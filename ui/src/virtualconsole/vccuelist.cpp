@@ -413,7 +413,11 @@ void VCCueList::updateStepList()
         int index = m_tree->indexOfTopLevelItem(item) + 1;
         item->setText(COL_NUM, QString("%1").arg(index));
         item->setData(COL_NUM, PROP_ID, function->id());
-        item->setText(COL_NAME, function->name());
+        QString displayName = function->name();
+        QString functionPath = function->path(true);
+        if (!functionPath.isEmpty())
+            displayName = functionPath + "/" + function->name();
+        item->setText(COL_NAME, displayName);
         if (step.note.isEmpty() == false)
             item->setText(COL_NOTES, step.note);
 

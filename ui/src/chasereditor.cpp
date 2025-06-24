@@ -1372,7 +1372,12 @@ void ChaserEditor::updateItem(QTreeWidgetItem* item, ChaserStep& step)
     item->setText(COL_NUM, QString("%1").arg(m_tree->indexOfTopLevelItem(item) + 1));
     if (m_chaser->type() == Function::ChaserType)
     {
-        item->setText(COL_NAME, function->name());
+        QString displayName = function->name();
+        QString functionPath = function->path(true);
+        if (!functionPath.isEmpty())
+            displayName = functionPath + "/" + function->name();
+
+        item->setText(COL_NAME, displayName);
         item->setIcon(COL_NAME, function->getIcon());
     }
 
