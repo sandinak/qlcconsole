@@ -4498,6 +4498,11 @@ Tenga en cuenta que el asistente no puede diferenciar entre una perilla y un sli
         <source>Page: %1</source>
         <translation>Página: %1</translation>
     </message>
+    <message>
+        <location filename="virtualconsole/vcspeeddialfunction.cpp" line="99"/>
+        <source>(Not Sent)</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>RDMManager</name>
