@@ -61,6 +61,8 @@ quint32 Collection::totalDuration()
     foreach (QVariant fid, functions())
     {
         Function* function = doc()->function(fid.toUInt());
+        if (function == nullptr)
+            continue;
         totalDuration += function->totalDuration();
     }
 
