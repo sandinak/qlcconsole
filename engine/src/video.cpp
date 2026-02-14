@@ -256,7 +256,6 @@ bool Video::setSourceUrl(QString filename)
     if (m_defaultPictureCaps.contains(fileExt))
     {
         m_isPicture = true;
-        setZIndex(2);
     }
 
     if (m_sourceUrl.contains("://"))
@@ -344,6 +343,12 @@ int Video::adjustAttribute(qreal fraction, int attributeId)
 void Video::slotFunctionRemoved(quint32 fid)
 {
     Q_UNUSED(fid)
+}
+
+void Video::stopFromUI()
+{
+    if (isRunning())
+        stop(FunctionParent::master());
 }
 
 /*********************************************************************
