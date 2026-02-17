@@ -1720,7 +1720,6 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         QString strVal = attrs.value(KXMLQLCPaletteValue).toString();
         switch (m_type)
         {
-            case Dimmer:
             case Pan:
             case Tilt:
                 setValue(strVal.toInt());
@@ -1738,6 +1737,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
             case Aim:
                 // Aim palettes don't store values — position is computed from geometry.
             break;
+            case Dimmer:
             case Zoom:
                 setValue(strVal.toFloat());
             break;
