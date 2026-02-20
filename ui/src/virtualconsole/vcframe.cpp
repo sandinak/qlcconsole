@@ -662,7 +662,7 @@ void VCFrame::slotSubmasterValueChanged(qreal value)
     while (it.hasNext() == true)
     {
         VCWidget *child = it.next();
-        if (child->parent() == this && child != submaster)
+        if (child != NULL && child->parent() == this && child != submaster)
             child->adjustIntensity(value);
     }
 }
@@ -673,10 +673,10 @@ void VCFrame::updateSubmasterValue()
     while (it.hasNext() == true)
     {
         VCWidget* child = it.next();
-        if (child->parent() == this && child->type() == SliderWidget)
+        if (child != NULL && child->parent() == this && child->type() == SliderWidget)
         {
             VCSlider* slider = reinterpret_cast<VCSlider*>(child);
-            if (slider->sliderMode() == VCSlider::Submaster)
+            if (slider != NULL && slider->sliderMode() == VCSlider::Submaster)
                 slider->emitSubmasterValue();
         }
     }
@@ -693,9 +693,11 @@ void VCFrame::adjustIntensity(qreal val)
     while (it.hasNext() == true)
     {
         VCWidget *child = it.next();
-        if (child->parent() == this)
+        if (child != NULL && child->parent() == this)
             child->adjustIntensity(val);
     }
+
+    updateSubmasterValue();
 }
 
 /*****************************************************************************
