@@ -177,24 +177,44 @@ QList<CaptureManager::ScenePlan> CaptureManager::buildPlan() const
 
 void CaptureManager::applyInPlace(const QList<ScenePlan>& plan)
 {
+    UndoEntry undo;
+    undo.label = tr("Apply");
+    undo.sceneCount = 0;
+    undo.channelCount = 0;
+
     bool anyApplied = false;
     for (const ScenePlan& p : plan)
     {
         if (p.scene == nullptr)
             continue;
+
+        // Snapshot prior values before mutating.
+        if (!undo.priorSceneValues.contains(p.scene->id()))
+        {
+            undo.priorSceneValues.insert(p.scene->id(), p.scene->values());
+            undo.sceneCount++;
+        }
+
         for (const Override& o : p.overrides)
         {
             QPair<quint32, quint32> key = qMakePair(o.fxi, o.channel);
             if (p.chaserDriven.contains(key))
                 continue; // skip chaser-animated channels
             p.scene->setValue(SceneValue(o.fxi, o.channel, o.value));
+            undo.channelCount++;
             anyApplied = true;
         }
     }
     if (anyApplied)
     {
+        // Push undo entry, capping depth.
+        m_undoStack.append(undo);
+        while (m_undoStack.size() > MAX_UNDO_DEPTH)
+            m_undoStack.removeFirst();
+
         m_doc->setModified();
         emit changesApplied();
+        emit undoStackChanged();
     }
     clear();
 }
@@ -202,6 +222,11 @@ void CaptureManager::applyInPlace(const QList<ScenePlan>& plan)
 void CaptureManager::saveAsNew(const QList<ScenePlan>& plan,
                                const QHash<quint32, QString>& newNamesById)
 {
+    UndoEntry undo;
+    undo.label = tr("Save as new");
+    undo.sceneCount = 0;
+    undo.channelCount = 0;
+
     bool anyApplied = false;
 
     // Collect running Collections so we can rewire their child lists if
@@ -228,6 +253,8 @@ void CaptureManager::saveAsNew(const QList<ScenePlan>& plan,
         copy->setName(newName);
         copy->setPath(p.scene->path(true));
         Scene* clone = static_cast<Scene*>(copy);
+        undo.createdSceneIds.append(clone->id());
+        undo.sceneCount++;
 
         for (const Override& o : p.overrides)
         {
@@ -235,6 +262,7 @@ void CaptureManager::saveAsNew(const QList<ScenePlan>& plan,
             if (p.chaserDriven.contains(key))
                 continue;
             clone->setValue(SceneValue(o.fxi, o.channel, o.value));
+            undo.channelCount++;
         }
 
         for (Collection* c : runningCollections)
@@ -243,6 +271,8 @@ void CaptureManager::saveAsNew(const QList<ScenePlan>& plan,
             int idx = children.indexOf(p.scene->id());
             if (idx >= 0)
             {
+                if (!undo.priorCollectionChildren.contains(c->id()))
+                    undo.priorCollectionChildren.insert(c->id(), children);
                 c->removeFunction(p.scene->id());
                 c->addFunction(clone->id(), idx);
             }
@@ -253,8 +283,91 @@ void CaptureManager::saveAsNew(const QList<ScenePlan>& plan,
 
     if (anyApplied)
     {
+        m_undoStack.append(undo);
+        while (m_undoStack.size() > MAX_UNDO_DEPTH)
+            m_undoStack.removeFirst();
+
         m_doc->setModified();
         emit changesApplied();
+        emit undoStackChanged();
     }
     clear();
+}
+
+int CaptureManager::impactedSceneCount() const
+{
+    if (m_overrides.isEmpty())
+        return 0;
+    QList<ScenePlan> plan = buildPlan();
+    return plan.size();
+}
+
+bool CaptureManager::canUndo() const
+{
+    return !m_undoStack.isEmpty();
+}
+
+QString CaptureManager::lastUndoLabel() const
+{
+    if (m_undoStack.isEmpty())
+        return QString();
+    return m_undoStack.last().label;
+}
+
+void CaptureManager::undoLast()
+{
+    if (m_undoStack.isEmpty())
+        return;
+
+    UndoEntry e = m_undoStack.takeLast();
+
+    // Restore Scene values: clear current values, set the snapshot back.
+    for (auto it = e.priorSceneValues.constBegin();
+         it != e.priorSceneValues.constEnd(); ++it)
+    {
+        Function* f = m_doc->function(it.key());
+        if (f == nullptr || f->type() != Function::SceneType)
+            continue;
+        Scene* s = static_cast<Scene*>(f);
+
+        // Wipe current values, then re-set from the snapshot. There's no
+        // bulk replace API on Scene, so iterate.
+        QList<SceneValue> current = s->values();
+        for (const SceneValue& sv : current)
+            s->unsetValue(sv.fxi, sv.channel);
+        for (const SceneValue& sv : it.value())
+            s->setValue(sv);
+    }
+
+    // Restore Collection child lists (save-as-new path).
+    for (auto it = e.priorCollectionChildren.constBegin();
+         it != e.priorCollectionChildren.constEnd(); ++it)
+    {
+        Function* f = m_doc->function(it.key());
+        if (f == nullptr || f->type() != Function::CollectionType)
+            continue;
+        Collection* c = static_cast<Collection*>(f);
+        QList<quint32> currentChildren = c->functions();
+        for (quint32 child : currentChildren)
+            c->removeFunction(child);
+        const QList<quint32>& priorChildren = it.value();
+        for (int i = 0; i < priorChildren.size(); ++i)
+            c->addFunction(priorChildren.at(i), i);
+    }
+
+    // Delete clones created by save-as-new.
+    for (quint32 cloneId : e.createdSceneIds)
+        m_doc->deleteFunction(cloneId);
+
+    // In-flight captures may be from before the undo and would re-assert
+    // values we just reverted. Drop them; user can re-edit if they meant
+    // to keep the look.
+    clear();
+
+    m_doc->setModified();
+
+    QString summary = tr("Undid %1 (%2 scene(s), %3 channel(s) restored)")
+                          .arg(e.label).arg(e.sceneCount).arg(e.channelCount);
+    emit undoPerformed(summary);
+    emit undoStackChanged();
 }

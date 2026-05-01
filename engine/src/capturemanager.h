@@ -27,6 +27,8 @@
 #include <QSet>
 #include <QString>
 
+#include "scenevalue.h"
+
 class Doc;
 class Scene;
 
@@ -66,6 +68,22 @@ public:
         QSet<QPair<quint32, quint32> > chaserDriven;
     };
 
+    /**
+     * Snapshot taken just before applyInPlace() / saveAsNew() mutates
+     * state, so undoLast() can revert. Holds enough information to
+     * restore both Scene values and Collection child rewires (for the
+     * save-as-new case).
+     */
+    struct UndoEntry
+    {
+        QString label;                                       //!< "Apply" / "Save as new"
+        int sceneCount;                                      //!< for status messages
+        int channelCount;                                    //!< for status messages
+        QHash<quint32, QList<SceneValue> > priorSceneValues; //!< sceneId -> pre-mutation values
+        QList<quint32> createdSceneIds;                      //!< clones to delete on undo
+        QHash<quint32, QList<quint32> > priorCollectionChildren; //!< collectionId -> pre-rewire child fids
+    };
+
     explicit CaptureManager(Doc* doc, QObject* parent = nullptr);
 
     bool isCapturing() const;
@@ -80,6 +98,25 @@ public:
 
     /** Number of distinct (fxi, channel) overrides currently held. */
     int overrideCount() const;
+
+    /** Number of unique running Scenes that the current overrides
+        would touch (LTP). 0 if nothing is pending. */
+    int impactedSceneCount() const;
+
+    /** True if at least one prior store can be reverted. */
+    bool canUndo() const;
+
+    /** Human-readable label of the most recent reversible store
+        (e.g. "Apply" / "Save as new"). Empty if !canUndo(). */
+    QString lastUndoLabel() const;
+
+    /** Revert the most recent applyInPlace() / saveAsNew() call.
+        Restores prior Scene values; for save-as-new, also deletes
+        the clones and re-points any Collections back to the
+        originals. Also clears any in-flight overrides so a slider's
+        current visible position doesn't immediately re-assert the
+        reverted values. */
+    void undoLast();
 
     /**
      * Build the per-Scene apply plan against the currently running
@@ -107,6 +144,8 @@ signals:
     void capturingChanged(bool on);
     void overrideRecorded(quint32 fxi, quint32 channel, uchar value);
     void changesApplied();
+    void undoStackChanged();
+    void undoPerformed(const QString& summary);
 
 private slots:
     void slotFunctionStarted(quint32 id);
@@ -120,6 +159,9 @@ private:
 
     QList<quint32> m_runningOrder;
     QSet<quint32> m_running;
+
+    QList<UndoEntry> m_undoStack;
+    static const int MAX_UNDO_DEPTH = 10;
 };
 
 #endif

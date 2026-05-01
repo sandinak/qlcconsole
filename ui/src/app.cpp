@@ -129,6 +129,8 @@ App::App()
     , m_liveEditAction(NULL)
     , m_liveEditVirtualConsoleAction(NULL)
     , m_captureLiveEditsAction(NULL)
+    , m_captureStoreAction(NULL)
+    , m_captureUndoAction(NULL)
 
     , m_helpIndexAction(NULL)
     , m_helpAboutAction(NULL)
@@ -765,6 +767,18 @@ void App::initActions()
     m_captureLiveEditsAction->setEnabled(false);
     connect(m_captureLiveEditsAction, SIGNAL(toggled(bool)), this, SLOT(slotCaptureLiveEdits(bool)));
 
+    m_captureStoreAction = new QAction(QIcon(":/filesave.png"), tr("Store"), this);
+    m_captureStoreAction->setToolTip(tr("Open the diff dialog to commit captured edits to scenes"));
+    m_captureStoreAction->setVisible(false);
+    m_captureStoreAction->setEnabled(false);
+    connect(m_captureStoreAction, SIGNAL(triggered()), this, SLOT(slotCaptureStore()));
+
+    m_captureUndoAction = new QAction(QIcon(":/back.png"), tr("Undo Last Store"), this);
+    m_captureUndoAction->setToolTip(tr("Revert the most recent capture commit"));
+    m_captureUndoAction->setVisible(false);
+    m_captureUndoAction->setEnabled(false);
+    connect(m_captureUndoAction, SIGNAL(triggered()), this, SLOT(slotCaptureUndo()));
+
     m_dumpDmxAction = new QAction(QIcon(":/add_dump.png"), tr("Dump DMX values to a function"), this);
     m_dumpDmxAction->setShortcut(QKeySequence("CTRL+D"));
     connect(m_dumpDmxAction, SIGNAL(triggered()), this, SLOT(slotDumpDmxIntoFunction()));
@@ -853,6 +867,8 @@ void App::initToolBar()
     m_toolbar->addAction(m_liveEditAction);
     m_toolbar->addAction(m_liveEditVirtualConsoleAction);
     m_toolbar->addAction(m_captureLiveEditsAction);
+    m_toolbar->addAction(m_captureStoreAction);
+    m_toolbar->addAction(m_captureUndoAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_controlPanicAction);
     m_toolbar->addSeparator();
@@ -1257,15 +1273,26 @@ void App::slotCaptureLiveEdits(bool checked)
     if (checked)
     {
         cm->setCapturing(true);
-        // Refresh status bar on each new override so the user sees the
-        // count climbing while they tweak.
+
         if (m_captureCountConnection)
             disconnect(m_captureCountConnection);
         m_captureCountConnection = connect(cm, &CaptureManager::overrideRecorded,
-                                           this, [this, cm](quint32, quint32, uchar) {
-            setStatusMessage(tr("Capturing live edits — %1 channel(s) recorded")
-                             .arg(cm->overrideCount()));
+                                           this, [this](quint32, quint32, uchar) {
+            slotCapturePendingChanged();
         });
+        connect(cm, &CaptureManager::undoStackChanged,
+                this, &App::slotCaptureUndoStackChanged, Qt::UniqueConnection);
+        connect(cm, &CaptureManager::changesApplied,
+                this, &App::slotCapturePendingChanged, Qt::UniqueConnection);
+        connect(cm, &CaptureManager::undoPerformed,
+                this, [this](const QString& summary) {
+            setStatusMessage(summary);
+        }, Qt::UniqueConnection);
+
+        m_captureStoreAction->setVisible(true);
+        m_captureUndoAction->setVisible(true);
+        slotCapturePendingChanged();
+        slotCaptureUndoStackChanged();
         setStatusMessage(tr("Capturing live edits — move VC sliders / XY pads to record"));
     }
     else
@@ -1284,7 +1311,76 @@ void App::slotCaptureLiveEdits(bool checked)
             dlg.exec();
         }
         cm->setCapturing(false);
+        m_captureStoreAction->setVisible(false);
+        m_captureStoreAction->setEnabled(false);
+        m_captureStoreAction->setText(tr("Store"));
+        m_captureUndoAction->setVisible(false);
+        m_captureUndoAction->setEnabled(false);
         clearStatusMessage();
+    }
+}
+
+void App::slotCaptureStore()
+{
+    CaptureManager *cm = m_doc->captureManager();
+    if (cm == NULL || cm->overrideCount() == 0)
+        return;
+    LiveCaptureDialog dlg(m_doc, this);
+    dlg.exec();
+    slotCapturePendingChanged();
+}
+
+void App::slotCaptureUndo()
+{
+    CaptureManager *cm = m_doc->captureManager();
+    if (cm == NULL || !cm->canUndo())
+        return;
+    cm->undoLast();
+    slotCapturePendingChanged();
+}
+
+void App::slotCapturePendingChanged()
+{
+    CaptureManager *cm = m_doc->captureManager();
+    if (cm == NULL)
+        return;
+    int channels = cm->overrideCount();
+    int scenes = cm->impactedSceneCount();
+    if (channels > 0)
+    {
+        m_captureStoreAction->setEnabled(true);
+        m_captureStoreAction->setText(tr("Store (%1 scene%2, %3 ch)")
+                                      .arg(scenes)
+                                      .arg(scenes == 1 ? QString() : tr("s"))
+                                      .arg(channels));
+        setStatusMessage(tr("Capturing live edits — %1 channel(s) recorded across %2 scene(s)")
+                         .arg(channels).arg(scenes));
+    }
+    else
+    {
+        m_captureStoreAction->setEnabled(false);
+        m_captureStoreAction->setText(tr("Store"));
+        if (cm->isCapturing())
+            setStatusMessage(tr("Capturing live edits — move VC sliders / XY pads to record"));
+    }
+}
+
+void App::slotCaptureUndoStackChanged()
+{
+    CaptureManager *cm = m_doc->captureManager();
+    if (cm == NULL)
+        return;
+    bool can = cm->canUndo();
+    m_captureUndoAction->setEnabled(can);
+    if (can)
+    {
+        m_captureUndoAction->setText(tr("Undo: %1").arg(cm->lastUndoLabel()));
+        m_captureUndoAction->setToolTip(tr("Revert the most recent %1").arg(cm->lastUndoLabel()));
+    }
+    else
+    {
+        m_captureUndoAction->setText(tr("Undo Last Store"));
+        m_captureUndoAction->setToolTip(tr("Revert the most recent capture commit"));
     }
 }
 

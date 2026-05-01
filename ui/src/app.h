@@ -176,6 +176,10 @@ public slots:
     void slotFunctionLiveEdit();
     void slotLiveEditVirtualConsole();
     void slotCaptureLiveEdits(bool checked);
+    void slotCaptureStore();
+    void slotCaptureUndo();
+    void slotCapturePendingChanged();
+    void slotCaptureUndoStackChanged();
     void slotDetachContext(int index);
     void slotReattachContext();
 
@@ -202,6 +206,8 @@ private:
     QAction* m_liveEditAction;
     QAction* m_liveEditVirtualConsoleAction;
     QAction* m_captureLiveEditsAction;
+    QAction* m_captureStoreAction;
+    QAction* m_captureUndoAction;
     QMetaObject::Connection m_captureCountConnection;
     QAction* m_appSettingsAction;
 
