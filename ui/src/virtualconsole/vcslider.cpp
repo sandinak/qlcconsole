@@ -103,6 +103,8 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
     , m_cngType(ClickAndGoWidget::None)
     , m_isOverriding(false)
     , m_lastInputValue(-1)
+    , m_parameterRole(RoleDimmer)
+    , m_parameterControlByte(QLCChannel::MSB)
 {
     /* Set the class name "VCSlider" as the object name as well */
     setObjectName(VCSlider::staticMetaObject.className());
@@ -462,6 +464,7 @@ QString VCSlider::sliderModeToString(SliderMode mode)
         case Level: return QString("Level"); break;
         case Playback: return QString("Playback"); break;
         case Submaster: return QString("Submaster"); break;
+        case Parameter: return QString("Parameter"); break;
         default: return QString("Unknown"); break;
     }
 }
@@ -470,10 +473,131 @@ VCSlider::SliderMode VCSlider::stringToSliderMode(const QString& mode)
 {
     if (mode == QString("Level"))
         return Level;
-    else  if (mode == QString("Playback"))
+    else if (mode == QString("Playback"))
        return Playback;
+    else if (mode == QString("Parameter"))
+        return Parameter;
     else //if (mode == QString("Submaster"))
         return Submaster;
+}
+
+QString VCSlider::parameterRoleToString(ParameterRole role)
+{
+    switch (role)
+    {
+    case RoleDimmer:      return QStringLiteral("Dimmer");
+    case RoleRed:         return QStringLiteral("Red");
+    case RoleGreen:       return QStringLiteral("Green");
+    case RoleBlue:        return QStringLiteral("Blue");
+    case RoleWhite:       return QStringLiteral("White");
+    case RoleCyan:        return QStringLiteral("Cyan");
+    case RoleMagenta:     return QStringLiteral("Magenta");
+    case RoleYellow:      return QStringLiteral("Yellow");
+    case RoleAmber:       return QStringLiteral("Amber");
+    case RoleUV:          return QStringLiteral("UV");
+    case RolePan:         return QStringLiteral("Pan");
+    case RoleTilt:        return QStringLiteral("Tilt");
+    case RoleShutter:     return QStringLiteral("Shutter");
+    case RoleGobo:        return QStringLiteral("Gobo");
+    case RoleSpeed:       return QStringLiteral("Speed");
+    case RoleEffect:      return QStringLiteral("Effect");
+    case RoleBeam:        return QStringLiteral("Beam");
+    case RoleMaintenance: return QStringLiteral("Maintenance");
+    }
+    return QStringLiteral("Dimmer");
+}
+
+VCSlider::ParameterRole VCSlider::stringToParameterRole(const QString& s)
+{
+    if (s == QStringLiteral("Red"))         return RoleRed;
+    if (s == QStringLiteral("Green"))       return RoleGreen;
+    if (s == QStringLiteral("Blue"))        return RoleBlue;
+    if (s == QStringLiteral("White"))       return RoleWhite;
+    if (s == QStringLiteral("Cyan"))        return RoleCyan;
+    if (s == QStringLiteral("Magenta"))     return RoleMagenta;
+    if (s == QStringLiteral("Yellow"))      return RoleYellow;
+    if (s == QStringLiteral("Amber"))       return RoleAmber;
+    if (s == QStringLiteral("UV"))          return RoleUV;
+    if (s == QStringLiteral("Pan"))         return RolePan;
+    if (s == QStringLiteral("Tilt"))        return RoleTilt;
+    if (s == QStringLiteral("Shutter"))     return RoleShutter;
+    if (s == QStringLiteral("Gobo"))        return RoleGobo;
+    if (s == QStringLiteral("Speed"))       return RoleSpeed;
+    if (s == QStringLiteral("Effect"))      return RoleEffect;
+    if (s == QStringLiteral("Beam"))        return RoleBeam;
+    if (s == QStringLiteral("Maintenance")) return RoleMaintenance;
+    return RoleDimmer;
+}
+
+int VCSlider::roleToChannelType(ParameterRole role)
+{
+    switch (role)
+    {
+    case RoleDimmer:      return QLCChannel::Intensity;
+    case RoleRed:         return QLCChannel::Red;
+    case RoleGreen:       return QLCChannel::Green;
+    case RoleBlue:        return QLCChannel::Blue;
+    case RoleWhite:       return QLCChannel::White;
+    case RoleCyan:        return QLCChannel::Cyan;
+    case RoleMagenta:     return QLCChannel::Magenta;
+    case RoleYellow:      return QLCChannel::Yellow;
+    case RoleAmber:       return QLCChannel::Amber;
+    case RoleUV:          return QLCChannel::UV;
+    case RolePan:         return QLCChannel::Pan;
+    case RoleTilt:        return QLCChannel::Tilt;
+    case RoleShutter:     return QLCChannel::Shutter;
+    case RoleGobo:        return QLCChannel::Gobo;
+    case RoleSpeed:       return QLCChannel::Speed;
+    case RoleEffect:      return QLCChannel::Effect;
+    case RoleBeam:        return QLCChannel::Beam;
+    case RoleMaintenance: return QLCChannel::Maintenance;
+    }
+    return QLCChannel::Intensity;
+}
+
+void VCSlider::setParameterRole(VCSlider::ParameterRole role)
+{
+    if (m_parameterRole == role) return;
+    m_parameterRole = role;
+    if (m_doc != NULL) m_doc->setModified();
+    if (m_sliderMode == Parameter)
+    {
+        QMutexLocker locker(&m_levelValueMutex);
+        m_levelValueChanged = true;
+    }
+}
+
+VCSlider::ParameterRole VCSlider::parameterRole() const
+{
+    return m_parameterRole;
+}
+
+void VCSlider::setParameterControlByte(int byte)
+{
+    int b = (byte == QLCChannel::LSB) ? QLCChannel::LSB : QLCChannel::MSB;
+    if (m_parameterControlByte == b) return;
+    m_parameterControlByte = b;
+    if (m_doc != NULL) m_doc->setModified();
+    if (m_sliderMode == Parameter)
+    {
+        QMutexLocker locker(&m_levelValueMutex);
+        m_levelValueChanged = true;
+    }
+}
+
+int VCSlider::parameterControlByte() const
+{
+    return m_parameterControlByte;
+}
+
+void VCSlider::slotProgrammerSelectionChanged()
+{
+    if (m_sliderMode != Parameter)
+        return;
+    // Selection just changed; the new fixtures should pick up the
+    // current slider value on the next tick.
+    QMutexLocker locker(&m_levelValueMutex);
+    m_levelValueChanged = true;
 }
 
 VCSlider::SliderMode VCSlider::sliderMode() const
@@ -483,7 +607,16 @@ VCSlider::SliderMode VCSlider::sliderMode() const
 
 void VCSlider::setSliderMode(SliderMode mode)
 {
-    Q_ASSERT(mode >= Level && mode <= Submaster);
+    Q_ASSERT(mode >= Level && mode <= Parameter);
+
+    // Manage Doc::programmerSelectionChanged subscription on transitions
+    // into and out of Parameter mode.
+    if (m_sliderMode == Parameter && mode != Parameter)
+        disconnect(m_doc, SIGNAL(programmerSelectionChanged()),
+                   this, SLOT(slotProgrammerSelectionChanged()));
+    else if (m_sliderMode != Parameter && mode == Parameter)
+        connect(m_doc, SIGNAL(programmerSelectionChanged()),
+                this, SLOT(slotProgrammerSelectionChanged()));
 
     m_sliderMode = mode;
 
@@ -545,6 +678,24 @@ void VCSlider::setSliderMode(SliderMode mode)
         }
         if (m_doc->mode() == Doc::Operate)
             m_doc->masterTimer()->unregisterDMXSource(this);
+    }
+    else if (mode == Parameter)
+    {
+        m_monitorEnabled = false;
+        m_cngType = ClickAndGoWidget::None;
+        if (m_cngButton)
+            m_cngButton->hide();
+        if (m_slider)
+        {
+            m_slider->setRange(0, UCHAR_MAX);
+            m_slider->setValue(levelValue());
+            if (m_widgetMode == WSlider)
+                m_slider->setStyleSheet(CNG_DEFAULT_STYLE);
+        }
+        m_bottomLabel->show();
+
+        if (m_doc->mode() == Doc::Operate)
+            m_doc->masterTimer()->registerDMXSource(this);
     }
 }
 
@@ -1149,6 +1300,8 @@ void VCSlider::writeDMX(MasterTimer *timer, QList<Universe *> universes)
         writeDMXLevel(timer, universes);
     else if (sliderMode() == Playback)
         writeDMXPlayback(timer, universes);
+    else if (sliderMode() == Parameter)
+        writeDMXParameter(timer, universes);
 }
 
 void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
@@ -1269,6 +1422,75 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
                 cm->recordOverride(lch.fixture, lch.channel, modLevel, caption());
 
             //qDebug() << "VC Slider write channel" << fc->target();
+        }
+    }
+    m_levelValueChanged = false;
+}
+
+void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes)
+{
+    Q_UNUSED(timer);
+
+    QMutexLocker locker(&m_levelValueMutex);
+    if (!m_levelValueChanged)
+        return;
+
+    uchar value = m_levelValue;
+    int chType = roleToChannelType(m_parameterRole);
+    int controlByte = m_parameterControlByte;
+
+    QList<quint32> selection = m_doc->programmerSelection();
+    CaptureManager *cm = m_doc->captureManager();
+    bool capturing = (cm != NULL && cm->isCapturing());
+
+    for (quint32 fid : selection)
+    {
+        Fixture *fxi = m_doc->fixture(fid);
+        if (fxi == NULL)
+            continue;
+
+        const int headCount = fxi->heads();
+        for (int h = 0; h < headCount; ++h)
+        {
+            quint32 ch = fxi->channelNumber(chType, controlByte, h);
+            if (ch == QLCChannel::invalid())
+                continue;
+
+            quint32 universe = fxi->universe();
+            if (universe >= (quint32)universes.size())
+                continue;
+
+            QSharedPointer<GenericFader> fader =
+                m_fadersMap.value(universe, QSharedPointer<GenericFader>());
+            if (fader.isNull())
+            {
+                fader = universes[universe]->requestFader();
+                fader->adjustIntensity(intensity());
+                m_fadersMap[universe] = fader;
+            }
+
+            FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe],
+                                                     fid, ch);
+            if (fc->universe() == Universe::invalid())
+            {
+                fader->remove(fc);
+                continue;
+            }
+
+            // Non-intensity channels are LTP — auto-remove when this
+            // slider stops asserting them so the rest of the show can
+            // take over cleanly.
+            const QLCChannel *qch = fxi->channel(ch);
+            if (qch != NULL && qch->group() != QLCChannel::Intensity)
+                fc->addFlag(FadeChannel::AutoRemove);
+
+            fc->setStart(fc->current());
+            fc->setTarget(value);
+            fc->setReady(false);
+            fc->setElapsed(0);
+
+            if (capturing)
+                cm->recordOverride(fid, ch, value, caption());
         }
     }
     m_levelValueChanged = false;
@@ -1395,6 +1617,14 @@ void VCSlider::setSliderValue(uchar value, bool scale, bool external)
         {
             setLevelValue(val);
             emitSubmasterValue();
+        }
+        break;
+
+        case Parameter:
+        {
+            // setLevelValue tracks m_levelValue + m_levelValueChanged
+            // which writeDMXParameter consumes on the next tick.
+            setLevelValue(val, external);
         }
         break;
     }
@@ -1726,6 +1956,17 @@ bool VCSlider::loadXML(QXmlStreamReader &root)
         {
             loadXMLPlayback(root);
         }
+        else if (root.name() == KXMLQLCVCSliderParameter)
+        {
+            QXmlStreamAttributes pAttrs = root.attributes();
+            if (pAttrs.hasAttribute(KXMLQLCVCSliderParameterRole))
+                setParameterRole(stringToParameterRole(
+                    pAttrs.value(KXMLQLCVCSliderParameterRole).toString()));
+            if (pAttrs.hasAttribute(KXMLQLCVCSliderParameterByte))
+                setParameterControlByte(
+                    pAttrs.value(KXMLQLCVCSliderParameterByte).toInt());
+            root.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown slider tag:" << root.name().toString();
@@ -1934,6 +2175,14 @@ bool VCSlider::saveXML(QXmlStreamWriter *doc)
     }
 
     /* End the <Playback> tag */
+    doc->writeEndElement();
+
+    /* Parameter mode */
+    doc->writeStartElement(KXMLQLCVCSliderParameter);
+    doc->writeAttribute(KXMLQLCVCSliderParameterRole,
+                        parameterRoleToString(m_parameterRole));
+    doc->writeAttribute(KXMLQLCVCSliderParameterByte,
+                        QString::number(m_parameterControlByte));
     doc->writeEndElement();
 
     /* End the <Slider> tag */

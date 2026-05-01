@@ -72,6 +72,10 @@ class VCSliderProperties;
 #define KXMLQLCVCSliderPlaybackFunction QStringLiteral("Function")
 #define KXMLQLCVCSliderPlaybackFlash    QStringLiteral("Flash")
 
+#define KXMLQLCVCSliderParameter        QStringLiteral("Parameter")
+#define KXMLQLCVCSliderParameterRole    QStringLiteral("Role")
+#define KXMLQLCVCSliderParameterByte    QStringLiteral("ControlByte")
+
 class VCSlider final : public VCWidget, public DMXSource
 {
     Q_OBJECT
@@ -148,8 +152,41 @@ public:
     {
         Level,
         Playback,
-        Submaster
+        Submaster,
+        Parameter
     };
+
+    /**
+     * Programmer mode "role" — the parameter on the currently-selected
+     * fixtures that this slider drives. Each role maps to a Group or
+     * PrimaryColour value that Fixture::channelNumber() understands;
+     * the wire encoding lives in roleToChannelType().
+     */
+    enum ParameterRole
+    {
+        RoleDimmer = 0,
+        RoleRed,
+        RoleGreen,
+        RoleBlue,
+        RoleWhite,
+        RoleCyan,
+        RoleMagenta,
+        RoleYellow,
+        RoleAmber,
+        RoleUV,
+        RolePan,
+        RoleTilt,
+        RoleShutter,
+        RoleGobo,
+        RoleSpeed,
+        RoleEffect,
+        RoleBeam,
+        RoleMaintenance
+    };
+
+    static QString parameterRoleToString(ParameterRole role);
+    static ParameterRole stringToParameterRole(const QString& s);
+    static int roleToChannelType(ParameterRole role);
 
 public:
     /**
@@ -181,6 +218,25 @@ public:
 
 protected:
     SliderMode m_sliderMode;
+
+    /*********************************************************************
+     * Parameter mode
+     *********************************************************************/
+public:
+    void setParameterRole(ParameterRole role);
+    ParameterRole parameterRole() const;
+
+    /** 0 = MSB (default), 1 = LSB. */
+    void setParameterControlByte(int byte);
+    int parameterControlByte() const;
+
+protected slots:
+    /** Re-assert the current value into the new selection's channels. */
+    void slotProgrammerSelectionChanged();
+
+protected:
+    ParameterRole m_parameterRole;
+    int m_parameterControlByte;
 
     /*********************************************************************
      * Value display style
@@ -445,6 +501,10 @@ protected:
 
     /** writeDMX for Playback mode */
     void writeDMXPlayback(MasterTimer *timer, QList<Universe*> universes);
+
+    /** writeDMX for Parameter mode (resolves channels from current
+        Doc::programmerSelection, role, and control byte). */
+    void writeDMXParameter(MasterTimer *timer, QList<Universe*> universes);
 
 private:
     /** Map used to lookup a GenericFader instance for a Universe ID */
