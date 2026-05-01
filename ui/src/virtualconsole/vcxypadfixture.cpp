@@ -546,10 +546,12 @@ void VCXYPadFixture::writeDMX(qreal xmul, qreal ymul, QSharedPointer<GenericFade
     updateChannel(fc, uchar(y >> 8));
 
     CaptureManager *cm = m_doc->captureManager();
-    if (cm != NULL && cm->isCapturing())
+    bool capturing = (cm != NULL && cm->isCapturing());
+    QString src;
+    if (capturing)
     {
         Fixture *fxi = m_doc->fixture(m_head.fxi);
-        QString src = fxi ? fxi->name() : QString::fromLatin1("XY");
+        src = fxi ? fxi->name() : QString::fromLatin1("XY");
         cm->recordOverride(m_head.fxi, m_xMSB, uchar(x >> 8), src);
         cm->recordOverride(m_head.fxi, m_yMSB, uchar(y >> 8), src);
     }
@@ -561,6 +563,12 @@ void VCXYPadFixture::writeDMX(qreal xmul, qreal ymul, QSharedPointer<GenericFade
 
         fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_yLSB);
         updateChannel(fc, uchar(y & 0xFF));
+
+        if (capturing)
+        {
+            cm->recordOverride(m_head.fxi, m_xLSB, uchar(x & 0xFF), src);
+            cm->recordOverride(m_head.fxi, m_yLSB, uchar(y & 0xFF), src);
+        }
     }
 }
 
