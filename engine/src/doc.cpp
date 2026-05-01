@@ -194,6 +194,13 @@ void Doc::clearContents()
     m_addresses.clear();
     m_loadStatus = Cleared;
 
+    if (!m_programmerSelection.isEmpty())
+    {
+        m_programmerSelection.clear();
+        m_programmerSelectionLookup.clear();
+        emit programmerSelectionChanged();
+    }
+
     emit cleared();
 }
 
@@ -279,6 +286,110 @@ MasterTimer* Doc::masterTimer() const
 CaptureManager* Doc::captureManager() const
 {
     return m_captureManager;
+}
+
+/*****************************************************************************
+ * Programmer selection
+ *****************************************************************************/
+
+QList<quint32> Doc::programmerSelection() const
+{
+    return m_programmerSelection;
+}
+
+void Doc::setProgrammerSelection(const QList<quint32>& fixtureIds)
+{
+    QList<quint32> deduped;
+    QSet<quint32> seen;
+    for (quint32 fid : fixtureIds)
+    {
+        if (seen.contains(fid))
+            continue;
+        deduped.append(fid);
+        seen.insert(fid);
+    }
+    if (deduped == m_programmerSelection)
+        return;
+    m_programmerSelection = deduped;
+    m_programmerSelectionLookup = seen;
+    emit programmerSelectionChanged();
+}
+
+void Doc::addToProgrammerSelection(const QList<quint32>& fixtureIds)
+{
+    bool changed = false;
+    for (quint32 fid : fixtureIds)
+    {
+        if (m_programmerSelectionLookup.contains(fid))
+            continue;
+        m_programmerSelection.append(fid);
+        m_programmerSelectionLookup.insert(fid);
+        changed = true;
+    }
+    if (changed)
+        emit programmerSelectionChanged();
+}
+
+void Doc::removeFromProgrammerSelection(const QList<quint32>& fixtureIds)
+{
+    bool changed = false;
+    for (quint32 fid : fixtureIds)
+    {
+        if (!m_programmerSelectionLookup.contains(fid))
+            continue;
+        m_programmerSelection.removeAll(fid);
+        m_programmerSelectionLookup.remove(fid);
+        changed = true;
+    }
+    if (changed)
+        emit programmerSelectionChanged();
+}
+
+void Doc::toggleInProgrammerSelection(const QList<quint32>& fixtureIds)
+{
+    bool changed = false;
+    for (quint32 fid : fixtureIds)
+    {
+        if (m_programmerSelectionLookup.contains(fid))
+        {
+            m_programmerSelection.removeAll(fid);
+            m_programmerSelectionLookup.remove(fid);
+        }
+        else
+        {
+            m_programmerSelection.append(fid);
+            m_programmerSelectionLookup.insert(fid);
+        }
+        changed = true;
+    }
+    if (changed)
+        emit programmerSelectionChanged();
+}
+
+void Doc::clearProgrammerSelection()
+{
+    if (m_programmerSelection.isEmpty())
+        return;
+    m_programmerSelection.clear();
+    m_programmerSelectionLookup.clear();
+    emit programmerSelectionChanged();
+}
+
+bool Doc::isInProgrammerSelection(quint32 fixtureId) const
+{
+    return m_programmerSelectionLookup.contains(fixtureId);
+}
+
+bool Doc::allInProgrammerSelection(const QList<quint32>& fixtureIds) const
+{
+    if (fixtureIds.isEmpty())
+        return false;
+    for (quint32 fid : fixtureIds)
+    {
+        if (!m_programmerSelectionLookup.contains(fid))
+            return false;
+    }
+    return true;
 }
 
 QSharedPointer<AudioCapture> Doc::audioInputCapture() const
@@ -523,6 +634,13 @@ bool Doc::deleteFixture(quint32 id)
         }
         if (m_monitorProps != NULL)
             m_monitorProps->removeFixture(id);
+
+        if (m_programmerSelectionLookup.contains(id))
+        {
+            m_programmerSelection.removeAll(id);
+            m_programmerSelectionLookup.remove(id);
+            emit programmerSelectionChanged();
+        }
 
         emit fixtureRemoved(id);
         setModified();

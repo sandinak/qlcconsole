@@ -26,6 +26,7 @@
 #include <QList>
 #include <QFile>
 #include <QMap>
+#include <QSet>
 
 #include "qlcfixturedefcache.h"
 #include "qlcmodifierscache.h"
@@ -246,6 +247,54 @@ public:
 
 private:
     QLCClipboard *m_clipboard;
+
+    /*********************************************************************
+     * Programmer selection
+     *
+     * A global, ordered set of fixture ids that "selected for editing"
+     * VC widgets target. Set by SelectFixtures-mode VCButtons; read by
+     * Parameter-mode VCSliders and similar widgets that resolve their
+     * write target against the current selection rather than a static
+     * channel list.
+     *
+     * The selection is intentionally engine-level so any layer (VC,
+     * QML UI, web access, scripts) can participate.
+     *********************************************************************/
+public:
+    /** Current programmer selection in selection-order. */
+    QList<quint32> programmerSelection() const;
+
+    /** Replace the selection wholesale. */
+    void setProgrammerSelection(const QList<quint32>& fixtureIds);
+
+    /** Append fixtures not already selected. Order is preserved. */
+    void addToProgrammerSelection(const QList<quint32>& fixtureIds);
+
+    /** Remove the given fixtures from the selection (no-op for absent). */
+    void removeFromProgrammerSelection(const QList<quint32>& fixtureIds);
+
+    /** Toggle each given fixture's membership. */
+    void toggleInProgrammerSelection(const QList<quint32>& fixtureIds);
+
+    /** Clear the selection. */
+    void clearProgrammerSelection();
+
+    /** Constant-time membership check. */
+    bool isInProgrammerSelection(quint32 fixtureId) const;
+
+    /** True if every given id is currently selected. Used by
+        SelectFixtures-mode buttons to decide their checked state. */
+    bool allInProgrammerSelection(const QList<quint32>& fixtureIds) const;
+
+signals:
+    /** Emitted whenever the programmer selection changes. Listeners
+        should re-read programmerSelection() — no payload, since the
+        change can be arbitrary (replace/add/remove/toggle/clear). */
+    void programmerSelectionChanged();
+
+private:
+    QList<quint32> m_programmerSelection;
+    QSet<quint32> m_programmerSelectionLookup;
 
     /*********************************************************************
      * Fixture Instances
