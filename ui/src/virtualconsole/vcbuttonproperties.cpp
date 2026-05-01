@@ -29,10 +29,16 @@
 #include <QAction>
 #include <qmath.h>
 
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
+
 #include "inputselectionwidget.h"
 #include "vcbuttonproperties.h"
 #include "functionselection.h"
 #include "speeddialwidget.h"
+#include "fixturegroup.h"
+#include "fixture.h"
+#include "doc.h"
 #include "function.h"
 #include "doc.h"
 
@@ -72,10 +78,23 @@ VCButtonProperties::VCButtonProperties(VCButton* button, Doc* doc)
         m_blackout->setChecked(true);
     else if (button->action() == VCButton::StopAll)
         m_stopAll->setChecked(true);
+    else if (button->action() == VCButton::SelectFixtures)
+        m_selectFixtures->setChecked(true);
     else
         m_toggle->setChecked(true);
     m_fadeOutTime = m_button->stopAllFadeTime();
     m_fadeOutEdit->setText(Function::speedToString(m_fadeOutTime));
+
+    /* Selection mode + tree */
+    switch (m_button->selectionMode())
+    {
+    case VCButton::SelectAdd:    m_selectionAddRadio->setChecked(true); break;
+    case VCButton::SelectRemove: m_selectionRemoveRadio->setChecked(true); break;
+    case VCButton::SelectToggle: m_selectionToggleRadio->setChecked(true); break;
+    default:                     m_selectionReplaceRadio->setChecked(true); break;
+    }
+    populateSelectionTree();
+
     slotActionToggled();
 
     m_forceLTP->setChecked(m_button->flashForceLTP());
@@ -96,6 +115,7 @@ VCButtonProperties::VCButtonProperties(VCButton* button, Doc* doc)
     connect(m_blackout, SIGNAL(toggled(bool)), this, SLOT(slotActionToggled()));
     connect(m_stopAll, SIGNAL(toggled(bool)), this, SLOT(slotActionToggled()));
     connect(m_flash, SIGNAL(toggled(bool)), this, SLOT(slotActionToggled()));
+    connect(m_selectFixtures, SIGNAL(toggled(bool)), this, SLOT(slotActionToggled()));
 
     connect(m_speedDialButton, SIGNAL(toggled(bool)),
             this, SLOT(slotSpeedDialToggle(bool)));
@@ -140,7 +160,8 @@ void VCButtonProperties::slotSetFunction(quint32 fid)
 
 void VCButtonProperties::slotActionToggled()
 {
-    if (m_blackout->isChecked() == true || m_stopAll->isChecked() == true)
+    bool isFunctional = m_toggle->isChecked() || m_flash->isChecked();
+    if (isFunctional == false)
     {
         m_generalGroup->setEnabled(false);
         m_intensityGroup->setEnabled(false);
@@ -157,6 +178,53 @@ void VCButtonProperties::slotActionToggled()
 
     m_forceLTP->setEnabled(m_flash->isChecked());
     m_overridePriority->setEnabled(m_flash->isChecked());
+
+    m_selectionGroup->setVisible(m_selectFixtures->isChecked());
+}
+
+void VCButtonProperties::populateSelectionTree()
+{
+    m_selectionTree->clear();
+
+    QSet<quint32> selectedFix(m_button->selectionFixtures().begin(),
+                              m_button->selectionFixtures().end());
+    QSet<quint32> selectedGrp(m_button->selectionGroups().begin(),
+                              m_button->selectionGroups().end());
+
+    // Group node first; each group's members appear under it.
+    QTreeWidgetItem* groupsRoot = new QTreeWidgetItem(m_selectionTree);
+    groupsRoot->setText(0, tr("Fixture Groups"));
+    groupsRoot->setExpanded(true);
+    groupsRoot->setFlags(groupsRoot->flags() & ~Qt::ItemIsUserCheckable);
+
+    for (FixtureGroup* grp : m_doc->fixtureGroups())
+    {
+        QTreeWidgetItem* g = new QTreeWidgetItem(groupsRoot);
+        g->setText(0, grp->name());
+        g->setData(0, Qt::UserRole, QStringLiteral("group"));
+        g->setData(0, Qt::UserRole + 1, grp->id());
+        g->setFlags(g->flags() | Qt::ItemIsUserCheckable);
+        g->setCheckState(0, selectedGrp.contains(grp->id())
+                            ? Qt::Checked : Qt::Unchecked);
+    }
+
+    // Then individual fixtures so users can pick one-offs that aren't
+    // members of a group.
+    QTreeWidgetItem* fixturesRoot = new QTreeWidgetItem(m_selectionTree);
+    fixturesRoot->setText(0, tr("Individual Fixtures"));
+    fixturesRoot->setExpanded(true);
+    fixturesRoot->setFlags(fixturesRoot->flags() & ~Qt::ItemIsUserCheckable);
+
+    for (Fixture* fxi : m_doc->fixtures())
+    {
+        QTreeWidgetItem* f = new QTreeWidgetItem(fixturesRoot);
+        f->setText(0, fxi->name());
+        f->setData(0, Qt::UserRole, QStringLiteral("fixture"));
+        f->setData(0, Qt::UserRole + 1, fxi->id());
+        f->setFlags(f->flags() | Qt::ItemIsUserCheckable);
+        f->setCheckState(0, selectedFix.contains(fxi->id())
+                            ? Qt::Checked : Qt::Unchecked);
+    }
 }
 
 void VCButtonProperties::slotSpeedDialToggle(bool state)
@@ -220,6 +288,39 @@ void VCButtonProperties::accept()
     m_button->enableStartupIntensity(m_intensityGroup->isChecked());
     m_button->setStartupIntensity(qreal(m_intensitySlider->value()) / qreal(100));
 
+    /* Pull the per-fixture and per-group selections from the tree
+       regardless of which radio is currently active so toggling between
+       Action types preserves the user's choices. */
+    QList<quint32> fixtures;
+    QList<quint32> groups;
+    for (int i = 0; i < m_selectionTree->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem* root = m_selectionTree->topLevelItem(i);
+        for (int j = 0; j < root->childCount(); ++j)
+        {
+            QTreeWidgetItem* child = root->child(j);
+            if (child->checkState(0) != Qt::Checked)
+                continue;
+            QString kind = child->data(0, Qt::UserRole).toString();
+            quint32 id = child->data(0, Qt::UserRole + 1).toUInt();
+            if (kind == QStringLiteral("group"))
+                groups.append(id);
+            else
+                fixtures.append(id);
+        }
+    }
+    m_button->setSelectionFixtures(fixtures);
+    m_button->setSelectionGroups(groups);
+
+    if (m_selectionAddRadio->isChecked())
+        m_button->setSelectionMode(VCButton::SelectAdd);
+    else if (m_selectionRemoveRadio->isChecked())
+        m_button->setSelectionMode(VCButton::SelectRemove);
+    else if (m_selectionToggleRadio->isChecked())
+        m_button->setSelectionMode(VCButton::SelectToggle);
+    else
+        m_button->setSelectionMode(VCButton::SelectReplace);
+
     if (m_toggle->isChecked() == true)
         m_button->setAction(VCButton::Toggle);
     else if (m_blackout->isChecked() == true)
@@ -228,6 +329,10 @@ void VCButtonProperties::accept()
     {
         m_button->setAction(VCButton::StopAll);
         m_button->setStopAllFadeOutTime(m_fadeOutTime);
+    }
+    else if (m_selectFixtures->isChecked() == true)
+    {
+        m_button->setAction(VCButton::SelectFixtures);
     }
     else
     {

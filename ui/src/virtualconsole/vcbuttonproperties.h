@@ -49,6 +49,7 @@ protected slots:
     void slotSetFunction(quint32 fid = Function::invalidId());
 
     void slotActionToggled();
+    void populateSelectionTree();
 
     void slotIntensitySliderMoved(int value);
     void slotIntensityEdited(const QString& text);
