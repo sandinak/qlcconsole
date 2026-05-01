@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ProgrammerMap>
+<ProgrammerMap>
+  <Manufacturer>Akai</Manufacturer>
+  <Model>APC40 mkII</Model>
+  <Profile>Akai-APC40-mkII.qxi</Profile>
+  <GridColumns>9</GridColumns>
+
+  <!-- Row 0: 8 channel-strip sliders + Master Sub.
+       Channel encoding: (MIDI channel - 1) * 4096 + CC. -->
+  <Mapping channel="7"     kind="ParameterSlider" role="Dimmer"  controlByte="MSB" row="0" column="0"/>
+  <Mapping channel="4103"  kind="ParameterSlider" role="Red"     controlByte="MSB" row="0" column="1"/>
+  <Mapping channel="8199"  kind="ParameterSlider" role="Green"   controlByte="MSB" row="0" column="2"/>
+  <Mapping channel="12295" kind="ParameterSlider" role="Blue"    controlByte="MSB" row="0" column="3"/>
+  <Mapping channel="16391" kind="ParameterSlider" role="White"   controlByte="MSB" row="0" column="4"/>
+  <Mapping channel="20487" kind="ParameterSlider" role="Pan"     controlByte="MSB" row="0" column="5"/>
+  <Mapping channel="24583" kind="ParameterSlider" role="Tilt"    controlByte="MSB" row="0" column="6"/>
+  <Mapping channel="28679" kind="ParameterSlider" role="Shutter" controlByte="MSB" row="0" column="7"/>
+
+  <!-- Row 1: 8 device knobs (Knob 9..16 in profile = top row on the device).
+       Used here for Pan-fine / Tilt-fine + utility roles. -->
+  <Mapping channel="16" kind="ParameterSlider" role="Pan"     controlByte="LSB" row="1" column="0"/>
+  <Mapping channel="17" kind="ParameterSlider" role="Tilt"    controlByte="LSB" row="1" column="1"/>
+  <Mapping channel="18" kind="ParameterSlider" role="Gobo"    controlByte="MSB" row="1" column="2"/>
+  <Mapping channel="19" kind="ParameterSlider" role="Effect"  controlByte="MSB" row="1" column="3"/>
+  <Mapping channel="20" kind="ParameterSlider" role="Beam"    controlByte="MSB" row="1" column="4"/>
+  <Mapping channel="21" kind="ParameterSlider" role="Speed"   controlByte="MSB" row="1" column="5"/>
+  <Mapping channel="22" kind="ParameterSlider" role="Cyan"    controlByte="MSB" row="1" column="6"/>
+  <Mapping channel="23" kind="ParameterSlider" role="Magenta" controlByte="MSB" row="1" column="7"/>
+
+  <!-- Row 2: 8 channel-strip knobs (Knob 1..8 in profile = lower row,
+       below the 8x5 grid). Reserved for finer tuning of common roles. -->
+  <Mapping channel="48" kind="ParameterSlider" role="Yellow" controlByte="MSB" row="2" column="0"/>
+  <Mapping channel="49" kind="ParameterSlider" role="Amber"  controlByte="MSB" row="2" column="1"/>
+  <Mapping channel="50" kind="ParameterSlider" role="UV"     controlByte="MSB" row="2" column="2"/>
+  <Mapping channel="51" kind="ParameterSlider" role="Speed"  controlByte="LSB" row="2" column="3"/>
+  <Mapping channel="52" kind="ParameterSlider" role="Maintenance" controlByte="MSB" row="2" column="4"/>
+  <Mapping channel="53" kind="ParameterSlider" role="Effect" controlByte="LSB" row="2" column="5"/>
+  <Mapping channel="54" kind="ParameterSlider" role="Beam"   controlByte="LSB" row="2" column="6"/>
+  <Mapping channel="55" kind="ParameterSlider" role="Gobo"   controlByte="LSB" row="2" column="7"/>
+
+  <!-- Row 3: 8 Clip-stop track-row buttons → SelectFixtures (Replace).
+       User assigns their fixture groups to these via right-click → Properties. -->
+  <Mapping channel="180"   kind="SelectFixturesButton" mode="Replace" row="3" column="0"/>
+  <Mapping channel="4276"  kind="SelectFixturesButton" mode="Replace" row="3" column="1"/>
+  <Mapping channel="8372"  kind="SelectFixturesButton" mode="Replace" row="3" column="2"/>
+  <Mapping channel="12468" kind="SelectFixturesButton" mode="Replace" row="3" column="3"/>
+  <Mapping channel="16564" kind="SelectFixturesButton" mode="Replace" row="3" column="4"/>
+  <Mapping channel="20660" kind="SelectFixturesButton" mode="Replace" row="3" column="5"/>
+  <Mapping channel="24756" kind="SelectFixturesButton" mode="Replace" row="3" column="6"/>
+  <Mapping channel="28852" kind="SelectFixturesButton" mode="Replace" row="3" column="7"/>
+
+  <!-- "Stop all clips" → clear-selection helper. -->
+  <Mapping channel="209" kind="ClearSelectionButton" row="3" column="8"/>
+</ProgrammerMap>
