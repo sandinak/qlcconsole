@@ -64,6 +64,9 @@ public:
     /** Force an immediate autosave if document is modified */
     void forceAutosave();
 
+    /** Set the workspace file path that autosave should target */
+    void setCurrentFile(const QString& filePath);
+
     /** Get the last autosave timestamp */
     QDateTime lastAutosaveTime() const;
 
@@ -113,6 +116,7 @@ private:
     
     bool m_documentModified;
     QDateTime m_lastAutosaveTime;
+    QString m_currentFile;
 };
 
 #endif // AUTOSAVEMANAGER_H

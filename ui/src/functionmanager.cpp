@@ -98,6 +98,7 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     , m_selectAllAction(NULL)
     , m_editor(NULL)
     , m_scene_editor(NULL)
+    , m_editedFunctionId(Function::invalidId())
 {
     Q_ASSERT(s_instance == NULL);
     s_instance = this;
@@ -315,9 +316,42 @@ void FunctionManager::initToolbar()
     m_toolbar->addAction(m_deleteAction);
 }
 
+QString FunctionManager::getSelectedFolderPath()
+{
+    // Determine the folder path based on current selection
+    QString folderPath;
+    QList<QTreeWidgetItem*> selected = m_tree->selectedItems();
+    if (!selected.isEmpty())
+    {
+        QTreeWidgetItem* item = selected.first();
+        QString itemPath = item->text(1); // COL_PATH
+
+        if (!itemPath.isEmpty())
+        {
+            // Selected item is a folder
+            folderPath = itemPath;
+        }
+        else
+        {
+            // Selected item is a function - get its folder
+            quint32 fid = item->data(0, Qt::UserRole).toUInt(); // COL_NAME
+            Function* func = m_doc->function(fid);
+            if (func != NULL)
+                folderPath = func->path(true);
+        }
+    }
+    return folderPath;
+}
+
 void FunctionManager::slotAddScene()
 {
     Function* f = new Scene(m_doc);
+
+    // Set the folder path based on current selection
+    QString folderPath = getSelectedFolderPath();
+    if (!folderPath.isEmpty())
+        f->setPath(folderPath);
+
     if (m_doc->addFunction(f) == true)
     {
         QTreeWidgetItem* item = m_tree->functionItem(f);
@@ -331,6 +365,12 @@ void FunctionManager::slotAddScene()
 void FunctionManager::slotAddChaser()
 {
     Function* f = new Chaser(m_doc);
+
+    // Set the folder path based on current selection
+    QString folderPath = getSelectedFolderPath();
+    if (!folderPath.isEmpty())
+        f->setPath(folderPath);
+
     if (m_doc->addFunction(f) == true)
     {
         QTreeWidgetItem* item = m_tree->functionItem(f);
@@ -354,6 +394,11 @@ void FunctionManager::slotAddSequence()
         Sequence *sequence = qobject_cast<Sequence *>(f);
         sequence->setBoundSceneID(scene->id());
 
+        // Set the folder path based on current selection
+        QString folderPath = getSelectedFolderPath();
+        if (!folderPath.isEmpty())
+            f->setPath(folderPath);
+
         if (m_doc->addFunction(sequence) == true)
         {
             QTreeWidgetItem* item = m_tree->functionItem(f);
@@ -368,6 +413,12 @@ void FunctionManager::slotAddSequence()
 void FunctionManager::slotAddCollection()
 {
     Function* f = new Collection(m_doc);
+
+    // Set the folder path based on current selection
+    QString folderPath = getSelectedFolderPath();
+    if (!folderPath.isEmpty())
+        f->setPath(folderPath);
+
     if (m_doc->addFunction(f) == true)
     {
         QTreeWidgetItem* item = m_tree->functionItem(f);
@@ -381,6 +432,12 @@ void FunctionManager::slotAddCollection()
 void FunctionManager::slotAddEFX()
 {
     Function* f = new EFX(m_doc);
+
+    // Set the folder path based on current selection
+    QString folderPath = getSelectedFolderPath();
+    if (!folderPath.isEmpty())
+        f->setPath(folderPath);
+
     if (m_doc->addFunction(f) == true)
     {
         QTreeWidgetItem* item = m_tree->functionItem(f);
@@ -394,6 +451,12 @@ void FunctionManager::slotAddEFX()
 void FunctionManager::slotAddRGBMatrix()
 {
     Function* f = new RGBMatrix(m_doc);
+
+    // Set the folder path based on current selection
+    QString folderPath = getSelectedFolderPath();
+    if (!folderPath.isEmpty())
+        f->setPath(folderPath);
+
     if (m_doc->addFunction(f) == true)
     {
         QTreeWidgetItem* item = m_tree->functionItem(f);
@@ -407,6 +470,12 @@ void FunctionManager::slotAddRGBMatrix()
 void FunctionManager::slotAddScript()
 {
     Function* f = new Script(m_doc);
+
+    // Set the folder path based on current selection
+    QString folderPath = getSelectedFolderPath();
+    if (!folderPath.isEmpty())
+        f->setPath(folderPath);
+
     if (m_doc->addFunction(f) == true)
     {
         QTreeWidgetItem* item = m_tree->functionItem(f);
@@ -448,6 +517,9 @@ void FunctionManager::slotAddAudio()
     if (dialog.exec() != QDialog::Accepted)
         return;
 
+    // Get the folder path once before the loop
+    QString folderPath = getSelectedFolderPath();
+
     foreach (QString fn, dialog.selectedFiles())
     {
         Function* f = new Audio(m_doc);
@@ -457,6 +529,11 @@ void FunctionManager::slotAddAudio()
             QMessageBox::warning(this, tr("Unsupported audio file"), tr("This audio file cannot be played with QLC+. Sorry."));
             return;
         }
+
+        // Set the folder path based on current selection
+        if (!folderPath.isEmpty())
+            f->setPath(folderPath);
+
         if (m_doc->addFunction(f) == true)
         {
             QTreeWidgetItem* item = m_tree->functionItem(f);
@@ -501,6 +578,9 @@ void FunctionManager::slotAddVideo()
     if (dialog.exec() != QDialog::Accepted)
         return;
 
+    // Get the folder path once before the loop
+    QString folderPath = getSelectedFolderPath();
+
     foreach (QString fn, dialog.selectedFiles())
     {
         Function* f = new Video(m_doc);
@@ -510,6 +590,11 @@ void FunctionManager::slotAddVideo()
             QMessageBox::warning(this, tr("Unsupported video file"), tr("This video file cannot be played with QLC+. Sorry."));
             return;
         }
+
+        // Set the folder path based on current selection
+        if (!folderPath.isEmpty())
+            f->setPath(folderPath);
+
         if (m_doc->addFunction(f) == true)
         {
             QTreeWidgetItem* item = m_tree->functionItem(f);
@@ -724,9 +809,13 @@ void FunctionManager::initTree()
     m_tree->setAcceptDrops(true);
     m_tree->setDragDropMode(QAbstractItemView::InternalMove);
 
-    // Catch selection changes
+    // Catch double-clicks to edit functions (single-click allows selection for drag-and-drop)
+    connect(m_tree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
+            this, SLOT(slotTreeItemDoubleClicked(QTreeWidgetItem*)));
+
+    // Catch selection changes to update action status
     connect(m_tree, SIGNAL(itemSelectionChanged()),
-            this, SLOT(slotTreeSelectionChanged()));
+            this, SLOT(updateActionStatus()));
 
     // Catch right-mouse clicks
     connect(m_tree, SIGNAL(customContextMenuRequested(const QPoint&)),
@@ -792,20 +881,14 @@ void FunctionManager::deleteSelectedFunctions()
     }
 }
 
-void FunctionManager::slotTreeSelectionChanged()
+void FunctionManager::slotTreeItemDoubleClicked(QTreeWidgetItem* item)
 {
-    updateActionStatus();
+    if (item == NULL)
+        return;
 
-    QList <QTreeWidgetItem*> selection(m_tree->selectedItems());
-    if (selection.size() == 1)
-    {
-        Function* function = m_doc->function(m_tree->itemFunctionId(selection.first()));
-        editFunction(function);
-    }
-    else
-    {
-        editFunction(NULL);
-    }
+    // Edit the double-clicked function
+    Function* function = m_doc->function(m_tree->itemFunctionId(item));
+    editFunction(function);
 }
 
 void FunctionManager::slotTreeContextMenuRequested()
@@ -922,10 +1005,9 @@ void FunctionManager::editFunction(Function* function)
     }
     else if (function->type() == Function::CollectionType)
     {
-        CollectionEditor* collEditor = new CollectionEditor(m_hsplitter->widget(1), qobject_cast<Collection*> (function), m_doc);
-        m_editor = collEditor;
-        // Auto-open the function selection dialog for easy drag-drop workflow
-        collEditor->openFunctionSelection();
+        m_editor = new CollectionEditor(m_hsplitter->widget(1), qobject_cast<Collection*> (function), m_doc);
+        // Enable external drag mode so functions can be dragged from tree to collection
+        m_tree->setExternalDragMode(true);
     }
     else if (function->type() == Function::EFXType)
     {
@@ -974,10 +1056,19 @@ void FunctionManager::editFunction(Function* function)
         m_vsplitter->widget(1)->layout()->addWidget(m_scene_editor);
         m_scene_editor->show();
     }
+
+    // Highlight the edited function in the tree
+    highlightEditedFunction(function->id());
 }
 
 void FunctionManager::deleteCurrentEditor(bool async)
 {
+    // Clear the highlight from the previously edited function
+    clearEditedFunctionHighlight();
+
+    // Disable external drag mode when switching away from collection editor
+    m_tree->setExternalDragMode(false);
+
     if (async)
     {
         if (m_editor) m_editor->deleteLater();
@@ -994,4 +1085,50 @@ void FunctionManager::deleteCurrentEditor(bool async)
 
     m_hsplitter->widget(1)->hide();
     m_vsplitter->widget(1)->hide();
+}
+
+void FunctionManager::highlightEditedFunction(quint32 fid)
+{
+    Function* function = m_doc->function(fid);
+    if (function == NULL)
+        return;
+
+    QTreeWidgetItem* item = m_tree->functionItem(function);
+    if (item != NULL)
+    {
+        // Set a distinct background color for the edited function
+        QColor highlightColor = palette().color(QPalette::Highlight).lighter(160);
+        item->setBackground(0, QBrush(highlightColor));
+
+        // Make the text bold
+        QFont font = item->font(0);
+        font.setBold(true);
+        item->setFont(0, font);
+    }
+
+    m_editedFunctionId = fid;
+}
+
+void FunctionManager::clearEditedFunctionHighlight()
+{
+    if (m_editedFunctionId == Function::invalidId())
+        return;
+
+    Function* function = m_doc->function(m_editedFunctionId);
+    if (function != NULL)
+    {
+        QTreeWidgetItem* item = m_tree->functionItem(function);
+        if (item != NULL)
+        {
+            // Clear the background color
+            item->setBackground(0, QBrush());
+
+            // Remove bold font
+            QFont font = item->font(0);
+            font.setBold(false);
+            item->setFont(0, font);
+        }
+    }
+
+    m_editedFunctionId = Function::invalidId();
 }

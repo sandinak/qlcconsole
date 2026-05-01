@@ -72,12 +72,10 @@ CollectionEditor::CollectionEditor(QWidget* parent, Collection* fc, Doc* doc)
 
 CollectionEditor::~CollectionEditor()
 {
-    // Close the sticky function selection dialog if open
     if (m_functionSelection != NULL)
     {
         m_functionSelection->close();
         delete m_functionSelection;
-        m_functionSelection = NULL;
     }
 
     if (m_testButton->isChecked())
@@ -91,66 +89,32 @@ void CollectionEditor::slotNameEdited(const QString& text)
 
 void CollectionEditor::slotAdd()
 {
-    // If sticky dialog already open, just bring it to front
-    if (m_functionSelection != NULL)
+    if (m_functionSelection == NULL)
     {
-        m_functionSelection->raise();
-        m_functionSelection->activateWindow();
-        return;
+        m_functionSelection = new FunctionSelection(this, m_doc);
     }
-
-    // Create sticky function selection dialog
-    m_functionSelection = new FunctionSelection(this, m_doc);
 
     // Set up disabled functions (prevent circular references)
     QList<quint32> disabledList;
     disabledList << m_collection->id();
-    foreach (Function* function, m_doc->functions())
+    foreach (Function* func, m_doc->functions())
     {
-        if (function->contains(m_collection->id()))
-            disabledList << function->id();
+        if (func->contains(m_collection->id()))
+            disabledList << func->id();
     }
     m_functionSelection->setDisabledFunctions(disabledList);
 
-    // Enable sticky mode for drag-drop workflow
-    m_functionSelection->enableStickyMode();
-
-    // Connect signal to add functions when selected
-    connect(m_functionSelection, SIGNAL(functionsSelected(QList<quint32>)),
-            this, SLOT(slotFunctionsSelected(QList<quint32>)));
-
-    // Clean up when dialog is closed and clear status message
-    connect(m_functionSelection, &QDialog::finished, this, [this]() {
-        m_functionSelection->deleteLater();
-        m_functionSelection = NULL;
-        // Clear status message when dialog closes
-        App* app = qobject_cast<App*>(parentWidget()->window());
-        if (app != NULL)
-            app->clearStatusMessage();
-    });
-
-    // Set status message
-    App* app = qobject_cast<App*>(parentWidget()->window());
-    if (app != NULL)
-        app->setStatusMessage(tr("Collection Edit Mode - Drag functions from dialog or double-click to add"));
-
-    // Show the dialog (non-modal)
-    m_functionSelection->show();
-}
-
-void CollectionEditor::openFunctionSelection()
-{
-    slotAdd();
-}
-
-void CollectionEditor::slotFunctionsSelected(QList<quint32> ids)
-{
-    foreach (quint32 id, ids)
+    // Use exec() to show modal dialog and get selection
+    if (m_functionSelection->exec() == QDialog::Accepted)
     {
-        if (canAddFunction(id))
-            m_collection->addFunction(id);
+        QList<quint32> ids = m_functionSelection->selection();
+        foreach (quint32 id, ids)
+        {
+            if (canAddFunction(id))
+                m_collection->addFunction(id);
+        }
+        updateFunctionList();
     }
-    updateFunctionList();
 }
 
 void CollectionEditor::slotRemove()
@@ -309,7 +273,10 @@ bool CollectionEditor::eventFilter(QObject* obj, QEvent* event)
 void CollectionEditor::handleDragEnterEvent(QDragEnterEvent* event)
 {
     if (event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
-        event->acceptProposedAction();
+    {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+    }
     else
         event->ignore();
 }
@@ -317,7 +284,10 @@ void CollectionEditor::handleDragEnterEvent(QDragEnterEvent* event)
 void CollectionEditor::handleDragMoveEvent(QDragMoveEvent* event)
 {
     if (event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
-        event->acceptProposedAction();
+    {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+    }
     else
         event->ignore();
 }
@@ -350,7 +320,8 @@ void CollectionEditor::handleDropEvent(QDropEvent* event)
     if (addedAny)
     {
         updateFunctionList();
-        event->acceptProposedAction();
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
     }
     else
     {

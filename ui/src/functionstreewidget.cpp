@@ -382,9 +382,27 @@ const char* FunctionsTreeWidget::functionDragMimeType()
 void FunctionsTreeWidget::setExternalDragMode(bool enable)
 {
     m_externalDragMode = enable;
+
+    // When external drag mode is enabled, allow dragging to external widgets
+    // When disabled, only allow internal drag (folder reordering)
+    if (enable)
+        setDragDropMode(QAbstractItemView::DragOnly);
+    else
+        setDragDropMode(QAbstractItemView::InternalMove);
 }
 
-QMimeData* FunctionsTreeWidget::mimeData(const QList<QTreeWidgetItem*> &items) const
+Qt::DropActions FunctionsTreeWidget::supportedDropActions() const
+{
+    // When in external drag mode, only support copy actions
+    // This prevents items from being removed from the tree when dragged to external widgets
+    if (m_externalDragMode)
+        return Qt::CopyAction;
+
+    // For internal drag (folder reordering), support move actions
+    return Qt::MoveAction;
+}
+
+QMimeData* FunctionsTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) const
 {
     // If external drag mode is enabled, provide our custom MIME data
     // This is used by Qt's built-in drag when setDragEnabled(true) is called

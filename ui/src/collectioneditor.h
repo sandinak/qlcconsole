@@ -46,12 +46,10 @@ public:
     CollectionEditor(QWidget* parent, Collection* fc, Doc* doc);
     ~CollectionEditor();
 
-    /** Open the function selection dialog (for auto-open on collection edit) */
-    void openFunctionSelection();
-
 private:
     Doc* m_doc;
     Collection* m_collection; // The Collection being edited
+    FunctionSelection* m_functionSelection;
 
 private slots:
     void slotNameEdited(const QString& text);
@@ -61,17 +59,11 @@ private slots:
     void slotMoveDown();
     void slotTestClicked();
 
-    /** Handle functions selected from sticky dialog */
-    void slotFunctionsSelected(QList<quint32> ids);
-
 private:
     FunctionParent functionParent() const;
 
 private:
     void updateFunctionList();
-
-    /** Sticky function selection dialog (stays open for drag-drop) */
-    FunctionSelection* m_functionSelection;
 
     /*********************************************************************
      * Drag & Drop

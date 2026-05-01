@@ -96,8 +96,8 @@ private:
     void deleteSelectedFunctions();
 
 private slots:
-    /** Function selection was changed */
-    void slotTreeSelectionChanged();
+    /** Function was double-clicked in the tree */
+    void slotTreeItemDoubleClicked(QTreeWidgetItem* item);
 
     /** Right mouse button was clicked on function tree */
     void slotTreeContextMenuRequested();
@@ -160,6 +160,9 @@ protected:
      * Helpers
      *********************************************************************/
 private:
+    /** Get the folder path based on current selection */
+    QString getSelectedFolderPath();
+
     /** Create a copy of the given function */
     void copyFunction(quint32 fid);
 
@@ -169,9 +172,16 @@ private:
     /** Delete current editor. Can be synchronous. */
     void deleteCurrentEditor(bool async = true);
 
+    /** Highlight the currently edited function in the tree */
+    void highlightEditedFunction(quint32 fid);
+
+    /** Clear the highlight from the previously edited function */
+    void clearEditedFunctionHighlight();
+
 private:
     QWidget* m_editor;
     QWidget* m_scene_editor;
+    quint32 m_editedFunctionId;  // ID of the currently edited function
 };
 
 /** @} */

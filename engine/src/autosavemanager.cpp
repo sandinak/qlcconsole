@@ -156,6 +156,11 @@ void AutoSaveManager::stop()
     }
 }
 
+void AutoSaveManager::setCurrentFile(const QString& filePath)
+{
+    m_currentFile = filePath;
+}
+
 void AutoSaveManager::forceAutosave()
 {
     if (m_documentModified)
@@ -202,7 +207,7 @@ void AutoSaveManager::updateTimerInterval()
 
 bool AutoSaveManager::performAutosave()
 {
-    QString currentFile = m_doc->currentWorkspaceFile();
+    QString currentFile = m_currentFile;
 
     // If no current file is set, we can't autosave
     if (currentFile.isEmpty())
@@ -238,7 +243,7 @@ void AutoSaveManager::onAutosaveResult(bool success, const QString& filePath)
 
         if (m_useBackupFiles)
         {
-            cleanupOldBackups(m_doc->currentWorkspaceFile());
+            cleanupOldBackups(m_currentFile);
         }
 
         qDebug() << "AutoSave: Successfully saved to" << filePath;
