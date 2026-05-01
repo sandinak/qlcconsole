@@ -49,7 +49,11 @@ coverage/
 
 # Development IDEs
 .vscode/
+.augment/
 
 # CMake build
 CMakeLists.txt.user
 build*
+
+# Translation working files
+engine/test/qlci18n/qlci18n_*.ts_
