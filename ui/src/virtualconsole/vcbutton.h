@@ -52,6 +52,14 @@ class QEvent;
 #define KXMLQLCVCButtonActionToggle     QStringLiteral("Toggle")
 #define KXMLQLCVCButtonActionBlackout   QStringLiteral("Blackout")
 #define KXMLQLCVCButtonActionStopAll    QStringLiteral("StopAll")
+#define KXMLQLCVCButtonActionSelect     QStringLiteral("SelectFixtures")
+#define KXMLQLCVCButtonSelectFixtures   QStringLiteral("SelectionFixtures")
+#define KXMLQLCVCButtonSelectGroups     QStringLiteral("SelectionGroups")
+#define KXMLQLCVCButtonSelectMode       QStringLiteral("SelectionMode")
+#define KXMLQLCVCButtonSelectModeReplace QStringLiteral("Replace")
+#define KXMLQLCVCButtonSelectModeAdd    QStringLiteral("Add")
+#define KXMLQLCVCButtonSelectModeRemove QStringLiteral("Remove")
+#define KXMLQLCVCButtonSelectModeToggle QStringLiteral("Toggle")
 
 #define KXMLQLCVCButtonFlashOverride    QStringLiteral("Override")
 #define KXMLQLCVCButtonFlashForceLTP    QStringLiteral("ForceLTP")
@@ -258,8 +266,13 @@ public:
      * Flash: Keep the function running as long as the button is kept down.
      * Blackout: Toggle blackout on/off.
      * StopAll: Stop all functions (panic button).
+     * SelectFixtures: Modify the global programmer selection (replace,
+     *                 add, remove, or toggle a configured fixture set).
      */
-    enum Action { Toggle, Flash, Blackout, StopAll };
+    enum Action { Toggle, Flash, Blackout, StopAll, SelectFixtures };
+
+    /** SelectFixtures sub-mode: how the click affects the selection. */
+    enum SelectionMode { SelectReplace, SelectAdd, SelectRemove, SelectToggle };
 
     /** Set this button's action */
     void setAction(Action action);
@@ -273,7 +286,38 @@ public:
     void setStopAllFadeOutTime(int ms);
     int stopAllFadeTime() const;
 
+    /*********************************************************************
+     * SelectFixtures (Programmer mode)
+     *********************************************************************/
+public:
+    /** Set the explicit fixtures this button targets. */
+    void setSelectionFixtures(const QList<quint32>& fixtureIds);
+    QList<quint32> selectionFixtures() const;
+
+    /** Set the fixture-group ids whose members this button targets.
+        Members are resolved at click time. */
+    void setSelectionGroups(const QList<quint32>& groupIds);
+    QList<quint32> selectionGroups() const;
+
+    /** How the button's fixtures affect the global selection. */
+    void setSelectionMode(SelectionMode mode);
+    SelectionMode selectionMode() const;
+
+    static QString selectionModeToString(SelectionMode mode);
+    static SelectionMode stringToSelectionMode(const QString& str);
+
+    /** Resolve groups + explicit ids into the final fixture id set. */
+    QList<quint32> resolveSelectionTargets() const;
+
+protected slots:
+    /** Re-evaluate isOn() based on current programmer selection. */
+    void slotProgrammerSelectionChanged();
+
 protected:
+    QList<quint32> m_selectionFixtures;
+    QList<quint32> m_selectionGroups;
+    SelectionMode m_selectionMode;
+
     Action m_action;
     int m_blackoutFadeOutTime;
 

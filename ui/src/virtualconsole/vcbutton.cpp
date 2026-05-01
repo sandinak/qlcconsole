@@ -69,6 +69,7 @@ const QSize VCButton::defaultSize(QSize(50, 50));
 
 VCButton::VCButton(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
     , m_iconPath()
+    , m_selectionMode(SelectReplace)
     , m_blackoutFadeOutTime(0)
     , m_startupIntensityEnabled(false)
     , m_startupIntensity(1.0)
@@ -591,6 +592,14 @@ void VCButton::setAction(Action action)
         connect(m_doc->inputOutputMap(), SIGNAL(blackoutChanged(bool)),
                 this, SLOT(slotBlackoutChanged(bool)));
 
+    // Programmer selection signal connection
+    if (m_action == SelectFixtures && action != SelectFixtures)
+        disconnect(m_doc, SIGNAL(programmerSelectionChanged()),
+                   this, SLOT(slotProgrammerSelectionChanged()));
+    else if (m_action != SelectFixtures && action == SelectFixtures)
+        connect(m_doc, SIGNAL(programmerSelectionChanged()),
+                this, SLOT(slotProgrammerSelectionChanged()));
+
     // Action update
     m_action = action;
     updateIcon();
@@ -600,6 +609,12 @@ void VCButton::setAction(Action action)
         setToolTip(tr("Toggle Blackout"));
     else if (m_action == StopAll)
         setToolTip(tr("Stop ALL functions!"));
+    else if (m_action == SelectFixtures)
+        setToolTip(tr("Programmer: %1 selection")
+                       .arg(selectionModeToString(m_selectionMode)));
+
+    if (m_action == SelectFixtures)
+        slotProgrammerSelectionChanged();
 }
 
 VCButton::Action VCButton::action() const
@@ -615,6 +630,8 @@ QString VCButton::actionToString(VCButton::Action action)
         return QString(KXMLQLCVCButtonActionBlackout);
     else if (action == StopAll)
         return QString(KXMLQLCVCButtonActionStopAll);
+    else if (action == SelectFixtures)
+        return QString(KXMLQLCVCButtonActionSelect);
     else
         return QString(KXMLQLCVCButtonActionToggle);
 }
@@ -627,8 +644,109 @@ VCButton::Action VCButton::stringToAction(const QString& str)
         return Blackout;
     else if (str == KXMLQLCVCButtonActionStopAll)
         return StopAll;
+    else if (str == KXMLQLCVCButtonActionSelect)
+        return SelectFixtures;
     else
         return Toggle;
+}
+
+QString VCButton::selectionModeToString(VCButton::SelectionMode mode)
+{
+    switch (mode)
+    {
+    case SelectAdd:    return KXMLQLCVCButtonSelectModeAdd;
+    case SelectRemove: return KXMLQLCVCButtonSelectModeRemove;
+    case SelectToggle: return KXMLQLCVCButtonSelectModeToggle;
+    default:           return KXMLQLCVCButtonSelectModeReplace;
+    }
+}
+
+VCButton::SelectionMode VCButton::stringToSelectionMode(const QString& str)
+{
+    if (str == KXMLQLCVCButtonSelectModeAdd)    return SelectAdd;
+    if (str == KXMLQLCVCButtonSelectModeRemove) return SelectRemove;
+    if (str == KXMLQLCVCButtonSelectModeToggle) return SelectToggle;
+    return SelectReplace;
+}
+
+void VCButton::setSelectionFixtures(const QList<quint32>& fixtureIds)
+{
+    m_selectionFixtures = fixtureIds;
+    if (m_doc != NULL) m_doc->setModified();
+    slotProgrammerSelectionChanged();
+}
+
+QList<quint32> VCButton::selectionFixtures() const
+{
+    return m_selectionFixtures;
+}
+
+void VCButton::setSelectionGroups(const QList<quint32>& groupIds)
+{
+    m_selectionGroups = groupIds;
+    if (m_doc != NULL) m_doc->setModified();
+    slotProgrammerSelectionChanged();
+}
+
+QList<quint32> VCButton::selectionGroups() const
+{
+    return m_selectionGroups;
+}
+
+void VCButton::setSelectionMode(VCButton::SelectionMode mode)
+{
+    if (m_selectionMode == mode)
+        return;
+    m_selectionMode = mode;
+    if (m_doc != NULL) m_doc->setModified();
+}
+
+VCButton::SelectionMode VCButton::selectionMode() const
+{
+    return m_selectionMode;
+}
+
+QList<quint32> VCButton::resolveSelectionTargets() const
+{
+    QList<quint32> ids;
+    QSet<quint32> seen;
+    for (quint32 fid : m_selectionFixtures)
+    {
+        if (seen.contains(fid))
+            continue;
+        ids.append(fid);
+        seen.insert(fid);
+    }
+    Doc *doc = m_doc;
+    if (doc != NULL)
+    {
+        for (quint32 gid : m_selectionGroups)
+        {
+            FixtureGroup *grp = doc->fixtureGroup(gid);
+            if (grp == NULL)
+                continue;
+            for (quint32 fid : grp->fixtureList())
+            {
+                if (seen.contains(fid))
+                    continue;
+                ids.append(fid);
+                seen.insert(fid);
+            }
+        }
+    }
+    return ids;
+}
+
+void VCButton::slotProgrammerSelectionChanged()
+{
+    if (m_action != SelectFixtures)
+        return;
+    if (m_doc == NULL)
+        return;
+    QList<quint32> targets = resolveSelectionTargets();
+    bool active = !targets.isEmpty()
+                  && m_doc->allInProgrammerSelection(targets);
+    setState(active ? Active : Inactive);
 }
 
 void VCButton::setStopAllFadeOutTime(int ms)
@@ -777,6 +895,26 @@ void VCButton::pressFunction()
             m_doc->masterTimer()->stopAllFunctions();
         else
             m_doc->masterTimer()->fadeAndStopAll(stopAllFadeTime());
+    }
+    else if (m_action == SelectFixtures)
+    {
+        QList<quint32> targets = resolveSelectionTargets();
+        switch (m_selectionMode)
+        {
+        case SelectAdd:
+            m_doc->addToProgrammerSelection(targets);
+            break;
+        case SelectRemove:
+            m_doc->removeFromProgrammerSelection(targets);
+            break;
+        case SelectToggle:
+            m_doc->toggleInProgrammerSelection(targets);
+            break;
+        case SelectReplace:
+        default:
+            m_doc->setProgrammerSelection(targets);
+            break;
+        }
     }
 }
 
@@ -952,7 +1090,6 @@ bool VCButton::loadXML(QXmlStreamReader &root)
         else if (root.name() == KXMLQLCVCButtonAction)
         {
             QXmlStreamAttributes attrs = root.attributes();
-            setAction(stringToAction(root.readElementText()));
             if (attrs.hasAttribute(KXMLQLCVCButtonStopAllFadeTime))
                 setStopAllFadeOutTime(attrs.value(KXMLQLCVCButtonStopAllFadeTime).toString().toInt());
 
@@ -961,6 +1098,32 @@ bool VCButton::loadXML(QXmlStreamReader &root)
 
             if (attrs.hasAttribute(KXMLQLCVCButtonFlashForceLTP))
                 setFlashForceLTP(attrs.value(KXMLQLCVCButtonFlashForceLTP).toInt());
+
+            if (attrs.hasAttribute(KXMLQLCVCButtonSelectMode))
+                setSelectionMode(stringToSelectionMode(
+                    attrs.value(KXMLQLCVCButtonSelectMode).toString()));
+
+            if (attrs.hasAttribute(KXMLQLCVCButtonSelectFixtures))
+            {
+                QList<quint32> fids;
+                for (const QString& s : attrs.value(KXMLQLCVCButtonSelectFixtures).toString()
+                                             .split(',', Qt::SkipEmptyParts))
+                    fids.append(s.toUInt());
+                setSelectionFixtures(fids);
+            }
+
+            if (attrs.hasAttribute(KXMLQLCVCButtonSelectGroups))
+            {
+                QList<quint32> gids;
+                for (const QString& s : attrs.value(KXMLQLCVCButtonSelectGroups).toString()
+                                             .split(',', Qt::SkipEmptyParts))
+                    gids.append(s.toUInt());
+                setSelectionGroups(gids);
+            }
+
+            // setAction last so the XML-driven SelectFixtures connection
+            // happens after the fixture/group lists are populated.
+            setAction(stringToAction(root.readElementText()));
         }
         else if (root.name() == KXMLQLCVCButtonKey)
         {
@@ -1023,6 +1186,25 @@ bool VCButton::saveXML(QXmlStreamWriter *doc)
     {
         doc->writeAttribute(KXMLQLCVCButtonFlashOverride, QString::number(flashOverrides()));
         doc->writeAttribute(KXMLQLCVCButtonFlashForceLTP, QString::number(flashForceLTP()));
+    }
+    else if (action() == SelectFixtures)
+    {
+        doc->writeAttribute(KXMLQLCVCButtonSelectMode,
+                            selectionModeToString(m_selectionMode));
+        if (!m_selectionFixtures.isEmpty())
+        {
+            QStringList ids;
+            for (quint32 fid : m_selectionFixtures)
+                ids.append(QString::number(fid));
+            doc->writeAttribute(KXMLQLCVCButtonSelectFixtures, ids.join(','));
+        }
+        if (!m_selectionGroups.isEmpty())
+        {
+            QStringList ids;
+            for (quint32 gid : m_selectionGroups)
+                ids.append(QString::number(gid));
+            doc->writeAttribute(KXMLQLCVCButtonSelectGroups, ids.join(','));
+        }
     }
     doc->writeCharacters(actionToString(action()));
     doc->writeEndElement();
