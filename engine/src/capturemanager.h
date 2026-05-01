@@ -146,10 +146,26 @@ signals:
     void changesApplied();
     void undoStackChanged();
     void undoPerformed(const QString& summary);
+    void autoStored(const QString& summary);
 
 private slots:
     void slotFunctionStarted(quint32 id);
     void slotFunctionStopped(quint32 id);
+    void slotChaserStepChanged(int stepNumber);
+
+private:
+    /**
+     * Take the subset of currently-held overrides whose (fxi, channel)
+     * matches a value in `target`, write those values into `target`,
+     * push an undo snapshot, and remove only those overrides from the
+     * in-flight set. Other overrides (for unrelated scenes) are kept
+     * so the user's next manual store still sees them.
+     */
+    void autoStoreToScene(Scene* target, const QString& reason);
+
+    /** Look up the Scene id for a chaser's currently active step.
+        Returns Function::invalidId() if not a Scene. */
+    quint32 chaserCurrentStepSceneId(class Chaser* chaser) const;
 
 private:
     Doc* m_doc;
@@ -159,6 +175,10 @@ private:
 
     QList<quint32> m_runningOrder;
     QSet<quint32> m_running;
+
+    /** chaser id -> currently-driving step Scene id, kept up to date as
+        each running Chaser fires currentStepChanged. */
+    QHash<quint32, quint32> m_chaserStepScene;
 
     QList<UndoEntry> m_undoStack;
     static const int MAX_UNDO_DEPTH = 10;

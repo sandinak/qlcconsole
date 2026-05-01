@@ -1288,6 +1288,11 @@ void App::slotCaptureLiveEdits(bool checked)
                 this, [this](const QString& summary) {
             setStatusMessage(summary);
         }, Qt::UniqueConnection);
+        connect(cm, &CaptureManager::autoStored,
+                this, [this](const QString& summary) {
+            setStatusMessage(summary);
+            slotCapturePendingChanged();
+        }, Qt::UniqueConnection);
 
         m_captureStoreAction->setVisible(true);
         m_captureUndoAction->setVisible(true);

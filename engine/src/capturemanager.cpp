@@ -77,12 +77,136 @@ void CaptureManager::slotFunctionStarted(quint32 id)
         return;
     m_running.insert(id);
     m_runningOrder.append(id);
+
+    Function* f = m_doc->function(id);
+    if (f != nullptr && f->type() == Function::ChaserType)
+    {
+        Chaser* chaser = static_cast<Chaser*>(f);
+        // Cache initial step scene so we know what was active when the
+        // chaser fires currentStepChanged for the first transition.
+        m_chaserStepScene.insert(id, chaserCurrentStepSceneId(chaser));
+        connect(chaser, &Chaser::currentStepChanged,
+                this, &CaptureManager::slotChaserStepChanged,
+                Qt::UniqueConnection);
+    }
 }
 
 void CaptureManager::slotFunctionStopped(quint32 id)
 {
     m_running.remove(id);
     m_runningOrder.removeAll(id);
+
+    Function* f = m_doc->function(id);
+    if (f != nullptr && f->type() == Function::ChaserType)
+    {
+        Chaser* chaser = static_cast<Chaser*>(f);
+        // Stopping a chaser is also a natural commit point: capture
+        // anything tied to its last-active step before the chaser leaves.
+        if (m_capturing && !m_overrides.isEmpty())
+        {
+            quint32 lastSceneId = m_chaserStepScene.value(id, Function::invalidId());
+            Function* sf = m_doc->function(lastSceneId);
+            if (sf != nullptr && sf->type() == Function::SceneType)
+            {
+                autoStoreToScene(static_cast<Scene*>(sf),
+                                 tr("chaser '%1' stopped").arg(chaser->name()));
+            }
+        }
+        disconnect(chaser, &Chaser::currentStepChanged,
+                   this, &CaptureManager::slotChaserStepChanged);
+        m_chaserStepScene.remove(id);
+    }
+}
+
+quint32 CaptureManager::chaserCurrentStepSceneId(Chaser* chaser) const
+{
+    if (chaser == nullptr)
+        return Function::invalidId();
+    int idx = chaser->currentStepIndex();
+    QList<ChaserStep> steps = chaser->steps();
+    if (idx < 0 || idx >= steps.size())
+        return Function::invalidId();
+    Function* f = m_doc->function(steps.at(idx).fid);
+    if (f == nullptr || f->type() != Function::SceneType)
+        return Function::invalidId();
+    return f->id();
+}
+
+void CaptureManager::slotChaserStepChanged(int stepNumber)
+{
+    Q_UNUSED(stepNumber);
+    Chaser* chaser = qobject_cast<Chaser*>(sender());
+    if (chaser == nullptr)
+        return;
+
+    quint32 oldSceneId = m_chaserStepScene.value(chaser->id(),
+                                                 Function::invalidId());
+    quint32 newSceneId = chaserCurrentStepSceneId(chaser);
+    m_chaserStepScene[chaser->id()] = newSceneId;
+
+    if (!m_capturing || m_overrides.isEmpty())
+        return;
+    if (oldSceneId == Function::invalidId() || oldSceneId == newSceneId)
+        return;
+
+    Function* f = m_doc->function(oldSceneId);
+    if (f == nullptr || f->type() != Function::SceneType)
+        return;
+
+    autoStoreToScene(static_cast<Scene*>(f),
+                     tr("chaser '%1' advanced").arg(chaser->name()));
+}
+
+void CaptureManager::autoStoreToScene(Scene* target, const QString& reason)
+{
+    if (target == nullptr)
+        return;
+
+    // Build the (fxi, channel) set the target Scene asserts.
+    QSet<QPair<quint32, quint32> > targetChannels;
+    for (const SceneValue& sv : target->values())
+        targetChannels.insert(qMakePair(sv.fxi, sv.channel));
+
+    // Collect overrides that match channels owned by the target.
+    QList<Override> matched;
+    QList<QPair<quint32, quint32> > matchedKeys;
+    for (auto it = m_overrides.constBegin(); it != m_overrides.constEnd(); ++it)
+    {
+        if (targetChannels.contains(it.key()))
+        {
+            matched.append(it.value());
+            matchedKeys.append(it.key());
+        }
+    }
+    if (matched.isEmpty())
+        return;
+
+    // Snapshot for undo before mutating.
+    UndoEntry undo;
+    undo.label = tr("Auto-store");
+    undo.sceneCount = 1;
+    undo.channelCount = matched.size();
+    undo.priorSceneValues.insert(target->id(), target->values());
+
+    for (const Override& o : matched)
+        target->setValue(SceneValue(o.fxi, o.channel, o.value));
+
+    m_undoStack.append(undo);
+    while (m_undoStack.size() > MAX_UNDO_DEPTH)
+        m_undoStack.removeFirst();
+
+    // Remove only the keys we just consumed; leave other in-flight
+    // captures alone so a later manual Store still sees them.
+    for (const auto& k : matchedKeys)
+        m_overrides.remove(k);
+
+    m_doc->setModified();
+    emit changesApplied();
+    emit undoStackChanged();
+
+    QString summary = tr("Auto-stored %1 channel(s) into '%2' (%3)")
+                          .arg(matched.size()).arg(target->name()).arg(reason);
+    emit autoStored(summary);
 }
 
 QList<CaptureManager::ScenePlan> CaptureManager::buildPlan() const
