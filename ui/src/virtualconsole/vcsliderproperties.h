@@ -55,12 +55,14 @@ protected slots:
     void slotModeLevelClicked();
     void slotModePlaybackClicked();
     void slotModeSubmasterClicked();
+    void slotModeParameterClicked();
     void slotTabChanged();
 
 protected:
     void setLevelPageVisibility(bool visible);
     void setPlaybackPageVisibility(bool visible);
     void setSubmasterPageVisibility(bool visible);
+    void setParameterPageVisibility(bool visible);
 
 protected:
     int m_sliderMode;

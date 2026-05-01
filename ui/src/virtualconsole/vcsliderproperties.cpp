@@ -94,6 +94,30 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
     connect(m_switchToSubmasterModeButton, SIGNAL(clicked()),
             this, SLOT(slotModeSubmasterClicked()));
 
+    /* Parameter page connections */
+    connect(m_switchToParameterModeButton, SIGNAL(clicked()),
+            this, SLOT(slotModeParameterClicked()));
+
+    /* Populate role combo (preserve enum index → combo index = enum value) */
+    static const VCSlider::ParameterRole roleOrder[] = {
+        VCSlider::RoleDimmer, VCSlider::RoleRed, VCSlider::RoleGreen,
+        VCSlider::RoleBlue, VCSlider::RoleWhite, VCSlider::RoleCyan,
+        VCSlider::RoleMagenta, VCSlider::RoleYellow, VCSlider::RoleAmber,
+        VCSlider::RoleUV, VCSlider::RolePan, VCSlider::RoleTilt,
+        VCSlider::RoleShutter, VCSlider::RoleGobo, VCSlider::RoleSpeed,
+        VCSlider::RoleEffect, VCSlider::RoleBeam, VCSlider::RoleMaintenance
+    };
+    for (VCSlider::ParameterRole r : roleOrder)
+        m_parameterRoleCombo->addItem(VCSlider::parameterRoleToString(r),
+                                      static_cast<int>(r));
+    m_parameterRoleCombo->setCurrentIndex(
+        m_parameterRoleCombo->findData(static_cast<int>(m_slider->parameterRole())));
+
+    if (m_slider->parameterControlByte() == 1)
+        m_parameterLSBRadio->setChecked(true);
+    else
+        m_parameterMSBRadio->setChecked(true);
+
     /*********************************************************************
      * General page
      *********************************************************************/
@@ -209,6 +233,9 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
         case VCSlider::Submaster:
             slotModeSubmasterClicked();
         break;
+        case VCSlider::Parameter:
+            slotModeParameterClicked();
+        break;
     }
 }
 
@@ -231,6 +258,7 @@ void VCSliderProperties::slotModeLevelClicked()
     setLevelPageVisibility(true);
     setPlaybackPageVisibility(false);
     setSubmasterPageVisibility(false);
+    setParameterPageVisibility(false);
 
     int cngType = m_slider->clickAndGoType();
     switch(cngType)
@@ -274,6 +302,7 @@ void VCSliderProperties::slotModePlaybackClicked()
     setLevelPageVisibility(false);
     setPlaybackPageVisibility(true);
     setSubmasterPageVisibility(false);
+    setParameterPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeSubmasterClicked()
@@ -283,6 +312,19 @@ void VCSliderProperties::slotModeSubmasterClicked()
     setLevelPageVisibility(false);
     setPlaybackPageVisibility(false);
     setSubmasterPageVisibility(true);
+    setParameterPageVisibility(false);
+}
+
+void VCSliderProperties::slotModeParameterClicked()
+{
+    m_sliderMode = VCSlider::Parameter;
+
+    m_nameEdit->setEnabled(true);
+
+    setLevelPageVisibility(false);
+    setPlaybackPageVisibility(false);
+    setSubmasterPageVisibility(false);
+    setParameterPageVisibility(true);
 }
 
 void VCSliderProperties::slotTabChanged()
@@ -348,6 +390,27 @@ void VCSliderProperties::setSubmasterPageVisibility(bool visible)
     {
         m_switchToSubmasterModeButton->show();
         m_submasterSpacer->changeSize(0, 0, QSizePolicy::Fixed, QSizePolicy::Fixed);
+    }
+}
+
+void VCSliderProperties::setParameterPageVisibility(bool visible)
+{
+    m_parameterInfo->setVisible(visible);
+    m_parameterRoleLabel->setVisible(visible);
+    m_parameterRoleCombo->setVisible(visible);
+    m_parameterByteLabel->setVisible(visible);
+    m_parameterMSBRadio->setVisible(visible);
+    m_parameterLSBRadio->setVisible(visible);
+
+    if (visible == true)
+    {
+        m_switchToParameterModeButton->hide();
+        m_parameterSpacer->changeSize(0, 0, QSizePolicy::Fixed, QSizePolicy::Expanding);
+    }
+    else
+    {
+        m_switchToParameterModeButton->show();
+        m_parameterSpacer->changeSize(0, 0, QSizePolicy::Fixed, QSizePolicy::Fixed);
     }
 }
 
@@ -879,6 +942,11 @@ void VCSliderProperties::accept()
     m_slider->setPlaybackFlashEnable(m_flashButtonCheck->isChecked());
     m_slider->setPlaybackFlashKeySequence(m_flashInputWidget->keySequence());
     m_slider->setInputSource(m_flashInputWidget->inputSource(), VCSlider::flashButtonInputSourceId);
+
+    /* Parameter page */
+    m_slider->setParameterRole(static_cast<VCSlider::ParameterRole>(
+        m_parameterRoleCombo->currentData().toInt()));
+    m_slider->setParameterControlByte(m_parameterLSBRadio->isChecked() ? 1 : 0);
 
     /* Slider mode */
     if (m_slider->sliderMode() != m_sliderMode)
