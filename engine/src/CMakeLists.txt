@@ -5,6 +5,7 @@ include(../../variables.cmake)
 add_library(${module_name} SHARED
     ../../plugins/interfaces/qlcioplugin.cpp ../../plugins/interfaces/qlcioplugin.h
     ../../plugins/interfaces/utils.h
+    autosavemanager.cpp autosavemanager.h
     avolitesd4parser.cpp avolitesd4parser.h
     bus.cpp bus.h
     channelmodifier.cpp channelmodifier.h

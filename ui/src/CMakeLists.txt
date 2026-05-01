@@ -81,6 +81,7 @@ add_library(${module_name}
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
     positiontool.cpp positiontool.h positiontool.ui
+    preferencesdialog.cpp preferencesdialog.h
     rdmmanager.cpp rdmmanager.h rdmmanager.ui
     remapwidget.cpp remapwidget.h
     rgbitem.cpp rgbitem.h
