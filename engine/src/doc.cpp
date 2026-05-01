@@ -35,6 +35,7 @@
 
 #include "monitorproperties.h"
 #include "audioplugincache.h"
+#include "capturemanager.h"
 #include "rgbscriptscache.h"
 #include "channelsgroup.h"
 #include "scriptwrapper.h"
@@ -65,6 +66,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_ioPluginCache(new IOPluginCache(this))
     , m_audioPluginCache(new AudioPluginCache(this))
     , m_masterTimer(new MasterTimer(this))
+    , m_captureManager(NULL)
     , m_ioMap(new InputOutputMap(this, universes))
     , m_monitorProps(NULL)
     , m_mode(Design)
@@ -89,6 +91,8 @@ Doc::Doc(QObject* parent, int universes)
     m_autosaveTimer.setSingleShot(true);
 
     connect(&m_autosaveTimer, SIGNAL(timeout()), this, SIGNAL(needAutosave()));
+
+    m_captureManager = new CaptureManager(this, this);
 }
 
 Doc::~Doc()
@@ -270,6 +274,11 @@ InputOutputMap* Doc::inputOutputMap() const
 MasterTimer* Doc::masterTimer() const
 {
     return m_masterTimer;
+}
+
+CaptureManager* Doc::captureManager() const
+{
+    return m_captureManager;
 }
 
 QSharedPointer<AudioCapture> Doc::audioInputCapture() const

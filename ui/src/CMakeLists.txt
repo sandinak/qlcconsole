@@ -71,6 +71,7 @@ add_library(${module_name}
     inputprofileeditor.cpp inputprofileeditor.h inputprofileeditor.ui
     inputselectionwidget.cpp inputselectionwidget.h inputselectionwidget.ui
     knobwidget.cpp knobwidget.h
+    livecapturedialog.cpp livecapturedialog.h
     monitor/monitor.cpp monitor/monitor.h
     monitor/monitorbackgroundselection.cpp monitor/monitorbackgroundselection.h monitor/monitorbackgroundselection.ui
     monitor/monitorfixture.cpp monitor/monitorfixture.h

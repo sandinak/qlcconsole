@@ -43,6 +43,8 @@
 #include "addresstool.h"
 #include "simpledesk.h"
 #include "appsettings.h"
+#include "capturemanager.h"
+#include "livecapturedialog.h"
 #include "aboutbox.h"
 #include "monitor.h"
 #include "vcframe.h"
@@ -126,6 +128,7 @@ App::App()
     , m_dumpDmxAction(NULL)
     , m_liveEditAction(NULL)
     , m_liveEditVirtualConsoleAction(NULL)
+    , m_captureLiveEditsAction(NULL)
 
     , m_helpIndexAction(NULL)
     , m_helpAboutAction(NULL)
@@ -684,6 +687,7 @@ void App::slotModeChanged(Doc::Mode mode)
         m_fileOpenAction->setEnabled(false);
         m_liveEditAction->setEnabled(true);
         m_liveEditVirtualConsoleAction->setEnabled(true);
+        m_captureLiveEditsAction->setEnabled(true);
 
         m_modeToggleAction->setIcon(QIcon(":/design.png"));
         m_modeToggleAction->setText(tr("Design"));
@@ -696,6 +700,9 @@ void App::slotModeChanged(Doc::Mode mode)
         m_fileOpenAction->setEnabled(true);
         m_liveEditAction->setEnabled(false);
         m_liveEditVirtualConsoleAction->setEnabled(false);
+        m_captureLiveEditsAction->setEnabled(false);
+        if (m_captureLiveEditsAction->isChecked())
+            m_captureLiveEditsAction->setChecked(false);
 
         m_modeToggleAction->setIcon(QIcon(":/operate.png"));
         m_modeToggleAction->setText(tr("Operate"));
@@ -751,6 +758,12 @@ void App::initActions()
     connect(m_liveEditVirtualConsoleAction, SIGNAL(triggered()), this, SLOT(slotLiveEditVirtualConsole()));
     m_liveEditVirtualConsoleAction->setCheckable(true);
     m_liveEditVirtualConsoleAction->setEnabled(false);
+
+    m_captureLiveEditsAction = new QAction(QIcon(":/liveedit.png"), tr("Capture Live Edits"), this);
+    m_captureLiveEditsAction->setToolTip(tr("Record VC fader/XYPad changes and fold them back into running scenes"));
+    m_captureLiveEditsAction->setCheckable(true);
+    m_captureLiveEditsAction->setEnabled(false);
+    connect(m_captureLiveEditsAction, SIGNAL(toggled(bool)), this, SLOT(slotCaptureLiveEdits(bool)));
 
     m_dumpDmxAction = new QAction(QIcon(":/add_dump.png"), tr("Dump DMX values to a function"), this);
     m_dumpDmxAction->setShortcut(QKeySequence("CTRL+D"));
@@ -839,6 +852,7 @@ void App::initToolBar()
     m_toolbar->addAction(m_dumpDmxAction);
     m_toolbar->addAction(m_liveEditAction);
     m_toolbar->addAction(m_liveEditVirtualConsoleAction);
+    m_toolbar->addAction(m_captureLiveEditsAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_controlPanicAction);
     m_toolbar->addSeparator();
@@ -1232,6 +1246,30 @@ void App::slotFunctionLiveEdit()
 void App::slotLiveEditVirtualConsole()
 {
     VirtualConsole::instance()->toggleLiveEdit();
+}
+
+void App::slotCaptureLiveEdits(bool checked)
+{
+    CaptureManager *cm = m_doc->captureManager();
+    if (cm == NULL)
+        return;
+
+    if (checked)
+    {
+        cm->setCapturing(true);
+    }
+    else
+    {
+        // Capture stopped: if anything was recorded, present the diff
+        // dialog so the user can apply or save-as-new. The dialog itself
+        // is responsible for clearing overrides on apply/cancel.
+        if (cm->overrideCount() > 0)
+        {
+            LiveCaptureDialog dlg(m_doc, this);
+            dlg.exec();
+        }
+        cm->setCapturing(false);
+    }
 }
 
 void App::slotDetachContext(int index)

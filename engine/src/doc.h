@@ -43,6 +43,7 @@ class AudioCapture;
 class RGBScriptsCache;
 class AudioPluginCache;
 class MonitorProperties;
+class CaptureManager;
 
 /** @addtogroup engine Engine
  * @{
@@ -147,6 +148,9 @@ public:
     /** Get the MasterTimer object that runs the show */
     MasterTimer *masterTimer() const;
 
+    /** Get the CaptureManager that records DMX overrides for live-edit */
+    CaptureManager *captureManager() const;
+
     /** Get the audio input capture object */
     QSharedPointer<AudioCapture> audioInputCapture() const;
 
@@ -160,6 +164,7 @@ private:
     IOPluginCache *m_ioPluginCache;
     AudioPluginCache *m_audioPluginCache;
     MasterTimer *m_masterTimer;
+    CaptureManager *m_captureManager;
     InputOutputMap *m_ioMap;
     mutable QSharedPointer<AudioCapture> m_inputCapture;
     MonitorProperties *m_monitorProps;

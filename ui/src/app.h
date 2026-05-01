@@ -175,6 +175,7 @@ public slots:
     void slotDumpDmxIntoFunction();
     void slotFunctionLiveEdit();
     void slotLiveEditVirtualConsole();
+    void slotCaptureLiveEdits(bool checked);
     void slotDetachContext(int index);
     void slotReattachContext();
 
@@ -200,6 +201,7 @@ private:
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
     QAction* m_liveEditVirtualConsoleAction;
+    QAction* m_captureLiveEditsAction;
     QAction* m_appSettingsAction;
 
     QAction* m_helpIndexAction;

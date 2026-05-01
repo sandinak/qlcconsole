@@ -31,6 +31,7 @@
 #include "qlcfile.h"
 
 #include "vcxypadfixture.h"
+#include "capturemanager.h"
 #include "genericfader.h"
 #include "fadechannel.h"
 #include "universe.h"
@@ -543,6 +544,15 @@ void VCXYPadFixture::writeDMX(qreal xmul, qreal ymul, QSharedPointer<GenericFade
 
     fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_yMSB);
     updateChannel(fc, uchar(y >> 8));
+
+    CaptureManager *cm = m_doc->captureManager();
+    if (cm != NULL && cm->isCapturing())
+    {
+        Fixture *fxi = m_doc->fixture(m_head.fxi);
+        QString src = fxi ? fxi->name() : QString::fromLatin1("XY");
+        cm->recordOverride(m_head.fxi, m_xMSB, uchar(x >> 8), src);
+        cm->recordOverride(m_head.fxi, m_yMSB, uchar(y >> 8), src);
+    }
 
     if (m_xLSB != QLCChannel::invalid() && m_yLSB != QLCChannel::invalid())
     {

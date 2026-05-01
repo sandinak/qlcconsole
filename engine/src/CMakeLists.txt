@@ -8,6 +8,7 @@ add_library(${module_name} SHARED
     autosavemanager.cpp autosavemanager.h
     avolitesd4parser.cpp avolitesd4parser.h
     bus.cpp bus.h
+    capturemanager.cpp capturemanager.h
     channelmodifier.cpp channelmodifier.h
     channelsgroup.cpp channelsgroup.h
     chaser.cpp chaser.h

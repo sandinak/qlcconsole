@@ -39,6 +39,7 @@
 #include <QPen>
 
 #include "vcsliderproperties.h"
+#include "capturemanager.h"
 #include "vcpropertieseditor.h"
 #include "genericfader.h"
 #include "fadechannel.h"
@@ -1262,6 +1263,10 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
             fc->setTarget(modLevel);
             fc->setReady(false);
             fc->setElapsed(0);
+
+            CaptureManager *cm = m_doc->captureManager();
+            if (cm != NULL && cm->isCapturing())
+                cm->recordOverride(lch.fixture, lch.channel, modLevel, caption());
 
             //qDebug() << "VC Slider write channel" << fc->target();
         }
