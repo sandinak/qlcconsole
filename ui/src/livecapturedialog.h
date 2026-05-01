@@ -16,6 +16,7 @@
 
 class Doc;
 class QTreeWidget;
+class QTreeWidgetItem;
 class QPushButton;
 class QLineEdit;
 
@@ -29,11 +30,18 @@ public:
 private slots:
     void slotApply();
     void slotSaveAsNew();
+    void slotItemChanged(QTreeWidgetItem* item, int column);
 
 private:
     void buildTree();
     QString channelLabel(quint32 fxi, quint32 ch) const;
     QString fixtureLabel(quint32 fxi) const;
+
+    /** Build a copy of m_plan filtered to only include rows the user
+        left checked. Channels skipped (chaser-driven, or unchecked by
+        the user) are dropped. Scenes with no surviving overrides are
+        dropped too. */
+    QList<CaptureManager::ScenePlan> filteredPlan() const;
 
 private:
     Doc* m_doc;

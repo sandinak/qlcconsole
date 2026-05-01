@@ -202,6 +202,7 @@ private:
     QAction* m_liveEditAction;
     QAction* m_liveEditVirtualConsoleAction;
     QAction* m_captureLiveEditsAction;
+    QMetaObject::Connection m_captureCountConnection;
     QAction* m_appSettingsAction;
 
     QAction* m_helpIndexAction;

@@ -1257,9 +1257,24 @@ void App::slotCaptureLiveEdits(bool checked)
     if (checked)
     {
         cm->setCapturing(true);
+        // Refresh status bar on each new override so the user sees the
+        // count climbing while they tweak.
+        if (m_captureCountConnection)
+            disconnect(m_captureCountConnection);
+        m_captureCountConnection = connect(cm, &CaptureManager::overrideRecorded,
+                                           this, [this, cm](quint32, quint32, uchar) {
+            setStatusMessage(tr("Capturing live edits — %1 channel(s) recorded")
+                             .arg(cm->overrideCount()));
+        });
+        setStatusMessage(tr("Capturing live edits — move VC sliders / XY pads to record"));
     }
     else
     {
+        if (m_captureCountConnection)
+        {
+            disconnect(m_captureCountConnection);
+            m_captureCountConnection = QMetaObject::Connection();
+        }
         // Capture stopped: if anything was recorded, present the diff
         // dialog so the user can apply or save-as-new. The dialog itself
         // is responsible for clearing overrides on apply/cancel.
@@ -1269,6 +1284,7 @@ void App::slotCaptureLiveEdits(bool checked)
             dlg.exec();
         }
         cm->setCapturing(false);
+        clearStatusMessage();
     }
 }
 
