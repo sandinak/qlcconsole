@@ -6,11 +6,13 @@
 */
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDialogButtonBox>
 #include <QComboBox>
 #include <QDir>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QHash>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
@@ -35,9 +37,12 @@ ProgrammerFrameWizard::ProgrammerFrameWizard(Doc* doc, QWidget* parent)
     , m_doc(doc)
 {
     setWindowTitle(tr("Generate Programmer Frame from Input Profile"));
-    resize(560, 240);
+    setMinimumWidth(620);
 
     QVBoxLayout* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(16, 16, 16, 16);
+    layout->setSpacing(12);
+
     QLabel* intro = new QLabel(tr(
         "Pick an input profile (one already loaded in this workspace, "
         "or browse-on-disk via Tools → Inputs/Outputs first) and a "
@@ -46,9 +51,14 @@ ProgrammerFrameWizard::ProgrammerFrameWizard(Doc* doc, QWidget* parent)
         "every widget pre-configured and pre-bound to your surface — "
         "no MIDI-learn, no manual properties."), this);
     intro->setWordWrap(true);
+    intro->setMinimumHeight(intro->sizeHint().height());
     layout->addWidget(intro);
 
     QFormLayout* form = new QFormLayout();
+    form->setHorizontalSpacing(12);
+    form->setVerticalSpacing(8);
+    form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     m_profileCombo = new QComboBox(this);
     m_mapCombo = new QComboBox(this);
     m_universeSpin = new QSpinBox(this);
@@ -62,7 +72,10 @@ ProgrammerFrameWizard::ProgrammerFrameWizard(Doc* doc, QWidget* parent)
 
     m_summary = new QLabel(this);
     m_summary->setWordWrap(true);
-    layout->addWidget(m_summary, 1);
+    m_summary->setTextFormat(Qt::PlainText);
+    m_summary->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::MinimumExpanding);
+    layout->addWidget(m_summary);
+    layout->addStretch(1);
 
     QDialogButtonBox* buttons = new QDialogButtonBox(this);
     m_generateButton = buttons->addButton(tr("Generate"),
@@ -100,17 +113,22 @@ void ProgrammerFrameWizard::populateMaps()
 {
     m_mapCombo->clear();
 
-    // System dir + user dir, both following the QLC+ convention.
     QStringList searchDirs;
+    // System dir per QLC+ convention.
     searchDirs << QLCFile::systemDirectory(QStringLiteral("ProgrammerMaps"))
                   .absolutePath();
+    // User-level overrides.
     searchDirs << QLCFile::userDirectory(QStringLiteral("ProgrammerMaps"),
                                          QString(),
                                          QStringList() << QStringLiteral("*.qxpm"))
                   .absolutePath();
-    // Also pick up the in-tree resource dir during development.
-    searchDirs << QStringLiteral("%1/../resources/programmermaps")
-                      .arg(QCoreApplication::applicationDirPath());
+    // macOS bundle Resources dir (capital R).
+    const QString appDir = QCoreApplication::applicationDirPath();
+    searchDirs << QStringLiteral("%1/../Resources/programmermaps").arg(appDir);
+    // In-tree dev: binary is in build/main/, source is two levels up.
+    searchDirs << QStringLiteral("%1/../../resources/programmermaps").arg(appDir);
+    // …and one level up, for build layouts that put binaries one deeper.
+    searchDirs << QStringLiteral("%1/../resources/programmermaps").arg(appDir);
 
     QSet<QString> seen;
     for (const QString& dirPath : searchDirs)
@@ -118,16 +136,16 @@ void ProgrammerFrameWizard::populateMaps()
         QDir dir(dirPath);
         if (!dir.exists())
             continue;
+        const QString canonical = dir.canonicalPath();
+        if (seen.contains(canonical))
+            continue;
+        seen.insert(canonical);
         for (const QFileInfo& fi : dir.entryInfoList(QStringList()
                                                      << QStringLiteral("*.qxpm"),
                                                      QDir::Files,
                                                      QDir::Name))
         {
-            const QString abs = fi.absoluteFilePath();
-            if (seen.contains(abs))
-                continue;
-            seen.insert(abs);
-            m_mapCombo->addItem(fi.baseName(), abs);
+            m_mapCombo->addItem(fi.baseName(), fi.absoluteFilePath());
         }
     }
 }
@@ -243,13 +261,52 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
                           .arg(map.manufacturer()).arg(map.model()).trimmed());
     parent->addWidgetToPageMap(frame);
 
-    // Layout constants
-    const int CELL_W = 60;
-    const int CELL_H = 110;
-    const int MARGIN = 10;
+    // Sizing: real, generously sized widgets so the surface mapping is
+    // legible without zooming the VC.
+    const int MARGIN = 12;
+    const int COL_W = 90;            // column pitch
+    const int ROW_GAP = 8;           // vertical gap between rows
+    const int W_INSET = 6;           // widget width inset within column
+    const int SLIDER_H = 220;        // slider row height
+    const int BUTTON_H = 60;         // button row height
 
-    int autoIdx = 0; // for entries without explicit row/column
+    // Pre-pass: determine each row's max widget height so mixed rows
+    // (rare but possible) lay out cleanly.
+    QHash<int, int> rowHeights;
+    int autoIdx = 0;
+    int maxColumn = 0;
+    for (const ProgrammerMap::Entry& e : map.entries())
+    {
+        int row = e.row;
+        int col = e.column;
+        if (row < 0 || col < 0)
+        {
+            row = autoIdx / map.gridColumns();
+            col = autoIdx % map.gridColumns();
+            ++autoIdx;
+        }
+        int h = (e.kind == ProgrammerMap::ParameterSlider) ? SLIDER_H : BUTTON_H;
+        rowHeights[row] = qMax(rowHeights.value(row, 0), h);
+        maxColumn = qMax(maxColumn, col);
+    }
 
+    // Cumulative row Y offsets.
+    QList<int> rowsSorted = rowHeights.keys();
+    std::sort(rowsSorted.begin(), rowsSorted.end());
+    QHash<int, int> rowY;
+    int yCursor = MARGIN;
+    for (int r : rowsSorted)
+    {
+        rowY[r] = yCursor;
+        yCursor += rowHeights[r] + ROW_GAP;
+    }
+    const int frameHeight = yCursor + MARGIN;
+    const int frameWidth = MARGIN * 2 + (maxColumn + 1) * COL_W;
+
+    // Second pass: actually create widgets.
+    autoIdx = 0;
+    int slidersMade = 0;
+    int buttonsMade = 0;
     for (const ProgrammerMap::Entry& e : map.entries())
     {
         QLCInputChannel* ich = profile->channels().value(e.channel);
@@ -264,10 +321,11 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
             ++autoIdx;
         }
 
-        const int x = MARGIN + col * CELL_W;
-        const int y = MARGIN + row * CELL_H;
+        const int x = MARGIN + col * COL_W;
+        const int y = rowY.value(row, MARGIN);
+        const int w = COL_W - W_INSET;
 
-        VCWidget* w = nullptr;
+        VCWidget* widget = nullptr;
         if (e.kind == ProgrammerMap::ParameterSlider)
         {
             VCSlider* slider = new VCSlider(frame, doc);
@@ -275,39 +333,44 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
             slider->setParameterRole(e.role);
             slider->setParameterControlByte(e.controlByte);
             slider->setSliderMode(VCSlider::Parameter);
-            slider->setGeometry(x, y, CELL_W - 4, CELL_H - 4);
-            w = slider;
+            slider->setGeometry(x, y, w, SLIDER_H);
+            widget = slider;
+            ++slidersMade;
         }
         else if (e.kind == ProgrammerMap::SelectFixturesButton ||
                  e.kind == ProgrammerMap::ClearSelectionButton)
         {
             VCButton* button = new VCButton(frame, doc);
             button->setCaption(caption);
-            button->setSelectionMode(e.selectionMode);
-            // ClearSelectionButton == empty fixtures + Replace mode
-            // (a SelectFixtures button with nothing checked, on Replace,
-            // is precisely "clear the selection").
-            if (e.kind == ProgrammerMap::ClearSelectionButton)
-                button->setSelectionMode(VCButton::SelectReplace);
+            // ClearSelectionButton is just SelectFixtures with empty
+            // fixtures + Replace mode — pressing it clears.
+            VCButton::SelectionMode m = (e.kind == ProgrammerMap::ClearSelectionButton)
+                ? VCButton::SelectReplace : e.selectionMode;
+            button->setSelectionMode(m);
             button->setAction(VCButton::SelectFixtures);
-            button->setGeometry(x, y, CELL_W - 4, 38);
-            w = button;
+            button->setGeometry(x, y, w, BUTTON_H);
+            widget = button;
+            ++buttonsMade;
+        }
+        else
+        {
+            qWarning() << "ProgrammerFrameWizard: skipping unknown kind for channel"
+                       << e.channel;
+            continue;
         }
 
-        if (w != nullptr)
-        {
-            frame->addWidgetToPageMap(w);
-            QSharedPointer<QLCInputSource> src(
-                new QLCInputSource(inputUniverse, e.channel));
-            w->setInputSource(src);
-            w->show();
-        }
+        frame->addWidgetToPageMap(widget);
+        QSharedPointer<QLCInputSource> src(
+            new QLCInputSource(inputUniverse, e.channel));
+        widget->setInputSource(src);
+        widget->show();
     }
 
-    // Size the frame to fit its contents with a little padding.
-    int needWidth = MARGIN * 2 + map.gridColumns() * CELL_W;
-    int needHeight = MARGIN * 2 + ((autoIdx / map.gridColumns()) + 4) * CELL_H;
-    frame->setGeometry(20, 20, needWidth, needHeight);
+    qDebug() << "ProgrammerFrameWizard: generated"
+             << slidersMade << "sliders +" << buttonsMade << "buttons in a"
+             << frameWidth << "x" << frameHeight << "frame";
+
+    frame->setGeometry(20, 20, frameWidth, frameHeight);
     frame->show();
 
     doc->setModified();
