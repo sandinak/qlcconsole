@@ -186,10 +186,13 @@ void VCButtonProperties::populateSelectionTree()
 {
     m_selectionTree->clear();
 
-    QSet<quint32> selectedFix(m_button->selectionFixtures().begin(),
-                              m_button->selectionFixtures().end());
-    QSet<quint32> selectedGrp(m_button->selectionGroups().begin(),
-                              m_button->selectionGroups().end());
+    // Bind to locals so the .begin()/.end() iterators don't point into
+    // destroyed temporaries (selectionFixtures()/selectionGroups()
+    // return QList by value).
+    const QList<quint32> fixturesSelected = m_button->selectionFixtures();
+    const QList<quint32> groupsSelected = m_button->selectionGroups();
+    const QSet<quint32> selectedFix(fixturesSelected.begin(), fixturesSelected.end());
+    const QSet<quint32> selectedGrp(groupsSelected.begin(), groupsSelected.end());
 
     // Group node first; each group's members appear under it.
     QTreeWidgetItem* groupsRoot = new QTreeWidgetItem(m_selectionTree);
