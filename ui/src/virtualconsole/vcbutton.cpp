@@ -746,7 +746,13 @@ void VCButton::slotProgrammerSelectionChanged()
     QList<quint32> targets = resolveSelectionTargets();
     bool active = !targets.isEmpty()
                   && m_doc->allInProgrammerSelection(targets);
-    setState(active ? Active : Inactive);
+    ButtonState newState = active ? Active : Inactive;
+    if (state() != newState)
+    {
+        setState(newState);
+        // Push the new state to the surface (LED on/off on APC40 etc.).
+        updateFeedback();
+    }
 }
 
 void VCButton::setStopAllFadeOutTime(int ms)

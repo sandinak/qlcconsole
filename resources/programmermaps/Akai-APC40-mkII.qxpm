@@ -52,4 +52,28 @@
 
   <!-- "Stop all clips" → clear-selection helper. -->
   <Mapping channel="209" kind="ClearSelectionButton" row="3" column="8"/>
+
+  <!-- Row 4: 8 Track Activator buttons ("R N" in profile) →
+       SelectFixtures (Toggle mode). Tap to add/remove a group from
+       the current selection. -->
+  <Mapping channel="176"   kind="SelectFixturesButton" mode="Toggle" row="4" column="0"/>
+  <Mapping channel="4272"  kind="SelectFixturesButton" mode="Toggle" row="4" column="1"/>
+  <Mapping channel="8368"  kind="SelectFixturesButton" mode="Toggle" row="4" column="2"/>
+  <Mapping channel="12464" kind="SelectFixturesButton" mode="Toggle" row="4" column="3"/>
+  <Mapping channel="16560" kind="SelectFixturesButton" mode="Toggle" row="4" column="4"/>
+  <Mapping channel="20656" kind="SelectFixturesButton" mode="Toggle" row="4" column="5"/>
+  <Mapping channel="24752" kind="SelectFixturesButton" mode="Toggle" row="4" column="6"/>
+  <Mapping channel="28848" kind="SelectFixturesButton" mode="Toggle" row="4" column="7"/>
+
+  <!-- Row 5: 8 Track Select buttons (numbered "1".."8" in profile) →
+       SelectFixtures (Add mode). Tap to add a group on top of the
+       current selection without disturbing what's already selected. -->
+  <Mapping channel="178"   kind="SelectFixturesButton" mode="Add" row="5" column="0"/>
+  <Mapping channel="4274"  kind="SelectFixturesButton" mode="Add" row="5" column="1"/>
+  <Mapping channel="8370"  kind="SelectFixturesButton" mode="Add" row="5" column="2"/>
+  <Mapping channel="12466" kind="SelectFixturesButton" mode="Add" row="5" column="3"/>
+  <Mapping channel="16562" kind="SelectFixturesButton" mode="Add" row="5" column="4"/>
+  <Mapping channel="20658" kind="SelectFixturesButton" mode="Add" row="5" column="5"/>
+  <Mapping channel="24754" kind="SelectFixturesButton" mode="Add" row="5" column="6"/>
+  <Mapping channel="28850" kind="SelectFixturesButton" mode="Add" row="5" column="7"/>
 </ProgrammerMap>

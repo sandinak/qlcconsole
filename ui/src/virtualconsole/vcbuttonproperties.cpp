@@ -19,6 +19,7 @@
 
 #include <QIntValidator>
 #include <QKeySequence>
+#include <QRegularExpression>
 #include <QRadioButton>
 #include <QMessageBox>
 #include <QPushButton>
@@ -314,6 +315,28 @@ void VCButtonProperties::accept()
     }
     m_button->setSelectionFixtures(fixtures);
     m_button->setSelectionGroups(groups);
+
+    /* Auto-rename when a single group is selected, but only if the
+       current caption still looks like a wizard placeholder
+       ("Group <N>") — never overwrite a caption the user has typed. */
+    if (groups.size() == 1 && fixtures.isEmpty())
+    {
+        FixtureGroup* grp = m_doc->fixtureGroup(groups.first());
+        if (grp != NULL)
+        {
+            // Wizard placeholders: "G<n>" or "G<n> [+|-|↻]" or "Group <n>"
+            // (legacy) or "Clear".
+            QRegularExpression placeholder(
+                QString::fromUtf8("^(Group |G)\\d+( [+\xe2\x88\x92\xe2\x86\xbb])?$"));
+            QString caption = m_nameEdit->text();
+            if (caption.isEmpty()
+                || caption == tr("Clear")
+                || placeholder.match(caption).hasMatch())
+            {
+                m_nameEdit->setText(grp->name());
+            }
+        }
+    }
 
     if (m_selectionAddRadio->isChecked())
         m_button->setSelectionMode(VCButton::SelectAdd);

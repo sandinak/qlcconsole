@@ -264,6 +264,7 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
     // Sizing: real, generously sized widgets so the surface mapping is
     // legible without zooming the VC.
     const int MARGIN = 12;
+    const int TOP_MARGIN = 40;       // clear VCFrame title bar / header
     const int COL_W = 90;            // column pitch
     const int ROW_GAP = 8;           // vertical gap between rows
     const int W_INSET = 6;           // widget width inset within column
@@ -294,7 +295,7 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
     QList<int> rowsSorted = rowHeights.keys();
     std::sort(rowsSorted.begin(), rowsSorted.end());
     QHash<int, int> rowY;
-    int yCursor = MARGIN;
+    int yCursor = TOP_MARGIN;
     for (int r : rowsSorted)
     {
         rowY[r] = yCursor;
@@ -307,7 +308,6 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
     autoIdx = 0;
     int slidersMade = 0;
     int buttonsMade = 0;
-    int selectButtonIndex = 0;
     for (const ProgrammerMap::Entry& e : map.entries())
     {
         int row = e.row;
@@ -320,7 +320,7 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
         }
 
         const int x = MARGIN + col * COL_W;
-        const int y = rowY.value(row, MARGIN);
+        const int y = rowY.value(row, TOP_MARGIN);
         const int w = COL_W - W_INSET;
 
         VCWidget* widget = nullptr;
@@ -353,8 +353,26 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
             }
             else
             {
-                ++selectButtonIndex;
-                caption = ProgrammerFrameWizard::tr("Group %1").arg(selectButtonIndex);
+                // Column-based caption so each "column" maps to one
+                // logical group; the row distinguishes the mode.
+                // Column index 0-based becomes "G<col+1>".
+                const int g = col + 1;
+                switch (e.selectionMode)
+                {
+                case VCButton::SelectAdd:
+                    caption = ProgrammerFrameWizard::tr("G%1 +").arg(g);
+                    break;
+                case VCButton::SelectRemove:
+                    caption = ProgrammerFrameWizard::tr("G%1 −").arg(g);
+                    break;
+                case VCButton::SelectToggle:
+                    caption = ProgrammerFrameWizard::tr("G%1 ↻").arg(g);
+                    break;
+                case VCButton::SelectReplace:
+                default:
+                    caption = ProgrammerFrameWizard::tr("G%1").arg(g);
+                    break;
+                }
                 button->setSelectionMode(e.selectionMode);
             }
             button->setCaption(caption);
