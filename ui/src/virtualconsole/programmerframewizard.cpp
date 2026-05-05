@@ -307,11 +307,9 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
     autoIdx = 0;
     int slidersMade = 0;
     int buttonsMade = 0;
+    int selectButtonIndex = 0;
     for (const ProgrammerMap::Entry& e : map.entries())
     {
-        QLCInputChannel* ich = profile->channels().value(e.channel);
-        QString caption = ich ? ich->name() : QString::number(e.channel + 1);
-
         int row = e.row;
         int col = e.column;
         if (row < 0 || col < 0)
@@ -328,8 +326,14 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
         VCWidget* widget = nullptr;
         if (e.kind == ProgrammerMap::ParameterSlider)
         {
+            // Caption is role-based ("R", "Pan", "Pan ◐") — far more
+            // useful on a programmer surface than the device-side
+            // channel name ("Slider 1", "Knob 9", etc.).
+            QString roleLabel = VCSlider::parameterRoleToString(e.role);
+            if (e.controlByte == 1)
+                roleLabel += QStringLiteral(" ◐"); // half-circle = LSB / fine
             VCSlider* slider = new VCSlider(frame, doc);
-            slider->setCaption(caption);
+            slider->setCaption(roleLabel);
             slider->setParameterRole(e.role);
             slider->setParameterControlByte(e.controlByte);
             slider->setSliderMode(VCSlider::Parameter);
@@ -341,12 +345,19 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
                  e.kind == ProgrammerMap::ClearSelectionButton)
         {
             VCButton* button = new VCButton(frame, doc);
+            QString caption;
+            if (e.kind == ProgrammerMap::ClearSelectionButton)
+            {
+                caption = ProgrammerFrameWizard::tr("Clear");
+                button->setSelectionMode(VCButton::SelectReplace);
+            }
+            else
+            {
+                ++selectButtonIndex;
+                caption = ProgrammerFrameWizard::tr("Group %1").arg(selectButtonIndex);
+                button->setSelectionMode(e.selectionMode);
+            }
             button->setCaption(caption);
-            // ClearSelectionButton is just SelectFixtures with empty
-            // fixtures + Replace mode — pressing it clears.
-            VCButton::SelectionMode m = (e.kind == ProgrammerMap::ClearSelectionButton)
-                ? VCButton::SelectReplace : e.selectionMode;
-            button->setSelectionMode(m);
             button->setAction(VCButton::SelectFixtures);
             button->setGeometry(x, y, w, BUTTON_H);
             widget = button;
