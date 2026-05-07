@@ -48,6 +48,7 @@ private slots:
     void showTreeTextColoursAreShown();
     void manualActivation();
     void keyboardNextPrevious();
+    void submasterWorksAfterSliderModeRoundTrip();
 
     void input();
 

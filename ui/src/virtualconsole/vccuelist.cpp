@@ -1279,6 +1279,7 @@ void VCCueList::slotFunctionStopped(quint32 fid)
     if (fid != m_chaserID)
         return;
 
+    resetIntensityOverrideAttribute();
     m_playbackButton->setIcon(QIcon(":/player_play.png"));
     m_topStepLabel->setText("");
     m_topStepLabel->setStyleSheet(cfLabelNoStyle);
