@@ -169,6 +169,8 @@ public slots:
     void slotControlFullScreen(bool usingGeometry);
     void slotControlBlackout();
     void slotBlackoutChanged(bool state);
+    void slotShowModeLock(bool checked);
+    void slotShowLockedChanged(bool locked);
     void slotControlPanic();
     void slotFadeAndStopAll();
     void slotRunningFunctionsChanged();
@@ -201,6 +203,7 @@ private:
     QAction* m_addressToolAction;
     QAction* m_controlFullScreenAction;
     QAction* m_controlBlackoutAction;
+    QAction* m_showLockAction;
     QAction* m_controlPanicAction;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
@@ -340,9 +343,23 @@ private:
     /** Update the status bar display */
     void updateStatusBar();
 
+private slots:
+    /** Programmer dirty/clean transition — refresh the status bar. */
+    void slotProgrammerDirtyChanged(bool dirty);
+
+    /** Programmer selection changed — refresh the "Selected: ..." label. */
+    void slotProgrammerSelectionChanged();
+
+    /** Pad-grid mode changed — refresh the "Pad: ..." label. */
+    void slotPadModeChanged(Doc::PadMode mode);
+
 private:
     QLabel* m_statusModeLabel;
     QLabel* m_statusAutosaveLabel;
+    QLabel* m_statusProgrammerLabel;
+    QLabel* m_statusSelectionLabel;
+    QLabel* m_statusPadModeLabel;
+    QLabel* m_statusShowLockLabel;
     QString m_statusMessage;
 };
 

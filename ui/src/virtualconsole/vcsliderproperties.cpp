@@ -103,9 +103,11 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
         VCSlider::RoleDimmer, VCSlider::RoleRed, VCSlider::RoleGreen,
         VCSlider::RoleBlue, VCSlider::RoleWhite, VCSlider::RoleCyan,
         VCSlider::RoleMagenta, VCSlider::RoleYellow, VCSlider::RoleAmber,
-        VCSlider::RoleUV, VCSlider::RolePan, VCSlider::RoleTilt,
-        VCSlider::RoleShutter, VCSlider::RoleGobo, VCSlider::RoleSpeed,
-        VCSlider::RoleEffect, VCSlider::RoleBeam, VCSlider::RoleMaintenance
+        VCSlider::RoleUV, VCSlider::RoleColour, VCSlider::RolePan,
+        VCSlider::RoleTilt, VCSlider::RoleShutter, VCSlider::RoleGobo,
+        VCSlider::RoleGobo2, VCSlider::RoleSpeed, VCSlider::RoleEffect,
+        VCSlider::RoleEffect2, VCSlider::RoleBeam, VCSlider::RoleFocus,
+        VCSlider::RoleZoom, VCSlider::RolePrism, VCSlider::RoleMaintenance
     };
     for (VCSlider::ParameterRole r : roleOrder)
         m_parameterRoleCombo->addItem(VCSlider::parameterRoleToString(r),

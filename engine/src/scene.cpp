@@ -295,6 +295,17 @@ void Scene::clear()
     m_palettes.clear();
 }
 
+void Scene::resetRuntime()
+{
+    QMutexLocker locker(&m_valueListMutex);
+    foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+    {
+        if (!fader.isNull())
+            fader->requestDelete();
+    }
+    m_fadersMap.clear();
+}
+
 /*********************************************************************
  * Channel Groups
  *********************************************************************/

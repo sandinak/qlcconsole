@@ -64,6 +64,7 @@ add_library(${module_name} SHARED
     rgbscriptproperty.h
     rgbscriptscache.cpp rgbscriptscache.h
     rgbtext.cpp rgbtext.h
+    programmerflasher.cpp programmerflasher.h
     scene.cpp scene.h
     scenevalue.cpp scenevalue.h
     scriptwrapper.h

@@ -206,6 +206,17 @@ public:
      */
     quint32 channelNumber(QLCChannel::Group group, QLCChannel::ControlByte cByte = QLCChannel::MSB) const;
 
+    /**
+     * Get the @p index-th channel of @p group. Index 0 = first match
+     * (same as channelNumber above), 1 = second occurrence, etc.
+     * Lets the programmer address fixtures with multiple channels in
+     * the same group (e.g. static gobo wheel + rotating gobo wheel,
+     * focus + zoom both as Beam, etc.).
+     * Returns QLCChannel::invalid() if @p index is out of range.
+     */
+    quint32 channelNumberByGroupIndex(QLCChannel::Group group, int index,
+                                      QLCChannel::ControlByte cByte = QLCChannel::MSB) const;
+
     /** Return the auto-detected channel index of the Fixture master dimmer for this mode */
     quint32 masterIntensityChannel() const;
 

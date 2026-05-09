@@ -153,7 +153,8 @@ public:
         Level,
         Playback,
         Submaster,
-        Parameter
+        Parameter,
+        GrandMaster
     };
 
     /**
@@ -181,12 +182,26 @@ public:
         RoleSpeed,
         RoleEffect,
         RoleBeam,
-        RoleMaintenance
+        RoleMaintenance,
+        RoleColour,
+        RolePrism,
+        // Indexed siblings — address the Nth channel of a QLCChannel
+        // group on fixtures with multiple channels in that group.
+        // E.g., a moving head with both static + rotating gobo
+        // wheels, or focus + zoom both classed as Beam.
+        RoleGobo2,    // 2nd Gobo channel  (rotating gobo on most movers)
+        RoleEffect2,  // 2nd Effect channel (prism rotation, etc.)
+        RoleFocus,    // 1st Beam channel (semantic alias)
+        RoleZoom      // 2nd Beam channel (zoom on most movers)
     };
 
     static QString parameterRoleToString(ParameterRole role);
     static ParameterRole stringToParameterRole(const QString& s);
     static int roleToChannelType(ParameterRole role);
+    /** 0 for the standard "first channel of group" roles, ≥1 for
+        indexed siblings (RoleGobo2 = 1, RoleZoom = 1, etc.). Lets
+        writeDMXParameter pick the Nth channel of the role's group. */
+    static int roleToGroupIndex(ParameterRole role);
 
 public:
     /**
@@ -233,6 +248,9 @@ public:
 protected slots:
     /** Re-assert the current value into the new selection's channels. */
     void slotProgrammerSelectionChanged();
+
+    /** Mirror external Grand Master changes onto the slider. */
+    void slotGrandMasterValueChanged(uchar value);
 
 protected:
     ParameterRole m_parameterRole;

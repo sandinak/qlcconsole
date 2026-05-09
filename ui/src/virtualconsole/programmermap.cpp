@@ -26,6 +26,11 @@ namespace
     const QString kAttrMode      = QStringLiteral("mode");
     const QString kAttrRow       = QStringLiteral("row");
     const QString kAttrColumn    = QStringLiteral("column");
+    const QString kAttrPadMode   = QStringLiteral("padMode");
+    const QString kAttrPadRow    = QStringLiteral("padRow");
+    const QString kAttrPadCol    = QStringLiteral("padCol");
+    const QString kAttrStyle     = QStringLiteral("style");
+    const QString kAttrRowSpan   = QStringLiteral("rowSpan");
 }
 
 VCSlider::ParameterRole ProgrammerMap::parseRole(const QString& s)
@@ -53,6 +58,20 @@ ProgrammerMap::WidgetKind ProgrammerMap::parseKind(const QString& s)
         return SelectFixturesButton;
     if (s.compare(QStringLiteral("ClearSelectionButton"), Qt::CaseInsensitive) == 0)
         return ClearSelectionButton;
+    if (s.compare(QStringLiteral("GrandMasterSlider"), Qt::CaseInsensitive) == 0)
+        return GrandMasterSlider;
+    if (s.compare(QStringLiteral("SaveProgrammerButton"), Qt::CaseInsensitive) == 0)
+        return SaveProgrammerButton;
+    if (s.compare(QStringLiteral("RevertProgrammerButton"), Qt::CaseInsensitive) == 0)
+        return RevertProgrammerButton;
+    if (s.compare(QStringLiteral("PadModeButton"), Qt::CaseInsensitive) == 0)
+        return PadModeButton;
+    if (s.compare(QStringLiteral("FixturePadCellButton"), Qt::CaseInsensitive) == 0)
+        return FixturePadCellButton;
+    if (s.compare(QStringLiteral("ChaserStepNextButton"), Qt::CaseInsensitive) == 0)
+        return ChaserStepNextButton;
+    if (s.compare(QStringLiteral("ChaserStepPrevButton"), Qt::CaseInsensitive) == 0)
+        return ChaserStepPrevButton;
     return Unknown;
 }
 
@@ -98,10 +117,36 @@ bool ProgrammerMap::load(const QString& filePath)
                 e.controlByte = parseControlByte(attrs.value(kAttrByte).toString());
             if (attrs.hasAttribute(kAttrMode))
                 e.selectionMode = parseSelectionMode(attrs.value(kAttrMode).toString());
+            if (attrs.hasAttribute(kAttrPadMode))
+            {
+                const QString pm = attrs.value(kAttrPadMode).toString();
+                if (pm.compare(QStringLiteral("FixtureSelect"), Qt::CaseInsensitive) == 0)
+                    e.padMode = 1; // Doc::PadModeFixtureSelect
+                else if (pm.compare(QStringLiteral("GoboSelect"), Qt::CaseInsensitive) == 0)
+                    e.padMode = 2;
+                else if (pm.compare(QStringLiteral("ColorPalette"), Qt::CaseInsensitive) == 0)
+                    e.padMode = 3;
+                else
+                    e.padMode = 0;
+            }
+            if (attrs.hasAttribute(kAttrPadRow))
+                e.padRow = attrs.value(kAttrPadRow).toInt();
+            if (attrs.hasAttribute(kAttrPadCol))
+                e.padCol = attrs.value(kAttrPadCol).toInt();
             if (attrs.hasAttribute(kAttrRow))
                 e.row = attrs.value(kAttrRow).toInt();
             if (attrs.hasAttribute(kAttrColumn))
                 e.column = attrs.value(kAttrColumn).toInt();
+            if (attrs.hasAttribute(kAttrStyle))
+            {
+                const QString s = attrs.value(kAttrStyle).toString();
+                if (s.compare(QStringLiteral("Knob"), Qt::CaseInsensitive) == 0)
+                    e.style = VCSlider::WKnob;
+                else
+                    e.style = VCSlider::WSlider;
+            }
+            if (attrs.hasAttribute(kAttrRowSpan))
+                e.rowSpan = qMax(1, attrs.value(kAttrRowSpan).toInt());
 
             if (e.kind != Unknown)
                 m_entries.append(e);

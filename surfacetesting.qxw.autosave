@@ -1,0 +1,1596 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.4 GIT</Version>
+  <Author>Branson Matheson</Author>
+ </Creator>
+ <Engine>
+  <InputOutputMap>
+   <BeatGenerator BeatType="Disabled" BPM="0"/>
+   <Universe Name="Universe 1" ID="0">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1"/>
+   </Universe>
+   <Universe Name="Universe 2" ID="1">
+    <Input Plugin="MIDI" UID="APC40 mkII" Line="2" Profile="Akai APC40 mkII"/>
+    <Feedback Plugin="MIDI" UID="APC40 mkII" Line="2"/>
+   </Universe>
+   <Universe Name="Universe 3" ID="2"/>
+   <Universe Name="Universe 4" ID="3"/>
+  </InputOutputMap>
+  <Fixture>
+   <Manufacturer>Branson</Manufacturer>
+   <Model>LED Movinghead+Circle</Model>
+   <Mode>12 Channel</Mode>
+   <ID>0</ID>
+   <Name>LED Movinghead+Circle</Name>
+   <Universe>0</Universe>
+   <Address>0</Address>
+   <Channels>12</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Betopper</Manufacturer>
+   <Model>LM70</Model>
+   <Mode>9 Channel</Mode>
+   <ID>1</ID>
+   <Name>LM70 #1</Name>
+   <Universe>0</Universe>
+   <Address>24</Address>
+   <Channels>9</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Betopper</Manufacturer>
+   <Model>LM70</Model>
+   <Mode>9 Channel</Mode>
+   <ID>2</ID>
+   <Name>LM70 #2</Name>
+   <Universe>0</Universe>
+   <Address>33</Address>
+   <Channels>9</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Branson</Manufacturer>
+   <Model>LED SPOT</Model>
+   <Mode>10 Channel</Mode>
+   <ID>3</ID>
+   <Name>LED SPOT</Name>
+   <Universe>0</Universe>
+   <Address>12</Address>
+   <Channels>10</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>American DJ</Manufacturer>
+   <Model>Focus Spot Three Z</Model>
+   <Mode>18 Channel</Mode>
+   <ID>4</ID>
+   <Name>Focus Spot Three Z</Name>
+   <Universe>0</Universe>
+   <Address>448</Address>
+   <Channels>18</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Branson</Manufacturer>
+   <Model>LED Bar</Model>
+   <Mode>Mode 6 - H</Mode>
+   <ID>5</ID>
+   <Name>LED Bar</Name>
+   <Universe>0</Universe>
+   <Address>485</Address>
+   <Channels>26</Channels>
+  </Fixture>
+  <FixtureGroup ID="0">
+   <Name>spots</Name>
+   <Size X="1" Y="1"/>
+   <Head X="0" Y="0" Fixture="0">0</Head>
+   <Head X="0" Y="1" Fixture="3">0</Head>
+   <Head X="0" Y="2" Fixture="4">0</Head>
+   <Head X="0" Y="3" Fixture="5">0</Head>
+   <Head X="0" Y="4" Fixture="5">1</Head>
+   <Head X="0" Y="5" Fixture="5">2</Head>
+   <Head X="0" Y="6" Fixture="5">3</Head>
+   <Head X="0" Y="7" Fixture="5">4</Head>
+   <Head X="0" Y="8" Fixture="5">5</Head>
+   <Head X="0" Y="9" Fixture="5">6</Head>
+   <Head X="0" Y="10" Fixture="5">7</Head>
+  </FixtureGroup>
+  <FixtureGroup ID="1">
+   <Name>washes</Name>
+   <Size X="2" Y="2"/>
+   <Head X="0" Y="0" Fixture="1">0</Head>
+   <Head X="1" Y="0" Fixture="2">0</Head>
+   <Head X="0" Y="1" Fixture="4">0</Head>
+  </FixtureGroup>
+  <FixtureGroup ID="2">
+   <Name>bar</Name>
+   <Size X="4" Y="1"/>
+   <Head X="0" Y="0" Fixture="3">0</Head>
+   <Head X="1" Y="0" Fixture="1">0</Head>
+   <Head X="2" Y="0" Fixture="2">0</Head>
+   <Head X="3" Y="0" Fixture="0">0</Head>
+  </FixtureGroup>
+  <FixtureGroup ID="3">
+   <Name>3z</Name>
+   <Size X="1" Y="1"/>
+   <Head X="0" Y="0" Fixture="4">0</Head>
+  </FixtureGroup>
+  <Function ID="0" Type="Scene" Name="washes" Path="Washes">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="1">2,0,3,0,4,4,5,16</FixtureVal>
+   <FixtureVal ID="2">2,0,3,0,4,4,5,16</FixtureVal>
+  </Function>
+  <Function ID="1" Type="Scene" Name="Wash-Red" Path="Washes">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="1">2,255,3,255,4,0,5,0</FixtureVal>
+   <FixtureVal ID="2">2,0,3,255,4,0,5,0</FixtureVal>
+  </Function>
+  <Function ID="2" Type="Scene" Name="Wash-Base" Path="Washes">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="1">0,46,1,127</FixtureVal>
+   <FixtureVal ID="2">2,255,3,0,4,0,5,255</FixtureVal>
+  </Function>
+  <Function ID="3" Type="Scene" Name="Spot-Base" Path="Spots">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,127,1,127,2,127,3,127</FixtureVal>
+  </Function>
+  <Function ID="4" Type="Scene" Name="Spot-Red" Path="Spots">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">4,12,7,255</FixtureVal>
+  </Function>
+  <Function ID="5" Type="Scene" Name="Spot-White" Path="Spots">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">4,0,7,255</FixtureVal>
+  </Function>
+  <Function ID="6" Type="Collection" Name="Red-Base" Path="Spots">
+   <Step Number="0">1</Step>
+   <Step Number="1">2</Step>
+   <Step Number="2">3</Step>
+   <Step Number="3">4</Step>
+  </Function>
+  <Function ID="7" Type="Collection" Name="Blue-Base (Copy)" Path="Spots">
+   <Step Number="0">2</Step>
+   <Step Number="1">3</Step>
+   <Step Number="2">5</Step>
+   <Step Number="3">0</Step>
+  </Function>
+  <Function ID="8" Type="Chaser" Name="New Chaser 8" Path="Collection/Spots">
+   <Speed FadeIn="0" FadeOut="0" Duration="4294967294"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <SpeedModes FadeIn="Default" FadeOut="Default" Duration="Common"/>
+   <Step Number="0" FadeIn="0" Hold="0" FadeOut="0">6</Step>
+   <Step Number="1" FadeIn="0" Hold="0" FadeOut="0">7</Step>
+  </Function>
+  <Function ID="9" Type="Scene" Name="Wash-Base" Path="Positions/washes">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="2">0,128,1,128</FixtureVal>
+  </Function>
+  <Function ID="10" Type="Collection" Name="Blue-Base (Copy) 2" Path="Spots">
+   <Step Number="0">2</Step>
+   <Step Number="1">3</Step>
+   <Step Number="2">5</Step>
+   <Step Number="3">0</Step>
+  </Function>
+  <Function ID="11" Type="Collection" Name="0.0.0-base" Path="Show"/>
+  <Function ID="12" Type="Collection" Name="0.0.1-Startup" Path="Show">
+   <Step Number="0">11</Step>
+   <Step Number="1">9</Step>
+   <Step Number="2">0</Step>
+   <Step Number="3">5</Step>
+   <Step Number="4">3</Step>
+  </Function>
+  <Function ID="13" Type="Chaser" Name="New Chaser 13">
+   <Speed FadeIn="0" FadeOut="0" Duration="4294967294"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <SpeedModes FadeIn="Default" FadeOut="Default" Duration="Common"/>
+   <Step Number="0" FadeIn="0" Hold="0" FadeOut="0">11</Step>
+   <Step Number="1" FadeIn="0" Hold="0" FadeOut="0">12</Step>
+  </Function>
+  <Function ID="14" Type="Collection" Name="0.0.2-Preshow" Path="Show">
+   <Step Number="0">11</Step>
+   <Step Number="1">9</Step>
+   <Step Number="2">0</Step>
+   <Step Number="3">5</Step>
+   <Step Number="4">3</Step>
+  </Function>
+  <Function ID="15" Type="Collection" Name="0.0.3-Announcer" Path="Show">
+   <Step Number="0">11</Step>
+   <Step Number="1">9</Step>
+   <Step Number="2">0</Step>
+   <Step Number="3">5</Step>
+   <Step Number="4">3</Step>
+  </Function>
+ </Engine>
+ <VirtualConsole>
+  <Frame Caption="">
+   <Appearance>
+    <FrameStyle>None</FrameStyle>
+    <ForegroundColor>Default</ForegroundColor>
+    <BackgroundColor>Default</BackgroundColor>
+    <BackgroundImage>None</BackgroundImage>
+    <Font>Default</Font>
+   </Appearance>
+   <CueList Caption="Cue list" ID="0">
+    <WindowState Visible="True" X="1290" Y="0" Width="370" Height="885"/>
+    <Appearance>
+     <FrameStyle>Sunken</FrameStyle>
+     <ForegroundColor>Default</ForegroundColor>
+     <BackgroundColor>Default</BackgroundColor>
+     <BackgroundImage>None</BackgroundImage>
+     <Font>Default</Font>
+    </Appearance>
+    <Chaser>13</Chaser>
+    <NextPrevBehavior>0</NextPrevBehavior>
+    <Next>
+     <Input Universe="1" Channel="231"/>
+    </Next>
+    <Previous>
+     <Input Universe="1" Channel="226"/>
+    </Previous>
+    <Playback/>
+    <Stop/>
+   </CueList>
+   <Frame Caption="Akai APC40 mkII Programmer">
+    <Appearance>
+     <FrameStyle>Sunken</FrameStyle>
+     <ForegroundColor>Default</ForegroundColor>
+     <BackgroundColor>Default</BackgroundColor>
+     <BackgroundImage>None</BackgroundImage>
+     <Font>Default</Font>
+    </Appearance>
+    <WindowState Visible="True" X="5" Y="0" Width="1284" Height="855"/>
+    <AllowChildren>True</AllowChildren>
+    <AllowResize>True</AllowResize>
+    <ShowHeader>True</ShowHeader>
+    <ShowEnableButton>True</ShowEnableButton>
+    <Collapsed>False</Collapsed>
+    <Disabled>False</Disabled>
+    <Slider Caption="Pan" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="12" Y="40" Width="84" Height="80"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="48"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="10"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Pan" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Pan ◐" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="102" Y="40" Width="84" Height="80"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="49"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="66"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Pan" ControlByte="1"/>
+    </Slider>
+    <Slider Caption="Tilt" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="192" Y="40" Width="84" Height="80"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="50"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="34"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Tilt" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Tilt ◐" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="282" Y="40" Width="84" Height="80"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="51"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Tilt" ControlByte="1"/>
+    </Slider>
+    <Slider Caption="Zoom" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="372" Y="40" Width="84" Height="80"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="52"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="140"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Zoom" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Focus" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="462" Y="40" Width="84" Height="80"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="53"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Focus" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Shutter" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="552" Y="40" Width="84" Height="80"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="54"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="252"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Shutter" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Speed" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="642" Y="40" Width="84" Height="80"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="55"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Speed" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Prism" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="912" Y="257" Width="84" Height="78"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="16"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Prism" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Effect2" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="1002" Y="257" Width="84" Height="78"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="17"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Effect2" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Gobo" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="1092" Y="257" Width="84" Height="78"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="18"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="54"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Gobo" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Gobo2" WidgetStyle="Knob" InvertedAppearance="false">
+     <WindowState Visible="True" X="1182" Y="257" Width="84" Height="78"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="19"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="40"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Gobo2" ControlByte="0"/>
+    </Slider>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="12" Y="128" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="0" PadCol="0">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="160" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="102" Y="128" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="0" PadCol="1">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="161" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="192" Y="128" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="0" PadCol="2">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="162" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="282" Y="128" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="0" PadCol="3">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="163" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="372" Y="128" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="0" PadCol="4">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="164" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="462" Y="128" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="0" PadCol="5">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="165" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="552" Y="128" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="0" PadCol="6">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="166" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="642" Y="128" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="0" PadCol="7">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="167" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="12" Y="171" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="1" PadCol="0">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="152" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="102" Y="171" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="1" PadCol="1">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="153" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="192" Y="171" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="1" PadCol="2">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="154" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="282" Y="171" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="1" PadCol="3">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="155" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="372" Y="171" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="1" PadCol="4">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="156" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="462" Y="171" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="1" PadCol="5">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="157" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="552" Y="171" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="1" PadCol="6">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="158" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="642" Y="171" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="1" PadCol="7">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="159" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="12" Y="214" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="2" PadCol="0">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="144" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="102" Y="214" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="2" PadCol="1">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="145" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="192" Y="214" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="2" PadCol="2">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="146" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="282" Y="214" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="2" PadCol="3">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="147" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="372" Y="214" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="2" PadCol="4">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="148" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="462" Y="214" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="2" PadCol="5">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="149" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="552" Y="214" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="2" PadCol="6">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="150" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="642" Y="214" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="2" PadCol="7">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="151" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="12" Y="257" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="3" PadCol="0">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="136" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="102" Y="257" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="3" PadCol="1">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="137" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="192" Y="257" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="3" PadCol="2">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="138" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="282" Y="257" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="3" PadCol="3">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="139" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="372" Y="257" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="3" PadCol="4">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="140" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="462" Y="257" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="3" PadCol="5">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="141" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="552" Y="257" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="3" PadCol="6">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="142" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="642" Y="257" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="3" PadCol="7">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="143" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="12" Y="300" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="4" PadCol="0">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="128" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="102" Y="300" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="4" PadCol="1">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="129" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="192" Y="300" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="4" PadCol="2">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="130" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="282" Y="300" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="4" PadCol="3">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="131" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="372" Y="300" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="4" PadCol="4">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="132" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="462" Y="300" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="4" PadCol="5">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="133" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="552" Y="300" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="4" PadCol="6">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="134" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="" Icon="">
+     <WindowState Visible="True" X="642" Y="300" Width="84" Height="30"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadRow="4" PadCol="7">FixturePadCell</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="135" UpperValue="74" MonitorValue="26"/>
+    </Button>
+    <Button Caption="spots&#10;set" Icon="">
+     <WindowState Visible="True" X="12" Y="343" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Replace" SelectionGroups="0">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="180"/>
+    </Button>
+    <Button Caption="washes&#10;set" Icon="">
+     <WindowState Visible="True" X="102" Y="343" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Replace" SelectionGroups="1">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="4276"/>
+    </Button>
+    <Button Caption="3z&#10;set" Icon="">
+     <WindowState Visible="True" X="192" Y="343" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Replace" SelectionGroups="3">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="8372"/>
+    </Button>
+    <Button Caption="bar&#10;set" Icon="">
+     <WindowState Visible="True" X="282" Y="343" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Replace" SelectionGroups="2">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="12468"/>
+    </Button>
+    <Button Caption="G5&#10;set" Icon="">
+     <WindowState Visible="True" X="372" Y="343" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Replace">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="16564"/>
+    </Button>
+    <Button Caption="G6&#10;set" Icon="">
+     <WindowState Visible="True" X="462" Y="343" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Replace">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="20660"/>
+    </Button>
+    <Button Caption="G7&#10;set" Icon="">
+     <WindowState Visible="True" X="552" Y="343" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Replace">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="24756"/>
+    </Button>
+    <Button Caption="G8&#10;set" Icon="">
+     <WindowState Visible="True" X="642" Y="343" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Replace">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="28852"/>
+    </Button>
+    <Button Caption="Clear" Icon="">
+     <WindowState Visible="True" X="732" Y="343" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Replace">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="209"/>
+    </Button>
+    <Button Caption="G1&#10;tog" Icon="">
+     <WindowState Visible="True" X="12" Y="411" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Toggle">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="176"/>
+    </Button>
+    <Button Caption="G2&#10;tog" Icon="">
+     <WindowState Visible="True" X="102" Y="411" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Toggle">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="4272"/>
+    </Button>
+    <Button Caption="G3&#10;tog" Icon="">
+     <WindowState Visible="True" X="192" Y="411" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Toggle">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="8368"/>
+    </Button>
+    <Button Caption="G4&#10;tog" Icon="">
+     <WindowState Visible="True" X="282" Y="411" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Toggle">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="12464"/>
+    </Button>
+    <Button Caption="G5&#10;tog" Icon="">
+     <WindowState Visible="True" X="372" Y="411" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Toggle">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="16560"/>
+    </Button>
+    <Button Caption="G6&#10;tog" Icon="">
+     <WindowState Visible="True" X="462" Y="411" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Toggle">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="20656"/>
+    </Button>
+    <Button Caption="G7&#10;tog" Icon="">
+     <WindowState Visible="True" X="552" Y="411" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Toggle">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="24752"/>
+    </Button>
+    <Button Caption="G8&#10;tog" Icon="">
+     <WindowState Visible="True" X="642" Y="411" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Toggle">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="28848"/>
+    </Button>
+    <Button Caption="G1&#10;add" Icon="">
+     <WindowState Visible="True" X="12" Y="479" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Add">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="178"/>
+    </Button>
+    <Button Caption="G2&#10;add" Icon="">
+     <WindowState Visible="True" X="102" Y="479" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Add">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="4274"/>
+    </Button>
+    <Button Caption="G3&#10;add" Icon="">
+     <WindowState Visible="True" X="192" Y="479" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Add">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="8370"/>
+    </Button>
+    <Button Caption="G4&#10;add" Icon="">
+     <WindowState Visible="True" X="282" Y="479" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Add">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="12466"/>
+    </Button>
+    <Button Caption="G5&#10;add" Icon="">
+     <WindowState Visible="True" X="372" Y="479" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Add">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="16562"/>
+    </Button>
+    <Button Caption="G6&#10;add" Icon="">
+     <WindowState Visible="True" X="462" Y="479" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Add">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="20658"/>
+    </Button>
+    <Button Caption="G7&#10;add" Icon="">
+     <WindowState Visible="True" X="552" Y="479" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Add">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="24754"/>
+    </Button>
+    <Button Caption="G8&#10;add" Icon="">
+     <WindowState Visible="True" X="642" Y="479" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action SelectionMode="Add">SelectFixtures</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="28850"/>
+    </Button>
+    <Slider Caption="Red" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="12" Y="547" Width="84" Height="220"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="7"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="114"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Red" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Green" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="102" Y="547" Width="84" Height="220"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="4103"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Green" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Blue" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="192" Y="547" Width="84" Height="220"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="8199"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Blue" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="White" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="282" Y="547" Width="84" Height="220"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="12295"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="White" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Amber" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="372" Y="547" Width="84" Height="220"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="16391"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Amber" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="UV" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="462" Y="547" Width="84" Height="220"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="20487"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="UV" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Color" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="552" Y="547" Width="84" Height="220"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="24583"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="10"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Color" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Dimmer" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="642" Y="547" Width="84" Height="220"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="28679"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">Parameter</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="255"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Dimmer" ControlByte="0"/>
+    </Slider>
+    <Slider Caption="Master" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="732" Y="547" Width="84" Height="220"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Input Universe="1" Channel="14"/>
+     <SliderMode ValueDisplayStyle="Exact" ClickAndGoType="None">GrandMaster</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0"/>
+     <Playback>
+      <Function>4294967295</Function>
+     </Playback>
+     <Parameter Role="Dimmer" ControlByte="0"/>
+    </Slider>
+    <Button Caption="Save" Icon="">
+     <WindowState Visible="True" X="822" Y="40" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>4289994270</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action>SaveProgrammer</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="221"/>
+    </Button>
+    <Button Caption="Fixt&#10;select" Icon="">
+     <WindowState Visible="True" X="822" Y="128" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action PadMode="FixtureSelect">PadModeSelect</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="215"/>
+    </Button>
+    <Button Caption="Revert" Icon="">
+     <WindowState Visible="True" X="822" Y="411" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action>RevertProgrammer</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="217"/>
+    </Button>
+    <Button Caption="Step&#10;‹" Icon="">
+     <WindowState Visible="True" X="1092" Y="775" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action>ChaserStepPrev</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="226"/>
+    </Button>
+    <Button Caption="Step&#10;›" Icon="">
+     <WindowState Visible="True" X="1182" Y="775" Width="84" Height="60"/>
+     <Appearance>
+      <FrameStyle>None</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Function ID="4294967295"/>
+     <Action>ChaserStepNext</Action>
+     <Intensity Adjust="False">100</Intensity>
+     <Input Universe="1" Channel="231"/>
+    </Button>
+   </Frame>
+  </Frame>
+  <Properties>
+   <Size Width="1920" Height="1080"/>
+   <GrandMaster Visible="1" ChannelMode="Intensity" ValueMode="Reduce" SliderMode="Normal"/>
+  </Properties>
+ </VirtualConsole>
+ <SimpleDesk>
+  <Engine/>
+ </SimpleDesk>
+</Workspace>

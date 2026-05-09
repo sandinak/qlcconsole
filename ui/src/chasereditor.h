@@ -58,8 +58,16 @@ public:
      *  and scroll the view to it */
     void selectStepAtTime(quint32 time);
 
+protected:
+    /** Intercept drag/drop events on the step tree's viewport so the
+        chaser accepts function-id drops from the Function Manager. */
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
 private:
     FunctionParent functionParent() const;
+    void handleDragEnterEvent(QDragEnterEvent *event);
+    void handleDragMoveEvent(QDragMoveEvent *event);
+    void handleDropEvent(QDropEvent *event);
 
 signals:
     void applyValues(QList<SceneValue>&);

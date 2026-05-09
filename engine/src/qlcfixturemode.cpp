@@ -241,6 +241,26 @@ quint32 QLCFixtureMode::channelNumber(QLCChannel::Group group, QLCChannel::Contr
     return QLCChannel::invalid();
 }
 
+quint32 QLCFixtureMode::channelNumberByGroupIndex(QLCChannel::Group group,
+                                                   int index,
+                                                   QLCChannel::ControlByte cByte) const
+{
+    if (index < 0)
+        return QLCChannel::invalid();
+    int seen = 0;
+    for (int i = 0; i < m_channels.size(); i++)
+    {
+        if (m_channels.at(i)->group() == group
+            && m_channels.at(i)->controlByte() == cByte)
+        {
+            if (seen == index)
+                return i;
+            ++seen;
+        }
+    }
+    return QLCChannel::invalid();
+}
+
 quint32 QLCFixtureMode::masterIntensityChannel() const
 {
     return m_masterIntensityChannel;

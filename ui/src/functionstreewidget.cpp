@@ -113,7 +113,10 @@ void FunctionsTreeWidget::updateFunctionItem(QTreeWidgetItem* item, const Functi
     item->setIcon(COL_NAME, function->getIcon());
     item->setData(COL_NAME, Qt::UserRole, function->id());
     item->setData(COL_NAME, Qt::UserRole + 1, function->type());
-    item->setFlags(item->flags() & ~Qt::ItemIsDropEnabled);
+    // Function rows are editable (in-place rename via F2 or click on
+    // already-selected). NOT drop-enabled (children would be silly).
+    item->setFlags((item->flags() | Qt::ItemIsEditable)
+                   & ~Qt::ItemIsDropEnabled);
 }
 
 QTreeWidgetItem* FunctionsTreeWidget::parentItem(const Function* function)
@@ -327,8 +330,24 @@ void FunctionsTreeWidget::slotItemChanged(QTreeWidgetItem *item)
 {
     blockSignals(true);
     qDebug() << "[FunctionsTreeWidget] TREE item changed";
+
+    // Function items have an empty COL_PATH (the path lives on the
+    // parent folder item). When the user renames a function row in
+    // place, persist the new caption back onto the Function object so
+    // it survives save+reload and shows up in chasers, references, etc.
     if (item->text(COL_PATH).isEmpty())
     {
+        const quint32 fid = item->data(COL_NAME, Qt::UserRole).toUInt();
+        if (fid != Function::invalidId())
+        {
+            Function *fn = m_doc->function(fid);
+            const QString newName = item->text(COL_NAME).trimmed();
+            if (fn != NULL && !newName.isEmpty() && fn->name() != newName)
+            {
+                fn->setName(newName);
+                m_doc->setModified();
+            }
+        }
         blockSignals(false);
         return;
     }

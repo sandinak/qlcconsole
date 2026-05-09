@@ -56,6 +56,7 @@
 #include "rgbscriptscache.h"
 #include "videoprovider.h"
 #include "qlcconfig.h"
+#include "fixturegroup.h"
 #include "qlcfile.h"
 #include "apputil.h"
 
@@ -149,6 +150,10 @@ App::App()
 
     , m_statusModeLabel(NULL)
     , m_statusAutosaveLabel(NULL)
+    , m_statusProgrammerLabel(NULL)
+    , m_statusSelectionLabel(NULL)
+    , m_statusPadModeLabel(NULL)
+    , m_statusShowLockLabel(NULL)
 {
     QCoreApplication::setOrganizationName("qlcplus");
     QCoreApplication::setOrganizationDomain("qlcplus.org");
@@ -752,6 +757,20 @@ void App::initActions()
     connect(m_controlBlackoutAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlackout()));
     m_controlBlackoutAction->setChecked(m_doc->inputOutputMap()->blackout());
 
+    // Show-mode lock — when on, programmer parameter writes drop
+    // silently. Selection nav, save, revert, pad-mode all still work.
+    // Designed to prevent accidental edits during a live show.
+    m_showLockAction = new QAction(QIcon(":/blackout.png"),
+                                   tr("Show-mode &Lock"), this);
+    m_showLockAction->setShortcut(QKeySequence("CTRL+L"));
+    m_showLockAction->setCheckable(true);
+    m_showLockAction->setToolTip(tr(
+        "When locked, slider/knob writes are dropped — protects "
+        "against accidental edits during a live show. Selection, "
+        "Save, Revert, and pad-mode toggles still work."));
+    connect(m_showLockAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotShowModeLock(bool)));
+
     m_liveEditAction = new QAction(QIcon(":/liveedit.png"), tr("Live edit a function"), this);
     connect(m_liveEditAction, SIGNAL(triggered()), this, SLOT(slotFunctionLiveEdit()));
     m_liveEditAction->setEnabled(false);
@@ -873,6 +892,7 @@ void App::initToolBar()
     m_toolbar->addAction(m_controlPanicAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_controlBlackoutAction);
+    m_toolbar->addAction(m_showLockAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_modeToggleAction);
 
@@ -1212,6 +1232,32 @@ void App::slotControlBlackout()
 void App::slotBlackoutChanged(bool state)
 {
     m_controlBlackoutAction->setChecked(state);
+}
+
+void App::slotShowModeLock(bool checked)
+{
+    if (m_doc != NULL)
+        m_doc->setShowLocked(checked);
+}
+
+void App::slotShowLockedChanged(bool locked)
+{
+    if (m_showLockAction != NULL)
+        m_showLockAction->setChecked(locked);
+    if (m_statusShowLockLabel != NULL)
+    {
+        if (locked)
+        {
+            m_statusShowLockLabel->setText(
+                tr("<span style='color:#e60000;font-weight:bold;'>"
+                   "🔒 Show locked</span>"));
+            m_statusShowLockLabel->show();
+        }
+        else
+        {
+            m_statusShowLockLabel->hide();
+        }
+    }
 }
 
 void App::slotControlPanic()
@@ -2074,12 +2120,171 @@ void App::initStatusBar()
     m_statusModeLabel->setMinimumWidth(300);
     sb->addWidget(m_statusModeLabel, 1);
 
+    // Programmer selection indicator (between mode and dirty). Hidden
+    // when nothing is selected, otherwise shows fully-selected fixture
+    // group names or a fixture count fallback.
+    m_statusSelectionLabel = new QLabel(this);
+    m_statusSelectionLabel->setAlignment(Qt::AlignRight);
+    m_statusSelectionLabel->hide();
+    sb->addPermanentWidget(m_statusSelectionLabel);
+
+    // Pad-grid mode indicator. Shows "Pad: Fixture select" etc. when
+    // the matrix is in any mode other than Off; hides otherwise.
+    m_statusPadModeLabel = new QLabel(this);
+    m_statusPadModeLabel->setAlignment(Qt::AlignRight);
+    m_statusPadModeLabel->hide();
+    sb->addPermanentWidget(m_statusPadModeLabel);
+
+    // Show-mode lock indicator. Hidden when unlocked; red 🔒 when on.
+    m_statusShowLockLabel = new QLabel(this);
+    m_statusShowLockLabel->setAlignment(Qt::AlignRight);
+    m_statusShowLockLabel->hide();
+    sb->addPermanentWidget(m_statusShowLockLabel);
+
+    // Programmer dirty indicator (between mode and autosave). Hidden
+    // when clean, red bullet + text when dirty. Mirrors the in-frame
+    // SaveProgrammer button highlight.
+    m_statusProgrammerLabel = new QLabel(this);
+    m_statusProgrammerLabel->setAlignment(Qt::AlignRight);
+    m_statusProgrammerLabel->hide();
+    sb->addPermanentWidget(m_statusProgrammerLabel);
+
     // Create autosave label (right side)
     m_statusAutosaveLabel = new QLabel(this);
     m_statusAutosaveLabel->setAlignment(Qt::AlignRight);
     sb->addPermanentWidget(m_statusAutosaveLabel);
 
+    if (m_doc != NULL)
+    {
+        connect(m_doc, SIGNAL(programmerDirtyChanged(bool)),
+                this, SLOT(slotProgrammerDirtyChanged(bool)));
+        connect(m_doc, SIGNAL(programmerSelectionChanged()),
+                this, SLOT(slotProgrammerSelectionChanged()));
+        connect(m_doc, &Doc::padModeChanged,
+                this, &App::slotPadModeChanged);
+        connect(m_doc, SIGNAL(showLockedChanged(bool)),
+                this, SLOT(slotShowLockedChanged(bool)));
+        slotProgrammerDirtyChanged(m_doc->isProgrammerDirty());
+        slotProgrammerSelectionChanged();
+        slotPadModeChanged(m_doc->padMode());
+        slotShowLockedChanged(m_doc->isShowLocked());
+    }
+
     updateStatusBar();
+}
+
+void App::slotProgrammerSelectionChanged()
+{
+    if (m_statusSelectionLabel == NULL || m_doc == NULL)
+        return;
+
+    const QList<quint32> selection = m_doc->programmerSelection();
+    if (selection.isEmpty())
+    {
+        m_statusSelectionLabel->hide();
+        return;
+    }
+
+    // Find every fixture group whose entire fixture list is contained
+    // in the current selection — those are "fully selected" groups,
+    // worth naming explicitly. Fixtures not covered by any such group
+    // are tallied as "+ N more".
+    QSet<quint32> selectedSet;
+    for (quint32 fid : selection)
+        selectedSet.insert(fid);
+
+    QStringList groupNames;
+    QSet<quint32> coveredFixtures;
+    for (FixtureGroup *grp : m_doc->fixtureGroups())
+    {
+        if (grp == NULL)
+            continue;
+        const QList<quint32> grpFixtures = grp->fixtureList();
+        if (grpFixtures.isEmpty())
+            continue;
+        bool fullyContained = true;
+        for (quint32 fid : grpFixtures)
+        {
+            if (!selectedSet.contains(fid))
+            {
+                fullyContained = false;
+                break;
+            }
+        }
+        if (fullyContained)
+        {
+            groupNames << grp->name();
+            for (quint32 fid : grpFixtures)
+                coveredFixtures.insert(fid);
+        }
+    }
+
+    const int extra = selection.size() - coveredFixtures.size();
+    QString text;
+    if (groupNames.isEmpty())
+    {
+        text = tr("Selected: %n fixture(s)", "", selection.size());
+    }
+    else
+    {
+        text = tr("Selected: %1").arg(groupNames.join(QStringLiteral(", ")));
+        if (extra > 0)
+            text += tr(" + %n more fixture(s)", "", extra);
+    }
+    m_statusSelectionLabel->setText(text);
+    m_statusSelectionLabel->show();
+}
+
+void App::slotPadModeChanged(Doc::PadMode mode)
+{
+    if (m_statusPadModeLabel == NULL)
+        return;
+    QString label;
+    QString color = QStringLiteral("#0a8");
+    switch (mode)
+    {
+    case Doc::PadModeFixtureSelect:
+        label = tr("Fixture select");
+        break;
+    case Doc::PadModeGoboSelect:
+        label = tr("Gobo select");
+        break;
+    case Doc::PadModeColorPalette:
+        label = tr("Color palette");
+        break;
+    case Doc::PadModeOff:
+    default:
+        m_statusPadModeLabel->hide();
+        return;
+    }
+    m_statusPadModeLabel->setText(
+        tr("<span style='color:%1;font-weight:bold;'>"
+           "▦ Pad: %2</span>").arg(color).arg(label));
+    m_statusPadModeLabel->show();
+}
+
+void App::slotProgrammerDirtyChanged(bool dirty)
+{
+    if (m_statusProgrammerLabel == NULL)
+        return;
+    if (!dirty || m_doc == NULL)
+    {
+        m_statusProgrammerLabel->hide();
+        return;
+    }
+    const int sceneCount = m_doc->editedSceneIds().size();
+    const bool hasNew = m_doc->hasProgrammerValues();
+
+    QStringList parts;
+    if (sceneCount > 0)
+        parts << tr("%n scene(s) edited", "", sceneCount);
+    if (hasNew)
+        parts << tr("new values pending");
+    const QString detail = parts.join(QStringLiteral(", "));
+    m_statusProgrammerLabel->setText(
+        tr("<span style='color:#e60000;font-weight:bold;'>"
+           "● Programmer: %1</span>").arg(detail));
+    m_statusProgrammerLabel->show();
 }
 
 void App::updateStatusBar()

@@ -808,6 +808,11 @@ void FunctionManager::initTree()
     m_tree->setDragEnabled(true);
     m_tree->setAcceptDrops(true);
     m_tree->setDragDropMode(QAbstractItemView::InternalMove);
+    // Rename in place via F2 or click-on-already-selected. NOT
+    // double-click — double-click is reserved for opening the function
+    // editor (slotTreeItemDoubleClicked below).
+    m_tree->setEditTriggers(QAbstractItemView::SelectedClicked
+                            | QAbstractItemView::EditKeyPressed);
 
     // Catch double-clicks to edit functions (single-click allows selection for drag-and-drop)
     connect(m_tree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
@@ -930,7 +935,11 @@ void FunctionManager::copyFunction(quint32 fid)
     Function* copy = function->createCopy(m_doc);
     if (copy != NULL)
     {
-        copy->setName(copy->name() + tr(" (Copy)"));
+        // Smart-increment the source name (e.g. "Verse 1" → "Verse 2",
+        // "01-01.02-Reville" → "01-01.03-Reville") instead of the
+        // generic "(Copy)" suffix. nextDuplicateName checks for
+        // collisions against other functions on the same Path.
+        copy->setName(m_doc->nextDuplicateName(function));
 
         /* If the cloned Function is a Sequence,
          * clone the bound Scene too */
@@ -972,6 +981,9 @@ void FunctionManager::editFunction(Function* function)
         m_editor = new ChaserEditor(m_hsplitter->widget(1), chaser, m_doc);
         connect(this, SIGNAL(functionManagerActive(bool)),
                 m_editor, SLOT(slotFunctionManagerActive(bool)));
+        // Allow drag-from-tree → drop-into-chaser-step-list, including
+        // collections/scenes/etc.
+        m_tree->setExternalDragMode(true);
     }
     else if (function->type() == Function::SequenceType)
     {
@@ -988,6 +1000,7 @@ void FunctionManager::editFunction(Function* function)
             m_editor = new ChaserEditor(m_hsplitter->widget(1), sequence, m_doc);
             connect(this, SIGNAL(functionManagerActive(bool)),
                     m_editor, SLOT(slotFunctionManagerActive(bool)));
+            m_tree->setExternalDragMode(true);
 
             if (sfunc->type() == Function::SceneType)
             {

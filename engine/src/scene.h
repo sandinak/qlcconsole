@@ -148,6 +148,16 @@ public:
      */
     void clear();
 
+    /**
+     * Drop the running fader state (FadeChannel cache + m_fadersMap).
+     * On the next tick Scene::write will re-initialize from m_values,
+     * so the scene "snaps back" to whatever its current values say —
+     * useful after a programmer edit was reverted via snapshot, where
+     * the fader otherwise retains FadeChannels for the post-edit
+     * values that don't match m_values anymore.
+     */
+    void resetRuntime();
+
 signals:
     void valueChanged(SceneValue scv);
 

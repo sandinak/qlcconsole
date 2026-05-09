@@ -19,7 +19,11 @@
 
 #include <QTreeWidgetItem>
 #include <QRadioButton>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QHeaderView>
+#include <QMimeData>
 #include <QTreeWidget>
 #include <QPushButton>
 #include <QMessageBox>
@@ -29,6 +33,7 @@
 #include <QUrl>
 #include <QAction>
 
+#include "functionstreewidget.h"
 #include "functionselection.h"
 #include "speeddialwidget.h"
 #include "chasereditor.h"
@@ -67,6 +72,13 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
     m_tree->setItemDelegateForColumn(COL_NUM, new NoEditDelegate(this));
     if (m_chaser->type() == Function::SequenceType)
         m_tree->header()->setSectionHidden(COL_NAME, true);
+
+    /* Accept function-id drops from the Function Manager. The tree's
+       built-in drop handling can't ingest our custom MIME format, so
+       we filter the viewport's drag/drop events ourselves. */
+    m_tree->setAcceptDrops(true);
+    m_tree->setDragDropMode(QAbstractItemView::DragDrop);
+    m_tree->viewport()->installEventFilter(this);
 
     m_cutAction = new QAction(QIcon(":/editcut.png"), tr("Cut"), this);
     m_cutButton->setDefaultAction(m_cutAction);
@@ -1129,6 +1141,111 @@ void ChaserEditor::slotTestPlay()
 FunctionParent ChaserEditor::functionParent() const
 {
     return FunctionParent::master();
+}
+
+bool ChaserEditor::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == m_tree->viewport())
+    {
+        switch (event->type())
+        {
+        case QEvent::DragEnter:
+            handleDragEnterEvent(static_cast<QDragEnterEvent *>(event));
+            return true;
+        case QEvent::DragMove:
+            handleDragMoveEvent(static_cast<QDragMoveEvent *>(event));
+            return true;
+        case QEvent::Drop:
+            handleDropEvent(static_cast<QDropEvent *>(event));
+            return true;
+        default:
+            break;
+        }
+    }
+    return QWidget::eventFilter(obj, event);
+}
+
+void ChaserEditor::handleDragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasFormat(FunctionsTreeWidget::functionDragMimeType()))
+    {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+    }
+    else
+    {
+        event->ignore();
+    }
+}
+
+void ChaserEditor::handleDragMoveEvent(QDragMoveEvent *event)
+{
+    if (event->mimeData()->hasFormat(FunctionsTreeWidget::functionDragMimeType()))
+    {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+    }
+    else
+    {
+        event->ignore();
+    }
+}
+
+void ChaserEditor::handleDropEvent(QDropEvent *event)
+{
+    if (!event->mimeData()->hasFormat(FunctionsTreeWidget::functionDragMimeType()))
+    {
+        event->ignore();
+        return;
+    }
+
+    QByteArray data = event->mimeData()->data(
+        FunctionsTreeWidget::functionDragMimeType());
+    QDataStream stream(&data, QIODevice::ReadOnly);
+
+    // Insertion point: position of the item under the drop, or end of
+    // list if dropped on empty space.
+    int insertionPoint = m_tree->topLevelItemCount();
+    if (QTreeWidgetItem *target = m_tree->itemAt(event->pos()))
+        insertionPoint = m_tree->indexOfTopLevelItem(target) + 1;
+
+    bool addedAny = false;
+    while (!stream.atEnd())
+    {
+        quint32 fid;
+        stream >> fid;
+        if (fid == Function::invalidId() || fid == m_chaser->id())
+            continue;
+
+        // Block circular references — the dragged function (or its
+        // children) must not contain this chaser.
+        Function *function = m_doc->function(fid);
+        if (function == NULL || function->contains(m_chaser->id()))
+            continue;
+
+        ChaserStep step(fid);
+        QTreeWidgetItem *item = new QTreeWidgetItem;
+        updateItem(item, step);
+        m_tree->insertTopLevelItem(insertionPoint, item);
+        m_chaser->addStep(step, insertionPoint++);
+        addedAny = true;
+    }
+
+    if (addedAny)
+    {
+        // Re-number existing steps after the insertion.
+        for (int i = 0; i < m_tree->topLevelItemCount(); ++i)
+        {
+            QTreeWidgetItem *it = m_tree->topLevelItem(i);
+            it->setText(COL_NUM, QString::number(i + 1));
+        }
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+    }
+    else
+    {
+        event->ignore();
+    }
 }
 
 void ChaserEditor::slotTestStop()

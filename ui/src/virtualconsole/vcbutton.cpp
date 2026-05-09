@@ -21,17 +21,25 @@
 #include <QStyleOptionButton>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QDialogButtonBox>
 #include <QWidgetAction>
 #include <QColorDialog>
 #include <QImageReader>
+#include <QInputDialog>
 #include <QFileDialog>
 #include <QPaintEvent>
 #include <QMouseEvent>
 #include <QMessageBox>
+#include <QTreeWidget>
+#include <QVBoxLayout>
+#include <QFormLayout>
+#include <QComboBox>
+#include <QDateTime>
 #include <QByteArray>
 #include <QSettings>
 #include <QPainter>
 #include <QString>
+#include <QLabel>
 #include <QDebug>
 #include <QEvent>
 #include <QTimer>
@@ -46,8 +54,13 @@
 #endif
 
 #include "qlcinputsource.h"
+#include "qlcchannel.h"
 #include "qlcmacros.h"
 #include "qlcfile.h"
+#include "collection.h"
+#include "scene.h"
+#include "fixture.h"
+#include "fixturegroup.h"
 
 #include "vcbuttonproperties.h"
 #include "vcpropertieseditor.h"
@@ -529,15 +542,28 @@ void VCButton::updateFeedback()
     //    return;
 
     QSharedPointer<QLCInputSource> src = inputSource();
-    if (!src.isNull() && src->isValid() == true)
+    if (src.isNull() || !src->isValid())
+        return;
+
+    // SaveProgrammer / RevertProgrammer LED follows dirty state, not
+    // m_state: blink while dirty, off when clean. The blink phase is
+    // toggled by the timer in slotProgrammerDirtyBlink().
+    if (m_action == SaveProgrammer || m_action == RevertProgrammer)
     {
-        if (m_state == Inactive)
-            sendFeedback(src->feedbackValue(QLCInputFeedback::LowerValue), src, src->feedbackExtraParams(QLCInputFeedback::LowerValue));
-        else if (m_state == Monitoring)
-            sendFeedback(src->feedbackValue(QLCInputFeedback::MonitorValue), src, src->feedbackExtraParams(QLCInputFeedback::MonitorValue));
-        else
-            sendFeedback(src->feedbackValue(QLCInputFeedback::UpperValue), src, src->feedbackExtraParams(QLCInputFeedback::UpperValue));
+        const bool dirty = (m_doc != NULL && m_doc->isProgrammerDirty());
+        const QLCInputFeedback::FeedbackType type =
+            (dirty && m_dirtyBlinkPhase) ? QLCInputFeedback::UpperValue
+                                         : QLCInputFeedback::LowerValue;
+        sendFeedback(src->feedbackValue(type), src, src->feedbackExtraParams(type));
+        return;
     }
+
+    if (m_state == Inactive)
+        sendFeedback(src->feedbackValue(QLCInputFeedback::LowerValue), src, src->feedbackExtraParams(QLCInputFeedback::LowerValue));
+    else if (m_state == Monitoring)
+        sendFeedback(src->feedbackValue(QLCInputFeedback::MonitorValue), src, src->feedbackExtraParams(QLCInputFeedback::MonitorValue));
+    else
+        sendFeedback(src->feedbackValue(QLCInputFeedback::UpperValue), src, src->feedbackExtraParams(QLCInputFeedback::UpperValue));
 }
 
 /*****************************************************************************
@@ -600,6 +626,67 @@ void VCButton::setAction(Action action)
         connect(m_doc, SIGNAL(programmerSelectionChanged()),
                 this, SLOT(slotProgrammerSelectionChanged()));
 
+    // PadModeSelect → padModeChanged subscription. Functor-style
+    // connect (compile-time type-checked) — the old SIGNAL/SLOT
+    // string macros silently fail on enum types whose qualifier
+    // doesn't normalize identically between signal-side and slot-side.
+    if (m_action == PadModeSelect && action != PadModeSelect)
+        disconnect(m_doc, &Doc::padModeChanged,
+                   this, &VCButton::slotPadModeChanged);
+    else if (m_action != PadModeSelect && action == PadModeSelect)
+        connect(m_doc, &Doc::padModeChanged,
+                this, &VCButton::slotPadModeChanged);
+
+    // FixturePadCell → selection + sub-selection + pad-mode subscriptions.
+    // Pad-mode change uses a lambda since the existing slot has a
+    // different signature and is also reused for the other two signals.
+    if (m_action == FixturePadCell && action != FixturePadCell)
+    {
+        disconnect(m_doc, &Doc::programmerSelectionChanged,
+                   this, &VCButton::slotProgrammerSubSelectionChanged);
+        disconnect(m_doc, &Doc::programmerSubSelectionChanged,
+                   this, &VCButton::slotProgrammerSubSelectionChanged);
+        disconnect(m_doc, &Doc::padModeChanged, this, nullptr);
+    }
+    else if (m_action != FixturePadCell && action == FixturePadCell)
+    {
+        connect(m_doc, &Doc::programmerSelectionChanged,
+                this, &VCButton::slotProgrammerSubSelectionChanged);
+        connect(m_doc, &Doc::programmerSubSelectionChanged,
+                this, &VCButton::slotProgrammerSubSelectionChanged);
+        connect(m_doc, &Doc::padModeChanged,
+                this, [this](Doc::PadMode){ slotProgrammerSubSelectionChanged(); });
+    }
+
+    // SaveProgrammer / RevertProgrammer share the same dirty-state
+    // subscription + blink machinery — both LEDs follow the dirty
+    // flag, both buttons need to flip on/off in sync with it.
+    auto wantsDirtyTracking = [](Action a) {
+        return a == SaveProgrammer || a == RevertProgrammer;
+    };
+    const bool wasTracking = wantsDirtyTracking(m_action);
+    const bool willTrack   = wantsDirtyTracking(action);
+
+    if (wasTracking && !willTrack)
+    {
+        disconnect(m_doc, SIGNAL(programmerDirtyChanged(bool)),
+                   this, SLOT(slotProgrammerDirtyChanged(bool)));
+        if (m_dirtyBlinkTimer != nullptr)
+            m_dirtyBlinkTimer->stop();
+    }
+    else if (!wasTracking && willTrack)
+    {
+        connect(m_doc, SIGNAL(programmerDirtyChanged(bool)),
+                this, SLOT(slotProgrammerDirtyChanged(bool)));
+        if (m_dirtyBlinkTimer == nullptr)
+        {
+            m_dirtyBlinkTimer = new QTimer(this);
+            m_dirtyBlinkTimer->setInterval(500);
+            connect(m_dirtyBlinkTimer, SIGNAL(timeout()),
+                    this, SLOT(slotProgrammerDirtyBlink()));
+        }
+    }
+
     // Action update
     m_action = action;
     updateIcon();
@@ -612,9 +699,20 @@ void VCButton::setAction(Action action)
     else if (m_action == SelectFixtures)
         setToolTip(tr("Programmer: %1 selection")
                        .arg(selectionModeToString(m_selectionMode)));
+    else if (m_action == SaveProgrammer)
+        setToolTip(tr("Save programmer values as a new Scene"));
+    else if (m_action == RevertProgrammer)
+        setToolTip(tr("Discard programmer edits — restore edited "
+                      "scenes to their saved values"));
 
     if (m_action == SelectFixtures)
         slotProgrammerSelectionChanged();
+    if (m_action == SaveProgrammer || m_action == RevertProgrammer)
+        slotProgrammerDirtyChanged(m_doc->isProgrammerDirty());
+    if (m_action == PadModeSelect)
+        slotPadModeChanged(m_doc->padMode());
+    if (m_action == FixturePadCell)
+        slotProgrammerSubSelectionChanged();
 }
 
 VCButton::Action VCButton::action() const
@@ -632,6 +730,18 @@ QString VCButton::actionToString(VCButton::Action action)
         return QString(KXMLQLCVCButtonActionStopAll);
     else if (action == SelectFixtures)
         return QString(KXMLQLCVCButtonActionSelect);
+    else if (action == SaveProgrammer)
+        return QString(KXMLQLCVCButtonActionSaveProgrammer);
+    else if (action == RevertProgrammer)
+        return QString(KXMLQLCVCButtonActionRevertProgrammer);
+    else if (action == PadModeSelect)
+        return QString(KXMLQLCVCButtonActionPadModeSelect);
+    else if (action == FixturePadCell)
+        return QString(KXMLQLCVCButtonActionFixturePadCell);
+    else if (action == ChaserStepNext)
+        return QString(KXMLQLCVCButtonActionChaserStepNext);
+    else if (action == ChaserStepPrev)
+        return QString(KXMLQLCVCButtonActionChaserStepPrev);
     else
         return QString(KXMLQLCVCButtonActionToggle);
 }
@@ -646,8 +756,52 @@ VCButton::Action VCButton::stringToAction(const QString& str)
         return StopAll;
     else if (str == KXMLQLCVCButtonActionSelect)
         return SelectFixtures;
+    else if (str == KXMLQLCVCButtonActionSaveProgrammer)
+        return SaveProgrammer;
+    else if (str == KXMLQLCVCButtonActionRevertProgrammer)
+        return RevertProgrammer;
+    else if (str == KXMLQLCVCButtonActionPadModeSelect)
+        return PadModeSelect;
+    else if (str == KXMLQLCVCButtonActionFixturePadCell)
+        return FixturePadCell;
+    else if (str == KXMLQLCVCButtonActionChaserStepNext)
+        return ChaserStepNext;
+    else if (str == KXMLQLCVCButtonActionChaserStepPrev)
+        return ChaserStepPrev;
     else
         return Toggle;
+}
+
+void VCButton::setPadMode(Doc::PadMode mode)
+{
+    m_padMode = mode;
+    if (m_action == PadModeSelect)
+        slotPadModeChanged(m_doc != NULL ? m_doc->padMode() : Doc::PadModeOff);
+}
+
+void VCButton::setPadCell(int row, int col)
+{
+    m_padRow = row;
+    m_padCol = col;
+    if (m_action == FixturePadCell)
+        slotProgrammerSubSelectionChanged();
+}
+
+quint32 VCButton::resolveFixturePadFixture() const
+{
+    if (m_doc == NULL || m_padRow < 0 || m_padCol < 0)
+        return Function::invalidId();
+    quint32 gid = m_doc->activeProgrammerGroup();
+    if (gid == Function::invalidId())
+        return Function::invalidId();
+    FixtureGroup *grp = m_doc->fixtureGroup(gid);
+    if (grp == NULL)
+        return Function::invalidId();
+    const QList<quint32> fixtures = grp->fixtureList();
+    const int idx = m_padRow * 8 + m_padCol;
+    if (idx < 0 || idx >= fixtures.size())
+        return Function::invalidId();
+    return fixtures.at(idx);
 }
 
 QString VCButton::selectionModeToString(VCButton::SelectionMode mode)
@@ -753,6 +907,334 @@ void VCButton::slotProgrammerSelectionChanged()
         // Push the new state to the surface (LED on/off on APC40 etc.).
         updateFeedback();
     }
+}
+
+void VCButton::slotProgrammerDirtyChanged(bool dirty)
+{
+    if (m_action != SaveProgrammer && m_action != RevertProgrammer)
+        return;
+    if (dirty)
+    {
+        if (m_dirtyBlinkTimer != nullptr && !m_dirtyBlinkTimer->isActive())
+            m_dirtyBlinkTimer->start();
+        m_dirtyBlinkPhase = true; // first blink: lit
+    }
+    else
+    {
+        if (m_dirtyBlinkTimer != nullptr)
+            m_dirtyBlinkTimer->stop();
+        m_dirtyBlinkPhase = false;
+    }
+    updateFeedback();
+    update();
+}
+
+void VCButton::slotProgrammerDirtyBlink()
+{
+    if (m_action != SaveProgrammer && m_action != RevertProgrammer)
+        return;
+    m_dirtyBlinkPhase = !m_dirtyBlinkPhase;
+    updateFeedback();
+    update();
+}
+
+void VCButton::slotPadModeChanged(Doc::PadMode mode)
+{
+    if (m_action != PadModeSelect)
+        return;
+    setState(mode == m_padMode ? Active : Inactive);
+}
+
+void VCButton::slotProgrammerSubSelectionChanged()
+{
+    if (m_action != FixturePadCell || m_doc == NULL)
+        return;
+
+    // Three visual states for a pad cell in FixtureSelect mode:
+    //   Active     — fixture is in the sub-selection (lit, green)
+    //   Monitoring — fixture exists at this idx but isn't selected
+    //                yet (candidate, orange in VC; same MIDI velocity
+    //                as Active by default, can be customized via
+    //                input source feedback values for distinct LED
+    //                colors on RGB controllers like APC40 mk2)
+    //   Inactive   — no fixture at this idx, OR mode != FixtureSelect
+    if (m_doc->padMode() != Doc::PadModeFixtureSelect)
+    {
+        setState(Inactive);
+        return;
+    }
+    const quint32 fid = resolveFixturePadFixture();
+    if (fid == Function::invalidId())
+    {
+        setState(Inactive);
+        return;
+    }
+    setState(m_doc->isInProgrammerSubSelection(fid) ? Active : Monitoring);
+}
+
+void VCButton::saveProgrammer()
+{
+    if (m_doc == NULL)
+        return;
+    if (!m_doc->isProgrammerDirty())
+    {
+        // Briefly flash the button to acknowledge the press even though
+        // there's nothing to save.
+        blink(150);
+        return;
+    }
+
+    // Two buckets to commit:
+    //  - editedSceneIds()   — scenes already mutated in memory; just
+    //                          mark Doc modified so the workspace saves.
+    //  - programmerValues   — channels with no running-scene owner;
+    //                          collect into a brand-new Scene with a
+    //                          user-provided name.
+    const bool hasEditedScenes = !m_doc->editedSceneIds().isEmpty();
+    const bool hasNewValues    = m_doc->hasProgrammerValues();
+
+    if (hasEditedScenes)
+        m_doc->setModified();
+
+    // Build dedup-aware row data for the dialog.
+    auto categoryLabel = [](Doc::SaveCategory c) -> QString {
+        switch (c)
+        {
+        case Doc::SaveCatPosition:  return tr("Position");
+        case Doc::SaveCatColor:     return tr("Color");
+        case Doc::SaveCatSpecial:   return tr("Special");
+        case Doc::SaveCatIntensity: return tr("Intensity");
+        default:                    return tr("Other");
+        }
+    };
+
+    struct EditedRow {
+        quint32 sceneId = Function::invalidId();
+        QString sceneName;
+        quint32 matchId = Function::invalidId();
+        QString matchName;
+    };
+    QList<EditedRow> editedRows;
+    for (quint32 sid : m_doc->editedSceneIds())
+    {
+        Function *fn = m_doc->function(sid);
+        if (fn == NULL)
+            continue;
+        EditedRow row;
+        row.sceneId = sid;
+        row.sceneName = fn->name();
+        Scene *scene = qobject_cast<Scene*>(fn);
+        if (scene != NULL)
+        {
+            QHash<quint32, QHash<quint32, uchar>> vals;
+            for (const SceneValue &sv : scene->values())
+                vals[sv.fxi][sv.channel] = sv.value;
+            row.matchId = m_doc->findMatchingScene(vals, sid);
+            if (row.matchId != Function::invalidId())
+            {
+                Function *m = m_doc->function(row.matchId);
+                if (m != NULL) row.matchName = m->name();
+            }
+        }
+        editedRows.append(row);
+    }
+
+    QList<Doc::SaveBucket> buckets;
+    if (hasNewValues)
+        buckets = m_doc->proposedSaveBuckets();
+
+    struct BucketRow {
+        Doc::SaveBucket bucket;
+        quint32 matchId = Function::invalidId();
+        QString matchName;
+    };
+    QList<BucketRow> bucketRows;
+    for (const Doc::SaveBucket &b : buckets)
+    {
+        BucketRow row;
+        row.bucket = b;
+        row.matchId = m_doc->findMatchingScene(b.values);
+        if (row.matchId != Function::invalidId())
+        {
+            Function *m = m_doc->function(row.matchId);
+            if (m != NULL) row.matchName = m->name();
+        }
+        bucketRows.append(row);
+    }
+
+    if (editedRows.isEmpty() && bucketRows.isEmpty())
+    {
+        blink(150);
+        return;
+    }
+
+    // Build dialog
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Save programmer"));
+    QVBoxLayout *layout = new QVBoxLayout(&dlg);
+
+    QTreeWidget *editedTree = nullptr;
+    if (!editedRows.isEmpty())
+    {
+        layout->addWidget(new QLabel(
+            tr("Edited running scenes — your edits already mutated "
+               "these. \"Use existing\" reverts the scene to its "
+               "pre-edit values and swaps the running collection to "
+               "play the matching scene instead:"), &dlg));
+        editedTree = new QTreeWidget(&dlg);
+        editedTree->setColumnCount(3);
+        editedTree->setHeaderLabels(QStringList()
+            << tr("Scene") << tr("Match") << tr("Action"));
+        editedTree->setRootIsDecorated(false);
+        for (const EditedRow &r : editedRows)
+        {
+            QTreeWidgetItem *it = new QTreeWidgetItem(editedTree);
+            it->setText(0, r.sceneName);
+            const bool hasMatch = (r.matchId != Function::invalidId());
+            it->setText(1, hasMatch ? r.matchName : tr("(no exact match)"));
+            QComboBox *combo = new QComboBox(editedTree);
+            combo->addItem(tr("Keep edit"));
+            if (hasMatch)
+            {
+                combo->addItem(tr("Use existing — revert + swap in collection"));
+                combo->setCurrentIndex(1); // default to "use existing" when matched
+            }
+            editedTree->setItemWidget(it, 2, combo);
+        }
+        editedTree->resizeColumnToContents(0);
+        editedTree->resizeColumnToContents(1);
+        layout->addWidget(editedTree, 1);
+    }
+
+    QTreeWidget *bucketTree = nullptr;
+    if (!bucketRows.isEmpty())
+    {
+        layout->addWidget(new QLabel(
+            tr("Non-routed values will be saved as one Scene per "
+               "(fixture group, category). Edit Name / Path or pick "
+               "\"Use existing\" if a matching scene already exists:"),
+            &dlg));
+        bucketTree = new QTreeWidget(&dlg);
+        bucketTree->setColumnCount(6);
+        bucketTree->setHeaderLabels(QStringList()
+            << tr("Save") << tr("Category") << tr("Group")
+            << tr("Name") << tr("Path") << tr("Action"));
+        bucketTree->setRootIsDecorated(false);
+        for (const BucketRow &r : bucketRows)
+        {
+            const Doc::SaveBucket &b = r.bucket;
+            QTreeWidgetItem *it = new QTreeWidgetItem(bucketTree);
+            it->setFlags(it->flags() | Qt::ItemIsUserCheckable
+                                      | Qt::ItemIsEditable);
+            it->setCheckState(0, Qt::Checked);
+            it->setText(1, categoryLabel(b.category));
+            it->setText(2, b.groupName);
+            it->setText(3, b.defaultName);
+            it->setText(4, b.defaultPath);
+            QComboBox *combo = new QComboBox(bucketTree);
+            combo->addItem(tr("Create new"));
+            if (r.matchId != Function::invalidId())
+            {
+                combo->addItem(tr("Use existing: %1").arg(r.matchName));
+                combo->setCurrentIndex(1); // default to existing when matched
+            }
+            bucketTree->setItemWidget(it, 5, combo);
+        }
+        bucketTree->resizeColumnToContents(0);
+        bucketTree->resizeColumnToContents(1);
+        bucketTree->resizeColumnToContents(2);
+        bucketTree->setColumnWidth(3, 160);
+        bucketTree->setColumnWidth(4, 200);
+        layout->addWidget(bucketTree, 1);
+    }
+
+    QDialogButtonBox *bb = new QDialogButtonBox(
+        QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    layout->addWidget(bb);
+
+    dlg.resize(820, 480);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    // ---- Apply choices ----
+    const quint32 runningCol = m_doc->singleRunningCollection();
+
+    // Edited scenes: Keep edit (no-op) OR Use existing (revert + swap)
+    if (editedTree != nullptr)
+    {
+        for (int i = 0; i < editedTree->topLevelItemCount(); ++i)
+        {
+            QTreeWidgetItem *it = editedTree->topLevelItem(i);
+            QComboBox *combo = qobject_cast<QComboBox*>(
+                editedTree->itemWidget(it, 2));
+            if (combo == nullptr || combo->currentIndex() != 1)
+                continue; // Keep edit
+            const EditedRow &r = editedRows.at(i);
+            // Revert this scene to its pre-edit snapshot, then swap any
+            // running collection's reference to the matching scene.
+            m_doc->revertSceneFromSnapshot(r.sceneId);
+            for (quint32 cid : m_doc->collectionsContaining(r.sceneId))
+            {
+                if (cid == runningCol || runningCol == Function::invalidId())
+                {
+                    m_doc->replaceSceneInCollection(cid, r.sceneId, r.matchId);
+                    if (cid == runningCol)
+                        break; // stop after the running one
+                }
+            }
+        }
+    }
+
+    // Bucket rows: Create new OR Use existing (+ optionally add to running)
+    if (bucketTree != nullptr)
+    {
+        for (int i = 0; i < bucketTree->topLevelItemCount(); ++i)
+        {
+            QTreeWidgetItem *it = bucketTree->topLevelItem(i);
+            if (it->checkState(0) != Qt::Checked)
+                continue;
+            const BucketRow &r = bucketRows.at(i);
+            QComboBox *combo = qobject_cast<QComboBox*>(
+                bucketTree->itemWidget(it, 5));
+            const bool useExisting = (combo != nullptr
+                                       && combo->currentIndex() == 1
+                                       && r.matchId != Function::invalidId());
+            if (useExisting)
+            {
+                // Don't create a new scene. If a single collection is
+                // running and doesn't already reference the match,
+                // add it as a child.
+                if (runningCol != Function::invalidId())
+                {
+                    Collection *coll = qobject_cast<Collection*>(
+                        m_doc->function(runningCol));
+                    if (coll != NULL && !coll->functions().contains(r.matchId))
+                    {
+                        coll->addFunction(r.matchId);
+                        m_doc->setModified();
+                    }
+                }
+            }
+            else
+            {
+                const QString name = it->text(3).trimmed();
+                const QString path = it->text(4).trimmed();
+                quint32 fid = m_doc->saveBucketAsScene(r.bucket, name, path);
+                if (fid == Function::invalidId())
+                {
+                    QMessageBox::warning(this, tr("Save programmer"),
+                        tr("Failed to create scene \"%1\".").arg(name));
+                }
+            }
+        }
+    }
+
+    if (!editedRows.isEmpty())
+        m_doc->setModified();
+    m_doc->clearProgrammerValues();
+    blink(250);
 }
 
 void VCButton::setStopAllFadeOutTime(int ms)
@@ -921,6 +1403,62 @@ void VCButton::pressFunction()
             m_doc->setProgrammerSelection(targets);
             break;
         }
+    }
+    else if (m_action == SaveProgrammer)
+    {
+        saveProgrammer();
+    }
+    else if (m_action == RevertProgrammer)
+    {
+        if (m_doc->isProgrammerDirty())
+        {
+            m_doc->revertProgrammer();
+            blink(250);
+        }
+        else
+        {
+            blink(150);
+        }
+    }
+    else if (m_action == PadModeSelect)
+    {
+        qDebug() << "[VCButton] PadModeSelect press: id=" << id()
+                 << "current=" << m_doc->padMode()
+                 << "target=" << m_padMode;
+        // Toggle: pressing the active mode's button switches pads off;
+        // pressing an inactive mode's button enters that mode.
+        if (m_doc->padMode() == m_padMode)
+            m_doc->setPadMode(Doc::PadModeOff);
+        else
+            m_doc->setPadMode(m_padMode);
+    }
+    else if (m_action == FixturePadCell)
+    {
+        if (m_doc->padMode() != Doc::PadModeFixtureSelect)
+        {
+            blink(150);    // wrong mode — acknowledge but no-op
+            return;
+        }
+        const quint32 fid = resolveFixturePadFixture();
+        if (fid == Function::invalidId())
+        {
+            blink(150);    // no fixture mapped to this cell
+            return;
+        }
+        m_doc->toggleInProgrammerSubSelection(fid);
+        // Visually identify the toggled fixture so the user can see
+        // which physical light corresponds to this pad.
+        m_doc->flashFixture(fid);
+    }
+    else if (m_action == ChaserStepNext)
+    {
+        m_doc->stepCurrentChaser(+1);
+        blink(120);
+    }
+    else if (m_action == ChaserStepPrev)
+    {
+        m_doc->stepCurrentChaser(-1);
+        blink(120);
     }
 }
 
@@ -1127,6 +1665,29 @@ bool VCButton::loadXML(QXmlStreamReader &root)
                 setSelectionGroups(gids);
             }
 
+            // Pad-mode + pad-cell coordinates. Persist these so a
+            // saved+reloaded workspace doesn't reset PadModeSelect to
+            // PadModeOff (no-op on press) or FixturePadCell to (-1,-1)
+            // (can't resolve fixture index).
+            if (attrs.hasAttribute(KXMLQLCVCButtonAttrPadMode))
+            {
+                const QString pm = attrs.value(KXMLQLCVCButtonAttrPadMode).toString();
+                if (pm.compare(QStringLiteral("FixtureSelect"), Qt::CaseInsensitive) == 0)
+                    setPadMode(Doc::PadModeFixtureSelect);
+                else if (pm.compare(QStringLiteral("GoboSelect"), Qt::CaseInsensitive) == 0)
+                    setPadMode(Doc::PadModeGoboSelect);
+                else if (pm.compare(QStringLiteral("ColorPalette"), Qt::CaseInsensitive) == 0)
+                    setPadMode(Doc::PadModeColorPalette);
+                else
+                    setPadMode(Doc::PadModeOff);
+            }
+            if (attrs.hasAttribute(KXMLQLCVCButtonAttrPadRow)
+                && attrs.hasAttribute(KXMLQLCVCButtonAttrPadCol))
+            {
+                setPadCell(attrs.value(KXMLQLCVCButtonAttrPadRow).toInt(),
+                           attrs.value(KXMLQLCVCButtonAttrPadCol).toInt());
+            }
+
             // setAction last so the XML-driven SelectFixtures connection
             // happens after the fixture/group lists are populated.
             setAction(stringToAction(root.readElementText()));
@@ -1211,6 +1772,24 @@ bool VCButton::saveXML(QXmlStreamWriter *doc)
                 ids.append(QString::number(gid));
             doc->writeAttribute(KXMLQLCVCButtonSelectGroups, ids.join(','));
         }
+    }
+    else if (action() == PadModeSelect)
+    {
+        QString pm;
+        switch (m_padMode)
+        {
+        case Doc::PadModeFixtureSelect: pm = QStringLiteral("FixtureSelect"); break;
+        case Doc::PadModeGoboSelect:    pm = QStringLiteral("GoboSelect");    break;
+        case Doc::PadModeColorPalette:  pm = QStringLiteral("ColorPalette");  break;
+        case Doc::PadModeOff:
+        default:                        pm = QStringLiteral("Off");           break;
+        }
+        doc->writeAttribute(KXMLQLCVCButtonAttrPadMode, pm);
+    }
+    else if (action() == FixturePadCell)
+    {
+        doc->writeAttribute(KXMLQLCVCButtonAttrPadRow, QString::number(m_padRow));
+        doc->writeAttribute(KXMLQLCVCButtonAttrPadCol, QString::number(m_padCol));
     }
     doc->writeCharacters(actionToString(action()));
     doc->writeEndElement();
@@ -1305,6 +1884,23 @@ void VCButton::paintEvent(QPaintEvent* e)
         QIcon icon(":/flash.png");
         painter.drawPixmap(rect().width() - 18, 2,
                            icon.pixmap(QSize(16, 16), QIcon::Normal, QIcon::On));
+    }
+
+    /* Dirty highlight on programmer-action buttons: red border + filled
+       corner dot for Save (commit), amber for Revert (discard). Pairs
+       with the status-bar dirty notice. */
+    if (m_doc != NULL && m_doc->isProgrammerDirty()
+        && (m_action == SaveProgrammer || m_action == RevertProgrammer))
+    {
+        const QColor highlight = (m_action == SaveProgrammer)
+            ? QColor(230, 0, 0, 255)        // red — commit
+            : QColor(245, 165, 0, 255);     // amber — discard
+        painter.setPen(QPen(highlight, 3));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(2, 2, rect().width() - 4, rect().height() - 4, 3, 3);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QBrush(highlight));
+        painter.drawEllipse(rect().width() - 14, 4, 10, 10);
     }
 
     if (m_ledStyle == true)

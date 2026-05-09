@@ -44,6 +44,9 @@
 #include "genericfader.h"
 #include "fadechannel.h"
 #include "mastertimer.h"
+#include "qlccapability.h"
+#include "qlcchannel.h"
+#include "qlcfixturemode.h"
 #include "qlcmacros.h"
 #include "universe.h"
 #include "vcslider.h"
@@ -347,10 +350,14 @@ void VCSlider::editProperties()
 
 void VCSlider::slotModeChanged(Doc::Mode mode)
 {
+    const bool needsDMXSource = (m_sliderMode == Level
+                                 || m_sliderMode == Playback
+                                 || m_sliderMode == Parameter);
+
     if (mode == Doc::Operate)
     {
         enableWidgetUI(true);
-        if (m_sliderMode == Level || m_sliderMode == Playback)
+        if (needsDMXSource)
         {
             m_doc->masterTimer()->registerDMXSource(this);
             if (m_sliderMode == Level)
@@ -360,7 +367,7 @@ void VCSlider::slotModeChanged(Doc::Mode mode)
     else
     {
         enableWidgetUI(false);
-        if (m_sliderMode == Level || m_sliderMode == Playback)
+        if (needsDMXSource)
         {
             m_doc->masterTimer()->unregisterDMXSource(this);
             // request to delete all the active faders
@@ -465,6 +472,7 @@ QString VCSlider::sliderModeToString(SliderMode mode)
         case Playback: return QString("Playback"); break;
         case Submaster: return QString("Submaster"); break;
         case Parameter: return QString("Parameter"); break;
+        case GrandMaster: return QString("GrandMaster"); break;
         default: return QString("Unknown"); break;
     }
 }
@@ -477,6 +485,8 @@ VCSlider::SliderMode VCSlider::stringToSliderMode(const QString& mode)
        return Playback;
     else if (mode == QString("Parameter"))
         return Parameter;
+    else if (mode == QString("GrandMaster"))
+        return GrandMaster;
     else //if (mode == QString("Submaster"))
         return Submaster;
 }
@@ -503,6 +513,12 @@ QString VCSlider::parameterRoleToString(ParameterRole role)
     case RoleEffect:      return QStringLiteral("Effect");
     case RoleBeam:        return QStringLiteral("Beam");
     case RoleMaintenance: return QStringLiteral("Maintenance");
+    case RoleColour:      return QStringLiteral("Color");
+    case RolePrism:       return QStringLiteral("Prism");
+    case RoleGobo2:       return QStringLiteral("Gobo2");
+    case RoleEffect2:     return QStringLiteral("Effect2");
+    case RoleFocus:       return QStringLiteral("Focus");
+    case RoleZoom:        return QStringLiteral("Zoom");
     }
     return QStringLiteral("Dimmer");
 }
@@ -526,6 +542,13 @@ VCSlider::ParameterRole VCSlider::stringToParameterRole(const QString& s)
     if (s == QStringLiteral("Effect"))      return RoleEffect;
     if (s == QStringLiteral("Beam"))        return RoleBeam;
     if (s == QStringLiteral("Maintenance")) return RoleMaintenance;
+    if (s == QStringLiteral("Color"))       return RoleColour;
+    if (s == QStringLiteral("Colour"))      return RoleColour;
+    if (s == QStringLiteral("Prism"))       return RolePrism;
+    if (s == QStringLiteral("Gobo2"))       return RoleGobo2;
+    if (s == QStringLiteral("Effect2"))     return RoleEffect2;
+    if (s == QStringLiteral("Focus"))       return RoleFocus;
+    if (s == QStringLiteral("Zoom"))        return RoleZoom;
     return RoleDimmer;
 }
 
@@ -551,8 +574,27 @@ int VCSlider::roleToChannelType(ParameterRole role)
     case RoleEffect:      return QLCChannel::Effect;
     case RoleBeam:        return QLCChannel::Beam;
     case RoleMaintenance: return QLCChannel::Maintenance;
+    case RoleColour:      return QLCChannel::Colour;
+    case RolePrism:       return QLCChannel::Prism;
+    // Indexed roles — same group as their non-indexed counterpart.
+    // The "which Nth occurrence" detail lives in roleToGroupIndex().
+    case RoleGobo2:       return QLCChannel::Gobo;
+    case RoleEffect2:     return QLCChannel::Effect;
+    case RoleFocus:       return QLCChannel::Beam;
+    case RoleZoom:        return QLCChannel::Beam;
     }
     return QLCChannel::Intensity;
+}
+
+int VCSlider::roleToGroupIndex(ParameterRole role)
+{
+    switch (role)
+    {
+    case RoleGobo2:    return 1; // 2nd Gobo
+    case RoleEffect2:  return 1; // 2nd Effect
+    case RoleZoom:     return 1; // 2nd Beam
+    default:           return 0; // first occurrence (existing semantics)
+    }
 }
 
 void VCSlider::setParameterRole(VCSlider::ParameterRole role)
@@ -592,12 +634,22 @@ int VCSlider::parameterControlByte() const
 
 void VCSlider::slotProgrammerSelectionChanged()
 {
-    if (m_sliderMode != Parameter)
+    // No-op by design: switching the programmer selection must NOT
+    // auto-assert this slider's last value onto the new fixtures, or
+    // moving from a "Reds at 200" group to an unrelated group would
+    // stomp the latter to red. The user is in pickup mode — values
+    // only apply when they actually move the slider/knob.
+    Q_UNUSED(this);
+}
+
+void VCSlider::slotGrandMasterValueChanged(uchar value)
+{
+    if (m_sliderMode != GrandMaster || m_slider == NULL)
         return;
-    // Selection just changed; the new fixtures should pick up the
-    // current slider value on the next tick.
-    QMutexLocker locker(&m_levelValueMutex);
-    m_levelValueChanged = true;
+    m_slider->blockSignals(true);
+    m_slider->setValue(value);
+    m_slider->blockSignals(false);
+    setTopLabelText(value);
 }
 
 VCSlider::SliderMode VCSlider::sliderMode() const
@@ -607,7 +659,7 @@ VCSlider::SliderMode VCSlider::sliderMode() const
 
 void VCSlider::setSliderMode(SliderMode mode)
 {
-    Q_ASSERT(mode >= Level && mode <= Parameter);
+    Q_ASSERT(mode >= Level && mode <= GrandMaster);
 
     // Manage Doc::programmerSelectionChanged subscription on transitions
     // into and out of Parameter mode.
@@ -617,6 +669,15 @@ void VCSlider::setSliderMode(SliderMode mode)
     else if (m_sliderMode != Parameter && mode == Parameter)
         connect(m_doc, SIGNAL(programmerSelectionChanged()),
                 this, SLOT(slotProgrammerSelectionChanged()));
+
+    // Mirror the global Grand Master value while in GrandMaster mode.
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (m_sliderMode == GrandMaster && mode != GrandMaster && iom != NULL)
+        disconnect(iom, SIGNAL(grandMasterValueChanged(uchar)),
+                   this, SLOT(slotGrandMasterValueChanged(uchar)));
+    else if (m_sliderMode != GrandMaster && mode == GrandMaster && iom != NULL)
+        connect(iom, SIGNAL(grandMasterValueChanged(uchar)),
+                this, SLOT(slotGrandMasterValueChanged(uchar)));
 
     m_sliderMode = mode;
 
@@ -696,6 +757,25 @@ void VCSlider::setSliderMode(SliderMode mode)
 
         if (m_doc->mode() == Doc::Operate)
             m_doc->masterTimer()->registerDMXSource(this);
+    }
+    else if (mode == GrandMaster)
+    {
+        m_monitorEnabled = false;
+        m_cngType = ClickAndGoWidget::None;
+        if (m_cngButton)
+            m_cngButton->hide();
+        if (m_slider)
+        {
+            m_slider->setRange(0, UCHAR_MAX);
+            m_slider->blockSignals(true);
+            m_slider->setValue(iom != NULL ? iom->grandMasterValue() : UCHAR_MAX);
+            m_slider->blockSignals(false);
+            if (m_widgetMode == WSlider)
+                m_slider->setStyleSheet(CNG_DEFAULT_STYLE);
+        }
+        m_bottomLabel->show();
+        // GrandMaster writes go through InputOutputMap directly, so no
+        // DMXSource registration needed.
     }
 }
 
@@ -1427,6 +1507,41 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
     m_levelValueChanged = false;
 }
 
+/**
+ * Walk a Color (wheel) channel's capabilities, find the preset whose
+ * stored colour is nearest to @p target in plain Euclidean RGB, and
+ * return its midpoint DMX value. Used to make RGB sliders also drive
+ * fixtures that only have a colour wheel.
+ */
+static uchar nearestColorWheelValue(const QLCChannel *qch, const QColor &target)
+{
+    if (qch == NULL)
+        return 0;
+    int bestDist = INT_MAX;
+    uchar bestValue = 0;
+    for (QLCCapability *cap : qch->capabilities())
+    {
+        if (cap == NULL)
+            continue;
+        QVariantList resources = cap->resources();
+        if (resources.isEmpty())
+            continue;
+        QColor c = resources.first().value<QColor>();
+        if (!c.isValid())
+            continue;
+        int dr = c.red() - target.red();
+        int dg = c.green() - target.green();
+        int db = c.blue() - target.blue();
+        int d = dr * dr + dg * dg + db * db;
+        if (d < bestDist)
+        {
+            bestDist = d;
+            bestValue = cap->middle();
+        }
+    }
+    return bestValue;
+}
+
 void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes)
 {
     Q_UNUSED(timer);
@@ -1439,9 +1554,90 @@ void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes
     int chType = roleToChannelType(m_parameterRole);
     int controlByte = m_parameterControlByte;
 
+    // RGB-W slider moves also feed Doc::m_programmerColor so that
+    // fixtures with a colour wheel (but no individual RGB channels) can
+    // follow what the user is asking for. The wheel write happens once
+    // per fixture below.
+    int primaryColour = QLCChannel::NoColour;
+    switch (chType)
+    {
+    case QLCChannel::Red:   primaryColour = QLCChannel::Red;   break;
+    case QLCChannel::Green: primaryColour = QLCChannel::Green; break;
+    case QLCChannel::Blue:  primaryColour = QLCChannel::Blue;  break;
+    case QLCChannel::White: primaryColour = QLCChannel::White; break;
+    default: break;
+    }
+    const bool isRGBWRole = (primaryColour != QLCChannel::NoColour);
+    if (isRGBWRole && controlByte == QLCChannel::MSB)
+        m_doc->setProgrammerColorComponent(primaryColour, value);
+
     QList<quint32> selection = m_doc->programmerSelection();
+    // Pad-grid sub-selection: when non-empty, restrict writes to
+    // only the fixtures the user picked via the pad matrix. Empty
+    // sub-selection means "the whole programmer selection", which
+    // is the default behavior.
+    const QSet<quint32> sub = m_doc->programmerSubSelection();
+    if (!sub.isEmpty())
+    {
+        QList<quint32> filtered;
+        for (quint32 fid : selection)
+        {
+            if (sub.contains(fid))
+                filtered.append(fid);
+        }
+        selection = filtered;
+    }
     CaptureManager *cm = m_doc->captureManager();
     bool capturing = (cm != NULL && cm->isCapturing());
+
+    auto writeChannel = [&](quint32 fid, Fixture *fxi, quint32 ch, uchar val)
+    {
+        quint32 universe = fxi->universe();
+        if (universe >= (quint32)universes.size())
+            return;
+
+        QSharedPointer<GenericFader> fader =
+            m_fadersMap.value(universe, QSharedPointer<GenericFader>());
+        if (fader.isNull())
+        {
+            fader = universes[universe]->requestFader();
+            fader->adjustIntensity(intensity());
+            m_fadersMap[universe] = fader;
+        }
+
+        FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe],
+                                                 fid, ch);
+        if (fc->universe() == Universe::invalid())
+        {
+            fader->remove(fc);
+            return;
+        }
+
+        // Non-intensity channels are LTP — auto-remove when this slider
+        // stops asserting them so the rest of the show can take over
+        // cleanly.
+        const QLCChannel *qch = fxi->channel(ch);
+        if (qch != NULL && qch->group() != QLCChannel::Intensity)
+            fc->addFlag(FadeChannel::AutoRemove);
+
+        fc->setStart(fc->current());
+        fc->setTarget(val);
+        fc->setReady(false);
+        fc->setElapsed(0);
+
+        // Edit-routing: if a running Scene "owns" this (fid, ch),
+        // mutate the scene in place — Scene::setValue injects into
+        // its running fader, so the change is visible immediately
+        // and the scene becomes the source on subsequent ticks. The
+        // scene is added to Doc::editedSceneIds() and Save will
+        // persist it. Otherwise (no owner), fall back to the
+        // programmer values map for "save as new scene" on Save.
+        if (m_doc->routeProgrammerEdit(fid, ch, val) == Function::invalidId())
+            m_doc->setProgrammerValue(fid, ch, val);
+
+        if (capturing)
+            cm->recordOverride(fid, ch, val, caption());
+    };
 
     for (quint32 fid : selection)
     {
@@ -1450,47 +1646,48 @@ void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes
             continue;
 
         const int headCount = fxi->heads();
+        const int groupIndex = roleToGroupIndex(m_parameterRole);
         for (int h = 0; h < headCount; ++h)
         {
-            quint32 ch = fxi->channelNumber(chType, controlByte, h);
-            if (ch == QLCChannel::invalid())
-                continue;
-
-            quint32 universe = fxi->universe();
-            if (universe >= (quint32)universes.size())
-                continue;
-
-            QSharedPointer<GenericFader> fader =
-                m_fadersMap.value(universe, QSharedPointer<GenericFader>());
-            if (fader.isNull())
+            // For indexed-sibling roles (Gobo2, Effect2, Zoom) skip
+            // the head-cache lookup entirely — that cache only knows
+            // about the FIRST channel of each group, so head 0's Gobo
+            // is what it'd return regardless of index.
+            quint32 ch = QLCChannel::invalid();
+            if (groupIndex == 0)
+                ch = fxi->channelNumber(chType, controlByte, h);
+            // QLCFixtureHead only caches Pan/Tilt/Intensity/PrimaryColour, so
+            // Colour-wheel/Gobo/Speed/Effect/Beam/Shutter/Maintenance/Prism
+            // come back invalid even when the channel exists. Fall back to the
+            // mode-wide search before giving up. Single-head fallback only — for
+            // multi-head fixtures the mode-level lookup would alias every head
+            // to the same channel.
+            if (ch == QLCChannel::invalid()
+                && headCount == 1
+                && fxi->fixtureMode() != NULL)
             {
-                fader = universes[universe]->requestFader();
-                fader->adjustIntensity(intensity());
-                m_fadersMap[universe] = fader;
+                ch = fxi->fixtureMode()->channelNumberByGroupIndex(
+                    static_cast<QLCChannel::Group>(chType),
+                    groupIndex,
+                    static_cast<QLCChannel::ControlByte>(controlByte));
             }
+            if (ch != QLCChannel::invalid())
+                writeChannel(fid, fxi, ch, value);
+        }
 
-            FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe],
-                                                     fid, ch);
-            if (fc->universe() == Universe::invalid())
+        // RGB-W role → also drive a colour-wheel channel if present, so
+        // a single fixture group can mix par-cans (RGB) and movers
+        // (colour wheel) and they'll move together visually.
+        if (isRGBWRole && fxi->fixtureMode() != NULL)
+        {
+            quint32 wheelCh = fxi->fixtureMode()->channelNumber(
+                QLCChannel::Colour, QLCChannel::MSB);
+            if (wheelCh != QLCChannel::invalid())
             {
-                fader->remove(fc);
-                continue;
+                uchar wheelValue = nearestColorWheelValue(
+                    fxi->channel(wheelCh), m_doc->programmerColor());
+                writeChannel(fid, fxi, wheelCh, wheelValue);
             }
-
-            // Non-intensity channels are LTP — auto-remove when this
-            // slider stops asserting them so the rest of the show can
-            // take over cleanly.
-            const QLCChannel *qch = fxi->channel(ch);
-            if (qch != NULL && qch->group() != QLCChannel::Intensity)
-                fc->addFlag(FadeChannel::AutoRemove);
-
-            fc->setStart(fc->current());
-            fc->setTarget(value);
-            fc->setReady(false);
-            fc->setElapsed(0);
-
-            if (capturing)
-                cm->recordOverride(fid, ch, value, caption());
         }
     }
     m_levelValueChanged = false;
@@ -1622,9 +1819,29 @@ void VCSlider::setSliderValue(uchar value, bool scale, bool external)
 
         case Parameter:
         {
+            // Show-mode lock: drop programmer parameter writes while
+            // locked. Selection navigation + Save/Revert/PadMode all
+            // remain functional — only this slider's value-output is
+            // suppressed. Keep m_levelValue updated for visual
+            // tracking but don't flag dirty.
+            if (m_doc->isShowLocked())
+            {
+                m_levelValue = uchar(val);
+                break;
+            }
             // setLevelValue tracks m_levelValue + m_levelValueChanged
             // which writeDMXParameter consumes on the next tick.
             setLevelValue(val, external);
+        }
+        break;
+
+        case GrandMaster:
+        {
+            if (m_doc->isShowLocked())
+                break;
+            InputOutputMap *iom = m_doc->inputOutputMap();
+            if (iom != NULL && iom->grandMasterValue() != uchar(val))
+                iom->setGrandMasterValue(uchar(val));
         }
         break;
     }

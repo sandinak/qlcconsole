@@ -23,6 +23,8 @@
 #include "programmerframewizard.h"
 #include "doc.h"
 #include "inputoutputmap.h"
+#include "inputpatch.h"
+#include "outputpatch.h"
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
 #include "qlcinputsource.h"
@@ -91,10 +93,13 @@ ProgrammerFrameWizard::ProgrammerFrameWizard(Doc* doc, QWidget* parent)
             this, SLOT(slotProfileChanged(int)));
     connect(m_mapCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotMapChanged(int)));
+    connect(m_universeSpin, SIGNAL(valueChanged(int)),
+            this, SLOT(slotProfileChanged(int)));
 
     populateProfiles();
     populateMaps();
-    updateSummary();
+    // Auto-sync profile to the initially-selected map's <Profile> ref.
+    slotMapChanged(0);
 }
 
 void ProgrammerFrameWizard::populateProfiles()
@@ -157,6 +162,43 @@ void ProgrammerFrameWizard::slotProfileChanged(int)
 
 void ProgrammerFrameWizard::slotMapChanged(int)
 {
+    // Auto-pick the input profile referenced by the selected map's
+    // <Profile> element, if a matching profile is loaded. Saves the
+    // user from having to remember which profile pairs with which
+    // map, and avoids the foot-gun where two similar profiles (e.g.
+    // "APC40 mkII" vs "APC Mini mk2") sit next to each other in the
+    // dropdown.
+    if (m_mapCombo->count() > 0 && m_doc != nullptr)
+    {
+        const QString mapPath = m_mapCombo->currentData().toString();
+        ProgrammerMap probe;
+        if (probe.load(mapPath))
+        {
+            const QString wantedFile = probe.matchingProfile();
+            if (!wantedFile.isEmpty())
+            {
+                InputOutputMap *iom = m_doc->inputOutputMap();
+                for (const QString &name : iom->profileNames())
+                {
+                    QLCInputProfile *p = iom->profile(name);
+                    if (p == nullptr)
+                        continue;
+                    const QString path = p->path();
+                    // Match on either basename (case-insensitive) or
+                    // exact name fallback.
+                    const QString baseName = path.section('/', -1);
+                    if (baseName.compare(wantedFile, Qt::CaseInsensitive) == 0
+                        || name.compare(wantedFile, Qt::CaseInsensitive) == 0)
+                    {
+                        const int idx = m_profileCombo->findText(name);
+                        if (idx >= 0 && idx != m_profileCombo->currentIndex())
+                            m_profileCombo->setCurrentIndex(idx);
+                        break;
+                    }
+                }
+            }
+        }
+    }
     updateSummary();
 }
 
@@ -196,6 +238,51 @@ void ProgrammerFrameWizard::updateSummary()
         }
         m_generateButton->setEnabled(profile != nullptr);
     }
+
+    // Patch-level diagnostics for the chosen Input universe. The wizard
+    // can wire widgets to channels, but it can't configure the universe's
+    // patches — and the bidirectional feedback path silently breaks if
+    // the profile isn't attached or the Feedback patch is missing. Warn
+    // the user up-front instead of letting them chase phantom bugs.
+    InputOutputMap* iom = m_doc->inputOutputMap();
+    const quint32 universe = static_cast<quint32>(m_universeSpin->value() - 1);
+    if (iom != nullptr)
+    {
+        QStringList warnings;
+
+        InputPatch* ip = iom->inputPatch(universe);
+        if (ip == nullptr || !ip->isPatched())
+        {
+            warnings << tr("• Universe %1 has no Input patch — hardware "
+                           "presses won't reach the VC.")
+                            .arg(m_universeSpin->value());
+        }
+        else if (profile != nullptr
+                 && (ip->profile() == nullptr
+                     || ip->profile()->name() != m_profileCombo->currentText()))
+        {
+            warnings << tr("• Universe %1 input patch isn't using profile "
+                           "\"%2\". Per-channel feedback values won't be "
+                           "applied; LEDs may stay dark even with a "
+                           "Feedback patch.")
+                            .arg(m_universeSpin->value())
+                            .arg(m_profileCombo->currentText());
+        }
+
+        if (iom->feedbackPatch(universe) == nullptr
+            || !iom->feedbackPatch(universe)->isPatched())
+        {
+            warnings << tr("• Universe %1 has no Feedback patch — VC "
+                           "state changes won't light controller LEDs. "
+                           "Add one in Tools → Inputs/Outputs (point it "
+                           "at the same MIDI device as the Input patch).")
+                            .arg(m_universeSpin->value());
+        }
+
+        if (!warnings.isEmpty())
+            text += tr("\n\nHeads-up:\n") + warnings.join(QStringLiteral("\n"));
+    }
+
     m_summary->setText(text);
 }
 
@@ -268,7 +355,8 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
     const int COL_W = 90;            // column pitch
     const int ROW_GAP = 8;           // vertical gap between rows
     const int W_INSET = 6;           // widget width inset within column
-    const int SLIDER_H = 220;        // slider row height
+    const int SLIDER_H = 220;        // slider row height (tall fader)
+    const int KNOB_H = 80;           // knob row height (compact rotary)
     const int BUTTON_H = 60;         // button row height
 
     // Pre-pass: determine each row's max widget height so mixed rows
@@ -286,8 +374,28 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
             col = autoIdx % map.gridColumns();
             ++autoIdx;
         }
-        int h = (e.kind == ProgrammerMap::ParameterSlider) ? SLIDER_H : BUTTON_H;
-        rowHeights[row] = qMax(rowHeights.value(row, 0), h);
+        const bool isSlider = (e.kind == ProgrammerMap::ParameterSlider
+                               || e.kind == ProgrammerMap::GrandMasterSlider);
+        const bool isKnob = isSlider && (e.style == VCSlider::WKnob);
+        const bool isPadCell = (e.kind == ProgrammerMap::FixturePadCellButton);
+        int h;
+        if (isKnob)         h = KNOB_H;
+        else if (isSlider)  h = SLIDER_H;
+        else if (isPadCell) h = 35;       // compact 30×30 cell + margin
+        else                h = BUTTON_H;
+        // Spanning widgets stretch across rowSpan rows; they don't
+        // contribute to any row's height (so e.g. a tall knob spanning
+        // two pad rows doesn't inflate those pad rows). Just register
+        // the spanned rows so they get Y positions.
+        if (e.rowSpan > 1)
+        {
+            for (int r = row; r < row + e.rowSpan; ++r)
+                rowHeights.insert(r, rowHeights.value(r, 0));
+        }
+        else
+        {
+            rowHeights[row] = qMax(rowHeights.value(row, 0), h);
+        }
         maxColumn = qMax(maxColumn, col);
     }
 
@@ -323,6 +431,22 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
         const int y = rowY.value(row, TOP_MARGIN);
         const int w = COL_W - W_INSET;
 
+        // Resolve the rendered height. With rowSpan > 1 the widget
+        // can use up to (sum of spanned row heights + intervening
+        // gaps); we render at min(natural, spanned) so the widget
+        // never overflows past its span (which would clip into the
+        // next row), and so non-stretching widgets like buttons keep
+        // their natural compact size in shared rows.
+        auto spannedHeight = [&](int naturalH) {
+            if (e.rowSpan <= 1)
+                return naturalH;
+            int total = 0;
+            for (int r = row; r < row + e.rowSpan; ++r)
+                total += rowHeights.value(r, 0);
+            total += (e.rowSpan - 1) * ROW_GAP;
+            return qMin(naturalH, total);
+        };
+
         VCWidget* widget = nullptr;
         if (e.kind == ProgrammerMap::ParameterSlider)
         {
@@ -337,9 +461,89 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
             slider->setParameterRole(e.role);
             slider->setParameterControlByte(e.controlByte);
             slider->setSliderMode(VCSlider::Parameter);
-            slider->setGeometry(x, y, w, SLIDER_H);
+            const int natH = (e.style == VCSlider::WKnob) ? KNOB_H : SLIDER_H;
+            slider->setGeometry(x, y, w, spannedHeight(natH));
+            if (e.style == VCSlider::WKnob)
+                slider->setWidgetStyle(VCSlider::WKnob);
             widget = slider;
             ++slidersMade;
+        }
+        else if (e.kind == ProgrammerMap::GrandMasterSlider)
+        {
+            VCSlider* slider = new VCSlider(frame, doc);
+            slider->setCaption(ProgrammerFrameWizard::tr("Master"));
+            slider->setSliderMode(VCSlider::GrandMaster);
+            const int natH = (e.style == VCSlider::WKnob) ? KNOB_H : SLIDER_H;
+            slider->setGeometry(x, y, w, spannedHeight(natH));
+            if (e.style == VCSlider::WKnob)
+                slider->setWidgetStyle(VCSlider::WKnob);
+            widget = slider;
+            ++slidersMade;
+        }
+        else if (e.kind == ProgrammerMap::SaveProgrammerButton)
+        {
+            VCButton* button = new VCButton(frame, doc);
+            button->setCaption(ProgrammerFrameWizard::tr("Save"));
+            button->setAction(VCButton::SaveProgrammer);
+            // Mirror the APC40 mk2's RECORD key, which is red.
+            button->setBackgroundColor(QColor(180, 30, 30));
+            button->setGeometry(x, y, w, spannedHeight(BUTTON_H));
+            widget = button;
+            ++buttonsMade;
+        }
+        else if (e.kind == ProgrammerMap::RevertProgrammerButton)
+        {
+            VCButton* button = new VCButton(frame, doc);
+            button->setCaption(ProgrammerFrameWizard::tr("Revert"));
+            button->setAction(VCButton::RevertProgrammer);
+            button->setGeometry(x, y, w, spannedHeight(BUTTON_H));
+            widget = button;
+            ++buttonsMade;
+        }
+        else if (e.kind == ProgrammerMap::PadModeButton)
+        {
+            VCButton* button = new VCButton(frame, doc);
+            QString cap;
+            switch (e.padMode)
+            {
+            case 1: cap = ProgrammerFrameWizard::tr("Fixt\nselect"); break;
+            case 2: cap = ProgrammerFrameWizard::tr("Gobo\nselect"); break;
+            case 3: cap = ProgrammerFrameWizard::tr("Color\npalette"); break;
+            default: cap = ProgrammerFrameWizard::tr("Pad\noff"); break;
+            }
+            button->setCaption(cap);
+            button->setPadMode(static_cast<Doc::PadMode>(e.padMode));
+            button->setAction(VCButton::PadModeSelect);
+            button->setGeometry(x, y, w, spannedHeight(BUTTON_H));
+            widget = button;
+            ++buttonsMade;
+        }
+        else if (e.kind == ProgrammerMap::FixturePadCellButton)
+        {
+            VCButton* button = new VCButton(frame, doc);
+            // No caption — pad cells are LED-only on hardware. The
+            // VC widget shows up as a small empty bar so the user
+            // can also click via mouse. Width matches slider width so
+            // the pad columns line up with the fader columns below.
+            button->setCaption(QString());
+            button->setPadCell(e.padRow, e.padCol);
+            button->setAction(VCButton::FixturePadCell);
+            button->setGeometry(x, y, w, spannedHeight(30));
+            widget = button;
+            ++buttonsMade;
+        }
+        else if (e.kind == ProgrammerMap::ChaserStepNextButton
+                 || e.kind == ProgrammerMap::ChaserStepPrevButton)
+        {
+            VCButton* button = new VCButton(frame, doc);
+            const bool isNext = (e.kind == ProgrammerMap::ChaserStepNextButton);
+            button->setCaption(isNext ? ProgrammerFrameWizard::tr("Step\n›")
+                                       : ProgrammerFrameWizard::tr("Step\n‹"));
+            button->setAction(isNext ? VCButton::ChaserStepNext
+                                      : VCButton::ChaserStepPrev);
+            button->setGeometry(x, y, w, spannedHeight(BUTTON_H));
+            widget = button;
+            ++buttonsMade;
         }
         else if (e.kind == ProgrammerMap::SelectFixturesButton ||
                  e.kind == ProgrammerMap::ClearSelectionButton)
@@ -353,31 +557,31 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
             }
             else
             {
-                // Column-based caption so each "column" maps to one
-                // logical group; the row distinguishes the mode.
-                // Column index 0-based becomes "G<col+1>".
+                // Two-line caption: group on top, mode word on bottom.
+                // Spelled out instead of symbols so the user doesn't
+                // have to decode the action without a legend.
                 const int g = col + 1;
                 switch (e.selectionMode)
                 {
                 case VCButton::SelectAdd:
-                    caption = ProgrammerFrameWizard::tr("G%1 +").arg(g);
+                    caption = ProgrammerFrameWizard::tr("G%1\nadd").arg(g);
                     break;
                 case VCButton::SelectRemove:
-                    caption = ProgrammerFrameWizard::tr("G%1 −").arg(g);
+                    caption = ProgrammerFrameWizard::tr("G%1\nrem").arg(g);
                     break;
                 case VCButton::SelectToggle:
-                    caption = ProgrammerFrameWizard::tr("G%1 ↻").arg(g);
+                    caption = ProgrammerFrameWizard::tr("G%1\ntog").arg(g);
                     break;
                 case VCButton::SelectReplace:
                 default:
-                    caption = ProgrammerFrameWizard::tr("G%1").arg(g);
+                    caption = ProgrammerFrameWizard::tr("G%1\nset").arg(g);
                     break;
                 }
                 button->setSelectionMode(e.selectionMode);
             }
             button->setCaption(caption);
             button->setAction(VCButton::SelectFixtures);
-            button->setGeometry(x, y, w, BUTTON_H);
+            button->setGeometry(x, y, w, spannedHeight(BUTTON_H));
             widget = button;
             ++buttonsMade;
         }
@@ -391,6 +595,20 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
         frame->addWidgetToPageMap(widget);
         QSharedPointer<QLCInputSource> src(
             new QLCInputSource(inputUniverse, e.channel));
+        // For pad cells on RGB controllers (e.g., APC40 mk2): use
+        // DMX values that map to distinct + visible MIDI velocities
+        // after QLC's DMX2MIDI = (val >> 1) shift.
+        //   DMX 0   → velocity 0   = off
+        //   DMX 26  → velocity 13  = orange (palette entry on mk2)
+        //   DMX 74  → velocity 37  = green
+        // Both > 0 so both produce LED output; different palette
+        // entries so candidate vs selected look different.
+        if (e.kind == ProgrammerMap::FixturePadCellButton)
+        {
+            src->setFeedbackValue(QLCInputFeedback::LowerValue,   0);
+            src->setFeedbackValue(QLCInputFeedback::MonitorValue, 26);
+            src->setFeedbackValue(QLCInputFeedback::UpperValue,   74);
+        }
         widget->setInputSource(src);
         widget->show();
     }

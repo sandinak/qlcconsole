@@ -30,7 +30,14 @@ public:
         Unknown,
         ParameterSlider,
         SelectFixturesButton,
-        ClearSelectionButton
+        ClearSelectionButton,
+        GrandMasterSlider,
+        SaveProgrammerButton,
+        RevertProgrammerButton,
+        PadModeButton,
+        FixturePadCellButton,
+        ChaserStepNextButton,
+        ChaserStepPrevButton
     };
 
     struct Entry
@@ -40,11 +47,25 @@ public:
         // Parameter-slider-only:
         VCSlider::ParameterRole role = VCSlider::RoleDimmer;
         int controlByte = 0;
+        // Slider/GrandMaster only: presentation style. WSlider = tall
+        // fader, WKnob = compact rotary. Default WSlider.
+        VCSlider::SliderWidgetStyle style = VCSlider::WSlider;
         // SelectFixtures-button-only:
         VCButton::SelectionMode selectionMode = VCButton::SelectReplace;
+        // PadModeButton-only: which pad-grid mode the button drives.
+        int padMode = 0;          // Doc::PadModeOff
+        // FixturePadCellButton-only: zero-based pad-grid coordinates
+        // (independent of VC layout row/column).
+        int padRow = -1;
+        int padCol = -1;
         // Optional layout hint: 0-based grid position. -1 = unspecified.
         int row = -1;
         int column = -1;
+        // Vertical span: how many rows this widget visually occupies.
+        // Spanning widgets stretch across rows without inflating the
+        // rows' heights, so e.g. a tall knob can sit alongside short
+        // pad cells without making those pad rows oversized.
+        int rowSpan = 1;
     };
 
     ProgrammerMap() = default;

@@ -53,6 +53,15 @@ class QEvent;
 #define KXMLQLCVCButtonActionBlackout   QStringLiteral("Blackout")
 #define KXMLQLCVCButtonActionStopAll    QStringLiteral("StopAll")
 #define KXMLQLCVCButtonActionSelect     QStringLiteral("SelectFixtures")
+#define KXMLQLCVCButtonActionSaveProgrammer   QStringLiteral("SaveProgrammer")
+#define KXMLQLCVCButtonActionRevertProgrammer QStringLiteral("RevertProgrammer")
+#define KXMLQLCVCButtonActionPadModeSelect    QStringLiteral("PadModeSelect")
+#define KXMLQLCVCButtonActionFixturePadCell   QStringLiteral("FixturePadCell")
+#define KXMLQLCVCButtonActionChaserStepNext   QStringLiteral("ChaserStepNext")
+#define KXMLQLCVCButtonActionChaserStepPrev   QStringLiteral("ChaserStepPrev")
+#define KXMLQLCVCButtonAttrPadMode            QStringLiteral("PadMode")
+#define KXMLQLCVCButtonAttrPadRow             QStringLiteral("PadRow")
+#define KXMLQLCVCButtonAttrPadCol             QStringLiteral("PadCol")
 #define KXMLQLCVCButtonSelectFixtures   QStringLiteral("SelectionFixtures")
 #define KXMLQLCVCButtonSelectGroups     QStringLiteral("SelectionGroups")
 #define KXMLQLCVCButtonSelectMode       QStringLiteral("SelectionMode")
@@ -269,7 +278,10 @@ public:
      * SelectFixtures: Modify the global programmer selection (replace,
      *                 add, remove, or toggle a configured fixture set).
      */
-    enum Action { Toggle, Flash, Blackout, StopAll, SelectFixtures };
+    enum Action { Toggle, Flash, Blackout, StopAll, SelectFixtures,
+                  SaveProgrammer, RevertProgrammer,
+                  PadModeSelect, FixturePadCell,
+                  ChaserStepNext, ChaserStepPrev };
 
     /** SelectFixtures sub-mode: how the click affects the selection. */
     enum SelectionMode { SelectReplace, SelectAdd, SelectRemove, SelectToggle };
@@ -309,9 +321,45 @@ public:
     /** Resolve groups + explicit ids into the final fixture id set. */
     QList<quint32> resolveSelectionTargets() const;
 
+    /** SaveProgrammer-action: prompt for a scene name (with a sensible
+        default), build a Scene from Doc::saveProgrammerAsScene(), and
+        clear the programmer values on success. */
+    void saveProgrammer();
+
+    /** PadModeSelect: which pad-grid mode this button activates when
+        pressed (and reflects the LED of when it equals doc->padMode()). */
+    Doc::PadMode padMode() const { return m_padMode; }
+    void setPadMode(Doc::PadMode mode);
+
+    /** FixturePadCell: zero-based row/col within the 5×8 pad grid.
+        Maps to fixture index `(row * 8 + col)` of the active group. */
+    int padRow() const { return m_padRow; }
+    int padCol() const { return m_padCol; }
+    void setPadCell(int row, int col);
+
+private:
+    /** FixturePadCell only: resolve the fixture this pad represents
+        based on the current active programmer group, or invalidId
+        if there is no active group / fewer fixtures than the index. */
+    quint32 resolveFixturePadFixture() const;
+
 protected slots:
     /** Re-evaluate isOn() based on current programmer selection. */
     void slotProgrammerSelectionChanged();
+
+    /** SaveProgrammer-action handler for Doc::programmerDirtyChanged.
+        Drives the blink-while-dirty LED feedback + repaint. */
+    void slotProgrammerDirtyChanged(bool dirty);
+
+    /** SaveProgrammer-action blink tick — flips m_dirtyBlinkPhase and
+        re-sends LED feedback so the hardware LED actually toggles. */
+    void slotProgrammerDirtyBlink();
+
+    /** PadModeSelect: re-evaluate Active state against doc->padMode(). */
+    void slotPadModeChanged(Doc::PadMode mode);
+
+    /** FixturePadCell: re-evaluate Active state from sub-selection. */
+    void slotProgrammerSubSelectionChanged();
 
 protected:
     QList<quint32> m_selectionFixtures;
@@ -320,6 +368,18 @@ protected:
 
     Action m_action;
     int m_blackoutFadeOutTime;
+
+    /** SaveProgrammer-action only: 500ms timer that toggles
+        m_dirtyBlinkPhase while the programmer is dirty. */
+    QTimer *m_dirtyBlinkTimer = nullptr;
+    bool m_dirtyBlinkPhase = false;
+
+    /** PadModeSelect only: which mode this button drives. */
+    Doc::PadMode m_padMode = Doc::PadModeOff;
+
+    /** FixturePadCell only: pad coordinates (zero-based, row 0 = top). */
+    int m_padRow = -1;
+    int m_padCol = -1;
 
     /*********************************************************************
      * Startup intensity adjustment

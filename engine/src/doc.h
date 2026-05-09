@@ -27,6 +27,7 @@
 #include <QFile>
 #include <QMap>
 #include <QSet>
+#include <QColor>
 
 #include "qlcfixturedefcache.h"
 #include "qlcmodifierscache.h"
@@ -37,6 +38,7 @@
 #include "qlcclipboard.h"
 #include "mastertimer.h"
 #include "qlcpalette.h"
+#include "scenevalue.h"
 #include "function.h"
 #include "fixture.h"
 
@@ -45,6 +47,7 @@ class RGBScriptsCache;
 class AudioPluginCache;
 class MonitorProperties;
 class CaptureManager;
+class ProgrammerFlasher;
 
 /** @addtogroup engine Engine
  * @{
@@ -286,15 +289,264 @@ public:
         SelectFixtures-mode buttons to decide their checked state. */
     bool allInProgrammerSelection(const QList<quint32>& fixtureIds) const;
 
+    /**
+     * Programmer-side composite color tracked across R/G/B/W slider
+     * moves. Lets fixtures with a Color (wheel) channel but no RGB
+     * channels still follow what the RGB sliders are asking for —
+     * VCSlider::writeDMXParameter does the nearest-preset lookup.
+     */
+    QColor programmerColor() const;
+    /** Update one component (Red/Green/Blue/White) of the programmer
+        color. White is stored in the alpha channel for compactness. */
+    void setProgrammerColorComponent(int qlcPrimaryColour, uchar value);
+
+    /*********************************************************************
+     * Programmer Values (asserted-by-the-programmer fixture-channel map)
+     *
+     * Every Parameter-mode write records its (fixture, channel, value)
+     * here. Save Programmer reads from this to build a Scene; Clear
+     * empties it. The map IS the dirty state — empty == clean.
+     *********************************************************************/
+public:
+    /** Record one programmer-asserted channel value. Triggers
+        programmerDirtyChanged(true) on the first non-empty write. */
+    void setProgrammerValue(quint32 fixtureId, quint32 channel, uchar value);
+
+    /** Drop all programmer values. Triggers programmerDirtyChanged(false). */
+    void clearProgrammerValues();
+
+    /** True iff at least one programmer value is currently held. */
+    bool isProgrammerDirty() const;
+
+    /** Snapshot the current programmer values into a brand-new Scene
+        with the given name. Returns the new function id, or
+        Function::invalidId() on failure. Caller should clear values
+        afterward (this method does NOT clear, so callers can sequence
+        the dialog/cancel/etc. however they want). */
+    quint32 saveProgrammerAsScene(const QString &name);
+
+    /*********************************************************************
+     * Smart-save bucketing: classify non-routed programmer values into
+     * (fixture group, role category) buckets so Save can land them in
+     * sensibly-named scenes filed under category folders.
+     *********************************************************************/
+    enum SaveCategory {
+        SaveCatPosition = 0,   // Pan, Tilt (and their fine bytes)
+        SaveCatColor,          // R/G/B/W/Amber/UV/Cyan/Magenta/Yellow + Colour wheel
+        SaveCatSpecial,        // Gobo, Shutter, Beam, Effect, Speed, Prism, Maintenance
+        SaveCatIntensity,      // Dimmer / Intensity (no specific colour)
+        SaveCatUnknown         // anything that doesn't fit above
+    };
+    Q_ENUM(SaveCategory)
+
+    /** Container for one Save proposal — a single new Scene to be
+        created from a (fixture-group, category) slice of the
+        programmer values. Names + path are pre-filled with sensible
+        defaults; the Save dialog lets the user edit them. */
+    struct SaveBucket
+    {
+        SaveCategory category = SaveCatUnknown;
+        quint32 fixtureGroupId = (quint32)~0;       // invalidId if no group fits
+        QString groupName;                           // for default naming/path
+        QString defaultName;
+        QString defaultPath;
+        QHash<quint32, QHash<quint32, uchar>> values;
+    };
+
+    /** Group the current programmer values by (fixture-group, category)
+        and return a Save proposal per bucket. Read-only — does not
+        modify Doc state. */
+    QList<SaveBucket> proposedSaveBuckets() const;
+
+    /** Persist a SaveBucket as a new Scene with the given (possibly
+        user-edited) name and path. Returns the new function id, or
+        invalidId on failure. */
+    quint32 saveBucketAsScene(const SaveBucket &bucket,
+                              const QString &name,
+                              const QString &path);
+
+    /**
+     * Generate a unique name for a copy of @p src by bumping the
+     * rightmost numeric segment of its current name (preserving
+     * zero-padding) and checking for collisions against other
+     * functions in the same Path. Falls back to appending " N" if no
+     * numeric pattern is detected. Pattern-agnostic — works for
+     * "Verse 1" → "Verse 2", "01-01.02-Reville" → "01-01.03-Reville",
+     * and arbitrary names with embedded numbers.
+     */
+    QString nextDuplicateName(const Function *src) const;
+
+    /**
+     * Step the most-recently-started running Chaser forward/backward.
+     * Lets a single pair of surface buttons (SHIFT/BANK on the Mk2)
+     * scrub through whatever chaser is in focus without binding each
+     * chaser explicitly. No-op if no chaser is running.
+     */
+    void stepCurrentChaser(int direction);  // -1 = back, +1 = forward
+
+    /**
+     * Find an existing Scene whose value-set EXACTLY matches @p values
+     * (same fixtures, same channels, same DMX values). @p excludeSceneId
+     * is skipped — useful when looking for a duplicate of a scene
+     * we're considering swapping.
+     * Returns the scene id, or Function::invalidId() if no match.
+     */
+    quint32 findMatchingScene(
+        const QHash<quint32, QHash<quint32, uchar>> &values,
+        quint32 excludeSceneId = (quint32)~0) const;
+
+    /** Collections that reference @p sceneId as a child. */
+    QList<quint32> collectionsContaining(quint32 sceneId) const;
+
+    /** Swap @p oldSceneId for @p newSceneId in @p collectionId at the
+        same insertion index. Returns true on success. */
+    bool replaceSceneInCollection(quint32 collectionId,
+                                  quint32 oldSceneId,
+                                  quint32 newSceneId);
+
+    /** Restore @p sceneId to the snapshot taken when it first became
+        edited. No-op if the scene wasn't edited. */
+    void revertSceneFromSnapshot(quint32 sceneId);
+
+    /** Currently-running Collection if there's exactly one — else
+        Function::invalidId(). Used by Save's "Use existing + add to
+        running collection" sugar. */
+    quint32 singleRunningCollection() const;
+
+    /** Briefly flash @p fixtureId so the user can spot which physical
+        fixture they just toggled in pad-grid sub-selection. Inverts
+        the current intensity (off→on if dim, on→off if bright) for
+        @p durationMs, then releases. */
+    void flashFixture(quint32 fixtureId, int durationMs = 180);
+
+    /**
+     * Show-mode lock — when true, programmer parameter writes (slider
+     * Parameter mode, GrandMaster, route + non-route) are silently
+     * dropped. Selection nav, Save, Revert and pad-mode toggles
+     * still work. Toggled by App's Tools → Show Mode Lock action.
+     */
+    bool isShowLocked() const;
+    void setShowLocked(bool locked);
+
+signals:
+    void showLockedChanged(bool locked);
+
+public:
+
+    /**
+     * Route a programmer write to whichever running Scene "owns" this
+     * (fixture, channel) — the most-recently-started running Scene
+     * that has a value set on the pair (LTP). Updates the scene's
+     * value in place and marks the scene as edited. Returns the scene
+     * id on success, or Function::invalidId() if no running scene
+     * owns the channel — in that case the caller should fall back to
+     * setProgrammerValue() so the write becomes part of a new scene
+     * on next Save.
+     */
+    quint32 routeProgrammerEdit(quint32 fid, quint32 ch, uchar value);
+
+    /** Read-only view of scenes with unsaved programmer edits. */
+    QSet<quint32> editedSceneIds() const;
+
+    /*********************************************************************
+     * Pad-grid mode + per-fixture sub-selection (5×8 matrix on Mk2)
+     *********************************************************************/
+    /** Current pad-grid mode. Drives what the 40 clip pads do and
+        what their LEDs reflect. Modes:
+         - PadModeOff:           pads inert + dark
+         - PadModeFixtureSelect: pads toggle fixtures within the
+                                  active programmer group
+         - PadModeGoboSelect:    (next round) pads = gobo capability
+                                  ranges
+         - PadModeColorPalette:  (next round) pads = preset colors */
+    enum PadMode {
+        PadModeOff = 0,
+        PadModeFixtureSelect,
+        PadModeGoboSelect,
+        PadModeColorPalette
+    };
+    Q_ENUM(PadMode)
+
+    PadMode padMode() const;
+    void setPadMode(PadMode mode);
+
+    /** The fixture group whose fixtures EXACTLY match the current
+        programmer selection — i.e., the unambiguous "active group"
+        the pad grid maps fixtures into. Returns invalidId when the
+        selection doesn't pin down a single group. */
+    quint32 activeProgrammerGroup() const;
+
+    /** Per-fixture refinement within the active group. Empty means
+        "all fixtures in the active group are in scope" (default).
+        Non-empty means "only these fixtures get programmer writes". */
+    QSet<quint32> programmerSubSelection() const;
+    bool isInProgrammerSubSelection(quint32 fid) const;
+    void toggleInProgrammerSubSelection(quint32 fid);
+    void clearProgrammerSubSelection();
+
+    /** True iff the programmer values map has any entries — i.e.,
+        Save would create a brand-new Scene from non-routed channels. */
+    bool hasProgrammerValues() const;
+
+    /** Read-only view of the non-routed programmer values, keyed by
+        fixture id then channel index. The Save dialog uses this to
+        show the user what's about to land in the new scene. */
+    QHash<quint32, QHash<quint32, uchar>> programmerValues() const;
+
+    /** Discard all in-flight programmer edits: restore each edited
+        scene to the snapshot taken before its first edit, drop the
+        programmer values map, fire programmerDirtyChanged(false). */
+    void revertProgrammer();
+
 signals:
     /** Emitted whenever the programmer selection changes. Listeners
         should re-read programmerSelection() — no payload, since the
         change can be arbitrary (replace/add/remove/toggle/clear). */
     void programmerSelectionChanged();
 
+    /** Emitted whenever the programmer-values map transitions between
+        empty and non-empty. Argument: new dirty state. */
+    void programmerDirtyChanged(bool dirty);
+
+    /** Emitted when padMode() changes. */
+    void padModeChanged(PadMode mode);
+
+    /** Emitted whenever programmerSubSelection() changes. */
+    void programmerSubSelectionChanged();
+
+private slots:
+    /** Maintain m_runningScenes as functions start / stop. */
+    void slotProgrammerFunctionStarted(quint32 fid);
+    void slotProgrammerFunctionStopped(quint32 fid);
+
 private:
     QList<quint32> m_programmerSelection;
     QSet<quint32> m_programmerSelectionLookup;
+    QColor m_programmerColor;
+    QHash<quint32, QHash<quint32, uchar>> m_programmerValues;
+    /** Most-recently-started running Scene fids, oldest → newest.
+        routeProgrammerEdit walks this in reverse for LTP routing. */
+    QList<quint32> m_runningScenes;
+    /** Most-recently-started running Chaser fids, oldest → newest.
+        stepCurrentChaser drives the last entry. */
+    QList<quint32> m_runningChasers;
+    /** Most-recently-started running Collection fids. Used for the
+        Save dialog's "add to running collection" sugar. */
+    QList<quint32> m_runningCollections;
+    /** Owns the per-tick flasher DMXSource for fixture flash-to-identify. */
+    ProgrammerFlasher *m_programmerFlasher = nullptr;
+    /** Show-mode safety lock. */
+    bool m_showLocked = false;
+    /** Scenes whose values have been mutated by the programmer
+        since the last Save / Revert. */
+    QSet<quint32> m_editedScenes;
+    /** Pre-edit value snapshot per scene: captured the first time a
+        scene becomes "edited" so Revert can restore it. */
+    QHash<quint32, QList<SceneValue>> m_sceneSnapshots;
+    /** Current pad-grid mode (default Off). */
+    PadMode m_padMode = PadModeOff;
+    /** Per-fixture refinement within the active programmer group. */
+    QSet<quint32> m_programmerSubSelection;
 
     /*********************************************************************
      * Fixture Instances

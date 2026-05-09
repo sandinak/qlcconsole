@@ -285,7 +285,6 @@ void VCButtonProperties::slotFadeOutTextEdited()
 
 void VCButtonProperties::accept()
 {
-    m_button->setCaption(m_nameEdit->text());
     m_button->setFunction(m_function);
     m_button->setKeySequence(m_inputSelWidget->keySequence());
     m_button->setInputSource(m_inputSelWidget->inputSource());
@@ -318,25 +317,58 @@ void VCButtonProperties::accept()
 
     /* Auto-rename when a single group is selected, but only if the
        current caption still looks like a wizard placeholder
-       ("Group <N>") — never overwrite a caption the user has typed. */
+       ("Group <N>") — never overwrite a caption the user has typed.
+       Preserves the mode suffix (set/add/tog/rem) on the second line so
+       reassigning a group keeps the visual mode indicator.
+
+       Two-line format: "<group>\n<mode>". Older single-line/symbol
+       formats are accepted and rewritten to the new two-line form. */
     if (groups.size() == 1 && fixtures.isEmpty())
     {
         FixtureGroup* grp = m_doc->fixtureGroup(groups.first());
         if (grp != NULL)
         {
-            // Wizard placeholders: "G<n>" or "G<n> [+|-|↻]" or "Group <n>"
-            // (legacy) or "Clear".
             QRegularExpression placeholder(
-                QString::fromUtf8("^(Group |G)\\d+( [+\xe2\x88\x92\xe2\x86\xbb])?$"));
+                QString::fromUtf8(
+                    "^(Group |G)\\d+"
+                    "(\\n(set|add|tog|rem)|"
+                    " [+\xe2\x88\x92\xe2\x86\xbb])?$"));
             QString caption = m_nameEdit->text();
+            QRegularExpressionMatch m = placeholder.match(caption);
             if (caption.isEmpty()
                 || caption == tr("Clear")
-                || placeholder.match(caption).hasMatch())
+                || m.hasMatch())
             {
-                m_nameEdit->setText(grp->name());
+                // Preserve the mode word from the existing placeholder
+                // so an assigned group still carries its action label.
+                QString mode = m.captured(3); // "set"|"add"|"tog"|"rem" or empty
+                if (mode.isEmpty() && m.hasMatch())
+                {
+                    // Older symbol form: map the symbol back to a word.
+                    const QString sym = m.captured(2).trimmed();
+                    if (sym == QStringLiteral("+"))      mode = QStringLiteral("add");
+                    else if (sym == QString::fromUtf8("\xe2\x88\x92")) mode = QStringLiteral("rem");
+                    else if (sym == QString::fromUtf8("\xe2\x86\xbb")) mode = QStringLiteral("tog");
+                }
+                if (mode.isEmpty())
+                {
+                    // No mode hint in the caption — derive from current
+                    // SelectionMode radio state so we still produce the
+                    // right second line.
+                    if (m_selectionAddRadio->isChecked())          mode = QStringLiteral("add");
+                    else if (m_selectionRemoveRadio->isChecked())  mode = QStringLiteral("rem");
+                    else if (m_selectionToggleRadio->isChecked())  mode = QStringLiteral("tog");
+                    else                                            mode = QStringLiteral("set");
+                }
+                m_nameEdit->setText(grp->name() + QStringLiteral("\n") + mode);
             }
         }
     }
+
+    // Apply caption AFTER auto-rename so the renamed text reaches the
+    // button. (Was sequenced wrong before — caption was set before the
+    // rename so the auto-update never landed on the button.)
+    m_button->setCaption(m_nameEdit->text());
 
     if (m_selectionAddRadio->isChecked())
         m_button->setSelectionMode(VCButton::SelectAdd);
