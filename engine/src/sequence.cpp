@@ -98,6 +98,24 @@ QList<quint32> Sequence::components() const
 }
 
 /*****************************************************************************
+ * Fixtures
+ *****************************************************************************/
+
+void Sequence::slotFixtureRemoved(quint32 fxID)
+{
+    for (ChaserStep& step : m_steps)
+    {
+        QMutableListIterator<SceneValue> it(step.values);
+        while (it.hasNext())
+        {
+            SceneValue& value(it.next());
+            if (value.fxi == fxID)
+                it.remove();
+        }
+    }
+}
+
+/*****************************************************************************
  * Save & Load
  *****************************************************************************/
 
