@@ -97,6 +97,23 @@ blackout-flap, channel-spray; 97 rounds):
 * RSS **107 → peak 153 → 140 MB**, +33 MB over the run, no runaway growth → **no
   obvious leak** under this workload.
 
+## Sanitizer findings (macOS 26.5, clang 21)
+
+* **UBSan — real bug, fixed:** `Universe::applyGM` (universe.cpp:514) cast a DMX
+  value (0–255) to signed `char` → UB for values >127. Now `uchar`.
+* **TSan — one real data race, fixed:** `RGBScript::apiVersion()` read a plain
+  `int m_apiVersion` on the run thread (per tick) while `evaluate()` wrote it on
+  the JS thread → now `std::atomic<int>`. Init handshake also hardened
+  (QMutex/QWaitCondition + mutex-guarded `initEngine`).
+* **TSan vs Qt — mostly false positives:** ~100 of the ~105 realtime TSan
+  reports are correctly-synchronised code that TSan flags because it does **not
+  model Qt6's QMutex / QWaitCondition / QSemaphore / BlockingQueuedConnection**.
+  Proof: a reported "race" where *both* accesses hold the same mutex (M0).
+  Meaningful TSan against the engine needs a TSan-instrumented Qt build or a
+  suppressions file; otherwise rely on ASan/UBSan (which found a real bug) plus
+  targeted reasoning. The RGBScript engine design (single shared JS thread, all
+  calls marshaled via BlockingQueuedConnection) is sound.
+
 ## Bugs / obstacles surfaced
 
 1. **Traditional UI can't be loaded headless via `-o`.** Under
