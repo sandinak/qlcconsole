@@ -209,7 +209,10 @@ def sanitizer_env(kind):
     # re-exec and the hang.
     env = {"MallocNanoZone": "0"}
     if kind in ("address", "asan"):
-        env["ASAN_OPTIONS"] = "detect_leaks=1:halt_on_error=0:print_summary=1"
+        # LeakSanitizer is not supported on macOS/arm64 and aborts at exit on
+        # Qt's reachable allocations; disable it so the run completes and we key
+        # on real ASan/UBSan errors instead. (Enable detect_leaks=1 on Linux.)
+        env["ASAN_OPTIONS"] = "detect_leaks=0:halt_on_error=0:print_summary=1"
         env["UBSAN_OPTIONS"] = "print_stacktrace=1:halt_on_error=0"
     elif kind in ("thread", "tsan"):
         env["TSAN_OPTIONS"] = "halt_on_error=0:second_deadlock_stack=1"
