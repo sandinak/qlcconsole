@@ -1,0 +1,23 @@
+{
+  "_comment": "Fixed scenario matrix for build validation. 'validate' runs these and compares tick cost to baseline.json. 'capability' runs the ramps. Edit freely; re-baseline after intentional changes.",
+  "validate": [
+    {"name": "baseline-light-16u",  "args": ["--universes","16","--fixtures-per-uni","100","--scenes","30","--chasers","8","--matrices","4","--efx","4","--collections","2"]},
+    {"name": "target-80u-light",    "args": ["--universes","80","--fixtures-per-uni","100","--scenes","20","--chasers","4","--matrices","2","--efx","2","--collections","2"]},
+    {"name": "scenes-100-16u",      "args": ["--universes","16","--fixtures-per-uni","120","--scenes","100","--chasers","0","--matrices","0","--efx","0","--collections","0"]},
+    {"name": "matrices-40-16u",     "args": ["--universes","16","--fixtures-per-uni","120","--scenes","10","--chasers","2","--matrices","40","--efx","0","--collections","0"]},
+    {"name": "efx-40-16u",          "args": ["--universes","16","--fixtures-per-uni","120","--scenes","10","--chasers","2","--matrices","0","--efx","40","--collections","0"]},
+    {"name": "mixed-40u",           "args": ["--universes","40","--fixtures-per-uni","100","--scenes","60","--chasers","20","--matrices","10","--efx","10","--collections","4"]},
+    {"name": "all-features-16u",    "args": ["--universes","16","--fixtures-per-uni","100","--scenes","40","--chasers","12","--matrices","8","--efx","8","--collections","4","--scripts","10","--sequences","12","--shows","4"]}
+  ],
+  "_comment_sanitize": "Smaller scenarios for sanitizer runs: bugs surface at any scale, and ASan/TSan are 3-10x slower, so keep these tractable while still hitting every function type (incl. scripts).",
+  "sanitize": [
+    {"name": "san-mixed-small",  "args": ["--universes","6","--fixtures-per-uni","60","--scenes","20","--chasers","6","--matrices","4","--efx","4","--collections","3","--scripts","6"]},
+    {"name": "san-matrices",     "args": ["--universes","4","--fixtures-per-uni","80","--scenes","6","--chasers","2","--matrices","10","--efx","0","--collections","0"]},
+    {"name": "san-scripts",      "args": ["--universes","4","--fixtures-per-uni","40","--scenes","10","--chasers","2","--matrices","0","--efx","0","--collections","2","--scripts","12"]}
+  ],
+  "capability": [
+    {"name": "ceiling-light",  "mode": "ramp", "args": ["--scenes","20","--chasers","4","--matrices","2","--efx","2","--collections","2","--fixtures-per-uni","120"]},
+    {"name": "ceiling-heavy",  "mode": "ramp", "args": ["--scenes","100","--chasers","20","--matrices","20","--efx","20","--collections","8","--fixtures-per-uni","100"]}
+  ],
+  "defaults": {"ticks": 400, "regression_tolerance_pct": 25.0}
+}

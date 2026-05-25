@@ -40,6 +40,31 @@
 #define MASTERTIMER_FREQUENCY "mastertimer/frequency"
 #define LATE_TO_BEAT_THRESHOLD 25
 
+/* Optional tick-timing instrumentation for stress testing. Enabled at runtime
+ * by setting the QLC_TICKLOG environment variable (to a tick-report interval,
+ * default 200). Near-zero cost when disabled: a single cached bool check. It
+ * measures the wall time spent computing each tick (function writes + DMX
+ * sources) and warns whenever that exceeds the tick budget, i.e. the engine
+ * cannot keep up at the configured frequency. */
+static bool tickLogEnabled()
+{
+    static int state = -1; // -1 unknown, 0 off, >0 report interval
+    if (state == -1)
+    {
+        QByteArray v = qgetenv("QLC_TICKLOG");
+        state = v.isNull() ? 0 : qMax(1, v.toInt());
+        if (state == 0 && !v.isNull())
+            state = 200;
+    }
+    return state > 0;
+}
+static int tickLogInterval()
+{
+    QByteArray v = qgetenv("QLC_TICKLOG");
+    int n = v.toInt();
+    return n > 0 ? n : 200;
+}
+
 /** The timer tick frequency in Hertz */
 uint MasterTimer::s_frequency = 50;
 uint MasterTimer::s_tick = 20;
@@ -142,8 +167,38 @@ void MasterTimer::timerTick()
 
     QList<Universe *> universes = doc->inputOutputMap()->claimUniverses();
 
+    const bool tlog = tickLogEnabled();
+    QElapsedTimer computeTimer;
+    if (tlog)
+        computeTimer.start();
+
     timerTickFunctions(universes);
     timerTickDMXSources(universes);
+
+    if (tlog)
+    {
+        // accumulate compute-time stats and warn on per-tick budget overruns
+        static quint64 nTicks = 0;
+        static double sumMs = 0, maxMs = 0;
+        static quint64 overruns = 0;
+        const double budgetMs = double(s_tick);
+        double ms = computeTimer.nsecsElapsed() / 1.0e6;
+        nTicks++;
+        sumMs += ms;
+        if (ms > maxMs) maxMs = ms;
+        if (ms > budgetMs)
+        {
+            overruns++;
+            qWarning("[TICKLOG] tick compute %.2f ms > budget %.0f ms (%d running funcs, %d universes)",
+                     ms, budgetMs, m_functionList.size(), int(universes.size()));
+        }
+        if ((nTicks % quint64(tickLogInterval())) == 0)
+        {
+            qWarning("[TICKLOG] %llu ticks: mean %.2f ms, max %.2f ms, budget %.0f ms, overruns %llu (%.1f%%)",
+                     nTicks, sumMs / nTicks, maxMs, budgetMs, overruns,
+                     100.0 * double(overruns) / double(nTicks));
+        }
+    }
 
     doc->inputOutputMap()->releaseUniverses();
 

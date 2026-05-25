@@ -1,0 +1,7 @@
+# build artifacts
+engine/build/
+engine/build-asan/
+engine/build-tsan/
+driver/__pycache__/
+results/
+*.o
