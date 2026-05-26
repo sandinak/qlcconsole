@@ -219,14 +219,107 @@ def sanitizer_env(kind):
     return env
 
 
+def _engine(args, extra):
+    """Run `qlcstress engine ...` with common dirs, return (results, out, rc)."""
+    cmd = [args.qlcstress, "engine", "--json",
+           "--fixtures-dir", args.fixtures, "--scripts-dir", args.scripts] + extra
+    env = dict(os.environ)
+    if args.sanitize:
+        env.update(sanitizer_env(args.sanitize))
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    out = proc.stdout + proc.stderr
+    results = [json.loads(l[len("RESULT_JSON "):]) for l in proc.stdout.splitlines()
+               if l.startswith("RESULT_JSON ")]
+    # surface live progress
+    for l in proc.stdout.splitlines():
+        if l.startswith(("soak:", "chaos:", "golden:")):
+            print(l)
+    return results, out, proc.returncode
+
+
+def cmd_soak(args, cfg):
+    c = cfg.get("soak", {})
+    secs = args.seconds or c.get("seconds", 1800)
+    sample = c.get("sample_seconds", 30)
+    leak_max = c.get("leak_mb_per_hr_max", 15.0)
+    fd_max = c.get("fd_growth_max", 8)
+    print(f"soak: {secs}s endurance run (leak threshold {leak_max} MB/hr)\n")
+    res, out, rc = _engine(args, ["--mode", "soak", "--scenario", "soak",
+                                  "--seconds", str(secs), "--sample-seconds", str(sample)] + c.get("args", []))
+    save_results("soak", {"returncode": rc, "result": res})
+    if rc != 0 or not res:
+        print(f"\nsoak: RESULT FAIL (rc={rc}, no result -> crash/hang?)"); return 1
+    r = res[0]
+    leak = r.get("leakMBperHr", 0.0); fdg = r.get("fdEnd", 0) - r.get("fdStart", 0)
+    ok = (leak <= leak_max) and (fdg <= fd_max)
+    print(f"\nsoak: leak={leak:.2f} MB/hr (max {leak_max}), fd growth={fdg} (max {fd_max}) -> "
+          f"{'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
+def cmd_chaos(args, cfg):
+    c = cfg.get("chaos", {})
+    secs = args.seconds or c.get("seconds", 60)
+    print(f"chaos: {secs}s realistic lifecycle churn (must survive)\n")
+    res, out, rc = _engine(args, ["--mode", "chaos", "--seconds", str(secs)] + c.get("args", []))
+    ok = (rc == 0) and ("survived" in out)
+    print(f"\nchaos: {'PASS (survived)' if ok else f'FAIL (rc={rc} - crash/hang)'}")
+    if not ok and any(m in out for m in SAN_MARKERS):
+        print("  " + next(l for l in out.splitlines() if "ERROR:" in l or "runtime error:" in l))
+    return 0 if ok else 1
+
+
+def cmd_golden(args, cfg):
+    c = cfg.get("golden", {})
+    gfile = os.path.join(HERE, c.get("file", "golden.txt"))
+    ticks = c.get("ticks", 3000)
+    base = ["golden", gfile, "--ticks", str(ticks),
+            "--fixtures-dir", args.fixtures, "--scripts-dir", args.scripts] + c.get("args", [])
+    if args.golden_capture or not os.path.exists(gfile):
+        if not args.golden_capture:
+            print(f"golden: no {gfile} yet -> capturing")
+        proc = subprocess.run([args.qlcstress] + base, capture_output=True, text=True)
+        print(next((l for l in proc.stdout.splitlines() if l.startswith("golden:")), proc.stdout[-200:]))
+        return 0
+    proc = subprocess.run([args.qlcstress] + base + ["--golden-verify"], capture_output=True, text=True)
+    line = next((l for l in proc.stdout.splitlines() if l.startswith("golden:")), "")
+    print(line)
+    return 0 if "MATCH" in line else 1
+
+
+def cmd_robustness(args, cfg):
+    # 1) round-trip fidelity of the validate workspaces
+    rc_total = 0
+    tmp = os.path.join(RESULTS_DIR, "rt.qxw"); os.makedirs(RESULTS_DIR, exist_ok=True)
+    for scn in cfg["validate"][:3]:
+        subprocess.run([args.qlcstress, "emit", tmp, "--fixtures-dir", args.fixtures,
+                        "--scripts-dir", args.scripts] + scn["args"], capture_output=True)
+        p = subprocess.run([args.qlcstress, "roundtrip", tmp, "--fixtures-dir", args.fixtures],
+                           capture_output=True, text=True)
+        line = next((l for l in p.stdout.splitlines() if l.startswith("roundtrip:")), "")
+        print(line)
+        if p.returncode != 0: rc_total = 1
+    # 2) loader fuzzing
+    print("\nrobustness: fuzzing loader (200 mutated workspaces)...")
+    fz = subprocess.run([sys.executable, os.path.join(HERE, "fuzz_projects.py"),
+                         "--count", "200"], capture_output=True, text=True)
+    print(fz.stdout.splitlines()[-1] if fz.stdout else "(no fuzz output)")
+    if fz.returncode != 0: rc_total = 1
+    print(f"\nrobustness: {'PASS' if rc_total == 0 else 'FAIL'}")
+    return rc_total
+
+
 def main():
     ap = argparse.ArgumentParser(description="QLC+ stress orchestrator")
-    ap.add_argument("mode", choices=["validate", "baseline", "capability"])
+    ap.add_argument("mode", choices=["validate", "baseline", "capability",
+                                     "soak", "chaos", "golden", "robustness"])
     ap.add_argument("--qlcstress", default=DEF_QLCSTRESS)
     ap.add_argument("--fixtures", default=DEF_FIXTURES)
     ap.add_argument("--scripts", default=DEF_SCRIPTS)
     ap.add_argument("--sanitize", default=None,
                     help="address|thread — run against a sanitizer build and fail on reports")
+    ap.add_argument("--seconds", type=int, default=0, help="override duration for soak/chaos")
+    ap.add_argument("--golden-capture", action="store_true", help="golden: (re)capture instead of verify")
     args = ap.parse_args()
 
     # --sanitize selects the sanitizer-built harness unless --qlcstress was set
@@ -251,6 +344,14 @@ def main():
         return cmd_validate(args, cfg)
     if args.mode == "capability":
         return cmd_capability(args, cfg)
+    if args.mode == "soak":
+        return cmd_soak(args, cfg)
+    if args.mode == "chaos":
+        return cmd_chaos(args, cfg)
+    if args.mode == "golden":
+        return cmd_golden(args, cfg)
+    if args.mode == "robustness":
+        return cmd_robustness(args, cfg)
     return 2
 
 

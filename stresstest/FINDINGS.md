@@ -114,6 +114,30 @@ blackout-flap, channel-spray; 97 rounds):
   targeted reasoning. The RGBScript engine design (single shared JS thread, all
   calls marshaled via BlockingQueuedConnection) is sound.
 
+## Production-viability findings
+
+* **Determinism — confirmed.** Same workspace + seed produces a byte-identical
+  DMX-frame fingerprint run-to-run (`golden`). Gives a behavioural-regression
+  gate and a cross-fork output-equivalence check.
+* **Loader robustness — solid.** 200 mutated / truncated / corrupt `.qxw` fed to
+  the loader under ASan: **0 crashes** (≈80% tolerated, ≈20% cleanly rejected).
+  Save→reload→save is byte-stable (`roundtrip`). The project loader is resilient.
+* **Runtime object-deletion is unsafe against the running engine — real, found
+  by `chaos`.** Deleting a Function or Fixture while the MasterTimer runs is a
+  heap-use-after-free:
+  ```
+  freed by  Doc::deleteFunction (doc.cpp:1093  delete func)      [edit thread]
+  read by   MasterTimer::timerTickFunctions (mastertimer.cpp:353) [timer thread]
+  ```
+  `stopAllFunctions()` before the delete is **not** sufficient (the runningâ‰¤count
+  check and the delete aren't atomic with the tick loop), and deleted objects
+  also leave dangling references in Collections/Chasers/Shows/FixtureGroups.
+  Safe deletion needs the timer **stopped** *and* referential cleanup — which
+  the app performs at the UI/design-mode layer, but the engine API is not
+  defensive. Relevant for anything driving runtime edits (web API, OSC,
+  scripts). Reproduce with `qlcstress engine --mode chaos --chaos-aggressive`.
+  (Not fixed: hardening this is an engine-concurrency change for upstream.)
+
 ## Bugs / obstacles surfaced
 
 1. **Traditional UI can't be loaded headless via `-o`.** Under

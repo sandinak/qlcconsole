@@ -15,6 +15,13 @@ python3 run.py capability    # measure the ceiling (largest sustainable config)
 python3 run.py baseline      # save current results as the new known-good
 python3 run.py validate --sanitize address   # run under ASan+UBSan, fail on any report
 python3 run.py validate --sanitize thread    # run under TSan (data races)
+
+# production-viability tests (long-runtime / behavioural / robustness)
+python3 run.py soak --seconds 1800   # endurance: leak rate (MB/hr) + FD growth -> PASS/FAIL
+python3 run.py golden --golden-capture   # capture a DMX-output fingerprint (deterministic)
+python3 run.py golden                 # verify output unchanged vs the captured golden -> PASS/FAIL
+python3 run.py chaos --seconds 60    # runtime lifecycle churn must survive -> PASS/FAIL
+python3 run.py robustness            # .qxw round-trip fidelity + loader fuzzing -> PASS/FAIL
 ```
 
 `run.py` drives the fixed scenario matrix in `scenarios.json`, parses machine-
@@ -34,6 +41,24 @@ crash, or a sanitizer report. Drop it into CI / a pre-merge check.
 The engine the whole suite targets ticks at **50 Hz → a 20 ms per-tick budget**.
 If the work for one tick exceeds 20 ms, the engine cannot keep up: that is the
 fundamental "breaking point" both layers look for.
+
+## Production-viability tests
+
+Beyond acute failures (crash/budget/UB), these target the chronic and
+behavioural issues that decide production readiness. All are fork-portable
+(they only use `libqlcplusengine`, the `.qxw` format, and the web API).
+
+| `run.py` mode | What it proves | How it fails |
+|---------------|----------------|--------------|
+| `soak` | No slow leaks / FD growth / jitter drift over hours | leak-rate (warmup-excluded RSS slope) > threshold, or FD growth > threshold, or crash |
+| `golden` | DMX output is **deterministic** and unchanged across builds/forks | output-frame hash diverges from the captured golden (reports first divergent tick) |
+| `chaos` | Runtime object lifecycle is safe (add/start/stop/mode churn) | the process crashes/hangs during churn |
+| `robustness` | `.qxw` save/load is lossless and the loader survives bad files | round-trip drift, or a mutated/truncated workspace crashes the loader (`fuzz_projects.py`, best run against the ASan build) |
+
+`golden` requires a deterministic workspace (no `Math.random` RGB scripts); the
+default golden scenario uses scenes/chasers/EFX/sequences only. `chaos` has an
+`--chaos-aggressive` engine flag (via `qlcstress`) that deletes functions/
+fixtures *while running* to reproduce the runtime-deletion UAF (see FINDINGS).
 
 ## Workflow for ongoing development
 

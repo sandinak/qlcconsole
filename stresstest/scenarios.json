@@ -19,5 +19,20 @@
     {"name": "ceiling-light",  "mode": "ramp", "args": ["--scenes","20","--chasers","4","--matrices","2","--efx","2","--collections","2","--fixtures-per-uni","120"]},
     {"name": "ceiling-heavy",  "mode": "ramp", "args": ["--scenes","100","--chasers","20","--matrices","20","--efx","20","--collections","8","--fixtures-per-uni","100"]}
   ],
+  "soak": {
+    "_comment": "Endurance workload. leak_mb_per_hr_max is the PASS threshold on the warmup-excluded RSS slope.",
+    "seconds": 1800, "sample_seconds": 30, "leak_mb_per_hr_max": 15.0, "fd_growth_max": 8,
+    "args": ["--universes","24","--fixtures-per-uni","100","--scenes","60","--chasers","20","--matrices","12","--efx","12","--collections","6","--scripts","6","--sequences","6","--shows","3"]
+  },
+  "chaos": {
+    "_comment": "Lifecycle churn. Realistic mode must survive; PASS = clean exit.",
+    "seconds": 60,
+    "args": ["--universes","6","--fixtures-per-uni","40","--scenes","20","--chasers","6","--matrices","4","--efx","4","--collections","2","--scripts","4"]
+  },
+  "golden": {
+    "_comment": "Deterministic workload for the output-regression hash: scenes/chasers/EFX only (RGB scripts can use randomness and would break determinism).",
+    "ticks": 3000, "file": "golden.txt",
+    "args": ["--universes","16","--fixtures-per-uni","100","--scenes","80","--chasers","24","--matrices","0","--efx","16","--collections","6","--scripts","0","--sequences","8","--shows","0"]
+  },
   "defaults": {"ticks": 400, "regression_tolerance_pct": 25.0}
 }
