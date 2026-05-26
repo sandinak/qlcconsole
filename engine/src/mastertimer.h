@@ -25,6 +25,7 @@
 #include <QHash>
 #include <QObject>
 #include <QMutex>
+#include <QRecursiveMutex>
 #include <QList>
 
 class MasterTimerPrivate;
@@ -98,6 +99,15 @@ public:
     /** This should be called by the function itself */
     virtual void startFunction(Function* function);
 
+    /**
+     * Remove a Function from the running list and start queue so it can be
+     * safely deleted by the caller. Takes the function-list lock, which the
+     * tick loop also holds while iterating, so on return the timer thread is
+     * guaranteed not to be ticking the function. Does NOT delete it (the caller
+     * owns it and must delete it on its own thread to keep QObject affinity).
+     */
+    void removeFunction(Function* function);
+
     /** Stop all functions. Doesn't affect registered DMX sources. */
     void stopAllFunctions();
 
@@ -122,12 +132,15 @@ private:
     void timerTickFunctions(QList<Universe *> universes);
 
 private:
-    /** List of currently running functions */
+    /** List of currently running functions and the queue of functions waiting
+     *  to start. Both are guarded by m_functionListMutex. */
     QList <Function*> m_functionList;
     QList <Function*> m_startQueue;
 
-    /** Mutex that guards access to m_startQueue */
-    QMutex m_functionListMutex;
+    /** Guards m_functionList and m_startQueue. Held by timerTickFunctions() for
+     *  the whole tick; recursive so Function::write() -> startFunction() (same
+     *  thread) can re-lock it. */
+    QRecursiveMutex m_functionListMutex;
 
     /** Flag for stopping all functions */
     bool m_stopAllFunctions;

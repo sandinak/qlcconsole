@@ -1090,6 +1090,12 @@ bool Doc::deleteFunction(quint32 id)
 
         emit functionRemoved(id);
         setModified();
+        // Remove it from the MasterTimer's running list / start queue first
+        // (synchronised with the tick) so the timer thread cannot be ticking it,
+        // then delete it here on the Doc thread (preserving QObject affinity).
+        // Deleting it without this removal would be a use-after-free in
+        // timerTickFunctions if the function is running.
+        masterTimer()->removeFunction(func);
         delete func;
 
         return true;

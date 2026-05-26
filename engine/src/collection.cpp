@@ -159,6 +159,12 @@ QList<quint32> Collection::functions() const
 
 void Collection::slotFunctionRemoved(quint32 fid)
 {
+    {
+        // Drop it from the running set too, otherwise postRun()/write() would
+        // later look it up (now NULL, as Doc has removed it) and dereference it.
+        QMutexLocker locker(&m_functionListMutex);
+        m_runningChildren.remove(fid);
+    }
     removeFunction(fid);
 }
 
@@ -292,7 +298,8 @@ void Collection::preRun(MasterTimer *timer)
         foreach (quint32 fid, m_functions)
         {
             Function *function = doc->function(fid);
-            Q_ASSERT(function != NULL);
+            if (function == NULL) // may be NULL if deleted while running
+            continue;
 
             m_intensityOverrideIds << function->requestAttributeOverride(Function::Intensity, getAttributeValue(Function::Intensity));
 
@@ -326,7 +333,8 @@ void Collection::setPause(bool enable)
     foreach (quint32 fid, m_runningChildren)
     {
         Function *function = doc->function(fid);
-        Q_ASSERT(function != NULL);
+        if (function == NULL) // may be NULL if deleted while running
+            continue;
         function->setPause(enable);
     }
     Function::setPause(enable);
@@ -353,7 +361,8 @@ void Collection::write(MasterTimer *timer, QList<Universe *> universes)
         foreach (quint32 fid, m_runningChildren)
         {
             Function *function = doc->function(fid);
-            Q_ASSERT(function != NULL);
+            if (function == NULL) // may be NULL if deleted while running
+            continue;
 
             // First tick may correspond to this collection starting the function
             // Now that first tick is over, stop listening to running signal
@@ -386,7 +395,8 @@ void Collection::postRun(MasterTimer* timer, QList<Universe *> universes)
         while (it.hasNext() == true)
         {
             Function* function = doc->function(it.next());
-            Q_ASSERT(function != NULL);
+            if (function == NULL) // may be NULL if deleted while running
+            continue;
             function->stop(functionParent());
         }
 
@@ -395,7 +405,8 @@ void Collection::postRun(MasterTimer* timer, QList<Universe *> universes)
         for (int i = 0; i < m_functions.count(); i++)
         {
             Function* function = doc->function(m_functions.at(i));
-            Q_ASSERT(function != NULL);
+            if (function == NULL) // may be NULL if deleted while running
+            continue;
 
             disconnect(function, SIGNAL(stopped(quint32)),
                     this, SLOT(slotChildStopped(quint32)));
@@ -438,7 +449,8 @@ int Collection::adjustAttribute(qreal fraction, int attributeId)
         for (int i = 0; i < m_functions.count(); i++)
         {
             Function* function = document->function(m_functions.at(i));
-            Q_ASSERT(function != NULL);
+            if (function == NULL) // may be NULL if deleted while running
+            continue;
             function->adjustAttribute(getAttributeValue(Function::Intensity), m_intensityOverrideIds.at(i));
         }
     }
@@ -458,7 +470,8 @@ void Collection::setBlendMode(Universe::BlendMode mode)
         for (int i = 0; i < m_functions.count(); i++)
         {
             Function* function = doc()->function(m_functions.at(i));
-            Q_ASSERT(function != NULL);
+            if (function == NULL) // may be NULL if deleted while running
+            continue;
             function->setBlendMode(mode);
         }
     }

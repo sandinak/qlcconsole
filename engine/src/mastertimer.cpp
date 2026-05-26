@@ -232,6 +232,21 @@ void MasterTimer::startFunction(Function* function)
         m_startQueue.append(function);
 }
 
+void MasterTimer::removeFunction(Function* function)
+{
+    if (function == NULL)
+        return;
+
+    // Remove the function from both the running list and the start queue under
+    // the lock. timerTickFunctions() holds the same (recursive) lock while it
+    // iterates m_functionList, so once this returns the timer thread is
+    // guaranteed not to be ticking this function: the caller (Doc) can then
+    // delete it safely, on its own thread (preserving QObject thread affinity).
+    QMutexLocker locker(&m_functionListMutex);
+    m_startQueue.removeAll(function);
+    m_functionList.removeAll(function);
+}
+
 void MasterTimer::stopAllFunctions()
 {
     m_stopAllFunctions = true;
@@ -274,6 +289,13 @@ int MasterTimer::runningFunctions() const
 
 void MasterTimer::timerTickFunctions(QList<Universe *> universes)
 {
+    // Hold the function-list lock for the whole tick. The mutex is recursive so
+    // that Function::write() -> MasterTimer::startFunction() (same thread)
+    // re-locks safely; it makes m_functionList iteration here mutually exclusive
+    // with structural changes from other threads (removeFunction()), so a
+    // Function can no longer be deleted out from under this loop.
+    QMutexLocker locker(&m_functionListMutex);
+
     // List of m_functionList indices that should be removed at the end of this
     // function. The functions at the indices have been stopped.
     QList<int> removeList;
@@ -331,31 +353,27 @@ void MasterTimer::timerTickFunctions(QList<Universe *> universes)
         firstIteration = false;
     }
 
+    // Start queued functions. The recursive lock is already held; write() below
+    // may call startFunction() (which re-locks on this thread) — that is fine.
+    while (m_startQueue.size() > 0)
     {
-        QMutexLocker locker(&m_functionListMutex);
-        while (m_startQueue.size() > 0)
+        QList<Function*> startQueue(m_startQueue);
+        m_startQueue.clear();
+
+        foreach (Function* f, startQueue)
         {
-            QList<Function*> startQueue(m_startQueue);
-            m_startQueue.clear();
-            locker.unlock();
-
-            foreach (Function* f, startQueue)
+            if (m_functionList.contains(f))
             {
-                if (m_functionList.contains(f))
-                {
-                    f->postRun(this, universes);
-                }
-                else
-                {
-                    m_functionList.append(f);
-                    functionListHasChanged = true;
-                }
-                f->preRun(this);
-                f->write(this, universes);
-                emit functionStarted(f->id());
+                f->postRun(this, universes);
             }
-
-            locker.relock();
+            else
+            {
+                m_functionList.append(f);
+                functionListHasChanged = true;
+            }
+            f->preRun(this);
+            f->write(this, universes);
+            emit functionStarted(f->id());
         }
     }
 
