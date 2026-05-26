@@ -122,21 +122,23 @@ blackout-flap, channel-spray; 97 rounds):
 * **Loader robustness — solid.** 200 mutated / truncated / corrupt `.qxw` fed to
   the loader under ASan: **0 crashes** (≈80% tolerated, ≈20% cleanly rejected).
   Save→reload→save is byte-stable (`roundtrip`). The project loader is resilient.
-* **Runtime object-deletion is unsafe against the running engine — real, found
-  by `chaos`.** Deleting a Function or Fixture while the MasterTimer runs is a
-  heap-use-after-free:
+* **Runtime object-deletion was unsafe against the running engine — found by
+  `chaos`, now FIXED (commit on `fix/runtime-deletion-uaf`).** Deleting a
+  Function or Fixture while the MasterTimer ran was a heap-use-after-free:
   ```
-  freed by  Doc::deleteFunction (doc.cpp:1093  delete func)      [edit thread]
-  read by   MasterTimer::timerTickFunctions (mastertimer.cpp:353) [timer thread]
+  freed by  Doc::deleteFunction (delete func)      [edit thread]
+  read by   MasterTimer::timerTickFunctions        [timer thread]
   ```
-  `stopAllFunctions()` before the delete is **not** sufficient (the runningâ‰¤count
-  check and the delete aren't atomic with the tick loop), and deleted objects
-  also leave dangling references in Collections/Chasers/Shows/FixtureGroups.
-  Safe deletion needs the timer **stopped** *and* referential cleanup — which
-  the app performs at the UI/design-mode layer, but the engine API is not
-  defensive. Relevant for anything driving runtime edits (web API, OSC,
-  scripts). Reproduce with `qlcstress engine --mode chaos --chaos-aggressive`.
-  (Not fixed: hardening this is an engine-concurrency change for upstream.)
+  It was a cascade: the function/timer race, plus deleted objects leaving
+  dangling refs in Collections (NULL deref via compiled-out `Q_ASSERT`) and a
+  Scene's value map racing fixture removal. Fix: a recursive
+  `m_functionListMutex` held across the whole tick + `MasterTimer::removeFunction()`
+  so deletion (on the Doc thread, preserving QObject affinity) can't race the
+  iteration; `Scene` locks `m_values` in `slotFixtureRemoved`/`writeDMX`;
+  `Collection` cleans `m_runningChildren` and null-checks its child loops.
+  Verified: `chaos --chaos-aggressive` now runs 200k–500k ops across seeds under
+  ASan with zero errors and clean shutdown. Reproduce the original crash by
+  reverting that commit and running `--chaos-aggressive`.
 
 ## Bugs / obstacles surfaced
 

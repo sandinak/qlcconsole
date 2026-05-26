@@ -58,7 +58,9 @@ behavioural issues that decide production readiness. All are fork-portable
 `golden` requires a deterministic workspace (no `Math.random` RGB scripts); the
 default golden scenario uses scenes/chasers/EFX/sequences only. `chaos` has an
 `--chaos-aggressive` engine flag (via `qlcstress`) that deletes functions/
-fixtures *while running* to reproduce the runtime-deletion UAF (see FINDINGS).
+fixtures *while running* — this exposed a runtime-deletion use-after-free that
+is now fixed on `fix/runtime-deletion-uaf` (see FINDINGS); keep it as a
+regression check under ASan.
 
 ## Workflow for ongoing development
 
