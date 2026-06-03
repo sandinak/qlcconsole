@@ -7,11 +7,15 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 (nothing active)
 
-## Backlog
+## Next two (per Branson)
 - [ ] **Fixture-channel editor in the canvas** — when a single fixture is
       selected in a scene, show that fixture's DMX channel editor (per-scene
       values) in the bottom of the center panel.
-- [ ] **Matrix head-layout: move a sub-group as a unit** — when placing a
+- [ ] **Matrix head-layout: move a sub-group as a unit** — drag a whole
+      fixture group onto a larger group's layout as a block; keep sub-groups
+      visually distinct. (Fixture Manager head-layout grid; meatier.)
+
+## Backlog — when placing a
       fixture group onto a larger group's head layout, drag the whole
       sub-group as a block and keep sub-groups visually distinct (Fixture
       Manager head-layout grid editor; meatier change).
@@ -45,3 +49,7 @@ move to the bottom or get deleted. See also the session memory under
 - [x] **Strobe region bands** on the intensity bar (CapabilityBar widget).
 - [x] Fix: removing a fixed-fixture target clears its baked values (look
       no longer overridden when converting a static scene to a group scene).
+- [x] Right-click create menus (function tree: new scene/chaser/…/folder;
+      palette tree: new palette / move to folder); removed the +buttons.
+- [x] Usage counts: scene "used in N places", look "used by N scenes".
+- [x] Nest a collection/chaser's members under its node in the tree.
