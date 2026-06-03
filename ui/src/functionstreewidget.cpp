@@ -41,6 +41,8 @@ static const char* PALETTE_CATEGORY = "Palettes";
 
 // MIME type for function drag/drop to external widgets
 static const char* FUNCTION_DRAG_MIME_TYPE = "application/x-qlcplus-functions";
+// MIME type for palette drag/drop to external widgets
+static const char* PALETTE_DRAG_MIME_TYPE = "application/x-qlcplus-palettes";
 
 FunctionsTreeWidget::FunctionsTreeWidget(Doc *doc, QWidget *parent) :
     QTreeWidget(parent)
@@ -584,6 +586,11 @@ const char* FunctionsTreeWidget::functionDragMimeType()
     return FUNCTION_DRAG_MIME_TYPE;
 }
 
+const char* FunctionsTreeWidget::paletteDragMimeType()
+{
+    return PALETTE_DRAG_MIME_TYPE;
+}
+
 void FunctionsTreeWidget::setExternalDragMode(bool enable)
 {
     m_externalDragMode = enable;
@@ -613,32 +620,47 @@ QMimeData* FunctionsTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) co
     // This is used by Qt's built-in drag when setDragEnabled(true) is called
     if (m_externalDragMode)
     {
-        QByteArray data;
-        QDataStream stream(&data, QIODevice::WriteOnly);
+        // Functions and palettes get separate payloads/MIME types so each
+        // drop target picks only what it understands (function targets
+        // never see palette IDs and vice-versa).
+        QByteArray fnData;
+        QDataStream fnStream(&fnData, QIODevice::WriteOnly);
+        int fnCount = 0;
+        QByteArray palData;
+        QDataStream palStream(&palData, QIODevice::WriteOnly);
+        int palCount = 0;
 
-        int validCount = 0;
         foreach (QTreeWidgetItem *item, items)
         {
-            // Palettes are not functions; never offer them to external
-            // function drop targets (e.g. the chaser step list).
             if (itemNodeKind(item) == PaletteNode)
+            {
+                const quint32 pid = itemPaletteId(item);
+                if (pid != QLCPalette::invalidId())
+                {
+                    palStream << pid;
+                    palCount++;
+                }
                 continue;
+            }
             QVariant var = item->data(COL_NAME, Qt::UserRole);
             if (var.isValid())
             {
                 quint32 fid = var.toUInt();
                 if (fid != Function::invalidId())
                 {
-                    stream << fid;
-                    validCount++;
+                    fnStream << fid;
+                    fnCount++;
                 }
             }
         }
 
-        if (validCount > 0)
+        if (fnCount > 0 || palCount > 0)
         {
             QMimeData *mimeData = new QMimeData();
-            mimeData->setData(FUNCTION_DRAG_MIME_TYPE, data);
+            if (fnCount > 0)
+                mimeData->setData(FUNCTION_DRAG_MIME_TYPE, fnData);
+            if (palCount > 0)
+                mimeData->setData(PALETTE_DRAG_MIME_TYPE, palData);
             return mimeData;
         }
     }
@@ -698,17 +720,27 @@ void FunctionsTreeWidget::mouseMoveEvent(QMouseEvent *event)
 
 void FunctionsTreeWidget::startExternalDrag()
 {
-    // Collect function IDs from selected items
-    QByteArray data;
-    QDataStream stream(&data, QIODevice::WriteOnly);
+    // Collect function and palette IDs from selected items into separate
+    // payloads (each drop target reads only the MIME type it understands).
+    QByteArray fnData;
+    QDataStream fnStream(&fnData, QIODevice::WriteOnly);
+    int fnCount = 0;
+    QByteArray palData;
+    QDataStream palStream(&palData, QIODevice::WriteOnly);
+    int palCount = 0;
 
-    int validCount = 0;
     foreach (QTreeWidgetItem *item, m_draggedItems)
     {
-        // Palettes are not functions; never offer them to external
-        // function drop targets (e.g. the chaser step list).
         if (itemNodeKind(item) == PaletteNode)
+        {
+            const quint32 pid = itemPaletteId(item);
+            if (pid != QLCPalette::invalidId())
+            {
+                palStream << pid;
+                palCount++;
+            }
             continue;
+        }
         QVariant var = item->data(COL_NAME, Qt::UserRole);
         if (var.isValid())
         {
@@ -716,18 +748,21 @@ void FunctionsTreeWidget::startExternalDrag()
             Function *func = m_doc->function(fid);
             if (func != NULL)
             {
-                stream << fid;
-                validCount++;
+                fnStream << fid;
+                fnCount++;
             }
         }
     }
 
-    if (validCount == 0)
+    if (fnCount == 0 && palCount == 0)
         return;
 
-    // Create mime data with function IDs
+    // Create mime data with function and/or palette IDs
     QMimeData *mimeData = new QMimeData();
-    mimeData->setData(FUNCTION_DRAG_MIME_TYPE, data);
+    if (fnCount > 0)
+        mimeData->setData(FUNCTION_DRAG_MIME_TYPE, fnData);
+    if (palCount > 0)
+        mimeData->setData(PALETTE_DRAG_MIME_TYPE, palData);
 
     // Create and execute the drag
     QDrag *drag = new QDrag(this);

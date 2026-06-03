@@ -49,6 +49,12 @@ public:
     /** Repopulate both lists from the scene's current groups/palettes. */
     void reload();
 
+protected:
+    /** Accept palettes dragged from the Function Manager tree. */
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
+
 private slots:
     void slotAddGroup();
     void slotRemoveGroup();

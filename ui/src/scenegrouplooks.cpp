@@ -11,8 +11,13 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QInputDialog>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QDataStream>
 
 #include "scenegrouplooks.h"
+#include "functionstreewidget.h"
 #include "paletteeditdialog.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
@@ -24,6 +29,8 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent)
     , m_scene(scene)
     , m_doc(doc)
 {
+    setAcceptDrops(true);
+
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 6, 0, 0);
 
@@ -31,7 +38,8 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent)
         tr("<b>Dynamic group looks</b> — palettes applied to fixture "
            "groups, following membership at run time. Every look applies "
            "to every target group; use separate scenes for different "
-           "looks per group."), this);
+           "looks per group. Tip: drag palettes here from the Functions "
+           "tree to add them as looks."), this);
     header->setWordWrap(true);
     root->addWidget(header);
 
@@ -120,6 +128,48 @@ void SceneGroupLooks::reload()
         QListWidgetItem *it = new QListWidgetItem(lookLabel(pid), m_lookList);
         it->setData(Qt::UserRole, pid);
     }
+}
+
+void SceneGroupLooks::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasFormat(FunctionsTreeWidget::paletteDragMimeType()))
+        event->acceptProposedAction();
+}
+
+void SceneGroupLooks::dragMoveEvent(QDragMoveEvent *event)
+{
+    if (event->mimeData()->hasFormat(FunctionsTreeWidget::paletteDragMimeType()))
+        event->acceptProposedAction();
+}
+
+void SceneGroupLooks::dropEvent(QDropEvent *event)
+{
+    const QMimeData *mime = event->mimeData();
+    if (mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType()) == false)
+        return;
+
+    QByteArray data = mime->data(FunctionsTreeWidget::paletteDragMimeType());
+    QDataStream stream(&data, QIODevice::ReadOnly);
+
+    bool changed = false;
+    while (stream.atEnd() == false)
+    {
+        quint32 pid = 0;
+        stream >> pid;
+        // Only attach palettes that exist and aren't already a look.
+        if (m_doc->palette(pid) != NULL && m_scene->palettes().contains(pid) == false)
+        {
+            m_scene->addPalette(pid);
+            changed = true;
+        }
+    }
+
+    if (changed)
+    {
+        m_doc->setModified();
+        reload();
+    }
+    event->acceptProposedAction();
 }
 
 void SceneGroupLooks::slotAddGroup()

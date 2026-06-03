@@ -153,6 +153,11 @@ public:
     /** MIME type for function drag/drop to external widgets (e.g., CollectionEditor) */
     static const char* functionDragMimeType();
 
+    /** MIME type for palette drag/drop to external widgets (e.g., the
+     *  scene editor's group-looks panel). Payload is a stream of palette
+     *  IDs (quint32). */
+    static const char* paletteDragMimeType();
+
     /** Enable external drag mode - drags will always use external MIME type without modifier key */
     void setExternalDragMode(bool enable);
 

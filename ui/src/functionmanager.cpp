@@ -1129,9 +1129,15 @@ void FunctionManager::editFunction(Function* function)
     // Choose the editor by the selected function's type
     if (function->type() == Function::SceneType)
     {
-        m_scene_editor = new SceneEditor(m_vsplitter->widget(1), qobject_cast<Scene*> (function), m_doc, true);
+        // Standalone scene opens in the right pane, like the chaser editor
+        // (a sequence's bound scene still uses the bottom pane below, since
+        // the right pane is taken by its chaser editor).
+        m_scene_editor = new SceneEditor(m_hsplitter->widget(1), qobject_cast<Scene*> (function), m_doc, true);
         connect(this, SIGNAL(functionManagerActive(bool)),
                 m_scene_editor, SLOT(slotFunctionManagerActive(bool)));
+        // Allow palettes to be dragged from the tree onto the scene's
+        // "looks" (see SceneGroupLooks drop handling).
+        m_tree->setExternalDragMode(true);
     }
     else if (function->type() == Function::ChaserType)
     {
@@ -1223,8 +1229,13 @@ void FunctionManager::editFunction(Function* function)
     }
     if (m_scene_editor != NULL)
     {
-        m_vsplitter->widget(1)->show();
-        m_vsplitter->widget(1)->layout()->addWidget(m_scene_editor);
+        // Standalone scene → right pane (no separate m_editor). A sequence's
+        // bound scene shares the screen with its chaser editor, so it goes
+        // in the bottom pane instead.
+        QWidget *sceneContainer = (m_editor == NULL) ? m_hsplitter->widget(1)
+                                                     : m_vsplitter->widget(1);
+        sceneContainer->show();
+        sceneContainer->layout()->addWidget(m_scene_editor);
         m_scene_editor->show();
     }
 
