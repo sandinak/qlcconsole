@@ -172,6 +172,9 @@ private:
     /** Create a copy of the given function */
     void copyFunction(quint32 fid);
 
+    /** Create a copy of the given palette */
+    void copyPalette(quint32 pid);
+
     /** Open an editor for the given function */
     void editFunction(Function* function);
 

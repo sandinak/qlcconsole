@@ -731,10 +731,20 @@ void FunctionManager::slotClone()
     while (it.hasNext() == true)
     {
         QTreeWidgetItem* item = it.next();
-        quint32 fid = item->data(COL_NAME, Qt::UserRole).toUInt();
+
+        const quint32 pid = m_tree->itemPaletteId(item);
+        if (pid != QLCPalette::invalidId())
+        {
+            copyPalette(pid);
+            continue;
+        }
+
+        // itemFunctionId() reports folders and palettes as invalid, so a
+        // single guard covers both.
+        const quint32 fid = m_tree->itemFunctionId(item);
         if (fid == Function::invalidId())
             continue;
-        copyFunction(m_tree->itemFunctionId(item));
+        copyFunction(fid);
     }
 }
 
@@ -813,6 +823,12 @@ void FunctionManager::updateActionStatus()
         quint32 fid = m_tree->itemFunctionId(firstItem);
         if (fid != Function::invalidId())
         {
+            m_cloneAction->setEnabled(true);
+            validSelection = true;
+        }
+        else if (m_tree->itemPaletteId(firstItem) != QLCPalette::invalidId())
+        {
+            // Palette leaf: clonable and deletable like a function leaf.
             m_cloneAction->setEnabled(true);
             validSelection = true;
         }
@@ -1078,6 +1094,29 @@ void FunctionManager::copyFunction(quint32 fid)
         QTreeWidgetItem* item = m_tree->functionItem(copy);
         m_tree->setCurrentItem(item);
     }
+}
+
+void FunctionManager::copyPalette(quint32 pid)
+{
+    QLCPalette* src = m_doc->palette(pid);
+    if (src == NULL)
+        return;
+
+    QLCPalette* copy = src->createCopy(); // copies name, value and path
+    if (copy == NULL)
+        return;
+
+    copy->setName(tr("%1 (Copy)").arg(src->name()));
+    if (m_doc->addPalette(copy) == false)
+    {
+        delete copy;
+        return;
+    }
+    m_doc->setModified();
+
+    QTreeWidgetItem* item = m_tree->paletteItem(copy);
+    if (item != NULL)
+        m_tree->setCurrentItem(item);
 }
 
 void FunctionManager::editFunction(Function* function)

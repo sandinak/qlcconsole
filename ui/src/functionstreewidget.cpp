@@ -265,10 +265,11 @@ void FunctionsTreeWidget::updatePaletteItem(QTreeWidgetItem* item, const QLCPale
     item->setData(COL_NAME, Qt::UserRole, palette->id());
     item->setData(COL_NAME, Qt::UserRole + 1, Function::Undefined);
     item->setData(COL_NAME, NODE_KIND_ROLE, PaletteNode);
-    // Editable for in-place rename. Slice 1: not drag-enabled (palette
-    // drag/drop between folders lands in Slice 2), and never drop-enabled.
-    item->setFlags((item->flags() | Qt::ItemIsEditable)
-                   & ~Qt::ItemIsDropEnabled & ~Qt::ItemIsDragEnabled);
+    // Editable for in-place rename; drag-enabled so it can be moved
+    // between palette folders. Never drop-enabled (a leaf can't host
+    // children).
+    item->setFlags((item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled)
+                   & ~Qt::ItemIsDropEnabled);
 }
 
 QTreeWidgetItem* FunctionsTreeWidget::addPalette(quint32 pid)
@@ -618,6 +619,10 @@ QMimeData* FunctionsTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) co
         int validCount = 0;
         foreach (QTreeWidgetItem *item, items)
         {
+            // Palettes are not functions; never offer them to external
+            // function drop targets (e.g. the chaser step list).
+            if (itemNodeKind(item) == PaletteNode)
+                continue;
             QVariant var = item->data(COL_NAME, Qt::UserRole);
             if (var.isValid())
             {
@@ -700,6 +705,10 @@ void FunctionsTreeWidget::startExternalDrag()
     int validCount = 0;
     foreach (QTreeWidgetItem *item, m_draggedItems)
     {
+        // Palettes are not functions; never offer them to external
+        // function drop targets (e.g. the chaser step list).
+        if (itemNodeKind(item) == PaletteNode)
+            continue;
         QVariant var = item->data(COL_NAME, Qt::UserRole);
         if (var.isValid())
         {
@@ -746,32 +755,43 @@ void FunctionsTreeWidget::dropEvent(QDropEvent *event)
     if (m_draggedItems.count() == 0 || dropItem == NULL)
         return;
 
-    // Slice 1: palettes don't participate in drag/drop yet. Refuse any
-    // drag that touches a palette subtree (target or source) so nothing
-    // gets mis-pathed. Palette drag/drop arrives in Slice 2.
-    if (itemNodeKind(dropItem) == PaletteNode)
-    {
-        m_draggedItems.clear();
-        return;
-    }
-    foreach (QTreeWidgetItem *item, m_draggedItems)
-    {
-        if (itemNodeKind(item) == PaletteNode)
-        {
-            m_draggedItems.clear();
-            return;
-        }
-    }
-
     QVariant var = dropItem->data(COL_NAME, Qt::UserRole + 1);
     if (var.isValid() == false)
         return;
 
     int dropType = var.toInt();
+    NodeKind dropKind = itemNodeKind(dropItem);
     //QString folderName = dropItem->text(COL_PATH);
 
     foreach (QTreeWidgetItem *item, m_draggedItems)
     {
+        NodeKind dragKind = itemNodeKind(item);
+
+        // Never mix functions and palettes: a palette can only land in a
+        // palette folder and vice-versa.
+        if (dragKind != dropKind)
+            continue;
+
+        if (dragKind == PaletteNode)
+        {
+            // itemPaletteId() is non-invalid only for leaves; folders
+            // fall through to the path-propagation branch.
+            const quint32 pid = itemPaletteId(item);
+            QTreeWidget::dropEvent(event);
+            if (pid != QLCPalette::invalidId())
+            {
+                QLCPalette *p = m_doc->palette(pid);
+                if (p != NULL)
+                    p->setPath(dropItem->text(COL_PATH));
+            }
+            else
+            {
+                // m_draggedItem is a palette folder
+                slotItemChanged(item);
+            }
+            continue;
+        }
+
         quint32 dragFID = item->data(COL_NAME, Qt::UserRole).toUInt();
         Function *dragFunc = m_doc->function(dragFID);
         if (dragFunc != NULL && dragFunc->type() == dropType)
