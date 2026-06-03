@@ -5,12 +5,7 @@ move to the bottom or get deleted. See also the session memory under
 `~/.claude/.../memory/palette_tree_integration.md`.
 
 ## In progress / next
-- [ ] **Fixture group folders** — `FixtureGroup` gains a `path` (+ XML), the
-      Fixtures & Groups tree nests groups by folder; distinct group vs folder
-      icons. (Programming-tab tree first; Fixture Manager later.)
-- [ ] **Strobe region bands on the intensity gradient** — paint capability
-      regions (e.g. strobe ranges) on the intensity bar, not just the textual
-      capability name.
+(nothing active)
 
 ## Backlog
 - [ ] **Fixture-channel editor in the canvas** — when a single fixture is
@@ -45,3 +40,8 @@ move to the bottom or get deleted. See also the session memory under
 - [x] Collections / chasers / EFX / matrices open in the Programming canvas
       with drag-in of members/steps.
 - [x] Cmd-C / Cmd-V duplicate; "New palette…"; type icons + paths on looks.
+- [x] Open Programming canvas on double-click (single-click drag works).
+- [x] **Fixture group folders** (FixtureGroup.path + tree folders + icons).
+- [x] **Strobe region bands** on the intensity bar (CapabilityBar widget).
+- [x] Fix: removing a fixed-fixture target clears its baked values (look
+      no longer overridden when converting a static scene to a group scene).
