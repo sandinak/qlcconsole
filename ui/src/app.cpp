@@ -34,6 +34,7 @@
 #include "inputoutputmanager.h"
 #include "functionselection.h"
 #include "functionmanager.h"
+#include "programmingmanager.h"
 #include "inputoutputmap.h"
 #include "virtualconsole.h"
 #include "fixturemanager.h"
@@ -322,6 +323,8 @@ void App::init()
     m_tab->addTab(w, QIcon(":/fixture.png"), tr("Fixtures"));
     w = new FunctionManager(m_tab, m_doc);
     m_tab->addTab(w, QIcon(":/function.png"), tr("Functions"));
+    w = new ProgrammingManager(m_tab, m_doc);
+    m_tab->addTab(w, QIcon(":/scene.png"), tr("Programming"));
     w = new ShowManager(m_tab, m_doc);
     m_tab->addTab(w, QIcon(":/show.png"), tr("Shows"));
     w = new VirtualConsole(m_tab, m_doc);
