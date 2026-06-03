@@ -61,6 +61,10 @@ signals:
     /** Emitted when the selected look changes (invalidId if none). */
     void lookSelected(quint32 paletteId);
 
+    /** Emitted when a fixed-fixture target is selected (Fixture::invalidId
+     *  if the selection isn't a single fixture). */
+    void fixtureSelected(quint32 fixtureId);
+
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
@@ -70,6 +74,7 @@ private slots:
     void slotRemoveTarget();
     void slotRemoveLook();
     void slotLookSelectionChanged();
+    void slotTargetSelectionChanged();
 
 private:
     QString lookLabel(quint32 paletteId) const;

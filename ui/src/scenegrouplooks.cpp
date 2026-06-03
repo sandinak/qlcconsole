@@ -84,6 +84,8 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     connect(m_removeLookButton, SIGNAL(clicked()), this, SLOT(slotRemoveLook()));
     connect(m_lookList, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotLookSelectionChanged()));
+    connect(m_targetList, SIGNAL(itemSelectionChanged()),
+            this, SLOT(slotTargetSelectionChanged()));
 
     reload();
 }
@@ -320,6 +322,16 @@ void SceneGroupLooks::slotLookSelectionChanged()
     const QList<QListWidgetItem*> sel = m_lookList->selectedItems();
     emit lookSelected(sel.isEmpty() ? QLCPalette::invalidId()
                                     : sel.first()->data(Qt::UserRole).toUInt());
+}
+
+void SceneGroupLooks::slotTargetSelectionChanged()
+{
+    const QList<QListWidgetItem*> sel = m_targetList->selectedItems();
+    if (sel.size() == 1
+        && sel.first()->data(TARGET_KIND_ROLE).toInt() == TargetFixture)
+        emit fixtureSelected(sel.first()->data(Qt::UserRole).toUInt());
+    else
+        emit fixtureSelected(Fixture::invalidId());
 }
 
 void SceneGroupLooks::slotRemoveLook()

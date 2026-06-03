@@ -25,8 +25,9 @@
 #include "fixturegroupsource.h"
 #include "scenegrouplooks.h"
 #include "lookeditor.h"
-#include "paletteeditdialog.h"
+#include "fixtureconsole.h"
 #include "functionparent.h"
+#include "fixture.h"
 #include "qlcpalette.h"
 #include "function.h"
 #include "scene.h"
@@ -39,6 +40,7 @@
 #include "efxeditor.h"
 #include "rgbmatrixeditor.h"
 #include "chaserstep.h"
+#include "scenevalue.h"
 #include "doc.h"
 
 ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
@@ -88,11 +90,25 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // Inline look editor pinned to the bottom of the center panel, in a
     // scroll area so tall pages (color picker / XY pad) never get clipped.
     m_lookEditor = new LookEditor(m_doc, this);
-    QScrollArea *lookScroll = new QScrollArea(this);
-    lookScroll->setWidgetResizable(true);
-    lookScroll->setFrameShape(QFrame::NoFrame);
-    lookScroll->setWidget(m_lookEditor);
-    m_canvasLayout->addWidget(lookScroll);
+    m_lookScroll = new QScrollArea(this);
+    m_lookScroll->setWidgetResizable(true);
+    m_lookScroll->setFrameShape(QFrame::NoFrame);
+    m_lookScroll->setWidget(m_lookEditor);
+    m_canvasLayout->addWidget(m_lookScroll);
+
+    // Per-fixture DMX channel editor, shown at the bottom when a single
+    // fixed-fixture target is selected (instead of the look editor).
+    m_fixtureConsole = new FixtureConsole(this, m_doc);
+    m_fixtureScroll = new QScrollArea(this);
+    m_fixtureScroll->setWidgetResizable(true);
+    m_fixtureScroll->setFrameShape(QFrame::NoFrame);
+    m_fixtureScroll->setWidget(m_fixtureConsole);
+    m_fixtureScroll->hide();
+    m_canvasLayout->addWidget(m_fixtureScroll);
+    connect(m_fixtureConsole, SIGNAL(valueChanged(quint32,quint32,uchar)),
+            this, SLOT(slotFixtureValueChanged(quint32,quint32,uchar)));
+    connect(m_fixtureConsole, SIGNAL(checked(quint32,quint32,bool)),
+            this, SLOT(slotFixtureChecked(quint32,quint32,bool)));
     splitter->addWidget(canvasPanel);
 
     // --- Right: drag sources (palette tree + fixtures & groups tree) ---
@@ -223,13 +239,21 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     }
 
     m_canvasPlaceholder->hide();
+    m_fixtureScroll->hide(); // default to the look editor at the bottom
+    m_lookScroll->show();
     m_lookEditor->setContextScene(scene);
     m_canvas = new SceneGroupLooks(scene, m_doc, this, /*includeFixtureTargets*/ true);
     connect(m_canvas, SIGNAL(sceneModified()), this, SLOT(slotCanvasModified()));
     connect(m_canvas, SIGNAL(lookSelected(quint32)),
             m_lookEditor, SLOT(setPalette(quint32)));
-    // Insert above the look editor (which is the last item).
-    m_canvasLayout->insertWidget(m_canvasLayout->count() - 1, m_canvas, 1);
+    connect(m_canvas, SIGNAL(fixtureSelected(quint32)),
+            this, SLOT(slotFixtureSelected(quint32)));
+    // Selecting a look switches the bottom back to the look editor.
+    connect(m_canvas, &SceneGroupLooks::lookSelected, this, [this](quint32 pid) {
+        if (pid != QLCPalette::invalidId()) { m_fixtureScroll->hide(); m_lookScroll->show(); }
+    });
+    // Insert above the bottom editors.
+    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookScroll), m_canvas, 1);
 
     startPreview();
     updateTitle();
@@ -260,6 +284,8 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     m_lookEditor->setContextScene(NULL);
     clearEditors();
     m_canvasPlaceholder->hide();
+    m_fixtureScroll->hide(); // non-scene: no per-fixture editor
+    m_lookScroll->show();
 
     // Host the stock editor for the function type; collections and chasers
     // accept functions dragged from the left tree (external drag mode).
@@ -301,7 +327,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     }
 
     m_funcEditor = ed;
-    m_canvasLayout->insertWidget(m_canvasLayout->count() - 1, m_funcEditor, 1);
+    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookScroll), m_funcEditor, 1);
     m_funcEditor->show();
     m_canvasTitle->setText(tr("Editing %1: %2")
                            .arg(Function::typeToString(f->type()))
@@ -377,6 +403,52 @@ void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
     const quint32 pid = m_paletteTree->itemPaletteId(item);
     if (pid != QLCPalette::invalidId())
         m_lookEditor->setPalette(pid);
+}
+
+void ProgrammingManager::slotFixtureSelected(quint32 fid)
+{
+    Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (fid == Fixture::invalidId() || s == NULL || m_doc->fixture(fid) == NULL)
+    {
+        m_fixtureScroll->hide();
+        m_lookScroll->show();
+        return;
+    }
+
+    // Show this fixture's channel editor, prefilled with the scene's values.
+    m_fixtureConsole->blockSignals(true);
+    m_fixtureConsole->setFixture(fid);
+    foreach (const SceneValue &scv, s->values())
+        if (scv.fxi == fid)
+            m_fixtureConsole->setSceneValue(scv);
+    m_fixtureConsole->blockSignals(false);
+
+    m_lookScroll->hide();
+    m_fixtureScroll->show();
+}
+
+void ProgrammingManager::slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value)
+{
+    Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (s == NULL)
+        return;
+    s->setValue(fxi, ch, value);
+    m_doc->setModified();
+    stopPreview();
+    startPreview();
+}
+
+void ProgrammingManager::slotFixtureChecked(quint32 fxi, quint32 ch, bool state)
+{
+    if (state) // enabling emits a value via valueChanged separately
+        return;
+    Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (s == NULL)
+        return;
+    s->unsetValue(fxi, ch);
+    m_doc->setModified();
+    stopPreview();
+    startPreview();
 }
 
 void ProgrammingManager::slotCopy()

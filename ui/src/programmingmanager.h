@@ -28,6 +28,8 @@ class FunctionsTreeWidget;
 class FixtureGroupSource;
 class SceneGroupLooks;
 class LookEditor;
+class FixtureConsole;
+class QScrollArea;
 class QVBoxLayout;
 class QLabel;
 class Doc;
@@ -58,6 +60,9 @@ private slots:
     void slotCopy();
     void slotPaste();
     void slotPaletteDoubleClicked(QTreeWidgetItem *item);
+    void slotFixtureSelected(quint32 fixtureId);
+    void slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value);
+    void slotFixtureChecked(quint32 fxi, quint32 ch, bool state);
 
 private:
     void loadCanvas(quint32 sceneId);
@@ -97,6 +102,9 @@ private:
     SceneGroupLooks *m_canvas;
     QWidget *m_funcEditor;     //!< stock editor for non-scene functions
     LookEditor *m_lookEditor;
+    QScrollArea *m_lookScroll;     //!< wraps the look editor (bottom)
+    QScrollArea *m_fixtureScroll;  //!< wraps the per-fixture console (bottom)
+    FixtureConsole *m_fixtureConsole;
     quint32 m_currentScene;
     quint32 m_previewScene;       //!< the scene we started for live preview
     quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate
