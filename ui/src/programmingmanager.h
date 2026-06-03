@@ -55,6 +55,7 @@ private slots:
 
 private:
     void loadCanvas(quint32 sceneId);
+    void updateTitle();
 
     /** Live-preview the canvas scene by running it (Design mode only), so
      *  the DMX/2D view reflects the look as you build. Blind/live handling
@@ -68,6 +69,7 @@ private:
     FunctionsTreeWidget *m_funcTree;
 
     QVBoxLayout *m_canvasLayout;
+    QLabel *m_canvasTitle;
     QLabel *m_canvasPlaceholder;
     SceneGroupLooks *m_canvas;
     LookEditor *m_lookEditor;

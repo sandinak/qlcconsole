@@ -38,6 +38,7 @@ public:
     LookEditor(Doc *doc, QWidget *parent = nullptr);
     ~LookEditor();
 
+public slots:
     /** Edit the given palette; invalidId() shows the empty page. */
     void setPalette(quint32 paletteId);
 

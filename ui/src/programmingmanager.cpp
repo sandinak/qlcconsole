@@ -45,6 +45,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_funcTree->setDisplayFilter(FunctionsTreeWidget::FunctionsOnly);
     m_funcTree->setHeaderHidden(true);
     m_funcTree->setColumnHidden(1, true);
+    m_funcTree->setSortingEnabled(true);
+    m_funcTree->sortByColumn(0, Qt::AscendingOrder);
     m_funcTree->updateTree();
     navCol->addWidget(m_funcTree, 1);
     QPushButton *newScene = new QPushButton(tr("New scene"), this);
@@ -54,6 +56,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // --- Center: the selected scene's canvas ---
     QWidget *canvasPanel = new QWidget(this);
     m_canvasLayout = new QVBoxLayout(canvasPanel);
+    m_canvasTitle = new QLabel(this);
+    m_canvasTitle->setStyleSheet("font-weight: bold;");
+    m_canvasTitle->setWordWrap(true);
+    m_canvasLayout->addWidget(m_canvasTitle);
     m_canvasPlaceholder = new QLabel(
         tr("Select or create a scene on the left, then drag palettes, "
            "fixture groups and fixtures from the right onto it."), this);
@@ -75,6 +81,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_paletteTree->setDisplayFilter(FunctionsTreeWidget::PalettesOnly);
     m_paletteTree->setHeaderHidden(true);
     m_paletteTree->setColumnHidden(1, true);
+    m_paletteTree->setSortingEnabled(true);
+    m_paletteTree->sortByColumn(0, Qt::AscendingOrder);
     m_paletteTree->setExternalDragMode(true); // emit palette MIME on drag
     m_paletteTree->updateTree();
     srcCol->addWidget(m_paletteTree, 1);
@@ -125,9 +133,19 @@ void ProgrammingManager::slotFunctionSelected()
     const quint32 fid = m_funcTree->itemFunctionId(sel.first());
     Function *f = m_doc->function(fid);
     if (f != NULL && f->type() == Function::SceneType)
+    {
         loadCanvas(fid);
+    }
     else
+    {
         loadCanvas(Function::invalidId()); // folders / non-scene -> placeholder
+        if (f != NULL)
+            m_canvasPlaceholder->setText(
+                tr("\"%1\" is a %2. Editing collections, chasers, effects and "
+                   "matrices here is coming soon — for now open it in the "
+                   "Functions tab.")
+                .arg(f->name()).arg(Function::typeToString(f->type())));
+    }
 }
 
 void ProgrammingManager::loadCanvas(quint32 sceneId)
@@ -148,7 +166,11 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
     if (scene == NULL)
     {
+        m_canvasPlaceholder->setText(
+            tr("Select or create a scene on the left, then drag palettes, "
+               "fixture groups and fixtures from the right onto it."));
         m_canvasPlaceholder->show();
+        updateTitle();
         return;
     }
 
@@ -161,6 +183,21 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     m_canvasLayout->insertWidget(m_canvasLayout->count() - 1, m_canvas, 1);
 
     startPreview();
+    updateTitle();
+}
+
+void ProgrammingManager::updateTitle()
+{
+    Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (s == NULL)
+    {
+        m_canvasTitle->setText(tr("Programming"));
+        return;
+    }
+    const bool live = (m_previewScene == m_currentScene);
+    m_canvasTitle->setText(tr("Editing scene: %1     [ live preview: %2 ]")
+        .arg(s->name())
+        .arg(live ? tr("ON") : tr("OFF — Design mode only")));
 }
 
 void ProgrammingManager::slotLookEdited()
@@ -186,6 +223,7 @@ void ProgrammingManager::startPreview()
 
     scene->start(m_doc->masterTimer(), FunctionParent::master());
     m_previewScene = m_currentScene;
+    updateTitle();
 }
 
 void ProgrammingManager::stopPreview()
@@ -196,6 +234,7 @@ void ProgrammingManager::stopPreview()
     if (scene != NULL)
         scene->stop(FunctionParent::master());
     m_previewScene = Function::invalidId();
+    updateTitle();
 }
 
 void ProgrammingManager::slotCanvasModified()
