@@ -91,6 +91,7 @@ add_library(${module_name}
     rgbmatrixeditor.cpp rgbmatrixeditor.h rgbmatrixeditor.ui
     sceneeditor.cpp sceneeditor.h sceneeditor.ui
     scenegrouplooks.cpp scenegrouplooks.h
+    groupselection.cpp groupselection.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h
     scripteditor.cpp scripteditor.h scripteditor.ui

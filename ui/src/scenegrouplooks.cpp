@@ -21,6 +21,7 @@
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"
 #include "paletteeditdialog.h"
+#include "groupselection.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "scene.h"
@@ -49,12 +50,16 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent)
     root->addLayout(cols);
 
     // --- Target groups column ---
-    // A checkable list of ALL fixture groups: tick a group to target it.
-    // (Same idiom as the channel-groups tree; no add/remove dialog.)
+    // Read-only summary of the scene's target groups; edited via a modal
+    // multi-select dialog (Select groups…).
     QVBoxLayout *groupCol = new QVBoxLayout();
     groupCol->addWidget(new QLabel(tr("Target groups"), this));
     m_groupList = new QListWidget(this);
+    m_groupList->setSelectionMode(QAbstractItemView::NoSelection);
+    m_groupList->setFocusPolicy(Qt::NoFocus);
     groupCol->addWidget(m_groupList);
+    m_selectGroupsButton = new QPushButton(tr("Select groups…"), this);
+    groupCol->addWidget(m_selectGroupsButton);
     cols->addLayout(groupCol);
 
     // --- Looks column ---
@@ -72,8 +77,8 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent)
     lookCol->addLayout(lookBtns);
     cols->addLayout(lookCol);
 
-    connect(m_groupList, SIGNAL(itemChanged(QListWidgetItem*)),
-            this, SLOT(slotGroupItemChanged(QListWidgetItem*)));
+    connect(m_selectGroupsButton, SIGNAL(clicked()),
+            this, SLOT(slotSelectGroups()));
     connect(m_addLookButton, SIGNAL(clicked()), this, SLOT(slotAddLook()));
     connect(m_removeLookButton, SIGNAL(clicked()), this, SLOT(slotRemoveLook()));
 
@@ -110,28 +115,33 @@ void SceneGroupLooks::reload()
 {
     // List every fixture group with a checkbox; checked == targeted by
     // this scene. Block signals so repopulating doesn't fire toggles.
-    const QList<quint32> targeted = m_scene->fixtureGroups();
-    // Sort groups by name (case-insensitive) for a stable, scannable list.
+    // Summary of the scene's target groups, sorted by name. Editing is
+    // done through the Select groups… dialog (slotSelectGroups).
     QList<FixtureGroup*> groups;
-    foreach (FixtureGroup *g, m_doc->fixtureGroups())
+    foreach (quint32 gid, m_scene->fixtureGroups())
+    {
+        FixtureGroup *g = m_doc->fixtureGroup(gid);
         if (g != NULL)
             groups.append(g);
+    }
     std::sort(groups.begin(), groups.end(),
               [](FixtureGroup *a, FixtureGroup *b) {
                   return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
               });
 
-    m_groupList->blockSignals(true);
     m_groupList->clear();
-    foreach (FixtureGroup *g, groups)
+    if (groups.isEmpty())
     {
-        QListWidgetItem *it = new QListWidgetItem(g->name(), m_groupList);
-        it->setData(Qt::UserRole, g->id());
-        it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
-        it->setCheckState(targeted.contains(g->id()) ? Qt::Checked
-                                                      : Qt::Unchecked);
+        QListWidgetItem *it = new QListWidgetItem(
+            tr("(none — looks apply to the scene's own fixtures)"),
+            m_groupList);
+        it->setFlags(Qt::NoItemFlags);
     }
-    m_groupList->blockSignals(false);
+    else
+    {
+        foreach (FixtureGroup *g, groups)
+            new QListWidgetItem(g->name(), m_groupList);
+    }
 
     m_lookList->clear();
     foreach (quint32 pid, m_scene->palettes())
@@ -183,19 +193,25 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
     event->acceptProposedAction();
 }
 
-void SceneGroupLooks::slotGroupItemChanged(QListWidgetItem *item)
+void SceneGroupLooks::slotSelectGroups()
 {
-    if (item == NULL)
+    GroupSelection dlg(m_doc, m_scene->fixtureGroups(), this);
+    if (dlg.exec() != QDialog::Accepted)
         return;
 
-    const quint32 gid = item->data(Qt::UserRole).toUInt();
-    if (item->checkState() == Qt::Checked)
-        m_scene->addFixtureGroup(gid);
-    else
-        m_scene->removeFixtureGroup(gid);
+    const QList<quint32> chosen = dlg.selection();
+    const QList<quint32> current = m_scene->fixtureGroups();
+
+    // Apply the diff: drop unchecked, add newly checked.
+    foreach (quint32 gid, current)
+        if (chosen.contains(gid) == false)
+            m_scene->removeFixtureGroup(gid);
+    foreach (quint32 gid, chosen)
+        if (current.contains(gid) == false)
+            m_scene->addFixtureGroup(gid);
+
     m_doc->setModified();
-    // No reload() here: the list already reflects the toggle, and a
-    // rebuild mid-itemChanged would be wasteful.
+    reload();
 }
 
 void SceneGroupLooks::slotAddLook()

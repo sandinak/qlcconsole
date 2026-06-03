@@ -57,7 +57,7 @@ protected:
     void dropEvent(QDropEvent *event) override;
 
 private slots:
-    void slotGroupItemChanged(QListWidgetItem *item);
+    void slotSelectGroups();
     void slotAddLook();
     void slotRemoveLook();
 
@@ -71,6 +71,7 @@ private:
 
     QListWidget *m_groupList;
     QListWidget *m_lookList;
+    QPushButton *m_selectGroupsButton;
     QPushButton *m_addLookButton;
     QPushButton *m_removeLookButton;
 };
