@@ -64,6 +64,10 @@ public slots:
     void slotFunctionManagerActive(bool active);
     void slotSetSceneValues(QList <SceneValue>&);
 
+protected:
+    /** Catch fixture-group drops on the fixtures tree (static expand). */
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
 protected slots:
     void slotFixtureRemoved(quint32 id);
 
@@ -141,6 +145,10 @@ private:
 
     bool addFixtureItem(Fixture* fixture);
     void removeFixtureItem(quint32 fixtureID);
+
+    /** Add every fixture currently in the given group to the scene
+     *  (static one-time expand). Returns true if anything was added. */
+    bool addFixturesFromGroup(quint32 groupId);
 
 private slots:
     void slotNameEdited(const QString& name);

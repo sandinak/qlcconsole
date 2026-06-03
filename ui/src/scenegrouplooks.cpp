@@ -20,6 +20,7 @@
 
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"
+#include "fixturegroupsource.h"
 #include "paletteeditdialog.h"
 #include "groupselection.h"
 #include "fixturegroup.h"
@@ -38,11 +39,14 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent)
     root->setContentsMargins(0, 6, 0, 0);
 
     QLabel *header = new QLabel(
-        tr("<b>Dynamic group looks</b> — palettes applied to fixture "
-           "groups, following membership at run time. Every look applies "
-           "to every target group; use separate scenes for different "
-           "looks per group. Tip: drag palettes here from the Functions "
-           "tree to add them as looks."), this);
+        tr("<b>Dynamic group looks</b> — these palettes (looks) are applied "
+           "to the dynamic groups below and <b>follow group membership at "
+           "run time</b>. Every look applies to every dynamic group; use "
+           "separate scenes for different looks per group.<br>"
+           "Drag here to add: palettes (from the Functions tree) become "
+           "looks; fixture groups (from the dock) become dynamic groups. "
+           "To instead add a group's <i>current</i> fixtures statically, "
+           "drop the group on the Fixtures list below."), this);
     header->setWordWrap(true);
     root->addWidget(header);
 
@@ -53,7 +57,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent)
     // Read-only summary of the scene's target groups; edited via a modal
     // multi-select dialog (Select groups…).
     QVBoxLayout *groupCol = new QVBoxLayout();
-    groupCol->addWidget(new QLabel(tr("Target groups"), this));
+    groupCol->addWidget(new QLabel(tr("Dynamic groups (follow membership)"), this));
     m_groupList = new QListWidget(this);
     m_groupList->setSelectionMode(QAbstractItemView::NoSelection);
     m_groupList->setFocusPolicy(Qt::NoFocus);
@@ -151,37 +155,69 @@ void SceneGroupLooks::reload()
     }
 }
 
+// This panel is the DYNAMIC drop zone: dropping a palette adds a look,
+// dropping a fixture group adds it as a dynamic target (follows
+// membership). Static fixture-expansion is handled by the fixtures
+// console below (see SceneEditor's drop handling).
+static bool hasAcceptedFormat(const QMimeData *mime)
+{
+    return mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType())
+        || mime->hasFormat(FixtureGroupSource::fixtureGroupMimeType());
+}
+
 void SceneGroupLooks::dragEnterEvent(QDragEnterEvent *event)
 {
-    if (event->mimeData()->hasFormat(FunctionsTreeWidget::paletteDragMimeType()))
+    if (hasAcceptedFormat(event->mimeData()))
         event->acceptProposedAction();
 }
 
 void SceneGroupLooks::dragMoveEvent(QDragMoveEvent *event)
 {
-    if (event->mimeData()->hasFormat(FunctionsTreeWidget::paletteDragMimeType()))
+    if (hasAcceptedFormat(event->mimeData()))
         event->acceptProposedAction();
 }
 
 void SceneGroupLooks::dropEvent(QDropEvent *event)
 {
     const QMimeData *mime = event->mimeData();
-    if (mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType()) == false)
+    if (hasAcceptedFormat(mime) == false)
         return;
 
-    QByteArray data = mime->data(FunctionsTreeWidget::paletteDragMimeType());
-    QDataStream stream(&data, QIODevice::ReadOnly);
-
     bool changed = false;
-    while (stream.atEnd() == false)
+
+    // Palettes -> looks.
+    if (mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType()))
     {
-        quint32 pid = 0;
-        stream >> pid;
-        // Only attach palettes that exist and aren't already a look.
-        if (m_doc->palette(pid) != NULL && m_scene->palettes().contains(pid) == false)
+        QByteArray data = mime->data(FunctionsTreeWidget::paletteDragMimeType());
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
         {
-            m_scene->addPalette(pid);
-            changed = true;
+            quint32 pid = 0;
+            stream >> pid;
+            if (m_doc->palette(pid) != NULL
+                && m_scene->palettes().contains(pid) == false)
+            {
+                m_scene->addPalette(pid);
+                changed = true;
+            }
+        }
+    }
+
+    // Fixture groups -> dynamic targets (follows membership at run time).
+    if (mime->hasFormat(FixtureGroupSource::fixtureGroupMimeType()))
+    {
+        QByteArray data = mime->data(FixtureGroupSource::fixtureGroupMimeType());
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 gid = 0;
+            stream >> gid;
+            if (m_doc->fixtureGroup(gid) != NULL
+                && m_scene->fixtureGroups().contains(gid) == false)
+            {
+                m_scene->addFixtureGroup(gid);
+                changed = true;
+            }
         }
     }
 

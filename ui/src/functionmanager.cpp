@@ -46,6 +46,7 @@
 #include "functionwizard.h"
 #include "palettemanager.h"
 #include "paletteeditdialog.h"
+#include "fixturegroupsource.h"
 #include "qlcpalette.h"
 #include "chasereditor.h"
 #include "scripteditor.h"
@@ -891,6 +892,17 @@ void FunctionManager::initSplitterView()
     container->setLayout(new QVBoxLayout);
     container->layout()->setContentsMargins(0, 0, 0, 0);
     container->hide();
+
+    // Drag-source dock: Fixtures & Groups, on the far right next to the
+    // editor. Only shown while editing a scene (the only editor that
+    // consumes fixtures/groups). Drag distance into the scene's drop zones
+    // stays short.
+    m_sourceDock = new FixtureGroupSource(m_doc, this);
+    m_hsplitter->addWidget(m_sourceDock);
+    m_hsplitter->setStretchFactor(0, 1); // tree
+    m_hsplitter->setStretchFactor(1, 4); // editor
+    m_hsplitter->setStretchFactor(2, 1); // sources dock
+    m_sourceDock->hide();
 }
 
 void FunctionManager::initTree()
@@ -1138,6 +1150,8 @@ void FunctionManager::editFunction(Function* function)
         // Allow palettes to be dragged from the tree onto the scene's
         // "looks" (see SceneGroupLooks drop handling).
         m_tree->setExternalDragMode(true);
+        // Show the Fixtures & Groups drag-source dock next to the editor.
+        m_sourceDock->show();
     }
     else if (function->type() == Function::ChaserType)
     {
@@ -1267,6 +1281,7 @@ void FunctionManager::deleteCurrentEditor(bool async)
 
     m_hsplitter->widget(1)->hide();
     m_vsplitter->widget(1)->hide();
+    m_sourceDock->hide();
 }
 
 void FunctionManager::highlightEditedFunction(quint32 fid)
