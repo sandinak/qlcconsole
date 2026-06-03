@@ -242,15 +242,25 @@ QTreeWidgetItem* FunctionsTreeWidget::palettesCategoryItem()
     const QString basePath = QString(PALETTE_CATEGORY) + "/";
     if (m_foldersMap.contains(basePath) == false)
     {
-        QTreeWidgetItem* item = new QTreeWidgetItem(this);
-        item->setText(COL_NAME, tr(PALETTE_CATEGORY));
-        item->setIcon(COL_NAME, QIcon(":/color.png"));
-        item->setData(COL_NAME, Qt::UserRole, Function::invalidId());
-        item->setData(COL_NAME, Qt::UserRole + 1, Function::Undefined);
-        item->setData(COL_NAME, NODE_KIND_ROLE, PaletteNode);
-        item->setText(COL_PATH, basePath);
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
-        m_foldersMap[basePath] = item;
+        // In a palettes-only tree the whole widget is palettes, so the
+        // "Palettes" header is redundant: hang folders/leaves off the
+        // invisible root instead of a visible category node.
+        if (m_displayFilter == PalettesOnly)
+        {
+            m_foldersMap[basePath] = invisibleRootItem();
+        }
+        else
+        {
+            QTreeWidgetItem* item = new QTreeWidgetItem(this);
+            item->setText(COL_NAME, tr(PALETTE_CATEGORY));
+            item->setIcon(COL_NAME, QIcon(":/color.png"));
+            item->setData(COL_NAME, Qt::UserRole, Function::invalidId());
+            item->setData(COL_NAME, Qt::UserRole + 1, Function::Undefined);
+            item->setData(COL_NAME, NODE_KIND_ROLE, PaletteNode);
+            item->setText(COL_PATH, basePath);
+            item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+            m_foldersMap[basePath] = item;
+        }
     }
     return m_foldersMap[basePath];
 }

@@ -128,7 +128,8 @@ void FixtureGroupSource::reload()
         }
     }
 
-    expandAll();
+    // Start collapsed — expand a group to reach its fixtures.
+    collapseAll();
 }
 
 QMimeData* FixtureGroupSource::mimeData(const QList<QTreeWidgetItem*> items) const

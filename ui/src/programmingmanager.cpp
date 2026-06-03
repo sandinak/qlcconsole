@@ -184,13 +184,11 @@ void ProgrammingManager::stopPreview()
 
 void ProgrammingManager::slotCanvasModified()
 {
-    // The running preview scene re-expands its palettes/groups on the next
-    // write tick, so the DMX/2D view reflects the new look immediately.
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_previewScene));
-    if (scene != NULL)
-        scene->resetRuntime();
-    else
-        startPreview(); // a look/target was just added to a not-yet-running scene
+    // Restart the preview so the scene re-expands its palettes over the
+    // current targets from scratch — reliable even when targets/looks were
+    // added to a scene that started empty. The DMX/2D view then updates.
+    stopPreview();
+    startPreview();
 }
 
 void ProgrammingManager::slotModeChanged()
