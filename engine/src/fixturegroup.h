@@ -90,11 +90,17 @@ public:
     /** Get the name of a fixture group */
     QString name() const;
 
+    /** Set/Get the folder path of this group (for organizing groups into
+     *  folders in the UI; "Movers/Front" style, empty = root). */
+    void setPath(const QString& path);
+    QString path() const;
+
 signals:
     void nameChanged();
 
 private:
     QString m_name;
+    QString m_path;
 
     /************************************************************************
      * Fixtures

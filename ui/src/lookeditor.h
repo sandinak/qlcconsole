@@ -22,6 +22,7 @@
 class QStackedWidget;
 class QColorDialog;
 class VCXYPadArea;
+class CapabilityBar;
 class QSlider;
 class QComboBox;
 class QLabel;
@@ -84,7 +85,7 @@ private:
     int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageSingle;
 
     QColorDialog *m_colorDialog;
-    QSlider *m_dimmerSlider;
+    CapabilityBar *m_dimmerBar; //!< gradient + strobe region marks
     QLabel *m_dimmerValue;
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;

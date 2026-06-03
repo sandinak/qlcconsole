@@ -8,6 +8,8 @@
 #include <QMimeData>
 #include <QDataStream>
 #include <QHeaderView>
+#include <QMenu>
+#include <QInputDialog>
 #include <QSet>
 
 #include <algorithm>
@@ -31,6 +33,10 @@ FixtureGroupSource::FixtureGroupSource(Doc *doc, QWidget *parent)
     setAcceptDrops(false);
     setDragDropMode(QAbstractItemView::DragOnly);
 
+    setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this, SIGNAL(customContextMenuRequested(QPoint)),
+            this, SLOT(slotContextMenu(QPoint)));
+
     reload();
 
     // Mirror the Fixture Manager: refresh whenever fixtures or groups change.
@@ -52,15 +58,36 @@ const char* FixtureGroupSource::fixtureMimeType()
     return FIXTURE_DRAG_MIME_TYPE;
 }
 
+QTreeWidgetItem *FixtureGroupSource::folderItem(const QString &path)
+{
+    if (path.isEmpty())
+        return invisibleRootItem();
+    if (m_folderMap.contains(path))
+        return m_folderMap[path];
+
+    const int slash = path.lastIndexOf('/');
+    const QString parentPath = (slash < 0) ? QString() : path.left(slash);
+    const QString name = (slash < 0) ? path : path.mid(slash + 1);
+
+    QTreeWidgetItem *fi = new QTreeWidgetItem(folderItem(parentPath));
+    fi->setText(0, name);
+    fi->setIcon(0, QIcon(":/folder.png"));
+    fi->setData(0, KindRole, CategoryNode);
+    fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    m_folderMap[path] = fi;
+    return fi;
+}
+
 void FixtureGroupSource::reload()
 {
     clear();
+    m_folderMap.clear();
 
     const Qt::ItemFlags leafFlags =
         Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled;
 
-    // One tree: each group is a node with its member fixtures nested under
-    // it. Drag a group -> dynamic target; drag a fixture -> fixed target.
+    // One tree: groups (nested in their folders) each with member fixtures
+    // under them. Drag a group -> dynamic target; a fixture -> fixed target.
     QList<FixtureGroup*> groups;
     foreach (FixtureGroup *g, m_doc->fixtureGroups())
         if (g != NULL)
@@ -74,7 +101,7 @@ void FixtureGroupSource::reload()
     foreach (FixtureGroup *g, groups)
     {
         const QList<quint32> members = g->fixtureList();
-        QTreeWidgetItem *gi = new QTreeWidgetItem(this);
+        QTreeWidgetItem *gi = new QTreeWidgetItem(folderItem(g->path()));
         gi->setText(0, tr("%1  (%n fixture(s))", "", members.count()).arg(g->name()));
         gi->setIcon(0, QIcon(":/group.png"));
         gi->setData(0, IdRole, g->id());
@@ -97,6 +124,7 @@ void FixtureGroupSource::reload()
         {
             QTreeWidgetItem *fi = new QTreeWidgetItem(gi);
             fi->setText(0, f->name());
+            fi->setIcon(0, QIcon(":/fixture.png"));
             fi->setData(0, IdRole, f->id());
             fi->setData(0, KindRole, FixtureNode);
             fi->setFlags(leafFlags);
@@ -122,6 +150,7 @@ void FixtureGroupSource::reload()
         {
             QTreeWidgetItem *fi = new QTreeWidgetItem(root);
             fi->setText(0, f->name());
+            fi->setIcon(0, QIcon(":/fixture.png"));
             fi->setData(0, IdRole, f->id());
             fi->setData(0, KindRole, FixtureNode);
             fi->setFlags(leafFlags);
@@ -130,6 +159,34 @@ void FixtureGroupSource::reload()
 
     // Start collapsed — expand a group to reach its fixtures.
     collapseAll();
+}
+
+void FixtureGroupSource::slotContextMenu(const QPoint &pos)
+{
+    QTreeWidgetItem *item = itemAt(pos);
+    if (item == NULL || item->data(0, KindRole).toInt() != GroupNode)
+        return;
+
+    FixtureGroup *g = m_doc->fixtureGroup(item->data(0, IdRole).toUInt());
+    if (g == NULL)
+        return;
+
+    QMenu menu(this);
+    QAction *move = menu.addAction(tr("Move to folder…"));
+    if (menu.exec(viewport()->mapToGlobal(pos)) != move)
+        return;
+
+    bool ok = false;
+    const QString path = QInputDialog::getText(
+        this, tr("Move group to folder"),
+        tr("Folder path (e.g. \"Movers/Front\"; empty for none):"),
+        QLineEdit::Normal, g->path(), &ok);
+    if (!ok)
+        return;
+
+    // setPath emits changed() -> Doc::fixtureGroupChanged -> reload().
+    g->setPath(path.trimmed());
+    m_doc->setModified();
 }
 
 QMimeData* FixtureGroupSource::mimeData(const QList<QTreeWidgetItem*> items) const

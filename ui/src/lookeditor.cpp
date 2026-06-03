@@ -16,6 +16,7 @@
 
 #include "lookeditor.h"
 #include "virtualconsole/vcxypadarea.h"
+#include "capabilitybar.h"
 #include "qlcpalette.h"
 #include "qlccapability.h"
 #include "qlcchannel.h"
@@ -66,32 +67,24 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     connect(m_colorDialog, SIGNAL(currentColorChanged(QColor)),
             this, SLOT(slotColorChanged(QColor)));
 
-    // Dimmer page
+    // Dimmer page — gradient bar with capability (strobe) region marks.
     QWidget *dimmer = new QWidget(this);
     QVBoxLayout *dv = new QVBoxLayout(dimmer);
-    QHBoxLayout *dl = new QHBoxLayout();
-    dv->addLayout(dl);
-    dl->addWidget(new QLabel(tr("Intensity"), dimmer));
-    m_dimmerSlider = new QSlider(Qt::Horizontal, dimmer);
-    m_dimmerSlider->setRange(0, 255);
-    // Visual intensity gradient (dark -> bright) on the groove.
-    m_dimmerSlider->setStyleSheet(
-        "QSlider::groove:horizontal { height: 16px; border: 1px solid #444;"
-        " border-radius: 3px; background: qlineargradient(x1:0, y1:0, x2:1,"
-        " y2:0, stop:0 #000000, stop:1 #ffffff); }"
-        "QSlider::handle:horizontal { width: 8px; background: #d33;"
-        " border: 1px solid #000; margin: -3px 0; border-radius: 2px; }");
-    dl->addWidget(m_dimmerSlider, 1);
+    QHBoxLayout *dtop = new QHBoxLayout();
+    dv->addLayout(dtop);
+    dtop->addWidget(new QLabel(tr("Intensity"), dimmer));
+    dtop->addStretch();
     m_dimmerValue = new QLabel("0", dimmer);
     m_dimmerValue->setMinimumWidth(32);
-    dl->addWidget(m_dimmerValue);
-    // Capability name at the current value on a representative fixture —
-    // surfaces strobe ranges that live in the intensity channel.
+    dtop->addWidget(m_dimmerValue);
+    m_dimmerBar = new CapabilityBar(dimmer);
+    dv->addWidget(m_dimmerBar);
+    // Capability name at the current value on a representative fixture.
     m_dimmerCap = new QLabel(dimmer);
     m_dimmerCap->setStyleSheet("color: #555; font-style: italic;");
     dv->addWidget(m_dimmerCap);
     m_pageDimmer = m_stack->addWidget(dimmer);
-    connect(m_dimmerSlider, SIGNAL(valueChanged(int)),
+    connect(m_dimmerBar, SIGNAL(valueChanged(int)),
             this, SLOT(slotDimmerChanged(int)));
 
     // Pan/Tilt page (X/Y grid)
@@ -168,12 +161,19 @@ void LookEditor::setPalette(quint32 paletteId)
         m_stack->setCurrentIndex(m_pageColor);
         break;
     case QLCPalette::Dimmer:
-        m_dimmerSlider->setValue(p->intValue1());
+    {
+        const QLCChannel *ich = representativeChannel(QLCChannel::Intensity);
+        QList<CapabilityBar::Region> regions;
+        if (ich != NULL)
+            foreach (QLCCapability *cap, ich->capabilities())
+                regions.append({ int(cap->min()), int(cap->max()), cap->name() });
+        m_dimmerBar->setRegions(regions);
+        m_dimmerBar->setValue(p->intValue1());
         m_dimmerValue->setText(QString::number(p->intValue1()));
-        m_dimmerCap->setText(capabilityNameAt(
-            representativeChannel(QLCChannel::Intensity), p->intValue1()));
+        m_dimmerCap->setText(capabilityNameAt(ich, p->intValue1()));
         m_stack->setCurrentIndex(m_pageDimmer);
         break;
+    }
     case QLCPalette::PanTilt:
     {
         const qreal x = qreal(p->intValue1()) / PAN_DEG * XY_MAX;

@@ -30,6 +30,7 @@
 #define KXMLQLCFixtureGroupHead QStringLiteral("Head")
 #define KXMLQLCFixtureGroupSize QStringLiteral("Size")
 #define KXMLQLCFixtureGroupName QStringLiteral("Name")
+#define KXMLQLCFixtureGroupPath QStringLiteral("Path")
 
 /****************************************************************************
  * Initialization
@@ -99,6 +100,19 @@ void FixtureGroup::setName(const QString& name)
 QString FixtureGroup::name() const
 {
     return m_name;
+}
+
+void FixtureGroup::setPath(const QString& path)
+{
+    if (m_path == path)
+        return;
+    m_path = path;
+    emit changed(this->id());
+}
+
+QString FixtureGroup::path() const
+{
+    return m_path;
 }
 
 /****************************************************************************
@@ -348,6 +362,10 @@ bool FixtureGroup::loadXML(QXmlStreamReader &xmlDoc)
         {
             m_name = xmlDoc.readElementText();
         }
+        else if (xmlDoc.name() == KXMLQLCFixtureGroupPath)
+        {
+            m_path = xmlDoc.readElementText();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown fixture group tag:" << xmlDoc.name();
@@ -368,6 +386,9 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
 
     /* Name */
     doc->writeTextElement(KXMLQLCFixtureGroupName, name());
+
+    if (m_path.isEmpty() == false)
+        doc->writeTextElement(KXMLQLCFixtureGroupPath, m_path);
 
     /* Matrix size */
     doc->writeStartElement(KXMLQLCFixtureGroupSize);

@@ -15,6 +15,7 @@
 #define FIXTUREGROUPSOURCE_H
 
 #include <QTreeWidget>
+#include <QHash>
 
 class Doc;
 
@@ -47,8 +48,17 @@ protected:
     /** Provide group/fixture IDs for dragging onto scene drop zones. */
     QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const override;
 
+private slots:
+    /** Right-click: move a group into a folder. */
+    void slotContextMenu(const QPoint &pos);
+
+private:
+    /** Get/create the folder item for a "/"-separated path (empty=root). */
+    QTreeWidgetItem *folderItem(const QString &path);
+
 private:
     Doc *m_doc;
+    QHash<QString, QTreeWidgetItem*> m_folderMap; //!< rebuilt each reload()
 };
 
 /** @} */
