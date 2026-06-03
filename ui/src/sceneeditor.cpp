@@ -39,6 +39,7 @@
 #include "functionmanager.h"
 #include "fixtureconsole.h"
 #include "groupsconsole.h"
+#include "scenegrouplooks.h"
 #include "qlcfixturedef.h"
 #include "channelsgroup.h"
 #include "qlcclipboard.h"
@@ -338,6 +339,14 @@ void SceneEditor::init(bool applyValues)
     connect(m_deselectAllGroups, SIGNAL(clicked()),
             this, SLOT(slotDisableAllChannelGroups()));
     updateChannelsGroupsTab();
+
+    // Dynamic group-look surface (fork-owned widget). Embedded in the
+    // General tab's grid below the fixture/channel-group trees so the
+    // tab-index bookkeeping (m_fixtureFirstTabIndex) is untouched.
+    {
+        SceneGroupLooks *gl = new SceneGroupLooks(m_scene, m_doc, this);
+        gridLayout->addWidget(gl, 14, 0, 1, 4);
+    }
 
     // Apply any mode related change
     slotModeChanged(m_doc->mode());

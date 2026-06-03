@@ -43,6 +43,8 @@
 #include <QDebug>
 #include <QEvent>
 #include <QTimer>
+
+#include <functional>
 #include <QBrush>
 #include <QStyle>
 #include <QMenu>
@@ -984,6 +986,12 @@ void VCButton::saveProgrammer()
         return;
     }
 
+    // Fold any raw programmer values that a now-running scene owns into
+    // that scene first. Covers "edit a look, *then* start its chase /
+    // collection, then Save" — without this those edits would only ever
+    // offer Create-new even though an existing scene owns them.
+    m_doc->rerouteProgrammerValues();
+
     // Two buckets to commit:
     //  - editedSceneIds()   — scenes already mutated in memory; just
     //                          mark Doc modified so the workspace saves.
@@ -1106,12 +1114,17 @@ void VCButton::saveProgrammer()
         layout->addWidget(editedTree, 1);
     }
 
+    // Item-keyed bucket data so rows can be split/replaced at runtime
+    // without an index-parallel list getting out of sync.
+    QHash<QTreeWidgetItem*, BucketRow> bucketData;
     QTreeWidget *bucketTree = nullptr;
     if (!bucketRows.isEmpty())
     {
         layout->addWidget(new QLabel(
-            tr("Non-routed values will be saved as one Scene per "
-               "(fixture group, category). Edit Name / Path or pick "
+            tr("Non-routed values default to one inclusive Scene per "
+               "category (the largest group covering the edited "
+               "fixtures). Use the Group dropdown to split per "
+               "contributing group. Edit Name / Path or pick "
                "\"Use existing\" if a matching scene already exists:"),
             &dlg));
         bucketTree = new QTreeWidget(&dlg);
@@ -1120,7 +1133,12 @@ void VCButton::saveProgrammer()
             << tr("Save") << tr("Category") << tr("Group")
             << tr("Name") << tr("Path") << tr("Action"));
         bucketTree->setRootIsDecorated(false);
-        for (const BucketRow &r : bucketRows)
+
+        // Adds one bucket row. When allowSplit is true the Group column
+        // becomes a dropdown offering "Split per group", which replaces
+        // the row with one sub-row per contributing group.
+        std::function<void(const BucketRow&, bool)> addBucketItem;
+        addBucketItem = [&](const BucketRow &r, bool allowSplit)
         {
             const Doc::SaveBucket &b = r.bucket;
             QTreeWidgetItem *it = new QTreeWidgetItem(bucketTree);
@@ -1128,21 +1146,86 @@ void VCButton::saveProgrammer()
                                       | Qt::ItemIsEditable);
             it->setCheckState(0, Qt::Checked);
             it->setText(1, categoryLabel(b.category));
-            it->setText(2, b.groupName);
             it->setText(3, b.defaultName);
             it->setText(4, b.defaultPath);
-            QComboBox *combo = new QComboBox(bucketTree);
-            combo->addItem(tr("Create new"));
-            if (r.matchId != Function::invalidId())
+
+            if (allowSplit)
             {
-                combo->addItem(tr("Use existing: %1").arg(r.matchName));
-                combo->setCurrentIndex(1); // default to existing when matched
+                QComboBox *gcombo = new QComboBox(bucketTree);
+                gcombo->addItem(tr("%1 (all)").arg(b.groupName));
+                gcombo->addItem(tr("Split per group"));
+                bucketTree->setItemWidget(it, 2, gcombo);
+                connect(gcombo,
+                        QOverload<int>::of(&QComboBox::activated),
+                        bucketTree, [&, it](int idx) {
+                    if (idx != 1)
+                        return;
+                    // Defer the tree surgery so we're not deleting the
+                    // combo that's mid-signal.
+                    QTimer::singleShot(0, bucketTree, [&, it]() {
+                        const BucketRow parent = bucketData.value(it);
+                        const QList<Doc::SaveBucket> subs =
+                            m_doc->splitBucketByGroup(parent.bucket);
+                        bucketData.remove(it);
+                        delete it;
+                        for (const Doc::SaveBucket &sub : subs)
+                        {
+                            BucketRow sr;
+                            sr.bucket = sub;
+                            sr.matchId = m_doc->findMatchingScene(sub.values);
+                            if (sr.matchId != Function::invalidId())
+                            {
+                                Function *m = m_doc->function(sr.matchId);
+                                if (m != NULL) sr.matchName = m->name();
+                            }
+                            addBucketItem(sr, false);
+                        }
+                    });
+                });
             }
+            else
+            {
+                it->setText(2, b.groupName);
+            }
+
+            // Action options carry a stable code in itemData (not index,
+            // since options are conditional):
+            //   0 = create new (static, per-fixture)
+            //   1 = create group scene (dynamic, follows membership)
+            //   2 = use existing match
+            QComboBox *combo = new QComboBox(bucketTree);
+            combo->addItem(tr("Create new"), 0);
+            const bool hasGroup = (b.fixtureGroupId != Function::invalidId());
+            if (hasGroup)
+                combo->addItem(tr("Create group scene (follows membership)"), 1);
+            if (r.matchId != Function::invalidId())
+                combo->addItem(tr("Use existing: %1").arg(r.matchName), 2);
+
+            // Default: prefer an existing match; else a dynamic group
+            // scene when the bucket targets a group; else create new.
+            int defCode = 0;
+            if (r.matchId != Function::invalidId())
+                defCode = 2;
+            else if (hasGroup)
+                defCode = 1;
+            const int defIdx = combo->findData(defCode);
+            if (defIdx >= 0)
+                combo->setCurrentIndex(defIdx);
             bucketTree->setItemWidget(it, 5, combo);
+
+            bucketData.insert(it, r);
+        };
+
+        for (const BucketRow &r : bucketRows)
+        {
+            const bool splittable =
+                m_doc->splitBucketByGroup(r.bucket).size() > 1;
+            addBucketItem(r, splittable);
         }
+
         bucketTree->resizeColumnToContents(0);
         bucketTree->resizeColumnToContents(1);
-        bucketTree->resizeColumnToContents(2);
+        bucketTree->setColumnWidth(2, 150);
         bucketTree->setColumnWidth(3, 160);
         bucketTree->setColumnWidth(4, 200);
         layout->addWidget(bucketTree, 1);
@@ -1195,13 +1278,15 @@ void VCButton::saveProgrammer()
             QTreeWidgetItem *it = bucketTree->topLevelItem(i);
             if (it->checkState(0) != Qt::Checked)
                 continue;
-            const BucketRow &r = bucketRows.at(i);
+            const BucketRow r = bucketData.value(it);
             QComboBox *combo = qobject_cast<QComboBox*>(
                 bucketTree->itemWidget(it, 5));
-            const bool useExisting = (combo != nullptr
-                                       && combo->currentIndex() == 1
-                                       && r.matchId != Function::invalidId());
-            if (useExisting)
+            // 0=create new, 1=group scene, 2=use existing (see addBucketItem)
+            int action = (combo != nullptr) ? combo->currentData().toInt() : 0;
+            if (action == 2 && r.matchId == Function::invalidId())
+                action = 0; // safety: no match to use
+
+            if (action == 2)
             {
                 // Don't create a new scene. If a single collection is
                 // running and doesn't already reference the match,
@@ -1221,7 +1306,13 @@ void VCButton::saveProgrammer()
             {
                 const QString name = it->text(3).trimmed();
                 const QString path = it->text(4).trimmed();
-                quint32 fid = m_doc->saveBucketAsScene(r.bucket, name, path);
+                quint32 fid = (action == 1)
+                    ? m_doc->saveBucketAsGroupScene(r.bucket, name, path)
+                    : m_doc->saveBucketAsScene(r.bucket, name, path);
+                // Group-scene build can fail (e.g. no palette-able
+                // channels) — fall back to a static per-fixture scene.
+                if (fid == Function::invalidId() && action == 1)
+                    fid = m_doc->saveBucketAsScene(r.bucket, name, path);
                 if (fid == Function::invalidId())
                 {
                     QMessageBox::warning(this, tr("Save programmer"),

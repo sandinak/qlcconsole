@@ -90,6 +90,9 @@ add_library(${module_name}
     rgbitem.cpp rgbitem.h
     rgbmatrixeditor.cpp rgbmatrixeditor.h rgbmatrixeditor.ui
     sceneeditor.cpp sceneeditor.h sceneeditor.ui
+    scenegrouplooks.cpp scenegrouplooks.h
+    paletteeditdialog.cpp paletteeditdialog.h
+    palettemanager.cpp palettemanager.h
     scripteditor.cpp scripteditor.h scripteditor.ui
     selectinputchannel.cpp selectinputchannel.h selectinputchannel.ui
     showmanager/audioitem.cpp showmanager/audioitem.h

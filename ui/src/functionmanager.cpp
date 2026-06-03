@@ -44,6 +44,7 @@
 #include "functionmanager.h"
 #include "rgbmatrixeditor.h"
 #include "functionwizard.h"
+#include "palettemanager.h"
 #include "chasereditor.h"
 #include "scripteditor.h"
 #include "sceneeditor.h"
@@ -269,6 +270,17 @@ void FunctionManager::initActions()
     connect(m_wizardAction, SIGNAL(triggered(bool)),
             this, SLOT(slotWizard()));
 
+    // Palettes are not Functions (they don't live in the tree), so this
+    // opens the standalone palette library rather than creating a tree
+    // item — hence a distinct action, not a "New …" entry.
+    m_paletteManagerAction = new QAction(QIcon(":/color.png"),
+                                         tr("&Palettes…"), this);
+    m_paletteManagerAction->setToolTip(tr(
+        "Manage reusable palettes (color, dimmer, position, gobo, "
+        "shutter) for dynamic group scenes"));
+    connect(m_paletteManagerAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotPaletteManager()));
+
     /* Edit actions */
     m_cloneAction = new QAction(QIcon(":/editcopy.png"),
                                 tr("&Clone"), this);
@@ -310,6 +322,8 @@ void FunctionManager::initToolbar()
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_autostartAction);
     m_toolbar->addAction(m_wizardAction);
+    m_toolbar->addSeparator();
+    m_toolbar->addAction(m_paletteManagerAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_cloneAction);
     m_toolbar->addSeparator();
@@ -638,6 +652,12 @@ void FunctionManager::slotWizard()
         m_tree->updateTree();
 }
 
+void FunctionManager::slotPaletteManager()
+{
+    PaletteManager pm(m_doc, this);
+    pm.exec();
+}
+
 void FunctionManager::slotClone()
 {
     QListIterator <QTreeWidgetItem*> it(m_tree->selectedItems());
@@ -916,6 +936,7 @@ void FunctionManager::slotTreeContextMenuRequested()
     menu.addAction(m_addFolderAction);
     menu.addSeparator();
     menu.addAction(m_wizardAction);
+    menu.addAction(m_paletteManagerAction);
 
     updateActionStatus();
 

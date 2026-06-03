@@ -54,6 +54,10 @@
 #include "show.h"
 #include "doc.h"
 #include "bus.h"
+#include "qlcpalette.h"
+#include "qlcphysical.h"
+#include "fixturegroup.h"
+#include "programmercontroller.h"
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
  #include "audiocapture_qt5.h"
@@ -98,6 +102,12 @@ Doc::Doc(QObject* parent, int universes)
 
     connect(&m_autosaveTimer, SIGNAL(timeout()), this, SIGNAL(needAutosave()));
 
+    // All programmer-mode state and logic live in a fork-owned
+    // controller (QObject child of Doc, auto-deleted). Doc keeps thin
+    // forwarder methods so no call sites / connect() sites elsewhere
+    // change. Created after m_masterTimer so it can wire to it.
+    m_programmer = new ProgrammerController(this);
+
     // Track running Scenes for programmer edit-routing (LTP).
     // DirectConnection: the signal is emitted from MasterTimer's worker
     // thread and the read side (VCSlider::writeDMXParameter →
@@ -107,11 +117,24 @@ Doc::Doc(QObject* parent, int universes)
     // chaser/collection step would see a stale-empty list and route
     // to the new-scene bucket instead of the running scenes.
     connect(m_masterTimer, SIGNAL(functionStarted(quint32)),
-            this, SLOT(slotProgrammerFunctionStarted(quint32)),
+            m_programmer, SLOT(slotProgrammerFunctionStarted(quint32)),
             Qt::DirectConnection);
     connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
-            this, SLOT(slotProgrammerFunctionStopped(quint32)),
+            m_programmer, SLOT(slotProgrammerFunctionStopped(quint32)),
             Qt::DirectConnection);
+
+    // Relay the controller's signals as Doc's own signals so external
+    // code keeps connecting to `doc` unchanged.
+    connect(m_programmer, &ProgrammerController::programmerSelectionChanged,
+            this, &Doc::programmerSelectionChanged);
+    connect(m_programmer, &ProgrammerController::programmerDirtyChanged,
+            this, &Doc::programmerDirtyChanged);
+    connect(m_programmer, &ProgrammerController::padModeChanged,
+            this, &Doc::padModeChanged);
+    connect(m_programmer, &ProgrammerController::programmerSubSelectionChanged,
+            this, &Doc::programmerSubSelectionChanged);
+    connect(m_programmer, &ProgrammerController::showLockedChanged,
+            this, &Doc::showLockedChanged);
 
     // Programmer sub-selection (pad-grid fixture refinement) is
     // scoped to the current programmer selection — clear it on every
@@ -119,8 +142,6 @@ Doc::Doc(QObject* parent, int universes)
     // can't silently filter writes against a different group.
     connect(this, &Doc::programmerSelectionChanged,
             this, &Doc::clearProgrammerSubSelection);
-
-    m_programmerFlasher = new ProgrammerFlasher(this);
 
     m_captureManager = new CaptureManager(this, this);
 }
@@ -224,12 +245,7 @@ void Doc::clearContents()
     m_addresses.clear();
     m_loadStatus = Cleared;
 
-    if (!m_programmerSelection.isEmpty())
-    {
-        m_programmerSelection.clear();
-        m_programmerSelectionLookup.clear();
-        emit programmerSelectionChanged();
-    }
+    m_programmer->clearProgrammerSelection();
 
     emit cleared();
 }
@@ -324,123 +340,52 @@ CaptureManager* Doc::captureManager() const
 
 QList<quint32> Doc::programmerSelection() const
 {
-    return m_programmerSelection;
+    return m_programmer->programmerSelection();
 }
 
 void Doc::setProgrammerSelection(const QList<quint32>& fixtureIds)
 {
-    QList<quint32> deduped;
-    QSet<quint32> seen;
-    for (quint32 fid : fixtureIds)
-    {
-        if (seen.contains(fid))
-            continue;
-        deduped.append(fid);
-        seen.insert(fid);
-    }
-    if (deduped == m_programmerSelection)
-        return;
-    m_programmerSelection = deduped;
-    m_programmerSelectionLookup = seen;
-    emit programmerSelectionChanged();
+    m_programmer->setProgrammerSelection(fixtureIds);
 }
 
 void Doc::addToProgrammerSelection(const QList<quint32>& fixtureIds)
 {
-    bool changed = false;
-    for (quint32 fid : fixtureIds)
-    {
-        if (m_programmerSelectionLookup.contains(fid))
-            continue;
-        m_programmerSelection.append(fid);
-        m_programmerSelectionLookup.insert(fid);
-        changed = true;
-    }
-    if (changed)
-        emit programmerSelectionChanged();
+    m_programmer->addToProgrammerSelection(fixtureIds);
 }
 
 void Doc::removeFromProgrammerSelection(const QList<quint32>& fixtureIds)
 {
-    bool changed = false;
-    for (quint32 fid : fixtureIds)
-    {
-        if (!m_programmerSelectionLookup.contains(fid))
-            continue;
-        m_programmerSelection.removeAll(fid);
-        m_programmerSelectionLookup.remove(fid);
-        changed = true;
-    }
-    if (changed)
-        emit programmerSelectionChanged();
+    m_programmer->removeFromProgrammerSelection(fixtureIds);
 }
 
 void Doc::toggleInProgrammerSelection(const QList<quint32>& fixtureIds)
 {
-    bool changed = false;
-    for (quint32 fid : fixtureIds)
-    {
-        if (m_programmerSelectionLookup.contains(fid))
-        {
-            m_programmerSelection.removeAll(fid);
-            m_programmerSelectionLookup.remove(fid);
-        }
-        else
-        {
-            m_programmerSelection.append(fid);
-            m_programmerSelectionLookup.insert(fid);
-        }
-        changed = true;
-    }
-    if (changed)
-        emit programmerSelectionChanged();
+    m_programmer->toggleInProgrammerSelection(fixtureIds);
 }
 
 void Doc::clearProgrammerSelection()
 {
-    if (m_programmerSelection.isEmpty())
-        return;
-    m_programmerSelection.clear();
-    m_programmerSelectionLookup.clear();
-    emit programmerSelectionChanged();
+    m_programmer->clearProgrammerSelection();
 }
 
 bool Doc::isInProgrammerSelection(quint32 fixtureId) const
 {
-    return m_programmerSelectionLookup.contains(fixtureId);
+    return m_programmer->isInProgrammerSelection(fixtureId);
 }
 
 bool Doc::allInProgrammerSelection(const QList<quint32>& fixtureIds) const
 {
-    if (fixtureIds.isEmpty())
-        return false;
-    for (quint32 fid : fixtureIds)
-    {
-        if (!m_programmerSelectionLookup.contains(fid))
-            return false;
-    }
-    return true;
+    return m_programmer->allInProgrammerSelection(fixtureIds);
 }
 
 QColor Doc::programmerColor() const
 {
-    return m_programmerColor;
+    return m_programmer->programmerColor();
 }
 
 void Doc::setProgrammerColorComponent(int qlcPrimaryColour, uchar value)
 {
-    if (!m_programmerColor.isValid())
-        m_programmerColor = QColor(0, 0, 0, 0);
-    switch (qlcPrimaryColour)
-    {
-    case QLCChannel::Red:   m_programmerColor.setRed(value); break;
-    case QLCChannel::Green: m_programmerColor.setGreen(value); break;
-    case QLCChannel::Blue:  m_programmerColor.setBlue(value); break;
-    // White rides in alpha — VCSlider's wheel-match consumer uses RGB
-    // only, but stashing W here lets a future white-aware match use it.
-    case QLCChannel::White: m_programmerColor.setAlpha(value); break;
-    default: break;
-    }
+    m_programmer->setProgrammerColorComponent(qlcPrimaryColour, value);
 }
 
 /*****************************************************************************
@@ -449,577 +394,106 @@ void Doc::setProgrammerColorComponent(int qlcPrimaryColour, uchar value)
 
 void Doc::setProgrammerValue(quint32 fixtureId, quint32 channel, uchar value)
 {
-    const bool wasEmpty = m_programmerValues.isEmpty();
-    m_programmerValues[fixtureId][channel] = value;
-    if (wasEmpty)
-        emit programmerDirtyChanged(true);
+    m_programmer->setProgrammerValue(fixtureId, channel, value);
 }
 
 void Doc::clearProgrammerValues()
 {
-    if (!isProgrammerDirty())
-        return;
-    // Caller (Save) has persisted everything elsewhere — drop the
-    // values map AND the in-memory edited-scenes tracking. Snapshots
-    // are no longer needed because the post-save scenes ARE the new
-    // baseline.
-    m_programmerValues.clear();
-    m_editedScenes.clear();
-    m_sceneSnapshots.clear();
-    emit programmerDirtyChanged(false);
+    m_programmer->clearProgrammerValues();
 }
 
 bool Doc::isProgrammerDirty() const
 {
-    return !m_programmerValues.isEmpty() || !m_editedScenes.isEmpty();
+    return m_programmer->isProgrammerDirty();
 }
 
 quint32 Doc::saveProgrammerAsScene(const QString &name)
 {
-    if (m_programmerValues.isEmpty())
-        return Function::invalidId();
-
-    Scene *scene = new Scene(this);
-    scene->setName(name.isEmpty() ? tr("Programmer scene") : name);
-
-    for (auto fixIt = m_programmerValues.constBegin();
-         fixIt != m_programmerValues.constEnd(); ++fixIt)
-    {
-        const quint32 fid = fixIt.key();
-        const QHash<quint32, uchar> &channels = fixIt.value();
-        for (auto chIt = channels.constBegin();
-             chIt != channels.constEnd(); ++chIt)
-        {
-            scene->setValue(fid, chIt.key(), chIt.value());
-        }
-    }
-
-    if (!addFunction(scene))
-    {
-        delete scene;
-        return Function::invalidId();
-    }
-    setModified();
-    return scene->id();
-}
-
-void Doc::slotProgrammerFunctionStarted(quint32 fid)
-{
-    Function *f = function(fid);
-    if (f == NULL)
-        return;
-    if (f->type() == Function::SceneType)
-    {
-        // Re-running an already-tracked scene: bump it to most-recent.
-        m_runningScenes.removeAll(fid);
-        m_runningScenes.append(fid);
-    }
-    else if (f->type() == Function::ChaserType)
-    {
-        m_runningChasers.removeAll(fid);
-        m_runningChasers.append(fid);
-    }
-    else if (f->type() == Function::CollectionType)
-    {
-        m_runningCollections.removeAll(fid);
-        m_runningCollections.append(fid);
-    }
-}
-
-void Doc::slotProgrammerFunctionStopped(quint32 fid)
-{
-    m_runningScenes.removeAll(fid);
-    m_runningChasers.removeAll(fid);
-    m_runningCollections.removeAll(fid);
+    return m_programmer->saveProgrammerAsScene(name);
 }
 
 quint32 Doc::routeProgrammerEdit(quint32 fid, quint32 ch, uchar value)
 {
-    // LTP: walk newest → oldest and pick the first running Scene that
-    // already has this (fid, ch) set.
-    for (int i = m_runningScenes.size() - 1; i >= 0; --i)
-    {
-        const quint32 sid = m_runningScenes.at(i);
-        Function *f = function(sid);
-        if (f == NULL || f->type() != Function::SceneType)
-            continue;
-        Scene *scene = qobject_cast<Scene*>(f);
-        if (scene == NULL)
-            continue;
-        SceneValue probe(fid, ch);
-        if (!scene->checkValue(probe))
-            continue;
+    return m_programmer->routeProgrammerEdit(fid, ch, value);
+}
 
-        // First time this scene becomes edited this round: snapshot
-        // its current values so Revert can restore them.
-        if (!m_editedScenes.contains(sid))
-        {
-            m_sceneSnapshots.insert(sid, scene->values());
-            const bool wasClean = !isProgrammerDirty();
-            m_editedScenes.insert(sid);
-            if (wasClean)
-                emit programmerDirtyChanged(true);
-        }
-        // checkHTP=false → the running fader REPLACES the channel
-        // value with ours rather than HTP-stacking. Without this,
-        // intensity-grouped channels (R/G/B/W/Dimmer) ignore lowered
-        // values — the existing higher target wins HTP, the user
-        // sees their slider tweak briefly then revert on the next tick.
-        scene->setValue(SceneValue(fid, ch, value),
-                        /*blind=*/false, /*checkHTP=*/false);
-        return sid;
-    }
-    return Function::invalidId();
+int Doc::rerouteProgrammerValues()
+{
+    return m_programmer->rerouteProgrammerValues();
 }
 
 QSet<quint32> Doc::editedSceneIds() const
 {
-    return m_editedScenes;
+    return m_programmer->editedSceneIds();
 }
 
 bool Doc::hasProgrammerValues() const
 {
-    return !m_programmerValues.isEmpty();
+    return m_programmer->hasProgrammerValues();
 }
 
 QHash<quint32, QHash<quint32, uchar>> Doc::programmerValues() const
 {
-    return m_programmerValues;
+    return m_programmer->programmerValues();
 }
-
-namespace {
-
-/** Classify a fixture's channel into the smart-save category that
-    determines which folder the resulting scene lands in. */
-Doc::SaveCategory categorizeChannel(const QLCChannel *qch)
-{
-    if (qch == NULL)
-        return Doc::SaveCatUnknown;
-    switch (qch->group())
-    {
-    case QLCChannel::Pan:
-    case QLCChannel::Tilt:
-        return Doc::SaveCatPosition;
-    case QLCChannel::Colour:
-        return Doc::SaveCatColor;
-    case QLCChannel::Intensity:
-        return (qch->colour() == QLCChannel::NoColour)
-                ? Doc::SaveCatIntensity
-                : Doc::SaveCatColor;
-    case QLCChannel::Gobo:
-    case QLCChannel::Speed:
-    case QLCChannel::Shutter:
-    case QLCChannel::Prism:
-    case QLCChannel::Beam:
-    case QLCChannel::Effect:
-    case QLCChannel::Maintenance:
-        return Doc::SaveCatSpecial;
-    default:
-        return Doc::SaveCatUnknown;
-    }
-}
-
-QString categoryFolderName(Doc::SaveCategory cat)
-{
-    switch (cat)
-    {
-    case Doc::SaveCatPosition:  return QStringLiteral("Positions");
-    case Doc::SaveCatColor:     return QStringLiteral("Colors");
-    case Doc::SaveCatSpecial:   return QStringLiteral("Specials");
-    case Doc::SaveCatIntensity: return QStringLiteral("Intensity");
-    default:                    return QStringLiteral("Programmer");
-    }
-}
-
-/** Best-effort named-color guess from RGBW values. The Save dialog
-    shows this as the default scene name; the user can rename. */
-QString guessColorName(int r, int g, int b, int w)
-{
-    // Treat any value >= 32 as "on enough to count" for category checks.
-    const bool anyRGB = (r >= 32 || g >= 32 || b >= 32);
-    if (!anyRGB && w >= 32)
-        return QStringLiteral("White");
-    if (!anyRGB && w == 0)
-        return QStringLiteral("Black");
-
-    struct NamedColor { const char *name; int r, g, b; };
-    static const NamedColor palette[] = {
-        {"Red",        255,   0,   0},
-        {"Orange",     255, 128,   0},
-        {"Yellow",     255, 255,   0},
-        {"Lime",       128, 255,   0},
-        {"Green",        0, 255,   0},
-        {"Teal",         0, 255, 128},
-        {"Cyan",         0, 255, 255},
-        {"Sky",          0, 128, 255},
-        {"Blue",         0,   0, 255},
-        {"Indigo",     128,   0, 255},
-        {"Magenta",    255,   0, 255},
-        {"Pink",       255,   0, 128},
-        {"White",      255, 255, 255},
-        {"Pale",       180, 180, 180},
-        {"Amber",      255, 160,  40},
-    };
-    int best = 0;
-    int bestDist = INT_MAX;
-    for (size_t i = 0; i < sizeof(palette) / sizeof(palette[0]); ++i)
-    {
-        const int dr = palette[i].r - r;
-        const int dg = palette[i].g - g;
-        const int db = palette[i].b - b;
-        const int d = dr * dr + dg * dg + db * db;
-        if (d < bestDist)
-        {
-            bestDist = d;
-            best = int(i);
-        }
-    }
-    QString base = QString::fromLatin1(palette[best].name);
-    if (w >= 96 && base != QStringLiteral("White"))
-        base += QStringLiteral(" + W");
-    return base;
-}
-
-/** Read a fixture's color-wheel capability name at the given DMX
-    value, if the fixture has one. Returns empty if not applicable. */
-QString readColorWheelName(Fixture *fxi, const QHash<quint32, uchar> &values)
-{
-    if (fxi == NULL || fxi->fixtureMode() == NULL)
-        return QString();
-    quint32 wheelCh = fxi->fixtureMode()->channelNumber(
-        QLCChannel::Colour, QLCChannel::MSB);
-    if (wheelCh == QLCChannel::invalid())
-        return QString();
-    if (!values.contains(wheelCh))
-        return QString();
-    const QLCChannel *qch = fxi->channel(wheelCh);
-    if (qch == NULL)
-        return QString();
-    const uchar v = values.value(wheelCh);
-    for (QLCCapability *cap : qch->capabilities())
-    {
-        if (cap == NULL)
-            continue;
-        if (v >= cap->min() && v <= cap->max())
-            return cap->name();
-    }
-    return QString();
-}
-
-} // anonymous namespace
 
 QList<Doc::SaveBucket> Doc::proposedSaveBuckets() const
 {
-    QList<SaveBucket> out;
-    if (m_programmerValues.isEmpty())
-        return out;
+    return m_programmer->proposedSaveBuckets();
+}
 
-    // Collect (fixtureGroup, category) → bucket
-    QHash<QPair<quint32, SaveCategory>, SaveBucket> map;
-
-    for (auto fxIt = m_programmerValues.constBegin();
-         fxIt != m_programmerValues.constEnd(); ++fxIt)
-    {
-        const quint32 fid = fxIt.key();
-        Fixture *fxi = fixture(fid);
-        if (fxi == NULL)
-            continue;
-
-        // Pick the smallest fixture group that contains this fixture
-        // (most specific). Falls back to invalidId if the fixture
-        // isn't in any group.
-        quint32 fgId = Function::invalidId();
-        QString fgName;
-        int bestSize = INT_MAX;
-        QMapIterator<quint32, FixtureGroup*> grpIt(m_fixtureGroups);
-        while (grpIt.hasNext())
-        {
-            grpIt.next();
-            FixtureGroup *g = grpIt.value();
-            if (g == NULL)
-                continue;
-            const QList<quint32> flist = g->fixtureList();
-            if (!flist.contains(fid))
-                continue;
-            if (flist.size() < bestSize)
-            {
-                bestSize = flist.size();
-                fgId = g->id();
-                fgName = g->name();
-            }
-        }
-        if (fgName.isEmpty())
-            fgName = QStringLiteral("Custom");
-
-        for (auto chIt = fxIt.value().constBegin();
-             chIt != fxIt.value().constEnd(); ++chIt)
-        {
-            const quint32 ch = chIt.key();
-            const uchar val = chIt.value();
-            const SaveCategory cat = categorizeChannel(fxi->channel(ch));
-
-            SaveBucket &b = map[qMakePair(fgId, cat)];
-            b.category = cat;
-            b.fixtureGroupId = fgId;
-            b.groupName = fgName;
-            b.values[fid][ch] = val;
-        }
-    }
-
-    // Generate default name + path per bucket.
-    for (auto it = map.begin(); it != map.end(); ++it)
-    {
-        SaveBucket &b = it.value();
-        b.defaultPath = QStringLiteral("%1/%2")
-                            .arg(categoryFolderName(b.category))
-                            .arg(b.groupName);
-
-        switch (b.category)
-        {
-        case SaveCatColor:
-        {
-            // Aggregate RGBW across the bucket's fixtures (avg).
-            int rsum = 0, gsum = 0, bsum = 0, wsum = 0;
-            int rN = 0, gN = 0, bN = 0, wN = 0;
-            QString wheelName;
-            for (auto fxIt2 = b.values.constBegin();
-                 fxIt2 != b.values.constEnd(); ++fxIt2)
-            {
-                Fixture *fxi = fixture(fxIt2.key());
-                if (fxi == NULL)
-                    continue;
-                if (wheelName.isEmpty())
-                    wheelName = readColorWheelName(fxi, fxIt2.value());
-                for (auto chIt = fxIt2.value().constBegin();
-                     chIt != fxIt2.value().constEnd(); ++chIt)
-                {
-                    const QLCChannel *qch = fxi->channel(chIt.key());
-                    if (qch == NULL)
-                        continue;
-                    if (qch->group() != QLCChannel::Intensity)
-                        continue;
-                    switch (qch->colour())
-                    {
-                    case QLCChannel::Red:   rsum += chIt.value(); ++rN; break;
-                    case QLCChannel::Green: gsum += chIt.value(); ++gN; break;
-                    case QLCChannel::Blue:  bsum += chIt.value(); ++bN; break;
-                    case QLCChannel::White: wsum += chIt.value(); ++wN; break;
-                    default: break;
-                    }
-                }
-            }
-            int r = rN ? rsum / rN : 0;
-            int g = gN ? gsum / gN : 0;
-            int blu = bN ? bsum / bN : 0;
-            int w = wN ? wsum / wN : 0;
-            QString colorName = guessColorName(r, g, blu, w);
-            if (rN == 0 && gN == 0 && bN == 0 && !wheelName.isEmpty())
-                colorName = wheelName;
-            b.defaultName = colorName;
-        }
-        break;
-
-        case SaveCatPosition:
-            b.defaultName = QStringLiteral("Pos");
-            break;
-
-        case SaveCatIntensity:
-        {
-            // Average dimmer to derive an "Int 75%" style label.
-            int sum = 0, n = 0;
-            for (auto fxIt2 = b.values.constBegin();
-                 fxIt2 != b.values.constEnd(); ++fxIt2)
-            {
-                for (auto chIt = fxIt2.value().constBegin();
-                     chIt != fxIt2.value().constEnd(); ++chIt)
-                {
-                    sum += chIt.value();
-                    ++n;
-                }
-            }
-            const int pct = n ? int((sum / n) * 100.0 / 255.0 + 0.5) : 0;
-            b.defaultName = QStringLiteral("Int %1%").arg(pct);
-        }
-        break;
-
-        case SaveCatSpecial:
-            b.defaultName = QStringLiteral("Special");
-            break;
-
-        default:
-            b.defaultName = QStringLiteral("Programmer");
-            break;
-        }
-
-        // Append a number if a function with that name already exists.
-        QString candidate = b.defaultName;
-        int suffix = 2;
-        while (true)
-        {
-            bool collision = false;
-            for (Function *fn : m_functions.values())
-            {
-                if (fn != NULL && fn->name() == candidate
-                    && fn->path() == b.defaultPath)
-                {
-                    collision = true;
-                    break;
-                }
-            }
-            if (!collision)
-                break;
-            candidate = QStringLiteral("%1 %2").arg(b.defaultName).arg(suffix++);
-        }
-        b.defaultName = candidate;
-
-        out.append(b);
-    }
-
-    // Stable order: Position, Color, Special, Intensity by group name.
-    std::sort(out.begin(), out.end(),
-              [](const SaveBucket &a, const SaveBucket &c) {
-                  if (a.category != c.category)
-                      return a.category < c.category;
-                  return a.groupName < c.groupName;
-              });
-    return out;
+QList<Doc::SaveBucket> Doc::splitBucketByGroup(const SaveBucket &bucket) const
+{
+    return m_programmer->splitBucketByGroup(bucket);
 }
 
 void Doc::stepCurrentChaser(int direction)
 {
-    if (m_runningChasers.isEmpty() || direction == 0)
-        return;
-    const quint32 cid = m_runningChasers.last();
-    Chaser *chaser = qobject_cast<Chaser*>(function(cid));
-    if (chaser == NULL)
-        return;
-    ChaserAction action;
-    action.m_action = (direction > 0) ? ChaserNextStep : ChaserPreviousStep;
-    chaser->setAction(action);
+    m_programmer->stepCurrentChaser(direction);
 }
 
 quint32 Doc::findMatchingScene(
     const QHash<quint32, QHash<quint32, uchar>> &values,
     quint32 excludeSceneId) const
 {
-    if (values.isEmpty())
-        return Function::invalidId();
-
-    // Flatten our values into a sorted list for quick exact-compare.
-    auto flatten = [](const QHash<quint32, QHash<quint32, uchar>> &v) {
-        QList<QPair<QPair<quint32, quint32>, uchar>> out;
-        for (auto fxIt = v.constBegin(); fxIt != v.constEnd(); ++fxIt)
-            for (auto chIt = fxIt.value().constBegin();
-                 chIt != fxIt.value().constEnd(); ++chIt)
-                out.append({{fxIt.key(), chIt.key()}, chIt.value()});
-        std::sort(out.begin(), out.end());
-        return out;
-    };
-    const auto target = flatten(values);
-
-    QMapIterator<quint32, Function*> it(m_functions);
-    while (it.hasNext())
-    {
-        it.next();
-        Function *fn = it.value();
-        if (fn == NULL || fn->type() != Function::SceneType)
-            continue;
-        if (fn->id() == excludeSceneId)
-            continue;
-        Scene *scene = qobject_cast<Scene*>(fn);
-        if (scene == NULL)
-            continue;
-
-        QHash<quint32, QHash<quint32, uchar>> sceneVals;
-        for (const SceneValue &sv : scene->values())
-            sceneVals[sv.fxi][sv.channel] = sv.value;
-
-        if (flatten(sceneVals) == target)
-            return scene->id();
-    }
-    return Function::invalidId();
+    return m_programmer->findMatchingScene(values, excludeSceneId);
 }
 
 QList<quint32> Doc::collectionsContaining(quint32 sceneId) const
 {
-    QList<quint32> out;
-    QMapIterator<quint32, Function*> it(m_functions);
-    while (it.hasNext())
-    {
-        it.next();
-        Function *fn = it.value();
-        if (fn == NULL || fn->type() != Function::CollectionType)
-            continue;
-        Collection *coll = qobject_cast<Collection*>(fn);
-        if (coll == NULL)
-            continue;
-        if (coll->functions().contains(sceneId))
-            out.append(coll->id());
-    }
-    return out;
+    return m_programmer->collectionsContaining(sceneId);
 }
 
 bool Doc::replaceSceneInCollection(quint32 collectionId,
                                    quint32 oldSceneId,
                                    quint32 newSceneId)
 {
-    Collection *coll = qobject_cast<Collection*>(function(collectionId));
-    if (coll == NULL)
-        return false;
-    const QList<quint32> children = coll->functions();
-    const int idx = children.indexOf(oldSceneId);
-    if (idx < 0)
-        return false;
-    coll->removeFunction(oldSceneId);
-    coll->addFunction(newSceneId, idx);
-    setModified();
-    return true;
+    return m_programmer->replaceSceneInCollection(collectionId, oldSceneId, newSceneId);
 }
 
 void Doc::revertSceneFromSnapshot(quint32 sceneId)
 {
-    if (!m_sceneSnapshots.contains(sceneId))
-        return;
-    Scene *scene = qobject_cast<Scene*>(function(sceneId));
-    if (scene == NULL)
-        return;
-    scene->clear();
-    for (const SceneValue &sv : m_sceneSnapshots.value(sceneId))
-    {
-        scene->setValue(SceneValue(sv.fxi, sv.channel, sv.value),
-                        /*blind=*/false, /*checkHTP=*/false);
-    }
-    scene->resetRuntime();
-    m_sceneSnapshots.remove(sceneId);
-    m_editedScenes.remove(sceneId);
-    if (!isProgrammerDirty())
-        emit programmerDirtyChanged(false);
+    m_programmer->revertSceneFromSnapshot(sceneId);
 }
 
 quint32 Doc::singleRunningCollection() const
 {
-    if (m_runningCollections.size() == 1)
-        return m_runningCollections.first();
-    return Function::invalidId();
+    return m_programmer->singleRunningCollection();
 }
 
 void Doc::flashFixture(quint32 fixtureId, int durationMs)
 {
-    if (m_programmerFlasher != nullptr)
-        m_programmerFlasher->flashFixture(fixtureId, durationMs);
+    m_programmer->flashFixture(fixtureId, durationMs);
 }
 
 bool Doc::isShowLocked() const
 {
-    return m_showLocked;
+    return m_programmer->isShowLocked();
 }
 
 void Doc::setShowLocked(bool locked)
 {
-    if (m_showLocked == locked)
-        return;
-    m_showLocked = locked;
-    emit showLockedChanged(locked);
+    m_programmer->setShowLocked(locked);
 }
 
 QString Doc::nextDuplicateName(const Function *src) const
@@ -1076,125 +550,53 @@ QString Doc::nextDuplicateName(const Function *src) const
 quint32 Doc::saveBucketAsScene(const SaveBucket &bucket,
                                const QString &name, const QString &path)
 {
-    if (bucket.values.isEmpty())
-        return Function::invalidId();
-    Scene *scene = new Scene(this);
-    scene->setName(name.isEmpty() ? bucket.defaultName : name);
-    if (!path.isEmpty())
-        scene->setPath(path);
-    for (auto fxIt = bucket.values.constBegin();
-         fxIt != bucket.values.constEnd(); ++fxIt)
-    {
-        for (auto chIt = fxIt.value().constBegin();
-             chIt != fxIt.value().constEnd(); ++chIt)
-        {
-            scene->setValue(fxIt.key(), chIt.key(), chIt.value());
-        }
-    }
-    if (!addFunction(scene))
-    {
-        delete scene;
-        return Function::invalidId();
-    }
-    setModified();
-    return scene->id();
+    return m_programmer->saveBucketAsScene(bucket, name, path);
+}
+
+quint32 Doc::saveBucketAsGroupScene(const SaveBucket &bucket,
+                                    const QString &name, const QString &path)
+{
+    return m_programmer->saveBucketAsGroupScene(bucket, name, path);
 }
 
 Doc::PadMode Doc::padMode() const
 {
-    return m_padMode;
+    return m_programmer->padMode();
 }
 
 void Doc::setPadMode(PadMode mode)
 {
-    if (m_padMode == mode)
-        return;
-    m_padMode = mode;
-    emit padModeChanged(mode);
+    m_programmer->setPadMode(mode);
 }
 
 quint32 Doc::activeProgrammerGroup() const
 {
-    if (m_programmerSelection.isEmpty())
-        return Function::invalidId();
-    QSet<quint32> selSet(m_programmerSelection.begin(),
-                         m_programmerSelection.end());
-    QMapIterator<quint32, FixtureGroup*> it(m_fixtureGroups);
-    while (it.hasNext())
-    {
-        it.next();
-        FixtureGroup *g = it.value();
-        if (g == NULL)
-            continue;
-        const QList<quint32> flist = g->fixtureList();
-        if (flist.size() != selSet.size())
-            continue;
-        QSet<quint32> gSet(flist.begin(), flist.end());
-        if (gSet == selSet)
-            return g->id();
-    }
-    return Function::invalidId();
+    return m_programmer->activeProgrammerGroup();
 }
 
 QSet<quint32> Doc::programmerSubSelection() const
 {
-    return m_programmerSubSelection;
+    return m_programmer->programmerSubSelection();
 }
 
 bool Doc::isInProgrammerSubSelection(quint32 fid) const
 {
-    return m_programmerSubSelection.contains(fid);
+    return m_programmer->isInProgrammerSubSelection(fid);
 }
 
 void Doc::toggleInProgrammerSubSelection(quint32 fid)
 {
-    if (m_programmerSubSelection.contains(fid))
-        m_programmerSubSelection.remove(fid);
-    else
-        m_programmerSubSelection.insert(fid);
-    emit programmerSubSelectionChanged();
+    m_programmer->toggleInProgrammerSubSelection(fid);
 }
 
 void Doc::clearProgrammerSubSelection()
 {
-    if (m_programmerSubSelection.isEmpty())
-        return;
-    m_programmerSubSelection.clear();
-    emit programmerSubSelectionChanged();
+    m_programmer->clearProgrammerSubSelection();
 }
 
 void Doc::revertProgrammer()
 {
-    if (!isProgrammerDirty())
-        return;
-
-    // Restore each edited scene from its pre-edit snapshot.
-    for (const quint32 sid : qAsConst(m_editedScenes))
-    {
-        Scene *scene = qobject_cast<Scene*>(function(sid));
-        if (scene == NULL)
-            continue;
-        scene->clear();
-        const QList<SceneValue> &snap = m_sceneSnapshots.value(sid);
-        for (const SceneValue &sv : snap)
-        {
-            // checkHTP=false → replace semantics. HTP would otherwise
-            // refuse to lower an intensity value back to its pre-edit
-            // level if the post-edit one is higher.
-            scene->setValue(SceneValue(sv.fxi, sv.channel, sv.value),
-                            /*blind=*/false, /*checkHTP=*/false);
-        }
-        // Drop the running faders so the next tick re-initializes
-        // from the now-restored m_values. Without this, FadeChannels
-        // added during the edit (channels not in the original scene)
-        // would keep asserting their post-edit values.
-        scene->resetRuntime();
-    }
-
-    m_editedScenes.clear();
-    m_sceneSnapshots.clear();
-    m_programmerValues.clear();
-    emit programmerDirtyChanged(false);
+    m_programmer->revertProgrammer();
 }
 
 QSharedPointer<AudioCapture> Doc::audioInputCapture() const
@@ -1440,12 +842,7 @@ bool Doc::deleteFixture(quint32 id)
         if (m_monitorProps != NULL)
             m_monitorProps->removeFixture(id);
 
-        if (m_programmerSelectionLookup.contains(id))
-        {
-            m_programmerSelection.removeAll(id);
-            m_programmerSelectionLookup.remove(id);
-            emit programmerSelectionChanged();
-        }
+        m_programmer->removeFromProgrammerSelection(QList<quint32>() << id);
 
         emit fixtureRemoved(id);
         setModified();

@@ -48,6 +48,7 @@ class AudioPluginCache;
 class MonitorProperties;
 class CaptureManager;
 class ProgrammerFlasher;
+class ProgrammerController;
 
 /** @addtogroup engine Engine
  * @{
@@ -353,10 +354,20 @@ public:
         QHash<quint32, QHash<quint32, uchar>> values;
     };
 
-    /** Group the current programmer values by (fixture-group, category)
-        and return a Save proposal per bucket. Read-only — does not
-        modify Doc state. */
+    /** Group the current programmer values by category and return a
+        Save proposal per bucket. Read-only — does not modify Doc state.
+        Default grouping is "most inclusive": per category, all the
+        edited fixtures collapse into the single largest fixture group
+        that contains every one of them. If no single group covers them
+        all, they fall back to one bucket per smallest-containing-group.
+        The UI can split an inclusive bucket via splitBucketByGroup(). */
     QList<SaveBucket> proposedSaveBuckets() const;
+
+    /** Split one (typically inclusive) bucket into sub-buckets, one per
+        smallest fixture group containing each of the bucket's fixtures.
+        Lets the Save dialog offer "save per contributing group" instead
+        of a single inclusive scene. Names/paths are regenerated. */
+    QList<SaveBucket> splitBucketByGroup(const SaveBucket &bucket) const;
 
     /** Persist a SaveBucket as a new Scene with the given (possibly
         user-edited) name and path. Returns the new function id, or
@@ -364,6 +375,19 @@ public:
     quint32 saveBucketAsScene(const SaveBucket &bucket,
                               const QString &name,
                               const QString &path);
+
+    /** Persist a SaveBucket as a *dynamic group Scene*: builds a
+        QLCPalette from the bucket (type derived from its category) and
+        a Scene that references the palette + the bucket's fixture group,
+        so the look follows group membership at run time. Channels the
+        palette can't drive (e.g. a colour-wheel fixture under a Color
+        palette) are baked per-fixture into the same Scene as a fallback.
+        Requires bucket.fixtureGroupId to be a real group. Returns the
+        new function id, or invalidId on failure (caller may then fall
+        back to the static saveBucketAsScene). */
+    quint32 saveBucketAsGroupScene(const SaveBucket &bucket,
+                                   const QString &name,
+                                   const QString &path);
 
     /**
      * Generate a unique name for a copy of @p src by bumping the
@@ -445,6 +469,16 @@ public:
      */
     quint32 routeProgrammerEdit(quint32 fid, quint32 ch, uchar value);
 
+    /** Re-attempt routing for every raw programmer value against the
+        currently-running scenes/chasers/collections. Values captured
+        while nothing owned them (e.g. the user edited a look, then
+        started the chase that plays it) fold into the now-running
+        scene and drop out of the raw value map. Call this just before
+        building the Save dialog so "edit a look then start its chase"
+        offers Update rather than only Create-new. Returns the number
+        of values that got routed. */
+    int rerouteProgrammerValues();
+
     /** Read-only view of scenes with unsaved programmer edits. */
     QSet<quint32> editedSceneIds() const;
 
@@ -514,39 +548,14 @@ signals:
     /** Emitted whenever programmerSubSelection() changes. */
     void programmerSubSelectionChanged();
 
-private slots:
-    /** Maintain m_runningScenes as functions start / stop. */
-    void slotProgrammerFunctionStarted(quint32 fid);
-    void slotProgrammerFunctionStopped(quint32 fid);
+public:
+    /** Fork-owned controller holding all programmer-mode state and
+        logic. Doc's programmer methods above are thin forwarders to it.
+        QObject child of Doc (auto-deleted). */
+    ProgrammerController *programmer() const { return m_programmer; }
 
 private:
-    QList<quint32> m_programmerSelection;
-    QSet<quint32> m_programmerSelectionLookup;
-    QColor m_programmerColor;
-    QHash<quint32, QHash<quint32, uchar>> m_programmerValues;
-    /** Most-recently-started running Scene fids, oldest → newest.
-        routeProgrammerEdit walks this in reverse for LTP routing. */
-    QList<quint32> m_runningScenes;
-    /** Most-recently-started running Chaser fids, oldest → newest.
-        stepCurrentChaser drives the last entry. */
-    QList<quint32> m_runningChasers;
-    /** Most-recently-started running Collection fids. Used for the
-        Save dialog's "add to running collection" sugar. */
-    QList<quint32> m_runningCollections;
-    /** Owns the per-tick flasher DMXSource for fixture flash-to-identify. */
-    ProgrammerFlasher *m_programmerFlasher = nullptr;
-    /** Show-mode safety lock. */
-    bool m_showLocked = false;
-    /** Scenes whose values have been mutated by the programmer
-        since the last Save / Revert. */
-    QSet<quint32> m_editedScenes;
-    /** Pre-edit value snapshot per scene: captured the first time a
-        scene becomes "edited" so Revert can restore it. */
-    QHash<quint32, QList<SceneValue>> m_sceneSnapshots;
-    /** Current pad-grid mode (default Off). */
-    PadMode m_padMode = PadModeOff;
-    /** Per-fixture refinement within the active programmer group. */
-    QSet<quint32> m_programmerSubSelection;
+    ProgrammerController *m_programmer = nullptr;
 
     /*********************************************************************
      * Fixture Instances

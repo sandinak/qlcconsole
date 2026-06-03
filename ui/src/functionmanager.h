@@ -128,6 +128,7 @@ protected slots:
 
     void slotSelectAutostartFunction();
     void slotWizard();
+    void slotPaletteManager();
 
     void slotClone();
     void slotDelete();
@@ -151,6 +152,7 @@ protected:
 
     QAction* m_autostartAction;
     QAction* m_wizardAction;
+    QAction* m_paletteManagerAction;
     QAction* m_addFolderAction;
     QAction* m_cloneAction;
     QAction* m_deleteAction;
