@@ -902,6 +902,8 @@ void FunctionManager::initSplitterView()
     m_hsplitter->setStretchFactor(0, 1); // tree
     m_hsplitter->setStretchFactor(1, 4); // editor
     m_hsplitter->setStretchFactor(2, 1); // sources dock
+    m_sourceDock->setMinimumWidth(160);
+    m_hsplitter->setCollapsible(2, false); // never let the dock vanish
     m_sourceDock->hide();
 }
 
@@ -1151,7 +1153,19 @@ void FunctionManager::editFunction(Function* function)
         // "looks" (see SceneGroupLooks drop handling).
         m_tree->setExternalDragMode(true);
         // Show the Fixtures & Groups drag-source dock next to the editor.
+        // Rebuild now (the workspace is loaded by the time a scene is
+        // edited) and guarantee a visible width: the saved splitter state
+        // predates this dock, so it can restore to zero width.
+        m_sourceDock->reload();
         m_sourceDock->show();
+        QList<int> sizes = m_hsplitter->sizes();
+        if (sizes.size() == 3 && sizes[2] < 120)
+        {
+            const int want = 220;
+            sizes[1] = qMax(200, sizes[1] - (want - sizes[2]));
+            sizes[2] = want;
+            m_hsplitter->setSizes(sizes);
+        }
     }
     else if (function->type() == Function::ChaserType)
     {

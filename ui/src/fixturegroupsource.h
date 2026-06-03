@@ -29,9 +29,6 @@ class FixtureGroupSource final : public QTreeWidget
 public:
     FixtureGroupSource(Doc *doc, QWidget *parent = nullptr);
 
-    /** Rebuild the tree from the Doc's fixtures and groups. */
-    void reload();
-
     /** MIME type carrying a stream of fixture-group IDs (quint32). */
     static const char* fixtureGroupMimeType();
 
@@ -41,6 +38,10 @@ public:
     /** Item-data roles / node kinds. */
     enum { IdRole = Qt::UserRole, KindRole = Qt::UserRole + 1 };
     enum NodeKind { CategoryNode = 0, GroupNode = 1, FixtureNode = 2 };
+
+public slots:
+    /** Rebuild the tree from the Doc's fixtures and groups. */
+    void reload();
 
 protected:
     /** Provide group/fixture IDs for dragging onto scene drop zones. */
