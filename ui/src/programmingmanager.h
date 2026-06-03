@@ -52,7 +52,6 @@ private slots:
     void slotFunctionActivated(QTreeWidgetItem *item);
     void slotFuncTreeMenu(const QPoint &pos);
     void slotPaletteTreeMenu(const QPoint &pos);
-    void slotNewPalette();
     void slotCanvasModified();
     void slotModeChanged();
     void slotLookEdited();
@@ -67,6 +66,10 @@ private:
     /** Tear down whichever canvas editor is currently shown. */
     void clearEditors();
     void updateTitle();
+
+    /** Create a new palette of the given QLCPalette::PaletteType in the
+     *  selected palette folder and open it in the look editor. */
+    void createPalette(int paletteType);
 
     /** Folder path of the current func-tree selection (for new functions). */
     QString selectedFuncFolderPath() const;

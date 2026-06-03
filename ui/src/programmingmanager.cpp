@@ -332,12 +332,21 @@ void ProgrammingManager::slotLookEdited()
     startPreview();
 }
 
-void ProgrammingManager::slotNewPalette()
+void ProgrammingManager::createPalette(int paletteType)
 {
-    PaletteEditDialog dlg(this);
-    if (dlg.exec() != QDialog::Accepted || dlg.result() == NULL)
-        return;
-    QLCPalette *p = dlg.result();
+    const QLCPalette::PaletteType type =
+        static_cast<QLCPalette::PaletteType>(paletteType);
+    QLCPalette *p = new QLCPalette(type);
+    p->setName(tr("New %1").arg(QLCPalette::typeToString(type)));
+
+    // Sensible starting value so the palette is valid/saveable.
+    switch (type)
+    {
+    case QLCPalette::Color:   p->setValue(QColor(Qt::white).name()); break;
+    case QLCPalette::Dimmer:  p->setValue(255); break;
+    case QLCPalette::PanTilt: p->setValue(270, 135); break;
+    default:                  p->setValue(0); break; // Gobo / Shutter / …
+    }
 
     // Drop it into the selected palette folder, if any.
     const QList<QTreeWidgetItem*> sel = m_paletteTree->selectedItems();
@@ -360,8 +369,7 @@ void ProgrammingManager::slotNewPalette()
         return;
     }
     m_doc->setModified();
-    // Edit it immediately in the inline editor.
-    m_lookEditor->setPalette(p->id());
+    m_lookEditor->setPalette(p->id()); // edit it inline immediately
 }
 
 void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
@@ -540,20 +548,39 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
 void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
 {
     QMenu menu(this);
-    QAction *aNew  = menu.addAction(tr("New palette…"));
+    // Type list, like the function tree's New menu. Only the types the
+    // engine resolves per-fixture are offered.
+    struct { const char *label; int type; } types[] = {
+        { QT_TR_NOOP("New Color"),    QLCPalette::Color },
+        { QT_TR_NOOP("New Dimmer"),   QLCPalette::Dimmer },
+        { QT_TR_NOOP("New Pan/Tilt"), QLCPalette::PanTilt },
+        { QT_TR_NOOP("New Gobo"),     QLCPalette::Gobo },
+        { QT_TR_NOOP("New Shutter"),  QLCPalette::Shutter },
+    };
+    QList<QAction*> newActions;
+    for (uint i = 0; i < sizeof(types) / sizeof(types[0]); i++)
+    {
+        QAction *a = menu.addAction(tr(types[i].label));
+        a->setData(types[i].type);
+        newActions << a;
+    }
+
     QAction *aMove = NULL;
     const quint32 pid =
         m_paletteTree->itemPaletteId(m_paletteTree->itemAt(pos));
     if (pid != QLCPalette::invalidId())
+    {
+        menu.addSeparator();
         aMove = menu.addAction(tr("Move to folder…"));
+    }
 
     QAction *chosen = menu.exec(m_paletteTree->viewport()->mapToGlobal(pos));
     if (chosen == NULL)
         return;
 
-    if (chosen == aNew)
+    if (newActions.contains(chosen))
     {
-        slotNewPalette();
+        createPalette(chosen->data().toInt());
     }
     else if (chosen == aMove)
     {
