@@ -113,6 +113,13 @@ public:
     QString name() const;
     void setName(const QString& name);
 
+    /** Get/Set the folder path of this palette in the Function Manager
+     *  tree. Uses the same "Category/Folder/Sub" convention as Functions,
+     *  with "Palettes" as the leading category segment. An empty path (or
+     *  just "Palettes/") means the Palettes category root. */
+    QString path() const;
+    void setPath(const QString& path);
+
     /** Get/Set the value(s) for this Palette.
      *  Some types like Position will store 2 values */
     QVariant value() const;
@@ -147,6 +154,7 @@ private:
     quint32 m_id;
     PaletteType m_type;
     QString m_name;
+    QString m_path;
     QVariantList m_values;
 
     /************************************************************************

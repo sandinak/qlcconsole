@@ -72,6 +72,8 @@ protected slots:
     void slotDocLoaded();
     void slotFunctionNameChanged(quint32 id);
     void slotFunctionAdded(quint32 id);
+    void slotPaletteAdded(quint32 id);
+    void slotPaletteRemoved(quint32 id);
 
 protected:
     static FunctionManager* s_instance;
@@ -129,6 +131,7 @@ protected slots:
     void slotSelectAutostartFunction();
     void slotWizard();
     void slotPaletteManager();
+    void slotAddPalette();
 
     void slotClone();
     void slotDelete();
@@ -153,6 +156,7 @@ protected:
     QAction* m_autostartAction;
     QAction* m_wizardAction;
     QAction* m_paletteManagerAction;
+    QAction* m_addPaletteAction;
     QAction* m_addFolderAction;
     QAction* m_cloneAction;
     QAction* m_deleteAction;

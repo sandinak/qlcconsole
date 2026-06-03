@@ -1293,6 +1293,15 @@ bool Doc::deletePalette(quint32 id)
         QLCPalette *palette = m_palettes.take(id);
         Q_ASSERT(palette != NULL);
 
+        // Detach from any scene that references this palette so no
+        // dangling references remain after deletion.
+        foreach (Function *f, functions())
+        {
+            Scene *s = qobject_cast<Scene*>(f);
+            if (s != NULL && s->palettes().contains(id))
+                s->removePalette(id);
+        }
+
         emit paletteRemoved(id);
         setModified();
         delete palette;

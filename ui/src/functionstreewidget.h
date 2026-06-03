@@ -23,6 +23,7 @@
 
 #include <QTreeWidget>
 
+class QLCPalette;
 class Function;
 class Doc;
 
@@ -45,10 +46,18 @@ class Doc;
  *  ------------------------------------------- --------------------------------
  * | Text: Function/category/folder name       | Text: path of category/folder  |
  * | Data:                                     |       (not set for functions)  |
- * |   Qt::UserRole: function ID (or invalid)  |                                |
+ * |   Qt::UserRole: function/palette ID       |                                |
+ * |                 (or invalid for folders)  |                                |
  * |   Qt::UserRole + 1: category type         |                                |
  * |                     (Function::Type)      |                                |
+ * |   Qt::UserRole + 2: node kind             |                                |
+ * |                 (FunctionNode/PaletteNode)|                                |
  *  ------------------------------------------- --------------------------------
+ *
+ * Palettes are not Functions but share the tree: they live under a
+ * synthetic "Palettes" category and carry NodeKind == PaletteNode (folders
+ * inherit their category's kind), so the Function-assuming code paths skip
+ * them exactly like they already skip folders.
  */
 
 class FunctionsTreeWidget final : public QTreeWidget
@@ -56,6 +65,11 @@ class FunctionsTreeWidget final : public QTreeWidget
     Q_OBJECT
 
 public:
+    /** Whether a tree item represents a Function subtree or a Palette
+     *  subtree. Stored at Qt::UserRole + 2. FunctionNode is the default
+     *  (0) so all pre-existing items are treated as functions. */
+    enum NodeKind { FunctionNode = 0, PaletteNode = 1 };
+
     FunctionsTreeWidget(Doc* doc, QWidget *parent = 0);
 
     /** Update all functions to function tree */
@@ -78,9 +92,37 @@ public:
     /** Get the item that represents the given function. */
     QTreeWidgetItem* functionItem(const Function* function);
 
+    /*********************************************************************
+     * Palettes (share the tree, but are not Functions)
+     *********************************************************************/
+public:
+    /** Add the Palette with the given ID and return a pointer to the
+     *  created (or existing) item. */
+    QTreeWidgetItem* addPalette(quint32 pid);
+
+    /** Get the ID of the palette represented by $item, or
+     *  QLCPalette::invalidId() if $item is not a palette leaf. */
+    quint32 itemPaletteId(const QTreeWidgetItem* item) const;
+
+    /** Get the item that represents the given palette. */
+    QTreeWidgetItem* paletteItem(const QLCPalette* palette);
+
+    /** Node kind for $item (FunctionNode/PaletteNode). */
+    static NodeKind itemNodeKind(const QTreeWidgetItem* item);
+
 private:
     /** Update $item's contents from the given $function */
     void updateFunctionItem(QTreeWidgetItem* item, const Function* function);
+
+    /** Update $item's contents from the given $palette */
+    void updatePaletteItem(QTreeWidgetItem* item, const QLCPalette* palette);
+
+    /** Return a suitable parent item for the $palette (ensures the
+     *  "Palettes" category and any folders along its path exist). */
+    QTreeWidgetItem* paletteParentItem(const QLCPalette* palette);
+
+    /** Ensure the synthetic "Palettes" category item exists; returns it. */
+    QTreeWidgetItem* palettesCategoryItem();
 
 private:
     Doc* m_doc;

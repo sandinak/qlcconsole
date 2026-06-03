@@ -45,6 +45,8 @@
 #include "rgbmatrixeditor.h"
 #include "functionwizard.h"
 #include "palettemanager.h"
+#include "paletteeditdialog.h"
+#include "qlcpalette.h"
 #include "chasereditor.h"
 #include "scripteditor.h"
 #include "sceneeditor.h"
@@ -123,6 +125,8 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     connect(m_doc, SIGNAL(loaded()), this, SLOT(slotDocLoaded()));
     connect(m_doc, SIGNAL(functionNameChanged(quint32)), this, SLOT(slotFunctionNameChanged(quint32)));
     connect(m_doc, SIGNAL(functionAdded(quint32)), this, SLOT(slotFunctionAdded(quint32)));
+    connect(m_doc, SIGNAL(paletteAdded(quint32)), this, SLOT(slotPaletteAdded(quint32)));
+    connect(m_doc, SIGNAL(paletteRemoved(quint32)), this, SLOT(slotPaletteRemoved(quint32)));
 
     QSettings settings;
     QVariant var = settings.value(SETTINGS_SPLITTER);
@@ -159,11 +163,13 @@ void FunctionManager::slotDocClearing()
 void FunctionManager::slotDocLoading()
 {
     disconnect(m_doc, SIGNAL(functionAdded(quint32)), this, SLOT(slotFunctionAdded(quint32)));
+    disconnect(m_doc, SIGNAL(paletteAdded(quint32)), this, SLOT(slotPaletteAdded(quint32)));
 }
 
 void FunctionManager::slotDocLoaded()
 {
     connect(m_doc, SIGNAL(functionAdded(quint32)), this, SLOT(slotFunctionAdded(quint32)));
+    connect(m_doc, SIGNAL(paletteAdded(quint32)), this, SLOT(slotPaletteAdded(quint32)));
 
     m_tree->updateTree();
 }
@@ -176,6 +182,19 @@ void FunctionManager::slotFunctionNameChanged(quint32 id)
 void FunctionManager::slotFunctionAdded(quint32 id)
 {
     m_tree->addFunction(id);
+}
+
+void FunctionManager::slotPaletteAdded(quint32 id)
+{
+    m_tree->addPalette(id);
+}
+
+void FunctionManager::slotPaletteRemoved(quint32 id)
+{
+    Q_UNUSED(id)
+    // Palette IDs and item lookups are cheap; a full refresh keeps folder
+    // bookkeeping (m_foldersMap) consistent without special-casing.
+    m_tree->updateTree();
 }
 
 void FunctionManager::showEvent(QShowEvent* ev)
@@ -281,6 +300,14 @@ void FunctionManager::initActions()
     connect(m_paletteManagerAction, SIGNAL(triggered(bool)),
             this, SLOT(slotPaletteManager()));
 
+    // Create a new palette directly in the tree (under the "Palettes"
+    // category / currently-selected palette folder).
+    m_addPaletteAction = new QAction(QIcon(":/color.png"),
+                                     tr("New p&alette…"), this);
+    m_addPaletteAction->setToolTip(tr("Create a new palette in the tree"));
+    connect(m_addPaletteAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotAddPalette()));
+
     /* Edit actions */
     m_cloneAction = new QAction(QIcon(":/editcopy.png"),
                                 tr("&Clone"), this);
@@ -347,11 +374,22 @@ QString FunctionManager::getSelectedFolderPath()
         }
         else
         {
-            // Selected item is a function - get its folder
-            quint32 fid = item->data(0, Qt::UserRole).toUInt(); // COL_NAME
-            Function* func = m_doc->function(fid);
-            if (func != NULL)
-                folderPath = func->path(true);
+            // Selected item is a leaf - get its folder. Palette leaves
+            // resolve via the palette; function leaves via the function.
+            const quint32 pid = m_tree->itemPaletteId(item);
+            if (pid != QLCPalette::invalidId())
+            {
+                QLCPalette* palette = m_doc->palette(pid);
+                if (palette != NULL)
+                    folderPath = palette->path();
+            }
+            else
+            {
+                quint32 fid = item->data(0, Qt::UserRole).toUInt(); // COL_NAME
+                Function* func = m_doc->function(fid);
+                if (func != NULL)
+                    folderPath = func->path(true);
+            }
         }
     }
     return folderPath;
@@ -658,6 +696,35 @@ void FunctionManager::slotPaletteManager()
     pm.exec();
 }
 
+void FunctionManager::slotAddPalette()
+{
+    PaletteEditDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted || dlg.result() == NULL)
+        return;
+
+    QLCPalette* palette = dlg.result();
+
+    // Drop it into the selected palette folder, if any. getSelectedFolderPath()
+    // returns a path only when a Palettes-category folder/leaf is selected.
+    const QString folderPath = getSelectedFolderPath();
+    if (folderPath.isEmpty() == false && folderPath.startsWith(QStringLiteral("Palettes")))
+        palette->setPath(folderPath);
+
+    if (m_doc->addPalette(palette) == false)
+    {
+        delete palette;
+        return;
+    }
+    m_doc->setModified();
+
+    QTreeWidgetItem* item = m_tree->paletteItem(palette);
+    if (item != NULL)
+    {
+        m_tree->scrollToItem(item);
+        m_tree->setCurrentItem(item);
+    }
+}
+
 void FunctionManager::slotClone()
 {
     QListIterator <QTreeWidgetItem*> it(m_tree->selectedItems());
@@ -863,6 +930,16 @@ void FunctionManager::deleteSelectedFunctions()
     while (it.hasNext() == true)
     {
         QTreeWidgetItem* item(it.next());
+
+        // Palette leaf: detach from scenes, then delete the palette.
+        const quint32 pid = m_tree->itemPaletteId(item);
+        if (pid != QLCPalette::invalidId())
+        {
+            m_doc->deletePalette(pid);
+            delete item;
+            continue;
+        }
+
         quint32 fid = m_tree->itemFunctionId(item);
         Function *func = m_doc->function(fid);
         if (func == NULL)
@@ -911,6 +988,26 @@ void FunctionManager::slotTreeItemDoubleClicked(QTreeWidgetItem* item)
     if (item == NULL)
         return;
 
+    // Palette leaf: open the shared palette editor in place of a
+    // function editor.
+    const quint32 pid = m_tree->itemPaletteId(item);
+    if (pid != QLCPalette::invalidId())
+    {
+        QLCPalette* palette = m_doc->palette(pid);
+        if (palette != NULL)
+        {
+            PaletteEditDialog dlg(palette, this);
+            if (dlg.exec() == QDialog::Accepted)
+            {
+                m_doc->setModified();
+                QTreeWidgetItem* it = m_tree->paletteItem(palette);
+                if (it != NULL)
+                    it->setText(0, palette->name());
+            }
+        }
+        return;
+    }
+
     // Edit the double-clicked function
     Function* function = m_doc->function(m_tree->itemFunctionId(item));
     editFunction(function);
@@ -935,6 +1032,7 @@ void FunctionManager::slotTreeContextMenuRequested()
     menu.addSeparator();
     menu.addAction(m_addFolderAction);
     menu.addSeparator();
+    menu.addAction(m_addPaletteAction);
     menu.addAction(m_wizardAction);
     menu.addAction(m_paletteManagerAction);
 

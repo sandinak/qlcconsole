@@ -30,6 +30,7 @@
 
 #define KXMLQLCPaletteType      QStringLiteral("Type")
 #define KXMLQLCPaletteName      QStringLiteral("Name")
+#define KXMLQLCPalettePath      QStringLiteral("Path")
 #define KXMLQLCPaletteValue     QStringLiteral("Value")
 #define KXMLQLCPaletteFanning   QStringLiteral("Fan")
 #define KXMLQLCPaletteFanLayout QStringLiteral("Layout")
@@ -51,6 +52,7 @@ QLCPalette *QLCPalette::createCopy()
     QLCPalette *copy = new QLCPalette(type());
     copy->setValues(this->values());
     copy->setName(this->name());
+    copy->setPath(this->path());
     copy->setFanningType(this->fanningType());
     copy->setFanningLayout(this->fanningLayout());
     copy->setFanningAmount(this->fanningAmount());
@@ -159,6 +161,16 @@ void QLCPalette::setName(const QString &name)
 
     m_name = QString(name);
     emit nameChanged();
+}
+
+QString QLCPalette::path() const
+{
+    return m_path;
+}
+
+void QLCPalette::setPath(const QString &path)
+{
+    m_path = path;
 }
 
 QVariant QLCPalette::value() const
@@ -821,6 +833,9 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
     if (attrs.hasAttribute(KXMLQLCPaletteName))
         setName(attrs.value(KXMLQLCPaletteName).toString());
 
+    if (attrs.hasAttribute(KXMLQLCPalettePath))
+        setPath(attrs.value(KXMLQLCPalettePath).toString());
+
     if (attrs.hasAttribute(KXMLQLCPaletteValue))
     {
         QString strVal = attrs.value(KXMLQLCPaletteValue).toString();
@@ -900,6 +915,8 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     doc->writeAttribute(KXMLQLCPaletteID, QString::number(this->id()));
     doc->writeAttribute(KXMLQLCPaletteType, typeToString(m_type));
     doc->writeAttribute(KXMLQLCPaletteName, this->name());
+    if (m_path.isEmpty() == false)
+        doc->writeAttribute(KXMLQLCPalettePath, m_path);
 
     /* write value */
     switch (m_type)
