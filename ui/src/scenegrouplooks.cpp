@@ -98,20 +98,32 @@ QString SceneGroupLooks::lookLabel(quint32 paletteId) const
     if (p == NULL)
         return tr("(missing palette %1)").arg(paletteId);
 
-    if (!p->name().isEmpty())
-        return p->name();
-
-    const QString type = QLCPalette::typeToString(p->type());
-    switch (p->type())
+    QString name = p->name();
+    if (name.isEmpty())
     {
-    case QLCPalette::Color:
-        return QString("%1 %2").arg(type).arg(p->rgbValue().name());
-    case QLCPalette::PanTilt:
-        return QString("%1 P%2 / T%3")
-            .arg(type).arg(p->intValue1()).arg(p->intValue2());
-    default:
-        return QString("%1 %2").arg(type).arg(p->intValue1());
+        const QString type = QLCPalette::typeToString(p->type());
+        switch (p->type())
+        {
+        case QLCPalette::Color:
+            name = QString("%1 %2").arg(type).arg(p->rgbValue().name()); break;
+        case QLCPalette::PanTilt:
+            name = QString("%1 P%2 / T%3")
+                   .arg(type).arg(p->intValue1()).arg(p->intValue2()); break;
+        default:
+            name = QString("%1 %2").arg(type).arg(p->intValue1()); break;
+        }
     }
+
+    // Show the folder path too (e.g. "Shutters/Full"), stripping the
+    // internal "Palettes/" category prefix.
+    QString path = p->path();
+    if (path.startsWith(QStringLiteral("Palettes/")))
+        path = path.mid(9);
+    else if (path == QStringLiteral("Palettes"))
+        path.clear();
+    if (path.endsWith('/'))
+        path.chop(1);
+    return path.isEmpty() ? name : path + "/" + name;
 }
 
 void SceneGroupLooks::reload()
@@ -174,6 +186,9 @@ void SceneGroupLooks::reload()
     {
         QListWidgetItem *it = new QListWidgetItem(lookLabel(pid), m_lookList);
         it->setData(Qt::UserRole, pid);
+        QLCPalette *p = m_doc->palette(pid);
+        if (p != NULL)
+            it->setIcon(QIcon(p->iconResource()));
     }
 }
 

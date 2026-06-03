@@ -24,6 +24,7 @@ class QColorDialog;
 class VCXYPadArea;
 class QSlider;
 class QLabel;
+class Scene;
 class Doc;
 
 /** @addtogroup ui_functions
@@ -37,6 +38,10 @@ class LookEditor final : public QWidget
 public:
     LookEditor(Doc *doc, QWidget *parent = nullptr);
     ~LookEditor();
+
+    /** The scene whose targets the edited palette applies to. Used to warn
+     *  when e.g. a Gobo look has no target fixture that supports gobos. */
+    void setContextScene(Scene *scene);
 
 public slots:
     /** Edit the given palette; invalidId() shows the empty page. */
@@ -53,11 +58,18 @@ private slots:
     void slotSingleValueChanged(int v);
 
 private:
+    /** Whether any target fixture of the context scene has a channel in the
+     *  given QLCChannel::Group. */
+    bool targetsHaveChannelGroup(int group) const;
+
+private:
     Doc *m_doc;
+    Scene *m_contextScene;
     quint32 m_paletteId;
     bool m_loading;
 
     QLabel *m_title;
+    QLabel *m_warning;
     QStackedWidget *m_stack;
     int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageSingle;
 

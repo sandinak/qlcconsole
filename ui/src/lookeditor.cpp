@@ -15,7 +15,13 @@
 #include "lookeditor.h"
 #include "virtualconsole/vcxypadarea.h"
 #include "qlcpalette.h"
+#include "qlcchannel.h"
+#include "fixturegroup.h"
+#include "fixture.h"
+#include "scene.h"
 #include "doc.h"
+
+#include <QSet>
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
 static const qreal XY_MAX = 256.0;
@@ -25,6 +31,7 @@ static const int TILT_DEG = 270;
 LookEditor::LookEditor(Doc *doc, QWidget *parent)
     : QWidget(parent)
     , m_doc(doc)
+    , m_contextScene(NULL)
     , m_paletteId(QLCPalette::invalidId())
     , m_loading(false)
 {
@@ -33,6 +40,12 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
     m_title = new QLabel(tr("Look editor"), this);
     root->addWidget(m_title);
+
+    m_warning = new QLabel(this);
+    m_warning->setStyleSheet("color: #b00; font-style: italic;");
+    m_warning->setWordWrap(true);
+    m_warning->hide();
+    root->addWidget(m_warning);
 
     m_stack = new QStackedWidget(this);
     root->addWidget(m_stack);
@@ -58,6 +71,13 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     dl->addWidget(new QLabel(tr("Intensity"), dimmer));
     m_dimmerSlider = new QSlider(Qt::Horizontal, dimmer);
     m_dimmerSlider->setRange(0, 255);
+    // Visual intensity gradient (dark -> bright) on the groove.
+    m_dimmerSlider->setStyleSheet(
+        "QSlider::groove:horizontal { height: 16px; border: 1px solid #444;"
+        " border-radius: 3px; background: qlineargradient(x1:0, y1:0, x2:1,"
+        " y2:0, stop:0 #000000, stop:1 #ffffff); }"
+        "QSlider::handle:horizontal { width: 8px; background: #d33;"
+        " border: 1px solid #000; margin: -3px 0; border-radius: 2px; }");
     dl->addWidget(m_dimmerSlider, 1);
     m_dimmerValue = new QLabel("0", dimmer);
     m_dimmerValue->setMinimumWidth(32);
@@ -139,7 +159,65 @@ void LookEditor::setPalette(quint32 paletteId)
         m_stack->setCurrentIndex(m_pageSingle);
         break;
     }
+
+    // Warn if this look's type can't be realised on any target fixture.
+    m_warning->hide();
+    if (m_contextScene != NULL)
+    {
+        if (p->type() == QLCPalette::Gobo
+            && targetsHaveChannelGroup(QLCChannel::Gobo) == false)
+        {
+            m_warning->setText(tr("⚠ No target fixture has a gobo channel."));
+            m_warning->show();
+        }
+        else if (p->type() == QLCPalette::Shutter
+                 && targetsHaveChannelGroup(QLCChannel::Shutter) == false)
+        {
+            m_warning->setText(tr("⚠ No target fixture has a shutter channel."));
+            m_warning->show();
+        }
+    }
+
     m_loading = false;
+}
+
+void LookEditor::setContextScene(Scene *scene)
+{
+    m_contextScene = scene;
+    // Re-evaluate the applicability warning for the current look.
+    if (m_paletteId != QLCPalette::invalidId())
+        setPalette(m_paletteId);
+}
+
+bool LookEditor::targetsHaveChannelGroup(int group) const
+{
+    if (m_contextScene == NULL)
+        return true; // unknown context -> don't warn
+
+    QSet<quint32> fixtures;
+    foreach (quint32 fid, m_contextScene->fixtures())
+        fixtures.insert(fid);
+    foreach (quint32 gid, m_contextScene->fixtureGroups())
+    {
+        FixtureGroup *g = m_doc->fixtureGroup(gid);
+        if (g != NULL)
+            foreach (quint32 fid, g->fixtureList())
+                fixtures.insert(fid);
+    }
+
+    foreach (quint32 fid, fixtures)
+    {
+        Fixture *f = m_doc->fixture(fid);
+        if (f == NULL)
+            continue;
+        for (quint32 i = 0; i < f->channels(); i++)
+        {
+            const QLCChannel *ch = f->channel(i);
+            if (ch != NULL && int(ch->group()) == group)
+                return true;
+        }
+    }
+    return false;
 }
 
 void LookEditor::slotColorChanged(const QColor &c)

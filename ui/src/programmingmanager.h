@@ -22,6 +22,7 @@
 
 #include <QWidget>
 
+class QTreeWidgetItem;
 class FunctionsTreeWidget;
 class FixtureGroupSource;
 class SceneGroupLooks;
@@ -52,6 +53,9 @@ private slots:
     void slotCanvasModified();
     void slotModeChanged();
     void slotLookEdited();
+    void slotCopy();
+    void slotPaste();
+    void slotPaletteDoubleClicked(QTreeWidgetItem *item);
 
 private:
     void loadCanvas(quint32 sceneId);
@@ -74,7 +78,8 @@ private:
     SceneGroupLooks *m_canvas;
     LookEditor *m_lookEditor;
     quint32 m_currentScene;
-    quint32 m_previewScene; //!< the scene we started for live preview
+    quint32 m_previewScene;       //!< the scene we started for live preview
+    quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate
 
     FunctionsTreeWidget *m_paletteTree;
     FixtureGroupSource *m_fixGroupSource;

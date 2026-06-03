@@ -13,6 +13,7 @@
 #include <QShowEvent>
 #include <QHideEvent>
 #include <QTreeWidgetItem>
+#include <QShortcut>
 
 #include "programmingmanager.h"
 #include "functionstreewidget.h"
@@ -31,6 +32,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     , m_canvas(nullptr)
     , m_currentScene(Function::invalidId())
     , m_previewScene(Function::invalidId())
+    , m_clipboardFunction(Function::invalidId())
 {
     QHBoxLayout *root = new QHBoxLayout(this);
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
@@ -117,6 +119,18 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
     connect(m_lookEditor, SIGNAL(paletteChanged(quint32)),
             this, SLOT(slotLookEdited()));
+
+    // Double-click a palette in the source tree to edit it inline too.
+    connect(m_paletteTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
+            this, SLOT(slotPaletteDoubleClicked(QTreeWidgetItem*)));
+
+    // Cmd/Ctrl-C then Cmd/Ctrl-V duplicates the selected function.
+    QShortcut *copySc = new QShortcut(QKeySequence::Copy, this);
+    copySc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(copySc, SIGNAL(activated()), this, SLOT(slotCopy()));
+    QShortcut *pasteSc = new QShortcut(QKeySequence::Paste, this);
+    pasteSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(pasteSc, SIGNAL(activated()), this, SLOT(slotPaste()));
 }
 
 ProgrammingManager::~ProgrammingManager()
@@ -175,6 +189,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     }
 
     m_canvasPlaceholder->hide();
+    m_lookEditor->setContextScene(scene);
     m_canvas = new SceneGroupLooks(scene, m_doc, this, /*includeFixtureTargets*/ true);
     connect(m_canvas, SIGNAL(sceneModified()), this, SLOT(slotCanvasModified()));
     connect(m_canvas, SIGNAL(lookSelected(quint32)),
@@ -205,6 +220,41 @@ void ProgrammingManager::slotLookEdited()
     // A look's value changed in the editor: refresh the preview output.
     stopPreview();
     startPreview();
+}
+
+void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
+{
+    const quint32 pid = m_paletteTree->itemPaletteId(item);
+    if (pid != QLCPalette::invalidId())
+        m_lookEditor->setPalette(pid);
+}
+
+void ProgrammingManager::slotCopy()
+{
+    const QList<QTreeWidgetItem*> sel = m_funcTree->selectedItems();
+    if (sel.isEmpty())
+        return;
+    const quint32 fid = m_funcTree->itemFunctionId(sel.first());
+    if (fid != Function::invalidId())
+        m_clipboardFunction = fid;
+}
+
+void ProgrammingManager::slotPaste()
+{
+    Function *src = m_doc->function(m_clipboardFunction);
+    if (src == NULL)
+        return;
+    Function *copy = src->createCopy(m_doc);
+    if (copy == NULL)
+        return;
+    copy->setName(m_doc->nextDuplicateName(src));
+
+    QTreeWidgetItem *it = m_funcTree->functionItem(copy);
+    if (it != NULL)
+    {
+        m_funcTree->setCurrentItem(it);
+        m_funcTree->scrollToItem(it);
+    }
 }
 
 void ProgrammingManager::startPreview()
