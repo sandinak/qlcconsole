@@ -49,6 +49,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     , m_currentScene(Function::invalidId())
     , m_previewScene(Function::invalidId())
     , m_clipboardFunction(Function::invalidId())
+    , m_memberContainer(Function::invalidId())
 {
     QHBoxLayout *root = new QHBoxLayout(this);
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
@@ -135,10 +136,26 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // Keep the trees in sync with the Doc (functor connects so we can call
     // the trees' non-slot helpers directly).
     connect(m_doc, &Doc::functionAdded, m_funcTree, &FunctionsTreeWidget::addFunction);
-    connect(m_doc, &Doc::functionRemoved, this, [this](quint32) { m_funcTree->updateTree(); });
-    connect(m_doc, &Doc::functionChanged, m_funcTree, &FunctionsTreeWidget::functionNameChanged);
-    connect(m_doc, &Doc::loaded, m_funcTree, &FunctionsTreeWidget::updateTree);
-    connect(m_doc, &Doc::cleared, m_funcTree, &FunctionsTreeWidget::updateTree);
+    connect(m_doc, &Doc::functionRemoved, this, [this](quint32) {
+        const quint32 c = m_memberContainer;
+        m_funcTree->updateTree();
+        m_memberContainer = Function::invalidId();
+        if (c != Function::invalidId())
+            syncMemberNodes(c);   // re-nest members (node is fresh after rebuild)
+    });
+    connect(m_doc, &Doc::functionChanged, this, [this](quint32 id) {
+        m_funcTree->functionNameChanged(id);
+        if (id == m_memberContainer)
+            syncMemberNodes(m_memberContainer); // membership may have changed
+    });
+    connect(m_doc, &Doc::loaded, this, [this]() {
+        m_funcTree->updateTree();
+        m_memberContainer = Function::invalidId();
+    });
+    connect(m_doc, &Doc::cleared, this, [this]() {
+        m_funcTree->updateTree();
+        m_memberContainer = Function::invalidId();
+    });
 
     connect(m_doc, &Doc::paletteAdded, m_paletteTree, &FunctionsTreeWidget::addPalette);
     connect(m_doc, &Doc::paletteRemoved, this, [this](quint32) { m_paletteTree->updateTree(); });
@@ -191,6 +208,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     m_currentScene = sceneId;
     m_lookEditor->setPalette(QLCPalette::invalidId());
     m_funcTree->setExternalDragMode(false); // only collections/chasers need it
+    syncMemberNodes(Function::invalidId());  // scenes have no nested members
     clearEditors();
 
     Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
@@ -268,6 +286,9 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     }
 
     m_funcTree->setExternalDragMode(dragIn);
+    // Nest the container's members under its node for quick navigation
+    // (add/remove still happens in the hosted editor).
+    syncMemberNodes(dragIn ? f->id() : Function::invalidId());
 
     if (ed == NULL)
     {
@@ -555,6 +576,56 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
         m_doc->setModified();
         m_paletteTree->updateTree();
     }
+}
+
+void ProgrammingManager::syncMemberNodes(quint32 containerId)
+{
+    // Remove members previously nested under the old container's node. After
+    // a tree rebuild the node is fresh (no children), so this is a no-op then.
+    if (m_memberContainer != Function::invalidId())
+    {
+        Function *old = m_doc->function(m_memberContainer);
+        if (old != NULL)
+        {
+            QTreeWidgetItem *n = m_funcTree->functionItem(old);
+            if (n != NULL)
+                while (n->childCount() > 0)
+                    delete n->takeChild(0);
+        }
+    }
+
+    m_memberContainer = containerId;
+
+    Function *c = m_doc->function(containerId);
+    if (c == NULL)
+        return;
+
+    QList<quint32> members;
+    if (Collection *col = qobject_cast<Collection*>(c))
+        members = col->functions();
+    else if (Chaser *ch = qobject_cast<Chaser*>(c))
+        foreach (const ChaserStep &s, ch->steps())
+            members << s.fid;
+    else
+        return;
+
+    QTreeWidgetItem *node = m_funcTree->functionItem(c);
+    if (node == NULL)
+        return;
+
+    foreach (quint32 mid, members)
+    {
+        Function *mf = m_doc->function(mid);
+        if (mf == NULL)
+            continue;
+        QTreeWidgetItem *ci = new QTreeWidgetItem(node);
+        ci->setText(0, mf->name());
+        ci->setIcon(0, mf->getIcon());
+        ci->setData(0, Qt::UserRole, mid); // so itemFunctionId() resolves it
+        // Read-only nav: selectable + double-click to edit, not draggable.
+        ci->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    }
+    node->setExpanded(true);
 }
 
 int ProgrammingManager::functionUsageCount(quint32 fid) const

@@ -73,6 +73,10 @@ private:
     /** How many chasers/collections reference this function. */
     int functionUsageCount(quint32 fid) const;
 
+    /** Show the members/steps of the given collection/chaser nested under
+     *  its node in the function tree (read-only nav; invalidId clears). */
+    void syncMemberNodes(quint32 containerId);
+
     /** Live-preview the canvas scene by running it (Design mode only), so
      *  the DMX/2D view reflects the look as you build. Blind/live handling
      *  comes later. */
@@ -93,6 +97,7 @@ private:
     quint32 m_currentScene;
     quint32 m_previewScene;       //!< the scene we started for live preview
     quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate
+    quint32 m_memberContainer;    //!< collection/chaser whose members are nested
 
     FunctionsTreeWidget *m_paletteTree;
     FixtureGroupSource *m_fixGroupSource;
