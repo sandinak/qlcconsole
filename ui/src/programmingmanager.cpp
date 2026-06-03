@@ -14,6 +14,7 @@
 #include <QHideEvent>
 #include <QTreeWidgetItem>
 #include <QShortcut>
+#include <QScrollArea>
 
 #include "programmingmanager.h"
 #include "functionstreewidget.h"
@@ -69,9 +70,14 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_canvasPlaceholder->setWordWrap(true);
     m_canvasPlaceholder->setAlignment(Qt::AlignCenter);
     m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
-    // Inline look editor pinned to the bottom of the center panel.
+    // Inline look editor pinned to the bottom of the center panel, in a
+    // scroll area so tall pages (color picker / XY pad) never get clipped.
     m_lookEditor = new LookEditor(m_doc, this);
-    m_canvasLayout->addWidget(m_lookEditor);
+    QScrollArea *lookScroll = new QScrollArea(this);
+    lookScroll->setWidgetResizable(true);
+    lookScroll->setFrameShape(QFrame::NoFrame);
+    lookScroll->setWidget(m_lookEditor);
+    m_canvasLayout->addWidget(lookScroll);
     splitter->addWidget(canvasPanel);
 
     // --- Right: drag sources (palette tree + fixtures & groups tree) ---

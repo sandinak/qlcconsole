@@ -9,19 +9,20 @@
 #include <QHBoxLayout>
 #include <QStackedWidget>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QSlider>
 #include <QLabel>
+#include <QSet>
 
 #include "lookeditor.h"
 #include "virtualconsole/vcxypadarea.h"
 #include "qlcpalette.h"
+#include "qlccapability.h"
 #include "qlcchannel.h"
 #include "fixturegroup.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
-
-#include <QSet>
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
 static const qreal XY_MAX = 256.0;
@@ -67,7 +68,9 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
     // Dimmer page
     QWidget *dimmer = new QWidget(this);
-    QHBoxLayout *dl = new QHBoxLayout(dimmer);
+    QVBoxLayout *dv = new QVBoxLayout(dimmer);
+    QHBoxLayout *dl = new QHBoxLayout();
+    dv->addLayout(dl);
     dl->addWidget(new QLabel(tr("Intensity"), dimmer));
     m_dimmerSlider = new QSlider(Qt::Horizontal, dimmer);
     m_dimmerSlider->setRange(0, 255);
@@ -82,6 +85,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_dimmerValue = new QLabel("0", dimmer);
     m_dimmerValue->setMinimumWidth(32);
     dl->addWidget(m_dimmerValue);
+    // Capability name at the current value on a representative fixture —
+    // surfaces strobe ranges that live in the intensity channel.
+    m_dimmerCap = new QLabel(dimmer);
+    m_dimmerCap->setStyleSheet("color: #555; font-style: italic;");
+    dv->addWidget(m_dimmerCap);
     m_pageDimmer = m_stack->addWidget(dimmer);
     connect(m_dimmerSlider, SIGNAL(valueChanged(int)),
             this, SLOT(slotDimmerChanged(int)));
@@ -89,9 +97,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Pan/Tilt page (X/Y grid)
     QWidget *pantilt = new QWidget(this);
     QVBoxLayout *pl = new QVBoxLayout(pantilt);
+    // Margins so the XY pad's frame border isn't clipped at the edges.
+    pl->setContentsMargins(6, 6, 6, 6);
     m_xyPad = new VCXYPadArea(pantilt);
     m_xyPad->setMode(Doc::Operate); // interactive
-    m_xyPad->setMinimumSize(160, 160);
+    m_xyPad->setMinimumSize(140, 140);
     pl->addWidget(m_xyPad, 1);
     m_pagePanTilt = m_stack->addWidget(pantilt);
     connect(m_xyPad, SIGNAL(positionChanged(QPointF)),
@@ -99,7 +109,12 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
     // Single-value page (gobo / shutter / pan / tilt / zoom)
     QWidget *single = new QWidget(this);
-    QHBoxLayout *sl = new QHBoxLayout(single);
+    QVBoxLayout *sv = new QVBoxLayout(single);
+    // Named capabilities (gobo/shutter) from a representative fixture.
+    m_singleCombo = new QComboBox(single);
+    sv->addWidget(m_singleCombo);
+    QHBoxLayout *sl = new QHBoxLayout();
+    sv->addLayout(sl);
     sl->addWidget(new QLabel(tr("Value"), single));
     m_singleSlider = new QSlider(Qt::Horizontal, single);
     m_singleSlider->setRange(0, 255);
@@ -110,6 +125,8 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_pageSingle = m_stack->addWidget(single);
     connect(m_singleSlider, SIGNAL(valueChanged(int)),
             this, SLOT(slotSingleValueChanged(int)));
+    connect(m_singleCombo, SIGNAL(activated(int)),
+            this, SLOT(slotSingleCapabilityPicked(int)));
 
     setPalette(QLCPalette::invalidId());
 }
@@ -130,8 +147,18 @@ void LookEditor::setPalette(quint32 paletteId)
     }
 
     m_loading = true;
-    const QString name = p->name().isEmpty()
-                         ? QLCPalette::typeToString(p->type()) : p->name();
+    QString name = p->name().isEmpty()
+                   ? QLCPalette::typeToString(p->type()) : p->name();
+    // Prefix the folder path (strip the internal "Palettes/" category).
+    QString path = p->path();
+    if (path.startsWith(QStringLiteral("Palettes/")))
+        path = path.mid(9);
+    else if (path == QStringLiteral("Palettes"))
+        path.clear();
+    if (path.endsWith('/'))
+        path.chop(1);
+    if (path.isEmpty() == false)
+        name = path + "/" + name;
     m_title->setText(tr("Editing look: %1").arg(name));
 
     switch (p->type())
@@ -143,6 +170,8 @@ void LookEditor::setPalette(quint32 paletteId)
     case QLCPalette::Dimmer:
         m_dimmerSlider->setValue(p->intValue1());
         m_dimmerValue->setText(QString::number(p->intValue1()));
+        m_dimmerCap->setText(capabilityNameAt(
+            representativeChannel(QLCChannel::Intensity), p->intValue1()));
         m_stack->setCurrentIndex(m_pageDimmer);
         break;
     case QLCPalette::PanTilt:
@@ -154,10 +183,39 @@ void LookEditor::setPalette(quint32 paletteId)
         break;
     }
     default: // Gobo / Shutter / Pan / Tilt / Zoom
+    {
         m_singleSlider->setValue(p->intValue1());
         m_singleValue->setText(QString::number(p->intValue1()));
+
+        // Named capabilities for gobo/shutter from a representative fixture.
+        int chGroup = -1;
+        if (p->type() == QLCPalette::Gobo)         chGroup = QLCChannel::Gobo;
+        else if (p->type() == QLCPalette::Shutter) chGroup = QLCChannel::Shutter;
+
+        m_singleCombo->clear();
+        const QLCChannel *ch = (chGroup >= 0) ? representativeChannel(chGroup) : NULL;
+        if (ch != NULL)
+        {
+            int sel = -1, idx = 0;
+            foreach (QLCCapability *cap, ch->capabilities())
+            {
+                m_singleCombo->addItem(cap->name(),
+                                       (int(cap->min()) + int(cap->max())) / 2);
+                if (p->intValue1() >= cap->min() && p->intValue1() <= cap->max())
+                    sel = idx;
+                idx++;
+            }
+            if (sel >= 0)
+                m_singleCombo->setCurrentIndex(sel);
+            m_singleCombo->setVisible(true);
+        }
+        else
+        {
+            m_singleCombo->setVisible(false);
+        }
         m_stack->setCurrentIndex(m_pageSingle);
         break;
+    }
     }
 
     // Warn if this look's type can't be realised on any target fixture.
@@ -235,6 +293,8 @@ void LookEditor::slotColorChanged(const QColor &c)
 void LookEditor::slotDimmerChanged(int v)
 {
     m_dimmerValue->setText(QString::number(v));
+    m_dimmerCap->setText(capabilityNameAt(
+        representativeChannel(QLCChannel::Intensity), v));
     if (m_loading)
         return;
     QLCPalette *p = m_doc->palette(m_paletteId);
@@ -270,4 +330,54 @@ void LookEditor::slotSingleValueChanged(int v)
     p->setValue(v);
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
+}
+
+void LookEditor::slotSingleCapabilityPicked(int index)
+{
+    if (index < 0)
+        return;
+    // Set the slider to the picked capability's mid value; that drives the
+    // palette update via slotSingleValueChanged().
+    m_singleSlider->setValue(m_singleCombo->itemData(index).toInt());
+}
+
+const QLCChannel *LookEditor::representativeChannel(int group) const
+{
+    if (m_contextScene == NULL)
+        return NULL;
+
+    QSet<quint32> fixtures;
+    foreach (quint32 fid, m_contextScene->fixtures())
+        fixtures.insert(fid);
+    foreach (quint32 gid, m_contextScene->fixtureGroups())
+    {
+        FixtureGroup *g = m_doc->fixtureGroup(gid);
+        if (g != NULL)
+            foreach (quint32 fid, g->fixtureList())
+                fixtures.insert(fid);
+    }
+
+    foreach (quint32 fid, fixtures)
+    {
+        Fixture *f = m_doc->fixture(fid);
+        if (f == NULL)
+            continue;
+        for (quint32 i = 0; i < f->channels(); i++)
+        {
+            const QLCChannel *ch = f->channel(i);
+            if (ch != NULL && int(ch->group()) == group)
+                return ch;
+        }
+    }
+    return NULL;
+}
+
+QString LookEditor::capabilityNameAt(const QLCChannel *ch, int v) const
+{
+    if (ch == NULL)
+        return QString();
+    foreach (QLCCapability *cap, ch->capabilities())
+        if (v >= cap->min() && v <= cap->max())
+            return cap->name();
+    return QString();
 }

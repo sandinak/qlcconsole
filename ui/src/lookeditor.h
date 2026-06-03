@@ -23,7 +23,9 @@ class QStackedWidget;
 class QColorDialog;
 class VCXYPadArea;
 class QSlider;
+class QComboBox;
 class QLabel;
+class QLCChannel;
 class Scene;
 class Doc;
 
@@ -56,11 +58,19 @@ private slots:
     void slotDimmerChanged(int v);
     void slotPanTiltChanged(const QPointF &p);
     void slotSingleValueChanged(int v);
+    void slotSingleCapabilityPicked(int index);
 
 private:
     /** Whether any target fixture of the context scene has a channel in the
      *  given QLCChannel::Group. */
     bool targetsHaveChannelGroup(int group) const;
+
+    /** A representative target-fixture channel of the given group, or NULL.
+     *  Used to surface capability (gobo/shutter/strobe) names. */
+    const QLCChannel *representativeChannel(int group) const;
+
+    /** Capability name covering value v on the channel, or empty. */
+    QString capabilityNameAt(const QLCChannel *ch, int v) const;
 
 private:
     Doc *m_doc;
@@ -76,9 +86,11 @@ private:
     QColorDialog *m_colorDialog;
     QSlider *m_dimmerSlider;
     QLabel *m_dimmerValue;
+    QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
     QSlider *m_singleSlider;
     QLabel *m_singleValue;
+    QComboBox *m_singleCombo;  //!< named gobo/shutter capabilities
 };
 
 /** @} */
