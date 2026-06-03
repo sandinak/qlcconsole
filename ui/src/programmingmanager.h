@@ -2,11 +2,14 @@
   Q Light Controller Plus
   programmingmanager.h
 
-  Fork-owned top-level "Programming" tab: a drag-drop authoring surface for
-  building scenes from palettes (looks) and fixture groups. Three panes:
-    - left:   the scenes you're building (select to edit, or create new)
+  Fork-owned top-level "Programming" tab: a drag-drop authoring surface.
+  Three panes:
+    - left:   a function tree (folders) of what you build; select a scene
+              to edit it (chaser/collection canvases come later)
     - center: the selected scene's canvas (reuses SceneGroupLooks)
-    - right:  searchable Palettes + Fixture Groups, dragged into the canvas
+    - right:  a Palettes tree + a Fixtures & Groups tree, dragged into the
+              canvas (palette -> look, group -> dynamic target, fixture ->
+              fixed target)
 
   It edits plain Scenes, so everything stays compatible with the classic
   Function Manager / scene editor.
@@ -19,11 +22,11 @@
 
 #include <QWidget>
 
-class QListWidget;
-class QLineEdit;
+class FunctionsTreeWidget;
+class FixtureGroupSource;
+class SceneGroupLooks;
 class QVBoxLayout;
 class QLabel;
-class SceneGroupLooks;
 class Doc;
 
 /** @addtogroup ui_functions
@@ -39,12 +42,8 @@ public:
     ~ProgrammingManager();
 
 private slots:
-    void slotReloadScenes();
-    void slotSceneSelected();
+    void slotFunctionSelected();
     void slotNewScene();
-    void slotReloadSources();
-    void slotPaletteFilter(const QString &text);
-    void slotGroupFilter(const QString &text);
 
 private:
     void loadCanvas(quint32 sceneId);
@@ -52,17 +51,15 @@ private:
 private:
     Doc *m_doc;
 
-    QListWidget *m_sceneList;
+    FunctionsTreeWidget *m_funcTree;
 
     QVBoxLayout *m_canvasLayout;
     QLabel *m_canvasPlaceholder;
     SceneGroupLooks *m_canvas;
     quint32 m_currentScene;
 
-    QLineEdit *m_paletteFilter;
-    QListWidget *m_paletteList;
-    QLineEdit *m_groupFilter;
-    QListWidget *m_groupList;
+    FunctionsTreeWidget *m_paletteTree;
+    FixtureGroupSource *m_fixGroupSource;
 };
 
 /** @} */

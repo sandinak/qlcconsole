@@ -25,13 +25,18 @@
 #include "groupselection.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
+#include "fixture.h"
 #include "scene.h"
 #include "doc.h"
 
-SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent)
+SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
+                                 bool showFixtures)
     : QWidget(parent)
     , m_scene(scene)
     , m_doc(doc)
+    , m_showFixtures(showFixtures)
+    , m_fixtureList(nullptr)
+    , m_removeFixtureButton(nullptr)
 {
     setAcceptDrops(true);
 
@@ -39,14 +44,13 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent)
     root->setContentsMargins(0, 6, 0, 0);
 
     QLabel *header = new QLabel(
-        tr("<b>Dynamic group looks</b> — these palettes (looks) are applied "
-           "to the dynamic groups below and <b>follow group membership at "
-           "run time</b>. Every look applies to every dynamic group; use "
-           "separate scenes for different looks per group.<br>"
-           "Drag here to add: palettes (from the Functions tree) become "
-           "looks; fixture groups (from the dock) become dynamic groups. "
-           "To instead add a group's <i>current</i> fixtures statically, "
-           "drop the group on the Fixtures list below."), this);
+        tr("<b>Looks</b> (palettes) are applied to this scene's targets. "
+           "Every look applies to every target; use separate scenes for "
+           "different looks per group.<br>"
+           "Drag here to add: <b>palettes</b> &rarr; looks; "
+           "<b>fixture groups</b> &rarr; dynamic targets (follow membership "
+           "at run time); <b>individual fixtures</b> &rarr; fixed targets "
+           "(looks still apply, membership doesn't change)."), this);
     header->setWordWrap(true);
     root->addWidget(header);
 
@@ -80,6 +84,26 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent)
     lookBtns->addStretch();
     lookCol->addLayout(lookBtns);
     cols->addLayout(lookCol);
+
+    // --- Fixed fixtures column (optional) ---
+    // Individual fixtures the scene targets (fixed membership). The scene's
+    // looks still drive them; they just don't follow a group's membership.
+    if (m_showFixtures)
+    {
+        QVBoxLayout *fxCol = new QVBoxLayout();
+        fxCol->addWidget(new QLabel(tr("Fixed fixtures (static targets)"), this));
+        m_fixtureList = new QListWidget(this);
+        m_fixtureList->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        fxCol->addWidget(m_fixtureList);
+        QHBoxLayout *fxBtns = new QHBoxLayout();
+        m_removeFixtureButton = new QPushButton(tr("Remove"), this);
+        fxBtns->addWidget(m_removeFixtureButton);
+        fxBtns->addStretch();
+        fxCol->addLayout(fxBtns);
+        cols->addLayout(fxCol);
+        connect(m_removeFixtureButton, SIGNAL(clicked()),
+                this, SLOT(slotRemoveFixture()));
+    }
 
     connect(m_selectGroupsButton, SIGNAL(clicked()),
             this, SLOT(slotSelectGroups()));
@@ -153,16 +177,38 @@ void SceneGroupLooks::reload()
         QListWidgetItem *it = new QListWidgetItem(lookLabel(pid), m_lookList);
         it->setData(Qt::UserRole, pid);
     }
+
+    if (m_fixtureList != NULL)
+    {
+        QList<Fixture*> fixtures;
+        foreach (quint32 fid, m_scene->fixtures())
+        {
+            Fixture *f = m_doc->fixture(fid);
+            if (f != NULL)
+                fixtures.append(f);
+        }
+        std::sort(fixtures.begin(), fixtures.end(),
+                  [](Fixture *a, Fixture *b) {
+                      return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+                  });
+        m_fixtureList->clear();
+        foreach (Fixture *f, fixtures)
+        {
+            QListWidgetItem *it = new QListWidgetItem(f->name(), m_fixtureList);
+            it->setData(Qt::UserRole, f->id());
+        }
+    }
 }
 
-// This panel is the DYNAMIC drop zone: dropping a palette adds a look,
-// dropping a fixture group adds it as a dynamic target (follows
-// membership). Static fixture-expansion is handled by the fixtures
-// console below (see SceneEditor's drop handling).
+// This panel is the look/target editor and a drop zone. Routed by MIME:
+//  - palette         -> add a look
+//  - fixture group   -> add a DYNAMIC target group (follows membership)
+//  - fixture         -> add a FIXED fixture target (looks still apply)
 static bool hasAcceptedFormat(const QMimeData *mime)
 {
     return mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType())
-        || mime->hasFormat(FixtureGroupSource::fixtureGroupMimeType());
+        || mime->hasFormat(FixtureGroupSource::fixtureGroupMimeType())
+        || mime->hasFormat(FixtureGroupSource::fixtureMimeType());
 }
 
 void SceneGroupLooks::dragEnterEvent(QDragEnterEvent *event)
@@ -216,6 +262,25 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
                 && m_scene->fixtureGroups().contains(gid) == false)
             {
                 m_scene->addFixtureGroup(gid);
+                changed = true;
+            }
+        }
+    }
+
+    // Individual fixtures -> fixed targets (looks still apply; membership
+    // is fixed, unlike a group).
+    if (mime->hasFormat(FixtureGroupSource::fixtureMimeType()))
+    {
+        QByteArray data = mime->data(FixtureGroupSource::fixtureMimeType());
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 fid = 0;
+            stream >> fid;
+            if (m_doc->fixture(fid) != NULL
+                && m_scene->fixtures().contains(fid) == false)
+            {
+                m_scene->addFixture(fid);
                 changed = true;
             }
         }
@@ -310,6 +375,19 @@ void SceneGroupLooks::slotRemoveLook()
     // other scene referencing it keeps working (orphans are harmless).
     foreach (QListWidgetItem *it, sel)
         m_scene->removePalette(it->data(Qt::UserRole).toUInt());
+    m_doc->setModified();
+    reload();
+}
+
+void SceneGroupLooks::slotRemoveFixture()
+{
+    if (m_fixtureList == NULL)
+        return;
+    const QList<QListWidgetItem*> sel = m_fixtureList->selectedItems();
+    if (sel.isEmpty())
+        return;
+    foreach (QListWidgetItem *it, sel)
+        m_scene->removeFixture(it->data(Qt::UserRole).toUInt());
     m_doc->setModified();
     reload();
 }

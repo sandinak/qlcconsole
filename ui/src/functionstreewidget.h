@@ -70,7 +70,15 @@ public:
      *  (0) so all pre-existing items are treated as functions. */
     enum NodeKind { FunctionNode = 0, PaletteNode = 1 };
 
+    /** What the tree displays. ShowAll (default) keeps the classic
+     *  Function Manager behaviour; the Programming tab uses FunctionsOnly
+     *  for its navigator and PalettesOnly for its palette source. */
+    enum DisplayFilter { ShowAll = 0, FunctionsOnly, PalettesOnly };
+
     FunctionsTreeWidget(Doc* doc, QWidget *parent = 0);
+
+    /** Restrict what updateTree() shows. Call before updateTree(). */
+    void setDisplayFilter(DisplayFilter filter);
 
     /** Update all functions to function tree */
     void updateTree();
@@ -145,6 +153,8 @@ private slots:
 
 private:
     QHash <QString, QTreeWidgetItem *> m_foldersMap;
+
+    DisplayFilter m_displayFilter;
 
     /*********************************************************************
      * Drag & Drop events

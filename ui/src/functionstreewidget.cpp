@@ -47,6 +47,7 @@ static const char* PALETTE_DRAG_MIME_TYPE = "application/x-qlcplus-palettes";
 FunctionsTreeWidget::FunctionsTreeWidget(Doc *doc, QWidget *parent) :
     QTreeWidget(parent)
   , m_doc(doc)
+  , m_displayFilter(ShowAll)
   , m_externalDragMode(false)
 {
     sortItems(COL_NAME, Qt::AscendingOrder);
@@ -58,25 +59,36 @@ FunctionsTreeWidget::FunctionsTreeWidget(Doc *doc, QWidget *parent) :
                 this, SLOT(slotItemChanged(QTreeWidgetItem*)));
 }
 
+void FunctionsTreeWidget::setDisplayFilter(DisplayFilter filter)
+{
+    m_displayFilter = filter;
+}
+
 void FunctionsTreeWidget::updateTree()
 {
     blockSignals(true);
 
     clearTree();
 
-    foreach (Function* function, m_doc->functions())
+    if (m_displayFilter != PalettesOnly)
     {
-        if (function->isVisible())
-            updateFunctionItem(new QTreeWidgetItem(parentItem(function)), function);
+        foreach (Function* function, m_doc->functions())
+        {
+            if (function->isVisible())
+                updateFunctionItem(new QTreeWidgetItem(parentItem(function)), function);
+        }
     }
 
-    foreach (QLCPalette* palette, m_doc->palettes())
+    if (m_displayFilter != FunctionsOnly)
     {
-        if (palette == NULL)
-            continue;
-        QTreeWidgetItem* parent = paletteParentItem(palette);
-        if (parent != NULL)
-            updatePaletteItem(new QTreeWidgetItem(parent), palette);
+        foreach (QLCPalette* palette, m_doc->palettes())
+        {
+            if (palette == NULL)
+                continue;
+            QTreeWidgetItem* parent = paletteParentItem(palette);
+            if (parent != NULL)
+                updatePaletteItem(new QTreeWidgetItem(parent), palette);
+        }
     }
 
     blockSignals(false);

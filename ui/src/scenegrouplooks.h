@@ -44,10 +44,16 @@ class SceneGroupLooks final : public QWidget
     Q_OBJECT
 
 public:
-    SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent = nullptr);
+    /** @param showFixtures  when true, also show a "Fixed fixtures" list
+     *  (the scene's individual fixture targets) and accept fixture drops.
+     *  The classic scene editor leaves it false (it has its own fixtures
+     *  tree); the Programming tab sets it true. */
+    SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent = nullptr,
+                    bool showFixtures = false);
     ~SceneGroupLooks();
 
-    /** Repopulate both lists from the scene's current groups/palettes. */
+    /** Repopulate the lists from the scene's current groups/palettes
+     *  (and fixtures, when shown). */
     void reload();
 
 protected:
@@ -60,6 +66,7 @@ private slots:
     void slotSelectGroups();
     void slotAddLook();
     void slotRemoveLook();
+    void slotRemoveFixture();
 
 private:
     /** Human-readable one-liner for a palette (type + value). */
@@ -68,12 +75,15 @@ private:
 private:
     Scene *m_scene;
     Doc *m_doc;
+    bool m_showFixtures;
 
     QListWidget *m_groupList;
     QListWidget *m_lookList;
+    QListWidget *m_fixtureList;     //!< only when m_showFixtures
     QPushButton *m_selectGroupsButton;
     QPushButton *m_addLookButton;
     QPushButton *m_removeLookButton;
+    QPushButton *m_removeFixtureButton;
 };
 
 /** @} */
