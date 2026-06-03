@@ -18,7 +18,9 @@
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
 #include "scenegrouplooks.h"
+#include "lookeditor.h"
 #include "functionparent.h"
+#include "qlcpalette.h"
 #include "function.h"
 #include "scene.h"
 #include "doc.h"
@@ -57,8 +59,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
            "fixture groups and fixtures from the right onto it."), this);
     m_canvasPlaceholder->setWordWrap(true);
     m_canvasPlaceholder->setAlignment(Qt::AlignCenter);
-    m_canvasLayout->addWidget(m_canvasPlaceholder);
-    m_canvasLayout->addStretch(1);
+    m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
+    // Inline look editor pinned to the bottom of the center panel.
+    m_lookEditor = new LookEditor(m_doc, this);
+    m_canvasLayout->addWidget(m_lookEditor);
     splitter->addWidget(canvasPanel);
 
     // --- Right: drag sources (palette tree + fixtures & groups tree) ---
@@ -103,6 +107,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_doc, &Doc::cleared, m_paletteTree, &FunctionsTreeWidget::updateTree);
 
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
+    connect(m_lookEditor, SIGNAL(paletteChanged(quint32)),
+            this, SLOT(slotLookEdited()));
 }
 
 ProgrammingManager::~ProgrammingManager()
@@ -131,6 +137,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
 
     stopPreview();
     m_currentScene = sceneId;
+    m_lookEditor->setPalette(QLCPalette::invalidId());
 
     if (m_canvas != NULL)
     {
@@ -148,9 +155,18 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     m_canvasPlaceholder->hide();
     m_canvas = new SceneGroupLooks(scene, m_doc, this, /*includeFixtureTargets*/ true);
     connect(m_canvas, SIGNAL(sceneModified()), this, SLOT(slotCanvasModified()));
-    // Insert above the trailing stretch.
+    connect(m_canvas, SIGNAL(lookSelected(quint32)),
+            m_lookEditor, SLOT(setPalette(quint32)));
+    // Insert above the look editor (which is the last item).
     m_canvasLayout->insertWidget(m_canvasLayout->count() - 1, m_canvas, 1);
 
+    startPreview();
+}
+
+void ProgrammingManager::slotLookEdited()
+{
+    // A look's value changed in the editor: refresh the preview output.
+    stopPreview();
     startPreview();
 }
 

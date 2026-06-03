@@ -25,6 +25,7 @@
 class FunctionsTreeWidget;
 class FixtureGroupSource;
 class SceneGroupLooks;
+class LookEditor;
 class QVBoxLayout;
 class QLabel;
 class Doc;
@@ -50,6 +51,7 @@ private slots:
     void slotNewScene();
     void slotCanvasModified();
     void slotModeChanged();
+    void slotLookEdited();
 
 private:
     void loadCanvas(quint32 sceneId);
@@ -68,6 +70,7 @@ private:
     QVBoxLayout *m_canvasLayout;
     QLabel *m_canvasPlaceholder;
     SceneGroupLooks *m_canvas;
+    LookEditor *m_lookEditor;
     quint32 m_currentScene;
     quint32 m_previewScene; //!< the scene we started for live preview
 

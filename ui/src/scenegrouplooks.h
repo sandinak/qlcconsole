@@ -58,6 +58,9 @@ signals:
     /** Emitted after the scene's targets/looks were changed here. */
     void sceneModified();
 
+    /** Emitted when the selected look changes (invalidId if none). */
+    void lookSelected(quint32 paletteId);
+
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
@@ -66,6 +69,7 @@ protected:
 private slots:
     void slotRemoveTarget();
     void slotRemoveLook();
+    void slotLookSelectionChanged();
 
 private:
     QString lookLabel(quint32 paletteId) const;

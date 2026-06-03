@@ -82,6 +82,8 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
 
     connect(m_removeTargetButton, SIGNAL(clicked()), this, SLOT(slotRemoveTarget()));
     connect(m_removeLookButton, SIGNAL(clicked()), this, SLOT(slotRemoveLook()));
+    connect(m_lookList, SIGNAL(itemSelectionChanged()),
+            this, SLOT(slotLookSelectionChanged()));
 
     reload();
 }
@@ -284,6 +286,13 @@ void SceneGroupLooks::slotRemoveTarget()
         reload();
         emit sceneModified();
     }
+}
+
+void SceneGroupLooks::slotLookSelectionChanged()
+{
+    const QList<QListWidgetItem*> sel = m_lookList->selectedItems();
+    emit lookSelected(sel.isEmpty() ? QLCPalette::invalidId()
+                                    : sel.first()->data(Qt::UserRole).toUInt());
 }
 
 void SceneGroupLooks::slotRemoveLook()

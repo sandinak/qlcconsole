@@ -93,6 +93,7 @@ add_library(${module_name}
     scenegrouplooks.cpp scenegrouplooks.h
     groupselection.cpp groupselection.h
     fixturegroupsource.cpp fixturegroupsource.h
+    lookeditor.cpp lookeditor.h
     programmingmanager.cpp programmingmanager.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h
