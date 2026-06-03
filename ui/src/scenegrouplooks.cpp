@@ -16,6 +16,8 @@
 #include <QMimeData>
 #include <QDataStream>
 
+#include <algorithm>
+
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"
 #include "paletteeditdialog.h"
@@ -109,12 +111,20 @@ void SceneGroupLooks::reload()
     // List every fixture group with a checkbox; checked == targeted by
     // this scene. Block signals so repopulating doesn't fire toggles.
     const QList<quint32> targeted = m_scene->fixtureGroups();
+    // Sort groups by name (case-insensitive) for a stable, scannable list.
+    QList<FixtureGroup*> groups;
+    foreach (FixtureGroup *g, m_doc->fixtureGroups())
+        if (g != NULL)
+            groups.append(g);
+    std::sort(groups.begin(), groups.end(),
+              [](FixtureGroup *a, FixtureGroup *b) {
+                  return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+              });
+
     m_groupList->blockSignals(true);
     m_groupList->clear();
-    foreach (FixtureGroup *g, m_doc->fixtureGroups())
+    foreach (FixtureGroup *g, groups)
     {
-        if (g == NULL)
-            continue;
         QListWidgetItem *it = new QListWidgetItem(g->name(), m_groupList);
         it->setData(Qt::UserRole, g->id());
         it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
