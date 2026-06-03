@@ -50,6 +50,7 @@ protected:
 private slots:
     void slotFunctionSelected();
     void slotNewScene();
+    void slotNewPalette();
     void slotCanvasModified();
     void slotModeChanged();
     void slotLookEdited();

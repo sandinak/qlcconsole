@@ -20,6 +20,7 @@
 #include "fixturegroupsource.h"
 #include "scenegrouplooks.h"
 #include "lookeditor.h"
+#include "paletteeditdialog.h"
 #include "functionparent.h"
 #include "qlcpalette.h"
 #include "function.h"
@@ -88,6 +89,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_paletteTree->setExternalDragMode(true); // emit palette MIME on drag
     m_paletteTree->updateTree();
     srcCol->addWidget(m_paletteTree, 1);
+    QPushButton *newPalette = new QPushButton(tr("New palette…"), this);
+    newPalette->setToolTip(tr("Create a reusable palette/look (e.g. a custom "
+                              "color) to drag onto scenes"));
+    srcCol->addWidget(newPalette);
 
     srcCol->addWidget(new QLabel(tr("Fixtures & groups"), this));
     m_fixGroupSource = new FixtureGroupSource(m_doc, this);
@@ -100,6 +105,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     splitter->setStretchFactor(2, 2); // sources
 
     connect(newScene, SIGNAL(clicked()), this, SLOT(slotNewScene()));
+    connect(newPalette, SIGNAL(clicked()), this, SLOT(slotNewPalette()));
     connect(m_funcTree, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotFunctionSelected()));
 
@@ -220,6 +226,22 @@ void ProgrammingManager::slotLookEdited()
     // A look's value changed in the editor: refresh the preview output.
     stopPreview();
     startPreview();
+}
+
+void ProgrammingManager::slotNewPalette()
+{
+    PaletteEditDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted || dlg.result() == NULL)
+        return;
+    QLCPalette *p = dlg.result();
+    if (m_doc->addPalette(p) == false)
+    {
+        delete p;
+        return;
+    }
+    m_doc->setModified();
+    // Edit it immediately in the inline editor.
+    m_lookEditor->setPalette(p->id());
 }
 
 void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
