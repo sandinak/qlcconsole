@@ -23,6 +23,7 @@
 #include <QWidget>
 
 class QTreeWidgetItem;
+class Function;
 class FunctionsTreeWidget;
 class FixtureGroupSource;
 class SceneGroupLooks;
@@ -60,6 +61,10 @@ private slots:
 
 private:
     void loadCanvas(quint32 sceneId);
+    /** Host the stock editor for a non-scene function in the canvas. */
+    void loadFunctionEditor(Function *function);
+    /** Tear down whichever canvas editor is currently shown. */
+    void clearEditors();
     void updateTitle();
 
     /** Live-preview the canvas scene by running it (Design mode only), so
@@ -77,6 +82,7 @@ private:
     QLabel *m_canvasTitle;
     QLabel *m_canvasPlaceholder;
     SceneGroupLooks *m_canvas;
+    QWidget *m_funcEditor;     //!< stock editor for non-scene functions
     LookEditor *m_lookEditor;
     quint32 m_currentScene;
     quint32 m_previewScene;       //!< the scene we started for live preview

@@ -26,12 +26,21 @@
 #include "qlcpalette.h"
 #include "function.h"
 #include "scene.h"
+#include "chaser.h"
+#include "collection.h"
+#include "efx.h"
+#include "rgbmatrix.h"
+#include "chasereditor.h"
+#include "collectioneditor.h"
+#include "efxeditor.h"
+#include "rgbmatrixeditor.h"
 #include "doc.h"
 
 ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     : QWidget(parent)
     , m_doc(doc)
     , m_canvas(nullptr)
+    , m_funcEditor(nullptr)
     , m_currentScene(Function::invalidId())
     , m_previewScene(Function::invalidId())
     , m_clipboardFunction(Function::invalidId())
@@ -158,20 +167,12 @@ void ProgrammingManager::slotFunctionSelected()
 
     const quint32 fid = m_funcTree->itemFunctionId(sel.first());
     Function *f = m_doc->function(fid);
-    if (f != NULL && f->type() == Function::SceneType)
-    {
+    if (f == NULL)
+        loadCanvas(Function::invalidId()); // folder / category -> placeholder
+    else if (f->type() == Function::SceneType)
         loadCanvas(fid);
-    }
     else
-    {
-        loadCanvas(Function::invalidId()); // folders / non-scene -> placeholder
-        if (f != NULL)
-            m_canvasPlaceholder->setText(
-                tr("\"%1\" is a %2. Editing collections, chasers, effects and "
-                   "matrices here is coming soon — for now open it in the "
-                   "Functions tab.")
-                .arg(f->name()).arg(Function::typeToString(f->type())));
-    }
+        loadFunctionEditor(f);
 }
 
 void ProgrammingManager::loadCanvas(quint32 sceneId)
@@ -182,12 +183,8 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     stopPreview();
     m_currentScene = sceneId;
     m_lookEditor->setPalette(QLCPalette::invalidId());
-
-    if (m_canvas != NULL)
-    {
-        m_canvas->deleteLater();
-        m_canvas = NULL;
-    }
+    m_funcTree->setExternalDragMode(false); // only collections/chasers need it
+    clearEditors();
 
     Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
     if (scene == NULL)
@@ -211,6 +208,76 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
 
     startPreview();
     updateTitle();
+}
+
+void ProgrammingManager::clearEditors()
+{
+    if (m_canvas != NULL)
+    {
+        m_canvas->deleteLater();
+        m_canvas = NULL;
+    }
+    if (m_funcEditor != NULL)
+    {
+        m_funcEditor->deleteLater();
+        m_funcEditor = NULL;
+    }
+}
+
+void ProgrammingManager::loadFunctionEditor(Function *f)
+{
+    if (f == NULL)
+        return;
+
+    stopPreview();
+    m_currentScene = Function::invalidId();
+    m_lookEditor->setPalette(QLCPalette::invalidId());
+    m_lookEditor->setContextScene(NULL);
+    clearEditors();
+    m_canvasPlaceholder->hide();
+
+    // Host the stock editor for the function type; collections and chasers
+    // accept functions dragged from the left tree (external drag mode).
+    QWidget *ed = NULL;
+    bool dragIn = false;
+    switch (f->type())
+    {
+    case Function::CollectionType:
+        ed = new CollectionEditor(this, qobject_cast<Collection*>(f), m_doc);
+        dragIn = true;
+        break;
+    case Function::ChaserType:
+        ed = new ChaserEditor(this, qobject_cast<Chaser*>(f), m_doc);
+        dragIn = true;
+        break;
+    case Function::EFXType:
+        ed = new EFXEditor(this, qobject_cast<EFX*>(f), m_doc);
+        break;
+    case Function::RGBMatrixType:
+        ed = new RGBMatrixEditor(this, qobject_cast<RGBMatrix*>(f), m_doc);
+        break;
+    default:
+        break;
+    }
+
+    m_funcTree->setExternalDragMode(dragIn);
+
+    if (ed == NULL)
+    {
+        m_canvasPlaceholder->setText(
+            tr("\"%1\" (%2) — open it in the Functions tab to edit.")
+            .arg(f->name()).arg(Function::typeToString(f->type())));
+        m_canvasPlaceholder->show();
+        m_canvasTitle->setText(tr("Programming"));
+        return;
+    }
+
+    m_funcEditor = ed;
+    m_canvasLayout->insertWidget(m_canvasLayout->count() - 1, m_funcEditor, 1);
+    m_funcEditor->show();
+    m_canvasTitle->setText(tr("Editing %1: %2")
+                           .arg(Function::typeToString(f->type()))
+                           .arg(f->name()));
 }
 
 void ProgrammingManager::updateTitle()
