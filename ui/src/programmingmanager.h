@@ -49,7 +49,7 @@ protected:
     void hideEvent(QHideEvent *ev) override;
 
 private slots:
-    void slotFunctionSelected();
+    void slotFunctionActivated(QTreeWidgetItem *item);
     void slotNewScene();
     void slotNewPalette();
     void slotCanvasModified();

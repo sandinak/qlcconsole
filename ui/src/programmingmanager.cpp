@@ -121,8 +121,11 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
     connect(newScene, SIGNAL(clicked()), this, SLOT(slotNewScene()));
     connect(newPalette, SIGNAL(clicked()), this, SLOT(slotNewPalette()));
-    connect(m_funcTree, SIGNAL(itemSelectionChanged()),
-            this, SLOT(slotFunctionSelected()));
+    // Open on DOUBLE-click only; single-click just selects, so a function
+    // can be click-dragged from the tree into a collection/chaser canvas
+    // without the canvas switching out from under the drag.
+    connect(m_funcTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
+            this, SLOT(slotFunctionActivated(QTreeWidgetItem*)));
 
     // Keep the trees in sync with the Doc (functor connects so we can call
     // the trees' non-slot helpers directly).
@@ -159,13 +162,12 @@ ProgrammingManager::~ProgrammingManager()
     stopPreview();
 }
 
-void ProgrammingManager::slotFunctionSelected()
+void ProgrammingManager::slotFunctionActivated(QTreeWidgetItem *item)
 {
-    const QList<QTreeWidgetItem*> sel = m_funcTree->selectedItems();
-    if (sel.isEmpty())
+    if (item == NULL)
         return;
 
-    const quint32 fid = m_funcTree->itemFunctionId(sel.first());
+    const quint32 fid = m_funcTree->itemFunctionId(item);
     Function *f = m_doc->function(fid);
     if (f == NULL)
         loadCanvas(Function::invalidId()); // folder / category -> placeholder
@@ -432,11 +434,13 @@ void ProgrammingManager::slotNewScene()
     }
     scene->setName(tr("New Scene %1").arg(scene->id()));
 
-    // Select it in the tree (which loads the canvas).
     QTreeWidgetItem *it = m_funcTree->functionItem(scene);
     if (it != NULL)
     {
         m_funcTree->setCurrentItem(it);
         m_funcTree->scrollToItem(it);
     }
+    // Selection no longer opens the canvas (that's double-click now), so
+    // open the freshly created scene explicitly.
+    loadCanvas(scene->id());
 }
