@@ -7,13 +7,12 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 (nothing active)
 
-## Next two (per Branson)
-- [ ] **Fixture-channel editor in the canvas** — when a single fixture is
-      selected in a scene, show that fixture's DMX channel editor (per-scene
-      values) in the bottom of the center panel.
-- [ ] **Matrix head-layout: move a sub-group as a unit** — drag a whole
-      fixture group onto a larger group's layout as a block; keep sub-groups
-      visually distinct. (Fixture Manager head-layout grid; meatier.)
+## Next
+- [ ] **Matrix head-layout: place/move a sub-group as a unit** — in
+      `FixtureGroupEditor` (Fixture Manager): (1) add a whole fixture group's
+      heads as a block; (2) colour cells by their source sub-group so they're
+      visually distinct; (3) move a sub-group block as a unit. Meatier change
+      to the QTableWidget grid — own focused turn.
 
 ## Backlog — when placing a
       fixture group onto a larger group's head layout, drag the whole
@@ -53,3 +52,5 @@ move to the bottom or get deleted. See also the session memory under
       palette tree: new palette / move to folder); removed the +buttons.
 - [x] Usage counts: scene "used in N places", look "used by N scenes".
 - [x] Nest a collection/chaser's members under its node in the tree.
+- [x] Palette right-click lists types (Color/Dimmer/Pan-Tilt/Gobo/Shutter).
+- [x] Per-fixture DMX channel editor in the canvas (select a fixed fixture).
