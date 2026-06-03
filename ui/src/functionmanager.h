@@ -27,7 +27,6 @@
 #include "doc.h"
 
 class FunctionsTreeWidget;
-class FixtureGroupSource;
 class QTreeWidgetItem;
 class QSplitter;
 class QToolBar;
@@ -109,10 +108,6 @@ private:
     QSplitter* m_hsplitter;
     QSplitter* m_vsplitter;
     FunctionsTreeWidget* m_tree;
-
-    /** Drag-source dock (Fixtures & Groups) shown beside the editor when a
-     *  scene is open. */
-    FixtureGroupSource* m_sourceDock;
 
     /*********************************************************************
      * Menus, toolbar & actions

@@ -32,21 +32,13 @@
 #include <qmath.h>
 #include <QLabel>
 #include <QDebug>
-#include <QEvent>
-#include <QDragEnterEvent>
-#include <QDropEvent>
-#include <QMimeData>
-#include <QDataStream>
 
 #include "genericdmxsource.h"
 #include "fixtureselection.h"
-#include "fixturegroupsource.h"
 #include "speeddialwidget.h"
 #include "functionmanager.h"
 #include "fixtureconsole.h"
-#include "fixturegroup.h"
 #include "groupsconsole.h"
-#include "scenegrouplooks.h"
 #include "qlcfixturedef.h"
 #include "channelsgroup.h"
 #include "qlcclipboard.h"
@@ -347,25 +339,9 @@ void SceneEditor::init(bool applyValues)
             this, SLOT(slotDisableAllChannelGroups()));
     updateChannelsGroupsTab();
 
-    // Dynamic group-look surface (fork-owned widget). Placed in the empty
-    // top band of the General tab's grid (rows 0-6) so group/looks sit
-    // ABOVE the fixture/channel-group trees (rows 7-13), which become the
-    // per-fixture/per-channel backup below. The tab-index bookkeeping
-    // (m_fixtureFirstTabIndex) is untouched.
-    {
-        SceneGroupLooks *gl = new SceneGroupLooks(m_scene, m_doc, this);
-        gridLayout->addWidget(gl, 0, 0, 7, 4);
-    }
-
-    // Static drop zone: dropping a fixture group on the fixtures tree adds
-    // that group's CURRENT fixtures to the scene (one-time expand), as
-    // opposed to the dynamic targets above. Handled via an event filter
-    // since m_tree comes from the .ui and isn't subclassed.
-    m_tree->setAcceptDrops(true);
-    m_tree->viewport()->setAcceptDrops(true);
-    m_tree->viewport()->installEventFilter(this);
-    m_tree->setToolTip(tr("Fixtures used by this scene (static). Drop a "
-                          "fixture group here to add its current members."));
+    // Group-look authoring (palettes/targets) and fixture-group drag/drop
+    // live in the Programming tab now; the classic scene editor stays
+    // focused on per-fixture/per-channel values.
 
     // Apply any mode related change
     slotModeChanged(m_doc->mode());
@@ -1286,79 +1262,6 @@ void SceneEditor::slotNameEdited(const QString& name)
     m_scene->setName(name);
     if (m_speedDials != NULL)
         m_speedDials->setWindowTitle(m_scene->name());
-}
-
-bool SceneEditor::eventFilter(QObject *obj, QEvent *event)
-{
-    if (obj == m_tree->viewport())
-    {
-        const char *mimeType = FixtureGroupSource::fixtureGroupMimeType();
-
-        if (event->type() == QEvent::DragEnter)
-        {
-            QDragEnterEvent *de = static_cast<QDragEnterEvent*>(event);
-            if (de->mimeData()->hasFormat(mimeType))
-            {
-                de->acceptProposedAction();
-                return true;
-            }
-        }
-        else if (event->type() == QEvent::DragMove)
-        {
-            QDragMoveEvent *dm = static_cast<QDragMoveEvent*>(event);
-            if (dm->mimeData()->hasFormat(mimeType))
-            {
-                dm->acceptProposedAction();
-                return true;
-            }
-        }
-        else if (event->type() == QEvent::Drop)
-        {
-            QDropEvent *dr = static_cast<QDropEvent*>(event);
-            if (dr->mimeData()->hasFormat(mimeType))
-            {
-                QByteArray data = dr->mimeData()->data(mimeType);
-                QDataStream stream(&data, QIODevice::ReadOnly);
-                bool added = false;
-                while (stream.atEnd() == false)
-                {
-                    quint32 gid = 0;
-                    stream >> gid;
-                    if (addFixturesFromGroup(gid))
-                        added = true;
-                }
-                if (added)
-                    m_doc->setModified();
-                dr->acceptProposedAction();
-                return true;
-            }
-        }
-    }
-
-    return QWidget::eventFilter(obj, event);
-}
-
-bool SceneEditor::addFixturesFromGroup(quint32 groupId)
-{
-    FixtureGroup *group = m_doc->fixtureGroup(groupId);
-    if (group == NULL)
-        return false;
-
-    bool added = false;
-    foreach (quint32 fxId, group->fixtureList())
-    {
-        Fixture *fixture = m_doc->fixture(fxId);
-        if (fixture == NULL)
-            continue;
-        if (m_scene->fixtures().contains(fixture->id()))
-            continue;
-
-        addFixtureItem(fixture);
-        addFixtureTab(fixture);
-        m_scene->addFixture(fixture->id());
-        added = true;
-    }
-    return added;
 }
 
 void SceneEditor::slotAddFixtureClicked()

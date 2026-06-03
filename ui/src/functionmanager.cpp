@@ -46,7 +46,6 @@
 #include "functionwizard.h"
 #include "palettemanager.h"
 #include "paletteeditdialog.h"
-#include "fixturegroupsource.h"
 #include "qlcpalette.h"
 #include "chasereditor.h"
 #include "scripteditor.h"
@@ -892,19 +891,6 @@ void FunctionManager::initSplitterView()
     container->setLayout(new QVBoxLayout);
     container->layout()->setContentsMargins(0, 0, 0, 0);
     container->hide();
-
-    // Drag-source dock: Fixtures & Groups, on the far right next to the
-    // editor. Only shown while editing a scene (the only editor that
-    // consumes fixtures/groups). Drag distance into the scene's drop zones
-    // stays short.
-    m_sourceDock = new FixtureGroupSource(m_doc, this);
-    m_hsplitter->addWidget(m_sourceDock);
-    m_hsplitter->setStretchFactor(0, 1); // tree
-    m_hsplitter->setStretchFactor(1, 4); // editor
-    m_hsplitter->setStretchFactor(2, 1); // sources dock
-    m_sourceDock->setMinimumWidth(160);
-    m_hsplitter->setCollapsible(2, false); // never let the dock vanish
-    m_sourceDock->hide();
 }
 
 void FunctionManager::initTree()
@@ -1149,23 +1135,8 @@ void FunctionManager::editFunction(Function* function)
         m_scene_editor = new SceneEditor(m_hsplitter->widget(1), qobject_cast<Scene*> (function), m_doc, true);
         connect(this, SIGNAL(functionManagerActive(bool)),
                 m_scene_editor, SLOT(slotFunctionManagerActive(bool)));
-        // Allow palettes to be dragged from the tree onto the scene's
-        // "looks" (see SceneGroupLooks drop handling).
-        m_tree->setExternalDragMode(true);
-        // Show the Fixtures & Groups drag-source dock next to the editor.
-        // Rebuild now (the workspace is loaded by the time a scene is
-        // edited) and guarantee a visible width: the saved splitter state
-        // predates this dock, so it can restore to zero width.
-        m_sourceDock->reload();
-        m_sourceDock->show();
-        QList<int> sizes = m_hsplitter->sizes();
-        if (sizes.size() == 3 && sizes[2] < 120)
-        {
-            const int want = 220;
-            sizes[1] = qMax(200, sizes[1] - (want - sizes[2]));
-            sizes[2] = want;
-            m_hsplitter->setSizes(sizes);
-        }
+        // Group-look authoring (palettes/targets) lives in the Programming
+        // tab now; the classic scene editor stays focused on fixtures/values.
     }
     else if (function->type() == Function::ChaserType)
     {
@@ -1295,7 +1266,6 @@ void FunctionManager::deleteCurrentEditor(bool async)
 
     m_hsplitter->widget(1)->hide();
     m_vsplitter->widget(1)->hide();
-    m_sourceDock->hide();
 }
 
 void FunctionManager::highlightEditedFunction(quint32 fid)
