@@ -50,7 +50,8 @@ protected:
 
 private slots:
     void slotFunctionActivated(QTreeWidgetItem *item);
-    void slotNewScene();
+    void slotFuncTreeMenu(const QPoint &pos);
+    void slotPaletteTreeMenu(const QPoint &pos);
     void slotNewPalette();
     void slotCanvasModified();
     void slotModeChanged();
@@ -66,6 +67,11 @@ private:
     /** Tear down whichever canvas editor is currently shown. */
     void clearEditors();
     void updateTitle();
+
+    /** Folder path of the current func-tree selection (for new functions). */
+    QString selectedFuncFolderPath() const;
+    /** How many chasers/collections reference this function. */
+    int functionUsageCount(quint32 fid) const;
 
     /** Live-preview the canvas scene by running it (Design mode only), so
      *  the DMX/2D view reflects the look as you build. Blind/live handling

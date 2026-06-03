@@ -15,6 +15,10 @@
 #include <QTreeWidgetItem>
 #include <QShortcut>
 #include <QScrollArea>
+#include <QMenu>
+#include <QLabel>
+#include <QInputDialog>
+#include <QLineEdit>
 
 #include "programmingmanager.h"
 #include "functionstreewidget.h"
@@ -34,6 +38,7 @@
 #include "collectioneditor.h"
 #include "efxeditor.h"
 #include "rgbmatrixeditor.h"
+#include "chaserstep.h"
 #include "doc.h"
 
 ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
@@ -60,10 +65,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_funcTree->setColumnHidden(1, true);
     m_funcTree->setSortingEnabled(true);
     m_funcTree->sortByColumn(0, Qt::AscendingOrder);
+    m_funcTree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_funcTree->updateTree();
     navCol->addWidget(m_funcTree, 1);
-    QPushButton *newScene = new QPushButton(tr("New scene"), this);
-    navCol->addWidget(newScene);
+    navCol->addWidget(new QLabel(tr("Right-click to add a scene/function or folder."), this));
     splitter->addWidget(navPanel);
 
     // --- Center: the selected scene's canvas ---
@@ -102,12 +107,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_paletteTree->setSortingEnabled(true);
     m_paletteTree->sortByColumn(0, Qt::AscendingOrder);
     m_paletteTree->setExternalDragMode(true); // emit palette MIME on drag
+    m_paletteTree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_paletteTree->updateTree();
     srcCol->addWidget(m_paletteTree, 1);
-    QPushButton *newPalette = new QPushButton(tr("New palette…"), this);
-    newPalette->setToolTip(tr("Create a reusable palette/look (e.g. a custom "
-                              "color) to drag onto scenes"));
-    srcCol->addWidget(newPalette);
+    srcCol->addWidget(new QLabel(tr("Right-click to add a palette."), this));
 
     srcCol->addWidget(new QLabel(tr("Fixtures & groups"), this));
     m_fixGroupSource = new FixtureGroupSource(m_doc, this);
@@ -119,13 +122,15 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     splitter->setStretchFactor(1, 3); // canvas
     splitter->setStretchFactor(2, 2); // sources
 
-    connect(newScene, SIGNAL(clicked()), this, SLOT(slotNewScene()));
-    connect(newPalette, SIGNAL(clicked()), this, SLOT(slotNewPalette()));
     // Open on DOUBLE-click only; single-click just selects, so a function
     // can be click-dragged from the tree into a collection/chaser canvas
     // without the canvas switching out from under the drag.
     connect(m_funcTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
             this, SLOT(slotFunctionActivated(QTreeWidgetItem*)));
+    connect(m_funcTree, SIGNAL(customContextMenuRequested(QPoint)),
+            this, SLOT(slotFuncTreeMenu(QPoint)));
+    connect(m_paletteTree, SIGNAL(customContextMenuRequested(QPoint)),
+            this, SLOT(slotPaletteTreeMenu(QPoint)));
 
     // Keep the trees in sync with the Doc (functor connects so we can call
     // the trees' non-slot helpers directly).
@@ -291,7 +296,10 @@ void ProgrammingManager::updateTitle()
         return;
     }
     const bool live = (m_previewScene == m_currentScene);
-    m_canvasTitle->setText(tr("Editing scene: %1     [ live preview: %2 ]")
+    const int uses = functionUsageCount(m_currentScene);
+    m_canvasTitle->setText(
+        tr("Editing scene: %1   —   used in %n place(s)   [ live preview: %2 ]",
+           "", uses)
         .arg(s->name())
         .arg(live ? tr("ON") : tr("OFF — Design mode only")));
 }
@@ -309,6 +317,22 @@ void ProgrammingManager::slotNewPalette()
     if (dlg.exec() != QDialog::Accepted || dlg.result() == NULL)
         return;
     QLCPalette *p = dlg.result();
+
+    // Drop it into the selected palette folder, if any.
+    const QList<QTreeWidgetItem*> sel = m_paletteTree->selectedItems();
+    if (sel.isEmpty() == false)
+    {
+        QString cp = sel.first()->text(1); // folder COL_PATH ("Palettes/…")
+        if (cp.isEmpty())
+        {
+            QLCPalette *sp = m_doc->palette(m_paletteTree->itemPaletteId(sel.first()));
+            if (sp != NULL)
+                cp = sp->path();
+        }
+        if (cp.isEmpty() == false)
+            p->setPath(cp);
+    }
+
     if (m_doc->addPalette(p) == false)
     {
         delete p;
@@ -424,23 +448,132 @@ void ProgrammingManager::hideEvent(QHideEvent *ev)
     QWidget::hideEvent(ev);
 }
 
-void ProgrammingManager::slotNewScene()
+QString ProgrammingManager::selectedFuncFolderPath() const
 {
-    Scene *scene = new Scene(m_doc);
-    if (m_doc->addFunction(scene) == false)
+    const QList<QTreeWidgetItem*> sel = m_funcTree->selectedItems();
+    if (sel.isEmpty())
+        return QString();
+    QTreeWidgetItem *it = sel.first();
+    const QString colPath = it->text(1); // COL_PATH
+    if (colPath.isEmpty() == false)
+        return colPath; // a folder/category is selected
+    Function *f = m_doc->function(m_funcTree->itemFunctionId(it));
+    return f != NULL ? f->path() : QString();
+}
+
+void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
+{
+    QMenu menu(this);
+    QAction *aScene  = menu.addAction(tr("New Scene"));
+    QAction *aChaser = menu.addAction(tr("New Chaser"));
+    QAction *aColl   = menu.addAction(tr("New Collection"));
+    QAction *aEFX    = menu.addAction(tr("New EFX"));
+    QAction *aMatrix = menu.addAction(tr("New RGB Matrix"));
+    menu.addSeparator();
+    QAction *aFolder = menu.addAction(tr("New Folder"));
+
+    QAction *chosen = menu.exec(m_funcTree->viewport()->mapToGlobal(pos));
+    if (chosen == NULL)
+        return;
+    if (chosen == aFolder)
     {
-        delete scene;
+        m_funcTree->addFolder();
         return;
     }
-    scene->setName(tr("New Scene %1").arg(scene->id()));
 
-    QTreeWidgetItem *it = m_funcTree->functionItem(scene);
+    Function *f = NULL;
+    QString base;
+    if (chosen == aScene)       { f = new Scene(m_doc);      base = tr("New Scene"); }
+    else if (chosen == aChaser) { f = new Chaser(m_doc);     base = tr("New Chaser"); }
+    else if (chosen == aColl)   { f = new Collection(m_doc); base = tr("New Collection"); }
+    else if (chosen == aEFX)    { f = new EFX(m_doc);        base = tr("New EFX"); }
+    else if (chosen == aMatrix) { f = new RGBMatrix(m_doc);  base = tr("New RGB Matrix"); }
+    if (f == NULL)
+        return;
+
+    const QString folder = selectedFuncFolderPath();
+    if (folder.isEmpty() == false)
+        f->setPath(folder);
+
+    if (m_doc->addFunction(f) == false)
+    {
+        delete f;
+        return;
+    }
+    f->setName(QString("%1 %2").arg(base).arg(f->id()));
+
+    QTreeWidgetItem *it = m_funcTree->functionItem(f);
     if (it != NULL)
     {
         m_funcTree->setCurrentItem(it);
         m_funcTree->scrollToItem(it);
     }
-    // Selection no longer opens the canvas (that's double-click now), so
-    // open the freshly created scene explicitly.
-    loadCanvas(scene->id());
+    // Selection no longer opens the canvas (double-click does), so open the
+    // freshly created function explicitly.
+    if (f->type() == Function::SceneType)
+        loadCanvas(f->id());
+    else
+        loadFunctionEditor(f);
+}
+
+void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
+{
+    QMenu menu(this);
+    QAction *aNew  = menu.addAction(tr("New palette…"));
+    QAction *aMove = NULL;
+    const quint32 pid =
+        m_paletteTree->itemPaletteId(m_paletteTree->itemAt(pos));
+    if (pid != QLCPalette::invalidId())
+        aMove = menu.addAction(tr("Move to folder…"));
+
+    QAction *chosen = menu.exec(m_paletteTree->viewport()->mapToGlobal(pos));
+    if (chosen == NULL)
+        return;
+
+    if (chosen == aNew)
+    {
+        slotNewPalette();
+    }
+    else if (chosen == aMove)
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (p == NULL)
+            return;
+        bool ok = false;
+        const QString folder = QInputDialog::getText(
+            this, tr("Move palette to folder"),
+            tr("Folder path (e.g. \"Shutters\"; empty for none):"),
+            QLineEdit::Normal, p->path(), &ok);
+        if (!ok)
+            return;
+        QString path = folder.trimmed();
+        // Palette paths are stored with the internal "Palettes/" prefix.
+        if (path.isEmpty())
+            p->setPath(QString());
+        else
+            p->setPath(QStringLiteral("Palettes/") + path);
+        m_doc->setModified();
+        m_paletteTree->updateTree();
+    }
+}
+
+int ProgrammingManager::functionUsageCount(quint32 fid) const
+{
+    int n = 0;
+    foreach (Function *f, m_doc->functions())
+    {
+        if (f == NULL)
+            continue;
+        if (Collection *c = qobject_cast<Collection*>(f))
+        {
+            if (c->functions().contains(fid))
+                n++;
+        }
+        else if (Chaser *ch = qobject_cast<Chaser*>(f))
+        {
+            foreach (const ChaserStep &s, ch->steps())
+                if (s.fid == fid) { n++; break; }
+        }
+    }
+    return n;
 }

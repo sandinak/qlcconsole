@@ -152,7 +152,16 @@ void LookEditor::setPalette(quint32 paletteId)
         path.chop(1);
     if (path.isEmpty() == false)
         name = path + "/" + name;
-    m_title->setText(tr("Editing look: %1").arg(name));
+
+    int uses = 0;
+    foreach (Function *fn, m_doc->functions())
+    {
+        Scene *s = qobject_cast<Scene*>(fn);
+        if (s != NULL && s->palettes().contains(paletteId))
+            uses++;
+    }
+    m_title->setText(tr("Editing look: %1   —   used by %n scene(s)", "", uses)
+                     .arg(name));
 
     switch (p->type())
     {
