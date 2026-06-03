@@ -340,12 +340,14 @@ void SceneEditor::init(bool applyValues)
             this, SLOT(slotDisableAllChannelGroups()));
     updateChannelsGroupsTab();
 
-    // Dynamic group-look surface (fork-owned widget). Embedded in the
-    // General tab's grid below the fixture/channel-group trees so the
-    // tab-index bookkeeping (m_fixtureFirstTabIndex) is untouched.
+    // Dynamic group-look surface (fork-owned widget). Placed in the empty
+    // top band of the General tab's grid (rows 0-6) so group/looks sit
+    // ABOVE the fixture/channel-group trees (rows 7-13), which become the
+    // per-fixture/per-channel backup below. The tab-index bookkeeping
+    // (m_fixtureFirstTabIndex) is untouched.
     {
         SceneGroupLooks *gl = new SceneGroupLooks(m_scene, m_doc, this);
-        gridLayout->addWidget(gl, 14, 0, 1, 4);
+        gridLayout->addWidget(gl, 0, 0, 7, 4);
     }
 
     // Apply any mode related change

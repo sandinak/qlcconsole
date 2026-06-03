@@ -17,6 +17,7 @@
 #include <QWidget>
 
 class QListWidget;
+class QListWidgetItem;
 class QPushButton;
 class Scene;
 class Doc;
@@ -56,8 +57,7 @@ protected:
     void dropEvent(QDropEvent *event) override;
 
 private slots:
-    void slotAddGroup();
-    void slotRemoveGroup();
+    void slotGroupItemChanged(QListWidgetItem *item);
     void slotAddLook();
     void slotRemoveLook();
 
@@ -71,8 +71,6 @@ private:
 
     QListWidget *m_groupList;
     QListWidget *m_lookList;
-    QPushButton *m_addGroupButton;
-    QPushButton *m_removeGroupButton;
     QPushButton *m_addLookButton;
     QPushButton *m_removeLookButton;
 };
