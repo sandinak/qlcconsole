@@ -2,10 +2,11 @@
   Q Light Controller Plus
   scenegrouplooks.h
 
-  Fork-owned widget: lets a Scene target fixture GROUPS with dynamic
-  palette "looks" (Color/Dimmer/Pan-Tilt/Gobo/Shutter) that follow group
-  membership at run time. Embedded into the classic Scene Editor's
-  General tab. Kept in its own file so the upstream sceneeditor.* diff
+  Fork-owned widget: a Scene's LOOKS (palettes) and TARGETS (fixture
+  groups = dynamic, individual fixtures = fixed). Add by dragging from the
+  Programming tab's sources (or the scene editor); remove with the buttons.
+  Embedded in the classic Scene Editor's General tab and in the Programming
+  tab's canvas. Kept in its own file so the upstream sceneeditor.* diff
   stays a tiny hook (cherry-pick friendliness).
 
   Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,63 +28,57 @@ class Doc;
  */
 
 /**
- * Two small lists inside the Scene Editor's General tab:
- *   - Target groups: the fixture groups this scene applies its looks to.
- *   - Looks: QLCPalettes (color/dimmer/position/gobo/shutter) the scene
- *     asserts. Per the engine, every look applies to every target group
- *     (and to the scene's individual fixtures) — so one scene is "these
- *     looks on these groups". Different looks per group => separate scenes.
+ * Two lists describing what a scene asserts:
+ *   - Targets: fixture groups (dynamic — follow membership at run time)
+ *     and/or individual fixtures (fixed membership). The scene's looks
+ *     apply to every target.
+ *   - Looks: QLCPalettes the scene asserts on its targets.
  *
- * This is a set-and-attach surface, not a live-preview editor: a look
- * takes effect when the scene runs. Authoring/live-tweak of group looks
- * happens in the VC programmer; this is the classic-editor companion so
- * group scenes are visible and editable here instead of opaque.
+ * Items are added by dropping palettes / groups / fixtures dragged from
+ * the sources; routed by MIME type. Emits sceneModified() after any change
+ * so a host (e.g. the Programming tab) can refresh a live preview.
  */
 class SceneGroupLooks final : public QWidget
 {
     Q_OBJECT
 
 public:
-    /** @param showFixtures  when true, also show a "Fixed fixtures" list
-     *  (the scene's individual fixture targets) and accept fixture drops.
-     *  The classic scene editor leaves it false (it has its own fixtures
-     *  tree); the Programming tab sets it true. */
+    /** @param includeFixtureTargets  when true, individual fixtures are
+     *  listed in (and accepted into) Targets. The classic scene editor
+     *  leaves it false — it shows fixtures in its own tree — while the
+     *  Programming tab sets it true. */
     SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent = nullptr,
-                    bool showFixtures = false);
+                    bool includeFixtureTargets = false);
     ~SceneGroupLooks();
 
-    /** Repopulate the lists from the scene's current groups/palettes
-     *  (and fixtures, when shown). */
+    /** Repopulate the lists from the scene's current targets/looks. */
     void reload();
 
+signals:
+    /** Emitted after the scene's targets/looks were changed here. */
+    void sceneModified();
+
 protected:
-    /** Accept palettes dragged from the Function Manager tree. */
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
 
 private slots:
-    void slotSelectGroups();
-    void slotAddLook();
+    void slotRemoveTarget();
     void slotRemoveLook();
-    void slotRemoveFixture();
 
 private:
-    /** Human-readable one-liner for a palette (type + value). */
     QString lookLabel(quint32 paletteId) const;
 
 private:
     Scene *m_scene;
     Doc *m_doc;
-    bool m_showFixtures;
+    bool m_includeFixtureTargets;
 
-    QListWidget *m_groupList;
+    QListWidget *m_targetList;
     QListWidget *m_lookList;
-    QListWidget *m_fixtureList;     //!< only when m_showFixtures
-    QPushButton *m_selectGroupsButton;
-    QPushButton *m_addLookButton;
+    QPushButton *m_removeTargetButton;
     QPushButton *m_removeLookButton;
-    QPushButton *m_removeFixtureButton;
 };
 
 /** @} */

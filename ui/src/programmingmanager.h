@@ -41,12 +41,24 @@ public:
     ProgrammingManager(QWidget *parent, Doc *doc);
     ~ProgrammingManager();
 
+protected:
+    void showEvent(QShowEvent *ev) override;
+    void hideEvent(QHideEvent *ev) override;
+
 private slots:
     void slotFunctionSelected();
     void slotNewScene();
+    void slotCanvasModified();
+    void slotModeChanged();
 
 private:
     void loadCanvas(quint32 sceneId);
+
+    /** Live-preview the canvas scene by running it (Design mode only), so
+     *  the DMX/2D view reflects the look as you build. Blind/live handling
+     *  comes later. */
+    void startPreview();
+    void stopPreview();
 
 private:
     Doc *m_doc;
@@ -57,6 +69,7 @@ private:
     QLabel *m_canvasPlaceholder;
     SceneGroupLooks *m_canvas;
     quint32 m_currentScene;
+    quint32 m_previewScene; //!< the scene we started for live preview
 
     FunctionsTreeWidget *m_paletteTree;
     FixtureGroupSource *m_fixGroupSource;

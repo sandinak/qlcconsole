@@ -8,6 +8,7 @@
 #include <QMimeData>
 #include <QDataStream>
 #include <QHeaderView>
+#include <QSet>
 
 #include <algorithm>
 
@@ -55,12 +56,11 @@ void FixtureGroupSource::reload()
 {
     clear();
 
-    // --- Fixture Groups ---
-    QTreeWidgetItem *groupsRoot = new QTreeWidgetItem(this);
-    groupsRoot->setText(0, tr("Fixture Groups"));
-    groupsRoot->setData(0, KindRole, CategoryNode);
-    groupsRoot->setFlags(Qt::ItemIsEnabled);
+    const Qt::ItemFlags leafFlags =
+        Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled;
 
+    // One tree: each group is a node with its member fixtures nested under
+    // it. Drag a group -> dynamic target; drag a fixture -> fixed target.
     QList<FixtureGroup*> groups;
     foreach (FixtureGroup *g, m_doc->fixtureGroups())
         if (g != NULL)
@@ -69,38 +69,63 @@ void FixtureGroupSource::reload()
               [](FixtureGroup *a, FixtureGroup *b) {
                   return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
               });
+
+    QSet<quint32> grouped;
     foreach (FixtureGroup *g, groups)
     {
-        const int n = g->fixtureList().count();
-        QTreeWidgetItem *it = new QTreeWidgetItem(groupsRoot);
-        it->setText(0, tr("%1  (%n fixture(s))", "", n).arg(g->name()));
-        it->setIcon(0, QIcon(":/group.png"));
-        it->setData(0, IdRole, g->id());
-        it->setData(0, KindRole, GroupNode);
-        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+        const QList<quint32> members = g->fixtureList();
+        QTreeWidgetItem *gi = new QTreeWidgetItem(this);
+        gi->setText(0, tr("%1  (%n fixture(s))", "", members.count()).arg(g->name()));
+        gi->setIcon(0, QIcon(":/group.png"));
+        gi->setData(0, IdRole, g->id());
+        gi->setData(0, KindRole, GroupNode);
+        gi->setFlags(leafFlags);
+
+        QList<Fixture*> members2;
+        foreach (quint32 fid, members)
+        {
+            grouped.insert(fid);
+            Fixture *f = m_doc->fixture(fid);
+            if (f != NULL)
+                members2.append(f);
+        }
+        std::sort(members2.begin(), members2.end(),
+                  [](Fixture *a, Fixture *b) {
+                      return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+                  });
+        foreach (Fixture *f, members2)
+        {
+            QTreeWidgetItem *fi = new QTreeWidgetItem(gi);
+            fi->setText(0, f->name());
+            fi->setData(0, IdRole, f->id());
+            fi->setData(0, KindRole, FixtureNode);
+            fi->setFlags(leafFlags);
+        }
     }
 
-    // --- Fixtures ---
-    QTreeWidgetItem *fixturesRoot = new QTreeWidgetItem(this);
-    fixturesRoot->setText(0, tr("Fixtures"));
-    fixturesRoot->setData(0, KindRole, CategoryNode);
-    fixturesRoot->setFlags(Qt::ItemIsEnabled);
-
-    QList<Fixture*> fixtures;
+    // Fixtures that belong to no group, so they're still reachable.
+    QList<Fixture*> ungrouped;
     foreach (Fixture *f, m_doc->fixtures())
-        if (f != NULL)
-            fixtures.append(f);
-    std::sort(fixtures.begin(), fixtures.end(),
-              [](Fixture *a, Fixture *b) {
-                  return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
-              });
-    foreach (Fixture *f, fixtures)
+        if (f != NULL && grouped.contains(f->id()) == false)
+            ungrouped.append(f);
+    if (ungrouped.isEmpty() == false)
     {
-        QTreeWidgetItem *it = new QTreeWidgetItem(fixturesRoot);
-        it->setText(0, f->name());
-        it->setData(0, IdRole, f->id());
-        it->setData(0, KindRole, FixtureNode);
-        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+        std::sort(ungrouped.begin(), ungrouped.end(),
+                  [](Fixture *a, Fixture *b) {
+                      return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+                  });
+        QTreeWidgetItem *root = new QTreeWidgetItem(this);
+        root->setText(0, tr("Ungrouped fixtures"));
+        root->setData(0, KindRole, CategoryNode);
+        root->setFlags(Qt::ItemIsEnabled);
+        foreach (Fixture *f, ungrouped)
+        {
+            QTreeWidgetItem *fi = new QTreeWidgetItem(root);
+            fi->setText(0, f->name());
+            fi->setData(0, IdRole, f->id());
+            fi->setData(0, KindRole, FixtureNode);
+            fi->setFlags(leafFlags);
+        }
     }
 
     expandAll();

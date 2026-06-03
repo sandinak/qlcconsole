@@ -10,11 +10,15 @@
 #include <QSplitter>
 #include <QPushButton>
 #include <QLabel>
+#include <QShowEvent>
+#include <QHideEvent>
+#include <QTreeWidgetItem>
 
 #include "programmingmanager.h"
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
 #include "scenegrouplooks.h"
+#include "functionparent.h"
 #include "function.h"
 #include "scene.h"
 #include "doc.h"
@@ -24,6 +28,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     , m_doc(doc)
     , m_canvas(nullptr)
     , m_currentScene(Function::invalidId())
+    , m_previewScene(Function::invalidId())
 {
     QHBoxLayout *root = new QHBoxLayout(this);
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
@@ -96,10 +101,13 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_doc, &Doc::paletteRemoved, this, [this](quint32) { m_paletteTree->updateTree(); });
     connect(m_doc, &Doc::loaded, m_paletteTree, &FunctionsTreeWidget::updateTree);
     connect(m_doc, &Doc::cleared, m_paletteTree, &FunctionsTreeWidget::updateTree);
+
+    connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
 }
 
 ProgrammingManager::~ProgrammingManager()
 {
+    stopPreview();
 }
 
 void ProgrammingManager::slotFunctionSelected()
@@ -121,6 +129,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     if (sceneId == m_currentScene && m_canvas != NULL)
         return;
 
+    stopPreview();
     m_currentScene = sceneId;
 
     if (m_canvas != NULL)
@@ -137,9 +146,82 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     }
 
     m_canvasPlaceholder->hide();
-    m_canvas = new SceneGroupLooks(scene, m_doc, this, /*showFixtures*/ true);
+    m_canvas = new SceneGroupLooks(scene, m_doc, this, /*includeFixtureTargets*/ true);
+    connect(m_canvas, SIGNAL(sceneModified()), this, SLOT(slotCanvasModified()));
     // Insert above the trailing stretch.
     m_canvasLayout->insertWidget(m_canvasLayout->count() - 1, m_canvas, 1);
+
+    startPreview();
+}
+
+void ProgrammingManager::startPreview()
+{
+    // Live-preview only in Design mode (don't hijack a running show).
+    if (m_doc->mode() != Doc::Design)
+        return;
+    if (isVisible() == false)
+        return;
+    if (m_previewScene == m_currentScene)
+        return;
+
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (scene == NULL)
+        return;
+
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    m_previewScene = m_currentScene;
+}
+
+void ProgrammingManager::stopPreview()
+{
+    if (m_previewScene == Function::invalidId())
+        return;
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_previewScene));
+    if (scene != NULL)
+        scene->stop(FunctionParent::master());
+    m_previewScene = Function::invalidId();
+}
+
+void ProgrammingManager::slotCanvasModified()
+{
+    // The running preview scene re-expands its palettes/groups on the next
+    // write tick, so the DMX/2D view reflects the new look immediately.
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_previewScene));
+    if (scene != NULL)
+        scene->resetRuntime();
+    else
+        startPreview(); // a look/target was just added to a not-yet-running scene
+}
+
+void ProgrammingManager::slotModeChanged()
+{
+    if (m_doc->mode() == Doc::Design)
+        startPreview();
+    else
+        stopPreview();
+}
+
+void ProgrammingManager::showEvent(QShowEvent *ev)
+{
+    // Pick up folder/path changes made in the Functions tab while away,
+    // preserving the current scene selection.
+    m_paletteTree->updateTree();
+    m_funcTree->updateTree();
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (scene != NULL)
+    {
+        QTreeWidgetItem *it = m_funcTree->functionItem(scene);
+        if (it != NULL)
+            m_funcTree->setCurrentItem(it);
+    }
+    startPreview();
+    QWidget::showEvent(ev);
+}
+
+void ProgrammingManager::hideEvent(QHideEvent *ev)
+{
+    stopPreview(); // don't leave a scene outputting when you leave the tab
+    QWidget::hideEvent(ev);
 }
 
 void ProgrammingManager::slotNewScene()
