@@ -291,9 +291,21 @@ void SceneGroupLooks::slotRemoveTarget()
     {
         const quint32 id = it->data(Qt::UserRole).toUInt();
         if (it->data(TARGET_KIND_ROLE).toInt() == TargetFixture)
+        {
+            // Also clear any baked static values for this fixture, otherwise
+            // they're written AFTER (and override) the scene's palette looks
+            // — which is why a look stops applying when converting a static
+            // scene to a dynamic group scene.
+            Fixture *f = m_doc->fixture(id);
+            if (f != NULL)
+                for (quint32 i = 0; i < f->channels(); i++)
+                    m_scene->unsetValue(id, i);
             changed = m_scene->removeFixture(id) || changed;
+        }
         else
+        {
             changed = m_scene->removeFixtureGroup(id) || changed;
+        }
     }
     if (changed)
     {
