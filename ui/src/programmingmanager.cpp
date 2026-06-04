@@ -94,15 +94,18 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_lookScroll = new QScrollArea(this);
     m_lookScroll->setWidgetResizable(true);
     m_lookScroll->setFrameShape(QFrame::NoFrame);
+    m_lookScroll->setMaximumHeight(420);
     m_lookScroll->setWidget(m_lookEditor);
     m_canvasLayout->addWidget(m_lookScroll);
 
-    // Per-fixture DMX channel editor, shown at the bottom when a single
-    // fixed-fixture target is selected (instead of the look editor).
+    // Per-fixture DMX channel editor, shown at the bottom when fixed-fixture
+    // targets are selected (instead of the look editor). Height-bounded so a
+    // tall console scrolls inside the panel instead of overrunning it.
     m_fixtureConsole = new FixtureConsole(this, m_doc);
     m_fixtureScroll = new QScrollArea(this);
     m_fixtureScroll->setWidgetResizable(true);
     m_fixtureScroll->setFrameShape(QFrame::NoFrame);
+    m_fixtureScroll->setMaximumHeight(360);
     m_fixtureScroll->setWidget(m_fixtureConsole);
     m_fixtureScroll->hide();
     m_canvasLayout->addWidget(m_fixtureScroll);
@@ -245,6 +248,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     }
 
     m_canvasPlaceholder->hide();
+    m_selectedFixtures.clear();
     m_fixtureScroll->hide(); // default to the look editor at the bottom
     m_lookScroll->show();
     m_lookEditor->setContextScene(scene);
@@ -252,8 +256,8 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     connect(m_canvas, SIGNAL(sceneModified()), this, SLOT(slotCanvasModified()));
     connect(m_canvas, SIGNAL(lookSelected(quint32)),
             m_lookEditor, SLOT(setPalette(quint32)));
-    connect(m_canvas, SIGNAL(fixtureSelected(quint32)),
-            this, SLOT(slotFixtureSelected(quint32)));
+    connect(m_canvas, SIGNAL(fixturesSelected(QList<quint32>)),
+            this, SLOT(slotFixturesSelected(QList<quint32>)));
     // Selecting a look switches the bottom back to the look editor.
     connect(m_canvas, &SceneGroupLooks::lookSelected, this, [this](quint32 pid) {
         if (pid != QLCPalette::invalidId()) { m_fixtureScroll->hide(); m_lookScroll->show(); }
@@ -451,21 +455,27 @@ void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
         m_lookEditor->setPalette(pid);
 }
 
-void ProgrammingManager::slotFixtureSelected(quint32 fid)
+void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
 {
+    m_selectedFixtures = fixtureIds;
     Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
-    if (fid == Fixture::invalidId() || s == NULL || m_doc->fixture(fid) == NULL)
+    if (fixtureIds.isEmpty() || s == NULL
+        || m_doc->fixture(fixtureIds.first()) == NULL)
     {
         m_fixtureScroll->hide();
         m_lookScroll->show();
         return;
     }
 
-    // Show this fixture's channel editor, prefilled with the scene's values.
+    // The console edits the FIRST selected fixture as a template; channel
+    // edits are mirrored to all selected fixtures (see below). Prefill with
+    // the first fixture's scene values — the others are left untouched until
+    // a value is actually changed, so mismatched values aren't clobbered.
+    const quint32 lead = fixtureIds.first();
     m_fixtureConsole->blockSignals(true);
-    m_fixtureConsole->setFixture(fid);
+    m_fixtureConsole->setFixture(lead);
     foreach (const SceneValue &scv, s->values())
-        if (scv.fxi == fid)
+        if (scv.fxi == lead)
             m_fixtureConsole->setSceneValue(scv);
     m_fixtureConsole->blockSignals(false);
 
@@ -475,22 +485,35 @@ void ProgrammingManager::slotFixtureSelected(quint32 fid)
 
 void ProgrammingManager::slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value)
 {
+    Q_UNUSED(fxi)
     Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
     if (s == NULL)
         return;
-    s->setValue(fxi, ch, value);
+    // Apply the change to every selected fixture that has this channel.
+    foreach (quint32 fid, m_selectedFixtures)
+    {
+        Fixture *f = m_doc->fixture(fid);
+        if (f != NULL && ch < f->channels())
+            s->setValue(fid, ch, value);
+    }
     m_doc->setModified();
     refreshPreview();
 }
 
 void ProgrammingManager::slotFixtureChecked(quint32 fxi, quint32 ch, bool state)
 {
+    Q_UNUSED(fxi)
     if (state) // enabling emits a value via valueChanged separately
         return;
     Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
     if (s == NULL)
         return;
-    s->unsetValue(fxi, ch);
+    foreach (quint32 fid, m_selectedFixtures)
+    {
+        Fixture *f = m_doc->fixture(fid);
+        if (f != NULL && ch < f->channels())
+            s->unsetValue(fid, ch);
+    }
     m_doc->setModified();
     refreshPreview();
 }

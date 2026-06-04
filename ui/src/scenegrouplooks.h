@@ -16,6 +16,7 @@
 #define SCENEGROUPLOOKS_H
 
 #include <QWidget>
+#include <QList>
 
 class QListWidget;
 class QListWidgetItem;
@@ -61,9 +62,9 @@ signals:
     /** Emitted when the selected look changes (invalidId if none). */
     void lookSelected(quint32 paletteId);
 
-    /** Emitted when a fixed-fixture target is selected (Fixture::invalidId
-     *  if the selection isn't a single fixture). */
-    void fixtureSelected(quint32 fixtureId);
+    /** Emitted with the fixed-fixture targets currently selected (empty if
+     *  none / only groups are selected). Multiple = edit them together. */
+    void fixturesSelected(const QList<quint32> &fixtureIds);
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;

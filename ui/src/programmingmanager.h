@@ -61,7 +61,7 @@ private slots:
     void slotCopy();
     void slotPaste();
     void slotPaletteDoubleClicked(QTreeWidgetItem *item);
-    void slotFixtureSelected(quint32 fixtureId);
+    void slotFixturesSelected(const QList<quint32> &fixtureIds);
     void slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value);
     void slotFixtureChecked(quint32 fxi, quint32 ch, bool state);
 
@@ -118,6 +118,7 @@ private:
     QScrollArea *m_lookScroll;     //!< wraps the look editor (bottom)
     QScrollArea *m_fixtureScroll;  //!< wraps the per-fixture console (bottom)
     FixtureConsole *m_fixtureConsole;
+    QList<quint32> m_selectedFixtures; //!< fixed fixtures edited together
     quint32 m_currentScene;       //!< scene shown in canvas (invalid if non-scene)
     quint32 m_canvasFunction;     //!< any function shown in canvas (preview target)
     quint32 m_previewFunction;    //!< the function we started for live preview

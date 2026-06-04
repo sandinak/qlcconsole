@@ -326,12 +326,11 @@ void SceneGroupLooks::slotLookSelectionChanged()
 
 void SceneGroupLooks::slotTargetSelectionChanged()
 {
-    const QList<QListWidgetItem*> sel = m_targetList->selectedItems();
-    if (sel.size() == 1
-        && sel.first()->data(TARGET_KIND_ROLE).toInt() == TargetFixture)
-        emit fixtureSelected(sel.first()->data(Qt::UserRole).toUInt());
-    else
-        emit fixtureSelected(Fixture::invalidId());
+    QList<quint32> fixtures;
+    foreach (QListWidgetItem *it, m_targetList->selectedItems())
+        if (it->data(TARGET_KIND_ROLE).toInt() == TargetFixture)
+            fixtures << it->data(Qt::UserRole).toUInt();
+    emit fixturesSelected(fixtures);
 }
 
 void SceneGroupLooks::slotRemoveLook()
