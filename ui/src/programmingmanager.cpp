@@ -319,9 +319,11 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     }
 
     m_funcTree->setExternalDragMode(dragIn);
-    // Nest the container's members under its node for quick navigation
-    // (add/remove still happens in the hosted editor).
-    syncMemberNodes(dragIn ? f->id() : Function::invalidId());
+    // If this function is nested inside the current container's tree (e.g. a
+    // collection under the open chaser), keep that context + subtree — just
+    // show/preview the selected function. Otherwise establish a new context.
+    if (isContainerMember(m_memberContainer, f->id()) == false)
+        syncMemberNodes(dragIn ? f->id() : Function::invalidId());
 
     if (ed == NULL)
     {
@@ -806,12 +808,11 @@ void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
         ci->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
 
         // Recurse into sub-containers (collection inside a chaser, etc.),
-        // guarding against cycles.
+        // guarding against cycles. Leave them collapsed — expand to drill in.
         if (visited.contains(mid) == false)
         {
             visited.insert(mid);
             addMemberChildren(ci, mid, visited, depth + 1);
-            ci->setExpanded(true);
         }
     }
 }
