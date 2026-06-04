@@ -93,6 +93,9 @@ private:
      *  comes later. */
     void startPreview();
     void stopPreview();
+    /** Re-apply the running preview after an edit WITHOUT churning
+     *  start/stop (resetRuntime if running; start if not). */
+    void refreshPreview();
 
 private:
     Doc *m_doc;

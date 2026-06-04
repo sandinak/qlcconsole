@@ -380,8 +380,7 @@ bool ProgrammingManager::isContainerMember(quint32 containerId, quint32 fid) con
 void ProgrammingManager::slotLookEdited()
 {
     // A look's value changed in the editor: refresh the preview output.
-    stopPreview();
-    startPreview();
+    refreshPreview();
 }
 
 void ProgrammingManager::createPalette(int paletteType)
@@ -460,8 +459,7 @@ void ProgrammingManager::slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar 
         return;
     s->setValue(fxi, ch, value);
     m_doc->setModified();
-    stopPreview();
-    startPreview();
+    refreshPreview();
 }
 
 void ProgrammingManager::slotFixtureChecked(quint32 fxi, quint32 ch, bool state)
@@ -473,8 +471,7 @@ void ProgrammingManager::slotFixtureChecked(quint32 fxi, quint32 ch, bool state)
         return;
     s->unsetValue(fxi, ch);
     m_doc->setModified();
-    stopPreview();
-    startPreview();
+    refreshPreview();
 }
 
 void ProgrammingManager::slotCopy()
@@ -536,13 +533,38 @@ void ProgrammingManager::stopPreview()
     updateTitle();
 }
 
+void ProgrammingManager::refreshPreview()
+{
+    // Apply an edit to the live preview WITHOUT a stop/start cycle (rapid
+    // start/stop on the MasterTimer thread races and crashes). If the
+    // function is already running, just reset its runtime so the next write
+    // re-expands values/palettes; otherwise start it (e.g. a scene that
+    // auto-stopped while empty, now that it has content).
+    if (m_doc->mode() != Doc::Design || isVisible() == false)
+        return;
+    Function *f = m_doc->function(m_canvasFunction);
+    if (f == NULL)
+        return;
+
+    if (f->isRunning())
+    {
+        if (Scene *s = qobject_cast<Scene*>(f))
+            s->resetRuntime();
+        // collections/others reflect their members' own changes
+    }
+    else
+    {
+        f->start(m_doc->masterTimer(), FunctionParent::master());
+        m_previewFunction = m_canvasFunction;
+        updateTitle();
+    }
+}
+
 void ProgrammingManager::slotCanvasModified()
 {
-    // Restart the preview so the scene re-expands its palettes over the
-    // current targets from scratch — reliable even when targets/looks were
-    // added to a scene that started empty. The DMX/2D view then updates.
-    stopPreview();
-    startPreview();
+    // Re-apply the scene's targets/looks to the live preview (resetRuntime
+    // if running, else start) — no start/stop churn.
+    refreshPreview();
 }
 
 void ProgrammingManager::slotModeChanged()
