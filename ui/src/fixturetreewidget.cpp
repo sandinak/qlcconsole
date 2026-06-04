@@ -19,6 +19,8 @@
 
 #include <QDebug>
 #include <QHeaderView>
+#include <QMimeData>
+#include <QDataStream>
 
 #include "fixturetreewidget.h"
 #include "qlcfixturedef.h"
@@ -28,6 +30,35 @@
 #include "doc.h"
 
 #define KColumnName 0
+
+static const char* FIXTURE_DRAG_MIME_TYPE = "application/x-qlcplus-fixtures";
+
+const char* FixtureTreeWidget::fixtureDragMimeType()
+{
+    return FIXTURE_DRAG_MIME_TYPE;
+}
+
+QMimeData* FixtureTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) const
+{
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    int count = 0;
+    foreach (QTreeWidgetItem *item, items)
+    {
+        QVariant v = item->data(KColumnName, PROP_ID); // fixture id (string)
+        if (v.isValid() == false)
+            continue;
+        bool ok = false;
+        quint32 fid = v.toString().toUInt(&ok);
+        if (ok) { stream << fid; count++; }
+    }
+    if (count == 0)
+        return QTreeWidget::mimeData(items);
+
+    QMimeData *mime = new QMimeData();
+    mime->setData(FIXTURE_DRAG_MIME_TYPE, data);
+    return mime;
+}
 
 FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
     : QTreeWidget(parent)

@@ -339,6 +339,9 @@ void FixtureManager::initDataView()
     m_fixtures_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_fixtures_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_fixtures_tree->sortByColumn(KColumnAddress, Qt::AscendingOrder);
+    // Allow dragging fixtures out onto the group editor's layout grid.
+    m_fixtures_tree->setDragEnabled(true);
+    m_fixtures_tree->setDragDropMode(QAbstractItemView::DragOnly);
 
     connect(m_fixtures_tree, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotSelectionChanged()));
@@ -564,18 +567,10 @@ void FixtureManager::slotSelectionChanged()
         // Set the text view's contents
         QVariant fxivar = item->data(KColumnName, PROP_ID);
         QVariant grpvar = item->data(KColumnName, PROP_GROUP);
-        if (fxivar.isValid() == true)
-        {
-            // Selected a fixture
-            fixtureSelected(fxivar.toUInt());
-        }
-        else if (grpvar.isValid() == true)
-        {
-            FixtureGroup* grp = m_doc->fixtureGroup(grpvar.toUInt());
-            Q_ASSERT(grp != NULL);
-            fixtureGroupSelected(grp);
-        }
-        else
+        // Single-click only SELECTS now (so a fixture can be dragged onto an
+        // open group editor without it being torn down); double-click opens
+        // the group editor / fixture properties (see slotDoubleClicked).
+        if (fxivar.isValid() == false && grpvar.isValid() == false)
         {
             QString info = "<HTML><BODY>";
             QString uniName;
@@ -736,8 +731,25 @@ void FixtureManager::slotChannelsGroupSelectionChanged()
 
 void FixtureManager::slotDoubleClicked(QTreeWidgetItem* item)
 {
-    if (item != NULL && m_doc->mode() != Doc::Operate)
-        slotProperties();
+    if (item == NULL)
+        return;
+
+    const QVariant fxivar = item->data(KColumnName, PROP_ID);
+    const QVariant grpvar = item->data(KColumnName, PROP_GROUP);
+
+    if (fxivar.isValid() == true)
+    {
+        // Double-click a fixture -> properties
+        if (m_doc->mode() != Doc::Operate)
+            slotProperties();
+    }
+    else if (grpvar.isValid() == true)
+    {
+        // Double-click a group -> open its editor
+        FixtureGroup* grp = m_doc->fixtureGroup(grpvar.toUInt());
+        if (grp != NULL)
+            fixtureGroupSelected(grp);
+    }
 }
 
 void FixtureManager::slotChannelsGroupDoubleClicked(QTreeWidgetItem*)

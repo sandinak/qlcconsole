@@ -21,13 +21,20 @@
 #include <QTableWidget>
 #include <QPushButton>
 #include <QInputDialog>
+#include <QHeaderView>
 #include <QSettings>
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QDebug>
+#include <QEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QDataStream>
 #include <climits>
 
 #include "fixturegroupeditor.h"
+#include "fixturetreewidget.h"
 #include "fixtureselection.h"
 #include "fixturegroup.h"
 #include "fixture.h"
@@ -78,7 +85,84 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->setIconSize(QSize(20, 20));
+
+    // Accept fixtures dragged from the fixture tree, dropped onto a cell.
+    m_table->setAcceptDrops(true);
+    m_table->viewport()->setAcceptDrops(true);
+    m_table->viewport()->installEventFilter(this);
+
     updateTable();
+}
+
+bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == m_table->viewport())
+    {
+        const char *mimeType = FixtureTreeWidget::fixtureDragMimeType();
+
+        if (event->type() == QEvent::DragEnter)
+        {
+            QDragEnterEvent *de = static_cast<QDragEnterEvent*>(event);
+            if (de->mimeData()->hasFormat(mimeType)) { de->acceptProposedAction(); return true; }
+        }
+        else if (event->type() == QEvent::DragMove)
+        {
+            QDragMoveEvent *dm = static_cast<QDragMoveEvent*>(event);
+            if (dm->mimeData()->hasFormat(mimeType)) { dm->acceptProposedAction(); return true; }
+        }
+        else if (event->type() == QEvent::Drop)
+        {
+            QDropEvent *dr = static_cast<QDropEvent*>(event);
+            if (dr->mimeData()->hasFormat(mimeType) == false)
+                return false;
+
+            // Cell under the cursor (fall back to the current cell).
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+            QModelIndex idx = m_table->indexAt(dr->pos());
+#else
+            QModelIndex idx = m_table->indexAt(dr->position().toPoint());
+#endif
+            int col = idx.isValid() ? idx.column() : m_column;
+            int row = idx.isValid() ? idx.row() : m_row;
+
+            QByteArray data = dr->mimeData()->data(mimeType);
+            QDataStream stream(&data, QIODevice::ReadOnly);
+            int maxX = m_grp->size().width() - 1;
+            int maxY = m_grp->size().height() - 1;
+            bool added = false;
+            while (stream.atEnd() == false)
+            {
+                quint32 fid = 0;
+                stream >> fid;
+                if (m_doc->fixture(fid) == NULL)
+                    continue;
+                // assignFixture places all of the fixture's heads from this
+                // cell; spread successive fixtures across the row.
+                if (m_grp->assignFixture(fid, QLCPoint(col, row)))
+                {
+                    added = true;
+                    maxX = qMax(maxX, col);
+                    maxY = qMax(maxY, row);
+                    col++;
+                }
+            }
+
+            if (added)
+            {
+                if (maxX + 1 > m_grp->size().width() || maxY + 1 > m_grp->size().height())
+                {
+                    m_grp->setSize(QSize(qMax(maxX + 1, m_grp->size().width()),
+                                         qMax(maxY + 1, m_grp->size().height())));
+                    m_xSpin->blockSignals(true); m_xSpin->setValue(m_grp->size().width());  m_xSpin->blockSignals(false);
+                    m_ySpin->blockSignals(true); m_ySpin->setValue(m_grp->size().height()); m_ySpin->blockSignals(false);
+                }
+                updateTable();
+            }
+            dr->acceptProposedAction();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 FixtureGroupEditor::~FixtureGroupEditor()

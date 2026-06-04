@@ -67,6 +67,16 @@ public:
      *  updateTree call */
     int channelsCount();
 
+    /** MIME type used when dragging fixtures out of the tree (payload is a
+     *  stream of fixture IDs). Matches the Programming tab's fixture MIME so
+     *  drop targets can be shared. */
+    static const char* fixtureDragMimeType();
+
+protected:
+    /** Provide fixture IDs for dragging onto drop targets (e.g. the fixture
+     *  group editor grid). */
+    QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const override;
+
 protected slots:
     void slotItemExpanded();
 

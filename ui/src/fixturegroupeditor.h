@@ -39,6 +39,10 @@ public:
     FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* parent);
     ~FixtureGroupEditor();
 
+protected:
+    /** Catch fixture drops on the layout grid (drag from the fixture tree). */
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
 private:
     void updateTable();
     void addFixtureHeads(Qt::ArrowType direction);
