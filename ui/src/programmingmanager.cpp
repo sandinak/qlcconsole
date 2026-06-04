@@ -365,14 +365,33 @@ bool ProgrammingManager::isContainerMember(quint32 containerId, quint32 fid) con
 {
     if (containerId == Function::invalidId())
         return false;
+    QSet<quint32> visited;
+    return containerHas(containerId, fid, visited, 0);
+}
+
+bool ProgrammingManager::containerHas(quint32 containerId, quint32 fid,
+                                      QSet<quint32> &visited, int depth) const
+{
+    if (depth > 8 || visited.contains(containerId))
+        return false;
+    visited.insert(containerId);
+
     Function *c = m_doc->function(containerId);
+    QList<quint32> members;
     if (Collection *col = qobject_cast<Collection*>(c))
-        return col->functions().contains(fid);
-    if (Chaser *ch = qobject_cast<Chaser*>(c))
-    {
+        members = col->functions();
+    else if (Chaser *ch = qobject_cast<Chaser*>(c))
         foreach (const ChaserStep &s, ch->steps())
-            if (s.fid == fid)
-                return true;
+            members << s.fid;
+    else
+        return false;
+
+    foreach (quint32 mid, members)
+    {
+        if (mid == fid)
+            return true;
+        if (containerHas(mid, fid, visited, depth + 1))
+            return true;
     }
     return false;
 }
@@ -747,7 +766,24 @@ void ProgrammingManager::syncMemberNodes(quint32 containerId)
     Function *c = m_doc->function(containerId);
     if (c == NULL)
         return;
+    QTreeWidgetItem *node = m_funcTree->functionItem(c);
+    if (node == NULL)
+        return;
 
+    // Recursively nest members (chaser -> collections -> scenes -> …).
+    QSet<quint32> visited;
+    visited.insert(containerId);
+    addMemberChildren(node, containerId, visited, 0);
+    node->setExpanded(true);
+}
+
+void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
+                                           quint32 containerId,
+                                           QSet<quint32> &visited, int depth)
+{
+    if (depth > 8)
+        return;
+    Function *c = m_doc->function(containerId);
     QList<quint32> members;
     if (Collection *col = qobject_cast<Collection*>(c))
         members = col->functions();
@@ -755,25 +791,29 @@ void ProgrammingManager::syncMemberNodes(quint32 containerId)
         foreach (const ChaserStep &s, ch->steps())
             members << s.fid;
     else
-        return;
-
-    QTreeWidgetItem *node = m_funcTree->functionItem(c);
-    if (node == NULL)
-        return;
+        return; // not a container
 
     foreach (quint32 mid, members)
     {
         Function *mf = m_doc->function(mid);
         if (mf == NULL)
             continue;
-        QTreeWidgetItem *ci = new QTreeWidgetItem(node);
+        QTreeWidgetItem *ci = new QTreeWidgetItem(treeNode);
         ci->setText(0, mf->name());
         ci->setIcon(0, mf->getIcon());
         ci->setData(0, Qt::UserRole, mid); // so itemFunctionId() resolves it
         // Read-only nav: selectable + double-click to edit, not draggable.
         ci->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+
+        // Recurse into sub-containers (collection inside a chaser, etc.),
+        // guarding against cycles.
+        if (visited.contains(mid) == false)
+        {
+            visited.insert(mid);
+            addMemberChildren(ci, mid, visited, depth + 1);
+            ci->setExpanded(true);
+        }
     }
-    node->setExpanded(true);
 }
 
 int ProgrammingManager::functionUsageCount(quint32 fid) const

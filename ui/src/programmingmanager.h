@@ -21,6 +21,7 @@
 #define PROGRAMMINGMANAGER_H
 
 #include <QWidget>
+#include <QSet>
 
 class QTreeWidgetItem;
 class Function;
@@ -84,9 +85,15 @@ private:
     /** Show the members/steps of the given collection/chaser nested under
      *  its node in the function tree (read-only nav; invalidId clears). */
     void syncMemberNodes(quint32 containerId);
+    /** Recursively nest the members of a container function under treeNode
+     *  (collections-in-chasers-in-… ); visited guards against cycles. */
+    void addMemberChildren(QTreeWidgetItem *treeNode, quint32 containerId,
+                           QSet<quint32> &visited, int depth);
 
-    /** Is fid a member/step of the given collection/chaser? */
+    /** Is fid anywhere in the container's tree (recursively)? */
     bool isContainerMember(quint32 containerId, quint32 fid) const;
+    bool containerHas(quint32 containerId, quint32 fid,
+                      QSet<quint32> &visited, int depth) const;
 
     /** Live-preview the canvas scene by running it (Design mode only), so
      *  the DMX/2D view reflects the look as you build. Blind/live handling
