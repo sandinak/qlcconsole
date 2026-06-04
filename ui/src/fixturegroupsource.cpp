@@ -10,11 +10,12 @@
 #include <QHeaderView>
 #include <QMenu>
 #include <QInputDialog>
-#include <QSet>
+#include <QMap>
 
 #include <algorithm>
 
 #include "fixturegroupsource.h"
+#include "inputoutputmap.h"
 #include "fixturegroup.h"
 #include "fixture.h"
 #include "doc.h"
@@ -97,7 +98,6 @@ void FixtureGroupSource::reload()
                   return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
               });
 
-    QSet<quint32> grouped;
     foreach (FixtureGroup *g, groups)
     {
         const QList<quint32> members = g->fixtureList();
@@ -111,7 +111,6 @@ void FixtureGroupSource::reload()
         QList<Fixture*> members2;
         foreach (quint32 fid, members)
         {
-            grouped.insert(fid);
             Fixture *f = m_doc->fixture(fid);
             if (f != NULL)
                 members2.append(f);
@@ -121,44 +120,60 @@ void FixtureGroupSource::reload()
                       return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
                   });
         foreach (Fixture *f, members2)
-        {
-            QTreeWidgetItem *fi = new QTreeWidgetItem(gi);
-            fi->setText(0, f->name());
-            fi->setIcon(0, QIcon(":/fixture.png"));
-            fi->setData(0, IdRole, f->id());
-            fi->setData(0, KindRole, FixtureNode);
-            fi->setFlags(leafFlags);
-        }
+            addFixtureLeaf(gi, f);
     }
 
-    // Fixtures that belong to no group, so they're still reachable.
-    QList<Fixture*> ungrouped;
+    // Default organisation: a "Universes" folder with every universe under
+    // it, fixtures nested by their universe (so all fixtures are reachable
+    // even without a group).
+    QMap<quint32, QList<Fixture*> > byUniverse;
     foreach (Fixture *f, m_doc->fixtures())
-        if (f != NULL && grouped.contains(f->id()) == false)
-            ungrouped.append(f);
-    if (ungrouped.isEmpty() == false)
+        if (f != NULL)
+            byUniverse[f->universe()].append(f);
+
+    if (byUniverse.isEmpty() == false)
     {
-        std::sort(ungrouped.begin(), ungrouped.end(),
-                  [](Fixture *a, Fixture *b) {
-                      return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
-                  });
-        QTreeWidgetItem *root = new QTreeWidgetItem(this);
-        root->setText(0, tr("Ungrouped fixtures"));
-        root->setData(0, KindRole, CategoryNode);
-        root->setFlags(Qt::ItemIsEnabled);
-        foreach (Fixture *f, ungrouped)
+        QTreeWidgetItem *uRoot = new QTreeWidgetItem(this);
+        uRoot->setText(0, tr("Universes"));
+        uRoot->setIcon(0, QIcon(":/folder.png"));
+        uRoot->setData(0, KindRole, CategoryNode);
+        uRoot->setFlags(Qt::ItemIsEnabled);
+
+        QMapIterator<quint32, QList<Fixture*> > it(byUniverse);
+        while (it.hasNext())
         {
-            QTreeWidgetItem *fi = new QTreeWidgetItem(root);
-            fi->setText(0, f->name());
-            fi->setIcon(0, QIcon(":/fixture.png"));
-            fi->setData(0, IdRole, f->id());
-            fi->setData(0, KindRole, FixtureNode);
-            fi->setFlags(leafFlags);
+            it.next();
+            QString uname = m_doc->inputOutputMap()->getUniverseNameByIndex(int(it.key()));
+            if (uname.isEmpty())
+                uname = tr("Universe %1").arg(it.key() + 1);
+            QTreeWidgetItem *uNode = new QTreeWidgetItem(uRoot);
+            uNode->setText(0, uname);
+            uNode->setIcon(0, QIcon(":/folder.png"));
+            uNode->setData(0, KindRole, CategoryNode);
+            uNode->setFlags(Qt::ItemIsEnabled);
+
+            QList<Fixture*> fl = it.value();
+            std::sort(fl.begin(), fl.end(),
+                      [](Fixture *a, Fixture *b) {
+                          return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+                      });
+            foreach (Fixture *f, fl)
+                addFixtureLeaf(uNode, f);
         }
     }
 
-    // Start collapsed — expand a group to reach its fixtures.
+    // Start collapsed — expand a group/universe to reach its fixtures.
     collapseAll();
+}
+
+void FixtureGroupSource::addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f)
+{
+    QTreeWidgetItem *fi = new QTreeWidgetItem(parent);
+    fi->setText(0, f->name());
+    fi->setIcon(0, QIcon(":/fixture.png"));
+    fi->setData(0, IdRole, f->id());
+    fi->setData(0, KindRole, FixtureNode);
+    fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
 }
 
 void FixtureGroupSource::slotContextMenu(const QPoint &pos)

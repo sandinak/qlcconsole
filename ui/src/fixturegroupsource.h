@@ -17,6 +17,8 @@
 #include <QTreeWidget>
 #include <QHash>
 
+class QTreeWidgetItem;
+class Fixture;
 class Doc;
 
 /** @addtogroup ui_functions
@@ -55,6 +57,9 @@ private slots:
 private:
     /** Get/create the folder item for a "/"-separated path (empty=root). */
     QTreeWidgetItem *folderItem(const QString &path);
+
+    /** Append a draggable fixture leaf under parent. */
+    void addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f);
 
 private:
     Doc *m_doc;
