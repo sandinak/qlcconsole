@@ -94,7 +94,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_lookScroll = new QScrollArea(this);
     m_lookScroll->setWidgetResizable(true);
     m_lookScroll->setFrameShape(QFrame::NoFrame);
-    m_lookScroll->setMaximumHeight(420);
+    m_lookScroll->setMinimumHeight(240);
+    m_lookScroll->setMaximumHeight(440);
     m_lookScroll->setWidget(m_lookEditor);
     m_canvasLayout->addWidget(m_lookScroll);
 
@@ -105,7 +106,11 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_fixtureScroll = new QScrollArea(this);
     m_fixtureScroll->setWidgetResizable(true);
     m_fixtureScroll->setFrameShape(QFrame::NoFrame);
-    m_fixtureScroll->setMaximumHeight(360);
+    // Minimum so the channel faders always have usable height (they were
+    // getting squished to nothing when the Targets list was tall); scrolls
+    // within the band if the console is taller.
+    m_fixtureScroll->setMinimumHeight(260);
+    m_fixtureScroll->setMaximumHeight(400);
     m_fixtureScroll->setWidget(m_fixtureConsole);
     m_fixtureScroll->hide();
     m_canvasLayout->addWidget(m_fixtureScroll);
