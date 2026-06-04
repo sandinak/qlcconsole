@@ -89,18 +89,17 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
     // Pan/Tilt page (X/Y grid)
     QWidget *pantilt = new QWidget(this);
-    QVBoxLayout *pl = new QVBoxLayout(pantilt);
-    // Margins so the XY pad's frame border isn't clipped at the edges.
+    // XY pad on the LEFT at a usable size; the right half is left free for
+    // future tools.
+    QHBoxLayout *pl = new QHBoxLayout(pantilt);
     pl->setContentsMargins(6, 6, 6, 6);
     m_xyPad = new VCXYPadArea(pantilt);
     m_xyPad->setMode(Doc::Operate); // interactive
-    // Bounded square, centered — NOT stretched. (Stretching it to fill the
-    // tall bottom panel made it overrun/clip its frame.)
-    m_xyPad->setMinimumSize(140, 140);
-    m_xyPad->setMaximumSize(240, 240);
+    m_xyPad->setMinimumSize(220, 220);
+    m_xyPad->setMaximumSize(360, 360);
     m_xyPad->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-    pl->addWidget(m_xyPad, 0, Qt::AlignHCenter | Qt::AlignTop);
-    pl->addStretch(1);
+    pl->addWidget(m_xyPad, 0, Qt::AlignLeft | Qt::AlignTop);
+    pl->addStretch(1); // reserved right half
     m_pagePanTilt = m_stack->addWidget(pantilt);
     connect(m_xyPad, SIGNAL(positionChanged(QPointF)),
             this, SLOT(slotPanTiltChanged(QPointF)));
