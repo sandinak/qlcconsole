@@ -49,10 +49,13 @@ private slots:
     void slotYSpinValueChanged(int value);
 
     void slotRightClicked();
-    void slotLeftClicked(); 
+    void slotLeftClicked();
     void slotUpClicked();
     void slotDownClicked();
     void slotRemoveFixtureClicked();
+    /** Add another fixture group's heads as a block (preserving its
+     *  relative layout) at the current cell. */
+    void slotAddGroupBlock();
 
     void slotCellActivated(int row, int column);
     void slotCellChanged(int row, int column);

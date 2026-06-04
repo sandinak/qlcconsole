@@ -19,10 +19,13 @@
 
 #include <QTableWidgetItem>
 #include <QTableWidget>
+#include <QPushButton>
+#include <QInputDialog>
 #include <QSettings>
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QDebug>
+#include <climits>
 
 #include "fixturegroupeditor.h"
 #include "fixtureselection.h"
@@ -66,6 +69,11 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
             this, SLOT(slotUpClicked())),
     connect(m_removeButton, SIGNAL(clicked()),
             this, SLOT(slotRemoveFixtureClicked()));
+
+    // Add a whole fixture group as a block (preserving its layout).
+    QPushButton *addGroupBtn = new QPushButton(tr("Add group as block…"), this);
+    horizontalLayout->addWidget(addGroupBtn);
+    connect(addGroupBtn, SIGNAL(clicked()), this, SLOT(slotAddGroupBlock()));
 
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -293,4 +301,67 @@ void FixtureGroupEditor::addFixtureHeads(Qt::ArrowType direction)
         updateTable();
         m_table->setCurrentCell(row, col);
     }
+}
+
+void FixtureGroupEditor::slotAddGroupBlock()
+{
+    // Pick another fixture group.
+    QList<FixtureGroup*> others;
+    foreach (FixtureGroup *g, m_doc->fixtureGroups())
+        if (g != NULL && g->id() != m_grp->id())
+            others.append(g);
+    if (others.isEmpty())
+        return;
+
+    QStringList names;
+    foreach (FixtureGroup *g, others)
+        names << g->name();
+
+    bool ok = false;
+    const QString picked = QInputDialog::getItem(
+        this, tr("Add group as block"),
+        tr("Insert this group's fixtures as a block at the selected cell:"),
+        names, 0, false, &ok);
+    if (!ok || picked.isEmpty())
+        return;
+    FixtureGroup *src = others.at(names.indexOf(picked));
+
+    const QMap<QLCPoint, GroupHead> srcHeads = src->headsMap();
+    if (srcHeads.isEmpty())
+        return;
+
+    // Normalise the source layout to its top-left so it pastes as a block
+    // anchored at the current cell.
+    int minX = INT_MAX, minY = INT_MAX;
+    QMapIterator<QLCPoint, GroupHead> mit(srcHeads);
+    while (mit.hasNext()) { mit.next(); minX = qMin(minX, mit.key().x()); minY = qMin(minY, mit.key().y()); }
+
+    const QList<GroupHead> existing = m_grp->headList();
+    int maxX = m_grp->size().width() - 1;
+    int maxY = m_grp->size().height() - 1;
+
+    QMapIterator<QLCPoint, GroupHead> it(srcHeads);
+    while (it.hasNext())
+    {
+        it.next();
+        const GroupHead &gh = it.value();
+        if (existing.contains(gh)) // already placed in this group
+            continue;
+        const int x = m_column + (it.key().x() - minX);
+        const int y = m_row + (it.key().y() - minY);
+        m_grp->assignHead(QLCPoint(x, y), gh);
+        maxX = qMax(maxX, x);
+        maxY = qMax(maxY, y);
+    }
+
+    // Grow the grid to fit the pasted block.
+    if (maxX + 1 > m_grp->size().width() || maxY + 1 > m_grp->size().height())
+    {
+        m_grp->setSize(QSize(qMax(maxX + 1, m_grp->size().width()),
+                             qMax(maxY + 1, m_grp->size().height())));
+        m_xSpin->blockSignals(true); m_xSpin->setValue(m_grp->size().width());  m_xSpin->blockSignals(false);
+        m_ySpin->blockSignals(true); m_ySpin->setValue(m_grp->size().height()); m_ySpin->blockSignals(false);
+    }
+
+    updateTable();
 }
