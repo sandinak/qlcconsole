@@ -79,3 +79,6 @@ move to the bottom or get deleted. See also the session memory under
       until changed).
 - [x] Engine: fixture-group sub-group tagging (+XML) + colour blocks in the
       group editor.
+- [x] Programming tab: bottom editors min-height (faders no longer squished).
+- [x] Fixture Manager: double-click to open; drag fixtures from the tree
+      onto the group editor grid at a cell.
