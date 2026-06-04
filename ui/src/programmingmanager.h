@@ -85,6 +85,9 @@ private:
      *  its node in the function tree (read-only nav; invalidId clears). */
     void syncMemberNodes(quint32 containerId);
 
+    /** Is fid a member/step of the given collection/chaser? */
+    bool isContainerMember(quint32 containerId, quint32 fid) const;
+
     /** Live-preview the canvas scene by running it (Design mode only), so
      *  the DMX/2D view reflects the look as you build. Blind/live handling
      *  comes later. */
@@ -105,8 +108,9 @@ private:
     QScrollArea *m_lookScroll;     //!< wraps the look editor (bottom)
     QScrollArea *m_fixtureScroll;  //!< wraps the per-fixture console (bottom)
     FixtureConsole *m_fixtureConsole;
-    quint32 m_currentScene;
-    quint32 m_previewScene;       //!< the scene we started for live preview
+    quint32 m_currentScene;       //!< scene shown in canvas (invalid if non-scene)
+    quint32 m_canvasFunction;     //!< any function shown in canvas (preview target)
+    quint32 m_previewFunction;    //!< the function we started for live preview
     quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate
     quint32 m_memberContainer;    //!< collection/chaser whose members are nested
 

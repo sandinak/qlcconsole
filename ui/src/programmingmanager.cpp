@@ -49,7 +49,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     , m_canvas(nullptr)
     , m_funcEditor(nullptr)
     , m_currentScene(Function::invalidId())
-    , m_previewScene(Function::invalidId())
+    , m_canvasFunction(Function::invalidId())
+    , m_previewFunction(Function::invalidId())
     , m_clipboardFunction(Function::invalidId())
     , m_memberContainer(Function::invalidId())
 {
@@ -222,9 +223,14 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
 
     stopPreview();
     m_currentScene = sceneId;
+    m_canvasFunction = sceneId;
     m_lookEditor->setPalette(QLCPalette::invalidId());
     m_funcTree->setExternalDragMode(false); // only collections/chasers need it
-    syncMemberNodes(Function::invalidId());  // scenes have no nested members
+    // Keep the collection/chaser context (its nested subtree) when drilling
+    // into one of ITS member scenes, so you can go back and forth; clear it
+    // only when opening an unrelated scene.
+    if (isContainerMember(m_memberContainer, sceneId) == false)
+        syncMemberNodes(Function::invalidId());
     clearEditors();
 
     Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
@@ -280,6 +286,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
 
     stopPreview();
     m_currentScene = Function::invalidId();
+    m_canvasFunction = f->id();
     m_lookEditor->setPalette(QLCPalette::invalidId());
     m_lookEditor->setContextScene(NULL);
     clearEditors();
@@ -322,33 +329,52 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
             tr("\"%1\" (%2) — open it in the Functions tab to edit.")
             .arg(f->name()).arg(Function::typeToString(f->type())));
         m_canvasPlaceholder->show();
-        m_canvasTitle->setText(tr("Programming"));
+        m_canvasFunction = Function::invalidId(); // nothing previewable shown
+        updateTitle();
         return;
     }
 
     m_funcEditor = ed;
     m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookScroll), m_funcEditor, 1);
     m_funcEditor->show();
-    m_canvasTitle->setText(tr("Editing %1: %2")
-                           .arg(Function::typeToString(f->type()))
-                           .arg(f->name()));
+    startPreview();   // run it live so the view reflects it (Design mode)
+    updateTitle();
 }
 
 void ProgrammingManager::updateTitle()
 {
-    Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
-    if (s == NULL)
+    Function *f = m_doc->function(m_canvasFunction);
+    if (f == NULL)
     {
         m_canvasTitle->setText(tr("Programming"));
         return;
     }
-    const bool live = (m_previewScene == m_currentScene);
-    const int uses = functionUsageCount(m_currentScene);
+    const QString kind = (f->type() == Function::SceneType)
+                         ? tr("scene") : Function::typeToString(f->type());
+    const bool live = (m_previewFunction == m_canvasFunction);
+    const int uses = functionUsageCount(m_canvasFunction);
     m_canvasTitle->setText(
-        tr("Editing scene: %1   —   used in %n place(s)   [ live preview: %2 ]",
+        tr("Editing %1: %2   —   used in %n place(s)   [ live preview: %3 ]",
            "", uses)
-        .arg(s->name())
+        .arg(kind)
+        .arg(f->name())
         .arg(live ? tr("ON") : tr("OFF — Design mode only")));
+}
+
+bool ProgrammingManager::isContainerMember(quint32 containerId, quint32 fid) const
+{
+    if (containerId == Function::invalidId())
+        return false;
+    Function *c = m_doc->function(containerId);
+    if (Collection *col = qobject_cast<Collection*>(c))
+        return col->functions().contains(fid);
+    if (Chaser *ch = qobject_cast<Chaser*>(c))
+    {
+        foreach (const ChaserStep &s, ch->steps())
+            if (s.fid == fid)
+                return true;
+    }
+    return false;
 }
 
 void ProgrammingManager::slotLookEdited()
@@ -481,31 +507,32 @@ void ProgrammingManager::slotPaste()
 
 void ProgrammingManager::startPreview()
 {
-    // Live-preview only in Design mode (don't hijack a running show).
+    // Live-preview the canvas function (scene, collection, …) by running it.
+    // Design mode only, so we don't hijack a running show.
     if (m_doc->mode() != Doc::Design)
         return;
     if (isVisible() == false)
         return;
-    if (m_previewScene == m_currentScene)
+    if (m_previewFunction == m_canvasFunction)
         return;
 
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
-    if (scene == NULL)
+    Function *f = m_doc->function(m_canvasFunction);
+    if (f == NULL)
         return;
 
-    scene->start(m_doc->masterTimer(), FunctionParent::master());
-    m_previewScene = m_currentScene;
+    f->start(m_doc->masterTimer(), FunctionParent::master());
+    m_previewFunction = m_canvasFunction;
     updateTitle();
 }
 
 void ProgrammingManager::stopPreview()
 {
-    if (m_previewScene == Function::invalidId())
+    if (m_previewFunction == Function::invalidId())
         return;
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_previewScene));
-    if (scene != NULL)
-        scene->stop(FunctionParent::master());
-    m_previewScene = Function::invalidId();
+    Function *f = m_doc->function(m_previewFunction);
+    if (f != NULL)
+        f->stop(FunctionParent::master());
+    m_previewFunction = Function::invalidId();
     updateTitle();
 }
 
