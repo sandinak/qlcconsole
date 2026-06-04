@@ -844,29 +844,36 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         return;
     }
 
-    if (m_fadersMap.isEmpty())
+    // Hold m_valueListMutex across the whole faders-map build, not just the
+    // m_values loop: resetRuntime() (UI thread) clears m_fadersMap under the
+    // same lock, so the isEmpty() check + (re)build here must be guarded too
+    // or the two threads race on the map (crash). processValue() doesn't take
+    // this lock, so a single locker here is safe (no recursive deadlock).
     {
-        uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
-
-        foreach (quint32 paletteID, palettes())
-        {
-            QLCPalette *palette = doc()->palette(paletteID);
-            if (palette == NULL)
-                continue;
-
-            foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups()))
-                processValue(timer, ua, fadeIn, scv);
-
-            foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures()))
-                processValue(timer, ua, fadeIn, scv);
-        }
-
         QMutexLocker locker(&m_valueListMutex);
-        QMapIterator <SceneValue, uchar> it(m_values);
-        while (it.hasNext() == true)
+        if (m_fadersMap.isEmpty())
         {
-            SceneValue scv(it.next().key());
-            processValue(timer, ua, fadeIn, scv);
+            uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
+
+            foreach (quint32 paletteID, palettes())
+            {
+                QLCPalette *palette = doc()->palette(paletteID);
+                if (palette == NULL)
+                    continue;
+
+                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups()))
+                    processValue(timer, ua, fadeIn, scv);
+
+                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures()))
+                    processValue(timer, ua, fadeIn, scv);
+            }
+
+            QMapIterator <SceneValue, uchar> it(m_values);
+            while (it.hasNext() == true)
+            {
+                SceneValue scv(it.next().key());
+                processValue(timer, ua, fadeIn, scv);
+            }
         }
     }
 
