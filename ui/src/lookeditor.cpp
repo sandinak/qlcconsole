@@ -94,8 +94,13 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     pl->setContentsMargins(6, 6, 6, 6);
     m_xyPad = new VCXYPadArea(pantilt);
     m_xyPad->setMode(Doc::Operate); // interactive
+    // Bounded square, centered — NOT stretched. (Stretching it to fill the
+    // tall bottom panel made it overrun/clip its frame.)
     m_xyPad->setMinimumSize(140, 140);
-    pl->addWidget(m_xyPad, 1);
+    m_xyPad->setMaximumSize(240, 240);
+    m_xyPad->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    pl->addWidget(m_xyPad, 0, Qt::AlignHCenter | Qt::AlignTop);
+    pl->addStretch(1);
     m_pagePanTilt = m_stack->addWidget(pantilt);
     connect(m_xyPad, SIGNAL(positionChanged(QPointF)),
             this, SLOT(slotPanTiltChanged(QPointF)));
