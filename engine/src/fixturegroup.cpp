@@ -193,13 +193,30 @@ bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
     return true;
 }
 
+void FixtureGroup::setHeadSubGroup(const QLCPoint& pt, quint32 subGroupId)
+{
+    if (subGroupId == 0)
+        m_headSubGroup.remove(pt);
+    else
+        m_headSubGroup[pt] = subGroupId;
+    emit changed(this->id());
+}
+
+quint32 FixtureGroup::headSubGroup(const QLCPoint& pt) const
+{
+    return m_headSubGroup.value(pt, 0);
+}
+
 void FixtureGroup::resignFixture(quint32 id)
 {
     QMap <QLCPoint,GroupHead>::iterator it = m_heads.begin();
     while(it != m_heads.end())
     {
         if (it.value().fxi == id)
+        {
+            m_headSubGroup.remove(it.key());
             it = m_heads.erase(it);
+        }
         else
             it++;
     }
@@ -210,6 +227,7 @@ void FixtureGroup::resignFixture(quint32 id)
 bool FixtureGroup::resignHead(const QLCPoint& pt)
 {
     const int removed = m_heads.remove(pt);
+    m_headSubGroup.remove(pt);
     if (removed)
         emit changed(this->id());
 
@@ -230,6 +248,12 @@ void FixtureGroup::swap(const QLCPoint& a, const QLCPoint& b)
         m_heads[a] = bh;
     else
         m_heads.remove(a);
+
+    // Keep sub-group tags following their heads.
+    const quint32 asg = m_headSubGroup.value(a, 0);
+    const quint32 bsg = m_headSubGroup.value(b, 0);
+    if (bsg != 0) m_headSubGroup[a] = bsg; else m_headSubGroup.remove(a);
+    if (asg != 0) m_headSubGroup[b] = asg; else m_headSubGroup.remove(b);
 
     emit changed(this->id());
 }
@@ -342,11 +366,16 @@ bool FixtureGroup::loadXML(QXmlStreamReader &xmlDoc)
             int x = attrs.value("X").toString().toInt(&xok);
             int y = attrs.value("Y").toString().toInt(&yok);
             quint32 id = attrs.value("Fixture").toString().toUInt(&idok);
+            quint32 subGroup = attrs.value("SubGroup").toString().toUInt();
             int head = xmlDoc.readElementText().toInt(&headok);
 
             // Don't use assignFixture() here because it assigns complete fixtures at once
             if (xok == true && yok == true && idok == true && headok == true)
+            {
                 m_heads[QLCPoint(x, y)] = GroupHead(id, head);
+                if (subGroup != 0)
+                    m_headSubGroup[QLCPoint(x, y)] = subGroup;
+            }
         }
         else if (xmlDoc.name() == KXMLQLCFixtureGroupSize)
         {
@@ -406,6 +435,9 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
         doc->writeAttribute("X", QString::number(pt.x()));
         doc->writeAttribute("Y", QString::number(pt.y()));
         doc->writeAttribute("Fixture", QString::number(head.fxi));
+        const quint32 sg = m_headSubGroup.value(pt, 0);
+        if (sg != 0)
+            doc->writeAttribute("SubGroup", QString::number(sg));
         doc->writeCharacters(QString::number(head.head));
         doc->writeEndElement();
     }

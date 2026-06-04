@@ -127,6 +127,12 @@ void FixtureGroupEditor::updateTable()
         item->setData(PROP_HEAD, head.head);
         item->setToolTip(str);
 
+        // Colour cells by sub-group so blocks pasted from another group are
+        // visually distinct (stable hue per sub-group id).
+        const quint32 sg = m_grp->headSubGroup(pt);
+        if (sg != 0)
+            item->setBackground(QBrush(QColor::fromHsv(int((sg * 53) % 360), 90, 235)));
+
         m_table->setItem(pt.y(), pt.x(), item);
     }
 
@@ -350,6 +356,7 @@ void FixtureGroupEditor::slotAddGroupBlock()
         const int x = m_column + (it.key().x() - minX);
         const int y = m_row + (it.key().y() - minY);
         m_grp->assignHead(QLCPoint(x, y), gh);
+        m_grp->setHeadSubGroup(QLCPoint(x, y), src->id()); // tag the block
         maxX = qMax(maxX, x);
         maxY = qMax(maxY, y);
     }

@@ -176,12 +176,21 @@ public:
     /** Get a list of fixture IDs assigned to the group */
     QList <quint32> fixtureList() const;
 
+    /** Tag the head at $pt as belonging to a sub-group (e.g. the source
+     *  fixture-group ID it was pasted from). 0 = no sub-group. Lets the UI
+     *  colour and move sub-groups as a unit. */
+    void setHeadSubGroup(const QLCPoint& pt, quint32 subGroupId);
+
+    /** Sub-group tag for the head at $pt (0 if none). */
+    quint32 headSubGroup(const QLCPoint& pt) const;
+
 private slots:
     /** Listens to Doc fixture removals */
     void slotFixtureRemoved(quint32 id);
 
 private:
     QMap <QLCPoint,GroupHead> m_heads;
+    QMap <QLCPoint,quint32> m_headSubGroup; //!< point -> sub-group tag (0=none)
 
     /************************************************************************
      * Size
