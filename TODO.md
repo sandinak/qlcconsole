@@ -66,3 +66,5 @@ move to the bottom or get deleted. See also the session memory under
 - [x] Per-fixture DMX channel editor in the canvas (select a fixed fixture).
 - [x] Live-preview any canvas function (collection auto-goes-live); keep
       the collection context/subtree when drilling into a member scene.
+- [x] Recursive nesting/context: Chaser -> Collections -> Scenes.
+- [x] Fix segfault from rapid preview start/stop during edits (refreshPreview).
