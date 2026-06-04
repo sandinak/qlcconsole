@@ -14,6 +14,16 @@ move to the bottom or get deleted. See also the session memory under
       visually distinct; (3) move a sub-group block as a unit. Meatier change
       to the QTableWidget grid — own focused turn.
 
+## Ideas / bigger bets (shower-thoughts)
+- [ ] **Shareable effect "looks"/groupings** — design a full set of effect
+      groupings (e.g. a rolling sweep with colour patterns) that can be
+      stored and **shared with other users** as a portable bundle.
+- [ ] **More movement shapes / draw-your-own** — beyond the built-in EFX
+      shapes, let users define custom movement paths (draw on an XY canvas).
+- [ ] **Capability plugins (RGBScript-like) for position / intensity /
+      colour / etc.** — extensible generators, tied to the sharing idea so
+      community-made effects can be imported.
+
 ## Backlog — when placing a
       fixture group onto a larger group's head layout, drag the whole
       sub-group as a block and keep sub-groups visually distinct (Fixture
@@ -54,3 +64,5 @@ move to the bottom or get deleted. See also the session memory under
 - [x] Nest a collection/chaser's members under its node in the tree.
 - [x] Palette right-click lists types (Color/Dimmer/Pan-Tilt/Gobo/Shutter).
 - [x] Per-fixture DMX channel editor in the canvas (select a fixed fixture).
+- [x] Live-preview any canvas function (collection auto-goes-live); keep
+      the collection context/subtree when drilling into a member scene.
