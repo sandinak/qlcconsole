@@ -8,11 +8,14 @@ move to the bottom or get deleted. See also the session memory under
 (nothing active)
 
 ## Next
-- [ ] **Matrix head-layout: place/move a sub-group as a unit** — in
-      `FixtureGroupEditor` (Fixture Manager): (1) add a whole fixture group's
-      heads as a block; (2) colour cells by their source sub-group so they're
-      visually distinct; (3) move a sub-group block as a unit. Meatier change
-      to the QTableWidget grid — own focused turn.
+- [ ] **Matrix head-layout: sub-group colouring + move-as-a-unit** — block
+      ADD is done (Add group as block). Still TODO: (2) colour cells by their
+      source sub-group; (3) move a sub-group block as a unit. Both need the
+      engine to remember sub-group membership (FixtureGroup stores only
+      heads) — needs an engine data change.
+- [ ] **Fixture-group folders in the Fixture Manager** — the Programming
+      tab's tree has them + a Universes default; mirror in the Fixture
+      Manager group view if wanted (it already groups fixtures by universe).
 
 ## Ideas / bigger bets (shower-thoughts)
 - [ ] **Shareable effect "looks"/groupings** — design a full set of effect
@@ -68,3 +71,7 @@ move to the bottom or get deleted. See also the session memory under
       the collection context/subtree when drilling into a member scene.
 - [x] Recursive nesting/context: Chaser -> Collections -> Scenes.
 - [x] Fix segfault from rapid preview start/stop during edits (refreshPreview).
+- [x] Engine: guard Scene::write fader-map build with m_valueListMutex
+      (race vs resetRuntime from live preview edits).
+- [x] Fixtures & Groups tree organized by Universe (default folder).
+- [x] Fixture group editor: "Add group as block".
