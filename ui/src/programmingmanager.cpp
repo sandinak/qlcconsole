@@ -787,21 +787,34 @@ void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
         return;
     Function *c = m_doc->function(containerId);
     QList<quint32> members;
+    bool ordered = false; // chaser steps have a meaningful order; collections don't
     if (Collection *col = qobject_cast<Collection*>(c))
         members = col->functions();
     else if (Chaser *ch = qobject_cast<Chaser*>(c))
+    {
+        ordered = true;
         foreach (const ChaserStep &s, ch->steps())
             members << s.fid;
+    }
     else
         return; // not a container
 
+    // The tree sorts alphabetically, so for ordered containers (chasers)
+    // prefix each child with a zero-padded step number — the sort then
+    // matches step order, and the number is useful to see.
+    const int width = qMax(2, QString::number(members.count()).length());
+    int idx = 0;
+
     foreach (quint32 mid, members)
     {
+        idx++;
         Function *mf = m_doc->function(mid);
         if (mf == NULL)
             continue;
         QTreeWidgetItem *ci = new QTreeWidgetItem(treeNode);
-        ci->setText(0, mf->name());
+        ci->setText(0, ordered
+                    ? QString("%1. %2").arg(idx, width, 10, QChar('0')).arg(mf->name())
+                    : mf->name());
         ci->setIcon(0, mf->getIcon());
         ci->setData(0, Qt::UserRole, mid); // so itemFunctionId() resolves it
         // Read-only nav: selectable + double-click to edit, not draggable.
