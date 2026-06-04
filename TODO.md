@@ -8,11 +8,10 @@ move to the bottom or get deleted. See also the session memory under
 (nothing active)
 
 ## Next
-- [ ] **Matrix head-layout: sub-group colouring + move-as-a-unit** — block
-      ADD is done (Add group as block). Still TODO: (2) colour cells by their
-      source sub-group; (3) move a sub-group block as a unit. Both need the
-      engine to remember sub-group membership (FixtureGroup stores only
-      heads) — needs an engine data change.
+- [ ] **Matrix head-layout: move a sub-group as a unit** — engine sub-group
+      tagging + block-add + cell colouring are done. Remaining: select a
+      tagged sub-group and shift/move all its heads together (and maybe
+      remove a whole sub-group). Interaction work in `FixtureGroupEditor`.
 - [ ] **Fixture-group folders in the Fixture Manager** — the Programming
       tab's tree has them + a Universes default; mirror in the Fixture
       Manager group view if wanted (it already groups fixtures by universe).
@@ -75,3 +74,8 @@ move to the bottom or get deleted. See also the session memory under
       (race vs resetRuntime from live preview edits).
 - [x] Fixtures & Groups tree organized by Universe (default folder).
 - [x] Fixture group editor: "Add group as block".
+- [x] Fixture console kept in-frame (height-bounded); multi-fixture editing
+      (edit several fixed fixtures together; mismatched values untouched
+      until changed).
+- [x] Engine: fixture-group sub-group tagging (+XML) + colour blocks in the
+      group editor.
