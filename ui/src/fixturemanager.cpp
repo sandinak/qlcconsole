@@ -267,6 +267,10 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
             m_fadeConfigAction->setEnabled(true);
         else
             m_fadeConfigAction->setEnabled(false);
+
+        // Always allow creating a group (its menu's "New Group" makes an
+        // empty one when no fixtures are selected; you then drag fixtures in).
+        m_groupAction->setEnabled(true);
     }
     else
     {
@@ -1804,6 +1808,8 @@ void FixtureManager::slotGroupSelected(QAction* action)
         qreal side = sqrt(headCount(m_fixtures_tree->selectedItems()));
         if (side != floor(side))
             side += 1; // Fixture number doesn't provide a full square
+        if (side < 1)
+            side = 4;  // empty group: a small default grid to drop into
 
         CreateFixtureGroup cfg(this);
         cfg.setSize(QSize(side, side));
