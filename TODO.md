@@ -8,13 +8,7 @@ move to the bottom or get deleted. See also the session memory under
 (nothing active)
 
 ## Next
-- [ ] **Matrix head-layout: move a sub-group as a unit** — engine sub-group
-      tagging + block-add + cell colouring are done. Remaining: select a
-      tagged sub-group and shift/move all its heads together (and maybe
-      remove a whole sub-group). Interaction work in `FixtureGroupEditor`.
-- [ ] **Fixture-group folders in the Fixture Manager** — the Programming
-      tab's tree has them + a Universes default; mirror in the Fixture
-      Manager group view if wanted (it already groups fixtures by universe).
+(nothing active — pick from Ideas/Backlog)
 
 ## Ideas / bigger bets (shower-thoughts)
 - [ ] **Shareable effect "looks"/groupings** — design a full set of effect
@@ -82,3 +76,6 @@ move to the bottom or get deleted. See also the session memory under
 - [x] Programming tab: bottom editors min-height (faders no longer squished).
 - [x] Fixture Manager: double-click to open; drag fixtures from the tree
       onto the group editor grid at a cell.
+- [x] Create empty fixture groups (group action always enabled in Design).
+- [x] Move a sub-group as a unit (right-click grid → Move sub-group …).
+- [x] Folders for fixture groups in the Fixture Manager (+ Move to folder).
