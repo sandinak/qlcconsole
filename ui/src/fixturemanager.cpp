@@ -35,6 +35,8 @@
 #include <QDebug>
 #include <QIcon>
 #include <QMenu>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QtGui>
 
 #include "qlcfixturemode.h"
@@ -2038,5 +2040,36 @@ void FixtureManager::slotContextMenuRequested(const QPoint&)
     menu.addSeparator();
     menu.addAction(m_groupAction);
     menu.addAction(m_unGroupAction);
-    menu.exec(QCursor::pos());
+
+    // "Move to folder…" when a fixture group is selected.
+    FixtureGroup *grp = NULL;
+    QTreeWidgetItem *curr = m_fixtures_tree->currentItem();
+    if (curr != NULL)
+    {
+        QVariant gv = curr->data(KColumnName, PROP_GROUP);
+        if (gv.isValid())
+            grp = m_doc->fixtureGroup(gv.toUInt());
+    }
+    QAction *moveToFolder = NULL;
+    if (grp != NULL)
+    {
+        menu.addSeparator();
+        moveToFolder = menu.addAction(tr("Move to folder…"));
+    }
+
+    QAction *chosen = menu.exec(QCursor::pos());
+    if (chosen != NULL && chosen == moveToFolder && grp != NULL)
+    {
+        bool ok = false;
+        const QString path = QInputDialog::getText(
+            this, tr("Move group to folder"),
+            tr("Folder path (e.g. \"Movers/Front\"; empty for none):"),
+            QLineEdit::Normal, grp->path(), &ok);
+        if (ok)
+        {
+            grp->setPath(path.trimmed());
+            m_doc->setModified();
+            updateView();
+        }
+    }
 }

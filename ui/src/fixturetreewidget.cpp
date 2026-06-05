@@ -38,6 +38,25 @@ const char* FixtureTreeWidget::fixtureDragMimeType()
     return FIXTURE_DRAG_MIME_TYPE;
 }
 
+QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
+{
+    if (path.isEmpty())
+        return invisibleRootItem();
+    if (m_groupFolders.contains(path))
+        return m_groupFolders[path];
+
+    const int slash = path.lastIndexOf('/');
+    const QString parentPath = (slash < 0) ? QString() : path.left(slash);
+    const QString name = (slash < 0) ? path : path.mid(slash + 1);
+
+    QTreeWidgetItem *fi = new QTreeWidgetItem(groupFolderItem(parentPath));
+    fi->setText(KColumnName, name);
+    fi->setIcon(KColumnName, QIcon(":/folder.png"));
+    fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    m_groupFolders[path] = fi;
+    return fi;
+}
+
 QMimeData* FixtureTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) const
 {
     QByteArray data;
@@ -453,6 +472,7 @@ void FixtureTreeWidget::slotItemExpanded()
 void FixtureTreeWidget::updateTree()
 {
     clear();
+    m_groupFolders.clear();
     m_universesCount = 0;
     m_fixturesCount = 0;
     m_channelsCount = 0;
@@ -461,7 +481,8 @@ void FixtureTreeWidget::updateTree()
     {
         foreach (FixtureGroup* grp, m_doc->fixtureGroups())
         {
-            QTreeWidgetItem* grpItem = new QTreeWidgetItem(this);
+            // Nest the group under its folder path (if any).
+            QTreeWidgetItem* grpItem = new QTreeWidgetItem(groupFolderItem(grp->path()));
             updateGroupItem(grpItem, grp);
         }
     }

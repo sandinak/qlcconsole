@@ -20,6 +20,8 @@
 #ifndef FIXTURETREEWIDGET_H
 #define FIXTURETREEWIDGET_H
 
+#include <QHash>
+
 #include <QTreeWidget>
 
 #include "grouphead.h"
@@ -81,7 +83,14 @@ protected slots:
     void slotItemExpanded();
 
 private:
+    /** Get/create the folder item for a "/"-separated fixture-group path
+     *  (empty = root). Rebuilt each updateTree(). */
+    QTreeWidgetItem* groupFolderItem(const QString& path);
+
+private:
     Doc *m_doc;
+
+    QHash<QString, QTreeWidgetItem*> m_groupFolders; //!< group folder nodes
 
     // counters
     int m_universesCount;
