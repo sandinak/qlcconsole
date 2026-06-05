@@ -21,6 +21,7 @@
 #include <QTableWidget>
 #include <QPushButton>
 #include <QInputDialog>
+#include <QMenu>
 #include <QHeaderView>
 #include <QSettings>
 #include <QLineEdit>
@@ -90,6 +91,11 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     m_table->setAcceptDrops(true);
     m_table->viewport()->setAcceptDrops(true);
     m_table->viewport()->installEventFilter(this);
+
+    // Right-click a sub-group cell to move the whole sub-group as a unit.
+    m_table->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_table, SIGNAL(customContextMenuRequested(QPoint)),
+            this, SLOT(slotTableContextMenu(QPoint)));
 
     updateTable();
 }
@@ -391,6 +397,86 @@ void FixtureGroupEditor::addFixtureHeads(Qt::ArrowType direction)
         updateTable();
         m_table->setCurrentCell(row, col);
     }
+}
+
+void FixtureGroupEditor::slotTableContextMenu(const QPoint &pos)
+{
+    const QModelIndex idx = m_table->indexAt(pos);
+    if (idx.isValid() == false)
+        return;
+    const quint32 sg = m_grp->headSubGroup(QLCPoint(idx.column(), idx.row()));
+    if (sg == 0)
+        return; // cell isn't part of a sub-group
+
+    QMenu menu(this);
+    QAction *up    = menu.addAction(tr("Move sub-group up"));
+    QAction *down  = menu.addAction(tr("Move sub-group down"));
+    QAction *left  = menu.addAction(tr("Move sub-group left"));
+    QAction *right = menu.addAction(tr("Move sub-group right"));
+
+    QAction *c = menu.exec(m_table->viewport()->mapToGlobal(pos));
+    if (c == up)         moveSubGroup(sg, 0, -1);
+    else if (c == down)  moveSubGroup(sg, 0, 1);
+    else if (c == left)  moveSubGroup(sg, -1, 0);
+    else if (c == right) moveSubGroup(sg, 1, 0);
+}
+
+void FixtureGroupEditor::moveSubGroup(quint32 sg, int dx, int dy)
+{
+    if (sg == 0)
+        return;
+
+    // Gather the sub-group's heads.
+    QList<QLCPoint> pts;
+    QList<GroupHead> heads;
+    QMapIterator<QLCPoint, GroupHead> it(m_grp->headsMap());
+    while (it.hasNext())
+    {
+        it.next();
+        if (m_grp->headSubGroup(it.key()) == sg)
+        {
+            pts << it.key();
+            heads << it.value();
+        }
+    }
+    if (pts.isEmpty())
+        return;
+
+    // Validate destinations: in bounds (top/left) and not blocked by a head
+    // that belongs to a DIFFERENT sub-group/none.
+    foreach (const QLCPoint &p, pts)
+    {
+        const QLCPoint np(p.x() + dx, p.y() + dy);
+        if (np.x() < 0 || np.y() < 0)
+            return;
+        if (m_grp->head(np).isValid() && m_grp->headSubGroup(np) != sg)
+            return;
+    }
+
+    // Move: clear the block, then re-place (and re-tag) at the new cells.
+    foreach (const QLCPoint &p, pts)
+        m_grp->resignHead(p);
+
+    int maxX = m_grp->size().width() - 1;
+    int maxY = m_grp->size().height() - 1;
+    for (int i = 0; i < pts.size(); i++)
+    {
+        const QLCPoint np(pts[i].x() + dx, pts[i].y() + dy);
+        m_grp->assignHead(np, heads[i]);
+        m_grp->setHeadSubGroup(np, sg);
+        maxX = qMax(maxX, np.x());
+        maxY = qMax(maxY, np.y());
+    }
+
+    if (maxX + 1 > m_grp->size().width() || maxY + 1 > m_grp->size().height())
+    {
+        m_grp->setSize(QSize(qMax(maxX + 1, m_grp->size().width()),
+                             qMax(maxY + 1, m_grp->size().height())));
+        m_xSpin->blockSignals(true); m_xSpin->setValue(m_grp->size().width());  m_xSpin->blockSignals(false);
+        m_ySpin->blockSignals(true); m_ySpin->setValue(m_grp->size().height()); m_ySpin->blockSignals(false);
+    }
+
+    updateTable();
 }
 
 void FixtureGroupEditor::slotAddGroupBlock()

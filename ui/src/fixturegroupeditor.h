@@ -46,6 +46,8 @@ protected:
 private:
     void updateTable();
     void addFixtureHeads(Qt::ArrowType direction);
+    /** Shift every head tagged with subGroupId by (dx,dy) as a unit. */
+    void moveSubGroup(quint32 subGroupId, int dx, int dy);
 
 private slots:
     void slotNameEdited(const QString& text);
@@ -60,6 +62,9 @@ private slots:
     /** Add another fixture group's heads as a block (preserving its
      *  relative layout) at the current cell. */
     void slotAddGroupBlock();
+
+    /** Right-click the grid: move the sub-group under the cursor as a unit. */
+    void slotTableContextMenu(const QPoint &pos);
 
     void slotCellActivated(int row, int column);
     void slotCellChanged(int row, int column);
