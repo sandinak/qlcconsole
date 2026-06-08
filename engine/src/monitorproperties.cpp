@@ -36,7 +36,10 @@
 #define KXMLQLCMonitorGridHeight    QStringLiteral("Height")
 #define KXMLQLCMonitorGridDepth     QStringLiteral("Depth")
 #define KXMLQLCMonitorGridUnits     QStringLiteral("Units")
+#define KXMLQLCMonitorGridSubdiv    QStringLiteral("Subdivisions")
 #define KXMLQLCMonitorPointOfView   QStringLiteral("POV")
+#define KXMLQLCMonitorLayoutLocked  QStringLiteral("LayoutLocked")
+#define KXMLQLCMonitorSnapDivisions QStringLiteral("SnapDivisions")
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
 #define KXMLQLCMonitorShowLabels    QStringLiteral("ShowLabels")
 
@@ -83,6 +86,9 @@ MonitorProperties::MonitorProperties()
     , m_gridUnits(Meters)
     , m_pointOfView(Undefined)
     , m_stageType(StageSimple)
+    , m_layoutLocked(false)
+    , m_gridSubdivisions(1)
+    , m_snapDivisions(0)
     , m_showLabels(false)
 {
 }
@@ -93,6 +99,9 @@ void MonitorProperties::reset()
     m_gridUnits = Meters;
     m_pointOfView = Undefined;
     m_stageType = StageSimple;
+    m_layoutLocked = false;
+    m_gridSubdivisions = 1;
+    m_snapDivisions = 0;
     m_showLabels = false;
     m_fixtureItems.clear();
     m_genericItems.clear();
@@ -535,6 +544,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             setLabelsVisible(false);
     }
 
+    if (attrs.hasAttribute(KXMLQLCMonitorLayoutLocked))
+        setLayoutLocked(attrs.value(KXMLQLCMonitorLayoutLocked).toString() == "1");
+
+    if (attrs.hasAttribute(KXMLQLCMonitorSnapDivisions))
+        setSnapDivisions(attrs.value(KXMLQLCMonitorSnapDivisions).toString().toInt());
+
     while (root.readNextStartElement())
     {
         QXmlStreamAttributes tAttrs = root.attributes();
@@ -572,6 +587,9 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
 
             if (tAttrs.hasAttribute(KXMLQLCMonitorGridUnits))
                 setGridUnits(GridUnits(tAttrs.value(KXMLQLCMonitorGridUnits).toString().toInt()));
+
+            if (tAttrs.hasAttribute(KXMLQLCMonitorGridSubdiv))
+                setGridSubdivisions(tAttrs.value(KXMLQLCMonitorGridSubdiv).toString().toInt());
 
             if (tAttrs.hasAttribute(KXMLQLCMonitorPointOfView))
                 setPointOfView(PointOfView(tAttrs.value(KXMLQLCMonitorPointOfView).toString().toInt()));
@@ -725,6 +743,10 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     doc->writeStartElement(KXMLQLCMonitorProperties);
     doc->writeAttribute(KXMLQLCMonitorDisplay, QString::number(displayMode()));
     doc->writeAttribute(KXMLQLCMonitorShowLabels, QString::number(labelsVisible()));
+    if (layoutLocked())
+        doc->writeAttribute(KXMLQLCMonitorLayoutLocked, QString::number(1));
+    if (snapDivisions() > 0)
+        doc->writeAttribute(KXMLQLCMonitorSnapDivisions, QString::number(snapDivisions()));
 
     /* Font */
     doc->writeTextElement(KXMLQLCMonitorFont, font().toString());
@@ -758,6 +780,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     doc->writeAttribute(KXMLQLCMonitorGridHeight, QString::number(gridSize().y()));
     doc->writeAttribute(KXMLQLCMonitorGridDepth, QString::number(gridSize().z()));
     doc->writeAttribute(KXMLQLCMonitorGridUnits, QString::number(gridUnits()));
+    if (gridSubdivisions() > 1)
+        doc->writeAttribute(KXMLQLCMonitorGridSubdiv, QString::number(gridSubdivisions()));
     if (m_pointOfView != Undefined)
         doc->writeAttribute(KXMLQLCMonitorPointOfView, QString::number(pointOfView()));
 

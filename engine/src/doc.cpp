@@ -230,6 +230,11 @@ void Doc::clearContents()
     {
         Fixture* fxi = m_fixtures.take(fxit.next());
         quint32 fxID = fxi->id();
+        // Invalidate the cached fixtures() list BEFORE emitting: the fixture is
+        // already out of m_fixtures, so a listener that calls fixtures() during
+        // the signal rebuilds from the live map and never sees this freed
+        // pointer (was a use-after-free / shutdown crash).
+        m_fixturesListCacheUpToDate = false;
         delete fxi;
         emit fixtureRemoved(fxID);
     }

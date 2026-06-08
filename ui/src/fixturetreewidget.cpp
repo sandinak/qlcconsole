@@ -21,6 +21,10 @@
 #include <QHeaderView>
 #include <QMimeData>
 #include <QDataStream>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QTreeWidgetItemIterator>
 
 #include "fixturetreewidget.h"
 #include "qlcfixturedef.h"
@@ -32,10 +36,16 @@
 #define KColumnName 0
 
 static const char* FIXTURE_DRAG_MIME_TYPE = "application/x-qlcplus-fixtures";
+static const char* GROUP_DRAG_MIME_TYPE = "application/x-qlcplus-fixturegroups";
 
 const char* FixtureTreeWidget::fixtureDragMimeType()
 {
     return FIXTURE_DRAG_MIME_TYPE;
+}
+
+const char* FixtureTreeWidget::groupDragMimeType()
+{
+    return GROUP_DRAG_MIME_TYPE;
 }
 
 QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
@@ -52,31 +62,129 @@ QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
     QTreeWidgetItem *fi = new QTreeWidgetItem(groupFolderItem(parentPath));
     fi->setText(KColumnName, name);
     fi->setIcon(KColumnName, QIcon(":/folder.png"));
-    fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    fi->setData(KColumnName, PROP_FOLDER, path); // lets drops resolve the path
+    fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
     m_groupFolders[path] = fi;
     return fi;
 }
 
 QMimeData* FixtureTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) const
 {
-    QByteArray data;
-    QDataStream stream(&data, QIODevice::WriteOnly);
-    int count = 0;
+    QByteArray fxData, grpData;
+    QDataStream fxStream(&fxData, QIODevice::WriteOnly);
+    QDataStream grpStream(&grpData, QIODevice::WriteOnly);
+    int fxCount = 0, grpCount = 0;
     foreach (QTreeWidgetItem *item, items)
     {
+        // A group item carries its layout as a whole; drag it to move folders.
+        QVariant g = item->data(KColumnName, PROP_GROUP);
+        if (g.isValid())
+        {
+            grpStream << g.toUInt();
+            grpCount++;
+            continue;
+        }
         QVariant v = item->data(KColumnName, PROP_ID); // fixture id (string)
         if (v.isValid() == false)
             continue;
         bool ok = false;
         quint32 fid = v.toString().toUInt(&ok);
-        if (ok) { stream << fid; count++; }
+        if (ok) { fxStream << fid; fxCount++; }
     }
-    if (count == 0)
+    if (fxCount == 0 && grpCount == 0)
         return QTreeWidget::mimeData(items);
 
     QMimeData *mime = new QMimeData();
-    mime->setData(FIXTURE_DRAG_MIME_TYPE, data);
+    if (fxCount > 0)
+        mime->setData(FIXTURE_DRAG_MIME_TYPE, fxData);
+    if (grpCount > 0)
+        mime->setData(GROUP_DRAG_MIME_TYPE, grpData);
     return mime;
+}
+
+void FixtureTreeWidget::dragEnterEvent(QDragEnterEvent* event)
+{
+    // The tree only accepts internal group-onto-folder drops; fixture drags
+    // are for external targets (the group editor grid), not this tree.
+    if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE))
+        event->acceptProposedAction();
+    else
+        event->ignore();
+}
+
+void FixtureTreeWidget::dragMoveEvent(QDragMoveEvent* event)
+{
+    if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE) == false)
+    {
+        event->ignore();
+        return;
+    }
+
+    // Only a group folder, a group (drop alongside it), or the empty root are
+    // valid targets for a group drop.
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    QTreeWidgetItem *target = itemAt(event->pos());
+#else
+    QTreeWidgetItem *target = itemAt(event->position().toPoint());
+#endif
+    const bool valid = target == NULL ||
+            target->data(KColumnName, PROP_FOLDER).isValid() ||
+            target->data(KColumnName, PROP_GROUP).isValid();
+    if (valid)
+        event->acceptProposedAction();
+    else
+        event->ignore();
+}
+
+void FixtureTreeWidget::dropEvent(QDropEvent* event)
+{
+    if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE) == false)
+    {
+        event->ignore();
+        return;
+    }
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    QTreeWidgetItem *target = itemAt(event->pos());
+#else
+    QTreeWidgetItem *target = itemAt(event->position().toPoint());
+#endif
+
+    // Resolve the destination folder path.
+    QString destPath;
+    if (target == NULL)
+    {
+        destPath = QString(); // dropped on empty space -> root
+    }
+    else if (target->data(KColumnName, PROP_FOLDER).isValid())
+    {
+        destPath = target->data(KColumnName, PROP_FOLDER).toString();
+    }
+    else if (target->data(KColumnName, PROP_GROUP).isValid())
+    {
+        // Dropped onto a group: join its folder.
+        FixtureGroup *grp = m_doc->fixtureGroup(target->data(KColumnName, PROP_GROUP).toUInt());
+        destPath = (grp != NULL) ? grp->path() : QString();
+    }
+    else
+    {
+        event->ignore(); // universe / fixture / head -> not a valid target
+        return;
+    }
+
+    QList<quint32> ids;
+    QByteArray data = event->mimeData()->data(GROUP_DRAG_MIME_TYPE);
+    QDataStream stream(&data, QIODevice::ReadOnly);
+    while (stream.atEnd() == false)
+    {
+        quint32 gid = 0;
+        stream >> gid;
+        ids << gid;
+    }
+
+    if (ids.isEmpty() == false)
+        emit groupsDroppedOnFolder(ids, destPath);
+    event->acceptProposedAction();
 }
 
 FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
@@ -184,19 +292,17 @@ void FixtureTreeWidget::setChannelsMask(QByteArray channels)
 
 QTreeWidgetItem *FixtureTreeWidget::fixtureItem(quint32 id) const
 {
-    for (int i = 0; i < topLevelItemCount(); i++)
+    // Search the whole tree: fixtures now sit two levels deep (Universes ->
+    // Universe -> fixture) and may also appear under group nodes.
+    QTreeWidgetItemIterator it(const_cast<FixtureTreeWidget*>(this));
+    while (*it != NULL)
     {
-        QTreeWidgetItem *tItem = topLevelItem(i);
-        if (tItem->childCount() > 0)
-        {
-            for (int c = 0; c < tItem->childCount(); c++)
-            {
-                QTreeWidgetItem *cItem = tItem->child(c);
-                QVariant var = cItem->data(KColumnName, PROP_ID);
-                if (var.isValid() == true && var.toUInt() == id)
-                    return cItem;
-            }
-        }
+        QTreeWidgetItem *item = *it;
+        QVariant var = item->data(KColumnName, PROP_ID);
+        if (var.isValid() == true && var.toUInt() == id &&
+            item->data(KColumnName, PROP_HEAD).isValid() == false)
+            return item;
+        ++it;
     }
 
     return NULL;
@@ -204,12 +310,15 @@ QTreeWidgetItem *FixtureTreeWidget::fixtureItem(quint32 id) const
 
 QTreeWidgetItem *FixtureTreeWidget::groupItem(quint32 id) const
 {
-    for (int i = 0; i < topLevelItemCount(); i++)
+    // Groups are nested under their folder path, so search recursively.
+    QTreeWidgetItemIterator it(const_cast<FixtureTreeWidget*>(this));
+    while (*it != NULL)
     {
-        QTreeWidgetItem *item = topLevelItem(i);
+        QTreeWidgetItem *item = *it;
         QVariant var = item->data(KColumnName, PROP_GROUP);
         if (var.isValid() == true && var.toUInt() == id)
             return item;
+        ++it;
     }
 
     return NULL;
@@ -487,15 +596,32 @@ void FixtureTreeWidget::updateTree()
         }
     }
 
+    // In the Fixture Manager (groups shown) keep all universes tidily under a
+    // single "Universes" folder, separate from the fixture-group folders.
+    QTreeWidgetItem *universesRoot = NULL;
+
     foreach (Fixture* fixture, m_doc->fixtures())
     {
         Q_ASSERT(fixture != NULL);
 
+        if (m_showGroups && universesRoot == NULL)
+        {
+            universesRoot = new QTreeWidgetItem(this);
+            universesRoot->setText(KColumnName, tr("Universes"));
+            universesRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+            universesRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            universesRoot->setExpanded(true);
+        }
+
+        // The universe nodes live under universesRoot (or at top level when
+        // groups aren't shown, e.g. in fixture-selection dialogs).
+        QTreeWidgetItem *uniParent = universesRoot ? universesRoot : invisibleRootItem();
+
         QTreeWidgetItem *topItem = NULL;
         quint32 uni = fixture->universe();
-        for (int i = 0; i < topLevelItemCount(); i++)
+        for (int i = 0; i < uniParent->childCount(); i++)
         {
-            QTreeWidgetItem* tItem = topLevelItem(i);
+            QTreeWidgetItem* tItem = uniParent->child(i);
             QVariant tVar = tItem->data(KColumnName, PROP_UNIVERSE);
             if (tVar.isValid())
             {
@@ -510,9 +636,9 @@ void FixtureTreeWidget::updateTree()
         // Haven't found this universe node ? Create it.
         if (topItem == NULL)
         {
-            topItem = new QTreeWidgetItem(this);
+            topItem = new QTreeWidgetItem(uniParent);
             topItem->setText(KColumnName, m_doc->inputOutputMap()->getUniverseNameByID(uni));
-            topItem->setIcon(KColumnName, QIcon(":/group.png"));
+            topItem->setIcon(KColumnName, QIcon(m_showGroups ? ":/folder.png" : ":/group.png"));
             topItem->setData(KColumnName, PROP_UNIVERSE, uni);
             topItem->setExpanded(true);
             if (m_channelSelection)

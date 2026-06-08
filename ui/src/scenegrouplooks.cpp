@@ -8,18 +8,27 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QListWidget>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
+#include <QHeaderView>
 #include <QPushButton>
 #include <QLabel>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
 #include <QDataStream>
+#include <QMessageBox>
+#include <QSet>
+#include <QMap>
+#include <QTimer>
 
 #include <algorithm>
 
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"   // palette MIME type
 #include "fixturegroupsource.h"    // fixture-group / fixture MIME types
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "fixture.h"
@@ -27,8 +36,19 @@
 #include "doc.h"
 
 // Target kinds, stored at Qt::UserRole + 1 on target items.
-enum { TargetGroup = 0, TargetFixture = 1 };
+enum { TargetGroup = 0, TargetFixture = 1, TargetTypeFolder = 2 };
 #define TARGET_KIND_ROLE (Qt::UserRole + 1)
+
+// Human label + stable bucket key for grouping fixed fixtures by type.
+static QString fixtureTypeLabel(const Fixture *f)
+{
+    if (f == NULL)
+        return QString();
+    if (f->fixtureDef() != NULL && f->fixtureMode() != NULL)
+        return QString("%1 (%2)").arg(f->fixtureDef()->model())
+                                 .arg(f->fixtureMode()->name());
+    return QObject::tr("Generic %1-channel").arg(f->channels());
+}
 
 SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
                                  bool includeFixtureTargets)
@@ -56,8 +76,11 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
 
     // --- Targets column (groups + optionally fixtures) ---
     QVBoxLayout *targetCol = new QVBoxLayout();
-    targetCol->addWidget(new QLabel(tr("Targets"), this));
-    m_targetList = new QListWidget(this);
+    m_targetsLabel = new QLabel(tr("Targets"), this);
+    targetCol->addWidget(m_targetsLabel);
+    m_targetList = new QTreeWidget(this);
+    m_targetList->setHeaderHidden(true);
+    m_targetList->setRootIsDecorated(true);
     m_targetList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     targetCol->addWidget(m_targetList);
     QHBoxLayout *targetBtns = new QHBoxLayout();
@@ -84,6 +107,10 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     connect(m_removeLookButton, SIGNAL(clicked()), this, SLOT(slotRemoveLook()));
     connect(m_lookList, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotLookSelectionChanged()));
+    // Double-click (re)loads the look into the editor even if it was already
+    // selected (a plain click on an already-selected look fires no change).
+    connect(m_lookList, SIGNAL(itemDoubleClicked(QListWidgetItem*)),
+            this, SLOT(slotLookDoubleClicked(QListWidgetItem*)));
     connect(m_targetList, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotTargetSelectionChanged()));
 
@@ -130,9 +157,26 @@ QString SceneGroupLooks::lookLabel(quint32 paletteId) const
 
 void SceneGroupLooks::reload()
 {
+    // Preserve the effective selection across the rebuild (a type folder is
+    // resolved to its fixtures) so adding/removing a target doesn't drop the
+    // selection — which would hide the console and make the splitter jump.
+    QSet<quint32> selFix, selGrp;
+    foreach (QTreeWidgetItem *it, m_targetList->selectedItems())
+    {
+        const int kind = it->data(0, TARGET_KIND_ROLE).toInt();
+        if (kind == TargetFixture)
+            selFix.insert(it->data(0, Qt::UserRole).toUInt());
+        else if (kind == TargetGroup)
+            selGrp.insert(it->data(0, Qt::UserRole).toUInt());
+        else if (kind == TargetTypeFolder)
+            for (int c = 0; c < it->childCount(); c++)
+                selFix.insert(it->child(c)->data(0, Qt::UserRole).toUInt());
+    }
+
+    m_targetList->blockSignals(true);
     m_targetList->clear();
 
-    // Groups = dynamic targets.
+    // Groups = dynamic targets (top level).
     QList<FixtureGroup*> groups;
     foreach (quint32 gid, m_scene->fixtureGroups())
     {
@@ -146,41 +190,79 @@ void SceneGroupLooks::reload()
               });
     foreach (FixtureGroup *g, groups)
     {
-        QListWidgetItem *it = new QListWidgetItem(
-            tr("%1  — group (dynamic)").arg(g->name()), m_targetList);
-        it->setData(Qt::UserRole, g->id());
-        it->setData(TARGET_KIND_ROLE, TargetGroup);
+        QTreeWidgetItem *it = new QTreeWidgetItem(m_targetList);
+        it->setText(0, tr("%1  — group (dynamic)").arg(g->name()));
+        it->setData(0, Qt::UserRole, g->id());
+        it->setData(0, TARGET_KIND_ROLE, TargetGroup);
     }
 
-    // Fixtures = fixed targets (only when this host shows them).
+    // Fixtures = fixed targets, grouped under per-type folders.
     if (m_includeFixtureTargets)
     {
-        QList<Fixture*> fixtures;
+        QMap<QString, QList<Fixture*> > byType; // type label -> fixtures
         foreach (quint32 fid, m_scene->fixtures())
         {
             Fixture *f = m_doc->fixture(fid);
             if (f != NULL)
-                fixtures.append(f);
+                byType[fixtureTypeLabel(f)].append(f);
         }
-        std::sort(fixtures.begin(), fixtures.end(),
-                  [](Fixture *a, Fixture *b) {
-                      return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
-                  });
-        foreach (Fixture *f, fixtures)
+
+        QMapIterator<QString, QList<Fixture*> > tit(byType);
+        while (tit.hasNext())
         {
-            QListWidgetItem *it = new QListWidgetItem(
-                tr("%1  — fixture (fixed)").arg(f->name()), m_targetList);
-            it->setData(Qt::UserRole, f->id());
-            it->setData(TARGET_KIND_ROLE, TargetFixture);
+            tit.next();
+            QList<Fixture*> fxs = tit.value();
+            std::sort(fxs.begin(), fxs.end(),
+                      [](Fixture *a, Fixture *b) {
+                          return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+                      });
+
+            QTreeWidgetItem *folder = new QTreeWidgetItem(m_targetList);
+            folder->setText(0, tr("%1  (%n)", "", fxs.count()).arg(tit.key()));
+            folder->setData(0, TARGET_KIND_ROLE, TargetTypeFolder);
+            folder->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            folder->setExpanded(true);
+            foreach (Fixture *f, fxs)
+            {
+                QTreeWidgetItem *it = new QTreeWidgetItem(folder);
+                it->setText(0, f->name());
+                it->setData(0, Qt::UserRole, f->id());
+                it->setData(0, TARGET_KIND_ROLE, TargetFixture);
+            }
         }
     }
 
-    if (m_targetList->count() == 0)
+    if (m_targetList->topLevelItemCount() == 0)
     {
-        QListWidgetItem *it = new QListWidgetItem(
-            tr("(no targets — drag groups or fixtures here)"), m_targetList);
+        QTreeWidgetItem *it = new QTreeWidgetItem(m_targetList);
+        it->setText(0, tr("(no targets — drag groups or fixtures here)"));
         it->setFlags(Qt::NoItemFlags);
     }
+
+    // Restore the previous selection (re-select fixture children / groups),
+    // then re-emit once so the bottom panel matches.
+    QTreeWidgetItemIterator rit(m_targetList);
+    while (*rit != NULL)
+    {
+        QTreeWidgetItem *it = *rit;
+        const int kind = it->data(0, TARGET_KIND_ROLE).toInt();
+        if (kind == TargetFixture && selFix.contains(it->data(0, Qt::UserRole).toUInt()))
+            it->setSelected(true);
+        else if (kind == TargetGroup && selGrp.contains(it->data(0, Qt::UserRole).toUInt()))
+            it->setSelected(true);
+        ++rit;
+    }
+    m_targetList->blockSignals(false);
+    slotTargetSelectionChanged();
+
+    // Total distinct fixtures across all targets (fixed + dynamic groups).
+    QSet<quint32> allFixtures;
+    foreach (quint32 fid, m_scene->fixtures())
+        allFixtures.insert(fid);
+    foreach (FixtureGroup *g, groups)
+        foreach (quint32 fid, g->fixtureList())
+            allFixtures.insert(fid);
+    m_targetsLabel->setText(tr("Targets (%n fixture(s))", "", allFixtures.count()));
 
     // Looks = palettes.
     m_lookList->clear();
@@ -222,6 +304,7 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
         return;
 
     bool changed = false;
+    bool palettesAdded = false;
 
     if (mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType()))
     {
@@ -236,6 +319,7 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
             {
                 m_scene->addPalette(pid);
                 changed = true;
+                palettesAdded = true;
             }
         }
     }
@@ -248,11 +332,25 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
         {
             quint32 gid = 0;
             stream >> gid;
-            if (m_doc->fixtureGroup(gid) != NULL
-                && m_scene->fixtureGroups().contains(gid) == false)
+            FixtureGroup *g = m_doc->fixtureGroup(gid);
+            if (g != NULL && m_scene->fixtureGroups().contains(gid) == false)
             {
                 m_scene->addFixtureGroup(gid);
                 changed = true;
+
+                // Replace any matching static (fixed) fixtures: the dynamic
+                // group now covers them, and leaving them as fixed targets
+                // would override the group's looks with their baked values.
+                foreach (quint32 fid, g->fixtureList())
+                {
+                    if (m_scene->fixtures().contains(fid) == false)
+                        continue;
+                    Fixture *f = m_doc->fixture(fid);
+                    if (f != NULL)
+                        for (quint32 i = 0; i < f->channels(); i++)
+                            m_scene->unsetValue(fid, i);
+                    m_scene->removeFixture(fid);
+                }
             }
         }
     }
@@ -274,6 +372,12 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
         }
     }
 
+    // When a look was applied, let the palettes take over their channels.
+    // Deferred so the modal prompt doesn't spin a nested event loop inside the
+    // drop event (before it's been accepted / the drag source cleaned up).
+    if (palettesAdded)
+        QTimer::singleShot(0, this, [this]() { reconcileAfterPaletteApply(); });
+
     if (changed)
     {
         m_doc->setModified();
@@ -283,32 +387,86 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
     event->acceptProposedAction();
 }
 
+void SceneGroupLooks::reconcileAfterPaletteApply()
+{
+    // Channels covered by every currently-applied palette (key = fxi<<32|ch).
+    QSet<quint64> covered;
+    foreach (quint32 pid, m_scene->palettes())
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (p == NULL)
+            continue;
+        foreach (const SceneValue &scv, p->valuesFromFixtureGroups(m_doc, m_scene->fixtureGroups()))
+            covered.insert((quint64(scv.fxi) << 32) | scv.channel);
+        foreach (const SceneValue &scv, p->valuesFromFixtures(m_doc, m_scene->fixtures()))
+            covered.insert((quint64(scv.fxi) << 32) | scv.channel);
+    }
+
+    // Strip baked values the palettes now control (palette paramount); gather
+    // the rest (baked channels no applied look covers).
+    QList<SceneValue> uncovered;
+    foreach (const SceneValue &scv, m_scene->values())
+    {
+        if (covered.contains((quint64(scv.fxi) << 32) | scv.channel))
+            m_scene->unsetValue(scv.fxi, scv.channel);
+        else
+            uncovered << scv;
+    }
+
+    if (uncovered.isEmpty() == false)
+    {
+        // Count the distinct fixtures involved so the total reads sensibly
+        // (it's per-fixture channels × fixtures, not just "channels").
+        QSet<quint32> fxis;
+        foreach (const SceneValue &scv, uncovered)
+            fxis.insert(scv.fxi);
+        const int ret = QMessageBox::question(this, tr("Apply look"),
+            tr("This scene still sets %1 channel value(s) across %2 fixture(s) "
+               "that no applied look covers.\n"
+               "Clear them so the applied looks fully control this scene?")
+               .arg(uncovered.count()).arg(fxis.count()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (ret == QMessageBox::Yes)
+            foreach (const SceneValue &scv, uncovered)
+                m_scene->unsetValue(scv.fxi, scv.channel);
+    }
+}
+
 void SceneGroupLooks::slotRemoveTarget()
 {
-    const QList<QListWidgetItem*> sel = m_targetList->selectedItems();
+    const QList<QTreeWidgetItem*> sel = m_targetList->selectedItems();
     if (sel.isEmpty())
         return;
-    bool changed = false;
-    foreach (QListWidgetItem *it, sel)
+
+    // Resolve the selection to fixture ids + group ids (a type folder removes
+    // all its fixtures).
+    QSet<quint32> fixIds, grpIds;
+    foreach (QTreeWidgetItem *it, sel)
     {
-        const quint32 id = it->data(Qt::UserRole).toUInt();
-        if (it->data(TARGET_KIND_ROLE).toInt() == TargetFixture)
-        {
-            // Also clear any baked static values for this fixture, otherwise
-            // they're written AFTER (and override) the scene's palette looks
-            // — which is why a look stops applying when converting a static
-            // scene to a dynamic group scene.
-            Fixture *f = m_doc->fixture(id);
-            if (f != NULL)
-                for (quint32 i = 0; i < f->channels(); i++)
-                    m_scene->unsetValue(id, i);
-            changed = m_scene->removeFixture(id) || changed;
-        }
-        else
-        {
-            changed = m_scene->removeFixtureGroup(id) || changed;
-        }
+        const int kind = it->data(0, TARGET_KIND_ROLE).toInt();
+        if (kind == TargetFixture)
+            fixIds.insert(it->data(0, Qt::UserRole).toUInt());
+        else if (kind == TargetGroup)
+            grpIds.insert(it->data(0, Qt::UserRole).toUInt());
+        else if (kind == TargetTypeFolder)
+            for (int c = 0; c < it->childCount(); c++)
+                fixIds.insert(it->child(c)->data(0, Qt::UserRole).toUInt());
     }
+
+    bool changed = false;
+    foreach (quint32 id, fixIds)
+    {
+        // Also clear any baked static values for this fixture, otherwise they
+        // are written AFTER (and override) the scene's palette looks.
+        Fixture *f = m_doc->fixture(id);
+        if (f != NULL)
+            for (quint32 i = 0; i < f->channels(); i++)
+                m_scene->unsetValue(id, i);
+        changed = m_scene->removeFixture(id) || changed;
+    }
+    foreach (quint32 id, grpIds)
+        changed = m_scene->removeFixtureGroup(id) || changed;
+
     if (changed)
     {
         m_doc->setModified();
@@ -324,12 +482,39 @@ void SceneGroupLooks::slotLookSelectionChanged()
                                     : sel.first()->data(Qt::UserRole).toUInt());
 }
 
+void SceneGroupLooks::slotLookDoubleClicked(QListWidgetItem *item)
+{
+    if (item == NULL)
+        return;
+    // Force-load this look into the editor (switches the bottom panel away
+    // from the per-fixture channel editor).
+    emit lookSelected(item->data(Qt::UserRole).toUInt());
+}
+
 void SceneGroupLooks::slotTargetSelectionChanged()
 {
+    // Selecting a type folder edits all its fixtures together. Preserve order
+    // and de-duplicate (a folder + one of its children could both be selected).
     QList<quint32> fixtures;
-    foreach (QListWidgetItem *it, m_targetList->selectedItems())
-        if (it->data(TARGET_KIND_ROLE).toInt() == TargetFixture)
-            fixtures << it->data(Qt::UserRole).toUInt();
+    foreach (QTreeWidgetItem *it, m_targetList->selectedItems())
+    {
+        const int kind = it->data(0, TARGET_KIND_ROLE).toInt();
+        if (kind == TargetFixture)
+        {
+            const quint32 id = it->data(0, Qt::UserRole).toUInt();
+            if (fixtures.contains(id) == false)
+                fixtures << id;
+        }
+        else if (kind == TargetTypeFolder)
+        {
+            for (int c = 0; c < it->childCount(); c++)
+            {
+                const quint32 id = it->child(c)->data(0, Qt::UserRole).toUInt();
+                if (fixtures.contains(id) == false)
+                    fixtures << id;
+            }
+        }
+    }
     emit fixturesSelected(fixtures);
 }
 

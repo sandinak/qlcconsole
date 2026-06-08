@@ -20,7 +20,9 @@
 
 class QListWidget;
 class QListWidgetItem;
+class QTreeWidget;
 class QPushButton;
+class QLabel;
 class Scene;
 class Doc;
 
@@ -75,17 +77,24 @@ private slots:
     void slotRemoveTarget();
     void slotRemoveLook();
     void slotLookSelectionChanged();
+    void slotLookDoubleClicked(QListWidgetItem *item);
     void slotTargetSelectionChanged();
 
 private:
     QString lookLabel(quint32 paletteId) const;
+
+    /** After applying look(s): strip baked values the applied palettes now
+     *  control (palette paramount), then offer to clear any remaining baked
+     *  channels no applied look covers. */
+    void reconcileAfterPaletteApply();
 
 private:
     Scene *m_scene;
     Doc *m_doc;
     bool m_includeFixtureTargets;
 
-    QListWidget *m_targetList;
+    QLabel *m_targetsLabel;     //!< "Targets (N fixtures)"
+    QTreeWidget *m_targetList;  //!< groups + fixtures grouped by type
     QListWidget *m_lookList;
     QPushButton *m_removeTargetButton;
     QPushButton *m_removeLookButton;

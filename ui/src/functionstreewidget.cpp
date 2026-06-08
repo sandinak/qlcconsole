@@ -21,11 +21,15 @@
 #include <QDebug>
 #include <QApplication>
 #include <QMimeData>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QDrag>
 
 #include "functionstreewidget.h"
 #include "qlcpalette.h"
 #include "function.h"
+#include "scene.h"
 #include "doc.h"
 
 #define COL_NAME 0
@@ -149,6 +153,35 @@ void FunctionsTreeWidget::updateFunctionItem(QTreeWidgetItem* item, const Functi
     // already-selected). NOT drop-enabled (children would be silly).
     item->setFlags((item->flags() | Qt::ItemIsEditable)
                    & ~Qt::ItemIsDropEnabled);
+
+    // Colour-code scenes by composition: dynamic (look/group-driven), static
+    // (baked channel values) or mixed.
+    const Scene *scene = qobject_cast<const Scene*>(function);
+    if (scene != NULL)
+    {
+        const bool baked = scene->values().isEmpty() == false;
+        const bool dyn = scene->palettes().isEmpty() == false
+                      || scene->fixtureGroups().isEmpty() == false;
+        if (dyn && !baked)
+        {
+            item->setForeground(COL_NAME, QColor("#4aa3ff"));
+            item->setToolTip(COL_NAME, tr("Dynamic scene — driven by looks / fixture groups"));
+        }
+        else if (baked && !dyn)
+        {
+            item->setForeground(COL_NAME, QColor("#9aa0a6"));
+            item->setToolTip(COL_NAME, tr("Static scene — baked channel values"));
+        }
+        else if (baked && dyn)
+        {
+            item->setForeground(COL_NAME, QColor("#c08af0"));
+            item->setToolTip(COL_NAME, tr("Mixed scene — looks + baked values"));
+        }
+        else
+        {
+            item->setToolTip(COL_NAME, tr("Empty scene"));
+        }
+    }
 }
 
 QTreeWidgetItem* FunctionsTreeWidget::parentItem(const Function* function)
@@ -452,6 +485,34 @@ void FunctionsTreeWidget::deleteFolder(QTreeWidgetItem *item)
     delete item;
 }
 
+QString FunctionsTreeWidget::paletteFolderPathFor(const QTreeWidgetItem* item) const
+{
+    if (item == NULL)
+        return QString(PALETTE_CATEGORY);
+
+    const QTreeWidgetItem* node = item;
+    if (itemPaletteId(item) != QLCPalette::invalidId()) // a palette leaf
+        node = item->parent();
+    if (node == NULL)
+        return QString(PALETTE_CATEGORY);
+
+    QString p = node->text(COL_PATH);
+    if (p.isEmpty())
+        return QString(PALETTE_CATEGORY); // invisible root / category
+    if (p.endsWith('/'))
+        p.chop(1);
+    return p;
+}
+
+QTreeWidgetItem* FunctionsTreeWidget::ensurePaletteFolder(const QString& fullPath)
+{
+    // folderItem() creates every missing level and returns the leaf folder.
+    // Clear the selection first so its selection-based fast path can't return
+    // an unrelated folder.
+    clearSelection();
+    return folderItem(fullPath);
+}
+
 QTreeWidgetItem *FunctionsTreeWidget::folderItem(QString name)
 {
     if (selectedItems().count() > 0)
@@ -617,10 +678,12 @@ void FunctionsTreeWidget::setExternalDragMode(bool enable)
 {
     m_externalDragMode = enable;
 
-    // When external drag mode is enabled, allow dragging to external widgets
-    // When disabled, only allow internal drag (folder reordering)
+    // External mode (Programming tab): drag palettes OUT to the looks canvas,
+    // and also accept palette drops onto folders within this tree. DragDrop
+    // (not DragOnly) is required to receive those internal drops.
+    // Internal mode (Function Manager): classic InternalMove folder editing.
     if (enable)
-        setDragDropMode(QAbstractItemView::DragOnly);
+        setDragDropMode(QAbstractItemView::DragDrop);
     else
         setDragDropMode(QAbstractItemView::InternalMove);
 }
@@ -802,6 +865,44 @@ void FunctionsTreeWidget::startExternalDrag()
     drag->exec(Qt::CopyAction);
 }
 
+void FunctionsTreeWidget::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (m_externalDragMode)
+    {
+        if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE))
+            event->acceptProposedAction();
+        else
+            event->ignore();
+        return;
+    }
+    QTreeWidget::dragEnterEvent(event);
+}
+
+void FunctionsTreeWidget::dragMoveEvent(QDragMoveEvent *event)
+{
+    if (m_externalDragMode)
+    {
+        if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE) == false)
+        {
+            event->ignore();
+            return;
+        }
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        QTreeWidgetItem *target = itemAt(event->pos());
+#else
+        QTreeWidgetItem *target = itemAt(event->position().toPoint());
+#endif
+        // A folder, a palette leaf (join its folder), the Palettes category,
+        // or the empty root are valid targets.
+        if (target == NULL || itemNodeKind(target) == PaletteNode)
+            event->acceptProposedAction();
+        else
+            event->ignore();
+        return;
+    }
+    QTreeWidget::dragMoveEvent(event);
+}
+
 void FunctionsTreeWidget::dropEvent(QDropEvent *event)
 {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -809,6 +910,54 @@ void FunctionsTreeWidget::dropEvent(QDropEvent *event)
 #else
     QTreeWidgetItem *dropItem = itemAt(event->position().toPoint());
 #endif
+
+    // External/Programming mode: move the dragged palettes into the folder
+    // under the cursor (don't do any Qt item reparenting; the owner rebuilds).
+    if (m_externalDragMode)
+    {
+        if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE) == false)
+        {
+            event->ignore();
+            return;
+        }
+
+        // Resolve the destination folder path.
+        QString destPath;
+        if (dropItem == NULL)
+            destPath = QString(); // root
+        else if (itemPaletteId(dropItem) != QLCPalette::invalidId())
+            destPath = (dropItem->parent() != NULL)
+                    ? dropItem->parent()->text(COL_PATH) : QString(); // join sibling's folder
+        else
+            destPath = dropItem->text(COL_PATH); // a folder (or Palettes root => "")
+
+        QList<quint32> ids;
+        QByteArray data = event->mimeData()->data(PALETTE_DRAG_MIME_TYPE);
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 pid = 0;
+            stream >> pid;
+            ids << pid;
+        }
+
+        bool changed = false;
+        foreach (quint32 pid, ids)
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (p != NULL && p->path() != destPath)
+            {
+                p->setPath(destPath);
+                changed = true;
+            }
+        }
+        m_draggedItems.clear();
+        event->acceptProposedAction();
+        if (changed)
+            emit paletteDroppedToFolder();
+        return;
+    }
+
     if (m_draggedItems.count() == 0 || dropItem == NULL)
         return;
 

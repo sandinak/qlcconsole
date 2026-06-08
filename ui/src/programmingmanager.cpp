@@ -18,6 +18,9 @@
 #include <QMenu>
 #include <QLabel>
 #include <QInputDialog>
+#include <QMessageBox>
+#include <QRegularExpression>
+#include <QTimer>
 #include <QLineEdit>
 
 #include "programmingmanager.h"
@@ -52,6 +55,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     , m_canvasFunction(Function::invalidId())
     , m_previewFunction(Function::invalidId())
     , m_clipboardFunction(Function::invalidId())
+    , m_clipboardPalette(QLCPalette::invalidId())
     , m_memberContainer(Function::invalidId())
 {
     QHBoxLayout *root = new QHBoxLayout(this);
@@ -88,16 +92,16 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_canvasPlaceholder->setWordWrap(true);
     m_canvasPlaceholder->setAlignment(Qt::AlignCenter);
     m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
-    // Inline look editor pinned to the bottom of the center panel, in a
-    // scroll area so tall pages (color picker / XY pad) never get clipped.
+    // Inline look editor pinned to the bottom of the center panel. It is NOT
+    // scrolled: it always renders fully at its preferred height (Fixed
+    // vertical), and the canvas above (stretch) shrinks to make room.
     m_lookEditor = new LookEditor(m_doc, this);
-    m_lookScroll = new QScrollArea(this);
-    m_lookScroll->setWidgetResizable(true);
-    m_lookScroll->setFrameShape(QFrame::NoFrame);
-    m_lookScroll->setMinimumHeight(240);
-    m_lookScroll->setMaximumHeight(440);
-    m_lookScroll->setWidget(m_lookEditor);
-    m_canvasLayout->addWidget(m_lookScroll);
+    // Take the look editor's full preferred height; the canvas above (Expanding)
+    // shrinks first to make room. Maximum (not Fixed) so the window can still be
+    // resized very short if needed (the canvas hits its min first).
+    m_lookEditor->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+    m_lookEditor->setMaximumHeight(340); // matches the capped picker/XY pad
+    m_canvasLayout->addWidget(m_lookEditor);
 
     // Per-fixture DMX channel editor, shown at the bottom when fixed-fixture
     // targets are selected (instead of the look editor). Height-bounded so a
@@ -109,11 +113,22 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // Minimum so the channel faders always have usable height (they were
     // getting squished to nothing when the Targets list was tall); scrolls
     // within the band if the console is taller.
-    m_fixtureScroll->setMinimumHeight(260);
+    m_fixtureScroll->setMinimumHeight(200);
     m_fixtureScroll->setMaximumHeight(400);
     m_fixtureScroll->setWidget(m_fixtureConsole);
     m_fixtureScroll->hide();
     m_canvasLayout->addWidget(m_fixtureScroll);
+
+    // Shown instead of the console when several selected fixed fixtures are of
+    // different types (editing them by channel index would be meaningless).
+    m_fixtureMixedNote = new QLabel(this);
+    m_fixtureMixedNote->setWordWrap(true);
+    m_fixtureMixedNote->setAlignment(Qt::AlignCenter);
+    m_fixtureMixedNote->setMinimumHeight(120);
+    m_fixtureMixedNote->setStyleSheet("QLabel { color: gray; }");
+    m_fixtureMixedNote->hide();
+    m_canvasLayout->addWidget(m_fixtureMixedNote);
+
     connect(m_fixtureConsole, SIGNAL(valueChanged(quint32,quint32,uchar)),
             this, SLOT(slotFixtureValueChanged(quint32,quint32,uchar)));
     connect(m_fixtureConsole, SIGNAL(checked(quint32,quint32,bool)),
@@ -157,6 +172,14 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
             this, SLOT(slotFuncTreeMenu(QPoint)));
     connect(m_paletteTree, SIGNAL(customContextMenuRequested(QPoint)),
             this, SLOT(slotPaletteTreeMenu(QPoint)));
+
+    // Drag palettes onto folders to re-file them. Defer the rebuild: this fires
+    // from the tree's dropEvent, and updateTree() deletes the items Qt's drag
+    // machinery still references (use-after-free) if done synchronously.
+    connect(m_paletteTree, &FunctionsTreeWidget::paletteDroppedToFolder,
+            this, [this]() {
+        QTimer::singleShot(0, this, [this]() { m_paletteTree->updateTree(); m_doc->setModified(); });
+    });
 
     // Keep the trees in sync with the Doc (functor connects so we can call
     // the trees' non-slot helpers directly).
@@ -255,7 +278,8 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     m_canvasPlaceholder->hide();
     m_selectedFixtures.clear();
     m_fixtureScroll->hide(); // default to the look editor at the bottom
-    m_lookScroll->show();
+    m_fixtureMixedNote->hide();
+    m_lookEditor->show();
     m_lookEditor->setContextScene(scene);
     m_canvas = new SceneGroupLooks(scene, m_doc, this, /*includeFixtureTargets*/ true);
     connect(m_canvas, SIGNAL(sceneModified()), this, SLOT(slotCanvasModified()));
@@ -265,10 +289,10 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
             this, SLOT(slotFixturesSelected(QList<quint32>)));
     // Selecting a look switches the bottom back to the look editor.
     connect(m_canvas, &SceneGroupLooks::lookSelected, this, [this](quint32 pid) {
-        if (pid != QLCPalette::invalidId()) { m_fixtureScroll->hide(); m_lookScroll->show(); }
+        if (pid != QLCPalette::invalidId()) { m_fixtureScroll->hide(); m_fixtureMixedNote->hide(); m_lookEditor->show(); }
     });
     // Insert above the bottom editors.
-    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookScroll), m_canvas, 1);
+    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_canvas, 1);
 
     startPreview();
     updateTitle();
@@ -301,7 +325,8 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     clearEditors();
     m_canvasPlaceholder->hide();
     m_fixtureScroll->hide(); // non-scene: no per-fixture editor
-    m_lookScroll->show();
+    m_fixtureMixedNote->hide();
+    m_lookEditor->show();
 
     // Host the stock editor for the function type; collections and chasers
     // accept functions dragged from the left tree (external drag mode).
@@ -346,7 +371,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     }
 
     m_funcEditor = ed;
-    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookScroll), m_funcEditor, 1);
+    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_funcEditor, 1);
     m_funcEditor->show();
     startPreview();   // run it live so the view reflects it (Design mode)
     updateTitle();
@@ -451,13 +476,24 @@ void ProgrammingManager::createPalette(int paletteType)
     }
     m_doc->setModified();
     m_lookEditor->setPalette(p->id()); // edit it inline immediately
+    showLookEditorPanel();
 }
 
 void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
 {
     const quint32 pid = m_paletteTree->itemPaletteId(item);
     if (pid != QLCPalette::invalidId())
+    {
         m_lookEditor->setPalette(pid);
+        showLookEditorPanel(); // pivot from the DMX console if it's showing
+    }
+}
+
+void ProgrammingManager::showLookEditorPanel()
+{
+    m_fixtureScroll->hide();
+    m_fixtureMixedNote->hide();
+    m_lookEditor->show();
 }
 
 void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
@@ -468,24 +504,102 @@ void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
         || m_doc->fixture(fixtureIds.first()) == NULL)
     {
         m_fixtureScroll->hide();
-        m_lookScroll->show();
+        m_fixtureMixedNote->hide();
+        m_lookEditor->show();
+        return;
+    }
+
+    // Channel edits are mirrored across the selected fixtures by channel
+    // index, which is only meaningful when they share the same type. If the
+    // selection mixes types, show a note instead of a misleading console.
+    const quint32 lead = fixtureIds.first();
+    Fixture *leadFx = m_doc->fixture(lead);
+    int mismatched = 0;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *f = m_doc->fixture(fid);
+        if (f == NULL || sameFixtureType(leadFx, f) == false)
+            mismatched++;
+    }
+
+    if (fixtureIds.size() > 1 && mismatched > 0)
+    {
+        m_lookEditor->hide();
+        m_fixtureScroll->hide();
+        m_fixtureMixedNote->setText(
+            tr("%n fixed fixture(s) of different types are selected.\n"
+               "Select fixtures of the same type to edit their DMX channels together.",
+               "", fixtureIds.size()));
+        m_fixtureMixedNote->show();
         return;
     }
 
     // The console edits the FIRST selected fixture as a template; channel
-    // edits are mirrored to all selected fixtures (see below). Prefill with
-    // the first fixture's scene values — the others are left untouched until
-    // a value is actually changed, so mismatched values aren't clobbered.
-    const quint32 lead = fixtureIds.first();
+    // edits are mirrored to all selected fixtures (see below). Prefill so the
+    // console reflects what the scene actually outputs for this fixture:
+    // first the applied looks (palettes are resolved per fixture, not baked
+    // into values), then the baked scene values on top — matching the runtime
+    // order in Scene::writeDMX (palettes first, m_values override).
     m_fixtureConsole->blockSignals(true);
     m_fixtureConsole->setFixture(lead);
+    // Checkable channels default to CHECKED; start them all unchecked so only
+    // the channels this scene actually drives (baked values + the channels its
+    // applied looks impact) end up selected. This keeps static scenes narrow
+    // so several can be layered on one fixture (colour / intensity / position
+    // / gobo as separate scenes) without clobbering each other.
+    m_fixtureConsole->setChecked(false);
+
+    // Baked values first, then applied looks override them (palette paramount,
+    // matching Scene::writeDMX). Look-controlled channels are checked but
+    // greyed out — they're driven by the palette, not directly editable.
     foreach (const SceneValue &scv, s->values())
         if (scv.fxi == lead)
             m_fixtureConsole->setSceneValue(scv);
+
+    QList<quint32> lockedChannels;
+    foreach (quint32 pid, s->palettes())
+    {
+        QLCPalette *pal = m_doc->palette(pid);
+        if (pal == NULL)
+            continue;
+        foreach (const SceneValue &scv, pal->valuesFromFixtureGroups(m_doc, s->fixtureGroups()))
+            if (scv.fxi == lead)
+            {
+                m_fixtureConsole->setSceneValue(scv);
+                lockedChannels << scv.channel;
+            }
+        foreach (const SceneValue &scv, pal->valuesFromFixtures(m_doc, s->fixtures()))
+            if (scv.fxi == lead)
+            {
+                m_fixtureConsole->setSceneValue(scv);
+                lockedChannels << scv.channel;
+            }
+    }
+    foreach (quint32 ch, lockedChannels)
+        m_fixtureConsole->setChannelEnabled(ch, false);
     m_fixtureConsole->blockSignals(false);
 
-    m_lookScroll->hide();
+    m_lookEditor->hide();
+    m_fixtureMixedNote->hide();
     m_fixtureScroll->show();
+    // The scroll area may already have been visible (fixture->fixture switch),
+    // so no showEvent fires for the rebuilt console — reveal its channels
+    // explicitly so single and multi selections render identically.
+    m_fixtureConsole->showChannels();
+}
+
+bool ProgrammingManager::sameFixtureType(const Fixture *a, const Fixture *b) const
+{
+    if (a == NULL || b == NULL)
+        return false;
+    if (a == b)
+        return true;
+    // Identical definition + mode => identical channel layout. Generic
+    // fixtures (no def) match by channel count.
+    if (a->fixtureDef() != NULL || b->fixtureDef() != NULL)
+        return a->fixtureDef() == b->fixtureDef()
+            && a->fixtureMode() == b->fixtureMode();
+    return a->channels() == b->channels();
 }
 
 void ProgrammingManager::slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value)
@@ -525,6 +639,21 @@ void ProgrammingManager::slotFixtureChecked(quint32 fxi, quint32 ch, bool state)
 
 void ProgrammingManager::slotCopy()
 {
+    // Palette tree focused with a palette selected? Copy the palette instead.
+    if (m_paletteTree->hasFocus())
+    {
+        const QList<QTreeWidgetItem*> psel = m_paletteTree->selectedItems();
+        if (psel.isEmpty() == false)
+        {
+            const quint32 pid = m_paletteTree->itemPaletteId(psel.first());
+            if (pid != QLCPalette::invalidId())
+            {
+                m_clipboardPalette = pid;
+                return;
+            }
+        }
+    }
+
     const QList<QTreeWidgetItem*> sel = m_funcTree->selectedItems();
     if (sel.isEmpty())
         return;
@@ -535,6 +664,12 @@ void ProgrammingManager::slotCopy()
 
 void ProgrammingManager::slotPaste()
 {
+    if (m_paletteTree->hasFocus() && m_clipboardPalette != QLCPalette::invalidId())
+    {
+        duplicatePalette(m_clipboardPalette);
+        return;
+    }
+
     Function *src = m_doc->function(m_clipboardFunction);
     if (src == NULL)
         return;
@@ -549,6 +684,32 @@ void ProgrammingManager::slotPaste()
         m_funcTree->setCurrentItem(it);
         m_funcTree->scrollToItem(it);
     }
+}
+
+void ProgrammingManager::duplicatePalette(quint32 pid)
+{
+    QLCPalette *src = m_doc->palette(pid);
+    if (src == NULL)
+        return;
+    QLCPalette *copy = src->createCopy();
+    if (copy == NULL)
+        return;
+    copy->setName(src->name() + tr(" (copy)"));
+    if (m_doc->addPalette(copy) == false)
+    {
+        delete copy;
+        return;
+    }
+    m_doc->setModified();
+    m_paletteTree->updateTree();
+    QTreeWidgetItem *it = m_paletteTree->paletteItem(copy);
+    if (it != NULL)
+    {
+        m_paletteTree->setCurrentItem(it);
+        m_paletteTree->scrollToItem(it);
+    }
+    m_lookEditor->setPalette(copy->id());
+    showLookEditorPanel();
 }
 
 void ProgrammingManager::startPreview()
@@ -670,6 +831,8 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     QAction *aMatrix = menu.addAction(tr("New RGB Matrix"));
     menu.addSeparator();
     QAction *aFolder = menu.addAction(tr("New Folder"));
+    menu.addSeparator();
+    QAction *aRepair = menu.addAction(tr("Repair: strip leading \"NN. \" from names"));
 
     QAction *chosen = menu.exec(m_funcTree->viewport()->mapToGlobal(pos));
     if (chosen == NULL)
@@ -677,6 +840,11 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     if (chosen == aFolder)
     {
         m_funcTree->addFolder();
+        return;
+    }
+    if (chosen == aRepair)
+    {
+        repairFunctionNames();
         return;
     }
 
@@ -735,12 +903,16 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
         newActions << a;
     }
 
+    menu.addSeparator();
+    QAction *aNewFolder = menu.addAction(tr("New folder…"));
+
     QAction *aMove = NULL;
+    QAction *aDuplicate = NULL;
     const quint32 pid =
         m_paletteTree->itemPaletteId(m_paletteTree->itemAt(pos));
     if (pid != QLCPalette::invalidId())
     {
-        menu.addSeparator();
+        aDuplicate = menu.addAction(tr("Duplicate"));
         aMove = menu.addAction(tr("Move to folder…"));
     }
 
@@ -751,6 +923,52 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
     if (newActions.contains(chosen))
     {
         createPalette(chosen->data().toInt());
+    }
+    else if (chosen == aNewFolder)
+    {
+        const QString parentPath =
+            m_paletteTree->paletteFolderPathFor(m_paletteTree->itemAt(pos));
+        bool ok = false;
+        const QString name = QInputDialog::getText(
+            this, tr("New palette folder"), tr("Folder name:"),
+            QLineEdit::Normal, tr("New folder"), &ok);
+        if (!ok || name.trimmed().isEmpty())
+            return;
+        const QString full = parentPath + "/" + name.trimmed();
+
+        // Move any selected palettes into the new folder so it persists;
+        // otherwise just create an (initially empty) folder node to drag into.
+        QList<quint32> pids;
+        foreach (QTreeWidgetItem *it, m_paletteTree->selectedItems())
+        {
+            const quint32 id = m_paletteTree->itemPaletteId(it);
+            if (id != QLCPalette::invalidId())
+                pids << id;
+        }
+        if (pids.isEmpty() == false)
+        {
+            foreach (quint32 id, pids)
+            {
+                QLCPalette *p = m_doc->palette(id);
+                if (p != NULL)
+                    p->setPath(full);
+            }
+            m_doc->setModified();
+            m_paletteTree->updateTree();
+        }
+        else
+        {
+            QTreeWidgetItem *f = m_paletteTree->ensurePaletteFolder(full);
+            if (f != NULL)
+            {
+                m_paletteTree->setCurrentItem(f);
+                m_paletteTree->scrollToItem(f);
+            }
+        }
+    }
+    else if (chosen == aDuplicate)
+    {
+        duplicatePalette(pid);
     }
     else if (chosen == aMove)
     {
@@ -777,6 +995,13 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
 
 void ProgrammingManager::syncMemberNodes(quint32 containerId)
 {
+    // CRITICAL: block the tree's signals for the whole rebuild. The nested
+    // member items carry a function id and get prefixed display text ("001.
+    // …"); without this, each setText() fires itemChanged -> the tree's rename
+    // handler bakes that prefixed text into the real function name (and saves
+    // it), which is what produced the runaway "001. 001. 001. …" names.
+    const bool wasBlocked = m_funcTree->blockSignals(true);
+
     // Remove members previously nested under the old container's node. After
     // a tree rebuild the node is fresh (no children), so this is a no-op then.
     if (m_memberContainer != Function::invalidId())
@@ -794,17 +1019,44 @@ void ProgrammingManager::syncMemberNodes(quint32 containerId)
     m_memberContainer = containerId;
 
     Function *c = m_doc->function(containerId);
-    if (c == NULL)
-        return;
-    QTreeWidgetItem *node = m_funcTree->functionItem(c);
-    if (node == NULL)
-        return;
+    QTreeWidgetItem *node = (c != NULL) ? m_funcTree->functionItem(c) : NULL;
+    if (node != NULL)
+    {
+        // Recursively nest members (chaser -> collections -> scenes -> …).
+        QSet<quint32> visited;
+        visited.insert(containerId);
+        addMemberChildren(node, containerId, visited, 0);
+        node->setExpanded(true);
+    }
 
-    // Recursively nest members (chaser -> collections -> scenes -> …).
-    QSet<quint32> visited;
-    visited.insert(containerId);
-    addMemberChildren(node, containerId, visited, 0);
-    node->setExpanded(true);
+    m_funcTree->blockSignals(wasBlocked);
+}
+
+void ProgrammingManager::repairFunctionNames()
+{
+    // Strip leading zero-padded step-number prefixes ("001. 001. … name") that
+    // an earlier bug baked into function names. The prefix always has a space
+    // after the dot, so it won't touch genuine names like "00-01.02-Setup".
+    QRegularExpression re(QStringLiteral("^(\\s*\\d+\\.\\s+)+"));
+    int fixed = 0;
+    foreach (Function *f, m_doc->functions())
+    {
+        if (f == NULL)
+            continue;
+        const QString cleaned = QString(f->name()).remove(re);
+        if (cleaned.isEmpty() == false && cleaned != f->name())
+        {
+            f->setName(cleaned);
+            fixed++;
+        }
+    }
+    if (fixed > 0)
+    {
+        m_doc->setModified();
+        m_funcTree->updateTree();
+    }
+    QMessageBox::information(this, tr("Repair names"),
+        tr("Cleaned leading numbering from %n function name(s).", "", fixed));
 }
 
 void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
@@ -839,10 +1091,16 @@ void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
         Function *mf = m_doc->function(mid);
         if (mf == NULL)
             continue;
+        // Prefix ordered (chaser) members with a zero-padded step number so
+        // the alphabetical tree keeps step order — BUT only when the member's
+        // own name doesn't already start with a number (users who encode order
+        // in the name, e.g. "00-01.02-…", shouldn't get a redundant prefix).
+        const QString mname = mf->name();
+        const bool nameIsNumbered = mname.isEmpty() == false && mname.at(0).isDigit();
         QTreeWidgetItem *ci = new QTreeWidgetItem(treeNode);
-        ci->setText(0, ordered
-                    ? QString("%1. %2").arg(idx, width, 10, QChar('0')).arg(mf->name())
-                    : mf->name());
+        ci->setText(0, (ordered && !nameIsNumbered)
+                    ? QString("%1. %2").arg(idx, width, 10, QChar('0')).arg(mname)
+                    : mname);
         ci->setIcon(0, mf->getIcon());
         ci->setData(0, Qt::UserRole, mid); // so itemFunctionId() resolves it
         // Read-only nav: selectable + double-click to edit, not draggable.

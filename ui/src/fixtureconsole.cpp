@@ -18,6 +18,7 @@
 */
 
 #include <QHBoxLayout>
+#include <QGraphicsOpacityEffect>
 #include <QDebug>
 #include <QIcon>
 #include <QList>
@@ -107,6 +108,15 @@ void FixtureConsole::enableResetButton(bool enable)
 
 void FixtureConsole::showEvent(QShowEvent *)
 {
+    showChannels();
+}
+
+void FixtureConsole::showChannels()
+{
+    // Reveal the channel widgets. Channels are built hidden (see setFixture)
+    // and revealed here so the path is identical whether the console was just
+    // shown (showEvent) or rebuilt while already visible (explicit call) —
+    // otherwise the two render slightly differently.
     QListIterator <ConsoleChannel*> it(m_channels);
     while (it.hasNext() == true)
     {
@@ -126,6 +136,13 @@ void FixtureConsole::setFixture(quint32 id)
     while (m_channels.isEmpty() == false)
         delete m_channels.takeFirst();
 
+    /* Remove any leftover layout items (notably the trailing spacer added
+     * below). Without this they accumulate at the front on every rebuild and
+     * push the channels progressively to the right. */
+    QLayoutItem *leftover;
+    while ((leftover = m_layout->takeAt(0)) != NULL)
+        delete leftover;
+
     /* Get the new fixture */
     Fixture *fxi = m_doc->fixture(id);
     Q_ASSERT(fxi != NULL);
@@ -141,6 +158,9 @@ void FixtureConsole::setFixture(quint32 id)
             continue;
 
         ConsoleChannel* cc = new ConsoleChannel(this, m_doc, id, i, m_showCheckBoxes);
+        // Built hidden; revealed via showChannels() (called from showEvent or
+        // explicitly after a rebuild while already visible) so the render path
+        // is identical in both cases.
         cc->setVisible(false);
         cc->setChannelStyleSheet(m_styleSheet);
 
@@ -206,6 +226,33 @@ void FixtureConsole::slotAliasChanged()
 /*****************************************************************************
  * Channels
  *****************************************************************************/
+
+void FixtureConsole::setChannelEnabled(quint32 channel, bool enabled)
+{
+    QListIterator <ConsoleChannel*> it(m_channels);
+    while (it.hasNext() == true)
+    {
+        ConsoleChannel* cc = it.next();
+        Q_ASSERT(cc != NULL);
+        if (cc->channelIndex() != channel)
+            continue;
+
+        cc->setEnabled(enabled);
+        // The channel's stylesheet paints its own background, so Qt's disabled
+        // palette doesn't show through — dim it explicitly so a locked
+        // (look-controlled) channel reads as greyed out, not just inert.
+        if (enabled)
+        {
+            cc->setGraphicsEffect(NULL);
+        }
+        else
+        {
+            QGraphicsOpacityEffect *eff = new QGraphicsOpacityEffect(cc);
+            eff->setOpacity(0.45);
+            cc->setGraphicsEffect(eff);
+        }
+    }
+}
 
 void FixtureConsole::setChecked(bool state, quint32 channel)
 {

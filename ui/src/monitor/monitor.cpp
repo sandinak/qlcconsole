@@ -231,6 +231,8 @@ void Monitor::fillGraphicsView()
     m_gridWSpin->blockSignals(true);
     m_gridHSpin->blockSignals(true);
     m_unitsCombo->blockSignals(true);
+    m_gridSubdivSpin->blockSignals(true);
+    m_snapCombo->blockSignals(true);
 
     if (m_props->gridUnits() == MonitorProperties::Meters)
     {
@@ -245,10 +247,17 @@ void Monitor::fillGraphicsView()
 
     m_gridWSpin->setValue(m_props->gridSize().x());
     m_gridHSpin->setValue(m_props->gridSize().z());
+    m_gridSubdivSpin->setValue(m_props->gridSubdivisions());
+    int snapIdx = m_snapCombo->findData(m_props->snapDivisions());
+    m_snapCombo->setCurrentIndex(snapIdx >= 0 ? snapIdx : 0);
     m_gridWSpin->blockSignals(false);
     m_gridHSpin->blockSignals(false);
     m_unitsCombo->blockSignals(false);
+    m_gridSubdivSpin->blockSignals(false);
+    m_snapCombo->blockSignals(false);
 
+    m_graphicsView->setGridSubdivisions(m_props->gridSubdivisions());
+    m_graphicsView->setSnapDivisions(m_props->snapDivisions());
     m_graphicsView->setGridSize(QSize(m_props->gridSize().x(), m_props->gridSize().z()));
     m_graphicsView->setBackgroundImage(m_props->commonBackgroundImage());
 
@@ -265,6 +274,13 @@ void Monitor::fillGraphicsView()
     }
 
     m_graphicsView->showFixturesLabels(m_props->labelsVisible());
+
+    // apply the persisted lock state once all fixtures are present
+    m_lockAction->blockSignals(true);
+    m_lockAction->setChecked(m_props->layoutLocked());
+    m_lockAction->setIcon(QIcon(m_props->layoutLocked() ? ":/lock.png" : ":/unlock.png"));
+    m_lockAction->blockSignals(false);
+    m_graphicsView->setLayoutLocked(m_props->layoutLocked());
 }
 
 void Monitor::showGraphicsView()
@@ -526,6 +542,42 @@ void Monitor::initGraphicsToolbar()
 
     m_graphicsToolBar->addSeparator();
 
+    QLabel *subdivLabel = new QLabel(tr("Subdivisions"));
+    subdivLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_graphicsToolBar->addWidget(subdivLabel);
+    m_gridSubdivSpin = new QSpinBox();
+    m_gridSubdivSpin->setMinimum(1);
+    m_gridSubdivSpin->setMaximum(8);
+    m_gridSubdivSpin->setValue(m_props->gridSubdivisions());
+    m_gridSubdivSpin->setToolTip(tr("Number of sub-divisions drawn inside each grid cell"));
+    m_graphicsToolBar->addWidget(m_gridSubdivSpin);
+    connect(m_gridSubdivSpin, SIGNAL(valueChanged(int)),
+            this, SLOT(slotGridSubdivisionsChanged(int)));
+
+    QLabel *snapLabel = new QLabel(tr("Snap"));
+    snapLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_graphicsToolBar->addWidget(snapLabel);
+    m_snapCombo = new QComboBox();
+    m_snapCombo->addItem(tr("Off"), 0);
+    m_snapCombo->addItem(tr("Full"), 1);
+    m_snapCombo->addItem(tr("1/2"), 2);
+    m_snapCombo->addItem(tr("1/4"), 4);
+    int snapIdx = m_snapCombo->findData(m_props->snapDivisions());
+    if (snapIdx >= 0)
+        m_snapCombo->setCurrentIndex(snapIdx);
+    m_snapCombo->setToolTip(tr("Snap fixtures to the grid while moving them"));
+    m_graphicsToolBar->addWidget(m_snapCombo);
+    connect(m_snapCombo, SIGNAL(currentIndexChanged(int)),
+            this, SLOT(slotSnapChanged(int)));
+
+    m_lockAction = m_graphicsToolBar->addAction(QIcon(":/lock.png"), tr("Lock layout"));
+    m_lockAction->setCheckable(true);
+    m_lockAction->setChecked(m_props->layoutLocked());
+    m_lockAction->setToolTip(tr("Lock the layout: fixtures can be selected but not moved"));
+    connect(m_lockAction, SIGNAL(toggled(bool)), this, SLOT(slotLockToggled(bool)));
+
+    m_graphicsToolBar->addSeparator();
+
     m_graphicsToolBar->addAction(QIcon(":/edit_add.png"), tr("Add fixture"),
                        this, SLOT(slotAddFixture()));
     m_graphicsToolBar->addAction(QIcon(":/edit_remove.png"), tr("Remove fixture"),
@@ -717,6 +769,39 @@ void Monitor::slotGridUnitsChanged(int index)
         m_graphicsView->setGridMetrics(304.8);
 
     m_props->setGridUnits(units);
+}
+
+void Monitor::slotGridSubdivisionsChanged(int value)
+{
+    Q_ASSERT(m_graphicsView != NULL);
+
+    m_graphicsView->setGridSubdivisions(value);
+    m_props->setGridSubdivisions(value);
+    m_doc->setModified();
+}
+
+void Monitor::slotSnapChanged(int index)
+{
+    Q_ASSERT(m_graphicsView != NULL);
+
+    int divisions = 0;
+    QVariant var = m_snapCombo->itemData(index);
+    if (var.isValid())
+        divisions = var.toInt();
+
+    m_graphicsView->setSnapDivisions(divisions);
+    m_props->setSnapDivisions(divisions);
+    m_doc->setModified();
+}
+
+void Monitor::slotLockToggled(bool locked)
+{
+    Q_ASSERT(m_graphicsView != NULL);
+
+    m_graphicsView->setLayoutLocked(locked);
+    m_lockAction->setIcon(QIcon(locked ? ":/lock.png" : ":/unlock.png"));
+    m_props->setLayoutLocked(locked);
+    m_doc->setModified();
 }
 
 void Monitor::slotAddFixture()

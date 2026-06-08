@@ -184,6 +184,20 @@ public:
     /** Sub-group tag for the head at $pt (0 if none). */
     quint32 headSubGroup(const QLCPoint& pt) const;
 
+    /** Get the whole point -> sub-group tag map (for snapshot/undo). */
+    QMap <QLCPoint,quint32> headSubGroupMap() const;
+
+    /** Replace the group's entire layout in one shot (heads + sub-group tags
+     *  + size) and emit a single changed() signal. Used for undo/restore so a
+     *  bulk edit doesn't fire a storm of per-head notifications. */
+    void restoreState(const QSize& sz,
+                      const QMap<QLCPoint, GroupHead>& heads,
+                      const QMap<QLCPoint, quint32>& subGroups);
+
+    /** Emit a single changed() notification. Use after a batch of mutations
+     *  performed with signals blocked, to refresh listeners just once. */
+    void notifyChanged();
+
 private slots:
     /** Listens to Doc fixture removals */
     void slotFixtureRemoved(quint32 id);

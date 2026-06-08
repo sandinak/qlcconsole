@@ -39,7 +39,8 @@ public:
     static const char* fixtureMimeType();
 
     /** Item-data roles / node kinds. */
-    enum { IdRole = Qt::UserRole, KindRole = Qt::UserRole + 1 };
+    enum { IdRole = Qt::UserRole, KindRole = Qt::UserRole + 1,
+           PathRole = Qt::UserRole + 2 /*!< folder path (string) */ };
     enum NodeKind { CategoryNode = 0, GroupNode = 1, FixtureNode = 2 };
 
 public slots:
@@ -49,6 +50,11 @@ public slots:
 protected:
     /** Provide group/fixture IDs for dragging onto scene drop zones. */
     QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const override;
+
+    /** Accept group drops onto folders (re-file groups); ignore otherwise. */
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
 
 private slots:
     /** Right-click: move a group into a folder. */
@@ -64,6 +70,7 @@ private:
 private:
     Doc *m_doc;
     QHash<QString, QTreeWidgetItem*> m_folderMap; //!< rebuilt each reload()
+    bool m_clearing = false;  //!< true while the Doc is clearing/tearing down
 };
 
 /** @} */

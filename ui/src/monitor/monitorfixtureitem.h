@@ -21,6 +21,7 @@
 #define MONITORFIXTUREITEM_H
 
 #include <QGraphicsItem>
+#include <QAbstractGraphicsShapeItem>
 #include <QFont>
 
 class Doc;
@@ -31,8 +32,11 @@ class Doc;
 
 struct FixtureHead
 {
-    QGraphicsEllipseItem *m_item;
-    QGraphicsEllipseItem *m_back;
+    // Ellipse for normal fixtures, rectangle for dense pixel arrays (RGB tape):
+    // both derive from QAbstractGraphicsShapeItem (setPen/setBrush); geometry is
+    // set via the setShapeRect/shapeRect helpers in the .cpp.
+    QAbstractGraphicsShapeItem *m_item;
+    QAbstractGraphicsShapeItem *m_back;
 
     //! cached rgb channels (channel indices)
     QList <quint32> m_rgb;
@@ -117,6 +121,18 @@ public:
     /** Show/hide this fixture item label */
     void showLabel(bool visible);
 
+    /** Enable/disable the possibility to move this item.
+     *  When disabled the item stays selectable (lock mode) */
+    void setMovable(bool movable);
+
+    /** Configure the snap-to-grid behaviour for this item.
+     *  @param divisions number of cell subdivisions to snap to
+     *         (1 = full cell, 2 = 1/2, 4 = 1/4). <= 0 disables snapping.
+     *  @param cellPixels size of a grid cell in pixels
+     *  @param xOffset horizontal grid origin offset in pixels
+     *  @param yOffset vertical grid origin offset in pixels */
+    void setSnap(int divisions, qreal cellPixels, qreal xOffset, qreal yOffset);
+
 protected slots:
     /** Update the fixture values for rendering, passing the
      *  universe array of values */
@@ -130,6 +146,7 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *) override;
+    QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
 
 private:
     void computeTiltPosition(FixtureHead *h, uchar value);
@@ -164,6 +181,17 @@ private:
 
     /** In case of a dimmer, this hold the gel color to apply */
     QColor m_gelColor;
+
+    /** Number of cell subdivisions used to snap the position.
+     *  <= 0 means snapping is disabled */
+    int m_snapDivisions;
+
+    /** Size of a grid cell in pixels, used to compute snapping */
+    qreal m_snapCellPixels;
+
+    /** Grid origin offsets in pixels, used to align the snapping */
+    qreal m_snapXOffset;
+    qreal m_snapYOffset;
 
     /** Flag to show/hide a fixture label */
     bool m_labelVisibility;

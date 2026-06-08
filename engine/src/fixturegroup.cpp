@@ -207,6 +207,26 @@ quint32 FixtureGroup::headSubGroup(const QLCPoint& pt) const
     return m_headSubGroup.value(pt, 0);
 }
 
+QMap <QLCPoint,quint32> FixtureGroup::headSubGroupMap() const
+{
+    return m_headSubGroup;
+}
+
+void FixtureGroup::restoreState(const QSize& sz,
+                                const QMap<QLCPoint, GroupHead>& heads,
+                                const QMap<QLCPoint, quint32>& subGroups)
+{
+    m_size = sz;
+    m_heads = heads;
+    m_headSubGroup = subGroups;
+    emit changed(this->id());
+}
+
+void FixtureGroup::notifyChanged()
+{
+    emit changed(this->id());
+}
+
 void FixtureGroup::resignFixture(quint32 id)
 {
     QMap <QLCPoint,GroupHead>::iterator it = m_heads.begin();
@@ -425,9 +445,10 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
     doc->writeAttribute("Y", QString::number(size().height()));
     doc->writeEndElement();
 
-    /* Fixture heads */
-    QMap <QLCPoint,GroupHead>::iterator it = m_heads.begin();
-    for (; it != m_heads.end(); it++)
+    /* Fixture heads (const iteration: read-only, avoids detaching a map that
+     *  may be implicitly shared with an editor undo snapshot) */
+    QMap <QLCPoint,GroupHead>::const_iterator it = m_heads.constBegin();
+    for (; it != m_heads.constEnd(); ++it)
     {
         QLCPoint pt = it.key();
         GroupHead head = it.value();

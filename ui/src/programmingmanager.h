@@ -27,6 +27,7 @@ class QTreeWidgetItem;
 class Function;
 class FunctionsTreeWidget;
 class FixtureGroupSource;
+class Fixture;
 class SceneGroupLooks;
 class LookEditor;
 class FixtureConsole;
@@ -73,9 +74,24 @@ private:
     void clearEditors();
     void updateTitle();
 
+    /** True if two fixtures share a channel layout (same def+mode, or both
+     *  generic with equal channel counts) and so can be edited together. */
+    bool sameFixtureType(const Fixture *a, const Fixture *b) const;
+
+    /** Show the look editor in the bottom panel (pivoting away from the
+     *  per-fixture DMX console if it's showing). */
+    void showLookEditorPanel();
+
     /** Create a new palette of the given QLCPalette::PaletteType in the
      *  selected palette folder and open it in the look editor. */
     void createPalette(int paletteType);
+
+    /** Duplicate palette $pid ("… (copy)"), add it, and open it for editing. */
+    void duplicatePalette(quint32 pid);
+
+    /** Strip leading "NN. " step-number prefixes accidentally baked into
+     *  function names by an earlier nesting bug. */
+    void repairFunctionNames();
 
     /** Folder path of the current func-tree selection (for new functions). */
     QString selectedFuncFolderPath() const;
@@ -114,15 +130,16 @@ private:
     QLabel *m_canvasPlaceholder;
     SceneGroupLooks *m_canvas;
     QWidget *m_funcEditor;     //!< stock editor for non-scene functions
-    LookEditor *m_lookEditor;
-    QScrollArea *m_lookScroll;     //!< wraps the look editor (bottom)
+    LookEditor *m_lookEditor;      //!< bottom pane; sizes to content (no scroll)
     QScrollArea *m_fixtureScroll;  //!< wraps the per-fixture console (bottom)
     FixtureConsole *m_fixtureConsole;
-    QList<quint32> m_selectedFixtures; //!< fixed fixtures edited together
+    QLabel *m_fixtureMixedNote;    //!< shown when selected fixed fixtures differ in type
+    QList<quint32> m_selectedFixtures; //!< fixed fixtures edited together (same type)
     quint32 m_currentScene;       //!< scene shown in canvas (invalid if non-scene)
     quint32 m_canvasFunction;     //!< any function shown in canvas (preview target)
     quint32 m_previewFunction;    //!< the function we started for live preview
     quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate
+    quint32 m_clipboardPalette;   //!< Cmd-C source palette for Cmd-V duplicate
     quint32 m_memberContainer;    //!< collection/chaser whose members are nested
 
     FunctionsTreeWidget *m_paletteTree;

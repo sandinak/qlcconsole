@@ -150,6 +150,7 @@ App::App()
     , m_autosaveInterval(DEFAULT_AUTOSAVE_INTERVAL)
 
     , m_statusModeLabel(NULL)
+    , m_statusDirtyLabel(NULL)
     , m_statusAutosaveLabel(NULL)
     , m_statusProgrammerLabel(NULL)
     , m_statusSelectionLabel(NULL)
@@ -263,6 +264,24 @@ void App::init()
     if (var.isValid() == true)
     {
         this->restoreGeometry(var.toByteArray());
+
+        // Clamp the restored window to the current screen: a geometry saved on
+        // a bigger/other display (or made too tall by an old minimum size) can
+        // land partly off-screen and become impossible to grab/resize.
+        QScreen *scr = QGuiApplication::screenAt(frameGeometry().center());
+        if (scr == NULL)
+            scr = QGuiApplication::primaryScreen();
+        if (scr != NULL)
+        {
+            const QRect avail = scr->availableGeometry();
+            QRect g = geometry();
+            g.setSize(g.size().boundedTo(avail.size()));
+            if (g.right()  > avail.right())  g.moveRight(avail.right());
+            if (g.bottom() > avail.bottom()) g.moveBottom(avail.bottom());
+            if (g.left()   < avail.left())   g.moveLeft(avail.left());
+            if (g.top()    < avail.top())    g.moveTop(avail.top());
+            setGeometry(g);
+        }
     }
     else
     {
@@ -599,6 +618,20 @@ void App::slotDocModified(bool state)
         setWindowTitle(caption + QString(" *"));
     else
         setWindowTitle(caption);
+
+    if (m_statusDirtyLabel != NULL)
+    {
+        if (state == true)
+        {
+            m_statusDirtyLabel->setText(tr("● Unsaved changes"));
+            m_statusDirtyLabel->setStyleSheet("QLabel { color: #d08020; font-weight: bold; }");
+        }
+        else
+        {
+            m_statusDirtyLabel->setText(tr("✓ Saved"));
+            m_statusDirtyLabel->setStyleSheet("QLabel { color: gray; }");
+        }
+    }
 }
 
 void App::slotDocAutosave()
@@ -2122,6 +2155,16 @@ void App::initStatusBar()
     m_statusModeLabel = new QLabel(this);
     m_statusModeLabel->setMinimumWidth(300);
     sb->addWidget(m_statusModeLabel, 1);
+
+    // Unsaved-changes indicator. Added as a PERMANENT widget so it sits in the
+    // same framed/aligned group as the autosave label (a normal addWidget item
+    // renders at a slightly different baseline than the permanent ones).
+    m_statusDirtyLabel = new QLabel(this);
+    // Match the other permanent status labels' alignment exactly (they use
+    // AlignRight, i.e. top-aligned) so the baseline lines up with "Autosave".
+    m_statusDirtyLabel->setAlignment(Qt::AlignRight);
+    sb->addPermanentWidget(m_statusDirtyLabel);
+    slotDocModified(m_doc != NULL ? m_doc->isModified() : false);
 
     // Programmer selection indicator (between mode and dirty). Hidden
     // when nothing is selected, otherwise shows fully-selected fixture

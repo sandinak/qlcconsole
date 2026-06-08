@@ -855,6 +855,18 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         {
             uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
 
+            // Baked values first, then palettes — so an applied look (palette)
+            // is PARAMOUNT and overrides any leftover baked value on the same
+            // channel (processValue applied later wins). The Programming tab
+            // also strips baked values a palette covers when it's applied, so
+            // conflicts are rare; this is the runtime safety net.
+            QMapIterator <SceneValue, uchar> it(m_values);
+            while (it.hasNext() == true)
+            {
+                SceneValue scv(it.next().key());
+                processValue(timer, ua, fadeIn, scv);
+            }
+
             foreach (quint32 paletteID, palettes())
             {
                 QLCPalette *palette = doc()->palette(paletteID);
@@ -866,13 +878,6 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
 
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures()))
                     processValue(timer, ua, fadeIn, scv);
-            }
-
-            QMapIterator <SceneValue, uchar> it(m_values);
-            while (it.hasNext() == true)
-            {
-                SceneValue scv(it.next().key());
-                processValue(timer, ua, fadeIn, scv);
             }
         }
     }

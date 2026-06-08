@@ -184,6 +184,15 @@ protected slots:
     /** Slot called when the unit metrics changes */
     void slotGridUnitsChanged(int index);
 
+    /** Slot called when the grid sub-divisions value changes */
+    void slotGridSubdivisionsChanged(int value);
+
+    /** Slot called when the snap-to-grid level changes */
+    void slotSnapChanged(int index);
+
+    /** Slot called when the layout lock state is toggled */
+    void slotLockToggled(bool locked);
+
     /** Slot called when the user wants to add
      *  a fixture to the graphics view */
     void slotAddFixture();
@@ -214,7 +223,10 @@ protected:
     QSpinBox* m_gridWSpin;
     QSpinBox *m_gridHSpin;
     QComboBox *m_unitsCombo;
+    QSpinBox *m_gridSubdivSpin;
+    QComboBox *m_snapCombo;
     QAction *m_labelsAction;
+    QAction *m_lockAction;
 };
 
 /** @} */

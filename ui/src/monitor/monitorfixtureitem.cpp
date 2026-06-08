@@ -18,6 +18,8 @@
 */
 
 #include <QGraphicsSceneMouseEvent>
+#include <QGraphicsEllipseItem>
+#include <QGraphicsRectItem>
 #include <QApplication>
 #include <QPainter>
 #include <qmath.h>
@@ -35,10 +37,37 @@
 #define MOVEMENT_THICKNESS    3
 #define STROBE_PERIOD 500 // 0.5s
 
+// A fixture with more heads than this is drawn as tiled rectangles (pixel
+// array, e.g. RGB tape) rather than round heads, for tight density.
+#define DENSE_HEAD_THRESHOLD 16
+
+// Geometry helpers: m_item/m_back are QGraphicsEllipseItem OR QGraphicsRectItem
+// (both QAbstractGraphicsShapeItem), so setRect/rect() must dispatch on type.
+static void setShapeRect(QAbstractGraphicsShapeItem *s, const QRectF &r)
+{
+    if (QGraphicsEllipseItem *e = qgraphicsitem_cast<QGraphicsEllipseItem*>(s))
+        e->setRect(r);
+    else if (QGraphicsRectItem *re = qgraphicsitem_cast<QGraphicsRectItem*>(s))
+        re->setRect(r);
+}
+
+static QRectF shapeRect(QAbstractGraphicsShapeItem *s)
+{
+    if (QGraphicsEllipseItem *e = qgraphicsitem_cast<QGraphicsEllipseItem*>(s))
+        return e->rect();
+    if (QGraphicsRectItem *re = qgraphicsitem_cast<QGraphicsRectItem*>(s))
+        return re->rect();
+    return QRectF();
+}
+
 MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
     : m_doc(doc)
     , m_fid(fid)
     , m_gelColor(QColor())
+    , m_snapDivisions(0)
+    , m_snapCellPixels(0)
+    , m_snapXOffset(0)
+    , m_snapYOffset(0)
     , m_labelVisibility(false)
 {
     Q_ASSERT(doc != NULL);
@@ -46,6 +75,7 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
     setCursor(Qt::OpenHandCursor);
     setFlag(QGraphicsItem::ItemIsMovable, true);
     setFlag(QGraphicsItem::ItemIsSelectable, true);
+    setFlag(QGraphicsItem::ItemSendsGeometryChanges, true);
 
     Fixture *fxi = m_doc->fixture(fid);
     Q_ASSERT(fxi != NULL);
@@ -57,11 +87,19 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
     m_font = qApp->font();
     m_font.setPixelSize(8);
 
+    // Dense fixtures (RGB tape / pixel arrays) draw heads as tiled rectangles
+    // so the colour packs with no gaps; sparse fixtures keep round heads.
+    const bool denseHeads = fxi->heads() > DENSE_HEAD_THRESHOLD;
+
     for (int i = 0; i < fxi->heads(); i++)
     {
         FixtureHead *fxiItem = new FixtureHead;
-        fxiItem->m_item = new QGraphicsEllipseItem(this);
-        fxiItem->m_item->setPen(QPen(Qt::white, 1));
+        fxiItem->m_item = denseHeads
+            ? static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsRectItem(this))
+            : static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsEllipseItem(this));
+        // Width 0 = cosmetic: the outline stays 1px at any zoom so it doesn't
+        // grow and wash out the head's colour fill when zoomed in.
+        fxiItem->m_item->setPen(QPen(Qt::white, 0));
         fxiItem->m_item->setBrush(QBrush(Qt::black));
 
         QLCFixtureHead head = fxi->head(i);
@@ -90,8 +128,10 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
 
         if ((fxiItem->m_dimmer != QLCChannel::invalid()) || (fxiItem->m_masterDimmer != QLCChannel::invalid()))
         {
-            fxiItem->m_back = new QGraphicsEllipseItem(this);
-            fxiItem->m_back->setPen(QPen(Qt::white, 1));
+            fxiItem->m_back = denseHeads
+                ? static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsRectItem(this))
+                : static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsEllipseItem(this));
+            fxiItem->m_back->setPen(QPen(Qt::white, 0)); // cosmetic (1px at any zoom)
             fxiItem->m_back->setBrush(QBrush(Qt::black));
         }
         else
@@ -143,15 +183,22 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
                for (quint32 v = 0; v < 256; ++v)
                {
                    QLCCapability *cap = ch->searchCapability(v);
-                   if (cap != NULL && cap->resource(0).isValid())
+                   QColor c;
+                   if (cap != NULL)
                    {
-                       values << cap->resource(0).value<QColor>();
+                       // Prefer an explicit resource colour; otherwise derive
+                       // it from the capability name (e.g. "Blue", "Red").
+                       c = cap->resource(0).value<QColor>();
+                       if (c.isValid() == false)
+                       {
+                           const QColor named(cap->name().trimmed());
+                           if (named.isValid())
+                               c = named;
+                       }
+                   }
+                   values << c;
+                   if (c.isValid())
                        containsColor = true;
-                   }
-                   else
-                   {
-                       values << QColor();
-                   }
                }
 
                if (containsColor)
@@ -266,76 +313,89 @@ void MonitorFixtureItem::setSize(QSize size)
     m_width = size.width();
     m_height = size.height();
 
-    if (m_width < 5 || m_height < 5)
+    if (m_width <= 0 || m_height <= 0 || m_heads.isEmpty())
         return;
 
-    // if this fixture has a pan or tilt channel,
-    // the head area has to be reduced to
-    // leave space to movements representation
     int headsWidth = m_width;
     int headsHeight = m_height;
 
-    // calculate the diameter of every single head
-    double headArea = (headsWidth * headsHeight) / m_heads.count();
-    double headSide = sqrt(headArea);
-    int columns = (headsWidth / headSide) + 0.5;
-    int rows = (headsHeight / headSide) + 0.5;
-
-    // dirty workaround to correctly display right columns on one row
-    if (rows == 1)
-        columns = m_heads.count();
-    if (columns == 1)
-        rows = m_heads.count();
-
-    //qDebug() << "Fixture columns:" << columns;
-
-    if (columns > m_heads.count())
-        columns = m_heads.count();
+    // Choose the head grid from the HEAD COUNT and the fixture's ASPECT RATIO,
+    // not from the pixel area (stable at any size, no degenerate wrapping).
+    //  - clearly elongated fixtures (tape / battens / pixel bars) -> a single
+    //    line: one row when wide, one column when tall;
+    //  - otherwise a grid matching the shape (cols ~ sqrt(N*AR)).
+    const int n = m_heads.count();
+    const double aspect = double(headsWidth) / double(headsHeight); // w/h
+    const double kLineAspect = 3.0; // beyond this, treat as a single strip
+    int columns, rows;
+    if (aspect >= kLineAspect)        { columns = n; rows = 1; }     // wide strip
+    else if (aspect <= 1.0 / kLineAspect) { columns = 1; rows = n; } // tall strip
+    else
+    {
+        columns = qRound(sqrt(double(n) * aspect));
+        if (columns < 1)
+            columns = 1;
+        if (columns > n)
+            columns = n;
+        rows = (n + columns - 1) / columns; // ceil(n/columns)
+    }
 
     if (rows < 1)
         rows = 1;
     if (columns < 1)
         columns = 1;
 
-    double cellWidth = headsWidth / columns;
-    double cellHeight = headsHeight / rows;
+    // Floating-point division: when columns/rows exceed the pixel size (dense
+    // strip), integer division would give 0-size cells (invisible at any zoom).
+    double cellWidth = double(headsWidth) / columns;
+    double cellHeight = double(headsHeight) / rows;
     double headDiam = (cellWidth < cellHeight) ? cellWidth : cellHeight;
 
-    int ypos = (cellHeight - headDiam) / 2;
+    // Dense fixtures (many heads, or tiny cells — e.g. RGB tape/pixel strips)
+    // pack badly as centred circles with gaps. Tile the cell instead so the
+    // colour fills the space, like pixels.
+    const bool dense = (m_heads.count() > 16) || (headDiam < 8.0);
+
     for (int i = 0; i < rows; i++)
     {
-        int xpos = (cellWidth - headDiam) / 2;
         for (int j = 0; j < columns; j++)
         {
             int index = i * columns + j;
             if (index < m_heads.size())
             {
+                const double cellLeft = j * cellWidth;
+                const double cellTop  = i * cellHeight;
+
                 FixtureHead * h = m_heads.at(index);
-                QGraphicsEllipseItem *head = h->m_item;
-                head->setRect(xpos, ypos, headDiam, headDiam);
+                QAbstractGraphicsShapeItem *head = h->m_item;
+                if (dense)
+                {
+                    // Fill the whole cell (no centring gap) so heads tile.
+                    setShapeRect(head, QRectF(cellLeft, cellTop, cellWidth, cellHeight));
+                }
+                else
+                {
+                    setShapeRect(head, QRectF(cellLeft + (cellWidth - headDiam) / 2,
+                                              cellTop  + (cellHeight - headDiam) / 2,
+                                              headDiam, headDiam));
+                }
 
                 if (h->m_panChannel != QLCChannel::invalid())
-                {
-                    head->setRect(head->rect().adjusted(MOVEMENT_THICKNESS + 1, MOVEMENT_THICKNESS + 1,
-                                                        -MOVEMENT_THICKNESS - 1, -MOVEMENT_THICKNESS - 1));
-                }
+                    setShapeRect(head, shapeRect(head).adjusted(MOVEMENT_THICKNESS + 1, MOVEMENT_THICKNESS + 1,
+                                                                -MOVEMENT_THICKNESS - 1, -MOVEMENT_THICKNESS - 1));
                 if (h->m_tiltChannel != QLCChannel::invalid())
-                {
-                    head->setRect(head->rect().adjusted(MOVEMENT_THICKNESS + 1, MOVEMENT_THICKNESS + 1,
-                                                        -MOVEMENT_THICKNESS - 1, -MOVEMENT_THICKNESS - 1));
-                }
+                    setShapeRect(head, shapeRect(head).adjusted(MOVEMENT_THICKNESS + 1, MOVEMENT_THICKNESS + 1,
+                                                                -MOVEMENT_THICKNESS - 1, -MOVEMENT_THICKNESS - 1));
 
                 head->setZValue(2);
-                QGraphicsEllipseItem *back = m_heads.at(index)->m_back;
+                QAbstractGraphicsShapeItem *back = m_heads.at(index)->m_back;
                 if (back != NULL)
                 {
-                    back->setRect(head->rect());
+                    setShapeRect(back, shapeRect(head));
                     back->setZValue(1);
                 }
             }
-            xpos += cellWidth;
         }
-        ypos += cellHeight;
     }
 
     QFontMetrics fm(m_font);
@@ -542,14 +602,17 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     if (this->isSelected() == true)
         defColor = Qt::yellow;
 
-    painter->setPen(QPen(defColor, 1));
+    {
+        QPen bodyPen(defColor, 0); // cosmetic: 1px border at any zoom level
+        painter->setPen(bodyPen);
+    }
 
     // draw item background
     painter->setBrush(QBrush(QColor(33, 33, 33)));
     painter->drawRect(0, 0, m_width, m_height);
     foreach (FixtureHead *head, m_heads)
     {
-        QRectF rect = head->m_item->rect();
+        QRectF rect = shapeRect(head->m_item);
 
         if (head->m_tiltChannel != UINT_MAX /*QLCChannel::invalid()*/)
         {
@@ -585,10 +648,32 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     }
 }
 
+void MonitorFixtureItem::setMovable(bool movable)
+{
+    setFlag(QGraphicsItem::ItemIsMovable, movable);
+    setCursor(movable ? Qt::OpenHandCursor : Qt::ArrowCursor);
+}
+
+void MonitorFixtureItem::setSnap(int divisions, qreal cellPixels, qreal xOffset, qreal yOffset)
+{
+    m_snapDivisions = divisions;
+    m_snapCellPixels = cellPixels;
+    m_snapXOffset = xOffset;
+    m_snapYOffset = yOffset;
+}
+
+QVariant MonitorFixtureItem::itemChange(GraphicsItemChange change, const QVariant &value)
+{
+    // Snapping is intentionally NOT done per-item here: quantising each
+    // selected fixture independently during a drag scrambles a multi-
+    // selection's relative layout. The view snaps the whole move as a group on
+    // drop instead (MonitorGraphicsView::slotFixtureMoved).
+    return QGraphicsItem::itemChange(change, value);
+}
+
 void MonitorFixtureItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mousePressEvent(event);
-    this->setSelected(true);
 }
 
 void MonitorFixtureItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)

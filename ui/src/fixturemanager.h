@@ -124,6 +124,13 @@ private:
     /** Handle fixture group selection */
     void fixtureGroupSelected(FixtureGroup* grp);
 
+    /** Copy the given fixtures (whole, all heads) and whole fixture groups
+     *  (as sub-group blocks, preserving their relative layout) into $target,
+     *  appending below whatever it already contains and growing the grid. */
+    void copySelectionIntoGroup(FixtureGroup* target,
+                                const QList<quint32>& fixtureIds,
+                                const QList<quint32>& groupIds);
+
     /** Create the text browser for displaying information */
     void createInfo();
 
@@ -180,6 +187,7 @@ private:
 
     QTextBrowser* m_info;
     FixtureGroupEditor* m_groupEditor;
+    quint32 m_groupEditorId; //!< id of the group m_groupEditor is editing
     int m_currentTabIndex;
 
     /********************************************************************
@@ -222,6 +230,9 @@ private slots:
 
     /** Callback for right mouse button clicks over a fixture item */
     void slotContextMenuRequested(const QPoint& pos);
+
+    /** Move the dropped fixture groups into folder $destPath ("" = root). */
+    void slotGroupsDroppedOnFolder(const QList<quint32>& groupIds, const QString& destPath);
 
 private:
     QAction* m_addAction;

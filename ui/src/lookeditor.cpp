@@ -12,6 +12,9 @@
 #include <QComboBox>
 #include <QSlider>
 #include <QLabel>
+#include <QFrame>
+#include <QPixmap>
+#include <QIcon>
 #include <QSet>
 
 #include "lookeditor.h"
@@ -58,12 +61,47 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     el->addWidget(new QLabel(tr("Select a look above to edit it."), empty));
     m_pageEmpty = m_stack->addWidget(empty);
 
-    // Color page
-    m_colorDialog = new QColorDialog(this);
+    // Color page: RGB picker on the LEFT, vertical extra-emitter sliders
+    // (White / Amber / UV) on the RIGHT — always visible beside the (tall)
+    // colour dialog rather than scrolled off-screen above/below it.
+    QWidget *colorPage = new QWidget(this);
+    QHBoxLayout *cl = new QHBoxLayout(colorPage);
+    cl->setContentsMargins(0, 0, 0, 0);
+
+    m_colorDialog = new QColorDialog(colorPage);
     m_colorDialog->setOptions(QColorDialog::NoButtons
                               | QColorDialog::DontUseNativeDialog);
     m_colorDialog->setWindowFlags(Qt::Widget);
-    m_pageColor = m_stack->addWidget(m_colorDialog);
+    // Keep the picker compact so the look panel doesn't force the tab (and the
+    // window) taller than short screens; it scrolls if the panel is short.
+    m_colorDialog->setMinimumHeight(0);
+    m_colorDialog->setMaximumHeight(300);
+    cl->addWidget(m_colorDialog, 1);
+
+    // One vertical slider (label above) per extra emitter.
+    auto makeColorCol = [&](const QString &name, QSlider *&slider) -> QWidget* {
+        QWidget *col = new QWidget(colorPage);
+        QVBoxLayout *vl = new QVBoxLayout(col);
+        vl->setContentsMargins(2, 0, 2, 0);
+        vl->addWidget(new QLabel(name, col), 0, Qt::AlignHCenter);
+        slider = new QSlider(Qt::Vertical, col);
+        slider->setRange(0, 255);
+        vl->addWidget(slider, 1, Qt::AlignHCenter);
+        connect(slider, SIGNAL(valueChanged(int)), this, SLOT(slotColorExtraChanged()));
+        return col;
+    };
+    QWidget *extras = new QWidget(colorPage);
+    QHBoxLayout *xl = new QHBoxLayout(extras);
+    xl->setContentsMargins(0, 0, 0, 0);
+    m_whiteRow = makeColorCol(tr("W"),  m_whiteSlider);
+    m_amberRow = makeColorCol(tr("A"),  m_amberSlider);
+    m_uvRow    = makeColorCol(tr("UV"), m_uvSlider);
+    xl->addWidget(m_whiteRow);
+    xl->addWidget(m_amberRow);
+    xl->addWidget(m_uvRow);
+    cl->addWidget(extras, 0);
+
+    m_pageColor = m_stack->addWidget(colorPage);
     connect(m_colorDialog, SIGNAL(currentColorChanged(QColor)),
             this, SLOT(slotColorChanged(QColor)));
 
@@ -95,8 +133,8 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     pl->setContentsMargins(6, 6, 6, 6);
     m_xyPad = new VCXYPadArea(pantilt);
     m_xyPad->setMode(Doc::Operate); // interactive
-    m_xyPad->setMinimumSize(220, 220);
-    m_xyPad->setMaximumSize(360, 360);
+    m_xyPad->setMinimumSize(200, 200);
+    m_xyPad->setMaximumSize(280, 280); // keep the bottom look pane compact
     m_xyPad->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     pl->addWidget(m_xyPad, 0, Qt::AlignLeft | Qt::AlignTop);
     pl->addStretch(1); // reserved right half
@@ -107,9 +145,19 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Single-value page (gobo / shutter / pan / tilt / zoom)
     QWidget *single = new QWidget(this);
     QVBoxLayout *sv = new QVBoxLayout(single);
-    // Named capabilities (gobo/shutter) from a representative fixture.
+    // Named capabilities (gobo/shutter) from a representative fixture, with a
+    // gobo image preview beside the picker.
+    QHBoxLayout *pickRow = new QHBoxLayout();
+    sv->addLayout(pickRow);
+    m_singlePreview = new QLabel(single);
+    m_singlePreview->setFixedSize(48, 48);
+    m_singlePreview->setAlignment(Qt::AlignCenter);
+    m_singlePreview->setFrameShape(QFrame::StyledPanel);
+    m_singlePreview->setVisible(false);
+    m_singleChannel = NULL;
+    pickRow->addWidget(m_singlePreview);
     m_singleCombo = new QComboBox(single);
-    sv->addWidget(m_singleCombo);
+    pickRow->addWidget(m_singleCombo, 1);
     QHBoxLayout *sl = new QHBoxLayout();
     sv->addLayout(sl);
     sl->addWidget(new QLabel(tr("Value"), single));
@@ -170,9 +218,31 @@ void LookEditor::setPalette(quint32 paletteId)
     switch (p->type())
     {
     case QLCPalette::Color:
-        m_colorDialog->setCurrentColor(p->rgbValue());
+    {
+        const QColor rgb = p->rgbValue();
+        m_colorDialog->setCurrentColor(rgb);
+
+        // Extra emitters: load stored wauv, or default White to the additive
+        // auto value (min of R,G,B) and Amber/UV to 0.
+        const QColor wauv = p->wauvValue();
+        const int autoW = qMin(rgb.red(), qMin(rgb.green(), rgb.blue()));
+        m_whiteSlider->blockSignals(true); m_amberSlider->blockSignals(true); m_uvSlider->blockSignals(true);
+        m_whiteSlider->setValue(wauv.isValid() ? wauv.red()   : autoW);
+        m_amberSlider->setValue(wauv.isValid() ? wauv.green() : 0);
+        m_uvSlider->setValue   (wauv.isValid() ? wauv.blue()  : 0);
+        m_whiteSlider->blockSignals(false); m_amberSlider->blockSignals(false); m_uvSlider->blockSignals(false);
+
+        // White is near-universal on LED fixtures and is the common request,
+        // so always offer it; gate the rarer Amber/UV on actual presence (but
+        // still show them if we can't determine the targets).
+        const bool unknown = (m_contextScene == NULL);
+        m_whiteRow->setVisible(true);
+        m_amberRow->setVisible(unknown || targetsHaveColour(QLCChannel::Amber));
+        m_uvRow->setVisible(unknown || targetsHaveColour(QLCChannel::UV));
+
         m_stack->setCurrentIndex(m_pageColor);
         break;
+    }
     case QLCPalette::Dimmer:
     {
         const QLCChannel *ich = representativeChannel(QLCChannel::Intensity);
@@ -207,12 +277,21 @@ void LookEditor::setPalette(quint32 paletteId)
 
         m_singleCombo->clear();
         const QLCChannel *ch = (chGroup >= 0) ? representativeChannel(chGroup) : NULL;
+        m_singleChannel = ch;
         if (ch != NULL)
         {
             int sel = -1, idx = 0;
             foreach (QLCCapability *cap, ch->capabilities())
             {
-                m_singleCombo->addItem(cap->name(),
+                // Show a gobo/effect thumbnail next to each named capability.
+                QIcon icon;
+                if (cap->presetType() == QLCCapability::Picture)
+                {
+                    const QPixmap px(cap->resource(0).toString());
+                    if (px.isNull() == false)
+                        icon = QIcon(px);
+                }
+                m_singleCombo->addItem(icon, cap->name(),
                                        (int(cap->min()) + int(cap->max())) / 2);
                 if (p->intValue1() >= cap->min() && p->intValue1() <= cap->max())
                     sel = idx;
@@ -220,12 +299,14 @@ void LookEditor::setPalette(quint32 paletteId)
             }
             if (sel >= 0)
                 m_singleCombo->setCurrentIndex(sel);
+            m_singleCombo->setIconSize(QSize(32, 32));
             m_singleCombo->setVisible(true);
         }
         else
         {
             m_singleCombo->setVisible(false);
         }
+        updateSinglePreview(p->intValue1());
         m_stack->setCurrentIndex(m_pageSingle);
         break;
     }
@@ -295,12 +376,58 @@ void LookEditor::slotColorChanged(const QColor &c)
 {
     if (m_loading)
         return;
+    // Auto-derive White additively (W = min(R,G,B), RGB kept) on colour change.
+    const int autoW = qMin(c.red(), qMin(c.green(), c.blue()));
+    m_whiteSlider->blockSignals(true);
+    m_whiteSlider->setValue(autoW);
+    m_whiteSlider->blockSignals(false);
+    commitColor();
+}
+
+void LookEditor::slotColorExtraChanged()
+{
+    if (m_loading)
+        return;
+    commitColor();
+}
+
+void LookEditor::commitColor()
+{
     QLCPalette *p = m_doc->palette(m_paletteId);
     if (p == NULL || p->type() != QLCPalette::Color)
         return;
-    p->setValue(c.name());
+    const QColor rgb = m_colorDialog->currentColor();
+    // wauv encodes White=red, Amber=green, UV=blue (see QLCPalette::Color).
+    const QColor wauv(m_whiteSlider->value(), m_amberSlider->value(), m_uvSlider->value());
+    p->setValue(QLCPalette::colorToString(rgb, wauv));
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
+}
+
+bool LookEditor::targetsHaveColour(int primaryColour) const
+{
+    if (m_contextScene == NULL)
+        return false;
+
+    QSet<quint32> fixtures;
+    foreach (quint32 fid, m_contextScene->fixtures())
+        fixtures.insert(fid);
+    foreach (quint32 gid, m_contextScene->fixtureGroups())
+    {
+        FixtureGroup *g = m_doc->fixtureGroup(gid);
+        if (g != NULL)
+            foreach (quint32 fid, g->fixtureList())
+                fixtures.insert(fid);
+    }
+
+    foreach (quint32 fid, fixtures)
+    {
+        Fixture *f = m_doc->fixture(fid);
+        if (f != NULL
+            && f->channelNumber(primaryColour, QLCChannel::MSB) != QLCChannel::invalid())
+            return true;
+    }
+    return false;
 }
 
 void LookEditor::slotDimmerChanged(int v)
@@ -335,6 +462,7 @@ void LookEditor::slotPanTiltChanged(const QPointF &pos)
 void LookEditor::slotSingleValueChanged(int v)
 {
     m_singleValue->setText(QString::number(v));
+    updateSinglePreview(v);
     if (m_loading)
         return;
     QLCPalette *p = m_doc->palette(m_paletteId);
@@ -343,6 +471,36 @@ void LookEditor::slotSingleValueChanged(int v)
     p->setValue(v);
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
+}
+
+void LookEditor::updateSinglePreview(int v)
+{
+    // Find the Picture-preset capability covering v and show its image.
+    QPixmap px;
+    if (m_singleChannel != NULL)
+    {
+        foreach (QLCCapability *cap, m_singleChannel->capabilities())
+        {
+            if (v >= cap->min() && v <= cap->max())
+            {
+                if (cap->presetType() == QLCCapability::Picture)
+                    px = QPixmap(cap->resource(0).toString());
+                break;
+            }
+        }
+    }
+
+    if (px.isNull())
+    {
+        m_singlePreview->clear();
+        m_singlePreview->setVisible(false);
+    }
+    else
+    {
+        m_singlePreview->setPixmap(px.scaled(m_singlePreview->size(),
+                                             Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        m_singlePreview->setVisible(true);
+    }
 }
 
 void LookEditor::slotSingleCapabilityPicked(int index)

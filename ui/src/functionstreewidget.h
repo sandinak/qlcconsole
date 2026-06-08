@@ -118,6 +118,15 @@ public:
     /** Node kind for $item (FunctionNode/PaletteNode). */
     static NodeKind itemNodeKind(const QTreeWidgetItem* item);
 
+    /** Folder path that a new sibling/child of $item belongs to: the folder's
+     *  own path, a leaf's parent folder, or the "Palettes" root for the
+     *  category/null. Used to anchor "New folder". */
+    QString paletteFolderPathFor(const QTreeWidgetItem* item) const;
+
+    /** Ensure the palette folder at $fullPath ("Palettes/…") exists, creating
+     *  any missing levels, and return its node. */
+    QTreeWidgetItem* ensurePaletteFolder(const QString& fullPath);
+
 private:
     /** Update $item's contents from the given $function */
     void updateFunctionItem(QTreeWidgetItem* item, const Function* function);
@@ -171,9 +180,16 @@ public:
     /** Enable external drag mode - drags will always use external MIME type without modifier key */
     void setExternalDragMode(bool enable);
 
+signals:
+    /** Emitted (external/Programming mode) after dragged palettes are dropped
+     *  onto a folder, so the owner can refresh the tree. */
+    void paletteDroppedToFolder();
+
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
 
     /** Override mimeData to provide function IDs for Qt's built-in drag */

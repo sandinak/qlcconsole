@@ -32,6 +32,15 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QDataStream>
+#include <QApplication>
+#include <QMouseEvent>
+#include <QItemSelectionModel>
+#include <QItemSelection>
+#include <QRubberBand>
+#include <QShortcut>
+#include <QKeySequence>
+#include <QDrag>
+#include <QTimer>
 #include <climits>
 
 #include "fixturegroupeditor.h"
@@ -45,6 +54,10 @@
 
 #define PROP_FIXTURE Qt::UserRole
 #define PROP_HEAD Qt::UserRole + 1
+
+// Mime type marking an internal drag of selected grid cells (payload is
+// carried in member state, not the mime data itself).
+static const char *CELLS_DRAG_MIME = "application/x-qlc-groupcells";
 
 FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* parent)
     : QWidget(parent)
@@ -97,6 +110,21 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     connect(m_table, SIGNAL(customContextMenuRequested(QPoint)),
             this, SLOT(slotTableContextMenu(QPoint)));
 
+    // Coalesce the burst of sectionResized signals (Stretch mode emits one per
+    // column) into a single font relayout, so rendering stays cheap.
+    m_resizeTimer = new QTimer(this);
+    m_resizeTimer->setSingleShot(true);
+    m_resizeTimer->setInterval(0);
+    connect(m_resizeTimer, SIGNAL(timeout()), this, SLOT(relayoutCellFonts()));
+
+    // Wireframe shown over the destination while dragging a block.
+    m_dropBand = new QRubberBand(QRubberBand::Rectangle, m_table->viewport());
+
+    // Ctrl+Z undoes the last layout edit.
+    QShortcut *undoSc = new QShortcut(QKeySequence::Undo, this);
+    undoSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(undoSc, SIGNAL(activated()), this, SLOT(slotUndo()));
+
     updateTable();
 }
 
@@ -106,19 +134,157 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
     {
         const char *mimeType = FixtureTreeWidget::fixtureDragMimeType();
 
+        // --- Selection & internal drag -------------------------------------
+        // We drive selection ourselves (index-precise) so it never over-grabs:
+        //  - Shift+click/drag: rectangle from the stored anchor to the cursor.
+        //  - Ctrl+click:       toggle a single cell.
+        //  - plain press on an occupied cell: arm a block move.
+        //  - plain press on an empty cell:    start a marquee selection.
+        if (event->type() == QEvent::MouseButtonPress)
+        {
+            QMouseEvent *me = static_cast<QMouseEvent*>(event);
+            m_dragMode = NoDrag;
+            if (me->button() == Qt::LeftButton)
+            {
+                const QLCPoint cell = cellAt(me->pos());
+                const QModelIndex idx = m_table->model()->index(cell.y(), cell.x());
+                const Qt::KeyboardModifiers mods = me->modifiers();
+                m_dragStartPos = me->pos();
+
+                if (mods & Qt::ShiftModifier)
+                {
+                    // Extend a rectangle from the existing anchor; let a drag
+                    // keep extending it.
+                    selectCellRange(m_marqueeAnchor, cell);
+                    m_dragMode = Marquee;
+                    return true;
+                }
+                if (mods & Qt::ControlModifier)
+                {
+                    m_table->selectionModel()->select(idx, QItemSelectionModel::Toggle);
+                    m_table->setCurrentCell(cell.y(), cell.x(), QItemSelectionModel::NoUpdate);
+                    slotCellActivated(cell.y(), cell.x());
+                    m_marqueeAnchor = cell;
+                    return true;
+                }
+                if (mods == Qt::NoModifier)
+                {
+                    m_marqueeAnchor = cell; // anchor for a later Shift+click
+                    const bool occupied = m_table->item(cell.y(), cell.x()) != NULL;
+                    if (occupied)
+                    {
+                        // Keep an existing multi-selection so it can be dragged;
+                        // otherwise select just this cell.
+                        if (m_table->selectionModel()->isSelected(idx) == false)
+                        {
+                            m_table->clearSelection();
+                            m_table->setCurrentCell(cell.y(), cell.x(),
+                                                    QItemSelectionModel::ClearAndSelect);
+                            slotCellActivated(cell.y(), cell.x());
+                        }
+                        m_dragMode = MoveBlock;
+                    }
+                    else
+                    {
+                        selectCellRange(cell, cell);
+                        m_dragMode = Marquee;
+                    }
+                    return true;
+                }
+            }
+        }
+        else if (event->type() == QEvent::MouseMove)
+        {
+            QMouseEvent *me = static_cast<QMouseEvent*>(event);
+            if ((me->buttons() & Qt::LeftButton) == 0)
+                return false;
+            if (m_dragMode == Marquee)
+            {
+                selectCellRange(m_marqueeAnchor, cellAt(me->pos()));
+                return true;
+            }
+            if (m_dragMode == MoveBlock)
+            {
+                if ((me->pos() - m_dragStartPos).manhattanLength()
+                        >= QApplication::startDragDistance())
+                {
+                    m_dragMode = NoDrag;
+                    startCellDrag();
+                }
+                return true;
+            }
+        }
+        else if (event->type() == QEvent::MouseButtonRelease)
+        {
+            if (m_dragMode != NoDrag)
+            {
+                m_dragMode = NoDrag;
+                return true;
+            }
+        }
+
         if (event->type() == QEvent::DragEnter)
         {
             QDragEnterEvent *de = static_cast<QDragEnterEvent*>(event);
-            if (de->mimeData()->hasFormat(mimeType)) { de->acceptProposedAction(); return true; }
+            if (de->mimeData()->hasFormat(mimeType) ||
+                de->mimeData()->hasFormat(CELLS_DRAG_MIME)) { de->acceptProposedAction(); return true; }
         }
         else if (event->type() == QEvent::DragMove)
         {
             QDragMoveEvent *dm = static_cast<QDragMoveEvent*>(event);
+            // Internal block move: show the wireframe and only accept the drop
+            // where the block would actually fit.
+            if (dm->mimeData()->hasFormat(CELLS_DRAG_MIME))
+            {
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+                const QLCPoint c = cellAt(dm->pos());
+#else
+                const QLCPoint c = cellAt(dm->position().toPoint());
+#endif
+                const int dx = c.x() - m_dragAnchor.x();
+                const int dy = c.y() - m_dragAnchor.y();
+                showDropPreview(dx, dy);
+                if (canMoveHeads(m_dragCells, dx, dy))
+                    dm->acceptProposedAction();
+                else
+                    dm->ignore();
+                return true;
+            }
             if (dm->mimeData()->hasFormat(mimeType)) { dm->acceptProposedAction(); return true; }
+        }
+        else if (event->type() == QEvent::DragLeave)
+        {
+            hideDropPreview();
         }
         else if (event->type() == QEvent::Drop)
         {
             QDropEvent *dr = static_cast<QDropEvent*>(event);
+
+            // Internal move of selected cells.
+            if (dr->mimeData()->hasFormat(CELLS_DRAG_MIME))
+            {
+                hideDropPreview();
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+                const QLCPoint c = cellAt(dr->pos());
+#else
+                const QLCPoint c = cellAt(dr->position().toPoint());
+#endif
+                const int dx = c.x() - m_dragAnchor.x();
+                const int dy = c.y() - m_dragAnchor.y();
+                if (dx != 0 || dy != 0)
+                {
+                    // Defer the table rebuild until the drop fully returns
+                    // (consistent with the other drop handlers; avoids
+                    // rebuilding the widget from inside its own drop).
+                    const QList<QLCPoint> cells = m_dragCells;
+                    QTimer::singleShot(0, this, [this, cells, dx, dy]() {
+                        moveHeads(cells, dx, dy);
+                    });
+                }
+                dr->acceptProposedAction();
+                return true;
+            }
+
             if (dr->mimeData()->hasFormat(mimeType) == false)
                 return false;
 
@@ -136,6 +302,7 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
             int maxX = m_grp->size().width() - 1;
             int maxY = m_grp->size().height() - 1;
             bool added = false;
+            beginEdit();
             while (stream.atEnd() == false)
             {
                 quint32 fid = 0;
@@ -162,7 +329,11 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
                     m_xSpin->blockSignals(true); m_xSpin->setValue(m_grp->size().width());  m_xSpin->blockSignals(false);
                     m_ySpin->blockSignals(true); m_ySpin->setValue(m_grp->size().height()); m_ySpin->blockSignals(false);
                 }
-                updateTable();
+                endEdit();
+            }
+            else
+            {
+                cancelEdit();
             }
             dr->acceptProposedAction();
             return true;
@@ -171,16 +342,44 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
     return QWidget::eventFilter(obj, event);
 }
 
+void FixtureGroupEditor::startCellDrag()
+{
+    // Capture the occupied selected cells; the anchor is the cell the drag
+    // started on (so the drop point yields the move delta).
+    m_dragCells.clear();
+    foreach (QTableWidgetItem *item, m_table->selectedItems())
+    {
+        if (item != NULL)
+            m_dragCells << QLCPoint(item->column(), item->row());
+    }
+    if (m_dragCells.isEmpty())
+        return;
+
+    const QModelIndex anchorIdx = m_table->indexAt(m_dragStartPos);
+    m_dragAnchor = anchorIdx.isValid()
+            ? QLCPoint(anchorIdx.column(), anchorIdx.row())
+            : m_dragCells.first();
+
+    QDrag *drag = new QDrag(m_table);
+    QMimeData *mime = new QMimeData;
+    mime->setData(CELLS_DRAG_MIME, QByteArray("1")); // payload kept in members
+    drag->setMimeData(mime);
+    drag->exec(Qt::MoveAction);
+    hideDropPreview(); // in case the drag ended outside the viewport
+}
+
 FixtureGroupEditor::~FixtureGroupEditor()
 {
 }
 
 void FixtureGroupEditor::updateTable()
 {
-    qDebug() << Q_FUNC_INFO;
     // Store these since they might get reset
     int savedRow = m_row;
     int savedCol = m_column;
+
+    // Freeze repaints/relayouts while we tear down and rebuild every cell.
+    m_table->setUpdatesEnabled(false);
 
     disconnect(m_table, SIGNAL(cellChanged(int,int)),
                this, SLOT(slotCellChanged(int,int)));
@@ -245,7 +444,9 @@ void FixtureGroupEditor::updateTable()
     }
 
     m_table->setCurrentCell(m_row, m_column);
-    slotResized();
+
+    m_table->setUpdatesEnabled(true);
+    relayoutCellFonts();
 }
 
 void FixtureGroupEditor::slotNameEdited(const QString& text)
@@ -288,12 +489,25 @@ void FixtureGroupEditor::slotUpClicked()
 
 void FixtureGroupEditor::slotRemoveFixtureClicked()
 {
-    QTableWidgetItem* item = m_table->currentItem();
-    if (item == NULL)
+    // Remove every selected occupied cell (falls back to the current cell).
+    QList<QLCPoint> pts;
+    foreach (QTableWidgetItem *item, m_table->selectedItems())
+        if (item != NULL)
+            pts << QLCPoint(item->column(), item->row());
+    if (pts.isEmpty() && m_table->currentItem() != NULL)
+        pts << QLCPoint(m_column, m_row);
+    if (pts.isEmpty())
         return;
 
-    if (m_grp->resignHead(QLCPoint(m_column, m_row)) == true)
-        delete item;
+    beginEdit();
+    bool removed = false;
+    foreach (const QLCPoint &p, pts)
+        if (m_grp->resignHead(p))
+            removed = true;
+    if (removed)
+        endEdit();
+    else
+        cancelEdit();
 }
 
 void FixtureGroupEditor::slotCellActivated(int row, int column)
@@ -335,6 +549,20 @@ void FixtureGroupEditor::slotCellChanged(int row, int column)
 
 void FixtureGroupEditor::slotResized()
 {
+    // Stretch mode fires sectionResized once per column; coalesce the burst
+    // into a single relayout on the next event-loop pass.
+    m_resizeTimer->start();
+}
+
+void FixtureGroupEditor::relayoutCellFonts()
+{
+    // Fitting each cell's font is O(cells); for big groups it dominates render
+    // time (and the result is illegibly small anyway). Skip it past a cap and
+    // let the cells use the default font.
+    static const int kFontFitCellCap = 600;
+    if (m_table->rowCount() * m_table->columnCount() > kFontFitCellCap)
+        return;
+
     disconnect(m_table, SIGNAL(cellChanged(int,int)),
                this, SLOT(slotCellChanged(int,int)));
 
@@ -381,6 +609,7 @@ void FixtureGroupEditor::addFixtureHeads(Qt::ArrowType direction)
     {
         int row = m_row;
         int col = m_column;
+        beginEdit();
         foreach (GroupHead gh, fs.selectedHeads())
         {
             m_grp->assignHead(QLCPoint(col, row), gh);
@@ -394,7 +623,7 @@ void FixtureGroupEditor::addFixtureHeads(Qt::ArrowType direction)
                 row--;
         }
 
-        updateTable();
+        endEdit();
         m_table->setCurrentCell(row, col);
     }
 }
@@ -404,54 +633,77 @@ void FixtureGroupEditor::slotTableContextMenu(const QPoint &pos)
     const QModelIndex idx = m_table->indexAt(pos);
     if (idx.isValid() == false)
         return;
-    const quint32 sg = m_grp->headSubGroup(QLCPoint(idx.column(), idx.row()));
-    if (sg == 0)
-        return; // cell isn't part of a sub-group
+    const QLCPoint pt(idx.column(), idx.row());
+    const GroupHead gh = m_grp->head(pt);
+    if (gh.isValid() == false)
+        return; // empty cell
+
+    const quint32 sg = m_grp->headSubGroup(pt);
+    const Fixture *fxi = m_doc->fixture(gh.fxi);
 
     QMenu menu(this);
-    QAction *up    = menu.addAction(tr("Move sub-group up"));
-    QAction *down  = menu.addAction(tr("Move sub-group down"));
-    QAction *left  = menu.addAction(tr("Move sub-group left"));
-    QAction *right = menu.addAction(tr("Move sub-group right"));
+
+    // Whole-fixture move: shifts every head of this fixture as one block.
+    const QString fxName = (fxi != NULL) ? fxi->name() : tr("fixture");
+    QAction *fUp    = menu.addAction(tr("Move %1 up").arg(fxName));
+    QAction *fDown  = menu.addAction(tr("Move %1 down").arg(fxName));
+    QAction *fLeft  = menu.addAction(tr("Move %1 left").arg(fxName));
+    QAction *fRight = menu.addAction(tr("Move %1 right").arg(fxName));
+
+    // Sub-group move (only when this cell belongs to a pasted block).
+    QAction *up = NULL, *down = NULL, *left = NULL, *right = NULL;
+    if (sg != 0)
+    {
+        menu.addSeparator();
+        up    = menu.addAction(tr("Move sub-group up"));
+        down  = menu.addAction(tr("Move sub-group down"));
+        left  = menu.addAction(tr("Move sub-group left"));
+        right = menu.addAction(tr("Move sub-group right"));
+    }
 
     QAction *c = menu.exec(m_table->viewport()->mapToGlobal(pos));
-    if (c == up)         moveSubGroup(sg, 0, -1);
-    else if (c == down)  moveSubGroup(sg, 0, 1);
-    else if (c == left)  moveSubGroup(sg, -1, 0);
-    else if (c == right) moveSubGroup(sg, 1, 0);
+    if (c == NULL)            return;
+    else if (c == fUp)        moveFixture(gh.fxi, 0, -1);
+    else if (c == fDown)      moveFixture(gh.fxi, 0, 1);
+    else if (c == fLeft)      moveFixture(gh.fxi, -1, 0);
+    else if (c == fRight)     moveFixture(gh.fxi, 1, 0);
+    else if (c == up)         moveSubGroup(sg, 0, -1);
+    else if (c == down)       moveSubGroup(sg, 0, 1);
+    else if (c == left)       moveSubGroup(sg, -1, 0);
+    else if (c == right)      moveSubGroup(sg, 1, 0);
 }
 
-void FixtureGroupEditor::moveSubGroup(quint32 sg, int dx, int dy)
+bool FixtureGroupEditor::canMoveHeads(const QList<QLCPoint>& pts, int dx, int dy) const
 {
-    if (sg == 0)
-        return;
+    if (pts.isEmpty() || (dx == 0 && dy == 0))
+        return false;
 
-    // Gather the sub-group's heads.
-    QList<QLCPoint> pts;
-    QList<GroupHead> heads;
-    QMapIterator<QLCPoint, GroupHead> it(m_grp->headsMap());
-    while (it.hasNext())
-    {
-        it.next();
-        if (m_grp->headSubGroup(it.key()) == sg)
-        {
-            pts << it.key();
-            heads << it.value();
-        }
-    }
-    if (pts.isEmpty())
-        return;
-
-    // Validate destinations: in bounds (top/left) and not blocked by a head
-    // that belongs to a DIFFERENT sub-group/none.
     foreach (const QLCPoint &p, pts)
     {
         const QLCPoint np(p.x() + dx, p.y() + dy);
         if (np.x() < 0 || np.y() < 0)
-            return;
-        if (m_grp->head(np).isValid() && m_grp->headSubGroup(np) != sg)
-            return;
+            return false;
+        if (m_grp->head(np).isValid() && pts.contains(np) == false)
+            return false;
     }
+    return true;
+}
+
+void FixtureGroupEditor::moveHeads(const QList<QLCPoint>& pts, int dx, int dy)
+{
+    if (canMoveHeads(pts, dx, dy) == false)
+        return;
+
+    // Snapshot the heads and their sub-group tags before we disturb anything.
+    QList<GroupHead> heads;
+    QList<quint32> tags;
+    foreach (const QLCPoint &p, pts)
+    {
+        heads << m_grp->head(p);
+        tags  << m_grp->headSubGroup(p);
+    }
+
+    beginEdit();
 
     // Move: clear the block, then re-place (and re-tag) at the new cells.
     foreach (const QLCPoint &p, pts)
@@ -463,7 +715,8 @@ void FixtureGroupEditor::moveSubGroup(quint32 sg, int dx, int dy)
     {
         const QLCPoint np(pts[i].x() + dx, pts[i].y() + dy);
         m_grp->assignHead(np, heads[i]);
-        m_grp->setHeadSubGroup(np, sg);
+        if (tags[i] != 0)
+            m_grp->setHeadSubGroup(np, tags[i]);
         maxX = qMax(maxX, np.x());
         maxY = qMax(maxY, np.y());
     }
@@ -476,7 +729,36 @@ void FixtureGroupEditor::moveSubGroup(quint32 sg, int dx, int dy)
         m_ySpin->blockSignals(true); m_ySpin->setValue(m_grp->size().height()); m_ySpin->blockSignals(false);
     }
 
-    updateTable();
+    endEdit();
+}
+
+void FixtureGroupEditor::moveSubGroup(quint32 sg, int dx, int dy)
+{
+    if (sg == 0)
+        return;
+
+    QList<QLCPoint> pts;
+    QMapIterator<QLCPoint, GroupHead> it(m_grp->headsMap());
+    while (it.hasNext())
+    {
+        it.next();
+        if (m_grp->headSubGroup(it.key()) == sg)
+            pts << it.key();
+    }
+    moveHeads(pts, dx, dy);
+}
+
+void FixtureGroupEditor::moveFixture(quint32 fxid, int dx, int dy)
+{
+    QList<QLCPoint> pts;
+    QMapIterator<QLCPoint, GroupHead> it(m_grp->headsMap());
+    while (it.hasNext())
+    {
+        it.next();
+        if (it.value().fxi == fxid)
+            pts << it.key();
+    }
+    moveHeads(pts, dx, dy);
 }
 
 void FixtureGroupEditor::slotAddGroupBlock()
@@ -516,6 +798,7 @@ void FixtureGroupEditor::slotAddGroupBlock()
     int maxX = m_grp->size().width() - 1;
     int maxY = m_grp->size().height() - 1;
 
+    beginEdit();
     QMapIterator<QLCPoint, GroupHead> it(srcHeads);
     while (it.hasNext())
     {
@@ -540,5 +823,130 @@ void FixtureGroupEditor::slotAddGroupBlock()
         m_ySpin->blockSignals(true); m_ySpin->setValue(m_grp->size().height()); m_ySpin->blockSignals(false);
     }
 
+    endEdit();
+}
+
+/****************************************************************************
+ * Edit batching + undo
+ ****************************************************************************/
+
+void FixtureGroupEditor::pushUndo()
+{
+    static const int kMaxUndo = 50;
+    GroupState s;
+    s.size = m_grp->size();
+    s.heads = m_grp->headsMap();
+    s.subGroups = m_grp->headSubGroupMap();
+    m_undoStack.append(s);
+    while (m_undoStack.size() > kMaxUndo)
+        m_undoStack.removeFirst();
+}
+
+void FixtureGroupEditor::beginEdit()
+{
+    pushUndo();
+    m_grp->blockSignals(true); // suppress the per-head changed() storm
+}
+
+void FixtureGroupEditor::endEdit()
+{
+    m_grp->blockSignals(false);
+    m_grp->notifyChanged(); // single refresh of any listeners (tree, menus)
+    if (m_doc != NULL)
+        m_doc->setModified();
     updateTable();
+}
+
+void FixtureGroupEditor::cancelEdit()
+{
+    m_grp->blockSignals(false);
+    if (m_undoStack.isEmpty() == false)
+        m_undoStack.removeLast();
+}
+
+void FixtureGroupEditor::slotUndo()
+{
+    if (m_undoStack.isEmpty())
+        return;
+
+    const GroupState s = m_undoStack.takeLast();
+    m_grp->restoreState(s.size, s.heads, s.subGroups);
+    if (m_doc != NULL)
+        m_doc->setModified();
+
+    m_xSpin->blockSignals(true); m_xSpin->setValue(s.size.width());  m_xSpin->blockSignals(false);
+    m_ySpin->blockSignals(true); m_ySpin->setValue(s.size.height()); m_ySpin->blockSignals(false);
+    updateTable();
+}
+
+/****************************************************************************
+ * Marquee selection + drag preview
+ ****************************************************************************/
+
+QLCPoint FixtureGroupEditor::cellAt(const QPoint& p) const
+{
+    int c = m_table->columnAt(p.x());
+    int r = m_table->rowAt(p.y());
+    // Clamp points past the last row/column to the nearest valid cell.
+    if (c < 0) c = (p.x() < 0) ? 0 : qMax(0, m_table->columnCount() - 1);
+    if (r < 0) r = (p.y() < 0) ? 0 : qMax(0, m_table->rowCount() - 1);
+    return QLCPoint(c, r);
+}
+
+void FixtureGroupEditor::selectCellRange(const QLCPoint& a, const QLCPoint& b)
+{
+    const int maxC = m_table->columnCount() - 1;
+    const int maxR = m_table->rowCount() - 1;
+    if (maxC < 0 || maxR < 0)
+        return;
+
+    // Clamp both corners into the grid so a stale anchor can't escape bounds.
+    const int c0 = qBound(0, qMin(a.x(), b.x()), maxC);
+    const int c1 = qBound(0, qMax(a.x(), b.x()), maxC);
+    const int r0 = qBound(0, qMin(a.y(), b.y()), maxR);
+    const int r1 = qBound(0, qMax(a.y(), b.y()), maxR);
+
+    QItemSelection sel;
+    const QModelIndex topLeft = m_table->model()->index(r0, c0);
+    const QModelIndex bottomRight = m_table->model()->index(r1, c1);
+    sel.select(topLeft, bottomRight);
+    m_table->selectionModel()->select(sel, QItemSelectionModel::ClearAndSelect);
+
+    const int curC = qBound(0, b.x(), maxC);
+    const int curR = qBound(0, b.y(), maxR);
+    m_table->setCurrentCell(curR, curC, QItemSelectionModel::NoUpdate);
+    slotCellActivated(curR, curC);
+}
+
+void FixtureGroupEditor::showDropPreview(int dx, int dy)
+{
+    if (m_dragCells.isEmpty())
+        return;
+
+    // Bounding box of the dragged block, shifted by the candidate delta.
+    int c0 = INT_MAX, c1 = INT_MIN, r0 = INT_MAX, r1 = INT_MIN;
+    foreach (const QLCPoint &p, m_dragCells)
+    {
+        c0 = qMin(c0, p.x() + dx); c1 = qMax(c1, p.x() + dx);
+        r0 = qMin(r0, p.y() + dy); r1 = qMax(r1, p.y() + dy);
+    }
+    c0 = qMax(0, c0); r0 = qMax(0, r0);
+    c1 = qMin(m_table->columnCount() - 1, c1);
+    r1 = qMin(m_table->rowCount() - 1, r1);
+    if (c1 < c0 || r1 < r0)
+    {
+        hideDropPreview();
+        return;
+    }
+
+    const QRect tl = m_table->visualRect(m_table->model()->index(r0, c0));
+    const QRect br = m_table->visualRect(m_table->model()->index(r1, c1));
+    m_dropBand->setGeometry(tl.united(br));
+    m_dropBand->show();
+}
+
+void FixtureGroupEditor::hideDropPreview()
+{
+    if (m_dropBand != NULL)
+        m_dropBand->hide();
 }

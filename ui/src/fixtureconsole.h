@@ -81,6 +81,14 @@ public:
     /** Get the fixture that this console is controlling */
     quint32 fixture() const;
 
+    /** Reveal the channel widgets. Call after rebuilding (setFixture) when the
+     *  console is already visible, since no showEvent fires then. */
+    void showChannels();
+
+    /** Enable/disable (grey out) a single channel's editor. Used to lock
+     *  channels that an applied look (palette) controls. */
+    void setChannelEnabled(quint32 channel, bool enabled);
+
 protected slots:
     void slotAliasChanged();
 

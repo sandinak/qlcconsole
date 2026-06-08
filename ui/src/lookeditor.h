@@ -8,8 +8,8 @@
     - Color   : color picker
     - Dimmer  : intensity slider
     - PanTilt : X/Y grid (the VC XY pad widget)
-    - Gobo/Shutter and other single-value types : slider
-  (Named gobo/shutter capability values are a planned follow-up.)
+    - Gobo/Shutter and other single-value types : slider + named-capability
+      picker with gobo/effect image thumbnails and a live preview
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */
@@ -56,6 +56,7 @@ signals:
 
 private slots:
     void slotColorChanged(const QColor &c);
+    void slotColorExtraChanged(); //!< White/Amber/UV sliders
     void slotDimmerChanged(int v);
     void slotPanTiltChanged(const QPointF &p);
     void slotSingleValueChanged(int v);
@@ -70,8 +71,19 @@ private:
      *  Used to surface capability (gobo/shutter/strobe) names. */
     const QLCChannel *representativeChannel(int group) const;
 
+    /** True if any target fixture has the given QLCChannel::PrimaryColour
+     *  emitter channel (White/Amber/UV). */
+    bool targetsHaveColour(int primaryColour) const;
+
+    /** Store the Color palette from the picker + White/Amber/UV sliders. */
+    void commitColor();
+
     /** Capability name covering value v on the channel, or empty. */
     QString capabilityNameAt(const QLCChannel *ch, int v) const;
+
+    /** Refresh the gobo/shutter image preview for value v on m_singleChannel
+     *  (hides the preview when there's no Picture-preset capability). */
+    void updateSinglePreview(int v);
 
 private:
     Doc *m_doc;
@@ -85,6 +97,8 @@ private:
     int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageSingle;
 
     QColorDialog *m_colorDialog;
+    QSlider *m_whiteSlider, *m_amberSlider, *m_uvSlider; //!< extra colour emitters
+    QWidget *m_whiteRow, *m_amberRow, *m_uvRow;          //!< hidden when absent
     CapabilityBar *m_dimmerBar; //!< gradient + strobe region marks
     QLabel *m_dimmerValue;
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
@@ -92,6 +106,8 @@ private:
     QSlider *m_singleSlider;
     QLabel *m_singleValue;
     QComboBox *m_singleCombo;  //!< named gobo/shutter capabilities
+    QLabel *m_singlePreview;   //!< gobo/shutter image for the current value
+    const QLCChannel *m_singleChannel; //!< representative chan for the single page
 };
 
 /** @} */

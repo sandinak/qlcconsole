@@ -37,7 +37,9 @@
 #include <QMenu>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QTimer>
 #include <QtGui>
+#include <climits>
 
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
@@ -81,6 +83,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_rdmManager(NULL)
     , m_info(NULL)
     , m_groupEditor(NULL)
+    , m_groupEditorId(FixtureGroup::invalidId())
     , m_currentTabIndex(0)
     , m_addAction(NULL)
     , m_addRGBAction(NULL)
@@ -288,6 +291,16 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
 
 void FixtureManager::slotFixtureGroupRemoved(quint32 id)
 {
+    // If the open group editor was editing the removed group, close it — its
+    // FixtureGroup* is now dangling and any further interaction (Ctrl+Z, drag,
+    // context menu, spin) would dereference freed memory.
+    if (m_groupEditor != NULL && m_groupEditorId == id)
+    {
+        delete m_groupEditor;
+        m_groupEditor = NULL;
+        m_groupEditorId = FixtureGroup::invalidId();
+    }
+
     for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); i++)
     {
         QTreeWidgetItem* item = m_fixtures_tree->topLevelItem(i);
@@ -345,9 +358,17 @@ void FixtureManager::initDataView()
     m_fixtures_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_fixtures_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_fixtures_tree->sortByColumn(KColumnAddress, Qt::AscendingOrder);
-    // Allow dragging fixtures out onto the group editor's layout grid.
+    // Allow dragging fixtures out onto the group editor's layout grid, and
+    // dragging fixture groups onto folders within the tree.
     m_fixtures_tree->setDragEnabled(true);
-    m_fixtures_tree->setDragDropMode(QAbstractItemView::DragOnly);
+    m_fixtures_tree->setDragDropMode(QAbstractItemView::DragDrop);
+    m_fixtures_tree->setDropIndicatorShown(true);
+    // CopyAction (not Move): the view must not auto-remove the dragged source
+    // rows — we handle the "move" ourselves (group path change / fixture add).
+    m_fixtures_tree->setDefaultDropAction(Qt::CopyAction);
+
+    connect(m_fixtures_tree, SIGNAL(groupsDroppedOnFolder(QList<quint32>,QString)),
+            this, SLOT(slotGroupsDroppedOnFolder(QList<quint32>,QString)));
 
     connect(m_fixtures_tree, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotSelectionChanged()));
@@ -532,9 +553,11 @@ void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
     {
         delete m_groupEditor;
         m_groupEditor = NULL;
+        m_groupEditorId = FixtureGroup::invalidId();
     }
 
     m_groupEditor = new FixtureGroupEditor(grp, m_doc, this);
+    m_groupEditorId = grp->id();
     m_splitter->addWidget(m_groupEditor);
 
     m_splitter->restoreState(state);
@@ -554,6 +577,7 @@ void FixtureManager::createInfo()
     {
         delete m_groupEditor;
         m_groupEditor = NULL;
+        m_groupEditorId = FixtureGroup::invalidId();
     }
 
     m_info = new QTextBrowser(this);
@@ -2030,6 +2054,83 @@ void FixtureManager::slotExport()
     file.close();
 }
 
+void FixtureManager::copySelectionIntoGroup(FixtureGroup* target,
+                                            const QList<quint32>& fixtureIds,
+                                            const QList<quint32>& groupIds)
+{
+    if (target == NULL)
+        return;
+
+    // Silence the per-head changed() storm; one refresh happens at the end.
+    target->blockSignals(true);
+
+    // Start appending below whatever the target already holds.
+    int curY = 0;
+    {
+        QMapIterator<QLCPoint, GroupHead> it(target->headsMap());
+        while (it.hasNext()) { it.next(); curY = qMax(curY, it.key().y() + 1); }
+    }
+
+    // Each source group goes in as a block (preserving its relative layout),
+    // tagged as a sub-group so it stays visually distinct and movable as a unit.
+    foreach (quint32 gid, groupIds)
+    {
+        FixtureGroup* src = m_doc->fixtureGroup(gid);
+        if (src == NULL || src == target)
+            continue;
+
+        const QMap<QLCPoint, GroupHead> srcHeads = src->headsMap();
+        if (srcHeads.isEmpty())
+            continue;
+
+        // Normalise the source to its top-left corner.
+        int minX = INT_MAX, minY = INT_MAX;
+        QMapIterator<QLCPoint, GroupHead> nit(srcHeads);
+        while (nit.hasNext()) { nit.next(); minX = qMin(minX, nit.key().x()); minY = qMin(minY, nit.key().y()); }
+
+        int blockMaxY = curY;
+        QMapIterator<QLCPoint, GroupHead> it(srcHeads);
+        while (it.hasNext())
+        {
+            it.next();
+            const int x = it.key().x() - minX;
+            const int y = curY + (it.key().y() - minY);
+            if (target->assignHead(QLCPoint(x, y), it.value()) == true)
+            {
+                target->setHeadSubGroup(QLCPoint(x, y), src->id());
+                blockMaxY = qMax(blockMaxY, y);
+            }
+        }
+        curY = blockMaxY + 1;
+    }
+
+    // Loose fixtures go in a row of their own (all heads of each fixture).
+    int col = 0;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture* fxi = m_doc->fixture(fid);
+        if (fxi == NULL)
+            continue;
+        for (int h = 0; h < fxi->heads(); h++)
+        {
+            if (target->assignHead(QLCPoint(col, curY), GroupHead(fid, h)) == true)
+                col++;
+        }
+    }
+
+    // Grow the grid to fit everything we placed.
+    int maxX = 0, maxY = 0;
+    QMapIterator<QLCPoint, GroupHead> sz(target->headsMap());
+    while (sz.hasNext()) { sz.next(); maxX = qMax(maxX, sz.key().x()); maxY = qMax(maxY, sz.key().y()); }
+    if (maxX + 1 > target->size().width() || maxY + 1 > target->size().height())
+        target->setSize(QSize(qMax(maxX + 1, target->size().width()),
+                              qMax(maxY + 1, target->size().height())));
+
+    target->blockSignals(false);
+    target->notifyChanged(); // single refresh
+    m_doc->setModified();
+}
+
 void FixtureManager::slotContextMenuRequested(const QPoint&)
 {
     QMenu menu(this);
@@ -2041,35 +2142,135 @@ void FixtureManager::slotContextMenuRequested(const QPoint&)
     menu.addAction(m_groupAction);
     menu.addAction(m_unGroupAction);
 
-    // "Move to folder…" when a fixture group is selected.
-    FixtureGroup *grp = NULL;
-    QTreeWidgetItem *curr = m_fixtures_tree->currentItem();
-    if (curr != NULL)
+    // Collect the selection so we can offer to move groups to a folder, and to
+    // copy whole fixtures and/or whole fixture groups into a new/existing group.
+    QList<quint32> selFixtures;
+    QList<quint32> selGroups;
+    foreach (QTreeWidgetItem *item, m_fixtures_tree->selectedItems())
     {
-        QVariant gv = curr->data(KColumnName, PROP_GROUP);
+        const QVariant gv = item->data(KColumnName, PROP_GROUP);
         if (gv.isValid())
-            grp = m_doc->fixtureGroup(gv.toUInt());
+        {
+            const quint32 gid = gv.toUInt();
+            if (selGroups.contains(gid) == false)
+                selGroups.append(gid);
+            continue;
+        }
+        // A fixture row (not a head row, which carries PROP_HEAD).
+        const QVariant fv = item->data(KColumnName, PROP_ID);
+        if (fv.isValid() && item->data(KColumnName, PROP_HEAD).isValid() == false)
+        {
+            const quint32 fid = fv.toUInt();
+            if (selFixtures.contains(fid) == false)
+                selFixtures.append(fid);
+        }
     }
+
+    // "Move to folder…" — applies to every selected group.
     QAction *moveToFolder = NULL;
-    if (grp != NULL)
+    if (selGroups.isEmpty() == false)
     {
         menu.addSeparator();
-        moveToFolder = menu.addAction(tr("Move to folder…"));
+        moveToFolder = menu.addAction(selGroups.size() > 1
+            ? tr("Move %1 groups to folder…").arg(selGroups.size())
+            : tr("Move to folder…"));
+    }
+
+    QAction *copyToNew = NULL;
+    QMenu *copyIntoMenu = NULL;
+    if (selFixtures.isEmpty() == false || selGroups.isEmpty() == false)
+    {
+        menu.addSeparator();
+        copyToNew = menu.addAction(tr("Copy to new group…"));
+
+        const QList<FixtureGroup*> groups = m_doc->fixtureGroups();
+        if (groups.isEmpty() == false)
+        {
+            copyIntoMenu = menu.addMenu(tr("Copy into group"));
+            foreach (FixtureGroup *g, groups)
+            {
+                if (g == NULL)
+                    continue;
+                QAction *a = copyIntoMenu->addAction(g->name());
+                a->setData(g->id());
+            }
+        }
     }
 
     QAction *chosen = menu.exec(QCursor::pos());
-    if (chosen != NULL && chosen == moveToFolder && grp != NULL)
+    if (chosen == NULL)
+        return;
+
+    if (chosen == moveToFolder && selGroups.isEmpty() == false)
     {
+        FixtureGroup *first = m_doc->fixtureGroup(selGroups.first());
+        const QString cur = (first != NULL) ? first->path() : QString();
         bool ok = false;
         const QString path = QInputDialog::getText(
-            this, tr("Move group to folder"),
+            this, tr("Move groups to folder"),
             tr("Folder path (e.g. \"Movers/Front\"; empty for none):"),
-            QLineEdit::Normal, grp->path(), &ok);
+            QLineEdit::Normal, cur, &ok);
         if (ok)
         {
-            grp->setPath(path.trimmed());
+            const QString p = path.trimmed();
+            foreach (quint32 gid, selGroups)
+            {
+                FixtureGroup *g = m_doc->fixtureGroup(gid);
+                if (g != NULL)
+                    g->setPath(p);
+            }
             m_doc->setModified();
             updateView();
         }
     }
+    else if (chosen == copyToNew)
+    {
+        bool ok = false;
+        const QString name = QInputDialog::getText(
+            this, tr("Copy to new group"), tr("New group name:"),
+            QLineEdit::Normal, tr("New Group"), &ok);
+        if (ok)
+        {
+            FixtureGroup *ng = new FixtureGroup(m_doc);
+            ng->setName(name.trimmed().isEmpty() ? tr("New Group") : name.trimmed());
+            ng->setSize(QSize(1, 1)); // grown to fit by copySelectionIntoGroup
+            m_doc->addFixtureGroup(ng);
+            copySelectionIntoGroup(ng, selFixtures, selGroups);
+            updateView();
+        }
+    }
+    else if (copyIntoMenu != NULL && copyIntoMenu->actions().contains(chosen))
+    {
+        FixtureGroup *target = m_doc->fixtureGroup(chosen->data().toUInt());
+        if (target != NULL)
+        {
+            copySelectionIntoGroup(target, selFixtures, selGroups);
+            updateView();
+        }
+    }
+}
+
+void FixtureManager::slotGroupsDroppedOnFolder(const QList<quint32>& groupIds,
+                                               const QString& destPath)
+{
+    // Defer: this runs from the tree's dropEvent; setPath()+updateView() would
+    // rebuild (delete) the tree items while Qt's drag machinery still uses the
+    // dragged item -> use-after-free. Apply once the drop has fully returned.
+    QTimer::singleShot(0, this, [this, groupIds, destPath]() {
+        bool changed = false;
+        foreach (quint32 id, groupIds)
+        {
+            FixtureGroup *g = m_doc->fixtureGroup(id);
+            if (g != NULL && g->path() != destPath)
+            {
+                g->setPath(destPath);
+                changed = true;
+            }
+        }
+        if (changed)
+        {
+            m_doc->setModified();
+            updateView();
+        }
+    });
 }

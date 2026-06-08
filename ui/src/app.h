@@ -355,6 +355,7 @@ private slots:
 
 private:
     QLabel* m_statusModeLabel;
+    QLabel* m_statusDirtyLabel;
     QLabel* m_statusAutosaveLabel;
     QLabel* m_statusProgrammerLabel;
     QLabel* m_statusSelectionLabel;

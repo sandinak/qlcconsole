@@ -35,6 +35,7 @@ class Doc;
 #define PROP_GROUP    Qt::UserRole + 2
 #define PROP_HEAD     Qt::UserRole + 3
 #define PROP_CHANNEL  Qt::UserRole + 4
+#define PROP_FOLDER   Qt::UserRole + 5  //!< group-folder path (string)
 
 class FixtureTreeWidget final : public QTreeWidget
 {
@@ -74,10 +75,24 @@ public:
      *  drop targets can be shared. */
     static const char* fixtureDragMimeType();
 
+    /** MIME type used when dragging fixture GROUPS within the tree (payload is
+     *  a stream of group IDs). Used to drop groups onto folders. */
+    static const char* groupDragMimeType();
+
+signals:
+    /** Emitted when one or more fixture groups are dropped onto a folder (or
+     *  the root). $destPath is the target folder path ("" = root). */
+    void groupsDroppedOnFolder(const QList<quint32>& groupIds, const QString& destPath);
+
 protected:
-    /** Provide fixture IDs for dragging onto drop targets (e.g. the fixture
-     *  group editor grid). */
+    /** Provide fixture/group IDs for dragging onto drop targets (the group
+     *  editor grid for fixtures, folders for groups). */
     QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const override;
+
+    /** Accept group drops onto folders/root; ignore everything else. */
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 protected slots:
     void slotItemExpanded();

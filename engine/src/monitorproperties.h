@@ -123,11 +123,28 @@ public:
     inline void setStageType(StageType type) { m_stageType = type; }
     inline StageType stageType() const { return m_stageType; }
 
+    /** Get/Set the layout lock state in 2D display mode.
+     *  When locked, fixtures cannot be moved but can still be selected */
+    inline void setLayoutLocked(bool locked) { m_layoutLocked = locked; }
+    inline bool layoutLocked() const { return m_layoutLocked; }
+
+    /** Get/Set the number of grid sub-divisions to render in 2D display mode */
+    inline void setGridSubdivisions(int subdivisions) { m_gridSubdivisions = subdivisions; }
+    inline int gridSubdivisions() const { return m_gridSubdivisions; }
+
+    /** Get/Set the snap-to-grid level in 2D display mode.
+     *  0 = off, 1 = full cell, 2 = 1/2 cell, 4 = 1/4 cell */
+    inline void setSnapDivisions(int divisions) { m_snapDivisions = divisions; }
+    inline int snapDivisions() const { return m_snapDivisions; }
+
 private:
     QVector3D m_gridSize;
     GridUnits m_gridUnits;
     PointOfView m_pointOfView;
     StageType m_stageType;
+    bool m_layoutLocked;
+    int m_gridSubdivisions;
+    int m_snapDivisions;
 
     /********************************************************************
      * Items flags
