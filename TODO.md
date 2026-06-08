@@ -4,64 +4,111 @@ Tracking future work for the fork's programming/looks workflow. Done items
 move to the bottom or get deleted. See also the session memory under
 `~/.claude/.../memory/palette_tree_integration.md`.
 
+---
+
 ## In progress / next
-(nothing active)
+*(pick from Backlog)*
 
-## Next
-(nothing active — pick from Ideas/Backlog)
+---
 
-## Ideas / bigger bets (shower-thoughts)
+## Backlog  *(roughly priority order)*
+
+### Low complexity — quick wins
+- [ ] **Decide Cmd-C/Cmd-V in Functions tab** — stock QLC has its own
+      duplicate there; now that Programming tab has it, remove one or
+      leave both?
+
+### Medium complexity — clear value
+- [ ] **Highlight mode (identify)** — flash a selected fixture/group to
+      full-bright white (bypassing programming) so you can identify it in
+      the rig. Standard on EOS / MA2. One ProgrammerController call +
+      a toolbar button; clears on deselect. *(relatd to park)*
+- [ ] **Park / unpark DMX** — hold a channel or fixture at a fixed DMX
+      value regardless of cue output. ProgrammerController maintains a
+      "parked" overlay; unpark removes it. Useful for stuck fixtures or
+      setting a fixture aside during programming.
+- [ ] **Blind vs live preview toggle** — Programming tab currently always
+      previews live in Design mode. Add a Blind button: edits don't hit
+      DMX until you "take" them. Normal EOS workflow.
+- [ ] **Scene capture from live DMX** — "Snapshot" action reads current
+      universe output and writes it into a new or existing scene as baked
+      values. Essential for capturing looks built on an external console.
+      MasterTimer or GenericFader has the live values.
+- [ ] **Sequence editing in the Programming canvas** — Sequences
+      (chasers with per-step scenes) currently show a "edit in Functions
+      tab" hint. Inline step editing in the canvas would complete the workflow.
+### Higher complexity — phased
+- [ ] **Sub-master / intensity master per fixture group** — a per-group
+      fader (0–100%) that scales all dimmer output for that group, without
+      editing the scene. Overlays on top of palette paramount. Useful for
+      live balancing without touching cues.
+- [ ] **Look transition times** — each look applied to a scene can carry a
+      fade-in / fade-out time, used when the scene is triggered. Scene
+      stores the fade alongside the palette ref; runtime applies via
+      FadeChannel. *Pairs with blind/live toggle.*
+
+---
+
+## Ideas / bigger bets  *(shower thoughts; decide before building)*
+
 - [ ] **Command line / keypad bar (EOS-style)** — a command prompt at the
       bottom of the window to perform operations by typing (select fixtures,
       apply palettes/intensity, record, etc.), like an ETC EOS command line.
       Would parse a small grammar and drive ProgrammerController / functions.
-- [ ] **Scriptable effect-plugin engine** (the big one). A JS effect like
-      RGBScript but *intelligent*: operates on a static list or a dynamic
-      FixtureGroup, and is handed a fixture-set descriptor
+      *High complexity; transformative for power users.*
+- [ ] **Scriptable effect-plugin engine** *(the big one)*. A JS effect like
+      RGBScript but intelligent: operates on a static list or a dynamic
+      FixtureGroup, handed a fixture-set descriptor
       `[{id, head, pos{x,y,z}, rot, type, hasPanTilt, panRange°, tiltRange°,
       hasRGB,…}]` built from MonitorProperties + Fixture.
       **DECIDED — data boundary = high-level INTENTS, not raw DMX**: scripts
       return per-fixture `{pan:°, tilt:°, dimmer:0-1, color/paletteRef,
-      gobo:idx}`; host converts via `Fixture::positionToValues` (degrees→DMX)
-      and `QLCPalette::valuesFromFixtures` (position-aware fanning), writing
-      FadeChannels (no bypass of HTP/LTP). Palettes are passed IN each tick
-      (named slots) so live palette edits re-colour the effect. Live inputs
-      (e.g. follow-spot target XY) declared as input channels (VC XY / OSC /
-      external socket). Engine choice TBD: QScriptEngine (match RGBScript) vs
-      QJSEngine (Qt5-current). Phasing: P0 pan/tilt script bound to a group →
-      P1 palette+color/dimmer/gobo intents → P2 live inputs (follow-spot) →
-      P3 sharing/bundling. Example plugins: moving-head effects, follow-spot
-      fed by external position code. See [[scriptable_effect_engine_design]].
-- [ ] **Shareable effect "looks"/groupings** — design a full set of effect
-      groupings (e.g. a rolling sweep with colour patterns) that can be
-      stored and **shared with other users** as a portable bundle. (Ties into
-      the scriptable effect-plugin engine above.)
-- [ ] **More movement shapes / draw-your-own** — beyond the built-in EFX
-      shapes, let users define custom movement paths (draw on an XY canvas).
-- [ ] **Beam palette** — generic Beam-group raw 0-255 slider (named caps like
-      Gobo/Shutter) targeting the fixture's primary Beam-group channel. ~8
-      touch points mirroring the Zoom palette (enum, valuesFromFixtures,
-      type↔string, icon, XML i/o, creation menu, look-editor page).
-- [ ] **2D Monitor**: multi-select move (RubberBandDrag + emit per selected),
-      grid substeps, snap-to-grid with levels (itemChange rounding).
+      gobo:idx}`; host converts via `Fixture::positionToValues` and
+      `QLCPalette::valuesFromFixtures`; palettes passed IN each tick (named
+      slots) so live palette edits re-colour the effect. Phasing: P0 pan/tilt
+      script bound to a group → P1 palette+color/dimmer/gobo intents →
+      P2 live inputs (follow-spot) → P3 sharing/bundling.
+      See [[scriptable_effect_engine_design]].
+- [ ] **Shareable effect "looks"/groupings** — portable bundles of effect
+      groupings (rolling sweep, colour patterns) that users can share.
+      *Depends on scriptable effect engine.*
+- [ ] **Timecode / cue sheet** — trigger cues from MIDI timecode or OSC
+      timestamps, for locked-to-music shows.
+- [ ] **More movement shapes / draw-your-own** — beyond built-in EFX shapes,
+      let users draw custom movement paths on an XY canvas.
+- [ ] **Dimmer curve per fixture / channel** — override the default linear
+      dimmer response with square, cubic, etc. curves, per fixture or group.
+      Stored in Scene or FixtureGroup; applied at writeDMX time.
+- [ ] **MIDI-mapped look recall** — bind a palette/look to a MIDI note or CC
+      so a controller can fire looks without Virtual Console. Would reuse the
+      InputProfileEditor + ProgrammerController.
 
-## Backlog — when placing a
-      fixture group onto a larger group's head layout, drag the whole
-      sub-group as a block and keep sub-groups visually distinct (Fixture
-      Manager head-layout grid editor; meatier change).
-- [ ] **Blind vs live preview toggle** in the Programming tab (currently
-      live preview runs the scene in Design mode only).
-- [ ] **Sequence editing** in the Programming canvas (currently Sequences
-      show the "edit in Functions tab" hint).
-- [ ] **Tree filtering** (search box) for very large palette/function trees,
-      if folders alone get unwieldy.
-- [ ] Remove the now-unused `ui/src/groupselection.{h,cpp}` (backed the
-      removed "Select groups…" dialog) — or repurpose.
-- [ ] Decide whether to remove the Functions tab's own Cmd-C/Cmd-V duplicate
-      (stock QLC) now that the Programming tab has duplicate.
-- [ ] Fixture Manager should also respect fixture-group folders once added.
+---
 
 ## Done
+- [x] **2D Monitor: grid/drag/snap/lock + zoom/pan/undo/center** —
+      multi-select + rubber-band, grid subdivisions, layout LOCK (magic-sheet
+      style selection surface, persisted), Shift+wheel zoom (cursor-anchored),
+      Shift-drag pan (sceneRect matched to viewport for scroll range), Cmd/Ctrl+Z
+      undo of moves, teal centre H/V axes. SNAP fix: snaps the whole move as a
+      group on drop (was snapping each fixture independently and scrambling the
+      layout). Files: monitor/monitorgraphicsview.*, monitorfixtureitem.*,
+      monitor.*, engine/monitorproperties.*.
+- [x] **Beam palette** — new `QLCPalette::Beam` type: Focus/Frost/Iris sliders
+      (0-255 raw DMX each). Engine matches BeamFocusNearFar/FarNear presets,
+      Beam-group channels named "frost", and ShutterIrisMinToMax/MaxToMin
+      presets. Look editor has a dedicated 3-slider page. XML save/load as
+      "focus,frost,iris". "New Beam" in the palette creation menu.
+- [x] **Position presets on the PanTilt look editor page** — Home / Front /
+      Down / Left / Right quick-dial buttons fill the XY pad to named degree
+      positions (no new palette type; PanTilt already stores degrees and
+      uses positionToValues()).
+- [x] **Tree search/filter in Programming tab** — QLineEdit with clear button
+      above both the scene/function tree and the palette tree; filterByText()
+      on FunctionsTreeWidget shows/hides items (case-insensitive, auto-expands
+      matching folders).
+- [x] **Removed dead `ui/src/groupselection.{h,cpp}`** — backed the removed
+      "Select groups…" dialog; nothing referenced it.
 - [x] **FIX (crash, from audit): dangling group editor on group delete** —
       deleting a group whose FixtureGroupEditor is open left m_grp dangling;
       any later interaction (Ctrl+Z/drag/menu) was a use-after-free. FixtureMgr
@@ -123,27 +170,16 @@ move to the bottom or get deleted. See also the session memory under
 - [x] **2D Monitor: dense fixtures tile as RECTANGLES (RGB tape/pixels)** —
       fixtures with >16 heads draw heads as QGraphicsRectItem filling the cell
       (zero-gap pixel array) instead of round QGraphicsEllipseItem; touching
-      ellipses still read as circles-with-gaps. FixtureHead m_item/m_back are
-      now QAbstractGraphicsShapeItem with setShapeRect/shapeRect helpers.
-      (Follow-up option: force 1-row layout for elongated strips.)
+      ellipses still read as circles-with-gaps.
 - [x] **2D Monitor: thin fixtures now visible** — flat/step fixtures rendered a
-      few px tall (setSize even skips head layout <5px), so no colour heads
-      existed. Clamp each fixture to a 14px minimum in updateFixture; heads lay
-      out and light up. True scale preserved above the minimum.
+      few px tall; clamp each fixture to a 14px minimum in updateFixture; heads
+      lay out and light up. True scale preserved above the minimum.
 - [x] **2D Monitor colour rendering at zoom** — head/body outlines made
       cosmetic (width 0) so they stay 1px at any zoom instead of growing and
       washing out the colour fill. Colour-wheel heads now derive their colour
       from the capability NAME (e.g. "Blue") when the definition carries no
       explicit resource colour. Shift+wheel zoom direction fixed for macOS
       (delta arrives on the X axis when Shift is held).
-- [x] **2D Monitor: grid/drag/snap/lock + zoom/pan/undo/center** —
-      multi-select + rubber-band, grid subdivisions, layout LOCK (magic-sheet
-      style selection surface, persisted), Shift+wheel zoom (cursor-anchored),
-      Shift-drag pan (sceneRect matched to viewport for scroll range), Cmd/Ctrl+Z
-      undo of moves, teal centre H/V axes. SNAP fix: snaps the whole move as a
-      group on drop (was snapping each fixture independently and scrambling the
-      layout). Files: monitor/monitorgraphicsview.*, monitorfixtureitem.*,
-      monitor.*, engine/monitorproperties.*.
 - [x] **Chaser member numbering: skip self-numbered names** — the Programming
       nav's step-number prefix is no longer added to members whose name already
       starts with a digit (e.g. "00-01.02-…"), so user SS-PP.II names don't get
@@ -210,13 +246,13 @@ move to the bottom or get deleted. See also the session memory under
       always built hidden + revealed via showChannels() (showEvent or explicit
       after a rebuild), so fixture→fixture switches render identically.
 - [x] **Fix: prog console selected ALL channels** — checkable ConsoleChannels
-      default to *checked*; the Programming console now unchecks all after
+      default to checked; the Programming console now unchecks all after
       setFixture so only the scene's actual baked values + applied-look channels
       are selected. Keeps static scenes narrow for layering (color/intensity/
       position/gobo as separate scenes on one fixture).
 - [x] **Fix: status-bar unsaved indicator alignment** — matched the other
-      permanent labels' AlignRight (they top-align); was AlignVCenter so it sat
-      lower than "Autosave".
+      permanent labels' AlignRight; was AlignVCenter so it sat lower than
+      "Autosave".
 - [x] **Fix: blank DMX console on fixture→fixture switch** — FixtureConsole
       built channels hidden and only revealed them in showEvent(); switching
       directly between fixtures (console already visible) left them hidden.

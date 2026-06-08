@@ -20,8 +20,22 @@
 
 #include <QApplication>
 #include <QActionGroup>
+#include <QColorDialog>
+#include <QCursor>
+#include <QDialog>
+#include <QMenu>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QFontDialog>
+#include <QFormLayout>
+#include <QInputDialog>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QScrollArea>
+#include <QToolButton>
+#include <QtMath>
 #include <QSpacerItem>
 #include <QByteArray>
 #include <QComboBox>
@@ -39,6 +53,8 @@
 #include "monitorfixturepropertieseditor.h"
 #include "monitorbackgroundselection.h"
 #include "monitorgraphicsview.h"
+#include "trussitem.h"
+#include "truss.h"
 #include "fixtureselection.h"
 #include "monitorfixture.h"
 #include "monitorlayout.h"
@@ -208,6 +224,14 @@ void Monitor::initGraphicsView()
             this, SLOT(slotFixtureMoved(quint32,QPointF)));
     connect(m_graphicsView, SIGNAL(viewClicked(QMouseEvent*)),
             this, SLOT(slotViewClicked()));
+    connect(m_graphicsView, &MonitorGraphicsView::fixtureDoubleClicked,
+            this, &Monitor::slotFixtureDoubleClicked);
+    connect(m_graphicsView, &MonitorGraphicsView::trussDoubleClicked,
+            this, &Monitor::slotTrussDoubleClicked);
+    connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
+            this, &Monitor::slotCanvasContextMenu);
+    connect(m_graphicsView, &MonitorGraphicsView::addFixtureToTrussRequested,
+            this, &Monitor::slotAddFixtureToTruss);
 
     // add container for chaser editor
     QWidget* econtainer = new QWidget(this);
@@ -260,6 +284,7 @@ void Monitor::fillGraphicsView()
     m_graphicsView->setSnapDivisions(m_props->snapDivisions());
     m_graphicsView->setGridSize(QSize(m_props->gridSize().x(), m_props->gridSize().z()));
     m_graphicsView->setBackgroundImage(m_props->commonBackgroundImage());
+    m_graphicsView->setBackgroundColor(m_props->commonBackgroundColor());
 
     foreach (quint32 fid, m_props->fixtureItemsID())
     {
@@ -578,15 +603,34 @@ void Monitor::initGraphicsToolbar()
 
     m_graphicsToolBar->addSeparator();
 
-    m_graphicsToolBar->addAction(QIcon(":/edit_add.png"), tr("Add fixture"),
-                       this, SLOT(slotAddFixture()));
-    m_graphicsToolBar->addAction(QIcon(":/edit_remove.png"), tr("Remove fixture"),
-                       this, SLOT(slotRemoveFixture()));
+    // Consolidated Add button with popup menu
+    QToolButton *addBtn = new QToolButton(this);
+    addBtn->setIcon(QIcon(":/edit_add.png"));
+    addBtn->setToolTip(tr("Add…"));
+    addBtn->setPopupMode(QToolButton::InstantPopup);
+    {
+        QMenu *addMenu = new QMenu(addBtn);
+        addMenu->addAction(QIcon(":/fixture.png"), tr("Add Fixture"),
+                           this, SLOT(slotAddFixture()));
+        addMenu->addAction(QIcon(":/group.png"), tr("Add Truss"),
+                           this, SLOT(slotAddTruss()));
+        addMenu->addSeparator();
+        QAction *targetAct = addMenu->addAction(tr("Add Target…"));
+        targetAct->setEnabled(false);
+        addBtn->setMenu(addMenu);
+    }
+    m_graphicsToolBar->addWidget(addBtn);
+
+    // Single Remove button removes whatever is selected
+    m_graphicsToolBar->addAction(QIcon(":/edit_remove.png"), tr("Remove selected"),
+                                 this, SLOT(slotRemoveSelected()));
 
     m_graphicsToolBar->addSeparator();
 
-    m_graphicsToolBar->addAction(QIcon(":/image.png"), tr("Set a background picture"),
+    m_graphicsToolBar->addAction(QIcon(":/image.png"), tr("Set background image"),
                        this, SLOT(slotSetBackground()));
+    m_graphicsToolBar->addAction(QIcon(":/color.png"), tr("Set background color"),
+                       this, SLOT(slotSetBackgroundColor()));
 
     m_labelsAction = m_graphicsToolBar->addAction(QIcon(":/label.png"), tr("Show/hide labels"));
     m_labelsAction->setCheckable(true);
@@ -815,13 +859,19 @@ void Monitor::slotAddFixture()
     fs.setDisabledFixtures(disabled);
     if (fs.exec() == QDialog::Accepted)
     {
+        // Convert pending scene-px position to mm (use 0,0 when added from toolbar)
+        QPointF mm = m_pendingAddScenePos.isNull()
+                     ? QPointF(0, 0)
+                     : m_graphicsView->pixelsToRealPosition(
+                           m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+        m_pendingAddScenePos = QPointF();  // clear after use
+
         QListIterator <quint32> it(fs.selection());
-        // TODO position fixtures one after the other
         while (it.hasNext() == true)
         {
             quint32 fid = it.next();
-            m_graphicsView->addFixture(fid);
-            m_props->setFixturePosition(fid, 0, 0, QVector3D(0, 0, 0));
+            m_graphicsView->addFixture(fid, mm);
+            m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
             m_props->setFixtureFlags(fid, 0, 0, 0);
             m_doc->setModified();
         }
@@ -856,6 +906,326 @@ void Monitor::slotSetBackground()
     }
 }
 
+void Monitor::slotSetBackgroundColor()
+{
+    Q_ASSERT(m_graphicsView != NULL);
+
+    QColor initial = m_props->commonBackgroundColor();
+    if (!initial.isValid())
+        initial = Qt::darkGray;
+
+    QColor c = QColorDialog::getColor(initial, this, tr("Set background color"),
+                                      QColorDialog::ShowAlphaChannel);
+    if (!c.isValid())
+        return;
+
+    m_props->setCommonBackgroundColor(c);
+    m_graphicsView->setBackgroundColor(c);
+    m_doc->setModified();
+}
+
+void Monitor::slotRemoveSelected()
+{
+    Q_ASSERT(m_graphicsView != NULL);
+
+    // Check if a truss item is selected in the scene
+    foreach (QGraphicsItem *gi, m_graphicsView->scene()->selectedItems())
+    {
+        TrussItem *ti = dynamic_cast<TrussItem *>(gi);
+        if (ti)
+        {
+            if (QMessageBox::question(this, tr("Remove Truss"),
+                    tr("Remove truss '%1'?").arg(ti->truss()->name()),
+                    QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes)
+            {
+                quint32 tid = ti->trussId();
+                // Item will be destroyed by updateTrusses; remove from props first.
+                m_props->removeTruss(tid);
+                m_graphicsView->updateTrusses();
+                m_doc->setModified();
+            }
+            return;
+        }
+    }
+
+    // Fall back to fixture remove
+    hideFixtureItemEditor();
+    if (m_graphicsView->removeFixture())
+        m_doc->setModified();
+}
+
+void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
+{
+    showFixtureItemEditor();
+}
+
+void Monitor::slotTrussDoubleClicked(quint32 tid)
+{
+    slotEditTruss(tid);
+}
+
+void Monitor::slotCanvasContextMenu(QPointF scenePos)
+{
+    m_pendingAddScenePos = scenePos;
+    QMenu menu(this);
+    menu.addAction(QIcon(":/fixture.png"), tr("Add Fixture here"),
+                   this, SLOT(slotAddFixture()));
+    menu.addAction(QIcon(":/group.png"), tr("Add Truss here"),
+                   this, SLOT(slotAddTruss()));
+    menu.addSeparator();
+    menu.addAction(tr("Add Target…"))->setEnabled(false);
+    menu.exec(QCursor::pos());
+}
+
+void Monitor::slotAddFixtureToTruss(quint32 trussId, float offsetMetres)
+{
+    Q_ASSERT(m_graphicsView != NULL);
+
+    Truss *t = m_props->truss(trussId);
+    if (!t) return;
+
+    QList<quint32> disabled = m_graphicsView->fixturesID();
+    FixtureSelection fs(this, m_doc);
+    fs.setMultiSelection(true);
+    fs.setDisabledFixtures(disabled);
+    if (fs.exec() != QDialog::Accepted)
+        return;
+
+    // Compute world position at the requested offset (mm)
+    QVector3D worldM = t->positionAt(offsetMetres);
+    QPointF mm(worldM.x() * 1000.0, worldM.y() * 1000.0);
+
+    foreach (quint32 fid, fs.selection())
+    {
+        m_graphicsView->addFixture(fid, mm);
+        m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
+        m_props->setFixtureFlags(fid, 0, 0, 0);
+
+        // Bind to truss
+        FixtureRigProps rp;
+        rp.trussId     = trussId;
+        rp.trussOffset = offsetMetres;
+        m_props->setFixtureRigProps(fid, rp);
+
+        m_doc->setModified();
+    }
+    if (m_labelsAction->isChecked())
+        slotShowLabels(true);
+}
+
+void Monitor::slotEditTruss(quint32 tid)
+{
+    Truss *t = m_props->truss(tid);
+    if (!t) return;
+
+    QDialog editDlg(this);
+    editDlg.setWindowTitle(tr("Edit Truss — %1").arg(t->name()));
+    QFormLayout *form = new QFormLayout(&editDlg);
+
+    QLineEdit *nameEdit = new QLineEdit(t->name(), &editDlg);
+    form->addRow(tr("Name:"), nameEdit);
+
+    QComboBox *typeCb = new QComboBox(&editDlg);
+    typeCb->addItems({ tr("Horizontal"), tr("Vertical"), tr("Ground") });
+    typeCb->setCurrentIndex(static_cast<int>(t->type()));
+    form->addRow(tr("Type:"), typeCb);
+
+    QDoubleSpinBox *originX = new QDoubleSpinBox(&editDlg);
+    originX->setRange(-50, 50); originX->setSuffix(" m"); originX->setDecimals(2);
+    originX->setValue(t->origin().x());
+    form->addRow(tr("Origin X:"), originX);
+
+    QDoubleSpinBox *originY = new QDoubleSpinBox(&editDlg);
+    originY->setRange(-50, 50); originY->setSuffix(" m"); originY->setDecimals(2);
+    originY->setValue(t->origin().y());
+    form->addRow(tr("Origin Y:"), originY);
+
+    QDoubleSpinBox *originZ = new QDoubleSpinBox(&editDlg);
+    originZ->setRange(0, 30); originZ->setSuffix(" m"); originZ->setDecimals(2);
+    originZ->setValue(t->origin().z());
+    form->addRow(tr("Height Z:"), originZ);
+
+    float existingAngle = float(qRadiansToDegrees(
+        qAtan2(double(t->direction().y()), double(t->direction().x()))));
+    if (existingAngle < 0) existingAngle += 360.0f;
+    QDoubleSpinBox *dirAngle = new QDoubleSpinBox(&editDlg);
+    dirAngle->setRange(0, 359); dirAngle->setSuffix(QString::fromUtf8("°"));
+    dirAngle->setDecimals(1); dirAngle->setValue(existingAngle);
+    form->addRow(tr("Direction (°):"), dirAngle);
+
+    QDoubleSpinBox *length = new QDoubleSpinBox(&editDlg);
+    length->setRange(0.1, 100); length->setSuffix(" m"); length->setDecimals(2);
+    length->setValue(t->length());
+    form->addRow(tr("Length:"), length);
+
+    QDoubleSpinBox *width = new QDoubleSpinBox(&editDlg);
+    width->setRange(0.05, 5); width->setSuffix(" m"); width->setDecimals(2);
+    width->setValue(t->width());
+    form->addRow(tr("Width:"), width);
+
+    QDialogButtonBox *btns = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &editDlg);
+    form->addRow(btns);
+    connect(btns, &QDialogButtonBox::accepted, &editDlg, &QDialog::accept);
+    connect(btns, &QDialogButtonBox::rejected, &editDlg, &QDialog::reject);
+
+    if (editDlg.exec() != QDialog::Accepted)
+        return;
+
+    t->setName(nameEdit->text());
+    t->setType(static_cast<Truss::TrussType>(typeCb->currentIndex()));
+    t->setOrigin(QVector3D(originX->value(), originY->value(), originZ->value()));
+    float radians = float(qDegreesToRadians(dirAngle->value()));
+    t->setDirection(QPointF(qCos(radians), qSin(radians)));
+    t->setLength(length->value());
+    t->setWidth(width->value());
+
+    m_graphicsView->updateTrusses();
+    m_doc->setModified();
+}
+
+void Monitor::slotAddTruss()
+{
+    Q_ASSERT(m_graphicsView != NULL);
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Add Truss"));
+    QFormLayout *form = new QFormLayout(&dlg);
+
+    QLineEdit *nameEdit = new QLineEdit(&dlg);
+    nameEdit->setPlaceholderText(tr("e.g. Front Wash"));
+    form->addRow(tr("Name:"), nameEdit);
+
+    QComboBox *typeCb = new QComboBox(&dlg);
+    typeCb->addItems({ tr("Horizontal"), tr("Vertical"), tr("Ground") });
+    form->addRow(tr("Type:"), typeCb);
+
+    // Pre-fill origin from the right-click position if invoked via context menu.
+    QPointF pendMm = m_pendingAddScenePos.isNull()
+                     ? QPointF(0, 0)
+                     : m_graphicsView->pixelsToRealPosition(
+                           m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    m_pendingAddScenePos = QPointF();
+
+    QDoubleSpinBox *originX = new QDoubleSpinBox(&dlg);
+    originX->setRange(-50, 50); originX->setSuffix(" m"); originX->setDecimals(2);
+    originX->setValue(pendMm.x() / 1000.0);
+    form->addRow(tr("Origin X (stage right):"), originX);
+
+    QDoubleSpinBox *originY = new QDoubleSpinBox(&dlg);
+    originY->setRange(-50, 50); originY->setSuffix(" m"); originY->setDecimals(2);
+    originY->setValue(pendMm.y() / 1000.0);
+    form->addRow(tr("Origin Y (upstage):"), originY);
+
+    QDoubleSpinBox *originZ = new QDoubleSpinBox(&dlg);
+    originZ->setRange(0, 30); originZ->setSuffix(" m"); originZ->setDecimals(2);
+    originZ->setValue(6.0);
+    form->addRow(tr("Height Z:"), originZ);
+
+    QDoubleSpinBox *dirAngle = new QDoubleSpinBox(&dlg);
+    dirAngle->setRange(0, 359); dirAngle->setSuffix(QString::fromUtf8("°")); dirAngle->setDecimals(1);
+    form->addRow(tr("Direction (° from stage-right):"), dirAngle);
+
+    QDoubleSpinBox *length = new QDoubleSpinBox(&dlg);
+    length->setRange(0.1, 100); length->setSuffix(" m"); length->setDecimals(2);
+    length->setValue(6.0);
+    form->addRow(tr("Length:"), length);
+
+    QDoubleSpinBox *width = new QDoubleSpinBox(&dlg);
+    width->setRange(0.05, 5); width->setSuffix(" m"); width->setDecimals(2);
+    width->setValue(0.29);
+    form->addRow(tr("Width:"), width);
+
+    QDialogButtonBox *btns = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    form->addRow(btns);
+    connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    Truss *t = m_props->addTruss();
+    t->setName(nameEdit->text().isEmpty()
+               ? tr("Truss %1").arg(t->id() + 1) : nameEdit->text());
+    t->setType(static_cast<Truss::TrussType>(typeCb->currentIndex()));
+    t->setOrigin(QVector3D(originX->value(), originY->value(), originZ->value()));
+
+    float radians = qDegreesToRadians(dirAngle->value());
+    t->setDirection(QPointF(qCos(radians), qSin(radians)));
+    t->setLength(length->value());
+    t->setWidth(width->value());
+
+    m_graphicsView->updateTrusses();
+    m_doc->setModified();
+}
+
+void Monitor::slotManageTrusses()
+{
+    Q_ASSERT(m_graphicsView != NULL);
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Manage Trusses"));
+    dlg.resize(400, 320);
+
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    QListWidget *list = new QListWidget(&dlg);
+    vl->addWidget(list);
+
+    auto repopulate = [&]() {
+        list->clear();
+        for (Truss *t : m_props->trusses())
+        {
+            QListWidgetItem *item = new QListWidgetItem(
+                QString("[%1] %2  (%3)  Z=%4 m  L=%5 m")
+                    .arg(t->id()).arg(t->name())
+                    .arg(Truss::typeToString(t->type()))
+                    .arg(double(t->origin().z()), 0, 'f', 2)
+                    .arg(double(t->length()), 0, 'f', 2));
+            item->setData(Qt::UserRole, t->id());
+            list->addItem(item);
+        }
+    };
+    repopulate();
+
+    QHBoxLayout *btnRow = new QHBoxLayout();
+    vl->addLayout(btnRow);
+
+    QPushButton *editBtn   = new QPushButton(tr("Edit…"), &dlg);
+    QPushButton *removeBtn = new QPushButton(tr("Remove"), &dlg);
+    QPushButton *closeBtn  = new QPushButton(tr("Close"), &dlg);
+    btnRow->addWidget(editBtn);
+    btnRow->addWidget(removeBtn);
+    btnRow->addStretch();
+    btnRow->addWidget(closeBtn);
+
+    connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+    connect(removeBtn, &QPushButton::clicked, &dlg, [&]() {
+        QListWidgetItem *sel = list->currentItem();
+        if (!sel) return;
+        quint32 tid = sel->data(Qt::UserRole).toUInt();
+        if (QMessageBox::question(&dlg, tr("Remove Truss"),
+                tr("Remove truss '%1'?").arg(m_props->truss(tid)->name()),
+                QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+            return;
+        m_props->removeTruss(tid);
+        repopulate();
+        m_graphicsView->updateTrusses();
+        m_doc->setModified();
+    });
+
+    connect(editBtn, &QPushButton::clicked, &dlg, [&]() {
+        QListWidgetItem *sel = list->currentItem();
+        if (!sel) return;
+        quint32 tid = sel->data(Qt::UserRole).toUInt();
+        slotEditTruss(tid);
+        repopulate();
+    });
+
+    dlg.exec();
+}
+
 void Monitor::slotShowLabels(bool visible)
 {
     Q_ASSERT(m_graphicsView != NULL);
@@ -867,8 +1237,6 @@ void Monitor::slotShowLabels(bool visible)
 void Monitor::slotFixtureMoved(quint32 fid, QPointF pos)
 {
     Q_ASSERT(m_graphicsView != NULL);
-
-    showFixtureItemEditor();
     m_props->setFixturePosition(fid, 0, 0, QVector3D(pos.x(), pos.y(), 0));
     m_doc->setModified();
 }

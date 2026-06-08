@@ -80,6 +80,11 @@ public:
     /** Restrict what updateTree() shows. Call before updateTree(). */
     void setDisplayFilter(DisplayFilter filter);
 
+    /** Show only items whose name contains $text (case-insensitive).
+     *  Pass an empty string to show everything. Parent folders are shown
+     *  if at least one child matches. */
+    void filterByText(const QString &text);
+
     /** Update all functions to function tree */
     void updateTree();
 

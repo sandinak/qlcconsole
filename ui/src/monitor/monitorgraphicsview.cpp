@@ -17,14 +17,22 @@
   limitations under the License.
 */
 
+#include <QContextMenuEvent>
 #include <QWheelEvent>
 #include <QMouseEvent>
 #include <QNativeGestureEvent>
 #include <QShortcut>
 
+#include <QGraphicsRectItem>
+#include <QGraphicsEllipseItem>
+#include <QGraphicsTextItem>
+#include <QGraphicsItemGroup>
+#include <QtMath>
 #include "monitorproperties.h"
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
+#include "trussitem.h"
+#include "truss.h"
 #include "qlcfixturemode.h"
 #include "doc.h"
 
@@ -156,6 +164,8 @@ void MonitorGraphicsView::setLayoutLocked(bool locked)
     m_layoutLocked = locked;
     foreach (MonitorFixtureItem *item, m_fixtures)
         item->setMovable(!locked);
+    foreach (TrussItem *ti, m_trussItems)
+        ti->setMovable(!locked);  // TrussItem::setMovable respects per-truss lock internally
 }
 
 void MonitorGraphicsView::setSnapDivisions(int divisions)
@@ -309,6 +319,16 @@ void MonitorGraphicsView::setBackgroundImage(QString filename)
     updateGrid();
 }
 
+void MonitorGraphicsView::setBackgroundColor(const QColor &color)
+{
+    // QGraphicsView::setBackgroundBrush overrides the near-black default set
+    // in initGraphicsView. Use an invalid color to restore that default.
+    if (color.isValid())
+        setBackgroundBrush(QBrush(color));
+    else
+        setBackgroundBrush(QBrush(QColor(11, 11, 11, 255)));
+}
+
 MonitorFixtureItem *MonitorGraphicsView::getSelectedItem()
 {
     QHashIterator <quint32, MonitorFixtureItem*> it(m_fixtures);
@@ -334,6 +354,9 @@ void MonitorGraphicsView::addFixture(quint32 id, QPointF pos)
     item->setZValue(2);
     item->setRealPosition(pos);
     item->setMovable(!m_layoutLocked);
+    // Reflect any existing truss binding (e.g. on workspace load)
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(id);
+    item->setBoundToTruss(rp.trussId != Truss::invalidId());
     m_fixtures[id] = item;
     m_scene->addItem(item);
     updateFixture(id);
@@ -371,6 +394,74 @@ void MonitorGraphicsView::clearFixtures()
     foreach (MonitorFixtureItem *item, m_fixtures)
         delete item;
     m_fixtures.clear();
+}
+
+void MonitorGraphicsView::updateTrusses()
+{
+    // Remove previous truss graphics items (label is a child of each TrussItem
+    // so it is deleted automatically).
+    foreach (TrussItem *ti, m_trussItems)
+    {
+        m_scene->removeItem(ti);
+        delete ti;
+    }
+    m_trussItems.clear();
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr || m_cellPixels == 0)
+        return;
+
+    foreach (Truss *t, props->trusses())
+    {
+        QPointF p0 = realPositionToPixels(t->origin().x() * 1000.0,
+                                          t->origin().y() * 1000.0);
+
+        float pxWid = float(qMax(8.0, (t->width()  * 1000.0 * m_cellPixels) / m_unitValue));
+        float pxLen;
+        float angleDeg = 0.0f;
+
+        if (t->type() == Truss::Vertical)
+        {
+            pxLen = pxWid;   // circle; length unused
+        }
+        else
+        {
+            pxLen    = float((t->length() * 1000.0 * m_cellPixels) / m_unitValue);
+            angleDeg = float(qRadiansToDegrees(qAtan2(double(t->direction().y()),
+                                                      double(t->direction().x()))));
+        }
+
+        TrussItem *ti = new TrussItem(t, m_doc, pxLen, pxWid);
+        ti->setPos(p0);
+        ti->setRotation(angleDeg);
+        ti->setMovable(!m_layoutLocked && !t->locked());
+        m_scene->addItem(ti);
+        m_trussItems.insert(t->id(), ti);
+
+        connect(ti, &TrussItem::itemDropped,
+                this, &MonitorGraphicsView::slotTrussMoved);
+        connect(ti, &TrussItem::addFixtureRequested,
+                this, &MonitorGraphicsView::addFixtureToTrussRequested);
+    }
+}
+
+void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
+{
+    // Convert current scene position back to world metres and persist.
+    QPointF sp  = item->pos();               // scene px (origin of truss)
+    QPointF mm  = pixelsToRealPosition(sp.x(), sp.y());
+    Truss  *t   = item->truss();
+    t->setOrigin(QVector3D(float(mm.x() / 1000.0), float(mm.y() / 1000.0),
+                           t->origin().z()));
+    m_doc->setModified();
+}
+
+QPointF MonitorGraphicsView::pixelsToRealPosition(qreal px, qreal py)
+{
+    if (m_cellPixels == 0)
+        return QPointF(0, 0);
+    return QPointF((px - m_xOffset) * m_unitValue / m_cellPixels,
+                   (py - m_yOffset) * m_unitValue / m_cellPixels);
 }
 
 void MonitorGraphicsView::updateGrid()
@@ -478,6 +569,8 @@ void MonitorGraphicsView::updateGrid()
     // and Shift-drag panning work.
     if (width() > 0 && height() > 0)
         m_scene->setSceneRect(0, 0, this->width(), this->height());
+
+    updateTrusses();
 }
 
 void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
@@ -495,6 +588,21 @@ void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
 
 void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 {
+    // Clear any truss drop-target highlights.
+    for (TrussItem *ti : m_trussItems)
+        ti->setHighlighted(false);
+
+    // The release that follows a mouseDoubleClickEvent must not emit viewClicked
+    // (that would immediately close the editor the double-click just opened).
+    if (m_suppressNextViewClick)
+    {
+        m_suppressNextViewClick = false;
+        QGraphicsView::mouseReleaseEvent(e);
+        if (dragMode() == QGraphicsView::ScrollHandDrag)
+            setDragMode(QGraphicsView::RubberBandDrag);
+        return;
+    }
+
     emit viewClicked(e);
 
     QGraphicsView::mouseReleaseEvent(e);
@@ -502,6 +610,110 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
     // Restore rubber-band selection after a shift-drag pan.
     if (dragMode() == QGraphicsView::ScrollHandDrag)
         setDragMode(QGraphicsView::RubberBandDrag);
+}
+
+void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
+{
+    // While a fixture item is being dragged, highlight any truss the cursor hovers.
+    if (event->buttons() & Qt::LeftButton)
+    {
+        bool draggingFixture = false;
+        foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        {
+            if (dynamic_cast<MonitorFixtureItem *>(gi))
+            {
+                draggingFixture = true;
+                break;
+            }
+        }
+
+        if (draggingFixture)
+        {
+            QPointF scenePos = mapToScene(event->pos());
+            MonitorProperties *props = m_doc->monitorProperties();
+
+            // Highlight trusses under cursor
+            for (TrussItem *ti : m_trussItems)
+            {
+                QPointF local = ti->mapFromScene(scenePos);
+                ti->setHighlighted(ti->contains(local));
+            }
+
+            // Show red escape-from-truss border when pulling a bound fixture far off
+            foreach (QGraphicsItem *gi, m_scene->selectedItems())
+            {
+                MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi);
+                if (!mfi || !mfi->isBoundToTruss()) continue;
+                quint32 fid = m_fixtures.key(mfi, Fixture::invalidId());
+                if (fid == Fixture::invalidId()) continue;
+                FixtureRigProps rp = props->fixtureRigProps(fid);
+                if (rp.trussId == Truss::invalidId()) continue;
+                TrussItem *ti = m_trussItems.value(rp.trussId, nullptr);
+                if (!ti) continue;
+
+                // Local-space y = perpendicular distance from the truss centreline
+                QPointF local = ti->mapFromScene(mfi->sceneBoundingRect().center());
+                float perpPx = qAbs(float(local.y()));
+                mfi->setEscapeMode(perpPx > ti->pxWid() * 2.0f);
+            }
+        }
+        else
+        {
+            // Not dragging a fixture — ensure no stale escape-mode borders remain
+            foreach (QGraphicsItem *gi, m_scene->selectedItems())
+            {
+                if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+                    mfi->setEscapeMode(false);
+            }
+        }
+    }
+
+    QGraphicsView::mouseMoveEvent(event);
+}
+
+void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    // Suppress the viewClicked that would fire on the release following this
+    // double-click (which would immediately close whatever the double-click opened).
+    m_suppressNextViewClick = true;
+
+    QPointF sp = mapToScene(event->pos());
+    QGraphicsItem *it = m_scene->itemAt(sp, QTransform());
+
+    // Walk up to the top-level item (e.g. from a label child to TrussItem).
+    while (it && it->parentItem())
+        it = it->parentItem();
+
+    if (auto *fi = dynamic_cast<MonitorFixtureItem *>(it))
+    {
+        emit fixtureDoubleClicked(fi->fixtureID());
+        return;
+    }
+    if (auto *ti = dynamic_cast<TrussItem *>(it))
+    {
+        emit trussDoubleClicked(ti->trussId());
+        return;
+    }
+
+    QGraphicsView::mouseDoubleClickEvent(event);
+}
+
+void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
+{
+    QPointF sp = mapToScene(event->pos());
+    QGraphicsItem *it = m_scene->itemAt(sp, QTransform());
+    while (it && it->parentItem())
+        it = it->parentItem();
+
+    bool isFixture = dynamic_cast<MonitorFixtureItem *>(it) != nullptr;
+    bool isTruss   = dynamic_cast<TrussItem *>(it) != nullptr;
+
+    if (!isFixture && !isTruss)
+    {
+        emit contextMenuRequested(sp);
+        return;
+    }
+    QGraphicsView::contextMenuEvent(event);
 }
 
 void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
@@ -538,15 +750,70 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
     {
         quint32 fid = m_fixtures.key(mfi);
 
-        // Convert the pixel position of the fixture into
-        // position in millimeters
+        // Convert the pixel position of the fixture into position in millimeters.
         QPointF mmPos;
         mmPos.setX(((mfi->x() - m_xOffset) * m_unitValue) / m_cellPixels);
         mmPos.setY(((mfi->y() - m_yOffset) * m_unitValue) / m_cellPixels);
 
-        // update the fixture item's real position
-        mfi->setRealPosition(mmPos);
+        // Truss binding and snapping.
+        //   • Already-bound: constrain to the existing truss line.
+        //   • Unbound (only the directly-dragged item): auto-bind if dropped on a truss.
+        MonitorProperties *props = m_doc->monitorProperties();
+        FixtureRigProps rp = props->fixtureRigProps(fid);
 
+        auto snapToTruss = [&](Truss *t)
+        {
+            double ox = t->origin().x() * 1000.0;
+            double oy = t->origin().y() * 1000.0;
+            double dx = t->direction().x();
+            double dy = t->direction().y();
+            double dot = (mmPos.x() - ox) * dx + (mmPos.y() - oy) * dy;
+            dot = qBound(0.0, dot, t->length() * 1000.0);
+            mmPos = QPointF(ox + dx * dot, oy + dy * dot);
+            rp.trussOffset = float(dot / 1000.0);
+            props->setFixtureRigProps(fid, rp);
+            mfi->setPos(realPositionToPixels(mmPos.x(), mmPos.y()));
+        };
+
+        if (rp.trussId != Truss::invalidId() && m_cellPixels > 0)
+        {
+            if (mfi->escapeMode())
+            {
+                // Pulled too far off the truss — unbind
+                rp.trussId     = Truss::invalidId();
+                rp.trussOffset = 0.0f;
+                props->setFixtureRigProps(fid, rp);
+                mfi->setEscapeMode(false);
+                mfi->setBoundToTruss(false);
+            }
+            else
+            {
+                // Already bound — constrain to the current truss.
+                Truss *t = props->truss(rp.trussId);
+                if (t != nullptr)
+                    snapToTruss(t);
+            }
+        }
+        else
+        {
+            // Not yet bound: check if this fixture landed on a truss.
+            // Applies to all selected fixtures, not just the primary dragged one,
+            // so the whole selection can bind in one drag.
+            QPointF sceneCenter = mfi->sceneBoundingRect().center();
+            for (TrussItem *ti : m_trussItems)
+            {
+                QPointF local = ti->mapFromScene(sceneCenter);
+                if (ti->contains(local))
+                {
+                    rp.trussId = ti->trussId();
+                    snapToTruss(ti->truss());
+                    mfi->setBoundToTruss(true);
+                    break;
+                }
+            }
+        }
+
+        mfi->setRealPosition(mmPos);
         emit fixtureMoved(fid, mmPos);
     }
 

@@ -23,6 +23,7 @@
 #include <QFont>
 
 #include "monitorproperties.h"
+#include "truss.h"
 #include "qlcconfig.h"
 #include "qlcfile.h"
 #include "doc.h"
@@ -44,6 +45,7 @@
 #define KXMLQLCMonitorShowLabels    QStringLiteral("ShowLabels")
 
 #define KXMLQLCMonitorCommonBackground  QStringLiteral("Background")
+#define KXMLQLCMonitorBgColor           QStringLiteral("BackgroundColor")
 #define KXMLQLCMonitorCustomBgItem      QStringLiteral("BackgroundItem")
 
 #define KXMLQLCMonitorFixtureItem   QStringLiteral("FxItem")
@@ -106,6 +108,9 @@ void MonitorProperties::reset()
     m_fixtureItems.clear();
     m_genericItems.clear();
     m_commonBackgroundImage = QString();
+    qDeleteAll(m_trusses);
+    m_trusses.clear();
+    m_rigProps.clear();
 }
 
 /********************************************************************
@@ -516,6 +521,64 @@ QString MonitorProperties::customBackground(quint32 fid)
 }
 
 /*********************************************************************
+ * Trusses
+ *********************************************************************/
+
+quint32 MonitorProperties::nextTrussId() const
+{
+    quint32 id = 0;
+    while (m_trusses.contains(id))
+        ++id;
+    return id;
+}
+
+Truss *MonitorProperties::addTruss()
+{
+    quint32 id = nextTrussId();
+    Truss *t = new Truss(id, this);
+    m_trusses.insert(id, t);
+    return t;
+}
+
+void MonitorProperties::removeTruss(quint32 id)
+{
+    // Un-assign any fixtures that were on this truss.
+    for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
+        if (it->trussId == id)
+            it->trussId = Truss::invalidId();
+
+    delete m_trusses.take(id);
+}
+
+/*********************************************************************
+ * Fixture rig properties
+ *********************************************************************/
+
+FixtureRigProps MonitorProperties::fixtureRigProps(quint32 fid) const
+{
+    return m_rigProps.value(fid, FixtureRigProps());
+}
+
+void MonitorProperties::setFixtureRigProps(quint32 fid, const FixtureRigProps &props)
+{
+    m_rigProps[fid] = props;
+}
+
+QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
+{
+    if (!m_fixtureItems.contains(fid))
+        return QVector3D();
+
+    const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
+    const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
+    if (t != nullptr)
+        return t->positionAt(rp.trussOffset);
+
+    // Free-placed: use the stored position directly (X/Y in scene units, Z in metres)
+    return m_fixtureItems[fid].m_baseItem.m_position;
+}
+
+/*********************************************************************
  * Load & Save
  *********************************************************************/
 
@@ -565,6 +628,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             setValueStyle(ValueStyle(root.readElementText().toInt()));
         else if (root.name() == KXMLQLCMonitorCommonBackground)
             setCommonBackgroundImage(mainDocument->denormalizeComponentPath(root.readElementText()));
+        else if (root.name() == KXMLQLCMonitorBgColor)
+            setCommonBackgroundColor(QColor(root.readElementText()));
         else if (root.name() == KXMLQLCMonitorCustomBgItem)
         {
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemID))
@@ -726,6 +791,26 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             m_genericItems[itemID] = item;
             root.skipCurrentElement();
         }
+        else if (root.name() == QStringLiteral("Truss"))
+        {
+            Truss *t = new Truss(nextTrussId(), this);
+            if (t->loadXML(root))
+                m_trusses.insert(t->id(), t);
+            else
+                delete t;
+        }
+        else if (root.name() == QStringLiteral("FixtureRig"))
+        {
+            QXmlStreamAttributes a = root.attributes();
+            quint32 fid = a.value("FID").toUInt();
+            FixtureRigProps rp;
+            rp.trussId     = a.value("Truss").toUInt();
+            rp.trussOffset = a.value("Offset").toFloat();
+            rp.mountingType = Truss::stringToMounting(a.value("Mounting").toString());
+            rp.panZeroDir  = a.value("PanZero").toFloat();
+            m_rigProps[fid] = rp;
+            root.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown MonitorProperties tag:" << root.name();
@@ -761,6 +846,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         doc->writeTextElement(KXMLQLCMonitorCommonBackground,
                               mainDocument->normalizeComponentPath(commonBackgroundImage()));
     }
+    if (commonBackgroundColor().isValid())
+        doc->writeTextElement(KXMLQLCMonitorBgColor, commonBackgroundColor().name());
     else if (customBackgroundList().isEmpty() == false)
     {
         QMapIterator <quint32, QString> it(customBackgroundList());
@@ -920,6 +1007,23 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         if (item.m_name.isEmpty() == false)
             doc->writeAttribute(KXMLQLCMonitorItemName, item.m_name);
 
+        doc->writeEndElement();
+    }
+
+    // Trusses
+    foreach (const Truss *t, m_trusses)
+        t->saveXML(doc);
+
+    // Fixture rig props (only write entries that differ from defaults)
+    for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)
+    {
+        const FixtureRigProps &rp = it.value();
+        doc->writeStartElement(QStringLiteral("FixtureRig"));
+        doc->writeAttribute(QStringLiteral("FID"),     QString::number(it.key()));
+        doc->writeAttribute(QStringLiteral("Truss"),   QString::number(rp.trussId));
+        doc->writeAttribute(QStringLiteral("Offset"),  QString::number(double(rp.trussOffset), 'f', 3));
+        doc->writeAttribute(QStringLiteral("Mounting"), Truss::mountingToString(rp.mountingType));
+        doc->writeAttribute(QStringLiteral("PanZero"), QString::number(double(rp.panZeroDir), 'f', 1));
         doc->writeEndElement();
     }
 

@@ -27,11 +27,43 @@
 #include <QDebug>
 #include <QTimer>
 
+#include <QGraphicsSceneContextMenuEvent>
+#include <QMenu>
+
+#include <QPixmap>
+
 #include "monitorfixtureitem.h"
+
+// Returns a 16×16 open-hand cursor — much smaller than the macOS system hand.
+static QCursor smallOpenHandCursor()
+{
+    QPixmap pm(16, 16);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    const QColor fg(255, 255, 255, 230);
+    const QColor bg(0, 0, 0, 200);
+    auto finger = [&](int x, int y, int w, int h) {
+        p.setPen(QPen(bg, 1));
+        p.setBrush(fg);
+        p.drawRoundedRect(x, y, w, h, 1, 1);
+    };
+    finger(2, 2, 2, 6);   // index
+    finger(5, 0, 2, 7);   // middle (tallest) — hotspot here
+    finger(8, 1, 2, 6);   // ring
+    finger(11, 2, 2, 5);  // pinky
+    finger(0, 7, 2, 5);   // thumb
+    p.setPen(QPen(bg, 1));
+    p.setBrush(fg);
+    p.drawRoundedRect(0, 8, 13, 6, 2, 2); // palm
+    p.end();
+    return QCursor(pm, 5, 0); // hotspot = tip of middle finger
+}
+#include "monitorproperties.h"
 #include "qlcfixturehead.h"
 #include "qlcfixturemode.h"
 #include "qlccapability.h"
 #include "fixture.h"
+#include "truss.h"
 #include "doc.h"
 
 #define MOVEMENT_THICKNESS    3
@@ -72,7 +104,7 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
 {
     Q_ASSERT(doc != NULL);
 
-    setCursor(Qt::OpenHandCursor);
+    setCursor(smallOpenHandCursor());
     setFlag(QGraphicsItem::ItemIsMovable, true);
     setFlag(QGraphicsItem::ItemIsSelectable, true);
     setFlag(QGraphicsItem::ItemSendsGeometryChanges, true);
@@ -610,6 +642,15 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     // draw item background
     painter->setBrush(QBrush(QColor(33, 33, 33)));
     painter->drawRect(0, 0, m_width, m_height);
+
+    // Truss-bind indicator: inner border ring (cyan = bound, red = escaping)
+    if (m_escapeMode || m_boundToTruss)
+    {
+        QColor ring = m_escapeMode ? QColor(220, 60, 60) : QColor(0, 180, 255);
+        painter->setPen(QPen(ring, 2.0));
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRect(QRectF(1.5, 1.5, m_width - 3, m_height - 3));
+    }
     foreach (FixtureHead *head, m_heads)
     {
         QRectF rect = shapeRect(head->m_item);
@@ -651,7 +692,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
 void MonitorFixtureItem::setMovable(bool movable)
 {
     setFlag(QGraphicsItem::ItemIsMovable, movable);
-    setCursor(movable ? Qt::OpenHandCursor : Qt::ArrowCursor);
+    setCursor(movable ? smallOpenHandCursor() : Qt::ArrowCursor);
 }
 
 void MonitorFixtureItem::setSnap(int divisions, qreal cellPixels, qreal xOffset, qreal yOffset)
@@ -680,12 +721,31 @@ void MonitorFixtureItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
     qDebug() << Q_FUNC_INFO << "mouse RELEASE event - <" << event->pos().toPoint().x() << "> - <" << event->pos().toPoint().y() << ">";
-    setCursor(Qt::OpenHandCursor);
+    setCursor(smallOpenHandCursor());
     emit itemDropped(this);
 }
 
-void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
+void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(m_fid);
+    if (rp.trussId == Truss::invalidId())
+        return;  // no truss — nothing to show
+
+    Truss *t = props->truss(rp.trussId);
+    QString trussName = t ? t->name() : tr("truss");
+
+    QMenu menu;
+    QAction *removeAct = menu.addAction(
+        tr("Remove from Truss \"%1\"").arg(trussName));
+    QAction *chosen = menu.exec(event->screenPos());
+    if (chosen == removeAct)
+    {
+        FixtureRigProps cleared;  // trussId defaults to Truss::invalidId()
+        props->setFixtureRigProps(m_fid, cleared);
+        m_doc->setModified();
+    }
+    event->accept();
 }
 
 void MonitorFixtureItem::computeTiltPosition(FixtureHead *h, uchar value)

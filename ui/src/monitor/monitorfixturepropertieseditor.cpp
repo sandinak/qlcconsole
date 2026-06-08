@@ -18,11 +18,16 @@
 */
 
 #include <QColorDialog>
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QLabel>
+#include <QVBoxLayout>
 
 #include "monitorfixturepropertieseditor.h"
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "monitorproperties.h"
+#include "truss.h"
 
 MonitorFixturePropertiesEditor::MonitorFixturePropertiesEditor(
         MonitorFixtureItem *fxItem, MonitorGraphicsView *gfxView,
@@ -74,6 +79,55 @@ MonitorFixturePropertiesEditor::MonitorFixturePropertiesEditor(
             this, SLOT(slotGelColorClicked()));
     connect(m_gelResetButton, SIGNAL(clicked()),
             this, SLOT(slotGelResetClicked()));
+
+    // --- Rig Assignment group ---
+    QGroupBox *rigBox = new QGroupBox(tr("Rig Assignment"), this);
+    QFormLayout *rigForm = new QFormLayout(rigBox);
+
+    m_trussCb = new QComboBox(rigBox);
+    m_trussCb->addItem(tr("(none)"), QVariant(Truss::invalidId()));
+    for (Truss *t : m_props->trusses())
+        m_trussCb->addItem(t->name(), t->id());
+    rigForm->addRow(tr("Truss:"), m_trussCb);
+
+    m_trussOffsetSpin = new QDoubleSpinBox(rigBox);
+    m_trussOffsetSpin->setRange(-100, 100);
+    m_trussOffsetSpin->setSuffix(" m");
+    m_trussOffsetSpin->setDecimals(2);
+    rigForm->addRow(tr("Offset along truss:"), m_trussOffsetSpin);
+
+    m_mountingCb = new QComboBox(rigBox);
+    m_mountingCb->addItem(tr("Top-hung"),      Truss::TopHung);
+    m_mountingCb->addItem(tr("Floor mounted"), Truss::FloorMounted);
+    m_mountingCb->addItem(tr("Side arm"),      Truss::SideArm);
+    rigForm->addRow(tr("Mounting:"), m_mountingCb);
+
+    m_panZeroSpin = new QDoubleSpinBox(rigBox);
+    m_panZeroSpin->setRange(0, 359);
+    m_panZeroSpin->setSuffix(QString::fromUtf8("°"));
+    m_panZeroSpin->setDecimals(1);
+    rigForm->addRow(tr("Pan-zero direction:"), m_panZeroSpin);
+
+    // Populate from existing rig props if any
+    FixtureRigProps rp = m_props->fixtureRigProps(m_fxItem->fixtureID());
+    for (int i = 0; i < m_trussCb->count(); ++i)
+    {
+        if (m_trussCb->itemData(i).toUInt() == rp.trussId)
+        {
+            m_trussCb->setCurrentIndex(i);
+            break;
+        }
+    }
+    m_trussOffsetSpin->setValue(double(rp.trussOffset));
+    m_mountingCb->setCurrentIndex(static_cast<int>(rp.mountingType));
+    m_panZeroSpin->setValue(double(rp.panZeroDir));
+
+    layout()->addWidget(rigBox);
+
+    connect(m_trussCb,        SIGNAL(currentIndexChanged(int)), this, SLOT(slotRigChanged()));
+    connect(m_trussOffsetSpin, SIGNAL(valueChanged(double)),    this, SLOT(slotRigChanged()));
+    connect(m_mountingCb,     SIGNAL(currentIndexChanged(int)), this, SLOT(slotRigChanged()));
+    connect(m_panZeroSpin,    SIGNAL(valueChanged(double)),     this, SLOT(slotRigChanged()));
 }
 
 MonitorFixturePropertiesEditor::~MonitorFixturePropertiesEditor()
@@ -117,5 +171,15 @@ void MonitorFixturePropertiesEditor::slotGelResetClicked()
     m_fxItem->setGelColor(QColor());
     m_props->setFixtureGelColor(m_fxItem->fixtureID(), 0, 0, QColor());
     m_fxItem->slotUpdateValues();
+}
+
+void MonitorFixturePropertiesEditor::slotRigChanged()
+{
+    FixtureRigProps rp;
+    rp.trussId     = m_trussCb->currentData().toUInt();
+    rp.trussOffset = float(m_trussOffsetSpin->value());
+    rp.mountingType = static_cast<Truss::MountingType>(m_mountingCb->currentData().toInt());
+    rp.panZeroDir  = float(m_panZeroSpin->value());
+    m_props->setFixtureRigProps(m_fxItem->fixtureID(), rp);
 }
 

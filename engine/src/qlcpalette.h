@@ -74,7 +74,8 @@ public:
         PanTilt,
         Shutter,
         Gobo,
-        Zoom
+        Zoom,
+        Beam
     };
 #if QT_VERSION >= 0x050500
     Q_ENUM(PaletteType)

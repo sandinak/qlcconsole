@@ -20,6 +20,8 @@
 #ifndef MONITORFIXTUREPROPERTIESEDITOR_H
 #define MONITORFIXTUREPROPERTIESEDITOR_H
 
+#include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QWidget>
 
 #include "ui_monitorfixturepropertieseditor.h"
@@ -58,10 +60,18 @@ protected slots:
      *  the current gel color */
     void slotGelResetClicked();
 
+    /** Slot called when any rig-assignment control changes */
+    void slotRigChanged();
+
 private:
     MonitorFixtureItem *m_fxItem;
     MonitorGraphicsView *m_gfxView;
     MonitorProperties *m_props;
+
+    QComboBox      *m_trussCb;
+    QDoubleSpinBox *m_trussOffsetSpin;
+    QComboBox      *m_mountingCb;
+    QDoubleSpinBox *m_panZeroSpin;
 };
 
 /** @} */

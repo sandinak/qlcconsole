@@ -67,6 +67,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     QVBoxLayout *navCol = new QVBoxLayout(navPanel);
     navCol->setContentsMargins(0, 0, 0, 0);
     navCol->addWidget(new QLabel(tr("Scenes / functions"), this));
+    QLineEdit *funcFilter = new QLineEdit(this);
+    funcFilter->setPlaceholderText(tr("Filter…"));
+    funcFilter->setClearButtonEnabled(true);
+    navCol->addWidget(funcFilter);
     m_funcTree = new FunctionsTreeWidget(m_doc, this);
     m_funcTree->setDisplayFilter(FunctionsTreeWidget::FunctionsOnly);
     m_funcTree->setHeaderHidden(true);
@@ -76,6 +80,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_funcTree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_funcTree->updateTree();
     navCol->addWidget(m_funcTree, 1);
+    connect(funcFilter, &QLineEdit::textChanged,
+            m_funcTree, &FunctionsTreeWidget::filterByText);
     navCol->addWidget(new QLabel(tr("Right-click to add a scene/function or folder."), this));
     splitter->addWidget(navPanel);
 
@@ -141,6 +147,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     srcCol->setContentsMargins(0, 0, 0, 0);
 
     srcCol->addWidget(new QLabel(tr("Palettes (looks)"), this));
+    QLineEdit *paletteFilter = new QLineEdit(this);
+    paletteFilter->setPlaceholderText(tr("Filter…"));
+    paletteFilter->setClearButtonEnabled(true);
+    srcCol->addWidget(paletteFilter);
     m_paletteTree = new FunctionsTreeWidget(m_doc, this);
     m_paletteTree->setDisplayFilter(FunctionsTreeWidget::PalettesOnly);
     m_paletteTree->setHeaderHidden(true);
@@ -152,6 +162,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_paletteTree->updateTree();
     srcCol->addWidget(m_paletteTree, 1);
     srcCol->addWidget(new QLabel(tr("Right-click to add a palette."), this));
+    connect(paletteFilter, &QLineEdit::textChanged,
+            m_paletteTree, &FunctionsTreeWidget::filterByText);
 
     srcCol->addWidget(new QLabel(tr("Fixtures & groups"), this));
     m_fixGroupSource = new FixtureGroupSource(m_doc, this);
@@ -892,6 +904,7 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
         { QT_TR_NOOP("New Color"),    QLCPalette::Color },
         { QT_TR_NOOP("New Dimmer"),   QLCPalette::Dimmer },
         { QT_TR_NOOP("New Pan/Tilt"), QLCPalette::PanTilt },
+        { QT_TR_NOOP("New Beam"),     QLCPalette::Beam },
         { QT_TR_NOOP("New Gobo"),     QLCPalette::Gobo },
         { QT_TR_NOOP("New Shutter"),  QLCPalette::Shutter },
     };

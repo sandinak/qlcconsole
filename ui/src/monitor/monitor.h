@@ -205,6 +205,33 @@ protected slots:
      *  a background picture on the graphics view */
     void slotSetBackground();
 
+    /** Add a new truss interactively and refresh the canvas. */
+    void slotAddTruss();
+
+    /** Open the truss-management dialog (edit / remove existing trusses). */
+    void slotManageTrusses();
+
+    /** Open the truss-edit form for a specific truss ID (from double-click). */
+    void slotEditTruss(quint32 tid);
+
+    /** Remove whichever fixture or truss is currently selected in the view. */
+    void slotRemoveSelected();
+
+    /** Open the background color picker. */
+    void slotSetBackgroundColor();
+
+    /** Show the fixture properties editor on double-click. */
+    void slotFixtureDoubleClicked(quint32 fid);
+
+    /** Open truss edit dialog on double-click. */
+    void slotTrussDoubleClicked(quint32 tid);
+
+    /** Show the Add context menu at the given scene position. */
+    void slotCanvasContextMenu(QPointF scenePos);
+
+    /** Add a fixture onto a truss at the given offset (from TrussItem right-click). */
+    void slotAddFixtureToTruss(quint32 trussId, float offsetMetres);
+
     /** Slot called when the user wants to show
      *  or hide fixtures labels */
     void slotShowLabels(bool visible);
@@ -218,6 +245,9 @@ protected slots:
 protected:
     QToolBar* m_graphicsToolBar;
     QSplitter* m_splitter;
+    /** Scene-space position of the last canvas right-click; used to place new
+     *  fixtures/trusses at the cursor location. */
+    QPointF m_pendingAddScenePos;
     MonitorGraphicsView* m_graphicsView;
     QWidget *m_fixtureItemEditor;
     QSpinBox* m_gridWSpin;

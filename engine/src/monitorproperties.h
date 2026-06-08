@@ -27,6 +27,8 @@
 #include <QSize>
 #include <QMap>
 
+#include "truss.h"
+
 class QXmlStreamReader;
 class QXmlStreamWriter;
 
@@ -268,12 +270,60 @@ private:
     QMap <quint32, PreviewItem> m_genericItems;
 
     /********************************************************************
+     * Trusses
+     ********************************************************************/
+public:
+    /** Return all defined trusses (owned by this object). */
+    QList<Truss*> trusses() const { return m_trusses.values(); }
+
+    /** Look up a truss by ID; returns nullptr if not found. */
+    Truss *truss(quint32 id) const { return m_trusses.value(id, nullptr); }
+
+    /** Add a new truss with a unique ID.  Takes ownership. */
+    Truss *addTruss();
+
+    /** Remove and delete the truss with the given ID. */
+    void removeTruss(quint32 id);
+
+    /** Next unused truss ID. */
+    quint32 nextTrussId() const;
+
+private:
+    QMap<quint32, Truss*> m_trusses;
+
+    /********************************************************************
+     * Fixture rig properties
+     ********************************************************************/
+public:
+    /** Return the rig assignment for fixture $fid (default-constructed if
+     *  never set: free-placed, top-hung, panZeroDir=0). */
+    FixtureRigProps fixtureRigProps(quint32 fid) const;
+    void setFixtureRigProps(quint32 fid, const FixtureRigProps &props);
+    void removeFixtureRigProps(quint32 fid) { m_rigProps.remove(fid); }
+    bool hasFixtureRigProps(quint32 fid) const { return m_rigProps.contains(fid); }
+
+    /** Compute the derived world-space 3-D position of fixture $fid.
+     *  For truss-assigned fixtures the position is derived from the truss
+     *  geometry + trussOffset; the existing fixturePosition() X/Y/Z is
+     *  used as a fallback for free-placed fixtures.
+     *  Returns QVector3D(0,0,0) if the fixture is unknown. */
+    QVector3D fixtureRigPosition(quint32 fid) const;
+
+private:
+    QMap<quint32, FixtureRigProps> m_rigProps;
+
+    /********************************************************************
      * 2D view background
      ********************************************************************/
 public:
     /** Get/Set a background image to be displayed in 2D mode */
     inline void setCommonBackgroundImage(QString filename) { m_commonBackgroundImage = filename; }
     inline QString commonBackgroundImage() const { return m_commonBackgroundImage; }
+
+    /** Get/Set a flat background color (overrides the default dark background;
+     *  ignored when a background image is also set). */
+    inline void setCommonBackgroundColor(const QColor &c) { m_commonBackgroundColor = c; }
+    inline QColor commonBackgroundColor() const { return m_commonBackgroundColor; }
 
     /** Set a picture found at $path to be displayed when $fid is started */
     void setCustomBackgroundItem(quint32 fid, QString path) { m_customBackgroundImages[fid] = path; }
@@ -292,6 +342,7 @@ public:
 
 private:
     QString m_commonBackgroundImage;
+    QColor  m_commonBackgroundColor;
     QMap <quint32, QString> m_customBackgroundImages;
 
     /*********************************************************************

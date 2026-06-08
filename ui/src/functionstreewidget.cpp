@@ -68,6 +68,30 @@ void FunctionsTreeWidget::setDisplayFilter(DisplayFilter filter)
     m_displayFilter = filter;
 }
 
+void FunctionsTreeWidget::filterByText(const QString &text)
+{
+    // Walk every top-level category/folder and recursively show/hide items.
+    // Returns true if any descendant is visible (so folders stay visible).
+    std::function<bool(QTreeWidgetItem*)> applyFilter = [&](QTreeWidgetItem *item) -> bool {
+        bool anyChildVisible = false;
+        for (int i = 0; i < item->childCount(); ++i)
+            anyChildVisible |= applyFilter(item->child(i));
+
+        bool selfMatch = text.isEmpty() ||
+                         item->text(COL_NAME).contains(text, Qt::CaseInsensitive);
+        bool visible = selfMatch || anyChildVisible;
+        item->setHidden(!visible);
+        if (!text.isEmpty() && anyChildVisible)
+            item->setExpanded(true);
+        else if (text.isEmpty())
+            item->setExpanded(false);
+        return visible;
+    };
+
+    for (int i = 0; i < topLevelItemCount(); ++i)
+        applyFilter(topLevelItem(i));
+}
+
 void FunctionsTreeWidget::updateTree()
 {
     blockSignals(true);

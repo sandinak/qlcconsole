@@ -102,6 +102,7 @@ QString QLCPalette::typeToString(QLCPalette::PaletteType type)
         case Shutter:   return "Shutter";
         case Gobo:      return "Gobo";
         case Zoom:      return "Zoom";
+        case Beam:      return "Beam";
         case Undefined: return "";
     }
 
@@ -126,6 +127,8 @@ QLCPalette::PaletteType QLCPalette::stringToType(const QString &str)
         return Gobo;
     else if (str == "Zoom")
         return Zoom;
+    else if (str == "Beam")
+        return Beam;
 
     return Undefined;
 }
@@ -145,6 +148,7 @@ QString QLCPalette::iconResource(bool svg) const
         case Shutter: return QString("%1:/shutter.%2").arg(prefix).arg(ext);
         case Gobo: return QString("%1:/gobo.%2").arg(prefix).arg(ext);
         case Zoom: return QString("%1:/beam.%2").arg(prefix).arg(ext);
+        case Beam: return QString("%1:/beam.%2").arg(prefix).arg(ext);
         default: return "";
     }
 }
@@ -550,6 +554,40 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 }
             }
             break;
+            case Beam:
+            {
+                // Values: [0]=Focus 0-255, [1]=Frost 0-255, [2]=Iris 0-255
+                uchar focusVal = (m_values.count() > 0) ? uchar(m_values.at(0).toInt()) : 0;
+                uchar frostVal = (m_values.count() > 1) ? uchar(m_values.at(1).toInt()) : 0;
+                uchar irisVal  = (m_values.count() > 2) ? uchar(m_values.at(2).toInt()) : 0;
+
+                for (quint32 i = 0; i < fixture->channels(); i++)
+                {
+                    const QLCChannel *ch = fixture->channel(i);
+                    if (ch == nullptr || ch->group() != QLCChannel::Beam)
+                        continue;
+
+                    if (ch->preset() == QLCChannel::BeamFocusNearFar)
+                        list << SceneValue(id, i, focusVal);
+                    else if (ch->preset() == QLCChannel::BeamFocusFarNear)
+                        list << SceneValue(id, i, 255 - focusVal);
+                    else if (ch->preset() == QLCChannel::Custom &&
+                             ch->name().contains("frost", Qt::CaseInsensitive))
+                        list << SceneValue(id, i, frostVal);
+                }
+                // Iris lives in the Shutter group
+                for (quint32 i = 0; i < fixture->channels(); i++)
+                {
+                    const QLCChannel *ch = fixture->channel(i);
+                    if (ch == nullptr || ch->group() != QLCChannel::Shutter)
+                        continue;
+                    if (ch->preset() == QLCChannel::ShutterIrisMinToMax)
+                        list << SceneValue(id, i, irisVal);
+                    else if (ch->preset() == QLCChannel::ShutterIrisMaxToMin)
+                        list << SceneValue(id, i, 255 - irisVal);
+                }
+            }
+            break;
             case Undefined:
             break;
         }
@@ -866,6 +904,16 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
             case Zoom:
                 setValue(strVal.toFloat());
             break;
+            case Beam:
+            {
+                QStringList beamList = strVal.split(",");
+                QVariantList vals;
+                vals << (beamList.count() > 0 ? beamList.at(0).toInt() : 0);
+                vals << (beamList.count() > 1 ? beamList.at(1).toInt() : 0);
+                vals << (beamList.count() > 2 ? beamList.at(2).toInt() : 0);
+                setValues(vals);
+            }
+            break;
             case Shutter:   break;
             case Gobo:      break;
             case Undefined: break;
@@ -897,6 +945,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 case Color:
                     setFanningValue(strVal);
                 break;
+                case Beam:      break;
                 case Shutter:   break;
                 case Gobo:      break;
                 case Undefined: break;
@@ -938,6 +987,15 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
         case PanTilt:
             doc->writeAttribute(KXMLQLCPaletteValue,
                                 QString("%1,%2").arg(m_values.at(0).toInt()).arg(m_values.at(1).toInt()));
+        break;
+        case Beam:
+        {
+            int focus = (m_values.count() > 0) ? m_values.at(0).toInt() : 0;
+            int frost  = (m_values.count() > 1) ? m_values.at(1).toInt() : 0;
+            int iris   = (m_values.count() > 2) ? m_values.at(2).toInt() : 0;
+            doc->writeAttribute(KXMLQLCPaletteValue,
+                                QString("%1,%2,%3").arg(focus).arg(frost).arg(iris));
+        }
         break;
         case Shutter:   break;
         case Gobo:      break;

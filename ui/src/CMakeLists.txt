@@ -81,6 +81,7 @@ add_library(${module_name}
     monitor/monitorfixturepropertieseditor.cpp monitor/monitorfixturepropertieseditor.h monitor/monitorfixturepropertieseditor.ui
     monitor/monitorgraphicsview.cpp monitor/monitorgraphicsview.h
     monitor/monitorlayout.cpp monitor/monitorlayout.h
+    monitor/trussitem.cpp monitor/trussitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
     positiontool.cpp positiontool.h positiontool.ui
@@ -91,7 +92,6 @@ add_library(${module_name}
     rgbmatrixeditor.cpp rgbmatrixeditor.h rgbmatrixeditor.ui
     sceneeditor.cpp sceneeditor.h sceneeditor.ui
     scenegrouplooks.cpp scenegrouplooks.h
-    groupselection.cpp groupselection.h
     fixturegroupsource.cpp fixturegroupsource.h
     capabilitybar.cpp capabilitybar.h
     lookeditor.cpp lookeditor.h

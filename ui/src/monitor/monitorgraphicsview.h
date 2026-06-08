@@ -27,6 +27,7 @@
 
 class MonitorProperties;
 class MonitorFixtureItem;
+class TrussItem;
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
@@ -108,6 +109,10 @@ public:
      *  to a position in pixels */
     QPointF realPositionToPixels(qreal xpos, qreal ypos);
 
+    /** Inverse of realPositionToPixels — convert scene-pixel position to
+     *  millimetres (same units as MonitorProperties fixture positions). */
+    QPointF pixelsToRealPosition(qreal px, qreal py);
+
     /** Update the position and the scale of the fixture with
      *  the given ID
      */
@@ -116,8 +121,14 @@ public:
     /** Set a background image for the view */
     void setBackgroundImage(QString filename);
 
+    /** Set a flat background color (pass an invalid QColor to clear). */
+    void setBackgroundColor(const QColor &color);
+
     /** Retrieve the path to the background image currently set */
     QString backgroundImage() { return m_backgroundImage; }
+
+    /** Rebuild the truss overlay items from MonitorProperties. */
+    void updateTrusses();
 
 protected:
     /** Triggers the whole view repaint and metrics
@@ -136,6 +147,15 @@ protected:
     /** Shift+left-drag on empty canvas pans the view. */
     void mousePressEvent(QMouseEvent *event) override;
 
+    /** Double-click detects fixture / truss and emits the appropriate signal. */
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
+
+    /** During fixture drags, highlights any truss under the cursor. */
+    void mouseMoveEvent(QMouseEvent *event) override;
+
+    /** Right-click on empty canvas emits contextMenuRequested; on items routes to them. */
+    void contextMenuEvent(QContextMenuEvent *event) override;
+
     /** Push the current snap configuration to a single fixture item */
     void applySnapToItem(MonitorFixtureItem *item);
 
@@ -153,6 +173,9 @@ protected slots:
     /** Slot called when a MonitorFixtureItem is dropped after a drag */
     void slotFixtureMoved(MonitorFixtureItem *item);
 
+    /** Slot called when a TrussItem is dropped after a drag */
+    void slotTrussMoved(TrussItem *item);
+
 private:
     /** Snap a scene-pixel coordinate to the current grid/subdivision. */
     QPointF snapScenePos(const QPointF &p) const;
@@ -165,6 +188,18 @@ signals:
 
     /** Signal emitted when the graphics view is clicked */
     void viewClicked(QMouseEvent *e);
+
+    /** Signal emitted when the user double-clicks a fixture item */
+    void fixtureDoubleClicked(quint32 fid);
+
+    /** Signal emitted when the user double-clicks a truss item */
+    void trussDoubleClicked(quint32 tid);
+
+    /** Signal emitted when the user right-clicks empty canvas space */
+    void contextMenuRequested(QPointF scenePos);
+
+    /** Signal re-emitted from TrussItem: add a fixture at offset metres on truss. */
+    void addFixtureToTrussRequested(quint32 trussId, float offsetMetres);
 
 private:
     Doc *m_doc;
@@ -210,9 +245,17 @@ private:
     /** Map of the rendered MonitorFixtureItem with their ID */
     QHash <quint32, MonitorFixtureItem*> m_fixtures;
 
+    /** Interactive truss items keyed by truss ID. */
+    QHash <quint32, TrussItem*> m_trussItems;
+
     /** Undo stack of fixture-move operations (fixture id -> previous real
      *  position in mm). Most recent at the back. */
     QList<QHash<quint32, QPointF> > m_moveUndo;
+
+    /** Set by mouseDoubleClickEvent; suppresses the viewClicked emission on
+     *  the paired mouseReleaseEvent so it doesn't immediately close the editor
+     *  that the double-click just opened. */
+    bool m_suppressNextViewClick = false;
 
     /** Positions snapshot taken at move-start, committed to m_moveUndo on
      *  drop if anything actually moved. */

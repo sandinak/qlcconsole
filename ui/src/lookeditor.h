@@ -8,6 +8,7 @@
     - Color   : color picker
     - Dimmer  : intensity slider
     - PanTilt : X/Y grid (the VC XY pad widget)
+    - Beam    : 3 sliders (Focus, Frost, Iris)
     - Gobo/Shutter and other single-value types : slider + named-capability
       picker with gobo/effect image thumbnails and a live preview
 
@@ -26,6 +27,7 @@ class CapabilityBar;
 class QSlider;
 class QComboBox;
 class QLabel;
+class QToolButton;
 class QLCChannel;
 class Scene;
 class Doc;
@@ -61,6 +63,7 @@ private slots:
     void slotPanTiltChanged(const QPointF &p);
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
+    void slotBeamChanged(int);
 
 private:
     /** Whether any target fixture of the context scene has a channel in the
@@ -94,7 +97,7 @@ private:
     QLabel *m_title;
     QLabel *m_warning;
     QStackedWidget *m_stack;
-    int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageSingle;
+    int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageBeam, m_pageSingle;
 
     QColorDialog *m_colorDialog;
     QSlider *m_whiteSlider, *m_amberSlider, *m_uvSlider; //!< extra colour emitters
@@ -103,6 +106,8 @@ private:
     QLabel *m_dimmerValue;
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
+    QSlider *m_beamFocusSlider, *m_beamFrostSlider, *m_beamIrisSlider;
+    QLabel *m_beamFocusValue, *m_beamFrostValue, *m_beamIrisValue;
     QSlider *m_singleSlider;
     QLabel *m_singleValue;
     QComboBox *m_singleCombo;  //!< named gobo/shutter capabilities

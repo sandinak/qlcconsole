@@ -125,6 +125,14 @@ public:
      *  When disabled the item stays selectable (lock mode) */
     void setMovable(bool movable);
 
+    /** Mark this fixture as bound to a truss (shows cyan border). */
+    void setBoundToTruss(bool b) { m_boundToTruss = b; update(); }
+    bool isBoundToTruss() const  { return m_boundToTruss; }
+
+    /** Show a red escape-from-truss indicator while dragging far off the truss. */
+    void setEscapeMode(bool e) { m_escapeMode = e; update(); }
+    bool escapeMode() const    { return m_escapeMode; }
+
     /** Configure the snap-to-grid behaviour for this item.
      *  @param divisions number of cell subdivisions to snap to
      *         (1 = full cell, 2 = 1/2, 4 = 1/4). <= 0 disables snapping.
@@ -200,6 +208,9 @@ private:
     QFont m_font;
 
     QRect m_labelRect;
+
+    bool m_boundToTruss = false;
+    bool m_escapeMode   = false;
 };
 
 /** @} */

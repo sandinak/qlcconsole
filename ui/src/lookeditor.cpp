@@ -16,6 +16,7 @@
 #include <QPixmap>
 #include <QIcon>
 #include <QSet>
+#include <QToolButton>
 
 #include "lookeditor.h"
 #include "virtualconsole/vcxypadarea.h"
@@ -125,10 +126,8 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     connect(m_dimmerBar, SIGNAL(valueChanged(int)),
             this, SLOT(slotDimmerChanged(int)));
 
-    // Pan/Tilt page (X/Y grid)
+    // Pan/Tilt page (X/Y grid + named position presets)
     QWidget *pantilt = new QWidget(this);
-    // XY pad on the LEFT at a usable size; the right half is left free for
-    // future tools.
     QHBoxLayout *pl = new QHBoxLayout(pantilt);
     pl->setContentsMargins(6, 6, 6, 6);
     m_xyPad = new VCXYPadArea(pantilt);
@@ -137,10 +136,72 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_xyPad->setMaximumSize(280, 280); // keep the bottom look pane compact
     m_xyPad->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     pl->addWidget(m_xyPad, 0, Qt::AlignLeft | Qt::AlignTop);
-    pl->addStretch(1); // reserved right half
+
+    // Named position preset buttons (pan°, tilt°)
+    // Degrees are in the palette's full-range convention:
+    //   Pan  0-540°  (center = 270)
+    //   Tilt 0-270°  (center = 135; up = low values, down = high)
+    struct { const char *label; int pan; int tilt; } presets[] = {
+        { "Home",   270, 135 },   // straight centre
+        { "Down",   270, 270 },   // full tilt down
+        { "Front",  270, 180 },   // ~45° forward tilt
+        { "Left",     0, 135 },   // full pan left
+        { "Right",  540, 135 },   // full pan right
+    };
+    QVBoxLayout *presetCol = new QVBoxLayout();
+    presetCol->setSpacing(4);
+    for (uint i = 0; i < sizeof(presets) / sizeof(presets[0]); i++)
+    {
+        QToolButton *btn = new QToolButton(pantilt);
+        btn->setText(tr(presets[i].label));
+        btn->setMinimumWidth(60);
+        int pan = presets[i].pan, tilt = presets[i].tilt;
+        connect(btn, &QToolButton::clicked, this, [this, pan, tilt]() {
+            const QPointF pt(qreal(pan) / PAN_DEG * XY_MAX,
+                             qreal(tilt) / TILT_DEG * XY_MAX);
+            // setPosition doesn't call update(), so the dot wouldn't repaint.
+            // Block the signal to avoid a double palette write; call the slot directly.
+            m_xyPad->blockSignals(true);
+            m_xyPad->setPosition(pt);
+            m_xyPad->blockSignals(false);
+            m_xyPad->update();
+            slotPanTiltChanged(pt);
+        });
+        presetCol->addWidget(btn);
+    }
+    presetCol->addStretch(1);
+    pl->addLayout(presetCol);
+    pl->addStretch(1);
+
     m_pagePanTilt = m_stack->addWidget(pantilt);
     connect(m_xyPad, SIGNAL(positionChanged(QPointF)),
             this, SLOT(slotPanTiltChanged(QPointF)));
+
+    // Beam page: Focus / Frost / Iris sliders
+    QWidget *beam = new QWidget(this);
+    QVBoxLayout *bv = new QVBoxLayout(beam);
+    bv->setContentsMargins(6, 6, 6, 6);
+    auto makeBeamRow = [&](const QString &label, QSlider *&slider, QLabel *&val) {
+        QHBoxLayout *row = new QHBoxLayout();
+        bv->addLayout(row);
+        QLabel *lbl = new QLabel(label, beam);
+        lbl->setMinimumWidth(46);
+        row->addWidget(lbl);
+        slider = new QSlider(Qt::Horizontal, beam);
+        slider->setRange(0, 255);
+        row->addWidget(slider, 1);
+        val = new QLabel("0", beam);
+        val->setMinimumWidth(32);
+        row->addWidget(val);
+    };
+    makeBeamRow(tr("Focus"), m_beamFocusSlider, m_beamFocusValue);
+    makeBeamRow(tr("Frost"),  m_beamFrostSlider, m_beamFrostValue);
+    makeBeamRow(tr("Iris"),   m_beamIrisSlider,  m_beamIrisValue);
+    bv->addStretch(1);
+    m_pageBeam = m_stack->addWidget(beam);
+    connect(m_beamFocusSlider, &QSlider::valueChanged, this, &LookEditor::slotBeamChanged);
+    connect(m_beamFrostSlider, &QSlider::valueChanged, this, &LookEditor::slotBeamChanged);
+    connect(m_beamIrisSlider,  &QSlider::valueChanged, this, &LookEditor::slotBeamChanged);
 
     // Single-value page (gobo / shutter / pan / tilt / zoom)
     QWidget *single = new QWidget(this);
@@ -263,6 +324,18 @@ void LookEditor::setPalette(quint32 paletteId)
         const qreal y = qreal(p->intValue2()) / TILT_DEG * XY_MAX;
         m_xyPad->setPosition(QPointF(x, y));
         m_stack->setCurrentIndex(m_pagePanTilt);
+        break;
+    }
+    case QLCPalette::Beam:
+    {
+        QVariantList bv = p->values();
+        m_beamFocusSlider->setValue(bv.count() > 0 ? bv.at(0).toInt() : 0);
+        m_beamFrostSlider->setValue(bv.count() > 1 ? bv.at(1).toInt() : 0);
+        m_beamIrisSlider ->setValue(bv.count() > 2 ? bv.at(2).toInt() : 0);
+        m_beamFocusValue->setText(QString::number(m_beamFocusSlider->value()));
+        m_beamFrostValue->setText(QString::number(m_beamFrostSlider->value()));
+        m_beamIrisValue ->setText(QString::number(m_beamIrisSlider->value()));
+        m_stack->setCurrentIndex(m_pageBeam);
         break;
     }
     default: // Gobo / Shutter / Pan / Tilt / Zoom
@@ -510,6 +583,27 @@ void LookEditor::slotSingleCapabilityPicked(int index)
     // Set the slider to the picked capability's mid value; that drives the
     // palette update via slotSingleValueChanged().
     m_singleSlider->setValue(m_singleCombo->itemData(index).toInt());
+}
+
+void LookEditor::slotBeamChanged(int)
+{
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL)
+        return;
+
+    int focus = m_beamFocusSlider->value();
+    int frost  = m_beamFrostSlider->value();
+    int iris   = m_beamIrisSlider->value();
+    m_beamFocusValue->setText(QString::number(focus));
+    m_beamFrostValue->setText(QString::number(frost));
+    m_beamIrisValue ->setText(QString::number(iris));
+
+    QVariantList vals;
+    vals << focus << frost << iris;
+    p->setValues(vals);
+    emit paletteChanged(m_paletteId);
 }
 
 const QLCChannel *LookEditor::representativeChannel(int group) const
