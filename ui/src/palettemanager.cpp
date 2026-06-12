@@ -142,7 +142,7 @@ void PaletteManager::slotSelectionChanged()
 
 void PaletteManager::slotNew()
 {
-    PaletteEditDialog dlg(this);
+    PaletteEditDialog dlg(this, m_doc);
     if (dlg.exec() != QDialog::Accepted || dlg.result() == nullptr)
         return;
     QLCPalette *p = dlg.result();
@@ -161,7 +161,7 @@ void PaletteManager::slotEdit()
     QLCPalette *p = m_doc->palette(id);
     if (p == nullptr)
         return;
-    PaletteEditDialog dlg(p, this);
+    PaletteEditDialog dlg(p, this, m_doc);
     if (dlg.exec() != QDialog::Accepted)
         return;
     m_doc->setModified();

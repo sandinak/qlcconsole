@@ -133,6 +133,9 @@ public:
     void setEscapeMode(bool e) { m_escapeMode = e; update(); }
     bool escapeMode() const    { return m_escapeMode; }
 
+    /** Highlight from an external source (e.g. Programming tab selection). */
+    void setHighlighted(bool h) { m_highlighted = h; update(); }
+
     /** Configure the snap-to-grid behaviour for this item.
      *  @param divisions number of cell subdivisions to snap to
      *         (1 = full cell, 2 = 1/2, 4 = 1/4). <= 0 disables snapping.
@@ -141,7 +144,7 @@ public:
      *  @param yOffset vertical grid origin offset in pixels */
     void setSnap(int divisions, qreal cellPixels, qreal xOffset, qreal yOffset);
 
-protected slots:
+public slots:
     /** Update the fixture values for rendering, passing the
      *  universe array of values */
     void slotUpdateValues();
@@ -209,8 +212,9 @@ private:
 
     QRect m_labelRect;
 
-    bool m_boundToTruss = false;
-    bool m_escapeMode   = false;
+    bool m_boundToTruss  = false;
+    bool m_escapeMode    = false;
+    bool m_highlighted   = false;
 };
 
 /** @} */

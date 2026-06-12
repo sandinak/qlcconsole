@@ -79,6 +79,7 @@ private slots:
     void slotLookSelectionChanged();
     void slotLookDoubleClicked(QListWidgetItem *item);
     void slotTargetSelectionChanged();
+    void slotTargetContextMenu(const QPoint &pos);
 
 private:
     QString lookLabel(quint32 paletteId) const;

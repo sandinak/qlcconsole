@@ -64,6 +64,14 @@ public:
 
     /** Refresh fixtures & show current view */
     void updateView();
+
+    /** Highlight the given fixtures (orange border) in the 2D graphics view.
+     *  Passing an empty list clears all highlights. */
+    void highlightFixtures(const QList<quint32> &ids);
+
+    /** Set the active scene context for aim-line rendering.
+     *  Pass Function::invalidId() to hide all aim lines. */
+    void setActiveScene(quint32 sceneId);
 protected:
     /** Initialize the monitor view */
     void initView();
@@ -168,10 +176,10 @@ protected:
      * Graphics View
      ********************************************************************/
 protected:
-    /** Hides the Fixture Item editor on the right side of the view */
+    /** Dismiss any open fixture property editor (no-op with popup design). */
     void hideFixtureItemEditor();
 
-    /** Shows the Fixture Item editor on the right side of the view */
+    /** Open a modal fixture properties dialog for the current selection. */
     void showFixtureItemEditor();
 
 protected slots:
@@ -232,6 +240,24 @@ protected slots:
     /** Add a fixture onto a truss at the given offset (from TrussItem right-click). */
     void slotAddFixtureToTruss(quint32 trussId, float offsetMetres);
 
+    /** Add a new platform and open its editor. */
+    void slotAddPlatform();
+
+    /** Open the platform edit dialog for the given platform ID. */
+    void slotEditPlatform(quint32 pid);
+
+    /** Open platform edit on double-click. */
+    void slotPlatformDoubleClicked(quint32 pid);
+
+    /** Add a new stage target and open its editor. */
+    void slotAddTarget();
+
+    /** Open the target edit dialog for the given target ID. */
+    void slotEditTarget(quint32 tid);
+
+    /** Open target edit on double-click. */
+    void slotTargetDoubleClicked(quint32 tid);
+
     /** Slot called when the user wants to show
      *  or hide fixtures labels */
     void slotShowLabels(bool visible);
@@ -249,7 +275,6 @@ protected:
      *  fixtures/trusses at the cursor location. */
     QPointF m_pendingAddScenePos;
     MonitorGraphicsView* m_graphicsView;
-    QWidget *m_fixtureItemEditor;
     QSpinBox* m_gridWSpin;
     QSpinBox *m_gridHSpin;
     QComboBox *m_unitsCombo;
@@ -257,6 +282,7 @@ protected:
     QComboBox *m_snapCombo;
     QAction *m_labelsAction;
     QAction *m_lockAction;
+    QAction *m_addPlatformAction;
 };
 
 /** @} */

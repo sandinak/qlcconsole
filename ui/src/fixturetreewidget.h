@@ -84,6 +84,11 @@ signals:
      *  the root). $destPath is the target folder path ("" = root). */
     void groupsDroppedOnFolder(const QList<quint32>& groupIds, const QString& destPath);
 
+    /** Emitted when the user commits an in-place rename of a group folder.
+     *  @p oldPath  full old path ("Stage/Left")
+     *  @p newName  new leaf name the user typed ("Right") */
+    void groupFolderRenamed(const QString& oldPath, const QString& newName);
+
 protected:
     /** Provide fixture/group IDs for dragging onto drop targets (the group
      *  editor grid for fixtures, folders for groups). */
@@ -93,9 +98,11 @@ protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 protected slots:
     void slotItemExpanded();
+    void slotItemChanged(QTreeWidgetItem* item, int column);
 
 private:
     /** Get/create the folder item for a "/"-separated fixture-group path

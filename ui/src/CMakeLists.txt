@@ -82,6 +82,8 @@ add_library(${module_name}
     monitor/monitorgraphicsview.cpp monitor/monitorgraphicsview.h
     monitor/monitorlayout.cpp monitor/monitorlayout.h
     monitor/trussitem.cpp monitor/trussitem.h
+    monitor/platformitem.cpp monitor/platformitem.h
+    monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
     positiontool.cpp positiontool.h positiontool.ui
@@ -188,6 +190,9 @@ if(QT_VERSION_MAJOR GREATER 5)
     qt_add_resources(qlcplusui_resource_files "qlcui.qrc")
 else()
     target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Script)
+    # EffectScript (via lookeditor) uses QJSEngine; link privately so
+    # QT_QML_LIB doesn't leak to downstream test binaries.
+    target_link_libraries(${module_name} PRIVATE Qt${QT_MAJOR_VERSION}::Qml)
     qt5_add_resources(qlcplusui_resource_files "qlcui.qrc")
 endif()
 

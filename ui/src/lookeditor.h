@@ -27,8 +27,11 @@ class CapabilityBar;
 class QSlider;
 class QComboBox;
 class QLabel;
+class QLineEdit;
 class QToolButton;
+class QScrollArea;
 class QLCChannel;
+class QLCPalette;
 class Scene;
 class Doc;
 
@@ -61,6 +64,7 @@ private slots:
     void slotColorExtraChanged(); //!< White/Amber/UV sliders
     void slotDimmerChanged(int v);
     void slotPanTiltChanged(const QPointF &p);
+    void slotTargetChanged(int index);
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
     void slotBeamChanged(int);
@@ -94,8 +98,9 @@ private:
     quint32 m_paletteId;
     bool m_loading;
 
-    QLabel *m_title;
-    QLabel *m_warning;
+    QLineEdit *m_nameEdit;   //!< editable palette name
+    QLabel    *m_title;      //!< "used by N scene(s)" info line
+    QLabel    *m_warning;
     QStackedWidget *m_stack;
     int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageBeam, m_pageSingle;
 
@@ -106,6 +111,7 @@ private:
     QLabel *m_dimmerValue;
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
+    QComboBox   *m_targetCombo;  //!< stage target for PanTilt palettes
     QSlider *m_beamFocusSlider, *m_beamFrostSlider, *m_beamIrisSlider;
     QLabel *m_beamFocusValue, *m_beamFrostValue, *m_beamIrisValue;
     QSlider *m_singleSlider;
@@ -113,6 +119,28 @@ private:
     QComboBox *m_singleCombo;  //!< named gobo/shutter capabilities
     QLabel *m_singlePreview;   //!< gobo/shutter image for the current value
     const QLCChannel *m_singleChannel; //!< representative chan for the single page
+
+    // Effect page
+    int m_pageEffect;
+    QComboBox   *m_effectScriptCombo;
+    QLabel      *m_effectDescLabel;   //!< one-line description below combo
+    QLabel      *m_effectNotesLabel;  //!< longer paragraph in edit panel
+    QLabel      *m_effectTypesLabel;  //!< "Works with: …" fixture-type chips
+    QScrollArea *m_effectDynScroll;
+    QWidget     *m_effectDynWidget;   //!< rebuilt when script selection changes
+
+private slots:
+    void slotNameEdited();
+    void slotEffectScriptChanged(int index);
+    void slotEffectParamChanged(int value);
+    void slotEffectBindInput();
+
+private:
+    void rebuildEffectDynWidget();
+
+    /** Auto-set palette name from its value when it still has the factory
+     *  default name ("New Color", "New Dimmer", "New Effect"). */
+    void maybeAutoName(QLCPalette *p);
 };
 
 /** @} */

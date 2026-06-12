@@ -31,6 +31,8 @@
 #include "doc.h"
 
 class ProgrammerFlasher;
+class HighlightEffect;
+class FollowSpotEffect;
 class QLCPalette;
 class Scene;
 
@@ -100,6 +102,23 @@ public:
     quint32 singleRunningCollection() const;
     void flashFixture(quint32 fixtureId, int durationMs = 180);
 
+    /*********************************************************************
+     * Highlight mode
+     *********************************************************************/
+public:
+    /** Toggle highlight on/off. When on, selected fixtures are driven to
+     *  full white on every DMX tick (bypasses running functions). */
+    bool isHighlightActive() const;
+    void setHighlightActive(bool active);
+
+    /*********************************************************************
+     * Followspot effect
+     *********************************************************************/
+public:
+    bool isFollowSpotActive() const;
+    void setFollowSpotActive(bool active);
+    FollowSpotEffect *followSpotEffect() const { return m_followSpotEffect; }
+
     bool isShowLocked() const;
     void setShowLocked(bool locked);
 
@@ -123,6 +142,10 @@ public:
 signals:
     /** Emitted whenever the programmer selection changes. */
     void programmerSelectionChanged();
+    /** Emitted when highlight active state changes. */
+    void highlightActiveChanged(bool active);
+    /** Emitted when followspot active state changes. */
+    void followSpotActiveChanged(bool active);
     /** Emitted whenever the programmer-values map transitions between
         empty and non-empty. */
     void programmerDirtyChanged(bool dirty);
@@ -137,6 +160,8 @@ private slots:
     /** Maintain m_runningScenes as functions start / stop. */
     void slotProgrammerFunctionStarted(quint32 fid);
     void slotProgrammerFunctionStopped(quint32 fid);
+    /** Sync highlight / followspot fixtures when selection changes. */
+    void slotSyncEffectFixtures();
 
 private:
     /** Fill in defaultName / defaultPath for each bucket (category- and
@@ -192,6 +217,11 @@ private:
     QList<quint32> m_runningCollections;
     /** Owns the per-tick flasher DMXSource for fixture flash-to-identify. */
     ProgrammerFlasher *m_programmerFlasher = nullptr;
+    /** Persistent highlight DMXSource — holds selected fixtures at white. */
+    HighlightEffect *m_highlightEffect = nullptr;
+    bool m_highlightActive = false;
+    /** Followspot DMXSource — maps joystick axes to fixture pan/tilt. */
+    FollowSpotEffect *m_followSpotEffect = nullptr;
     /** Show-mode safety lock. */
     bool m_showLocked = false;
     /** Scenes whose values have been mutated by the programmer

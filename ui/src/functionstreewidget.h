@@ -190,6 +190,9 @@ signals:
      *  onto a folder, so the owner can refresh the tree. */
     void paletteDroppedToFolder();
 
+    /** Emitted when a palette is renamed in-place so canvas tiles can update. */
+    void paletteRenamed(quint32 paletteId);
+
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;

@@ -22,8 +22,13 @@
 #include <QRegularExpression>
 #include <QTimer>
 #include <QLineEdit>
+#include <QSlider>
+#include <QGroupBox>
+#include <QFormLayout>
 
 #include "programmingmanager.h"
+#include "programmercontroller.h"
+#include "followspoteffect.h"
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
 #include "scenegrouplooks.h"
@@ -45,6 +50,8 @@
 #include "chaserstep.h"
 #include "scenevalue.h"
 #include "doc.h"
+#include "effectscriptrunner.h"
+#include "monitor/monitor.h"
 
 ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     : QWidget(parent)
@@ -88,6 +95,101 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // --- Center: the selected scene's canvas ---
     QWidget *canvasPanel = new QWidget(this);
     m_canvasLayout = new QVBoxLayout(canvasPanel);
+
+    // Toolbar: Highlight + Followspot toggles
+    {
+        QHBoxLayout *toolbar = new QHBoxLayout;
+        toolbar->setContentsMargins(0, 0, 0, 0);
+
+        m_highlightBtn = new QPushButton(tr("Highlight"), this);
+        m_highlightBtn->setCheckable(true);
+        m_highlightBtn->setToolTip(tr("Drive selected fixtures to full white so you can identify them in the rig"));
+        toolbar->addWidget(m_highlightBtn);
+
+        m_followSpotBtn = new QPushButton(tr("Followspot"), this);
+        m_followSpotBtn->setCheckable(true);
+        m_followSpotBtn->setToolTip(tr("Steer selected fixtures with a joystick"));
+        toolbar->addWidget(m_followSpotBtn);
+
+        toolbar->addStretch(1);
+
+        m_canvasLayout->addLayout(toolbar);
+
+        connect(m_highlightBtn, &QPushButton::toggled,
+                this, &ProgrammingManager::slotHighlightToggled);
+        connect(m_followSpotBtn, &QPushButton::toggled,
+                this, &ProgrammingManager::slotFollowSpotToggled);
+    }
+
+    // Followspot config panel (hidden until activated)
+    {
+        m_followSpotPanel = new QGroupBox(tr("Followspot settings"), this);
+        QFormLayout *form = new QFormLayout(m_followSpotPanel);
+        form->setContentsMargins(4, 4, 4, 4);
+        form->setSpacing(4);
+
+        QHBoxLayout *xRow = new QHBoxLayout;
+        m_fsBindXBtn = new QPushButton(tr("Bind X (pan)"), this);
+        m_fsXLabel = new QLabel(tr("—"), this);
+        xRow->addWidget(m_fsBindXBtn);
+        xRow->addWidget(m_fsXLabel, 1);
+        form->addRow(tr("Pan axis:"), xRow);
+
+        QHBoxLayout *yRow = new QHBoxLayout;
+        m_fsBindYBtn = new QPushButton(tr("Bind Y (tilt)"), this);
+        m_fsYLabel = new QLabel(tr("—"), this);
+        yRow->addWidget(m_fsBindYBtn);
+        yRow->addWidget(m_fsYLabel, 1);
+        form->addRow(tr("Tilt axis:"), yRow);
+
+        m_fsSensSlider = new QSlider(Qt::Horizontal, this);
+        m_fsSensSlider->setRange(10, 200);   // 0.1× to 2.0×
+        m_fsSensSlider->setValue(100);        // 1.0× default
+        m_fsSensSlider->setToolTip(tr("Sensitivity (10%–200%)"));
+        form->addRow(tr("Sensitivity:"), m_fsSensSlider);
+
+        m_fsDzSlider = new QSlider(Qt::Horizontal, this);
+        m_fsDzSlider->setRange(0, 30);   // 0%–30%
+        m_fsDzSlider->setValue(5);        // 5% default
+        m_fsDzSlider->setToolTip(tr("Deadzone around joystick centre (0%–30%)"));
+        form->addRow(tr("Deadzone:"), m_fsDzSlider);
+
+        QPushButton *clearBtn = new QPushButton(tr("Clear bindings"), this);
+        form->addRow(QString(), clearBtn);
+
+        m_followSpotPanel->hide();
+        m_canvasLayout->addWidget(m_followSpotPanel);
+
+        connect(m_fsBindXBtn, &QPushButton::clicked,
+                this, &ProgrammingManager::slotFollowSpotBindX);
+        connect(m_fsBindYBtn, &QPushButton::clicked,
+                this, &ProgrammingManager::slotFollowSpotBindY);
+        connect(clearBtn, &QPushButton::clicked,
+                this, &ProgrammingManager::slotFollowSpotClearBindings);
+        connect(m_fsSensSlider, &QSlider::valueChanged,
+                this, &ProgrammingManager::slotFollowSpotSensitivity);
+        connect(m_fsDzSlider, &QSlider::valueChanged,
+                this, &ProgrammingManager::slotFollowSpotDeadzone);
+
+        // Sync with engine state
+        ProgrammerController *pc = m_doc->programmer();
+        if (pc)
+        {
+            FollowSpotEffect *fs = pc->followSpotEffect();
+            if (fs)
+            {
+                connect(fs, &FollowSpotEffect::bindingChanged,
+                        this, &ProgrammingManager::slotFollowSpotBindingChanged);
+                connect(fs, &FollowSpotEffect::activeChanged,
+                        this, &ProgrammingManager::slotFollowSpotActiveChanged);
+            }
+            connect(pc, &ProgrammerController::highlightActiveChanged,
+                    m_highlightBtn, &QPushButton::setChecked);
+            connect(pc, &ProgrammerController::followSpotActiveChanged,
+                    m_followSpotBtn, &QPushButton::setChecked);
+        }
+    }
+
     m_canvasTitle = new QLabel(this);
     m_canvasTitle->setStyleSheet("font-weight: bold;");
     m_canvasTitle->setWordWrap(true);
@@ -225,6 +327,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
     connect(m_lookEditor, SIGNAL(paletteChanged(quint32)),
             this, SLOT(slotLookEdited()));
+    // Refresh canvas palette tiles when a palette is renamed in the tree.
+    connect(m_paletteTree, &FunctionsTreeWidget::paletteRenamed,
+            this, [this](quint32) { if (m_canvas) m_canvas->reload(); });
 
     // Double-click a palette in the source tree to edit it inline too.
     connect(m_paletteTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
@@ -268,6 +373,8 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     m_currentScene = sceneId;
     m_canvasFunction = sceneId;
     m_lookEditor->setPalette(QLCPalette::invalidId());
+    if (Monitor::instance() != NULL)
+        Monitor::instance()->setActiveScene(sceneId);
     m_funcTree->setExternalDragMode(false); // only collections/chasers need it
     // Keep the collection/chaser context (its nested subtree) when drilling
     // into one of ITS member scenes, so you can go back and forth; clear it
@@ -334,6 +441,8 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     m_canvasFunction = f->id();
     m_lookEditor->setPalette(QLCPalette::invalidId());
     m_lookEditor->setContextScene(NULL);
+    if (Monitor::instance() != NULL)
+        Monitor::instance()->setActiveScene(Function::invalidId());
     clearEditors();
     m_canvasPlaceholder->hide();
     m_fixtureScroll->hide(); // non-scene: no per-fixture editor
@@ -446,8 +555,14 @@ bool ProgrammingManager::containerHas(quint32 containerId, quint32 fid,
 
 void ProgrammingManager::slotLookEdited()
 {
-    // A look's value changed in the editor: refresh the preview output.
+    // A look's value changed (including name edits) in the editor:
+    // refresh the preview and update any tree/canvas items that show the name.
     refreshPreview();
+    // Update the palette tree so a renamed palette shows its new name.
+    m_paletteTree->updateTree();
+    // Update the canvas's looks list (tiles show palette name).
+    if (m_canvas)
+        m_canvas->reload();
 }
 
 void ProgrammingManager::createPalette(int paletteType)
@@ -463,10 +578,12 @@ void ProgrammingManager::createPalette(int paletteType)
     case QLCPalette::Color:   p->setValue(QColor(Qt::white).name()); break;
     case QLCPalette::Dimmer:  p->setValue(255); break;
     case QLCPalette::PanTilt: p->setValue(270, 135); break;
+    case QLCPalette::Effect:  break; // no value needed; script path set in LookEditor
     default:                  p->setValue(0); break; // Gobo / Shutter / …
     }
 
-    // Drop it into the selected palette folder, if any.
+    // Default to a type-named folder; override with selected folder if one is active.
+    p->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(type)));
     const QList<QTreeWidgetItem*> sel = m_paletteTree->selectedItems();
     if (sel.isEmpty() == false)
     {
@@ -511,6 +628,8 @@ void ProgrammingManager::showLookEditorPanel()
 void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
 {
     m_selectedFixtures = fixtureIds;
+    if (Monitor::instance() != NULL)
+        Monitor::instance()->highlightFixtures(fixtureIds);
     Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
     if (fixtureIds.isEmpty() || s == NULL
         || m_doc->fixture(fixtureIds.first()) == NULL)
@@ -771,7 +890,14 @@ void ProgrammingManager::refreshPreview()
     if (f->isRunning())
     {
         if (Scene *s = qobject_cast<Scene*>(f))
+        {
             s->resetRuntime();
+            // Effect palettes are not written by Scene::write(), so resetRuntime
+            // doesn't trigger a functionStarted signal. Re-sync EffectInstances
+            // explicitly so newly-added/removed Effect palettes take effect.
+            if (m_doc->effectScriptRunner())
+                m_doc->effectScriptRunner()->syncScene(m_canvasFunction);
+        }
         // collections/others reflect their members' own changes
     }
     else
@@ -907,6 +1033,7 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
         { QT_TR_NOOP("New Beam"),     QLCPalette::Beam },
         { QT_TR_NOOP("New Gobo"),     QLCPalette::Gobo },
         { QT_TR_NOOP("New Shutter"),  QLCPalette::Shutter },
+        { QT_TR_NOOP("New Effect"),   QLCPalette::Effect },
     };
     QList<QAction*> newActions;
     for (uint i = 0; i < sizeof(types) / sizeof(types[0]); i++)
@@ -1148,4 +1275,100 @@ int ProgrammingManager::functionUsageCount(quint32 fid) const
         }
     }
     return n;
+}
+
+/*****************************************************************************
+ * Highlight
+ *****************************************************************************/
+
+void ProgrammingManager::slotHighlightToggled(bool on)
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc)
+        pc->setHighlightActive(on);
+}
+
+/*****************************************************************************
+ * Followspot
+ *****************************************************************************/
+
+void ProgrammingManager::slotFollowSpotToggled(bool on)
+{
+    m_followSpotPanel->setVisible(on);
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc)
+        pc->setFollowSpotActive(on);
+}
+
+void ProgrammingManager::slotFollowSpotBindX()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (!pc) return;
+    FollowSpotEffect *fs = pc->followSpotEffect();
+    if (!fs) return;
+    m_fsBindXBtn->setText(tr("Move X axis…"));
+    m_fsBindYBtn->setEnabled(false);
+    fs->startBindX();
+}
+
+void ProgrammingManager::slotFollowSpotBindY()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (!pc) return;
+    FollowSpotEffect *fs = pc->followSpotEffect();
+    if (!fs) return;
+    m_fsBindYBtn->setText(tr("Move Y axis…"));
+    m_fsBindXBtn->setEnabled(false);
+    fs->startBindY();
+}
+
+void ProgrammingManager::slotFollowSpotClearBindings()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (!pc) return;
+    FollowSpotEffect *fs = pc->followSpotEffect();
+    if (!fs) return;
+    fs->clearBindings();
+}
+
+void ProgrammingManager::slotFollowSpotSensitivity(int value)
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (!pc) return;
+    FollowSpotEffect *fs = pc->followSpotEffect();
+    if (fs)
+        fs->setSensitivity(value / 100.0f);
+}
+
+void ProgrammingManager::slotFollowSpotDeadzone(int value)
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (!pc) return;
+    FollowSpotEffect *fs = pc->followSpotEffect();
+    if (fs)
+        fs->setDeadzone(value / 100.0f);
+}
+
+void ProgrammingManager::slotFollowSpotBindingChanged()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (!pc) return;
+    FollowSpotEffect *fs = pc->followSpotEffect();
+    if (!fs) return;
+
+    // Restore button labels and enable state
+    m_fsBindXBtn->setText(tr("Bind X (pan)"));
+    m_fsBindYBtn->setText(tr("Bind Y (tilt)"));
+    m_fsBindXBtn->setEnabled(true);
+    m_fsBindYBtn->setEnabled(true);
+
+    m_fsXLabel->setText(fs->xBindingLabel());
+    m_fsYLabel->setText(fs->yBindingLabel());
+}
+
+void ProgrammingManager::slotFollowSpotActiveChanged(bool active)
+{
+    // Keep the button in sync if the engine toggles independently
+    m_followSpotBtn->setChecked(active);
+    m_followSpotPanel->setVisible(active);
 }

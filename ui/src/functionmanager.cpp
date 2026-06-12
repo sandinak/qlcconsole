@@ -374,16 +374,12 @@ QString FunctionManager::getSelectedFolderPath()
         }
         else
         {
-            // Selected item is a leaf - get its folder. Palette leaves
-            // resolve via the palette; function leaves via the function.
+            // Selected item is a leaf — only follow function leaves.
+            // Palette leaves must NOT seed the path for a new function:
+            // palette paths live under a separate tree subtree and placing
+            // a function there makes functionItem() return NULL (→ Q_ASSERT).
             const quint32 pid = m_tree->itemPaletteId(item);
-            if (pid != QLCPalette::invalidId())
-            {
-                QLCPalette* palette = m_doc->palette(pid);
-                if (palette != NULL)
-                    folderPath = palette->path();
-            }
-            else
+            if (pid == QLCPalette::invalidId())
             {
                 quint32 fid = item->data(0, Qt::UserRole).toUInt(); // COL_NAME
                 Function* func = m_doc->function(fid);
@@ -698,7 +694,7 @@ void FunctionManager::slotPaletteManager()
 
 void FunctionManager::slotAddPalette()
 {
-    PaletteEditDialog dlg(this);
+    PaletteEditDialog dlg(this, m_doc);
     if (dlg.exec() != QDialog::Accepted || dlg.result() == NULL)
         return;
 
@@ -1012,7 +1008,7 @@ void FunctionManager::slotTreeItemDoubleClicked(QTreeWidgetItem* item)
         QLCPalette* palette = m_doc->palette(pid);
         if (palette != NULL)
         {
-            PaletteEditDialog dlg(palette, this);
+            PaletteEditDialog dlg(palette, this, m_doc);
             if (dlg.exec() == QDialog::Accepted)
             {
                 m_doc->setModified();

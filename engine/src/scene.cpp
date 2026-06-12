@@ -872,6 +872,8 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 QLCPalette *palette = doc()->palette(paletteID);
                 if (palette == NULL)
                     continue;
+                if (palette->type() == QLCPalette::Effect)
+                    continue; // EffectScriptRunner handles these as a DMXSource
 
                 foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups()))
                     processValue(timer, ua, fadeIn, scv);

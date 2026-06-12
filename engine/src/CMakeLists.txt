@@ -38,6 +38,8 @@ add_library(${module_name} SHARED
     keypadparser.cpp keypadparser.h
     mastertimer.cpp mastertimer.h
     monitorproperties.cpp monitorproperties.h
+    stageplatform.cpp stageplatform.h
+    stagetarget.cpp stagetarget.h
     truss.cpp truss.h
     outputpatch.cpp outputpatch.h
     qlccapability.cpp qlccapability.h
@@ -66,6 +68,12 @@ add_library(${module_name} SHARED
     rgbscriptscache.cpp rgbscriptscache.h
     rgbtext.cpp rgbtext.h
     programmerflasher.cpp programmerflasher.h
+    highlighteffect.cpp highlighteffect.h
+    followspoteffect.cpp followspoteffect.h
+    effectscript.cpp effectscript.h
+    effectscriptcache.cpp effectscriptcache.h
+    effectinstance.cpp effectinstance.h
+    effectscriptrunner.cpp effectscriptrunner.h
     programmercontroller.cpp programmercontroller.h
     scene.cpp scene.h
     scenevalue.cpp scenevalue.h
@@ -140,6 +148,9 @@ if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
 else()
     target_sources(${module_name} PRIVATE rgbscript.cpp rgbscript.h)
     target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Script)
+    # EffectScript uses QJSEngine; link Qml privately so QT_QML_LIB doesn't
+    # propagate to test binaries that guard on it for rgbscript vs rgbscriptv4.
+    target_link_libraries(${module_name} PRIVATE Qt${QT_MAJOR_VERSION}::Qml)
 endif()
 
 if(qmlui)

@@ -21,6 +21,7 @@ class QSpinBox;
 class QPushButton;
 class QLabel;
 class QLCPalette;
+class Doc;
 
 /** @addtogroup ui_functions
  * @{
@@ -44,9 +45,10 @@ class PaletteEditDialog final : public QDialog
 
 public:
     /** New-palette mode. */
-    explicit PaletteEditDialog(QWidget *parent = nullptr);
+    explicit PaletteEditDialog(QWidget *parent = nullptr, Doc *doc = nullptr);
     /** Edit-existing mode. */
-    explicit PaletteEditDialog(QLCPalette *existing, QWidget *parent = nullptr);
+    explicit PaletteEditDialog(QLCPalette *existing, QWidget *parent = nullptr,
+                               Doc *doc = nullptr);
     ~PaletteEditDialog();
 
     /** The created (new mode) or edited (edit mode) palette, valid only
@@ -65,15 +67,18 @@ private:
 private:
     QLCPalette *m_existing;   //!< non-null in edit mode
     QLCPalette *m_palette;    //!< result after accept()
+    Doc        *m_doc;        //!< may be null — used for target list
     QColor m_color;           //!< current color for Color type
 
-    QLineEdit *m_nameEdit;
-    QComboBox *m_typeCombo;
-    QPushButton *m_colorButton;
-    QLabel *m_value1Label;
-    QSpinBox *m_value1Spin;
-    QLabel *m_value2Label;
-    QSpinBox *m_value2Spin;
+    QLineEdit  *m_nameEdit;
+    QComboBox  *m_typeCombo;
+    QPushButton*m_colorButton;
+    QLabel     *m_value1Label;
+    QSpinBox   *m_value1Spin;
+    QLabel     *m_value2Label;
+    QSpinBox   *m_value2Spin;
+    QLabel     *m_targetLabel;
+    QComboBox  *m_targetCombo;
 };
 
 /** @} */

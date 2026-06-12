@@ -28,6 +28,8 @@
 #include <QMap>
 
 #include "truss.h"
+#include "stageplatform.h"
+#include "stagetarget.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -292,6 +294,54 @@ private:
     QMap<quint32, Truss*> m_trusses;
 
     /********************************************************************
+     * Stage platforms (risers)
+     ********************************************************************/
+public:
+    /** Return all defined platforms (owned by this object). */
+    QList<StagePlatform*> platforms() const { return m_platforms.values(); }
+
+    /** Look up a platform by ID; returns nullptr if not found. */
+    StagePlatform *platform(quint32 id) const { return m_platforms.value(id, nullptr); }
+
+    /** Add a new platform with a unique ID.  Takes ownership. */
+    StagePlatform *addPlatform();
+
+    /** Remove and delete the platform with the given ID. */
+    void removePlatform(quint32 id);
+
+    /** Next unused platform ID. */
+    quint32 nextPlatformId() const;
+
+    /** Return the platform height (metres) at floor position (xMetres, yMetres).
+     *  Returns 0 if the point is not on any platform. */
+    float platformHeightAt(float xMetres, float yMetres) const;
+
+private:
+    QMap<quint32, StagePlatform*> m_platforms;
+
+    /********************************************************************
+     * Stage targets
+     ********************************************************************/
+public:
+    /** Return all defined targets (owned by this object). */
+    QList<StageTarget*> stageTargets() const { return m_stageTargets.values(); }
+
+    /** Look up a target by ID; returns nullptr if not found. */
+    StageTarget *stageTarget(quint32 id) const { return m_stageTargets.value(id, nullptr); }
+
+    /** Add a new target with a unique ID.  Takes ownership. */
+    StageTarget *addStageTarget();
+
+    /** Remove and delete the target with the given ID. */
+    void removeStageTarget(quint32 id);
+
+    /** Next unused target ID. */
+    quint32 nextStageTargetId() const;
+
+private:
+    QMap<quint32, StageTarget*> m_stageTargets;
+
+    /********************************************************************
      * Fixture rig properties
      ********************************************************************/
 public:
@@ -301,6 +351,7 @@ public:
     void setFixtureRigProps(quint32 fid, const FixtureRigProps &props);
     void removeFixtureRigProps(quint32 fid) { m_rigProps.remove(fid); }
     bool hasFixtureRigProps(quint32 fid) const { return m_rigProps.contains(fid); }
+    const QMap<quint32, FixtureRigProps> &fixtureRigPropsMap() const { return m_rigProps; }
 
     /** Compute the derived world-space 3-D position of fixture $fid.
      *  For truss-assigned fixtures the position is derived from the truss

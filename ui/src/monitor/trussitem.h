@@ -67,6 +67,7 @@ public:
 
     /** Highlight the truss (e.g. while a fixture is dragged over it). */
     void setHighlighted(bool highlighted);
+    bool isHighlighted() const { return m_highlighted; }
 
     // QGraphicsItem interface
     QRectF boundingRect() const override;

@@ -18,6 +18,7 @@
 #include <QMimeData>
 #include <QDataStream>
 #include <QMessageBox>
+#include <QMenu>
 #include <QSet>
 #include <QMap>
 #include <QTimer>
@@ -82,6 +83,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     m_targetList->setHeaderHidden(true);
     m_targetList->setRootIsDecorated(true);
     m_targetList->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_targetList->setContextMenuPolicy(Qt::CustomContextMenu);
     targetCol->addWidget(m_targetList);
     QHBoxLayout *targetBtns = new QHBoxLayout();
     m_removeTargetButton = new QPushButton(tr("Remove"), this);
@@ -113,6 +115,8 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
             this, SLOT(slotLookDoubleClicked(QListWidgetItem*)));
     connect(m_targetList, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotTargetSelectionChanged()));
+    connect(m_targetList, SIGNAL(customContextMenuRequested(QPoint)),
+            this, SLOT(slotTargetContextMenu(QPoint)));
 
     reload();
 }
@@ -264,7 +268,17 @@ void SceneGroupLooks::reload()
             allFixtures.insert(fid);
     m_targetsLabel->setText(tr("Targets (%n fixture(s))", "", allFixtures.count()));
 
-    // Looks = palettes.
+    // Looks = palettes — preserve the current selection so that moving an
+    // effect slider (which triggers reload via slotLookEdited) doesn't
+    // deselect the palette and clear the LookEditor.
+    quint32 selPid = QLCPalette::invalidId();
+    {
+        const QList<QListWidgetItem*> prevSel = m_lookList->selectedItems();
+        if (!prevSel.isEmpty())
+            selPid = prevSel.first()->data(Qt::UserRole).toUInt();
+    }
+
+    m_lookList->blockSignals(true);
     m_lookList->clear();
     foreach (quint32 pid, m_scene->palettes())
     {
@@ -274,6 +288,20 @@ void SceneGroupLooks::reload()
         if (p != NULL)
             it->setIcon(QIcon(p->iconResource()));
     }
+
+    // Restore selection (setCurrentRow fires currentItemChanged after unblock)
+    if (selPid != QLCPalette::invalidId())
+    {
+        for (int i = 0; i < m_lookList->count(); ++i)
+        {
+            if (m_lookList->item(i)->data(Qt::UserRole).toUInt() == selPid)
+            {
+                m_lookList->setCurrentRow(i);
+                break;
+            }
+        }
+    }
+    m_lookList->blockSignals(false);
 }
 
 // Routed by MIME: palette -> look, fixture group -> dynamic target,
@@ -473,6 +501,16 @@ void SceneGroupLooks::slotRemoveTarget()
         reload();
         emit sceneModified();
     }
+}
+
+void SceneGroupLooks::slotTargetContextMenu(const QPoint &pos)
+{
+    if (m_targetList->selectedItems().isEmpty())
+        return;
+    QMenu menu(m_targetList);
+    QAction *removeAct = menu.addAction(tr("Remove"));
+    if (menu.exec(m_targetList->viewport()->mapToGlobal(pos)) == removeAct)
+        slotRemoveTarget();
 }
 
 void SceneGroupLooks::slotLookSelectionChanged()

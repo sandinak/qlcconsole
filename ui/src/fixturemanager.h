@@ -234,6 +234,10 @@ private slots:
     /** Move the dropped fixture groups into folder $destPath ("" = root). */
     void slotGroupsDroppedOnFolder(const QList<quint32>& groupIds, const QString& destPath);
 
+    /** Rename a fixture-group folder and update all groups whose path starts
+     *  with @p oldPath. */
+    void slotGroupFolderRenamed(const QString& oldPath, const QString& newLeaf);
+
 private:
     QAction* m_addAction;
     QAction* m_addRGBAction;

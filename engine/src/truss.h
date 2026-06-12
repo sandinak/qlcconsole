@@ -152,7 +152,16 @@ struct FixtureRigProps
     Truss::MountingType mountingType = Truss::TopHung;
     /** Stage yaw of pan=0°: degrees clockwise from downstage (0 = fixture
      *  faces directly downstage when pan is at its centre DMX value). */
-    float            panZeroDir  = 0.0f;
+    float            panZeroDir   = 0.0f;
+    /** Additive calibration offsets applied after target-geometry computation. */
+    float            panOffsetDeg  = 0.0f;
+    float            tiltOffsetDeg = 0.0f;
+    /** Invert pan/tilt direction.  Some fixtures physically pan/tilt the opposite
+     *  way from the DMX convention assumed by the geometry (increasing DMX = wrong
+     *  physical direction).  Enabling invert mirrors the computed DMX value around
+     *  the fixture's centre: effective = panMax - computed (before qBound). */
+    bool             panInvert  = false;
+    bool             tiltInvert = false;
 };
 
 /** @} */

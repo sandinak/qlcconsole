@@ -34,6 +34,9 @@ class FixtureConsole;
 class QScrollArea;
 class QVBoxLayout;
 class QLabel;
+class QPushButton;
+class QSlider;
+class QWidget;
 class Doc;
 
 /** @addtogroup ui_functions
@@ -65,6 +68,19 @@ private slots:
     void slotFixturesSelected(const QList<quint32> &fixtureIds);
     void slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value);
     void slotFixtureChecked(quint32 fxi, quint32 ch, bool state);
+
+    // Highlight
+    void slotHighlightToggled(bool on);
+
+    // Followspot
+    void slotFollowSpotToggled(bool on);
+    void slotFollowSpotBindX();
+    void slotFollowSpotBindY();
+    void slotFollowSpotClearBindings();
+    void slotFollowSpotSensitivity(int value);
+    void slotFollowSpotDeadzone(int value);
+    void slotFollowSpotBindingChanged();
+    void slotFollowSpotActiveChanged(bool active);
 
 private:
     void loadCanvas(quint32 sceneId);
@@ -144,6 +160,19 @@ private:
 
     FunctionsTreeWidget *m_paletteTree;
     FixtureGroupSource *m_fixGroupSource;
+
+    // Toolbar buttons
+    QPushButton *m_highlightBtn;
+    QPushButton *m_followSpotBtn;
+
+    // Followspot config panel (shown/hidden with followspot toggle)
+    QWidget     *m_followSpotPanel;
+    QPushButton *m_fsBindXBtn;
+    QPushButton *m_fsBindYBtn;
+    QLabel      *m_fsXLabel;
+    QLabel      *m_fsYLabel;
+    QSlider     *m_fsSensSlider;
+    QSlider     *m_fsDzSlider;
 };
 
 /** @} */

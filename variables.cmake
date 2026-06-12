@@ -336,6 +336,15 @@ else ()
     set(RGBSCRIPTDIR "${DATADIR}/rgbscripts")
 endif ()
 
+# Effect Scripts
+if (WIN32)
+    set(EFFECTSCRIPTDIR "EffectScripts")
+elseif (APPLE)
+    set(EFFECTSCRIPTDIR "${DATADIR}/EffectScripts")
+else ()
+    set(EFFECTSCRIPTDIR "${DATADIR}/effectscripts")
+endif ()
+
 if (ANDROID)
     set(RGBSCRIPTDIR "${DATADIR}/rgbscripts")
 elseif (IOS)

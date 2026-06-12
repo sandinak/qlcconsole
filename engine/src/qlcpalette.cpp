@@ -25,6 +25,9 @@
 #include "monitorproperties.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
+#include "qlccapability.h"
+#include "qlcfixturehead.h"
+#include "qlcfixturemode.h"
 #include "scenevalue.h"
 #include "doc.h"
 
@@ -32,10 +35,11 @@
 #define KXMLQLCPaletteName      QStringLiteral("Name")
 #define KXMLQLCPalettePath      QStringLiteral("Path")
 #define KXMLQLCPaletteValue     QStringLiteral("Value")
-#define KXMLQLCPaletteFanning   QStringLiteral("Fan")
-#define KXMLQLCPaletteFanLayout QStringLiteral("Layout")
-#define KXMLQLCPaletteFanAmount QStringLiteral("Amount")
-#define KXMLQLCPaletteFanValue  QStringLiteral("FanValue")
+#define KXMLQLCPaletteFanning     QStringLiteral("Fan")
+#define KXMLQLCPaletteFanLayout   QStringLiteral("Layout")
+#define KXMLQLCPaletteFanAmount   QStringLiteral("Amount")
+#define KXMLQLCPaletteFanValue    QStringLiteral("FanValue")
+#define KXMLQLCPaletteStageTarget QStringLiteral("StageTarget")
 
 QLCPalette::QLCPalette(QLCPalette::PaletteType type, QObject *parent)
     : QObject(parent)
@@ -103,6 +107,7 @@ QString QLCPalette::typeToString(QLCPalette::PaletteType type)
         case Gobo:      return "Gobo";
         case Zoom:      return "Zoom";
         case Beam:      return "Beam";
+        case Effect:    return "Effect";
         case Undefined: return "";
     }
 
@@ -129,6 +134,8 @@ QLCPalette::PaletteType QLCPalette::stringToType(const QString &str)
         return Zoom;
     else if (str == "Beam")
         return Beam;
+    else if (str == "Effect")
+        return Effect;
 
     return Undefined;
 }
@@ -148,7 +155,8 @@ QString QLCPalette::iconResource(bool svg) const
         case Shutter: return QString("%1:/shutter.%2").arg(prefix).arg(ext);
         case Gobo: return QString("%1:/gobo.%2").arg(prefix).arg(ext);
         case Zoom: return QString("%1:/beam.%2").arg(prefix).arg(ext);
-        case Beam: return QString("%1:/beam.%2").arg(prefix).arg(ext);
+        case Beam:   return QString("%1:/beam.%2").arg(prefix).arg(ext);
+        case Effect: return QString("%1:/script.%2").arg(prefix).arg(ext);
         default: return "";
     }
 }
@@ -450,6 +458,54 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         list << SceneValue(id, cmyCh.at(2), uchar(col.yellow()));
                     }
 
+                    // Color-wheel fixtures: snap to the nearest wheel slot.
+                    // Only applies when the fixture has no RGB/CMY channels
+                    // (those are already handled above with exact mixing).
+                    if (rgbCh.size() < 3 && cmyCh.size() < 3)
+                    {
+                        QLCFixtureMode *mode = fixture->fixtureMode();
+                        QLCFixtureHead fHead = fixture->head(i);
+                        const QVector<quint32> &wheels = fHead.colorWheels();
+                        for (quint32 wheelCh : wheels)
+                        {
+                            QLCChannel *ch = mode ? mode->channel(wheelCh) : nullptr;
+                            if (!ch)
+                                continue;
+                            // Walk all 256 slots; keep the one whose colour is
+                            // closest (squared RGB distance) to col.
+                            int bestDmx  = -1;
+                            qint64 bestDist = LLONG_MAX;
+                            for (int v = 0; v < 256; ++v)
+                            {
+                                QLCCapability *cap = ch->searchCapability(uchar(v));
+                                if (!cap)
+                                    continue;
+                                QColor slotCol = cap->resource(0).value<QColor>();
+                                if (!slotCol.isValid())
+                                {
+                                    // Fall back to name-based colour (e.g. "Blue")
+                                    slotCol = QColor(cap->name().trimmed());
+                                }
+                                if (!slotCol.isValid())
+                                    continue;
+                                qint64 dr = col.red()   - slotCol.red();
+                                qint64 dg = col.green() - slotCol.green();
+                                qint64 db = col.blue()  - slotCol.blue();
+                                qint64 dist = dr*dr + dg*dg + db*db;
+                                if (dist < bestDist)
+                                {
+                                    bestDist = dist;
+                                    bestDmx  = v;
+                                }
+                                // Advance v to skip identical caps in the range
+                                if (cap->max() > uchar(v))
+                                    v = int(cap->max());
+                            }
+                            if (bestDmx >= 0)
+                                list << SceneValue(id, wheelCh, uchar(bestDmx));
+                        }
+                    }
+
                     // Extra emitters (White/Amber/UV). Use the explicit wauv
                     // value if the palette has one; otherwise auto-derive White
                     // additively (W = min(R,G,B), per fixture) so RGBW fixtures
@@ -504,7 +560,91 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             break;
             case PanTilt:
             {
-                if (m_values.count() == 2)
+                bool usedTarget = false;
+
+                // If this palette is linked to a stage target and the fixture has
+                // a truss rig assignment, compute per-fixture pan/tilt from geometry.
+                if (m_stageTargetId != UINT_MAX && mProps->hasFixtureRigProps(id))
+                {
+                    StageTarget *tgt = mProps->stageTarget(m_stageTargetId);
+                    FixtureRigProps rp = mProps->fixtureRigProps(id);
+
+                    if (tgt != nullptr && rp.trussId != Truss::invalidId() &&
+                        fixture->fixtureMode() != nullptr)
+                    {
+                        // Fixture world position in metres (derived from truss geometry)
+                        QVector3D fixPos = mProps->fixtureRigPosition(id);
+                        // Target Z is stored as absolute floor height; add platform height
+                        // at the target's XY so a target on a raised platform is correct.
+                        QVector3D tgtPos = tgt->position();
+                        tgtPos.setZ(tgtPos.z() + mProps->platformHeightAt(tgtPos.x(), tgtPos.y()));
+
+                        float dx = tgtPos.x() - fixPos.x();
+                        float dy = tgtPos.y() - fixPos.y();
+                        float dz = tgtPos.z() - fixPos.z();
+                        float horizDist = qSqrt(dx * dx + dy * dy);
+
+                        // Horizontal azimuth: clockwise degrees from downstage.
+                        // Convention: Y+ = upstage, so downstage direction = decreasing Y.
+                        // atan2(dx, -dy): when target is downstage (dy<0), -dy>0 → 0°; SR→90°; SL→270°.
+                        float azimuthDeg = float(qRadiansToDegrees(
+                            qAtan2(double(dx), double(-dy))));
+                        if (azimuthDeg < 0.0f) azimuthDeg += 360.0f;
+
+                        // Pan relative to fixture's panZeroDir, centred at panMax/2
+                        float relativePan = azimuthDeg - rp.panZeroDir;
+                        while (relativePan >  180.0f) relativePan -= 360.0f;
+                        while (relativePan < -180.0f) relativePan += 360.0f;
+
+                        QLCPhysical phy = fixture->fixtureMode()->physical();
+                        float panMax  = float(phy.focusPanMax());  if (panMax  == 0.0f) panMax  = 360.0f;
+                        float tiltMax = float(phy.focusTiltMax()); if (tiltMax == 0.0f) tiltMax = 270.0f;
+
+                        float panRaw = panMax / 2.0f + relativePan + rp.panOffsetDeg;
+                        if (rp.panInvert) panRaw = panMax - panRaw;
+                        float panDeg = qBound(0.0f, panRaw, panMax);
+
+                        // Elevation angle from horizontal (negative = beam points downward)
+                        float elevDeg = float(qRadiansToDegrees(
+                            qAtan2(double(dz), double(horizDist))));
+
+                        // For TopHung: tilt centre = straight down (elevation = -90°).
+                        // Deviation from straight-down = 90° + elevation
+                        // (0 when directly below; 90° when horizontal)
+                        float tiltOffset = 90.0f + elevDeg;
+                        float tiltDeg;
+                        if (rp.mountingType == Truss::FloorMounted)
+                            tiltDeg = tiltMax / 2.0f - tiltOffset + rp.tiltOffsetDeg;
+                        else   // TopHung / SideArm
+                            tiltDeg = tiltMax / 2.0f + tiltOffset + rp.tiltOffsetDeg;
+                        if (rp.tiltInvert) tiltDeg = tiltMax - tiltDeg;
+                        tiltDeg = qBound(0.0f, tiltDeg, tiltMax);
+
+                        list << fixture->positionToValues(QLCChannel::Pan, panDeg);
+                        list << fixture->positionToValues(QLCChannel::Tilt, tiltDeg);
+
+                        // Set pan/tilt speed to maximum (DMX 0 for FastSlow, 255 for SlowFast)
+                        // so the fixture responds at full speed when following a target.
+                        if (fixture->fixtureMode())
+                        {
+                            for (int ci = 0; ci < fixture->fixtureMode()->channels().count(); ci++)
+                            {
+                                const QLCChannel *ch = fixture->fixtureMode()->channel(ci);
+                                if (!ch || ch->group() != QLCChannel::Speed) continue;
+                                uchar fastVal = 0;
+                                if (ch->preset() == QLCChannel::SpeedPanTiltSlowFast ||
+                                    ch->preset() == QLCChannel::SpeedPanSlowFast ||
+                                    ch->preset() == QLCChannel::SpeedTiltSlowFast)
+                                    fastVal = 255;
+                                list << SceneValue(fixture->id(), ci, fastVal);
+                            }
+                        }
+
+                        usedTarget = true;
+                    }
+                }
+
+                if (!usedTarget && m_values.count() == 2)
                 {
                     int panDegrees = m_values.at(0).toInt();
                     int tiltDegrees = m_values.at(1).toInt();
@@ -525,9 +665,45 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             break;
             case Shutter:
             {
-                quint32 shCh = fixture->channelNumber(QLCChannel::Shutter, QLCChannel::MSB);
+                // channelNumber(Shutter, MSB) via the head map never resolves Shutter
+                // because heads store shutter in m_shutterChannels, not m_channelsMap.
+                // Query the mode directly instead.
+                quint32 shCh = (fixture->fixtureMode() != nullptr)
+                    ? fixture->fixtureMode()->channelNumber(QLCChannel::Shutter, QLCChannel::MSB)
+                    : QLCChannel::invalid();
                 if (shCh != QLCChannel::invalid())
-                    list << SceneValue(id, shCh, uchar(value().toUInt()));
+                {
+                    const QLCChannel *ch = fixture->channel(shCh);
+                    uchar dmxVal = 0;
+                    if (ch != nullptr &&
+                        (ch->preset() == QLCChannel::ShutterStrobeSlowFast ||
+                         ch->preset() == QLCChannel::ShutterStrobeFastSlow))
+                    {
+                        // Pure preset strobe channel: DMX 0 = open, 1-255 = strobe.
+                        // Always send 0 to open regardless of the palette's stored value.
+                        dmxVal = 0;
+                    }
+                    else
+                    {
+                        // Custom (capability-defined) shutter channel: use the palette's
+                        // explicit value, or auto-detect the ShutterOpen capability midpoint
+                        // when no value is set (e.g. after loading an old workspace).
+                        dmxVal = m_values.isEmpty() ? 0 : uchar(value().toUInt());
+                        if (dmxVal == 0 && ch != nullptr)
+                        {
+                            for (const QLCCapability *cap : ch->capabilities())
+                            {
+                                if (cap->preset() == QLCCapability::ShutterOpen)
+                                {
+                                    dmxVal = uchar((int(cap->min()) + int(cap->max())) / 2);
+                                    break;
+                                }
+                            }
+                        }
+                        if (dmxVal == 0) dmxVal = 255; // last resort
+                    }
+                    list << SceneValue(id, shCh, dmxVal);
+                }
             }
             break;
             case Gobo:
@@ -588,6 +764,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 }
             }
             break;
+            case Effect:
             case Undefined:
             break;
         }
@@ -914,11 +1091,17 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 setValues(vals);
             }
             break;
-            case Shutter:   break;
-            case Gobo:      break;
+            case Shutter:
+            case Gobo:
+                setValue(strVal.toInt());
+            break;
+            case Effect:
             case Undefined: break;
         }
     }
+
+    if (attrs.hasAttribute(KXMLQLCPaletteStageTarget))
+        m_stageTargetId = attrs.value(KXMLQLCPaletteStageTarget).toUInt();
 
     if (attrs.hasAttribute(KXMLQLCPaletteFanning))
     {
@@ -948,8 +1131,46 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 case Beam:      break;
                 case Shutter:   break;
                 case Gobo:      break;
+                case Effect:    break;
                 case Undefined: break;
             }
+        }
+    }
+
+    // Effect-palette sub-elements
+    if (m_type == Effect)
+    {
+        while (doc.readNextStartElement())
+        {
+            if (doc.name() == "EffectScript")
+                m_scriptPath = doc.readElementText();
+            else if (doc.name() == "EffectInputBinding")
+            {
+                QString slot   = doc.attributes().value("slot").toString();
+                quint32 uni    = doc.attributes().value("universe").toUInt();
+                quint32 ch     = doc.attributes().value("channel").toUInt();
+                if (!slot.isEmpty())
+                    m_effectInputBindings[slot] = qMakePair(uni, ch);
+                doc.skipCurrentElement();
+            }
+            else if (doc.name() == "EffectPaletteBinding")
+            {
+                QString slot = doc.attributes().value("slot").toString();
+                quint32 pid  = doc.attributes().value("palette").toUInt();
+                if (!slot.isEmpty())
+                    m_effectPaletteBindings[slot] = pid;
+                doc.skipCurrentElement();
+            }
+            else if (doc.name() == "EffectParam")
+            {
+                QString name = doc.attributes().value("name").toString();
+                double  val  = doc.attributes().value("value").toDouble();
+                if (!name.isEmpty())
+                    m_effectParamValues[name] = val;
+                doc.skipCurrentElement();
+            }
+            else
+                doc.skipCurrentElement();
         }
     }
 
@@ -960,7 +1181,9 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
 {
     Q_ASSERT(doc != NULL);
 
-    if (m_values.isEmpty())
+    // Shutter, Gobo, and Effect palettes are valid without m_values.
+    if (m_values.isEmpty() && m_type != Shutter && m_type != Gobo
+        && m_type != Effect)
     {
         qWarning() << "Unable to save a Palette without value!";
         return false;
@@ -997,10 +1220,20 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
                                 QString("%1,%2,%3").arg(focus).arg(frost).arg(iris));
         }
         break;
-        case Shutter:   break;
-        case Gobo:      break;
+        case Shutter:
+        case Gobo:
+            if (!m_values.isEmpty())
+                doc->writeAttribute(KXMLQLCPaletteValue, value().toString());
+        break;
+        case Effect:
+            // Script path and bindings saved as child elements below
+        break;
         case Undefined: break;
     }
+
+    /* write stage target linkage */
+    if (m_stageTargetId != UINT_MAX)
+        doc->writeAttribute(KXMLQLCPaletteStageTarget, QString::number(m_stageTargetId));
 
     /* write fanning */
     if (m_fanningType != Flat)
@@ -1011,7 +1244,54 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
         doc->writeAttribute(KXMLQLCPaletteFanValue, fanningValue().toString());
     }
 
+    /* write Effect-palette sub-elements */
+    if (m_type == Effect)
+    {
+        if (!m_scriptPath.isEmpty())
+        {
+            doc->writeStartElement("EffectScript");
+            doc->writeCharacters(m_scriptPath);
+            doc->writeEndElement();
+        }
+        for (auto it = m_effectInputBindings.constBegin();
+             it != m_effectInputBindings.constEnd(); ++it)
+        {
+            doc->writeStartElement("EffectInputBinding");
+            doc->writeAttribute("slot",    it.key());
+            doc->writeAttribute("universe", QString::number(it.value().first));
+            doc->writeAttribute("channel",  QString::number(it.value().second));
+            doc->writeEndElement();
+        }
+        for (auto it = m_effectPaletteBindings.constBegin();
+             it != m_effectPaletteBindings.constEnd(); ++it)
+        {
+            doc->writeStartElement("EffectPaletteBinding");
+            doc->writeAttribute("slot",    it.key());
+            doc->writeAttribute("palette", QString::number(it.value()));
+            doc->writeEndElement();
+        }
+        for (auto it = m_effectParamValues.constBegin();
+             it != m_effectParamValues.constEnd(); ++it)
+        {
+            doc->writeStartElement("EffectParam");
+            doc->writeAttribute("name",  it.key());
+            doc->writeAttribute("value", QString::number(it.value()));
+            doc->writeEndElement();
+        }
+    }
+
     doc->writeEndElement();
 
     return true;
+}
+
+QColor QLCPalette::colorValue() const
+{
+    if (m_type == Color && !m_values.isEmpty())
+    {
+        QColor rgb, wauv;
+        if (stringToColor(m_values.at(0).toString(), rgb, wauv))
+            return rgb;
+    }
+    return QColor();
 }

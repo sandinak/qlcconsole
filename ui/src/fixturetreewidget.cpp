@@ -24,6 +24,7 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QKeyEvent>
 #include <QTreeWidgetItemIterator>
 
 #include "fixturetreewidget.h"
@@ -63,7 +64,7 @@ QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
     fi->setText(KColumnName, name);
     fi->setIcon(KColumnName, QIcon(":/folder.png"));
     fi->setData(KColumnName, PROP_FOLDER, path); // lets drops resolve the path
-    fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+    fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled | Qt::ItemIsEditable);
     m_groupFolders[path] = fi;
     return fi;
 }
@@ -100,6 +101,45 @@ QMimeData* FixtureTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) cons
     if (grpCount > 0)
         mime->setData(GROUP_DRAG_MIME_TYPE, grpData);
     return mime;
+}
+
+void FixtureTreeWidget::keyPressEvent(QKeyEvent* event)
+{
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        && state() != QAbstractItemView::EditingState)
+    {
+        QTreeWidgetItem *it = currentItem();
+        if (it && it->data(KColumnName, PROP_FOLDER).isValid())
+        {
+            editItem(it, KColumnName);
+            return;
+        }
+    }
+    QTreeWidget::keyPressEvent(event);
+}
+
+void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
+{
+    if (column != KColumnName || !item)
+        return;
+    const QVariant folderVar = item->data(KColumnName, PROP_FOLDER);
+    if (!folderVar.isValid())
+        return;
+
+    const QString oldPath = folderVar.toString();
+    const QString newLeaf = item->text(KColumnName).trimmed();
+    if (newLeaf.isEmpty() || newLeaf == oldPath.section('/', -1))
+        return;
+
+    // Build the new full path, preserving any parent path segments.
+    const int slash = oldPath.lastIndexOf('/');
+    const QString newPath = (slash < 0) ? newLeaf
+                                        : oldPath.left(slash + 1) + newLeaf;
+
+    // Update the stored path on this item so drop-targets stay consistent.
+    item->setData(KColumnName, PROP_FOLDER, newPath);
+
+    emit groupFolderRenamed(oldPath, newLeaf);
 }
 
 void FixtureTreeWidget::dragEnterEvent(QDragEnterEvent* event)
@@ -214,6 +254,8 @@ FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
             this, SLOT(slotItemExpanded()));
     connect(this, SIGNAL(itemCollapsed(QTreeWidgetItem*)),
             this, SLOT(slotItemExpanded()));
+    connect(this, SIGNAL(itemChanged(QTreeWidgetItem*, int)),
+            this, SLOT(slotItemChanged(QTreeWidgetItem*, int)));
 }
 
 void FixtureTreeWidget::setFlags(quint32 flags)

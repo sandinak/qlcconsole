@@ -131,8 +131,10 @@ void TrussItem::paint(QPainter *painter,
 
     // Silver palette — nearly transparent fill so the background shows through,
     // with solid chord and web lines for structural clarity.
-    const QColor chordFill(210, 213, 220, 50);   // very light tint (mostly transparent)
-    const QColor chordLine(160, 163, 172);        // light silver outline
+    const QColor chordFill = locked ? QColor(200, 60, 60, 70)   // red tint when locked
+                                    : QColor(210, 213, 220, 50); // light silver normally
+    const QColor chordLine = locked ? QColor(200, 80, 80)
+                                    : QColor(160, 163, 172);
     const QColor diagLine (140, 143, 152);        // medium silver diagonals
     const QColor selColor (255, 180,   0);        // amber when selected
     const QColor lockColor(200,  60,  60);        // red tint when locked

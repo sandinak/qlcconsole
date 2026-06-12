@@ -17,6 +17,9 @@
 
 #include "paletteeditdialog.h"
 #include "qlcpalette.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "doc.h"
 
 // Palette types we expose (the ones QLCPalette resolves per-fixture).
 // Stored as itemData on the type combo.
@@ -28,10 +31,11 @@ static const struct { QLCPalette::PaletteType type; const char *label; } kTypes[
     { QLCPalette::Shutter, "Shutter" },
 };
 
-PaletteEditDialog::PaletteEditDialog(QWidget *parent)
+PaletteEditDialog::PaletteEditDialog(QWidget *parent, Doc *doc)
     : QDialog(parent)
     , m_existing(nullptr)
     , m_palette(nullptr)
+    , m_doc(doc)
     , m_color(Qt::white)
 {
     buildUi();
@@ -39,10 +43,11 @@ PaletteEditDialog::PaletteEditDialog(QWidget *parent)
     syncEditorsToType();
 }
 
-PaletteEditDialog::PaletteEditDialog(QLCPalette *existing, QWidget *parent)
+PaletteEditDialog::PaletteEditDialog(QLCPalette *existing, QWidget *parent, Doc *doc)
     : QDialog(parent)
     , m_existing(existing)
     , m_palette(nullptr)
+    , m_doc(doc)
     , m_color(Qt::white)
 {
     buildUi();
@@ -71,6 +76,15 @@ PaletteEditDialog::PaletteEditDialog(QLCPalette *existing, QWidget *parent)
         case QLCPalette::PanTilt:
             m_value1Spin->setValue(m_existing->intValue1());
             m_value2Spin->setValue(m_existing->intValue2());
+            // Pre-select the linked target
+            for (int i = 0; i < m_targetCombo->count(); ++i)
+            {
+                if (quint32(m_targetCombo->itemData(i).toUInt()) == m_existing->stageTargetId())
+                {
+                    m_targetCombo->setCurrentIndex(i);
+                    break;
+                }
+            }
             break;
         default:
             m_value1Spin->setValue(m_existing->intValue1());
@@ -110,6 +124,17 @@ void PaletteEditDialog::buildUi()
     m_value2Spin = new QSpinBox(this);
     m_value2Spin->setRange(0, 360);
     form->addRow(m_value2Label, m_value2Spin);
+
+    m_targetLabel = new QLabel(tr("Stage target"), this);
+    m_targetCombo = new QComboBox(this);
+    m_targetCombo->addItem(tr("(none)"), QVariant(StageTarget::invalidId()));
+    if (m_doc && m_doc->monitorProperties())
+    {
+        for (StageTarget *t : m_doc->monitorProperties()->stageTargets())
+            m_targetCombo->addItem(t->name(), QVariant(t->id()));
+    }
+    m_targetCombo->setToolTip(tr("Associate this palette with a named stage target position"));
+    form->addRow(m_targetLabel, m_targetCombo);
 
     QDialogButtonBox *bb = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -153,6 +178,8 @@ void PaletteEditDialog::syncEditorsToType()
     m_value1Spin->setVisible(!isColor);
     m_value2Label->setVisible(isPanTilt);
     m_value2Spin->setVisible(isPanTilt);
+    m_targetLabel->setVisible(isPanTilt);
+    m_targetCombo->setVisible(isPanTilt);
 
     switch (type)
     {
@@ -194,6 +221,7 @@ void PaletteEditDialog::accept()
         break;
     case QLCPalette::PanTilt:
         p->setValue(m_value1Spin->value(), m_value2Spin->value());
+        p->setStageTargetId(m_targetCombo->currentData().toUInt());
         break;
     default:
         p->setValue(m_value1Spin->value());

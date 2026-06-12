@@ -75,7 +75,8 @@ public:
         Shutter,
         Gobo,
         Zoom,
-        Beam
+        Beam,
+        Effect      ///< Computed by a JS effect script (tick-driven)
     };
 #if QT_VERSION >= 0x050500
     Q_ENUM(PaletteType)
@@ -237,6 +238,59 @@ public:
     /** Helper method to convert a string created with colorToString
      *  back to 2 separate QColor */
     static bool stringToColor(QString str, QColor &rgb, QColor &wauv);
+
+    /************************************************************************
+     * Stage target linkage
+     ************************************************************************/
+public:
+    /** Return the StageTarget ID this palette aims at, or StageTarget::invalidId(). */
+    quint32 stageTargetId() const { return m_stageTargetId; }
+
+    /** Associate this palette with a StageTarget (pass invalidId() to clear). */
+    void setStageTargetId(quint32 id) { m_stageTargetId = id; }
+
+private:
+    quint32 m_stageTargetId = UINT_MAX;
+
+    /************************************************************************
+     * Effect script (type == Effect only)
+     ************************************************************************/
+public:
+    /** Absolute or search-relative path to the .js script file. */
+    QString scriptPath() const { return m_scriptPath; }
+    void setScriptPath(const QString &p) { m_scriptPath = p; }
+
+    /** Input slot bindings: slot name → (universe, channel).
+     *  The EffectScriptRunner maps incoming input events to slot values. */
+    QMap<QString, QPair<quint32,quint32>> effectInputBindings() const
+        { return m_effectInputBindings; }
+    void setEffectInputBindings(const QMap<QString, QPair<quint32,quint32>> &b)
+        { m_effectInputBindings = b; }
+    void setEffectInputBinding(const QString &slot, quint32 universe, quint32 channel)
+        { m_effectInputBindings[slot] = qMakePair(universe, channel); }
+    void clearEffectInputBindings() { m_effectInputBindings.clear(); }
+
+    /** Palette slot bindings: slot name → palette ID. */
+    QMap<QString, quint32> effectPaletteBindings() const
+        { return m_effectPaletteBindings; }
+    void setEffectPaletteBinding(const QString &slot, quint32 paletteId)
+        { m_effectPaletteBindings[slot] = paletteId; }
+
+    /** Script parameter overrides: param name → value. */
+    QMap<QString, double> effectParamValues() const
+        { return m_effectParamValues; }
+    void setEffectParamValue(const QString &name, double value)
+        { m_effectParamValues[name] = value; }
+
+    /** Convenience: get a single colour value for Color-type palettes
+     *  (used by EffectInstance to build the palettes object for scripts). */
+    QColor colorValue() const;
+
+private:
+    QString m_scriptPath;
+    QMap<QString, QPair<quint32,quint32>> m_effectInputBindings;
+    QMap<QString, quint32>               m_effectPaletteBindings;
+    QMap<QString, double>                m_effectParamValues;
 
     /************************************************************************
      * Load & Save

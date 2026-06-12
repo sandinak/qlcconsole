@@ -36,6 +36,7 @@
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "programmerflasher.h"
+#include "effectscriptrunner.h"
 
 #include "monitorproperties.h"
 #include "audioplugincache.h"
@@ -122,6 +123,16 @@ Doc::Doc(QObject* parent, int universes)
     connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
             m_programmer, SLOT(slotProgrammerFunctionStopped(quint32)),
             Qt::DirectConnection);
+
+    // Effect script runner — drives JS effect instances for scenes that
+    // reference Effect-type palettes. Queued connections are fine here
+    // because the runner only needs to know about starts/stops to create
+    // or destroy instances; the actual DMX work is driven by its QTimer.
+    m_effectScriptRunner = new EffectScriptRunner(this);
+    connect(m_masterTimer, SIGNAL(functionStarted(quint32)),
+            m_effectScriptRunner, SLOT(slotFunctionStarted(quint32)));
+    connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
+            m_effectScriptRunner, SLOT(slotFunctionStopped(quint32)));
 
     // Relay the controller's signals as Doc's own signals so external
     // code keeps connecting to `doc` unchanged.

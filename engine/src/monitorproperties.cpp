@@ -24,6 +24,8 @@
 
 #include "monitorproperties.h"
 #include "truss.h"
+#include "stageplatform.h"
+#include "stagetarget.h"
 #include "qlcconfig.h"
 #include "qlcfile.h"
 #include "doc.h"
@@ -110,6 +112,10 @@ void MonitorProperties::reset()
     m_commonBackgroundImage = QString();
     qDeleteAll(m_trusses);
     m_trusses.clear();
+    qDeleteAll(m_platforms);
+    m_platforms.clear();
+    qDeleteAll(m_stageTargets);
+    m_stageTargets.clear();
     m_rigProps.clear();
 }
 
@@ -551,6 +557,67 @@ void MonitorProperties::removeTruss(quint32 id)
 }
 
 /*********************************************************************
+ * Stage platforms
+ *********************************************************************/
+
+quint32 MonitorProperties::nextPlatformId() const
+{
+    quint32 id = 0;
+    while (m_platforms.contains(id))
+        ++id;
+    return id;
+}
+
+StagePlatform *MonitorProperties::addPlatform()
+{
+    quint32 id = nextPlatformId();
+    StagePlatform *p = new StagePlatform(id, this);
+    m_platforms.insert(id, p);
+    return p;
+}
+
+void MonitorProperties::removePlatform(quint32 id)
+{
+    delete m_platforms.take(id);
+}
+
+float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
+{
+    float h = 0.0f;
+    foreach (const StagePlatform *p, m_platforms)
+    {
+        if (p->containsPoint(xMetres, yMetres))
+            h = qMax(h, p->height());
+    }
+    return h;
+}
+
+/*********************************************************************
+ * Stage targets
+ *********************************************************************/
+
+quint32 MonitorProperties::nextStageTargetId() const
+{
+    quint32 id = 0;
+    while (m_stageTargets.contains(id))
+        ++id;
+    return id;
+}
+
+StageTarget *MonitorProperties::addStageTarget()
+{
+    quint32 id = nextStageTargetId();
+    StageTarget *t = new StageTarget(id, this);
+    m_stageTargets.insert(id, t);
+    return t;
+}
+
+void MonitorProperties::removeStageTarget(quint32 id)
+{
+    delete m_stageTargets.take(id);
+}
+
+/*********************************************************************
  * Fixture rig properties
  *********************************************************************/
 
@@ -799,15 +866,35 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             else
                 delete t;
         }
+        else if (root.name() == QStringLiteral("StagePlatform"))
+        {
+            StagePlatform *p = new StagePlatform(nextPlatformId(), this);
+            if (p->loadXML(root))
+                m_platforms.insert(p->id(), p);
+            else
+                delete p;
+        }
+        else if (root.name() == QStringLiteral("StageTarget"))
+        {
+            StageTarget *t = new StageTarget(nextStageTargetId(), this);
+            if (t->loadXML(root))
+                m_stageTargets.insert(t->id(), t);
+            else
+                delete t;
+        }
         else if (root.name() == QStringLiteral("FixtureRig"))
         {
             QXmlStreamAttributes a = root.attributes();
             quint32 fid = a.value("FID").toUInt();
             FixtureRigProps rp;
             rp.trussId     = a.value("Truss").toUInt();
-            rp.trussOffset = a.value("Offset").toFloat();
-            rp.mountingType = Truss::stringToMounting(a.value("Mounting").toString());
-            rp.panZeroDir  = a.value("PanZero").toFloat();
+            rp.trussOffset    = a.value("Offset").toFloat();
+            rp.mountingType   = Truss::stringToMounting(a.value("Mounting").toString());
+            rp.panZeroDir     = a.value("PanZero").toFloat();
+            rp.panOffsetDeg   = a.value("PanOfs").toFloat();
+            rp.tiltOffsetDeg  = a.value("TiltOfs").toFloat();
+            rp.panInvert      = a.value("PanInv").toString() == QStringLiteral("1");
+            rp.tiltInvert     = a.value("TiltInv").toString() == QStringLiteral("1");
             m_rigProps[fid] = rp;
             root.skipCurrentElement();
         }
@@ -1014,6 +1101,14 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     foreach (const Truss *t, m_trusses)
         t->saveXML(doc);
 
+    // Stage platforms
+    foreach (const StagePlatform *p, m_platforms)
+        p->saveXML(doc);
+
+    // Stage targets
+    foreach (const StageTarget *t, m_stageTargets)
+        t->saveXML(doc);
+
     // Fixture rig props (only write entries that differ from defaults)
     for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)
     {
@@ -1023,7 +1118,15 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         doc->writeAttribute(QStringLiteral("Truss"),   QString::number(rp.trussId));
         doc->writeAttribute(QStringLiteral("Offset"),  QString::number(double(rp.trussOffset), 'f', 3));
         doc->writeAttribute(QStringLiteral("Mounting"), Truss::mountingToString(rp.mountingType));
-        doc->writeAttribute(QStringLiteral("PanZero"), QString::number(double(rp.panZeroDir), 'f', 1));
+        doc->writeAttribute(QStringLiteral("PanZero"),  QString::number(double(rp.panZeroDir),     'f', 1));
+        if (rp.panOffsetDeg  != 0.0f)
+            doc->writeAttribute(QStringLiteral("PanOfs"),  QString::number(double(rp.panOffsetDeg),  'f', 2));
+        if (rp.tiltOffsetDeg != 0.0f)
+            doc->writeAttribute(QStringLiteral("TiltOfs"), QString::number(double(rp.tiltOffsetDeg), 'f', 2));
+        if (rp.panInvert)
+            doc->writeAttribute(QStringLiteral("PanInv"),  QStringLiteral("1"));
+        if (rp.tiltInvert)
+            doc->writeAttribute(QStringLiteral("TiltInv"), QStringLiteral("1"));
         doc->writeEndElement();
     }
 

@@ -40,6 +40,8 @@
 #include "qlcfixturemode.h"
 #include "mastertimer.h"
 #include "programmerflasher.h"
+#include "highlighteffect.h"
+#include "followspoteffect.h"
 #include "capturemanager.h"
 
 ProgrammerController::ProgrammerController(Doc *doc)
@@ -47,6 +49,11 @@ ProgrammerController::ProgrammerController(Doc *doc)
     , m_doc(doc)
 {
     m_programmerFlasher = new ProgrammerFlasher(m_doc);
+    m_highlightEffect = new HighlightEffect(m_doc);
+    m_followSpotEffect = new FollowSpotEffect(m_doc);
+
+    connect(this, &ProgrammerController::programmerSelectionChanged,
+            this, &ProgrammerController::slotSyncEffectFixtures);
 }
 
 /*****************************************************************************
@@ -1027,6 +1034,49 @@ void ProgrammerController::flashFixture(quint32 fixtureId, int durationMs)
 {
     if (m_programmerFlasher != nullptr)
         m_programmerFlasher->flashFixture(fixtureId, durationMs);
+}
+
+/*****************************************************************************
+ * Highlight mode
+ *****************************************************************************/
+
+bool ProgrammerController::isHighlightActive() const
+{
+    return m_highlightActive;
+}
+
+void ProgrammerController::setHighlightActive(bool active)
+{
+    if (m_highlightActive == active)
+        return;
+    m_highlightActive = active;
+    if (m_highlightEffect)
+        m_highlightEffect->setFixtures(active ? m_programmerSelection : QList<quint32>());
+    emit highlightActiveChanged(active);
+}
+
+/*****************************************************************************
+ * Followspot effect
+ *****************************************************************************/
+
+bool ProgrammerController::isFollowSpotActive() const
+{
+    return m_followSpotEffect && m_followSpotEffect->isActive();
+}
+
+void ProgrammerController::setFollowSpotActive(bool active)
+{
+    if (m_followSpotEffect)
+        m_followSpotEffect->setActive(active);
+    emit followSpotActiveChanged(active);
+}
+
+void ProgrammerController::slotSyncEffectFixtures()
+{
+    if (m_highlightActive && m_highlightEffect)
+        m_highlightEffect->setFixtures(m_programmerSelection);
+    if (m_followSpotEffect && m_followSpotEffect->isActive())
+        m_followSpotEffect->setFixtures(m_programmerSelection);
 }
 
 bool ProgrammerController::isShowLocked() const

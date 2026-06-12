@@ -237,6 +237,12 @@ QTreeWidgetItem* FunctionsTreeWidget::parentItem(const Function* function)
         return pItem;
     }
 
+    // Empty sub-path: function lives at the top of its type category.
+    // folderItem("") can't locate the category node (it's keyed as "RGB Matrix/"),
+    // so fall back to the category we just ensured exists above.
+    if (function->path(true).isEmpty())
+        return m_foldersMap.value(QString(basePath + "/"), nullptr);
+
     return NULL;
 }
 
@@ -328,12 +334,17 @@ QTreeWidgetItem* FunctionsTreeWidget::paletteParentItem(const QLCPalette* palett
 
     QTreeWidgetItem* category = palettesCategoryItem();
 
-    const QString path = palette->path();
-    const QString basePath = QString(PALETTE_CATEGORY) + "/";
-    if (path.isEmpty() || path == basePath || path == PALETTE_CATEGORY)
+    QString path = palette->path();
+    // Paths are stored with a trailing '/' (e.g. "Palettes/Color/") but
+    // folderItem() returns NULL for any name ending in '/', so strip it.
+    while (path.endsWith('/'))
+        path.chop(1);
+
+    const QString basePath = QString(PALETTE_CATEGORY);
+    if (path.isEmpty() || path == basePath)
         return category;
 
-    QTreeWidgetItem* pItem = folderItem(path);
+    QTreeWidgetItem* pItem = ensurePaletteFolder(path);
     return pItem != NULL ? pItem : category;
 }
 
@@ -373,7 +384,11 @@ QTreeWidgetItem* FunctionsTreeWidget::addPalette(quint32 pid)
 
 quint32 FunctionsTreeWidget::itemPaletteId(const QTreeWidgetItem* item) const
 {
-    if (item == NULL || item->parent() == NULL)
+    if (item == NULL)
+        return QLCPalette::invalidId();
+    // In PalettesOnly mode the category IS the invisibleRootItem, so top-level
+    // items (parent()==nullptr) are valid palette leaves — don't reject them.
+    if (item->parent() == NULL && m_displayFilter != PalettesOnly)
         return QLCPalette::invalidId();
     if (itemNodeKind(item) != PaletteNode)
         return QLCPalette::invalidId();
@@ -614,11 +629,13 @@ void FunctionsTreeWidget::slotItemChanged(QTreeWidgetItem *item)
         const QString newName = item->text(COL_NAME).trimmed();
         if (itemNodeKind(item) == PaletteNode)
         {
-            QLCPalette *p = m_doc->palette(itemPaletteId(item));
+            quint32 pid = itemPaletteId(item);
+            QLCPalette *p = m_doc->palette(pid);
             if (p != NULL && !newName.isEmpty() && p->name() != newName)
             {
                 p->setName(newName);
                 m_doc->setModified();
+                emit paletteRenamed(pid);
             }
             blockSignals(false);
             return;

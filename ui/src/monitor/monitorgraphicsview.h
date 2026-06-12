@@ -22,12 +22,18 @@
 
 #include <QGraphicsView>
 #include <QHash>
+#include <QList>
+#include <QSet>
+#include <QVector3D>
 
 #include "fixture.h"
+#include "function.h"
 
 class MonitorProperties;
 class MonitorFixtureItem;
 class TrussItem;
+class PlatformItem;
+class TargetItem;
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
@@ -81,6 +87,9 @@ public:
      *  Return NULL if none */
     MonitorFixtureItem *getSelectedItem();
 
+    /** Return all selected MonitorFixtureItems (may be empty). */
+    QList<MonitorFixtureItem *> selectedFixtureItems() const;
+
     /** Set the gel color of the fixture with the given ID */
     void setFixtureGelColor(quint32 id, QColor col);
 
@@ -130,6 +139,22 @@ public:
     /** Rebuild the truss overlay items from MonitorProperties. */
     void updateTrusses();
 
+    /** Rebuild the platform overlay items from MonitorProperties. */
+    void updatePlatforms();
+
+    /** Rebuild the target marker items from MonitorProperties. */
+    void updateTargets();
+
+    /** Rebuild the aim-line overlays for all selected TargetItems. */
+    void updateAimLines();
+
+    /** Highlight (orange border) a set of fixtures by ID; clears previous highlights. */
+    void highlightFixtures(const QList<quint32> &ids);
+
+    /** Set the active scene whose target palette links are shown as aim lines.
+     *  Pass Function::invalidId() to hide all aim lines. */
+    void setActiveScene(quint32 sceneId);
+
 protected:
     /** Triggers the whole view repaint and metrics
      *  computation */
@@ -166,6 +191,10 @@ public:
     /** Undo the last fixture move (Cmd/Ctrl+Z). */
     void undoLastMove();
 
+    /** Update a fixture item's real position (mm) and reposition it on the canvas.
+     *  Call this after programmatically changing a fixture's truss offset. */
+    void moveFixtureTo(quint32 fid, QPointF mmPos);
+
 public slots:
     void mouseReleaseEvent(QMouseEvent *e) override;
 
@@ -175,6 +204,12 @@ protected slots:
 
     /** Slot called when a TrussItem is dropped after a drag */
     void slotTrussMoved(TrussItem *item);
+
+    /** Slot called when a PlatformItem is dropped after a drag */
+    void slotPlatformMoved(PlatformItem *item);
+
+    /** Slot called when a TargetItem is dropped after a drag */
+    void slotTargetMoved(TargetItem *item);
 
 private:
     /** Snap a scene-pixel coordinate to the current grid/subdivision. */
@@ -186,6 +221,15 @@ signals:
     /** Signal emitted after fixture point -> metrics conversion */
     void fixtureMoved(quint32 id, QPointF pos);
 
+    /** Signal emitted when a platform is moved (new origin in metres). */
+    void platformMoved(quint32 id, QPointF originMetres);
+
+    /** Signal emitted when a target is moved (new XY position in metres). */
+    void targetMoved(quint32 id, QPointF posMetres);
+
+    /** Signal emitted when the user double-clicks a target item */
+    void targetDoubleClicked(quint32 tid);
+
     /** Signal emitted when the graphics view is clicked */
     void viewClicked(QMouseEvent *e);
 
@@ -194,6 +238,9 @@ signals:
 
     /** Signal emitted when the user double-clicks a truss item */
     void trussDoubleClicked(quint32 tid);
+
+    /** Signal emitted when the user double-clicks a platform item */
+    void platformDoubleClicked(quint32 pid);
 
     /** Signal emitted when the user right-clicks empty canvas space */
     void contextMenuRequested(QPointF scenePos);
@@ -248,14 +295,43 @@ private:
     /** Interactive truss items keyed by truss ID. */
     QHash <quint32, TrussItem*> m_trussItems;
 
-    /** Undo stack of fixture-move operations (fixture id -> previous real
-     *  position in mm). Most recent at the back. */
-    QList<QHash<quint32, QPointF> > m_moveUndo;
+    /** Interactive platform items keyed by platform ID. */
+    QHash <quint32, PlatformItem*> m_platformItems;
+
+    /** Interactive target marker items keyed by target ID. */
+    QHash <quint32, TargetItem*> m_targetItems;
+
+    /** Aim-line overlays (rebuilt on selection change). */
+    QList <QGraphicsLineItem*> m_aimLines;
+
+    /** Scene whose palette→target links are shown as aim lines.
+     *  invalidId() means no scene is active → no lines drawn. */
+    quint32 m_activeSceneId = Function::invalidId();
+
+    /** Truss IDs that were highlighted (cursor over them) at the moment of the
+     *  last mouse release.  Populated in mouseReleaseEvent, consumed in
+     *  slotFixtureMoved to bind fixtures to the truss the user visually dropped
+     *  them onto — more reliable than comparing fixture-centre geometry. */
+    QSet<quint32> m_droppedOnTrussIds;
+
+    /** Tagged undo entry — covers both fixture moves and truss moves so that
+     *  Ctrl+Z replays operations in the order they were performed. */
+    struct UndoEntry {
+        enum Type { FixtureMove, TrussMove } type;
+        QHash<quint32, QPointF>   fixturePositions; ///< type == FixtureMove
+        QHash<quint32, QVector3D> trussOrigins;     ///< type == TrussMove
+    };
+    QList<UndoEntry> m_moveUndo;
 
     /** Set by mouseDoubleClickEvent; suppresses the viewClicked emission on
      *  the paired mouseReleaseEvent so it doesn't immediately close the editor
      *  that the double-click just opened. */
     bool m_suppressNextViewClick = false;
+
+    /** Selection snapshot taken at mousePressEvent time, before Qt's default
+     *  handler clears the selection. Used by mouseDoubleClickEvent to restore
+     *  a multi-selection that was active when the user double-clicked. */
+    QList<QGraphicsItem *> m_savedSelection;
 
     /** Positions snapshot taken at move-start, committed to m_moveUndo on
      *  drop if anything actually moved. */

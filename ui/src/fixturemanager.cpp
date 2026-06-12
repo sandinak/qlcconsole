@@ -369,6 +369,8 @@ void FixtureManager::initDataView()
 
     connect(m_fixtures_tree, SIGNAL(groupsDroppedOnFolder(QList<quint32>,QString)),
             this, SLOT(slotGroupsDroppedOnFolder(QList<quint32>,QString)));
+    connect(m_fixtures_tree, SIGNAL(groupFolderRenamed(QString,QString)),
+            this, SLOT(slotGroupFolderRenamed(QString,QString)));
 
     connect(m_fixtures_tree, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotSelectionChanged()));
@@ -2247,6 +2249,34 @@ void FixtureManager::slotContextMenuRequested(const QPoint&)
             copySelectionIntoGroup(target, selFixtures, selGroups);
             updateView();
         }
+    }
+}
+
+void FixtureManager::slotGroupFolderRenamed(const QString& oldPath,
+                                            const QString& newLeaf)
+{
+    // Compute new path: keep all parent segments, replace the last one.
+    const int slash = oldPath.lastIndexOf('/');
+    const QString parentPrefix = (slash < 0) ? QString() : oldPath.left(slash + 1);
+    const QString newPath = parentPrefix + newLeaf;
+
+    bool changed = false;
+    foreach (FixtureGroup *g, m_doc->fixtureGroups())
+    {
+        if (g == NULL)
+            continue;
+        const QString gp = g->path();
+        // Match exact folder or any descendant (e.g. "Stage/Left/Sub").
+        if (gp == oldPath || gp.startsWith(oldPath + "/"))
+        {
+            g->setPath(newPath + gp.mid(oldPath.length()));
+            changed = true;
+        }
+    }
+    if (changed)
+    {
+        m_doc->setModified();
+        updateView();
     }
 }
 

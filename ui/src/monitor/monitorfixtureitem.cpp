@@ -147,6 +147,8 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
         }
 
         fxiItem->m_dimmer = head.channelNumber(QLCChannel::Intensity, QLCChannel::MSB);
+        if (fxiItem->m_dimmer == QLCChannel::invalid())
+            fxiItem->m_dimmer = head.channelNumber(QLCChannel::White, QLCChannel::MSB);
         if (fxiItem->m_dimmer != QLCChannel::invalid())
         {
             qDebug() << "Set dimmer to:" << fxiItem->m_dimmer;
@@ -631,7 +633,9 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     Q_UNUSED(widget);
     QColor defColor = Qt::darkGray;
 
-    if (this->isSelected() == true)
+    if (m_highlighted)
+        defColor = QColor(255, 140, 0);   // orange — externally highlighted
+    else if (this->isSelected() == true)
         defColor = Qt::yellow;
 
     {

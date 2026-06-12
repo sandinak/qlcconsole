@@ -49,6 +49,7 @@ class MonitorProperties;
 class CaptureManager;
 class ProgrammerFlasher;
 class ProgrammerController;
+class EffectScriptRunner;
 
 /** @addtogroup engine Engine
  * @{
@@ -554,8 +555,13 @@ public:
         QObject child of Doc (auto-deleted). */
     ProgrammerController *programmer() const { return m_programmer; }
 
+    /** Drives all active EffectScript instances (tick, DMX, input routing).
+        QObject child of Doc (auto-deleted). */
+    EffectScriptRunner *effectScriptRunner() const { return m_effectScriptRunner; }
+
 private:
     ProgrammerController *m_programmer = nullptr;
+    EffectScriptRunner   *m_effectScriptRunner = nullptr;
 
     /*********************************************************************
      * Fixture Instances
