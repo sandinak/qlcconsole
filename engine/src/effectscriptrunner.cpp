@@ -96,19 +96,11 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
     if (!scene)
         return;
 
-    qDebug() << "[EffectScriptRunner] createInstancesForScene" << sceneId
-             << "palettes:" << scene->palettes().size()
-             << "groups:" << scene->fixtureGroups().size()
-             << "fixtures:" << scene->fixtures().size();
-
     for (quint32 pid : scene->palettes())
     {
         QLCPalette *pal = m_doc->palette(pid);
         if (!pal || pal->type() != QLCPalette::Effect)
             continue;
-
-        qDebug() << "[EffectScriptRunner] creating instance for effect palette" << pid
-                 << "script:" << pal->scriptPath();
 
         EffectInstance *inst = new EffectInstance(m_doc, sceneId, pid);
         if (!inst->isValid())
@@ -130,8 +122,6 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
             m_registered = true;
         }
 
-        qDebug() << "[EffectScriptRunner] started instance for scene"
-                 << sceneId << "palette" << pid;
     }
 }
 
@@ -212,10 +202,6 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
     for (const EffectInstance *inst : m_instances)
     {
         const QList<EffectInstance::DmxWrite> &writes = inst->dmxWrites();
-        static int s_logThrottle = 0;
-        if (++s_logThrottle % 50 == 1) // log roughly every second
-            qDebug() << "[EffectScriptRunner] writeDMX instances:" << m_instances.size()
-                     << "writes from this inst:" << writes.size();
         for (const auto &w : writes)
         {
             if (w.universeId >= 0 && w.universeId < universes.size())

@@ -1635,17 +1635,7 @@ QString App::fileName() const
 
 QString App::autoSaveFileName() const
 {
-    QString fName = m_fileName;
-
-    if (fName.isEmpty())
-        fName = "NewProject.autosave.qxw";
-    else
-    {
-        fName.remove(".qxw");
-        fName.append(".autosave.qxw");
-    }
-
-    return fName;
+    return autosaveFilePath();
 }
 
 QFile::FileError App::loadXML(const QString& fileName)

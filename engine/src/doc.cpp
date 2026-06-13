@@ -1643,7 +1643,6 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         else if (doc.name() == KXMLQLCPalette)
         {
             QLCPalette::loader(doc, this);
-            doc.skipCurrentElement();
         }
         else if (doc.name() == KXMLQLCFunction)
         {

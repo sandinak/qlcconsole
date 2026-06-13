@@ -1137,7 +1137,10 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         }
     }
 
-    // Effect-palette sub-elements
+    // Effect-palette sub-elements; all other palette types have no children.
+    // Either way, advance to </Palette> EndElement so the caller's
+    // readNextStartElement() loop can move on cleanly (matching the
+    // convention used by Function::loadXML and Fixture::loadXML).
     if (m_type == Effect)
     {
         while (doc.readNextStartElement())
@@ -1172,6 +1175,12 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
             else
                 doc.skipCurrentElement();
         }
+        // readNextStartElement() has consumed </Palette> — reader is at EndElement.
+    }
+    else
+    {
+        // No children: skip from <Palette> StartElement to </Palette> EndElement.
+        doc.skipCurrentElement();
     }
 
     return true;

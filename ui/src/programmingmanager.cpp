@@ -315,6 +315,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_memberContainer = Function::invalidId();
     });
     connect(m_doc, &Doc::cleared, this, [this]() {
+        m_currentScene   = Function::invalidId();
+        m_canvasFunction = Function::invalidId();
+        clearEditors();
         m_funcTree->updateTree();
         m_memberContainer = Function::invalidId();
     });

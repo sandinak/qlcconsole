@@ -115,10 +115,7 @@ void EffectInstance::runTick()
     }
 
     if (fxIds.isEmpty())
-    {
-        qDebug() << "[EffectInstance] scene" << m_sceneId << "has no fixture targets – skipping tick";
         return;
-    }
 
     QJSValue fixtures = buildFixturesArray();
     QJSValue inputs   = buildInputsObject();
