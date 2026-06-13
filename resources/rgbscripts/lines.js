@@ -17,13 +17,11 @@
   limitations under the License.
 */
 
-// Development tool access
-var testAlgo;
 
 (
   function()
   {
-    var algo = new Object;
+    var algo = {};
     algo.apiVersion = 2;
     algo.name = "Lines";
     algo.author = "Branson Matheson";
@@ -52,12 +50,12 @@ var testAlgo;
     algo.properties.push("name:linesMovementSpeed|type:range|display:Movement Energy|values:10,200|write:setMovementSpeed|read:getMovementSpeed");
     algo.fadeMode = 0;
 
-    var util = new Object;
+    var util = {};
     util.pixelMap = new Array();
     util.initialized = false;
     util.linesMaxSize = 0;
 
-    var lines = new Array();
+    var lines = [];
 
     function Line(x, y, step)
     {
@@ -72,9 +70,10 @@ var testAlgo;
 
     algo.setLinesSize = function(_size)
     {
-      if (!(parseInt(_size) === NaN) && parseInt(_size) > 0)
-      {
-        algo.linesSize = parseInt(_size);
+      // Only set if the input is valid.
+      var n = parseInt(_size, 10);
+      if (!isNaN(n) && n > 0) {
+        algo.linesSize = n;
         util.initialized = false;
       }
     };
@@ -86,9 +85,9 @@ var testAlgo;
 
     algo.setVariability = function(_var)
     {
-      if (!(parseInt(_var) === NaN) && parseInt(_var) >= 0)
-      {
-        algo.linesVariability = parseInt(_var);
+      var n = parseInt(_var, 10);
+      if (!isNaN(n) && n >= 0) {
+        algo.linesVariability = n;
         util.initialized = false;
       }
     };
@@ -100,9 +99,9 @@ var testAlgo;
 
     algo.setAmount = function(_amount)
     {
-      if (!(parseInt(_amount) === NaN) && parseInt(_amount) >= 1 && parseInt(_amount) <= 200)
-      {
-        algo.linesAmount = parseInt(_amount);
+      var n = parseInt(_amount, 10);
+      if (!isNaN(n) && n >= 1 && n <= 200) {
+        algo.linesAmount = n;
         util.initialized = false;
       }
     };
@@ -196,9 +195,10 @@ var testAlgo;
 
     algo.setBrightnessVariance = function(_variance)
     {
-      if (!(parseInt(_variance) === NaN) && parseInt(_variance) >= 0 && parseInt(_variance) <= 100)
+      var n = parseInt(_variance, 10);
+      if (!isNaN(n) && n >= 0 && n <= 100)
       {
-        algo.linesBrightnessVariance = parseInt(_variance);
+        algo.linesBrightnessVariance = n;
       }
     };
 
@@ -209,9 +209,10 @@ var testAlgo;
 
     algo.setMovementSpeed = function(_speed)
     {
-      if (!(parseInt(_speed) === NaN) && parseInt(_speed) >= 10 && parseInt(_speed) <= 200)
+      var n = parseInt(_speed, 10);
+      if (!isNaN(n) && n >= 10 && n <= 200)
       {
-        algo.linesMovementSpeed = parseInt(_speed);
+        algo.linesMovementSpeed = n;
       }
     };
 
@@ -427,6 +428,8 @@ var testAlgo;
     {
       var dimension = maxValue;
 
+      var range = 0;
+
       // Handle edge case for very small dimensions
       if (dimension <= 1)
       {
@@ -462,7 +465,7 @@ var testAlgo;
       else if (algo.linesDistribution === 4)
       {
         var halfPoint = Math.floor(dimension / 2);
-        var range = dimension - halfPoint - 1;
+        range = dimension - halfPoint - 1;
         if (range <= 0) return Math.min(halfPoint, dimension - 1);
         return halfPoint + Math.round(Math.random() * range);
       }
@@ -471,7 +474,7 @@ var testAlgo;
         var thirdPoint = Math.floor(dimension / 3);
         var startPos = thirdPoint;
         var endPos = dimension - thirdPoint;
-        var range = endPos - startPos - 1;
+        range = endPos - startPos - 1;
         if (range <= 0) return Math.min(startPos, dimension - 1);
         return startPos + Math.round(Math.random() * range);
       }
@@ -490,7 +493,7 @@ var testAlgo;
         else
         {
           var startPos = dimension - quarterPoint;
-          var range = quarterPoint - 1;
+          range = quarterPoint - 1;
           if (range <= 0) return Math.min(startPos, dimension - 1);
           return startPos + Math.round(Math.random() * range);
         }
@@ -588,10 +591,10 @@ var testAlgo;
           if (isHorizontalType && algo.linesDistribution > 0) {
             // Use distribution for Y when horizontal lines
             lines[i].yCenter = util.getDistributedPosition(height, true);
-          } else if (algo.linesBias == 1 || algo.linesBias == 5 || algo.linesBias == 6) {
+          } else if (algo.linesBias === 1 || algo.linesBias === 5 || algo.linesBias === 6) {
             // Top bias
             lines[i].yCenter = Math.round(Math.random() * height / 5);
-          } else if (algo.linesBias == 2 || algo.linesBias == 7 || algo.linesBias == 8) {
+          } else if (algo.linesBias === 2 || algo.linesBias === 7 || algo.linesBias === 8) {
             // Bottom bias
             lines[i].yCenter = (height - 1) - Math.round(Math.random() * height / 5);
           } else {
@@ -603,10 +606,10 @@ var testAlgo;
           if (isVerticalType && algo.linesDistribution > 0) {
             // Use distribution for X when vertical lines
             lines[i].xCenter = util.getDistributedPosition(width, false);
-          } else if (algo.linesBias == 3 || algo.linesBias == 5 || algo.linesBias == 7) {
+          } else if (algo.linesBias === 3 || algo.linesBias === 5 || algo.linesBias === 7) {
             // Left bias
             lines[i].xCenter = Math.round(Math.random() * width / 5);
-          } else if (algo.linesBias == 4 || algo.linesBias == 6 || algo.linesBias == 8) {
+          } else if (algo.linesBias === 4 || algo.linesBias === 6 || algo.linesBias === 8) {
             // Right bias
             lines[i].xCenter = (width - 1) - Math.round(Math.random() * width / 5);
           } else {
@@ -639,29 +642,29 @@ var testAlgo;
 
             y = Math.sqrt(radius2 - (x * x));
 
-            if (algo.linesType == 0 || algo.linesType == 2 || algo.linesType == 4 || algo.linesType == 5) {
+            if (algo.linesType === 0 || algo.linesType === 2 || algo.linesType === 4 || algo.linesType === 5) {
               util.drawPixel(lines[i].xCenter - x, lines[i].yCenter, color, width, height);
             }
-            if (algo.linesType == 0 || algo.linesType == 2 || algo.linesType == 4 || algo.linesType == 6) {
+            if (algo.linesType === 0 || algo.linesType === 2 || algo.linesType === 4 || algo.linesType === 6) {
               util.drawPixel(lines[i].xCenter + x, lines[i].yCenter, color, width, height);
             }
-            if (algo.linesType == 1 || algo.linesType == 2 || algo.linesType == 4 || algo.linesType == 7) {
+            if (algo.linesType === 1 || algo.linesType === 2 || algo.linesType === 4 || algo.linesType === 7) {
               util.drawPixel(lines[i].xCenter, lines[i].yCenter - x, color, width, height);
             }
-            if (algo.linesType == 1 || algo.linesType == 2 || algo.linesType == 4 || algo.linesType == 8) {
+            if (algo.linesType === 1 || algo.linesType === 2 || algo.linesType === 4 || algo.linesType === 8) {
               util.drawPixel(lines[i].xCenter, lines[i].yCenter + x, color, width, height);
             }
 
-            if (algo.linesType == 3 || algo.linesType == 4 ||  algo.linesType == 9) {
+            if (algo.linesType === 3 || algo.linesType === 4 ||  algo.linesType === 9) {
               util.drawPixel(lines[i].xCenter + x, lines[i].yCenter - x, color, width, height);
             }
-            if (algo.linesType == 3 || algo.linesType == 4 || algo.linesType == 10) {
+            if (algo.linesType === 3 || algo.linesType === 4 || algo.linesType === 10) {
               util.drawPixel(lines[i].xCenter - x, lines[i].yCenter - x, color, width, height);
             }
-            if (algo.linesType == 3 || algo.linesType == 4 || algo.linesType == 11) {
+            if (algo.linesType === 3 || algo.linesType === 4 || algo.linesType === 11) {
               util.drawPixel(lines[i].xCenter + x, lines[i].yCenter + x, color, width, height);
             }
-            if (algo.linesType == 3 || algo.linesType == 4 || algo.linesType == 12) {
+            if (algo.linesType === 3 || algo.linesType === 4 || algo.linesType === 12) {
               util.drawPixel(lines[i].xCenter - x, lines[i].yCenter + x, color, width, height);
             }
           }
@@ -678,15 +681,15 @@ var testAlgo;
 
           while (lines[i].movementCounter >= 1.0)
           {
-            if (algo.linesSlide == 1) { lines[i].yCenter--; }
-            else if (algo.linesSlide == 2) { lines[i].yCenter++; }
-            else if (algo.linesSlide == 3) { lines[i].xCenter--; }
-            else if (algo.linesSlide == 4) { lines[i].xCenter++; }
+            if (algo.linesSlide === 1) { lines[i].yCenter--; }
+            else if (algo.linesSlide === 2) { lines[i].yCenter++; }
+            else if (algo.linesSlide === 3) { lines[i].xCenter--; }
+            else if (algo.linesSlide === 4) { lines[i].xCenter++; }
 
             lines[i].movementCounter -= 1.0;
           }
 
-          if (algo.linesRollover == 1)
+          if (algo.linesRollover === 1)
           {
             if (lines[i].xCenter < 0) { lines[i].xCenter = width - 1; }
             if (lines[i].yCenter < 0) { lines[i].yCenter = height - 1; }
@@ -728,7 +731,7 @@ var testAlgo;
       return util.pixelMap;
     };
 
-    algo.rgbMap = function(width, height, rgb, step)
+    algo.rgbMap = function(width, height, rgb, _step)
     {
       if (util.initialized === false)
       {
@@ -738,13 +741,10 @@ var testAlgo;
       return util.getNextStep(width, height, rgb);
     };
 
-    algo.rgbMapStepCount = function(width, height)
+    algo.rgbMapStepCount = function(_width, _height)
     {
       return 2;
     };
-
-    // Development tool access
-    testAlgo = algo;
 
     // Test suite compatibility - functions named exactly like property names
     algo.linesAmount = function(amount) { algo.setAmount(amount); };
@@ -758,7 +758,6 @@ var testAlgo;
     algo.linesBrightnessVariance = function(variance) { algo.setBrightnessVariance(variance); };
     algo.linesMovementSpeed = function(speed) { algo.setMovementSpeed(speed); };
     algo.linesVariability = function(variability) { algo.setVariability(variability); };
-
     return algo;
   }
 )();
