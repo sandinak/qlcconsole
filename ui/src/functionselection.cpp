@@ -310,6 +310,9 @@ void FunctionSelection::refillTree()
     /* Fill the tree */
     foreach (Function* function, m_doc->functions())
     {
+        if (!function)
+            continue;
+
         if (m_runningOnlyFlag == true && !function->isRunning())
             continue;
 
