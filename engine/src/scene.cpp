@@ -354,14 +354,20 @@ void Scene::slotFixtureRemoved(quint32 fxi_id)
 {
     bool hasChanged = false;
 
-    QMutableMapIterator <SceneValue, uchar> it(m_values);
-    while (it.hasNext() == true)
     {
-        SceneValue value(it.next().key());
-        if (value.fxi == fxi_id)
+        // m_values is read by the MasterTimer thread in write()/writeDMX();
+        // guard the removal so it cannot race a tick (use-after-free of the
+        // QMap when a fixture is deleted while the scene is running).
+        QMutexLocker locker(&m_valueListMutex);
+        QMutableMapIterator <SceneValue, uchar> it(m_values);
+        while (it.hasNext() == true)
         {
-            it.remove();
-            hasChanged = true;
+            SceneValue value(it.next().key());
+            if (value.fxi == fxi_id)
+            {
+                it.remove();
+                hasChanged = true;
+            }
         }
     }
 
@@ -690,6 +696,9 @@ void Scene::writeDMX(MasterTimer *timer, QList<Universe *> ua)
         {
             // Keep HTP and LTP channels up. Flash is more or less a forceful intervention
             // so enforce all values that the user has chosen to flash.
+            // Lock m_values: it may be mutated by slotFixtureRemoved() on the
+            // edit thread while this runs on the MasterTimer thread.
+            QMutexLocker locker(&m_valueListMutex);
             QMap <SceneValue, uchar>::iterator it = m_values.begin();
             for (; it != m_values.end(); it++)
             {

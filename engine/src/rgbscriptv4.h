@@ -22,6 +22,7 @@
 
 #include <QHash>
 #include <QJSValue>
+#include <atomic>
 
 #include "rgbalgorithm.h"
 #include "rgbscriptproperty.h"
@@ -118,7 +119,7 @@ public:
     bool saveXML(QXmlStreamWriter *doc) const override;
 
 private:
-    int m_apiVersion;           //! The API version that the script uses
+    std::atomic<int> m_apiVersion; //! API version (read lock-free from the run thread; written on the JS thread during evaluate())
     QJSValue m_script;          //! The script itself
     QJSValue m_rgbMap;          //! rgbMap() function
     QJSValue m_rgbMapStepCount; //! rgbMapStepCount() function

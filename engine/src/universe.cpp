@@ -511,7 +511,7 @@ uchar Universe::applyGM(int channel, uchar value)
         if (m_grandMaster->valueMode() == GrandMaster::Limit)
             value = MIN(value, m_grandMaster->value());
         else
-            value = char(floor((double(value) * m_grandMaster->fraction()) + 0.5));
+            value = uchar(floor((double(value) * m_grandMaster->fraction()) + 0.5));
     }
 
     return value;

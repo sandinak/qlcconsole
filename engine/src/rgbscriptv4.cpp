@@ -27,7 +27,8 @@
 // cppcheck-suppress missingIncludeSystem
 #include <QCoreApplication>
 // cppcheck-suppress missingIncludeSystem
-#include <QSemaphore>
+#include <QMutex>
+#include <QWaitCondition>
 
 #include "rgbscriptv4.h"
 
@@ -41,15 +42,29 @@
 
 JSThread* RGBScript::s_jsThread = NULL;
 
+// Guards creation/teardown of the single shared JS thread so concurrent
+// first-use is race-free.
+static QMutex s_initMutex;
+
 class JSThread final : public QThread
 {
 public:
-    QJSEngine *engine;
-    QSemaphore ready;
+    QJSEngine *engine = nullptr;
+    // Engine-ready handshake. A QMutex/QWaitCondition (pthread-backed) is used
+    // instead of a QSemaphore so the publication of `engine` establishes a
+    // happens-before that ThreadSanitizer can see.
+    QMutex readyMutex;
+    QWaitCondition readyCond;
+    bool ready = false;
     void run() override
     {
-        engine = new QJSEngine();
-        ready.release(1);
+        QJSEngine *e = new QJSEngine();
+        {
+            QMutexLocker locker(&readyMutex);
+            engine = e;
+            ready = true;
+            readyCond.wakeAll();
+        }
         exec();
         delete engine;
     }
@@ -85,7 +100,7 @@ RGBScript &RGBScript::operator=(const RGBScript &s)
     {
         m_fileName = s.m_fileName;
         m_contents = s.m_contents;
-        m_apiVersion = s.m_apiVersion;
+        m_apiVersion = s.m_apiVersion.load();
         evaluate();
         foreach (RGBScriptProperty cap, s.m_properties)
         {
@@ -147,19 +162,31 @@ QString RGBScript::fileName() const
 
 void RGBScript::initEngine()
 {
+    QMutexLocker initLocker(&s_initMutex);
     if (s_jsThread == NULL)
     {
-        s_jsThread = new JSThread();
-        s_jsThread->start();
+        JSThread *t = new JSThread();
+        t->start();
         // cppcheck-suppress unknownMacro
         qAddPostRoutine(RGBScript::cleanupEngine);
-        s_jsThread->ready.acquire(1);
+        // Wait until the JS thread has created its engine. The mutex/condition
+        // handshake publishes `engine` with a happens-before to this thread.
+        {
+            QMutexLocker locker(&t->readyMutex);
+            while (!t->ready)
+                t->readyCond.wait(&t->readyMutex);
+        }
+        // Publish only once fully initialised.
+        s_jsThread = t;
     }
     Q_ASSERT(s_jsThread->engine != NULL);
 }
 
 void RGBScript::cleanupEngine()
 {
+    QMutexLocker initLocker(&s_initMutex);
+    if (s_jsThread == NULL)
+        return;
     s_jsThread->exit();
     s_jsThread->wait();
     delete s_jsThread;
