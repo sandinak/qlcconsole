@@ -49,7 +49,7 @@ public slots:
 
 protected:
     /** Provide group/fixture IDs for dragging onto scene drop zones. */
-    QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const override;
+    QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const override;
 
     /** Accept group drops onto folders (re-file groups); ignore otherwise. */
     void dragEnterEvent(QDragEnterEvent *event) override;

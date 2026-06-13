@@ -740,7 +740,7 @@ Qt::DropActions FunctionsTreeWidget::supportedDropActions() const
     return Qt::MoveAction;
 }
 
-QMimeData* FunctionsTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) const
+QMimeData* FunctionsTreeWidget::mimeData(const QList<QTreeWidgetItem*> &items) const
 {
     // If external drag mode is enabled, provide our custom MIME data
     // This is used by Qt's built-in drag when setDragEnabled(true) is called
