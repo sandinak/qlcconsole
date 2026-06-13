@@ -19,10 +19,12 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QFileInfo>
 #include <QtMath>
 #include <QDebug>
 
 #include "monitorproperties.h"
+#include "effectscriptrunner.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
@@ -1012,6 +1014,27 @@ bool QLCPalette::loader(QXmlStreamReader &xmlDoc, Doc *doc)
 
     if (palette->loadXML(xmlDoc) == true)
     {
+        // Resolve the Effect palette's stored script reference.
+        // New format: a portable name ("ramp-chase").
+        // Old format: an absolute path that may not exist on this machine.
+        // Either way, look it up in the cache; fall back to the stored value
+        // so a valid absolute path still works.
+        if (palette->type() == Effect && !palette->scriptPath().isEmpty()
+                && doc->effectScriptRunner())
+        {
+            const EffectScriptCache *cache = doc->effectScriptRunner()->cache();
+            const QString stored = palette->scriptPath();
+            // Try stored value as a script name first (new format or bare basename).
+            QString resolved = cache->scriptPath(stored);
+            if (resolved.isEmpty())
+            {
+                // Old format: extract basename from absolute path and look up.
+                resolved = cache->scriptPath(QFileInfo(stored).completeBaseName());
+            }
+            if (!resolved.isEmpty())
+                palette->setScriptPath(resolved);
+            // else: keep the stored value; may still be a valid absolute path
+        }
         doc->addPalette(palette, palette->id());
     }
     else
@@ -1258,8 +1281,10 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     {
         if (!m_scriptPath.isEmpty())
         {
+            // Store the portable script name (no directory, no extension) so
+            // workspaces stay valid when moved between machines.
             doc->writeStartElement("EffectScript");
-            doc->writeCharacters(m_scriptPath);
+            doc->writeCharacters(QFileInfo(m_scriptPath).completeBaseName());
             doc->writeEndElement();
         }
         for (auto it = m_effectInputBindings.constBegin();
