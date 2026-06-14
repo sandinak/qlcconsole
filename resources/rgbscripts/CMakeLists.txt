@@ -5,6 +5,8 @@ set(SCRIPT_FILES
     aurora.js
     balls.js
     blinder.js
+    blooddrip.js
+    bloodsplatter.js
     circles.js
     circular.js
     confetti.js

@@ -41,6 +41,7 @@
 #include "qlcfixturemode.h"
 #include "qlcpalette.h"
 #include "scene.h"
+#include "fixturegroup.h"
 #include "function.h"
 #include "doc.h"
 
@@ -664,6 +665,8 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
 
 void MonitorGraphicsView::updateAimLines()
 {
+    fprintf(stderr, "[AIM] updateAimLines called\n"); fflush(stderr);
+
     // Remove old aim lines
     foreach (QGraphicsLineItem *li, m_aimLines)
     {
@@ -673,80 +676,79 @@ void MonitorGraphicsView::updateAimLines()
     m_aimLines.clear();
 
     if (m_cellPixels == 0)
+    {
+        fprintf(stderr, "[AIM] early exit: m_cellPixels==0\n"); fflush(stderr);
+        return;
+    }
+
+    // Count how many targets are selected.
+    int selectedTargets = 0;
+    foreach (TargetItem *ti, m_targetItems)
+        if (ti->isSelected()) selectedTargets++;
+
+    fprintf(stderr, "[AIM] targets=%d selected=%d monitorFix=%d sceneId=%u\n",
+            m_targetItems.size(), selectedTargets,
+            m_fixtures.size(), m_activeSceneId); fflush(stderr);
+
+    if (selectedTargets == 0)
         return;
 
-    MonitorProperties *props = m_doc->monitorProperties();
-    if (props == nullptr)
-        return;
+    // Build the set of candidate fixtures.
+    // Prefer the active scene's fixtures; fall back to all monitor fixtures.
+    QSet<quint32> candidates;
+    Scene *activeScene = (m_activeSceneId != Function::invalidId())
+                         ? qobject_cast<Scene *>(m_doc->function(m_activeSceneId))
+                         : nullptr;
 
-    // Only draw aim lines when a specific scene is active in the Programming tab.
-    // Lines show only for palettes that (a) belong to the active scene and
-    // (b) link to a target via stageTargetId.
-    if (m_activeSceneId == Function::invalidId())
-        return;
+    if (activeScene)
+    {
+        foreach (quint32 fid, activeScene->fixtures())
+            candidates.insert(fid);
+        foreach (quint32 gid, activeScene->fixtureGroups())
+        {
+            FixtureGroup *fg = m_doc->fixtureGroup(gid);
+            if (fg)
+                foreach (quint32 fid, fg->fixtureList())
+                    candidates.insert(fid);
+        }
+        fprintf(stderr, "[AIM] scene %u: fix=%d grp=%d -> candidates=%d\n",
+                m_activeSceneId, activeScene->fixtures().size(),
+                activeScene->fixtureGroups().size(), candidates.size()); fflush(stderr);
+    }
 
-    Scene *activeScene = qobject_cast<Scene *>(m_doc->function(m_activeSceneId));
-    if (!activeScene)
-        return;
-
-    const QMap<quint32, FixtureRigProps> &rigMap = props->fixtureRigPropsMap();
-
-    // Build the set of fixtures in this scene once.
-    QSet<quint32> sceneFixtures;
-    foreach (quint32 fid, activeScene->fixtures())
-        sceneFixtures.insert(fid);
-
-    // Each fixture points to at most one target — the first one it's matched to.
-    QSet<quint32> assignedFixtures;
+    // If scene gave us nothing, fall back to every fixture visible in the monitor.
+    if (candidates.isEmpty())
+    {
+        fprintf(stderr, "[AIM] fallback: using all %d monitor fixtures\n",
+                m_fixtures.size()); fflush(stderr);
+        foreach (quint32 fid, m_fixtures.keys())
+            candidates.insert(fid);
+    }
 
     foreach (TargetItem *ti, m_targetItems)
     {
+        if (!ti->isSelected())
+            continue;
+
         StageTarget *tgt = ti->target();
-        const quint32 targetId = tgt->id();
-
-        // Only draw if at least one of this scene's palettes links to this target.
-        bool linked = false;
-        foreach (quint32 pid, activeScene->palettes())
-        {
-            QLCPalette *pal = m_doc->palette(pid);
-            if (pal && pal->stageTargetId() == targetId)
-            { linked = true; break; }
-        }
-
-        if (!linked)
-            continue;
-
-        if (sceneFixtures.isEmpty())
-            continue;
-
         QPointF tgtPx = ti->pos();
-        QPen aimPen(tgt->color().isValid() ? tgt->color() : QColor(255, 180, 0), 1.0);
+        QPen aimPen(tgt->color().isValid() ? tgt->color() : QColor(255, 180, 0), 1.5);
         aimPen.setStyle(Qt::DashLine);
 
-        for (quint32 fid : sceneFixtures)
+        int drawn = 0;
+        for (quint32 fid : candidates)
         {
-            if (assignedFixtures.contains(fid))
-                continue; // already drawn a line to another target for this fixture
-
-            if (!m_fixtures.contains(fid))
-                continue;
-
-            // Only fixtures on a truss have a meaningful 3D rig position
-            auto rigIt = rigMap.find(fid);
-            if (rigIt == rigMap.constEnd() || rigIt.value().trussId == Truss::invalidId())
-                continue;
-
             MonitorFixtureItem *mfi = m_fixtures.value(fid);
             if (!mfi)
                 continue;
 
-            assignedFixtures.insert(fid);
             QPointF fixPx = mfi->sceneBoundingRect().center();
 
             QGraphicsLineItem *line = m_scene->addLine(
                 fixPx.x(), fixPx.y(), tgtPx.x(), tgtPx.y(), aimPen);
             line->setZValue(2.5);
             m_aimLines.append(line);
+            drawn++;
 
             // Arrow head at the target end
             QPointF dir = tgtPx - fixPx;
@@ -766,6 +768,7 @@ void MonitorGraphicsView::updateAimLines()
                 m_aimLines.append(al); m_aimLines.append(ar);
             }
         }
+        fprintf(stderr, "[AIM] drew %d lines to target\n", drawn); fflush(stderr);
     }
 }
 
@@ -967,6 +970,7 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
         setDragMode(QGraphicsView::RubberBandDrag);
 
     // Selection may have changed — rebuild aim lines for selected targets.
+    fprintf(stderr, "[AIM] mouseReleaseEvent -> updateAimLines\n"); fflush(stderr);
     updateAimLines();
 }
 

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch:*)",
+      "Bash(git log:*)",
+      "Bash(grep -v \"\\\\.ts$\")",
+      "Bash(grep -v \"\\\\.qxf$\")",
+      "Bash(grep -v \"\\\\.svg$\")",
+      "Bash(grep -E \"\\\\.\\(h|cpp\\)$\")",
+      "Bash(qmake --version)",
+      "Bash(qmake6 --version)",
+      "Bash(ps -ax -o stat,command)",
+      "Bash(sw_vers -productVersion)",
+      "Bash(clang --version)",
+      "Bash(brew --prefix qt)",
+      "Bash(ls -d \"$\\(brew --prefix qt\\)/lib/cmake/Qt6\")",
+      "Bash(./stresstest/engine/build/qlcstress --help)"
+    ]
+  }
+}
