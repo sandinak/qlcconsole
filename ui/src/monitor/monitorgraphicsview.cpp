@@ -413,6 +413,11 @@ MonitorFixtureItem *MonitorGraphicsView::getSelectedItem()
     return NULL;
 }
 
+MonitorFixtureItem *MonitorGraphicsView::fixtureItemForId(quint32 fxId) const
+{
+    return m_fixtures.value(fxId, nullptr);
+}
+
 QList<MonitorFixtureItem *> MonitorGraphicsView::selectedFixtureItems() const
 {
     QList<MonitorFixtureItem *> result;
@@ -665,8 +670,6 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
 
 void MonitorGraphicsView::updateAimLines()
 {
-    fprintf(stderr, "[AIM] updateAimLines called\n"); fflush(stderr);
-
     // Remove old aim lines
     foreach (QGraphicsLineItem *li, m_aimLines)
     {
@@ -676,58 +679,40 @@ void MonitorGraphicsView::updateAimLines()
     m_aimLines.clear();
 
     if (m_cellPixels == 0)
-    {
-        fprintf(stderr, "[AIM] early exit: m_cellPixels==0\n"); fflush(stderr);
-        return;
-    }
-
-    // Count how many targets are selected.
-    int selectedTargets = 0;
-    foreach (TargetItem *ti, m_targetItems)
-        if (ti->isSelected()) selectedTargets++;
-
-    fprintf(stderr, "[AIM] targets=%d selected=%d monitorFix=%d sceneId=%u\n",
-            m_targetItems.size(), selectedTargets,
-            m_fixtures.size(), m_activeSceneId); fflush(stderr);
-
-    if (selectedTargets == 0)
         return;
 
-    // Build the set of candidate fixtures.
-    // Prefer the active scene's fixtures; fall back to all monitor fixtures.
+    // Aim lines require an active scene; no scene = no lines.
+    if (m_activeSceneId == Function::invalidId())
+        return;
+
+    Scene *activeScene = qobject_cast<Scene *>(m_doc->function(m_activeSceneId));
+    if (!activeScene)
+        return;
+
+    // Build the set of fixtures in the active scene.
     QSet<quint32> candidates;
-    Scene *activeScene = (m_activeSceneId != Function::invalidId())
-                         ? qobject_cast<Scene *>(m_doc->function(m_activeSceneId))
-                         : nullptr;
-
-    if (activeScene)
+    foreach (quint32 fid, activeScene->fixtures())
+        candidates.insert(fid);
+    foreach (quint32 gid, activeScene->fixtureGroups())
     {
-        foreach (quint32 fid, activeScene->fixtures())
-            candidates.insert(fid);
-        foreach (quint32 gid, activeScene->fixtureGroups())
-        {
-            FixtureGroup *fg = m_doc->fixtureGroup(gid);
-            if (fg)
-                foreach (quint32 fid, fg->fixtureList())
-                    candidates.insert(fid);
-        }
-        fprintf(stderr, "[AIM] scene %u: fix=%d grp=%d -> candidates=%d\n",
-                m_activeSceneId, activeScene->fixtures().size(),
-                activeScene->fixtureGroups().size(), candidates.size()); fflush(stderr);
+        FixtureGroup *fg = m_doc->fixtureGroup(gid);
+        if (fg)
+            foreach (quint32 fid, fg->fixtureList())
+                candidates.insert(fid);
     }
 
-    // If scene gave us nothing, fall back to every fixture visible in the monitor.
     if (candidates.isEmpty())
-    {
-        fprintf(stderr, "[AIM] fallback: using all %d monitor fixtures\n",
-                m_fixtures.size()); fflush(stderr);
-        foreach (quint32 fid, m_fixtures.keys())
-            candidates.insert(fid);
-    }
+        return;
+
+    // If a target is selected, draw only to selected targets.
+    // If no target is selected, draw to all targets in the view.
+    bool anySelected = false;
+    foreach (TargetItem *ti, m_targetItems)
+        if (ti->isSelected()) { anySelected = true; break; }
 
     foreach (TargetItem *ti, m_targetItems)
     {
-        if (!ti->isSelected())
+        if (anySelected && !ti->isSelected())
             continue;
 
         StageTarget *tgt = ti->target();
@@ -735,7 +720,6 @@ void MonitorGraphicsView::updateAimLines()
         QPen aimPen(tgt->color().isValid() ? tgt->color() : QColor(255, 180, 0), 1.5);
         aimPen.setStyle(Qt::DashLine);
 
-        int drawn = 0;
         for (quint32 fid : candidates)
         {
             MonitorFixtureItem *mfi = m_fixtures.value(fid);
@@ -748,7 +732,6 @@ void MonitorGraphicsView::updateAimLines()
                 fixPx.x(), fixPx.y(), tgtPx.x(), tgtPx.y(), aimPen);
             line->setZValue(2.5);
             m_aimLines.append(line);
-            drawn++;
 
             // Arrow head at the target end
             QPointF dir = tgtPx - fixPx;
@@ -768,7 +751,6 @@ void MonitorGraphicsView::updateAimLines()
                 m_aimLines.append(al); m_aimLines.append(ar);
             }
         }
-        fprintf(stderr, "[AIM] drew %d lines to target\n", drawn); fflush(stderr);
     }
 }
 
@@ -970,7 +952,6 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
         setDragMode(QGraphicsView::RubberBandDrag);
 
     // Selection may have changed — rebuild aim lines for selected targets.
-    fprintf(stderr, "[AIM] mouseReleaseEvent -> updateAimLines\n"); fflush(stderr);
     updateAimLines();
 }
 
@@ -986,6 +967,15 @@ void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
             {
                 draggingFixture = true;
                 break;
+            }
+        }
+
+        // If dragging a target, keep aim lines live.
+        if (!draggingFixture && m_activeSceneId != Function::invalidId())
+        {
+            foreach (QGraphicsItem *gi, m_scene->selectedItems())
+            {
+                if (dynamic_cast<TargetItem *>(gi)) { updateAimLines(); break; }
             }
         }
 

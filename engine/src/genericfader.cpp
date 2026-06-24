@@ -200,6 +200,12 @@ int GenericFader::channelsCount() const
 
 void GenericFader::write(Universe *universe)
 {
+    if (m_zeroAll)
+    {
+        for (int c = 0; c < 512; ++c)
+            universe->write(c, 0, true);
+    }
+
     if (m_monitoring)
         emit preWriteData(universe->id(), universe->preGMValues());
 

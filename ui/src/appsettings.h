@@ -23,6 +23,7 @@
 #include <QDialog>
 
 class QCheckBox;
+class QComboBox;
 class QSpinBox;
 class App;
 
@@ -46,7 +47,10 @@ private:
 
     // Autosave widgets
     QCheckBox *m_autosaveEnabledCheck;
-    QSpinBox *m_autosaveIntervalSpin;
+    QSpinBox  *m_autosaveIntervalSpin;
+
+    // Tab label mode
+    QComboBox *m_tabLabelModeCombo;
 };
 
 /** @} */

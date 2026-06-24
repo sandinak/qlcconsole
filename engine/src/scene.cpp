@@ -103,6 +103,9 @@ bool Scene::copyFrom(const Function* function)
     m_channelGroupsLevels = scene->m_channelGroupsLevels;
     m_fixtureGroups.clear();
     m_fixtureGroups = scene->m_fixtureGroups;
+
+    // Share palette references — duplicate scene points at the same palettes
+    // so the operator can add/remove looks independently without spawning clones.
     m_palettes.clear();
     m_palettes = scene->m_palettes;
 

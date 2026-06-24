@@ -19,6 +19,7 @@
 */
 
 #include <QtAlgorithms>
+#include <QDebug>
 #include <algorithm>
 #include <climits>
 
@@ -43,11 +44,20 @@
 #include "highlighteffect.h"
 #include "followspoteffect.h"
 #include "capturemanager.h"
+#include "inputoutputmap.h"
+#include "inputpatch.h"
+#include "qlcioplugin.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "truss.h"
+#include <QtMath>
+#include <QVector3D>
 
 ProgrammerController::ProgrammerController(Doc *doc)
     : QObject(doc)
     , m_doc(doc)
 {
+    qDebug() << "[PC] ProgrammerController constructed";
     m_programmerFlasher = new ProgrammerFlasher(m_doc);
     m_highlightEffect = new HighlightEffect(m_doc);
     m_followSpotEffect = new FollowSpotEffect(m_doc);
@@ -326,8 +336,8 @@ quint32 ProgrammerController::routeProgrammerEdit(quint32 fid, quint32 ch, uchar
 
     // Palette-aware routing first: editing a whole group scene live
     // updates the palette (so the group follows) instead of writing a
-    // per-channel override. Falls through for pad sub-selections and
-    // non-derivable palette types (e.g. Pan/Tilt).
+    // per-channel override. Falls through only for pad sub-selections
+    // or partial group selections.
     const quint32 paletteRouted = tryRoutePaletteEdit(fid, ch, value, candidates);
     if (paletteRouted != Function::invalidId())
         return paletteRouted;
@@ -452,9 +462,20 @@ quint32 ProgrammerController::tryRoutePaletteEdit(quint32 fid, quint32 ch,
             if (!drives)
                 continue;
 
-            const PaletteEditOutcome outcome = updatePaletteForEdit(pal, value);
+            PaletteEditOutcome outcome = updatePaletteForEdit(pal, value);
             if (outcome == PaletteCantDerive)
-                return Function::invalidId(); // fall through to per-channel
+            {
+                // updatePaletteForEdit can't back-derive this palette type
+                // from a raw DMX value alone (e.g. PanTilt). Try the
+                // channel-group-aware path so we update the palette rather
+                // than writing a raw baked value into the scene alongside it.
+                Fixture *fxi = m_doc->fixture(fid);
+                const QLCChannel *qch = fxi ? fxi->channel(ch) : nullptr;
+                if (qch)
+                    outcome = updatePaletteForChannelType(pal, qch->group(), 0, value);
+                if (outcome == PaletteCantDerive)
+                    return Function::invalidId(); // genuinely can't route
+            }
 
             const quint32 sid = scene->id();
             if (outcome == PaletteChanged)
@@ -1068,7 +1089,518 @@ void ProgrammerController::setFollowSpotActive(bool active)
 {
     if (m_followSpotEffect)
         m_followSpotEffect->setActive(active);
+    if (active)
+    {
+        if (!m_panBound && !m_tiltBound)
+            autoBindFromProfile();
+        // Push current programmer selection into the effect — the selection
+        // may have been set before the toggle was turned on, so slotSyncEffectFixtures
+        // would have skipped it (effect wasn't active yet).
+        if (m_followSpotEffect && !m_programmerSelection.isEmpty())
+            m_followSpotEffect->setFixtures(m_programmerSelection);
+    }
     emit followSpotActiveChanged(active);
+}
+
+void ProgrammerController::bumpFollowSpot()
+{
+    if (!m_followSpotEffect || !m_followSpotEffect->isActive())
+        return;
+    MasterTimer *mt = m_doc->masterTimer();
+    if (!mt)
+        return;
+    mt->unregisterDMXSource(m_followSpotEffect);
+    mt->registerDMXSource(m_followSpotEffect);
+}
+
+/*********************************************************************
+ * Controller axis binding
+ *********************************************************************/
+
+void ProgrammerController::bindPanAxis()
+{
+    m_boundFromProfile = false; // switching to manual mode
+    connectControllerInput();
+    m_capturingPan  = true;
+    m_capturingTilt = false;
+}
+
+void ProgrammerController::bindTiltAxis()
+{
+    m_boundFromProfile = false; // switching to manual mode
+    connectControllerInput();
+    m_capturingPan  = false;
+    m_capturingTilt = true;
+}
+
+void ProgrammerController::clearAxisBindings()
+{
+    m_panBound  = false;
+    m_tiltBound = false;
+    m_boundFromProfile = false;
+    m_capturingPan  = false;
+    m_capturingTilt = false;
+    emit axisBindingChanged();
+}
+
+QString ProgrammerController::axisLabel(quint32 universe, quint32 channel) const
+{
+    if (!m_doc->inputOutputMap())
+        return QString("Universe %1, Ch %2").arg(universe + 1).arg(channel + 1);
+
+    InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
+    if (!ip)
+        return QString("Universe %1, Ch %2").arg(universe + 1).arg(channel + 1);
+
+    // Ask the plugin for a profile-derived channel name (e.g. "Left Stick X")
+    const QString chanName = ip->plugin()
+        ? ip->plugin()->inputChannelName(ip->input(), channel)
+        : QString();
+
+    const QString devName = ip->inputName(); // e.g. "Microsoft Controller"
+
+    if (!chanName.isEmpty() && !devName.isEmpty())
+        return QString("%1 — %2").arg(devName).arg(chanName);
+    if (!chanName.isEmpty())
+        return chanName;
+    if (!devName.isEmpty())
+        return QString("%1  axis %2").arg(devName).arg(channel + 1);
+    return QString("Universe %1, Ch %2").arg(universe + 1).arg(channel + 1);
+}
+
+QString ProgrammerController::panAxisLabel() const
+{
+    if (!m_panBound) return tr("—");
+    return axisLabel(m_panUniverse, m_panChannel);
+}
+
+QString ProgrammerController::tiltAxisLabel() const
+{
+    if (!m_tiltBound) return tr("—");
+    return axisLabel(m_tiltUniverse, m_tiltChannel);
+}
+
+void ProgrammerController::autoBindFromProfile()
+{
+    if (!m_doc->inputOutputMap())
+        return;
+
+    bool changed = false;
+    const auto universeList = m_doc->inputOutputMap()->universes();
+    qCritical() << "[AutoBind] scanning" << universeList.size() << "universes; panBound=" << m_panBound << "tiltBound=" << m_tiltBound;
+    for (quint32 u = 0; u < (quint32)universeList.size(); ++u)
+    {
+        InputPatch *ip = m_doc->inputOutputMap()->inputPatch(u);
+        if (!ip)
+        {
+            qCritical() << "[AutoBind] universe" << u << "- no input patch";
+            continue;
+        }
+        QLCIOPlugin *plugin = ip->plugin();
+        if (!plugin)
+            continue;
+
+        // inputAxisForSlot matches profile by device VID/PID, not by the named profile
+        // assignment in the I/O panel — so no hidProfileName() check needed here.
+        const int panCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("pan"));
+        const int tiltCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("tilt"));
+        qCritical() << "[AutoBind] universe" << u << "plugin=" << plugin->name()
+                    << "input=" << ip->input() << "profile=" << ip->hidProfileName()
+                    << "panCh=" << panCh << "tiltCh=" << tiltCh;
+
+        if (panCh >= 0 && !m_panBound)
+        {
+            m_panUniverse = u;
+            m_panChannel  = (quint32)panCh;
+            m_panBound    = true;
+            changed = true;
+        }
+        if (tiltCh >= 0 && !m_tiltBound)
+        {
+            m_tiltUniverse = u;
+            m_tiltChannel  = (quint32)tiltCh;
+            m_tiltBound    = true;
+            changed = true;
+        }
+    }
+
+    if (changed)
+    {
+        m_boundFromProfile = true;
+
+        /* Apply sensitivity / deadzone from the matched profile to the C++ followspot. */
+        if (m_followSpotEffect)
+        {
+            const auto universeList2 = m_doc->inputOutputMap()->universes();
+            for (quint32 u = 0; u < (quint32)universeList2.size(); ++u)
+            {
+                InputPatch *ip2 = m_doc->inputOutputMap()->inputPatch(u);
+                if (!ip2 || ip2->hidProfileName().isEmpty()) continue;
+                QLCIOPlugin *plugin2 = ip2->plugin();
+                if (!plugin2) continue;
+                m_followSpotEffect->setSensitivity(plugin2->inputProfileSensitivity(ip2->input()));
+                m_followSpotEffect->setDeadzone(plugin2->inputProfileDeadzone(ip2->input()));
+                break; // use first profile that has pan/tilt
+            }
+        }
+
+        updateFollowspotJsBindings();
+        emit axisBindingChanged();
+    }
+
+    // Always connect input so we receive events even when no profile is assigned.
+    // Without this, manual bind capture (bindPanAxis/bindTiltAxis) never fires.
+    connectControllerInput();
+    qCritical() << "[AutoBind] RESULT: panBound=" << m_panBound << "(u=" << m_panUniverse << "ch=" << m_panChannel << ")"
+                << "tiltBound=" << m_tiltBound << "(u=" << m_tiltUniverse << "ch=" << m_tiltChannel << ")"
+                << "inputConnected=" << m_controllerInputConnected;
+}
+
+void ProgrammerController::connectControllerInput()
+{
+    if (m_controllerInputConnected || !m_doc->inputOutputMap())
+        return;
+    connect(m_doc->inputOutputMap(),
+            SIGNAL(inputValueChanged(quint32, quint32, uchar, const QString&)),
+            this,
+            SLOT(slotControllerInputChanged(quint32, quint32, uchar, const QString&)));
+    m_controllerInputConnected = true;
+}
+
+void ProgrammerController::updateFollowspotJsBindings()
+{
+    // Propagate the bound axis into any followspot.js effect palettes so the
+    // EffectScriptRunner routes values to them via its normal mechanism.
+    for (QLCPalette *pal : m_doc->palettes())
+    {
+        const QString sp = pal->scriptPath();
+        if (!sp.contains(QLatin1String("followspot"), Qt::CaseInsensitive))
+            continue;
+        if (m_panBound)
+            pal->setEffectInputBinding(QStringLiteral("x"), m_panUniverse, m_panChannel);
+        if (m_tiltBound)
+            pal->setEffectInputBinding(QStringLiteral("y"), m_tiltUniverse, m_tiltChannel);
+    }
+}
+
+void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 channel,
+                                                       uchar value, const QString &)
+{
+    if (m_capturingPan)
+    {
+        m_panUniverse = universe;
+        m_panChannel  = channel;
+        m_panBound    = true;
+        m_capturingPan = false;
+        updateFollowspotJsBindings();
+        emit axisBindingChanged();
+        return;
+    }
+    if (m_capturingTilt)
+    {
+        m_tiltUniverse = universe;
+        m_tiltChannel  = channel;
+        m_tiltBound    = true;
+        m_capturingTilt = false;
+        updateFollowspotJsBindings();
+        emit axisBindingChanged();
+        return;
+    }
+
+    const float norm = value / 255.0f;
+
+    // Trace every event so we can see incoming u/ch vs bound u/ch.
+    // One-shot per (universe, channel) pair to avoid 50Hz flood.
+    {
+        static QSet<quint64> seen;
+        const quint64 key = ((quint64)universe << 32) | channel;
+        if (!seen.contains(key))
+        {
+            seen.insert(key);
+            qCritical() << "[Input] first event: u=" << universe << "ch=" << channel
+                        << "val=" << value
+                        << " | panBound=" << m_panBound
+                        << "(u=" << m_panUniverse << "ch=" << m_panChannel << ")"
+                        << " | tiltBound=" << m_tiltBound
+                        << "(u=" << m_tiltUniverse << "ch=" << m_tiltChannel << ")"
+                        << " | mode=" << (m_doc->mode() == Doc::Design ? "Design" : "Operate");
+        }
+    }
+
+    if (m_panBound && universe == m_panUniverse && channel == m_panChannel)
+    {
+        m_panNorm = norm;
+        if (m_doc->mode() == Doc::Design)
+            applyDesignJoystick();
+        else if (m_followSpotEffect)
+            m_followSpotEffect->setXNorm(norm);
+        emit joystickUpdated(m_panNorm, m_tiltNorm);
+        return;
+    }
+    if (m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel)
+    {
+        m_tiltNorm = norm;
+        if (m_doc->mode() == Doc::Design)
+            applyDesignJoystick();
+        else if (m_followSpotEffect)
+            m_followSpotEffect->setYNorm(norm);
+        emit joystickUpdated(m_panNorm, m_tiltNorm);
+        return;
+    }
+
+    /* Button action dispatch: only on press (value > 0) */
+    if (value > 0 && m_doc->inputOutputMap())
+    {
+        InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
+        if (ip && ip->plugin())
+        {
+            const QString action = ip->plugin()->inputButtonAction(ip->input(), channel);
+            if (!action.isEmpty())
+                emit buttonActionTriggered(action);
+        }
+    }
+}
+
+void ProgrammerController::applyDesignJoystick()
+{
+    // Design mode: use FollowSpotEffect (velocity/setpoint) to move fixtures.
+    // The FS runs as a DMXSource AFTER the scene and wins LTP via forceLTP writes,
+    // so the scene's palette output is overridden without modifying palette data.
+    // commitDesignJoystick() writes the final position into the palette on Save.
+    if (m_focusedSceneId == Function::invalidId())
+        return;
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
+    if (!scene)
+        return;
+    if (!m_panBound && !m_tiltBound)
+        return;
+
+    // Working selection: programmer selection first, then all scene fixtures.
+    QList<quint32> workingSelection = m_programmerSelection;
+    if (workingSelection.isEmpty())
+    {
+        for (quint32 fid : scene->fixtures())
+            workingSelection << fid;
+        for (quint32 gid : scene->fixtureGroups())
+        {
+            FixtureGroup *g = m_doc->fixtureGroup(gid);
+            if (g)
+                for (quint32 fid : g->fixtureList())
+                    if (!workingSelection.contains(fid)) workingSelection << fid;
+        }
+    }
+    if (workingSelection.isEmpty())
+        return;
+
+    // Find the controlling position palette (Aim or PanTilt, whichever is last in list).
+    QLCPalette *panTiltPal = nullptr;
+    QLCPalette *aimPal     = nullptr;
+    if (m_focusedPaletteId != QLCPalette::invalidId())
+    {
+        QLCPalette *p = m_doc->palette(m_focusedPaletteId);
+        if (p && p->type() == QLCPalette::PanTilt) panTiltPal = p;
+        if (p && p->type() == QLCPalette::Aim)     aimPal     = p;
+    }
+    if (!panTiltPal && !aimPal)
+    {
+        for (quint32 pid : scene->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (!p) continue;
+            if (p->type() == QLCPalette::PanTilt) panTiltPal = p;
+            if (p->type() == QLCPalette::Aim)     aimPal     = p;
+        }
+        if (panTiltPal && aimPal)
+        {
+            const QList<quint32> &order = scene->palettes();
+            if (order.lastIndexOf(aimPal->id()) > order.lastIndexOf(panTiltPal->id()))
+                panTiltPal = nullptr;
+            else
+                aimPal = nullptr;
+        }
+    }
+
+    if (panTiltPal || aimPal)
+    {
+        // Route through FollowSpotEffect: velocity/setpoint model accumulates
+        // position as the stick deflects, holds position when released.
+        // Runs LAST (bumpFollowSpot), writes forceLTP — wins over scene output.
+        m_followSpotEffect->setFixtures(workingSelection);
+        m_followSpotEffect->setXNorm(m_panNorm);
+        m_followSpotEffect->setYNorm(m_tiltNorm);
+        if (!m_followSpotEffect->isActive())
+            m_followSpotEffect->setActive(true);
+        bumpFollowSpot();
+        emit designPositionWritten();
+        return;
+    }
+
+    // No position palette — bake values directly into scene channels.
+    const bool firstEdit = !m_editedScenes.contains(m_focusedSceneId);
+    for (quint32 fid : workingSelection)
+    {
+        Fixture *f = m_doc->fixture(fid);
+        if (!f || !f->fixtureMode()) continue;
+        const QLCPhysical &phy = f->fixtureMode()->physical();
+        if (m_panBound)
+        {
+            float panMax = phy.focusPanMax() > 0 ? phy.focusPanMax() : 360.0f;
+            for (const SceneValue &sv : f->positionToValues(QLCChannel::Pan, m_panNorm * panMax))
+                scene->setValue(sv.fxi, sv.channel, sv.value);
+        }
+        if (m_tiltBound)
+        {
+            float tiltMax = phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270.0f;
+            for (const SceneValue &sv : f->positionToValues(QLCChannel::Tilt, m_tiltNorm * tiltMax))
+                scene->setValue(sv.fxi, sv.channel, sv.value);
+        }
+    }
+    if (firstEdit) markSceneEdited(m_focusedSceneId);
+    else           scene->resetRuntime();
+    emit designPositionWritten();
+}
+
+void ProgrammerController::commitDesignJoystick()
+{
+    // Commit the FollowSpotEffect setpoints into the palette, then deactivate
+    // FS so the scene resumes palette control at the committed position.
+    if (!m_followSpotEffect || !m_followSpotEffect->isActive()) return;
+    if (!m_followSpotEffect->setpointValid()) return;
+    if (m_focusedSceneId == Function::invalidId()) return;
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
+    if (!scene) return;
+
+    const float panSetpoint  = m_followSpotEffect->panSetpoint();
+    const float tiltSetpoint = m_followSpotEffect->tiltSetpoint();
+
+    // Find position palette (same logic as applyDesignJoystick).
+    QLCPalette *panTiltPal = nullptr;
+    QLCPalette *aimPal     = nullptr;
+    if (m_focusedPaletteId != QLCPalette::invalidId())
+    {
+        QLCPalette *p = m_doc->palette(m_focusedPaletteId);
+        if (p && p->type() == QLCPalette::PanTilt) panTiltPal = p;
+        if (p && p->type() == QLCPalette::Aim)     aimPal     = p;
+    }
+    if (!panTiltPal && !aimPal)
+    {
+        for (quint32 pid : scene->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (!p) continue;
+            if (p->type() == QLCPalette::PanTilt) panTiltPal = p;
+            if (p->type() == QLCPalette::Aim)     aimPal     = p;
+        }
+        if (panTiltPal && aimPal)
+        {
+            const QList<quint32> &order = scene->palettes();
+            if (order.lastIndexOf(aimPal->id()) > order.lastIndexOf(panTiltPal->id()))
+                panTiltPal = nullptr;
+            else
+                aimPal = nullptr;
+        }
+    }
+
+    if (panTiltPal)
+    {
+        // Convert normalized setpoints to fixture degrees.
+        float panDeg = 0.0f, tiltDeg = 0.0f;
+        for (quint32 fid : scene->fixtures())
+        {
+            Fixture *f = m_doc->fixture(fid);
+            if (!f || !f->fixtureMode()) continue;
+            const QLCPhysical &phy = f->fixtureMode()->physical();
+            panDeg  = panSetpoint  * (phy.focusPanMax()  > 0 ? phy.focusPanMax()  : 360.0f);
+            tiltDeg = tiltSetpoint * (phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270.0f);
+            break;
+        }
+        // Commit to palette before deactivating FS so scene snaps to correct position.
+        panTiltPal->setValue(QVariant(panDeg), QVariant(tiltDeg));
+        m_followSpotEffect->setActive(false);
+        markSceneEdited(m_focusedSceneId);
+        return;
+    }
+
+    if (aimPal)
+    {
+        MonitorProperties *mProps = m_doc->monitorProperties();
+        StageTarget *tgt = mProps ? mProps->stageTarget(aimPal->stageTargetId()) : nullptr;
+
+        // Find first fixture in scene with rig props.
+        quint32 rigFid = Function::invalidId();
+        if (mProps)
+        {
+            for (quint32 fid : scene->fixtures())
+                if (mProps->hasFixtureRigProps(fid)) { rigFid = fid; break; }
+            if (rigFid == Function::invalidId())
+            {
+                for (quint32 gid : scene->fixtureGroups())
+                {
+                    FixtureGroup *g = m_doc->fixtureGroup(gid);
+                    if (!g) continue;
+                    for (quint32 fid : g->fixtureList())
+                        if (mProps->hasFixtureRigProps(fid)) { rigFid = fid; break; }
+                    if (rigFid != Function::invalidId()) break;
+                }
+            }
+        }
+
+        if (!tgt || rigFid == Function::invalidId())
+        {
+            // No rig geometry — just deactivate FS and leave scene as-is.
+            m_followSpotEffect->setActive(false);
+            return;
+        }
+
+        Fixture *f = m_doc->fixture(rigFid);
+        if (!f || !f->fixtureMode()) { m_followSpotEffect->setActive(false); return; }
+
+        FixtureRigProps rp = mProps->fixtureRigProps(rigFid);
+        const QLCPhysical &phy = f->fixtureMode()->physical();
+        float panMax  = phy.focusPanMax()  > 0 ? phy.focusPanMax()  : 360.0f;
+        float tiltMax = phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270.0f;
+
+        // FS setpoints → fixture degrees (FS applies aim-height bias to tilt).
+        float panDeg  = panSetpoint  * panMax;
+        float tiltDeg = tiltSetpoint * tiltMax
+                        - (m_followSpotEffect->aimHeight() / 100.0f) * 5.0f;
+        tiltDeg = qBound(0.0f, tiltDeg, tiltMax);
+
+        // Undo rig pan offsets → azimuth.
+        float rawPan = panDeg;
+        if (rp.panInvert) rawPan = panMax - rawPan;
+        rawPan -= rp.panOffsetDeg;
+        float azimuthDeg = (rawPan - panMax / 2.0f) + rp.panZeroDir;
+        float azimuthRad = qDegreesToRadians(azimuthDeg);
+
+        // Undo rig tilt offsets → elevation angle.
+        float rawTilt = tiltDeg;
+        if (rp.tiltInvert) rawTilt = tiltMax - rawTilt;
+        rawTilt -= rp.tiltOffsetDeg;
+        float tiltOffset = rawTilt - tiltMax / 2.0f;
+        float elevDeg = (rp.mountingType == Truss::FloorMounted)
+                        ? (90.0f - tiltOffset) : (tiltOffset - 90.0f);
+
+        // Skip commit if fixture is nearly vertical (target undefined).
+        if (qAbs(elevDeg) >= 88.0f)
+        {
+            m_followSpotEffect->setActive(false);
+            return;
+        }
+        elevDeg = qBound(-89.0f, elevDeg, -1.0f);
+
+        QVector3D fixPos = mProps->fixtureRigPosition(rigFid);
+        float dz = 0.0f - fixPos.z();
+        float horizDist = dz / qTan(qDegreesToRadians(elevDeg));
+        QVector3D newTgtPos(fixPos.x() + horizDist * qSin(azimuthRad),
+                            fixPos.y() - horizDist * qCos(azimuthRad),
+                            0.0f);
+
+        // Commit before deactivating so the scene immediately snaps to the right spot.
+        tgt->setPosition(newTgtPos);
+        m_followSpotEffect->setActive(false);
+        markSceneEdited(m_focusedSceneId);
+    }
 }
 
 void ProgrammerController::slotSyncEffectFixtures()
@@ -1421,4 +1953,235 @@ void ProgrammerController::revertProgrammer()
     m_sceneSnapshots.clear();
     m_programmerValues.clear();
     emit programmerDirtyChanged(false);
+}
+
+/*****************************************************************************
+ * Look-level routing
+ *****************************************************************************/
+
+void ProgrammerController::setFocusedScene(quint32 sceneId)
+{
+    if (m_focusedSceneId != sceneId)
+    {
+        // Deactivate design-mode FollowSpotEffect so the new scene's palette
+        // controls fixture position until the operator moves the stick.
+        if (m_followSpotEffect && m_followSpotEffect->isActive())
+            m_followSpotEffect->setActive(false);
+    }
+    m_focusedSceneId = sceneId;
+    // Changing the scene invalidates any palette-specific focus.
+    m_focusedPaletteId = QLCPalette::invalidId();
+}
+
+void ProgrammerController::setFocusedPalette(quint32 paletteId)
+{
+    m_focusedPaletteId = paletteId;
+}
+
+QLCPalette::PaletteType ProgrammerController::channelGroupToPaletteType(int g)
+{
+    switch (g)
+    {
+    case QLCChannel::Intensity: return QLCPalette::Dimmer;
+    case QLCChannel::Red:
+    case QLCChannel::Green:
+    case QLCChannel::Blue:
+    case QLCChannel::White:
+    case QLCChannel::Amber:
+    case QLCChannel::UV:
+    case QLCChannel::Cyan:
+    case QLCChannel::Magenta:
+    case QLCChannel::Yellow:
+    case QLCChannel::Colour:    return QLCPalette::Color;
+    case QLCChannel::Pan:       return QLCPalette::Pan;   // also accepts PanTilt
+    case QLCChannel::Tilt:      return QLCPalette::Tilt;  // also accepts PanTilt
+    case QLCChannel::Shutter:   return QLCPalette::Shutter;
+    case QLCChannel::Gobo:      return QLCPalette::Gobo;
+    case QLCChannel::Beam:      return QLCPalette::Beam;
+    case QLCChannel::Effect:    return QLCPalette::Effect;
+    default:                    return QLCPalette::Undefined;
+    }
+}
+
+bool ProgrammerController::paletteTypeMatchesChannel(QLCPalette::PaletteType palType,
+                                                     int qlcChannelGroup,
+                                                     int /*groupIndex*/)
+{
+    QLCPalette::PaletteType wanted = channelGroupToPaletteType(qlcChannelGroup);
+    if (wanted == QLCPalette::Undefined)
+        return false;
+    if (palType == wanted)
+        return true;
+    // Pan and Tilt channels can both be served by a combined PanTilt palette.
+    if ((wanted == QLCPalette::Pan || wanted == QLCPalette::Tilt)
+            && palType == QLCPalette::PanTilt)
+        return true;
+    return false;
+}
+
+ProgrammerController::PaletteEditOutcome
+ProgrammerController::updatePaletteForChannelType(QLCPalette *pal,
+                                                   int qlcChannelGroup,
+                                                   int groupIndex,
+                                                   uchar rawValue)
+{
+    switch (pal->type())
+    {
+    case QLCPalette::Color:
+    {
+        // Use the composite programmer color, same as updatePaletteForEdit.
+        const QColor c(m_programmerColor.red(),
+                       m_programmerColor.green(),
+                       m_programmerColor.blue());
+        const QString nv = c.name();
+        if (pal->value().toString() == nv)
+            return PaletteUnchanged;
+        pal->setValue(nv);
+        return PaletteChanged;
+    }
+
+    case QLCPalette::Dimmer:
+    case QLCPalette::Gobo:
+    case QLCPalette::Shutter:
+        if (pal->intValue1() == int(rawValue))
+            return PaletteUnchanged;
+        pal->setValue(int(rawValue));
+        return PaletteChanged;
+
+    case QLCPalette::Pan:
+    case QLCPalette::Tilt:
+    {
+        const int pct = int(rawValue) * 100 / 255;
+        if (pal->intValue1() == pct)
+            return PaletteUnchanged;
+        pal->setValue(pct);
+        return PaletteChanged;
+    }
+
+    case QLCPalette::PanTilt:
+    {
+        const int pct = int(rawValue) * 100 / 255;
+        if (qlcChannelGroup == QLCChannel::Pan)
+        {
+            if (pal->intValue1() == pct)
+                return PaletteUnchanged;
+            pal->setValue(pct, pal->intValue2());
+        }
+        else // Tilt
+        {
+            if (pal->intValue2() == pct)
+                return PaletteUnchanged;
+            pal->setValue(pal->intValue1(), pct);
+        }
+        return PaletteChanged;
+    }
+
+    case QLCPalette::Beam:
+    {
+        // Beam palette stores [focus, frost, iris] as intValue1/2/3.
+        // groupIndex 0 = focus (primary Beam), 1 = zoom/secondary.
+        const int idx = (groupIndex <= 0) ? 0 : 1;
+        QVariantList vals = pal->values();
+        while (vals.size() <= idx)
+            vals.append(0);
+        if (vals.at(idx).toInt() == int(rawValue))
+            return PaletteUnchanged;
+        vals[idx] = int(rawValue);
+        pal->setValues(vals);
+        return PaletteChanged;
+    }
+
+    default:
+        return PaletteCantDerive;
+    }
+}
+
+void ProgrammerController::markSceneEdited(quint32 sceneId)
+{
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
+    if (!scene)
+        return;
+    scene->resetRuntime();
+    if (!m_editedScenes.contains(sceneId))
+    {
+        m_sceneSnapshots.insert(sceneId, scene->values());
+        const bool wasClean = !isProgrammerDirty();
+        m_editedScenes.insert(sceneId);
+        if (wasClean)
+            emit programmerDirtyChanged(true);
+    }
+    m_doc->setModified();
+}
+
+quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGroup,
+                                                               int groupIndex,
+                                                               uchar rawValue)
+{
+    // Determine which palette to target.
+    QLCPalette *pal = nullptr;
+    quint32 owningSceneId = Function::invalidId();
+
+    if (m_focusedPaletteId != QLCPalette::invalidId())
+    {
+        // User has a specific look selected → use it if the type matches.
+        pal = m_doc->palette(m_focusedPaletteId);
+        if (!pal || !paletteTypeMatchesChannel(pal->type(), qlcChannelGroup, groupIndex))
+            return Function::invalidId();
+
+        // Find which scene owns this palette so we can mark it edited.
+        if (m_focusedSceneId != Function::invalidId())
+        {
+            Scene *s = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
+            if (s && s->palettes().contains(m_focusedPaletteId))
+                owningSceneId = m_focusedSceneId;
+        }
+        // Fallback: search running scenes.
+        if (owningSceneId == Function::invalidId())
+        {
+            QList<Scene*> candidates;
+            for (int i = m_runningScenes.size() - 1; i >= 0; --i)
+                collectActiveScenes(m_doc, m_doc->function(m_runningScenes.at(i)), candidates);
+            for (Scene *s : qAsConst(candidates))
+            {
+                if (s->palettes().contains(m_focusedPaletteId))
+                {
+                    owningSceneId = s->id();
+                    break;
+                }
+            }
+        }
+    }
+    else if (m_focusedSceneId != Function::invalidId())
+    {
+        // Scene selected but no specific look → find the first palette in
+        // the scene whose type matches the channel group being edited.
+        Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
+        if (!scene)
+            return Function::invalidId();
+        for (quint32 pid : scene->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (p && paletteTypeMatchesChannel(p->type(), qlcChannelGroup, groupIndex))
+            {
+                pal = p;
+                owningSceneId = m_focusedSceneId;
+                break;
+            }
+        }
+    }
+
+    if (!pal)
+        return Function::invalidId();
+
+    const PaletteEditOutcome outcome =
+        updatePaletteForChannelType(pal, qlcChannelGroup, groupIndex, rawValue);
+
+    if (outcome == PaletteCantDerive)
+        return Function::invalidId();
+
+    if (outcome == PaletteChanged && owningSceneId != Function::invalidId())
+        markSceneEdited(owningSceneId);
+
+    // Return a valid id so VCSlider knows the edit was taken.
+    return (owningSceneId != Function::invalidId()) ? owningSceneId : pal->id();
 }

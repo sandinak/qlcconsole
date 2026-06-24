@@ -114,6 +114,11 @@ public:
     /** Name of the assigned input profile (empty if none) */
     QString profileName() const;
 
+    /** HID device profile name (maps controller axes/buttons by VID/PID).
+     *  Separate from QLCInputProfile — stored as a plain name string. */
+    QString hidProfileName() const { return m_hidProfileName; }
+    void setHidProfileName(const QString &name) { m_hidProfileName = name; }
+
     /** Returns true if a valid plugin line has been set */
     bool isPatched() const;
 
@@ -142,6 +147,8 @@ private:
     quint32 m_pluginLine;
     /** The reference of an input profile if activated by the user (otherwise NULL) */
     QLCInputProfile* m_profile;
+    /** HID device profile name assigned by user (stored by name, not pointer) */
+    QString m_hidProfileName;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
 

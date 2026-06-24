@@ -163,6 +163,9 @@ protected slots:
 signals:
     void channelStyleChanged(MonitorProperties::ChannelStyle style);
     void valueStyleChanged(MonitorProperties::ValueStyle style);
+    /** Emitted when the user clicks a fixture (or empty space) in the 2D view.
+     *  @p fixtureIds is the current graphics-view selection (may be empty). */
+    void fixturesSelected(QList<quint32> fixtureIds);
 
 protected:
     QToolBar* m_DMXToolBar;
@@ -175,6 +178,13 @@ protected:
     /********************************************************************
      * Graphics View
      ********************************************************************/
+
+    /** Open the fixture properties / test dialog for a specific fixture ID.
+     *  Can be called from outside the Monitor (e.g. SimpleDesk, Fixture Manager).
+     *  The Monitor must already be constructed; call Monitor::createAndShow() first. */
+public:
+    void showFixturePropertiesById(quint32 fxId);
+
 protected:
     /** Dismiss any open fixture property editor (no-op with popup design). */
     void hideFixtureItemEditor();

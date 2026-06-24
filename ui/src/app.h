@@ -26,6 +26,8 @@
 #include <QList>
 #include <QFile>
 #include <QTimer>
+#include <QIcon>
+#include <QPair>
 
 #include "dmxdumpfactoryproperties.h"
 #include "qlcfixturedefcache.h"
@@ -96,6 +98,20 @@ protected:
     bool nativeEvent(const QByteArray & eventType, void * message, long * result);
     void disableTimerResolutionThrottling();
 #endif
+
+    /*********************************************************************
+     * Tab label mode
+     *********************************************************************/
+public:
+    enum TabLabelMode { TabIconAndText = 0, TabIconOnly = 1, TabTextOnly = 2 };
+
+    int tabLabelMode() const;
+    void setTabLabelMode(int mode);
+    void applyTabLabelMode();
+
+private:
+    int m_tabLabelMode = TabIconAndText;
+    QList<QPair<QString, QIcon>> m_tabOriginals; // stored on first tab add
 
 private:
     QTabWidget* m_tab;

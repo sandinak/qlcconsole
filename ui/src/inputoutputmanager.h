@@ -94,6 +94,7 @@ private slots:
     void slotUniverseNameChanged(QString name);
     void slotUniverseAdded(quint32 universe);
     void slotPassthroughChanged(bool checked);
+    void slotRescanPlugins();
 
 protected:
     /** @reimp */
@@ -107,6 +108,7 @@ private:
     QAction* m_deleteUniverseAction;
     QLineEdit *m_uniNameEdit;
     QCheckBox *m_uniPassthroughCheck;
+    QAction* m_rescanAction;
     QListWidget *m_list;
     QIcon m_icon;
     QTimer* m_timer;

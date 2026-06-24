@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE HIDProfile>
+<HIDProfile>
+  <Name>Microsoft Xbox Controller</Name>
+  <!-- Matches all wired Xbox 360 / One / Series controllers by Microsoft VID -->
+  <Vendor id="0x045E" name="Microsoft"/>
+  <Settings sensitivity="1.00" deadzone="0.050"/>
+  <Products>
+    <Product id="0x028E" name="Xbox 360 Wired"/>
+    <Product id="0x028F" name="Xbox 360 Wireless"/>
+    <Product id="0x02D1" name="Xbox One"/>
+    <Product id="0x02DD" name="Xbox One (firmware 2015)"/>
+    <Product id="0x02E3" name="Xbox One Elite"/>
+    <Product id="0x02EA" name="Xbox One S"/>
+    <Product id="0x0B12" name="Xbox Series X/S"/>
+  </Products>
+  <Axes>
+    <Axis index="0" slot="pan">Left Stick X</Axis>
+    <Axis index="1" slot="tilt">Left Stick Y</Axis>
+    <Axis index="2">Left Trigger</Axis>
+    <Axis index="3">Right Stick X</Axis>
+    <Axis index="4">Right Stick Y</Axis>
+    <Axis index="5">Right Trigger</Axis>
+  </Axes>
+  <Buttons>
+    <Button index="0" action="chaser_step_forward">A</Button>
+    <Button index="1" action="chaser_step_back">B</Button>
+    <Button index="2">X</Button>
+    <Button index="3">Y</Button>
+    <Button index="4">LB</Button>
+    <Button index="5">RB</Button>
+    <Button index="6">Back</Button>
+    <Button index="7">Start</Button>
+    <Button index="8">Left Stick</Button>
+    <Button index="9">Right Stick</Button>
+    <Button index="10" action="followspot_toggle">Xbox</Button>
+  </Buttons>
+</HIDProfile>

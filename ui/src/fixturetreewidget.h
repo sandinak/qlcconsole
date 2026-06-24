@@ -92,7 +92,12 @@ signals:
 protected:
     /** Provide fixture/group IDs for dragging onto drop targets (the group
      *  editor grid for fixtures, folders for groups). */
-    QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const override;
+    QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const
+        { return buildMimeData(items); }
+    QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const
+        { return buildMimeData(items); }
+private:
+    QMimeData* buildMimeData(const QList<QTreeWidgetItem*> &items) const;
 
     /** Accept group drops onto folders/root; ignore everything else. */
     void dragEnterEvent(QDragEnterEvent* event) override;

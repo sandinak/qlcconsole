@@ -26,8 +26,15 @@
 #include "configurehid.h"
 #include "hiddmxdevice.h"
 #include "hidjsdevice.h"
+#include "hidprofile.h"
+#include "hidprofileeditor.h"
 #include "hidapi.h"
 #include "hidplugin.h"
+#include "qlcfile.h"
+
+// macOS bundle layout: mirrors RGBScripts / EffectScripts
+#define HIDPROFILEDIR     "Resources/HIDProfiles"
+#define USERHIDPROFILEDIR "Library/Application Support/QLC+/HIDProfiles"
 
 #if defined(Q_WS_X11) || defined(Q_OS_LINUX)
   #include "hidlinuxjoystick.h"
@@ -43,7 +50,124 @@
 
 void HIDPlugin::init()
 {
+    loadProfiles(QLCFile::systemDirectory(QString(HIDPROFILEDIR), QString(".qxhid")));
+    loadProfiles(QLCFile::userDirectory(QString(USERHIDPROFILEDIR), QString(HIDPROFILEDIR),
+                                        QStringList() << "*.qxhid"));
     rescanDevices();
+}
+
+void HIDPlugin::loadProfiles(const QDir &dir)
+{
+    if (!dir.exists() || !dir.isReadable())
+        return;
+    const QStringList files = dir.entryList(QStringList() << "*.qxhid",
+                                             QDir::Files | QDir::Readable);
+    for (const QString &f : files)
+    {
+        HIDProfile *p = HIDProfile::load(dir.absoluteFilePath(f));
+        if (p)
+            m_profiles.append(p);
+    }
+}
+
+const HIDProfile *HIDPlugin::profileForDevice(const HIDDevice *device) const
+{
+    if (!device) return nullptr;
+    const unsigned short vid = device->vendorId();
+    const unsigned short pid = device->productId();
+    for (const HIDProfile *p : m_profiles)
+        if (p->matchesDevice(vid, pid))
+            return p;
+    return nullptr;
+}
+
+QStringList HIDPlugin::inputDeviceProfileNames(quint32 input) const
+{
+    Q_UNUSED(input);
+    QStringList names;
+    names.append(QString()); // empty = "None"
+    for (const HIDProfile *p : m_profiles)
+        names.append(p->name());
+    return names;
+}
+
+const HIDProfile *HIDPlugin::profileByName(const QString &name) const
+{
+    for (const HIDProfile *p : m_profiles)
+        if (p->name() == name)
+            return p;
+    return nullptr;
+}
+
+int HIDPlugin::inputAxisForSlot(quint32 input, const QString &slot) const
+{
+    HIDDevice *dev = device(input);
+    if (!dev) return -1;
+    const HIDProfile *prof = profileForDevice(dev);
+    if (!prof) return -1;
+    return prof->axisForSlot(slot);
+}
+
+void HIDPlugin::editDeviceProfile(quint32 input, const QString &profileName, QWidget *parent)
+{
+    Q_UNUSED(input);
+    HIDProfile *prof = nullptr;
+    for (HIDProfile *p : m_profiles)
+        if (p->name() == profileName) { prof = p; break; }
+    if (!prof) return;
+
+    HIDProfileEditor dlg(prof, parent);
+    dlg.exec();
+}
+
+float HIDPlugin::inputProfileSensitivity(quint32 input) const
+{
+    HIDDevice *dev = device(input);
+    if (!dev) return 1.0f;
+    const HIDProfile *prof = profileForDevice(dev);
+    return prof ? prof->sensitivity() : 1.0f;
+}
+
+float HIDPlugin::inputProfileDeadzone(quint32 input) const
+{
+    HIDDevice *dev = device(input);
+    if (!dev) return 0.05f;
+    const HIDProfile *prof = profileForDevice(dev);
+    return prof ? prof->deadzone() : 0.05f;
+}
+
+QString HIDPlugin::inputButtonAction(quint32 input, quint32 channel) const
+{
+    HIDDevice *dev = device(input);
+    if (!dev) return QString();
+    const HIDProfile *prof = profileForDevice(dev);
+    if (!prof) return QString();
+    const int axes = dev->axisCount();
+    if (axes < 0 || (int)channel < axes)
+        return QString(); // axis channel, not a button
+    return prof->buttonAction((int)channel - axes);
+}
+
+QString HIDPlugin::inputChannelName(quint32 input, quint32 channel) const
+{
+    HIDDevice *dev = device(input);
+    if (!dev) return QString();
+    const HIDProfile *prof = profileForDevice(dev);
+    if (!prof) return QString();
+
+    /* Profiles explicitly list axis indices — check that first so we don't
+       depend on axisCount() being correct (IOKit multi-interface matching can
+       land on the wrong interface and report 0 axes). */
+    const QString axName = prof->axisName((int)channel);
+    if (!axName.isEmpty())
+        return axName;
+
+    /* Fall back to button name using axisCount as channel offset */
+    const int axes = dev->axisCount();
+    if (axes >= 0 && (int)channel >= axes)
+        return prof->buttonName((int)channel - axes);
+
+    return QString();
 }
 
 HIDPlugin::~HIDPlugin()

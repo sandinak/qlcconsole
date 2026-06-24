@@ -38,6 +38,7 @@
 
 #include "grandmasterslider.h"
 #include "simpledeskengine.h"
+#include "monitor/monitor.h"
 #include "speeddialwidget.h"
 #include "fixtureconsole.h"
 #include "playbackslider.h"
@@ -597,6 +598,11 @@ void SimpleDesk::initSliderView(bool fullMode)
                     this, SLOT(slotUniverseSliderValueChanged(quint32,quint32,uchar)));
             connect(console, SIGNAL(resetRequest(quint32,quint32)),
                     this, SLOT(slotChannelResetClicked(quint32,quint32)));
+            connect(console, &FixtureConsole::fixtureDoubleClicked, [this](quint32 fxId) {
+                Monitor::createAndShow(this, m_doc);
+                if (Monitor::instance())
+                    Monitor::instance()->showFixturePropertiesById(fxId);
+            });
             c++;
             m_consoleList[fixture->id()] = console;
         }

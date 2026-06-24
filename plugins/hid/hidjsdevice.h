@@ -51,6 +51,12 @@ protected:
 
     /** @reimp */
     bool hasInput() const override { return true; }
+    /** @reimp */
+    unsigned short vendorId()  const override { return m_dev_info ? m_dev_info->vendor_id  : 0; }
+    /** @reimp */
+    unsigned short productId() const override { return m_dev_info ? m_dev_info->product_id : 0; }
+    /** @reimp */
+    int axisCount() const override { return (int)m_axesNumber; }
 
 protected:
     struct hid_device_info *m_dev_info;

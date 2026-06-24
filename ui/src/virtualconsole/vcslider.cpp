@@ -1571,6 +1571,23 @@ void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes
     if (isRGBWRole && controlByte == QLCChannel::MSB)
         m_doc->setProgrammerColorComponent(primaryColour, value);
 
+    // Look-level routing: when the Programming canvas has a scene (or
+    // specific palette) focused, route the edit to the palette's abstract
+    // value rather than writing individual fixture channels. If taken,
+    // skip the per-fixture DMX loop — the scene's runtime faders re-expand
+    // the palette on the next tick, driving all fixture channels uniformly.
+    // Sub-selection (pad cells) bypasses look routing so individual fixture
+    // deviations still work at channel level.
+    if (m_doc->programmerSubSelection().isEmpty() && controlByte == QLCChannel::MSB)
+    {
+        const int groupIndex = roleToGroupIndex(m_parameterRole);
+        if (m_doc->routeProgrammerEditByChannelType(chType, groupIndex, value) != Function::invalidId())
+        {
+            m_levelValueChanged = false;
+            return;
+        }
+    }
+
     QList<quint32> selection = m_doc->programmerSelection();
     // Pad-grid sub-selection: when non-empty, restrict writes to
     // only the fixtures the user picked via the pad matrix. Empty

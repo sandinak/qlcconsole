@@ -310,6 +310,75 @@ public:
     virtual bool canConfigure() const;
 
     /**
+     * Re-enumerate hardware devices and update internal state.
+     * Plugins that support hot-plug or need an explicit rescan can override
+     * this; the default implementation does nothing.
+     */
+    virtual void rescan() {}
+
+    /**
+     * Return a human-readable name for a specific input channel (axis/button)
+     * on a given input line.  Plugins that load device profiles can override
+     * this to return names like "Left Stick X".  The default returns an empty
+     * string, which callers treat as "no profile name available".
+     *
+     * @param input   Input line index (device slot within the plugin)
+     * @param channel Channel index (axis or button number within the device)
+     */
+    virtual QString inputChannelName(quint32 input, quint32 channel) const
+    { Q_UNUSED(input); Q_UNUSED(channel); return QString(); }
+
+    /**
+     * Return the names of available device profiles for a given input line.
+     * The default returns an empty list (no profiles).  HID plugin overrides
+     * this to return loaded .qxhid profile names.
+     *
+     * @param input  Input line index; ignored by default (profiles aren't
+     *               per-line in HID — all are globally available).
+     */
+    virtual QStringList inputDeviceProfileNames(quint32 input) const
+    { Q_UNUSED(input); return QStringList(); }
+
+    /**
+     * Return the channel index (axis number) assigned to a semantic slot
+     * ("pan", "tilt") on a given input line, or -1 if not found.
+     * Used by ProgrammerController to auto-bind axes without manual capture.
+     */
+    virtual int inputAxisForSlot(quint32 input, const QString &slot) const
+    { Q_UNUSED(input); Q_UNUSED(slot); return -1; }
+
+    /**
+     * Return the action string associated with a button channel on a given
+     * input line, or an empty string if none.  Channels that are buttons
+     * start after the axis channels (channel >= axisCount).
+     */
+    virtual QString inputButtonAction(quint32 input, quint32 channel) const
+    { Q_UNUSED(input); Q_UNUSED(channel); return QString(); }
+
+    /**
+     * Open an editor dialog for the named device profile associated with a
+     * given input line.  The plugin shows its own editor UI (modal dialog).
+     * The default does nothing — only plugins with editable profiles
+     * (e.g. HID) need to override this.
+     */
+    virtual void editDeviceProfile(quint32 input, const QString &profileName, QWidget *parent)
+    { Q_UNUSED(input); Q_UNUSED(profileName); Q_UNUSED(parent); }
+
+    /**
+     * Return the sensitivity multiplier from the device profile for a given
+     * input line, or 1.0 if there is no profile / the plugin doesn't support it.
+     */
+    virtual float inputProfileSensitivity(quint32 input) const
+    { Q_UNUSED(input); return 1.0f; }
+
+    /**
+     * Return the deadzone fraction from the device profile for a given input
+     * line, or 0.05 if there is no profile / the plugin doesn't support it.
+     */
+    virtual float inputProfileDeadzone(quint32 input) const
+    { Q_UNUSED(input); return 0.05f; }
+
+    /**
      * Set an arbitrary parameter useful for the plugin. This is similar
      * to Qt's setProperty
      *

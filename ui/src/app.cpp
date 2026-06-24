@@ -93,8 +93,9 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define SETTINGS_GEOMETRY      QStringLiteral("workspace/geometry")
 #define SETTINGS_WORKINGPATH   QStringLiteral("workspace/workingpath")
 #define SETTINGS_RECENTFILE    QStringLiteral("workspace/recent")
-#define SETTINGS_AUTOSAVE_ENABLED QStringLiteral("workspace/autosave/enabled")
+#define SETTINGS_AUTOSAVE_ENABLED  QStringLiteral("workspace/autosave/enabled")
 #define SETTINGS_AUTOSAVE_INTERVAL QStringLiteral("workspace/autosave/interval")
+#define SETTINGS_TAB_LABEL_MODE    QStringLiteral("workspace/tabLabelMode")
 #define KXMLQLCWorkspaceWindow QStringLiteral("CurrentWindow")
 
 #define MAX_RECENT_FILES    10
@@ -338,20 +339,38 @@ void App::init()
 
     // Create primary views.
     m_tab->setIconSize(QSize(24, 24));
+
+    // Helper to add a tab and record the original label/icon for mode switching.
+    auto addTab = [this](QWidget *w, const QIcon &icon, const QString &text) {
+        m_tab->addTab(w, icon, text);
+        m_tabOriginals.append(qMakePair(text, icon));
+    };
+
     QWidget* w = new FixtureManager(m_tab, m_doc);
-    m_tab->addTab(w, QIcon(":/fixture.png"), tr("Fixtures"));
+    addTab(w, QIcon(":/fixture.png"), tr("Fixtures"));
     w = new FunctionManager(m_tab, m_doc);
-    m_tab->addTab(w, QIcon(":/function.png"), tr("Functions"));
-    w = new ProgrammingManager(m_tab, m_doc);
-    m_tab->addTab(w, QIcon(":/scene.png"), tr("Programming"));
+    addTab(w, QIcon(":/function.png"), tr("Functions"));
+    {
+        ProgrammingManager *pm = new ProgrammingManager(m_tab, m_doc);
+        connect(pm, &ProgrammingManager::requestSave, this, &App::slotFileSave);
+        w = pm;
+    }
+    addTab(w, QIcon(":/scene.png"), tr("Programming"));
     w = new ShowManager(m_tab, m_doc);
-    m_tab->addTab(w, QIcon(":/show.png"), tr("Shows"));
+    addTab(w, QIcon(":/show.png"), tr("Shows"));
     w = new VirtualConsole(m_tab, m_doc);
-    m_tab->addTab(w, QIcon(":/virtualconsole.png"), tr("Virtual Console"));
+    addTab(w, QIcon(":/virtualconsole.png"), tr("Virtual Console"));
     w = new SimpleDesk(m_tab, m_doc);
-    m_tab->addTab(w, QIcon(":/slidermatrix.png"), tr("Simple Desk"));
+    addTab(w, QIcon(":/slidermatrix.png"), tr("Simple Desk"));
     w = new InputOutputManager(m_tab, m_doc);
-    m_tab->addTab(w, QIcon(":/input_output.png"), tr("Inputs/Outputs"));
+    addTab(w, QIcon(":/input_output.png"), tr("Inputs/Outputs"));
+
+    // Load and apply the tab label mode preference.
+    {
+        QSettings settings;
+        m_tabLabelMode = settings.value(SETTINGS_TAB_LABEL_MODE, TabIconAndText).toInt();
+    }
+    applyTabLabelMode();
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
     /* Detach the tab's widget onto a new window on doubleClick */
@@ -1734,6 +1753,53 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
             /* Ignore creator information */
             doc.skipCurrentElement();
         }
+        else if (doc.name() == "AppState")
+        {
+            // Defer restoring windows until after the full workspace is loaded
+            // so that Monitor and tabs are fully initialised first.
+            // Collect the state now and act after the while loop.
+            while (doc.readNextStartElement())
+            {
+                if (doc.name() == "MonitorWindow"
+                    && doc.attributes().value("open") == "1")
+                {
+                    QByteArray geo = QByteArray::fromBase64(
+                        doc.attributes().value("geometry").toLatin1());
+                    Monitor::createAndShow(this, m_doc);
+                    if (Monitor::instance() && !geo.isEmpty())
+                        Monitor::instance()->restoreGeometry(geo);
+                }
+                else if (doc.name() == "DetachedWindow")
+                {
+                    QString cls = doc.attributes().value("class").toString();
+                    int tabIdx  = doc.attributes().value("tabIndex").toInt();
+                    QByteArray geo = QByteArray::fromBase64(
+                        doc.attributes().value("geometry").toLatin1());
+                    // Find the tab widget that matches the class name and detach it
+                    for (int t = 0; t < m_tab->count(); ++t)
+                    {
+                        QWidget *w = m_tab->widget(t);
+                        if (w && QString(w->metaObject()->className()) == cls)
+                        {
+                            w->setProperty("tabIndex", tabIdx);
+                            w->setProperty("tabIcon",  QVariant::fromValue(m_tab->tabIcon(t)));
+                            w->setProperty("tabLabel", m_tab->tabText(t));
+                            DetachedContext *dw = new DetachedContext(this);
+                            dw->setCentralWidget(w);
+                            if (!geo.isEmpty())
+                                dw->restoreGeometry(geo);
+                            else
+                                dw->resize(800, 600);
+                            dw->show();
+                            w->show();
+                            connect(dw, SIGNAL(closing()), this, SLOT(slotReattachContext()));
+                            break;
+                        }
+                    }
+                }
+                doc.skipCurrentElement();
+            }
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown Workspace tag:" << doc.name();
@@ -1808,6 +1874,30 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
 
     /* Write Simple Desk to the XML document */
     SimpleDesk::instance()->saveXML(&doc);
+
+    /* Write open window state */
+    doc.writeStartElement("AppState");
+    if (Monitor::instance() != NULL && Monitor::instance()->isVisible())
+    {
+        doc.writeStartElement("MonitorWindow");
+        doc.writeAttribute("open", "1");
+        doc.writeAttribute("geometry",
+            QString::fromLatin1(Monitor::instance()->saveGeometry().toBase64()));
+        doc.writeEndElement();
+    }
+    const QList<DetachedContext*> detached = findChildren<DetachedContext*>();
+    for (DetachedContext *dw : detached)
+    {
+        QWidget *ctx = dw->centralWidget();
+        if (!ctx) continue;
+        doc.writeStartElement("DetachedWindow");
+        doc.writeAttribute("class", QString(ctx->metaObject()->className()));
+        doc.writeAttribute("tabIndex", QString::number(ctx->property("tabIndex").toInt()));
+        doc.writeAttribute("geometry",
+            QString::fromLatin1(dw->saveGeometry().toBase64()));
+        doc.writeEndElement();
+    }
+    doc.writeEndElement(); // AppState
 
     doc.writeEndElement(); // close KXMLQLCWorkspace
 
@@ -1965,6 +2055,70 @@ void App::setAutosaveInterval(int minutes)
     {
         m_autosaveTimer->start(m_autosaveInterval * 60 * 1000);
         qDebug() << "[Autosave] Interval changed to" << minutes << "minutes";
+    }
+}
+
+/*****************************************************************************
+ * Tab label mode
+ *****************************************************************************/
+
+int App::tabLabelMode() const
+{
+    return m_tabLabelMode;
+}
+
+void App::setTabLabelMode(int mode)
+{
+    if (m_tabLabelMode == mode)
+        return;
+    m_tabLabelMode = mode;
+    QSettings settings;
+    settings.setValue(SETTINGS_TAB_LABEL_MODE, mode);
+    applyTabLabelMode();
+}
+
+void App::applyTabLabelMode()
+{
+    if (!m_tab)
+        return;
+    const int count = m_tab->count();
+    for (int i = 0; i < count && i < m_tabOriginals.size(); ++i)
+    {
+        const QString &origText = m_tabOriginals.at(i).first;
+        const QIcon   &origIcon = m_tabOriginals.at(i).second;
+        switch (m_tabLabelMode)
+        {
+        case TabIconOnly:
+            m_tab->setTabText(i, QString());
+            m_tab->setTabIcon(i, origIcon);
+            break;
+        case TabTextOnly:
+            m_tab->setTabText(i, origText);
+            m_tab->setTabIcon(i, QIcon());
+            break;
+        default: // TabIconAndText
+            m_tab->setTabText(i, origText);
+            m_tab->setTabIcon(i, origIcon);
+            break;
+        }
+    }
+
+    // Apply the same mode to the main toolbar so "Text only" hides toolbar
+    // icons and "Icons only" hides toolbar text labels.
+    if (m_toolbar)
+    {
+        switch (m_tabLabelMode)
+        {
+        case TabIconOnly:
+            m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+            break;
+        case TabTextOnly:
+            m_toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            break;
+        default:
+            m_toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            break;
+        }
     }
 }
 

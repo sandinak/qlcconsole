@@ -32,6 +32,7 @@ QString paletteValueText(QLCPalette *p)
     case QLCPalette::Color:   return p->rgbValue().name();
     case QLCPalette::PanTilt: return QString("P%1 / T%2")
                                   .arg(p->intValue1()).arg(p->intValue2());
+    case QLCPalette::Aim:     return QString("Aim");
     default:                  return QString::number(p->intValue1());
     }
 }

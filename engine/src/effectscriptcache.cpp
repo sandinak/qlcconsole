@@ -87,6 +87,11 @@ void EffectScriptCache::scanDir(const QDir &dir)
         if (!meta.displayName.isEmpty() && !m_scripts.contains(meta.displayName))
         {
             m_scripts.insert(meta.displayName, meta);
+            // Also index by filename basename so XML round-trips work when
+            // the display name (effect.name) differs from the .js filename.
+            const QString baseName = nameFromPath(absPath);
+            if (!m_scripts.contains(baseName))
+                m_scripts.insert(baseName, meta);
             qDebug() << "[EffectScriptCache] found:" << meta.displayName << "at" << absPath;
         }
     }

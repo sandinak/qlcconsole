@@ -106,6 +106,11 @@
            <string>Feedback</string>
           </property>
          </column>
+         <column>
+          <property name="text">
+           <string>Profile</string>
+          </property>
+         </column>
         </widget>
        </item>
        <item row="1" column="0" rowspan="3" colspan="2">
@@ -159,109 +164,6 @@
          <property name="checkable">
           <bool>true</bool>
          </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="Profile">
-      <attribute name="title">
-       <string>Profile</string>
-      </attribute>
-      <layout class="QGridLayout" name="gridLayout">
-       <item row="0" column="1">
-        <widget class="QToolButton" name="m_addProfileButton">
-         <property name="toolTip">
-          <string>Create a new input profile</string>
-         </property>
-         <property name="text">
-          <string notr="true">...</string>
-         </property>
-         <property name="icon">
-          <iconset resource="qlcui.qrc">
-           <normaloff>:/edit_add.png</normaloff>:/edit_add.png</iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>32</width>
-           <height>32</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QToolButton" name="m_removeProfileButton">
-         <property name="toolTip">
-          <string>Delete the selected input profile</string>
-         </property>
-         <property name="text">
-          <string notr="true">...</string>
-         </property>
-         <property name="icon">
-          <iconset resource="qlcui.qrc">
-           <normaloff>:/edit_remove.png</normaloff>:/edit_remove.png</iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>32</width>
-           <height>32</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="1">
-        <widget class="QToolButton" name="m_editProfileButton">
-         <property name="toolTip">
-          <string>Edit the selected input profile</string>
-         </property>
-         <property name="text">
-          <string notr="true">...</string>
-         </property>
-         <property name="icon">
-          <iconset resource="qlcui.qrc">
-           <normaloff>:/edit.png</normaloff>:/edit.png</iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>32</width>
-           <height>32</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="1">
-        <spacer name="verticalSpacer_2">
-         <property name="orientation">
-          <enum>Qt::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>170</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item row="0" column="0" rowspan="4">
-        <widget class="QTreeWidget" name="m_profileTree">
-         <property name="rootIsDecorated">
-          <bool>false</bool>
-         </property>
-         <property name="itemsExpandable">
-          <bool>false</bool>
-         </property>
-         <property name="allColumnsShowFocus">
-          <bool>true</bool>
-         </property>
-         <column>
-          <property name="text">
-           <string>Profile</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>Type</string>
-          </property>
-         </column>
         </widget>
        </item>
       </layout>

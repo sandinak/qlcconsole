@@ -17,11 +17,18 @@
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
 #include "monitorproperties.h"
+#include "stagetarget.h"
 #include "scenevalue.h"
 #include "universe.h"
 
+#include "mastertimer.h"
+
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QSet>
 #include <QDebug>
 #include <QtMath>
+#include <cmath>
 
 EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId)
     : m_doc(doc)
@@ -54,9 +61,16 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
     // Seed param defaults from script meta for anything not in palette
     for (const EffectScript::ParamDef &d : m_script.paramDefs())
     {
+        if (d.type == QLatin1String("path"))
+            continue;  // path params seeded from string params below
         if (!m_paramValues.contains(d.name))
             m_paramValues[d.name] = d.defaultValue;
     }
+
+    // Seed string/path params from palette
+    const QMap<QString, QString> &strParams = pal->effectStringParams();
+    for (auto it = strParams.constBegin(); it != strParams.constEnd(); ++it)
+        m_stringParamValues[it.key()] = it.value();
 
     m_state = m_script.newState();
     m_elapsed.start();
@@ -75,6 +89,16 @@ float EffectInstance::inputValue(const QString &slotName) const
 void EffectInstance::setParamValue(const QString &name, double value)
 {
     m_paramValues[name] = value;
+}
+
+void EffectInstance::setStringParamValue(const QString &name, const QString &value)
+{
+    m_stringParamValues[name] = value;
+}
+
+void EffectInstance::setDataChannels(const QHash<QString, QVariantMap> &channels)
+{
+    m_dataChannels = channels;
 }
 
 void EffectInstance::runTick()
@@ -121,8 +145,9 @@ void EffectInstance::runTick()
     QJSValue inputs   = buildInputsObject();
     QJSValue palettes = buildPalettesObject();
     QJSValue params   = buildParamsObject();
+    QJSValue data     = buildDataChannelsObject();
 
-    QJSValue result = m_script.callTick(fixtures, inputs, palettes, params, m_state);
+    QJSValue result = m_script.callTick(fixtures, inputs, palettes, params, m_state, data);
     if (!result.isArray())
         return;
 
@@ -171,6 +196,7 @@ QJSValue EffectInstance::buildFixturesArray()
 
     QJSValue arr = m_script.engine()->newArray(fxIds.size());
     const MonitorProperties *mp = m_doc->monitorProperties();
+    QLCPalette *effectPal = m_doc->palette(m_effectPaletteId);
 
     for (int i = 0; i < fxIds.size(); ++i)
     {
@@ -218,7 +244,13 @@ QJSValue EffectInstance::buildFixturesArray()
                     else hasColorWheel = true;
                     break;
                 case QLCChannel::Intensity:
-                    hasDimmer = true; break;
+                    // IntensityRed/Green/Blue presets land in the Intensity group
+                    // but carry a colour value — treat them as additive RGB channels.
+                    if (ch->colour() == QLCChannel::Red)        hasR = true;
+                    else if (ch->colour() == QLCChannel::Green)  hasG = true;
+                    else if (ch->colour() == QLCChannel::Blue)   hasB = true;
+                    else hasDimmer = true;
+                    break;
                 case QLCChannel::Gobo:
                     hasGobo = true; break;
                 case QLCChannel::Shutter:
@@ -237,16 +269,47 @@ QJSValue EffectInstance::buildFixturesArray()
         obj.setProperty("hasGobo",       hasGobo);
         obj.setProperty("hasShutter",    hasShutt);
 
-        // 3D position from MonitorProperties (0,0,0 if not set)
+        // 3D rig position from MonitorProperties (0,0,0 if not set)
         QVector3D pos(0, 0, 0);
         if (mp)
-            pos = mp->fixturePosition(fid, 0, 0);
+            pos = mp->fixtureRigPosition(fid);
 
         QJSValue posObj = m_script.engine()->newObject();
-        posObj.setProperty("x", pos.x());
-        posObj.setProperty("y", pos.y());
-        posObj.setProperty("z", pos.z());
+        posObj.setProperty("x", (double)pos.x());
+        posObj.setProperty("y", (double)pos.y());
+        posObj.setProperty("z", (double)pos.z());
         obj.setProperty("pos", posObj);
+
+        // aimAt: pre-computed pan/tilt for each bound target slot
+        QJSValue aimAt = m_script.engine()->newObject();
+        if (mp && effectPal)
+        {
+            const QMap<QString, quint32> &tgtBindings = effectPal->effectTargetBindings();
+            for (const EffectScript::TargetDef &td : m_script.targetDefs())
+            {
+                quint32 tid = tgtBindings.value(td.name, StageTarget::invalidId());
+                StageTarget *tgt = mp->stageTarget(tid);
+                if (!tgt || pos == QVector3D())
+                {
+                    aimAt.setProperty(td.name, m_script.engine()->newObject());
+                    continue;
+                }
+                QVector3D tgtPos = tgt->position();
+                tgtPos.setZ(tgtPos.z() + mp->platformHeightAt(tgtPos.x(), tgtPos.y()));
+                float dx = tgtPos.x() - pos.x();
+                float dy = tgtPos.y() - pos.y();
+                float dz = tgtPos.z() - pos.z();
+                float horizDist = qSqrt(dx*dx + dy*dy);
+                float azimuthDeg = float(qRadiansToDegrees(qAtan2(double(dx), double(-dy))));
+                if (azimuthDeg < 0.0f) azimuthDeg += 360.0f;
+                float elevDeg = float(qRadiansToDegrees(qAtan2(double(dz), double(horizDist))));
+                QJSValue aimObj = m_script.engine()->newObject();
+                aimObj.setProperty("pan",  (double)azimuthDeg);
+                aimObj.setProperty("tilt", (double)(90.0f + elevDeg)); // elevation offset for top-hung
+                aimAt.setProperty(td.name, aimObj);
+            }
+        }
+        obj.setProperty("aimAt", aimAt);
 
         arr.setProperty(i, obj);
     }
@@ -258,8 +321,33 @@ QJSValue EffectInstance::buildInputsObject() const
     QJSValue obj = m_script.engine()->newObject();
     for (auto it = m_inputValues.constBegin(); it != m_inputValues.constEnd(); ++it)
         obj.setProperty(it.key(), (double)it.value());
-    // Inject elapsed time in seconds
-    obj.setProperty("_time", m_elapsed.elapsed() / 1000.0);
+
+    const double elapsedMs = (double)m_elapsed.elapsed();
+    obj.setProperty("_time", elapsedMs / 1000.0);
+
+    // Beat/tempo inputs from MasterTimer so scripts can lock to music tempo.
+    //   _beat      — 0.0→1.0 sawtooth phase within the current beat period
+    //   _bpm       — current BPM (0 when no beat source is active)
+    //   _beatCount — integer count of beats since this instance started
+    MasterTimer *mt = m_doc->masterTimer();
+    const int beatDurationMs = mt ? mt->beatTimeDuration() : 0;
+    const int bpm            = mt ? mt->bpmNumber()        : 0;
+    if (beatDurationMs > 0)
+    {
+        const double beatPhase = std::fmod(elapsedMs, (double)beatDurationMs)
+                                 / (double)beatDurationMs;
+        const int beatCount    = (int)(elapsedMs / (double)beatDurationMs);
+        obj.setProperty("_bpm",       (double)bpm);
+        obj.setProperty("_beat",      beatPhase);
+        obj.setProperty("_beatCount", beatCount);
+    }
+    else
+    {
+        obj.setProperty("_bpm",       0.0);
+        obj.setProperty("_beat",      0.0);
+        obj.setProperty("_beatCount", 0);
+    }
+
     return obj;
 }
 
@@ -303,8 +391,63 @@ QJSValue EffectInstance::buildPalettesObject() const
 QJSValue EffectInstance::buildParamsObject() const
 {
     QJSValue obj = m_script.engine()->newObject();
+
+    // Scalar params
     for (auto it = m_paramValues.constBegin(); it != m_paramValues.constEnd(); ++it)
         obj.setProperty(it.key(), it.value());
+
+    // Determine which params are path-typed so we can emit JS arrays for them
+    QSet<QString> pathParams;
+    for (const EffectScript::ParamDef &d : m_script.paramDefs())
+        if (d.type == QLatin1String("path"))
+            pathParams.insert(d.name);
+
+    // String/path params
+    for (auto it = m_stringParamValues.constBegin(); it != m_stringParamValues.constEnd(); ++it)
+    {
+        if (pathParams.contains(it.key()))
+        {
+            // Parse [[x,y], ...] JSON → JS array of 2-element arrays
+            QJsonDocument jdoc = QJsonDocument::fromJson(it.value().toUtf8());
+            QJSValue arr = m_script.engine()->newArray();
+            int idx = 0;
+            if (jdoc.isArray())
+            {
+                for (const QJsonValue &v : jdoc.array())
+                {
+                    if (!v.isArray() || v.toArray().size() < 2) continue;
+                    QJSValue pair = m_script.engine()->newArray(2);
+                    pair.setProperty(0, v.toArray()[0].toDouble());
+                    pair.setProperty(1, v.toArray()[1].toDouble());
+                    arr.setProperty(idx++, pair);
+                }
+            }
+            arr.setProperty("length", idx);
+            obj.setProperty(it.key(), arr);
+        }
+        else
+        {
+            obj.setProperty(it.key(), it.value());
+        }
+    }
+
+    return obj;
+}
+
+QJSValue EffectInstance::buildDataChannelsObject() const
+{
+    QJSValue obj = m_script.engine()->newObject();
+    const QStringList subscribed = m_script.dataChannelKeys();
+    for (auto it = m_dataChannels.constBegin(); it != m_dataChannels.constEnd(); ++it)
+    {
+        if (!subscribed.isEmpty() && !subscribed.contains(it.key()))
+            continue; // skip unsubscribed channels
+        QJSValue chObj = m_script.engine()->newObject();
+        const QVariantMap &vm = it.value();
+        for (auto vit = vm.constBegin(); vit != vm.constEnd(); ++vit)
+            chObj.setProperty(vit.key(), m_script.engine()->toScriptValue(vit.value()));
+        obj.setProperty(it.key(), chObj);
+    }
     return obj;
 }
 
@@ -335,7 +478,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             float deg = (float)panVal.toNumber();
             const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Pan, deg);
             for (const SceneValue &sv : svs)
-                writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value});
+                writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value, fxi->id(), sv.channel});
         }
 
         // Tilt
@@ -345,7 +488,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             float deg = (float)tiltVal.toNumber();
             const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Tilt, deg);
             for (const SceneValue &sv : svs)
-                writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value});
+                writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value, fxi->id(), sv.channel});
         }
 
         // Dimmer
@@ -355,7 +498,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             uchar dmxVal = (uchar)qBound(0, (int)(dimVal.toNumber() * 255), 255);
             quint32 miCh = fxi->masterIntensityChannel();
             if (miCh != QLCChannel::invalid())
-                writes.append({uniIdx, (int)fxi->address() + (int)miCh, dmxVal});
+                writes.append({uniIdx, (int)fxi->address() + (int)miCh, dmxVal, fxi->id(), miCh});
         }
 
         // RGB colour channels (additive mixing fixtures)
@@ -369,8 +512,14 @@ EffectInstance::parseIntents(const QJSValue &intents,
             {
                 if (!fxi->fixtureMode()) break;
                 QLCChannel *ch = fxi->fixtureMode()->channel(c);
-                if (ch && ch->group() == QLCChannel::Colour && ch->colour() == colour)
-                    writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal});
+                // Accept both Colour-group and Intensity-group (IntensityRed/Green/Blue
+                // presets) channels — the fixture definition preset determines which
+                // group they land in, but both carry a meaningful colour value.
+                bool isColourCh = (ch->colour() == colour) &&
+                                  (ch->group() == QLCChannel::Colour ||
+                                   ch->group() == QLCChannel::Intensity);
+                if (isColourCh)
+                    writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c});
             }
         };
         writeColour("r",  QLCChannel::Red);
@@ -419,7 +568,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     }
                 }
                 if (bestDist < INT_MAX)
-                    writes.append({uniIdx, (int)fxi->address() + (int)c, bestDmx});
+                    writes.append({uniIdx, (int)fxi->address() + (int)c, bestDmx, fxi->id(), c});
             }
         }
     }

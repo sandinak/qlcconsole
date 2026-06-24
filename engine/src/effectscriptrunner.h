@@ -17,12 +17,16 @@
 #define EFFECTSCRIPTRUNNER_H
 
 #include <QObject>
+#include <QHash>
 #include <QList>
 #include <QMutex>
 #include <QTimer>
+#include <QSharedPointer>
+#include <QVariantMap>
 
 #include "dmxsource.h"
 #include "effectscriptcache.h"
+#include "genericfader.h"
 
 class EffectInstance;
 class Doc;
@@ -52,6 +56,10 @@ public slots:
     void slotInputValueChanged(quint32 universe, quint32 channel,
                                uchar value, const QString &key);
 
+    /** Update a named real-time data channel (e.g. "joystick") injected into
+     *  every subscribing effect script before each tick.  Call from the main thread. */
+    void setDataChannel(const QString &name, const QVariantMap &data);
+
 private slots:
     void slotTick();
 
@@ -73,6 +81,15 @@ private:
     QList<EffectInstance*> m_instances;
 
     bool m_registered = false;
+
+    /** Named real-time data channels updated by external sources (joystick, beat…).
+     *  Accessed only from the main thread; no mutex needed. */
+    QHash<QString, QVariantMap> m_dataChannels;
+
+    /** Per-universe GenericFaders used to write effect DMX through the fader
+     *  pipeline instead of directly to preGMValues (which zeroIntensityChannels
+     *  would wipe before processFaders re-writes colour faders). */
+    QHash<int, QSharedPointer<GenericFader>> m_faders; // key = universe index
 };
 
 #endif // EFFECTSCRIPTRUNNER_H

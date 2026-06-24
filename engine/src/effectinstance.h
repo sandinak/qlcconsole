@@ -21,6 +21,7 @@
 #include <QHash>
 #include <QList>
 #include <QElapsedTimer>
+#include <QVariantMap>
 
 #include "effectscript.h"
 
@@ -30,9 +31,11 @@ class EffectInstance
 {
 public:
     struct DmxWrite {
-        int   universeId;
-        int   addr;        // universe-local address (0-511)
-        uchar value;
+        int     universeId;
+        int     addr;        // universe-local address (0-511)
+        uchar   value;
+        quint32 fixtureId;   // for GenericFader FadeChannel creation
+        quint32 channel;     // fixture-relative channel index
     };
 
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);
@@ -46,8 +49,15 @@ public:
     void setInputValue(const QString &slotName, float norm01);
     float inputValue(const QString &slotName) const;
 
+    // --- Named data channels (joystick, beat, …) injected before each tick ---
+    void setDataChannels(const QHash<QString, QVariantMap> &channels);
+
+    /** Names of data channels this script subscribes to. */
+    QStringList dataChannelKeys() const { return m_script.dataChannelKeys(); }
+
     // --- Param values ---
     void setParamValue(const QString &name, double value);
+    void setStringParamValue(const QString &name, const QString &value);
 
     // --- Run one tick (MAIN THREAD ONLY) ---
     void runTick();
@@ -60,6 +70,7 @@ private:
     QJSValue buildInputsObject() const;
     QJSValue buildPalettesObject() const;
     QJSValue buildParamsObject() const;
+    QJSValue buildDataChannelsObject() const;
 
     QList<DmxWrite> parseIntents(const QJSValue &intents,
                                  const QList<quint32> &fxIds) const;
@@ -72,8 +83,10 @@ private:
     QJSValue         m_state;
     QElapsedTimer    m_elapsed;
 
-    QHash<QString, float>   m_inputValues;
-    QHash<QString, double>  m_paramValues;
+    QHash<QString, float>      m_inputValues;
+    QHash<QString, double>     m_paramValues;
+    QHash<QString, QString>    m_stringParamValues;
+    QHash<QString, QVariantMap> m_dataChannels;
 
     mutable QMutex   m_mutex;
     QList<DmxWrite>  m_lastResults;

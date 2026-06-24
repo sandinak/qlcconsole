@@ -22,6 +22,7 @@
 
 #include <QWidget>
 #include <QSet>
+#include <QElapsedTimer>
 
 class QTreeWidgetItem;
 class Function;
@@ -35,7 +36,7 @@ class QScrollArea;
 class QVBoxLayout;
 class QLabel;
 class QPushButton;
-class QSlider;
+class QSpinBox;
 class QWidget;
 class Doc;
 
@@ -66,6 +67,7 @@ private slots:
     void slotPaste();
     void slotPaletteDoubleClicked(QTreeWidgetItem *item);
     void slotFixturesSelected(const QList<quint32> &fixtureIds);
+    void slotFixGroupSourceSelectionChanged();
     void slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value);
     void slotFixtureChecked(quint32 fxi, quint32 ch, bool state);
 
@@ -73,14 +75,22 @@ private slots:
     void slotHighlightToggled(bool on);
 
     // Followspot
-    void slotFollowSpotToggled(bool on);
     void slotFollowSpotBindX();
     void slotFollowSpotBindY();
     void slotFollowSpotClearBindings();
-    void slotFollowSpotSensitivity(int value);
-    void slotFollowSpotDeadzone(int value);
     void slotFollowSpotBindingChanged();
-    void slotFollowSpotActiveChanged(bool active);
+    void slotJoystickUpdated(float pan, float tilt);
+    /** Dispatches controller button actions from ProgrammerController. */
+    void slotButtonAction(const QString &action);
+
+    // BPM / internal beat generator
+    void slotBpmToggled(bool on);
+    void slotBpmChanged(int bpm);
+    void slotTapBeat();
+
+    // Design-mode joystick save
+    void slotDesignPositionWritten();
+    void slotSavePositions();
 
 private:
     void loadCanvas(quint32 sceneId);
@@ -163,16 +173,30 @@ private:
 
     // Toolbar buttons
     QPushButton *m_highlightBtn;
-    QPushButton *m_followSpotBtn;
 
-    // Followspot config panel (shown/hidden with followspot toggle)
+    // BPM / internal beat generator
+    QPushButton  *m_bpmBtn;
+    QSpinBox     *m_bpmSpin;
+    QPushButton  *m_tapBtn;
+    QElapsedTimer m_tapTimer;
+    bool          m_tapActive = false;
+
+    // Followspot config panel (kept for signal wiring; always hidden from UI)
     QWidget     *m_followSpotPanel;
     QPushButton *m_fsBindXBtn;
     QPushButton *m_fsBindYBtn;
+    QPushButton *m_fsClearBtn;
     QLabel      *m_fsXLabel;
     QLabel      *m_fsYLabel;
-    QSlider     *m_fsSensSlider;
-    QSlider     *m_fsDzSlider;
+    QLabel      *m_fsJoyLabel;  // live pan/tilt readout
+
+    // Save button (armed two-press confirmation)
+    QPushButton *m_saveBtn = nullptr;
+    bool         m_saveArmed = false;
+
+signals:
+    /** Emitted when the user confirms Save in the Programming tab. */
+    void requestSave();
 };
 
 /** @} */

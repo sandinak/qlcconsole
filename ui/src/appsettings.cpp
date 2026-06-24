@@ -21,6 +21,7 @@
 #include <QHBoxLayout>
 #include <QGroupBox>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QSpinBox>
 #include <QLabel>
 #include <QPushButton>
@@ -76,6 +77,19 @@ AppSettings::AppSettings(App *app, QWidget *parent)
 
     mainLayout->addWidget(autosaveGroup);
 
+    // Tab Label Mode Group
+    QGroupBox *tabGroup = new QGroupBox(tr("Tab Bar"), this);
+    QHBoxLayout *tabLayout = new QHBoxLayout(tabGroup);
+    tabLayout->addWidget(new QLabel(tr("Tab labels:"), tabGroup));
+    m_tabLabelModeCombo = new QComboBox(tabGroup);
+    m_tabLabelModeCombo->addItem(tr("Icons and text"), App::TabIconAndText);
+    m_tabLabelModeCombo->addItem(tr("Icons only"),     App::TabIconOnly);
+    m_tabLabelModeCombo->addItem(tr("Text only"),      App::TabTextOnly);
+    m_tabLabelModeCombo->setCurrentIndex(m_tabLabelModeCombo->findData(m_app->tabLabelMode()));
+    tabLayout->addWidget(m_tabLabelModeCombo);
+    tabLayout->addStretch();
+    mainLayout->addWidget(tabGroup);
+
     // Add stretch to push buttons to bottom
     mainLayout->addStretch();
 
@@ -101,6 +115,10 @@ void AppSettings::accept()
     // Apply autosave settings
     m_app->setAutosaveEnabled(m_autosaveEnabledCheck->isChecked());
     m_app->setAutosaveInterval(m_autosaveIntervalSpin->value());
+
+    // Apply tab label mode
+    const int mode = m_tabLabelModeCombo->currentData().toInt();
+    m_app->setTabLabelMode(mode);
 
     QDialog::accept();
 }

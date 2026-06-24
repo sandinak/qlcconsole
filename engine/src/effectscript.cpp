@@ -25,8 +25,10 @@ bool EffectScript::load(const QString &path)
     m_apiVersion = 0;
     m_inputs.clear();
     m_palettes.clear();
+    m_targets.clear();
     m_params.clear();
     m_fixtureTypes.clear();
+    m_dataChannelKeys.clear();
     m_script = QJSValue();
     m_tickFn  = QJSValue();
 
@@ -114,11 +116,29 @@ bool EffectScript::parseMeta()
         {
             QJSValue item = palArr.property(i);
             PaletteDef def;
-            def.name     = item.property("name").toString();
-            def.type     = item.property("type").toString();
-            def.optional = item.property("optional").toBool();
+            def.name        = item.property("name").toString();
+            def.description = item.property("description").toString();
+            def.type        = item.property("type").toString();
+            def.optional    = item.property("optional").toBool();
             if (!def.name.isEmpty())
                 m_palettes.append(def);
+        }
+    }
+
+    // --- targets ---
+    QJSValue tgtArr = m_script.property("targets");
+    if (tgtArr.isArray())
+    {
+        int len = tgtArr.property("length").toInt();
+        for (int i = 0; i < len; ++i)
+        {
+            QJSValue item = tgtArr.property(i);
+            TargetDef def;
+            def.name        = item.property("name").toString();
+            def.description = item.property("description").toString();
+            def.optional    = item.property("optional").toBool();
+            if (!def.name.isEmpty())
+                m_targets.append(def);
         }
     }
 
@@ -133,11 +153,32 @@ bool EffectScript::parseMeta()
             ParamDef def;
             def.name         = item.property("name").toString();
             def.description  = item.property("description").toString();
+            def.type         = item.property("type").toString();
             def.min          = (float)item.property("min").toNumber();
             def.max          = (float)item.property("max").toNumber();
             def.defaultValue = (float)item.property("defaultValue").toNumber();
+            QJSValue vals = item.property("values");
+            if (vals.isArray())
+            {
+                int vlen = vals.property("length").toInt();
+                for (int vi = 0; vi < vlen; ++vi)
+                    def.enumValues << vals.property(vi).toString();
+            }
             if (!def.name.isEmpty())
                 m_params.append(def);
+        }
+    }
+
+    // --- dataChannels ---
+    QJSValue dcArr = m_script.property("dataChannels");
+    if (dcArr.isArray())
+    {
+        int len = dcArr.property("length").toInt();
+        for (int i = 0; i < len; ++i)
+        {
+            const QString ch = dcArr.property(i).toString().trimmed();
+            if (!ch.isEmpty())
+                m_dataChannelKeys.append(ch);
         }
     }
 
@@ -161,13 +202,14 @@ QJSValue EffectScript::callTick(const QJSValue &fixtures,
                                  const QJSValue &inputs,
                                  const QJSValue &palettes,
                                  const QJSValue &params,
-                                 QJSValue       &state)
+                                 QJSValue       &state,
+                                 const QJSValue &data)
 {
     if (!m_valid || !m_tickFn.isCallable())
         return QJSValue();
 
     QJSValueList args;
-    args << fixtures << inputs << palettes << params << state;
+    args << fixtures << inputs << palettes << params << state << data;
     QJSValue result = m_tickFn.call(args);
 
     if (result.isError())

@@ -24,12 +24,12 @@ class QStackedWidget;
 class QColorDialog;
 class VCXYPadArea;
 class CapabilityBar;
+class PathDrawWidget;
 class QSlider;
 class QComboBox;
 class QLabel;
 class QLineEdit;
 class QToolButton;
-class QScrollArea;
 class QLCChannel;
 class QLCPalette;
 class Scene;
@@ -56,15 +56,21 @@ public slots:
     void setPalette(quint32 paletteId);
 
 signals:
-    /** The edited palette's value changed. */
+    /** The edited palette's value changed (may affect name/icon — triggers full
+     *  tree + canvas update in ProgrammingManager). */
     void paletteChanged(quint32 paletteId);
+
+    /** A live parameter value changed but the palette's name/icon are
+     *  unaffected (e.g. effect script param slider). Only refreshes the DMX
+     *  preview — does NOT rebuild the look list or palette tree. */
+    void paletteValueChanged(quint32 paletteId);
 
 private slots:
     void slotColorChanged(const QColor &c);
     void slotColorExtraChanged(); //!< White/Amber/UV sliders
     void slotDimmerChanged(int v);
     void slotPanTiltChanged(const QPointF &p);
-    void slotTargetChanged(int index);
+    void slotAimTargetChanged(int index);
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
     void slotBeamChanged(int);
@@ -102,7 +108,7 @@ private:
     QLabel    *m_title;      //!< "used by N scene(s)" info line
     QLabel    *m_warning;
     QStackedWidget *m_stack;
-    int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageBeam, m_pageSingle;
+    int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageAim, m_pageBeam, m_pageSingle;
 
     QColorDialog *m_colorDialog;
     QSlider *m_whiteSlider, *m_amberSlider, *m_uvSlider; //!< extra colour emitters
@@ -111,7 +117,7 @@ private:
     QLabel *m_dimmerValue;
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
-    QComboBox   *m_targetCombo;  //!< stage target for PanTilt palettes
+    QComboBox   *m_aimTargetCombo;  //!< stage target for Aim palettes
     QSlider *m_beamFocusSlider, *m_beamFrostSlider, *m_beamIrisSlider;
     QLabel *m_beamFocusValue, *m_beamFrostValue, *m_beamIrisValue;
     QSlider *m_singleSlider;
@@ -126,13 +132,15 @@ private:
     QLabel      *m_effectDescLabel;   //!< one-line description below combo
     QLabel      *m_effectNotesLabel;  //!< longer paragraph in edit panel
     QLabel      *m_effectTypesLabel;  //!< "Works with: …" fixture-type chips
-    QScrollArea *m_effectDynScroll;
     QWidget     *m_effectDynWidget;   //!< rebuilt when script selection changes
 
 private slots:
     void slotNameEdited();
     void slotEffectScriptChanged(int index);
     void slotEffectParamChanged(int value);
+    void slotEffectEnumParamChanged(int index);
+    void slotEffectPaletteBindingChanged(int index);
+    void slotEffectTargetBindingChanged(int index);
     void slotEffectBindInput();
 
 private:

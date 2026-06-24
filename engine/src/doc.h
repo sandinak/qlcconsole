@@ -470,6 +470,23 @@ public:
      */
     quint32 routeProgrammerEdit(quint32 fid, quint32 ch, uchar value);
 
+    /** Notify the programmer controller which scene is open in the
+     *  Programming canvas.  Clears any palette-specific focus. */
+    void setFocusedScene(quint32 sceneId);
+
+    /** Notify the programmer controller which palette (look) is currently
+     *  selected in the canvas look list.  Pass QLCPalette::invalidId() to
+     *  clear (any matching palette in the focused scene is eligible). */
+    void setFocusedPalette(quint32 paletteId);
+
+    /** Try to route a parameter-slider edit at the palette (look) level.
+     *  @param qlcChannelGroup  QLCChannel::Group (Pan, Tilt, Intensity, …)
+     *  @param groupIndex       0 = primary channel of that group, 1 = secondary
+     *  @param rawValue         0–255 slider value
+     *  Returns the owning scene id on success, Function::invalidId() to fall
+     *  through to the normal per-fixture DMX write. */
+    quint32 routeProgrammerEditByChannelType(int qlcChannelGroup, int groupIndex, uchar rawValue);
+
     /** Re-attempt routing for every raw programmer value against the
         currently-running scenes/chasers/collections. Values captured
         while nothing owned them (e.g. the user edited a look, then

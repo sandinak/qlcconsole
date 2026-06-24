@@ -13,7 +13,6 @@
 #include "qlcphysical.h"
 #include "mastertimer.h"
 #include "universe.h"
-#include "inputoutputmap.h"
 #include "scenevalue.h"
 
 #include <QtMath>
@@ -26,7 +25,6 @@ FollowSpotEffect::FollowSpotEffect(Doc *doc)
 
 FollowSpotEffect::~FollowSpotEffect()
 {
-    disconnectInput();
     if (m_registered && m_doc && m_doc->masterTimer())
         m_doc->masterTimer()->unregisterDMXSource(this);
 }
@@ -39,115 +37,25 @@ void FollowSpotEffect::setFixtures(const QList<quint32>& fixtureIds)
 {
     QMutexLocker locker(&m_mutex);
     m_fixtures = fixtureIds;
+    // Do NOT reset m_setpointValid here: once the operator has moved the stick
+    // once, subsequent target selections should immediately follow the held
+    // setpoint rather than requiring another stick move.
 }
 
 /*********************************************************************
- * Input binding
+ * Axis values
  *********************************************************************/
 
-void FollowSpotEffect::startBindX()
+void FollowSpotEffect::setXNorm(float v)
 {
-    connectInput();
-    m_capturingX = true;
-    m_capturingY = false;
+    QMutexLocker locker(&m_mutex);
+    m_xNorm = qBound(0.0f, v, 1.0f);
 }
 
-void FollowSpotEffect::startBindY()
+void FollowSpotEffect::setYNorm(float v)
 {
-    connectInput();
-    m_capturingX = false;
-    m_capturingY = true;
-}
-
-void FollowSpotEffect::clearBindings()
-{
-    m_xBound = false;
-    m_yBound = false;
-    m_capturingX = false;
-    m_capturingY = false;
-    emit bindingChanged();
-}
-
-bool FollowSpotEffect::isXBound() const
-{
-    return m_xBound;
-}
-
-bool FollowSpotEffect::isYBound() const
-{
-    return m_yBound;
-}
-
-QString FollowSpotEffect::xBindingLabel() const
-{
-    if (!m_xBound)
-        return tr("—");
-    return tr("Universe %1, Ch %2").arg(m_xUniverse + 1).arg(m_xChannel + 1);
-}
-
-QString FollowSpotEffect::yBindingLabel() const
-{
-    if (!m_yBound)
-        return tr("—");
-    return tr("Universe %1, Ch %2").arg(m_yUniverse + 1).arg(m_yChannel + 1);
-}
-
-void FollowSpotEffect::connectInput()
-{
-    if (m_inputConnected || !m_doc || !m_doc->inputOutputMap())
-        return;
-    connect(m_doc->inputOutputMap(),
-            SIGNAL(inputValueChanged(quint32, quint32, uchar, const QString&)),
-            this,
-            SLOT(slotInputValueChanged(quint32, quint32, uchar, const QString&)));
-    m_inputConnected = true;
-}
-
-void FollowSpotEffect::disconnectInput()
-{
-    if (!m_inputConnected || !m_doc || !m_doc->inputOutputMap())
-        return;
-    disconnect(m_doc->inputOutputMap(),
-               SIGNAL(inputValueChanged(quint32, quint32, uchar, const QString&)),
-               this,
-               SLOT(slotInputValueChanged(quint32, quint32, uchar, const QString&)));
-    m_inputConnected = false;
-}
-
-void FollowSpotEffect::slotInputValueChanged(quint32 universe, quint32 channel,
-                                              uchar value, const QString& key)
-{
-    Q_UNUSED(key)
-
-    if (m_capturingX)
-    {
-        m_xUniverse = universe;
-        m_xChannel  = channel;
-        m_xBound    = true;
-        m_capturingX = false;
-        emit bindingChanged();
-        return;
-    }
-    if (m_capturingY)
-    {
-        m_yUniverse = universe;
-        m_yChannel  = channel;
-        m_yBound    = true;
-        m_capturingY = false;
-        emit bindingChanged();
-        return;
-    }
-
-    if (m_xBound && universe == m_xUniverse && channel == m_xChannel)
-    {
-        QMutexLocker locker(&m_mutex);
-        m_xNorm = value / 255.0f;
-    }
-    else if (m_yBound && universe == m_yUniverse && channel == m_yChannel)
-    {
-        QMutexLocker locker(&m_mutex);
-        m_yNorm = value / 255.0f;
-    }
+    QMutexLocker locker(&m_mutex);
+    m_yNorm = qBound(0.0f, v, 1.0f);
 }
 
 /*********************************************************************
@@ -164,6 +72,21 @@ void FollowSpotEffect::setDeadzone(float d)
     m_deadzone = qBound(0.0f, d, 0.4f);
 }
 
+void FollowSpotEffect::setAimHeight(int cm)
+{
+    m_aimHeight = qBound(0, cm, 300);
+}
+
+/*********************************************************************
+ * Setpoint access
+ *********************************************************************/
+
+void FollowSpotEffect::resetSetpoint()
+{
+    QMutexLocker l(&m_mutex);
+    m_setpointValid = false;
+}
+
 /*********************************************************************
  * Enable / disable
  *********************************************************************/
@@ -176,7 +99,7 @@ void FollowSpotEffect::setActive(bool active)
 
     if (active)
     {
-        connectInput();
+        m_setpointValid = false; // require one stick move to take control
         if (!m_registered && m_doc && m_doc->masterTimer())
         {
             m_doc->masterTimer()->registerDMXSource(this);
@@ -201,24 +124,41 @@ void FollowSpotEffect::setActive(bool active)
 
 void FollowSpotEffect::writeDMX(MasterTimer *timer, QList<Universe*> universes)
 {
-    Q_UNUSED(timer)
-
     QMutexLocker locker(&m_mutex);
 
     if (!m_active || m_fixtures.isEmpty())
         return;
 
-    // Apply deadzone: values within ±deadzone of centre are snapped to centre.
-    auto applyDZ = [this](float norm) -> float {
-        float centered = norm - 0.5f;   // -0.5..+0.5
-        float dz = m_deadzone * 0.5f;   // half-range deadzone
-        if (qAbs(centered) < dz)
-            centered = 0.0f;
-        return centered + 0.5f;         // back to 0..1
-    };
+    // Stick velocity: -1..1 centered at stick-center (0.5 normalized).
+    const float xVel = (m_xNorm - 0.5f) * 2.0f;
+    const float yVel = (m_yNorm - 0.5f) * 2.0f;
 
-    const float xNorm = applyDZ(m_xNorm);
-    const float yNorm = applyDZ(m_yNorm);
+    // Apply deadzone to velocity (deadzone is fraction of full range each side).
+    auto applyDZ = [this](float v) -> float {
+        return (qAbs(v) < m_deadzone * 2.0f) ? 0.0f : v;
+    };
+    const float xV = applyDZ(xVel);
+    const float yV = applyDZ(yVel);
+
+    if (xV != 0.0f || yV != 0.0f)
+    {
+        // First stick move: initialize setpoint at center.
+        if (!m_setpointValid)
+        {
+            m_panSetpoint  = 0.5f;
+            m_tiltSetpoint = 0.5f;
+            m_setpointValid = true;
+        }
+        // Move setpoint by velocity * speed. sensitivity=1 sweeps full range in 1s.
+        const float dt = (timer->frequency() > 0)
+                         ? 1.0f / (float)timer->frequency() : 0.02f;
+        m_panSetpoint  = qBound(0.0f, m_panSetpoint  + xV * m_sensitivity * dt, 1.0f);
+        m_tiltSetpoint = qBound(0.0f, m_tiltSetpoint + yV * m_sensitivity * dt, 1.0f);
+    }
+
+    // Don't write until the operator has moved the stick; let the scene control.
+    if (!m_setpointValid)
+        return;
 
     for (quint32 fid : m_fixtures)
     {
@@ -233,8 +173,13 @@ void FollowSpotEffect::writeDMX(MasterTimer *timer, QList<Universe*> universes)
         float tiltMax = (float)phy.focusTiltMax();
         if (tiltMax <= 0) tiltMax = 270.0f;
 
-        float panDeg  = xNorm * panMax  * m_sensitivity;
-        float tiltDeg = yNorm * tiltMax * m_sensitivity;
+        float panDeg  = m_panSetpoint  * panMax;
+        float tiltDeg = m_tiltSetpoint * tiltMax;
+
+        // Aim-height bias: 5° per metre so beam hits head not floor.
+        const float aimBiasRaw = (m_aimHeight / 100.0f) * 5.0f;
+        tiltDeg -= aimBiasRaw;
+
         panDeg  = qBound(0.0f, panDeg,  panMax);
         tiltDeg = qBound(0.0f, tiltDeg, tiltMax);
 
@@ -248,13 +193,11 @@ void FollowSpotEffect::writeDMX(MasterTimer *timer, QList<Universe*> universes)
         const QList<SceneValue> panVals =
             fxi->positionToValues(QLCChannel::Pan, panDeg);
         for (const SceneValue &sv : panVals)
-            uni->write((int)fxi->address() + (int)sv.channel, sv.value,
-                       /*forceLTP=*/true);
+            uni->write((int)fxi->address() + (int)sv.channel, sv.value, /*forceLTP=*/true);
 
         const QList<SceneValue> tiltVals =
             fxi->positionToValues(QLCChannel::Tilt, tiltDeg);
         for (const SceneValue &sv : tiltVals)
-            uni->write((int)fxi->address() + (int)sv.channel, sv.value,
-                       /*forceLTP=*/true);
+            uni->write((int)fxi->address() + (int)sv.channel, sv.value, /*forceLTP=*/true);
     }
 }

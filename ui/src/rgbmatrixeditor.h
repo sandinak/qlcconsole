@@ -118,6 +118,7 @@ private slots:
     void slotFixtureGroupAdded();
     void slotFixtureGroupRemoved();
     void slotFixtureGroupChanged(quint32 id);
+    void slotFunctionRemoved(quint32 id);
 
     void slotSaveToSequenceClicked();
     void slotShapeToggle(bool);

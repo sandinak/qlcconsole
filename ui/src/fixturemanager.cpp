@@ -60,6 +60,7 @@
 #include "fixture.h"
 #include "apputil.h"
 #include "doc.h"
+#include "monitor/monitor.h"
 
 #define SETTINGS_SPLITTER "fixturemanager/splitterstate"
 
@@ -89,6 +90,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_addRGBAction(NULL)
     , m_removeAction(NULL)
     , m_propertiesAction(NULL)
+    , m_testAction(NULL)
     , m_fadeConfigAction(NULL)
     , m_remapAction(NULL)
     , m_groupAction(NULL)
@@ -237,9 +239,15 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
             m_addRGBAction->setEnabled(true);
             m_removeAction->setEnabled(true);
             if (selected == 1)
+            {
                 m_propertiesAction->setEnabled(true);
+                m_testAction->setEnabled(true);
+            }
             else
+            {
                 m_propertiesAction->setEnabled(false);
+                m_testAction->setEnabled(false);
+            }
             m_groupAction->setEnabled(true);
 
             // Don't allow ungrouping from the "All fixtures" group
@@ -286,6 +294,11 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         m_fadeConfigAction->setEnabled(false);
         m_groupAction->setEnabled(false);
         m_unGroupAction->setEnabled(false);
+        // Allow testing a fixture in Operate mode too
+        QTreeWidgetItem* item = m_fixtures_tree->currentItem();
+        bool singleFixture = (item && item->data(KColumnName, PROP_ID).isValid() &&
+                              m_fixtures_tree->selectedItems().size() == 1);
+        m_testAction->setEnabled(singleFixture);
     }
 }
 
@@ -1142,6 +1155,12 @@ void FixtureManager::initActions()
     connect(m_propertiesAction, SIGNAL(triggered(bool)),
             this, SLOT(slotProperties()));
 
+    m_testAction = new QAction(QIcon(":/fixture.png"),
+                               tr("Test Fixture..."), this);
+    m_testAction->setEnabled(false);
+    connect(m_testAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotTestFixture()));
+
     m_fadeConfigAction = new QAction(QIcon(":/fade.png"),
                                      tr("Channels Fade Configuration..."), this);
     connect(m_fadeConfigAction, SIGNAL(triggered(bool)),
@@ -1223,6 +1242,7 @@ void FixtureManager::initToolBar()
     toolbar->addAction(m_addRGBAction);
     toolbar->addAction(m_removeAction);
     toolbar->addAction(m_propertiesAction);
+    toolbar->addAction(m_testAction);
     toolbar->addAction(m_fadeConfigAction);
     toolbar->addSeparator();
     toolbar->addAction(m_groupAction);
@@ -1758,6 +1778,19 @@ void FixtureManager::slotProperties()
         editFixtureProperties();
 }
 
+void FixtureManager::slotTestFixture()
+{
+    QTreeWidgetItem* item = m_fixtures_tree->currentItem();
+    if (!item)
+        return;
+    QVariant var = item->data(KColumnName, PROP_ID);
+    if (!var.isValid())
+        return;
+    Monitor::createAndShow(this, m_doc);
+    if (Monitor::instance())
+        Monitor::instance()->showFixturePropertiesById(var.toUInt());
+}
+
 void FixtureManager::slotFadeConfig()
 {
     ChannelsSelection cfg(m_doc, this, ChannelsSelection::ConfigurationMode);
@@ -2139,6 +2172,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint&)
     menu.addAction(m_addAction);
     menu.addAction(m_addRGBAction);
     menu.addAction(m_propertiesAction);
+    menu.addAction(m_testAction);
     menu.addAction(m_removeAction);
     menu.addSeparator();
     menu.addAction(m_groupAction);

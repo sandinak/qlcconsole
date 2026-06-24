@@ -5,6 +5,7 @@
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
+#include <QDebug>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QListWidget>
@@ -142,6 +143,8 @@ QString SceneGroupLooks::lookLabel(quint32 paletteId) const
         case QLCPalette::PanTilt:
             name = QString("%1 P%2 / T%3")
                    .arg(type).arg(p->intValue1()).arg(p->intValue2()); break;
+        case QLCPalette::Aim:
+            name = type; break;
         default:
             name = QString("%1 %2").arg(type).arg(p->intValue1()); break;
         }
@@ -458,6 +461,12 @@ void SceneGroupLooks::reconcileAfterPaletteApply()
             foreach (const SceneValue &scv, uncovered)
                 m_scene->unsetValue(scv.fxi, scv.channel);
     }
+
+    // Trigger a second runtime reset so the scene fader is rebuilt from the
+    // NOW-reconciled value list (baked channels stripped above).  The first
+    // resetRuntime fired synchronously in the dropEvent's sceneModified path,
+    // before this deferred call ran.
+    emit sceneModified();
 }
 
 void SceneGroupLooks::slotRemoveTarget()
@@ -552,7 +561,22 @@ void SceneGroupLooks::slotTargetSelectionChanged()
                     fixtures << id;
             }
         }
+        else if (kind == TargetGroup)
+        {
+            const quint32 gid = it->data(0, Qt::UserRole).toUInt();
+            FixtureGroup *g = m_doc->fixtureGroup(gid);
+            qDebug() << "TargetGroup selected: gid=" << gid
+                     << "group=" << (g ? g->name() : "(null)")
+                     << "fixtures=" << (g ? g->fixtureList() : QList<quint32>());
+            if (g != NULL)
+            {
+                foreach (quint32 fid, g->fixtureList())
+                    if (fixtures.contains(fid) == false)
+                        fixtures << fid;
+            }
+        }
     }
+    qDebug() << "slotTargetSelectionChanged: emitting" << fixtures.size() << "fixtures" << fixtures;
     emit fixturesSelected(fixtures);
 }
 

@@ -69,7 +69,7 @@ QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
     return fi;
 }
 
-QMimeData* FixtureTreeWidget::mimeData(const QList<QTreeWidgetItem*> &items) const
+QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items) const
 {
     QByteArray fxData, grpData;
     QDataStream fxStream(&fxData, QIODevice::WriteOnly);

@@ -201,7 +201,12 @@ protected:
     void dropEvent(QDropEvent *event) override;
 
     /** Override mimeData to provide function IDs for Qt's built-in drag */
-    QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const override;
+    QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const
+        { return buildMimeData(items); }
+    QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const
+        { return buildMimeData(items); }
+private:
+    QMimeData* buildMimeData(const QList<QTreeWidgetItem*> &items) const;
 
     /** Override to specify that external drags are copy operations, not move */
     Qt::DropActions supportedDropActions() const override;

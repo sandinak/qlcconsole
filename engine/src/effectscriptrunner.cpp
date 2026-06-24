@@ -14,6 +14,7 @@
 #include "mastertimer.h"
 #include "inputoutputmap.h"
 #include "universe.h"
+#include "fadechannel.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -64,6 +65,8 @@ void EffectScriptRunner::slotPrepareQuit()
         m_doc->masterTimer()->unregisterDMXSource(this);
         m_registered = false;
     }
+
+    m_faders.clear(); // faders dismissed via universe destructor during shutdown
 
     QMutexLocker locker(&m_instanceMutex);
     qDeleteAll(m_instances);
@@ -134,22 +137,48 @@ void EffectScriptRunner::syncScene(quint32 sceneId)
 
 void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
 {
-    QMutexLocker locker(&m_instanceMutex);
-    QMutableListIterator<EffectInstance*> it(m_instances);
-    while (it.hasNext())
-    {
-        EffectInstance *inst = it.next();
-        if (inst->sceneId() == sceneId)
-        {
-            delete inst;
-            it.remove();
-        }
-    }
+    // Deadlock prevention: unregisterDMXSource acquires m_dmxSourceListMutex,
+    // but the timer thread holds m_dmxSourceListMutex while calling writeDMX,
+    // which acquires m_instanceMutex.  Calling unregisterDMXSource while
+    // holding m_instanceMutex causes an ABBA deadlock.  Collect cleanup work
+    // under the lock, then release before touching MasterTimer or universes.
+    bool shouldUnregister = false;
 
-    if (m_instances.isEmpty() && m_registered && m_doc->masterTimer())
     {
-        m_doc->masterTimer()->unregisterDMXSource(this);
-        m_registered = false;
+        QMutexLocker locker(&m_instanceMutex);
+        QMutableListIterator<EffectInstance*> it(m_instances);
+        while (it.hasNext())
+        {
+            EffectInstance *inst = it.next();
+            if (inst->sceneId() == sceneId)
+            {
+                delete inst;
+                it.remove();
+            }
+        }
+
+        if (m_instances.isEmpty() && m_registered)
+        {
+            shouldUnregister = true;
+            m_registered = false;
+        }
+    } // release m_instanceMutex before touching MasterTimer
+
+    if (shouldUnregister)
+    {
+        if (m_doc->masterTimer())
+            m_doc->masterTimer()->unregisterDMXSource(this);
+
+        // Dismiss all per-universe faders so no stale values linger.
+        QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+        for (auto it2 = m_faders.begin(); it2 != m_faders.end(); ++it2)
+        {
+            int idx = it2.key();
+            if (!it2.value().isNull() && idx >= 0 && idx < ua.size())
+                ua.at(idx)->dismissFader(it2.value());
+        }
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        m_faders.clear();
     }
 }
 
@@ -161,7 +190,15 @@ void EffectScriptRunner::slotTick()
 {
     QMutexLocker locker(&m_instanceMutex);
     for (EffectInstance *inst : m_instances)
+    {
+        inst->setDataChannels(m_dataChannels);
         inst->runTick();
+    }
+}
+
+void EffectScriptRunner::setDataChannel(const QString &name, const QVariantMap &data)
+{
+    m_dataChannels[name] = data;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,18 +235,51 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
 {
     Q_UNUSED(timer)
 
+    // Effect scripts are for live show operation; suppress output in Design mode.
+    if (m_doc->mode() == Doc::Design)
+    {
+        static int suppressCount = 0;
+        if (++suppressCount % 250 == 1)
+            qCritical() << "[ESR] suppressed in Design mode, call#" << suppressCount
+                        << "instances=" << m_instances.size();
+        for (auto &fader : m_faders)
+            if (!fader.isNull()) fader->removeAll();
+        return;
+    }
+
+    // Clear all faders so channels from the previous tick don't linger when
+    // the effect stops writing them (e.g. fixture removed from scene).
+    for (auto &fader : m_faders)
+        if (!fader.isNull()) fader->removeAll();
+
     QMutexLocker locker(&m_instanceMutex);
     for (const EffectInstance *inst : m_instances)
     {
         const QList<EffectInstance::DmxWrite> &writes = inst->dmxWrites();
         for (const auto &w : writes)
         {
-            if (w.universeId >= 0 && w.universeId < universes.size())
+            if (w.universeId < 0 || w.universeId >= universes.size())
+                continue;
+            Universe *uni = universes.at(w.universeId);
+            if (!uni)
+                continue;
+
+            // Get or create a GenericFader for this universe. Using a fader
+            // instead of uni->write() ensures that processFaders() writes our
+            // values AFTER zeroIntensityChannels() has run — without this,
+            // the RGB writes are wiped before they reach the DMX output.
+            QSharedPointer<GenericFader> &fader = m_faders[w.universeId];
+            if (fader.isNull())
             {
-                Universe *uni = universes.at(w.universeId);
-                if (uni)
-                    uni->write(w.addr, w.value, /*forceLTP=*/true);
+                fader = uni->requestFader(Universe::Auto);
+                fader->setName(QStringLiteral("EffectScript"));
             }
+
+            FadeChannel fc(m_doc, w.fixtureId, w.channel);
+            fc.setTarget(w.value);
+            fc.setCurrent(w.value);
+            fc.setFadeTime(0);
+            fader->add(fc);
         }
     }
 }

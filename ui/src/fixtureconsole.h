@@ -62,8 +62,13 @@ public:
 signals:
     void resetRequest(quint32 fxID, quint32 channel);
 
+    /** Emitted when the user double-clicks the fixture title (group-box header area).
+     *  Carry the fixture ID so the receiver can open the test dialog. */
+    void fixtureDoubleClicked(quint32 fxId);
+
 protected:
     void showEvent(QShowEvent* ev) override;
+    void mouseDoubleClickEvent(QMouseEvent *ev) override;
 
 private:
     Doc* m_doc;

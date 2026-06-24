@@ -3,7 +3,12 @@ project(effectscripts)
 set(SCRIPT_FILES
     breathe.js
     color-chase.js
+    drawn-path.js
+    ColorAlternate.js
+    ColorGradient.js
+    ColorSpread.js
     fan.js
+    figure8.js
     fire.js
     followspot.js
     lightning.js
@@ -12,8 +17,11 @@ set(SCRIPT_FILES
     ramp-chase.js
     sparkle.js
     spatial-gradient.js
+    spotlight-chase.js
     strobe.js
+    sweep.js
     wander.js
+    wave.js
 )
 
 install(FILES ${SCRIPT_FILES} DESTINATION ${INSTALLROOT}/${EFFECTSCRIPTDIR})

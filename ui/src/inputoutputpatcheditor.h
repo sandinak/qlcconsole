@@ -24,6 +24,8 @@
 
 #include "ui_inputoutputpatcheditor.h"
 
+class QComboBox;
+class QPushButton;
 class InputOutputMap;
 class AudioCapture;
 class OutputPatch;
@@ -43,34 +45,25 @@ class InputOutputPatchEditor final : public QWidget, public Ui_InputOutputPatchE
      * Initialization
      ********************************************************************/
 public:
-    /**
-     * Create a new output patch editor for the given universe.
-     *
-     * @param parent The owning parent widget
-     * @param universe The universe whose settings to edit
-     * @param outputMap The output map object that handles DMX output
-     */
     InputOutputPatchEditor(QWidget* parent, quint32 universe, InputOutputMap* ioMap, Doc* doc);
     ~InputOutputPatchEditor();
 
 signals:
-    /** Tells that the mapping settings have changed */
     void mappingChanged();
-
-    /** Tells that the audio input device has changed */
     void audioInputDeviceChanged();
 
 private:
     InputOutputMap* m_ioMap;
     Doc *m_doc;
 
-    quint32 m_universe; //! The input universe that is being edited
+    quint32 m_universe;
 
     QString m_currentInputPluginName;
     quint32 m_currentInput;
     QString m_currentOutputPluginName;
     quint32 m_currentOutput;
-    QString m_currentProfileName;
+    QString m_currentProfileName;     // QLCInputProfile name (MIDI/OSC etc.)
+    QString m_currentHidProfileName;  // HID device profile name
     QString m_currentFeedbackPluginName;
     quint32 m_currentFeedback;
 
@@ -81,6 +74,11 @@ private:
     InputPatch* patch() const;
     QTreeWidgetItem* currentlyMappedItem() const;
     void setupMappingPage();
+    void updateProfileColumnWidget(QTreeWidgetItem *item); // set/refresh profile cell for item
+    void applyCurrentProfile();        // push current profile names to the patch
+    bool isHidPlugin() const;          // true when m_currentInputPluginName is HID-style
+    QString fullProfilePath(const QString& manufacturer, const QString& model) const;
+
     QTreeWidgetItem *itemLookup(QString pluginName, QString devName);
     void fillMappingTree();
     QTreeWidgetItem* pluginItem(const QString& pluginName);
@@ -92,21 +90,6 @@ private slots:
     void slotConfigureInputClicked();
     void slotPluginConfigurationChanged(const QString& pluginName, bool success);
     void slotHotpluggingChanged(bool checked);
-
-    /************************************************************************
-     * Profile page
-     ************************************************************************/
-private:
-    void setupProfilePage();
-    void fillProfileTree();
-    void updateProfileItem(const QString& name, QTreeWidgetItem* item);
-    QString fullProfilePath(const QString& manufacturer, const QString& model) const;
-
-private slots:
-    void slotProfileItemChanged(QTreeWidgetItem* item);
-    void slotAddProfileClicked();
-    void slotRemoveProfileClicked();
-    void slotEditProfileClicked();
 
     /************************************************************************
      * Audio page

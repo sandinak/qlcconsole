@@ -19,6 +19,7 @@
 
 #include <QHBoxLayout>
 #include <QGraphicsOpacityEffect>
+#include <QMouseEvent>
 #include <QDebug>
 #include <QIcon>
 #include <QList>
@@ -109,6 +110,17 @@ void FixtureConsole::enableResetButton(bool enable)
 void FixtureConsole::showEvent(QShowEvent *)
 {
     showChannels();
+}
+
+void FixtureConsole::mouseDoubleClickEvent(QMouseEvent *ev)
+{
+    // Emit only when the click is in the title/header area of the QGroupBox.
+    // The header is typically the top ~20px; use fontMetrics as an approximation.
+    const int titleHeight = fontMetrics().height() + 8;
+    if (ev->y() <= titleHeight)
+        emit fixtureDoubleClicked(m_fixture);
+    else
+        QGroupBox::mouseDoubleClickEvent(ev);
 }
 
 void FixtureConsole::showChannels()

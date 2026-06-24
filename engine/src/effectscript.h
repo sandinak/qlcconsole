@@ -25,18 +25,36 @@
         ];
 
         // Named palette references the host resolves before each tick.
+        // type matches a QLCPalette type string: "Color", "Dimmer", "PanTilt", etc.
         effect.palettes = [
-            { name: "color", type: "Color", optional: true }
+            { name: "color",  type: "Color",  optional: true  },
+            { name: "dimmer", type: "Dimmer", optional: true  }
         ];
 
-        // Scalar parameters shown as sliders in the look editor.
+        // Stage target references. The host pre-computes per-fixture aim angles
+        // and injects them into each fixture descriptor as f.aimAt[name] = {pan, tilt}.
+        effect.targets = [
+            { name: "center", optional: true, description: "Aim center point" }
+        ];
+
+        // Parameters shown in the look editor.
+        // When 'values' is present the param is an integer index shown as a dropdown.
+        // When type is "path" the param is an XY drawn-path widget; min/max/defaultValue
+        // are ignored and the value is stored as a JSON array [[x,y], ...] of 0-1 pairs.
         effect.parameters = [
-            { name: "speed", description: "Scale", min: 0.1, max: 3.0, defaultValue: 1.0 }
+            { name: "speed", description: "Scale", min: 0.1, max: 3.0, defaultValue: 1.0 },
+            { name: "mode",  description: "Mode",  min: 0,   max: 2,   defaultValue: 0,
+              values: ["Alternate", "Gradient", "Spread"] },
+            { name: "path",  description: "Movement path", type: "path" }
         ];
 
         // Called every ~50 Hz tick while the scene is running.
         //   fixtures  – array of FixtureDescriptor objects (see below)
-        //   inputs    – { slotName: 0.0-1.0, …, _time: seconds }
+        //   inputs    – { slotName: 0.0-1.0, …,
+        //                 _time:      seconds since scene start,
+        //                 _beat:      0.0-1.0 sawtooth phase within current beat,
+        //                 _bpm:       current BPM (0 = no beat source),
+        //                 _beatCount: integer count of beats since start }
         //   palettes  – { paletteName: resolvedValues | null, … }
         //   params    – { paramName: value, … }
         //   state     – persistent plain object (reset on scene start)
@@ -48,6 +66,7 @@
         // Omit fields the script doesn't control.
         effect.tick = function(fixtures, inputs, palettes, params, state) {
             return fixtures.map(function(f) {
+                // f.aimAt.center = { pan: degrees, tilt: degrees }  (when target bound)
                 return { pan: inputs.x * f.panRange, tilt: inputs.y * f.tiltRange };
             });
         };
@@ -65,7 +84,9 @@
     hasDimmer  – bool
     hasGobo    – bool
     hasShutter – bool
-    pos        – { x, y, z } in metres (from MonitorProperties, or {0,0,0})
+    pos        – { x, y, z } in metres (rig 3D world position, or {0,0,0})
+    aimAt      – { <targetName>: { pan: deg, tilt: deg }, … }
+                 pre-computed aim angles for each bound effect.targets entry
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */
@@ -106,28 +127,39 @@ public:
         float defaultValue = 0.5f;
     };
     struct PaletteDef {
-        QString name, type;
+        QString name, description, type; // type: "Color", "Dimmer", "PanTilt", …
+        bool optional = true;
+    };
+    struct TargetDef {
+        QString name, description;
         bool optional = true;
     };
     struct ParamDef {
         QString name, description;
+        QString type;           // "" or "path" (XY drawn path); "path" params ignore min/max
         float min = 0.0f, max = 1.0f, defaultValue = 0.5f;
+        QStringList enumValues; // non-empty → render as dropdown; value is integer index
     };
 
-    QList<InputDef>   inputDefs()   const { return m_inputs;     }
-    QList<PaletteDef> paletteDefs() const { return m_palettes;   }
-    QList<ParamDef>   paramDefs()   const { return m_params;     }
+    QList<InputDef>   inputDefs()       const { return m_inputs;          }
+    QList<PaletteDef> paletteDefs()    const { return m_palettes;        }
+    QList<TargetDef>  targetDefs()     const { return m_targets;         }
+    QList<ParamDef>   paramDefs()      const { return m_params;          }
+    /** Named real-time data channels this script subscribes to (e.g. "joystick"). */
+    QStringList       dataChannelKeys() const { return m_dataChannelKeys; }
 
-    /** Call tick(fixtures, inputs, palettes, params, state).
+    /** Call tick(fixtures, inputs, palettes, params, state, data).
      *  Must be called from the thread that created this EffectScript.
      *  @p state is an in/out persistent JS object (survives between ticks).
+     *  @p data is an object keyed by channel name (e.g. data.joystick.pan).
      *  Returns the raw QJSValue returned by the script (array of intents),
      *  or an invalid QJSValue on error. */
     QJSValue callTick(const QJSValue &fixtures,
                       const QJSValue &inputs,
                       const QJSValue &palettes,
                       const QJSValue &params,
-                      QJSValue       &state);
+                      QJSValue       &state,
+                      const QJSValue &data);
 
     /** Create a fresh empty state object in this engine. */
     QJSValue newState();
@@ -149,7 +181,9 @@ private:
 
     QList<InputDef>   m_inputs;
     QList<PaletteDef> m_palettes;
+    QList<TargetDef>  m_targets;
     QList<ParamDef>   m_params;
+    QStringList       m_dataChannelKeys;
 
     bool m_valid = false;
 };

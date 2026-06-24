@@ -63,6 +63,21 @@ QLCPalette *QLCPalette::createCopy()
     copy->setFanningLayout(this->fanningLayout());
     copy->setFanningAmount(this->fanningAmount());
     copy->setFanningValue(this->fanningValue());
+    copy->setStageTargetId(this->stageTargetId());
+    copy->setScriptPath(this->scriptPath());
+    copy->setEffectInputBindings(this->effectInputBindings());
+    for (auto it = m_effectPaletteBindings.constBegin();
+         it != m_effectPaletteBindings.constEnd(); ++it)
+        copy->setEffectPaletteBinding(it.key(), it.value());
+    for (auto it = m_effectTargetBindings.constBegin();
+         it != m_effectTargetBindings.constEnd(); ++it)
+        copy->setEffectTargetBinding(it.key(), it.value());
+    for (auto it = m_effectParamValues.constBegin();
+         it != m_effectParamValues.constEnd(); ++it)
+        copy->setEffectParamValue(it.key(), it.value());
+    for (auto it = m_effectStringParams.constBegin();
+         it != m_effectStringParams.constEnd(); ++it)
+        copy->setEffectStringParam(it.key(), it.value());
 
     return copy;
 }
@@ -105,6 +120,7 @@ QString QLCPalette::typeToString(QLCPalette::PaletteType type)
         case Pan:       return "Pan";
         case Tilt:      return "Tilt";
         case PanTilt:   return "PanTilt";
+        case Aim:       return "Aim";
         case Shutter:   return "Shutter";
         case Gobo:      return "Gobo";
         case Zoom:      return "Zoom";
@@ -128,6 +144,8 @@ QLCPalette::PaletteType QLCPalette::stringToType(const QString &str)
         return Tilt;
     else if (str == "PanTilt")
         return PanTilt;
+    else if (str == "Aim")
+        return Aim;
     else if (str == "Shutter")
         return Shutter;
     else if (str == "Gobo")
@@ -154,6 +172,7 @@ QString QLCPalette::iconResource(bool svg) const
         case Pan: return QString("%1:/pan.%2").arg(prefix).arg(ext);
         case Tilt: return QString("%1:/tilt.%2").arg(prefix).arg(ext);
         case PanTilt: return QString("%1:/position.%2").arg(prefix).arg(ext);
+        case Aim: return QString("%1:/target.%2").arg(prefix).arg(ext);
         case Shutter: return QString("%1:/shutter.%2").arg(prefix).arg(ext);
         case Gobo: return QString("%1:/gobo.%2").arg(prefix).arg(ext);
         case Zoom: return QString("%1:/beam.%2").arg(prefix).arg(ext);
@@ -562,93 +581,10 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             break;
             case PanTilt:
             {
-                bool usedTarget = false;
-
-                // If this palette is linked to a stage target and the fixture has
-                // a truss rig assignment, compute per-fixture pan/tilt from geometry.
-                if (m_stageTargetId != UINT_MAX && mProps->hasFixtureRigProps(id))
+                // Raw pan/tilt degrees stored in m_values[0] (pan) and m_values[1] (tilt).
+                if (m_values.count() == 2)
                 {
-                    StageTarget *tgt = mProps->stageTarget(m_stageTargetId);
-                    FixtureRigProps rp = mProps->fixtureRigProps(id);
-
-                    if (tgt != nullptr && rp.trussId != Truss::invalidId() &&
-                        fixture->fixtureMode() != nullptr)
-                    {
-                        // Fixture world position in metres (derived from truss geometry)
-                        QVector3D fixPos = mProps->fixtureRigPosition(id);
-                        // Target Z is stored as absolute floor height; add platform height
-                        // at the target's XY so a target on a raised platform is correct.
-                        QVector3D tgtPos = tgt->position();
-                        tgtPos.setZ(tgtPos.z() + mProps->platformHeightAt(tgtPos.x(), tgtPos.y()));
-
-                        float dx = tgtPos.x() - fixPos.x();
-                        float dy = tgtPos.y() - fixPos.y();
-                        float dz = tgtPos.z() - fixPos.z();
-                        float horizDist = qSqrt(dx * dx + dy * dy);
-
-                        // Horizontal azimuth: clockwise degrees from downstage.
-                        // Convention: Y+ = upstage, so downstage direction = decreasing Y.
-                        // atan2(dx, -dy): when target is downstage (dy<0), -dy>0 → 0°; SR→90°; SL→270°.
-                        float azimuthDeg = float(qRadiansToDegrees(
-                            qAtan2(double(dx), double(-dy))));
-                        if (azimuthDeg < 0.0f) azimuthDeg += 360.0f;
-
-                        // Pan relative to fixture's panZeroDir, centred at panMax/2
-                        float relativePan = azimuthDeg - rp.panZeroDir;
-                        while (relativePan >  180.0f) relativePan -= 360.0f;
-                        while (relativePan < -180.0f) relativePan += 360.0f;
-
-                        QLCPhysical phy = fixture->fixtureMode()->physical();
-                        float panMax  = float(phy.focusPanMax());  if (panMax  == 0.0f) panMax  = 360.0f;
-                        float tiltMax = float(phy.focusTiltMax()); if (tiltMax == 0.0f) tiltMax = 270.0f;
-
-                        float panRaw = panMax / 2.0f + relativePan + rp.panOffsetDeg;
-                        if (rp.panInvert) panRaw = panMax - panRaw;
-                        float panDeg = qBound(0.0f, panRaw, panMax);
-
-                        // Elevation angle from horizontal (negative = beam points downward)
-                        float elevDeg = float(qRadiansToDegrees(
-                            qAtan2(double(dz), double(horizDist))));
-
-                        // For TopHung: tilt centre = straight down (elevation = -90°).
-                        // Deviation from straight-down = 90° + elevation
-                        // (0 when directly below; 90° when horizontal)
-                        float tiltOffset = 90.0f + elevDeg;
-                        float tiltDeg;
-                        if (rp.mountingType == Truss::FloorMounted)
-                            tiltDeg = tiltMax / 2.0f - tiltOffset + rp.tiltOffsetDeg;
-                        else   // TopHung / SideArm
-                            tiltDeg = tiltMax / 2.0f + tiltOffset + rp.tiltOffsetDeg;
-                        if (rp.tiltInvert) tiltDeg = tiltMax - tiltDeg;
-                        tiltDeg = qBound(0.0f, tiltDeg, tiltMax);
-
-                        list << fixture->positionToValues(QLCChannel::Pan, panDeg);
-                        list << fixture->positionToValues(QLCChannel::Tilt, tiltDeg);
-
-                        // Set pan/tilt speed to maximum (DMX 0 for FastSlow, 255 for SlowFast)
-                        // so the fixture responds at full speed when following a target.
-                        if (fixture->fixtureMode())
-                        {
-                            for (int ci = 0; ci < fixture->fixtureMode()->channels().count(); ci++)
-                            {
-                                const QLCChannel *ch = fixture->fixtureMode()->channel(ci);
-                                if (!ch || ch->group() != QLCChannel::Speed) continue;
-                                uchar fastVal = 0;
-                                if (ch->preset() == QLCChannel::SpeedPanTiltSlowFast ||
-                                    ch->preset() == QLCChannel::SpeedPanSlowFast ||
-                                    ch->preset() == QLCChannel::SpeedTiltSlowFast)
-                                    fastVal = 255;
-                                list << SceneValue(fixture->id(), ci, fastVal);
-                            }
-                        }
-
-                        usedTarget = true;
-                    }
-                }
-
-                if (!usedTarget && m_values.count() == 2)
-                {
-                    int panDegrees = m_values.at(0).toInt();
+                    int panDegrees  = m_values.at(0).toInt();
                     int tiltDegrees = m_values.at(1).toInt();
 
                     if (fType != Flat)
@@ -656,12 +592,91 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         int offset = int(qreal(intFanValue) * factor);
                         if (fLayout == XCentered || fLayout == YCentered || fLayout == ZCentered)
                             offset *= centeredSign;
-                        panDegrees = int((qreal(panDegrees) + qreal(offset)));
+                        panDegrees  = int((qreal(panDegrees)  + qreal(offset)));
                         tiltDegrees = int((qreal(tiltDegrees) + qreal(offset)));
                     }
 
-                    list << fixture->positionToValues(QLCChannel::Pan, panDegrees);
+                    list << fixture->positionToValues(QLCChannel::Pan,  panDegrees);
                     list << fixture->positionToValues(QLCChannel::Tilt, tiltDegrees);
+                }
+            }
+            break;
+            case Aim:
+            {
+                // Per-fixture pan/tilt computed from rig geometry toward a StageTarget.
+                if (m_stageTargetId == UINT_MAX || !mProps->hasFixtureRigProps(id))
+                    break;
+
+                StageTarget *tgt = mProps->stageTarget(m_stageTargetId);
+                FixtureRigProps rp = mProps->fixtureRigProps(id);
+
+                if (tgt == nullptr || rp.trussId == Truss::invalidId() ||
+                    fixture->fixtureMode() == nullptr)
+                    break;
+
+                // Fixture world position in metres (derived from truss geometry)
+                QVector3D fixPos = mProps->fixtureRigPosition(id);
+                // Target Z is stored as absolute floor height; add platform height
+                // at the target's XY so a target on a raised platform is correct.
+                QVector3D tgtPos = tgt->position();
+                tgtPos.setZ(tgtPos.z() + mProps->platformHeightAt(tgtPos.x(), tgtPos.y()));
+
+                float dx = tgtPos.x() - fixPos.x();
+                float dy = tgtPos.y() - fixPos.y();
+                float dz = tgtPos.z() - fixPos.z();
+                float horizDist = qSqrt(dx * dx + dy * dy);
+
+                // Horizontal azimuth: clockwise degrees from downstage.
+                // Convention: Y+ = upstage, so downstage direction = decreasing Y.
+                // atan2(dx, -dy): when target is downstage (dy<0), -dy>0 → 0°; SR→90°; SL→270°.
+                float azimuthDeg = float(qRadiansToDegrees(
+                    qAtan2(double(dx), double(-dy))));
+                if (azimuthDeg < 0.0f) azimuthDeg += 360.0f;
+
+                // Pan relative to fixture's panZeroDir, centred at panMax/2
+                float relativePan = azimuthDeg - rp.panZeroDir;
+                while (relativePan >  180.0f) relativePan -= 360.0f;
+                while (relativePan < -180.0f) relativePan += 360.0f;
+
+                QLCPhysical phy = fixture->fixtureMode()->physical();
+                float panMax  = float(phy.focusPanMax());  if (panMax  == 0.0f) panMax  = 360.0f;
+                float tiltMax = float(phy.focusTiltMax()); if (tiltMax == 0.0f) tiltMax = 270.0f;
+
+                float panRaw = panMax / 2.0f + relativePan + rp.panOffsetDeg;
+                if (rp.panInvert) panRaw = panMax - panRaw;
+                float panDeg = qBound(0.0f, panRaw, panMax);
+
+                // Elevation angle from horizontal (negative = beam points downward)
+                float elevDeg = float(qRadiansToDegrees(
+                    qAtan2(double(dz), double(horizDist))));
+
+                // For TopHung: tilt centre = straight down (elevation = -90°).
+                // Deviation from straight-down = 90° + elevation
+                // (0 when directly below; 90° when horizontal)
+                float tiltOffset = 90.0f + elevDeg;
+                float tiltDeg;
+                if (rp.mountingType == Truss::FloorMounted)
+                    tiltDeg = tiltMax / 2.0f - tiltOffset + rp.tiltOffsetDeg;
+                else   // TopHung / SideArm
+                    tiltDeg = tiltMax / 2.0f + tiltOffset + rp.tiltOffsetDeg;
+                if (rp.tiltInvert) tiltDeg = tiltMax - tiltDeg;
+                tiltDeg = qBound(0.0f, tiltDeg, tiltMax);
+
+                list << fixture->positionToValues(QLCChannel::Pan,  panDeg);
+                list << fixture->positionToValues(QLCChannel::Tilt, tiltDeg);
+
+                // Set pan/tilt speed to maximum (DMX 0 for FastSlow, 255 for SlowFast)
+                // so the fixture responds at full speed when following a target.
+                for (int ci = 0; ci < fixture->fixtureMode()->channels().count(); ci++)
+                {
+                    const QLCChannel *ch = fixture->fixtureMode()->channel(ci);
+                    if (!ch || ch->group() != QLCChannel::Speed) continue;
+                    uchar fastVal = 0;
+                    if (ch->preset() == QLCChannel::SpeedPanTiltSlowFast ||
+                        ch->preset() == QLCChannel::SpeedPanSlowFast ||
+                        ch->preset() == QLCChannel::SpeedTiltSlowFast)
+                        fastVal = 255;
+                    list << SceneValue(fixture->id(), ci, fastVal);
                 }
             }
             break;
@@ -1075,6 +1090,11 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
 
     m_type = stringToType(attrs.value(KXMLQLCPaletteType).toString());
 
+    // Migration: old files stored target-aimed palettes as PanTilt + StageTarget attribute.
+    // Upgrade them to the dedicated Aim type on load.
+    if (m_type == PanTilt && attrs.hasAttribute(KXMLQLCPaletteStageTarget))
+        m_type = Aim;
+
     if (attrs.hasAttribute(KXMLQLCPaletteName))
         setName(attrs.value(KXMLQLCPaletteName).toString());
 
@@ -1100,6 +1120,9 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 if (posList.count() == 2)
                     setValue(posList.at(0).toInt(), posList.at(1).toInt());
             }
+            break;
+            case Aim:
+                // Aim palettes don't store values — position is computed from geometry.
             break;
             case Zoom:
                 setValue(strVal.toFloat());
@@ -1151,6 +1174,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 case Color:
                     setFanningValue(strVal);
                 break;
+                case Aim:       break;
                 case Beam:      break;
                 case Shutter:   break;
                 case Gobo:      break;
@@ -1187,12 +1211,28 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                     m_effectPaletteBindings[slot] = pid;
                 doc.skipCurrentElement();
             }
+            else if (doc.name() == "EffectTargetBinding")
+            {
+                QString slot = doc.attributes().value("slot").toString();
+                quint32 tid  = doc.attributes().value("target").toUInt();
+                if (!slot.isEmpty())
+                    m_effectTargetBindings[slot] = tid;
+                doc.skipCurrentElement();
+            }
             else if (doc.name() == "EffectParam")
             {
                 QString name = doc.attributes().value("name").toString();
                 double  val  = doc.attributes().value("value").toDouble();
                 if (!name.isEmpty())
                     m_effectParamValues[name] = val;
+                doc.skipCurrentElement();
+            }
+            else if (doc.name() == "EffectStringParam")
+            {
+                QString name = doc.attributes().value("name").toString();
+                QString val  = doc.attributes().value("value").toString();
+                if (!name.isEmpty())
+                    m_effectStringParams[name] = val;
                 doc.skipCurrentElement();
             }
             else
@@ -1213,9 +1253,9 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
 {
     Q_ASSERT(doc != NULL);
 
-    // Shutter, Gobo, and Effect palettes are valid without m_values.
+    // Shutter, Gobo, Effect, and Aim palettes are valid without m_values.
     if (m_values.isEmpty() && m_type != Shutter && m_type != Gobo
-        && m_type != Effect)
+        && m_type != Effect && m_type != Aim)
     {
         qWarning() << "Unable to save a Palette without value!";
         return false;
@@ -1242,6 +1282,10 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
         case PanTilt:
             doc->writeAttribute(KXMLQLCPaletteValue,
                                 QString("%1,%2").arg(m_values.at(0).toInt()).arg(m_values.at(1).toInt()));
+        break;
+        case Aim:
+            // No m_values — position is computed per-fixture from rig geometry.
+            // StageTarget ID is written below.
         break;
         case Beam:
         {
@@ -1304,12 +1348,28 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             doc->writeAttribute("palette", QString::number(it.value()));
             doc->writeEndElement();
         }
+        for (auto it = m_effectTargetBindings.constBegin();
+             it != m_effectTargetBindings.constEnd(); ++it)
+        {
+            doc->writeStartElement("EffectTargetBinding");
+            doc->writeAttribute("slot",   it.key());
+            doc->writeAttribute("target", QString::number(it.value()));
+            doc->writeEndElement();
+        }
         for (auto it = m_effectParamValues.constBegin();
              it != m_effectParamValues.constEnd(); ++it)
         {
             doc->writeStartElement("EffectParam");
             doc->writeAttribute("name",  it.key());
             doc->writeAttribute("value", QString::number(it.value()));
+            doc->writeEndElement();
+        }
+        for (auto it = m_effectStringParams.constBegin();
+             it != m_effectStringParams.constEnd(); ++it)
+        {
+            doc->writeStartElement("EffectStringParam");
+            doc->writeAttribute("name",  it.key());
+            doc->writeAttribute("value", it.value());
             doc->writeEndElement();
         }
     }

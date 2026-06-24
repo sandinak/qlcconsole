@@ -29,10 +29,14 @@ target_sources(${module_name} PRIVATE
     hiddevice.cpp hiddevice.h
     hiddmxdevice.cpp hiddmxdevice.h
     hidjsdevice.cpp hidjsdevice.h
+    hidprofile.cpp hidprofile.h
+    hidprofileeditor.cpp hidprofileeditor.h
     ${module_name}.cpp ${module_name}.h
+    ../../engine/src/qlcfile.cpp ../../engine/src/qlcfile.h
 )
 target_include_directories(${module_name} PRIVATE
     ../interfaces
+    ../../engine/src
 )
 
 target_link_libraries(${module_name} PRIVATE

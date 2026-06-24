@@ -82,6 +82,7 @@ RGBMatrixEditor::RGBMatrixEditor(QWidget* parent, RGBMatrix* mtx, Doc* doc)
     connect(m_doc, SIGNAL(fixtureGroupAdded(quint32)), this, SLOT(slotFixtureGroupAdded()));
     connect(m_doc, SIGNAL(fixtureGroupRemoved(quint32)), this, SLOT(slotFixtureGroupRemoved()));
     connect(m_doc, SIGNAL(fixtureGroupChanged(quint32)), this, SLOT(slotFixtureGroupChanged(quint32)));
+    connect(m_doc, SIGNAL(functionRemoved(quint32)), this, SLOT(slotFunctionRemoved(quint32)));
 
     init();
 
@@ -849,6 +850,7 @@ void RGBMatrixEditor::slotPatternActivated(int patternIndex)
 
 void RGBMatrixEditor::slotFixtureGroupActivated(int index)
 {
+    if (!m_matrix) return;
     QVariant var = m_fixtureGroupCombo->itemData(index);
     if (var.isValid() == true)
     {
@@ -1216,12 +1218,14 @@ void RGBMatrixEditor::slotFixtureGroupAdded()
 
 void RGBMatrixEditor::slotFixtureGroupRemoved()
 {
+    if (!m_matrix) return;
     fillFixtureGroupCombo();
     slotFixtureGroupActivated(m_fixtureGroupCombo->currentIndex());
 }
 
 void RGBMatrixEditor::slotFixtureGroupChanged(quint32 id)
 {
+    if (!m_matrix) return;
     if (id == m_matrix->fixtureGroup())
     {
         // Update the whole chain -> maybe the fixture layout has changed
@@ -1238,6 +1242,12 @@ void RGBMatrixEditor::slotFixtureGroupChanged(quint32 id)
             m_fixtureGroupCombo->setItemText(index, grp->name());
         }
     }
+}
+
+void RGBMatrixEditor::slotFunctionRemoved(quint32 id)
+{
+    if (m_matrix && m_matrix->id() == id)
+        m_matrix = nullptr;
 }
 
 void RGBMatrixEditor::slotSaveToSequenceClicked()

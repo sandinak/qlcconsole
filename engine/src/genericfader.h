@@ -155,6 +155,13 @@ public:
     /** Remove the Crossfade flag from every fader handled by this class */
     void resetCrossfade();
 
+    /** When true, write() zeros all 512 channels in the universe (forceLTP)
+     *  before writing this fader's channels.  Use for Override-priority faders
+     *  that must blackout everything except their own channels (e.g. fixture
+     *  test-mode isolation). */
+    bool zeroAll() const { return m_zeroAll; }
+    void setZeroAll(bool z) { m_zeroAll = z; }
+
 signals:
     /** Signal emitted when monitoring is enabled.
      *  Data is preGM and includes the whole universe */
@@ -175,6 +182,7 @@ private:
     bool m_deleteRequest;
     Universe::BlendMode m_blendMode;
     bool m_monitoring;
+    bool m_zeroAll = false;
 };
 
 /** @} */

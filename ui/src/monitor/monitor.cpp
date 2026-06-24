@@ -68,6 +68,8 @@
 #include "scene.h"
 #include "mastertimer.h"
 #include "dmxsource.h"
+#include "genericfader.h"
+#include "fadechannel.h"
 #include "fixture.h"
 #include "monitorbackgroundselection.h"
 #include "monitorgraphicsview.h"
@@ -1329,50 +1331,195 @@ void Monitor::slotAddFixtureToTruss(quint32 trussId, float offsetMetres)
 // No Q_OBJECT — callers read results via slots() on dialog accept.
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-// DMX source that holds a fixture at a fixed pan/tilt for orientation testing.
-// Registered with MasterTimer while active; destructor auto-unregisters.
+// DMX helpers + Override-priority fixture test/locate classes.
 // ---------------------------------------------------------------------------
-class FixtureOrientationTest : public DMXSource
+
+/** Helper: find the first "shutter open" channel for a fixture.
+ *  Returns QLCChannel::invalid() if not found; sets outValue to the midpoint. */
+static quint32 fixtureShutterChannel(Fixture *fxi, uchar &outValue)
+{
+    if (!fxi->fixtureMode()) return QLCChannel::invalid();
+    for (quint32 c = 0; c < fxi->channels(); ++c)
+    {
+        QLCChannel *ch = fxi->fixtureMode()->channel(c);
+        if (!ch || ch->group() != QLCChannel::Shutter) continue;
+        for (const QLCCapability *cap : ch->capabilities())
+        {
+            const QString n = cap->name().toLower();
+            if (n.contains("open") && !n.contains("strobe") && !n.contains("close"))
+            {
+                outValue = cap->middle();
+                return c;
+            }
+        }
+    }
+    return QLCChannel::invalid();
+}
+
+/** Append full-intensity + shutter-open SceneValues for fxi. */
+static void appendFixtureOnValues(Fixture *fxi, QList<SceneValue> &svs)
+{
+    if (!fxi->fixtureMode()) return;
+
+    // masterIntensityChannel() only finds channels where headForChannel(i)==-1
+    // (i.e. not assigned to any head). On most moving heads the dimmer IS a
+    // head channel, so we fall back to scanning all fixture channels directly.
+    quint32 mi = fxi->masterIntensityChannel();
+    if (mi == QLCChannel::invalid())
+    {
+        for (quint32 c = 0; c < fxi->channels(); ++c)
+        {
+            QLCChannel *ch = fxi->fixtureMode()->channel(c);
+            if (ch && ch->group() == QLCChannel::Intensity
+                && ch->controlByte() == QLCChannel::MSB
+                && ch->colour() == QLCChannel::NoColour)
+            {
+                mi = c;
+                break;
+            }
+        }
+    }
+    if (mi != QLCChannel::invalid())
+        svs << SceneValue(fxi->id(), mi, 255);
+
+    // For RGB/RGBW/LED wash fixtures: set every Intensity-group colour channel
+    // (Red, Green, Blue, White, Amber, UV …) to 255 so the fixture emits
+    // white/full-on light during test and locate.  This covers both
+    // Colour-group presets and IntensityRed/Green/Blue-style presets.
+    for (quint32 c = 0; c < fxi->channels(); ++c)
+    {
+        QLCChannel *ch = fxi->fixtureMode()->channel(c);
+        if (!ch || ch->controlByte() != QLCChannel::MSB) continue;
+        const bool isColourGroup    = (ch->group() == QLCChannel::Colour);
+        const bool isIntensityColour = (ch->group() == QLCChannel::Intensity
+                                        && ch->colour() != QLCChannel::NoColour);
+        if ((isColourGroup || isIntensityColour)
+            && ch->colour() != QLCChannel::NoColour)
+        {
+            svs << SceneValue(fxi->id(), c, 255);
+        }
+    }
+
+    uchar shutterVal = 0;
+    quint32 shutterCh = fixtureShutterChannel(fxi, shutterVal);
+    if (shutterCh != QLCChannel::invalid())
+        svs << SceneValue(fxi->id(), shutterCh, shutterVal);
+}
+
+/** Test-orientation override for a single fixture.
+ *
+ *  Acquires Override-priority GenericFaders for every universe with
+ *  setZeroAll(true) so all other fixtures are blacked out while the test
+ *  is active.  The test fixture's fader also writes pan/tilt + full
+ *  intensity + open shutter so the fixture is visible on the rig. */
+class FixtureOrientationTest
 {
 public:
     FixtureOrientationTest(Fixture *fxi, Doc *doc)
         : m_fxi(fxi), m_doc(doc)
     {
-        m_doc->masterTimer()->registerDMXSource(this);
-        setChanged(true);
+        quint32 fxUni = fxi->universe();
+        QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+        for (int i = 0; i < ua.size(); ++i)
+        {
+            QSharedPointer<GenericFader> fader = ua[i]->requestFader(Universe::Override);
+            fader->setName(QStringLiteral("FixtureTest"));
+            fader->setZeroAll(true);
+            m_faders[i] = fader;
+            m_universes[i] = ua[i];
+        }
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        m_fixtureUniIdx = int(fxUni);
     }
 
     ~FixtureOrientationTest()
     {
-        m_doc->masterTimer()->unregisterDMXSource(this);
+        QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+        for (auto it = m_faders.begin(); it != m_faders.end(); ++it)
+        {
+            int idx = it.key();
+            if (!it.value().isNull() && idx < ua.size())
+                ua[idx]->dismissFader(it.value());
+        }
+        m_doc->inputOutputMap()->releaseUniverses(false);
     }
 
     void setDegrees(float panDeg, float tiltDeg)
     {
-        QMutexLocker lock(&m_mutex);
-        m_values.clear();
-        m_values << m_fxi->positionToValues(QLCChannel::Pan,  panDeg);
-        m_values << m_fxi->positionToValues(QLCChannel::Tilt, tiltDeg);
-        setChanged(true);
-    }
+        QSharedPointer<GenericFader> fader = m_faders.value(m_fixtureUniIdx);
+        if (fader.isNull()) return;
 
-    void writeDMX(MasterTimer * /*timer*/, QList<Universe *> universes) override
-    {
-        QMutexLocker lock(&m_mutex);
-        quint32 fxUni = m_fxi->universe();
-        if (fxUni >= quint32(universes.count()))
-            return;
-        Universe *uni = universes[int(fxUni)];
-        for (const SceneValue &sv : qAsConst(m_values))
-            uni->write(int(m_fxi->address() + sv.channel), sv.value, true);
-        setChanged(true); // keep writing to override running scenes
+        QList<SceneValue> svs;
+        svs << m_fxi->positionToValues(QLCChannel::Pan,  panDeg);
+        svs << m_fxi->positionToValues(QLCChannel::Tilt, tiltDeg);
+        appendFixtureOnValues(m_fxi, svs);
+
+        fader->removeAll();
+        for (const SceneValue &sv : svs)
+        {
+            FadeChannel fc(m_doc, m_fxi->id(), sv.channel);
+            fc.setTarget(sv.value);
+            fc.setCurrent(sv.value);
+            fc.setFadeTime(0);
+            fader->add(fc);
+        }
     }
 
 private:
-    Fixture         *m_fxi;
-    Doc             *m_doc;
-    QList<SceneValue> m_values;
-    QMutex           m_mutex;
+    Fixture *m_fxi;
+    Doc     *m_doc;
+    int      m_fixtureUniIdx = -1;
+    QHash<int, QSharedPointer<GenericFader>> m_faders;
+    QHash<int, Universe*>                    m_universes;
+};
+
+/** Locate flash — no blackout; just overrides the fixture's intensity + shutter
+ *  so it pops up over any running scene.  Call setOn(false/true) to strobe. */
+class FixtureLocate
+{
+public:
+    FixtureLocate(Fixture *fxi, Doc *doc) : m_fxi(fxi), m_doc(doc)
+    {
+        QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+        quint32 fxUni = fxi->universe();
+        if (fxUni < quint32(ua.size()))
+        {
+            m_universe = ua[int(fxUni)];
+            m_fader = m_universe->requestFader(Universe::Override);
+            m_fader->setName(QStringLiteral("FixtureLocate"));
+        }
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        appendFixtureOnValues(m_fxi, m_onValues);
+        setOn(true);
+    }
+
+    ~FixtureLocate()
+    {
+        if (m_universe && !m_fader.isNull())
+            m_universe->dismissFader(m_fader);
+    }
+
+    void setOn(bool on)
+    {
+        if (m_fader.isNull()) return;
+        m_fader->removeAll();
+        if (!on) return;
+        for (const SceneValue &sv : m_onValues)
+        {
+            FadeChannel fc(m_doc, sv.fxi, sv.channel);
+            fc.setTarget(sv.value);
+            fc.setCurrent(sv.value);
+            fc.setFadeTime(0);
+            m_fader->add(fc);
+        }
+    }
+
+private:
+    Fixture      *m_fxi;
+    Doc          *m_doc;
+    Universe     *m_universe = nullptr;
+    QSharedPointer<GenericFader> m_fader;
+    QList<SceneValue>            m_onValues;
 };
 
 // ---------------------------------------------------------------------------
@@ -2020,11 +2167,121 @@ void Monitor::slotViewClicked()
     Q_ASSERT(m_graphicsView != NULL);
 
     hideFixtureItemEditor();
+
+    // Emit the current fixture selection so the Programming tab can sync.
+    QList<quint32> ids;
+    for (MonitorFixtureItem *item : m_graphicsView->selectedFixtureItems())
+        ids.append(item->fixtureID());
+    emit fixturesSelected(ids);
 }
 
 void Monitor::hideFixtureItemEditor()
 {
     // No-op: fixture properties are now shown in a modal popup dialog.
+}
+
+void Monitor::showFixturePropertiesById(quint32 fxId)
+{
+    MonitorFixtureItem *item = m_graphicsView->fixtureItemForId(fxId);
+    if (item)
+    {
+        // Select the item and use the full editor (includes position/rotation/gel)
+        m_graphicsView->scene()->clearSelection();
+        item->setSelected(true);
+        showFixtureItemEditor();
+    }
+    else
+    {
+        // Fixture not placed in 2D view — show the compact test-only dialog
+        Fixture *fxi = m_doc->fixture(fxId);
+        if (!fxi) return;
+
+        QDialog dlg(this);
+        dlg.setWindowTitle(tr("Fixture Test — %1").arg(fxi->name()));
+        QVBoxLayout *vl = new QVBoxLayout(&dlg);
+
+        // Header
+        QLabel *nameLabel = new QLabel(QString("<b>%1</b>").arg(fxi->name()), &dlg);
+        vl->addWidget(nameLabel);
+        if (fxi->fixtureDef())
+        {
+            QLabel *typeLabel = new QLabel(
+                fxi->fixtureDef()->manufacturer() + " " + fxi->fixtureDef()->model(), &dlg);
+            typeLabel->setStyleSheet("color:#aaa; font-size:10px;");
+            vl->addWidget(typeLabel);
+        }
+
+        // Address info
+        QString addrStr = tr("Universe %1 • Ch %2")
+            .arg(int(fxi->universe()) + 1).arg(int(fxi->address()) + 1);
+        if (fxi->channels() > 1)
+            addrStr += tr("–%1").arg(int(fxi->address()) + int(fxi->channels()));
+        QLabel *addrLabel = new QLabel(addrStr, &dlg);
+        addrLabel->setStyleSheet("color:#aaa; font-size:10px;");
+        vl->addWidget(addrLabel);
+
+        QFrame *sep = new QFrame; sep->setFrameShape(QFrame::HLine); vl->addWidget(sep);
+
+        // Identify / Reset buttons (same logic as full dialog)
+        int resetCh = -1; uchar resetVal = 0;
+        int identifyCh = -1; uchar identifyVal = 0;
+        if (fxi->fixtureMode())
+        {
+            for (int ci = 0; ci < fxi->fixtureMode()->channels().count(); ci++)
+            {
+                const QLCChannel *ch = fxi->fixtureMode()->channel(ci);
+                if (!ch || ch->group() != QLCChannel::Maintenance) continue;
+                for (const QLCCapability *cap : ch->capabilities())
+                {
+                    const QString capName = cap->name().toLower();
+                    if (resetCh < 0 && capName.contains("reset"))
+                    { resetCh = ci; resetVal = uchar((cap->min() + cap->max()) / 2); }
+                    if (identifyCh < 0 && capName.contains("identif"))
+                    { identifyCh = ci; identifyVal = uchar((cap->min() + cap->max()) / 2); }
+                }
+            }
+        }
+
+        if (identifyCh >= 0 || resetCh >= 0)
+        {
+            QHBoxLayout *hl = new QHBoxLayout;
+            auto makeMaintBtn = [&](const QString &label, const QString &sentLabel,
+                                    const QString &tip, int ch, uchar val) {
+                QPushButton *btn = new QPushButton(label, &dlg);
+                btn->setToolTip(tip);
+                hl->addWidget(btn);
+                connect(btn, &QPushButton::clicked, [=]() {
+                    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+                    quint32 u = fxi->universe();
+                    if (u < quint32(ua.size()))
+                    {
+                        Universe *uni = ua[int(u)];
+                        uni->write(int(fxi->address()) + ch, val);
+                        const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
+                        uni->dumpOutput(pg, true);
+                    }
+                    m_doc->inputOutputMap()->releaseUniverses(false);
+                    btn->setEnabled(false); btn->setText(sentLabel);
+                    QTimer::singleShot(3000, btn, [btn, label]() {
+                        btn->setEnabled(true); btn->setText(label);
+                    });
+                });
+            };
+            if (identifyCh >= 0)
+                makeMaintBtn(tr("Identify"), tr("Identifying…"),
+                             tr("Flash/beep to confirm DMX address"), identifyCh, identifyVal);
+            if (resetCh >= 0)
+                makeMaintBtn(tr("Reset"), tr("Resetting…"),
+                             tr("Send fixture reset (hold ~3s)"), resetCh, resetVal);
+            hl->addStretch();
+            vl->addLayout(hl);
+        }
+
+        QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+        connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+        vl->addWidget(bb);
+        dlg.exec();
+    }
 }
 
 void Monitor::showFixtureItemEditor()
@@ -2120,6 +2377,98 @@ void Monitor::showFixtureItemEditor()
     sep->setFrameShadow(QFrame::Sunken);
     vl->addWidget(sep);
 
+    // --- Fixture info (read-only, live-updating) ---
+    {
+        QFormLayout *infoForm = new QFormLayout;
+        infoForm->setContentsMargins(0, 2, 0, 4);
+
+        // DMX address
+        QString addrStr = tr("Universe %1 • Ch %2")
+            .arg(fxi ? int(fxi->universe()) + 1 : 0)
+            .arg(fxi ? int(fxi->address()) + 1 : 0);
+        if (fxi && fxi->channels() > 1)
+            addrStr += tr("–%1").arg(int(fxi->address()) + int(fxi->channels()));
+        QLabel *addrLabel = new QLabel(addrStr, &dlg);
+        addrLabel->setStyleSheet("color: #aaa; font-size: 10px;");
+        infoForm->addRow(tr("Address:"), addrLabel);
+
+        // Live Pan/Tilt readout — only for fixtures that have P/T channels
+        QLabel *panLabel  = nullptr;
+        QLabel *tiltLabel = nullptr;
+        bool hasPan  = fxi && fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB, 0) != QLCChannel::invalid();
+        bool hasTilt = fxi && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) != QLCChannel::invalid();
+
+        if (hasPan)
+        {
+            panLabel = new QLabel("—", &dlg);
+            panLabel->setStyleSheet("color: #aaa; font-size: 10px;");
+            infoForm->addRow(tr("Pan:"), panLabel);
+        }
+        if (hasTilt)
+        {
+            tiltLabel = new QLabel("—", &dlg);
+            tiltLabel->setStyleSheet("color: #aaa; font-size: 10px;");
+            infoForm->addRow(tr("Tilt:"), tiltLabel);
+        }
+        vl->addLayout(infoForm);
+
+        // Refresh the P/T labels every 150ms while the dialog is open
+        if ((hasPan || hasTilt) && fxi)
+        {
+            auto readPTLabel = [fxi, this](int chType, QLabel *lbl) {
+                if (!lbl) return;
+                quint32 msbCh = fxi->channelNumber(chType, QLCChannel::MSB, 0);
+                quint32 lsbCh = fxi->channelNumber(chType, QLCChannel::LSB, 0);
+                if (msbCh == QLCChannel::invalid()) return;
+
+                uchar msb = 0, lsb = 0;
+                {
+                    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+                    quint32 u = fxi->universe();
+                    if (u < quint32(ua.size()))
+                    {
+                        msb = ua[int(u)]->postGMValue(int(fxi->address() + msbCh));
+                        if (lsbCh != QLCChannel::invalid())
+                            lsb = ua[int(u)]->postGMValue(int(fxi->address() + lsbCh));
+                    }
+                    m_doc->inputOutputMap()->releaseUniverses(false);
+                }
+
+                float maxDeg = (chType == QLCChannel::Pan)
+                    ? (fxi->fixtureMode() ? fxi->fixtureMode()->physical().focusPanMax()  : 0.0f)
+                    : (fxi->fixtureMode() ? fxi->fixtureMode()->physical().focusTiltMax() : 0.0f);
+                if (maxDeg <= 0) maxDeg = (chType == QLCChannel::Pan) ? 360.0f : 270.0f;
+
+                bool hasFine = (lsbCh != QLCChannel::invalid());
+                quint32 raw16 = hasFine ? (quint32(msb) << 8 | quint32(lsb)) : quint32(msb) << 8;
+                float deg = (raw16 / 65535.0f) * maxDeg;
+
+                QString txt;
+                if (hasFine)
+                    txt = tr("%1° • MSB %2 / Fine %3").arg(deg, 0, 'f', 1).arg(msb).arg(lsb);
+                else
+                    txt = tr("%1° • DMX %2").arg(deg, 0, 'f', 1).arg(msb);
+                lbl->setText(txt);
+            };
+
+            QTimer *ptTimer = new QTimer(&dlg);
+            ptTimer->setInterval(150);
+            connect(ptTimer, &QTimer::timeout, [=]() {
+                readPTLabel(QLCChannel::Pan,  panLabel);
+                readPTLabel(QLCChannel::Tilt, tiltLabel);
+            });
+            ptTimer->start();
+            // Populate immediately
+            readPTLabel(QLCChannel::Pan,  panLabel);
+            readPTLabel(QLCChannel::Tilt, tiltLabel);
+        }
+    }
+
+    QFrame *sep2 = new QFrame;
+    sep2->setFrameShape(QFrame::HLine);
+    sep2->setFrameShadow(QFrame::Sunken);
+    vl->addWidget(sep2);
+
     // Rig Assignment (at top, per user request)
     QGroupBox *rigBox = new QGroupBox(tr("Rig Assignment"), &dlg);
     QFormLayout *rigForm = new QFormLayout(rigBox);
@@ -2204,10 +2553,15 @@ void Monitor::showFixtureItemEditor()
     QPushButton *testBtn = new QPushButton(tr("Test"));
     testBtn->setCheckable(true);
     testBtn->setToolTip(tr("While checked, overrides fixture DMX with the selected test pose.\n"
-                           "Changes to panZeroDir and offsets take effect immediately."));
+                           "Changes to panZeroDir and offsets take effect immediately.\n"
+                           "Blacks out all other fixtures while active."));
+    QPushButton *locateBtn = new QPushButton(tr("Locate"));
+    locateBtn->setToolTip(tr("Flash this fixture at full intensity 3 times to identify it on the rig.\n"
+                             "Works in any running scene without affecting other fixtures."));
     testRowLayout->addWidget(testModeCb, 1);
     testRowLayout->addWidget(testTargetCb, 1);
     testRowLayout->addWidget(testBtn);
+    testRowLayout->addWidget(locateBtn);
     rigForm->addRow(tr("Test orientation:"), testRowWidget);
 
     connect(testModeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int) {
@@ -2307,6 +2661,43 @@ void Monitor::showFixtureItemEditor()
         } else {
             testSrc.reset();
         }
+    });
+
+    // --- Locate: flash the fixture 3× at full intensity without blackout ---
+    std::shared_ptr<FixtureLocate> locateSrc;
+    QTimer *locateTimer = new QTimer(&dlg);
+    locateTimer->setSingleShot(false);
+    int locateStep = 0;
+
+    connect(locateBtn, &QPushButton::clicked, [&]() {
+        if (locateTimer->isActive())
+        {
+            locateTimer->stop();
+            locateSrc.reset();
+            locateBtn->setEnabled(true);
+            return;
+        }
+        if (!fxi) return;
+        locateStep = 1;  // step 1 = first "on" phase just started
+        locateSrc = std::make_shared<FixtureLocate>(fxi, m_doc);
+        locateSrc->setOn(true);
+        locateBtn->setEnabled(false);
+        locateTimer->setInterval(300);
+        locateTimer->start();
+    });
+    connect(locateTimer, &QTimer::timeout, [&]() {
+        ++locateStep;
+        // Steps 1,3,5 = on (300 ms); steps 2,4,6 = off (150 ms); step 7 = done
+        if (locateStep > 6)
+        {
+            locateTimer->stop();
+            locateSrc.reset();
+            locateBtn->setEnabled(true);
+            return;
+        }
+        bool isOn = (locateStep % 2 == 1);
+        locateSrc->setOn(isOn);
+        locateTimer->setInterval(isOn ? 300 : 150);
     });
 
     // Helper: flush the scene fader cache for running scenes that contain fxId.
@@ -2414,49 +2805,90 @@ void Monitor::showFixtureItemEditor()
     if (fxi && fxi->fixtureMode())
     {
         // Find the first Maintenance channel that has a Reset capability
-        int resetCh = -1; uchar resetVal = 0;
-        for (int ci = 0; ci < fxi->fixtureMode()->channels().count() && resetCh < 0; ci++)
+        // Scan for Reset and Identify capabilities in Maintenance channels
+        int resetCh = -1;    uchar resetVal = 0;
+        int identifyCh = -1; uchar identifyVal = 0;
+        for (int ci = 0; ci < fxi->fixtureMode()->channels().count(); ci++)
         {
             const QLCChannel *ch = fxi->fixtureMode()->channel(ci);
             if (!ch || ch->group() != QLCChannel::Maintenance) continue;
             for (const QLCCapability *cap : ch->capabilities())
             {
                 const QString capName = cap->name().toLower();
-                if (capName.contains("reset"))
+                if (resetCh < 0 && capName.contains("reset"))
                 {
                     resetCh  = ci;
                     resetVal = uchar((cap->min() + cap->max()) / 2);
-                    break;
+                }
+                if (identifyCh < 0 && capName.contains("identif"))
+                {
+                    identifyCh  = ci;
+                    identifyVal = uchar((cap->min() + cap->max()) / 2);
                 }
             }
         }
-        if (resetCh >= 0)
+
+        if (resetCh >= 0 || identifyCh >= 0)
         {
             QGroupBox *dmxBox = new QGroupBox(tr("DMX Controls"), &dlg);
             QHBoxLayout *dmxHl = new QHBoxLayout(dmxBox);
-            QPushButton *resetBtn = new QPushButton(tr("Reset Fixture"));
-            resetBtn->setToolTip(tr("Sends the fixture's reset DMX value (Maintenance channel).\n"
-                                    "Hold for ~3 seconds while the fixture resets."));
-            dmxHl->addWidget(resetBtn);
+
+            if (identifyCh >= 0)
+            {
+                QPushButton *identBtn = new QPushButton(tr("Identify"), dmxBox);
+                identBtn->setToolTip(tr("Makes the fixture flash/beep to confirm its DMX address.\n"
+                                        "Sends the Identify capability value (Maintenance channel)."));
+                dmxHl->addWidget(identBtn);
+                const int iCh = identifyCh; const uchar iVal = identifyVal;
+                connect(identBtn, &QPushButton::clicked, [&, iCh, iVal]() {
+                    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+                    quint32 fxUni = fxi->universe();
+                    if (fxUni < quint32(ua.size()))
+                    {
+                        Universe *uni = ua[int(fxUni)];
+                        uni->write(int(fxi->address()) + iCh, iVal);
+                        const QByteArray postGM = uni->postGMValues()->mid(0, uni->usedChannels());
+                        uni->dumpOutput(postGM, true);
+                    }
+                    m_doc->inputOutputMap()->releaseUniverses(false);
+                    identBtn->setEnabled(false);
+                    identBtn->setText(tr("Identifying…"));
+                    QTimer::singleShot(3000, identBtn, [identBtn]() {
+                        identBtn->setEnabled(true);
+                        identBtn->setText(tr("Identify"));
+                    });
+                });
+            }
+
+            if (resetCh >= 0)
+            {
+                QPushButton *resetBtn = new QPushButton(tr("Reset"), dmxBox);
+                resetBtn->setToolTip(tr("Sends the fixture's reset DMX value (Maintenance channel).\n"
+                                        "Hold for ~3 seconds while the fixture resets."));
+                dmxHl->addWidget(resetBtn);
+                const int rCh = resetCh; const uchar rVal = resetVal;
+                connect(resetBtn, &QPushButton::clicked, [&, rCh, rVal]() {
+                    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+                    quint32 fxUni = fxi->universe();
+                    if (fxUni < quint32(ua.size()))
+                    {
+                        Universe *uni = ua[int(fxUni)];
+                        uni->write(int(fxi->address()) + rCh, rVal);
+                        const QByteArray postGM = uni->postGMValues()->mid(0, uni->usedChannels());
+                        uni->dumpOutput(postGM, true);
+                    }
+                    m_doc->inputOutputMap()->releaseUniverses(false);
+                    resetBtn->setEnabled(false);
+                    resetBtn->setText(tr("Resetting…"));
+                    QTimer::singleShot(3000, resetBtn, [resetBtn]() {
+                        resetBtn->setEnabled(true);
+                        resetBtn->setText(tr("Reset"));
+                    });
+                });
+            }
+
             dmxHl->addStretch();
             vl->addWidget(dmxBox);
-
-            const int capturedCh  = resetCh;
-            const uchar capturedVal = resetVal;
-            connect(resetBtn, &QPushButton::clicked, [&, capturedCh, capturedVal]() {
-                // Write reset value directly to the universe, bypassing faders.
-                QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
-                quint32 fxUni = fxi->universe();
-                if (fxUni < quint32(ua.size()))
-                    ua[int(fxUni)]->write(int(fxi->address()) + capturedCh, capturedVal);
-                m_doc->inputOutputMap()->releaseUniverses(false);
-                resetBtn->setEnabled(false);
-                resetBtn->setText(tr("Reset sent…"));
-                QTimer::singleShot(3000, resetBtn, [resetBtn]() {
-                    resetBtn->setEnabled(true);
-                    resetBtn->setText(tr("Reset Fixture"));
-                });
-            });
         }
     }
 

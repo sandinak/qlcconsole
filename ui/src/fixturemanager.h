@@ -219,6 +219,7 @@ private slots:
     void slotAddRGBPanel();
     void slotRemove();
     void slotProperties();
+    void slotTestFixture();
     void slotFadeConfig();
     void slotRemap();
     void slotUnGroup();
@@ -243,6 +244,7 @@ private:
     QAction* m_addRGBAction;
     QAction* m_removeAction;
     QAction* m_propertiesAction;
+    QAction* m_testAction;
     QAction* m_fadeConfigAction;
     QAction* m_remapAction;
     QAction* m_groupAction;

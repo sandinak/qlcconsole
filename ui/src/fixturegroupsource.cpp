@@ -243,7 +243,7 @@ void FixtureGroupSource::slotContextMenu(const QPoint &pos)
     m_doc->setModified();
 }
 
-QMimeData* FixtureGroupSource::mimeData(const QList<QTreeWidgetItem*> &items) const
+QMimeData* FixtureGroupSource::buildMimeData(const QList<QTreeWidgetItem*> &items) const
 {
     // Groups and fixtures get separate payloads/MIME types so each scene
     // drop zone reads only what it understands.

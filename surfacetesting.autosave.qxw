@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Workspace>
-<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ProgrammingManager">
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FunctionManager">
  <Creator>
   <Name>Q Light Controller Plus</Name>
   <Version>4.14.4 GIT</Version>
@@ -13,8 +13,8 @@
     <Output Plugin="ArtNet" UID="172.18.2.17" Line="1"/>
    </Universe>
    <Universe Name="Universe 2" ID="1">
-    <Input Plugin="MIDI" UID="APC40 mkII" Line="2" Profile="Akai APC40 mkII"/>
-    <Feedback Plugin="MIDI" UID="APC40 mkII" Line="2"/>
+    <Input Plugin="MIDI" UID="APC40 mkII" Line="0" Profile="Akai APC40 mkII"/>
+    <Feedback Plugin="MIDI" UID="APC40 mkII" Line="0"/>
    </Universe>
    <Universe Name="Universe 3" ID="2"/>
    <Universe Name="Universe 4" ID="3"/>
@@ -89,6 +89,26 @@
    <Address>90</Address>
    <Channels>16</Channels>
   </Fixture>
+  <Fixture>
+   <Manufacturer>Warmdance</Manufacturer>
+   <Model>XL-450</Model>
+   <Mode>135ch RGB</Mode>
+   <ID>7</ID>
+   <Name>XL-450 - RGB</Name>
+   <Universe>0</Universe>
+   <Address>106</Address>
+   <Channels>135</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Warmdance</Manufacturer>
+   <Model>XL-450</Model>
+   <Mode>30ch White</Mode>
+   <ID>8</ID>
+   <Name>XL-450</Name>
+   <Universe>0</Universe>
+   <Address>241</Address>
+   <Channels>30</Channels>
+  </Fixture>
   <FixtureGroup ID="0">
    <Name>spots</Name>
    <Size X="1" Y="1"/>
@@ -127,6 +147,81 @@
    <Head X="0" Y="32" Fixture="5">29</Head>
    <Head X="0" Y="33" Fixture="5">30</Head>
    <Head X="0" Y="34" Fixture="5">31</Head>
+   <Head X="0" Y="35" Fixture="7">0</Head>
+   <Head X="0" Y="36" Fixture="7">1</Head>
+   <Head X="0" Y="37" Fixture="7">2</Head>
+   <Head X="0" Y="38" Fixture="7">3</Head>
+   <Head X="0" Y="39" Fixture="7">4</Head>
+   <Head X="0" Y="40" Fixture="7">5</Head>
+   <Head X="0" Y="41" Fixture="7">6</Head>
+   <Head X="0" Y="42" Fixture="7">7</Head>
+   <Head X="0" Y="43" Fixture="7">8</Head>
+   <Head X="0" Y="44" Fixture="7">9</Head>
+   <Head X="0" Y="45" Fixture="7">10</Head>
+   <Head X="0" Y="46" Fixture="7">11</Head>
+   <Head X="0" Y="47" Fixture="7">12</Head>
+   <Head X="0" Y="48" Fixture="7">13</Head>
+   <Head X="0" Y="49" Fixture="7">14</Head>
+   <Head X="0" Y="50" Fixture="7">15</Head>
+   <Head X="0" Y="51" Fixture="7">16</Head>
+   <Head X="0" Y="52" Fixture="7">17</Head>
+   <Head X="0" Y="53" Fixture="7">18</Head>
+   <Head X="0" Y="54" Fixture="7">19</Head>
+   <Head X="0" Y="55" Fixture="7">20</Head>
+   <Head X="0" Y="56" Fixture="7">21</Head>
+   <Head X="0" Y="57" Fixture="7">22</Head>
+   <Head X="0" Y="58" Fixture="7">23</Head>
+   <Head X="0" Y="59" Fixture="7">24</Head>
+   <Head X="0" Y="60" Fixture="7">25</Head>
+   <Head X="0" Y="61" Fixture="7">26</Head>
+   <Head X="0" Y="62" Fixture="7">27</Head>
+   <Head X="0" Y="63" Fixture="7">28</Head>
+   <Head X="0" Y="64" Fixture="7">29</Head>
+   <Head X="0" Y="65" Fixture="7">30</Head>
+   <Head X="0" Y="66" Fixture="7">31</Head>
+   <Head X="0" Y="67" Fixture="7">32</Head>
+   <Head X="0" Y="68" Fixture="7">33</Head>
+   <Head X="0" Y="69" Fixture="7">34</Head>
+   <Head X="0" Y="70" Fixture="7">35</Head>
+   <Head X="0" Y="71" Fixture="7">36</Head>
+   <Head X="0" Y="72" Fixture="7">37</Head>
+   <Head X="0" Y="73" Fixture="7">38</Head>
+   <Head X="0" Y="74" Fixture="7">39</Head>
+   <Head X="0" Y="75" Fixture="7">40</Head>
+   <Head X="0" Y="76" Fixture="7">41</Head>
+   <Head X="0" Y="77" Fixture="7">42</Head>
+   <Head X="0" Y="78" Fixture="7">43</Head>
+   <Head X="0" Y="79" Fixture="7">44</Head>
+   <Head X="0" Y="80" Fixture="7">45</Head>
+   <Head X="0" Y="81" Fixture="7">46</Head>
+   <Head X="0" Y="82" Fixture="7">47</Head>
+   <Head X="0" Y="83" Fixture="7">48</Head>
+   <Head X="0" Y="84" Fixture="7">49</Head>
+   <Head X="0" Y="85" Fixture="7">50</Head>
+   <Head X="0" Y="86" Fixture="7">51</Head>
+   <Head X="0" Y="87" Fixture="7">52</Head>
+   <Head X="0" Y="88" Fixture="7">53</Head>
+   <Head X="0" Y="89" Fixture="7">54</Head>
+   <Head X="0" Y="90" Fixture="7">55</Head>
+   <Head X="0" Y="91" Fixture="7">56</Head>
+   <Head X="0" Y="92" Fixture="7">57</Head>
+   <Head X="0" Y="93" Fixture="7">58</Head>
+   <Head X="0" Y="94" Fixture="7">59</Head>
+   <Head X="0" Y="95" Fixture="7">60</Head>
+   <Head X="0" Y="96" Fixture="7">61</Head>
+   <Head X="0" Y="97" Fixture="7">62</Head>
+   <Head X="0" Y="98" Fixture="7">63</Head>
+   <Head X="0" Y="99" Fixture="7">64</Head>
+   <Head X="0" Y="100" Fixture="7">65</Head>
+   <Head X="0" Y="101" Fixture="7">66</Head>
+   <Head X="0" Y="102" Fixture="7">67</Head>
+   <Head X="0" Y="103" Fixture="7">68</Head>
+   <Head X="0" Y="104" Fixture="7">69</Head>
+   <Head X="0" Y="105" Fixture="7">70</Head>
+   <Head X="0" Y="106" Fixture="7">71</Head>
+   <Head X="0" Y="107" Fixture="7">72</Head>
+   <Head X="0" Y="108" Fixture="7">73</Head>
+   <Head X="0" Y="109" Fixture="7">74</Head>
   </FixtureGroup>
   <FixtureGroup ID="1">
    <Name>washes</Name>
@@ -148,6 +243,121 @@
    <Size X="1" Y="1"/>
    <Head X="0" Y="0" Fixture="4">0</Head>
   </FixtureGroup>
+  <FixtureGroup ID="4">
+   <Name>RGB Washes</Name>
+   <Size X="16" Y="5"/>
+   <Head X="0" Y="0" Fixture="7">0</Head>
+   <Head X="1" Y="0" Fixture="7">1</Head>
+   <Head X="2" Y="0" Fixture="7">2</Head>
+   <Head X="3" Y="0" Fixture="7">3</Head>
+   <Head X="4" Y="0" Fixture="7">4</Head>
+   <Head X="5" Y="0" Fixture="7">5</Head>
+   <Head X="6" Y="0" Fixture="7">6</Head>
+   <Head X="7" Y="0" Fixture="7">7</Head>
+   <Head X="8" Y="0" Fixture="7">8</Head>
+   <Head X="9" Y="0" Fixture="7">9</Head>
+   <Head X="10" Y="0" Fixture="7">10</Head>
+   <Head X="11" Y="0" Fixture="7">11</Head>
+   <Head X="12" Y="0" Fixture="7">12</Head>
+   <Head X="13" Y="0" Fixture="7">13</Head>
+   <Head X="14" Y="0" Fixture="7">14</Head>
+   <Head X="0" Y="1" Fixture="7">15</Head>
+   <Head X="1" Y="1" Fixture="7">16</Head>
+   <Head X="2" Y="1" Fixture="7">17</Head>
+   <Head X="3" Y="1" Fixture="7">18</Head>
+   <Head X="4" Y="1" Fixture="7">19</Head>
+   <Head X="5" Y="1" Fixture="7">20</Head>
+   <Head X="6" Y="1" Fixture="7">21</Head>
+   <Head X="7" Y="1" Fixture="7">22</Head>
+   <Head X="8" Y="1" Fixture="7">23</Head>
+   <Head X="9" Y="1" Fixture="7">24</Head>
+   <Head X="10" Y="1" Fixture="7">25</Head>
+   <Head X="11" Y="1" Fixture="7">26</Head>
+   <Head X="12" Y="1" Fixture="7">27</Head>
+   <Head X="13" Y="1" Fixture="7">28</Head>
+   <Head X="14" Y="1" Fixture="7">29</Head>
+   <Head X="0" Y="2" Fixture="7">30</Head>
+   <Head X="1" Y="2" Fixture="7">31</Head>
+   <Head X="2" Y="2" Fixture="7">32</Head>
+   <Head X="3" Y="2" Fixture="7">33</Head>
+   <Head X="4" Y="2" Fixture="7">34</Head>
+   <Head X="5" Y="2" Fixture="7">35</Head>
+   <Head X="6" Y="2" Fixture="7">36</Head>
+   <Head X="7" Y="2" Fixture="7">37</Head>
+   <Head X="8" Y="2" Fixture="7">38</Head>
+   <Head X="9" Y="2" Fixture="7">39</Head>
+   <Head X="10" Y="2" Fixture="7">40</Head>
+   <Head X="11" Y="2" Fixture="7">41</Head>
+   <Head X="12" Y="2" Fixture="7">42</Head>
+   <Head X="13" Y="2" Fixture="7">43</Head>
+   <Head X="14" Y="2" Fixture="7">44</Head>
+   <Head X="4" Y="3" Fixture="5">0</Head>
+   <Head X="5" Y="3" Fixture="5">1</Head>
+   <Head X="6" Y="3" Fixture="5">2</Head>
+   <Head X="7" Y="3" Fixture="5">3</Head>
+   <Head X="8" Y="3" Fixture="5">4</Head>
+   <Head X="9" Y="3" Fixture="5">5</Head>
+   <Head X="10" Y="3" Fixture="5">6</Head>
+   <Head X="11" Y="3" Fixture="5">7</Head>
+   <Head X="4" Y="4" Fixture="5">8</Head>
+   <Head X="5" Y="4" Fixture="5">9</Head>
+   <Head X="6" Y="4" Fixture="5">10</Head>
+   <Head X="7" Y="4" Fixture="5">11</Head>
+   <Head X="8" Y="4" Fixture="5">12</Head>
+   <Head X="9" Y="4" Fixture="5">13</Head>
+   <Head X="10" Y="4" Fixture="5">14</Head>
+   <Head X="11" Y="4" Fixture="5">15</Head>
+  </FixtureGroup>
+  <FixtureGroup ID="5">
+   <Name>W Washes</Name>
+   <Size X="15" Y="6"/>
+   <Head X="0" Y="1" Fixture="8">0</Head>
+   <Head X="1" Y="1" Fixture="8">1</Head>
+   <Head X="2" Y="1" Fixture="8">2</Head>
+   <Head X="3" Y="1" Fixture="8">3</Head>
+   <Head X="4" Y="1" Fixture="8">4</Head>
+   <Head X="5" Y="1" Fixture="8">5</Head>
+   <Head X="6" Y="1" Fixture="8">6</Head>
+   <Head X="7" Y="1" Fixture="8">7</Head>
+   <Head X="8" Y="1" Fixture="8">8</Head>
+   <Head X="9" Y="1" Fixture="8">9</Head>
+   <Head X="10" Y="1" Fixture="8">10</Head>
+   <Head X="11" Y="1" Fixture="8">11</Head>
+   <Head X="12" Y="1" Fixture="8">12</Head>
+   <Head X="13" Y="1" Fixture="8">13</Head>
+   <Head X="14" Y="1" Fixture="8">14</Head>
+   <Head X="0" Y="2" Fixture="8">15</Head>
+   <Head X="1" Y="2" Fixture="8">16</Head>
+   <Head X="2" Y="2" Fixture="8">17</Head>
+   <Head X="3" Y="2" Fixture="8">18</Head>
+   <Head X="4" Y="2" Fixture="8">19</Head>
+   <Head X="5" Y="2" Fixture="8">20</Head>
+   <Head X="6" Y="2" Fixture="8">21</Head>
+   <Head X="7" Y="2" Fixture="8">22</Head>
+   <Head X="8" Y="2" Fixture="8">23</Head>
+   <Head X="9" Y="2" Fixture="8">24</Head>
+   <Head X="10" Y="2" Fixture="8">25</Head>
+   <Head X="11" Y="2" Fixture="8">26</Head>
+   <Head X="12" Y="2" Fixture="8">27</Head>
+   <Head X="13" Y="2" Fixture="8">28</Head>
+   <Head X="14" Y="2" Fixture="8">29</Head>
+   <Head X="3" Y="3" Fixture="6">0</Head>
+   <Head X="4" Y="3" Fixture="6">1</Head>
+   <Head X="5" Y="3" Fixture="6">2</Head>
+   <Head X="6" Y="3" Fixture="6">3</Head>
+   <Head X="7" Y="3" Fixture="6">4</Head>
+   <Head X="8" Y="3" Fixture="6">5</Head>
+   <Head X="9" Y="3" Fixture="6">6</Head>
+   <Head X="10" Y="3" Fixture="6">7</Head>
+   <Head X="3" Y="4" Fixture="6">8</Head>
+   <Head X="4" Y="4" Fixture="6">9</Head>
+   <Head X="5" Y="4" Fixture="6">10</Head>
+   <Head X="6" Y="4" Fixture="6">11</Head>
+   <Head X="7" Y="4" Fixture="6">12</Head>
+   <Head X="8" Y="4" Fixture="6">13</Head>
+   <Head X="9" Y="4" Fixture="6">14</Head>
+   <Head X="10" Y="4" Fixture="6">15</Head>
+  </FixtureGroup>
   <Palette ID="0" Type="PanTilt" Name="Desk" Path="Palettes/PanTilt/" Value="0,0" StageTarget="0"/>
   <Palette ID="1" Type="Color" Name="White" Path="Palettes/PanTilt/" Value="#ffffff"/>
   <Palette ID="2" Type="Dimmer" Name="Full" Path="Palettes/PanTilt/" Value="252"/>
@@ -155,7 +365,7 @@
   <Palette ID="4" Type="Color" Name="Blue" Path="Palettes/Color/" Value="#0206ff020000"/>
   <Palette ID="5" Type="Dimmer" Name="New Dimmer" Path="Palettes/Color/" Value="255"/>
   <Palette ID="6" Type="PanTilt" Name="New PanTilt" Path="Palettes/Color/" Value="270,135" StageTarget="0"/>
-  <Function ID="0" Type="Scene" Name="Show" Path="Washes">
+  <Function ID="0" Type="Scene" Name="RGBMatrix" Path="Washes">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureVal ID="1">2,0,3,0,4,4,5,16</FixtureVal>
    <FixtureVal ID="2">2,0,3,0,4,4,5,16</FixtureVal>
@@ -255,26 +465,36 @@
    <Palette ID="3"/>
    <Palette ID="4"/>
   </Function>
+  <Function ID="17" Type="RGBMatrix" Name="New RGB Matrix 17">
+   <Speed FadeIn="0" FadeOut="0" Duration="50"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <Algorithm Type="Script">Fill</Algorithm>
+   <Color Index="0">4294967295</Color>
+   <Color Index="1">4288914339</Color>
+   <ControlMode>White</ControlMode>
+   <FixtureGroup>5</FixtureGroup>
+  </Function>
   <Monitor DisplayMode="1" ShowLabels="0">
    <Font>Arial,12,-1,5,50,0,0,0,0,0</Font>
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
    <Grid Width="16" Height="3" Depth="16" Units="1"/>
-   <FxItem ID="0" XPos="2867.53" YPos="4422"/>
-   <FxItem ID="1" XPos="2036.42" YPos="4422"/>
-   <FxItem ID="2" XPos="2637.18" YPos="4422"/>
-   <FxItem ID="3" XPos="2275.29" YPos="4422"/>
-   <FxItem ID="4" XPos="1682.6" YPos="4422"/>
+   <FxItem ID="0" XPos="2889.5" YPos="4422.65"/>
+   <FxItem ID="1" XPos="2037.68" YPos="4422.65"/>
+   <FxItem ID="2" XPos="2638.44" YPos="4422.65"/>
+   <FxItem ID="3" XPos="2276.55" YPos="4422.65"/>
+   <FxItem ID="4" XPos="1688.28" YPos="4422.65"/>
    <FxItem ID="5" XPos="1970.15" YPos="3639.93"/>
    <FxItem ID="6" XPos="1970.16" YPos="3560.42"/>
-   <Truss ID="0" Name="Truss 1" Type="Horizontal" Profile="Square" Length="1.524" Width="0.213" OriginX="1.666" OriginY="4.422" OriginZ="2.134" DirX="1.000000" DirY="0.000000"/>
-   <StagePlatform ID="0" Name="Platform 1" OriginX="1.394" OriginY="0.269" Width="1.999" Depth="0.914" Height="0.500" Color="#5078c8"/>
-   <StageTarget ID="0" Name="Test Target" X="0.016" Y="0.140" Z="0.000" Color="#ffb400"/>
-   <FixtureRig FID="0" Truss="0" Offset="1.202" Mounting="TopHung" PanZero="260.0"/>
+   <Truss ID="0" Name="Truss 1" Type="Horizontal" Profile="Square" Length="1.524" Width="0.213" OriginX="1.667" OriginY="4.423" OriginZ="2.134" DirX="1.000000" DirY="0.000000"/>
+   <StagePlatform ID="0" Name="Platform 1" OriginX="1.359" OriginY="0.026" Width="1.999" Depth="0.914" Height="0.500" Color="#5078c8"/>
+   <StageTarget ID="0" Name="Test Target" X="0.948" Y="1.730" Z="0.000" Color="#ffb400"/>
+   <FixtureRig FID="0" Truss="0" Offset="1.222" Mounting="TopHung" PanZero="260.0"/>
    <FixtureRig FID="1" Truss="0" Offset="0.370" Mounting="TopHung" PanZero="0.0"/>
-   <FixtureRig FID="2" Truss="0" Offset="0.971" Mounting="TopHung" PanZero="0.0" TiltOfs="38.00"/>
+   <FixtureRig FID="2" Truss="0" Offset="0.971" Mounting="TopHung" PanZero="0.0"/>
    <FixtureRig FID="3" Truss="0" Offset="0.609" Mounting="TopHung" PanZero="298.0" PanOfs="-17.00" TiltOfs="6.00"/>
-   <FixtureRig FID="4" Truss="0" Offset="0.017" Mounting="TopHung" PanZero="90.0" PanOfs="5.00"/>
+   <FixtureRig FID="4" Truss="0" Offset="0.021" Mounting="TopHung" PanZero="90.0" PanOfs="5.00"/>
   </Monitor>
  </Engine>
  <VirtualConsole>

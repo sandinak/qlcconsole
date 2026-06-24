@@ -97,6 +97,7 @@ add_library(${module_name}
     fixturegroupsource.cpp fixturegroupsource.h
     capabilitybar.cpp capabilitybar.h
     lookeditor.cpp lookeditor.h
+    pathdrawwidget.cpp pathdrawwidget.h
     programmingmanager.cpp programmingmanager.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h

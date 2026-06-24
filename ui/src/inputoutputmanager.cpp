@@ -23,6 +23,7 @@
 #include <QStringList>
 #include <QVBoxLayout>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSettings>
 #include <QSplitter>
 #include <QLineEdit>
@@ -38,6 +39,8 @@
 #include "universeitemwidget.h"
 #include "inputoutputmanager.h"
 #include "inputoutputmap.h"
+#include "ioplugincache.h"
+#include "qlcioplugin.h"
 #include "outputpatch.h"
 #include "inputpatch.h"
 #include "doc.h"
@@ -60,6 +63,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     , m_toolbar(NULL)
     , m_addUniverseAction(NULL)
     , m_deleteUniverseAction(NULL)
+    , m_rescanAction(NULL)
     , m_uniNameEdit(NULL)
     , m_uniPassthroughCheck(NULL)
     , m_editor(NULL)
@@ -133,6 +137,16 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     m_list = new QListWidget(this);
     m_list->setItemDelegate(new UniverseItemWidget(m_list));
     m_splitter->widget(0)->layout()->addWidget(m_list);
+
+    /* Rescan button — below the universe list so it's always visible */
+    {
+        QPushButton *rescanBtn = new QPushButton(
+            QIcon(":/refresh.png"), tr("Rescan Inputs/Outputs"), this);
+        rescanBtn->setToolTip(tr("Re-enumerate input/output devices "
+                                 "(use after plugging in a controller)"));
+        connect(rescanBtn, SIGNAL(clicked()), this, SLOT(slotRescanPlugins()));
+        m_splitter->widget(0)->layout()->addWidget(rescanBtn);
+    }
 
     QWidget* gcontainer = new QWidget(this);
     m_splitter->addWidget(gcontainer);
@@ -389,6 +403,13 @@ void InputOutputManager::slotDeleteUniverse()
 
     m_ioMap->removeUniverse(uniIdx);
     m_doc->setModified();
+    updateList();
+}
+
+void InputOutputManager::slotRescanPlugins()
+{
+    for (QLCIOPlugin *plugin : m_doc->ioPluginCache()->plugins())
+        plugin->rescan();
     updateList();
 }
 

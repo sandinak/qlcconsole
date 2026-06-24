@@ -23,9 +23,13 @@
 #include <QToolButton>
 #include <QMessageBox>
 #include <QFileDialog>
+#include <QPushButton>
+#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QSettings>
 #include <QComboBox>
 #include <QGroupBox>
+#include <QLabel>
 #include <QVariant>
 #include <QDebug>
 #include <QFile>
@@ -49,17 +53,14 @@
 #define KMapColumnHasInput      2
 #define KMapColumnHasOutput     3
 #define KMapColumnHasFeedback   4
-#define KMapColumnInputLine     5
-#define KMapColumnOutputLine    6
+#define KMapColumnProfile       5   /* visible: combo+edit embedded widget */
+#define KMapColumnInputLine     6   /* hidden data: input line number      */
+#define KMapColumnOutputLine    7   /* hidden data: output line number     */
 
 #define KAudioColumnDeviceName  0
 #define KAudioColumnHasInput    1
 #define KAudioColumnHasOutput   2
 #define KAudioColumnPrivate     3
-
-/* Profile column structure */
-#define KProfileColumnName 0
-#define KProfileColumnType 1
 
 InputOutputPatchEditor::InputOutputPatchEditor(QWidget* parent, quint32 universe, InputOutputMap *ioMap, Doc *doc)
     : QWidget(parent)
@@ -81,7 +82,7 @@ InputOutputPatchEditor::InputOutputPatchEditor(QWidget* parent, quint32 universe
     setupUi(this);
 
     m_infoBrowser->setOpenExternalLinks(true);
-    m_infoBrowser->setFixedHeight(250);
+    m_infoBrowser->setFixedHeight(180);
 
     InputPatch* inputPatch = m_ioMap->inputPatch(universe);
     OutputPatch* outputPatch = m_ioMap->outputPatch(universe);
@@ -93,6 +94,7 @@ InputOutputPatchEditor::InputOutputPatchEditor(QWidget* parent, quint32 universe
         m_currentInputPluginName = inputPatch->pluginName();
         m_currentInput = inputPatch->input();
         m_currentProfileName = inputPatch->profileName();
+        m_currentHidProfileName = inputPatch->hidProfileName();
     }
 
     if (outputPatch != NULL)
@@ -112,7 +114,6 @@ InputOutputPatchEditor::InputOutputPatchEditor(QWidget* parent, quint32 universe
 
     /* Setup UI controls */
     setupMappingPage();
-    setupProfilePage();
 
     QSettings settings;
     QVariant var = settings.value(SETTINGS_HOTPLUG);
@@ -192,6 +193,145 @@ void InputOutputPatchEditor::setupMappingPage()
     /* Double click acts as edit button click */
     connect(m_mapTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
             this, SLOT(slotConfigureInputClicked()));
+
+    /* Tree row 0 gets all stretch so the info browser stays at its fixed height */
+    gridLayout_2->setRowStretch(0, 1);
+}
+
+
+bool InputOutputPatchEditor::isHidPlugin() const
+{
+    QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(m_currentInputPluginName);
+    if (!plugin) return false;
+    return !plugin->inputDeviceProfileNames(m_currentInput).isEmpty();
+}
+
+void InputOutputPatchEditor::updateProfileColumnWidget(QTreeWidgetItem *item)
+{
+    if (!item) return;
+
+    /* Always clear first */
+    m_mapTree->setItemWidget(item, KMapColumnProfile, nullptr);
+
+    const bool hasInput = (item->checkState(KMapColumnHasInput) == Qt::Checked);
+    const quint32 inputLine = item->text(KMapColumnInputLine).toUInt();
+
+    if (!hasInput || inputLine == QLCIOPlugin::invalidLine())
+        return;
+
+    const QString pluginName = item->text(KMapColumnPluginName);
+    QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(pluginName);
+    if (!plugin) return;
+
+    const QStringList hidNames = plugin->inputDeviceProfileNames(inputLine);
+    const bool isHid = !hidNames.isEmpty();
+
+    QWidget *cell = new QWidget();
+    QHBoxLayout *lay = new QHBoxLayout(cell);
+    lay->setContentsMargins(2, 1, 2, 1);
+    lay->setSpacing(3);
+
+    if (isHid)
+    {
+        QComboBox *combo = new QComboBox(cell);
+        combo->addItem(tr("None"), QString());
+        for (int i = 1; i < hidNames.size(); ++i)
+            combo->addItem(hidNames[i], hidNames[i]);
+
+        int idx = combo->findData(m_currentHidProfileName);
+        combo->setCurrentIndex(idx >= 0 ? idx : 0);
+        lay->addWidget(combo, 1);
+
+        QPushButton *editBtn = new QPushButton(tr("Edit"), cell);
+        editBtn->setEnabled(!m_currentHidProfileName.isEmpty());
+        lay->addWidget(editBtn);
+
+        connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                [this, combo, editBtn](int) {
+            m_currentHidProfileName = combo->currentData().toString();
+            editBtn->setEnabled(!m_currentHidProfileName.isEmpty());
+            InputPatch *ip = m_ioMap->inputPatch(m_universe);
+            if (ip) ip->setHidProfileName(m_currentHidProfileName);
+            emit mappingChanged();
+        });
+
+        connect(editBtn, &QPushButton::clicked, this, [this, combo]() {
+            const QString name = combo->currentData().toString();
+            if (name.isEmpty()) return;
+            QLCIOPlugin *p = m_doc->ioPluginCache()->plugin(m_currentInputPluginName);
+            if (p) p->editDeviceProfile(m_currentInput, name, this);
+        });
+    }
+    else
+    {
+        /* MIDI / OSC / etc.: QLCInputProfile */
+        QComboBox *combo = new QComboBox(cell);
+        combo->addItem(KInputNone, QString());
+        const QStringList names = m_ioMap->profileNames();
+        for (const QString &n : names)
+            combo->addItem(n, n);
+
+        const QString cur = (m_currentProfileName == KInputNone) ? QString() : m_currentProfileName;
+        int idx = combo->findData(cur);
+        combo->setCurrentIndex(idx >= 0 ? idx : 0);
+        lay->addWidget(combo, 1);
+
+        QPushButton *editBtn = new QPushButton(tr("Edit"), cell);
+        editBtn->setEnabled(!cur.isEmpty());
+        lay->addWidget(editBtn);
+
+        connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                [this, combo, editBtn](int) {
+            const QString name = combo->currentData().toString();
+            m_currentProfileName = name.isEmpty() ? KInputNone : name;
+            editBtn->setEnabled(!name.isEmpty());
+            if (m_ioMap->setInputProfile(m_universe, m_currentProfileName) == false)
+                showPluginMappingError();
+            emit mappingChanged();
+        });
+
+        connect(editBtn, &QPushButton::clicked, this, [this, combo, item]() {
+            const QString name = combo->currentData().toString();
+            if (name.isEmpty()) return;
+            QLCInputProfile *profile = m_ioMap->profile(name);
+            if (!profile) return;
+            InputProfileEditor ite(this, profile, m_ioMap);
+            if (ite.exec() != QDialog::Accepted) return;
+            *profile = *ite.profile();
+            if (!profile->saveXML(profile->path()))
+                QMessageBox::warning(this, tr("Saving failed"),
+                    tr("Unable to save %1").arg(profile->name()));
+            updateProfileColumnWidget(item);
+        });
+    }
+
+    m_mapTree->setItemWidget(item, KMapColumnProfile, cell);
+}
+
+void InputOutputPatchEditor::applyCurrentProfile()
+{
+    InputPatch *ip = m_ioMap->inputPatch(m_universe);
+    if (!ip) return;
+
+    if (isHidPlugin())
+    {
+        ip->setHidProfileName(m_currentHidProfileName);
+    }
+    else
+    {
+        if (m_ioMap->setInputProfile(m_universe, m_currentProfileName) == false)
+            showPluginMappingError();
+    }
+}
+
+
+QString InputOutputPatchEditor::fullProfilePath(const QString& manufacturer,
+                                                const QString& model) const
+{
+    QDir dir(InputOutputMap::userProfileDirectory());
+    return QString("%1/%2-%3%4").arg(dir.absolutePath())
+                                .arg(manufacturer).arg(model)
+                                .arg(KExtInputProfile);
 }
 
 void InputOutputPatchEditor::fillMappingTree()
@@ -350,6 +490,16 @@ void InputOutputPatchEditor::fillMappingTree()
 
     m_mapTree->resizeColumnToContents(KMapColumnPluginName);
     m_mapTree->resizeColumnToContents(KMapColumnDeviceName);
+    m_mapTree->setColumnWidth(KMapColumnProfile, 220);
+
+    /* Restore profile column widget for any already-checked input (loaded from workspace) */
+    QTreeWidgetItemIterator preIt(m_mapTree);
+    while (*preIt)
+    {
+        if ((*preIt)->checkState(KMapColumnHasInput) == Qt::Checked)
+            updateProfileColumnWidget(*preIt);
+        ++preIt;
+    }
 
     /* Enable check state change tracking after the tree has been filled */
     connect(m_mapTree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
@@ -428,6 +578,9 @@ void InputOutputPatchEditor::slotMapItemChanged(QTreeWidgetItem* item, int col)
             if (m_ioMap->setInputPatch(m_universe, m_currentInputPluginName, "",
                                        m_currentInput, m_currentProfileName) == false)
                 showPluginMappingError();
+
+            /* Update profile column widget for this device row */
+            updateProfileColumnWidget(item);
         }
         else if (col == KMapColumnHasOutput)
         {
@@ -479,6 +632,7 @@ void InputOutputPatchEditor::slotMapItemChanged(QTreeWidgetItem* item, int col)
 
             if (m_ioMap->setInputPatch(m_universe, m_currentInputPluginName, "", m_currentInput) == false)
                 showPluginMappingError();
+            updateProfileColumnWidget(item); // clears cell (unchecked path returns early)
         }
         else if (col == KMapColumnHasOutput)
         {
@@ -567,309 +721,6 @@ void InputOutputPatchEditor::showPluginMappingError()
                              "an unsupported input/output mode.\n"
                              "Please refer to the plugins documentation to troubleshoot this."),
                           QMessageBox::Close);
-}
-
-/****************************************************************************
- * Profile tree
- ****************************************************************************/
-
-void InputOutputPatchEditor::setupProfilePage()
-{
-    connect(m_addProfileButton, SIGNAL(clicked()),
-            this, SLOT(slotAddProfileClicked()));
-    connect(m_removeProfileButton, SIGNAL(clicked()),
-            this, SLOT(slotRemoveProfileClicked()));
-    connect(m_editProfileButton, SIGNAL(clicked()),
-            this, SLOT(slotEditProfileClicked()));
-
-    /* Fill the profile tree with available profile names */
-    fillProfileTree();
-
-    /* Listen to itemChanged() signals to catch check state changes */
-    connect(m_profileTree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
-            this, SLOT(slotProfileItemChanged(QTreeWidgetItem*)));
-
-    /* Double click acts as edit button click */
-    connect(m_profileTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
-            this, SLOT(slotEditProfileClicked()));
-}
-
-void InputOutputPatchEditor::fillProfileTree()
-{
-    QTreeWidgetItem* item;
-
-    m_profileTree->clear();
-
-    /* Add an option for having no profile at all */
-    item = new QTreeWidgetItem(m_profileTree);
-    updateProfileItem(KInputNone, item);
-
-    /* Insert available input profiles to the tree */
-    QStringListIterator it(m_ioMap->profileNames());
-    while (it.hasNext() == true)
-    {
-        item = new QTreeWidgetItem(m_profileTree);
-        updateProfileItem(it.next(), item);
-    }
-    m_profileTree->resizeColumnToContents(KProfileColumnName);
-}
-
-void InputOutputPatchEditor::updateProfileItem(const QString& name, QTreeWidgetItem* item)
-{
-    Q_ASSERT(item != NULL);
-
-    item->setText(KProfileColumnName, name);
-    QLCInputProfile * prof = m_ioMap->profile(name);
-    if (prof)
-    {
-        item->setText(KProfileColumnType, QLCInputProfile::typeToString(prof->type()));
-    }
-
-    item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-    if (m_currentProfileName == name)
-        item->setCheckState(KProfileColumnName, Qt::Checked);
-    else
-        item->setCheckState(KProfileColumnName, Qt::Unchecked);
-}
-
-QString InputOutputPatchEditor::fullProfilePath(const QString& manufacturer,
-                                          const QString& model) const
-{
-    QDir dir(InputOutputMap::userProfileDirectory());
-    QString path = QString("%1/%2-%3%4").arg(dir.absolutePath())
-                                        .arg(manufacturer).arg(model)
-                                        .arg(KExtInputProfile);
-
-    return path;
-}
-
-void InputOutputPatchEditor::slotProfileItemChanged(QTreeWidgetItem* item)
-{
-    if (item->checkState(KProfileColumnName) == Qt::Checked)
-    {
-        /* Temporarily disable this signal to prevent an endless loop */
-        disconnect(m_profileTree,
-                   SIGNAL(itemChanged(QTreeWidgetItem*,int)),
-                   this,
-                   SLOT(slotProfileItemChanged(QTreeWidgetItem*)));
-
-        /* Set all other items unchecked... */
-        QTreeWidgetItemIterator it(m_profileTree);
-        while (*it != NULL)
-        {
-            /* ...except the one that was just checked */
-            if (*it != item)
-                (*it)->setCheckState(KProfileColumnName,
-                                     Qt::Unchecked);
-            ++it;
-        }
-
-        /* Start listening to this signal once again */
-        connect(m_profileTree,
-                SIGNAL(itemChanged(QTreeWidgetItem*,int)),
-                this,
-                SLOT(slotProfileItemChanged(QTreeWidgetItem*)));
-    }
-    else
-    {
-        /* Don't allow unchecking an item by clicking it. Only allow
-           changing the check state by checking another item. */
-        item->setCheckState(KProfileColumnName, Qt::Checked);
-    }
-
-    /* Store the selected profile name */
-    m_currentProfileName = item->text(KProfileColumnName);
-
-    /* Apply the patch immediately */
-    //if (m_ioMap->setInputPatch(m_universe, m_currentInputPluginName, m_currentInput, m_currentProfileName) == false)
-    if (m_ioMap->setInputProfile(m_universe, m_currentProfileName) == false)
-        showPluginMappingError();
-
-    emit mappingChanged();
-}
-
-void InputOutputPatchEditor::slotAddProfileClicked()
-{
-    /* Create a new input profile and start editing it */
-    InputProfileEditor ite(this, NULL, m_ioMap);
-edit:
-    if (ite.exec() == QDialog::Accepted)
-    {
-        /* Remove spaces from these */
-        QString manufacturer = ite.profile()->manufacturer().remove(QChar(' '));
-        QString model = ite.profile()->model().remove(QChar(' '));
-        QString path = fullProfilePath(manufacturer, model);
-
-        /* If another profile with the same name exists, ask permission to overwrite */
-        if (QFile::exists(path) == true && path != ite.profile()->path())
-        {
-            int r = QMessageBox::warning(this, tr("Existing Input Profile"),
-                    tr("An input profile at %1 already exists. Do you wish to overwrite it?").arg(path),
-                    QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
-                    QMessageBox::No);
-            if (r == QMessageBox::Cancel)
-            {
-                goto edit;
-            }
-            else if (r == QMessageBox::No)
-            {
-                path = QFileDialog::getSaveFileName(this, tr("Save Input Profile"),
-                                                    path, tr("Input Profiles (*.qxi)"));
-                if (path.isEmpty() == true)
-                    goto edit;
-            }
-        }
-
-        /* Create a new non-const copy of the profile and
-           reparent it to the input map */
-        QLCInputProfile* profile = ite.profile()->createCopy();
-
-        /* Save it to a file, go back to edit if save failed */
-        if (profile->saveXML(path) == false)
-        {
-            QMessageBox::warning(this, tr("Saving failed"),
-                                 tr("Unable to save the profile to %1")
-                                 .arg(QDir::toNativeSeparators(path)));
-            delete profile;
-            goto edit;
-        }
-        else
-        {
-            /* Add the new profile to input map */
-            m_ioMap->addProfile(profile);
-
-            /* Add the new profile to our tree widget */
-            QTreeWidgetItem* item;
-            item = new QTreeWidgetItem(m_profileTree);
-            updateProfileItem(profile->name(), item);
-        }
-    }
-}
-
-void InputOutputPatchEditor::slotRemoveProfileClicked()
-{
-    QLCInputProfile* profile;
-    QTreeWidgetItem* item;
-    QString name;
-    int r;
-
-    /* Find out the currently selected item */
-    item = m_profileTree->currentItem();
-    if (item == NULL)
-        return;
-
-    /* Get the currently selected profile object by its name */
-    name = item->text(KProfileColumnName);
-    profile = m_ioMap->profile(name);
-    if (profile == NULL)
-        return;
-
-    /* Ask for user confirmation */
-    r = QMessageBox::question(this, tr("Delete profile"),
-                              tr("Do you wish to permanently delete profile \"%1\"?")
-                              .arg(profile->name()),
-                              QMessageBox::Yes, QMessageBox::No);
-    if (r == QMessageBox::Yes)
-    {
-        /* Attempt to delete the file first */
-        QFile file(profile->path());
-        if (file.remove() == true)
-        {
-            if (item->checkState(KProfileColumnName) == Qt::Checked)
-            {
-                /* The currently assigned profile is removed,
-                   so select "None" next. */
-                QTreeWidgetItem* none;
-                none = m_profileTree->topLevelItem(0);
-                Q_ASSERT(none != NULL);
-                none->setCheckState(KProfileColumnName,
-                                    Qt::Checked);
-            }
-
-            /* Successful deletion. Remove the profile from
-               input map and our tree widget */
-            m_ioMap->removeProfile(name);
-            delete item;
-        }
-        else
-        {
-            /* Annoy the user even more after deletion failure */
-            QMessageBox::warning(this, tr("File deletion failed"),
-                                 tr("Unable to delete file %1")
-                                 .arg(file.errorString()));
-        }
-    }
-}
-
-void InputOutputPatchEditor::slotEditProfileClicked()
-{
-    QLCInputProfile* profile;
-    QTreeWidgetItem* item;
-    QString name;
-
-    /* Get the currently selected item and bail out if nothing or "None"
-       is selected */
-    item = m_profileTree->currentItem();
-    if (item == NULL || item->text(KProfileColumnName) == KInputNone)
-        return;
-
-    /* Get the currently selected profile by its name */
-    name = item->text(KProfileColumnName);
-    profile = m_ioMap->profile(name);
-    if (profile == NULL)
-        return;
-
-    /* Edit the profile and update the item if OK was pressed */
-    InputProfileEditor ite(this, profile, m_ioMap);
-edit:
-    if (ite.exec() == QDialog::Rejected)
-        return;
-
-    /* Copy the channel's contents from the editor's copy to
-       the actual object (with QLCInputProfile::operator=()). */
-    *profile = *ite.profile();
-
-    /* Remove spaces from these */
-    QString manufacturer = ite.profile()->manufacturer().remove(QChar(' '));
-    QString model = ite.profile()->model().remove(QChar(' '));
-    QString path = fullProfilePath(manufacturer, model);
-
-    /* If another profile with the same name exists, ask permission to overwrite */
-    if (QFile::exists(path) == true && path != ite.profile()->path())
-    {
-        int r = QMessageBox::warning(this, tr("Existing Input Profile"),
-                tr("An input profile at %1 already exists. Do you wish to overwrite it?").arg(path),
-                QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
-                QMessageBox::No);
-        if (r == QMessageBox::Cancel)
-        {
-            goto edit;
-        }
-        else if (r == QMessageBox::No)
-        {
-            path = QFileDialog::getSaveFileName(this, tr("Save Input Profile"),
-                                                path, tr("Input Profiles (*.qxi)"));
-            if (path.isEmpty() == true)
-                goto edit;
-        }
-    }
-
-    /* Save the profile */
-    if (profile->saveXML(path) == true)
-    {
-        /* Get the profile's name from the profile itself
-           since it may have changed making local variable
-           "name" invalid */
-        updateProfileItem(profile->name(), item);
-    }
-    else
-    {
-        QMessageBox::warning(this, tr("Saving failed"),
-                             tr("Unable to save %1 to %2")
-                             .arg(profile->name())
-                             .arg(QDir::toNativeSeparators(path)));
-        goto edit;
-    }
 }
 
 /****************************************************************************

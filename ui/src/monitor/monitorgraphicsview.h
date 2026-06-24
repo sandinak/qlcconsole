@@ -90,6 +90,9 @@ public:
     /** Return all selected MonitorFixtureItems (may be empty). */
     QList<MonitorFixtureItem *> selectedFixtureItems() const;
 
+    /** Return the MonitorFixtureItem for the given fixture ID, or nullptr if not in the view. */
+    MonitorFixtureItem *fixtureItemForId(quint32 fxId) const;
+
     /** Set the gel color of the fixture with the given ID */
     void setFixtureGelColor(quint32 id, QColor col);
 

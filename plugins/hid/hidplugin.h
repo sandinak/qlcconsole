@@ -22,11 +22,13 @@
 
 #include <QEvent>
 #include <QList>
+#include <QDir>
 
 #include "qlcioplugin.h"
 
 class HIDPoller;
 class HIDDevice;
+class HIDProfile;
 
 /*****************************************************************************
  * HIDPlugin
@@ -76,6 +78,27 @@ public:
     /** @reimp */
     QString inputInfo(quint32 input) override;
 
+    /** @reimp — returns the profile axis/button name for this channel, or empty. */
+    QString inputChannelName(quint32 input, quint32 channel) const override;
+
+    /** @reimp — returns names of all loaded HID profiles (input ignored). */
+    QStringList inputDeviceProfileNames(quint32 input) const override;
+
+    /** @reimp — returns axis channel index for semantic slot ("pan"/"tilt"), or -1. */
+    int inputAxisForSlot(quint32 input, const QString &slot) const override;
+
+    /** @reimp — returns action string for a button channel, or empty. */
+    QString inputButtonAction(quint32 input, quint32 channel) const override;
+
+    /** @reimp — opens HIDProfileEditor dialog for the named profile. */
+    void editDeviceProfile(quint32 input, const QString &profileName, QWidget *parent) override;
+
+    /** @reimp — returns sensitivity from the device's matched HID profile, or 1.0. */
+    float inputProfileSensitivity(quint32 input) const override;
+
+    /** @reimp — returns deadzone from the device's matched HID profile, or 0.05. */
+    float inputProfileDeadzone(quint32 input) const override;
+
     /*********************************************************************
      * Outputs
      *********************************************************************/
@@ -105,6 +128,9 @@ public:
     /** @reimp */
     bool canConfigure() const override;
 
+    /** @reimp — re-enumerate HID devices without opening the configure dialog. */
+    void rescan() override { rescanDevices(); }
+
 signals:
     void configurationChanged();
 
@@ -125,6 +151,19 @@ protected:
 signals:
     void deviceAdded(HIDDevice* device);
     void deviceRemoved(HIDDevice* device);
+
+    /*********************************************************************
+     * HID device profiles
+     *********************************************************************/
+public:
+    /** Profile matched to @p device by VID:PID, or nullptr. */
+    const HIDProfile *profileForDevice(const HIDDevice *device) const;
+    /** Profile with the given name, or nullptr. */
+    const HIDProfile *profileByName(const QString &name) const;
+
+private:
+    void loadProfiles(const QDir &dir);
+    QList<HIDProfile*> m_profiles;
 
 protected:
     QList <HIDDevice*> m_devices;

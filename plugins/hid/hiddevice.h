@@ -118,6 +118,12 @@ public:
     virtual bool hasInput() const { return false; }
     virtual bool hasOutput() const { return false; }
 
+    /** Joystick devices return their VID/PID; DMX devices return 0. */
+    virtual unsigned short vendorId()  const { return 0; }
+    virtual unsigned short productId() const { return 0; }
+    /** Number of axes on joystick devices; -1 for non-joystick. */
+    virtual int axisCount() const { return -1; }
+
 protected:
     quint32 m_line;
     int m_capabilities;

@@ -119,12 +119,78 @@ public:
     void setFollowSpotActive(bool active);
     FollowSpotEffect *followSpotEffect() const { return m_followSpotEffect; }
 
+    /** Re-register the followspot DMXSource at the end of the MasterTimer
+     *  source list so it writes AFTER the scene preview and wins LTP. */
+    void bumpFollowSpot();
+
+    /*********************************************************************
+     * Design-mode joystick (writes pan/tilt into the focused scene)
+     *********************************************************************/
+public:
+    /** Apply current pan/tilt norm values as scene values on the focused scene.
+     *  Called in Design mode; no-op if no scene is focused or no fixtures selected. */
+    void applyDesignJoystick();
+
+    /** Commit the FollowSpotEffect's current setpoints into the focused scene's
+     *  position palette (Aim target position or PanTilt palette degrees) then
+     *  deactivate the FollowSpotEffect so the palette resumes control.
+     *  Called when the user confirms Save in the Programming tab. */
+    void commitDesignJoystick();
+
+    /*********************************************************************
+     * Controller axis binding (program-level; shared across all effects)
+     *********************************************************************/
+public:
+    /** Capture next input event as the pan (X) axis. */
+    void bindPanAxis();
+    /** Capture next input event as the tilt (Y) axis. */
+    void bindTiltAxis();
+    /** Clear both axis bindings. */
+    void clearAxisBindings();
+
+    bool isPanBound()         const { return m_panBound; }
+    bool isTiltBound()        const { return m_tiltBound; }
+    bool isCapturingPan()     const { return m_capturingPan; }
+    bool isCapturingTilt()    const { return m_capturingTilt; }
+    bool isBoundFromProfile() const { return m_boundFromProfile; }
+
+    /** Human-readable label for the current pan/tilt binding. */
+    QString panAxisLabel()  const;
+    QString tiltAxisLabel() const;
+
+    /** Scan all input universes for HID profiles with pan/tilt slots and
+     *  auto-bind them.  Called after followspot activation and after workspace
+     *  load.  Emits axisBindingChanged() if anything was bound. */
+    void autoBindFromProfile();
+
     bool isShowLocked() const;
     void setShowLocked(bool locked);
 
     quint32 routeProgrammerEdit(quint32 fid, quint32 ch, uchar value);
     int rerouteProgrammerValues();
     QSet<quint32> editedSceneIds() const;
+
+    /*********************************************************************
+     * Look-level routing (palette-aware, scene/palette-focused)
+     *********************************************************************/
+public:
+    /** Called by ProgrammingManager when a scene is loaded into the canvas.
+     *  Sets the "focused scene" for look-level routing. */
+    void setFocusedScene(quint32 sceneId);
+
+    /** Called by ProgrammingManager when a specific palette (look) is
+     *  selected or deselected in the canvas. When valid, slider edits
+     *  target ONLY that palette; when invalidId() any matching palette
+     *  in the focused scene is eligible. */
+    void setFocusedPalette(quint32 paletteId);
+
+    /** Try to route a parameter slider edit at the palette (look) level.
+     *  @param qlcChannelGroup  QLCChannel::Group value (Pan, Tilt, Intensity…)
+     *  @param groupIndex       0 for primary, 1 for secondary (e.g. Zoom vs Focus)
+     *  @param rawValue         0–255 DMX byte from the slider
+     *  @return  owning scene id on success, Function::invalidId() to fall through
+     *           to the normal per-fixture DMX path. */
+    quint32 routeProgrammerEditByChannelType(int qlcChannelGroup, int groupIndex, uchar rawValue);
 
     Doc::PadMode padMode() const;
     void setPadMode(Doc::PadMode mode);
@@ -146,6 +212,12 @@ signals:
     void highlightActiveChanged(bool active);
     /** Emitted when followspot active state changes. */
     void followSpotActiveChanged(bool active);
+    /** Emitted when a pan or tilt axis binding is captured or cleared. */
+    void axisBindingChanged();
+    /** Emitted when a controller button with a named action is pressed.
+     *  Action values: "chaser_step_forward", "chaser_step_back",
+     *  "followspot_toggle", "highlight_toggle", "programmer_clear". */
+    void buttonActionTriggered(const QString &action);
     /** Emitted whenever the programmer-values map transitions between
         empty and non-empty. */
     void programmerDirtyChanged(bool dirty);
@@ -155,6 +227,13 @@ signals:
     void programmerSubSelectionChanged();
     /** Emitted when the show-mode lock changes. */
     void showLockedChanged(bool locked);
+    /** Emitted each time the bound pan/tilt axes carry new values.
+     *  @p pan and @p tilt are normalised 0.0–1.0 (centre = 0.5). */
+    void joystickUpdated(float pan, float tilt);
+    /** Emitted by applyDesignJoystick() after it successfully writes
+     *  pan/tilt values (to scene or to a PanTilt palette).  The UI uses
+     *  this to enable the Save button. */
+    void designPositionWritten();
 
 private slots:
     /** Maintain m_runningScenes as functions start / stop. */
@@ -162,8 +241,17 @@ private slots:
     void slotProgrammerFunctionStopped(quint32 fid);
     /** Sync highlight / followspot fixtures when selection changes. */
     void slotSyncEffectFixtures();
+    /** Route controller input to FollowSpotEffect and JS effect palettes. */
+    void slotControllerInputChanged(quint32 universe, quint32 channel,
+                                    uchar value, const QString &key);
 
 private:
+    void connectControllerInput();
+    /** Push pan/tilt binding into any followspot.js palette so EffectScriptRunner
+     *  routes values to them via its normal universe/channel mechanism. */
+    void updateFollowspotJsBindings();
+    QString axisLabel(quint32 universe, quint32 channel) const;
+
     /** Fill in defaultName / defaultPath for each bucket (category- and
         group-derived names, with collision-avoiding numeric suffix).
         Shared by proposedSaveBuckets() and splitBucketByGroup(). */
@@ -222,6 +310,18 @@ private:
     bool m_highlightActive = false;
     /** Followspot DMXSource — maps joystick axes to fixture pan/tilt. */
     FollowSpotEffect *m_followSpotEffect = nullptr;
+    // Controller axis binding (program-wide)
+    quint32 m_panUniverse = 0,  m_panChannel  = 0;
+    quint32 m_tiltUniverse = 0, m_tiltChannel = 0;
+    bool m_panBound  = false;
+    bool m_tiltBound = false;
+    float m_panNorm  = 0.5f;   // last normalised pan value (0-1, centre=0.5)
+    float m_tiltNorm = 0.5f;   // last normalised tilt value
+    bool m_boundFromProfile = false; // true when binding came from autoBindFromProfile()
+    bool m_capturingPan  = false;
+    bool m_capturingTilt = false;
+    bool m_controllerInputConnected = false;
+
     /** Show-mode safety lock. */
     bool m_showLocked = false;
     /** Scenes whose values have been mutated by the programmer
@@ -234,6 +334,33 @@ private:
     Doc::PadMode m_padMode = Doc::PadModeOff;
     /** Per-fixture refinement within the active programmer group. */
     QSet<quint32> m_programmerSubSelection;
+
+    /** Scene currently shown in the Programming canvas (invalidId when none). */
+    quint32 m_focusedSceneId = Function::invalidId();
+    /** Specific palette selected in the canvas look list (invalidId = any). */
+    quint32 m_focusedPaletteId = QLCPalette::invalidId();
+
+private:
+    /** Map an QLCChannel::Group to the QLCPalette::PaletteType that represents it.
+     *  Returns QLCPalette::Undefined for channel groups that have no palette type. */
+    static QLCPalette::PaletteType channelGroupToPaletteType(int qlcChannelGroup);
+
+    /** True iff a palette of the given type can serve a channel-group + groupIndex edit.
+     *  Handles the Pan/PanTilt and Tilt/PanTilt overlap. */
+    static bool paletteTypeMatchesChannel(QLCPalette::PaletteType palType,
+                                          int qlcChannelGroup, int groupIndex);
+
+    /** Update @p pal's abstract value from @p rawValue for the given channel
+     *  group + component index. Returns PaletteChanged / PaletteUnchanged /
+     *  PaletteCantDerive (same semantics as updatePaletteForEdit). */
+    PaletteEditOutcome updatePaletteForChannelType(QLCPalette *pal,
+                                                   int qlcChannelGroup,
+                                                   int groupIndex,
+                                                   uchar rawValue);
+
+    /** Mark @p sceneId as edited (snapshot + dirty flag) and drop its
+     *  runtime faders so the palette re-expands on the next tick. */
+    void markSceneEdited(quint32 sceneId);
 };
 
 #endif // PROGRAMMERCONTROLLER_H

@@ -71,7 +71,8 @@ public:
         Color,
         Pan,
         Tilt,
-        PanTilt,
+        PanTilt,    ///< Raw pan/tilt degrees stored in m_values (XY pad driven)
+        Aim,        ///< Aims at a named StageTarget using per-fixture rig geometry
         Shutter,
         Gobo,
         Zoom,
@@ -275,12 +276,30 @@ public:
         { return m_effectPaletteBindings; }
     void setEffectPaletteBinding(const QString &slot, quint32 paletteId)
         { m_effectPaletteBindings[slot] = paletteId; }
+    void clearEffectPaletteBinding(const QString &slot)
+        { m_effectPaletteBindings.remove(slot); }
+
+    /** Target slot bindings: slot name → StageTarget ID. */
+    QMap<QString, quint32> effectTargetBindings() const
+        { return m_effectTargetBindings; }
+    void setEffectTargetBinding(const QString &slot, quint32 targetId)
+        { m_effectTargetBindings[slot] = targetId; }
+    void clearEffectTargetBinding(const QString &slot)
+        { m_effectTargetBindings.remove(slot); }
 
     /** Script parameter overrides: param name → value. */
     QMap<QString, double> effectParamValues() const
         { return m_effectParamValues; }
     void setEffectParamValue(const QString &name, double value)
         { m_effectParamValues[name] = value; }
+
+    /** String parameter overrides (e.g. type:"path" XY path JSON). */
+    QMap<QString, QString> effectStringParams() const
+        { return m_effectStringParams; }
+    QString effectStringParam(const QString &name) const
+        { return m_effectStringParams.value(name); }
+    void setEffectStringParam(const QString &name, const QString &value)
+        { m_effectStringParams[name] = value; }
 
     /** Convenience: get a single colour value for Color-type palettes
      *  (used by EffectInstance to build the palettes object for scripts). */
@@ -290,7 +309,9 @@ private:
     QString m_scriptPath;
     QMap<QString, QPair<quint32,quint32>> m_effectInputBindings;
     QMap<QString, quint32>               m_effectPaletteBindings;
+    QMap<QString, quint32>               m_effectTargetBindings;
     QMap<QString, double>                m_effectParamValues;
+    QMap<QString, QString>               m_effectStringParams;
 
     /************************************************************************
      * Load & Save

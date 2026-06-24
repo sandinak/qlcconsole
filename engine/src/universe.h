@@ -60,6 +60,7 @@ class Doc;
 #define KXMLQLCUniverseLine             QStringLiteral("Line")
 #define KXMLQLCUniverseLineUID          QStringLiteral("UID")
 #define KXMLQLCUniverseProfileName      QStringLiteral("Profile")
+#define KXMLQLCUniverseHIDProfileName   QStringLiteral("HIDProfile")
 #define KXMLQLCUniversePluginParameters QStringLiteral("PluginParameters")
 
 /** Universe class contains input/output data for one DMX universe
@@ -618,7 +619,8 @@ public:
         QString const & pluginName, const QString &lineName,
         quint32 line,
         QString profileName,
-        QMap<QString, QVariant>parameters) const;
+        QMap<QString, QVariant>parameters,
+        const QString &hidProfileName = QString()) const;
 
     /**
      * Save a plugin custom parameters (if available) into a tag nested

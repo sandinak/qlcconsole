@@ -621,10 +621,13 @@ void MonitorFixtureItem::showLabel(bool visible)
 
 QRectF MonitorFixtureItem::boundingRect() const
 {
+    // Arc strokes are drawn up to MOVEMENT_THICKNESS px outside the fixture cell
+    // rectangle; add a margin so Qt's dirty-region clipping never hides them.
+    const qreal m = MOVEMENT_THICKNESS + 1;
     if (m_labelVisibility)
-        return QRectF(-10, 0, m_width + 20, m_height + m_labelRect.height() + 2);
+        return QRectF(-10 - m, -m, m_width + 20 + 2 * m, m_height + m_labelRect.height() + 2 + m);
     else
-        return QRectF(0, 0, m_width, m_height);
+        return QRectF(-m, -m, m_width + 2 * m, m_height + 2 * m);
 }
 
 void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)

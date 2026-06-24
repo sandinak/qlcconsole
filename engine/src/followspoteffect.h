@@ -2,15 +2,9 @@
   Q Light Controller Plus
   followspoteffect.h
 
-  A DMXSource that reads two joystick axes (from any InputOutputMap input)
-  and continuously writes Pan/Tilt DMX values to the target fixtures.
-  The operator picks fixtures via the programmer selection; this effect
-  then steers all of them in sync as if they are a single followspot.
-
-  Input binding:
-    - "Bind X" captures the next input event as the pan (horizontal) axis.
-    - "Bind Y" captures the next input event as the tilt (vertical) axis.
-  Input values (0–255) are mapped 0→0°, 255→focusPanMax (or 360 default).
+  A DMXSource that steers fixtures based on pan/tilt normalized axis values
+  (0.0–1.0). Input binding and routing is handled by ProgrammerController;
+  this class is a pure "write pan/tilt DMX" engine.
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */
@@ -21,7 +15,6 @@
 #include <QMutex>
 #include <QObject>
 #include <QList>
-#include <QHash>
 #include <QString>
 
 #include "dmxsource.h"
@@ -42,26 +35,10 @@ public:
     void setFixtures(const QList<quint32>& fixtureIds);
 
     /*********************************************************************
-     * Input bindings
+     * Axis values (set by ProgrammerController from controller input)
      *********************************************************************/
-
-    /** Start capturing the next input event as the X (pan) axis.
-     *  Once captured, isXBound() becomes true. */
-    void startBindX();
-    /** Start capturing the next input event as the Y (tilt) axis. */
-    void startBindY();
-    /** Clear both bindings. */
-    void clearBindings();
-
-    bool isXBound() const;
-    bool isYBound() const;
-    bool isCapturingX() const { return m_capturingX; }
-    bool isCapturingY() const { return m_capturingY; }
-
-    /** Human-readable description of the current X/Y binding, e.g.
-     *  "Universe 1, Ch 1" or "—" if unbound. */
-    QString xBindingLabel() const;
-    QString yBindingLabel() const;
+    void setXNorm(float v);  // pan  0.0–1.0
+    void setYNorm(float v);  // tilt 0.0–1.0
 
     /*********************************************************************
      * Settings
@@ -72,11 +49,25 @@ public:
     float deadzone() const { return m_deadzone; }
     void setDeadzone(float d);
 
+    /** Aim height in centimetres — tilt bias so beam hits head not feet. */
+    int aimHeight() const { return m_aimHeight; }
+    void setAimHeight(int cm);
+
     /*********************************************************************
      * Enable / disable
      *********************************************************************/
     void setActive(bool active);
     bool isActive() const { return m_active; }
+
+    /*********************************************************************
+     * Setpoint access (for save / commit after design-mode positioning)
+     *********************************************************************/
+    float panSetpoint()   const { return m_panSetpoint;   }
+    float tiltSetpoint()  const { return m_tiltSetpoint;  }
+    bool  setpointValid() const { return m_setpointValid; }
+    /** Reset so the scene palette controls the fixture until the next
+     *  stick movement.  Call after committing a saved position. */
+    void  resetSetpoint();
 
     /*********************************************************************
      * DMXSource
@@ -85,36 +76,27 @@ public:
 
 signals:
     void activeChanged(bool active);
-    /** Emitted when a binding is captured (X or Y settled). */
-    void bindingChanged();
-
-private slots:
-    void slotInputValueChanged(quint32 universe, quint32 channel,
-                               uchar value, const QString& key);
 
 private:
-    void connectInput();
-    void disconnectInput();
-
     Doc *m_doc;
     QList<quint32> m_fixtures;
 
-    quint32 m_xUniverse = 0, m_xChannel = 0;
-    quint32 m_yUniverse = 0, m_yChannel = 0;
-    bool m_xBound = false;
-    bool m_yBound = false;
-    bool m_capturingX = false;
-    bool m_capturingY = false;
-    bool m_inputConnected = false;
-
-    float m_xNorm = 0.5f;   // 0.0–1.0, updated from joystick events
+    float m_xNorm = 0.5f;
     float m_yNorm = 0.5f;
 
-    float m_sensitivity = 1.0f;  // multiplied against mapped degrees
-    float m_deadzone    = 0.05f; // fraction of half-range treated as center
+    // Setpoint/velocity mode: stick deflection moves position, release holds it.
+    // m_setpointValid is false until the first non-zero stick input, so the scene
+    // controls the fixture until the operator actually moves the stick.
+    float m_panSetpoint  = 0.5f;
+    float m_tiltSetpoint = 0.5f;
+    bool  m_setpointValid = false;
 
-    bool m_active      = false;
-    bool m_registered  = false;
+    float m_sensitivity = 1.0f;
+    float m_deadzone    = 0.05f;
+    int   m_aimHeight   = 170;
+
+    bool m_active     = false;
+    bool m_registered = false;
 
     QMutex m_mutex;
 };

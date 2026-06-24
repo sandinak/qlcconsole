@@ -94,6 +94,7 @@
         <file alias="other.png">../../resources/icons/png/other.png</file>
         <file alias="pan.png">../../resources/icons/png/pan.png</file>
         <file alias="panic.png">../../resources/icons/png/panic.png</file>
+        <file alias="position.png">../../resources/icons/png/position.png</file>
         <file alias="player_play.png">../../resources/icons/png/player_play.png</file>
         <file alias="player_pause.png">../../resources/icons/png/player_pause.png</file>
         <file alias="player_stop.png">../../resources/icons/png/player_stop.png</file>
@@ -123,6 +124,7 @@
         <file alias="square.png">../../resources/icons/png/square.png</file>
         <file alias="strobe.png">../../resources/icons/png/strobe.png</file>
         <file alias="tabview.png">../../resources/icons/png/tabview.png</file>
+        <file alias="target.png">../../resources/icons/png/target.png</file>
         <file alias="tilt.png">../../resources/icons/png/tilt.png</file>
         <file alias="uncheck.png">../../resources/icons/png/uncheck.png</file>
         <file alias="undo.png">../../resources/icons/png/undo.png</file>

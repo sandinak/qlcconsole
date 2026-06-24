@@ -27,6 +27,7 @@ static const struct { QLCPalette::PaletteType type; const char *label; } kTypes[
     { QLCPalette::Color,   "Color" },
     { QLCPalette::Dimmer,  "Dimmer" },
     { QLCPalette::PanTilt, "Pan/Tilt" },
+    { QLCPalette::Aim,     "Aim at Target" },
     { QLCPalette::Gobo,    "Gobo" },
     { QLCPalette::Shutter, "Shutter" },
 };
@@ -76,6 +77,8 @@ PaletteEditDialog::PaletteEditDialog(QLCPalette *existing, QWidget *parent, Doc 
         case QLCPalette::PanTilt:
             m_value1Spin->setValue(m_existing->intValue1());
             m_value2Spin->setValue(m_existing->intValue2());
+            break;
+        case QLCPalette::Aim:
             // Pre-select the linked target
             for (int i = 0; i < m_targetCombo->count(); ++i)
             {
@@ -169,17 +172,18 @@ void PaletteEditDialog::syncEditorsToType()
 
     const bool isColor = (type == QLCPalette::Color);
     const bool isPanTilt = (type == QLCPalette::PanTilt);
+    const bool isAim = (type == QLCPalette::Aim);
 
     m_colorButton->setVisible(isColor);
     if (isColor)
         m_colorButton->setText(m_color.name());
 
-    m_value1Label->setVisible(!isColor);
-    m_value1Spin->setVisible(!isColor);
+    m_value1Label->setVisible(!isColor && !isAim);
+    m_value1Spin->setVisible(!isColor && !isAim);
     m_value2Label->setVisible(isPanTilt);
     m_value2Spin->setVisible(isPanTilt);
-    m_targetLabel->setVisible(isPanTilt);
-    m_targetCombo->setVisible(isPanTilt);
+    m_targetLabel->setVisible(isAim);
+    m_targetCombo->setVisible(isAim);
 
     switch (type)
     {
@@ -221,6 +225,8 @@ void PaletteEditDialog::accept()
         break;
     case QLCPalette::PanTilt:
         p->setValue(m_value1Spin->value(), m_value2Spin->value());
+        break;
+    case QLCPalette::Aim:
         p->setStageTargetId(m_targetCombo->currentData().toUInt());
         break;
     default:
@@ -237,6 +243,8 @@ void PaletteEditDialog::accept()
         else if (type == QLCPalette::PanTilt)
             name = QString("Pos P%1/T%2")
                        .arg(m_value1Spin->value()).arg(m_value2Spin->value());
+        else if (type == QLCPalette::Aim)
+            name = tr("Aim");
         else
             name = QString("%1 %2")
                        .arg(QLCPalette::typeToString(type))

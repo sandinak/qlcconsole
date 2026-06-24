@@ -134,6 +134,16 @@ Doc::Doc(QObject* parent, int universes)
     connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
             m_effectScriptRunner, SLOT(slotFunctionStopped(quint32)));
 
+    // Feed real-time joystick data into the effect script data channel system.
+    connect(m_programmer, &ProgrammerController::joystickUpdated,
+            this, [this](float pan, float tilt)
+    {
+        QVariantMap jd;
+        jd[QStringLiteral("pan")]  = double(pan);
+        jd[QStringLiteral("tilt")] = double(tilt);
+        m_effectScriptRunner->setDataChannel(QStringLiteral("joystick"), jd);
+    });
+
     // Relay the controller's signals as Doc's own signals so external
     // code keeps connecting to `doc` unchanged.
     connect(m_programmer, &ProgrammerController::programmerSelectionChanged,
@@ -431,6 +441,21 @@ quint32 Doc::saveProgrammerAsScene(const QString &name)
 quint32 Doc::routeProgrammerEdit(quint32 fid, quint32 ch, uchar value)
 {
     return m_programmer->routeProgrammerEdit(fid, ch, value);
+}
+
+void Doc::setFocusedScene(quint32 sceneId)
+{
+    m_programmer->setFocusedScene(sceneId);
+}
+
+void Doc::setFocusedPalette(quint32 paletteId)
+{
+    m_programmer->setFocusedPalette(paletteId);
+}
+
+quint32 Doc::routeProgrammerEditByChannelType(int qlcChannelGroup, int groupIndex, uchar rawValue)
+{
+    return m_programmer->routeProgrammerEditByChannelType(qlcChannelGroup, groupIndex, rawValue);
 }
 
 int Doc::rerouteProgrammerValues()

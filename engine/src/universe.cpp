@@ -1103,6 +1103,7 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
             quint32 inputLine = QLCIOPlugin::invalidLine();
             QString inputUID;
             QString profile = KInputNone;
+            QString hidProfile;
 
             if (pAttrs.hasAttribute(KXMLQLCUniversePlugin))
                 plugin = pAttrs.value(KXMLQLCUniversePlugin).toString();
@@ -1112,9 +1113,13 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
                 inputLine = pAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
             if (pAttrs.hasAttribute(KXMLQLCUniverseProfileName))
                 profile = pAttrs.value(KXMLQLCUniverseProfileName).toString();
+            if (pAttrs.hasAttribute(KXMLQLCUniverseHIDProfileName))
+                hidProfile = pAttrs.value(KXMLQLCUniverseHIDProfileName).toString();
 
             // apply the parameters just loaded
             ioMap->setInputPatch(index, plugin, inputUID, inputLine, profile);
+            if (!hidProfile.isEmpty() && ioMap->inputPatch(index))
+                ioMap->inputPatch(index)->setHidProfileName(hidProfile);
 
             QXmlStreamReader::TokenType tType = root.readNext();
             if (tType == QXmlStreamReader::Characters)
@@ -1246,7 +1251,8 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
     if (inputPatch() != NULL)
     {
         savePatchXML(doc, KXMLQLCUniverseInputPatch, inputPatch()->pluginName(), inputPatch()->inputName(),
-            inputPatch()->input(), inputPatch()->profileName(), inputPatch()->getPluginParameters());
+            inputPatch()->input(), inputPatch()->profileName(), inputPatch()->getPluginParameters(),
+            inputPatch()->hidProfileName());
     }
     foreach (OutputPatch *op, m_outputPatchList)
     {
@@ -1272,7 +1278,8 @@ void Universe::savePatchXML(
     const QString &lineName,
     quint32 line,
     QString profileName,
-    QMap<QString, QVariant> parameters) const
+    QMap<QString, QVariant> parameters,
+    const QString &hidProfileName) const
 {
     // sanity check: don't save invalid data
     if (pluginName.isEmpty() || pluginName == KInputNone || line == QLCIOPlugin::invalidLine())
@@ -1284,6 +1291,8 @@ void Universe::savePatchXML(
     doc->writeAttribute(KXMLQLCUniverseLine, QString::number(line));
     if (!profileName.isEmpty() && profileName != KInputNone)
         doc->writeAttribute(KXMLQLCUniverseProfileName, profileName);
+    if (!hidProfileName.isEmpty())
+        doc->writeAttribute(KXMLQLCUniverseHIDProfileName, hidProfileName);
 
     savePluginParametersXML(doc, parameters);
     doc->writeEndElement();

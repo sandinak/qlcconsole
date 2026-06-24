@@ -10,11 +10,15 @@
     effect.description = "Pan/tilt fixtures with joystick X/Y axes";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
-    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. Bind the x and y inputs to a gamepad or MIDI controller. Sensitivity scales the range; a deadzone prevents drift near centre. Color and dimmer palettes are applied as static looks alongside the movement.";
+    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. Bind the x and y inputs to a gamepad or MIDI controller. Sensitivity and deadzone are configured in the HID device profile (I/O Manager). Person Height biases the tilt centre so the beam lands at the subject's head. Color and dimmer palettes are applied as static looks alongside the movement.";
+
+    // The host injects joystick data automatically when a HID profile is active.
+    // Manual input bindings (x / y) are kept as a fallback for non-HID controllers.
+    effect.dataChannels = ["joystick"];
 
     effect.inputs = [
-        { name: "x", description: "Pan axis (0=left, 0.5=center, 1=right)", defaultValue: 0.5 },
-        { name: "y", description: "Tilt axis (0=up, 0.5=center, 1=down)",   defaultValue: 0.5 }
+        { name: "x", description: "Pan axis fallback (0=left, 0.5=center, 1=right)", defaultValue: 0.5 },
+        { name: "y", description: "Tilt axis fallback (0=up, 0.5=center, 1=down)",   defaultValue: 0.5 }
     ];
 
     effect.palettes = [
@@ -23,15 +27,24 @@
     ];
 
     effect.parameters = [
-        { name: "sensitivity", description: "Pan/tilt travel scale", min: 0.1, max: 2.0, defaultValue: 1.0 },
-        { name: "deadzone",    description: "Deadzone around center (0–0.5)", min: 0.0, max: 0.5, defaultValue: 0.05 }
+        { name: "personHeight", description: "Height of person being followed (cm) — adjusts tilt centre", min: 50, max: 250, defaultValue: 170 }
     ];
 
-    effect.tick = function(fixtures, inputs, palettes, params, state) {
-        var x   = inputs.x !== undefined ? inputs.x : 0.5;
-        var y   = inputs.y !== undefined ? inputs.y : 0.5;
-        var dz  = params.deadzone    !== undefined ? params.deadzone    : 0.05;
-        var sen = params.sensitivity !== undefined ? params.sensitivity : 1.0;
+    effect.tick = function(fixtures, inputs, palettes, params, state, data) {
+        // Prefer automatic joystick data channel (HID profile active) over
+        // manual input bindings — fall back to inputs.x/y for other controllers.
+        var joystick = data && data.joystick;
+        var x  = joystick ? joystick.pan  : (inputs.x !== undefined ? inputs.x  : 0.5);
+        var y  = joystick ? joystick.tilt : (inputs.y !== undefined ? inputs.y  : 0.5);
+        // sensitivity / deadzone are applied by the host via the HID profile;
+        // use conservative defaults here as a fallback.
+        var dz  = 0.05;
+        var sen = 1.0;
+        var pH = params.personHeight !== undefined ? params.personHeight : 170;
+
+        // Small tilt offset so the beam lands at the person's head, not feet.
+        // 170 cm = neutral; taller people → beam aims slightly higher (less tilt).
+        var tiltOffset = (170 - pH) / 300 * 0.12;
 
         // Apply deadzone symmetrically around 0.5
         function applyDeadzone(v) {
@@ -43,7 +56,7 @@
         }
 
         var xN = applyDeadzone(x);
-        var yN = applyDeadzone(y);
+        var yN = Math.min(1.0, Math.max(0.0, applyDeadzone(y) + tiltOffset));
 
         return fixtures.map(function(f) {
             var intent = {};
