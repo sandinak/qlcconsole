@@ -22,6 +22,8 @@
 #include <QGraphicsRectItem>
 #include <QApplication>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPolygonF>
 #include <qmath.h>
 #include <QCursor>
 #include <QDebug>
@@ -176,6 +178,7 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
         fxiItem->m_panChannel = head.channelNumber(QLCChannel::Pan, QLCChannel::MSB);
         if (fxiItem->m_panChannel != QLCChannel::invalid())
         {
+            m_hasPan = true; // moving head: gets a facing arrow / Alt-drag rotate
             // retrieve the PAN max degrees from the fixture mode
             fxiItem->m_panMaxDegrees = 360; // fallback. Very unprecise
             QLCFixtureMode *mode = fxi->fixtureMode();
@@ -316,6 +319,11 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
 
         m_heads.append(fxiItem);
     }
+
+    // Seed the facing arrow from the stored rig facing (panZeroDir).
+    if (m_hasPan && m_doc->monitorProperties() != NULL)
+        m_facingDeg = m_doc->monitorProperties()->fixtureRigProps(fid).panZeroDir;
+
     slotUpdateValues();
     connect(fxi, SIGNAL(valuesChanged()), this, SLOT(slotUpdateValues()));
 }
@@ -437,6 +445,24 @@ void MonitorFixtureItem::setSize(QSize size)
                                   Qt::AlignHCenter | Qt::TextWrapAnywhere, m_name);
 
     setTransformOriginPoint(m_width / 2, m_height / 2);
+    update();
+}
+
+void MonitorFixtureItem::setViewTint(const QColor &color)
+{
+    m_viewTint = color;
+    foreach (FixtureHead *head, m_heads)
+    {
+        if (color.isValid())
+            head->m_item->setBrush(QBrush(color));
+        else
+        {
+            // Restore the last live/gel colour.
+            QColor col = head->m_color;
+            col.setAlpha(head->m_dimmerValue);
+            head->m_item->setBrush(QBrush(col));
+        }
+    }
     update();
 }
 
@@ -571,7 +597,9 @@ void MonitorFixtureItem::slotUpdateValues()
             head->m_strobeTimer->stop();
         }
 
-        head->m_item->setBrush(QBrush(col));
+        // A 2D-map view overlay (Power/DMX/...) takes precedence over the live
+        // fill so the plot stays colour-coded regardless of DMX output.
+        head->m_item->setBrush(QBrush(m_viewTint.isValid() ? m_viewTint : col));
 
         if (head->m_panChannel != UINT_MAX /*QLCChannel::invalid()*/)
         {
@@ -619,15 +647,45 @@ void MonitorFixtureItem::showLabel(bool visible)
     update();
 }
 
+qreal MonitorFixtureItem::facingReach() const
+{
+    return qMax(m_width, m_height) / 2.0 + 10.0;
+}
+
 QRectF MonitorFixtureItem::boundingRect() const
 {
     // Arc strokes are drawn up to MOVEMENT_THICKNESS px outside the fixture cell
     // rectangle; add a margin so Qt's dirty-region clipping never hides them.
     const qreal m = MOVEMENT_THICKNESS + 1;
+    QRectF rect;
     if (m_labelVisibility)
-        return QRectF(-10 - m, -m, m_width + 20 + 2 * m, m_height + m_labelRect.height() + 2 + m);
+        rect = QRectF(-10 - m, -m, m_width + 20 + 2 * m, m_height + m_labelRect.height() + 2 + m);
     else
-        return QRectF(-m, -m, m_width + 2 * m, m_height + 2 * m);
+        rect = QRectF(-m, -m, m_width + 2 * m, m_height + 2 * m);
+
+    // The facing arrow sweeps a circle of facingReach() around the centre at any
+    // facing angle; union that in so rotating it never clips.
+    if (m_hasPan)
+    {
+        const qreal r = facingReach() + 6.0;
+        const QPointF c(m_width / 2.0, m_height / 2.0);
+        rect = rect.united(QRectF(c.x() - r, c.y() - r, 2 * r, 2 * r));
+    }
+    return rect;
+}
+
+QPainterPath MonitorFixtureItem::shape() const
+{
+    // Hit-test / selection area = the fixture body (+ movement margin and
+    // label), deliberately EXCLUDING the facing arrow's reach. boundingRect()
+    // is enlarged to fit the arrow for repaint, but the arrow must never steal
+    // clicks from fixtures it overlaps.
+    const qreal m = MOVEMENT_THICKNESS + 1;
+    QPainterPath path;
+    path.addRect(QRectF(-m, -m, m_width + 2 * m, m_height + 2 * m));
+    if (m_labelVisibility)
+        path.addRect(m_labelRect);
+    return path;
 }
 
 void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
@@ -658,19 +716,38 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setBrush(Qt::NoBrush);
         painter->drawRect(QRectF(1.5, 1.5, m_width - 3, m_height - 3));
     }
+    // The pan/tilt indicators are drawn around screen-down (Qt angle 270°),
+    // which represents the home/centre pointing = downstage. Rotating the
+    // fixture's facing (panZeroDir) swings that home direction with the base:
+    // Qt_zero = 270° + facing (facing 90 -> Qt 0° = stage-right, etc.).
+    //
+    // These movement indicators and the facing arrow are FUNCTIONAL (they show
+    // where the head actually aims), so they live in STAGE frame — driven by the
+    // pan-zero facing only.  The item itself is rotated by the VISUAL icon
+    // rotation (QGraphicsItem::rotation()); we counter-rotate these by
+    // -rotation() so the icon spin never drags them.  Pivoting on each head's own
+    // centre keeps the cluster at the head's icon-rotated position.
+    const int facing16 = qRound(m_facingDeg * 16.0);
+    const qreal iconRot = rotation();   // visual icon rotation (degrees)
     foreach (FixtureHead *head, m_heads)
     {
         QRectF rect = shapeRect(head->m_item);
+        const QPointF rc = rect.center();
+
+        painter->save();
+        painter->translate(rc);
+        painter->rotate(-iconRot);      // out of the icon rotation → stage frame
+        painter->translate(-rc);
 
         if (head->m_tiltChannel != UINT_MAX /*QLCChannel::invalid()*/)
         {
             rect.adjust(-MOVEMENT_THICKNESS, -MOVEMENT_THICKNESS, MOVEMENT_THICKNESS, MOVEMENT_THICKNESS);
 
             painter->setPen(QPen(defColor, MOVEMENT_THICKNESS));
-            painter->drawArc(rect, 270 * 16 - head->m_tiltMaxDegrees * 16 / 2 - 8, 16);
-            painter->drawArc(rect, 270 * 16 + head->m_tiltMaxDegrees * 16 / 2 - 8, 16);
+            painter->drawArc(rect, 270 * 16 + facing16 - head->m_tiltMaxDegrees * 16 / 2 - 8, 16);
+            painter->drawArc(rect, 270 * 16 + facing16 + head->m_tiltMaxDegrees * 16 / 2 - 8, 16);
             painter->setPen(QPen(QColor("turquoise"), MOVEMENT_THICKNESS));
-            painter->drawArc(rect, 270 * 16, - head->m_tiltDegrees * 16);
+            painter->drawArc(rect, 270 * 16 + facing16, - head->m_tiltDegrees * 16);
         }
 
         if (head->m_panChannel != UINT_MAX /*QLCChannel::invalid()*/)
@@ -678,11 +755,44 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
             rect.adjust(-MOVEMENT_THICKNESS, -MOVEMENT_THICKNESS, MOVEMENT_THICKNESS, MOVEMENT_THICKNESS);
 
             painter->setPen(QPen(defColor, MOVEMENT_THICKNESS));
-            painter->drawArc(rect, 270 * 16 - head->m_panMaxDegrees * 16 / 2 - 8, 16);
-            painter->drawArc(rect, 270 * 16 + head->m_panMaxDegrees * 16 / 2 - 8, 16);
+            painter->drawArc(rect, 270 * 16 + facing16 - head->m_panMaxDegrees * 16 / 2 - 8, 16);
+            painter->drawArc(rect, 270 * 16 + facing16 + head->m_panMaxDegrees * 16 / 2 - 8, 16);
             painter->setPen(QPen(QColor("purple"), MOVEMENT_THICKNESS));
-            painter->drawArc(rect, 270 * 16, - head->m_panDegrees * 16);
+            painter->drawArc(rect, 270 * 16 + facing16, - head->m_panDegrees * 16);
         }
+
+        painter->restore();
+    }
+
+    // Facing arrow: an editing affordance shown only while the layout is
+    // unlocked (rig-setup mode). It points the way a moving head's pan-zero
+    // faces relative to the stage (downstage = screen-down). Direction =
+    // (sin f, cos f) so f=0 -> downstage, 90 -> stage-right, 180 -> upstage,
+    // 270 -> stage-left, matching the aim solver's azimuth convention.
+    // Counter-rotated by -rotation() (pivot = item centre) so the VISUAL icon
+    // rotation never moves the GREEN aim arrow.
+    if (m_hasPan && m_editable)
+    {
+        const QPointF c(m_width / 2.0, m_height / 2.0);
+        painter->save();
+        painter->translate(c);
+        painter->rotate(-iconRot);      // out of the icon rotation → stage frame
+
+        const qreal f = qDegreesToRadians(qreal(m_facingDeg));
+        const QPointF dir(qSin(f), qCos(f));
+        const QPointF tip = dir * facingReach();
+        const QPointF perp(-dir.y(), dir.x());
+        const QPointF base = tip - dir * 7.0;
+
+        const QColor arrowCol = m_rotating ? QColor(120, 240, 160) : QColor(80, 200, 120);
+        QPolygonF headTri;
+        headTri << tip << (base + perp * 4.0) << (base - perp * 4.0);
+
+        painter->setPen(QPen(arrowCol, 0)); // cosmetic line, 1px at any zoom
+        painter->drawLine(QPointF(0, 0), tip);
+        painter->setBrush(arrowCol);
+        painter->drawPolygon(headTri);
+        painter->restore();
     }
 
     if (m_labelVisibility)
@@ -700,6 +810,12 @@ void MonitorFixtureItem::setMovable(bool movable)
 {
     setFlag(QGraphicsItem::ItemIsMovable, movable);
     setCursor(movable ? smallOpenHandCursor() : Qt::ArrowCursor);
+    // Locking the layout (movable=false) also hides the facing arrow and
+    // disables rig editing — the rig is frozen for the show.
+    m_editable = movable;
+    if (!m_editable)
+        m_rotating = false;
+    update();
 }
 
 void MonitorFixtureItem::setSnap(int divisions, qreal cellPixels, qreal xOffset, qreal yOffset)
@@ -721,37 +837,133 @@ QVariant MonitorFixtureItem::itemChange(GraphicsItemChange change, const QVarian
 
 void MonitorFixtureItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
+    // Alt-drag on a moving head rotates its facing (panZeroDir) instead of
+    // moving the item. Swallow the press so the base class doesn't start a move.
+    // Disabled when the layout is locked (rig frozen).
+    if (m_hasPan && m_editable && (event->modifiers() & Qt::AltModifier))
+    {
+        m_rotating = true;
+        update();
+        event->accept();
+        return;
+    }
     QGraphicsItem::mousePressEvent(event);
+}
+
+void MonitorFixtureItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (m_rotating)
+    {
+        const QPointF c(m_width / 2.0, m_height / 2.0);
+        const QPointF d = event->pos() - c;
+        if (!d.isNull())
+        {
+            // Inverse of the (sin f, cos f) arrow mapping: f = atan2(dx, dy).
+            qreal deg = qRadiansToDegrees(qAtan2(d.x(), d.y()));
+            if (deg < 0.0)
+                deg += 360.0;
+            // Snap to 15° unless Shift is held for fine control.
+            if (!(event->modifiers() & Qt::ShiftModifier))
+                deg = qRound(deg / 15.0) * 15.0;
+            if (deg >= 360.0)
+                deg -= 360.0;
+            m_facingDeg = float(deg);
+            update();
+        }
+        event->accept();
+        return;
+    }
+    QGraphicsItem::mouseMoveEvent(event);
 }
 
 void MonitorFixtureItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (m_rotating)
+    {
+        m_rotating = false;
+        commitFacing();
+        update();
+        event->accept();
+        return;
+    }
     QGraphicsItem::mouseReleaseEvent(event);
     qDebug() << Q_FUNC_INFO << "mouse RELEASE event - <" << event->pos().toPoint().x() << "> - <" << event->pos().toPoint().y() << ">";
     setCursor(smallOpenHandCursor());
     emit itemDropped(this);
 }
 
+void MonitorFixtureItem::commitFacing()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == NULL)
+        return;
+
+    FixtureRigProps rp = props->fixtureRigProps(m_fid);
+    rp.panZeroDir = m_facingDeg;
+    props->setFixtureRigProps(m_fid, rp);
+    m_doc->setModified();
+}
+
 void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
     MonitorProperties *props = m_doc->monitorProperties();
+    if (props == NULL)
+    {
+        event->ignore();
+        return;
+    }
     FixtureRigProps rp = props->fixtureRigProps(m_fid);
-    if (rp.trussId == Truss::invalidId())
-        return;  // no truss — nothing to show
-
-    Truss *t = props->truss(rp.trussId);
-    QString trussName = t ? t->name() : tr("truss");
 
     QMenu menu;
-    QAction *removeAct = menu.addAction(
-        tr("Remove from Truss \"%1\"").arg(trussName));
+
+    // Facing (pan-zero direction) quick-set for moving heads — rig editing, so
+    // only offered while unlocked.
+    QAction *faceDS = NULL, *faceSR = NULL, *faceUS = NULL, *faceSL = NULL;
+    if (m_hasPan && m_editable)
+    {
+        QMenu *fm = menu.addMenu(tr("Facing (pan-zero)"));
+        faceDS = fm->addAction(tr("Downstage (0°)"));
+        faceSR = fm->addAction(tr("Stage Right (90°)"));
+        faceUS = fm->addAction(tr("Upstage (180°)"));
+        faceSL = fm->addAction(tr("Stage Left (270°)"));
+        fm->addSeparator();
+        QAction *hint = fm->addAction(tr("…or Alt-drag to rotate"));
+        hint->setEnabled(false);
+    }
+
+    // Truss unbind (only when assigned, and only while unlocked).
+    QAction *removeAct = NULL;
+    if (m_editable && rp.trussId != Truss::invalidId())
+    {
+        Truss *t = props->truss(rp.trussId);
+        QString trussName = t ? t->name() : tr("truss");
+        removeAct = menu.addAction(tr("Remove from Truss \"%1\"").arg(trussName));
+    }
+
+    if (menu.isEmpty())
+    {
+        event->ignore();
+        return;
+    }
+
     QAction *chosen = menu.exec(event->screenPos());
+    if (chosen == NULL)
+    {
+        event->accept();
+        return;
+    }
+
     if (chosen == removeAct)
     {
         FixtureRigProps cleared;  // trussId defaults to Truss::invalidId()
         props->setFixtureRigProps(m_fid, cleared);
         m_doc->setModified();
     }
+    else if (chosen == faceDS) { m_facingDeg = 0.0f;   commitFacing(); update(); }
+    else if (chosen == faceSR) { m_facingDeg = 90.0f;  commitFacing(); update(); }
+    else if (chosen == faceUS) { m_facingDeg = 180.0f; commitFacing(); update(); }
+    else if (chosen == faceSL) { m_facingDeg = 270.0f; commitFacing(); update(); }
+
     event->accept();
 }
 

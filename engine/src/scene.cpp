@@ -852,6 +852,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
 
     if (m_values.count() == 0 && m_palettes.count() == 0)
     {
+        qCritical() << "[Scene] write: SELF-STOPPING" << id() << name() << "(no values or palettes)";
         stop(FunctionParent::master());
         return;
     }
@@ -906,6 +907,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
 
 void Scene::postRun(MasterTimer* timer, QList<Universe *> ua)
 {
+    qCritical() << "[Scene] postRun:" << id() << name();
     handleFadersEnd(timer);
 
     Function::postRun(timer, ua);

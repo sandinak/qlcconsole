@@ -43,6 +43,7 @@
 #define KXMLQLCMonitorPointOfView   QStringLiteral("POV")
 #define KXMLQLCMonitorLayoutLocked  QStringLiteral("LayoutLocked")
 #define KXMLQLCMonitorSnapDivisions QStringLiteral("SnapDivisions")
+#define KXMLQLCMonitorAimSubjectHeight QStringLiteral("AimSubjectHeight")
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
 #define KXMLQLCMonitorShowLabels    QStringLiteral("ShowLabels")
 
@@ -93,6 +94,7 @@ MonitorProperties::MonitorProperties()
     , m_layoutLocked(false)
     , m_gridSubdivisions(1)
     , m_snapDivisions(0)
+    , m_aimSubjectHeight(1.4f)
     , m_showLabels(false)
 {
 }
@@ -106,6 +108,7 @@ void MonitorProperties::reset()
     m_layoutLocked = false;
     m_gridSubdivisions = 1;
     m_snapDivisions = 0;
+    m_aimSubjectHeight = 1.4f;
     m_showLabels = false;
     m_fixtureItems.clear();
     m_genericItems.clear();
@@ -629,6 +632,7 @@ FixtureRigProps MonitorProperties::fixtureRigProps(quint32 fid) const
 void MonitorProperties::setFixtureRigProps(quint32 fid, const FixtureRigProps &props)
 {
     m_rigProps[fid] = props;
+    emit rigPropsChanged(fid);
 }
 
 QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
@@ -641,8 +645,13 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     if (t != nullptr)
         return t->positionAt(rp.trussOffset);
 
-    // Free-placed: use the stored position directly (X/Y in scene units, Z in metres)
-    return m_fixtureItems[fid].m_baseItem.m_position;
+    // Free-placed: stored X/Y are in MILLIMETRES (see setFixturePosition callers,
+    // which pass raw mm), but this function must return METRES to match the truss
+    // branch above and the target/platform world coordinates that callers (aim
+    // solver, effect engine, Aim palette) subtract it from. Convert X/Y; Z is
+    // already in metres (always 0 today).
+    const QVector3D p = m_fixtureItems[fid].m_baseItem.m_position;
+    return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f, p.z());
 }
 
 /*********************************************************************
@@ -679,6 +688,9 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
 
     if (attrs.hasAttribute(KXMLQLCMonitorSnapDivisions))
         setSnapDivisions(attrs.value(KXMLQLCMonitorSnapDivisions).toString().toInt());
+
+    if (attrs.hasAttribute(KXMLQLCMonitorAimSubjectHeight))
+        setAimSubjectHeight(attrs.value(KXMLQLCMonitorAimSubjectHeight).toString().toFloat());
 
     while (root.readNextStartElement())
     {
@@ -919,6 +931,7 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         doc->writeAttribute(KXMLQLCMonitorLayoutLocked, QString::number(1));
     if (snapDivisions() > 0)
         doc->writeAttribute(KXMLQLCMonitorSnapDivisions, QString::number(snapDivisions()));
+        doc->writeAttribute(KXMLQLCMonitorAimSubjectHeight, QString::number(aimSubjectHeight()));
 
     /* Font */
     doc->writeTextElement(KXMLQLCMonitorFont, font().toString());

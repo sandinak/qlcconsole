@@ -789,6 +789,7 @@ void App::initActions()
 
     m_fileSaveAction = new QAction(QIcon(":/filesave.png"), tr("&Save"), this);
     m_fileSaveAction->setShortcut(QKeySequence("CTRL+S"));
+    m_fileSaveAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_fileSaveAction, SIGNAL(triggered(bool)), this, SLOT(slotFileSave()));
 
     m_fileSaveAsAction = new QAction(QIcon(":/filesaveas.png"), tr("Save &As..."), this);

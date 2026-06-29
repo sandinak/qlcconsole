@@ -38,6 +38,9 @@ add_library(${module_name} SHARED
     keypadparser.cpp keypadparser.h
     mastertimer.cpp mastertimer.h
     monitorproperties.cpp monitorproperties.h
+    powerdistribution.cpp powerdistribution.h
+    venue.cpp venue.h
+    aimsolver.cpp aimsolver.h
     stageplatform.cpp stageplatform.h
     stagetarget.cpp stagetarget.h
     truss.cpp truss.h
@@ -69,7 +72,6 @@ add_library(${module_name} SHARED
     rgbtext.cpp rgbtext.h
     programmerflasher.cpp programmerflasher.h
     highlighteffect.cpp highlighteffect.h
-    followspoteffect.cpp followspoteffect.h
     effectscript.cpp effectscript.h
     effectscriptcache.cpp effectscriptcache.h
     effectinstance.cpp effectinstance.h

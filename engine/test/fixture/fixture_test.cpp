@@ -590,6 +590,49 @@ void Fixture_Test::degrees()
     QCOMPARE(pos.at(1).value, uchar(170));
 }
 
+void Fixture_Test::indexedPosition()
+{
+    // The Junman 2 Head maps only DMX 0-127 of its Pan channel to absolute
+    // positioning (RotationIndexed) — one full 360-degree CCW sweep; 128-255 is
+    // continuous rotation. With PanMax=360, position math must spread 0..360
+    // degrees across MSB 0..127, never spilling into the rotation band.
+    Fixture fxi(this);
+
+    QLCFixtureDef* fixtureDef;
+    fixtureDef = m_doc->fixtureDefCache()->fixtureDef("Junman", "2 Head");
+    QVERIFY(fixtureDef != NULL);
+
+    QLCFixtureMode* fixtureMode = fixtureDef->modes().first();
+    QVERIFY(fixtureMode != NULL);
+
+    fxi.setFixtureDefinition(fixtureDef, fixtureMode);
+    fxi.setID(7);
+
+    // Helper: pull the MSB value written for the first head's Pan (channel 0).
+    // Band is [0, 0x7FFF] => MSB spans 0..127.
+
+    // 0 degrees -> bottom of band
+    QList<SceneValue> pos = fxi.positionToValues(QLCChannel::Pan, 0);
+    QCOMPARE(pos.at(0).channel, quint32(0));
+    QCOMPARE(pos.at(0).value, uchar(0));
+
+    // Full 360 sweep (== PanMax) -> top of the indexed band, MSB 127 (NOT 255)
+    pos = fxi.positionToValues(QLCChannel::Pan, 360);
+    QCOMPARE(pos.at(0).channel, quint32(0));
+    QCOMPARE(pos.at(0).value, uchar(127));
+    QCOMPARE(pos.at(1).value, uchar(255));   // fine channel
+
+    // Half sweep (180) -> roughly mid-band: 0.5 * 0x7FFF = 0x3FFF -> MSB 63
+    pos = fxi.positionToValues(QLCChannel::Pan, 180);
+    QCOMPARE(pos.at(0).channel, quint32(0));
+    QCOMPARE(pos.at(0).value, uchar(63));
+
+    // Over-range angle is CLAMPED to the band, never entering the spin zone
+    pos = fxi.positionToValues(QLCChannel::Pan, 720);
+    QCOMPARE(pos.at(0).value, uchar(127));
+    QVERIFY(pos.at(0).value < uchar(128));
+}
+
 void Fixture_Test::heads()
 {
     Fixture fxi(this);

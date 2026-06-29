@@ -65,11 +65,11 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     root->setContentsMargins(0, 6, 0, 0);
 
     QLabel *header = new QLabel(
-        tr("<b>Looks</b> (palettes) are applied to this scene's <b>targets</b>. "
-           "Every look applies to every target.<br>"
+        tr("<b>Looks</b> (palettes) are applied to the <b>fixtures in this scene</b>. "
+           "Every look applies to every fixture.<br>"
            "Drag here to add: <b>palettes</b> &rarr; looks; "
-           "<b>fixture groups</b> &rarr; targets (dynamic — follow membership); "
-           "<b>fixtures</b> &rarr; targets (fixed)."), this);
+           "<b>fixture groups</b> &rarr; scene fixtures (dynamic — follow membership); "
+           "individual <b>fixtures</b> &rarr; scene fixtures (fixed)."), this);
     header->setWordWrap(true);
     root->addWidget(header);
 
@@ -78,7 +78,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
 
     // --- Targets column (groups + optionally fixtures) ---
     QVBoxLayout *targetCol = new QVBoxLayout();
-    m_targetsLabel = new QLabel(tr("Targets"), this);
+    m_targetsLabel = new QLabel(tr("Fixtures in Scene"), this);
     targetCol->addWidget(m_targetsLabel);
     m_targetList = new QTreeWidget(this);
     m_targetList->setHeaderHidden(true);
@@ -242,7 +242,7 @@ void SceneGroupLooks::reload()
     if (m_targetList->topLevelItemCount() == 0)
     {
         QTreeWidgetItem *it = new QTreeWidgetItem(m_targetList);
-        it->setText(0, tr("(no targets — drag groups or fixtures here)"));
+        it->setText(0, tr("(no fixtures — drag groups or fixtures here)"));
         it->setFlags(Qt::NoItemFlags);
     }
 
@@ -269,7 +269,7 @@ void SceneGroupLooks::reload()
     foreach (FixtureGroup *g, groups)
         foreach (quint32 fid, g->fixtureList())
             allFixtures.insert(fid);
-    m_targetsLabel->setText(tr("Targets (%n fixture(s))", "", allFixtures.count()));
+    m_targetsLabel->setText(tr("Fixtures in Scene (count %n)", "", allFixtures.count()));
 
     // Looks = palettes — preserve the current selection so that moving an
     // effect slider (which triggers reload via slotLookEdited) doesn't

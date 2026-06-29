@@ -83,6 +83,7 @@ add_library(${module_name}
     monitor/monitorlayout.cpp monitor/monitorlayout.h
     monitor/trussitem.cpp monitor/trussitem.h
     monitor/platformitem.cpp monitor/platformitem.h
+    monitor/powersourceitem.cpp monitor/powersourceitem.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
@@ -98,6 +99,7 @@ add_library(${module_name}
     capabilitybar.cpp capabilitybar.h
     lookeditor.cpp lookeditor.h
     pathdrawwidget.cpp pathdrawwidget.h
+    powerdistributiondialog.cpp powerdistributiondialog.h
     programmingmanager.cpp programmingmanager.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h

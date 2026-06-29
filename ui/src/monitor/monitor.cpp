@@ -26,6 +26,8 @@
 #include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPolygonF>
+#include <QtMath>
 #include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -62,6 +64,7 @@
 #include <QMutexLocker>
 #include <memory>
 #include "monitorfixtureitem.h"
+#include "powerdistribution.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "scenevalue.h"
@@ -75,6 +78,7 @@
 #include "monitorgraphicsview.h"
 #include "trussitem.h"
 #include "platformitem.h"
+#include "feetinchesspinbox.h"
 #include "targetitem.h"
 #include "truss.h"
 #include "stageplatform.h"
@@ -119,6 +123,7 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     , m_gridHSpin(NULL)
     , m_unitsCombo(NULL)
     , m_labelsAction(NULL)
+    , m_pasteAction(NULL)
 {
     Q_ASSERT(doc != NULL);
 
@@ -138,6 +143,12 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
             this, SLOT(slotFixtureRemoved(quint32)));
     connect(m_doc->masterTimer(), SIGNAL(functionStarted(quint32)),
             this, SLOT(slotFunctionStarted(quint32)));
+    // Re-render targets on Design/Operate switch so their drag-ability tracks the
+    // mode (editable while designing, frozen in a show).
+    connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode) {
+        if (m_graphicsView != NULL)
+            m_graphicsView->updateTargets();
+    });
 }
 
 void Monitor::slotFunctionStarted(quint32 id)
@@ -328,7 +339,7 @@ void Monitor::fillGraphicsView()
     // apply the persisted lock state once all fixtures are present
     m_lockAction->blockSignals(true);
     m_lockAction->setChecked(m_props->layoutLocked());
-    m_lockAction->setIcon(QIcon(m_props->layoutLocked() ? ":/lock.png" : ":/unlock.png"));
+    updatePlotLockAppearance(m_props->layoutLocked());
     m_lockAction->blockSignals(false);
     m_graphicsView->setLayoutLocked(m_props->layoutLocked());
 }
@@ -376,6 +387,12 @@ void Monitor::setActiveScene(quint32 sceneId)
 {
     if (m_graphicsView != NULL)
         m_graphicsView->setActiveScene(sceneId);
+}
+
+void Monitor::setFollowSpotPin(bool visible, float xMeters, float yMeters)
+{
+    if (m_graphicsView != NULL)
+        m_graphicsView->setFollowSpotPin(visible, xMeters, yMeters);
 }
 
 Monitor* Monitor::instance()
@@ -632,11 +649,26 @@ void Monitor::initGraphicsToolbar()
     connect(m_snapCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotSnapChanged(int)));
 
-    m_lockAction = m_graphicsToolBar->addAction(QIcon(":/lock.png"), tr("Lock layout"));
+    m_lockAction = m_graphicsToolBar->addAction(QIcon(":/lock.png"), tr("Edit Plot"));
     m_lockAction->setCheckable(true);
     m_lockAction->setChecked(m_props->layoutLocked());
-    m_lockAction->setToolTip(tr("Lock the layout: fixtures can be selected but not moved"));
+    updatePlotLockAppearance(m_props->layoutLocked());
     connect(m_lockAction, SIGNAL(toggled(bool)), this, SLOT(slotLockToggled(bool)));
+
+    m_graphicsToolBar->addSeparator();
+
+    // 2D-map view overlay: recolours the plot by a chosen dimension. Power tints
+    // fixtures by circuit; more views (DMX/Groups/...) slot in here later.
+    QLabel *viewLabel = new QLabel(tr("View"));
+    viewLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_graphicsToolBar->addWidget(viewLabel);
+    m_viewCombo = new QComboBox();
+    m_viewCombo->addItem(tr("Normal"),     ViewNormal);
+    m_viewCombo->addItem(tr("Power"),      ViewPower);
+    m_viewCombo->setToolTip(tr("Colour the plot by an overlay: Normal = live "
+                               "output; Power = tint each fixture by its circuit."));
+    m_graphicsToolBar->addWidget(m_viewCombo);
+    connect(m_viewCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotMapViewChanged(int)));
 
     m_graphicsToolBar->addSeparator();
 
@@ -663,6 +695,23 @@ void Monitor::initGraphicsToolbar()
     // Single Remove button removes whatever is selected
     m_graphicsToolBar->addAction(QIcon(":/edit_remove.png"), tr("Remove selected"),
                                  this, SLOT(slotRemoveSelected()));
+
+    // Copy / paste of stage features (trusses, platforms, targets) so identical
+    // scenic elements can be replicated quickly.
+    QAction *copyAct = m_graphicsToolBar->addAction(
+        QIcon(":/editcopy.png"), tr("Copy selected features"),
+        this, SLOT(slotCopySelected()));
+    copyAct->setShortcut(QKeySequence::Copy);
+    copyAct->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    addAction(copyAct);
+
+    m_pasteAction = m_graphicsToolBar->addAction(
+        QIcon(":/editpaste.png"), tr("Paste features"),
+        this, SLOT(slotPasteFeatures()));
+    m_pasteAction->setShortcut(QKeySequence::Paste);
+    m_pasteAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    m_pasteAction->setEnabled(false);
+    addAction(m_pasteAction);
 
     m_graphicsToolBar->addSeparator();
 
@@ -897,19 +946,114 @@ void Monitor::slotSnapChanged(int index)
     m_doc->setModified();
 }
 
+void Monitor::slotMapViewChanged(int)
+{
+    if (m_viewCombo != NULL)
+        applyMapView(m_viewCombo->currentData().toInt());
+}
+
+void Monitor::applyMapView(int view)
+{
+    if (m_graphicsView == NULL)
+        return;
+
+    if (view == ViewPower)
+    {
+        PowerDistribution *pd = m_doc->powerDistribution();
+
+        // Give each circuit a distinct hue (flat index across all sources).
+        int total = 0;
+        foreach (const PowerSource &src, pd->sources())
+            total += src.circuits.size();
+        QHash<QString, QColor> circuitColor;
+        int idx = 0;
+        for (int s = 0; s < pd->sources().size(); s++)
+            for (int c = 0; c < pd->sources().at(s).circuits.size(); c++)
+            {
+                const int hue = int(idx * 360.0 / qMax(1, total)) % 360;
+                circuitColor.insert(QString("%1:%2").arg(s).arg(c),
+                                    QColor::fromHsv(hue, 200, 235));
+                idx++;
+            }
+
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
+            if (it == NULL)
+                continue;
+            int s = -1, c = -1;
+            pd->circuitOf(fx->id(), s, c);
+            if (s >= 0 && c >= 0)
+            {
+                it->setViewTint(circuitColor.value(QString("%1:%2").arg(s).arg(c),
+                                                   QColor(120, 120, 120)));
+                it->setToolTip(tr("Power: %1 / %2")
+                               .arg(pd->sources().at(s).name)
+                               .arg(pd->sources().at(s).circuits.at(c).name));
+            }
+            else
+            {
+                it->setViewTint(QColor(70, 70, 70));   // unassigned = dim grey
+                it->setToolTip(tr("Power: unassigned to a circuit"));
+            }
+        }
+        // Tint the source markers with their circuits' colours so a source and
+        // the fixtures on its circuits read as the same colour.
+        m_graphicsView->setPowerSourceColors(circuitColor);
+    }
+    else // ViewNormal: clear overlays
+    {
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
+            if (it != NULL)
+            {
+                it->setViewTint(QColor());
+                it->setToolTip(QString());
+            }
+        }
+        m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
+    }
+}
+
 void Monitor::slotLockToggled(bool locked)
 {
     Q_ASSERT(m_graphicsView != NULL);
 
     m_graphicsView->setLayoutLocked(locked);
-    m_lockAction->setIcon(QIcon(locked ? ":/lock.png" : ":/unlock.png"));
+    updatePlotLockAppearance(locked);
     m_props->setLayoutLocked(locked);
     m_doc->setModified();
+}
+
+void Monitor::updatePlotLockAppearance(bool locked)
+{
+    if (m_lockAction == NULL)
+        return;
+
+    m_lockAction->setIcon(QIcon(locked ? ":/lock.png" : ":/unlock.png"));
+    // The toggle flips between editing the plot and freezing it for the show.
+    m_lockAction->setText(locked ? tr("Plot Locked") : tr("Edit Plot"));
+    m_lockAction->setToolTip(locked
+        ? tr("Plot locked — the rig is frozen for the show.\n"
+             "Fixtures can be selected but not moved, and facing arrows are hidden;\n"
+             "aim targets stay adjustable. Click to edit the plot.")
+        : tr("Editing the plot — arrange & aim the rig.\n"
+             "Drag a fixture to move it; Alt-drag a moving head to rotate its facing.\n"
+             "Click to lock the plot for the show."));
 }
 
 void Monitor::slotAddFixture()
 {
     Q_ASSERT(m_graphicsView != NULL);
+
+    if (m_props->layoutLocked())
+    {
+        QMessageBox::information(this, tr("Plot locked"),
+            tr("Unlock the plot (Edit Plot) before adding fixtures — a fixture "
+               "added to a locked plot can't be positioned."));
+        return;
+    }
 
     QList <quint32> disabled = m_graphicsView->fixturesID();
     /* Get a list of new fixtures to add to the scene */
@@ -1040,6 +1184,141 @@ void Monitor::slotRemoveSelected()
         m_doc->setModified();
 }
 
+bool Monitor::clipboardHasFeatures() const
+{
+    return !m_trussClipboard.isEmpty()
+        || !m_platformClipboard.isEmpty()
+        || !m_targetClipboard.isEmpty();
+}
+
+void Monitor::slotCopySelected()
+{
+    QList<TrussClip>    trusses;
+    QList<PlatformClip> platforms;
+    QList<TargetClip>   targets;
+
+    foreach (QGraphicsItem *gi, m_graphicsView->scene()->selectedItems())
+    {
+        if (TrussItem *ti = dynamic_cast<TrussItem *>(gi))
+        {
+            Truss *t = ti->truss();
+            TrussClip c;
+            c.name = t->name();   c.type = int(t->type());
+            c.origin = t->origin(); c.direction = t->direction();
+            c.length = t->length(); c.width = t->width();
+            c.profile = int(t->profile()); c.locked = t->locked();
+            trusses.append(c);
+        }
+        else if (PlatformItem *pi = dynamic_cast<PlatformItem *>(gi))
+        {
+            StagePlatform *p = pi->platform();
+            PlatformClip c;
+            c.name = p->name();
+            c.originX = p->originX(); c.originY = p->originY();
+            c.width = p->width(); c.depth = p->depth(); c.height = p->height();
+            c.color = p->color();
+            platforms.append(c);
+        }
+        else if (TargetItem *tg = dynamic_cast<TargetItem *>(gi))
+        {
+            StageTarget *t = tg->target();
+            TargetClip c;
+            c.name = t->name();
+            c.x = t->x(); c.y = t->y(); c.z = t->z();
+            c.color = t->color();
+            targets.append(c);
+        }
+    }
+
+    if (trusses.isEmpty() && platforms.isEmpty() && targets.isEmpty())
+        return;   // nothing copyable selected: keep any previous clipboard
+
+    m_trussClipboard    = trusses;
+    m_platformClipboard = platforms;
+    m_targetClipboard   = targets;
+    m_pasteCount        = 0;
+
+    if (m_pasteAction)
+        m_pasteAction->setEnabled(true);
+}
+
+void Monitor::pasteClipboard(float dxM, float dyM)
+{
+    if (!clipboardHasFeatures())
+        return;
+
+    QList<quint32> newTrussIds, newPlatformIds, newTargetIds, newPaletteIds;
+
+    foreach (const TrussClip &c, m_trussClipboard)
+    {
+        Truss *t = m_props->addTruss();
+        t->setName(c.name + tr(" copy"));
+        t->setType(Truss::TrussType(c.type));
+        t->setOrigin(c.origin + QVector3D(dxM, dyM, 0.0f));
+        t->setDirection(c.direction);
+        t->setLength(c.length);
+        t->setWidth(c.width);
+        t->setProfile(Truss::Profile(c.profile));
+        t->setLocked(c.locked);
+        newTrussIds.append(t->id());
+    }
+
+    foreach (const PlatformClip &c, m_platformClipboard)
+    {
+        StagePlatform *p = m_props->addPlatform();
+        p->setName(c.name + tr(" copy"));
+        p->setOriginX(c.originX + dxM);
+        p->setOriginY(c.originY + dyM);
+        p->setWidth(c.width);
+        p->setDepth(c.depth);
+        p->setHeight(c.height);
+        p->setColor(c.color);
+        newPlatformIds.append(p->id());
+    }
+
+    foreach (const TargetClip &c, m_targetClipboard)
+    {
+        StageTarget *t = m_props->addStageTarget();
+        t->setName(c.name + tr(" copy"));
+        t->setX(c.x + dxM);
+        t->setY(c.y + dyM);
+        t->setZ(c.z);
+        t->setColor(c.color);
+        newTargetIds.append(t->id());
+
+        // Mirror slotAddTarget: give the copy its own linked PanTilt palette so
+        // it is immediately usable rather than a dangling position.
+        QLCPalette *pal = new QLCPalette(QLCPalette::PanTilt);
+        pal->setName(t->name());
+        pal->setValue(0, 0);
+        pal->setStageTargetId(t->id());
+        pal->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(QLCPalette::PanTilt)));
+        m_doc->addPalette(pal);
+        newPaletteIds.append(pal->id());
+    }
+
+    m_graphicsView->updateTrusses();
+    m_graphicsView->updatePlatforms();
+    m_graphicsView->updateTargets();
+    m_doc->setModified();
+
+    // Register the paste on the canvas undo stack so Ctrl+Z removes the copies.
+    m_graphicsView->recordFeaturePaste(newTrussIds, newPlatformIds,
+                                       newTargetIds, newPaletteIds);
+}
+
+void Monitor::slotPasteFeatures()
+{
+    if (!clipboardHasFeatures())
+        return;
+
+    // Cascade each successive paste so repeated Ctrl+V copies don't stack
+    // exactly on top of one another.
+    ++m_pasteCount;
+    const float step = 0.5f * float(m_pasteCount);   // metres
+    pasteClipboard(step, step);
+}
+
 void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
 {
     showFixtureItemEditor();
@@ -1136,8 +1415,20 @@ void Monitor::slotEditTarget(quint32 tid)
     QDoubleSpinBox *zSpin = new QDoubleSpinBox(&dlg);
     zSpin->setRange(0, isFeet_t ? 65.6 : 20.0); zSpin->setSuffix(unitSfx_t); zSpin->setDecimals(2);
     zSpin->setValue(double(t->z()) * toDisp_t);
-    zSpin->setToolTip(tr("Height above stage floor (0 = floor target)"));
+    zSpin->setToolTip(tr("ABSOLUTE aim height above the stage floor for this "
+                         "target (used by Pan/Tilt aim palettes). 0 = floor."));
     form->addRow(tr("Z (height):"), zSpin);
+
+    // Follow-spot subject/user height — when a follow spot drives a fixture it
+    // aims at this height above the platform the subject stands on, OVERRIDING
+    // the target Z so the beam tracks the body across risers. Per-workspace.
+    QDoubleSpinBox *subjSpin = new QDoubleSpinBox(&dlg);
+    subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0); subjSpin->setSuffix(unitSfx_t); subjSpin->setDecimals(2);
+    subjSpin->setValue(double(m_props->aimSubjectHeight()) * toDisp_t);
+    subjSpin->setToolTip(tr("Follow-spot subject height above the platform/deck "
+                            "(overrides the target Z when a follow spot drives the "
+                            "fixture). ~1.4 m hits the chest."));
+    form->addRow(tr("Follow-spot subject height:"), subjSpin);
 
     QColor curColor = t->color().isValid() ? t->color() : QColor(255, 180, 0);
     QPushButton *colorBtn = new QPushButton(&dlg);
@@ -1168,6 +1459,7 @@ void Monitor::slotEditTarget(quint32 tid)
     t->setY(float(ySpin->value() * fromDisp_t));
     t->setZ(float(zSpin->value() * fromDisp_t));
     t->setColor(chosenColor);
+    m_props->setAimSubjectHeight(float(subjSpin->value() * fromDisp_t));
 
     m_graphicsView->updateTargets();
     m_doc->setModified();
@@ -1224,18 +1516,19 @@ void Monitor::slotEditPlatform(quint32 pid)
     oySpin->setValue(double(p->originY()) * toDisp_p);
     form->addRow(tr("Origin Y:"), oySpin);
 
-    QDoubleSpinBox *wSpin = new QDoubleSpinBox(&dlg);
-    wSpin->setRange(0.1, sizeMax_p); wSpin->setSuffix(unitSfx_p); wSpin->setDecimals(2);
+    // In feet mode these accept feet-and-inches (5' 6") or decimal feet (5.5).
+    FeetInchesSpinBox *wSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    wSpin->setRange(0.1, sizeMax_p);
     wSpin->setValue(double(p->width()) * toDisp_p);
     form->addRow(tr("Width (X):"), wSpin);
 
-    QDoubleSpinBox *dSpin = new QDoubleSpinBox(&dlg);
-    dSpin->setRange(0.1, sizeMax_p); dSpin->setSuffix(unitSfx_p); dSpin->setDecimals(2);
+    FeetInchesSpinBox *dSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    dSpin->setRange(0.1, sizeMax_p);
     dSpin->setValue(double(p->depth()) * toDisp_p);
     form->addRow(tr("Depth (Y):"), dSpin);
 
-    QDoubleSpinBox *hSpin = new QDoubleSpinBox(&dlg);
-    hSpin->setRange(0.0, hMax_p); hSpin->setSuffix(unitSfx_p); hSpin->setDecimals(2);
+    FeetInchesSpinBox *hSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    hSpin->setRange(0.0, hMax_p);
     hSpin->setValue(double(p->height()) * toDisp_p);
     form->addRow(tr("Height:"), hSpin);
 
@@ -1287,12 +1580,47 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     menu.addSeparator();
     menu.addAction(tr("Add Target Position here"),
                    this, SLOT(slotAddTarget()));
+
+    menu.addSeparator();
+    menu.addAction(QIcon(":/editcopy.png"), tr("Copy selected features"),
+                   this, SLOT(slotCopySelected()));
+    if (clipboardHasFeatures())
+    {
+        QAction *pasteHere = menu.addAction(QIcon(":/editpaste.png"),
+                                            tr("Paste features here"));
+        connect(pasteHere, &QAction::triggered, this, [this, scenePos]() {
+            // Anchor the paste so the first clipboard feature lands at the
+            // cursor; the rest keep their relative offsets.
+            QPointF refM;
+            if (!m_trussClipboard.isEmpty())
+                refM = QPointF(m_trussClipboard.first().origin.x(),
+                               m_trussClipboard.first().origin.y());
+            else if (!m_platformClipboard.isEmpty())
+                refM = QPointF(m_platformClipboard.first().originX,
+                               m_platformClipboard.first().originY);
+            else
+                refM = QPointF(m_targetClipboard.first().x,
+                               m_targetClipboard.first().y);
+
+            QPointF curMm = m_graphicsView->pixelsToRealPosition(scenePos.x(), scenePos.y());
+            pasteClipboard(float(curMm.x() / 1000.0) - refM.x(),
+                           float(curMm.y() / 1000.0) - refM.y());
+        });
+    }
+
     menu.exec(QCursor::pos());
 }
 
 void Monitor::slotAddFixtureToTruss(quint32 trussId, float offsetMetres)
 {
     Q_ASSERT(m_graphicsView != NULL);
+
+    if (m_props->layoutLocked())
+    {
+        QMessageBox::information(this, tr("Plot locked"),
+            tr("Unlock the plot (Edit Plot) before adding fixtures."));
+        return;
+    }
 
     Truss *t = m_props->truss(trussId);
     if (!t) return;
@@ -2284,6 +2612,114 @@ void Monitor::showFixturePropertiesById(quint32 fxId)
     }
 }
 
+// Live preview of how a moving head's facing reads on the 2D stage layout:
+// a body square + green facing arrow (panZeroDir) and a faint pan-range wedge
+// over DS/US/SR/SL stage labels. Mirrors MonitorFixtureItem's look so the user
+// can confirm orientation before saving without hunting for the icon behind the
+// dialog. Plain QWidget (no Q_OBJECT) — same pattern as TrussStripWidget.
+class FacingPreviewWidget : public QWidget
+{
+public:
+    explicit FacingPreviewWidget(QWidget *parent = nullptr)
+        : QWidget(parent)
+    {
+        setMinimumSize(116, 116);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        setToolTip(tr("Orientation preview (DS=downstage, US=upstage, SR/SL=stage "
+                      "right/left).\nGREEN arrow = Front of device (Pan-zero) — drives "
+                      "the aim, shown in the 2D view.\nBLUE arrow = icon rotation — "
+                      "visual only, never affects the aim."));
+    }
+
+    void setHasPan(bool h)      { m_hasPan = h; update(); }
+    void setFacing(double deg)  { m_facing = float(deg); update(); }
+    void setIconRotation(double deg) { m_rotation = float(deg); update(); }
+    void setPanMax(double deg)  { m_panMax = deg > 0 ? float(deg) : 360.0f; update(); }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+
+        const QRectF r = QRectF(rect()).adjusted(1, 1, -1, -1);
+        const QPointF c = r.center();
+
+        p.fillRect(r, QColor(24, 24, 24));
+        p.setPen(QPen(QColor(60, 60, 60), 1));
+        p.drawRect(r);
+
+        // Stage-reference labels (screen space): DS bottom, US top, SR/SL sides.
+        p.setPen(QColor(150, 150, 150));
+        QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
+        p.drawText(QRectF(r.left(), r.bottom() - 13, r.width(), 12), Qt::AlignHCenter, tr("DS"));
+        p.drawText(QRectF(r.left(), r.top() + 1,     r.width(), 12), Qt::AlignHCenter, tr("US"));
+        p.drawText(QRectF(r.right() - 16, r.top(), 15, r.height()), Qt::AlignVCenter | Qt::AlignRight, tr("SR"));
+        p.drawText(QRectF(r.left() + 1,   r.top(), 15, r.height()), Qt::AlignVCenter | Qt::AlignLeft,  tr("SL"));
+
+        if (!m_hasPan)
+        {
+            p.setPen(QColor(150, 150, 150));
+            p.drawText(r, Qt::AlignCenter, tr("(no pan)"));
+            return;
+        }
+
+        p.save();
+        p.translate(c);
+
+        const qreal bodyHalf = 12.0;
+
+        // Pan-range wedge — centred on the FACING (Front of device).  Independent
+        // of the icon rotation: the visual icon spin must never move the aim.
+        const qreal wedgeReach = bodyHalf + 30.0;
+        QRectF arcR(-wedgeReach, -wedgeReach, 2 * wedgeReach, 2 * wedgeReach);
+        const int startQt = qRound((270.0 + double(m_facing) - double(m_panMax) / 2.0) * 16.0);
+        const int spanQt  = qRound(double(m_panMax) * 16.0);
+        p.setPen(QPen(QColor(120, 90, 160, 130), 2));
+        p.drawArc(arcR, startQt, spanQt);
+
+        // Body — rotated by the VISUAL icon rotation ONLY (cosmetic layout).
+        p.save();
+        p.rotate(m_rotation);
+        p.setPen(QPen(QColor(150, 150, 150), 1));
+        p.setBrush(QColor(33, 33, 33));
+        p.drawRect(QRectF(-bodyHalf, -bodyHalf, 2 * bodyHalf, 2 * bodyHalf));
+        p.restore();
+
+        // Helper: draw an arrow from centre toward (sin a, cos a) — the same
+        // mapping the 2D fixture item uses (0°=DS, 90°=SR, 180°=US, 270°=SL).
+        auto drawArrow = [&](float angleDeg, qreal reach, qreal halfHead, const QColor &col) {
+            const qreal a = qDegreesToRadians(qreal(angleDeg));
+            const QPointF dir(qSin(a), qCos(a));
+            const QPointF tip  = dir * (bodyHalf + reach);
+            const QPointF perp(-dir.y(), dir.x());
+            const QPointF base = tip - dir * (halfHead * 1.8);
+            p.setPen(QPen(col, 2));
+            p.drawLine(QPointF(0, 0), tip);
+            p.setBrush(col);
+            p.setPen(QPen(col, 1));
+            QPolygonF head; head << tip << (base + perp * halfHead) << (base - perp * halfHead);
+            p.drawPolygon(head);
+        };
+
+        // BLUE arrow = icon (visual) rotation.  Shown only in this preview — never
+        // in the 2D stage view.  Drawn shorter/under the green arrow.
+        drawArrow(m_rotation, 20.0, 4.5, QColor(90, 150, 230));
+
+        // GREEN arrow = facing / Front of device.  This drives the aim and is the
+        // arrow shown in the 2D view.  Independent of the icon rotation above.
+        drawArrow(m_facing, 28.0, 5.0, QColor(80, 200, 120));
+
+        p.restore();
+    }
+
+private:
+    bool  m_hasPan   = true;
+    float m_facing   = 0.0f;
+    float m_rotation = 0.0f;
+    float m_panMax   = 360.0f;
+};
+
 void Monitor::showFixtureItemEditor()
 {
     QList<MonitorFixtureItem *> items = m_graphicsView->selectedFixtureItems();
@@ -2313,7 +2749,7 @@ void Monitor::showFixtureItemEditor()
         panZeroSpin->setRange(0, 359);
         panZeroSpin->setSuffix(QString::fromUtf8("°"));
         panZeroSpin->setDecimals(1);
-        rigForm->addRow(tr("Pan-zero direction:"), panZeroSpin);
+        rigForm->addRow(tr("Pan-zero — Front of device:"), panZeroSpin);
         vl->addWidget(rigBox);
 
         QGroupBox *transformBox = new QGroupBox(tr("Transform"), &dlg);
@@ -2321,7 +2757,7 @@ void Monitor::showFixtureItemEditor()
         QSpinBox *rotSpin = new QSpinBox;
         rotSpin->setRange(0, 359);
         rotSpin->setSuffix(QString::fromUtf8("°"));
-        transformForm->addRow(tr("Rotation:"), rotSpin);
+        transformForm->addRow(tr("Icon rotation (visual):"), rotSpin);
         vl->addWidget(transformBox);
 
         QDialogButtonBox *btns = new QDialogButtonBox(
@@ -2500,7 +2936,7 @@ void Monitor::showFixtureItemEditor()
     panZeroSpin->setRange(0, 359);
     panZeroSpin->setSuffix(QString::fromUtf8("°"));
     panZeroSpin->setDecimals(1);
-    rigForm->addRow(tr("Pan-zero direction:"), panZeroSpin);
+    rigForm->addRow(tr("Pan-zero — Front of device:"), panZeroSpin);
 
     QDoubleSpinBox *panOffsetSpin = new QDoubleSpinBox;
     panOffsetSpin->setRange(-720, 720);   // 540° pan fixtures need up to ±270°; 720 gives headroom
@@ -2730,6 +3166,9 @@ void Monitor::showFixtureItemEditor()
         live.panInvert     = panInvertCb->isChecked();
         live.tiltInvert    = tiltInvertCb->isChecked();
         m_props->setFixtureRigProps(fxId_dlg, live);
+        // Keep the 2D facing arrow in sync with the spinbox live.
+        if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fxId_dlg))
+            fi->setFacing(live.panZeroDir);
         flushSceneCaches();
         refreshTest();
     };
@@ -2741,9 +3180,12 @@ void Monitor::showFixtureItemEditor()
     connect(panInvertCb,    &QCheckBox::toggled, [&](bool) { liveRigUpdate(); });
     connect(tiltInvertCb,   &QCheckBox::toggled, [&](bool) { liveRigUpdate(); });
 
-    // Position and rotation
-    QGroupBox *posBox = new QGroupBox(tr("Position and rotation"), &dlg);
-    QFormLayout *posForm = new QFormLayout(posBox);
+    // Position & Orientation  (placed above Rig Assignment, per user request).
+    // Spinboxes on the left, live facing preview on the right to save height.
+    QGroupBox *posBox = new QGroupBox(tr("Position & Orientation"), &dlg);
+    QHBoxLayout *posRow = new QHBoxLayout(posBox);
+    QFormLayout *posForm = new QFormLayout;
+    posRow->addLayout(posForm, 1);
     const QString unit = isFeet_fx ? tr("ft") : tr("m");
 
     QDoubleSpinBox *xSpin = new QDoubleSpinBox;
@@ -2762,8 +3204,36 @@ void Monitor::showFixtureItemEditor()
     rotSpin->setRange(0, 359);
     rotSpin->setSuffix(QString::fromUtf8("°"));
     rotSpin->setValue(int(fxItem->rotation()));
-    posForm->addRow(tr("Rotation:"), rotSpin);
-    vl->addWidget(posBox);
+    posForm->addRow(tr("Icon rotation (visual):"), rotSpin);
+
+    // Live facing preview: how this fixture's orientation reads on the 2D stage
+    // once saved. Reflects the Rig-Assignment pan-zero direction below (and the
+    // icon Rotation) as they change.
+    {
+        const bool hasPanFx = fxi &&
+            fxi->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) != QLCChannel::invalid();
+        float panMaxFx = 360.0f;
+        if (fxi && fxi->fixtureMode() && fxi->fixtureMode()->physical().focusPanMax() > 0)
+            panMaxFx = float(fxi->fixtureMode()->physical().focusPanMax());
+
+        FacingPreviewWidget *preview = new FacingPreviewWidget(posBox);
+        preview->setHasPan(hasPanFx);
+        preview->setPanMax(panMaxFx);
+        preview->setFacing(panZeroSpin->value());
+        preview->setIconRotation(rotSpin->value());
+        posRow->addWidget(preview, 0, Qt::AlignTop);
+
+        // The pan-zero control lives in the Rig Assignment block below; keep the
+        // preview in lock-step with it and with the icon Rotation field.
+        connect(panZeroSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                preview, &FacingPreviewWidget::setFacing);
+        connect(rotSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+                [preview](int v) { preview->setIconRotation(v); });
+    }
+
+    // Insert the Position & Orientation box directly above Rig Assignment.
+    const int rigIdx = vl->indexOf(rigBox);
+    vl->insertWidget(rigIdx >= 0 ? rigIdx : vl->count(), posBox);
 
     // Gel color
     QGroupBox *gelBox = new QGroupBox(tr("Gel Color"), &dlg);

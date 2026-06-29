@@ -20,6 +20,7 @@
 #include <QHash>
 #include <QList>
 #include <QMutex>
+#include <QPointF>
 #include <QTimer>
 #include <QSharedPointer>
 #include <QVariantMap>
@@ -90,6 +91,13 @@ private:
      *  pipeline instead of directly to preGMValues (which zeroIntensityChannels
      *  would wipe before processFaders re-writes colour faders). */
     QHash<int, QSharedPointer<GenericFader>> m_faders; // key = universe index
+
+    /** Last followspot beam position (pan/tilt degrees) per fixture, captured
+     *  from the most recent Operate-mode tick.  Persists across scene
+     *  transitions and instance teardown so a followspot effect configured for
+     *  followMode = "lastPosition" resumes where the beam left off instead of
+     *  jumping.  Main-thread only (written/read in slotTick). */
+    QHash<quint32, QPointF> m_lastSpotDeg;
 };
 
 #endif // EFFECTSCRIPTRUNNER_H

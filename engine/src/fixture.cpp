@@ -320,6 +320,39 @@ QVector <quint32> Fixture::cmyChannels(int head) const
     return m_fixtureMode->heads().at(head).cmyChannels();
 }
 
+/**
+ * Some moving heads map only a sub-range of their Pan/Tilt channel to absolute
+ * (indexed) positioning, reserving the rest of the range for continuous
+ * rotation at variable speed/direction (e.g. the Junman 2-head: DMX 0-127 =
+ * indexed position, 128-255 = spin). When such a band is declared in the
+ * fixture definition with a RotationIndexed capability, position math must
+ * scale the physical degree range across THAT band only — otherwise a computed
+ * angle spills into the rotation zone and the head spins instead of pointing.
+ *
+ * Returns the 16-bit [lo, hi] band the degrees should map into. Defaults to the
+ * full 0..65535 range when no indexed capability is present, which reproduces
+ * stock QLC+ behaviour for every ordinary fixture.
+ */
+static void indexedPositionBand(const QLCChannel *msbChannel, quint32 &lo16, quint32 &hi16)
+{
+    lo16 = 0;
+    hi16 = 65535;
+
+    if (msbChannel == NULL)
+        return;
+
+    foreach (const QLCCapability *cap, msbChannel->capabilities())
+    {
+        if (cap->preset() == QLCCapability::RotationIndexed)
+        {
+            // Capability min/max are 8-bit DMX values on the MSB channel.
+            lo16 = quint32(cap->min()) << 8;
+            hi16 = (quint32(cap->max()) << 8) | 0x00FF;
+            return;
+        }
+    }
+}
+
 QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRelative)
 {
     QList<SceneValue> posList;
@@ -344,21 +377,30 @@ QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRela
                 continue;
             quint32 panLSB = channelNumber(QLCChannel::Pan, QLCChannel::LSB, i);
 
+            // Honour an indexed-position band if the fixture declares one
+            // (otherwise lo/hi span the full 0..65535 channel range).
+            quint32 lo16, hi16;
+            indexedPositionBand(m_fixtureMode->channel(panMSB), lo16, hi16);
+
             if (isRelative)
             {
                 // degrees is a relative value upon the current value.
-                // Recalculate absolute degrees here
-                float chDegrees = (maxDegrees / 256.0) * channelValueAt(panMSB);
-                headDegrees = qBound(0.0, chDegrees + headDegrees, maxDegrees);
-
+                // Recalculate absolute degrees from the current channel value,
+                // inverting the band mapping.
+                quint32 cur = quint32(channelValueAt(panMSB)) << 8;
                 if (panLSB != QLCChannel::invalid())
-                {
-                    chDegrees = (maxDegrees / 65536.0) * channelValueAt(panLSB);
-                    headDegrees = qBound(0.0, chDegrees + headDegrees, maxDegrees);
-                }
+                    cur |= channelValueAt(panLSB);
+
+                qreal chDegrees = (hi16 > lo16)
+                    ? maxDegrees * (qreal(qBound(lo16, cur, hi16)) - lo16) / (hi16 - lo16)
+                    : 0.0;
+                headDegrees = qBound(0.0, chDegrees + qreal(degrees), maxDegrees);
             }
 
-            quint16 degToDmx = (headDegrees * 65535.0) / maxDegrees;
+            // Clamp to the band so an out-of-range angle can never spill into
+            // the rotation zone of a split channel.
+            qreal frac = qBound(0.0, headDegrees / maxDegrees, 1.0);
+            quint16 degToDmx = static_cast<quint16>(lo16 + frac * (hi16 - lo16));
             posList.append(SceneValue(id(), panMSB, static_cast<uchar>(degToDmx >> 8)));
 
             if (panLSB != QLCChannel::invalid())
@@ -381,21 +423,30 @@ QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRela
                 continue;
             quint32 tiltLSB = channelNumber(QLCChannel::Tilt, QLCChannel::LSB, i);
 
+            // Honour an indexed-position band if the fixture declares one
+            // (otherwise lo/hi span the full 0..65535 channel range).
+            quint32 lo16, hi16;
+            indexedPositionBand(m_fixtureMode->channel(tiltMSB), lo16, hi16);
+
             if (isRelative)
             {
                 // degrees is a relative value upon the current value.
-                // Recalculate absolute degrees here
-                float chDegrees = (maxDegrees / 256.0) * channelValueAt(tiltMSB);
-                headDegrees = qBound(0.0, chDegrees + headDegrees, maxDegrees);
-
+                // Recalculate absolute degrees from the current channel value,
+                // inverting the band mapping.
+                quint32 cur = quint32(channelValueAt(tiltMSB)) << 8;
                 if (tiltLSB != QLCChannel::invalid())
-                {
-                    chDegrees = (maxDegrees / 65536.0) * channelValueAt(tiltLSB);
-                    headDegrees = qBound(0.0, chDegrees + headDegrees, maxDegrees);
-                }
+                    cur |= channelValueAt(tiltLSB);
+
+                qreal chDegrees = (hi16 > lo16)
+                    ? maxDegrees * (qreal(qBound(lo16, cur, hi16)) - lo16) / (hi16 - lo16)
+                    : 0.0;
+                headDegrees = qBound(0.0, chDegrees + qreal(degrees), maxDegrees);
             }
 
-            quint16 degToDmx = (headDegrees * 65535.0) / maxDegrees;
+            // Clamp to the band so an out-of-range angle can never spill into
+            // the rotation zone of a split channel.
+            qreal frac = qBound(0.0, headDegrees / maxDegrees, 1.0);
+            quint16 degToDmx = static_cast<quint16>(lo16 + frac * (hi16 - lo16));
             posList.append(SceneValue(id(), tiltMSB, static_cast<uchar>(degToDmx >> 8)));
 
             if (tiltLSB != QLCChannel::invalid())

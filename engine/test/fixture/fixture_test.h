@@ -43,6 +43,7 @@ private slots:
     void fixtureDef();
     void channels();
     void degrees();
+    void indexedPosition();
     void heads();
     void loadWrongRoot();
     void loadFixtureDef();

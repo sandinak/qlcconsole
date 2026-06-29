@@ -20,6 +20,7 @@
 #include <QJSValue>
 #include <QHash>
 #include <QList>
+#include <QPointF>
 #include <QElapsedTimer>
 #include <QVariantMap>
 
@@ -52,6 +53,16 @@ public:
     // --- Named data channels (joystick, beat, …) injected before each tick ---
     void setDataChannels(const QHash<QString, QVariantMap> &channels);
 
+    /** Last followspot beam position (pan/tilt degrees) per fixture, supplied by
+     *  the runner before each tick.  Exposed to the script as fixture.lastSpot so
+     *  followMode = "lastPosition" can seed its setpoint and avoid jumping when a
+     *  new scene's followspot takes over. */
+    void setLastSpotPositions(const QHash<quint32, QPointF> &deg) { m_lastSpotIn = deg; }
+
+    /** Per-fixture pan/tilt (degrees) the last runTick() produced.  The runner
+     *  accumulates these into its persistent last-spot store. */
+    QHash<quint32, QPointF> lastIntentDegrees() const { return m_lastIntentDeg; }
+
     /** Names of data channels this script subscribes to. */
     QStringList dataChannelKeys() const { return m_script.dataChannelKeys(); }
 
@@ -65,8 +76,12 @@ public:
     // --- Read last results (any thread, mutex-protected) ---
     QList<DmxWrite> dmxWrites() const;
 
+    // Returns the scene's fixture list filtered by the script's declared fixtureTypes.
+    // If the script declares no types, all scene fixtures are returned.
+    QList<quint32> effectiveFixtureIds() const;
+
 private:
-    QJSValue buildFixturesArray();
+    QJSValue buildFixturesArray(const QList<quint32> &fxIds);
     QJSValue buildInputsObject() const;
     QJSValue buildPalettesObject() const;
     QJSValue buildParamsObject() const;
@@ -87,6 +102,13 @@ private:
     QHash<QString, double>     m_paramValues;
     QHash<QString, QString>    m_stringParamValues;
     QHash<QString, QVariantMap> m_dataChannels;
+
+    // Followspot position handoff (pan/tilt degrees, keyed by fixture id):
+    //   m_lastSpotIn   — injected by the runner before runTick() (resume source)
+    //   m_lastIntentDeg — captured during parseIntents() (what the script wrote)
+    // Both touched on the main thread only.
+    QHash<quint32, QPointF>    m_lastSpotIn;
+    mutable QHash<quint32, QPointF> m_lastIntentDeg;
 
     mutable QMutex   m_mutex;
     QList<DmxWrite>  m_lastResults;

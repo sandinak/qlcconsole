@@ -38,6 +38,8 @@ class QLabel;
 class QPushButton;
 class QSpinBox;
 class QWidget;
+class QFrame;
+class QTimer;
 class Doc;
 
 /** @addtogroup ui_functions
@@ -71,6 +73,12 @@ private slots:
     void slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value);
     void slotFixtureChecked(quint32 fxi, quint32 ch, bool state);
 
+    // Power/amperage estimate (Design mode only)
+    /** Re-estimate the load of the previewed look and refresh the footer. */
+    void recomputePower();
+    /** Open the power-distribution (circuits) editor dialog. */
+    void slotOpenCircuits();
+
     // Highlight
     void slotHighlightToggled(bool on);
 
@@ -91,6 +99,7 @@ private slots:
     // Design-mode joystick save
     void slotDesignPositionWritten();
     void slotSavePositions();
+    void slotFollowSpotPinChanged(bool visible, float xMeters, float yMeters);
 
 private:
     void loadCanvas(quint32 sceneId);
@@ -142,6 +151,11 @@ private:
      *  comes later. */
     void startPreview();
     void stopPreview();
+    /** In Operate mode, run the canvas scene directly (all channels live)
+     *  so lights stay on when the show mode is active. A followspot.js effect
+     *  look overrides pan/tilt on joystick moves on top. */
+    void startOperateScene();
+    void stopOperateScene();
     /** Re-apply the running preview after an edit WITHOUT churning
      *  start/stop (resetRuntime if running; start if not). */
     void refreshPreview();
@@ -164,6 +178,7 @@ private:
     quint32 m_currentScene;       //!< scene shown in canvas (invalid if non-scene)
     quint32 m_canvasFunction;     //!< any function shown in canvas (preview target)
     quint32 m_previewFunction;    //!< the function we started for live preview
+    quint32 m_operateFunction;   //!< scene we started in Operate mode (all channels live)
     quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate
     quint32 m_clipboardPalette;   //!< Cmd-C source palette for Cmd-V duplicate
     quint32 m_memberContainer;    //!< collection/chaser whose members are nested
@@ -190,9 +205,27 @@ private:
     QLabel      *m_fsYLabel;
     QLabel      *m_fsJoyLabel;  // live pan/tilt readout
 
+    // Joystick speed spinner
+    QSpinBox    *m_speedSpin = nullptr;
+
     // Save button (armed two-press confirmation)
     QPushButton *m_saveBtn = nullptr;
     bool         m_saveArmed = false;
+
+    // Power/amperage footer (Design mode only). Hidden in Operate; the timer
+    // is stopped whenever the tab is hidden or the show goes live, so Run mode
+    // pays nothing.
+    QFrame      *m_powerFooter = nullptr;
+    QLabel      *m_powerAmpsLabel = nullptr;
+    QLabel      *m_powerKwLabel = nullptr;
+    QLabel      *m_powerOverloadLabel = nullptr;
+    QPushButton *m_circuitsBtn = nullptr;
+    QTimer      *m_powerTimer = nullptr;
+
+    /** Build the footer widget and append it to the canvas layout. */
+    void buildPowerFooter();
+    /** Start/stop the periodic re-estimate and footer visibility per mode. */
+    void updatePowerFooterActive();
 
 signals:
     /** Emitted when the user confirms Save in the Programming tab. */

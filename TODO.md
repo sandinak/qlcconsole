@@ -9,6 +9,64 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+- [ ] **Power/amperage estimate + power-distribution model (NEW, needs GUI test)** —
+      Design-mode-only estimate of the previewed look's electrical load, shown in a
+      Programming-tab **footer** (`Estimated load: X.X A | Y.YY kW | OVERLOAD`), plus a
+      full power-distribution model. Engine: `engine/src/powerdistribution.{h,cpp}` —
+      `PowerSource`(name, voltage) → `PowerCircuit`(name, ratedAmps, deratePercent,
+      fixtures) → fixtures; owned by `Doc` (lazy `powerDistribution()`, mirrors
+      `MonitorProperties`), persisted in the `.qxw` as `<PowerDistribution>`.
+      `PowerEstimator` namespace estimates per-fixture watts = rated
+      (`physical().powerConsumption()`) × intensityFraction (dimmer × colour); movers
+      add a fixed always-on base (`MoverBaseWatts=60`); rated==0 falls back to
+      `#intensityChannels × FallbackWattsPerChannel(40)`. Amps = Σwatts/voltage.
+      `recomputePower()` reads `Universe::preGMValues()` (designed peak, ignores
+      GM/blackout) via `claimUniverses/releaseUniverses(false)` on a 500 ms timer that
+      is **started only in Design mode + tab visible** (gated in
+      showEvent/hideEvent/slotModeChanged) so Run mode pays nothing; footer hidden in
+      Operate. Circuit-assignment dialog: `ui/src/powerdistributiondialog.{h,cpp}`
+      (Circuits… button) — editable sources/circuits tree (rows red when over derated
+      limit), fixture list with assignment + watts, and greedy **auto-assign**
+      bin-packing into circuits up to `deratedLimit()`. Default voltage/derate/breaker
+      from QSettings (`power/defaultVoltage`=120, `deratePercent`=80,
+      `defaultBreakerAmps`=20). Circuits carry **per-circuit voltage** (0=inherit source,
+      for mixed 120/208 distros) and a derived **connector hint** (Edison/L6-20…).
+      **UPS/battery sources**: set a VA rating to make a source a UPS — carries a
+      datasheet runtime point (min @ W), estimates runtime = (min×W)/loadW, flags
+      overload when load VA (=W/PF, `power/powerFactor`=0.9) exceeds the VA rating
+      (footer + source row). Edited in the dialog's "Source power (UPS / battery)" panel.
+      XML round-trip (incl. circuit voltage + UPS fields) + runtime scaling unit-verified;
+      live compute path runs without hang. Still needs: visual confirmation of the
+      footer/dialog and tuning of the Mover/fallback watt constants against real fixtures.
+
+- [ ] **2D Monitor: fixture facing arrow + set-facing (DRAFT, needs GUI test)** —
+      moving heads now draw a green facing arrow showing `FixtureRigProps.panZeroDir`
+      (0=downstage/screen-down, 90=SR, 180=US, 270=SL; matches the aim solver's
+      azimuth). Set it by **Alt-drag** to rotate (snaps 15°, Shift=fine) or
+      **right-click → Facing (pan-zero)** quick-presets. Persists to
+      `panZeroDir`, shares the one source of truth with the test dialog's
+      Pan-zero spinbox (dialog edits refresh the arrow live via
+      `fixtureItemForId`). The pan/tilt movement arcs now also rotate with the
+      facing (Qt_zero = 270° + panZeroDir), so the head's depicted home/centre
+      pointing swings with the base — matching the aim solver, which already
+      folds panZeroDir into the world→pan computation. Files:
+      monitorfixtureitem.{h,cpp}, monitor.cpp.
+      The facing arrow + Alt-drag + facing/truss context menu are **editing
+      affordances**, shown only while the plot is unlocked. The existing layout
+      lock toggle was renamed to the **Edit Plot ⇄ Plot Locked** paradigm
+      (padlock label + tooltip via `updatePlotLockAppearance`): "Edit Plot" =
+      arrange & aim (arrows on); "Plot Locked" = rig frozen for the show (arrows
+      off, fixtures not movable, aim targets still adjustable). Pan/tilt arcs
+      stay visible in both modes.
+      Fixture Properties dialog: "Position & Orientation" block moved above "Rig
+      Assignment" and given a live **facing preview** (FacingPreviewWidget) —
+      body + green arrow + pan-range wedge over DS/US/SR/SL labels, updating in
+      lock-step with the pan-zero spinbox and icon Rotation so you can confirm
+      orientation before saving without looking at the canvas.
+      Follow-ups: true side-mount (boom) kinematics is still Tier-2
+      (yaw+pitch+roll base orientation, pan/tilt swap roles); reverse live-sync
+      (Alt-drag → open dialog spinbox) not wired.
+
 ---
 
 ## Backlog  *(roughly priority order)*
@@ -86,6 +144,66 @@ move to the bottom or get deleted. See also the session memory under
 ---
 
 ## Done
+- [x] **Followspot: Design-mode inert + lastPosition/snapToTarget handoff** — (1)
+      the JS effect engine no longer ticks in Design mode (`EffectScriptRunner::
+      slotTick` returns early when `Doc::Design`), so followspot does NOT move and
+      does NOT accumulate any setpoint while building scenes — only output was
+      suppressed before, the script still advanced state. (2) `followspot.js` gains
+      a `followMode` dropdown: `lastPosition` (default) resumes from the beam's
+      last spot so heads don't jump on scene transitions; `snapToTarget` re-aims to
+      the bound `followTarget` each time. Last position is persisted host-side:
+      `EffectInstance` reports per-fixture pan/tilt degrees (`lastIntentDegrees()`),
+      `EffectScriptRunner` accumulates them in `m_lastSpotDeg` (survives instance
+      teardown) and re-injects via `setLastSpotPositions()` → exposed to scripts as
+      `fixture.lastSpot`. Falls back to target, then movement-seeded centre, when no
+      position is recorded yet. The `followMode` dropdown appears in the **Look
+      Editor** Parameters section (per-effect-palette), not the Followspot panel.
+      (3) Follow-spot **pin** is now Operate-only: `ProgrammingManager::
+      slotFollowSpotPinChanged` gates `visible` on `Doc::Operate` (single choke
+      point), `slotModeChanged` hides it on →Design and re-seeds via
+      `seedStageAimFromScene` on →Operate. The draggable **StageTarget** marker
+      stays visible in Design as the aim handle. (4) **Shortest-path pan** on
+      target transitions: `followspot.js` `nearestPan()` picks the pan
+      representation (pan±360 within range) closest to the beam's last position
+      when seeding `snapToTarget`, so a >360° head takes the short way instead of
+      flipping/sweeping the long way. (5) Effect scripts now copy into the build
+      tree at BUILD time (`add_custom_command` + `effectscripts_build` target in
+      `resources/effectscripts/CMakeLists.txt`) so script edits propagate with a
+      plain `cmake --build` — no reconfigure. (6) Removed [AIM2]/[FSOUT]
+      fx9 debug logging. (7) **JS effect owns the followspot** (decided over the
+      C++ Aim path): root cause of "snap to target on stick move" + "can't move
+      after guard" was that the EffectScriptRunner's fader used `Universe::Auto`,
+      same priority as the scene's Aim/PanTilt palette fader — so the effect
+      winning LTP depended on fragile insertion order and the scene's pan/tilt
+      could override it. Fixed by requesting the effect fader at
+      `Universe::Override` (effectscriptrunner.cpp) so it reliably wins LTP
+      (pan/tilt); HTP intensity unchanged (max is order-independent). With the
+      effect now actually steering, `applyDesignJoystick` yields (returns early)
+      when the focused scene has a `followspot` Effect palette — this also stops
+      the C++ path from dragging the Aim stage target around / `resetRuntime()`
+      churn. Net: in lastPosition the beam holds across transitions and moves
+      from where it sits; per-fixture seeding handles mixed-fixture scenes (same
+      fixture holds, new fixture seeds from its bound target).
+- [x] **Split Pan/Tilt channels: indexed-position band** — fixtures whose
+      Pan/Tilt channel maps only a sub-range to absolute positioning (rest =
+      continuous rotation, e.g. Junman 2 Head: DMX 0-127 index, 128-255 spin)
+      now convert correctly. `Fixture::positionToValues` honours a
+      `RotationIndexed` capability on the MSB channel and scales the physical
+      degree range across that band only, clamping so an out-of-range angle can
+      never spill into the rotation zone. No-band fixtures are byte-identical to
+      stock. Added `Junman/Junman-2-Head.qxf` (+ FixturesMap entry) and a
+      `Fixture_Test::indexedPosition` unit test. Continuous spin would be a
+      separate "rate" intent writing raw values into 128-255 — not built yet.
+- [x] **2D Monitor: stage-feature copy/paste** — Ctrl+C / Ctrl+V (toolbar +
+      "Copy/Paste features here" context menu) duplicate selected trusses,
+      platforms and targets. Keyboard paste cascades 0.5 m per repeat; "Paste
+      here" anchors the group to the cursor. Target copies get their own linked
+      PanTilt palette (mirrors Add Target). Ctrl+Z undoes a paste (removes the
+      copies + any palettes), interleaved correctly with move-undo.
+- [x] **2D Monitor: platform polish** — targets stay movable when layout is
+      locked; platform placement snaps to grid on drop; platform W/D/H accept
+      feet-and-inches (5' 6") or decimal feet; platform name label bigger/bold
+      and centered.
 - [x] **2D Monitor: grid/drag/snap/lock + zoom/pan/undo/center** —
       multi-select + rubber-band, grid subdivisions, layout LOCK (magic-sheet
       style selection surface, persisted), Shift+wheel zoom (cursor-anchored),

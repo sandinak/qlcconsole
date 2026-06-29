@@ -10,11 +10,11 @@
   <InputOutputMap>
    <BeatGenerator BeatType="Disabled" BPM="0"/>
    <Universe Name="Universe 1" ID="0">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="2"/>
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1"/>
    </Universe>
    <Universe Name="Universe 2" ID="1">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="2"/>
-    <Feedback Plugin="MIDI" UID="Logic Pro Virtual In" Line="2">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1"/>
+    <Feedback Plugin="MIDI" UID="Launchkey MK4 49" Line="0">
      <PluginParameters midichannel="16"/>
     </Feedback>
    </Universe>
@@ -112,6 +112,16 @@
    <Universe>0</Universe>
    <Address>241</Address>
    <Channels>30</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Junman</Manufacturer>
+   <Model>Two Arm LED Beam</Model>
+   <Mode>15 Channel</Mode>
+   <ID>9</ID>
+   <Name>Two Arm LED Beam</Name>
+   <Universe>1</Universe>
+   <Address>0</Address>
+   <Channels>15</Channels>
   </Fixture>
   <FixtureGroup ID="0">
    <Name>spots</Name>
@@ -362,12 +372,12 @@
    <Head X="10" Y="4" Fixture="6">15</Head>
   </FixtureGroup>
   <Palette ID="0" Type="Aim" Name="Test Target" Path="Palettes/PanTilt/" StageTarget="0"/>
-  <Palette ID="1" Type="Color" Name="White" Path="Palettes/PanTilt/" Value="#ffffff"/>
-  <Palette ID="2" Type="Dimmer" Name="Full" Path="Palettes/PanTilt/" Value="252"/>
+  <Palette ID="1" Type="Color" Name="White" Path="Palettes/Color" Value="#ffffff"/>
+  <Palette ID="2" Type="Dimmer" Name="Full" Path="Palettes/Dimmer" Value="252"/>
   <Palette ID="3" Type="Shutter" Name="New Shutter" Path="Palettes/Shutter/" Value="255"/>
   <Palette ID="4" Type="Color" Name="Blue" Path="Palettes/Color/" Value="#0206ff020000"/>
   <Palette ID="5" Type="Dimmer" Name="New Dimmer" Path="Palettes/Dimmer" Value="255"/>
-  <Palette ID="6" Type="Aim" Name="New PanTilt" Path="Palettes/Color/" StageTarget="0"/>
+  <Palette ID="6" Type="Aim" Name="New PanTilt" Path="Palettes/PanTilt" StageTarget="1"/>
   <Palette ID="7" Type="Effect" Name="ColorAlternate" Path="Palettes/Effect/">
    <EffectScript>ColorAlternate</EffectScript>
    <EffectPaletteBinding slot="color1" palette="8"/>
@@ -392,9 +402,9 @@
   </Palette>
   <Palette ID="14" Type="Effect" Name="followspot" Path="Palettes/Effect/">
    <EffectScript>followspot</EffectScript>
-   <EffectInputBinding slot="x" universe="2" channel="0"/>
-   <EffectInputBinding slot="y" universe="2" channel="1"/>
+   <EffectTargetBinding slot="followTarget" target="0"/>
   </Palette>
+  <Palette ID="15" Type="Aim" Name="Target 2" Path="Palettes/PanTilt/" StageTarget="1"/>
   <Function ID="0" Type="Scene" Name="RGBMatrix" Path="Washes">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureVal ID="1">2,0,3,0,4,4,5,16</FixtureVal>
@@ -472,6 +482,7 @@
    <SpeedModes FadeIn="Default" FadeOut="Default" Duration="Common"/>
    <Step Number="0" FadeIn="0" Hold="0" FadeOut="0">11</Step>
    <Step Number="1" FadeIn="0" Hold="0" FadeOut="0">12</Step>
+   <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0">16</Step>
   </Function>
   <Function ID="14" Type="Collection" Name="0.0.2-Preshow" Path="Show">
    <Step Number="0">11</Step>
@@ -489,17 +500,17 @@
   </Function>
   <Function ID="16" Type="Scene" Name="New Scene 16">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureVal ID="0">0,130,1,130,2,126,3,126</FixtureVal>
-   <FixtureVal ID="4">0,130,1,126</FixtureVal>
-   <FixtureVal ID="3">0,130,1,130,2,126,3,125</FixtureVal>
-   <FixtureVal ID="2">0,130,1,126</FixtureVal>
-   <FixtureVal ID="1">0,130,1,126</FixtureVal>
+   <FixtureVal ID="0"/>
+   <FixtureVal ID="4"/>
+   <FixtureVal ID="3"/>
+   <FixtureVal ID="2"/>
+   <FixtureVal ID="1"/>
+   <FixtureVal ID="9"/>
    <Palette ID="2"/>
    <Palette ID="3"/>
-   <Palette ID="9"/>
-   <Palette ID="10"/>
    <Palette ID="0"/>
    <Palette ID="14"/>
+   <Palette ID="4"/>
   </Function>
   <Function ID="17" Type="RGBMatrix" Name="New RGB Matrix 17">
    <Speed FadeIn="0" FadeOut="0" Duration="50"/>
@@ -526,26 +537,70 @@
    <FixtureVal ID="2"/>
    <Palette ID="4"/>
   </Function>
-  <Monitor DisplayMode="1" ShowLabels="0">
+  <Function ID="19" Type="Scene" Name="New Scene 19">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="9"/>
+   <FixtureGroup ID="4"/>
+   <Palette ID="4"/>
+   <Palette ID="2"/>
+   <Palette ID="14"/>
+   <Palette ID="15"/>
+  </Function>
+  <PowerDistribution>
+   <Source Voltage="120" VARating="2200" RuntimeMin="8" RuntimeWatts="2000" PosX="9.525" PosY="4.81584">
+    <Name>Cyberpower</Name>
+    <Circuit RatedAmps="20" Derate="80">
+     <Name>Circuit 1</Name>
+     <Fixture>4</Fixture>
+     <Fixture>9</Fixture>
+     <Fixture>1</Fixture>
+     <Fixture>2</Fixture>
+     <Fixture>0</Fixture>
+     <Fixture>3</Fixture>
+     <Fixture>5</Fixture>
+     <Fixture>6</Fixture>
+     <Fixture>7</Fixture>
+     <Fixture>8</Fixture>
+    </Circuit>
+   </Source>
+  </PowerDistribution>
+  <Monitor DisplayMode="1" ShowLabels="0" LayoutLocked="1" AimSubjectHeight="1.39903">
    <Font>Arial,12,-1,5,50,0,0,0,0,0</Font>
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
-   <Grid Width="16" Height="3" Depth="16" Units="1"/>
-   <FxItem ID="0" XPos="2889.5" YPos="4423"/>
-   <FxItem ID="1" XPos="2660.65" YPos="4423"/>
-   <FxItem ID="2" XPos="2033.26" YPos="4423"/>
-   <FxItem ID="3" XPos="2276.55" YPos="4422.65"/>
-   <FxItem ID="4" XPos="1688.28" YPos="4423"/>
-   <FxItem ID="5" XPos="1970.15" YPos="3639.93"/>
-   <FxItem ID="6" XPos="1970.16" YPos="3560.42"/>
-   <Truss ID="0" Name="Truss 1" Type="Horizontal" Profile="Square" Length="1.524" Width="0.213" OriginX="1.667" OriginY="4.423" OriginZ="2.134" DirX="1.000000" DirY="0.000000"/>
-   <StagePlatform ID="0" Name="Platform 1" OriginX="1.359" OriginY="0.026" Width="1.999" Depth="0.914" Height="0.500" Color="#5078c8"/>
-   <StageTarget ID="0" Name="Test Target" X="2.852" Y="4.430" Z="0.000" Color="#ffb400"/>
-   <FixtureRig FID="0" Truss="0" Offset="1.222" Mounting="TopHung" PanZero="260.0"/>
-   <FixtureRig FID="1" Truss="0" Offset="0.994" Mounting="TopHung" PanZero="48.0"/>
-   <FixtureRig FID="2" Truss="0" Offset="0.366" Mounting="TopHung" PanZero="0.0"/>
-   <FixtureRig FID="3" Truss="0" Offset="0.609" Mounting="TopHung" PanZero="298.0" PanOfs="-17.00" TiltOfs="6.00"/>
-   <FixtureRig FID="4" Truss="0" Offset="0.021" Mounting="TopHung" PanZero="90.0" PanOfs="5.00"/>
+   <Grid Width="39" Height="3" Depth="24" Units="1" Subdivisions="3"/>
+   <FxItem ID="0" XPos="6606.2" YPos="6612" Rotation="180"/>
+   <FxItem ID="1" XPos="6377.6" YPos="6612" Rotation="180"/>
+   <FxItem ID="2" XPos="5768" YPos="6612" Rotation="180"/>
+   <FxItem ID="3" XPos="5996.6" YPos="6612" Rotation="180"/>
+   <FxItem ID="4" XPos="5387" YPos="6612" Rotation="270"/>
+   <FxItem ID="5" XPos="5425.44" YPos="5547.36"/>
+   <FxItem ID="6" XPos="5715" YPos="5105.4"/>
+   <FxItem ID="7" XPos="6416.04" YPos="5905.5"/>
+   <FxItem ID="9" XPos="5715" YPos="6096" Rotation="270"/>
+   <Truss ID="0" Name="Truss 1" Type="Horizontal" Profile="Square" Length="1.524" Width="0.213" OriginX="5.387" OriginY="6.612" OriginZ="2.134" DirX="1.000000" DirY="0.000000"/>
+   <StagePlatform ID="0" Name="US1" OriginX="1.067" OriginY="0.000" Width="2.438" Depth="1.219" Height="0.610" Color="#d2132a"/>
+   <StagePlatform ID="1" Name="US2" OriginX="3.505" OriginY="0.000" Width="2.438" Depth="1.219" Height="0.610" Color="#d2132a"/>
+   <StagePlatform ID="2" Name="US3" OriginX="5.944" OriginY="0.000" Width="2.438" Depth="1.219" Height="0.610" Color="#d2132a"/>
+   <StagePlatform ID="3" Name="US4" OriginX="8.382" OriginY="0.000" Width="2.438" Depth="1.219" Height="0.610" Color="#d2132a"/>
+   <StagePlatform ID="4" Name="CS1" OriginX="1.067" OriginY="1.219" Width="2.438" Depth="1.219" Height="0.396" Color="#068b0f"/>
+   <StagePlatform ID="5" Name="CS2" OriginX="3.505" OriginY="1.219" Width="2.438" Depth="1.219" Height="0.396" Color="#068b0f"/>
+   <StagePlatform ID="6" Name="CS3" OriginX="5.944" OriginY="1.219" Width="2.438" Depth="1.219" Height="0.396" Color="#068b0f"/>
+   <StagePlatform ID="7" Name="CS4" OriginX="8.382" OriginY="1.219" Width="2.438" Depth="1.219" Height="0.396" Color="#068b0f"/>
+   <StagePlatform ID="8" Name="DS1" OriginX="1.067" OriginY="2.438" Width="2.438" Depth="1.219" Height="0.183" Color="#3d5986"/>
+   <StagePlatform ID="9" Name="DS2" OriginX="3.505" OriginY="2.438" Width="2.438" Depth="1.219" Height="0.183" Color="#3d5986"/>
+   <StagePlatform ID="10" Name="DS4" OriginX="5.944" OriginY="2.438" Width="2.438" Depth="1.219" Height="0.183" Color="#3d5986"/>
+   <StagePlatform ID="11" Name="DS4" OriginX="8.382" OriginY="2.438" Width="2.438" Depth="1.219" Height="0.183" Color="#3d5986"/>
+   <StageTarget ID="0" Name="Test Target" X="7.162" Y="1.995" Z="0.000" Color="#ffb400"/>
+   <StageTarget ID="1" Name="Target 2" X="7.249" Y="1.247" Z="0.000" Color="#ffb400"/>
+   <FixtureRig FID="0" Truss="0" Offset="1.219" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="1" Truss="0" Offset="0.991" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="2" Truss="0" Offset="0.381" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="3" Truss="0" Offset="0.610" Mounting="TopHung" PanZero="0.0" PanOfs="-17.00" TiltOfs="6.00"/>
+   <FixtureRig FID="4" Truss="0" Offset="0.000" Mounting="TopHung" PanZero="90.0" PanOfs="5.00"/>
+   <FixtureRig FID="5" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="6" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="9" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="270.0"/>
   </Monitor>
  </Engine>
  <VirtualConsole>
@@ -1997,6 +2052,24 @@
      <Intensity Adjust="False">100</Intensity>
      <Input Universe="1" Channel="231"/>
     </Button>
+    <CueList Caption="\" ID="97">
+     <WindowState Visible="False" X="980" Y="362" Width="455" Height="565"/>
+     <Appearance>
+      <FrameStyle>Sunken</FrameStyle>
+      <ForegroundColor>Default</ForegroundColor>
+      <BackgroundColor>Default</BackgroundColor>
+      <BackgroundImage>None</BackgroundImage>
+      <Font>Default</Font>
+     </Appearance>
+     <Chaser>13</Chaser>
+     <NextPrevBehavior>0</NextPrevBehavior>
+     <Next>
+      <Key>M</Key>
+     </Next>
+     <Previous/>
+     <Playback/>
+     <Stop/>
+    </CueList>
    </Frame>
   </Frame>
   <Properties>
@@ -2008,6 +2081,6 @@
   <Engine/>
  </SimpleDesk>
  <AppState>
-  <MonitorWindow open="1" geometry="AdnQywADAAAAAAN+///6rAAACdz///98AAADfv//+swAAAnc////fAAAAAEAAAAACgAAAAN+///6zAAACdz///98"/>
+  <MonitorWindow open="1" geometry="AdnQywADAAAAAACaAAAAdAAABvgAAAVEAAAAmgAAAJQAAAb4AAAFRAAAAAAAAAAACgAAAACaAAAAlAAABvgAAAVE"/>
  </AppState>
 </Workspace>

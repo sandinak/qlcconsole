@@ -23,6 +23,10 @@
 #include <QWidget>
 #include <QHash>
 #include <QList>
+#include <QVector3D>
+#include <QPointF>
+#include <QColor>
+#include <QString>
 
 #include "monitorproperties.h"
 
@@ -72,6 +76,10 @@ public:
     /** Set the active scene context for aim-line rendering.
      *  Pass Function::invalidId() to hide all aim lines. */
     void setActiveScene(quint32 sceneId);
+
+    /** Show or move the followspot current-position pin on the 2D floor map.
+     *  visible=false hides the pin. xMeters/yMeters are in stage space. */
+    void setFollowSpotPin(bool visible, float xMeters, float yMeters);
 protected:
     /** Initialize the monitor view */
     void initView();
@@ -208,8 +216,15 @@ protected slots:
     /** Slot called when the snap-to-grid level changes */
     void slotSnapChanged(int index);
 
+    /** Slot called when the 2D-map view overlay changes (Normal/Power/...) */
+    void slotMapViewChanged(int index);
+
     /** Slot called when the layout lock state is toggled */
     void slotLockToggled(bool locked);
+
+    /** Update the Plot/Locked toggle's icon, label and tooltip for the given
+     *  state. "Edit Plot" (unlocked) vs "Plot Locked" (frozen for the show). */
+    void updatePlotLockAppearance(bool locked);
 
     /** Slot called when the user wants to add
      *  a fixture to the graphics view */
@@ -268,6 +283,14 @@ protected slots:
     /** Open target edit on double-click. */
     void slotTargetDoubleClicked(quint32 tid);
 
+    /** Copy the currently selected stage features (trusses / platforms /
+     *  targets) into the internal clipboard. */
+    void slotCopySelected();
+
+    /** Paste the clipboard's stage features back onto the canvas, offset from
+     *  their originals so the copies are immediately visible and draggable. */
+    void slotPasteFeatures();
+
     /** Slot called when the user wants to show
      *  or hide fixtures labels */
     void slotShowLabels(bool visible);
@@ -290,9 +313,60 @@ protected:
     QComboBox *m_unitsCombo;
     QSpinBox *m_gridSubdivSpin;
     QComboBox *m_snapCombo;
+    QComboBox *m_viewCombo;
+
+    /** 2D-map view overlays (see slotMapViewChanged). */
+    enum MapView { ViewNormal = 0, ViewPower = 1 };
+    /** Apply a view overlay: tint/annotate every placed fixture. */
+    void applyMapView(int view);
     QAction *m_labelsAction;
     QAction *m_lockAction;
     QAction *m_addPlatformAction;
+    QAction *m_pasteAction;
+
+private:
+    /** Value snapshots of stage features for the copy/paste clipboard. The
+     *  engine models are owned by MonitorProperties and may be deleted, so we
+     *  store geometry/appearance by value rather than holding pointers. */
+    struct TrussClip
+    {
+        QString   name;
+        int       type;        ///< Truss::TrussType
+        QVector3D origin;       ///< metres
+        QPointF   direction;    ///< normalised XY
+        float     length;       ///< metres
+        float     width;        ///< metres
+        int       profile;      ///< Truss::Profile
+        bool      locked;
+    };
+    struct PlatformClip
+    {
+        QString name;
+        float   originX, originY;   ///< metres
+        float   width, depth, height;
+        QColor  color;
+    };
+    struct TargetClip
+    {
+        QString name;
+        float   x, y, z;            ///< metres
+        QColor  color;
+    };
+
+    QList<TrussClip>    m_trussClipboard;
+    QList<PlatformClip> m_platformClipboard;
+    QList<TargetClip>   m_targetClipboard;
+    /** How many times the current clipboard has been pasted; each paste
+     *  cascades a little further so repeats don't stack exactly. Reset on copy. */
+    int                 m_pasteCount = 0;
+
+    /** True when there is anything to paste. */
+    bool clipboardHasFeatures() const;
+
+    /** Re-create the clipboard features, translating each by (dxM, dyM) metres.
+     *  Shared by the keyboard/toolbar (cascading offset) and "Paste here"
+     *  (cursor-anchored) paths. */
+    void pasteClipboard(float dxM, float dyM);
 };
 
 /** @} */

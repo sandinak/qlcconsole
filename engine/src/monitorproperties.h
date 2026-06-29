@@ -141,6 +141,12 @@ public:
     inline void setSnapDivisions(int divisions) { m_snapDivisions = divisions; }
     inline int snapDivisions() const { return m_snapDivisions; }
 
+    /** Default height (metres) above the floor/deck that target-aimed fixtures
+     *  point at — i.e. the subject's body height, so beams land on the chest
+     *  rather than the feet. A StageTarget with a non-zero Z overrides this. */
+    inline void setAimSubjectHeight(float metres) { m_aimSubjectHeight = metres; }
+    inline float aimSubjectHeight() const { return m_aimSubjectHeight; }
+
 private:
     QVector3D m_gridSize;
     GridUnits m_gridUnits;
@@ -149,6 +155,7 @@ private:
     bool m_layoutLocked;
     int m_gridSubdivisions;
     int m_snapDivisions;
+    float m_aimSubjectHeight;
 
     /********************************************************************
      * Items flags
@@ -350,6 +357,14 @@ public:
     FixtureRigProps fixtureRigProps(quint32 fid) const;
     void setFixtureRigProps(quint32 fid, const FixtureRigProps &props);
     void removeFixtureRigProps(quint32 fid) { m_rigProps.remove(fid); }
+
+signals:
+    /** Emitted when a fixture's rig assignment changes (mounting, pan-zero
+     *  facing, truss, offset) so live Aim looks can re-resolve immediately
+     *  instead of only after the scene is restarted. */
+    void rigPropsChanged(quint32 fid);
+
+public:
     bool hasFixtureRigProps(quint32 fid) const { return m_rigProps.contains(fid); }
     const QMap<quint32, FixtureRigProps> &fixtureRigPropsMap() const { return m_rigProps; }
 

@@ -25,10 +25,12 @@
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QSpinBox>
+#include <QFrame>
+#include <QSettings>
 
+#include <QDebug>
 #include "programmingmanager.h"
 #include "programmercontroller.h"
-#include "followspoteffect.h"
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
 #include "scenegrouplooks.h"
@@ -51,6 +53,12 @@
 #include "chaserstep.h"
 #include "chaseraction.h"
 #include "scenevalue.h"
+#include "powerdistribution.h"
+#include "powerdistributiondialog.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
+#include "inputoutputmap.h"
+#include "universe.h"
 #include "doc.h"
 #include "inputoutputmap.h"
 #include "effectscriptrunner.h"
@@ -64,6 +72,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     , m_currentScene(Function::invalidId())
     , m_canvasFunction(Function::invalidId())
     , m_previewFunction(Function::invalidId())
+    , m_operateFunction(Function::invalidId())
     , m_clipboardFunction(Function::invalidId())
     , m_clipboardPalette(QLCPalette::invalidId())
     , m_memberContainer(Function::invalidId())
@@ -131,6 +140,16 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_bpmBtn->setToolTip(tr("Enable QLC+ internal beat generator (drives _beat/_bpm in effect scripts)"));
         toolbar->addWidget(m_bpmBtn);
 
+        toolbar->addWidget(new QLabel(tr("Jog:"), this));
+
+        m_speedSpin = new QSpinBox(this);
+        m_speedSpin->setRange(10, 500);
+        m_speedSpin->setSingleStep(10);
+        m_speedSpin->setValue(100);
+        m_speedSpin->setSuffix(tr("%"));
+        m_speedSpin->setToolTip(tr("Joystick speed for position editing (100% = 2 m/s at full deflection)"));
+        toolbar->addWidget(m_speedSpin);
+
         m_saveBtn = new QPushButton(tr("Save"), this);
         m_saveBtn->setEnabled(false);
         m_saveBtn->setToolTip(tr("Save joystick position edits to the workspace file"));
@@ -142,6 +161,11 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                 this, &ProgrammingManager::slotHighlightToggled);
         connect(m_saveBtn, &QPushButton::clicked,
                 this, &ProgrammingManager::slotSavePositions);
+        connect(m_speedSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+                this, [this](int v) {
+                    ProgrammerController *pc = m_doc->programmer();
+                    if (pc) pc->setJoystickSensitivity(v / 100.0f);
+                });
         connect(m_bpmBtn, &QPushButton::toggled,
                 this, &ProgrammingManager::slotBpmToggled);
         connect(m_bpmSpin, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -208,6 +232,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                     this, &ProgrammingManager::slotButtonAction);
             connect(pc, &ProgrammerController::designPositionWritten,
                     this, &ProgrammingManager::slotDesignPositionWritten);
+            connect(pc, &ProgrammerController::followSpotPinChanged,
+                    this, &ProgrammingManager::slotFollowSpotPinChanged);
         }
     }
 
@@ -257,6 +283,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_fixtureMixedNote->setStyleSheet("QLabel { color: gray; }");
     m_fixtureMixedNote->hide();
     m_canvasLayout->addWidget(m_fixtureMixedNote);
+
+    // Estimated electrical load of the previewed look (Design mode only).
+    buildPowerFooter();
 
     connect(m_fixtureConsole, SIGNAL(valueChanged(quint32,quint32,uchar)),
             this, SLOT(slotFixtureValueChanged(quint32,quint32,uchar)));
@@ -398,6 +427,13 @@ void ProgrammingManager::slotFunctionActivated(QTreeWidgetItem *item)
 
 void ProgrammingManager::loadCanvas(quint32 sceneId)
 {
+    {
+        Function *f = m_doc->function(sceneId);
+        qCritical() << "[PM] loadCanvas:" << sceneId << (f ? f->name() : "(null)")
+                    << "mode=" << (m_doc->mode() == Doc::Design ? "Design" : "Operate")
+                    << "previewFn=" << m_previewFunction
+                    << "operateFn=" << m_operateFunction;
+    }
     if (sceneId == m_currentScene && m_canvas != NULL)
         return;
 
@@ -419,6 +455,8 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     if (scene == NULL)
     {
         m_doc->setFocusedScene(Function::invalidId());
+        if (ProgrammerController *pc = m_doc->programmer())
+            pc->seedStageAimFromScene(Function::invalidId());
         m_canvasPlaceholder->setText(
             tr("Select or create a scene on the left, then drag palettes, "
                "fixture groups and fixtures from the right onto it."));
@@ -450,10 +488,14 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     // Insert above the bottom editors.
     m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_canvas, 1);
 
+    stopOperateScene();  // stop the previous scene before starting the new one
     startPreview();
-    // Ensure followspot writes after the scene so it wins LTP conflicts.
+    startOperateScene(); // no-op in Design mode; keeps all channels live in Operate mode
+    // Seed the aim/pin from this scene's Aim target (if any) so the pin appears
+    // on the target.  Live position is driven by the scene's followspot.js
+    // effect (single engine), not a native effect.
     if (ProgrammerController *pc = m_doc->programmer())
-        pc->bumpFollowSpot();
+        pc->seedStageAimFromScene(sceneId);
     updateTitle();
 }
 
@@ -920,16 +962,29 @@ void ProgrammingManager::startPreview()
     // Live-preview the canvas function (scene, collection, …) by running it.
     // Design mode only, so we don't hijack a running show.
     if (m_doc->mode() != Doc::Design)
+    {
+        qCritical() << "[PM] startPreview: skipped (mode is Operate)";
         return;
+    }
     if (isVisible() == false)
+    {
+        qCritical() << "[PM] startPreview: skipped (tab not visible)";
         return;
+    }
     if (m_previewFunction == m_canvasFunction)
+    {
+        qCritical() << "[PM] startPreview: already running canvas" << m_canvasFunction;
         return;
+    }
 
     Function *f = m_doc->function(m_canvasFunction);
     if (f == NULL)
+    {
+        qCritical() << "[PM] startPreview: canvas" << m_canvasFunction << "not found";
         return;
+    }
 
+    qCritical() << "[PM] startPreview: starting" << m_canvasFunction << f->name();
     f->start(m_doc->masterTimer(), FunctionParent::master());
     m_previewFunction = m_canvasFunction;
     updateTitle();
@@ -940,6 +995,8 @@ void ProgrammingManager::stopPreview()
     if (m_previewFunction == Function::invalidId())
         return;
     Function *f = m_doc->function(m_previewFunction);
+    qCritical() << "[PM] stopPreview: stopping" << m_previewFunction
+                << (f ? f->name() : "(null)");
     if (f != NULL)
         f->stop(FunctionParent::master());
     m_previewFunction = Function::invalidId();
@@ -978,6 +1035,8 @@ void ProgrammingManager::refreshPreview()
         m_previewFunction = m_canvasFunction;
         updateTitle();
     }
+    // Values just changed in the preview; re-estimate after they settle.
+    QTimer::singleShot(50, this, &ProgrammingManager::recomputePower);
 }
 
 void ProgrammingManager::slotCanvasModified()
@@ -985,14 +1044,299 @@ void ProgrammingManager::slotCanvasModified()
     // Re-apply the scene's targets/looks to the live preview (resetRuntime
     // if running, else start) — no start/stop churn.
     refreshPreview();
+    // Targets/looks changed → the load changed too.
+    recomputePower();
+}
+
+/****************************************************************************
+ * Power / amperage estimate (Design mode only)
+ ****************************************************************************/
+
+void ProgrammingManager::buildPowerFooter()
+{
+    m_powerFooter = new QFrame(this);
+    m_powerFooter->setFrameShape(QFrame::StyledPanel);
+    QHBoxLayout *fl = new QHBoxLayout(m_powerFooter);
+    fl->setContentsMargins(6, 2, 6, 2);
+
+    QLabel *caption = new QLabel(tr("Estimated load:"), m_powerFooter);
+    m_powerAmpsLabel = new QLabel(QStringLiteral("0.0 A"), m_powerFooter);
+    QFont bold = m_powerAmpsLabel->font();
+    bold.setBold(true);
+    m_powerAmpsLabel->setFont(bold);
+    m_powerKwLabel = new QLabel(QStringLiteral("0.0 kW"), m_powerFooter);
+    m_powerKwLabel->setStyleSheet(QStringLiteral("QLabel { color: gray; }"));
+
+    m_powerOverloadLabel = new QLabel(tr("OVERLOAD"), m_powerFooter);
+    m_powerOverloadLabel->setStyleSheet(
+        QStringLiteral("QLabel { color: white; background: #c0392b; "
+                       "padding: 0 6px; border-radius: 3px; font-weight: bold; }"));
+    m_powerOverloadLabel->hide();
+
+    m_circuitsBtn = new QPushButton(tr("Circuits…"), m_powerFooter);
+    connect(m_circuitsBtn, &QPushButton::clicked,
+            this, &ProgrammingManager::slotOpenCircuits);
+
+    fl->addWidget(caption);
+    fl->addWidget(m_powerAmpsLabel);
+    fl->addWidget(m_powerKwLabel);
+    fl->addWidget(m_powerOverloadLabel);
+    fl->addStretch(1);
+    fl->addWidget(m_circuitsBtn);
+
+    m_canvasLayout->addWidget(m_powerFooter);
+
+    // Low-frequency refresh so a held fader / palette change settles into the
+    // reading without us hooking every DMX write. Design-mode-gated below.
+    m_powerTimer = new QTimer(this);
+    m_powerTimer->setInterval(500);
+    connect(m_powerTimer, &QTimer::timeout, this, &ProgrammingManager::recomputePower);
+}
+
+void ProgrammingManager::updatePowerFooterActive()
+{
+    // Footer + timer live only in Design mode while the tab is on screen, so
+    // Operate/Run mode pays nothing for this feature.
+    const bool active = (m_doc->mode() == Doc::Design) && isVisible();
+    if (m_powerFooter != nullptr)
+        m_powerFooter->setVisible(active);
+    if (m_powerTimer != nullptr)
+    {
+        if (active)
+        {
+            if (!m_powerTimer->isActive())
+                m_powerTimer->start();
+            recomputePower();
+        }
+        else
+        {
+            m_powerTimer->stop();
+        }
+    }
+}
+
+void ProgrammingManager::recomputePower()
+{
+    // Same gate as refreshPreview(): never compute outside Design mode.
+    if (m_doc->mode() != Doc::Design || isVisible() == false)
+        return;
+    if (m_powerAmpsLabel == nullptr)
+        return;
+
+    // Take a consistent pre-Grand-Master snapshot of all universes (the
+    // "designed peak", free of Grand Master/blackout). claimUniverses() shares
+    // the MasterTimer's write mutex; release with changed=false (read-only).
+    QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
+    PowerEstimator::PreGMReader reader =
+        [&universes](quint32 uni, quint32 addr) -> uchar
+        {
+            if (uni >= quint32(universes.size()))
+                return 0;
+            return universes[uni]->preGMValue(int(addr));
+        };
+
+    QHash<quint32, double> perFixture;
+    PowerEstimator::estimateWatts(m_doc, reader, &perFixture);
+    m_doc->inputOutputMap()->releaseUniverses(false);
+
+    // Total amps: sum each source's watts / its own voltage (handles mixed
+    // voltages), plus any unassigned fixtures at the global default voltage.
+    PowerDistribution *pd = m_doc->powerDistribution();
+    QSettings settings;
+    const double defaultVoltage =
+        settings.value(QStringLiteral("power/defaultVoltage"), 120.0).toDouble();
+    const double powerFactor =
+        settings.value(QStringLiteral("power/powerFactor"), 0.9).toDouble();
+
+    double totalWatts = 0.0;
+    double totalAmps = 0.0;
+    bool overload = false;
+    QSet<quint32> assigned;
+
+    foreach (const PowerSource &src, pd->sources())
+    {
+        const double srcV = (src.voltage > 0.0) ? src.voltage : defaultVoltage;
+        double sourceWatts = 0.0;
+        foreach (const PowerCircuit &cir, src.circuits)
+        {
+            double cw = 0.0;
+            foreach (quint32 fxId, cir.fixtures)
+            {
+                cw += perFixture.value(fxId, 0.0);
+                assigned.insert(fxId);
+            }
+            totalWatts += cw;
+            sourceWatts += cw;
+            const double camps = cw / cir.effectiveVoltage(srcV);
+            totalAmps += camps;
+            if (camps > cir.deratedLimit())
+                overload = true;
+        }
+        // A UPS source overloads when its apparent load exceeds its VA rating.
+        if (src.isUPS())
+        {
+            const double va = (powerFactor > 0.0) ? sourceWatts / powerFactor : sourceWatts;
+            if (va > src.vaRating)
+                overload = true;
+        }
+    }
+
+    // Fixtures not on any circuit still draw — count them at the default voltage.
+    for (QHash<quint32, double>::const_iterator it = perFixture.constBegin();
+         it != perFixture.constEnd(); ++it)
+    {
+        if (assigned.contains(it.key()))
+            continue;
+        totalWatts += it.value();
+        totalAmps += it.value() / defaultVoltage;
+    }
+
+    // TEMP power diagnostic: log only when the total moves, plus a sample of the
+    // first fixture's intensity-channel preGM values, to see if intensity edits
+    // reach the universe the estimate reads.
+    static double s_lastWatts = -1.0;
+    if (qAbs(totalWatts - s_lastWatts) > 0.5)
+    {
+        s_lastWatts = totalWatts;
+        QString sample;
+        QList<Universe*> u2 = m_doc->inputOutputMap()->claimUniverses();
+        const QList<Fixture*> fxs = m_doc->fixtures();
+        for (int n = 0; n < fxs.size() && n < 3; n++)
+        {
+            Fixture *fx = fxs.at(n);
+            if (!fx || !fx->fixtureMode()) continue;
+            QString ch;
+            const QVector<QLCChannel*> cs = fx->fixtureMode()->channels();
+            for (int i = 0; i < cs.size(); i++)
+                if (cs.at(i)->group() == QLCChannel::Intensity)
+                    ch += QString(" ch%1=%2").arg(i)
+                          .arg(int(u2.at(fx->universe())->preGMValue(fx->address() + i)));
+            sample += QString(" [fx%1 w=%2%3]").arg(fx->id())
+                      .arg(perFixture.value(fx->id(), 0.0), 0, 'f', 0).arg(ch);
+        }
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        qCritical() << "[PWR] totalWatts=" << totalWatts << "amps=" << totalAmps << sample;
+    }
+
+    m_powerAmpsLabel->setText(tr("%1 A").arg(totalAmps, 0, 'f', 1));
+    m_powerKwLabel->setText(tr("%1 kW").arg(totalWatts / 1000.0, 0, 'f', 2));
+    m_powerOverloadLabel->setVisible(overload);
+}
+
+void ProgrammingManager::slotOpenCircuits()
+{
+    PowerDistributionDialog dlg(m_doc, this);
+    dlg.exec();
+    // Assignments/ratings may have changed; refresh the footer.
+    recomputePower();
+}
+
+void ProgrammingManager::startOperateScene()
+{
+    // In Operate mode the preview can't run, so start the scene directly so all
+    // channels (dimmer, colour, etc.) stay live.  A followspot.js effect look on
+    // the scene then overrides pan/tilt on joystick moves on top of this.
+    //
+    // Do NOT guard on f->isRunning(): stopPreview() defers its stop to the next
+    // timer tick, so isRunning() is still true here when we're called immediately
+    // after stopPreview().  The m_operateFunction guard prevents double-starts.
+    if (m_doc->mode() != Doc::Operate)
+    {
+        qCritical() << "[PM] startOperateScene: skipped (mode is Design)";
+        return;
+    }
+    if (!isVisible())
+    {
+        qCritical() << "[PM] startOperateScene: skipped (tab not visible)";
+        return;
+    }
+    if (m_operateFunction == m_canvasFunction)
+    {
+        qCritical() << "[PM] startOperateScene: already running canvas" << m_canvasFunction;
+        return;
+    }
+
+    Function *f = m_doc->function(m_canvasFunction);
+    if (!f)
+    {
+        qCritical() << "[PM] startOperateScene: canvas" << m_canvasFunction << "not found";
+        return;
+    }
+
+    qCritical() << "[PM] startOperateScene: starting" << m_canvasFunction << f->name();
+    f->start(m_doc->masterTimer(), FunctionParent::master());
+    m_operateFunction = m_canvasFunction;
+}
+
+void ProgrammingManager::stopOperateScene()
+{
+    if (m_operateFunction == Function::invalidId()) return;
+    Function *f = m_doc->function(m_operateFunction);
+    qCritical() << "[PM] stopOperateScene: stopping" << m_operateFunction
+                << (f ? f->name() : "(null)");
+    if (f) f->stop(FunctionParent::master());
+    m_operateFunction = Function::invalidId();
 }
 
 void ProgrammingManager::slotModeChanged()
 {
     if (m_doc->mode() == Doc::Design)
+    {
+        // Operate → Design: App::slotModeDesign() calls
+        // MasterTimer::stopAllFunctions() (synchronously) BEFORE the mode
+        // actually changes, so the operate scene has already been stopped by
+        // the time this fires.  Reclassifying it as a still-running preview
+        // would leave a dead function flagged as "running" — the stage reverts
+        // out of the scene (intensity off) and stays that way until the scene
+        // is re-selected (because startPreview()'s "already running" guard then
+        // skips the restart).  Clear the stale handles and start a fresh
+        // preview.  This is a start only (no stop), so there's no MasterTimer
+        // start/stop race — the previous run is already fully stopped.
+        qCritical() << "[PM] slotModeChanged → Design:"
+                    << "operateFunction=" << m_operateFunction
+                    << "previewFunction=" << m_previewFunction
+                    << "canvasFunction=" << m_canvasFunction
+                    << "currentScene=" << m_currentScene;
+        m_operateFunction = Function::invalidId();
+        m_previewFunction = Function::invalidId();
         startPreview();
+        updatePowerFooterActive(); // back in Design → show footer, start timer
+
+        // Operate → Design: the live follow-spot pin has no meaning while
+        // designing — hide it so only the draggable StageTarget remains.
+        if (Monitor *mon = Monitor::instance())
+            mon->setFollowSpotPin(false, 0.0f, 0.0f);
+    }
     else
-        stopPreview();
+    {
+        // Design → Operate: reclassify the running preview as operate scene.
+        // Do NOT stop and restart — same function, no timing gap, lights stay on.
+        qCritical() << "[PM] slotModeChanged → Operate:"
+                    << "previewFunction=" << m_previewFunction
+                    << "operateFunction=" << m_operateFunction
+                    << "canvasFunction=" << m_canvasFunction
+                    << "currentScene=" << m_currentScene;
+        if (m_previewFunction != Function::invalidId())
+        {
+            Function *f = m_doc->function(m_previewFunction);
+            qCritical() << "[PM]   reclassify preview→operate:" << m_previewFunction
+                        << (f ? f->name() : "(null)") << "running=" << (f ? f->isRunning() : false);
+            m_operateFunction = m_previewFunction;
+            m_previewFunction = Function::invalidId();
+        }
+        else
+        {
+            qCritical() << "[PM]   no preview function, starting fresh operate scene";
+            startOperateScene();  // nothing was running; start fresh
+        }
+        updatePowerFooterActive(); // Operate → hide footer, stop timer
+
+        // Design → Operate: now the follow-spot pin is meaningful — seed it at
+        // the focused scene's aim target so it appears immediately (the gate in
+        // slotFollowSpotPinChanged now lets it through).
+        if (ProgrammerController *pc = m_doc->programmer())
+            pc->seedStageAimFromScene(m_currentScene);
+    }
 }
 
 void ProgrammingManager::showEvent(QShowEvent *ev)
@@ -1016,15 +1360,20 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
     if (ProgrammerController *pc = m_doc->programmer())
         pc->autoBindFromProfile();
     startPreview();
+    updatePowerFooterActive();
     QWidget::showEvent(ev);
 }
 
 void ProgrammingManager::hideEvent(QHideEvent *ev)
 {
-    stopPreview(); // don't leave a scene outputting when you leave the tab
+    qCritical() << "[PMVIS] hideEvent: Programming tab HIDDEN -> stopping preview"
+                << "spontaneous=" << ev->spontaneous();
+    stopPreview();
+    stopOperateScene(); // don't leave a scene outputting when you leave the tab
     if (Monitor *mon = Monitor::instance())
         disconnect(mon, &Monitor::fixturesSelected,
                    this, &ProgrammingManager::slotFixturesSelected);
+    updatePowerFooterActive(); // stops the timer / hides the footer
     QWidget::hideEvent(ev);
 }
 
@@ -1443,6 +1792,19 @@ void ProgrammingManager::slotDesignPositionWritten()
     }
 }
 
+void ProgrammingManager::slotFollowSpotPinChanged(bool visible, float xMeters, float yMeters)
+{
+    // The follow-spot PIN is the LIVE beam position the operator drives — it
+    // belongs to Operate mode only.  In Design you set the aim by dragging the
+    // StageTarget marker (which stays visible), so the pin must never appear
+    // while building looks.  This is the single choke point for every pin-show
+    // path (scene focus, joystick move, …), so gate it here once.
+    if (m_doc->mode() != Doc::Operate)
+        visible = false;
+    if (Monitor *mon = Monitor::instance())
+        mon->setFollowSpotPin(visible, xMeters, yMeters);
+}
+
 void ProgrammingManager::slotSavePositions()
 {
     if (!m_saveBtn) return;
@@ -1536,8 +1898,9 @@ void ProgrammingManager::slotButtonAction(const QString &action)
 
     if (action == QLatin1String("followspot_toggle"))
     {
-        if (pc)
-            pc->setFollowSpotActive(!pc->isFollowSpotActive());
+        // Followspot is now the followspot.js effect look attached to a scene,
+        // not a separately-toggled native effect.  Button retained as a no-op
+        // until it is repurposed (e.g. attach/detach the effect look).
         return;
     }
 

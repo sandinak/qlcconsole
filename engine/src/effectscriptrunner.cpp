@@ -188,11 +188,24 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
 
 void EffectScriptRunner::slotTick()
 {
+    // Effect scripts run in BOTH modes: live in Operate, and on the previewed
+    // scene in Edit so the operator can fly the beam (joystick) while building.
+    // The previewed scene is started via Function::start() in Design too, so it
+    // has live instances here.  The beam position carries continuously across an
+    // Edit↔Run switch via m_lastSpotDeg (followMode = "lastPosition").
     QMutexLocker locker(&m_instanceMutex);
     for (EffectInstance *inst : m_instances)
     {
+        inst->setLastSpotPositions(m_lastSpotDeg);
         inst->setDataChannels(m_dataChannels);
         inst->runTick();
+
+        // Capture the pan/tilt the script just produced so a later scene (whose
+        // followspot uses followMode = "lastPosition") can resume from where the
+        // beam left off — even after this instance is destroyed on scene stop.
+        const QHash<quint32, QPointF> &deg = inst->lastIntentDegrees();
+        for (auto it = deg.constBegin(); it != deg.constEnd(); ++it)
+            m_lastSpotDeg[it.key()] = it.value();
     }
 }
 
@@ -235,17 +248,8 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
 {
     Q_UNUSED(timer)
 
-    // Effect scripts are for live show operation; suppress output in Design mode.
-    if (m_doc->mode() == Doc::Design)
-    {
-        static int suppressCount = 0;
-        if (++suppressCount % 250 == 1)
-            qCritical() << "[ESR] suppressed in Design mode, call#" << suppressCount
-                        << "instances=" << m_instances.size();
-        for (auto &fader : m_faders)
-            if (!fader.isNull()) fader->removeAll();
-        return;
-    }
+    // Effect scripts write in both modes — live in Operate, and on the previewed
+    // scene in Edit (so the joystick can fly the beam while building).
 
     // Clear all faders so channels from the previous tick don't linger when
     // the effect stops writing them (e.g. fixture removed from scene).
@@ -253,6 +257,24 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         if (!fader.isNull()) fader->removeAll();
 
     QMutexLocker locker(&m_instanceMutex);
+    {
+        // One-shot log on first Operate-mode tick so we can see how many instances
+        // are active and what they will write.
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            qCritical() << "[ESR] first effect tick: instances=" << m_instances.size();
+            for (const EffectInstance *inst : m_instances) {
+                const QList<EffectInstance::DmxWrite> &w = inst->dmxWrites();
+                qCritical() << "[ESR]   instance palId=" << inst->effectPaletteId()
+                            << "writes=" << w.size();
+                for (int i = 0; i < qMin(w.size(), 8); ++i)
+                    qCritical() << "[ESR]     ch" << w[i].channel
+                                << "uni" << w[i].universeId
+                                << "val" << w[i].value;
+            }
+        }
+    }
     for (const EffectInstance *inst : m_instances)
     {
         const QList<EffectInstance::DmxWrite> &writes = inst->dmxWrites();
@@ -268,10 +290,20 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
             // instead of uni->write() ensures that processFaders() writes our
             // values AFTER zeroIntensityChannels() has run — without this,
             // the RGB writes are wiped before they reach the DMX output.
+            //
+            // Priority is Override (not Auto): an effect palette is meant to
+            // layer ON TOP of the scene it's attached to.  At equal (Auto)
+            // priority the winner is decided by fader insertion order, which is
+            // fragile across scene transitions — the scene's Aim/PanTilt palette
+            // could win and the effect's pan/tilt would be silently overridden
+            // (followspot couldn't move the beam).  Override guarantees the
+            // effect fader is written last, so it reliably wins LTP channels
+            // (pan/tilt).  HTP channels (intensity) still max regardless of
+            // order, so this doesn't change colour/dimmer behaviour.
             QSharedPointer<GenericFader> &fader = m_faders[w.universeId];
             if (fader.isNull())
             {
-                fader = uni->requestFader(Universe::Auto);
+                fader = uni->requestFader(Universe::Override);
                 fader->setName(QStringLiteral("EffectScript"));
             }
 

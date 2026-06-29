@@ -25,6 +25,7 @@
 
 #include "monitorproperties.h"
 #include "effectscriptrunner.h"
+#include "aimsolver.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
@@ -604,63 +605,47 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             case Aim:
             {
                 // Per-fixture pan/tilt computed from rig geometry toward a StageTarget.
-                if (m_stageTargetId == UINT_MAX || !mProps->hasFixtureRigProps(id))
+                // Gate on whether the fixture is PLACED in the plot (has a position),
+                // NOT on having a rig-props entry: a floor fixture is in the position
+                // map but only gets a rig-props entry once it's bound to a truss or
+                // edited in properties — so hasFixtureRigProps() wrongly excluded
+                // floor fixtures. fixtureRigProps() returns sensible free-placed
+                // defaults when no explicit entry exists.
+                if (m_stageTargetId == UINT_MAX || !mProps->containsFixture(id))
                     break;
 
                 StageTarget *tgt = mProps->stageTarget(m_stageTargetId);
-                FixtureRigProps rp = mProps->fixtureRigProps(id);
-
-                if (tgt == nullptr || rp.trussId == Truss::invalidId() ||
-                    fixture->fixtureMode() == nullptr)
+                if (tgt == nullptr || fixture->fixtureMode() == nullptr)
                     break;
 
-                // Fixture world position in metres (derived from truss geometry)
-                QVector3D fixPos = mProps->fixtureRigPosition(id);
-                // Target Z is stored as absolute floor height; add platform height
-                // at the target's XY so a target on a raised platform is correct.
+                // Is this target driven by a follow spot? If any Effect palette
+                // binds it as a follow target, the beam tracks a SUBJECT — aim at
+                // (platform height + subject height), i.e. the body, overriding the
+                // target's own Z. Otherwise it's a static aim point and its Z is an
+                // ABSOLUTE height above the floor, used as-is.
+                bool subjectMode = false;
+                foreach (QLCPalette *p, doc->palettes())
+                {
+                    if (p == NULL || p->type() != Effect)
+                        continue;
+                    const QMap<QString, quint32> &tb = p->effectTargetBindings();
+                    for (QMap<QString, quint32>::const_iterator it = tb.constBegin();
+                         it != tb.constEnd(); ++it)
+                        if (it.value() == m_stageTargetId) { subjectMode = true; break; }
+                    if (subjectMode)
+                        break;
+                }
+
                 QVector3D tgtPos = tgt->position();
-                tgtPos.setZ(tgtPos.z() + mProps->platformHeightAt(tgtPos.x(), tgtPos.y()));
+                if (subjectMode)
+                    tgtPos.setZ(mProps->platformHeightAt(tgtPos.x(), tgtPos.y())
+                                + mProps->aimSubjectHeight());
 
-                float dx = tgtPos.x() - fixPos.x();
-                float dy = tgtPos.y() - fixPos.y();
-                float dz = tgtPos.z() - fixPos.z();
-                float horizDist = qSqrt(dx * dx + dy * dy);
-
-                // Horizontal azimuth: clockwise degrees from downstage.
-                // Convention: Y+ = upstage, so downstage direction = decreasing Y.
-                // atan2(dx, -dy): when target is downstage (dy<0), -dy>0 → 0°; SR→90°; SL→270°.
-                float azimuthDeg = float(qRadiansToDegrees(
-                    qAtan2(double(dx), double(-dy))));
-                if (azimuthDeg < 0.0f) azimuthDeg += 360.0f;
-
-                // Pan relative to fixture's panZeroDir, centred at panMax/2
-                float relativePan = azimuthDeg - rp.panZeroDir;
-                while (relativePan >  180.0f) relativePan -= 360.0f;
-                while (relativePan < -180.0f) relativePan += 360.0f;
-
-                QLCPhysical phy = fixture->fixtureMode()->physical();
-                float panMax  = float(phy.focusPanMax());  if (panMax  == 0.0f) panMax  = 360.0f;
-                float tiltMax = float(phy.focusTiltMax()); if (tiltMax == 0.0f) tiltMax = 270.0f;
-
-                float panRaw = panMax / 2.0f + relativePan + rp.panOffsetDeg;
-                if (rp.panInvert) panRaw = panMax - panRaw;
-                float panDeg = qBound(0.0f, panRaw, panMax);
-
-                // Elevation angle from horizontal (negative = beam points downward)
-                float elevDeg = float(qRadiansToDegrees(
-                    qAtan2(double(dz), double(horizDist))));
-
-                // For TopHung: tilt centre = straight down (elevation = -90°).
-                // Deviation from straight-down = 90° + elevation
-                // (0 when directly below; 90° when horizontal)
-                float tiltOffset = 90.0f + elevDeg;
-                float tiltDeg;
-                if (rp.mountingType == Truss::FloorMounted)
-                    tiltDeg = tiltMax / 2.0f - tiltOffset + rp.tiltOffsetDeg;
-                else   // TopHung / SideArm
-                    tiltDeg = tiltMax / 2.0f + tiltOffset + rp.tiltOffsetDeg;
-                if (rp.tiltInvert) tiltDeg = tiltMax - tiltDeg;
-                tiltDeg = qBound(0.0f, tiltDeg, tiltMax);
+                // Shared aim geometry — identical to the follow-spot effect's, so
+                // a fixture points the same way in Edit and Run.
+                float panDeg = 0.0f, tiltDeg = 0.0f;
+                if (!AimSolver::aimDegrees(doc, id, tgtPos, panDeg, tiltDeg))
+                    break;
 
                 list << fixture->positionToValues(QLCChannel::Pan,  panDeg);
                 list << fixture->positionToValues(QLCChannel::Tilt, tiltDeg);

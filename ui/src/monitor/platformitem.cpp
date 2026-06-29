@@ -12,6 +12,8 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsTextItem>
 #include <QStyleOptionGraphicsItem>
+#include <QTextDocument>
+#include <QTextOption>
 #include <QPainter>
 #include <QFont>
 
@@ -42,10 +44,17 @@ PlatformItem::PlatformItem(StagePlatform *platform, Doc *doc,
     m_label = new QGraphicsTextItem(
         QString("%1\n(%2 %3)").arg(platform->name()).arg(dispH, 0, 'f', 2).arg(unitStr),
         this);
-    m_label->setDefaultTextColor(QColor(240, 240, 240, 200));
-    m_label->setFont(QFont("Arial", 7));
+    m_label->setDefaultTextColor(QColor(240, 240, 240, 220));
+    m_label->setFont(QFont("Arial", 10, QFont::Bold));
     m_label->setZValue(0.1);
-    m_label->setPos(4, 4);
+
+    // Center the label both horizontally and vertically within the platform.
+    m_label->setTextWidth(m_pxW);
+    QTextOption opt = m_label->document()->defaultTextOption();
+    opt.setAlignment(Qt::AlignHCenter);
+    m_label->document()->setDefaultTextOption(opt);
+    const qreal th = m_label->boundingRect().height();
+    m_label->setPos(0, qMax(qreal(0.0), (m_pxD - th) / 2.0));
 }
 
 quint32 PlatformItem::platformId() const

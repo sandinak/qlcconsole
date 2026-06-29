@@ -112,6 +112,11 @@ public:
     void setGelColor(QColor color) { m_gelColor = color; }
     QColor getColor() const { return m_gelColor; }
 
+    /** Non-destructive 2D-map "view" overlay tint (Power/DMX/... views). When
+     *  valid it overrides the live/gel fill so the plot can be colour-coded by
+     *  circuit, universe, group, etc.; an invalid colour restores normal fill. */
+    void setViewTint(const QColor &color);
+
     /** Return the fixture ID associated to this item */
     quint32 fixtureID() const { return m_fid; }
 
@@ -136,6 +141,12 @@ public:
     /** Highlight from an external source (e.g. Programming tab selection). */
     void setHighlighted(bool h) { m_highlighted = h; update(); }
 
+    /** Set the fixture's pan-zero facing (degrees clockwise from downstage),
+     *  i.e. FixtureRigProps::panZeroDir. Drives the facing arrow on the icon.
+     *  Only meaningful for moving heads (fixtures with a Pan channel). */
+    void setFacing(float deg) { m_facingDeg = deg; update(); }
+    float facing() const { return m_facingDeg; }
+
     /** Configure the snap-to-grid behaviour for this item.
      *  @param divisions number of cell subdivisions to snap to
      *         (1 = full cell, 2 = 1/2, 4 = 1/4). <= 0 disables snapping.
@@ -152,9 +163,11 @@ public slots:
 
 protected:
     QRectF boundingRect() const override;
+    QPainterPath shape() const override;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override;
 
     void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *) override;
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
@@ -162,6 +175,12 @@ protected:
 private:
     void computeTiltPosition(FixtureHead *h, uchar value);
     void computePanPosition(FixtureHead *h, uchar value);
+
+    /** Radius (item-local px) the facing arrow extends from the icon centre. */
+    qreal facingReach() const;
+    /** Persist the current facing into FixtureRigProps::panZeroDir + mark the
+     *  workspace modified. */
+    void commitFacing();
 
     QColor computeColor(const FixtureHead *head, const QByteArray & values);
     uchar computeAlpha(const FixtureHead *head, const QByteArray & values);
@@ -193,6 +212,9 @@ private:
     /** In case of a dimmer, this hold the gel color to apply */
     QColor m_gelColor;
 
+    /** 2D-map view overlay tint; invalid = no overlay (normal rendering). */
+    QColor m_viewTint;
+
     /** Number of cell subdivisions used to snap the position.
      *  <= 0 means snapping is disabled */
     int m_snapDivisions;
@@ -215,6 +237,22 @@ private:
     bool m_boundToTruss  = false;
     bool m_escapeMode    = false;
     bool m_highlighted   = false;
+
+    /** True if any head has a Pan channel (i.e. a moving head): only these
+     *  show a facing arrow and accept Alt-drag rotation. */
+    bool m_hasPan        = false;
+
+    /** Pan-zero facing in degrees clockwise from downstage (FixtureRigProps
+     *  panZeroDir). 0 = faces downstage. */
+    float m_facingDeg    = 0.0f;
+
+    /** True while an Alt-drag facing rotation is in progress. */
+    bool m_rotating      = false;
+
+    /** True when the layout is unlocked (rig-setup mode): the facing arrow is
+     *  shown and Alt-drag rotation / facing menu are enabled. Mirrors the
+     *  ItemIsMovable flag set by MonitorGraphicsView::setLayoutLocked(). */
+    bool m_editable      = true;
 };
 
 /** @} */

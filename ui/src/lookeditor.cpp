@@ -1340,8 +1340,12 @@ void LookEditor::rebuildEffectDynWidget()
     }
 
     // --- Input bindings ---
+    // Hide manual bindings when the script subscribes to the system "joystick"
+    // data channel — the programmer controller auto-routes the HID/profile axes.
+    const bool systemBound = tmpScript.dataChannelKeys().contains(
+                                 QLatin1String("joystick"));
     const QList<EffectScript::InputDef> &idefs = tmpScript.inputDefs();
-    if (!idefs.isEmpty())
+    if (!idefs.isEmpty() && !systemBound)
     {
         QLabel *hdr2 = new QLabel(tr("Input bindings"), m_effectDynWidget);
         hdr2->setStyleSheet("font-weight: bold;");

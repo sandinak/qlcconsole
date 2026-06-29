@@ -29,11 +29,23 @@ install(FILES ${SCRIPT_FILES} DESTINATION ${INSTALLROOT}/${EFFECTSCRIPTDIR})
 # Copy scripts into the build tree so the app finds them when run
 # from the build directory on macOS (QLCFile::systemDirectory uses
 # applicationDirPath()/../Resources/EffectScripts).
+# Done at BUILD time (custom command keyed on each source) rather than configure
+# time, so editing a script and re-running `cmake --build` refreshes the copy the
+# app loads — without a reconfigure.  copy_if_different keeps it a no-op when
+# nothing changed.
 if (APPLE)
     set(BUILD_EFFECTSCRIPTDIR "${CMAKE_BINARY_DIR}/Resources/EffectScripts")
     file(MAKE_DIRECTORY ${BUILD_EFFECTSCRIPTDIR})
+    set(COPIED_SCRIPTS)
     foreach(SCRIPT_FILE IN LISTS SCRIPT_FILES)
-        file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/${SCRIPT_FILE}
-             DESTINATION ${BUILD_EFFECTSCRIPTDIR})
+        add_custom_command(
+            OUTPUT ${BUILD_EFFECTSCRIPTDIR}/${SCRIPT_FILE}
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${CMAKE_CURRENT_SOURCE_DIR}/${SCRIPT_FILE}
+                    ${BUILD_EFFECTSCRIPTDIR}/${SCRIPT_FILE}
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SCRIPT_FILE}
+            COMMENT "Copying effect script ${SCRIPT_FILE} to build tree")
+        list(APPEND COPIED_SCRIPTS ${BUILD_EFFECTSCRIPTDIR}/${SCRIPT_FILE})
     endforeach()
+    add_custom_target(effectscripts_build ALL DEPENDS ${COPIED_SCRIPTS})
 endif()

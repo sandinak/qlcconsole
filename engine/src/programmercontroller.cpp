@@ -42,7 +42,6 @@
 #include "mastertimer.h"
 #include "programmerflasher.h"
 #include "highlighteffect.h"
-#include "followspoteffect.h"
 #include "capturemanager.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
@@ -60,10 +59,23 @@ ProgrammerController::ProgrammerController(Doc *doc)
     qDebug() << "[PC] ProgrammerController constructed";
     m_programmerFlasher = new ProgrammerFlasher(m_doc);
     m_highlightEffect = new HighlightEffect(m_doc);
-    m_followSpotEffect = new FollowSpotEffect(m_doc);
 
     connect(this, &ProgrammerController::programmerSelectionChanged,
             this, &ProgrammerController::slotSyncEffectFixtures);
+    connect(m_doc, &Doc::modeChanged,
+            this, &ProgrammerController::slotDocModeChanged);
+    if (m_doc->monitorProperties())
+        connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged,
+                this, &ProgrammerController::slotRigPropsChanged);
+
+    // Drive joystick aim at a steady 50 Hz so a HELD stick keeps moving (velocity
+    // ∝ deflection) — input events only fire while the value is changing, so
+    // integrating in the event handler made it move only while the stick moved.
+    m_designJoyTimer = new QTimer(this);
+    m_designJoyTimer->setInterval(20);   // 50 Hz, matches the dt used in the math
+    connect(m_designJoyTimer, &QTimer::timeout,
+            this, &ProgrammerController::applyDesignJoystick);
+    m_designJoyTimer->start();
 }
 
 /*****************************************************************************
@@ -256,6 +268,9 @@ void ProgrammerController::slotProgrammerFunctionStarted(quint32 fid)
     Function *f = m_doc->function(fid);
     if (f == NULL)
         return;
+    qCritical() << "[PC] functionStarted:" << fid << f->name()
+                << "type=" << f->type()
+                << "mode=" << (m_doc->mode() == Doc::Design ? "Design" : "Operate");
     if (f->type() == Function::SceneType)
     {
         // Re-running an already-tracked scene: bump it to most-recent.
@@ -276,6 +291,10 @@ void ProgrammerController::slotProgrammerFunctionStarted(quint32 fid)
 
 void ProgrammerController::slotProgrammerFunctionStopped(quint32 fid)
 {
+    Function *f = m_doc->function(fid);
+    qCritical() << "[PC] functionStopped:" << fid
+                << (f ? f->name() : "(null)")
+                << "mode=" << (m_doc->mode() == Doc::Design ? "Design" : "Operate");
     m_runningScenes.removeAll(fid);
     m_runningChasers.removeAll(fid);
     m_runningCollections.removeAll(fid);
@@ -1080,39 +1099,6 @@ void ProgrammerController::setHighlightActive(bool active)
  * Followspot effect
  *****************************************************************************/
 
-bool ProgrammerController::isFollowSpotActive() const
-{
-    return m_followSpotEffect && m_followSpotEffect->isActive();
-}
-
-void ProgrammerController::setFollowSpotActive(bool active)
-{
-    if (m_followSpotEffect)
-        m_followSpotEffect->setActive(active);
-    if (active)
-    {
-        if (!m_panBound && !m_tiltBound)
-            autoBindFromProfile();
-        // Push current programmer selection into the effect — the selection
-        // may have been set before the toggle was turned on, so slotSyncEffectFixtures
-        // would have skipped it (effect wasn't active yet).
-        if (m_followSpotEffect && !m_programmerSelection.isEmpty())
-            m_followSpotEffect->setFixtures(m_programmerSelection);
-    }
-    emit followSpotActiveChanged(active);
-}
-
-void ProgrammerController::bumpFollowSpot()
-{
-    if (!m_followSpotEffect || !m_followSpotEffect->isActive())
-        return;
-    MasterTimer *mt = m_doc->masterTimer();
-    if (!mt)
-        return;
-    mt->unregisterDMXSource(m_followSpotEffect);
-    mt->registerDMXSource(m_followSpotEffect);
-}
-
 /*********************************************************************
  * Controller axis binding
  *********************************************************************/
@@ -1228,22 +1214,6 @@ void ProgrammerController::autoBindFromProfile()
     {
         m_boundFromProfile = true;
 
-        /* Apply sensitivity / deadzone from the matched profile to the C++ followspot. */
-        if (m_followSpotEffect)
-        {
-            const auto universeList2 = m_doc->inputOutputMap()->universes();
-            for (quint32 u = 0; u < (quint32)universeList2.size(); ++u)
-            {
-                InputPatch *ip2 = m_doc->inputOutputMap()->inputPatch(u);
-                if (!ip2 || ip2->hidProfileName().isEmpty()) continue;
-                QLCIOPlugin *plugin2 = ip2->plugin();
-                if (!plugin2) continue;
-                m_followSpotEffect->setSensitivity(plugin2->inputProfileSensitivity(ip2->input()));
-                m_followSpotEffect->setDeadzone(plugin2->inputProfileDeadzone(ip2->input()));
-                break; // use first profile that has pan/tilt
-            }
-        }
-
         updateFollowspotJsBindings();
         emit axisBindingChanged();
     }
@@ -1269,17 +1239,18 @@ void ProgrammerController::connectControllerInput()
 
 void ProgrammerController::updateFollowspotJsBindings()
 {
-    // Propagate the bound axis into any followspot.js effect palettes so the
-    // EffectScriptRunner routes values to them via its normal mechanism.
+    // Followspot ties to a joystick DEVICE, not to per-effect x/y axis settings:
+    // pan/tilt arrive globally through the "joystick" data channel (fed from the
+    // device's HID profile), so the effect palette must not carry its own x/y
+    // input bindings.  Clear any stale per-effect axis bindings so the config
+    // stays minimal and device-bound.  (Generic, non-joystick effects keep
+    // their own input bindings — only followspot is device-bound here.)
     for (QLCPalette *pal : m_doc->palettes())
     {
         const QString sp = pal->scriptPath();
         if (!sp.contains(QLatin1String("followspot"), Qt::CaseInsensitive))
             continue;
-        if (m_panBound)
-            pal->setEffectInputBinding(QStringLiteral("x"), m_panUniverse, m_panChannel);
-        if (m_tiltBound)
-            pal->setEffectInputBinding(QStringLiteral("y"), m_tiltUniverse, m_tiltChannel);
+        pal->clearEffectInputBindings();
     }
 }
 
@@ -1327,23 +1298,18 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         }
     }
 
+    // Input events only update the latest stick value; the 50 Hz timer
+    // (m_designJoyTimer → applyDesignJoystick) integrates it continuously so a
+    // held stick keeps moving at a rate set by its deflection.
     if (m_panBound && universe == m_panUniverse && channel == m_panChannel)
     {
         m_panNorm = norm;
-        if (m_doc->mode() == Doc::Design)
-            applyDesignJoystick();
-        else if (m_followSpotEffect)
-            m_followSpotEffect->setXNorm(norm);
         emit joystickUpdated(m_panNorm, m_tiltNorm);
         return;
     }
     if (m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel)
     {
         m_tiltNorm = norm;
-        if (m_doc->mode() == Doc::Design)
-            applyDesignJoystick();
-        else if (m_followSpotEffect)
-            m_followSpotEffect->setYNorm(norm);
         emit joystickUpdated(m_panNorm, m_tiltNorm);
         return;
     }
@@ -1363,10 +1329,10 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
 
 void ProgrammerController::applyDesignJoystick()
 {
-    // Design mode: use FollowSpotEffect (velocity/setpoint) to move fixtures.
-    // The FS runs as a DMXSource AFTER the scene and wins LTP via forceLTP writes,
-    // so the scene's palette output is overridden without modifying palette data.
-    // commitDesignJoystick() writes the final position into the palette on Save.
+    // Run-mode joystick: for an Aim look, drag the stage target in floor space
+    // (the scene re-resolves per-fixture pan/tilt from the moved target).  A
+    // Standard Pan/Tilt look is fixed; a followspot.js effect, when present,
+    // owns the joystick instead (this path yields to it below).
     if (m_focusedSceneId == Function::invalidId())
         return;
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
@@ -1374,6 +1340,34 @@ void ProgrammerController::applyDesignJoystick()
         return;
     if (!m_panBound && !m_tiltBound)
         return;
+
+    // The joystick drives the focused scene in BOTH modes now: it authors the
+    // Aim target (Edit, persisted) or tracks it live (Operate).  Ownership, not
+    // mode, decides who gets the stick — see the effect yield below.
+
+    // A followspot JS effect in this scene OWNS the joystick.  Pan/tilt reach it
+    // through the "joystick" data channel.  Decide who owns the stick:
+    //  - Followspot + NO aim target = FREE-FLY: the effect flies each head's angle
+    //    itself, so this C++ path yields and lets it be the sole driver.
+    //  - Followspot + aim target = CONVERGED FOLLOW: the joystick instead moves
+    //    the shared aim target below and the scene's Aim look re-aims every head
+    //    at it (heads stay converged on the spot).  The effect defers (emits no
+    //    pan/tilt when it has a target), so the two never fight.  Don't yield.
+    {
+        bool hasFollowspot = false, hasAimTarget = false;
+        for (quint32 pid : scene->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (!p) continue;
+            if (p->type() == QLCPalette::Effect &&
+                p->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
+                hasFollowspot = true;
+            if (p->type() == QLCPalette::Aim)
+                hasAimTarget = true;
+        }
+        if (hasFollowspot && !hasAimTarget)
+            return;
+    }
 
     // Working selection: programmer selection first, then all scene fixtures.
     QList<quint32> workingSelection = m_programmerSelection;
@@ -1420,18 +1414,68 @@ void ProgrammerController::applyDesignJoystick()
         }
     }
 
-    if (panTiltPal || aimPal)
+    if (aimPal)
     {
-        // Route through FollowSpotEffect: velocity/setpoint model accumulates
-        // position as the stick deflects, holds position when released.
-        // Runs LAST (bumpFollowSpot), writes forceLTP — wins over scene output.
-        m_followSpotEffect->setFixtures(workingSelection);
-        m_followSpotEffect->setXNorm(m_panNorm);
-        m_followSpotEffect->setYNorm(m_tiltNorm);
-        if (!m_followSpotEffect->isActive())
-            m_followSpotEffect->setActive(true);
-        bumpFollowSpot();
-        emit designPositionWritten();
+        // Aim palette: move the stage target in XY space (metres) so the fixture
+        // beam traces a straight line on the floor — avoids the circular arc that
+        // pan/tilt angle accumulation produces (equal angle steps ≠ equal floor steps).
+        MonitorProperties *mProps = m_doc->monitorProperties();
+        StageTarget *tgt = mProps ? mProps->stageTarget(aimPal->stageTargetId()) : nullptr;
+        if (tgt)
+        {
+            if (!m_stageAimValid)
+            {
+                QVector3D pos = tgt->position();
+                m_stageAimX = pos.x();
+                m_stageAimY = pos.y();
+                m_stageAimValid = true;
+            }
+
+            const float dt    = 1.0f / 50.0f;
+            const float dz    = 0.12f;   // ±6% deadzone per axis
+            const float speed = m_joystickSensitivity * 2.0f;  // m/s at full deflection
+            float xVel =  (m_panNorm  - 0.5f) * 2.0f;
+            float yVel = -(m_tiltNorm - 0.5f) * 2.0f;  // negated: stick-up → target up on stage
+            if (qAbs(xVel) < dz) xVel = 0.0f;
+            if (qAbs(yVel) < dz) yVel = 0.0f;
+
+            // Stick centred → no velocity → nothing to do. Return BEFORE
+            // resetRuntime()/emits so the 50 Hz timer doesn't churn while idle;
+            // the heads simply hold their last aimed position.
+            if (xVel == 0.0f && yVel == 0.0f)
+                return;
+
+            m_stageAimX = qBound(-50.0f, m_stageAimX + xVel * speed * dt, 50.0f);
+            m_stageAimY = qBound(-50.0f, m_stageAimY + yVel * speed * dt, 50.0f);
+
+            tgt->setPosition(QVector3D(m_stageAimX, m_stageAimY, 0.0f));
+
+            // Both Design and Operate modes: the scene is running (preview or
+            // operate-scene).  resetRuntime() clears the fader map so the next
+            // write() tick re-evaluates the Aim palette with the updated target
+            // position — re-aiming every head at the moved spot (convergence).
+            // A followspot.js effect on the scene defers (emits no pan/tilt when a
+            // target is present), so it does not fight this.
+            // Re-resolve the Aim palette against the new target position. Force a
+            // 0-time fade first so the head SNAPS to the recomputed pan/tilt — at
+            // 50 Hz a non-zero fade would restart every tick and the beam would
+            // flicker/stutter instead of tracking smoothly.
+            scene->setOverrideFadeInSpeed(0);
+            scene->resetRuntime();
+
+            emit designPositionWritten();
+            emit followSpotPinChanged(true, m_stageAimX, m_stageAimY);
+            return;
+        }
+        // No stage target — fall through to baked path
+    }
+
+    if (panTiltPal)
+    {
+        // Standard Pan/Tilt look (fixed angles): the joystick does not fly it.
+        // Live position flying is the followspot.js effect (single engine); raw
+        // P/T authoring will arrive with the Edit-mode gamepad map.  No-op here.
+        emit followSpotPinChanged(false, 0.0f, 0.0f);  // PanTilt has no floor geometry
         return;
     }
 
@@ -1462,144 +1506,17 @@ void ProgrammerController::applyDesignJoystick()
 
 void ProgrammerController::commitDesignJoystick()
 {
-    // Commit the FollowSpotEffect setpoints into the palette, then deactivate
-    // FS so the scene resumes palette control at the committed position.
-    if (!m_followSpotEffect || !m_followSpotEffect->isActive()) return;
-    if (!m_followSpotEffect->setpointValid()) return;
     if (m_focusedSceneId == Function::invalidId()) return;
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
     if (!scene) return;
 
-    const float panSetpoint  = m_followSpotEffect->panSetpoint();
-    const float tiltSetpoint = m_followSpotEffect->tiltSetpoint();
-
-    // Find position palette (same logic as applyDesignJoystick).
-    QLCPalette *panTiltPal = nullptr;
-    QLCPalette *aimPal     = nullptr;
-    if (m_focusedPaletteId != QLCPalette::invalidId())
+    // Aim palette: the target was already updated live on every joystick tick.
+    // Just finalize (mark edited if not already) and reset stage-aim state.
+    if (m_stageAimValid)
     {
-        QLCPalette *p = m_doc->palette(m_focusedPaletteId);
-        if (p && p->type() == QLCPalette::PanTilt) panTiltPal = p;
-        if (p && p->type() == QLCPalette::Aim)     aimPal     = p;
-    }
-    if (!panTiltPal && !aimPal)
-    {
-        for (quint32 pid : scene->palettes())
-        {
-            QLCPalette *p = m_doc->palette(pid);
-            if (!p) continue;
-            if (p->type() == QLCPalette::PanTilt) panTiltPal = p;
-            if (p->type() == QLCPalette::Aim)     aimPal     = p;
-        }
-        if (panTiltPal && aimPal)
-        {
-            const QList<quint32> &order = scene->palettes();
-            if (order.lastIndexOf(aimPal->id()) > order.lastIndexOf(panTiltPal->id()))
-                panTiltPal = nullptr;
-            else
-                aimPal = nullptr;
-        }
-    }
-
-    if (panTiltPal)
-    {
-        // Convert normalized setpoints to fixture degrees.
-        float panDeg = 0.0f, tiltDeg = 0.0f;
-        for (quint32 fid : scene->fixtures())
-        {
-            Fixture *f = m_doc->fixture(fid);
-            if (!f || !f->fixtureMode()) continue;
-            const QLCPhysical &phy = f->fixtureMode()->physical();
-            panDeg  = panSetpoint  * (phy.focusPanMax()  > 0 ? phy.focusPanMax()  : 360.0f);
-            tiltDeg = tiltSetpoint * (phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270.0f);
-            break;
-        }
-        // Commit to palette before deactivating FS so scene snaps to correct position.
-        panTiltPal->setValue(QVariant(panDeg), QVariant(tiltDeg));
-        m_followSpotEffect->setActive(false);
-        markSceneEdited(m_focusedSceneId);
-        return;
-    }
-
-    if (aimPal)
-    {
-        MonitorProperties *mProps = m_doc->monitorProperties();
-        StageTarget *tgt = mProps ? mProps->stageTarget(aimPal->stageTargetId()) : nullptr;
-
-        // Find first fixture in scene with rig props.
-        quint32 rigFid = Function::invalidId();
-        if (mProps)
-        {
-            for (quint32 fid : scene->fixtures())
-                if (mProps->hasFixtureRigProps(fid)) { rigFid = fid; break; }
-            if (rigFid == Function::invalidId())
-            {
-                for (quint32 gid : scene->fixtureGroups())
-                {
-                    FixtureGroup *g = m_doc->fixtureGroup(gid);
-                    if (!g) continue;
-                    for (quint32 fid : g->fixtureList())
-                        if (mProps->hasFixtureRigProps(fid)) { rigFid = fid; break; }
-                    if (rigFid != Function::invalidId()) break;
-                }
-            }
-        }
-
-        if (!tgt || rigFid == Function::invalidId())
-        {
-            // No rig geometry — just deactivate FS and leave scene as-is.
-            m_followSpotEffect->setActive(false);
-            return;
-        }
-
-        Fixture *f = m_doc->fixture(rigFid);
-        if (!f || !f->fixtureMode()) { m_followSpotEffect->setActive(false); return; }
-
-        FixtureRigProps rp = mProps->fixtureRigProps(rigFid);
-        const QLCPhysical &phy = f->fixtureMode()->physical();
-        float panMax  = phy.focusPanMax()  > 0 ? phy.focusPanMax()  : 360.0f;
-        float tiltMax = phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270.0f;
-
-        // FS setpoints → fixture degrees (FS applies aim-height bias to tilt).
-        float panDeg  = panSetpoint  * panMax;
-        float tiltDeg = tiltSetpoint * tiltMax
-                        - (m_followSpotEffect->aimHeight() / 100.0f) * 5.0f;
-        tiltDeg = qBound(0.0f, tiltDeg, tiltMax);
-
-        // Undo rig pan offsets → azimuth.
-        float rawPan = panDeg;
-        if (rp.panInvert) rawPan = panMax - rawPan;
-        rawPan -= rp.panOffsetDeg;
-        float azimuthDeg = (rawPan - panMax / 2.0f) + rp.panZeroDir;
-        float azimuthRad = qDegreesToRadians(azimuthDeg);
-
-        // Undo rig tilt offsets → elevation angle.
-        float rawTilt = tiltDeg;
-        if (rp.tiltInvert) rawTilt = tiltMax - rawTilt;
-        rawTilt -= rp.tiltOffsetDeg;
-        float tiltOffset = rawTilt - tiltMax / 2.0f;
-        float elevDeg = (rp.mountingType == Truss::FloorMounted)
-                        ? (90.0f - tiltOffset) : (tiltOffset - 90.0f);
-
-        // Skip commit if fixture is nearly vertical (target undefined).
-        if (qAbs(elevDeg) >= 88.0f)
-        {
-            m_followSpotEffect->setActive(false);
-            return;
-        }
-        elevDeg = qBound(-89.0f, elevDeg, -1.0f);
-
-        QVector3D fixPos = mProps->fixtureRigPosition(rigFid);
-        float dz = 0.0f - fixPos.z();
-        float horizDist = dz / qTan(qDegreesToRadians(elevDeg));
-        QVector3D newTgtPos(fixPos.x() + horizDist * qSin(azimuthRad),
-                            fixPos.y() - horizDist * qCos(azimuthRad),
-                            0.0f);
-
-        // Commit before deactivating so the scene immediately snaps to the right spot.
-        tgt->setPosition(newTgtPos);
-        m_followSpotEffect->setActive(false);
-        markSceneEdited(m_focusedSceneId);
+        if (!m_editedScenes.contains(m_focusedSceneId))
+            markSceneEdited(m_focusedSceneId);
+        m_stageAimValid = false;
     }
 }
 
@@ -1607,8 +1524,48 @@ void ProgrammerController::slotSyncEffectFixtures()
 {
     if (m_highlightActive && m_highlightEffect)
         m_highlightEffect->setFixtures(m_programmerSelection);
-    if (m_followSpotEffect && m_followSpotEffect->isActive())
-        m_followSpotEffect->setFixtures(m_programmerSelection);
+}
+
+void ProgrammerController::slotDocModeChanged(Doc::Mode mode)
+{
+    Q_UNUSED(mode);
+    // Centre the joystick on any mode switch: a deflection left over from Edit
+    // (where the stick is read but the integrator is disabled) would otherwise
+    // immediately walk the beam off the target the instant Run starts. The next
+    // real stick event re-reads the live position.
+    m_panNorm  = 0.5f;
+    m_tiltNorm = 0.5f;
+    // Push the centred value into the effect-script "joystick" data channel too
+    // (followspot.js reads its velocity from there), else it keeps the stale
+    // deflection and drifts.
+    emit joystickUpdated(m_panNorm, m_tiltNorm);
+
+    m_stageAimValid = false;
+    // Start the aim/pin on the scene's target so on entering Run the beam is
+    // already on the target and the pin shows there — no jump, no need to nudge
+    // the stick first.
+    seedStageAimFromScene(m_focusedSceneId);
+}
+
+void ProgrammerController::slotRigPropsChanged(quint32 fid)
+{
+    Q_UNUSED(fid);
+    // Mounting / pan-zero facing / truss changed.  Clear the fader map of the
+    // focused (previewed/operate) scene and any running scenes so their Aim looks
+    // re-resolve against the new geometry on the next tick — otherwise the change
+    // only shows after a scene restart ("I changed it and nothing happened").
+    auto reaim = [this](quint32 sceneId) {
+        if (sceneId == Function::invalidId()) return;
+        if (Scene *s = qobject_cast<Scene*>(m_doc->function(sceneId)))
+        {
+            s->setOverrideFadeInSpeed(0);
+            s->resetRuntime();
+        }
+    };
+    reaim(m_focusedSceneId);
+    for (quint32 sid : m_runningScenes)
+        if (sid != m_focusedSceneId)
+            reaim(sid);
 }
 
 bool ProgrammerController::isShowLocked() const
@@ -1961,16 +1918,82 @@ void ProgrammerController::revertProgrammer()
 
 void ProgrammerController::setFocusedScene(quint32 sceneId)
 {
-    if (m_focusedSceneId != sceneId)
-    {
-        // Deactivate design-mode FollowSpotEffect so the new scene's palette
-        // controls fixture position until the operator moves the stick.
-        if (m_followSpotEffect && m_followSpotEffect->isActive())
-            m_followSpotEffect->setActive(false);
-    }
     m_focusedSceneId = sceneId;
-    // Changing the scene invalidates any palette-specific focus.
     m_focusedPaletteId = QLCPalette::invalidId();
+    m_stageAimValid = false;
+
+    // Entering a follow-spot scene that aims at an existing target: start the
+    // beam pin AT the target so it never begins from a stale/centre position.
+    seedStageAimFromScene(sceneId);
+}
+
+void ProgrammerController::seedStageAimFromScene(quint32 sceneId)
+{
+    // Restore any target a previous Operate run moved transiently, so the saved
+    // target returns to its authored position before we (re)seed.
+    restoreAim();
+
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
+    MonitorProperties *mProps = m_doc->monitorProperties();
+    if (scene != NULL && mProps != NULL)
+    {
+        foreach (quint32 pid, scene->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (p == NULL || p->type() != QLCPalette::Aim)
+                continue;
+            StageTarget *tgt = mProps->stageTarget(p->stageTargetId());
+            if (tgt == NULL)
+                continue;
+            const QVector3D pos = tgt->position();
+            m_stageAimX = pos.x();
+            m_stageAimY = pos.y();
+            m_stageAimValid = true;
+            // Operate = transient follow: remember the authored position so the
+            // run's joystick moves can be reverted (the saved target stays put).
+            if (m_doc->mode() == Doc::Operate)
+            {
+                m_aimRestoreTgtId = p->stageTargetId();
+                m_aimRestoreOrig  = pos;
+                m_aimRestoreValid = true;
+            }
+            emit followSpotPinChanged(true, m_stageAimX, m_stageAimY);
+            return;
+        }
+    }
+    // No aim target in this scene → no pin.
+    emit followSpotPinChanged(false, 0.0f, 0.0f);
+}
+
+void ProgrammerController::restoreAim()
+{
+    if (!m_aimRestoreValid)
+        return;
+    MonitorProperties *mProps = m_doc->monitorProperties();
+    StageTarget *tgt = mProps ? mProps->stageTarget(m_aimRestoreTgtId) : nullptr;
+    if (tgt)
+    {
+        tgt->setPosition(m_aimRestoreOrig);
+        // Re-resolve the running scene so heads return to the authored aim.
+        Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
+        if (scene)
+        {
+            scene->setOverrideFadeInSpeed(0);
+            scene->resetRuntime();
+        }
+    }
+    m_aimRestoreValid = false;
+}
+
+bool ProgrammerController::hasFollowSpotInput() const
+{
+    return m_controllerInputConnected && (m_panBound || m_tiltBound);
+}
+
+void ProgrammerController::setJoystickSensitivity(float s)
+{
+    m_joystickSensitivity = qBound(0.1f, s, 10.0f);
+    emit joystickSensitivityChanged(m_joystickSensitivity);
 }
 
 void ProgrammerController::setFocusedPalette(quint32 paletteId)

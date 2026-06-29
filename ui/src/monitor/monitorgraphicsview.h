@@ -33,6 +33,7 @@ class MonitorProperties;
 class MonitorFixtureItem;
 class TrussItem;
 class PlatformItem;
+class PowerSourceItem;
 class TargetItem;
 class Doc;
 
@@ -145,11 +146,28 @@ public:
     /** Rebuild the platform overlay items from MonitorProperties. */
     void updatePlatforms();
 
+    /** Rebuild the power-source markers from the power-distribution model. */
+    void updatePowerSources();
+
+    /** Power view: tint each source marker with its circuits' colours (key
+     *  "sourceIdx:circuitIdx"). Empty map restores the plain markers. */
+    void setPowerSourceColors(const QHash<QString, QColor> &circuitColors);
+
     /** Rebuild the target marker items from MonitorProperties. */
     void updateTargets();
 
+    /** Reposition existing TargetItems in place from their StageTarget data
+     *  (no recreate) — used when the joystick moves an aim target live so the
+     *  marker tracks without the churn of updateTargets(). */
+    void repositionTargetItems();
+
     /** Rebuild the aim-line overlays for all selected TargetItems. */
     void updateAimLines();
+
+    /** Show or hide the followspot beam-position pin on the floor map.
+     *  @p xMeters, @p yMeters give the floor hit in metres (stage space).
+     *  Pass visible=false to hide the pin. */
+    void setFollowSpotPin(bool visible, float xMeters, float yMeters);
 
     /** Highlight (orange border) a set of fixtures by ID; clears previous highlights. */
     void highlightFixtures(const QList<quint32> &ids);
@@ -194,6 +212,14 @@ public:
     /** Undo the last fixture move (Cmd/Ctrl+Z). */
     void undoLastMove();
 
+    /** Record a stage-feature paste on the undo stack so Ctrl+Z removes the
+     *  copies (and any palettes created for pasted targets). IDs are the
+     *  newly-created feature/palette IDs. */
+    void recordFeaturePaste(const QList<quint32> &trussIds,
+                            const QList<quint32> &platformIds,
+                            const QList<quint32> &targetIds,
+                            const QList<quint32> &paletteIds);
+
     /** Update a fixture item's real position (mm) and reposition it on the canvas.
      *  Call this after programmatically changing a fixture's truss offset. */
     void moveFixtureTo(quint32 fid, QPointF mmPos);
@@ -210,6 +236,9 @@ protected slots:
 
     /** Slot called when a PlatformItem is dropped after a drag */
     void slotPlatformMoved(PlatformItem *item);
+
+    /** Slot called when a PowerSourceItem is dropped after a drag */
+    void slotPowerSourceMoved(PowerSourceItem *item);
 
     /** Slot called when a TargetItem is dropped after a drag */
     void slotTargetMoved(TargetItem *item);
@@ -301,11 +330,20 @@ private:
     /** Interactive platform items keyed by platform ID. */
     QHash <quint32, PlatformItem*> m_platformItems;
 
+    /** Power-source markers, indexed positionally to PowerDistribution::sources(). */
+    QList <PowerSourceItem*> m_powerSourceItems;
+
     /** Interactive target marker items keyed by target ID. */
     QHash <quint32, TargetItem*> m_targetItems;
 
     /** Aim-line overlays (rebuilt on selection change). */
     QList <QGraphicsLineItem*> m_aimLines;
+
+    /** FollowSpot current-position pin (circle + crosshair), created lazily. */
+    QGraphicsEllipseItem    *m_fsPinCircle = nullptr;
+    QGraphicsLineItem       *m_fsPinH      = nullptr;
+    QGraphicsLineItem       *m_fsPinV      = nullptr;
+    QGraphicsSimpleTextItem *m_fsPinLabel  = nullptr;  ///< "no joystick" warning
 
     /** Scene whose palette→target links are shown as aim lines.
      *  invalidId() means no scene is active → no lines drawn. */
@@ -317,12 +355,21 @@ private:
      *  them onto — more reliable than comparing fixture-centre geometry. */
     QSet<quint32> m_droppedOnTrussIds;
 
-    /** Tagged undo entry — covers both fixture moves and truss moves so that
-     *  Ctrl+Z replays operations in the order they were performed. */
+    /** Tagged undo entry — covers fixture moves, truss moves and stage-feature
+     *  pastes so that Ctrl+Z replays operations in the order they were
+     *  performed. */
     struct UndoEntry {
-        enum Type { FixtureMove, TrussMove } type;
+        enum Type { FixtureMove, TrussMove, PlatformMove, TargetMove,
+                    FeaturePaste } type;
         QHash<quint32, QPointF>   fixturePositions; ///< type == FixtureMove
         QHash<quint32, QVector3D> trussOrigins;     ///< type == TrussMove
+        QHash<quint32, QPointF>   platformOrigins;  ///< type == PlatformMove (metres)
+        QHash<quint32, QPointF>   targetPositions;  ///< type == TargetMove (metres)
+        // type == FeaturePaste: IDs created by a paste, removed on undo.
+        QList<quint32> pastedTrussIds;
+        QList<quint32> pastedPlatformIds;
+        QList<quint32> pastedTargetIds;
+        QList<quint32> pastedPaletteIds;
     };
     QList<UndoEntry> m_moveUndo;
 

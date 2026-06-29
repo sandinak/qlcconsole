@@ -46,6 +46,7 @@ class AudioCapture;
 class RGBScriptsCache;
 class AudioPluginCache;
 class MonitorProperties;
+class PowerDistribution;
 class CaptureManager;
 class ProgrammerFlasher;
 class ProgrammerController;
@@ -174,6 +175,7 @@ private:
     InputOutputMap *m_ioMap;
     mutable QSharedPointer<AudioCapture> m_inputCapture;
     MonitorProperties *m_monitorProps;
+    PowerDistribution *m_powerDist;
 
     /*********************************************************************
      * Main operating mode
@@ -951,6 +953,13 @@ protected:
 public:
     /** Returns a reference to the monitor properties instance */
     MonitorProperties *monitorProperties();
+
+    /*********************************************************************
+     * Power Distribution
+     *********************************************************************/
+public:
+    /** Returns a reference to the power distribution model instance */
+    PowerDistribution *powerDistribution();
 
     /*********************************************************************
      * Load & Save

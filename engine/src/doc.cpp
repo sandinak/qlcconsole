@@ -39,6 +39,7 @@
 #include "effectscriptrunner.h"
 
 #include "monitorproperties.h"
+#include "powerdistribution.h"
 #include "audioplugincache.h"
 #include "capturemanager.h"
 #include "rgbscriptscache.h"
@@ -80,6 +81,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_captureManager(NULL)
     , m_ioMap(new InputOutputMap(this, universes))
     , m_monitorProps(NULL)
+    , m_powerDist(NULL)
     , m_mode(Design)
     , m_kiosk(false)
     , m_loadStatus(Cleared)
@@ -141,6 +143,9 @@ Doc::Doc(QObject* parent, int universes)
         QVariantMap jd;
         jd[QStringLiteral("pan")]  = double(pan);
         jd[QStringLiteral("tilt")] = double(tilt);
+        // Sensitivity is a global joystick setting (not per-effect): pass it
+        // through so effect scripts honour the I/O Manager / device profile.
+        jd[QStringLiteral("sensitivity")] = double(m_programmer->joystickSensitivity());
         m_effectScriptRunner->setDataChannel(QStringLiteral("joystick"), jd);
     });
 
@@ -193,6 +198,9 @@ Doc::~Doc()
 
     delete m_rgbScriptsCache;
     m_rgbScriptsCache = NULL;
+
+    delete m_powerDist;
+    m_powerDist = NULL;
 }
 
 void Doc::clearContents()
@@ -203,6 +211,9 @@ void Doc::clearContents()
 
     if (m_monitorProps != NULL)
         m_monitorProps->reset();
+
+    if (m_powerDist != NULL)
+        m_powerDist->reset();
 
     destroyAudioCapture();
 
@@ -882,6 +893,9 @@ bool Doc::deleteFixture(quint32 id)
         }
         if (m_monitorProps != NULL)
             m_monitorProps->removeFixture(id);
+
+        if (m_powerDist != NULL)
+            m_powerDist->removeFixture(id);
 
         m_programmer->removeFromProgrammerSelection(QList<quint32>() << id);
 
@@ -1626,6 +1640,18 @@ MonitorProperties *Doc::monitorProperties()
     return m_monitorProps;
 }
 
+/*********************************************************************
+ * Power Distribution
+ *********************************************************************/
+
+PowerDistribution *Doc::powerDistribution()
+{
+    if (m_powerDist == NULL)
+        m_powerDist = new PowerDistribution();
+
+    return m_powerDist;
+}
+
 /*****************************************************************************
  * Load & Save
  *****************************************************************************/
@@ -1686,6 +1712,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         else if (doc.name() == KXMLQLCMonitorProperties)
         {
             monitorProperties()->loadXML(doc, this);
+        }
+        else if (doc.name() == KXMLQLCPowerDistribution)
+        {
+            powerDistribution()->loadXML(doc, this);
         }
         else
         {
@@ -1758,6 +1788,9 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
         Q_ASSERT(func != NULL);
         func->saveXML(doc);
     }
+
+    if (m_powerDist != NULL)
+        m_powerDist->saveXML(doc);
 
     if (m_monitorProps != NULL)
         m_monitorProps->saveXML(doc, this);

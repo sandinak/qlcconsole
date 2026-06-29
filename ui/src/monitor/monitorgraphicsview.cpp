@@ -34,6 +34,8 @@
 #include "monitorfixtureitem.h"
 #include "trussitem.h"
 #include "platformitem.h"
+#include "powersourceitem.h"
+#include "powerdistribution.h"
 #include "targetitem.h"
 #include "truss.h"
 #include "stageplatform.h"
@@ -43,6 +45,7 @@
 #include "scene.h"
 #include "fixturegroup.h"
 #include "function.h"
+#include "programmercontroller.h"
 #include "doc.h"
 
 MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
@@ -235,8 +238,11 @@ void MonitorGraphicsView::setLayoutLocked(bool locked)
         ti->setMovable(!locked);  // TrussItem::setMovable respects per-truss lock internally
     foreach (PlatformItem *pi, m_platformItems)
         pi->setMovable(!locked);
-    foreach (TargetItem *ti, m_targetItems)
-        ti->setMovable(!locked);
+    foreach (PowerSourceItem *ps, m_powerSourceItems)
+        ps->setMovable(!locked);
+    // Targets stay movable even when the layout is locked: locking the rig is
+    // about freezing fixtures/trusses/platforms for a show, but the operator
+    // still needs to nudge aim targets live for the selected scene.
 }
 
 void MonitorGraphicsView::setSnapDivisions(int divisions)
@@ -585,14 +591,118 @@ void MonitorGraphicsView::updatePlatforms()
 
 void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
 {
-    QPointF sp = item->pos();
-    QPointF mm = pixelsToRealPosition(sp.x(), sp.y());
     StagePlatform *p = item->platform();
-    p->setOriginX(float(mm.x() / 1000.0));
-    p->setOriginY(float(mm.y() / 1000.0));
+    const QPointF oldOrigin(double(p->originX()), double(p->originY()));
+
+    QPointF sp = item->pos();
+    // Snap the platform origin to the grid on drop, matching fixture behaviour.
+    if (m_snapDivisions > 0 && m_cellPixels > 0)
+    {
+        sp = snapScenePos(sp);
+        item->setPos(sp);
+    }
+    QPointF mm = pixelsToRealPosition(sp.x(), sp.y());
+    const QPointF newOrigin(mm.x() / 1000.0, mm.y() / 1000.0);
+
+    if (newOrigin != oldOrigin)
+    {
+        UndoEntry e; e.type = UndoEntry::PlatformMove;
+        e.platformOrigins.insert(p->id(), oldOrigin);
+        m_moveUndo.append(e);
+        while (m_moveUndo.count() > 50)
+            m_moveUndo.removeFirst();
+    }
+
+    p->setOriginX(float(newOrigin.x()));
+    p->setOriginY(float(newOrigin.y()));
     m_doc->setModified();
     emit platformMoved(item->platformId(),
                        QPointF(double(p->originX()), double(p->originY())));
+}
+
+void MonitorGraphicsView::updatePowerSources()
+{
+    foreach (PowerSourceItem *ps, m_powerSourceItems)
+    {
+        m_scene->removeItem(ps);
+        delete ps;
+    }
+    m_powerSourceItems.clear();
+
+    if (m_cellPixels == 0)
+        return;
+
+    PowerDistribution *pd = m_doc->powerDistribution();
+    for (int i = 0; i < pd->sources().size(); i++)
+    {
+        const PowerSource &src = pd->sources().at(i);
+        // Placed sources use their stored metres; unplaced ones cascade near the
+        // origin so they're visible and can be dragged into position.
+        const double mx = src.placed ? src.posX : (0.5 + i * 0.4);
+        const double my = src.placed ? src.posY : 0.5;
+        const QPointF px = realPositionToPixels(mx * 1000.0, my * 1000.0);
+
+        PowerSourceItem *ps = new PowerSourceItem(i, src.name);
+        ps->setPos(px);
+        ps->setMovable(!m_layoutLocked);
+        m_scene->addItem(ps);
+        m_powerSourceItems.append(ps);
+
+        connect(ps, &PowerSourceItem::itemDropped,
+                this, &MonitorGraphicsView::slotPowerSourceMoved);
+    }
+}
+
+void MonitorGraphicsView::setPowerSourceColors(const QHash<QString, QColor> &circuitColors)
+{
+    PowerDistribution *pd = m_doc->powerDistribution();
+    foreach (PowerSourceItem *ps, m_powerSourceItems)
+    {
+        const int s = ps->sourceIndex();
+        QList<QColor> cols;
+        if (!circuitColors.isEmpty() && s >= 0 && s < pd->sources().size())
+            for (int c = 0; c < pd->sources().at(s).circuits.size(); c++)
+                cols << circuitColors.value(QString("%1:%2").arg(s).arg(c),
+                                            QColor(120, 120, 120));
+        ps->setCircuitColors(cols);
+    }
+}
+
+void MonitorGraphicsView::slotPowerSourceMoved(PowerSourceItem *item)
+{
+    PowerDistribution *pd = m_doc->powerDistribution();
+    const int idx = item->sourceIndex();
+    if (idx < 0 || idx >= pd->sources().size())
+        return;
+
+    QPointF sp = item->pos();
+    if (m_snapDivisions > 0 && m_cellPixels > 0)
+    {
+        sp = snapScenePos(sp);
+        item->setPos(sp);
+    }
+    const QPointF mm = pixelsToRealPosition(sp.x(), sp.y());
+    pd->sources()[idx].placed = true;
+    pd->sources()[idx].posX = mm.x() / 1000.0;
+    pd->sources()[idx].posY = mm.y() / 1000.0;
+    m_doc->setModified();
+}
+
+void MonitorGraphicsView::repositionTargetItems()
+{
+    if (m_cellPixels == 0)
+        return;
+    foreach (TargetItem *ti, m_targetItems)
+    {
+        StageTarget *t = ti->target();
+        if (t == nullptr)
+            continue;
+        const QVector3D p = t->position();
+        // realPositionToPixels expects millimetres (StageTarget is in metres).
+        const QPointF px = realPositionToPixels(p.x() * 1000.0, p.y() * 1000.0);
+        ti->setScenePos(float(px.x()), float(px.y()));
+    }
+    updateAimLines();   // keep aim lines tracking the moved target
 }
 
 void MonitorGraphicsView::updateTargets()
@@ -616,13 +726,36 @@ void MonitorGraphicsView::updateTargets()
     if (props == nullptr || m_cellPixels == 0)
         return;
 
+    // Only show targets referenced by the active scene's Aim palettes.
+    // With no scene focused there is nothing to aim, so show nothing.
+    QSet<quint32> visibleTargetIds;
+    if (m_activeSceneId != Function::invalidId())
+    {
+        Scene *activeScene = qobject_cast<Scene *>(m_doc->function(m_activeSceneId));
+        if (activeScene)
+        {
+            foreach (quint32 pid, activeScene->palettes())
+            {
+                QLCPalette *pal = m_doc->palette(pid);
+                if (pal && pal->type() == QLCPalette::Aim)
+                    visibleTargetIds.insert(pal->stageTargetId());
+            }
+        }
+    }
+
     foreach (StageTarget *t, props->stageTargets())
     {
+        if (!visibleTargetIds.contains(t->id()))
+            continue;
+
         float pxX = float(m_xOffset + (t->x() * 1000.0 * m_cellPixels) / m_unitValue);
         float pxY = float(m_yOffset + (t->y() * 1000.0 * m_cellPixels) / m_unitValue);
 
         TargetItem *ti = new TargetItem(t, m_doc, pxX, pxY);
-        ti->setMovable(!m_layoutLocked);
+        // Targets are a DESIGN-time aim point: draggable while editing (even when
+        // the rig layout is locked), but frozen in Run/Operate — in a show the
+        // operator drives the follow-spot pin, not the target.
+        ti->setMovable(m_doc->mode() == Doc::Design);
         m_scene->addItem(ti);
         m_targetItems.insert(t->id(), ti);
 
@@ -635,11 +768,24 @@ void MonitorGraphicsView::updateTargets()
 
 void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
 {
+    StageTarget *t = item->target();
+    const QPointF oldPos(double(t->x()), double(t->y()));
+
     QPointF sp = item->pos();
     QPointF mm = pixelsToRealPosition(sp.x(), sp.y());
-    StageTarget *t = item->target();
-    t->setX(float(mm.x() / 1000.0));
-    t->setY(float(mm.y() / 1000.0));
+    const QPointF newPos(mm.x() / 1000.0, mm.y() / 1000.0);
+
+    if (newPos != oldPos)
+    {
+        UndoEntry e; e.type = UndoEntry::TargetMove;
+        e.targetPositions.insert(t->id(), oldPos);
+        m_moveUndo.append(e);
+        while (m_moveUndo.count() > 50)
+            m_moveUndo.removeFirst();
+    }
+
+    t->setX(float(newPos.x()));
+    t->setY(float(newPos.y()));
     m_doc->setModified();
     updateAimLines();
     emit targetMoved(item->targetId(), QPointF(double(t->x()), double(t->y())));
@@ -757,7 +903,83 @@ void MonitorGraphicsView::updateAimLines()
 void MonitorGraphicsView::setActiveScene(quint32 sceneId)
 {
     m_activeSceneId = sceneId;
-    updateAimLines();
+    updateTargets();  // re-filter targets to those used by the new scene
+}
+
+void MonitorGraphicsView::setFollowSpotPin(bool visible, float xMeters, float yMeters)
+{
+    if (!m_scene) return;
+
+    // The joystick may have just moved the aim target (this fires from the aim
+    // path on every move).  Reposition the on-screen target marker so it tracks —
+    // StageTarget::setPosition() is signal-less, so nothing else would.  Do this
+    // BEFORE the visibility gate: in Edit the followspot PIN is hidden, but the
+    // target MARKER must still track the joystick authoring the target.
+    repositionTargetItems();
+
+    if (!visible)
+    {
+        if (m_fsPinCircle) m_fsPinCircle->setVisible(false);
+        if (m_fsPinH)      m_fsPinH->setVisible(false);
+        if (m_fsPinV)      m_fsPinV->setVisible(false);
+        return;
+    }
+
+    // Convert metres → scene pixels using the same transform as TargetItem.
+    if (m_cellPixels == 0) return;
+    const float px = float(m_xOffset + (xMeters * 1000.0 * m_cellPixels) / m_unitValue);
+    const float py = float(m_yOffset + (yMeters * 1000.0 * m_cellPixels) / m_unitValue);
+    const float r  = 18.0f;  // radius in scene pixels
+
+    // Create pin items on first use.
+    if (!m_fsPinCircle)
+    {
+        m_fsPinCircle = new QGraphicsEllipseItem();
+        m_fsPinCircle->setZValue(100);
+        m_fsPinCircle->setFlag(QGraphicsItem::ItemIsSelectable, false);
+        m_fsPinCircle->setFlag(QGraphicsItem::ItemIsMovable, false);
+        m_scene->addItem(m_fsPinCircle);
+
+        m_fsPinH = new QGraphicsLineItem();
+        m_fsPinH->setZValue(101);
+        m_scene->addItem(m_fsPinH);
+
+        m_fsPinV = new QGraphicsLineItem();
+        m_fsPinV->setZValue(101);
+        m_scene->addItem(m_fsPinV);
+
+        m_fsPinLabel = new QGraphicsSimpleTextItem();
+        m_fsPinLabel->setZValue(102);
+        QFont lf("Arial", 9, QFont::Bold);
+        m_fsPinLabel->setFont(lf);
+        m_scene->addItem(m_fsPinLabel);
+    }
+
+    // No bound/connected controller → the follow-spot can't be driven. Flag it:
+    // red pin + "⚠ no joystick" label so it's obvious nothing's plugged in.
+    const bool hasInput = m_doc->programmer() && m_doc->programmer()->hasFollowSpotInput();
+    const QColor pinColor = hasInput ? QColor(255, 140, 0)     // orange = drivable
+                                     : QColor(220, 60, 60);    // red    = no input
+    const QPen pen(pinColor, 2.5);
+    m_fsPinCircle->setPen(pen);
+    m_fsPinCircle->setBrush(QColor(pinColor.red(), pinColor.green(), pinColor.blue(), 60));
+    m_fsPinH->setPen(pen);
+    m_fsPinV->setPen(pen);
+    m_fsPinCircle->setToolTip(hasInput ? QObject::tr("Follow-spot beam position")
+        : QObject::tr("Follow-spot has no joystick — connect/bind a controller to move it"));
+
+    m_fsPinCircle->setRect(px - r, py - r, r * 2, r * 2);
+    m_fsPinH->setLine(px - r, py, px + r, py);
+    m_fsPinV->setLine(px, py - r, px, py + r);
+
+    m_fsPinLabel->setText(hasInput ? QString() : QObject::tr("⚠ no joystick"));
+    m_fsPinLabel->setBrush(QColor(220, 60, 60));
+    m_fsPinLabel->setPos(px + r + 3, py - r);
+    m_fsPinLabel->setVisible(!hasInput);
+
+    m_fsPinCircle->setVisible(true);
+    m_fsPinH->setVisible(true);
+    m_fsPinV->setVisible(true);
 }
 
 void MonitorGraphicsView::highlightFixtures(const QList<quint32> &ids)
@@ -883,6 +1105,7 @@ void MonitorGraphicsView::updateGrid()
 
     updateTrusses();
     updatePlatforms();
+    updatePowerSources();
     updateTargets();
 }
 
@@ -1300,11 +1523,90 @@ void MonitorGraphicsView::captureMoveUndo()
     }
 }
 
+void MonitorGraphicsView::recordFeaturePaste(const QList<quint32> &trussIds,
+                                             const QList<quint32> &platformIds,
+                                             const QList<quint32> &targetIds,
+                                             const QList<quint32> &paletteIds)
+{
+    if (trussIds.isEmpty() && platformIds.isEmpty() && targetIds.isEmpty())
+        return;
+
+    UndoEntry e;
+    e.type = UndoEntry::FeaturePaste;
+    e.pastedTrussIds    = trussIds;
+    e.pastedPlatformIds = platformIds;
+    e.pastedTargetIds   = targetIds;
+    e.pastedPaletteIds  = paletteIds;
+    m_moveUndo.append(e);
+    while (m_moveUndo.count() > 50)
+        m_moveUndo.removeFirst();
+}
+
 void MonitorGraphicsView::undoLastMove()
 {
     if (m_moveUndo.isEmpty())
         return;
     const UndoEntry entry = m_moveUndo.takeLast();
+
+    if (entry.type == UndoEntry::FeaturePaste)
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        if (props != nullptr)
+        {
+            foreach (quint32 id, entry.pastedTrussIds)
+                props->removeTruss(id);
+            foreach (quint32 id, entry.pastedPlatformIds)
+                props->removePlatform(id);
+            foreach (quint32 id, entry.pastedTargetIds)
+                props->removeStageTarget(id);
+        }
+        foreach (quint32 id, entry.pastedPaletteIds)
+            m_doc->deletePalette(id);
+
+        updateTrusses();
+        updatePlatforms();
+        updatePowerSources();
+        updateTargets();
+        m_doc->setModified();
+        return;
+    }
+
+    if (entry.type == UndoEntry::PlatformMove)
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        QHashIterator<quint32, QPointF> it(entry.platformOrigins);
+        while (it.hasNext())
+        {
+            it.next();
+            StagePlatform *p = props ? props->platform(it.key()) : nullptr;
+            if (p == nullptr)
+                continue;
+            p->setOriginX(float(it.value().x()));
+            p->setOriginY(float(it.value().y()));
+        }
+        updatePlatforms();
+        updatePowerSources();
+        m_doc->setModified();
+        return;
+    }
+
+    if (entry.type == UndoEntry::TargetMove)
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        QHashIterator<quint32, QPointF> it(entry.targetPositions);
+        while (it.hasNext())
+        {
+            it.next();
+            StageTarget *t = props ? props->stageTarget(it.key()) : nullptr;
+            if (t == nullptr)
+                continue;
+            t->setX(float(it.value().x()));
+            t->setY(float(it.value().y()));
+        }
+        updateTargets();
+        m_doc->setModified();
+        return;
+    }
 
     if (entry.type == UndoEntry::FixtureMove)
     {

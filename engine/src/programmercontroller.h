@@ -26,13 +26,14 @@
 #include <QSet>
 #include <QHash>
 #include <QColor>
+#include <QTimer>
+#include <QVector3D>
 
 #include "scenevalue.h"
 #include "doc.h"
 
 class ProgrammerFlasher;
 class HighlightEffect;
-class FollowSpotEffect;
 class QLCPalette;
 class Scene;
 
@@ -112,18 +113,6 @@ public:
     void setHighlightActive(bool active);
 
     /*********************************************************************
-     * Followspot effect
-     *********************************************************************/
-public:
-    bool isFollowSpotActive() const;
-    void setFollowSpotActive(bool active);
-    FollowSpotEffect *followSpotEffect() const { return m_followSpotEffect; }
-
-    /** Re-register the followspot DMXSource at the end of the MasterTimer
-     *  source list so it writes AFTER the scene preview and wins LTP. */
-    void bumpFollowSpot();
-
-    /*********************************************************************
      * Design-mode joystick (writes pan/tilt into the focused scene)
      *********************************************************************/
 public:
@@ -131,11 +120,16 @@ public:
      *  Called in Design mode; no-op if no scene is focused or no fixtures selected. */
     void applyDesignJoystick();
 
-    /** Commit the FollowSpotEffect's current setpoints into the focused scene's
-     *  position palette (Aim target position or PanTilt palette degrees) then
-     *  deactivate the FollowSpotEffect so the palette resumes control.
-     *  Called when the user confirms Save in the Programming tab. */
+    /** Finalize a design-mode joystick edit: the Aim target was moved live on
+     *  every tick, so this just marks the scene edited and clears stage-aim
+     *  state.  Called when the user confirms Save in the Programming tab. */
     void commitDesignJoystick();
+
+    /** Joystick speed factor for Design-mode position editing.
+     *  1.0 = default: Aim palette moves at ~2 m/s stage-space at full deflection;
+     *  PanTilt palette traverses ~50% of range per second at full deflection. */
+    float joystickSensitivity() const { return m_joystickSensitivity; }
+    void  setJoystickSensitivity(float s);
 
     /*********************************************************************
      * Controller axis binding (program-level; shared across all effects)
@@ -150,6 +144,10 @@ public:
 
     bool isPanBound()         const { return m_panBound; }
     bool isTiltBound()        const { return m_tiltBound; }
+
+    /** True if a joystick axis is bound AND a controller is connected, i.e. the
+     *  follow-spot can actually be driven. False = "nothing plugged in". */
+    bool hasFollowSpotInput() const;
     bool isCapturingPan()     const { return m_capturingPan; }
     bool isCapturingTilt()    const { return m_capturingTilt; }
     bool isBoundFromProfile() const { return m_boundFromProfile; }
@@ -177,6 +175,9 @@ public:
     /** Called by ProgrammingManager when a scene is loaded into the canvas.
      *  Sets the "focused scene" for look-level routing. */
     void setFocusedScene(quint32 sceneId);
+    /** Seed the stage-aim/pin from the scene's Aim target (if any), emitting
+     *  followSpotPinChanged so the pin appears on the target. */
+    void seedStageAimFromScene(quint32 sceneId);
 
     /** Called by ProgrammingManager when a specific palette (look) is
      *  selected or deselected in the canvas. When valid, slider edits
@@ -210,8 +211,6 @@ signals:
     void programmerSelectionChanged();
     /** Emitted when highlight active state changes. */
     void highlightActiveChanged(bool active);
-    /** Emitted when followspot active state changes. */
-    void followSpotActiveChanged(bool active);
     /** Emitted when a pan or tilt axis binding is captured or cleared. */
     void axisBindingChanged();
     /** Emitted when a controller button with a named action is pressed.
@@ -235,15 +234,28 @@ signals:
      *  this to enable the Save button. */
     void designPositionWritten();
 
+    /** Emitted whenever the followspot beam position changes in Design mode.
+     *  @p visible is false when no floor position is computable (hide pin).
+     *  @p xMeters, @p yMeters give the floor XY in metres (stage space). */
+    void followSpotPinChanged(bool visible, float xMeters, float yMeters);
+
+    /** Emitted when joystick sensitivity changes. */
+    void joystickSensitivityChanged(float s);
+
 private slots:
     /** Maintain m_runningScenes as functions start / stop. */
     void slotProgrammerFunctionStarted(quint32 fid);
     void slotProgrammerFunctionStopped(quint32 fid);
     /** Sync highlight / followspot fixtures when selection changes. */
     void slotSyncEffectFixtures();
-    /** Route controller input to FollowSpotEffect and JS effect palettes. */
+    /** Route controller input to the joystick data channel and JS effect palettes. */
     void slotControllerInputChanged(quint32 universe, quint32 channel,
                                     uchar value, const QString &key);
+    /** Re-centre the joystick and re-seed the aim/pin when the app mode changes. */
+    void slotDocModeChanged(Doc::Mode mode);
+    /** A fixture's rig assignment changed (mounting / pan-zero facing / truss) —
+     *  re-resolve live Aim looks so the new geometry shows immediately. */
+    void slotRigPropsChanged(quint32 fid);
 
 private:
     void connectControllerInput();
@@ -308,8 +320,6 @@ private:
     /** Persistent highlight DMXSource — holds selected fixtures at white. */
     HighlightEffect *m_highlightEffect = nullptr;
     bool m_highlightActive = false;
-    /** Followspot DMXSource — maps joystick axes to fixture pan/tilt. */
-    FollowSpotEffect *m_followSpotEffect = nullptr;
     // Controller axis binding (program-wide)
     quint32 m_panUniverse = 0,  m_panChannel  = 0;
     quint32 m_tiltUniverse = 0, m_tiltChannel = 0;
@@ -339,6 +349,25 @@ private:
     quint32 m_focusedSceneId = Function::invalidId();
     /** Specific palette selected in the canvas look list (invalidId = any). */
     quint32 m_focusedPaletteId = QLCPalette::invalidId();
+
+    // Design-mode stage-space joystick state (Aim palette path)
+    float m_stageAimX = 0.0f;
+    float m_stageAimY = 0.0f;
+    bool  m_stageAimValid = false;   // true once initialized from target this drag
+    float m_joystickSensitivity = 1.0f;
+
+    // Operate-mode transient follow: in Run the joystick moves the aim target live
+    // (so heads converge on the moving spot) but the SAVED target must not change.
+    // Record its authored position on Run entry and restore on Run/scene exit.
+    quint32   m_aimRestoreTgtId = 0;       // StageTarget id whose pos is saved
+    QVector3D m_aimRestoreOrig;            // authored position to restore
+    bool      m_aimRestoreValid = false;
+    /** Restore the transiently-moved Operate aim target to its authored position. */
+    void restoreAim();
+
+    /** 50 Hz driver so a held joystick keeps integrating (smooth velocity move). */
+    QTimer *m_designJoyTimer = nullptr;
+
 
 private:
     /** Map an QLCChannel::Group to the QLCPalette::PaletteType that represents it.

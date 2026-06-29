@@ -96,6 +96,13 @@ void FunctionsTreeWidget::updateTree()
 {
     blockSignals(true);
 
+    // Snapshot which folder paths are currently expanded so we can restore
+    // them after the tree is rebuilt (clearTree wipes m_foldersMap).
+    QSet<QString> expandedPaths;
+    for (auto it = m_foldersMap.constBegin(); it != m_foldersMap.constEnd(); ++it)
+        if (it.value() && it.value()->isExpanded())
+            expandedPaths.insert(it.key());
+
     clearTree();
 
     if (m_displayFilter != PalettesOnly)
@@ -118,6 +125,11 @@ void FunctionsTreeWidget::updateTree()
                 updatePaletteItem(new QTreeWidgetItem(parent), palette);
         }
     }
+
+    // Restore expanded state.
+    for (auto it = m_foldersMap.constBegin(); it != m_foldersMap.constEnd(); ++it)
+        if (it.value() && expandedPaths.contains(it.key()))
+            it.value()->setExpanded(true);
 
     blockSignals(false);
 }
