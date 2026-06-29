@@ -309,6 +309,12 @@ void Scene::resetRuntime()
     m_fadersMap.clear();
 }
 
+void Scene::requestReaim()
+{
+    QMutexLocker locker(&m_valueListMutex);
+    m_reaimRequested = true;
+}
+
 /*********************************************************************
  * Channel Groups
  *********************************************************************/
@@ -866,6 +872,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         QMutexLocker locker(&m_valueListMutex);
         if (m_fadersMap.isEmpty())
         {
+            m_reaimRequested = false;   // full build already resolves positions
             uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
 
             // Baked values first, then palettes — so an applied look (palette)
@@ -893,6 +900,36 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
 
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures()))
                     processValue(timer, ua, fadeIn, scv);
+            }
+        }
+        else if (m_reaimRequested)
+        {
+            // Live target move: re-resolve ONLY the position palettes into the
+            // EXISTING faders (replace pan/tilt channels in place, 0-time) so the
+            // dimmer/colour faders are left alone — no LED flash while flying.
+            m_reaimRequested = false;
+            auto reaimOne = [&](const SceneValue &scv) {
+                Fixture *fixture = doc()->fixture(scv.fxi);
+                if (fixture == NULL) return;
+                quint32 universe = fixture->universe();
+                if (!m_fadersMap.contains(universe)) return;
+                FadeChannel fc(doc(), scv.fxi, scv.channel);
+                fc.setStart(scv.value);
+                fc.setTarget(scv.value);
+                fc.setCurrent(scv.value);
+                fc.setFadeTime(0);
+                m_fadersMap[universe]->replace(fc);
+            };
+            foreach (quint32 paletteID, palettes())
+            {
+                QLCPalette *palette = doc()->palette(paletteID);
+                if (palette == NULL) continue;
+                if (palette->type() != QLCPalette::Aim &&
+                    palette->type() != QLCPalette::PanTilt) continue;
+                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups()))
+                    reaimOne(scv);
+                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures()))
+                    reaimOne(scv);
             }
         }
     }

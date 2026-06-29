@@ -910,12 +910,12 @@ void MonitorGraphicsView::setFollowSpotPin(bool visible, float xMeters, float yM
 {
     if (!m_scene) return;
 
-    // The joystick may have just moved the aim target (this fires from the aim
-    // path on every move).  Reposition the on-screen target marker so it tracks —
-    // StageTarget::setPosition() is signal-less, so nothing else would.  Do this
-    // BEFORE the visibility gate: in Edit the followspot PIN is hidden, but the
-    // target MARKER must still track the joystick authoring the target.
-    repositionTargetItems();
+    // EDIT only: the joystick is AUTHORING the target, so the target MARKER must
+    // track it (StageTarget::setPosition() is signal-less, so nothing else would).
+    // In RUN the target moves only transiently to converge the beam — the saved
+    // target marker must stay put; the followspot PIN below shows the live beam.
+    if (m_doc && m_doc->mode() != Doc::Operate)
+        repositionTargetItems();
 
     if (!visible)
     {

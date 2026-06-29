@@ -303,13 +303,18 @@ Control map (when no joystick-subscribing effect owns the stick):
    now runs in both modes, gated only by the followspot-effect yield (ownership,
    not mode). Note: the yield still matches on the "followspot" script path; once
    the influence contract lands it should key off "subscribes to joystick".
-4. **Send `deadzone`** (and any other global joystick settings) on the
-   `joystick` data channel — `Doc` currently sends only pan/tilt/sensitivity, so
-   scripts hard-fall-back to 0.05.
+4. **[DONE] Send `deadzone`** on the `joystick` data channel.
+   `ProgrammerController::joystickDeadzone()` is captured from the bound HID
+   profile (default 0.05) and `Doc` now sends it alongside pan/tilt/sensitivity.
 5. **Add the influence contract** (`controls` / `requires` / `contradicts`) to
    the effect-script API, host-side validation, and the **popup** error UI.
-6. **Drop the followspot `followTarget` binding** — read the Target implicitly
-   from the scene's Target look; free-fly (scene fixtures) when none is present.
+6. **[DONE] Drop the followspot `followTarget` binding** — removed from the
+   script manifest (gone from the menu). The host injects the scene's own Aim
+   look per-fixture as `fixture.sceneTarget`; the script defers on that. Subject
+   height (aim at the body, not the floor) is now keyed off "this Aim look is in
+   a scene with a followspot" rather than a target binding. Host-side
+   `followMode` (lastPosition holds the beam across transitions vs snapToTarget)
+   wired in `seedStageAimFromScene`.
 7. **Enforce shortest-path / no-wipe** on every followspot transition (extend
    the existing `nearestPan` logic to cover all seeds, not just snapToTarget).
 8. **Lock in the API tenets**: keep `tick` a pure function, ship a small

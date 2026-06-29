@@ -131,6 +131,11 @@ public:
     float joystickSensitivity() const { return m_joystickSensitivity; }
     void  setJoystickSensitivity(float s);
 
+    /** Global joystick deadzone (fraction of half-range, 0..0.4), captured from
+     *  the bound HID profile.  Sent on the "joystick" data channel so effect
+     *  scripts honour the same deadzone as the device profile. */
+    float joystickDeadzone() const { return m_joystickDeadzone; }
+
     /*********************************************************************
      * Controller axis binding (program-level; shared across all effects)
      *********************************************************************/
@@ -355,6 +360,7 @@ private:
     float m_stageAimY = 0.0f;
     bool  m_stageAimValid = false;   // true once initialized from target this drag
     float m_joystickSensitivity = 1.0f;
+    float m_joystickDeadzone    = 0.05f;  // from HID profile; default matches followspot.js
 
     // Operate-mode transient follow: in Run the joystick moves the aim target live
     // (so heads converge on the moving spot) but the SAVED target must not change.
@@ -364,6 +370,14 @@ private:
     bool      m_aimRestoreValid = false;
     /** Restore the transiently-moved Operate aim target to its authored position. */
     void restoreAim();
+
+    // followMode = lastPosition: the beam's last floor position persists across
+    // scene transitions (unlike m_stageAimValid, reset by setFocusedScene) so a
+    // new scene can resume the beam where it was rather than snapping to target.
+    bool m_beamHeldValid = false;
+    /** True if the scene's followspot effect is in lastPosition mode (default),
+     *  i.e. the beam should hold across a transition instead of snapping. */
+    bool sceneFollowspotLastPosition(Scene *scene) const;
 
     /** 50 Hz driver so a held joystick keeps integrating (smooth velocity move). */
     QTimer *m_designJoyTimer = nullptr;

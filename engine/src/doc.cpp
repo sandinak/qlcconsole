@@ -143,9 +143,11 @@ Doc::Doc(QObject* parent, int universes)
         QVariantMap jd;
         jd[QStringLiteral("pan")]  = double(pan);
         jd[QStringLiteral("tilt")] = double(tilt);
-        // Sensitivity is a global joystick setting (not per-effect): pass it
-        // through so effect scripts honour the I/O Manager / device profile.
+        // Sensitivity and deadzone are global joystick settings (not per-effect):
+        // pass them through so effect scripts honour the I/O Manager / device
+        // profile instead of falling back to hard-coded defaults.
         jd[QStringLiteral("sensitivity")] = double(m_programmer->joystickSensitivity());
+        jd[QStringLiteral("deadzone")]    = double(m_programmer->joystickDeadzone());
         m_effectScriptRunner->setDataChannel(QStringLiteral("joystick"), jd);
     });
 

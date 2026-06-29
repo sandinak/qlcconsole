@@ -158,12 +158,19 @@ public:
      */
     void resetRuntime();
 
+    /** Re-resolve ONLY the position palettes (Aim/PanTilt) into the EXISTING
+     *  fader map on the next write(), replacing pan/tilt channels in place.
+     *  Unlike resetRuntime() this does NOT tear down dimmer/colour faders, so a
+     *  live target move (joystick, 50 Hz) re-aims without flashing the LEDs. */
+    void requestReaim();
+
 signals:
     void valueChanged(SceneValue scv);
 
 protected:
     QMap <SceneValue, uchar> m_values;
     QMutex m_valueListMutex;
+    bool m_reaimRequested = false;
 
     /*********************************************************************
      * Channel Groups

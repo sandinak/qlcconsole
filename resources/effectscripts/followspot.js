@@ -32,13 +32,11 @@
     // whatever look is active.
     effect.palettes = [];
 
-    // Optional: bind to a stage target to seed the initial pan/tilt position.
-    // If bound, the first tick initializes the setpoint from the fixture's
-    // pre-computed aim angle toward that target (from the rig geometry),
-    // so the beam doesn't jump when switching from Design to Operate mode.
-    effect.targets = [
-        { name: "followTarget", description: "Stage target to seed initial aim position (optional)", optional: true }
-    ];
+    // No target binding: the followspot reads its target IMPLICITLY from the
+    // scene's own Aim look.  The host injects that as fixture.sceneTarget and,
+    // when present, moves the shared aim point so the heads converge — this
+    // effect then defers (emits no pan/tilt).  Free-fly (no Aim look) is the
+    // only case this script flies angles itself.
 
     // Sensitivity and deadzone are deliberately NOT effect parameters — they are
     // global joystick settings (HID device profile / I/O Manager) and arrive via
@@ -106,8 +104,7 @@
                 // from different geometries diverge).  Emit no pan/tilt here so this
                 // effect doesn't fight the Aim look; it just declares the scene a
                 // followspot and carries followMode / personHeight.
-                var hasTarget = f.aimAt && f.aimAt["followTarget"] &&
-                                f.aimAt["followTarget"].pan !== undefined;
+                var hasTarget = f.sceneTarget && f.sceneTarget.pan !== undefined;
                 if (hasTarget)
                     return intent;
 

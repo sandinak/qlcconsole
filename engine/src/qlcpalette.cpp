@@ -32,6 +32,7 @@
 #include "qlcfixturehead.h"
 #include "qlcfixturemode.h"
 #include "scenevalue.h"
+#include "scene.h"
 #include "doc.h"
 
 #define KXMLQLCPaletteType      QStringLiteral("Type")
@@ -618,20 +619,26 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 if (tgt == nullptr || fixture->fixtureMode() == nullptr)
                     break;
 
-                // Is this target driven by a follow spot? If any Effect palette
-                // binds it as a follow target, the beam tracks a SUBJECT — aim at
-                // (platform height + subject height), i.e. the body, overriding the
-                // target's own Z. Otherwise it's a static aim point and its Z is an
-                // ABSOLUTE height above the floor, used as-is.
+                // Is this target driven by a follow spot? The followspot reads its
+                // target IMPLICITLY from the scene's own Aim look, so subject mode
+                // is now keyed off the SCENE: if this Aim look lives in a scene that
+                // also carries a followspot effect, the beam tracks a SUBJECT (a
+                // person) — aim at (platform + subject height), i.e. the body,
+                // overriding the target's own Z. Otherwise it is a static aim point
+                // and its Z is an ABSOLUTE height above the floor, used as-is.
                 bool subjectMode = false;
-                foreach (QLCPalette *p, doc->palettes())
+                foreach (Function *fn, doc->functions())
                 {
-                    if (p == NULL || p->type() != Effect)
+                    Scene *sc = qobject_cast<Scene*>(fn);
+                    if (sc == NULL || !sc->palettes().contains(m_id))
                         continue;
-                    const QMap<QString, quint32> &tb = p->effectTargetBindings();
-                    for (QMap<QString, quint32>::const_iterator it = tb.constBegin();
-                         it != tb.constEnd(); ++it)
-                        if (it.value() == m_stageTargetId) { subjectMode = true; break; }
+                    foreach (quint32 spid, sc->palettes())
+                    {
+                        QLCPalette *sp = doc->palette(spid);
+                        if (sp != NULL && sp->type() == Effect &&
+                            sp->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
+                        { subjectMode = true; break; }
+                    }
                     if (subjectMode)
                         break;
                 }

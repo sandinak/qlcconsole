@@ -358,6 +358,39 @@ QJSValue EffectInstance::buildFixturesArray(const QList<quint32> &fxIds)
         }
         obj.setProperty("aimAt", aimAt);
 
+        // sceneTarget: the per-fixture aim toward the SCENE's own Aim look (not a
+        // manual binding).  The followspot reads its target IMPLICITLY from the
+        // scene this way, so it needs no followTarget slot in its menu.  Present
+        // only when the scene actually carries an Aim look; the script defers to
+        // the host's converged aim whenever it is present.
+        if (mp)
+        {
+            Scene *sc = qobject_cast<Scene*>(m_doc->function(m_sceneId));
+            if (sc)
+            {
+                for (quint32 spid : sc->palettes())
+                {
+                    QLCPalette *ap = m_doc->palette(spid);
+                    if (ap == NULL || ap->type() != QLCPalette::Aim)
+                        continue;
+                    StageTarget *st = mp->stageTarget(ap->stageTargetId());
+                    if (st == NULL)
+                        continue;
+                    QVector3D tp = st->position();
+                    tp.setZ(mp->platformHeightAt(tp.x(), tp.y()) + mp->aimSubjectHeight());
+                    float pd = 0.0f, td = 0.0f;
+                    if (AimSolver::aimDegrees(m_doc, fid, tp, pd, td))
+                    {
+                        QJSValue so = m_script.engine()->newObject();
+                        so.setProperty("pan",  double(pd));
+                        so.setProperty("tilt", double(td));
+                        obj.setProperty("sceneTarget", so);
+                    }
+                    break; // first Aim look wins
+                }
+            }
+        }
+
         // lastSpot: pan/tilt (degrees) where this fixture's beam was left by the
         // previous Operate-mode tick (possibly from a different scene).  Lets a
         // followspot script seed followMode = "lastPosition" so the beam holds

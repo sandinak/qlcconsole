@@ -1214,6 +1214,22 @@ void ProgrammerController::autoBindFromProfile()
     {
         m_boundFromProfile = true;
 
+        // Capture the device's global deadzone from the matched HID profile so it
+        // reaches effect scripts (followspot.js) via the "joystick" data channel —
+        // otherwise they fall back to a hard-coded default and feel inconsistent.
+        for (quint32 u = 0; u < (quint32)universeList.size(); ++u)
+        {
+            InputPatch *ip2 = m_doc->inputOutputMap()->inputPatch(u);
+            if (!ip2) continue;
+            QLCIOPlugin *plugin2 = ip2->plugin();
+            if (!plugin2) continue;
+            if (plugin2->inputAxisForSlot(ip2->input(), QStringLiteral("pan"))  < 0 &&
+                plugin2->inputAxisForSlot(ip2->input(), QStringLiteral("tilt")) < 0)
+                continue;
+            m_joystickDeadzone = qBound(0.0f, float(plugin2->inputProfileDeadzone(ip2->input())), 0.4f);
+            break;
+        }
+
         updateFollowspotJsBindings();
         emit axisBindingChanged();
     }
@@ -1447,6 +1463,7 @@ void ProgrammerController::applyDesignJoystick()
 
             m_stageAimX = qBound(-50.0f, m_stageAimX + xVel * speed * dt, 50.0f);
             m_stageAimY = qBound(-50.0f, m_stageAimY + yVel * speed * dt, 50.0f);
+            m_beamHeldValid = true;   // a real beam position now exists (lastPosition)
 
             tgt->setPosition(QVector3D(m_stageAimX, m_stageAimY, 0.0f));
 
@@ -1456,12 +1473,11 @@ void ProgrammerController::applyDesignJoystick()
             // position — re-aiming every head at the moved spot (convergence).
             // A followspot.js effect on the scene defers (emits no pan/tilt when a
             // target is present), so it does not fight this.
-            // Re-resolve the Aim palette against the new target position. Force a
-            // 0-time fade first so the head SNAPS to the recomputed pan/tilt — at
-            // 50 Hz a non-zero fade would restart every tick and the beam would
-            // flicker/stutter instead of tracking smoothly.
-            scene->setOverrideFadeInSpeed(0);
-            scene->resetRuntime();
+            // Re-resolve ONLY the position palettes into the existing faders
+            // (requestReaim) rather than tearing down the whole map — the latter
+            // rebuilds the dimmer/colour faders every 50 Hz tick and flashes the
+            // LEDs.  requestReaim replaces pan/tilt in place at 0-time fade.
+            scene->requestReaim();
 
             emit designPositionWritten();
             emit followSpotPinChanged(true, m_stageAimX, m_stageAimY);
@@ -1557,10 +1573,7 @@ void ProgrammerController::slotRigPropsChanged(quint32 fid)
     auto reaim = [this](quint32 sceneId) {
         if (sceneId == Function::invalidId()) return;
         if (Scene *s = qobject_cast<Scene*>(m_doc->function(sceneId)))
-        {
-            s->setOverrideFadeInSpeed(0);
-            s->resetRuntime();
-        }
+            s->requestReaim();   // position-only; no LED flash
     };
     reaim(m_focusedSceneId);
     for (quint32 sid : m_runningScenes)
@@ -1945,17 +1958,37 @@ void ProgrammerController::seedStageAimFromScene(quint32 sceneId)
             StageTarget *tgt = mProps->stageTarget(p->stageTargetId());
             if (tgt == NULL)
                 continue;
-            const QVector3D pos = tgt->position();
-            m_stageAimX = pos.x();
-            m_stageAimY = pos.y();
-            m_stageAimValid = true;
-            // Operate = transient follow: remember the authored position so the
-            // run's joystick moves can be reverted (the saved target stays put).
-            if (m_doc->mode() == Doc::Operate)
+
+            const bool operate = (m_doc->mode() == Doc::Operate);
+            // lastPosition (default): in Run, HOLD the beam where the previous
+            // scene left it — move the new scene's target (transiently) to the
+            // held floor position so the heads don't jump on transition.
+            const bool hold = operate && m_beamHeldValid &&
+                              sceneFollowspotLastPosition(scene);
+
+            if (hold)
             {
                 m_aimRestoreTgtId = p->stageTargetId();
-                m_aimRestoreOrig  = pos;
+                m_aimRestoreOrig  = tgt->position();
                 m_aimRestoreValid = true;
+                tgt->setPosition(QVector3D(m_stageAimX, m_stageAimY, 0.0f));
+                m_stageAimValid = true;
+                if (Scene *s = qobject_cast<Scene*>(m_doc->function(sceneId)))
+                    s->requestReaim();
+            }
+            else
+            {
+                // snapToTarget, or first activation: seed from the scene's target.
+                const QVector3D pos = tgt->position();
+                m_stageAimX = pos.x();
+                m_stageAimY = pos.y();
+                m_stageAimValid = true;
+                if (operate)
+                {
+                    m_aimRestoreTgtId = p->stageTargetId();
+                    m_aimRestoreOrig  = pos;
+                    m_aimRestoreValid = true;
+                }
             }
             emit followSpotPinChanged(true, m_stageAimX, m_stageAimY);
             return;
@@ -1963,6 +1996,24 @@ void ProgrammerController::seedStageAimFromScene(quint32 sceneId)
     }
     // No aim target in this scene → no pin.
     emit followSpotPinChanged(false, 0.0f, 0.0f);
+}
+
+bool ProgrammerController::sceneFollowspotLastPosition(Scene *scene) const
+{
+    if (!scene)
+        return false;
+    for (quint32 pid : scene->palettes())
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (p && p->type() == QLCPalette::Effect &&
+            p->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
+        {
+            // followMode: 0 = lastPosition (default), 1 = snapToTarget.
+            const double m = p->effectParamValues().value(QStringLiteral("followMode"), 0.0);
+            return m < 0.5;
+        }
+    }
+    return false; // no followspot effect → snap (seed straight from the target)
 }
 
 void ProgrammerController::restoreAim()
@@ -1974,13 +2025,10 @@ void ProgrammerController::restoreAim()
     if (tgt)
     {
         tgt->setPosition(m_aimRestoreOrig);
-        // Re-resolve the running scene so heads return to the authored aim.
-        Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
-        if (scene)
-        {
-            scene->setOverrideFadeInSpeed(0);
-            scene->resetRuntime();
-        }
+        // Re-resolve only the position so heads return to the authored aim
+        // without flashing the LEDs.
+        if (Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId)))
+            scene->requestReaim();
     }
     m_aimRestoreValid = false;
 }
