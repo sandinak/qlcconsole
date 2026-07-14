@@ -11,6 +11,7 @@
 #include <QLineEdit>
 #include <QStackedWidget>
 #include <QColorDialog>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QSlider>
 #include <QLabel>
@@ -498,6 +499,24 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Dynamic area (params + palette/target bindings) — show in full, no scrolling.
     m_effectDynWidget = new QWidget(effectPage);
     efv->addWidget(m_effectDynWidget);
+
+    // Keep the script's state across a scene change. Same idea (and the same
+    // wording) as "Persist across restarts" on an RGB Matrix — see
+    // QLCPalette::persistent().
+    m_effectPersistentCb = new QCheckBox(tr("Persist across restarts"), effectPage);
+    m_effectPersistentCb->setToolTip(
+        tr("Keep this effect running where it left off when the scene using it stops "
+           "and another scene with the SAME look starts, instead of restarting it from "
+           "its first frame. Use for long, slowly-evolving effects that must survive a "
+           "scene change."));
+    efv->addWidget(m_effectPersistentCb);
+    connect(m_effectPersistentCb, &QCheckBox::clicked, this, [this](bool checked) {
+        QLCPalette *p = m_doc->palette(m_paletteId);
+        if (p == NULL || p->type() != QLCPalette::Effect)
+            return;
+        p->setPersistent(checked);
+        m_doc->setModified();
+    });
 
     // Save the current Generator + settings as a reusable named Effect.
     QHBoxLayout *efSaveRow = new QHBoxLayout();
@@ -1611,6 +1630,15 @@ void LookEditor::rebuildEffectDynWidget()
 
 void LookEditor::populateEffectPicker(QLCPalette *p)
 {
+    // Reflect the look's persistence flag (blockSignals: this is a programmatic
+    // update, not a user click, and the clicked() handler would dirty the Doc).
+    if (m_effectPersistentCb != nullptr)
+    {
+        m_effectPersistentCb->blockSignals(true);
+        m_effectPersistentCb->setChecked(p != NULL && p->persistent());
+        m_effectPersistentCb->blockSignals(false);
+    }
+
     m_effectScriptCombo->clear();
     m_effectScriptCombo->addItem(tr("(none)"), QString());
     m_effectScriptCombo->setItemData(0, EffectKindScript, EffectKindRole);

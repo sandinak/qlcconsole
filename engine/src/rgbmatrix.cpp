@@ -42,6 +42,7 @@
 
 #define KXMLQLCRGBMatrixFixtureGroup    QStringLiteral("FixtureGroup")
 #define KXMLQLCRGBMatrixDimmerControl   QStringLiteral("DimmerControl")
+#define KXMLQLCRGBMatrixPersistent      QStringLiteral("Persistent")
 
 #define KXMLQLCRGBMatrixProperty        QStringLiteral("Property")
 #define KXMLQLCRGBMatrixPropertyName    QStringLiteral("Name")
@@ -168,6 +169,9 @@ bool RGBMatrix::copyFrom(const Function* function)
 
     setDimmerControl(mtx->dimmerControl());
     setFixtureGroup(mtx->fixtureGroup());
+    // The FLAG copies; the resume point does not. A copy is a different matrix,
+    // so it is a different effect and starts from the top.
+    setPersistent(mtx->persistent());
 
     m_rgbColors.clear();
     foreach (QColor col, mtx->getColors())
@@ -214,12 +218,29 @@ QList<quint32> RGBMatrix::components() const
  * Algorithm
  ****************************************************************************/
 
+void RGBMatrix::setPersistent(bool persist)
+{
+    if (m_persistent == persist)
+        return;
+    m_persistent = persist;
+    // Turning it off must not leave a stale resume point behind, or turning it
+    // back on later would jump to wherever the script happened to be long ago.
+    if (!persist)
+        m_persistedStepIndex = -1;
+    emit changed(id());
+}
+
 void RGBMatrix::setAlgorithm(RGBAlgorithm *algo)
 {
     {
         QMutexLocker algorithmLocker(&m_algorithmMutex);
         delete m_algorithm;
         m_algorithm = algo;
+
+        // A different algorithm is a different effect: its step space and its
+        // internal state are unrelated to the old one, so the resume point is
+        // meaningless now.
+        m_persistedStepIndex = -1;
 
         m_requestEngineCreation = true;
 
@@ -492,6 +513,10 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
         {
             setDimmerControl(root.readElementText().toInt());
         }
+        else if (root.name() == KXMLQLCRGBMatrixPersistent)
+        {
+            setPersistent(root.readElementText().toInt() != 0);
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown RGB matrix tag:" << root.name();
@@ -531,6 +556,10 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc) const
     /* LEGACY - Dimmer Control */
     if (dimmerControl())
         doc->writeTextElement(KXMLQLCRGBMatrixDimmerControl, QString::number(dimmerControl()));
+
+    /* Keep the script running across stop/start (see RGBMatrix::persistent()) */
+    if (persistent())
+        doc->writeTextElement(KXMLQLCRGBMatrixPersistent, QStringLiteral("1"));
 
     /* Colors */
     for (int i = 0; i < m_rgbColors.count(); i++)
@@ -610,6 +639,18 @@ void RGBMatrix::preRun(MasterTimer *timer)
 
             // Copy direction from parent class direction
             m_stepHandler->initializeDirection(direction(), m_rgbColors[0], m_rgbColors[1], m_stepsCount, m_runAlgorithm);
+
+            // Persistent matrix: initializeDirection() has just reset the step
+            // index to the top, which is exactly what we do NOT want — put the
+            // resume point back. The script object itself is not recreated
+            // (m_runAlgorithm == m_algorithm), so whatever state the script keeps
+            // internally is still there; restoring the step is what makes the
+            // effect pick up mid-flight rather than restart.
+            if (m_persistent && m_persistedStepIndex >= 0 &&
+                m_persistedStepIndex < m_stepsCount)
+            {
+                m_stepHandler->setCurrentStepIndex(m_persistedStepIndex);
+            }
 
             if (m_runAlgorithm->type() == RGBAlgorithm::Script)
             {
@@ -718,6 +759,15 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
 
 void RGBMatrix::postRun(MasterTimer *timer, QList<Universe *> universes)
 {
+    // Remember where the script had got to, so the next start resumes here
+    // instead of running from the first frame. Captured before anything else in
+    // the teardown can disturb the step handler.
+    if (m_persistent)
+    {
+        QMutexLocker algorithmLocker(&m_algorithmMutex);
+        m_persistedStepIndex = m_stepHandler->currentStepIndex();
+    }
+
     uint fadeout = overrideFadeOutSpeed() == defaultSpeed() ? fadeOutSpeed() : overrideFadeOutSpeed();
 
     /* If no fade out is needed, dismiss all the requested faders.

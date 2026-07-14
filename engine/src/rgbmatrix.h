@@ -153,6 +153,40 @@ private:
     FixtureGroup *m_group;
 
     /************************************************************************
+     * Persistence
+     ************************************************************************/
+public:
+    /**
+     * Persist this matrix's script state across stop/start.
+     *
+     * Off (default): every start calls initializeDirection(), which resets the
+     * step index — the script runs from its first frame again.
+     *
+     * On: the step index the matrix had reached is remembered when it stops and
+     * restored when it starts again. Because RGBMatrix does not clone its
+     * algorithm (m_runAlgorithm == m_algorithm), the RGBScript object — and with
+     * it any state the script keeps in its own module scope, e.g. a per-pixel
+     * heat/decay buffer — survives too. So a long effect (a trickle down the
+     * front cloth) carries on where it left off when a chaser steps from one
+     * collection to the next collection that also runs THIS matrix, instead of
+     * snapping back to frame 0.
+     *
+     * Identity is the matrix function itself: a different RGBMatrix is a
+     * different effect and always starts clean. This is the exact analogue of
+     * QLCPalette::persistent() for Effect looks.
+     */
+    bool persistent() const { return m_persistent; }
+    void setPersistent(bool persist);
+
+    /** Forget the resume point, so the next start runs from the first frame. */
+    void resetPersistentState() { m_persistedStepIndex = -1; }
+
+private:
+    bool m_persistent = false;
+    /** Step index to resume from; -1 = nothing to resume (start from the top). */
+    int m_persistedStepIndex = -1;
+
+    /************************************************************************
      * Algorithm
      ************************************************************************/
 public:

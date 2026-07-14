@@ -48,6 +48,13 @@ public:
     quint32 sceneId()         const { return m_sceneId; }
     quint32 effectPaletteId() const { return m_effectPaletteId; }
 
+    /** Re-bind a PARKED persistent instance to the scene that is adopting it.
+     *  Everything else — the QJSEngine, the script's own state, the phase it had
+     *  reached — is deliberately left untouched: that continuity is the whole
+     *  point of a persistent effect. Only the scene it draws its fixtures and
+     *  base values from changes. */
+    void rebindToScene(quint32 sceneId) { m_sceneId = sceneId; }
+
     // --- Input values (main thread, set by EffectScriptRunner on input events) ---
     void setInputValue(const QString &slotName, float norm01);
     float inputValue(const QString &slotName) const;

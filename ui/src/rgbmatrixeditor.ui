@@ -73,6 +73,16 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QCheckBox" name="m_persistentCb">
+        <property name="toolTip">
+         <string>Keep the script running where it left off when this matrix stops and starts again (e.g. stepping between collections that both use it), instead of restarting it from the first frame. Use for long, slowly-evolving effects that must survive a scene change.</string>
+        </property>
+        <property name="text">
+         <string>Persist across restarts</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

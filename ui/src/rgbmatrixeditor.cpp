@@ -167,6 +167,9 @@ void RGBMatrixEditor::init()
     else
         m_intensityGroup->hide();
 
+    /* Persist the script's position across stop/start */
+    m_persistentCb->setChecked(m_matrix->persistent());
+
     fillPatternCombo();
     fillFixtureGroupCombo();
     fillAnimationCombo();
@@ -260,6 +263,10 @@ void RGBMatrixEditor::init()
     connect(m_forward, SIGNAL(clicked()), this, SLOT(slotForwardClicked()));
     connect(m_backward, SIGNAL(clicked()), this, SLOT(slotBackwardClicked()));
     connect(m_dimmerControlCb, SIGNAL(clicked()), this, SLOT(slotDimmerControlClicked()));
+    connect(m_persistentCb, &QCheckBox::clicked, this, [this](bool checked) {
+        if (m_matrix != NULL)
+            m_matrix->setPersistent(checked);
+    });
 
     // Test slots
     connect(m_testButton, SIGNAL(clicked(bool)),

@@ -79,6 +79,9 @@ void EffectScriptRunner::slotPrepareQuit()
         m_instances.clear();
     }
 
+    qDeleteAll(m_parked);
+    m_parked.clear();
+
     QMutexLocker locker(&m_writesMutex);
     m_publishedWrites.clear();
 }
@@ -129,6 +132,18 @@ void EffectScriptRunner::slotDocCleared()
     }
     for (quint32 sid : sceneIds)
         destroyInstancesForScene(sid);
+
+    // Persistence is scoped to the workspace: a new one starts every effect
+    // clean, so nothing may be carried over (and the parked engines belong to
+    // palettes that are about to be destroyed).
+    qDeleteAll(m_parked);
+    m_parked.clear();
+}
+
+void EffectScriptRunner::slotPaletteRemoved(quint32 paletteId)
+{
+    // The look is gone — so is any engine parked under it.
+    discardParked(paletteId);
 }
 
 void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
@@ -143,7 +158,27 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
         if (!pal || pal->type() != QLCPalette::Effect)
             continue;
 
-        EffectInstance *inst = new EffectInstance(m_doc, sceneId, pid);
+        // Already running this look (another scene in the same collection also
+        // carries it, or a crossfade has both scenes live)? Leave the single
+        // running engine alone — one look means one effect.
+        if (instanceForPalette(pid) != nullptr)
+            continue;
+
+        EffectInstance *inst = nullptr;
+
+        // Persistent look: adopt the parked engine if we have one, so the script
+        // resumes exactly where it left off instead of restarting.
+        if (pal->persistent() && m_parked.contains(pid))
+        {
+            inst = m_parked.take(pid);
+            inst->rebindToScene(sceneId);
+            qDebug() << "[EffectScriptRunner] resumed persistent effect palette"
+                     << pid << "in scene" << sceneId;
+        }
+
+        if (inst == nullptr)
+            inst = new EffectInstance(m_doc, sceneId, pid);
+
         if (!inst->isValid())
         {
             qWarning() << "[EffectScriptRunner] instance invalid for palette" << pid;
@@ -168,8 +203,23 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
 
 void EffectScriptRunner::syncScene(quint32 sceneId)
 {
-    // Used when a running scene's palette list changes (no stop/start fired).
+    // Used when a running scene's palette list changes (no stop/start fired) and
+    // when the Programming tab re-syncs a look the user is editing.
+    //
+    // The parked engines for this scene's looks are DISCARDED, not reused. This
+    // is an edit, not a transition: the script, its parameters or the persistence
+    // flag itself may have just changed, and adopting the parked engine would
+    // silently keep running the pre-edit script. Persistence is meant to carry an
+    // effect across a scene CHANGE, never across a change to the effect.
+    QList<quint32> paletteIds;
+    if (Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId)))
+        paletteIds = scene->palettes();
+
     destroyInstancesForScene(sceneId);
+
+    for (quint32 pid : paletteIds)
+        discardParked(pid);
+
     createInstancesForScene(sceneId);
 }
 
@@ -187,10 +237,26 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
         while (it.hasNext())
         {
             EffectInstance *inst = it.next();
-            if (inst->sceneId() == sceneId)
+            if (inst->sceneId() != sceneId)
+                continue;
+
+            it.remove();
+
+            // A persistent look is PARKED rather than destroyed: hold the engine
+            // (and the script state inside it) so the next scene using this same
+            // palette can pick the effect up mid-flight. Its writes stop
+            // immediately either way — publishWrites() below only walks
+            // m_instances, so a parked effect drives no DMX.
+            const QLCPalette *pal = m_doc->palette(inst->effectPaletteId());
+            if (pal != nullptr && pal->persistent())
+            {
+                // Shouldn't happen (one look = one engine), but never leak if it does.
+                delete m_parked.value(inst->effectPaletteId(), nullptr);
+                m_parked.insert(inst->effectPaletteId(), inst);
+            }
+            else
             {
                 delete inst;
-                it.remove();
             }
         }
 
@@ -255,6 +321,20 @@ void EffectScriptRunner::slotTick()
     locker.unlock();
 
     publishWrites();
+}
+
+EffectInstance *EffectScriptRunner::instanceForPalette(quint32 paletteId) const
+{
+    QMutexLocker locker(&m_instanceMutex);
+    for (EffectInstance *inst : m_instances)
+        if (inst->effectPaletteId() == paletteId)
+            return inst;
+    return nullptr;
+}
+
+void EffectScriptRunner::discardParked(quint32 paletteId)
+{
+    delete m_parked.take(paletteId);
 }
 
 void EffectScriptRunner::publishWrites()

@@ -27,6 +27,7 @@ class CapabilityBar;
 class PathDrawWidget;
 class GradientDirectionWidget;
 class QSlider;
+class QCheckBox;
 class QComboBox;
 class QPushButton;
 class QLabel;
@@ -143,6 +144,7 @@ private:
     QLabel      *m_effectNotesLabel;  //!< longer paragraph in edit panel
     QLabel      *m_effectTypesLabel;  //!< "Works with: …" fixture-type chips
     QWidget     *m_effectDynWidget;   //!< rebuilt when script selection changes
+    QCheckBox   *m_effectPersistentCb = nullptr; //!< QLCPalette::persistent()
     QPushButton *m_saveAsEffectButton = nullptr;
 
 private slots:

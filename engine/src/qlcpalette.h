@@ -278,6 +278,24 @@ public:
     QString scriptPath() const { return m_scriptPath; }
     void setScriptPath(const QString &p) { m_scriptPath = p; }
 
+    /**
+     * Persist this effect's script state across stop/start.
+     *
+     * Off (default): every time a scene carrying this look starts, the effect
+     * gets a fresh engine and runs from its first frame.
+     *
+     * On: the running engine is PARKED when the last scene using this look
+     * stops, and re-adopted — state, phase and all — by the next scene that
+     * uses THIS SAME palette. So a slow effect (a trickle down the front cloth)
+     * keeps its place across a scene change instead of snapping back to frame 0.
+     *
+     * Identity is the palette: a different Effect look is a different effect and
+     * always starts clean. This is the exact analogue of RGBMatrix::persistent(),
+     * where identity is the matrix function.
+     */
+    bool persistent() const { return m_persistent; }
+    void setPersistent(bool p) { m_persistent = p; }
+
     /** Name of the effect PRESET this palette was stamped from (empty if the
      *  user picked a raw engine script). Purely identity/display — the script
      *  and param values above are authoritative, so the look loads fine even
@@ -337,6 +355,7 @@ public:
 
 private:
     QString m_scriptPath;
+    bool m_persistent = false;
     QString m_effectPreset;
     QMap<QString, QPair<quint32,quint32>> m_effectInputBindings;
     QMap<QString, quint32>               m_effectPaletteBindings;

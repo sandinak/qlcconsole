@@ -145,6 +145,9 @@ Doc::Doc(QObject* parent, int universes)
             m_effectScriptRunner, SLOT(slotFunctionRemoved(quint32)));
     connect(this, SIGNAL(cleared()),
             m_effectScriptRunner, SLOT(slotDocCleared()));
+    // A deleted Effect look must not leave a persistent engine parked under its id.
+    connect(this, SIGNAL(paletteRemoved(quint32)),
+            m_effectScriptRunner, SLOT(slotPaletteRemoved(quint32)));
 
     // Feed real-time joystick data into the effect script data channel system.
     connect(m_programmer, &ProgrammerController::joystickUpdated,

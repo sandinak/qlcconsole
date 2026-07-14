@@ -60,6 +60,9 @@ public slots:
     /** Workspace cleared — drop every instance. */
     void slotDocCleared();
 
+    /** An Effect look was deleted — discard any engine parked for it. */
+    void slotPaletteRemoved(quint32 paletteId);
+
     /** Re-scan a running scene's palettes and recreate Effect instances.
      *  Call this whenever a scene's palette list changes without a stop/start. */
     void syncScene(quint32 sceneId);
@@ -87,6 +90,13 @@ private:
      *  the ONLY thing writeDMX() (MasterTimer thread) reads. Main thread only. */
     void publishWrites();
 
+    /** The RUNNING instance for @p paletteId, or nullptr. (Parked instances are
+     *  deliberately not considered — they are held, not running.) */
+    EffectInstance *instanceForPalette(quint32 paletteId) const;
+
+    /** Destroy the parked engine for @p paletteId, if any. */
+    void discardParked(quint32 paletteId);
+
     Doc *m_doc;
     EffectScriptCache m_cache;
     EffectPresetCache m_presetCache;
@@ -113,6 +123,21 @@ private:
      *  only ever held for a flat list copy — never across script evaluation. */
     mutable QMutex m_writesMutex;
     QList<EffectInstance::DmxWrite> m_publishedWrites;
+
+    /**
+     * Parked engines for palettes flagged QLCPalette::persistent(), keyed by
+     * palette id.
+     *
+     * When the last scene using a persistent look stops, its instance is moved
+     * here instead of being destroyed, and the next scene that uses THAT SAME
+     * palette adopts it — engine, script state and phase intact — so a long
+     * effect keeps its place across a scene change rather than restarting.
+     * Parked instances are not ticked and write no DMX; they are simply held.
+     *
+     * Identity is the palette, which is the effect's identity: a different look
+     * is a different effect and always starts clean. Main thread only.
+     */
+    QHash<quint32, EffectInstance*> m_parked;
 
     bool m_registered = false;
 

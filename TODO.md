@@ -144,6 +144,22 @@ move to the bottom or get deleted. See also the session memory under
 ---
 
 ## Done
+- [x] **Persist across restarts (RGB Matrix + Effect looks)** — one flag, one
+      meaning, on both script paradigms: *stopping and restarting does not reset
+      the script*. For an **RGBMatrix** the identity is the matrix function, so
+      `postRun()` remembers the step index and `preRun()` restores it after
+      `initializeDirection()` has reset it (the `RGBScript` object itself is never
+      recreated — `m_runAlgorithm == m_algorithm` — so any per-pixel buffer the
+      script keeps in its module scope survives already). For an **Effect look**
+      the identity is the palette, so `EffectScriptRunner` *parks* the whole
+      `EffectInstance` (QJSEngine and all) when the last scene using it stops, and
+      re-adopts it in the next scene that carries the same palette. Purpose: long,
+      slowly-evolving effects (a trickle down the front cloth) survive a chaser
+      step from one collection to the next instead of snapping back to frame 0.
+      The effect ends naturally when it is no longer part of the running
+      collection. Editing a look (`syncScene`) discards the parked engine — a
+      change to the effect must not resume the pre-edit script; a copy of a matrix
+      copies the flag but not the resume point. Both persist to XML.
 - [x] **Followspot: Design-mode inert + lastPosition/snapToTarget handoff** — (1)
       the JS effect engine no longer ticks in Design mode (`EffectScriptRunner::
       slotTick` returns early when `Doc::Design`), so followspot does NOT move and

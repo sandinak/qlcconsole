@@ -38,6 +38,7 @@
 #define KXMLQLCPaletteType      QStringLiteral("Type")
 #define KXMLQLCPaletteName      QStringLiteral("Name")
 #define KXMLQLCPalettePath      QStringLiteral("Path")
+#define KXMLQLCPalettePersistent QStringLiteral("Persistent")
 #define KXMLQLCPaletteValue     QStringLiteral("Value")
 #define KXMLQLCPaletteFanning     QStringLiteral("Fan")
 #define KXMLQLCPaletteFanLayout   QStringLiteral("Layout")
@@ -67,6 +68,7 @@ QLCPalette *QLCPalette::createCopy()
     copy->setFanningValue(this->fanningValue());
     copy->setStageTargetId(this->stageTargetId());
     copy->setScriptPath(this->scriptPath());
+    copy->setPersistent(this->persistent());
     copy->setEffectPreset(this->effectPreset());
     copy->setEffectInputBindings(this->effectInputBindings());
     for (auto it = m_effectPaletteBindings.constBegin();
@@ -1202,6 +1204,10 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
     if (attrs.hasAttribute(KXMLQLCPalettePath))
         setPath(attrs.value(KXMLQLCPalettePath).toString());
 
+    // Effect looks only: keep the script engine alive across stop/start.
+    if (attrs.hasAttribute(KXMLQLCPalettePersistent))
+        m_persistent = (attrs.value(KXMLQLCPalettePersistent).toString() == QLatin1String("1"));
+
     if (attrs.hasAttribute(KXMLQLCPaletteValue))
     {
         QString strVal = attrs.value(KXMLQLCPaletteValue).toString();
@@ -1381,6 +1387,8 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     doc->writeAttribute(KXMLQLCPaletteID, QString::number(this->id()));
     doc->writeAttribute(KXMLQLCPaletteType, typeToString(m_type));
     doc->writeAttribute(KXMLQLCPaletteName, this->name());
+    if (m_type == Effect && m_persistent)
+        doc->writeAttribute(KXMLQLCPalettePersistent, QStringLiteral("1"));
     if (m_path.isEmpty() == false)
         doc->writeAttribute(KXMLQLCPalettePath, m_path);
 
