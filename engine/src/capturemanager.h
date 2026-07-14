@@ -23,6 +23,7 @@
 #include <QObject>
 #include <QHash>
 #include <QList>
+#include <QMutex>
 #include <QPair>
 #include <QSet>
 #include <QString>
@@ -167,8 +168,22 @@ private:
         Returns Function::invalidId() if not a Scene. */
     quint32 chaserCurrentStepSceneId(class Chaser* chaser) const;
 
+    /** Thread-safe copy of the in-flight overrides. GUI-side readers work
+        off a snapshot rather than holding m_mutex across a long walk of the
+        Doc, so the DMX thread never blocks behind them. */
+    QHash<QPair<quint32, quint32>, Override> overridesSnapshot() const;
+
+    /** Thread-safe removal of the keys a store has just consumed. */
+    void removeOverrides(const QList<QPair<quint32, quint32> >& keys);
+
 private:
     Doc* m_doc;
+
+    /** recordOverride() is called from VCSlider::writeDMX*, i.e. on the
+        MasterTimer (DMX) thread, while every other member function runs on
+        the GUI thread. m_capturing and m_overrides are the only state shared
+        across that boundary, so all access to them goes through m_mutex. */
+    mutable QMutex m_mutex;
     bool m_capturing;
 
     QHash<QPair<quint32, quint32>, Override> m_overrides;

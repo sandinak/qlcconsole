@@ -348,6 +348,9 @@ private:
     /** Scene whose palette→target links are shown as aim lines.
      *  invalidId() means no scene is active → no lines drawn. */
     quint32 m_activeSceneId = Function::invalidId();
+    /** Guards against re-queueing an aim-line rebuild that is already pending
+        (a joystick tick emits functionChanged once per fixture per channel). */
+    bool m_aimLinesUpdatePending = false;
 
     /** Truss IDs that were highlighted (cursor over them) at the moment of the
      *  last mouse release.  Populated in mouseReleaseEvent, consumed in

@@ -28,6 +28,7 @@ class QXmlStreamReader;
 class QXmlStreamWriter;
 class SceneValue;
 class Doc;
+class Scene;
 
 /** @addtogroup engine Engine
  * @{
@@ -140,8 +141,23 @@ public:
     void setValues(QVariantList values);
     void resetValues();
 
-    QList<SceneValue> valuesFromFixtures(Doc *doc, QList<quint32>fixtures);
-    QList<SceneValue> valuesFromFixtureGroups(Doc *doc, QList<quint32>groups);
+    /**
+     * Expand this palette into concrete SceneValues for @a fixtures.
+     *
+     * @a owner is the Scene this palette is being expanded for, and it matters
+     * for the Aim type: an Aim look aims at a SUBJECT (a person) when its own
+     * scene also carries a follow-spot effect, and at a static point otherwise.
+     * Pass it whenever you have it. Without it, that question can only be
+     * answered by scanning every Function in the Doc — which is O(functions x
+     * fixtures) and, worse, a data race when called from the MasterTimer thread
+     * (Scene::write) while the GUI thread adds or deletes functions. Callers on
+     * the DMX path MUST pass it; the nullptr fallback exists only for GUI-side
+     * callers with no scene context.
+     */
+    QList<SceneValue> valuesFromFixtures(Doc *doc, QList<quint32>fixtures,
+                                         const Scene *owner = nullptr);
+    QList<SceneValue> valuesFromFixtureGroups(Doc *doc, QList<quint32>groups,
+                                              const Scene *owner = nullptr);
 
 protected:
     /** This method returns a normalized factor between 0.0 and 1.0

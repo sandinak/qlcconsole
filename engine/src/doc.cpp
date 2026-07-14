@@ -23,6 +23,7 @@
 #include <QRegularExpression>
 #include <QStringList>
 #include <QString>
+#include <QThread>
 #include <QDebug>
 #include <QList>
 #include <QTime>
@@ -135,6 +136,15 @@ Doc::Doc(QObject* parent, int universes)
             m_effectScriptRunner, SLOT(slotFunctionStarted(quint32)));
     connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
             m_effectScriptRunner, SLOT(slotFunctionStopped(quint32)));
+    // deleteFunction() removes the function from the MasterTimer without
+    // emitting functionStopped, and clearContents() deletes every function at
+    // once — neither would tear down the effect instances, which then leak a
+    // QJSEngine each and keep pinning their last frame onto the output at
+    // Override priority. Both are emitted before the functions are destroyed.
+    connect(this, SIGNAL(functionRemoved(quint32)),
+            m_effectScriptRunner, SLOT(slotFunctionRemoved(quint32)));
+    connect(this, SIGNAL(cleared()),
+            m_effectScriptRunner, SLOT(slotDocCleared()));
 
     // Feed real-time joystick data into the effect script data channel system.
     connect(m_programmer, &ProgrammerController::joystickUpdated,
@@ -694,7 +704,18 @@ bool Doc::isModified() const
 void Doc::setModified()
 {
     m_modified = true;
-    m_autosaveTimer.start();
+
+    // setModified() is reached from the MasterTimer (DMX) thread via the
+    // programmer edit routing (VCSlider::writeDMXParameter -> markSceneEdited).
+    // QTimer::start() cannot be called from a thread other than the timer's own:
+    // Qt refuses it ("Timers can only be used with threads started with QThread")
+    // and the timer is simply never armed — so autosave silently stopped
+    // tracking programmer edits. Marshal the start back to the timer's thread.
+    if (QThread::currentThread() == m_autosaveTimer.thread())
+        m_autosaveTimer.start();
+    else
+        QMetaObject::invokeMethod(&m_autosaveTimer, "start", Qt::QueuedConnection);
+
     emit modified(true);
 }
 

@@ -117,7 +117,7 @@ quint32 PaletteManager::selectedPaletteId() const
 {
     const QList<QTreeWidgetItem*> sel = m_tree->selectedItems();
     if (sel.isEmpty())
-        return 0;
+        return QLCPalette::invalidId();   // NOT 0 — 0 is a legitimate palette id
     return sel.first()->data(0, Qt::UserRole).toUInt();
 }
 
@@ -135,7 +135,10 @@ int PaletteManager::referenceCount(quint32 paletteId) const
 
 void PaletteManager::slotSelectionChanged()
 {
-    const bool has = (selectedPaletteId() != 0);
+    // Doc::createPaletteId() starts at 0, so the FIRST palette in a workspace
+    // legitimately has id 0 — testing against 0 left Edit/Rename/Delete greyed
+    // out for it. QLCPalette::invalidId() is the sentinel everywhere else.
+    const bool has = (selectedPaletteId() != QLCPalette::invalidId());
     m_editButton->setEnabled(has);
     m_renameButton->setEnabled(has);
     m_deleteButton->setEnabled(has);

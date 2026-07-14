@@ -78,6 +78,11 @@ public:
     // --- Read last results (any thread, mutex-protected) ---
     QList<DmxWrite> dmxWrites() const;
 
+    /** Drop the last tick's writes so writeDMX() stops asserting them. Any
+        runTick() bail-out must call this, or the effect's final frame stays
+        pinned on the output at Override priority. */
+    void clearResults();
+
     // Returns the scene's fixture list filtered by the script's declared fixtureTypes.
     // If the script declares no types, all scene fixtures are returned.
     QList<quint32> effectiveFixtureIds() const;

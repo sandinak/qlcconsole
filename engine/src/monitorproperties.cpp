@@ -881,25 +881,42 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         else if (root.name() == QStringLiteral("StagePlatform"))
         {
             StagePlatform *p = new StagePlatform(nextPlatformId(), this);
-            if (p->loadXML(root))
+            // Ids now come from the file, so a malformed/hand-edited workspace
+            // can repeat one. insert() would overwrite and leak the first.
+            if (p->loadXML(root) && !m_platforms.contains(p->id()))
+            {
                 m_platforms.insert(p->id(), p);
+            }
             else
+            {
+                qWarning() << "Discarding stage platform with missing or duplicate id" << p->id();
                 delete p;
+            }
         }
         else if (root.name() == QStringLiteral("StageTarget"))
         {
             StageTarget *t = new StageTarget(nextStageTargetId(), this);
-            if (t->loadXML(root))
+            if (t->loadXML(root) && !m_stageTargets.contains(t->id()))
+            {
                 m_stageTargets.insert(t->id(), t);
+            }
             else
+            {
+                qWarning() << "Discarding stage target with missing or duplicate id" << t->id();
                 delete t;
+            }
         }
         else if (root.name() == QStringLiteral("FixtureRig"))
         {
             QXmlStreamAttributes a = root.attributes();
             quint32 fid = a.value("FID").toUInt();
             FixtureRigProps rp;
-            rp.trussId     = a.value("Truss").toUInt();
+            // No Truss attribute means free-placed, which is what the default
+            // (Truss::invalidId()) encodes. toUInt() on a missing attribute
+            // returns 0 — a VALID truss id — which would make the fixture read
+            // as hung on truss 0 and flip the tilt sign in AimSolver.
+            if (a.hasAttribute("Truss"))
+                rp.trussId = a.value("Truss").toUInt();
             rp.trussOffset    = a.value("Offset").toFloat();
             rp.mountingType   = Truss::stringToMounting(a.value("Mounting").toString());
             rp.panZeroDir     = a.value("PanZero").toFloat();

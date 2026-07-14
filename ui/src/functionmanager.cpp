@@ -938,17 +938,23 @@ void FunctionManager::selectFunction(quint32 id)
 
 void FunctionManager::deleteSelectedFunctions()
 {
+    // Doc::deletePalette() emits paletteRemoved, which rebuilds the whole tree
+    // and destroys every QTreeWidgetItem in it — including the ones this
+    // selection snapshot still points at. So palettes are collected by ID here
+    // and deleted in a second pass, after the last item pointer has been used.
+    // (Deleting a Function does NOT rebuild the tree, so those still own their
+    // items and delete them by hand, as upstream does.)
+    QList<quint32> paletteIds;
+
     QListIterator <QTreeWidgetItem*> it(m_tree->selectedItems());
     while (it.hasNext() == true)
     {
         QTreeWidgetItem* item(it.next());
 
-        // Palette leaf: detach from scenes, then delete the palette.
         const quint32 pid = m_tree->itemPaletteId(item);
         if (pid != QLCPalette::invalidId())
         {
-            m_doc->deletePalette(pid);
-            delete item;
+            paletteIds.append(pid);
             continue;
         }
 
@@ -993,6 +999,11 @@ void FunctionManager::deleteSelectedFunctions()
                 m_tree->deleteFolder(parent);
         }
     }
+
+    // Second pass: every deletePalette() rebuilds the tree from scratch, so no
+    // item pointer from the loop above may be touched from here on.
+    foreach (quint32 pid, paletteIds)
+        m_doc->deletePalette(pid);
 }
 
 void FunctionManager::slotTreeItemDoubleClicked(QTreeWidgetItem* item)

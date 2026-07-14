@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <climits>
 
+#include <QMutexLocker>
+
 #include "programmercontroller.h"
 
 #include "doc.h"
@@ -84,6 +86,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
 
 QList<quint32> ProgrammerController::programmerSelection() const
 {
+    // Read from the DMX thread (VCSlider::writeDMXParameter).
+    QMutexLocker locker(&m_stateMutex);
     return m_programmerSelection;
 }
 
@@ -98,23 +102,30 @@ void ProgrammerController::setProgrammerSelection(const QList<quint32>& fixtureI
         deduped.append(fid);
         seen.insert(fid);
     }
-    if (deduped == m_programmerSelection)
-        return;
-    m_programmerSelection = deduped;
-    m_programmerSelectionLookup = seen;
+
+    {
+        QMutexLocker locker(&m_stateMutex);
+        if (deduped == m_programmerSelection)
+            return;
+        m_programmerSelection = deduped;
+        m_programmerSelectionLookup = seen;
+    }
     emit programmerSelectionChanged();
 }
 
 void ProgrammerController::addToProgrammerSelection(const QList<quint32>& fixtureIds)
 {
     bool changed = false;
-    for (quint32 fid : fixtureIds)
     {
-        if (m_programmerSelectionLookup.contains(fid))
-            continue;
-        m_programmerSelection.append(fid);
-        m_programmerSelectionLookup.insert(fid);
-        changed = true;
+        QMutexLocker locker(&m_stateMutex);
+        for (quint32 fid : fixtureIds)
+        {
+            if (m_programmerSelectionLookup.contains(fid))
+                continue;
+            m_programmerSelection.append(fid);
+            m_programmerSelectionLookup.insert(fid);
+            changed = true;
+        }
     }
     if (changed)
         emit programmerSelectionChanged();
@@ -123,13 +134,16 @@ void ProgrammerController::addToProgrammerSelection(const QList<quint32>& fixtur
 void ProgrammerController::removeFromProgrammerSelection(const QList<quint32>& fixtureIds)
 {
     bool changed = false;
-    for (quint32 fid : fixtureIds)
     {
-        if (!m_programmerSelectionLookup.contains(fid))
-            continue;
-        m_programmerSelection.removeAll(fid);
-        m_programmerSelectionLookup.remove(fid);
-        changed = true;
+        QMutexLocker locker(&m_stateMutex);
+        for (quint32 fid : fixtureIds)
+        {
+            if (!m_programmerSelectionLookup.contains(fid))
+                continue;
+            m_programmerSelection.removeAll(fid);
+            m_programmerSelectionLookup.remove(fid);
+            changed = true;
+        }
     }
     if (changed)
         emit programmerSelectionChanged();
@@ -138,19 +152,22 @@ void ProgrammerController::removeFromProgrammerSelection(const QList<quint32>& f
 void ProgrammerController::toggleInProgrammerSelection(const QList<quint32>& fixtureIds)
 {
     bool changed = false;
-    for (quint32 fid : fixtureIds)
     {
-        if (m_programmerSelectionLookup.contains(fid))
+        QMutexLocker locker(&m_stateMutex);
+        for (quint32 fid : fixtureIds)
         {
-            m_programmerSelection.removeAll(fid);
-            m_programmerSelectionLookup.remove(fid);
+            if (m_programmerSelectionLookup.contains(fid))
+            {
+                m_programmerSelection.removeAll(fid);
+                m_programmerSelectionLookup.remove(fid);
+            }
+            else
+            {
+                m_programmerSelection.append(fid);
+                m_programmerSelectionLookup.insert(fid);
+            }
+            changed = true;
         }
-        else
-        {
-            m_programmerSelection.append(fid);
-            m_programmerSelectionLookup.insert(fid);
-        }
-        changed = true;
     }
     if (changed)
         emit programmerSelectionChanged();
@@ -158,15 +175,19 @@ void ProgrammerController::toggleInProgrammerSelection(const QList<quint32>& fix
 
 void ProgrammerController::clearProgrammerSelection()
 {
-    if (m_programmerSelection.isEmpty())
-        return;
-    m_programmerSelection.clear();
-    m_programmerSelectionLookup.clear();
+    {
+        QMutexLocker locker(&m_stateMutex);
+        if (m_programmerSelection.isEmpty())
+            return;
+        m_programmerSelection.clear();
+        m_programmerSelectionLookup.clear();
+    }
     emit programmerSelectionChanged();
 }
 
 bool ProgrammerController::isInProgrammerSelection(quint32 fixtureId) const
 {
+    QMutexLocker locker(&m_stateMutex);
     return m_programmerSelectionLookup.contains(fixtureId);
 }
 
@@ -174,6 +195,7 @@ bool ProgrammerController::allInProgrammerSelection(const QList<quint32>& fixtur
 {
     if (fixtureIds.isEmpty())
         return false;
+    QMutexLocker locker(&m_stateMutex);
     for (quint32 fid : fixtureIds)
     {
         if (!m_programmerSelectionLookup.contains(fid))
@@ -184,11 +206,14 @@ bool ProgrammerController::allInProgrammerSelection(const QList<quint32>& fixtur
 
 QColor ProgrammerController::programmerColor() const
 {
+    QMutexLocker locker(&m_stateMutex);
     return m_programmerColor;
 }
 
 void ProgrammerController::setProgrammerColorComponent(int qlcPrimaryColour, uchar value)
 {
+    // Written from the DMX thread (VCSlider colour-component sliders).
+    QMutexLocker locker(&m_stateMutex);
     if (!m_programmerColor.isValid())
         m_programmerColor = QColor(0, 0, 0, 0);
     switch (qlcPrimaryColour)
@@ -209,41 +234,51 @@ void ProgrammerController::setProgrammerColorComponent(int qlcPrimaryColour, uch
 
 void ProgrammerController::setProgrammerValue(quint32 fixtureId, quint32 channel, uchar value)
 {
-    const bool wasEmpty = m_programmerValues.isEmpty();
-    m_programmerValues[fixtureId][channel] = value;
+    // Written from the DMX thread (VCSlider::writeDMXParameter).
+    bool wasEmpty = false;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        wasEmpty = m_programmerValues.isEmpty();
+        m_programmerValues[fixtureId][channel] = value;
+    }
     if (wasEmpty)
         emit programmerDirtyChanged(true);
 }
 
 void ProgrammerController::clearProgrammerValues()
 {
-    if (!isProgrammerDirty())
-        return;
-    // Caller (Save) has persisted everything elsewhere — drop the
-    // values map AND the in-memory edited-scenes tracking. Snapshots
-    // are no longer needed because the post-save scenes ARE the new
-    // baseline.
-    m_programmerValues.clear();
-    m_editedScenes.clear();
-    m_sceneSnapshots.clear();
+    {
+        QMutexLocker locker(&m_stateMutex);
+        if (m_programmerValues.isEmpty() && m_editedScenes.isEmpty())
+            return;
+        // Caller (Save) has persisted everything elsewhere — drop the
+        // values map AND the in-memory edited-scenes tracking. Snapshots
+        // are no longer needed because the post-save scenes ARE the new
+        // baseline.
+        m_programmerValues.clear();
+        m_editedScenes.clear();
+        m_sceneSnapshots.clear();
+    }
     emit programmerDirtyChanged(false);
 }
 
 bool ProgrammerController::isProgrammerDirty() const
 {
+    QMutexLocker locker(&m_stateMutex);
     return !m_programmerValues.isEmpty() || !m_editedScenes.isEmpty();
 }
 
 quint32 ProgrammerController::saveProgrammerAsScene(const QString &name)
 {
-    if (m_programmerValues.isEmpty())
+    const QHash<quint32, QHash<quint32, uchar>> values = programmerValues();
+    if (values.isEmpty())
         return Function::invalidId();
 
     Scene *scene = new Scene(m_doc);
     scene->setName(name.isEmpty() ? tr("Programmer scene") : name);
 
-    for (auto fixIt = m_programmerValues.constBegin();
-         fixIt != m_programmerValues.constEnd(); ++fixIt)
+    for (auto fixIt = values.constBegin();
+         fixIt != values.constEnd(); ++fixIt)
     {
         const quint32 fid = fixIt.key();
         const QHash<quint32, uchar> &channels = fixIt.value();
@@ -268,21 +303,29 @@ void ProgrammerController::slotProgrammerFunctionStarted(quint32 fid)
     Function *f = m_doc->function(fid);
     if (f == NULL)
         return;
-    qCritical() << "[PC] functionStarted:" << fid << f->name()
-                << "type=" << f->type()
-                << "mode=" << (m_doc->mode() == Doc::Design ? "Design" : "Operate");
-    if (f->type() == Function::SceneType)
+    // qDebug, not qCritical: this runs on the MasterTimer thread (DirectConnection)
+    // while the function-list mutex is held, and a chaser stepping fires it on
+    // every step — unconditional stderr writes there cost tick budget.
+    qDebug() << "[PC] functionStarted:" << fid << f->name()
+             << "type=" << f->type()
+             << "mode=" << (m_doc->mode() == Doc::Design ? "Design" : "Operate");
+    // Pure container work only: this slot runs on the MasterTimer thread with
+    // MasterTimer::m_functionListMutex already held, so it must not call out
+    // to anything that could take another engine lock while holding this one.
+    const Function::Type type = f->type();
+    QMutexLocker locker(&m_stateMutex);
+    if (type == Function::SceneType)
     {
         // Re-running an already-tracked scene: bump it to most-recent.
         m_runningScenes.removeAll(fid);
         m_runningScenes.append(fid);
     }
-    else if (f->type() == Function::ChaserType)
+    else if (type == Function::ChaserType)
     {
         m_runningChasers.removeAll(fid);
         m_runningChasers.append(fid);
     }
-    else if (f->type() == Function::CollectionType)
+    else if (type == Function::CollectionType)
     {
         m_runningCollections.removeAll(fid);
         m_runningCollections.append(fid);
@@ -292,9 +335,12 @@ void ProgrammerController::slotProgrammerFunctionStarted(quint32 fid)
 void ProgrammerController::slotProgrammerFunctionStopped(quint32 fid)
 {
     Function *f = m_doc->function(fid);
-    qCritical() << "[PC] functionStopped:" << fid
-                << (f ? f->name() : "(null)")
-                << "mode=" << (m_doc->mode() == Doc::Design ? "Design" : "Operate");
+    qDebug() << "[PC] functionStopped:" << fid
+             << (f ? f->name() : "(null)")
+             << "mode=" << (m_doc->mode() == Doc::Design ? "Design" : "Operate");
+
+    // As in slotProgrammerFunctionStarted: DMX thread, container work only.
+    QMutexLocker locker(&m_stateMutex);
     m_runningScenes.removeAll(fid);
     m_runningChasers.removeAll(fid);
     m_runningCollections.removeAll(fid);
@@ -345,13 +391,24 @@ quint32 ProgrammerController::routeProgrammerEdit(quint32 fid, quint32 ch, uchar
     // as the active step of a running chaser, or as a member of a
     // running collection (including a collection that runs a chaser,
     // which is the common "play a look" structure).
+    // Copy the running lists under the lock (they are mutated from the same
+    // DMX thread by the functionStarted/Stopped slots, and read here), then
+    // walk them unlocked — collectActiveScenes() calls into Doc.
+    QList<quint32> scenes, chasers, collections;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        scenes = m_runningScenes;
+        chasers = m_runningChasers;
+        collections = m_runningCollections;
+    }
+
     QList<Scene*> candidates;
-    for (int i = m_runningScenes.size() - 1; i >= 0; --i)
-        collectActiveScenes(m_doc, m_doc->function(m_runningScenes.at(i)), candidates);
-    for (int i = m_runningChasers.size() - 1; i >= 0; --i)
-        collectActiveScenes(m_doc, m_doc->function(m_runningChasers.at(i)), candidates);
-    for (int i = m_runningCollections.size() - 1; i >= 0; --i)
-        collectActiveScenes(m_doc, m_doc->function(m_runningCollections.at(i)), candidates);
+    for (int i = scenes.size() - 1; i >= 0; --i)
+        collectActiveScenes(m_doc, m_doc->function(scenes.at(i)), candidates);
+    for (int i = chasers.size() - 1; i >= 0; --i)
+        collectActiveScenes(m_doc, m_doc->function(chasers.at(i)), candidates);
+    for (int i = collections.size() - 1; i >= 0; --i)
+        collectActiveScenes(m_doc, m_doc->function(collections.at(i)), candidates);
 
     // Palette-aware routing first: editing a whole group scene live
     // updates the palette (so the group follows) instead of writing a
@@ -370,16 +427,9 @@ quint32 ProgrammerController::routeProgrammerEdit(quint32 fid, quint32 ch, uchar
             continue;
 
         const quint32 sid = scene->id();
-        // First time this scene becomes edited this round: snapshot
-        // its current values so Revert can restore them.
-        if (!m_editedScenes.contains(sid))
-        {
-            m_sceneSnapshots.insert(sid, scene->values());
-            const bool wasClean = !isProgrammerDirty();
-            m_editedScenes.insert(sid);
-            if (wasClean)
-                emit programmerDirtyChanged(true);
-        }
+        // First time this scene becomes edited this round: snapshot it so
+        // Revert can restore it.
+        beginSceneEdit(scene);
         // checkHTP=false → the running fader REPLACES the channel
         // value with ours rather than HTP-stacking. Without this,
         // intensity-grouped channels (R/G/B/W/Dimmer) ignore lowered
@@ -396,7 +446,8 @@ bool ProgrammerController::selectionCoversGroups(const QList<quint32> &groups) c
 {
     if (groups.isEmpty())
         return false;
-    QSet<quint32> sel(m_programmerSelection.begin(), m_programmerSelection.end());
+    const QList<quint32> selection = programmerSelection();   // locked copy
+    QSet<quint32> sel(selection.begin(), selection.end());
     QSet<quint32> grp;
     for (quint32 gid : groups)
     {
@@ -466,10 +517,12 @@ quint32 ProgrammerController::tryRoutePaletteEdit(quint32 fid, quint32 ch,
             if (pal == NULL)
                 continue;
 
-            // Does this palette currently drive (fid, ch)?
+            // Does this palette currently drive (fid, ch)? Pass the owning
+            // scene: this runs on the DMX thread, where the Doc-wide function
+            // scan in the Aim branch would be a race.
             bool drives = false;
             const QList<SceneValue> exp =
-                pal->valuesFromFixtureGroups(m_doc, groups);
+                pal->valuesFromFixtureGroups(m_doc, groups, scene);
             for (const SceneValue &sv : exp)
             {
                 if (sv.fxi == fid && sv.channel == ch)
@@ -481,6 +534,17 @@ quint32 ProgrammerController::tryRoutePaletteEdit(quint32 fid, quint32 ch,
             if (!drives)
                 continue;
 
+            // Snapshot BEFORE touching the palette: updatePaletteForEdit
+            // mutates the shared QLCPalette in place, so a snapshot taken
+            // afterwards would capture the already-edited value and Revert
+            // would be a no-op.
+            bool wasEdited = false;
+            {
+                QMutexLocker locker(&m_stateMutex);
+                wasEdited = m_editedScenes.contains(scene->id());
+            }
+            beginSceneEdit(scene);
+
             PaletteEditOutcome outcome = updatePaletteForEdit(pal, value);
             if (outcome == PaletteCantDerive)
             {
@@ -491,25 +555,36 @@ quint32 ProgrammerController::tryRoutePaletteEdit(quint32 fid, quint32 ch,
                 Fixture *fxi = m_doc->fixture(fid);
                 const QLCChannel *qch = fxi ? fxi->channel(ch) : nullptr;
                 if (qch)
-                    outcome = updatePaletteForChannelType(pal, qch->group(), 0, value);
+                    outcome = updatePaletteForChannelType(pal, qch->group(), 0, value, fxi);
                 if (outcome == PaletteCantDerive)
+                {
+                    // Nothing was mutated after all — undo the speculative
+                    // snapshot so we don't leave the scene falsely dirty.
+                    if (!wasEdited)
+                    {
+                        bool nowClean = false;
+                        {
+                            QMutexLocker locker(&m_stateMutex);
+                            m_sceneSnapshots.remove(scene->id());
+                            m_editedScenes.remove(scene->id());
+                            nowClean = m_programmerValues.isEmpty() &&
+                                       m_editedScenes.isEmpty();
+                        }
+                        if (nowClean)
+                            emit programmerDirtyChanged(false);
+                    }
                     return Function::invalidId(); // genuinely can't route
+                }
             }
 
             const quint32 sid = scene->id();
             if (outcome == PaletteChanged)
             {
-                // Drop the scene's runtime faders so the next write tick
-                // re-expands the palette with the new value — the whole
-                // group follows live (no scene/engine change needed).
-                scene->resetRuntime();
-                if (!m_editedScenes.contains(sid))
-                {
-                    const bool wasClean = !isProgrammerDirty();
-                    m_editedScenes.insert(sid);
-                    if (wasClean)
-                        emit programmerDirtyChanged(true);
-                }
+                // Re-expand the palette into the LIVE faders on the next write
+                // tick — the whole group follows the edit with no scene/engine
+                // change. In-place, not resetRuntime(): this is the DMX thread
+                // and it runs on every tick of a slider drag.
+                scene->requestPaletteRefresh();
                 m_doc->setModified();
             }
             return sid; // took the edit (changed or already-matching)
@@ -523,8 +598,8 @@ int ProgrammerController::rerouteProgrammerValues()
     int routed = 0;
     // Snapshot first — routeProgrammerEdit() mutates m_programmerValues
     // indirectly only via our removals below, but iterate a copy to be
-    // safe against any reentrancy.
-    const QHash<quint32, QHash<quint32, uchar>> snapshot = m_programmerValues;
+    // safe against any reentrancy (and against the DMX thread inserting).
+    const QHash<quint32, QHash<quint32, uchar>> snapshot = programmerValues();
     for (auto fixIt = snapshot.constBegin(); fixIt != snapshot.constEnd(); ++fixIt)
     {
         const quint32 fid = fixIt.key();
@@ -537,6 +612,7 @@ int ProgrammerController::rerouteProgrammerValues()
             {
                 // Now owned by a running scene → drop from the raw map
                 // so Save doesn't also bundle it into a new scene.
+                QMutexLocker locker(&m_stateMutex);
                 m_programmerValues[fid].remove(ch);
                 if (m_programmerValues[fid].isEmpty())
                     m_programmerValues.remove(fid);
@@ -549,16 +625,19 @@ int ProgrammerController::rerouteProgrammerValues()
 
 QSet<quint32> ProgrammerController::editedSceneIds() const
 {
+    QMutexLocker locker(&m_stateMutex);
     return m_editedScenes;
 }
 
 bool ProgrammerController::hasProgrammerValues() const
 {
+    QMutexLocker locker(&m_stateMutex);
     return !m_programmerValues.isEmpty();
 }
 
 QHash<quint32, QHash<quint32, uchar>> ProgrammerController::programmerValues() const
 {
+    QMutexLocker locker(&m_stateMutex);
     return m_programmerValues;
 }
 
@@ -960,9 +1039,15 @@ void ProgrammerController::finalizeSaveBuckets(QList<Doc::SaveBucket> &buckets) 
 
 void ProgrammerController::stepCurrentChaser(int direction)
 {
-    if (m_runningChasers.isEmpty() || direction == 0)
+    if (direction == 0)
         return;
-    const quint32 cid = m_runningChasers.last();
+    quint32 cid = Function::invalidId();
+    {
+        QMutexLocker locker(&m_stateMutex);
+        if (m_runningChasers.isEmpty())
+            return;
+        cid = m_runningChasers.last();
+    }
     Chaser *chaser = qobject_cast<Chaser*>(m_doc->function(cid));
     if (chaser == NULL)
         return;
@@ -1045,26 +1130,33 @@ bool ProgrammerController::replaceSceneInCollection(quint32 collectionId,
 
 void ProgrammerController::revertSceneFromSnapshot(quint32 sceneId)
 {
-    if (!m_sceneSnapshots.contains(sceneId))
-        return;
+    SceneSnapshot snap;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        if (!m_sceneSnapshots.contains(sceneId))
+            return;
+        snap = m_sceneSnapshots.value(sceneId);
+    }
+
     Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
     if (scene == NULL)
         return;
-    scene->clear();
-    for (const SceneValue &sv : m_sceneSnapshots.value(sceneId))
+    restoreSceneFromSnapshot(scene, snap);   // calls out — not under the lock
+
+    bool nowClean = false;
     {
-        scene->setValue(SceneValue(sv.fxi, sv.channel, sv.value),
-                        /*blind=*/false, /*checkHTP=*/false);
+        QMutexLocker locker(&m_stateMutex);
+        m_sceneSnapshots.remove(sceneId);
+        m_editedScenes.remove(sceneId);
+        nowClean = m_programmerValues.isEmpty() && m_editedScenes.isEmpty();
     }
-    scene->resetRuntime();
-    m_sceneSnapshots.remove(sceneId);
-    m_editedScenes.remove(sceneId);
-    if (!isProgrammerDirty())
+    if (nowClean)
         emit programmerDirtyChanged(false);
 }
 
 quint32 ProgrammerController::singleRunningCollection() const
 {
+    QMutexLocker locker(&m_stateMutex);
     if (m_runningCollections.size() == 1)
         return m_runningCollections.first();
     return Function::invalidId();
@@ -1090,8 +1182,12 @@ void ProgrammerController::setHighlightActive(bool active)
     if (m_highlightActive == active)
         return;
     m_highlightActive = active;
+    // HighlightEffect registers/unregisters a DMXSource, which takes
+    // MasterTimer::m_dmxSourceListMutex — so take the locked copy of the
+    // selection FIRST and call out with no lock held.
+    const QList<quint32> selection = programmerSelection();
     if (m_highlightEffect)
-        m_highlightEffect->setFixtures(active ? m_programmerSelection : QList<quint32>());
+        m_highlightEffect->setFixtures(active ? selection : QList<quint32>());
     emit highlightActiveChanged(active);
 }
 
@@ -1386,7 +1482,7 @@ void ProgrammerController::applyDesignJoystick()
     }
 
     // Working selection: programmer selection first, then all scene fixtures.
-    QList<quint32> workingSelection = m_programmerSelection;
+    QList<quint32> workingSelection = programmerSelection();   // locked copy
     if (workingSelection.isEmpty())
     {
         for (quint32 fid : scene->fixtures())
@@ -1512,27 +1608,39 @@ void ProgrammerController::applyDesignJoystick()
             return;
     }
 
-    const bool firstEdit = !m_editedScenes.contains(m_focusedSceneId);
+    bool firstEdit = false;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        firstEdit = !m_editedScenes.contains(m_focusedSceneId);
+    }
     for (quint32 fid : workingSelection)
     {
         Fixture *f = m_doc->fixture(fid);
         if (!f || !f->fixtureMode()) continue;
         const QLCPhysical &phy = f->fixtureMode()->physical();
+        // checkHTP=false → Scene::setValue REPLACES the channel in the live fader
+        // instead of HTP-merging it. HTP would refuse to lower a pan/tilt value
+        // (the existing higher target wins), which is the only reason this used to
+        // need a resetRuntime() afterwards — and that tore the whole fader map down
+        // 50×/s while the stick was deflected, re-fading every dimmer/colour
+        // channel and making the rig blink. Replace-in-place needs no teardown.
         if (m_panBound)
         {
             float panMax = phy.focusPanMax() > 0 ? phy.focusPanMax() : 360.0f;
             for (const SceneValue &sv : f->positionToValues(QLCChannel::Pan, m_panNorm * panMax))
-                scene->setValue(sv.fxi, sv.channel, sv.value);
+                scene->setValue(SceneValue(sv.fxi, sv.channel, sv.value),
+                                /*blind=*/false, /*checkHTP=*/false);
         }
         if (m_tiltBound)
         {
             float tiltMax = phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270.0f;
             for (const SceneValue &sv : f->positionToValues(QLCChannel::Tilt, m_tiltNorm * tiltMax))
-                scene->setValue(sv.fxi, sv.channel, sv.value);
+                scene->setValue(SceneValue(sv.fxi, sv.channel, sv.value),
+                                /*blind=*/false, /*checkHTP=*/false);
         }
     }
-    if (firstEdit) markSceneEdited(m_focusedSceneId);
-    else           scene->resetRuntime();
+    if (firstEdit)
+        markSceneEdited(m_focusedSceneId);
     emit designPositionWritten();
 }
 
@@ -1546,7 +1654,12 @@ void ProgrammerController::commitDesignJoystick()
     // Just finalize (mark edited if not already) and reset stage-aim state.
     if (m_stageAimValid)
     {
-        if (!m_editedScenes.contains(m_focusedSceneId))
+        bool alreadyEdited = false;
+        {
+            QMutexLocker locker(&m_stateMutex);
+            alreadyEdited = m_editedScenes.contains(m_focusedSceneId);
+        }
+        if (!alreadyEdited)
             markSceneEdited(m_focusedSceneId);
         m_stageAimValid = false;
     }
@@ -1555,7 +1668,7 @@ void ProgrammerController::commitDesignJoystick()
 void ProgrammerController::slotSyncEffectFixtures()
 {
     if (m_highlightActive && m_highlightEffect)
-        m_highlightEffect->setFixtures(m_programmerSelection);
+        m_highlightEffect->setFixtures(programmerSelection());
 }
 
 void ProgrammerController::slotDocModeChanged(Doc::Mode mode)
@@ -1592,7 +1705,12 @@ void ProgrammerController::slotRigPropsChanged(quint32 fid)
             s->requestReaim();   // position-only; no LED flash
     };
     reaim(m_focusedSceneId);
-    for (quint32 sid : m_runningScenes)
+    QList<quint32> running;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        running = m_runningScenes;
+    }
+    for (quint32 sid : running)
         if (sid != m_focusedSceneId)
             reaim(sid);
 }
@@ -1862,10 +1980,10 @@ void ProgrammerController::setPadMode(Doc::PadMode mode)
 
 quint32 ProgrammerController::activeProgrammerGroup() const
 {
-    if (m_programmerSelection.isEmpty())
+    const QList<quint32> selection = programmerSelection();   // locked copy
+    if (selection.isEmpty())
         return Function::invalidId();
-    QSet<quint32> selSet(m_programmerSelection.begin(),
-                         m_programmerSelection.end());
+    QSet<quint32> selSet(selection.begin(), selection.end());
     for (FixtureGroup *g : m_doc->fixtureGroups())
     {
         if (g == NULL)
@@ -1882,28 +2000,37 @@ quint32 ProgrammerController::activeProgrammerGroup() const
 
 QSet<quint32> ProgrammerController::programmerSubSelection() const
 {
+    // Read from the DMX thread (VCSlider::writeDMXParameter).
+    QMutexLocker locker(&m_stateMutex);
     return m_programmerSubSelection;
 }
 
 bool ProgrammerController::isInProgrammerSubSelection(quint32 fid) const
 {
+    QMutexLocker locker(&m_stateMutex);
     return m_programmerSubSelection.contains(fid);
 }
 
 void ProgrammerController::toggleInProgrammerSubSelection(quint32 fid)
 {
-    if (m_programmerSubSelection.contains(fid))
-        m_programmerSubSelection.remove(fid);
-    else
-        m_programmerSubSelection.insert(fid);
+    {
+        QMutexLocker locker(&m_stateMutex);
+        if (m_programmerSubSelection.contains(fid))
+            m_programmerSubSelection.remove(fid);
+        else
+            m_programmerSubSelection.insert(fid);
+    }
     emit programmerSubSelectionChanged();
 }
 
 void ProgrammerController::clearProgrammerSubSelection()
 {
-    if (m_programmerSubSelection.isEmpty())
-        return;
-    m_programmerSubSelection.clear();
+    {
+        QMutexLocker locker(&m_stateMutex);
+        if (m_programmerSubSelection.isEmpty())
+            return;
+        m_programmerSubSelection.clear();
+    }
     emit programmerSubSelectionChanged();
 }
 
@@ -1912,32 +2039,25 @@ void ProgrammerController::revertProgrammer()
     if (!isProgrammerDirty())
         return;
 
-    // Restore each edited scene from its pre-edit snapshot.
-    for (const quint32 sid : qAsConst(m_editedScenes))
+    // Snapshot the edit set under the lock, then restore outside it — the
+    // restore calls into Scene/Doc and must not hold m_stateMutex.
+    QHash<quint32, SceneSnapshot> snapshots;
     {
-        Scene *scene = qobject_cast<Scene*>(m_doc->function(sid));
-        if (scene == NULL)
-            continue;
-        scene->clear();
-        const QList<SceneValue> &snap = m_sceneSnapshots.value(sid);
-        for (const SceneValue &sv : snap)
-        {
-            // checkHTP=false → replace semantics. HTP would otherwise
-            // refuse to lower an intensity value back to its pre-edit
-            // level if the post-edit one is higher.
-            scene->setValue(SceneValue(sv.fxi, sv.channel, sv.value),
-                            /*blind=*/false, /*checkHTP=*/false);
-        }
-        // Drop the running faders so the next tick re-initializes
-        // from the now-restored m_values. Without this, FadeChannels
-        // added during the edit (channels not in the original scene)
-        // would keep asserting their post-edit values.
-        scene->resetRuntime();
+        QMutexLocker locker(&m_stateMutex);
+        snapshots = m_sceneSnapshots;
+        m_editedScenes.clear();
+        m_sceneSnapshots.clear();
+        m_programmerValues.clear();
     }
 
-    m_editedScenes.clear();
-    m_sceneSnapshots.clear();
-    m_programmerValues.clear();
+    for (auto it = snapshots.constBegin(); it != snapshots.constEnd(); ++it)
+    {
+        Scene *scene = qobject_cast<Scene*>(m_doc->function(it.key()));
+        if (scene == NULL)
+            continue;
+        restoreSceneFromSnapshot(scene, it.value());
+    }
+
     emit programmerDirtyChanged(false);
 }
 
@@ -2106,11 +2226,27 @@ bool ProgrammerController::paletteTypeMatchesChannel(QLCPalette::PaletteType pal
     return false;
 }
 
+int ProgrammerController::positionMaxDegrees(int qlcChannelGroup, const Fixture *ref)
+{
+    // Mirrors Fixture::positionToValues(), which is the consumer of the value
+    // we are about to store.
+    const int fallback = (qlcChannelGroup == QLCChannel::Pan) ? 360 : 270;
+    if (ref == NULL || ref->fixtureMode() == NULL)
+        return fallback;
+
+    QLCPhysical phy = ref->fixtureMode()->physical();
+    const int max = (qlcChannelGroup == QLCChannel::Pan)
+                        ? phy.focusPanMax()
+                        : phy.focusTiltMax();
+    return (max > 0) ? max : fallback;
+}
+
 ProgrammerController::PaletteEditOutcome
 ProgrammerController::updatePaletteForChannelType(QLCPalette *pal,
                                                    int qlcChannelGroup,
                                                    int groupIndex,
-                                                   uchar rawValue)
+                                                   uchar rawValue,
+                                                   const Fixture *ref)
 {
     switch (pal->type())
     {
@@ -2135,30 +2271,36 @@ ProgrammerController::updatePaletteForChannelType(QLCPalette *pal,
         pal->setValue(int(rawValue));
         return PaletteChanged;
 
+    // Pan/Tilt palettes store DEGREES, not a percentage: valuesFromFixtures()
+    // hands the stored value to Fixture::positionToValues() as degrees. Scaling
+    // the raw slider value to 0-100 would aim a 540-degree mover at 100 degrees
+    // (~18% of travel) at full-fader, and bake that wrong number into the file.
     case QLCPalette::Pan:
     case QLCPalette::Tilt:
     {
-        const int pct = int(rawValue) * 100 / 255;
-        if (pal->intValue1() == pct)
+        const int maxDeg = positionMaxDegrees(qlcChannelGroup, ref);
+        const int deg = int(rawValue) * maxDeg / 255;
+        if (pal->intValue1() == deg)
             return PaletteUnchanged;
-        pal->setValue(pct);
+        pal->setValue(deg);
         return PaletteChanged;
     }
 
     case QLCPalette::PanTilt:
     {
-        const int pct = int(rawValue) * 100 / 255;
+        const int maxDeg = positionMaxDegrees(qlcChannelGroup, ref);
+        const int deg = int(rawValue) * maxDeg / 255;
         if (qlcChannelGroup == QLCChannel::Pan)
         {
-            if (pal->intValue1() == pct)
+            if (pal->intValue1() == deg)
                 return PaletteUnchanged;
-            pal->setValue(pct, pal->intValue2());
+            pal->setValue(deg, pal->intValue2());
         }
         else // Tilt
         {
-            if (pal->intValue2() == pct)
+            if (pal->intValue2() == deg)
                 return PaletteUnchanged;
-            pal->setValue(pal->intValue1(), pct);
+            pal->setValue(pal->intValue1(), deg);
         }
         return PaletteChanged;
     }
@@ -2183,20 +2325,90 @@ ProgrammerController::updatePaletteForChannelType(QLCPalette *pal,
     }
 }
 
+void ProgrammerController::beginSceneEdit(Scene *scene)
+{
+    if (scene == NULL)
+        return;
+
+    {
+        QMutexLocker locker(&m_stateMutex);
+        if (m_editedScenes.contains(scene->id()))
+            return;
+    }
+
+    // Built OUTSIDE the lock: these are calls out into Scene and Doc, and
+    // m_stateMutex must never be held across a call that could take another
+    // engine lock (see the m_stateMutex comment in the header).
+    SceneSnapshot snap;
+    snap.values = scene->values();
+    snap.fixtures = scene->fixtures();
+    snap.fixtureGroups = scene->fixtureGroups();
+    snap.palettes = scene->palettes();
+    foreach (quint32 pid, snap.palettes)
+    {
+        QLCPalette *pal = m_doc->palette(pid);
+        if (pal != NULL)
+            snap.paletteValues.insert(pid, pal->values());
+    }
+
+    bool wasClean = false;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        // Re-check under the lock: another thread may have flagged this scene
+        // while we were building the snapshot above.
+        if (m_editedScenes.contains(scene->id()))
+            return;
+        wasClean = m_programmerValues.isEmpty() && m_editedScenes.isEmpty();
+        m_sceneSnapshots.insert(scene->id(), snap);
+        m_editedScenes.insert(scene->id());
+    }
+    if (wasClean)
+        emit programmerDirtyChanged(true);
+}
+
+void ProgrammerController::restoreSceneFromSnapshot(Scene *scene, const SceneSnapshot &snap)
+{
+    if (scene == NULL)
+        return;
+
+    scene->clear();
+    for (const SceneValue &sv : snap.values)
+    {
+        // checkHTP=false → replace semantics. HTP would otherwise refuse to
+        // lower an intensity value back to its pre-edit level if the
+        // post-edit one is higher.
+        scene->setValue(SceneValue(sv.fxi, sv.channel, sv.value),
+                        /*blind=*/false, /*checkHTP=*/false);
+    }
+    foreach (quint32 id, snap.fixtures)
+        scene->addFixture(id);
+    foreach (quint32 id, snap.fixtureGroups)
+        scene->addFixtureGroup(id);
+    foreach (quint32 pid, snap.palettes)
+    {
+        scene->addPalette(pid);
+        QLCPalette *pal = m_doc->palette(pid);
+        if (pal != NULL && snap.paletteValues.contains(pid))
+            pal->setValues(snap.paletteValues.value(pid));
+    }
+
+    // Drop the running faders so the next tick re-initializes from the
+    // now-restored values and palettes.
+    scene->resetRuntime();
+}
+
 void ProgrammerController::markSceneEdited(quint32 sceneId)
 {
     Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
     if (!scene)
         return;
-    scene->resetRuntime();
-    if (!m_editedScenes.contains(sceneId))
-    {
-        m_sceneSnapshots.insert(sceneId, scene->values());
-        const bool wasClean = !isProgrammerDirty();
-        m_editedScenes.insert(sceneId);
-        if (wasClean)
-            emit programmerDirtyChanged(true);
-    }
+    // Refresh the palettes into the LIVE faders rather than resetRuntime()'ing
+    // the fader map. This runs on the DMX thread once per tick for the whole
+    // duration of a slider drag; a teardown would rebuild every baked value and
+    // re-expand every palette from scratch, 50 times a second, and restart the
+    // scene's fade-in each time.
+    scene->requestPaletteRefresh();
+    beginSceneEdit(scene);
     m_doc->setModified();
 }
 
@@ -2226,8 +2438,13 @@ quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGro
         if (owningSceneId == Function::invalidId())
         {
             QList<Scene*> candidates;
-            for (int i = m_runningScenes.size() - 1; i >= 0; --i)
-                collectActiveScenes(m_doc, m_doc->function(m_runningScenes.at(i)), candidates);
+            QList<quint32> runningScenes;
+            {
+                QMutexLocker locker(&m_stateMutex);
+                runningScenes = m_runningScenes;
+            }
+            for (int i = runningScenes.size() - 1; i >= 0; --i)
+                collectActiveScenes(m_doc, m_doc->function(runningScenes.at(i)), candidates);
             for (Scene *s : qAsConst(candidates))
             {
                 if (s->palettes().contains(m_focusedPaletteId))
@@ -2260,8 +2477,18 @@ quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGro
     if (!pal)
         return Function::invalidId();
 
+    // Pan/Tilt values are stored in degrees, so the conversion needs a fixture
+    // to read the pan/tilt range from. Use the first fixture of the current
+    // programmer selection as the reference — that is what the user is aiming.
+    const Fixture *ref = nullptr;
+    {
+        const QList<quint32> selection = programmerSelection();
+        if (!selection.isEmpty())
+            ref = m_doc->fixture(selection.first());
+    }
+
     const PaletteEditOutcome outcome =
-        updatePaletteForChannelType(pal, qlcChannelGroup, groupIndex, rawValue);
+        updatePaletteForChannelType(pal, qlcChannelGroup, groupIndex, rawValue, ref);
 
     if (outcome == PaletteCantDerive)
         return Function::invalidId();

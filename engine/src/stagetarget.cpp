@@ -36,6 +36,12 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
         return false;
 
     QXmlStreamAttributes a = root.attributes();
+    // Restore the PERSISTED id. saveXML() writes it, and Aim palettes /
+    // followspot bindings reference targets by it — so if it is not read back,
+    // the loader's sequentially-assigned id silently re-numbers the targets and
+    // every stored reference points at the wrong target (or none). Files older
+    // than the ID attribute fall back to the id the caller assigned.
+    if (a.hasAttribute(KXMLStageTargetID))    m_id   = a.value(KXMLStageTargetID).toUInt();
     if (a.hasAttribute(KXMLStageTargetName))  m_name = a.value(KXMLStageTargetName).toString();
     if (a.hasAttribute(KXMLStageTargetX))     m_position.setX(a.value(KXMLStageTargetX).toFloat());
     if (a.hasAttribute(KXMLStageTargetY))     m_position.setY(a.value(KXMLStageTargetY).toFloat());

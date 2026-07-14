@@ -93,21 +93,29 @@ bool Scene::copyFrom(const Function* function)
     if (scene == NULL)
         return false;
 
-    m_values.clear();
-    m_values = scene->m_values;
-    m_fixtures.clear();
-    m_fixtures = scene->m_fixtures;
-    m_channelGroups.clear();
-    m_channelGroups = scene->m_channelGroups;
-    m_channelGroupsLevels.clear();
-    m_channelGroupsLevels = scene->m_channelGroupsLevels;
-    m_fixtureGroups.clear();
-    m_fixtureGroups = scene->m_fixtureGroups;
+    // Read the source's bindings through its locked accessors, then publish
+    // ours under our own lock (this scene may already be running).
+    const QList<quint32> srcFixtures = scene->fixtures();
+    const QList<quint32> srcGroups = scene->fixtureGroups();
+    const QList<quint32> srcPalettes = scene->palettes();
 
-    // Share palette references — duplicate scene points at the same palettes
-    // so the operator can add/remove looks independently without spawning clones.
-    m_palettes.clear();
-    m_palettes = scene->m_palettes;
+    {
+        QMutexLocker locker(&m_valueListMutex);
+        m_values = scene->m_values;
+    }
+
+    m_channelGroups = scene->m_channelGroups;
+    m_channelGroupsLevels = scene->m_channelGroupsLevels;
+
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        m_fixtures = srcFixtures;
+        m_fixtureGroups = srcGroups;
+        // Share palette references — duplicate scene points at the same
+        // palettes so the operator can add/remove looks independently without
+        // spawning clones.
+        m_palettes = srcPalettes;
+    }
 
     return Function::copyFrom(function);
 }
@@ -120,10 +128,16 @@ void Scene::setValue(const SceneValue& scv, bool blind, bool checkHTP)
 {
     bool valChanged = false;
 
-    if (!m_fixtures.contains(scv.fxi))
+    // Scoped so m_bindingsMutex is RELEASED before m_valueListMutex is taken
+    // below. The lock order is valueList -> bindings (see scene.h); taking them
+    // the other way round while nested would be an inversion against write().
     {
-        qWarning() << Q_FUNC_INFO << "Setting value for unknown fixture" << scv.fxi << ". Adding it.";
-        m_fixtures.append(scv.fxi);
+        QMutexLocker locker(&m_bindingsMutex);
+        if (!m_fixtures.contains(scv.fxi))
+        {
+            qWarning() << Q_FUNC_INFO << "Setting value for unknown fixture" << scv.fxi << ". Adding it.";
+            m_fixtures.append(scv.fxi);
+        }
     }
 
     {
@@ -168,9 +182,18 @@ void Scene::setValue(const SceneValue& scv, bool blind, bool checkHTP)
         }
     }
 
-    emit changed(this->id());
+    // Only signal when something ACTUALLY changed. changed() fans out to
+    // Doc::functionChanged, which the 2-D monitor turns into a full aim-line
+    // rebuild (delete + recreate several QGraphicsItems per fixture per target)
+    // and the function trees into a name refresh. The joystick bakes pan+tilt
+    // for every selected fixture at 50 Hz, so emitting unconditionally meant
+    // thousands of graphics-item churns per second for values that were often
+    // identical to the ones already stored.
     if (valChanged)
+    {
+        emit changed(this->id());
         emit valueChanged(scv);
+    }
 }
 
 void Scene::setValue(quint32 fxi, quint32 ch, uchar value)
@@ -180,8 +203,11 @@ void Scene::setValue(quint32 fxi, quint32 ch, uchar value)
 
 void Scene::unsetValue(quint32 fxi, quint32 ch)
 {
-    if (!m_fixtures.contains(fxi))
-        qWarning() << Q_FUNC_INFO << "Unsetting value for unknown fixture" << fxi;
+    {
+        QMutexLocker locker(&m_bindingsMutex);   // released before the value lock
+        if (!m_fixtures.contains(fxi))
+            qWarning() << Q_FUNC_INFO << "Unsetting value for unknown fixture" << fxi;
+    }
 
     {
         QMutexLocker locker(&m_valueListMutex);
@@ -292,7 +318,11 @@ QColor Scene::colorValue(quint32 fxi)
 
 void Scene::clear()
 {
-    m_values.clear();
+    {
+        QMutexLocker locker(&m_valueListMutex);
+        m_values.clear();
+    }
+    QMutexLocker locker(&m_bindingsMutex);
     m_fixtures.clear();
     m_fixtureGroups.clear();
     m_palettes.clear();
@@ -307,6 +337,12 @@ void Scene::resetRuntime()
             fader->requestDelete();
     }
     m_fadersMap.clear();
+}
+
+void Scene::requestPaletteRefresh()
+{
+    QMutexLocker locker(&m_valueListMutex);
+    m_repaletteRequested = true;
 }
 
 void Scene::requestReaim()
@@ -389,17 +425,20 @@ void Scene::slotFixtureRemoved(quint32 fxi_id)
 
 void Scene::addFixture(quint32 fixtureId)
 {
+    QMutexLocker locker(&m_bindingsMutex);
     if (m_fixtures.contains(fixtureId) == false)
         m_fixtures.append(fixtureId);
 }
 
 bool Scene::removeFixture(quint32 fixtureId)
 {
+    QMutexLocker locker(&m_bindingsMutex);
     return m_fixtures.removeOne(fixtureId);
 }
 
 QList<quint32> Scene::fixtures() const
 {
+    QMutexLocker locker(&m_bindingsMutex);
     return m_fixtures;
 }
 
@@ -409,17 +448,20 @@ QList<quint32> Scene::fixtures() const
 
 void Scene::addFixtureGroup(quint32 id)
 {
+    QMutexLocker locker(&m_bindingsMutex);
     if (m_fixtureGroups.contains(id) == false)
         m_fixtureGroups.append(id);
 }
 
 bool Scene::removeFixtureGroup(quint32 id)
 {
+    QMutexLocker locker(&m_bindingsMutex);
     return m_fixtureGroups.removeOne(id);
 }
 
 QList<quint32> Scene::fixtureGroups() const
 {
+    QMutexLocker locker(&m_bindingsMutex);
     return m_fixtureGroups;
 }
 
@@ -429,22 +471,26 @@ QList<quint32> Scene::fixtureGroups() const
 
 void Scene::addPalette(quint32 id)
 {
+    QMutexLocker locker(&m_bindingsMutex);
     if (m_palettes.contains(id) == false)
         m_palettes.append(id);
 }
 
 bool Scene::removePalette(quint32 id)
 {
+    QMutexLocker locker(&m_bindingsMutex);
     return m_palettes.removeOne(id);
 }
 
 QList<quint32> Scene::palettes() const
 {
+    QMutexLocker locker(&m_bindingsMutex);
     return m_palettes;
 }
 
 bool Scene::reorderPalettes(const QList<quint32> &orderedIds)
 {
+    QMutexLocker locker(&m_bindingsMutex);
     QList<quint32> reordered;
     // Take attached ids in the requested order (de-duplicated)...
     foreach (quint32 id, orderedIds)
@@ -502,7 +548,8 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
     QList<SceneValue> values = m_values.keys();
 
     // loop through the Scene Fixtures in the order they've been added
-    foreach (quint32 fxId, m_fixtures)
+    // (locked copies: the MasterTimer thread reads these lists too)
+    foreach (quint32 fxId, fixtures())
     {
         QStringList currFixValues;
         bool found = false;
@@ -532,7 +579,7 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
     }
 
     /* Save referenced Fixture Groups */
-    foreach (quint32 groupId, m_fixtureGroups)
+    foreach (quint32 groupId, fixtureGroups())
     {
         doc->writeStartElement(KXMLQLCFixtureGroup);
         doc->writeAttribute(KXMLQLCFixtureGroupID, QString::number(groupId));
@@ -540,7 +587,7 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
     }
 
     /* Save referenced Palettes */
-    foreach (quint32 pId, m_palettes)
+    foreach (quint32 pId, palettes())
     {
         doc->writeStartElement(KXMLQLCPalette);
         doc->writeAttribute(KXMLQLCPaletteID, QString::number(pId));
@@ -875,9 +922,20 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
 {
     //qDebug() << Q_FUNC_INFO << elapsed();
 
-    if (m_values.count() == 0 && m_palettes.count() == 0)
+    bool empty = false;
     {
-        qCritical() << "[Scene] write: SELF-STOPPING" << id() << name() << "(no values or palettes)";
+        // Both lists are mutated by the GUI thread; read them under their locks
+        // rather than bare (this runs on the MasterTimer thread).
+        QMutexLocker vLocker(&m_valueListMutex);
+        const bool noValues = m_values.isEmpty();
+        vLocker.unlock();
+        QMutexLocker bLocker(&m_bindingsMutex);
+        empty = noValues && m_palettes.isEmpty();
+    }
+
+    if (empty)
+    {
+        qDebug() << "[Scene] write: SELF-STOPPING" << id() << name() << "(no values or palettes)";
         stop(FunctionParent::master());
         return;
     }
@@ -891,7 +949,9 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         QMutexLocker locker(&m_valueListMutex);
         if (m_fadersMap.isEmpty())
         {
-            m_reaimRequested = false;   // full build already resolves positions
+            // full build already resolves positions and palette values
+            m_reaimRequested = false;
+            m_repaletteRequested = false;
             uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
 
             // Baked values first, then palettes — so an applied look (palette)
@@ -914,20 +974,30 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 if (palette->type() == QLCPalette::Effect)
                     continue; // EffectScriptRunner handles these as a DMXSource
 
-                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups()))
+                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this))
                     processValue(timer, ua, fadeIn, scv);
 
-                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures()))
+                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this))
                     processValue(timer, ua, fadeIn, scv);
             }
         }
-        else if (m_reaimRequested)
+        else if (m_reaimRequested || m_repaletteRequested)
         {
-            // Live target move: re-resolve ONLY the position palettes into the
-            // EXISTING faders (replace pan/tilt channels in place, 0-time) so the
-            // dimmer/colour faders are left alone — no LED flash while flying.
+            // Re-resolve palettes into the EXISTING faders (replace channels in
+            // place, 0-time) instead of tearing the fader map down and rebuilding
+            // it. A rebuild restarts the scene's fade-in, which the user sees as
+            // the whole rig blinking — and while a slider is being dragged that
+            // would happen on EVERY tick.
+            //
+            //   reaim     — a target moved: touch position palettes ONLY, so the
+            //               dimmer/colour faders are left strictly alone.
+            //   repalette — the programmer edited a palette's value: refresh every
+            //               palette, since any type may have changed.
+            const bool positionsOnly = !m_repaletteRequested;
             m_reaimRequested = false;
-            auto reaimOne = [&](const SceneValue &scv) {
+            m_repaletteRequested = false;
+
+            auto replaceOne = [&](const SceneValue &scv) {
                 Fixture *fixture = doc()->fixture(scv.fxi);
                 if (fixture == NULL) return;
                 quint32 universe = fixture->universe();
@@ -939,16 +1009,21 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 fc.setFadeTime(0);
                 m_fadersMap[universe]->replace(fc);
             };
+
             foreach (quint32 paletteID, palettes())
             {
                 QLCPalette *palette = doc()->palette(paletteID);
                 if (palette == NULL) continue;
-                if (palette->type() != QLCPalette::Aim &&
+                if (palette->type() == QLCPalette::Effect)
+                    continue;  // EffectScriptRunner owns these
+                if (positionsOnly &&
+                    palette->type() != QLCPalette::Aim &&
                     palette->type() != QLCPalette::PanTilt) continue;
-                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups()))
-                    reaimOne(scv);
-                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures()))
-                    reaimOne(scv);
+
+                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this))
+                    replaceOne(scv);
+                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this))
+                    replaceOne(scv);
             }
         }
     }
@@ -963,7 +1038,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
 
 void Scene::postRun(MasterTimer* timer, QList<Universe *> ua)
 {
-    qCritical() << "[Scene] postRun:" << id() << name();
+    qDebug() << "[Scene] postRun:" << id() << name();
     handleFadersEnd(timer);
 
     Function::postRun(timer, ua);

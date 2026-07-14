@@ -164,6 +164,15 @@ public:
      *  live target move (joystick, 50 Hz) re-aims without flashing the LEDs. */
     void requestReaim();
 
+    /** Re-resolve ALL (non-Effect) palettes into the EXISTING fader map on the
+     *  next write(), replacing their channels in place at 0-time.
+     *
+     *  This is what a programmer palette edit wants: resetRuntime() would drop
+     *  the whole fader map and force a full rebuild — restarting the scene's
+     *  fade-in, which reads as the rig blinking — and a slider drag fires an
+     *  edit on every one of the 50 ticks per second. */
+    void requestPaletteRefresh();
+
 signals:
     void valueChanged(SceneValue scv);
 
@@ -171,6 +180,22 @@ protected:
     QMap <SceneValue, uchar> m_values;
     QMutex m_valueListMutex;
     bool m_reaimRequested = false;
+    bool m_repaletteRequested = false;
+
+    /**
+     * Guards m_fixtures, m_fixtureGroups and m_palettes.
+     *
+     * write() reads all three on the MasterTimer thread when it builds the
+     * fader map, while the GUI thread mutates them as the user drags palettes,
+     * groups and fixtures onto a scene in the Programming tab. m_valueListMutex
+     * cannot be reused for this: write() already holds it across the calls to
+     * palettes()/fixtures()/fixtureGroups(), and it is a plain (non-recursive)
+     * QMutex, so those accessors taking it would self-deadlock.
+     *
+     * Lock order is m_valueListMutex -> m_bindingsMutex. Nothing may take them
+     * the other way round.
+     */
+    mutable QMutex m_bindingsMutex;
 
     /*********************************************************************
      * Channel Groups

@@ -43,6 +43,9 @@ bool StagePlatform::loadXML(QXmlStreamReader &root)
         return false;
 
     QXmlStreamAttributes a = root.attributes();
+    // Restore the persisted id rather than keeping the loader's assigned one —
+    // see the equivalent comment in StageTarget::loadXML.
+    if (a.hasAttribute(KXMLPlatformID))     m_id      = a.value(KXMLPlatformID).toUInt();
     if (a.hasAttribute(KXMLPlatformName))   m_name    = a.value(KXMLPlatformName).toString();
     if (a.hasAttribute(KXMLPlatformOriginX)) m_originX = a.value(KXMLPlatformOriginX).toFloat();
     if (a.hasAttribute(KXMLPlatformOriginY)) m_originY = a.value(KXMLPlatformOriginY).toFloat();

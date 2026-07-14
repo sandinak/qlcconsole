@@ -5,6 +5,8 @@
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
+#include <QDebug>
+
 #include "programmerflasher.h"
 #include "doc.h"
 #include "fixture.h"
@@ -52,6 +54,20 @@ void ProgrammerFlasher::flashFixture(quint32 fixtureId, int durationMs)
                 addrs.append(int(fxi->address()) + int(ch));
         }
     }
+    // Drop any address that runs past the end of the universe. Universe::write()
+    // only guards this with a Q_ASSERT (compiled out in release), so a fixture
+    // patched close enough to 511 that its channels overrun would otherwise be
+    // an out-of-bounds heap write.
+    for (int i = addrs.count() - 1; i >= 0; --i)
+    {
+        if (addrs.at(i) < 0 || addrs.at(i) >= UNIVERSE_SIZE)
+        {
+            qWarning() << "Fixture" << fixtureId << "has an intensity channel at DMX address"
+                       << addrs.at(i) << "which is outside the universe — not flashing it.";
+            addrs.removeAt(i);
+        }
+    }
+
     if (addrs.isEmpty())
         return;
 

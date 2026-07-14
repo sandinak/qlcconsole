@@ -121,15 +121,25 @@ void EffectInstance::setDataChannels(const QHash<QString, QVariantMap> &channels
 
 void EffectInstance::runTick()
 {
+    // Every bail-out below must CLEAR m_lastResults, not just return: writeDMX()
+    // re-applies dmxWrites() into an Override-priority fader on every tick, so a
+    // stale non-empty result set would pin this effect's final frame onto the
+    // output forever, with no way for the scene to reclaim those channels.
     if (!m_script.isValid())
+    {
+        clearResults();
         return;
+    }
 
     // Collect the fixture ids the scene targets, filtered by the script's
     // declared fixtureTypes (e.g. ["rgb"] excludes movers, ["moving"] excludes
     // wash fixtures).  If the script declares no types, all scene fixtures are used.
     QList<quint32> fxIds = effectiveFixtureIds();
     if (fxIds.isEmpty())
+    {
+        clearResults();
         return;
+    }
 
     // Actuation envelope: scale intensity/colour output by the host scene's
     // fade-in ramp so the effect fires *with* the scene (ramps up as the scene
@@ -148,12 +158,22 @@ void EffectInstance::runTick()
 
     QJSValue result = m_script.callTick(fixtures, inputs, palettes, params, m_state, data);
     if (!result.isArray())
+    {
+        // The script threw, or returned something that isn't an intent list.
+        clearResults();
         return;
+    }
 
     QList<DmxWrite> writes = parseIntents(result, fxIds);
 
     QMutexLocker locker(&m_mutex);
     m_lastResults = writes;
+}
+
+void EffectInstance::clearResults()
+{
+    QMutexLocker locker(&m_mutex);
+    m_lastResults.clear();
 }
 
 QList<EffectInstance::DmxWrite> EffectInstance::dmxWrites() const
@@ -190,9 +210,9 @@ void EffectInstance::buildSceneBaseValues()
         QLCPalette *p = m_doc->palette(pid);
         if (p == nullptr || p->type() == QLCPalette::Effect)
             continue;
-        for (const SceneValue &sv : p->valuesFromFixtureGroups(m_doc, groups))
+        for (const SceneValue &sv : p->valuesFromFixtureGroups(m_doc, groups, scene))
             m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
-        for (const SceneValue &sv : p->valuesFromFixtures(m_doc, fixtures))
+        for (const SceneValue &sv : p->valuesFromFixtures(m_doc, fixtures, scene))
             m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
     }
 }
@@ -820,11 +840,16 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 {
                     QLCChannel *ch = fxi->fixtureMode()->channel(c);
                     if (ch == nullptr) continue;
-                    const bool isColour =
-                        (ch->group() == QLCChannel::Intensity &&
-                         ch->colour() != QLCChannel::NoColour) ||
-                        ch->group() == QLCChannel::Colour;
-                    if (!isColour) continue;
+                    // Only channels that actually EMIT a colour can stand in for a
+                    // dimmer. A colour-WHEEL channel is in the Colour group but its
+                    // value is a wheel POSITION (colour() == NoColour) — scaling it
+                    // by the dimmer multiplier does not dim anything, it spins the
+                    // wheel to an arbitrary slot at flicker rate.
+                    const bool isEmitter =
+                        (ch->group() == QLCChannel::Intensity ||
+                         ch->group() == QLCChannel::Colour) &&
+                        ch->colour() != QLCChannel::NoColour;
+                    if (!isEmitter) continue;
                     // Default to full so a fixture with no Colour look still
                     // flickers (user choice) rather than staying dark.
                     const uchar base = sceneBaseValue(fid, c, 255);

@@ -302,7 +302,25 @@ void QLCPalette::resetValues()
     m_values.clear();
 }
 
-QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtures)
+/** True if @a scene carries a follow-spot effect palette, which is what makes
+ *  an Aim look in that scene track a subject rather than a static point. */
+static bool sceneHasFollowSpot(Doc *doc, const Scene *scene)
+{
+    if (doc == NULL || scene == NULL)
+        return false;
+
+    foreach (quint32 pid, scene->palettes())
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p != NULL && p->type() == QLCPalette::Effect &&
+            p->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
+            return true;
+    }
+    return false;
+}
+
+QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtures,
+                                                 const Scene *owner)
 {
     QList<SceneValue> list;
 
@@ -630,21 +648,30 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 // person) — aim at (platform + subject height), i.e. the body,
                 // overriding the target's own Z. Otherwise it is a static aim point
                 // and its Z is an ABSOLUTE height above the floor, used as-is.
+                // Answer it from the OWNING scene when the caller told us which
+                // one it is — that is exact, O(palettes), and touches nothing
+                // shared. The doc->functions() scan below is the fallback for
+                // GUI callers with no scene context: it copies Doc's whole
+                // function map and dereferences every Function, which races
+                // addFunction/deleteFunction if it ever runs on the DMX thread.
                 bool subjectMode = false;
-                foreach (Function *fn, doc->functions())
+                if (owner != nullptr)
                 {
-                    Scene *sc = qobject_cast<Scene*>(fn);
-                    if (sc == NULL || !sc->palettes().contains(m_id))
-                        continue;
-                    foreach (quint32 spid, sc->palettes())
+                    subjectMode = sceneHasFollowSpot(doc, owner);
+                }
+                else
+                {
+                    foreach (Function *fn, doc->functions())
                     {
-                        QLCPalette *sp = doc->palette(spid);
-                        if (sp != NULL && sp->type() == Effect &&
-                            sp->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
-                        { subjectMode = true; break; }
+                        const Scene *sc = qobject_cast<const Scene*>(fn);
+                        if (sc == NULL || !sc->palettes().contains(m_id))
+                            continue;
+                        if (sceneHasFollowSpot(doc, sc))
+                        {
+                            subjectMode = true;
+                            break;
+                        }
                     }
-                    if (subjectMode)
-                        break;
                 }
 
                 QVector3D tgtPos = tgt->position();
@@ -856,7 +883,8 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
     return list;
 }
 
-QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> groups)
+QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> groups,
+                                                      const Scene *owner)
 {
     QList<quint32> fixturesList;
 
@@ -869,7 +897,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> g
         fixturesList.append(group->fixtureList());
     }
 
-    return valuesFromFixtures(doc, fixturesList);
+    return valuesFromFixtures(doc, fixturesList, owner);
 }
 
 qreal QLCPalette::valueFactor(qreal progress)
@@ -1136,11 +1164,19 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
 
     QXmlStreamAttributes attrs = doc.attributes();
 
+    // NOTE on the skipCurrentElement() calls below: on SUCCESS this function
+    // consumes the whole <Palette> element, so Doc::loadXML no longer skips it
+    // for us. A bare `return false` would therefore leave the reader parked on
+    // the <Palette> StartElement — Doc's `while (readNextStartElement())` then
+    // reads the closing tag, gets false, and EXITS, silently dropping every
+    // Function, FixtureGroup and MonitorProperties element after this palette.
+    // One malformed palette must cost us that palette, not the rest of the file.
     bool ok = false;
     quint32 id = attrs.value(KXMLQLCPaletteID).toString().toUInt(&ok);
     if (ok == false)
     {
         qWarning() << "Invalid Palette ID:" << attrs.value(KXMLQLCPaletteID).toString();
+        doc.skipCurrentElement();
         return false;
     }
 
@@ -1149,6 +1185,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
     if (attrs.hasAttribute(KXMLQLCPaletteType) == false)
     {
         qWarning() << "Palette type not found!";
+        doc.skipCurrentElement();
         return false;
     }
 
@@ -1324,11 +1361,19 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     Q_ASSERT(doc != NULL);
 
     // Shutter, Gobo, Effect, and Aim palettes are valid without m_values.
+    // A value-less palette of any OTHER type is malformed — but it must still
+    // be written out. Scenes persist their looks as <Palette ID="n"/> refs
+    // (see Scene::saveXML), so skipping the palette here would leave those refs
+    // dangling and the look would silently disappear on the next load. Write it
+    // with a zeroed value instead and warn; the ref stays resolvable and the
+    // user can see and fix the palette rather than losing it.
     if (m_values.isEmpty() && m_type != Shutter && m_type != Gobo
         && m_type != Effect && m_type != Aim)
     {
-        qWarning() << "Unable to save a Palette without value!";
-        return false;
+        qWarning() << "Saving palette" << this->id() << name()
+                   << "of type" << typeToString(m_type)
+                   << "with no value — writing a zeroed value to keep scene"
+                      " references intact.";
     }
 
     /* write a Palette entry */
@@ -1350,8 +1395,15 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             doc->writeAttribute(KXMLQLCPaletteValue, value().toString());
         break;
         case PanTilt:
+        {
+            // Count-guarded like Beam below: a PanTilt whose stored Value did
+            // not split into exactly two parts leaves m_values short, and a
+            // bare at(1) is then an out-of-range QList access.
+            int pan  = (m_values.count() > 0) ? m_values.at(0).toInt() : 0;
+            int tilt = (m_values.count() > 1) ? m_values.at(1).toInt() : 0;
             doc->writeAttribute(KXMLQLCPaletteValue,
-                                QString("%1,%2").arg(m_values.at(0).toInt()).arg(m_values.at(1).toInt()));
+                                QString("%1,%2").arg(pan).arg(tilt));
+        }
         break;
         case Aim:
             // No m_values — position is computed per-fixture from rig geometry.

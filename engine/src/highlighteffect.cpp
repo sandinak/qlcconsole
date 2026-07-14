@@ -68,6 +68,13 @@ HighlightEffect::buildEntries(const QList<quint32>& fixtureIds) const
                 continue;
 
             int absAddr = (int)fxi->address() + (int)c;
+            // Universe::write() only guards this with a Q_ASSERT, which is
+            // compiled out in release — an over-addressed fixture (patched so
+            // its channel count runs past 511; Fixture::setAddress only checks
+            // the start address) would be an out-of-bounds heap write.
+            if (absAddr >= UNIVERSE_SIZE)
+                break;
+
             uchar value = 0;
             bool include = false;
 

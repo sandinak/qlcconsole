@@ -27,8 +27,12 @@ void EffectScriptCache::rescan()
 {
     m_scripts.clear();
     m_displayNames.clear();
-    scanDir(systemScriptsDirectory());
+    // User dir FIRST: scanDir() is first-found-wins (keyed on display name), so
+    // scanning the system dir first meant a user's edited copy of a shipped
+    // script was silently discarded and the shipped one kept loading. This
+    // matches EffectPresetCache::rescan() and BundleCache::rescan().
     scanDir(userScriptsDirectory());
+    scanDir(systemScriptsDirectory());
     for (const QDir &d : m_extraDirs)
         scanDir(d);
 }

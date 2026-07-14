@@ -216,22 +216,35 @@ void PaletteEditDialog::accept()
         ? m_existing
         : new QLCPalette(type);
 
-    p->resetValues();
+    // Only rewrite the value for the types this dialog actually edits (the
+    // kTypes table). An existing palette of any OTHER type — Strobe, Beam,
+    // Effect — has no matching editor here, so the spin box holds a meaningless
+    // value; falling through to resetValues() + setValue() would silently
+    // destroy that palette's real values (a Beam's [focus, frost, iris] list,
+    // a Strobe's rate). Leave those alone and let the user just rename.
     switch (type)
     {
     case QLCPalette::Color:
         // 7-char "#rrggbb" => RGB only (no forced W/A/UV assertion).
+        p->resetValues();
         p->setValue(m_color.name());
         break;
     case QLCPalette::PanTilt:
+        p->resetValues();
         p->setValue(m_value1Spin->value(), m_value2Spin->value());
         break;
     case QLCPalette::Aim:
+        // Aim carries no m_values — position is derived from rig geometry.
         p->setStageTargetId(m_targetCombo->currentData().toUInt());
         break;
-    default:
+    case QLCPalette::Dimmer:
+    case QLCPalette::Gobo:
+    case QLCPalette::Shutter:
+        p->resetValues();
         p->setValue(m_value1Spin->value());
         break;
+    default:
+        break;  // type not editable here — preserve its existing values
     }
 
     QString name = m_nameEdit->text().trimmed();

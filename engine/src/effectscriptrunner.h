@@ -26,11 +26,11 @@
 #include <QVariantMap>
 
 #include "dmxsource.h"
+#include "effectinstance.h"   // EffectInstance::DmxWrite is held by value below
 #include "effectscriptcache.h"
 #include "effectpresetcache.h"
 #include "genericfader.h"
 
-class EffectInstance;
 class Doc;
 
 class EffectScriptRunner final : public QObject, public DMXSource
@@ -53,6 +53,12 @@ public:
 public slots:
     void slotFunctionStarted(quint32 fid);
     void slotFunctionStopped(quint32 fid);
+    /** A Function was deleted from the Doc. Doc::deleteFunction() does not
+        emit functionStopped, so without this a deleted-while-running scene
+        would strand its effect instances (leak + stuck Override DMX). */
+    void slotFunctionRemoved(quint32 fid);
+    /** Workspace cleared — drop every instance. */
+    void slotDocCleared();
 
     /** Re-scan a running scene's palettes and recreate Effect instances.
      *  Call this whenever a scene's palette list changes without a stop/start. */
@@ -77,14 +83,36 @@ private:
     void createInstancesForScene(quint32 sceneId);
     void destroyInstancesForScene(quint32 sceneId);
 
+    /** Collect every live instance's DMX writes into m_publishedWrites, which is
+     *  the ONLY thing writeDMX() (MasterTimer thread) reads. Main thread only. */
+    void publishWrites();
+
     Doc *m_doc;
     EffectScriptCache m_cache;
     EffectPresetCache m_presetCache;
 
     QTimer m_tickTimer;
 
+    /**
+     * m_instances is MAIN-THREAD ONLY. Every path that touches it — slotTick,
+     * create/destroy, syncScene, slotPrepareQuit — runs on the GUI thread, and
+     * writeDMX() deliberately does NOT: it reads m_publishedWrites instead.
+     *
+     * That separation is the whole point. writeDMX() used to take this mutex,
+     * which meant the MasterTimer thread blocked for as long as slotTick held it
+     * — and slotTick holds it across QJSEngine evaluation for every instance. Any
+     * slow script, V4 GC pause or busy event loop was therefore transmitted
+     * straight into DMX jitter, while MasterTimer also held m_dmxSourceListMutex.
+     * The DMX thread must never wait on JavaScript.
+     */
     mutable QMutex   m_instanceMutex;
     QList<EffectInstance*> m_instances;
+
+    /** Hand-off buffer: written by the main thread at the end of a tick, read by
+     *  the MasterTimer thread in writeDMX(). Guarded by its own mutex, which is
+     *  only ever held for a flat list copy — never across script evaluation. */
+    mutable QMutex m_writesMutex;
+    QList<EffectInstance::DmxWrite> m_publishedWrites;
 
     bool m_registered = false;
 

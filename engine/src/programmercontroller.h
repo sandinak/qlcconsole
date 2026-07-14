@@ -26,6 +26,7 @@
 #include <QSet>
 #include <QHash>
 #include <QColor>
+#include <QRecursiveMutex>
 #include <QTimer>
 #include <QVector3D>
 
@@ -54,6 +55,21 @@ class ProgrammerController final : public QObject
 
 public:
     ProgrammerController(Doc *doc);
+
+    /** Everything a Revert has to put back. Scene::clear() wipes the baked
+     *  values, the fixture list, the group list AND the attached palette
+     *  ids, so a values-only snapshot would silently gut the scene. */
+    struct SceneSnapshot
+    {
+        QList<SceneValue> values;
+        QList<quint32> fixtures;
+        QList<quint32> fixtureGroups;
+        QList<quint32> palettes;
+        /** Attached palettes' values at snapshot time: a palette-routed edit
+         *  mutates the shared QLCPalette itself, which no scene-level state
+         *  would restore. */
+        QHash<quint32, QVariantList> paletteValues;
+    };
 
     /*********************************************************************
      * Programmer selection
@@ -307,6 +323,26 @@ private:
 private:
     Doc *m_doc;
 
+    /**
+     * Guards every container below that is shared across the thread boundary:
+     * the selection, the programmer values, the edited-scene set + snapshots,
+     * and the running-function lists.
+     *
+     * Two threads reach this class. VCSlider::writeDMXLevel/writeDMXParameter
+     * run on the MasterTimer (DMX) thread and call routeProgrammerEdit() and
+     * programmerSelection(); MasterTimer::functionStarted/Stopped are wired
+     * DirectConnection so those slots run on the DMX thread too. Everything
+     * else (Save, Revert, the Programming tab, the pads) is the GUI thread.
+     *
+     * Recursive because the DMX-side entry points nest: routeProgrammerEdit()
+     * → tryRoutePaletteEdit() → beginSceneEdit() → isProgrammerDirty().
+     *
+     * Lock order is always ProgrammerController → Scene. Scene::write() takes
+     * only its own m_valueListMutex and never calls back in here, so there is
+     * no inversion.
+     */
+    mutable QRecursiveMutex m_stateMutex;
+
     QList<quint32> m_programmerSelection;
     QSet<quint32> m_programmerSelectionLookup;
     QColor m_programmerColor;
@@ -342,9 +378,13 @@ private:
     /** Scenes whose values have been mutated by the programmer
         since the last Save / Revert. */
     QSet<quint32> m_editedScenes;
-    /** Pre-edit value snapshot per scene: captured the first time a
-        scene becomes "edited" so Revert can restore it. */
-    QHash<quint32, QList<SceneValue>> m_sceneSnapshots;
+    /** Pre-edit snapshot per scene: captured the first time a scene becomes
+        "edited" so Revert can restore it. Revert goes through Scene::clear(),
+        which drops the palette/fixture/group bindings as well as the baked
+        values, so the snapshot has to carry all of them — and the palettes'
+        own values too, since a palette-routed edit mutates the shared
+        QLCPalette in place rather than the scene. */
+    QHash<quint32, SceneSnapshot> m_sceneSnapshots;
     /** Current pad-grid mode (default Off). */
     Doc::PadMode m_padMode = Doc::PadModeOff;
     /** Per-fixture refinement within the active programmer group. */
@@ -395,15 +435,35 @@ private:
 
     /** Update @p pal's abstract value from @p rawValue for the given channel
      *  group + component index. Returns PaletteChanged / PaletteUnchanged /
-     *  PaletteCantDerive (same semantics as updatePaletteForEdit). */
+     *  PaletteCantDerive (same semantics as updatePaletteForEdit).
+     *
+     *  @p ref is the fixture the edit came from. Pan/Tilt palettes store
+     *  DEGREES (QLCPalette::valuesFromFixtures feeds them straight to
+     *  Fixture::positionToValues), so the raw 0-255 slider value has to be
+     *  scaled by that fixture's pan/tilt range. Pass nullptr only when no
+     *  fixture is available; the range then falls back to 360/270 degrees. */
     PaletteEditOutcome updatePaletteForChannelType(QLCPalette *pal,
                                                    int qlcChannelGroup,
                                                    int groupIndex,
-                                                   uchar rawValue);
+                                                   uchar rawValue,
+                                                   const Fixture *ref = nullptr);
+
+    /** Full-travel range in degrees of @p ref for a Pan or Tilt channel group,
+     *  with sane defaults when the fixture or its physical data is missing. */
+    static int positionMaxDegrees(int qlcChannelGroup, const Fixture *ref);
 
     /** Mark @p sceneId as edited (snapshot + dirty flag) and drop its
      *  runtime faders so the palette re-expands on the next tick. */
     void markSceneEdited(quint32 sceneId);
+
+    /** Take the pre-edit snapshot of @p scene and flag it edited, once per
+     *  Save/Revert round. No-op if it is already flagged. Every path that
+     *  mutates a scene (or one of its palettes) on the programmer's behalf
+     *  MUST go through here, or Revert restores from an empty snapshot. */
+    void beginSceneEdit(Scene *scene);
+
+    /** Put @p scene back the way @p snap found it. */
+    void restoreSceneFromSnapshot(Scene *scene, const SceneSnapshot &snap);
 };
 
 #endif // PROGRAMMERCONTROLLER_H

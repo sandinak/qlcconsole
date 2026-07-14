@@ -299,7 +299,15 @@ void Collection::preRun(MasterTimer *timer)
         {
             Function *function = doc->function(fid);
             if (function == NULL) // may be NULL if deleted while running
-            continue;
+            {
+                // Push a placeholder so m_intensityOverrideIds stays INDEX-PARALLEL
+                // with m_functions: adjustAttribute() below indexes it by the
+                // m_functions position, so skipping an entry here would shift every
+                // later override onto the wrong function and run .at(i) off the end
+                // of the list.
+                m_intensityOverrideIds << Function::invalidAttributeId();
+                continue;
+            }
 
             m_intensityOverrideIds << function->requestAttributeOverride(Function::Intensity, getAttributeValue(Function::Intensity));
 
@@ -451,7 +459,15 @@ int Collection::adjustAttribute(qreal fraction, int attributeId)
             Function* function = document->function(m_functions.at(i));
             if (function == NULL) // may be NULL if deleted while running
             continue;
-            function->adjustAttribute(getAttributeValue(Function::Intensity), m_intensityOverrideIds.at(i));
+            // m_intensityOverrideIds is filled in preRun() and is index-parallel
+            // with m_functions, but the collection's contents can change between
+            // the two, so bounds-check rather than trusting the sizes to match.
+            if (i >= m_intensityOverrideIds.count())
+                break;
+            const int overrideId = m_intensityOverrideIds.at(i);
+            if (overrideId == Function::invalidAttributeId())
+                continue;  // no override was acquired for this child
+            function->adjustAttribute(getAttributeValue(Function::Intensity), overrideId);
         }
     }
 

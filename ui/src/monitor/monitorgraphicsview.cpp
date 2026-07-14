@@ -74,9 +74,19 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     connect(undoSc, &QShortcut::activated, this, &MonitorGraphicsView::undoLastMove);
 
     // Refresh aim lines whenever the active scene's fixture/value list changes.
+    //
+    // COALESCED: updateAimLines() deletes and recreates every aim line item, and
+    // a single joystick tick emits one functionChanged per fixture per channel —
+    // dozens of full rebuilds for what is visually one update. Defer to the end of
+    // the event-loop turn so a burst collapses into exactly one rebuild.
     connect(m_doc, &Doc::functionChanged, this, [this](quint32 fid) {
-        if (fid == m_activeSceneId)
+        if (fid != m_activeSceneId || m_aimLinesUpdatePending)
+            return;
+        m_aimLinesUpdatePending = true;
+        QTimer::singleShot(0, this, [this]() {
+            m_aimLinesUpdatePending = false;
             updateAimLines();
+        });
     });
 
     m_gridSize = QSize(5, 5);
@@ -999,9 +1009,17 @@ QPointF MonitorGraphicsView::pixelsToRealPosition(qreal px, qreal py)
 
 void MonitorGraphicsView::updateGrid()
 {
+    // removeItem() hands ownership of the item back to the caller, so it has
+    // to be deleted here — otherwise every grid line is leaked, and updateGrid()
+    // runs on each resizeEvent (dozens per window drag, and each rebuild now
+    // makes gridSubdivisions× more lines than it used to).
     int itemsCount = m_gridItems.count();
     for (int i = 0; i < itemsCount; i++)
-        m_scene->removeItem((QGraphicsItem *)m_gridItems.takeLast());
+    {
+        QGraphicsItem *item = (QGraphicsItem *)m_gridItems.takeLast();
+        m_scene->removeItem(item);
+        delete item;
+    }
 
     if (m_gridEnabled == true)
     {

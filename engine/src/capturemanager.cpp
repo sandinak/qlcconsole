@@ -32,43 +32,68 @@ CaptureManager::CaptureManager(Doc* doc, QObject* parent)
 
 bool CaptureManager::isCapturing() const
 {
+    QMutexLocker locker(&m_mutex);
     return m_capturing;
 }
 
 void CaptureManager::setCapturing(bool on)
 {
-    if (on == m_capturing)
-        return;
-    m_capturing = on;
-    if (!on)
-        clear();
-    emit capturingChanged(m_capturing);
+    {
+        QMutexLocker locker(&m_mutex);
+        if (on == m_capturing)
+            return;
+        m_capturing = on;
+        if (!on)
+            m_overrides.clear();   // inline: clear() would re-lock m_mutex
+    }
+    emit capturingChanged(on);
 }
 
 void CaptureManager::recordOverride(quint32 fxi, quint32 channel, uchar value,
                                     const QString& sourceName)
 {
-    if (!m_capturing)
-        return;
+    // Called on the MasterTimer (DMX) thread — keep the critical section to
+    // the hash insert, and emit outside it.
+    {
+        QMutexLocker locker(&m_mutex);
+        if (!m_capturing)
+            return;
 
-    Override o;
-    o.fxi = fxi;
-    o.channel = channel;
-    o.value = value;
-    o.sourceName = sourceName;
-    m_overrides.insert(qMakePair(fxi, channel), o);
+        Override o;
+        o.fxi = fxi;
+        o.channel = channel;
+        o.value = value;
+        o.sourceName = sourceName;
+        m_overrides.insert(qMakePair(fxi, channel), o);
+    }
 
     emit overrideRecorded(fxi, channel, value);
 }
 
 void CaptureManager::clear()
 {
+    QMutexLocker locker(&m_mutex);
     m_overrides.clear();
 }
 
 int CaptureManager::overrideCount() const
 {
+    QMutexLocker locker(&m_mutex);
     return m_overrides.size();
+}
+
+QHash<QPair<quint32, quint32>, CaptureManager::Override>
+CaptureManager::overridesSnapshot() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_overrides;
+}
+
+void CaptureManager::removeOverrides(const QList<QPair<quint32, quint32> >& keys)
+{
+    QMutexLocker locker(&m_mutex);
+    for (const auto& k : keys)
+        m_overrides.remove(k);
 }
 
 void CaptureManager::slotFunctionStarted(quint32 id)
@@ -102,7 +127,7 @@ void CaptureManager::slotFunctionStopped(quint32 id)
         Chaser* chaser = static_cast<Chaser*>(f);
         // Stopping a chaser is also a natural commit point: capture
         // anything tied to its last-active step before the chaser leaves.
-        if (m_capturing && !m_overrides.isEmpty())
+        if (isCapturing() && overrideCount() > 0)
         {
             quint32 lastSceneId = m_chaserStepScene.value(id, Function::invalidId());
             Function* sf = m_doc->function(lastSceneId);
@@ -144,7 +169,7 @@ void CaptureManager::slotChaserStepChanged(int stepNumber)
     quint32 newSceneId = chaserCurrentStepSceneId(chaser);
     m_chaserStepScene[chaser->id()] = newSceneId;
 
-    if (!m_capturing || m_overrides.isEmpty())
+    if (!isCapturing() || overrideCount() == 0)
         return;
     if (oldSceneId == Function::invalidId() || oldSceneId == newSceneId)
         return;
@@ -168,9 +193,10 @@ void CaptureManager::autoStoreToScene(Scene* target, const QString& reason)
         targetChannels.insert(qMakePair(sv.fxi, sv.channel));
 
     // Collect overrides that match channels owned by the target.
+    const QHash<QPair<quint32, quint32>, Override> overrides = overridesSnapshot();
     QList<Override> matched;
     QList<QPair<quint32, quint32> > matchedKeys;
-    for (auto it = m_overrides.constBegin(); it != m_overrides.constEnd(); ++it)
+    for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it)
     {
         if (targetChannels.contains(it.key()))
         {
@@ -197,8 +223,7 @@ void CaptureManager::autoStoreToScene(Scene* target, const QString& reason)
 
     // Remove only the keys we just consumed; leave other in-flight
     // captures alone so a later manual Store still sees them.
-    for (const auto& k : matchedKeys)
-        m_overrides.remove(k);
+    removeOverrides(matchedKeys);
 
     m_doc->setModified();
     emit changesApplied();
@@ -212,7 +237,8 @@ void CaptureManager::autoStoreToScene(Scene* target, const QString& reason)
 QList<CaptureManager::ScenePlan> CaptureManager::buildPlan() const
 {
     QList<ScenePlan> result;
-    if (m_overrides.isEmpty())
+    const QHash<QPair<quint32, quint32>, Override> overrides = overridesSnapshot();
+    if (overrides.isEmpty())
         return result;
 
     // Walk running scenes in start order so the latest start is processed
@@ -266,7 +292,7 @@ QList<CaptureManager::ScenePlan> CaptureManager::buildPlan() const
 
     QHash<Scene*, ScenePlan> bySceneTmp;
 
-    for (auto it = m_overrides.constBegin(); it != m_overrides.constEnd(); ++it)
+    for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it)
     {
         const QPair<quint32, quint32>& key = it.key();
         const Override& o = it.value();
@@ -420,7 +446,7 @@ void CaptureManager::saveAsNew(const QList<ScenePlan>& plan,
 
 int CaptureManager::impactedSceneCount() const
 {
-    if (m_overrides.isEmpty())
+    if (overrideCount() == 0)
         return 0;
     QList<ScenePlan> plan = buildPlan();
     return plan.size();

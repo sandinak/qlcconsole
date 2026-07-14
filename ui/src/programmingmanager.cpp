@@ -377,7 +377,14 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // Keep the trees in sync with the Doc (functor connects so we can call
     // the trees' non-slot helpers directly).
     connect(m_doc, &Doc::functionAdded, m_funcTree, &FunctionsTreeWidget::addFunction);
-    connect(m_doc, &Doc::functionRemoved, this, [this](quint32) {
+    connect(m_doc, &Doc::functionRemoved, this, [this](quint32 id) {
+        // The canvas (SceneGroupLooks), the look editor and the chaser/
+        // collection editor all hold a raw Function*/Scene*. Doc emits this
+        // BEFORE it deletes the function, so tear them down now — otherwise
+        // the next canvas interaction dereferences freed memory.
+        if (id == m_currentScene || id == m_canvasFunction)
+            loadCanvas(Function::invalidId());
+
         const quint32 c = m_memberContainer;
         m_funcTree->updateTree();
         m_memberContainer = Function::invalidId();
@@ -547,6 +554,9 @@ void ProgrammingManager::clearEditors()
         m_funcEditor->deleteLater();
         m_funcEditor = NULL;
     }
+    // The look editor outlives the canvas, so drop its Scene* here too — it
+    // null-checks the pointer everywhere, but a stale one is a use-after-free.
+    m_lookEditor->setContextScene(NULL);
     m_doc->setFocusedScene(Function::invalidId());
     m_doc->setFocusedPalette(QLCPalette::invalidId());
 }
@@ -2149,9 +2159,11 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
             else if (entry.type == "Beam")
             {
                 np = new QLCPalette(QLCPalette::Beam);
-                np->setValue(entry.focus);
-                np->setValue(entry.frost);
-                np->setValue(entry.iris);
+                // setValues(), not three setValue() calls: setValue() CLEARS the
+                // list before appending, so the first two would be discarded and
+                // the palette would end up as [iris] — which valuesFromFixtures()
+                // reads as focus, driving the wrong channel.
+                np->setValues(QVariantList() << entry.focus << entry.frost << entry.iris);
                 np->setPath("Palettes/Beam/");
             }
 
