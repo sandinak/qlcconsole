@@ -1,0 +1,7 @@
+{
+  "name": "Amber Fire",
+  "script": "amber-pulse",
+  "category": "Color",
+  "description": "Irregular sine amber flicker spread across fixtures — fire and candle looks",
+  "params": { "rate": 1.8, "spread": 270, "waveform": 0, "minA": 30, "maxA": 255 }
+}

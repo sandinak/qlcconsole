@@ -26,6 +26,7 @@ EffectScriptCache::EffectScriptCache(QObject *parent)
 void EffectScriptCache::rescan()
 {
     m_scripts.clear();
+    m_displayNames.clear();
     scanDir(systemScriptsDirectory());
     scanDir(userScriptsDirectory());
     for (const QDir &d : m_extraDirs)
@@ -41,7 +42,9 @@ void EffectScriptCache::addDirectory(const QDir &dir)
 
 QStringList EffectScriptCache::scriptNames() const
 {
-    return m_scripts.keys();
+    QStringList names = m_displayNames;
+    names.sort(Qt::CaseInsensitive);
+    return names;
 }
 
 QString EffectScriptCache::scriptPath(const QString &name) const
@@ -57,6 +60,19 @@ EffectScriptCache::ScriptMeta EffectScriptCache::scriptMeta(const QString &name)
 QString EffectScriptCache::nameFromPath(const QString &path)
 {
     return QFileInfo(path).completeBaseName();
+}
+
+QString EffectScriptCache::categoryForTypes(const QStringList &ft)
+{
+    if (ft.contains(QStringLiteral("dimmer")))
+        return QStringLiteral("Dimmer");
+    if (ft.contains(QStringLiteral("rgb"))   || ft.contains(QStringLiteral("rgbw"))
+        || ft.contains(QStringLiteral("color")) || ft.contains(QStringLiteral("colorwheel")))
+        return QStringLiteral("Color");
+    if (ft.contains(QStringLiteral("moving")) || ft.contains(QStringLiteral("mover"))
+        || ft.contains(QStringLiteral("pantilt")))
+        return QStringLiteral("Position");
+    return QStringLiteral("Other");
 }
 
 QDir EffectScriptCache::systemScriptsDirectory()
@@ -87,10 +103,13 @@ void EffectScriptCache::scanDir(const QDir &dir)
         if (!meta.displayName.isEmpty() && !m_scripts.contains(meta.displayName))
         {
             m_scripts.insert(meta.displayName, meta);
+            // The picker shows ONE name per script (the display name); filename
+            // aliases below are for resolution only, not for the list.
+            m_displayNames.append(meta.displayName);
             // Also index by filename basename so XML round-trips work when
             // the display name (effect.name) differs from the .js filename.
             const QString baseName = nameFromPath(absPath);
-            if (!m_scripts.contains(baseName))
+            if (baseName != meta.displayName && !m_scripts.contains(baseName))
                 m_scripts.insert(baseName, meta);
             qDebug() << "[EffectScriptCache] found:" << meta.displayName << "at" << absPath;
         }

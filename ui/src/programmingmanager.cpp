@@ -62,7 +62,12 @@
 #include "doc.h"
 #include "inputoutputmap.h"
 #include "effectscriptrunner.h"
+#include "bundlecache.h"
+#include "bundlebrowser.h"
+#include "bundleeditor.h"
+#include "qlcbundle.h"
 #include "monitor/monitor.h"
+#include <QTabWidget>
 
 ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     : QWidget(parent)
@@ -137,7 +142,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
         m_bpmBtn = new QPushButton(tr("Beat On"), this);
         m_bpmBtn->setCheckable(true);
-        m_bpmBtn->setToolTip(tr("Enable QLC+ internal beat generator (drives _beat/_bpm in effect scripts)"));
+        m_bpmBtn->setToolTip(tr("Enable QLC+ internal beat generator (drives _beat/_bpm in generators)"));
         toolbar->addWidget(m_bpmBtn);
 
         toolbar->addWidget(new QLabel(tr("Jog:"), this));
@@ -294,32 +299,54 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     splitter->addWidget(canvasPanel);
 
     // --- Right: drag sources (palette tree + fixtures & groups tree) ---
-    QWidget *sourcePanel = new QWidget(this);
-    QVBoxLayout *srcCol = new QVBoxLayout(sourcePanel);
-    srcCol->setContentsMargins(0, 0, 0, 0);
+    // ── Source panel: tabbed (Palettes | Bundles | Fixtures) ─────────────
+    auto *sourceTab = new QTabWidget(this);
+    sourceTab->setDocumentMode(true);
 
-    srcCol->addWidget(new QLabel(tr("Palettes (looks)"), this));
-    QLineEdit *paletteFilter = new QLineEdit(this);
+    // ── Palettes tab ──────────────────────────────────────────────────────
+    QWidget *palTab = new QWidget(sourceTab);
+    QVBoxLayout *palCol = new QVBoxLayout(palTab);
+    palCol->setContentsMargins(2, 2, 2, 2);
+    QLineEdit *paletteFilter = new QLineEdit(palTab);
     paletteFilter->setPlaceholderText(tr("Filter…"));
     paletteFilter->setClearButtonEnabled(true);
-    srcCol->addWidget(paletteFilter);
-    m_paletteTree = new FunctionsTreeWidget(m_doc, this);
+    palCol->addWidget(paletteFilter);
+    m_paletteTree = new FunctionsTreeWidget(m_doc, palTab);
     m_paletteTree->setDisplayFilter(FunctionsTreeWidget::PalettesOnly);
     m_paletteTree->setHeaderHidden(true);
     m_paletteTree->setColumnHidden(1, true);
     m_paletteTree->setSortingEnabled(true);
     m_paletteTree->sortByColumn(0, Qt::AscendingOrder);
-    m_paletteTree->setExternalDragMode(true); // emit palette MIME on drag
+    m_paletteTree->setExternalDragMode(true);
     m_paletteTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    organizeEffectPalettes();
     m_paletteTree->updateTree();
-    srcCol->addWidget(m_paletteTree, 1);
-    srcCol->addWidget(new QLabel(tr("Right-click to add a palette."), this));
+    palCol->addWidget(m_paletteTree, 1);
+    palCol->addWidget(new QLabel(tr("Right-click to add a palette."), palTab));
     connect(paletteFilter, &QLineEdit::textChanged,
             m_paletteTree, &FunctionsTreeWidget::filterByText);
+    sourceTab->addTab(palTab, tr("Palettes"));
 
-    srcCol->addWidget(new QLabel(tr("Fixtures & groups"), this));
-    m_fixGroupSource = new FixtureGroupSource(m_doc, this);
-    srcCol->addWidget(m_fixGroupSource, 1);
+    // ── Bundles tab ───────────────────────────────────────────────────────
+    m_bundleCache = new BundleCache(this);
+    m_bundleCache->rescan();
+    m_bundleBrowser = new BundleBrowser(m_doc, m_bundleCache, sourceTab);
+    connect(m_bundleBrowser, &BundleBrowser::stampRequested,
+            this, &ProgrammingManager::slotStampBundle);
+    connect(m_bundleBrowser, &BundleBrowser::saveAsBundleRequested,
+            this, &ProgrammingManager::slotSaveAsBundle);
+    sourceTab->addTab(m_bundleBrowser, tr("Bundles"));
+
+    // ── Right column: tabs on top, fixtures below (always visible) ────────
+    QWidget *sourcePanel = new QWidget(this);
+    QVBoxLayout *srcCol  = new QVBoxLayout(sourcePanel);
+    srcCol->setContentsMargins(0, 0, 0, 0);
+    srcCol->setSpacing(2);
+    srcCol->addWidget(sourceTab, 3);
+
+    srcCol->addWidget(new QLabel(tr("Fixtures & groups"), sourcePanel));
+    m_fixGroupSource = new FixtureGroupSource(m_doc, sourcePanel);
+    srcCol->addWidget(m_fixGroupSource, 2);
     connect(m_fixGroupSource, &QTreeWidget::itemSelectionChanged,
             this, &ProgrammingManager::slotFixGroupSourceSelectionChanged);
 
@@ -376,7 +403,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
     connect(m_doc, &Doc::paletteAdded, m_paletteTree, &FunctionsTreeWidget::addPalette);
     connect(m_doc, &Doc::paletteRemoved, this, [this](quint32) { m_paletteTree->updateTree(); });
-    connect(m_doc, &Doc::loaded, m_paletteTree, &FunctionsTreeWidget::updateTree);
+    connect(m_doc, &Doc::loaded, this, [this]() {
+        organizeEffectPalettes();
+        m_paletteTree->updateTree();
+    });
     connect(m_doc, &Doc::cleared, m_paletteTree, &FunctionsTreeWidget::updateTree);
 
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
@@ -403,6 +433,11 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     QShortcut *pasteSc = new QShortcut(QKeySequence::Paste, this);
     pasteSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(pasteSc, SIGNAL(activated()), this, SLOT(slotPaste()));
+
+    // Ctrl-Z undoes the last bundle stamp.
+    QShortcut *undoSc = new QShortcut(QKeySequence::Undo, this);
+    undoSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(undoSc, &QShortcut::activated, this, &ProgrammingManager::slotUndoStamp);
 }
 
 ProgrammingManager::~ProgrammingManager()
@@ -440,6 +475,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     stopPreview();
     m_currentScene = sceneId;
     m_canvasFunction = sceneId;
+    m_lastSyncedEffectPalettes.clear(); // new scene — force re-sync on first refreshPreview
     m_lookEditor->setPalette(QLCPalette::invalidId());
     if (Monitor::instance() != NULL)
         Monitor::instance()->setActiveScene(sceneId);
@@ -649,6 +685,42 @@ void ProgrammingManager::slotLookEdited()
         m_canvas->reload();
 }
 
+bool ProgrammingManager::organizeEffectPalettes()
+{
+    if (m_doc->effectScriptRunner() == NULL)
+        return false;
+    EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
+
+    bool changed = false;
+    foreach (QLCPalette *p, m_doc->palettes())
+    {
+        if (p == NULL || p->type() != QLCPalette::Effect || p->scriptPath().isEmpty())
+            continue;
+
+        // Only auto-organize palettes still on the BARE default folder; never
+        // touch a folder the user (or a prior pick) already set.
+        QString norm = p->path();
+        if (norm.endsWith('/')) norm.chop(1);
+        if (!(norm.isEmpty() || norm == QLatin1String("Palettes/Effect")))
+            continue;
+
+        const QString base = scache->nameFromPath(p->scriptPath());
+        const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
+        const QString engine = meta.displayName.isEmpty() ? base : meta.displayName;
+        const QString cat    = EffectScriptCache::categoryForTypes(meta.fixtureTypes);
+        if (engine.isEmpty() || cat.isEmpty())
+            continue;
+
+        const QString folder = QString("Palettes/Effect/%1/%2/").arg(cat, engine);
+        if (p->path() != folder)
+        {
+            p->setPath(folder);
+            changed = true;
+        }
+    }
+    return changed;   // cosmetic: persists when the user next saves
+}
+
 void ProgrammingManager::createPalette(int paletteType)
 {
     const QLCPalette::PaletteType type =
@@ -664,6 +736,7 @@ void ProgrammingManager::createPalette(int paletteType)
     case QLCPalette::PanTilt: p->setValue(270, 135); break;
     case QLCPalette::Aim:     break; // no m_values; target set in LookEditor
     case QLCPalette::Effect:  break; // no value needed; script path set in LookEditor
+    case QLCPalette::Strobe:  p->setValue(0.25f); break; // default to 25% rate
     default:                  p->setValue(0); break; // Gobo / Shutter / …
     }
 
@@ -987,6 +1060,19 @@ void ProgrammingManager::startPreview()
     qCritical() << "[PM] startPreview: starting" << m_canvasFunction << f->name();
     f->start(m_doc->masterTimer(), FunctionParent::master());
     m_previewFunction = m_canvasFunction;
+    // Seed the Effect-palette cache so the first canvas modification
+    // (e.g. dropping a target group) doesn't falsely see the set as
+    // "changed" and call syncScene(), which would tear down JS instances.
+    m_lastSyncedEffectPalettes.clear();
+    if (Scene *s = qobject_cast<Scene*>(f))
+    {
+        for (quint32 pid : s->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (p && p->type() == QLCPalette::Effect)
+                m_lastSyncedEffectPalettes << pid;
+        }
+    }
     updateTitle();
 }
 
@@ -1021,11 +1107,25 @@ void ProgrammingManager::refreshPreview()
         if (Scene *s = qobject_cast<Scene*>(f))
         {
             s->resetRuntime();
-            // Effect palettes are not written by Scene::write(), so resetRuntime
-            // doesn't trigger a functionStarted signal. Re-sync EffectInstances
-            // explicitly so newly-added/removed Effect palettes take effect.
+            // Only re-sync EffectInstances when the set of Effect-type palettes
+            // actually changed. Non-Effect palette edits (Shutter, Color, Dimmer)
+            // must NOT recreate instances — that resets JS state and breaks
+            // continuously running effects (candle flicker loses its phase, etc.).
             if (m_doc->effectScriptRunner())
-                m_doc->effectScriptRunner()->syncScene(m_canvasFunction);
+            {
+                QList<quint32> effectPals;
+                for (quint32 pid : s->palettes())
+                {
+                    QLCPalette *p = m_doc->palette(pid);
+                    if (p && p->type() == QLCPalette::Effect)
+                        effectPals << pid;
+                }
+                if (effectPals != m_lastSyncedEffectPalettes)
+                {
+                    m_lastSyncedEffectPalettes = effectPals;
+                    m_doc->effectScriptRunner()->syncScene(m_canvasFunction);
+                }
+            }
         }
         // collections/others reflect their members' own changes
     }
@@ -1033,10 +1133,29 @@ void ProgrammingManager::refreshPreview()
     {
         f->start(m_doc->masterTimer(), FunctionParent::master());
         m_previewFunction = m_canvasFunction;
+        // Seed the cache with what the scene already has so the first
+        // canvas modification (e.g. dropping a target group) doesn't
+        // incorrectly see "effect palette set changed" and call syncScene().
+        m_lastSyncedEffectPalettes.clear();
+        if (Scene *startedScene = qobject_cast<Scene*>(f))
+        {
+            for (quint32 pid : startedScene->palettes())
+            {
+                QLCPalette *p = m_doc->palette(pid);
+                if (p && p->type() == QLCPalette::Effect)
+                    m_lastSyncedEffectPalettes << pid;
+            }
+        }
         updateTitle();
     }
-    // Values just changed in the preview; re-estimate after they settle.
-    QTimer::singleShot(50, this, &ProgrammingManager::recomputePower);
+    // NOTE: do NOT schedule a power recompute here. refreshPreview() runs on
+    // every live edit — including every tick of a slider drag — and a per-call
+    // QTimer::singleShot() queued dozens of overlapping recomputePower() passes.
+    // Each claims the universe write mutex (contending with the 50 Hz DMX thread)
+    // and estimates watts over every fixture, flooding the GUI thread and
+    // starving widget repaints (param sliders rendered stale handles until a full
+    // repaint). The repeating m_powerTimer (500 ms, Design-mode-gated) already
+    // keeps the footer fresh; structural changes call recomputePower() directly.
 }
 
 void ProgrammingManager::slotCanvasModified()
@@ -1465,6 +1584,7 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
         { QT_TR_NOOP("New Beam"),       QLCPalette::Beam },
         { QT_TR_NOOP("New Gobo"),       QLCPalette::Gobo },
         { QT_TR_NOOP("New Shutter"),    QLCPalette::Shutter },
+        { QT_TR_NOOP("New Strobe"),     QLCPalette::Strobe },
         { QT_TR_NOOP("New Effect"),     QLCPalette::Effect },
     };
     QList<QAction*> newActions;
@@ -1941,4 +2061,189 @@ void ProgrammingManager::slotButtonAction(const QString &action)
         if (ch && ch->isRunning())
             ch->setAction(chaserAction);
     }
+}
+
+// ─── Bundle stamp & save ──────────────────────────────────────────────────────
+
+void ProgrammingManager::slotStampBundle(const QString &bundleName)
+{
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (!scene)
+    {
+        QMessageBox::information(this, tr("No look selected"),
+            tr("Select a look in the canvas before stamping a Bundle."));
+        return;
+    }
+
+    const QLCBundle bundle = m_bundleCache->bundle(bundleName);
+    if (!bundle.isValid()) return;
+
+    // Save undo snapshot before replacing
+    m_stampUndoSceneId   = scene->id();
+    m_stampUndoPalettes  = scene->palettes();
+
+    // Replace: remove all existing palettes from this scene before stamping
+    for (quint32 pid : m_stampUndoPalettes)
+        scene->removePalette(pid);
+
+    for (const BundleEntry &entry : bundle.palettes)
+    {
+        quint32 paletteId = QLCPalette::invalidId();
+
+        // De-dup: look for an existing palette that matches this entry.
+        if (entry.type == "Color")
+        {
+            for (QLCPalette *p : m_doc->palettes())
+            {
+                if (p->type() != QLCPalette::Color) continue;
+                if (p->rgbValue().name() == entry.color)
+                { paletteId = p->id(); break; }
+            }
+        }
+        else if (entry.type == "Dimmer")
+        {
+            for (QLCPalette *p : m_doc->palettes())
+            {
+                if (p->type() != QLCPalette::Dimmer) continue;
+                if (p->value().toInt() == entry.dimmerValue)
+                { paletteId = p->id(); break; }
+            }
+        }
+        // Effects are never de-duped — params may differ per look.
+
+        if (paletteId == QLCPalette::invalidId())
+        {
+            // Create a new palette from the entry.
+            QLCPalette *np = nullptr;
+            if (entry.type == "Color")
+            {
+                np = new QLCPalette(QLCPalette::Color);
+                np->setValue(entry.color);
+                np->setPath("Palettes/Color/");
+            }
+            else if (entry.type == "Dimmer")
+            {
+                np = new QLCPalette(QLCPalette::Dimmer);
+                np->setValue(entry.dimmerValue);
+                np->setPath("Palettes/Dimmer/");
+            }
+            else if (entry.type == "Effect")
+            {
+                np = new QLCPalette(QLCPalette::Effect);
+                // Resolve base name → full path via the script cache
+                EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
+                QString fullPath = scache->scriptPath(entry.script);
+                if (fullPath.isEmpty())
+                    fullPath = entry.script;  // fallback: store as-is
+                np->setScriptPath(fullPath);
+                np->setEffectPreset(entry.effectPreset);
+                np->setEffectParamValues(entry.params);
+                np->setPath(QString("Palettes/Effect/"));
+            }
+            else if (entry.type == "PanTilt")
+            {
+                np = new QLCPalette(QLCPalette::PanTilt);
+                np->setValue(entry.pan, entry.tilt);
+                np->setPath("Palettes/PanTilt/");
+            }
+            else if (entry.type == "Beam")
+            {
+                np = new QLCPalette(QLCPalette::Beam);
+                np->setValue(entry.focus);
+                np->setValue(entry.frost);
+                np->setValue(entry.iris);
+                np->setPath("Palettes/Beam/");
+            }
+
+            if (!np) continue;
+
+            np->setName(entry.name.isEmpty()
+                        ? tr("New %1").arg(entry.type) : entry.name);
+            if (!m_doc->addPalette(np)) { delete np; continue; }
+            paletteId = np->id();
+        }
+
+        scene->addPalette(paletteId);
+    }
+
+    m_doc->setModified();
+    // Sync effect instances immediately — destroys old ones, creates new ones
+    // based on the current palette list. Done BEFORE reload/slotCanvasModified
+    // so the change takes effect regardless of whether this tab is visible
+    // (refreshPreview() is gated on isVisible() and would miss hidden-tab stamps).
+    if (m_doc->effectScriptRunner())
+    {
+        m_doc->effectScriptRunner()->syncScene(m_currentScene);
+        // Update cache so the next refreshPreview() call doesn't redundantly
+        // re-sync when the scene is already running with these palettes.
+        Scene *stampScene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+        m_lastSyncedEffectPalettes.clear();
+        if (stampScene)
+        {
+            for (quint32 pid : stampScene->palettes())
+            {
+                QLCPalette *p = m_doc->palette(pid);
+                if (p && p->type() == QLCPalette::Effect)
+                    m_lastSyncedEffectPalettes << pid;
+            }
+        }
+    }
+    m_paletteTree->updateTree();
+    if (m_canvas) m_canvas->reload();  // rebuild look list to show new entries
+    slotCanvasModified();              // restart preview so DMX updates
+}
+
+void ProgrammingManager::slotSaveAsBundle()
+{
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (!scene)
+    {
+        QMessageBox::information(this, tr("No look selected"),
+            tr("Select a look in the canvas to save as a Bundle."));
+        return;
+    }
+
+    const QList<quint32> paletteIds = scene->palettes();
+    if (paletteIds.isEmpty())
+    {
+        QMessageBox::information(this, tr("Look is empty"),
+            tr("Add at least one palette to the look before saving it as a Bundle."));
+        return;
+    }
+
+    BundleEditor dlg(m_doc, m_bundleCache, paletteIds, this);
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    if (!m_bundleCache->saveBundle(dlg.bundle()))
+    {
+        QMessageBox::warning(this, tr("Save failed"),
+                             tr("Could not write the Bundle file."));
+        return;
+    }
+    m_bundleBrowser->refresh();
+}
+
+void ProgrammingManager::slotUndoStamp()
+{
+    if (m_stampUndoSceneId == quint32(-1)) return;
+
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_stampUndoSceneId));
+    if (!scene) return;
+
+    // Remove the currently stamped palettes
+    for (quint32 pid : scene->palettes())
+        scene->removePalette(pid);
+
+    // Restore the saved palette list
+    for (quint32 pid : m_stampUndoPalettes)
+        scene->addPalette(pid);
+
+    // Consume the undo entry so a second Ctrl-Z won't repeat
+    m_stampUndoSceneId  = quint32(-1);
+    m_stampUndoPalettes.clear();
+
+    m_doc->setModified();
+    m_paletteTree->updateTree();
+    if (m_canvas) m_canvas->reload();
+    slotCanvasModified();
 }

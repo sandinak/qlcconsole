@@ -17,18 +17,18 @@
         { name: "position", description: "Hot-spot position override (0=first, 1=last; auto when no BPM)", defaultValue: 0.0 }
     ];
 
+    // Colour + intensity come from the LOOK (first Colour palette, master
+    // Dimmer). 'pos' optionally aims the chase at a bound PanTilt palette.
     effect.palettes = [
-        { name: "color",  type: "Color",  optional: true },
-        { name: "dimmer", type: "Dimmer", optional: true },
         { name: "pos",    type: "PanTilt", optional: true }
     ];
 
     effect.parameters = [
         { name: "speed",      description: "Hot-spot cycles per second (auto mode)",         min: 0.1,  max: 5.0,  defaultValue: 1.0  },
         { name: "trail",      description: "Trail length (fixture-widths)",                  min: 0.0,  max: 3.0,  defaultValue: 1.0  },
-        { name: "trailShape", description: "Trail shape", min: 0, max: 1, defaultValue: 1,
+        { name: "trailShape", description: "Trail shape", defaultValue: 1,
           values: ["Linear", "Cosine"] },
-        { name: "mode",       description: "Direction", min: 0, max: 2, defaultValue: 0,
+        { name: "mode",       description: "Direction", defaultValue: 0,
           values: ["Loop", "Bounce", "Input"] },
         { name: "beatSync",   description: "Advance one fixture per beat (0=off, 1=on)",     min: 0.0,  max: 1.0,  defaultValue: 0.0  },
         { name: "panCenter",  description: "Pan center for all heads (0=left, 0.5=mid)",     min: 0.0,  max: 1.0,  defaultValue: 0.5  },
@@ -93,10 +93,9 @@
             aimTilt = palettes.pos.tilt / 270.0;
         }
 
-        // Peak dimmer from palette or default full
-        var peakDim = 1.0;
-        if (palettes.dimmer && palettes.dimmer.dimmer !== undefined)
-            peakDim = palettes.dimmer.dimmer;
+        // Peak dimmer from the look's master Dimmer (default full).
+        var peakDim = (palettes.look && palettes.look.dimmer !== undefined)
+                      ? palettes.look.dimmer : 1.0;
 
         return fixtures.map(function(f, i) {
             var dist = Math.abs(i - hotPos);
@@ -112,14 +111,14 @@
                 intent.tilt = aimTilt * f.tiltRange;
             }
 
-            if (palettes.color && palettes.color.r !== undefined) {
-                intent.r = Math.round(palettes.color.r * bright);
-                intent.g = Math.round(palettes.color.g * bright);
-                intent.b = Math.round(palettes.color.b * bright);
-            } else {
-                intent.r = Math.round(255 * bright);
-                intent.g = Math.round(255 * bright);
-                intent.b = Math.round(255 * bright);
+            // Scale the look's colour by the hot-spot brightness so the trail
+            // shows on pure-RGB fixtures. No look colour → omit (the dimmer
+            // channel still carries the chase; the scene Colour look shows).
+            var lc = (palettes.look && palettes.look.colors) ? palettes.look.colors[0] : null;
+            if (lc && lc.r !== undefined) {
+                intent.r = Math.round(lc.r * bright);
+                intent.g = Math.round(lc.g * bright);
+                intent.b = Math.round(lc.b * bright);
             }
 
             return intent;

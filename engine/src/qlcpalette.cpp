@@ -67,6 +67,7 @@ QLCPalette *QLCPalette::createCopy()
     copy->setFanningValue(this->fanningValue());
     copy->setStageTargetId(this->stageTargetId());
     copy->setScriptPath(this->scriptPath());
+    copy->setEffectPreset(this->effectPreset());
     copy->setEffectInputBindings(this->effectInputBindings());
     for (auto it = m_effectPaletteBindings.constBegin();
          it != m_effectPaletteBindings.constEnd(); ++it)
@@ -124,6 +125,7 @@ QString QLCPalette::typeToString(QLCPalette::PaletteType type)
         case PanTilt:   return "PanTilt";
         case Aim:       return "Aim";
         case Shutter:   return "Shutter";
+        case Strobe:    return "Strobe";
         case Gobo:      return "Gobo";
         case Zoom:      return "Zoom";
         case Beam:      return "Beam";
@@ -150,6 +152,8 @@ QLCPalette::PaletteType QLCPalette::stringToType(const QString &str)
         return Aim;
     else if (str == "Shutter")
         return Shutter;
+    else if (str == "Strobe")
+        return Strobe;
     else if (str == "Gobo")
         return Gobo;
     else if (str == "Zoom")
@@ -688,17 +692,14 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         (ch->preset() == QLCChannel::ShutterStrobeSlowFast ||
                          ch->preset() == QLCChannel::ShutterStrobeFastSlow))
                     {
-                        // Pure preset strobe channel: DMX 0 = open, 1-255 = strobe.
-                        // Always send 0 to open regardless of the palette's stored value.
+                        // Preset strobe channel: DMX 0 = beam open, 1-255 = strobe.
                         dmxVal = 0;
                     }
                     else
                     {
-                        // Custom (capability-defined) shutter channel: use the palette's
-                        // explicit value, or auto-detect the ShutterOpen capability midpoint
-                        // when no value is set (e.g. after loading an old workspace).
-                        dmxVal = m_values.isEmpty() ? 0 : uchar(value().toUInt());
-                        if (dmxVal == 0 && ch != nullptr)
+                        // Capability-defined channel: search for ShutterOpen first
+                        // (fixture-aware), then fall back to stored value / 255.
+                        if (ch != nullptr)
                         {
                             for (const QLCCapability *cap : ch->capabilities())
                             {
@@ -709,10 +710,81 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                                 }
                             }
                         }
-                        if (dmxVal == 0) dmxVal = 255; // last resort
+                        if (dmxVal == 0 && !m_values.isEmpty())
+                            dmxVal = uchar(value().toUInt());
+                        if (dmxVal == 0)
+                            dmxVal = 255; // last resort
                     }
                     list << SceneValue(id, shCh, dmxVal);
                 }
+            }
+            break;
+            case Strobe:
+            {
+                quint32 shCh = (fixture->fixtureMode() != nullptr)
+                    ? fixture->fixtureMode()->channelNumber(QLCChannel::Shutter, QLCChannel::MSB)
+                    : QLCChannel::invalid();
+                if (shCh == QLCChannel::invalid())
+                    break;
+                const QLCChannel *ch = fixture->channel(shCh);
+                if (ch == nullptr)
+                    break;
+
+                // rate is 0.0 (off/slowest) to 1.0 (fastest)
+                float rate = m_values.isEmpty() ? 0.0f : value().toFloat();
+                rate = qBound(0.0f, rate, 1.0f);
+
+                uchar dmxVal = 0;
+                bool found = false;
+
+                if (ch->preset() == QLCChannel::ShutterStrobeSlowFast)
+                {
+                    // 0 = open; 1-255 = strobe slow → fast
+                    dmxVal = (rate <= 0.0f) ? 1 : uchar(1 + qRound(rate * 254.0f));
+                    found = true;
+                }
+                else if (ch->preset() == QLCChannel::ShutterStrobeFastSlow)
+                {
+                    // 0 = open; 1-255 = strobe fast → slow (rate inverted)
+                    dmxVal = (rate <= 0.0f) ? 1 : uchar(1 + qRound((1.0f - rate) * 254.0f));
+                    found = true;
+                }
+                else
+                {
+                    // Custom channel: find strobe capability range and interpolate.
+                    for (const QLCCapability *cap : ch->capabilities())
+                    {
+                        int lo = int(cap->min()), hi = int(cap->max());
+                        if (cap->preset() == QLCCapability::StrobeSlowToFast ||
+                            cap->preset() == QLCCapability::StrobeFrequency   ||
+                            cap->preset() == QLCCapability::StrobeFreqRange)
+                        {
+                            dmxVal = uchar(lo + qRound(rate * (hi - lo)));
+                            found = true;
+                            break;
+                        }
+                        else if (cap->preset() == QLCCapability::StrobeFastToSlow)
+                        {
+                            dmxVal = uchar(lo + qRound((1.0f - rate) * (hi - lo)));
+                            found = true;
+                            break;
+                        }
+                        else if (cap->preset() == QLCCapability::StrobeRandom          ||
+                                 cap->preset() == QLCCapability::StrobeRandomSlowToFast ||
+                                 cap->preset() == QLCCapability::StrobeRandomFastToSlow)
+                        {
+                            // Prefer an ordered strobe range; accept random as fallback.
+                            if (!found)
+                            {
+                                dmxVal = uchar(lo + qRound(rate * (hi - lo)));
+                                found = true;
+                            }
+                        }
+                    }
+                }
+
+                if (found)
+                    list << SceneValue(id, shCh, dmxVal);
             }
             break;
             case Gobo:
@@ -1133,6 +1205,9 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
             case Gobo:
                 setValue(strVal.toInt());
             break;
+            case Strobe:
+                setValue(strVal.toFloat()); // 0.0–1.0 relative rate
+            break;
             case Effect:
             case Undefined: break;
         }
@@ -1169,6 +1244,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 case Aim:       break;
                 case Beam:      break;
                 case Shutter:   break;
+                case Strobe:    break;
                 case Gobo:      break;
                 case Effect:    break;
                 case Undefined: break;
@@ -1186,6 +1262,8 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         {
             if (doc.name() == "EffectScript")
                 m_scriptPath = doc.readElementText();
+            else if (doc.name() == "EffectPreset")
+                m_effectPreset = doc.readElementText();
             else if (doc.name() == "EffectInputBinding")
             {
                 QString slot   = doc.attributes().value("slot").toString();
@@ -1293,6 +1371,11 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             if (!m_values.isEmpty())
                 doc->writeAttribute(KXMLQLCPaletteValue, value().toString());
         break;
+        case Strobe:
+            if (!m_values.isEmpty())
+                doc->writeAttribute(KXMLQLCPaletteValue,
+                                    QString::number(value().toFloat(), 'f', 4));
+        break;
         case Effect:
             // Script path and bindings saved as child elements below
         break;
@@ -1321,6 +1404,13 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             // workspaces stay valid when moved between machines.
             doc->writeStartElement("EffectScript");
             doc->writeCharacters(QFileInfo(m_scriptPath).completeBaseName());
+            doc->writeEndElement();
+        }
+        if (!m_effectPreset.isEmpty())
+        {
+            // Preset identity (display only); script+params above are authoritative.
+            doc->writeStartElement("EffectPreset");
+            doc->writeCharacters(m_effectPreset);
             doc->writeEndElement();
         }
         for (auto it = m_effectInputBindings.constBegin();

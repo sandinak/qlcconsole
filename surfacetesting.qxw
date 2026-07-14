@@ -374,37 +374,46 @@
   <Palette ID="0" Type="Aim" Name="Test Target" Path="Palettes/PanTilt/" StageTarget="0"/>
   <Palette ID="1" Type="Color" Name="White" Path="Palettes/Color" Value="#ffffff"/>
   <Palette ID="2" Type="Dimmer" Name="Full" Path="Palettes/Dimmer" Value="252"/>
-  <Palette ID="3" Type="Shutter" Name="New Shutter" Path="Palettes/Shutter/" Value="255"/>
+  <Palette ID="3" Type="Shutter" Name="New Shutter" Path="Palettes/Shutter/" Value="191"/>
   <Palette ID="4" Type="Color" Name="Blue" Path="Palettes/Color/" Value="#0206ff020000"/>
   <Palette ID="5" Type="Dimmer" Name="New Dimmer" Path="Palettes/Dimmer" Value="255"/>
   <Palette ID="6" Type="Aim" Name="New PanTilt" Path="Palettes/PanTilt" StageTarget="1"/>
-  <Palette ID="7" Type="Effect" Name="ColorAlternate" Path="Palettes/Effect/">
-   <EffectScript>ColorAlternate</EffectScript>
+  <Palette ID="7" Type="Effect" Name="ColorAlternate" Path="Palettes/Effect/Color/Color Alternate/">
+   <EffectScript>color-alternate</EffectScript>
    <EffectPaletteBinding slot="color1" palette="8"/>
    <EffectPaletteBinding slot="color2" palette="1"/>
    <EffectPaletteBinding slot="color3" palette="4"/>
    <EffectParam name="offset" value="0.048"/>
   </Palette>
   <Palette ID="8" Type="Color" Name="Red" Path="Palettes/Color/" Value="#ff270a0a0000"/>
-  <Palette ID="9" Type="Effect" Name="spatial-gradient" Path="Palettes/Effect">
-   <EffectScript>ColorGradient</EffectScript>
-   <EffectPaletteBinding slot="color1" palette="4"/>
-   <EffectPaletteBinding slot="color2" palette="8"/>
-   <EffectPaletteBinding slot="colorA" palette="4"/>
-   <EffectPaletteBinding slot="colorB" palette="8"/>
+  <Palette ID="9" Type="Effect" Name="spatial-gradient" Path="Palettes/Effect/Color/Spatial Gradient/">
+   <EffectScript>spatial-gradient</EffectScript>
   </Palette>
   <Palette ID="10" Type="Dimmer" Name="Full" Path="Palettes/Dimmer" Value="255"/>
   <Palette ID="11" Type="PanTilt" Name="Base" Path="Palettes/PanTilt/" Value="270,135"/>
   <Palette ID="12" Type="Color" Name="White" Path="Palettes/Color" Value="#ffffff"/>
-  <Palette ID="13" Type="Effect" Name="sweep" Path="Palettes/Effect">
+  <Palette ID="13" Type="Effect" Name="sweep" Path="Palettes/Effect/Position/Sweep/">
    <EffectScript>sweep</EffectScript>
    <EffectParam name="beatSync" value="0"/>
   </Palette>
-  <Palette ID="14" Type="Effect" Name="followspot" Path="Palettes/Effect/">
+  <Palette ID="14" Type="Effect" Name="followspot" Path="Palettes/Effect/Position/Followspot/">
    <EffectScript>followspot</EffectScript>
    <EffectTargetBinding slot="followTarget" target="0"/>
   </Palette>
   <Palette ID="15" Type="Aim" Name="Target 2" Path="Palettes/PanTilt/" StageTarget="1"/>
+  <Palette ID="16" Type="Effect" Name="Stage shape -circle" Path="Palettes/Effect/Position/Stage Shape/">
+   <EffectScript>stage-shape</EffectScript>
+   <EffectParam name="rotation" value="95.76"/>
+   <EffectParam name="size" value="5.9868"/>
+  </Palette>
+  <Palette ID="17" Type="Color" Name="Candle Orange" Path="Palettes/Color/" Value="#ff8020"/>
+  <Palette ID="18" Type="Dimmer" Name="Candle Intensity" Path="Palettes/Dimmer/" Value="180"/>
+  <Palette ID="19" Type="Effect" Name="Candlelight" Path="Palettes/Effect/Other/Candle Flicker/">
+   <EffectScript>candle-flicker</EffectScript>
+   <EffectParam name="rate" value="1.4"/>
+   <EffectParam name="depth" value="0.55"/>
+   <EffectParam name="level" value="1"/>
+  </Palette>
   <Function ID="0" Type="Scene" Name="RGBMatrix" Path="Washes">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureVal ID="1">2,0,3,0,4,4,5,16</FixtureVal>
@@ -546,6 +555,19 @@
    <Palette ID="14"/>
    <Palette ID="15"/>
   </Function>
+  <Function ID="20" Type="Scene" Name="Shape">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,129,1,129,2,125,3,124</FixtureVal>
+   <FixtureVal ID="4">0,129,1,125</FixtureVal>
+   <FixtureVal ID="3">0,129,1,129,2,125,3,124</FixtureVal>
+   <FixtureVal ID="2">0,129,1,125</FixtureVal>
+   <FixtureVal ID="1">0,129,1,125</FixtureVal>
+   <FixtureVal ID="9">0,64,1,64,2,125,3,125</FixtureVal>
+   <Palette ID="17"/>
+   <Palette ID="18"/>
+   <Palette ID="19"/>
+   <Palette ID="3"/>
+  </Function>
   <PowerDistribution>
    <Source Voltage="120" VARating="2200" RuntimeMin="8" RuntimeWatts="2000" PosX="9.525" PosY="4.81584">
     <Name>Cyberpower</Name>
@@ -591,7 +613,7 @@
    <StagePlatform ID="9" Name="DS2" OriginX="3.505" OriginY="2.438" Width="2.438" Depth="1.219" Height="0.183" Color="#3d5986"/>
    <StagePlatform ID="10" Name="DS4" OriginX="5.944" OriginY="2.438" Width="2.438" Depth="1.219" Height="0.183" Color="#3d5986"/>
    <StagePlatform ID="11" Name="DS4" OriginX="8.382" OriginY="2.438" Width="2.438" Depth="1.219" Height="0.183" Color="#3d5986"/>
-   <StageTarget ID="0" Name="Test Target" X="7.162" Y="1.995" Z="0.000" Color="#ffb400"/>
+   <StageTarget ID="0" Name="Test Target" X="5.966" Y="2.292" Z="0.000" Color="#ffb400"/>
    <StageTarget ID="1" Name="Target 2" X="7.249" Y="1.247" Z="0.000" Color="#ffb400"/>
    <FixtureRig FID="0" Truss="0" Offset="1.219" Mounting="TopHung" PanZero="0.0"/>
    <FixtureRig FID="1" Truss="0" Offset="0.991" Mounting="TopHung" PanZero="0.0"/>
@@ -2080,7 +2102,5 @@
  <SimpleDesk>
   <Engine/>
  </SimpleDesk>
- <AppState>
-  <MonitorWindow open="1" geometry="AdnQywADAAAAAACaAAAAdAAABvgAAAVEAAAAmgAAAJQAAAb4AAAFRAAAAAAAAAAACgAAAACaAAAAlAAABvgAAAVE"/>
- </AppState>
+ <AppState/>
 </Workspace>

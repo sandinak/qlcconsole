@@ -1,27 +1,37 @@
 project(effectscripts)
 
 set(SCRIPT_FILES
-    breathe.js
+    amber-pulse.js
+    ballyhoo.js
+    candle-flicker.js
+    color-alternate.js
     color-chase.js
+    color-gradient.js
+    color-phaser.js
+    color-spread.js
+    dimmer-phaser.js
     drawn-path.js
-    ColorAlternate.js
-    ColorGradient.js
-    ColorSpread.js
     fan.js
     figure8.js
     fire.js
     followspot.js
+    gobo-chase.js
+    iris-pulse.js
     lightning.js
+    native-strobe.js
     orbit.js
+    pantilt-phaser.js
     rainbow.js
-    ramp-chase.js
     sparkle.js
     spatial-gradient.js
     spotlight-chase.js
-    strobe.js
+    stage-shape.js
     sweep.js
+    uv-pulse.js
     wander.js
+    warm-cool.js
     wave.js
+    zoom-pulse.js
 )
 
 install(FILES ${SCRIPT_FILES} DESTINATION ${INSTALLROOT}/${EFFECTSCRIPTDIR})

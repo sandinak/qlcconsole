@@ -18,16 +18,14 @@
         { name: "y", description: "Figure center tilt (0=up,   0.5=mid, 1=down)",  defaultValue: 0.5 }
     ];
 
-    effect.palettes = [
-        { name: "color",  type: "Color",  optional: true },
-        { name: "dimmer", type: "Dimmer", optional: true }
-    ];
+    // Position-only effect: no colour/dimmer. Add a Colour/Dimmer look to the
+    // scene for those; this effect drives pan/tilt and composes with them.
 
     effect.parameters = [
         { name: "speed",       description: "Cycles per second",                          min: -3.0, max: 3.0,  defaultValue: 0.3  },
         { name: "panRadius",   description: "Pan half-width (fraction of range)",          min: 0.0,  max: 0.5,  defaultValue: 0.2  },
         { name: "tiltRadius",  description: "Tilt half-width (fraction of range)",         min: 0.0,  max: 0.5,  defaultValue: 0.15 },
-        { name: "ratio",       description: "Pan:tilt frequency ratio", min: 0, max: 2, defaultValue: 0,
+        { name: "ratio",       description: "Pan:tilt frequency ratio", defaultValue: 0,
           values: ["2:1 (figure-8)", "3:2 (trefoil)", "3:1 (3-petal)"] },
         { name: "phaseSpread", description: "Phase spread across fixtures (0=clump, 1=full cycle)", min: 0.0, max: 1.0, defaultValue: 0.8 },
         { name: "beatSync",    description: "Figures per beat (0=off, 1=1/beat, 0.5=1/2beats)", min: 0.0, max: 4.0, defaultValue: 0.0 }
@@ -83,10 +81,11 @@
                 tilt: Math.max(0, Math.min(f.tiltRange, tilt))
             };
 
+            // Position effect: only touch dimmer/colour when a palette is
+            // bound. Otherwise omit those keys so the scene's own Dimmer/Color
+            // looks fall through (Override only wins channels we emit).
             if (palettes.dimmer && palettes.dimmer.dimmer !== undefined)
                 intent.dimmer = palettes.dimmer.dimmer;
-            else if (f.hasDimmer)
-                intent.dimmer = 1.0;
 
             if (palettes.color && palettes.color.r !== undefined) {
                 intent.r = palettes.color.r;

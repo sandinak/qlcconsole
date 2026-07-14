@@ -42,6 +42,10 @@ bool EffectScript::load(const QString &path)
     f.close();
 
     m_script = m_engine.evaluate(contents, path);
+    qDebug() << "[ES-DIAG] evaluate: isError=" << m_script.isError()
+             << "isObject=" << m_script.isObject()
+             << "isCallable=" << m_script.isCallable()
+             << "isUndefined=" << m_script.isUndefined();
     if (m_script.isError())
     {
         qWarning() << "[EffectScript]" << path << "evaluate error:"
@@ -56,6 +60,7 @@ bool EffectScript::load(const QString &path)
     }
 
     m_tickFn = m_script.property("tick");
+    qDebug() << "[ES-DIAG] tick: isCallable=" << m_tickFn.isCallable();
     if (!m_tickFn.isCallable())
     {
         qWarning() << "[EffectScript]" << path << "missing tick() function";
@@ -63,9 +68,13 @@ bool EffectScript::load(const QString &path)
     }
 
     if (!parseMeta())
+    {
+        qWarning() << "[EffectScript]" << path << "parseMeta() failed";
         return false;
+    }
 
     m_valid = true;
+    qDebug() << "[ES-DIAG] load OK:" << path;
     return true;
 }
 
@@ -83,6 +92,9 @@ bool EffectScript::parseMeta()
     m_description = m_script.property("description").toString();
     m_notes       = m_script.property("notes").toString();
     m_author      = m_script.property("author").toString();
+    m_version     = m_script.property("version").toInt();
+    if (m_version < 1)
+        m_version = 1;   // default for Generators that don't declare one
 
     if (m_name.isEmpty())
     {
@@ -163,6 +175,13 @@ bool EffectScript::parseMeta()
                 int vlen = vals.property("length").toInt();
                 for (int vi = 0; vi < vlen; ++vi)
                     def.enumValues << vals.property(vi).toString();
+            }
+            QJSValue aliases = item.property("aliases");
+            if (aliases.isArray())
+            {
+                int alen = aliases.property("length").toInt();
+                for (int ai = 0; ai < alen; ++ai)
+                    def.aliases << aliases.property(ai).toString();
             }
             if (!def.name.isEmpty())
                 m_params.append(def);

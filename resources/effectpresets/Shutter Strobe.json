@@ -1,0 +1,7 @@
+{
+  "name": "Shutter Strobe",
+  "script": "native-strobe",
+  "category": "Dimmer",
+  "description": "Hardware shutter strobe at 8 Hz — all fixtures fire simultaneously",
+  "params": { "rate": 8, "spread": 0, "width": 0.5 }
+}

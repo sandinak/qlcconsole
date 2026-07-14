@@ -1,18 +1,23 @@
-# Effect Script API Reference
+# Generator API Reference
 
-A guide for writing **effect scripts** for this QLC+ fork — enough detail to
-author new scripts (including for an AI). Effect scripts are small JavaScript
-files that compute live DMX output for a scene, frame by frame. They are the
-**single effect engine** for the programmer/looks workflow (the native C++
-effects were retired); a followspot, a colour chase, a position→intensity mapper
-are all just scripts.
+A guide for writing **Generators** for this QLC+ fork — enough detail to
+author new ones (including for an AI). Generators are small JavaScript files
+that compute live DMX output for a scene, frame by frame. They are the
+**single effect engine** for the Effect/looks workflow (the native C++ effects
+were retired); a followspot, a colour chase, a position→intensity mapper are
+all just Generators.
+
+**Vocabulary:** a **Generator** is a `.js` file (the algorithm). An **Effect**
+is a named configuration (Generator + pinned params) stored as a `.json` preset.
+A **Look** is an assembled scene with colour/dimmer/Effect palettes stacked in
+precedence order.
 
 See `POSITION_ARCH.md` for the position/followspot architecture that several of
 these concepts (targets, convergence, followMode) come from.
 
 ---
 
-## 1. Where scripts live & how they run
+## 1. Where Generators live & how they run
 
 - **Location:** `resources/effectscripts/*.js`. On macOS the build copies them to
   `<build>/Resources/EffectScripts/` (the app reads `applicationDirPath()/../Resources/EffectScripts`).
@@ -23,18 +28,18 @@ these concepts (targets, convergence, followMode) come from.
   converts the returned intents to DMX.
 - **When:** an instance exists for each **Effect palette** attached to a
   **running scene**. Scenes run in **both Edit (preview) and Operate** modes, so
-  scripts tick in both. Tick rate is ~**50 Hz**.
-- **Output priority:** script output is written through a GenericFader at
+  Generators tick in both. Tick rate is ~**50 Hz**.
+- **Output priority:** Generator output is written through a GenericFader at
   `Universe::Override`, so it **layers on top of** the scene's own palettes and
   reliably wins LTP channels (pan/tilt). HTP channels (intensity) still max.
-- **Editing a script:** re-run `cmake --build build` to refresh the copied file,
-  then relaunch (scripts are loaded at startup).
+- **Editing a Generator:** re-run `cmake --build build` to refresh the copied file,
+  then relaunch (Generators are loaded at startup).
 
 ---
 
-## 2. Script shape
+## 2. Generator shape
 
-A script is an IIFE returning one `effect` object:
+A Generator is a `.js` file returning one `effect` manifest object:
 
 ```js
 (function() {
@@ -71,6 +76,7 @@ how it shows up in the look editor and how the host knows what to inject.
 | Field | Type | Purpose |
 |---|---|---|
 | `apiVersion` | int | API version (current: `1`). |
+| `version` | int | Generator content version (default `1`). Bump when you change params/behaviour so Effects (presets) authored against an older version can be reasoned about. |
 | `name` | string | Display name in the effect picker. |
 | `description` | string | One-line tooltip. |
 | `notes` | string | Long help shown in the editor panel. |
@@ -102,7 +108,15 @@ effect.parameters = [
     // 'values' present → integer-index dropdown:
     { name: "mode",  description: "Mode",  defaultValue: 0, values: ["A", "B", "C"] },
     // type:"path" → XY drawn-path widget; value is a JSON array [[x,y],...] of 0..1 pairs:
-    { name: "path",  description: "Movement path", type: "path" }
+    { name: "path",  description: "Movement path", type: "path" },
+    // type:"direction" → compass widget; value is a screen bearing in DEGREES
+    // (0 = left→right, 90 = top→bottom, …) that previews the look's colours.
+    // Project floor positions with px = pos.x, py = -pos.y (stage +y is upstage
+    // = screen up) so it reads WYSIWYG against the 2D Monitor:
+    { name: "angle", description: "Gradient direction", type: "direction", min: 0, max: 360, defaultValue: 0 },
+    // 'aliases' = former names for this param. A stored value under an old name
+    // maps to this one, so renaming a param doesn't break saved looks/Effects:
+    { name: "rate", description: "Cycles/sec", aliases: ["speed"], min: 0, max: 20, defaultValue: 1 }
 ];
 
 effect.dataChannels = ["joystick"];
@@ -142,7 +156,7 @@ One object per (filtered) fixture in the scene. Fields:
 | `hasShutter` | bool | Has a shutter/strobe channel. |
 | `pos` | `{x,y,z}` | 3-D rig world position in **metres** (`{0,0,0}` if unplaced). |
 | `aimAt` | `{ <slot>: {pan,tilt} }` | Per-fixture aim **degrees** toward each bound `effect.targets` slot. Empty object per slot when unbound/unsolvable. |
-| `sceneTarget` | `{pan,tilt}` | Per-fixture aim **degrees** toward the scene's **own Aim look** (implicit target). **Present only when the scene carries an Aim look.** Use it to detect "this scene aims somewhere" (the followspot defers to the host's converged aim when this is present). |
+| `sceneTarget` | `{x,y,z, pan,tilt}` | The scene's **own Aim look** (implicit target). **Present only when the scene carries an Aim look.** `x,y,z` = the target's **world location** in metres (shared by all fixtures) — centre a shape/formation on it and return world-space aim intents (`aimX/aimY/aimZ`). `pan,tilt` = this fixture's pre-solved aim **degrees** at the target (subject-height biased; present only with usable rig geometry) — the followspot defers to the host's converged aim when these are present. |
 | `lastSpot` | `{pan,tilt}` | Pan/tilt **degrees** where this fixture's beam was left by the previous Operate tick (possibly a different scene). Absent if no prior position. Enables `followMode = lastPosition` handoffs. |
 
 ### `inputs` — control values
@@ -166,6 +180,30 @@ For each declared `effect.palettes` slot, a flattened value object (or empty):
 |---|---|
 | `Color` | `{ r, g, b }` (0..255) |
 | `Dimmer` | `{ dimmer }` (0..1) |
+
+**The look is the data source (auto-bind).** A slot is filled in this priority:
+
+1. **Explicit binding** — if the user dragged a palette onto the slot, that wins.
+2. **The look, in precedence order** — otherwise an unbound `Color` slot is
+   auto-filled from the scene's own **Color** looks (the palettes the user
+   stacked in the Looks list), and an unbound `Dimmer` slot from the look's
+   master **Dimmer**. Colour slots claim look colours in declaration order:
+   declare `color1, color2` and a look of *Red, Blue* gives `color1 = Red`,
+   `color2 = Blue` with **no binding required**.
+3. **Empty** — if neither applies, the slot is an empty object and your script
+   falls back to its own default (`palettes.color1.r === undefined`).
+
+This means a creator assembles a look and effects consume it; binding slots are
+optional per-slot overrides, not a setup step. Prefer reading the look over
+hard-coding colours in the script.
+
+`palettes.look` exposes the whole ordered look for effects that want more
+colours than they declare slots for (e.g. an N-way spread):
+
+| Key | Shape |
+|---|---|
+| `palettes.look.colors` | `[{ r, g, b }, …]` — every Colour look, **precedence order** |
+| `palettes.look.dimmer` | `0..1` — the look's master dimmer (`1.0` if none) |
 
 ### `params` — user parameter values
 
@@ -203,6 +241,7 @@ palette retains that channel. Return `{}` to drive nothing for a fixture.
 |---|---|---|
 | `pan` | degrees (0..panRange) | Pan position. Converted via the fixture's pan range → DMX (16-bit aware). |
 | `tilt` | degrees (0..tiltRange) | Tilt position. |
+| `aimX`,`aimY`,`aimZ` | metres (absolute world) | **World-space aim.** Give `aimX`+`aimY` (and optional `aimZ`, default 0) and the host solves this fixture's pan/tilt with the shared **AimSolver** — the same rig geometry the Aim palette uses, so the beam points the same way in Edit and Run. Lets every head converge on its **own** stage point (e.g. a different point on a shape's outline). Needs the fixture placed in the 2D Monitor; unsolvable fixtures are skipped. Explicit `pan`/`tilt` override this if both are present. |
 | `dimmer` | 0.0–1.0 | Master intensity channel. |
 | `r`,`g`,`b`,`w`,`a`,`uv` | 0–255 | Additive colour channels (Red/Green/Blue/White/Amber/UV). If `r/g/b` are given but the fixture has **no** additive RGB, the host falls back to the **closest colour-wheel slot**. |
 
@@ -224,7 +263,7 @@ palette retains that channel. Return `{}` to drive nothing for a fixture.
 - **Layering:** output is Override-priority, on top of the scene's palettes.
   Omit a channel and the scene keeps it — this is how a position-only effect
   leaves colour/dimmer alone.
-- **Both modes:** scripts tick in Edit (on the previewed scene) and Operate.
+- **Both modes:** Generators tick in Edit (on the previewed scene) and Operate.
 - **The "defer" pattern:** when the host can drive something better than the
   script (e.g. multi-head convergence on a moving target), the script returns an
   **empty intent** for that fixture and lets the host/scene drive. The followspot

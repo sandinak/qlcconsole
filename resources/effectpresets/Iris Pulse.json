@@ -1,0 +1,7 @@
+{
+  "name": "Iris Pulse",
+  "script": "iris-pulse",
+  "category": "Beam",
+  "description": "Slow sine iris oscillation — aperture breathes open and closed across fixtures",
+  "params": { "rate": 0.5, "spread": 180, "waveform": 0, "minIris": 0.0, "maxIris": 1.0 }
+}

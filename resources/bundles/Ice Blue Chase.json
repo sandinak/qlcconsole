@@ -1,0 +1,23 @@
+{
+  "name": "Ice Blue Chase",
+  "description": "Cool cyan-to-white colour chase with a warm-cool temperature wave. Clean, corporate, and high-energy.",
+  "author": "QLC+ fork",
+  "created": "2026-06-30",
+  "version": 2,
+  "keywords": ["blue", "cyan", "white", "cool", "chase", "corporate", "clean"],
+  "attributes": {
+    "category": "Chase",
+    "contains": ["color", "dimmer", "effect"],
+    "tempo": "fast",
+    "mood": "cool"
+  },
+  "palettes": [
+    { "type": "Color",  "name": "Ice Cyan",      "color": "#00cfff" },
+    { "type": "Color",  "name": "Cool White",    "color": "#d0eeff" },
+    { "type": "Dimmer", "name": "Full",          "value": 255 },
+    { "type": "Effect", "name": "Color Chase",   "script": "color-chase",
+      "effect": "", "params": { "rate": 2.0, "spread": 360, "waveform": 3 } },
+    { "type": "Effect", "name": "Cool Wave",     "script": "warm-cool",
+      "effect": "Cool Wave", "params": { "rate": 0.4, "spread": 180, "waveform": 0, "minW": 0, "maxW": 60, "minC": 20, "maxC": 220 } }
+  ]
+}

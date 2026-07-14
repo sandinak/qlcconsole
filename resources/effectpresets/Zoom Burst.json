@@ -1,0 +1,7 @@
+{
+  "name": "Zoom Burst",
+  "script": "zoom-pulse",
+  "category": "Beam",
+  "description": "Square-wave zoom pop — fixtures snap wide then narrow in unison",
+  "params": { "rate": 1, "spread": 0, "waveform": 2, "minZoom": 0.05, "maxZoom": 1.0 }
+}

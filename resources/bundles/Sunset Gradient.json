@@ -1,0 +1,23 @@
+{
+  "name": "Sunset Gradient",
+  "description": "Warm orange-to-deep-blue spatial gradient with a slow amber breath overlay. Stack onto any colour wash for a rich sunset look.",
+  "author": "QLC+ fork",
+  "created": "2026-06-30",
+  "version": 2,
+  "keywords": ["sunset", "warm", "orange", "blue", "gradient", "outdoor", "evening"],
+  "attributes": {
+    "category": "Ambience",
+    "contains": ["color", "dimmer", "effect"],
+    "tempo": "slow",
+    "mood": "warm"
+  },
+  "palettes": [
+    { "type": "Color",  "name": "Sunset Orange",    "color": "#ff5e2c" },
+    { "type": "Color",  "name": "Night Blue",       "color": "#1b2a6b" },
+    { "type": "Dimmer", "name": "Full Intensity",   "value": 255 },
+    { "type": "Effect", "name": "Spatial Gradient", "script": "spatial-gradient",
+      "effect": "", "params": { "angle": 0, "gamma": 1.0 } },
+    { "type": "Effect", "name": "Amber Fire",       "script": "amber-pulse",
+      "effect": "Amber Fire", "params": { "rate": 1.8, "spread": 270, "waveform": 0, "minA": 30, "maxA": 180 } }
+  ]
+}

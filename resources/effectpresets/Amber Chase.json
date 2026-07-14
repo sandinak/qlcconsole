@@ -1,0 +1,7 @@
+{
+  "name": "Amber Chase",
+  "script": "amber-pulse",
+  "category": "Color",
+  "description": "Sawtooth amber chase — warm pulse travels across the fixture array",
+  "params": { "rate": 2, "spread": 360, "waveform": 3, "minA": 0, "maxA": 255 }
+}

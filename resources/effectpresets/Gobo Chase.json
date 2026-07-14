@@ -1,0 +1,7 @@
+{
+  "name": "Gobo Chase",
+  "script": "gobo-chase",
+  "category": "Beam",
+  "description": "Steps through gobo slots with a 90° stagger across fixtures — 5 gobos at 1 Hz",
+  "params": { "rate": 1, "spread": 90, "firstGobo": 1, "goboCount": 5 }
+}

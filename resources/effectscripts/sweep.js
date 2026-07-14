@@ -17,17 +17,15 @@
         { name: "center", description: "Sweep center (0=left/up, 0.5=mid, 1=right/down)", defaultValue: 0.5 }
     ];
 
-    effect.palettes = [
-        { name: "color",  type: "Color",  optional: true },
-        { name: "dimmer", type: "Dimmer", optional: true }
-    ];
+    // Position-only effect: no colour/dimmer. Add a Colour/Dimmer look to the
+    // scene for those; this effect drives pan/tilt and composes with them.
 
     effect.parameters = [
         { name: "speed",     description: "Sweeps per second",                              min: 0.05, max: 4.0,  defaultValue: 0.4  },
         { name: "panSweep",  description: "Pan half-width (fraction of range)",             min: 0.0,  max: 0.5,  defaultValue: 0.35 },
         { name: "tiltSweep", description: "Tilt half-width (fraction of range)",            min: 0.0,  max: 0.5,  defaultValue: 0.0  },
         { name: "cascade",   description: "Time stagger between fixtures (fraction of period)", min: 0.0, max: 0.5, defaultValue: 0.1 },
-        { name: "mode",      description: "Mode", min: 0, max: 1, defaultValue: 0,
+        { name: "mode",      description: "Mode", defaultValue: 0,
           values: ["Bounce", "Loop"] },
         { name: "beatSync",  description: "Reverse/reset on beat (0=off, 1=on)",            min: 0.0,  max: 1.0,  defaultValue: 0.0  }
     ];
@@ -82,10 +80,11 @@
                 tilt: Math.max(0, Math.min(f.tiltRange, tilt))
             };
 
+            // Position effect: only touch dimmer/colour when a palette is
+            // bound. Otherwise omit those keys so the scene's own Dimmer/Color
+            // looks fall through (Override only wins channels we emit).
             if (palettes.dimmer && palettes.dimmer.dimmer !== undefined)
                 intent.dimmer = palettes.dimmer.dimmer;
-            else if (f.hasDimmer)
-                intent.dimmer = 1.0;
 
             if (palettes.color && palettes.color.r !== undefined) {
                 intent.r = palettes.color.r;

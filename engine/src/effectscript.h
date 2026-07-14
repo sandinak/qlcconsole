@@ -117,6 +117,10 @@ public:
     QString     notes()        const { return m_notes; }
     QString     author()       const { return m_author; }
     int         apiVersion()   const { return m_apiVersion; }
+    /** Generator content version (effect.version; default 1). Bumped by the
+     *  author when params/behaviour change; used to reason about Effects
+     *  (presets) authored against an older Generator. */
+    int         version()      const { return m_version; }
 
     /** Fixture-type tags declared in the script (e.g. "moving", "rgb", "dimmer").
      *  Empty list means the script works with any fixture type. */
@@ -139,6 +143,7 @@ public:
         QString type;           // "" or "path" (XY drawn path); "path" params ignore min/max
         float min = 0.0f, max = 1.0f, defaultValue = 0.5f;
         QStringList enumValues; // non-empty → render as dropdown; value is integer index
+        QStringList aliases;    // former names; stored values under an alias map to this param
     };
 
     QList<InputDef>   inputDefs()       const { return m_inputs;          }
@@ -177,6 +182,7 @@ private:
     QString     m_filePath;
     QString     m_name, m_description, m_notes, m_author;
     int         m_apiVersion = 0;
+    int         m_version = 1;
     QStringList m_fixtureTypes;
 
     QList<InputDef>   m_inputs;

@@ -1,0 +1,22 @@
+{
+  "name": "UV Black Light",
+  "description": "Deep purple wash with a pulsing UV chase and slow dimmer breath. UV-reactive props pop with this look.",
+  "author": "QLC+ fork",
+  "created": "2026-06-30",
+  "version": 2,
+  "keywords": ["uv", "blacklight", "purple", "dark", "club", "ultraviolet"],
+  "attributes": {
+    "category": "Specials",
+    "contains": ["color", "dimmer", "effect"],
+    "tempo": "medium",
+    "mood": "dramatic"
+  },
+  "palettes": [
+    { "type": "Color",  "name": "Deep Purple",  "color": "#2a0040" },
+    { "type": "Dimmer", "name": "UV Full",      "value": 200 },
+    { "type": "Effect", "name": "UV Chase",     "script": "uv-pulse",
+      "effect": "UV Chase", "params": { "rate": 1.5, "spread": 360, "waveform": 3, "minUV": 0, "maxUV": 255 } },
+    { "type": "Effect", "name": "Breathe",      "script": "dimmer-phaser",
+      "effect": "Breathe", "params": { "waveform": 0, "rate": 0.2, "minDim": 0.05, "maxDim": 1.0, "spread": 0 } }
+  ]
+}

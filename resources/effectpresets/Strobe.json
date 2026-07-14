@@ -1,0 +1,7 @@
+{
+  "name": "Strobe",
+  "script": "dimmer-phaser",
+  "category": "Dimmer",
+  "description": "Hard on/off strobe — square wave, short pulses",
+  "params": { "waveform": 4, "rate": 8, "minDim": 0.0, "maxDim": 1.0, "spread": 0, "width": 0.1 }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Candlelight",
+  "description": "Warm amber and orange with slow random-ish flickering. Intimate, romantic, fire-and-candle feel.",
+  "author": "QLC+ fork",
+  "created": "2026-06-30",
+  "version": 2,
+  "keywords": ["candle", "fire", "warm", "amber", "orange", "intimate", "romantic", "slow"],
+  "attributes": {
+    "category": "Ambience",
+    "contains": ["color", "dimmer", "effect"],
+    "tempo": "slow",
+    "mood": "warm"
+  },
+  "palettes": [
+    { "type": "Color",  "name": "Candle Orange",     "color": "#ff8020" },
+    { "type": "Dimmer", "name": "Candle Intensity",  "value": 180 },
+    { "type": "Effect", "name": "Candlelight",       "script": "amber-pulse",
+      "effect": "Candlelight", "params": { "rate": 0.3, "spread": 30, "waveform": 0, "minA": 60, "maxA": 200 } }
+  ]
+}

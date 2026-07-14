@@ -29,6 +29,7 @@
 
 #include "lookeditor.h"
 #include "pathdrawwidget.h"
+#include "gradientdirectionwidget.h"
 #include "virtualconsole/vcxypadarea.h"
 #include "capabilitybar.h"
 #include "qlcpalette.h"
@@ -43,6 +44,12 @@
 #include "effectscriptrunner.h"
 #include "effectscript.h"
 #include "effectscriptcache.h"
+#include "effectpresetcache.h"
+#include <QStandardItemModel>
+#include <QFileInfo>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QPushButton>
 #include "inputpatch.h"
 #include "inputoutputmap.h"
 #include "qlcioplugin.h"
@@ -53,6 +60,21 @@ static const int PAN_DEG = 540;
 static const int TILT_DEG = 270;
 
 static const char *PALETTE_DROP_MIME = "application/x-qlcplus-palettes";
+
+// Effect picker combo: each item is a category header, a raw engine script, or
+// a preset. The kind is stored at EffectKindRole, the name at Qt::UserRole.
+enum { EffectKindHeader = 0, EffectKindScript = 1, EffectKindPreset = 2 };
+static const int EffectKindRole = Qt::UserRole + 1;
+
+// Display order for the category groups in the effect picker.
+static const char *kEffectCategoryOrder[] = { "Color", "Dimmer", "Position", "Beam", "Other" };
+
+// Category for a RAW script from its fixtureTypes (shared with the engine cache
+// so the picker grouping and the palette-folder pathing never drift apart).
+static QString scriptCategory(const QStringList &ft)
+{
+    return EffectScriptCache::categoryForTypes(ft);
+}
 
 /** Drop zone widget for binding an effect palette slot.
  *  Accepts drag-drop from the palette tree AND click-to-pick (left-click
@@ -287,6 +309,25 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     connect(m_dimmerBar, SIGNAL(valueChanged(int)),
             this, SLOT(slotDimmerChanged(int)));
 
+    // Strobe page — single 0-100 rate slider; DMX resolution is per-fixture.
+    QWidget *strobePage = new QWidget(this);
+    QVBoxLayout *stv = new QVBoxLayout(strobePage);
+    QHBoxLayout *stop = new QHBoxLayout();
+    stv->addLayout(stop);
+    stop->addWidget(new QLabel(tr("Strobe rate"), strobePage));
+    stop->addStretch();
+    m_strobeValue = new QLabel("0%", strobePage);
+    m_strobeValue->setMinimumWidth(40);
+    stop->addWidget(m_strobeValue);
+    m_strobeSlider = new QSlider(Qt::Horizontal, strobePage);
+    m_strobeSlider->setRange(0, 100);
+    m_strobeSlider->setValue(0);
+    stv->addWidget(m_strobeSlider);
+    stv->addStretch();
+    m_pageStrobe = m_stack->addWidget(strobePage);
+    connect(m_strobeSlider, SIGNAL(valueChanged(int)),
+            this, SLOT(slotStrobeChanged(int)));
+
     // Pan/Tilt page (X/Y grid + named position presets + stage target)
     QWidget *pantilt = new QWidget(this);
     QVBoxLayout *ptv = new QVBoxLayout(pantilt);
@@ -426,11 +467,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     efv->setContentsMargins(6, 6, 6, 6);
     efv->setSpacing(4);
 
-    // Script selector row
+    // Effect picker row (Effects grouped by category, each over a Generator)
     QHBoxLayout *efScriptRow = new QHBoxLayout();
-    efScriptRow->addWidget(new QLabel(tr("Script:"), effectPage));
+    efScriptRow->addWidget(new QLabel(tr("Effect:"), effectPage));
     m_effectScriptCombo = new QComboBox(effectPage);
-    m_effectScriptCombo->setToolTip(tr("Effect script to run for this look"));
+    m_effectScriptCombo->setToolTip(tr("Pick an Effect (or a raw Generator) for this look"));
     efScriptRow->addWidget(m_effectScriptCombo, 1);
     efv->addLayout(efScriptRow);
 
@@ -457,6 +498,17 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Dynamic area (params + palette/target bindings) — show in full, no scrolling.
     m_effectDynWidget = new QWidget(effectPage);
     efv->addWidget(m_effectDynWidget);
+
+    // Save the current Generator + settings as a reusable named Effect.
+    QHBoxLayout *efSaveRow = new QHBoxLayout();
+    efSaveRow->addStretch(1);
+    m_saveAsEffectButton = new QPushButton(tr("Save as Effect…"), effectPage);
+    m_saveAsEffectButton->setToolTip(
+        tr("Save this Generator + its current settings as a named Effect you can reuse"));
+    efSaveRow->addWidget(m_saveAsEffectButton);
+    efv->addLayout(efSaveRow);
+    connect(m_saveAsEffectButton, &QPushButton::clicked, this, &LookEditor::slotSaveAsEffect);
+
     efv->addStretch(1);
 
     m_pageEffect = m_stack->addWidget(effectPage);
@@ -605,50 +657,26 @@ void LookEditor::setPalette(quint32 paletteId)
     }
     case QLCPalette::Effect:
     {
-        // Populate script combo from the runner's cache
+        // Populate the picker with PRESETS + raw scripts, grouped by category.
         m_effectScriptCombo->blockSignals(true);
-        m_effectScriptCombo->clear();
-        m_effectScriptCombo->addItem(tr("(none)"), QString());
-        if (m_doc->effectScriptRunner())
-        {
-            const EffectScriptCache *cache = m_doc->effectScriptRunner()->cache();
-            const QStringList names = cache->scriptNames();
-            for (const QString &n : names)
-            {
-                m_effectScriptCombo->addItem(n, n);
-                const QString desc = cache->scriptMeta(n).description;
-                if (!desc.isEmpty())
-                    m_effectScriptCombo->setItemData(
-                        m_effectScriptCombo->count() - 1, desc, Qt::ToolTipRole);
-            }
-        }
-        // Select current script — find the combo entry whose cache path matches
-        // the palette's stored path (combo data = display name, not path).
-        int scriptIdx = 0;
-        const QString curPath = p->scriptPath();
-        if (!curPath.isEmpty() && m_doc->effectScriptRunner())
-        {
-            const EffectScriptCache *cache = m_doc->effectScriptRunner()->cache();
-            for (const QString &n : cache->scriptNames())
-            {
-                if (cache->scriptPath(n) == curPath)
-                {
-                    for (int i = 0; i < m_effectScriptCombo->count(); ++i)
-                    {
-                        if (m_effectScriptCombo->itemData(i).toString() == n)
-                        { scriptIdx = i; break; }
-                    }
-                    break;
-                }
-            }
-        }
-        m_effectScriptCombo->setCurrentIndex(scriptIdx);
+        populateEffectPicker(p);
         m_effectScriptCombo->blockSignals(false);
 
         rebuildEffectDynWidget();
         m_stack->setCurrentIndex(m_pageEffect);
         setMaximumHeight(QWIDGETSIZE_MAX);
         updateGeometry();
+        break;
+    }
+    case QLCPalette::Strobe:
+    {
+        int pct = qRound(p->value().toFloat() * 100.0f);
+        m_strobeSlider->blockSignals(true);
+        m_strobeSlider->setValue(pct);
+        m_strobeSlider->blockSignals(false);
+        m_strobeValue->setText(QString("%1%").arg(pct));
+        m_stack->setCurrentIndex(m_pageStrobe);
+        setMaximumHeight(340);
         break;
     }
     default: // Gobo / Shutter / Pan / Tilt / Zoom
@@ -713,6 +741,12 @@ void LookEditor::setPalette(quint32 paletteId)
                  && targetsHaveChannelGroup(QLCChannel::Shutter) == false)
         {
             m_warning->setText(tr("⚠ No target fixture has a shutter channel."));
+            m_warning->show();
+        }
+        else if (p->type() == QLCPalette::Strobe
+                 && targetsHaveChannelGroup(QLCChannel::Shutter) == false)
+        {
+            m_warning->setText(tr("⚠ No target fixture has a strobe-capable shutter channel."));
             m_warning->show();
         }
     }
@@ -807,8 +841,18 @@ void LookEditor::maybeAutoName(QLCPalette *p)
         else              autoName = tr("Intensity %1%").arg(qRound(v * 100.0 / 255.0));
         break;
     }
+    case QLCPalette::Strobe:
+    {
+        int pct = qRound(p->value().toFloat() * 100.0f);
+        if (pct <= 0)       autoName = tr("Strobe Off");
+        else if (pct >= 100) autoName = tr("Strobe Max");
+        else                 autoName = tr("Strobe %1%").arg(pct);
+        break;
+    }
     case QLCPalette::Effect:
     {
+        // Prefer the preset's name ("Breathe") over the engine basename.
+        if (!p->effectPreset().isEmpty()) { autoName = p->effectPreset(); break; }
         const QString path = p->scriptPath();
         if (!path.isEmpty() && m_doc->effectScriptRunner())
         {
@@ -826,6 +870,38 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     m_nameEdit->blockSignals(true);
     m_nameEdit->setText(autoName);
     m_nameEdit->blockSignals(false);
+}
+
+bool LookEditor::isAutoEffectPath(const QString &path) const
+{
+    QString p = path;
+    if (p.endsWith('/')) p.chop(1);
+    if (p.isEmpty() || p == QLatin1String("Palettes/Effect"))
+        return true;   // the bare default
+
+    // An auto path looks exactly like Palettes/Effect/<Category>/<Engine>, where
+    // the category is one we use and the engine is a real script display name.
+    // Anything else (e.g. a user folder "Palettes/Effect/My Faves") is left be.
+    const QStringList seg = p.split('/');
+    if (seg.size() != 4 || seg[0] != QLatin1String("Palettes")
+        || seg[1] != QLatin1String("Effect"))
+        return false;
+    bool knownCat = false;
+    for (const char *c : kEffectCategoryOrder)
+        if (seg[2] == QLatin1String(c)) { knownCat = true; break; }
+    if (!knownCat)
+        return false;
+    return m_doc->effectScriptRunner()
+        && m_doc->effectScriptRunner()->cache()->scriptNames().contains(seg[3]);
+}
+
+void LookEditor::maybeAutoPath(QLCPalette *p, const QString &category, const QString &engine)
+{
+    if (!p || category.isEmpty() || engine.isEmpty())
+        return;
+    if (!isAutoEffectPath(p->path()))
+        return;   // user organized this palette — don't clobber their folder
+    p->setPath(QString("Palettes/Effect/%1/%2/").arg(category, engine));
 }
 
 void LookEditor::slotNameEdited()
@@ -898,6 +974,19 @@ bool LookEditor::targetsHaveColour(int primaryColour) const
             return true;
     }
     return false;
+}
+
+void LookEditor::slotStrobeChanged(int pct)
+{
+    m_strobeValue->setText(QString("%1%").arg(pct));
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Strobe)
+        return;
+    p->setValue(float(pct) / 100.0f);
+    m_doc->setModified();
+    emit paletteChanged(m_paletteId);
 }
 
 void LookEditor::slotDimmerChanged(int v)
@@ -1063,6 +1152,33 @@ QString LookEditor::capabilityNameAt(const QLCChannel *ch, int v) const
 
 void LookEditor::rebuildEffectDynWidget()
 {
+    // Skip a redundant rebuild for the SAME palette + script. Selecting a look
+    // can emit lookSelected twice (selectionChanged + doubleClicked), which used
+    // to build the param panel twice — the first set of sliders was torn down but
+    // left ghost pixels painted under the live set (handles appeared to "move" and
+    // some snapped back to the original values). A real script change keys a
+    // different path, so it still rebuilds.
+    {
+        QLCPalette *gp = m_doc->palette(m_paletteId);
+        QString gScriptPath;
+        if (gp && gp->type() == QLCPalette::Effect)
+        {
+            const QString gName = m_effectScriptCombo->currentData().toString();
+            if (!gName.isEmpty() && m_doc->effectScriptRunner())
+                gScriptPath = m_doc->effectScriptRunner()->cache()->scriptPath(gName);
+        }
+        const QString buildKey = QString::number(m_paletteId) + QLatin1Char('|') + gScriptPath;
+        qDebug() << "[LE-DIAG] buildKey=" << buildKey
+                 << "cached=" << m_effectBuildKey
+                 << "hasLayout=" << (m_effectDynWidget->layout() != nullptr);
+        if (buildKey == m_effectBuildKey && m_effectDynWidget->layout() != nullptr)
+        {
+            qDebug() << "[LE-DIAG] early-return (stale key)";
+            return;
+        }
+        m_effectBuildKey = buildKey;
+    }
+
     // Block slider valueChanged → slotEffectParamChanged during the entire
     // rebuild, including any re-entrant emission paths.
     m_loading = true;
@@ -1097,18 +1213,24 @@ void LookEditor::rebuildEffectDynWidget()
         return;
     }
 
-    // Determine the selected script path from the combo
-    const QString scriptName = m_effectScriptCombo->currentData().toString();
-    QString scriptPath;
-    if (!scriptName.isEmpty() && m_doc->effectScriptRunner())
-        scriptPath = m_doc->effectScriptRunner()->cache()->scriptPath(scriptName);
+    // The engine script comes from the PALETTE (a preset stamps it there); the
+    // combo's current data may be a preset NAME, which is not a script name.
+    QString scriptPath = p->scriptPath();
+    qDebug() << "[LE-DIAG] palette scriptPath=" << scriptPath;
+    if (!scriptPath.isEmpty() && !QFileInfo::exists(scriptPath)
+        && m_doc->effectScriptRunner())
+        scriptPath = m_doc->effectScriptRunner()->cache()->scriptPath(
+            QFileInfo(scriptPath).completeBaseName());
+    qDebug() << "[LE-DIAG] resolved scriptPath=" << scriptPath
+             << "exists=" << QFileInfo::exists(scriptPath);
 
     if (scriptPath.isEmpty())
     {
+        qDebug() << "[LE-DIAG] no scriptPath → showing placeholder";
         m_effectDescLabel->hide();
         m_effectNotesLabel->hide();
         m_effectTypesLabel->hide();
-        dv->addWidget(new QLabel(tr("(select a script above to configure it)"), m_effectDynWidget));
+        dv->addWidget(new QLabel(tr("(select a generator above to configure it)"), m_effectDynWidget));
         dv->addStretch(1);
         m_loading = false;
         return;
@@ -1116,13 +1238,16 @@ void LookEditor::rebuildEffectDynWidget()
 
     // Load the script to get meta (params, inputs, palettes)
     EffectScript tmpScript;
-    if (!tmpScript.load(scriptPath))
+    const bool loaded = tmpScript.load(scriptPath);
+    qDebug() << "[LE-DIAG] tmpScript.load(" << scriptPath << ") =" << loaded;
+    if (!loaded)
     {
         m_effectDescLabel->hide();
         m_effectNotesLabel->hide();
         m_effectTypesLabel->hide();
-        dv->addWidget(new QLabel(tr("Error loading script — check the .js file."), m_effectDynWidget));
+        dv->addWidget(new QLabel(tr("Error loading generator — check the .js file."), m_effectDynWidget));
         dv->addStretch(1);
+        m_effectBuildKey.clear();  // don't cache a failed build — retry on next selection
         m_loading = false;
         return;
     }
@@ -1168,6 +1293,22 @@ void LookEditor::rebuildEffectDynWidget()
     else
     {
         m_effectTypesLabel->hide();
+    }
+
+    // Engine/preset banner — always show which script is doing the work.
+    {
+        const QString engine = tmpScript.name().isEmpty()
+            ? QFileInfo(scriptPath).completeBaseName() : tmpScript.name();
+        const QString preset = p->effectPreset();
+        QLabel *eng = new QLabel(m_effectDynWidget);
+        eng->setTextFormat(Qt::RichText);
+        if (!preset.isEmpty())
+            eng->setText(tr("Effect <b>%1</b> &nbsp;·&nbsp; generator: <b>%2</b>")
+                         .arg(preset.toHtmlEscaped(), engine.toHtmlEscaped()));
+        else
+            eng->setText(tr("Generator: <b>%1</b>").arg(engine.toHtmlEscaped()));
+        eng->setStyleSheet("color: palette(mid);");
+        dv->addWidget(eng);
     }
 
     // --- Palette bindings ---
@@ -1294,6 +1435,41 @@ void LookEditor::rebuildEffectDynWidget()
                 });
                 form->addRow(pd.name, pdw);
             }
+            else if (pd.type == QLatin1String("direction"))
+            {
+                // Gradient-direction param → visual compass that previews the
+                // look's two colours along the chosen angle.
+                GradientDirectionWidget *gdw = new GradientDirectionWidget(m_effectDynWidget);
+                gdw->setAngle(cur);
+
+                // Resolve ALL the look's Colour palettes (precedence order) so
+                // the preview shows the real multi-stop gradient.
+                QList<QColor> stops;
+                if (m_contextScene != NULL)
+                {
+                    foreach (quint32 pid, m_contextScene->palettes())
+                    {
+                        QLCPalette *lp = m_doc->palette(pid);
+                        if (lp != NULL && lp->type() == QLCPalette::Color)
+                            stops << lp->colorValue();
+                    }
+                }
+                if (stops.size() >= 2)
+                    gdw->setStops(stops);
+                else
+                    gdw->setColors(QColor(255, 0, 0), QColor(0, 0, 255));
+
+                const QString paramName = pd.name;
+                connect(gdw, &GradientDirectionWidget::angleChanged,
+                        this, [this, paramName](double deg) {
+                    QLCPalette *pp = m_doc->palette(m_paletteId);
+                    if (!pp) return;
+                    pp->setEffectParamValue(paramName, deg);
+                    m_doc->setModified();
+                    emit paletteValueChanged(m_paletteId);
+                });
+                form->addRow(pd.name, gdw);
+            }
             else if (!pd.enumValues.isEmpty())
             {
                 // Enum param → dropdown
@@ -1317,6 +1493,18 @@ void LookEditor::rebuildEffectDynWidget()
 
                 QSlider *sl = new QSlider(Qt::Horizontal, row);
                 sl->setRange(0, 1000);
+                // Render NON-natively (Qt stylesheet, not QMacStyle). On macOS the
+                // native QSlider draws through a single shared NSSlider cell; while
+                // one slider is dragged and the panel repaints rapidly, the sibling
+                // sliders redraw from that shared cell and show the DRAGGED value —
+                // every handle (and fill) tracks the slider being moved even though
+                // their own values never change. A stylesheet forces each slider to
+                // paint from its own value, eliminating the shared-cell artifact.
+                sl->setStyleSheet(
+                    "QSlider::groove:horizontal{height:4px;background:#4a4a4a;border-radius:2px;}"
+                    "QSlider::sub-page:horizontal{background:#2f7fd1;border-radius:2px;}"
+                    "QSlider::add-page:horizontal{background:#4a4a4a;border-radius:2px;}"
+                    "QSlider::handle:horizontal{width:13px;margin:-6px 0;border-radius:6px;background:#e0e0e0;}");
                 int slVal = (pd.max > pd.min)
                             ? int((cur - pd.min) / (pd.max - pd.min) * 1000) : 0;
                 sl->setValue(qBound(0, slVal, 1000));
@@ -1327,7 +1515,14 @@ void LookEditor::rebuildEffectDynWidget()
                 rl->addWidget(sl, 1);
 
                 QLabel *val = new QLabel(QString::number(cur, 'f', 2), row);
-                val->setMinimumWidth(40);
+                // FIXED width (not minimum): the displayed number changes width as
+                // it's dragged (e.g. "6.90" -> "11.30"); with only a minimum width
+                // that resizes the label, which relayouts the row's QFormLayout
+                // every tick and repaints the sibling sliders — on macOS those
+                // native sliders then render a stale handle (appears to "move",
+                // snapping back only on a full repaint). A fixed width removes the
+                // per-tick relayout entirely.
+                val->setFixedWidth(56);
                 val->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
                 sl->setProperty("valueLabel", QVariant::fromValue((QObject*)val));
                 rl->addWidget(val);
@@ -1414,6 +1609,114 @@ void LookEditor::rebuildEffectDynWidget()
     m_loading = false;
 }
 
+void LookEditor::populateEffectPicker(QLCPalette *p)
+{
+    m_effectScriptCombo->clear();
+    m_effectScriptCombo->addItem(tr("(none)"), QString());
+    m_effectScriptCombo->setItemData(0, EffectKindScript, EffectKindRole);
+
+    if (!m_doc->effectScriptRunner())
+        return;
+
+    EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
+    EffectPresetCache *pcache = m_doc->effectScriptRunner()->presetCache();
+
+    // One engine script + the presets that are backed by it.
+    struct ScriptNode {
+        QString display;      // effect.name ("Dimmer Phaser")
+        QString basename;     // file basename ("dimmer-phaser")
+        QString category;
+        QString tooltip;
+        QList<EffectPresetCache::Preset> presets;
+    };
+    QList<ScriptNode> nodes;
+    QMap<QString, int> byBasename;
+    for (const QString &n : scache->scriptNames())
+    {
+        const EffectScriptCache::ScriptMeta m = scache->scriptMeta(n);
+        ScriptNode node;
+        node.display  = n;
+        node.basename = scache->nameFromPath(scache->scriptPath(n));
+        node.category = scriptCategory(m.fixtureTypes);
+        node.tooltip  = m.description;
+        byBasename.insert(node.basename, nodes.size());
+        nodes.append(node);
+    }
+    // Attach each preset under its engine script.
+    for (const EffectPresetCache::Preset &pr : pcache->presets())
+        if (byBasename.contains(pr.script))
+            nodes[byBasename.value(pr.script)].presets.append(pr);
+
+    // Group script-nodes by category.
+    QMap<QString, QList<int>> byCat;
+    for (int i = 0; i < nodes.size(); i++)
+        byCat[nodes[i].category].append(i);
+
+    QStringList cats;
+    for (const char *c : kEffectCategoryOrder)
+        if (byCat.contains(QLatin1String(c))) cats << QLatin1String(c);
+    for (const QString &c : byCat.keys())
+        if (!cats.contains(c)) cats << c;
+
+    QStandardItemModel *model = qobject_cast<QStandardItemModel*>(m_effectScriptCombo->model());
+    const QString curPreset = p ? p->effectPreset() : QString();
+    const QString curPath   = p ? p->scriptPath()   : QString();
+    int selectIdx = 0;
+
+    auto addHeader = [&](const QString &text) {
+        m_effectScriptCombo->addItem(text);
+        const int hi = m_effectScriptCombo->count() - 1;
+        m_effectScriptCombo->setItemData(hi, EffectKindHeader, EffectKindRole);
+        if (model && model->item(hi))
+        {
+            QStandardItem *it = model->item(hi);
+            it->setFlags(it->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
+            QFont f = it->font(); f.setBold(true); it->setFont(f);
+        }
+    };
+
+    for (const QString &cat : cats)
+    {
+        addHeader(cat);                                    // ── Category ──
+
+        QList<int> idxs = byCat.value(cat);
+        std::sort(idxs.begin(), idxs.end(), [&](int a, int b) {
+            return nodes[a].display.compare(nodes[b].display, Qt::CaseInsensitive) < 0; });
+
+        for (int ni : idxs)
+        {
+            ScriptNode &node = nodes[ni];
+
+            // The engine script — selectable (start from scratch). Indent 1.
+            m_effectScriptCombo->addItem(QStringLiteral("  ") + node.display, node.display);
+            const int sidx = m_effectScriptCombo->count() - 1;
+            m_effectScriptCombo->setItemData(sidx, EffectKindScript, EffectKindRole);
+            if (!node.tooltip.isEmpty())
+                m_effectScriptCombo->setItemData(sidx, node.tooltip, Qt::ToolTipRole);
+            if (curPreset.isEmpty() && selectIdx == 0
+                && !curPath.isEmpty() && scache->scriptPath(node.display) == curPath)
+                selectIdx = sidx;
+
+            // Its presets — nested under it. Indent 2.
+            std::sort(node.presets.begin(), node.presets.end(),
+                      [](const EffectPresetCache::Preset &a, const EffectPresetCache::Preset &b) {
+                          return a.name.compare(b.name, Qt::CaseInsensitive) < 0; });
+            for (const EffectPresetCache::Preset &pr : node.presets)
+            {
+                m_effectScriptCombo->addItem(QStringLiteral("      • ") + pr.name, pr.name);
+                const int pidx = m_effectScriptCombo->count() - 1;
+                m_effectScriptCombo->setItemData(pidx, EffectKindPreset, EffectKindRole);
+                if (!pr.description.isEmpty())
+                    m_effectScriptCombo->setItemData(pidx, pr.description, Qt::ToolTipRole);
+                if (!curPreset.isEmpty() && pr.name == curPreset)
+                    selectIdx = pidx;
+            }
+        }
+    }
+
+    m_effectScriptCombo->setCurrentIndex(selectIdx);
+}
+
 void LookEditor::slotEffectScriptChanged(int /*index*/)
 {
     if (m_loading)
@@ -1423,23 +1726,112 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
     if (!p || p->type() != QLCPalette::Effect)
         return;
 
-    const QString scriptName = m_effectScriptCombo->currentData().toString();
-    if (scriptName.isEmpty())
+    if (!m_doc->effectScriptRunner())
+        return;
+
+    EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
+    const int     kind = m_effectScriptCombo->currentData(EffectKindRole).toInt();
+    const QString name = m_effectScriptCombo->currentData().toString();
+
+    if (kind == EffectKindPreset)
     {
-        p->setScriptPath(QString());
+        // Stamp the preset: engine script + pinned param values + identity.
+        const EffectPresetCache::Preset pr =
+            m_doc->effectScriptRunner()->presetCache()->preset(name);
+        p->setScriptPath(scache->scriptPath(pr.script));
+        p->setEffectPreset(pr.name);
+        p->setEffectParamValues(pr.params);
     }
-    else if (m_doc->effectScriptRunner())
+    else
     {
-        const QString path = m_doc->effectScriptRunner()->cache()->scriptPath(scriptName);
-        p->setScriptPath(path);
+        // Raw script (or "(none)"): clear preset identity + stale params.
+        p->setScriptPath(name.isEmpty() ? QString() : scache->scriptPath(name));
+        p->setEffectPreset(QString());
+        p->clearEffectParamValues();
     }
-    // Wipe old param/input bindings since script changed
+    // Wipe old input bindings since the effect changed.
     p->clearEffectInputBindings();
     maybeAutoName(p);
+
+    // Organize the palette FOLDER to mirror the picker hierarchy:
+    //   Palettes/Effect/<Category>/<Engine>/
+    // so browsing effect palettes reads the same as the script picker.
+    {
+        QString engineBase;
+        if (kind == EffectKindPreset)
+            engineBase = m_doc->effectScriptRunner()->presetCache()->preset(name).script;
+        else if (!name.isEmpty())
+            engineBase = scache->nameFromPath(scache->scriptPath(name));
+        if (!engineBase.isEmpty())
+        {
+            const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(engineBase);
+            const QString engineDisplay = meta.displayName.isEmpty() ? engineBase : meta.displayName;
+            maybeAutoPath(p, scriptCategory(meta.fixtureTypes), engineDisplay);
+        }
+    }
+
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
 
     rebuildEffectDynWidget();
+}
+
+void LookEditor::slotSaveAsEffect()
+{
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (!p || p->type() != QLCPalette::Effect || !m_doc->effectScriptRunner())
+        return;
+    if (p->scriptPath().isEmpty())
+    {
+        QMessageBox::information(this, tr("Save as Effect"),
+            tr("Pick a Generator first, then save it as an Effect."));
+        return;
+    }
+
+    EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
+    EffectPresetCache *pcache = m_doc->effectScriptRunner()->presetCache();
+
+    // Default the name to the look's current name / preset name.
+    const QString suggested = !p->effectPreset().isEmpty() ? p->effectPreset()
+                            : (p->name().isEmpty() ? tr("My Effect") : p->name());
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("Save as Effect"),
+        tr("Effect name:"), QLineEdit::Normal, suggested, &ok).trimmed();
+    if (!ok || name.isEmpty())
+        return;
+
+    if (pcache->contains(name))
+    {
+        if (QMessageBox::question(this, tr("Save as Effect"),
+                tr("An Effect named \"%1\" already exists. Replace it?").arg(name),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            return;
+    }
+
+    const QString base = scache->nameFromPath(p->scriptPath());
+    const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
+
+    EffectPresetCache::Preset preset;
+    preset.name        = name;
+    preset.script      = base;
+    preset.category    = EffectScriptCache::categoryForTypes(meta.fixtureTypes);
+    preset.description = meta.description;   // start from the Generator's blurb
+    preset.params      = p->effectParamValues();
+
+    if (!pcache->savePreset(preset))
+    {
+        QMessageBox::warning(this, tr("Save as Effect"),
+            tr("Could not write the Effect file. Check folder permissions."));
+        return;
+    }
+
+    // The look IS this Effect now — adopt its identity and reselect it.
+    p->setEffectPreset(name);
+    m_doc->setModified();
+    m_effectScriptCombo->blockSignals(true);
+    populateEffectPicker(p);
+    m_effectScriptCombo->blockSignals(false);
+    emit paletteChanged(m_paletteId);
 }
 
 void LookEditor::slotEffectParamChanged(int value)

@@ -76,6 +76,10 @@ protected:
 private slots:
     void slotRemoveTarget();
     void slotRemoveLook();
+    void slotMoveLookUp();
+    void slotMoveLookDown();
+    /** Sync the scene's palette order from the list after an internal drag. */
+    void slotLooksReordered();
     void slotLookSelectionChanged();
     void slotLookDoubleClicked(QListWidgetItem *item);
     void slotTargetSelectionChanged();
@@ -83,6 +87,15 @@ private slots:
 
 private:
     QString lookLabel(quint32 paletteId) const;
+
+    /** Move the selected look(s) by @a delta rows (-1 = up, +1 = down) and
+     *  push the new precedence order down to the scene. Mirrors the
+     *  Collection/Chaser editor move idiom. */
+    void moveSelectedLooks(int delta);
+
+    /** Read the current list order and apply it as the scene's palette
+     *  precedence (used by both the buttons and internal drag-drop). */
+    void applyLookOrderFromList();
 
     /** After applying look(s): strip baked values the applied palettes now
      *  control (palette paramount), then offer to clear any remaining baked
@@ -99,6 +112,8 @@ private:
     QListWidget *m_lookList;
     QPushButton *m_removeTargetButton;
     QPushButton *m_removeLookButton;
+    QPushButton *m_moveLookUpButton;
+    QPushButton *m_moveLookDownButton;
 };
 
 /** @} */

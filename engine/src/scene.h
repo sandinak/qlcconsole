@@ -238,6 +238,14 @@ public:
     bool removePalette(quint32 id);
     QList<quint32> palettes() const;
 
+    /** Reorder the attached palettes to match @a orderedIds. Ids not currently
+     *  attached are ignored; any attached id absent from @a orderedIds is kept,
+     *  appended in its previous relative order. Palette order is PRECEDENCE:
+     *  later entries override earlier ones on channels they share — this is the
+     *  same order saveXML(), Scene::write() and the EffectScriptRunner apply
+     *  palettes/effects in. Returns true if the order actually changed. */
+    bool reorderPalettes(const QList<quint32> &orderedIds);
+
 private:
     QList<quint32> m_palettes;
 

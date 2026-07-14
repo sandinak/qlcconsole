@@ -11,66 +11,91 @@
     effect.name        = "Spatial Gradient";
     effect.description = "Color gradient across the rig based on fixture 3D position";
     effect.author      = "QLC+";
-    effect.fixtureTypes = ["rgb"];
-    effect.notes        = "Interpolates between two colour palettes based on each fixture's physical stage position. Requires 3D positions set in the 2D Monitor (Edit > Monitor Properties). Falls back to array index when no position data is available. The shift input slides the gradient across the rig live.";
+    effect.fixtureTypes = ["rgb", "colorwheel"];
+    effect.notes        = "Interpolates between two colours across the rig. The colours come from the look's first two Colour palettes (Red then Blue gives red→blue). Set which way the gradient runs with the direction picker — drag the arrow or use the →↓←↑ buttons (left→right, top→bottom, …); the preview shows the actual colours and direction. Works on additive RGB fixtures and on colour-wheel movers (mapped to the nearest wheel slot). Needs 3D positions in the 2D Monitor; falls back to array index when unplaced. The shift input slides the gradient live.";
 
     effect.inputs = [
-        { name: "shift", description: "Shift the gradient left/right (0-1)", defaultValue: 0.5 }
+        { name: "shift", description: "Shift the gradient left/right (0-1)", defaultValue: 0.0 }
     ];
 
-    effect.palettes = [
-        { name: "colorA", type: "Color", optional: false },
-        { name: "colorB", type: "Color", optional: false }
-    ];
-
+    // No palette slots and no dimmer: this is a pure colour effect. The two
+    // gradient ends come straight from the LOOK's Colour palettes (in order),
+    // and intensity is left to the scene's own Dimmer look.
     effect.parameters = [
-        { name: "axis",   description: "Sort axis: 0=X, 0.5=Y, 1=Z",       min: 0.0, max: 1.0, defaultValue: 0.0  },
-        { name: "dimmer", description: "Dimmer level",                       min: 0.0, max: 1.0, defaultValue: 1.0  },
+        { name: "angle",  description: "Gradient direction", type: "direction", min: 0.0, max: 360.0, defaultValue: 0.0 },
         { name: "gamma",  description: "Gradient curve (1=linear, 2=ease)", min: 0.5, max: 4.0, defaultValue: 1.0  }
     ];
 
+    // Sample an evenly-spaced multi-stop gradient at t in [0,1].
+    function sampleStops(stops, t) {
+        var n = stops.length;
+        if (n === 1) return stops[0];
+        if (t <= 0) return stops[0];
+        if (t >= 1) return stops[n - 1];
+        var x = t * (n - 1);
+        var i = Math.floor(x);
+        var f = x - i;
+        var a = stops[i], b = stops[i + 1];
+        return { r: a.r + (b.r - a.r) * f,
+                 g: a.g + (b.g - a.g) * f,
+                 b: a.b + (b.b - a.b) * f };
+    }
+
     effect.tick = function(fixtures, inputs, palettes, params, state) {
-        var shift = inputs.shift !== undefined ? inputs.shift : 0.5;
-        var axis  = params.axis   !== undefined ? params.axis   : 0.0;
-        var dim   = params.dimmer !== undefined ? params.dimmer : 1.0;
+        var shift = inputs.shift !== undefined ? inputs.shift : 0.0;
+        var angle = params.angle  !== undefined ? params.angle  : 0.0;
         var gamma = params.gamma  !== undefined ? params.gamma  : 1.0;
 
-        var ca = (palettes.colorA && palettes.colorA.r !== undefined)
-                  ? palettes.colorA : { r: 255, g: 0, b: 0 };
-        var cb = (palettes.colorB && palettes.colorB.r !== undefined)
-                  ? palettes.colorB : { r: 0, g: 0, b: 255 };
+        // Gradient stops = ALL the look's Colour palettes (precedence order),
+        // so 3+ colours give a Red→Green→Blue spread. Fall back to red→blue.
+        var L = (palettes.look && palettes.look.colors) ? palettes.look.colors : [];
+        var stops = [];
+        for (var s = 0; s < L.length; s++)
+            if (L[s] && L[s].r !== undefined) stops.push(L[s]);
+        if (stops.length === 0)
+            stops = [{ r: 255, g: 0, b: 0 }, { r: 0, g: 0, b: 255 }];
 
-        // Pick the coordinate to use for sorting
+        // Project each fixture's floor position onto the gradient direction.
+        // angle is a SCREEN bearing (0=left→right, 90=top→bottom, matching the
+        // 2D Monitor and the direction-picker widget). Stage +y is upstage =
+        // screen UP, so we flip y (px=x, py=-y) before projecting.
+        var rad = angle * Math.PI / 180.0;
+        var dx = Math.cos(rad), dy = Math.sin(rad);
         function axisVal(f) {
-            if (axis < 0.25) return f.pos.x;
-            if (axis < 0.75) return f.pos.y;
-            return f.pos.z;
+            var px = (f.pos ? f.pos.x : 0);
+            var py = (f.pos ? -f.pos.y : 0);
+            return px * dx + py * dy;
         }
 
-        // Find range of the chosen axis
+        // Find range of the projected coordinate
         var mn = Infinity, mx = -Infinity;
         for (var i = 0; i < fixtures.length; i++) {
             var v = axisVal(fixtures[i]);
             if (v < mn) mn = v;
             if (v > mx) mx = v;
         }
-        var range = (mx > mn) ? (mx - mn) : 1.0;
+        // Spread by position only when the fixtures actually differ along the
+        // direction; otherwise (unplaced, or all on one line perpendicular to
+        // it) fall back to array index so the gradient still spans the group
+        // instead of collapsing to a single colour.
+        var spreadByPos = (mx > mn);
+        var range = spreadByPos ? (mx - mn) : 1.0;
 
         return fixtures.map(function(f, i) {
             // Normalised 0..1 position along chosen axis
-            var raw = (range > 0) ? ((axisVal(f) - mn) / range) : (i / Math.max(fixtures.length - 1, 1));
-            // Apply shift (wrapping)
-            var t = (raw + shift) % 1.0;
+            var raw = spreadByPos ? ((axisVal(f) - mn) / range)
+                                  : (i / Math.max(fixtures.length - 1, 1));
+            // Slide the gradient with shift, clamped so the endpoints stay the
+            // two colours (a clean linear A→B map across the rig). Use
+            // color-gradient.js when you want a wrapping/scrolling gradient.
+            var t = raw + shift;
+            if (t < 0) t = 0; else if (t > 1) t = 1;
             // Apply gamma
             t = Math.pow(t, gamma);
 
-            var r = Math.round(ca.r + t * (cb.r - ca.r));
-            var g = Math.round(ca.g + t * (cb.g - ca.g));
-            var b = Math.round(ca.b + t * (cb.b - ca.b));
-
-            var intent = { r: r, g: g, b: b };
-            if (f.hasDimmer) intent.dimmer = dim;
-            return intent;
+            var c = sampleStops(stops, t);
+            // Colour only — leave dimmer/pan/tilt to the scene's own looks.
+            return { r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b) };
         });
     };
 

@@ -142,6 +142,20 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
             fxiItem->m_rgb.append(rgbComp);
             //qDebug() << "Add RGB comp at address:" << rgbComp;
         }
+        // White/Amber emitters aren't part of rgbChannels(); cache them so the
+        // rendered colour reflects them (an RGBW fixture blasting white should
+        // read white, not black).
+        foreach (quint32 chIdx, head.channels())
+        {
+            const QLCChannel *ch = (fxi->fixtureMode() != NULL)
+                ? fxi->fixtureMode()->channel(chIdx) : NULL;
+            if (ch == NULL)
+                continue;
+            if (ch->colour() == QLCChannel::White)
+                fxiItem->m_white.append(chIdx);
+            else if (ch->colour() == QLCChannel::Amber)
+                fxiItem->m_amber.append(chIdx);
+        }
         foreach (quint32 cmyComp, head.cmyChannels())
         {
             fxiItem->m_cmy.append(cmyComp);
@@ -478,11 +492,22 @@ QColor MonitorFixtureItem::computeColor(const FixtureHead *head, const QByteArra
 
     if (head->m_rgb.count() > 0)
     {
-        uchar r = 0, g = 0, b = 0;
-        r = values.at(head->m_rgb.at(0));
-        g = values.at(head->m_rgb.at(1));
-        b = values.at(head->m_rgb.at(2));
-        return QColor(r, g, b);
+        int r = values.at(head->m_rgb.at(0));
+        int g = values.at(head->m_rgb.at(1));
+        int b = values.at(head->m_rgb.at(2));
+        // Fold in white (adds to all primaries) and amber (warm: R + ~0.5·G)
+        // so RGBW/RGBA emitters contribute to the rendered colour.
+        foreach (quint32 w, head->m_white)
+        {
+            int v = uchar(values.at(w));
+            r += v; g += v; b += v;
+        }
+        foreach (quint32 a, head->m_amber)
+        {
+            int v = uchar(values.at(a));
+            r += v; g += qRound(v * 0.494);
+        }
+        return QColor(qMin(r, 255), qMin(g, 255), qMin(b, 255));
     }
 
     if (head->m_cmy.count() > 0)

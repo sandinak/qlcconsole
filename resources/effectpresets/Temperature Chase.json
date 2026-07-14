@@ -1,0 +1,7 @@
+{
+  "name": "Temperature Chase",
+  "script": "warm-cool",
+  "category": "Color",
+  "description": "Fast sawtooth chase that sweeps warm-to-cool colour temperature across fixtures",
+  "params": { "rate": 1.5, "spread": 360, "waveform": 3, "minW": 0, "maxW": 255, "minC": 0, "maxC": 200 }
+}

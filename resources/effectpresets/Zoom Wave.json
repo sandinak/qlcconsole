@@ -1,0 +1,7 @@
+{
+  "name": "Zoom Wave",
+  "script": "zoom-pulse",
+  "category": "Beam",
+  "description": "Slow sine zoom wave — narrow-to-wide beam oscillation travels across fixtures",
+  "params": { "rate": 0.4, "spread": 180, "waveform": 0, "minZoom": 0.05, "maxZoom": 1.0 }
+}

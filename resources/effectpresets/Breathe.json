@@ -1,0 +1,7 @@
+{
+  "name": "Breathe",
+  "script": "dimmer-phaser",
+  "category": "Dimmer",
+  "description": "Slow sine dimmer pulse — ambient/standby look",
+  "params": { "waveform": 0, "rate": 0.2, "minDim": 0.05, "maxDim": 1.0, "spread": 0 }
+}

@@ -26,10 +26,15 @@ EffectScriptRunner::EffectScriptRunner(Doc *doc)
     , m_doc(doc)
 {
     m_cache.rescan();
+    m_presetCache.rescan();
 
-    // Drive tick() on the main thread
+    // Drive tick() on the main thread. Use a precise timer so the effect
+    // actuates promptly and doesn't stutter/lag when the GUI event loop is busy
+    // (a coarse timer can drift by tens of ms under load, which reads as the
+    // flicker "starting late" or freezing while the window has focus).
     connect(&m_tickTimer, &QTimer::timeout,
             this, &EffectScriptRunner::slotTick);
+    m_tickTimer.setTimerType(Qt::PreciseTimer);
     m_tickTimer.setInterval(TICK_INTERVAL_MS);
     m_tickTimer.start();
 
@@ -257,24 +262,26 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         if (!fader.isNull()) fader->removeAll();
 
     QMutexLocker locker(&m_instanceMutex);
+
+    // TEMP diagnostic on the MasterTimer (DMX) thread — this cannot be starved
+    // by the GUI, so it keeps printing even if the main thread blocks on a
+    // scene edit. If the sampled value keeps varying → the effect is alive and
+    // any visual freeze is in the GUI/monitor; if it sticks → the main-thread
+    // tick starved.
     {
-        // One-shot log on first Operate-mode tick so we can see how many instances
-        // are active and what they will write.
-        static bool logged = false;
-        if (!logged) {
-            logged = true;
-            qCritical() << "[ESR] first effect tick: instances=" << m_instances.size();
-            for (const EffectInstance *inst : m_instances) {
+        static int wtick = 0;
+        if (++wtick % 50 == 0)
+        {
+            for (const EffectInstance *inst : m_instances)
+            {
                 const QList<EffectInstance::DmxWrite> &w = inst->dmxWrites();
-                qCritical() << "[ESR]   instance palId=" << inst->effectPaletteId()
-                            << "writes=" << w.size();
-                for (int i = 0; i < qMin(w.size(), 8); ++i)
-                    qCritical() << "[ESR]     ch" << w[i].channel
-                                << "uni" << w[i].universeId
-                                << "val" << w[i].value;
+                int sample = w.isEmpty() ? -1 : (int)w.last().value;
+                qCritical() << "[EFXOUT] pal" << inst->effectPaletteId()
+                            << "writes=" << w.size() << "lastVal=" << sample;
             }
         }
     }
+
     for (const EffectInstance *inst : m_instances)
     {
         const QList<EffectInstance::DmxWrite> &writes = inst->dmxWrites();
@@ -311,6 +318,11 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
             fc.setTarget(w.value);
             fc.setCurrent(w.value);
             fc.setFadeTime(0);
+            // replace=true → the effect OWNS this channel: write it verbatim
+            // (bypassing the HTP merge) so it can drive the value DOWN below the
+            // scene's level (e.g. a candle dimmer flicker under a lit base).
+            if (w.replace)
+                fc.addFlag(FadeChannel::Override);
             fader->add(fc);
         }
     }

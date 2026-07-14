@@ -1,0 +1,7 @@
+{
+  "name": "Stagger Strobe",
+  "script": "native-strobe",
+  "category": "Dimmer",
+  "description": "Hardware shutter strobe with 180° phase stagger — alternating pop across fixtures",
+  "params": { "rate": 4, "spread": 180, "width": 0.4 }
+}

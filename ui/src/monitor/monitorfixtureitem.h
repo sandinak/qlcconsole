@@ -41,6 +41,13 @@ struct FixtureHead
     //! cached rgb channels (channel indices)
     QList <quint32> m_rgb;
 
+    //! cached white channels (channel indices) — folded into the rendered
+    //! colour so RGBW fixtures don't render black when only white is lit.
+    QList <quint32> m_white;
+
+    //! cached amber channels (channel indices) — folded into the colour as warmth.
+    QList <quint32> m_amber;
+
     //! cached cmy channels (channel indices)
     QList <quint32> m_cmy;
 

@@ -1,0 +1,7 @@
+{
+  "name": "Ramp Chase",
+  "script": "dimmer-phaser",
+  "category": "Dimmer",
+  "description": "Bright ramp travels through the fixture array (comet tail)",
+  "params": { "waveform": 2, "rate": 2, "minDim": 0.0, "maxDim": 1.0, "spread": 360 }
+}

@@ -10,12 +10,11 @@
   path    – XY control-point array (drawn in the editor; default is a circle)
   speed   – cycles per second  [0.01 – 2.0,  default 0.25]
   spread  – fraction of the path between adjacent fixtures  [0.0 – 1.0,  default 0.5]
-  dimmer  – overall intensity when no dimmer palette is bound  [0.0 – 1.0, default 1.0]
 
   Inputs / palettes
   ─────────────────
   color   – optional Color palette (all fixtures share it)
-  dimmer  – optional Dimmer palette (overrides the 'dimmer' parameter)
+  dimmer  – optional Dimmer palette; when unbound the scene's Dimmer look keeps control
 */
 
 (function () {
@@ -31,10 +30,8 @@
     effect.fixtureTypes = ["moving"];
     effect.author       = "QLC+ Programmer";
 
-    effect.palettes = [
-        { name: "color",  type: "Color",  optional: true },
-        { name: "dimmer", type: "Dimmer", optional: true }
-    ];
+    // Position-only effect: no colour/dimmer. Add a Colour/Dimmer look to the
+    // scene for those; this effect drives pan/tilt and composes with them.
 
     effect.parameters = [
         { name: "path",
@@ -45,10 +42,7 @@
           min: 0.01, max: 2.0, defaultValue: 0.25 },
         { name: "spread",
           description: "Phase spread between adjacent fixtures (0 = all together, 1 = spread across full path)",
-          min: 0.0, max: 1.0, defaultValue: 0.5 },
-        { name: "dimmer",
-          description: "Intensity when no dimmer palette is bound",
-          min: 0.0, max: 1.0, defaultValue: 1.0 }
+          min: 0.0, max: 1.0, defaultValue: 0.5 }
     ];
 
     // Catmull-Rom interpolation between p1 and p2 using p0 and p3 as tangent helpers.
@@ -80,11 +74,12 @@
         var t      = inputs._time  || 0;
         var speed  = (params.speed  !== undefined) ? params.speed  : 0.25;
         var spread = (params.spread !== undefined) ? params.spread : 0.5;
-        var dim    = (params.dimmer !== undefined) ? params.dimmer : 1.0;
         var N      = Math.max(fixtures.length, 1);
         var nSeg   = path.length;  // closed: last segment wraps to index 0
 
-        // resolve dimmer from bound palette if available
+        // Dimmer is emitted ONLY when a Dimmer palette is bound; otherwise the
+        // key is omitted so the scene's own Dimmer look keeps control (this is a
+        // position effect — it should not force intensity over the scene).
         var dimFromPal = null;
         if (palettes.dimmer !== null && palettes.dimmer !== undefined
                 && palettes.dimmer.dimmer !== undefined)
@@ -112,9 +107,10 @@
 
             var intent = {
                 pan:    x * f.panRange,
-                tilt:   y * f.tiltRange,
-                dimmer: dimFromPal !== null ? dimFromPal : dim
+                tilt:   y * f.tiltRange
             };
+            if (dimFromPal !== null)
+                intent.dimmer = dimFromPal;
 
             if (palettes.color !== null && palettes.color !== undefined) {
                 if (palettes.color.r !== undefined) intent.r = palettes.color.r;

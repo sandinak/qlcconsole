@@ -1496,6 +1496,22 @@ void ProgrammerController::applyDesignJoystick()
     }
 
     // No position palette — bake values directly into scene channels.
+    //
+    // Idle-stick guard (mirrors the aim branch above): applyDesignJoystick()
+    // runs at 50 Hz whenever a joystick is bound.  A resting analog stick that
+    // drifts slightly off-centre would otherwise re-bake identical pan/tilt and
+    // call resetRuntime() every tick — tearing down the scene's whole fader map
+    // 50×/s, which makes dimmer/colour faders re-fade and the rig visibly blink.
+    // Within the centre deadzone → nothing has changed, hold and return before
+    // any resetRuntime().  A followspot with an Aim look takes the guarded aim
+    // branch instead, which is why applying an Aim target also stops the blink.
+    {
+        const float dz = 0.12f;   // ±6% per axis, matches the aim branch
+        if (qAbs((m_panNorm  - 0.5f) * 2.0f) < dz &&
+            qAbs((m_tiltNorm - 0.5f) * 2.0f) < dz)
+            return;
+    }
+
     const bool firstEdit = !m_editedScenes.contains(m_focusedSceneId);
     for (quint32 fid : workingSelection)
     {

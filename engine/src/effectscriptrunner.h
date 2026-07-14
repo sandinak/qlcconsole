@@ -27,6 +27,7 @@
 
 #include "dmxsource.h"
 #include "effectscriptcache.h"
+#include "effectpresetcache.h"
 #include "genericfader.h"
 
 class EffectInstance;
@@ -42,6 +43,9 @@ public:
 
     /** Script discovery cache (also used by the UI for listing scripts). */
     EffectScriptCache *cache() { return &m_cache; }
+
+    /** Preset discovery cache (named configs over the scripts; UI listing). */
+    EffectPresetCache *presetCache() { return &m_presetCache; }
 
     // DMXSource
     void writeDMX(MasterTimer *timer, QList<Universe*> universes) override;
@@ -75,6 +79,7 @@ private:
 
     Doc *m_doc;
     EffectScriptCache m_cache;
+    EffectPresetCache m_presetCache;
 
     QTimer m_tickTimer;
 

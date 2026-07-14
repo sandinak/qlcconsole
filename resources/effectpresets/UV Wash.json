@@ -1,0 +1,7 @@
+{
+  "name": "UV Wash",
+  "script": "uv-pulse",
+  "category": "Color",
+  "description": "Slow sine UV breath — all fixtures pulse UV in unison",
+  "params": { "rate": 0.25, "spread": 0, "waveform": 0, "minUV": 0, "maxUV": 255 }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "UV Strobe",
+  "script": "uv-pulse",
+  "category": "Color",
+  "description": "Fast square-wave UV strobe on all fixtures simultaneously",
+  "params": { "rate": 8, "spread": 0, "waveform": 2, "minUV": 0, "maxUV": 255 }
+}

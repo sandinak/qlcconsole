@@ -74,6 +74,9 @@ add_library(${module_name} SHARED
     highlighteffect.cpp highlighteffect.h
     effectscript.cpp effectscript.h
     effectscriptcache.cpp effectscriptcache.h
+    effectpresetcache.cpp effectpresetcache.h
+    qlcbundle.cpp qlcbundle.h
+    bundlecache.cpp bundlecache.h
     effectinstance.cpp effectinstance.h
     effectscriptrunner.cpp effectscriptrunner.h
     programmercontroller.cpp programmercontroller.h

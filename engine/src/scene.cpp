@@ -443,6 +443,25 @@ QList<quint32> Scene::palettes() const
     return m_palettes;
 }
 
+bool Scene::reorderPalettes(const QList<quint32> &orderedIds)
+{
+    QList<quint32> reordered;
+    // Take attached ids in the requested order (de-duplicated)...
+    foreach (quint32 id, orderedIds)
+        if (m_palettes.contains(id) && reordered.contains(id) == false)
+            reordered.append(id);
+    // ...then append any attached id the caller didn't mention, preserving
+    // its existing relative order (defensive: callers normally pass them all).
+    foreach (quint32 id, m_palettes)
+        if (reordered.contains(id) == false)
+            reordered.append(id);
+
+    if (reordered == m_palettes)
+        return false;
+    m_palettes = reordered;
+    return true;
+}
+
 /*****************************************************************************
  * Load & Save
  *****************************************************************************/

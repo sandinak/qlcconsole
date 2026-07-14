@@ -73,7 +73,8 @@ public:
         Tilt,
         PanTilt,    ///< Raw pan/tilt degrees stored in m_values (XY pad driven)
         Aim,        ///< Aims at a named StageTarget using per-fixture rig geometry
-        Shutter,
+        Shutter,    ///< Opens the beam — fixture-aware: finds ShutterOpen capability value
+        Strobe,     ///< Strobe at a relative rate (0=off/slow, 1=fastest) — fixture-aware
         Gobo,
         Zoom,
         Beam,
@@ -261,6 +262,13 @@ public:
     QString scriptPath() const { return m_scriptPath; }
     void setScriptPath(const QString &p) { m_scriptPath = p; }
 
+    /** Name of the effect PRESET this palette was stamped from (empty if the
+     *  user picked a raw engine script). Purely identity/display — the script
+     *  and param values above are authoritative, so the look loads fine even
+     *  if the preset file is gone. */
+    QString effectPreset() const { return m_effectPreset; }
+    void setEffectPreset(const QString &name) { m_effectPreset = name; }
+
     /** Input slot bindings: slot name → (universe, channel).
      *  The EffectScriptRunner maps incoming input events to slot values. */
     QMap<QString, QPair<quint32,quint32>> effectInputBindings() const
@@ -292,6 +300,12 @@ public:
         { return m_effectParamValues; }
     void setEffectParamValue(const QString &name, double value)
         { m_effectParamValues[name] = value; }
+    /** Replace ALL numeric param overrides at once (used when stamping a
+     *  preset). String/path params are cleared too so nothing stale lingers. */
+    void setEffectParamValues(const QMap<QString, double> &values)
+        { m_effectParamValues = values; m_effectStringParams.clear(); }
+    void clearEffectParamValues()
+        { m_effectParamValues.clear(); m_effectStringParams.clear(); }
 
     /** String parameter overrides (e.g. type:"path" XY path JSON). */
     QMap<QString, QString> effectStringParams() const
@@ -307,6 +321,7 @@ public:
 
 private:
     QString m_scriptPath;
+    QString m_effectPreset;
     QMap<QString, QPair<quint32,quint32>> m_effectInputBindings;
     QMap<QString, quint32>               m_effectPaletteBindings;
     QMap<QString, quint32>               m_effectTargetBindings;

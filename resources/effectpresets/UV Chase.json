@@ -1,0 +1,7 @@
+{
+  "name": "UV Chase",
+  "script": "uv-pulse",
+  "category": "Color",
+  "description": "Sawtooth UV chase — UV pulse travels across the fixture array",
+  "params": { "rate": 1.5, "spread": 360, "waveform": 3, "minUV": 0, "maxUV": 255 }
+}

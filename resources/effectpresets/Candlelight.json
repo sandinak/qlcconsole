@@ -1,0 +1,7 @@
+{
+  "name": "Candlelight",
+  "script": "amber-pulse",
+  "category": "Color",
+  "description": "Very slow amber breath — gentle candle glow on all fixtures together",
+  "params": { "rate": 0.3, "spread": 30, "waveform": 0, "minA": 60, "maxA": 200 }
+}

@@ -18,10 +18,8 @@
         { name: "y", description: "Fan tilt        (0=up,   0.5=mid, 1=down)",  defaultValue: 0.5 }
     ];
 
-    effect.palettes = [
-        { name: "color",  type: "Color",  optional: true },
-        { name: "dimmer", type: "Dimmer", optional: true }
-    ];
+    // Position-only effect: no colour/dimmer. Add a Colour/Dimmer look to the
+    // scene for those; this effect drives pan/tilt and composes with them.
 
     effect.parameters = [
         { name: "spread",    description: "Total pan spread (degrees)",    min: 0.0,  max: 360.0, defaultValue: 90.0  },
@@ -54,10 +52,11 @@
                 tilt: Math.max(0, Math.min(f.tiltRange, tiltDeg))
             };
 
+            // Position effect: only touch dimmer/colour when a palette is
+            // bound. Otherwise omit those keys so the scene's own Dimmer/Color
+            // looks fall through (Override only wins channels we emit).
             if (palettes.dimmer && palettes.dimmer.dimmer !== undefined)
                 intent.dimmer = palettes.dimmer.dimmer;
-            else if (f.hasDimmer)
-                intent.dimmer = 1.0;
 
             if (palettes.color && palettes.color.r !== undefined) {
                 intent.r = palettes.color.r;

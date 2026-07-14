@@ -37,6 +37,8 @@ public:
         uchar   value;
         quint32 fixtureId;   // for GenericFader FadeChannel creation
         quint32 channel;     // fixture-relative channel index
+        bool    replace = false; // true → overwrite the scene value (bypass HTP)
+                                 //        so the effect can drive a channel DOWN
     };
 
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);
@@ -80,6 +82,21 @@ public:
     // If the script declares no types, all scene fixtures are returned.
     QList<quint32> effectiveFixtureIds() const;
 
+    /** Host scene's actuation level [0..1]: ramps 0→1 over the scene's fade-in,
+     *  then holds at 1. Applied to the effect's intensity/colour output so the
+     *  effect fires in sync with the scene rather than independent of it. */
+    float sceneEnvelope() const;
+
+    /** Rebuild m_sceneBaseValues: the DMX value the scene's *non-effect* looks
+     *  (Colour/Dimmer palettes + baked values) assign to each fixture channel.
+     *  Lets an intensity effect flicker *around* the scene's base rather than
+     *  replacing it with an absolute value. Built once per runTick(). */
+    void buildSceneBaseValues();
+
+    /** Scene base DMX value for (fixtureId, channel), or @p dflt if the scene's
+     *  looks don't drive that channel. */
+    uchar sceneBaseValue(quint32 fid, quint32 channel, uchar dflt) const;
+
 private:
     QJSValue buildFixturesArray(const QList<quint32> &fxIds);
     QJSValue buildInputsObject() const;
@@ -112,6 +129,11 @@ private:
 
     mutable QMutex   m_mutex;
     QList<DmxWrite>  m_lastResults;
+
+    float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
+
+    //!< scene base DMX per (fixtureId<<32|channel), rebuilt each runTick()
+    QHash<quint64, uchar> m_sceneBaseValues;
 };
 
 #endif // EFFECTINSTANCE_H

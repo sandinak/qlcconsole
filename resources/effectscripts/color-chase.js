@@ -14,10 +14,8 @@
 
     effect.inputs = [];
 
-    effect.palettes = [
-        { name: "color",      type: "Color",  optional: false },
-        { name: "background", type: "Color",  optional: true  }
-    ];
+    // Colours come from the LOOK: the first Colour palette is the chase band,
+    // the second (optional) is the background.
 
     effect.parameters = [
         { name: "speed",   description: "Chase speed (fixtures/sec)", min: 0.1, max: 20.0, defaultValue: 3.0  },
@@ -40,10 +38,9 @@
         var head = (t * speed / n) % 1.0;
         if (rev > 0.5) head = 1.0 - head;
 
-        var fc = (palettes.color && palettes.color.r !== undefined)
-                 ? palettes.color : { r: 255, g: 255, b: 255 };
-        var bg = (palettes.background && palettes.background.r !== undefined)
-                 ? palettes.background : null;
+        var L  = (palettes.look && palettes.look.colors) ? palettes.look.colors : [];
+        var fc = (L[0] && L[0].r !== undefined) ? L[0] : { r: 255, g: 255, b: 255 };
+        var bg = (L[1] && L[1].r !== undefined) ? L[1] : null;
 
         return fixtures.map(function(f, i) {
             var pos = i / n;  // fixture's normalised position

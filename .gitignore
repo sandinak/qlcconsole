@@ -57,3 +57,6 @@ build*
 
 # Translation working files
 engine/test/qlci18n/qlci18n_*.ts_
+
+# Workspace autosave files
+*.qxw.autosave

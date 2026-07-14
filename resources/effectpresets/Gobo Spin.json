@@ -1,0 +1,7 @@
+{
+  "name": "Gobo Spin",
+  "script": "gobo-chase",
+  "category": "Beam",
+  "description": "Fast gobo chase with full 360° spread — gobos fly around the rig",
+  "params": { "rate": 3, "spread": 360, "firstGobo": 1, "goboCount": 6 }
+}

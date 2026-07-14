@@ -56,6 +56,10 @@ public:
     /** Infer a script name from its file basename (strips .js). */
     static QString nameFromPath(const QString &path);
 
+    /** Picker/folder category ("Color"/"Dimmer"/"Position"/"Beam"/"Other")
+     *  inferred from a script's fixtureTypes. */
+    static QString categoryForTypes(const QStringList &fixtureTypes);
+
     // --- Standard search directories ---
     static QDir systemScriptsDirectory();
     static QDir userScriptsDirectory();
@@ -65,7 +69,12 @@ private:
     static ScriptMeta parseMeta(const QString &path);
     static QString extractField(const QString &src, const QString &field);
 
-    QMap<QString, ScriptMeta> m_scripts;  // displayName → ScriptMeta
+    // Resolution map: keyed by BOTH the display name (effect.name) and the
+    // file basename, so workspaces that stored either can resolve a script.
+    QMap<QString, ScriptMeta> m_scripts;
+    // Canonical display names for the picker — one entry per script, no
+    // filename aliases (scriptNames() returns these, sorted).
+    QStringList               m_displayNames;
     QList<QDir>               m_extraDirs;
 };
 

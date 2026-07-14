@@ -25,8 +25,10 @@ class QColorDialog;
 class VCXYPadArea;
 class CapabilityBar;
 class PathDrawWidget;
+class GradientDirectionWidget;
 class QSlider;
 class QComboBox;
+class QPushButton;
 class QLabel;
 class QLineEdit;
 class QToolButton;
@@ -103,12 +105,16 @@ private:
     Scene *m_contextScene;
     quint32 m_paletteId;
     bool m_loading;
+    //!< "<paletteId>|<scriptPath>" the effect param panel was last built for, so
+    //!< a redundant rebuild (selection often emits twice) is skipped — rebuilding
+    //!< in place left a ghost set of sliders painted under the live ones.
+    QString m_effectBuildKey;
 
     QLineEdit *m_nameEdit;   //!< editable palette name
     QLabel    *m_title;      //!< "used by N scene(s)" info line
     QLabel    *m_warning;
     QStackedWidget *m_stack;
-    int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageAim, m_pageBeam, m_pageSingle;
+    int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageAim, m_pageBeam, m_pageSingle, m_pageStrobe;
 
     QColorDialog *m_colorDialog;
     QSlider *m_whiteSlider, *m_amberSlider, *m_uvSlider; //!< extra colour emitters
@@ -126,6 +132,10 @@ private:
     QLabel *m_singlePreview;   //!< gobo/shutter image for the current value
     const QLCChannel *m_singleChannel; //!< representative chan for the single page
 
+    // Strobe page
+    QSlider *m_strobeSlider;   //!< 0-100 → rate 0.0-1.0
+    QLabel  *m_strobeValue;
+
     // Effect page
     int m_pageEffect;
     QComboBox   *m_effectScriptCombo;
@@ -133,10 +143,14 @@ private:
     QLabel      *m_effectNotesLabel;  //!< longer paragraph in edit panel
     QLabel      *m_effectTypesLabel;  //!< "Works with: …" fixture-type chips
     QWidget     *m_effectDynWidget;   //!< rebuilt when script selection changes
+    QPushButton *m_saveAsEffectButton = nullptr;
 
 private slots:
     void slotNameEdited();
+    void slotStrobeChanged(int value);
     void slotEffectScriptChanged(int index);
+    /** Save the current Generator + settings as a named Effect (preset). */
+    void slotSaveAsEffect();
     void slotEffectParamChanged(int value);
     void slotEffectEnumParamChanged(int index);
     void slotEffectPaletteBindingChanged(int index);
@@ -146,9 +160,21 @@ private slots:
 private:
     void rebuildEffectDynWidget();
 
+    /** Fill the effect picker combo with presets + raw scripts grouped by
+     *  category, and select the entry matching palette @p p. */
+    void populateEffectPicker(QLCPalette *p);
+
     /** Auto-set palette name from its value when it still has the factory
      *  default name ("New Color", "New Dimmer", "New Effect"). */
     void maybeAutoName(QLCPalette *p);
+
+    /** True if @p path is the bare default or an auto-generated
+     *  Effect/<Category>/<Engine> folder (i.e. safe to re-derive). */
+    bool isAutoEffectPath(const QString &path) const;
+
+    /** Move an Effect palette into Palettes/Effect/<category>/<engine>/ to
+     *  mirror the picker, unless the user has chosen a custom folder. */
+    void maybeAutoPath(QLCPalette *p, const QString &category, const QString &engine);
 };
 
 /** @} */

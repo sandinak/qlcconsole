@@ -1,0 +1,7 @@
+{
+  "name": "Cool Wave",
+  "script": "warm-cool",
+  "category": "Color",
+  "description": "Slow sine colour-temperature wave — cool blues travel across the rig",
+  "params": { "rate": 0.4, "spread": 180, "waveform": 0, "minW": 0, "maxW": 60, "minC": 20, "maxC": 220 }
+}

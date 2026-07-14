@@ -1,0 +1,7 @@
+{
+  "name": "Iris Pop",
+  "script": "iris-pulse",
+  "category": "Beam",
+  "description": "Square-wave iris snap — fixtures alternate between pinpoint and full-open in a chase",
+  "params": { "rate": 2, "spread": 180, "waveform": 2, "minIris": 0.0, "maxIris": 1.0 }
+}

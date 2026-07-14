@@ -32,11 +32,14 @@ class Fixture;
 class SceneGroupLooks;
 class LookEditor;
 class FixtureConsole;
+class BundleBrowser;
+class BundleCache;
 class QScrollArea;
 class QVBoxLayout;
 class QLabel;
 class QPushButton;
 class QSpinBox;
+class QTabWidget;
 class QWidget;
 class QFrame;
 class QTimer;
@@ -72,6 +75,11 @@ private slots:
     void slotFixGroupSourceSelectionChanged();
     void slotFixtureValueChanged(quint32 fxi, quint32 ch, uchar value);
     void slotFixtureChecked(quint32 fxi, quint32 ch, bool state);
+
+    // Bundle CRUD
+    void slotStampBundle(const QString &bundleName);
+    void slotSaveAsBundle();
+    void slotUndoStamp();
 
     // Power/amperage estimate (Design mode only)
     /** Re-estimate the load of the previewed look and refresh the footer. */
@@ -120,6 +128,12 @@ private:
     /** Create a new palette of the given QLCPalette::PaletteType in the
      *  selected palette folder and open it in the look editor. */
     void createPalette(int paletteType);
+
+    /** Move Effect palettes still on the bare default folder into
+     *  Palettes/Effect/<Category>/<Engine>/ so the tree mirrors the picker.
+     *  Idempotent; leaves user-chosen folders alone. Cosmetic (no setModified).
+     *  Returns true if any path changed. */
+    bool organizeEffectPalettes();
 
     /** Duplicate palette $pid ("… (copy)"), add it, and open it for editing. */
     void duplicatePalette(quint32 pid);
@@ -184,7 +198,17 @@ private:
     quint32 m_memberContainer;    //!< collection/chaser whose members are nested
 
     FunctionsTreeWidget *m_paletteTree;
-    FixtureGroupSource *m_fixGroupSource;
+    FixtureGroupSource  *m_fixGroupSource;
+    BundleBrowser       *m_bundleBrowser = nullptr;
+    BundleCache         *m_bundleCache   = nullptr;
+
+    // Bundle stamp undo (one-level: save prior palette list, restore on Ctrl+Z)
+    QList<quint32>       m_stampUndoPalettes;
+    quint32              m_stampUndoSceneId = quint32(-1);
+
+    // Last Effect-palette set synced to ESR — used to avoid recreating instances
+    // on every refreshPreview() call when only non-Effect palettes changed.
+    QList<quint32>       m_lastSyncedEffectPalettes;
 
     // Toolbar buttons
     QPushButton *m_highlightBtn;

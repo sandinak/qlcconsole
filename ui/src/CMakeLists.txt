@@ -97,6 +97,9 @@ add_library(${module_name}
     scenegrouplooks.cpp scenegrouplooks.h
     fixturegroupsource.cpp fixturegroupsource.h
     capabilitybar.cpp capabilitybar.h
+    gradientdirectionwidget.cpp gradientdirectionwidget.h
+    bundleeditor.cpp bundleeditor.h
+    bundlebrowser.cpp bundlebrowser.h
     lookeditor.cpp lookeditor.h
     pathdrawwidget.cpp pathdrawwidget.h
     powerdistributiondialog.cpp powerdistributiondialog.h

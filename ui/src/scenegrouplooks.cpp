@@ -14,6 +14,7 @@
 #include <QHeaderView>
 #include <QPushButton>
 #include <QLabel>
+#include <QIcon>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
@@ -31,6 +32,8 @@
 #include "fixturegroupsource.h"    // fixture-group / fixture MIME types
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
+#include "qlcchannel.h"
+#include "qlccapability.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "fixture.h"
@@ -98,16 +101,37 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     lookCol->addWidget(new QLabel(tr("Looks"), this));
     m_lookList = new QListWidget(this);
     m_lookList->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    // Order = precedence: looks lower in the list are applied last and win on
+    // any channel they share (pan/tilt, colour, dimmer). Reorder by dragging
+    // within the list or with the Up/Down buttons.
+    m_lookList->setDragDropMode(QAbstractItemView::InternalMove);
+    m_lookList->setDefaultDropAction(Qt::MoveAction);
+    m_lookList->setToolTip(
+        tr("Order sets precedence: lower looks are applied last and override "
+           "earlier ones on shared channels.\n"
+           "Drag to reorder, or use the Up/Down buttons."));
     lookCol->addWidget(m_lookList);
     QHBoxLayout *lookBtns = new QHBoxLayout();
     m_removeLookButton = new QPushButton(tr("Remove"), this);
     lookBtns->addWidget(m_removeLookButton);
     lookBtns->addStretch();
+    m_moveLookUpButton = new QPushButton(QIcon(":/up.png"), QString(), this);
+    m_moveLookUpButton->setToolTip(tr("Move look up (applied earlier — lower precedence)"));
+    m_moveLookDownButton = new QPushButton(QIcon(":/down.png"), QString(), this);
+    m_moveLookDownButton->setToolTip(tr("Move look down (applied later — higher precedence)"));
+    lookBtns->addWidget(m_moveLookUpButton);
+    lookBtns->addWidget(m_moveLookDownButton);
     lookCol->addLayout(lookBtns);
     cols->addLayout(lookCol);
 
     connect(m_removeTargetButton, SIGNAL(clicked()), this, SLOT(slotRemoveTarget()));
     connect(m_removeLookButton, SIGNAL(clicked()), this, SLOT(slotRemoveLook()));
+    connect(m_moveLookUpButton, SIGNAL(clicked()), this, SLOT(slotMoveLookUp()));
+    connect(m_moveLookDownButton, SIGNAL(clicked()), this, SLOT(slotMoveLookDown()));
+    // Internal drag-drop reorder: the model emits rowsMoved when the user drops
+    // a dragged look at a new position — sync that order back to the scene.
+    connect(m_lookList->model(), SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)),
+            this, SLOT(slotLooksReordered()));
     connect(m_lookList, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotLookSelectionChanged()));
     // Double-click (re)loads the look into the editor even if it was already
@@ -162,6 +186,65 @@ QString SceneGroupLooks::lookLabel(quint32 paletteId) const
     return path.isEmpty() ? name : path + "/" + name;
 }
 
+/** Returns a short "⚠ no look for: X, Y" string for capabilities the fixture
+ *  has but the scene's current palette set does not cover.  Empty if all
+ *  capabilities are covered (or the fixture has none of note). */
+static QString capCoverageHint(Fixture *fxi, const QSet<QLCPalette::PaletteType> &covered)
+{
+    if (!fxi || !fxi->fixtureMode())
+        return QString();
+
+    bool hasRGB = false, hasDimmer = false, hasPT = false, needsShutter = false;
+    for (quint32 c = 0; c < fxi->channels(); ++c)
+    {
+        QLCChannel *ch = fxi->fixtureMode()->channel(c);
+        if (!ch) continue;
+        switch (ch->group())
+        {
+            case QLCChannel::Pan:
+            case QLCChannel::Tilt:
+                hasPT = true; break;
+            case QLCChannel::Intensity:
+                if (ch->colour() == QLCChannel::Red   ||
+                    ch->colour() == QLCChannel::Green ||
+                    ch->colour() == QLCChannel::Blue)
+                    hasRGB = true;
+                else
+                    hasDimmer = true;
+                break;
+            case QLCChannel::Colour:
+                if (ch->colour() == QLCChannel::Red   ||
+                    ch->colour() == QLCChannel::Green ||
+                    ch->colour() == QLCChannel::Blue)
+                    hasRGB = true;
+                break;
+            case QLCChannel::Shutter:
+            {
+                // Only flag shutter as "needs a look" when DMX value 0 defaults
+                // to ShutterClose (beam blocked). Fixtures where 0 = ShutterOpen
+                // or strobe-off (LED Movinghead-style) are fine without a look.
+                QLCCapability *cap = ch->searchCapability(0);
+                if (cap && cap->preset() == QLCCapability::ShutterClose)
+                    needsShutter = true;
+                break;
+            }
+            default: break;
+        }
+    }
+
+    QStringList missing;
+    if (hasRGB       && !covered.contains(QLCPalette::Color))  missing << QObject::tr("color");
+    if (hasDimmer    && !covered.contains(QLCPalette::Dimmer)) missing << QObject::tr("dimmer");
+    if (hasPT        && !covered.contains(QLCPalette::PanTilt) &&
+                        !covered.contains(QLCPalette::Aim))    missing << QObject::tr("pan/tilt");
+    if (needsShutter && !covered.contains(QLCPalette::Shutter))missing << QObject::tr("shutter");
+
+    if (missing.isEmpty())
+        return QString();
+    return QObject::tr("  ⚠ no look for: %1").arg(missing.join(", "));
+}
+
+
 void SceneGroupLooks::reload()
 {
     // Preserve the effective selection across the rebuild (a type folder is
@@ -183,6 +266,14 @@ void SceneGroupLooks::reload()
     m_targetList->blockSignals(true);
     m_targetList->clear();
 
+    // Which palette types does the current look cover?
+    QSet<QLCPalette::PaletteType> coveredTypes;
+    foreach (quint32 pid, m_scene->palettes())
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (p) coveredTypes.insert(p->type());
+    }
+
     // Groups = dynamic targets (top level).
     QList<FixtureGroup*> groups;
     foreach (quint32 gid, m_scene->fixtureGroups())
@@ -197,8 +288,31 @@ void SceneGroupLooks::reload()
               });
     foreach (FixtureGroup *g, groups)
     {
+        // Aggregate coverage hint across all fixtures in the group.
+        QSet<QString> groupMissing;
+        foreach (quint32 fid, g->fixtureList())
+        {
+            const QString hint = capCoverageHint(m_doc->fixture(fid), coveredTypes);
+            if (!hint.isEmpty())
+            {
+                // Extract just the capability names from "  ⚠ no look for: x, y"
+                QString caps = hint;
+                const int colonIdx = caps.indexOf(':');
+                if (colonIdx >= 0)
+                    for (const QString &c : caps.mid(colonIdx + 1).trimmed().split(','))
+                        groupMissing.insert(c.trimmed());
+            }
+        }
         QTreeWidgetItem *it = new QTreeWidgetItem(m_targetList);
-        it->setText(0, tr("%1  — group (dynamic)").arg(g->name()));
+        QString label = tr("%1  — group").arg(g->name());
+        if (!groupMissing.isEmpty())
+        {
+            QStringList ml = groupMissing.values();
+            std::sort(ml.begin(), ml.end());
+            label += tr("  ⚠ no look for: %1").arg(ml.join(", "));
+            it->setForeground(0, QColor(200, 130, 0));
+        }
+        it->setText(0, label);
         it->setData(0, Qt::UserRole, g->id());
         it->setData(0, TARGET_KIND_ROLE, TargetGroup);
     }
@@ -232,7 +346,10 @@ void SceneGroupLooks::reload()
             foreach (Fixture *f, fxs)
             {
                 QTreeWidgetItem *it = new QTreeWidgetItem(folder);
-                it->setText(0, f->name());
+                const QString hint = capCoverageHint(f, coveredTypes);
+                it->setText(0, hint.isEmpty() ? f->name() : f->name() + hint);
+                if (!hint.isEmpty())
+                    it->setForeground(0, QColor(200, 130, 0));
                 it->setData(0, Qt::UserRole, f->id());
                 it->setData(0, TARGET_KIND_ROLE, TargetFixture);
             }
@@ -351,6 +468,10 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
                 m_scene->addPalette(pid);
                 changed = true;
                 palettesAdded = true;
+                QLCPalette *ap = m_doc->palette(pid);
+                qCritical() << "[DROP] add palette/look" << pid
+                            << (ap ? ap->name() : "?")
+                            << "type=" << (ap ? (int)ap->type() : -1);
             }
         }
     }
@@ -369,19 +490,55 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
                 m_scene->addFixtureGroup(gid);
                 changed = true;
 
-                // Replace any matching static (fixed) fixtures: the dynamic
-                // group now covers them, and leaving them as fixed targets
-                // would override the group's looks with their baked values.
+                qCritical() << "[DROP] add group" << gid << (g ? g->name() : "?")
+                            << "members=" << g->fixtureList()
+                            << "| scene fixtures BEFORE=" << m_scene->fixtures()
+                            << "groups=" << m_scene->fixtureGroups();
+
+                // The group's applied looks (non-effect palettes) will assert on
+                // these fixtures at runtime. Only strip baked values those looks
+                // actually replace — stripping a channel no palette covers would
+                // leave the fixture dark (nothing else drives it).
+                QSet<quint64> covered;
+                foreach (quint32 pid, m_scene->palettes())
+                {
+                    QLCPalette *p = m_doc->palette(pid);
+                    if (p == NULL || p->type() == QLCPalette::Effect)
+                        continue;
+                    foreach (const SceneValue &scv,
+                             p->valuesFromFixtureGroups(m_doc, QList<quint32>() << gid))
+                        covered.insert((quint64(scv.fxi) << 32) | scv.channel);
+                }
+
                 foreach (quint32 fid, g->fixtureList())
                 {
                     if (m_scene->fixtures().contains(fid) == false)
                         continue;
-                    Fixture *f = m_doc->fixture(fid);
-                    if (f != NULL)
-                        for (quint32 i = 0; i < f->channels(); i++)
-                            m_scene->unsetValue(fid, i);
-                    m_scene->removeFixture(fid);
+
+                    // Keep any baked value the group's looks don't cover, so the
+                    // fixture stays lit; drop only the covered ones.
+                    QList<SceneValue> keep;
+                    foreach (const SceneValue &scv, m_scene->values())
+                    {
+                        if (scv.fxi != fid)
+                            continue;
+                        if (covered.contains((quint64(fid) << 32) | scv.channel))
+                            m_scene->unsetValue(fid, scv.channel);
+                        else
+                            keep << scv;
+                    }
+                    // Only drop the fixed target if the group's looks fully cover
+                    // it; otherwise keep it so its uncovered channels still light.
+                    if (keep.isEmpty())
+                        m_scene->removeFixture(fid);
+
+                    qCritical() << "[DROP]   fixture" << fid
+                                << "coveredByLooks=" << (keep.isEmpty())
+                                << "keptBakedValues=" << keep.size();
                 }
+
+                qCritical() << "[DROP] scene fixtures AFTER=" << m_scene->fixtures()
+                            << "groups=" << m_scene->fixtureGroups();
             }
         }
     }
@@ -399,6 +556,8 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
             {
                 m_scene->addFixture(fid);
                 changed = true;
+                qCritical() << "[DROP] add single fixture" << fid
+                            << "| scene fixtures now=" << m_scene->fixtures();
             }
         }
     }
@@ -592,4 +751,71 @@ void SceneGroupLooks::slotRemoveLook()
     m_doc->setModified();
     reload();
     emit sceneModified();
+}
+
+void SceneGroupLooks::slotMoveLookUp()
+{
+    moveSelectedLooks(-1);
+}
+
+void SceneGroupLooks::slotMoveLookDown()
+{
+    moveSelectedLooks(+1);
+}
+
+void SceneGroupLooks::moveSelectedLooks(int delta)
+{
+    const QList<QListWidgetItem*> sel = m_lookList->selectedItems();
+    if (sel.isEmpty() || delta == 0)
+        return;
+
+    // Abort if any selected item would move past an edge — move the whole
+    // selection as a block or not at all (mirrors Collection/Chaser editors).
+    foreach (QListWidgetItem *it, sel)
+    {
+        const int row = m_lookList->row(it) + delta;
+        if (row < 0 || row >= m_lookList->count())
+            return;
+    }
+
+    // Take/insert in an order that won't disturb pending rows: ascending when
+    // moving up, descending when moving down. Each swap only touches the two
+    // adjacent rows, so the original indices stay valid as we go.
+    QList<int> rows;
+    foreach (QListWidgetItem *it, sel)
+        rows << m_lookList->row(it);
+    std::sort(rows.begin(), rows.end());
+    if (delta > 0)
+        std::reverse(rows.begin(), rows.end());
+
+    m_lookList->blockSignals(true);
+    foreach (int row, rows)
+    {
+        QListWidgetItem *it = m_lookList->takeItem(row);
+        m_lookList->insertItem(row + delta, it);
+        it->setSelected(true);
+    }
+    m_lookList->blockSignals(false);
+
+    applyLookOrderFromList();
+}
+
+void SceneGroupLooks::slotLooksReordered()
+{
+    // Fired by the model after an internal drag-drop. Defer the sync so it runs
+    // once the drag fully settles, not mid-operation.
+    QTimer::singleShot(0, this, [this]() { applyLookOrderFromList(); });
+}
+
+void SceneGroupLooks::applyLookOrderFromList()
+{
+    QList<quint32> order;
+    for (int i = 0; i < m_lookList->count(); ++i)
+        order << m_lookList->item(i)->data(Qt::UserRole).toUInt();
+
+    if (m_scene->reorderPalettes(order))
+    {
+        m_doc->setModified();
+        emit sceneModified();
+    }
 }
