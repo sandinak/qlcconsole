@@ -102,6 +102,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_funcTree->setSortingEnabled(true);
     m_funcTree->sortByColumn(0, Qt::AscendingOrder);
     m_funcTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    // Shift/Ctrl-click to select several functions at once, then drag, delete or
+    // duplicate them together. mimeData() already streams every selected id.
+    m_funcTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_funcTree->updateTree();
     navCol->addWidget(m_funcTree, 1);
     connect(funcFilter, &QLineEdit::textChanged,
@@ -319,6 +322,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_paletteTree->sortByColumn(0, Qt::AscendingOrder);
     m_paletteTree->setExternalDragMode(true);
     m_paletteTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    // Multi-select so several palettes can be dragged onto a look together, or
+    // saved as a Bundle in one action from the context menu.
+    m_paletteTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     organizeEffectPalettes();
     m_paletteTree->updateTree();
     palCol->addWidget(m_paletteTree, 1);
@@ -372,6 +378,15 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_paletteTree, &FunctionsTreeWidget::paletteDroppedToFolder,
             this, [this]() {
         QTimer::singleShot(0, this, [this]() { m_paletteTree->updateTree(); m_doc->setModified(); });
+    });
+
+    // Drag scene(s) / other collection(s) onto a collection node in the nav tree
+    // to add them as members. Deferred for the same reason as above (the tree is
+    // rebuilt, invalidating the drag's item pointers).
+    connect(m_funcTree, &FunctionsTreeWidget::functionsDroppedOnCollection,
+            this, [this](quint32 containerId, const QList<quint32> &fids) {
+        QTimer::singleShot(0, this,
+            [this, containerId, fids]() { addFunctionsToCollection(containerId, fids); });
     });
 
     // Keep the trees in sync with the Doc (functor connects so we can call
@@ -471,7 +486,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
 {
     {
         Function *f = m_doc->function(sceneId);
-        qCritical() << "[PM] loadCanvas:" << sceneId << (f ? f->name() : "(null)")
+        qDebug() << "[PM] loadCanvas:" << sceneId << (f ? f->name() : "(null)")
                     << "mode=" << (m_doc->mode() == Doc::Design ? "Design" : "Operate")
                     << "previewFn=" << m_previewFunction
                     << "operateFn=" << m_operateFunction;
@@ -1046,28 +1061,28 @@ void ProgrammingManager::startPreview()
     // Design mode only, so we don't hijack a running show.
     if (m_doc->mode() != Doc::Design)
     {
-        qCritical() << "[PM] startPreview: skipped (mode is Operate)";
+        qDebug() << "[PM] startPreview: skipped (mode is Operate)";
         return;
     }
     if (isVisible() == false)
     {
-        qCritical() << "[PM] startPreview: skipped (tab not visible)";
+        qDebug() << "[PM] startPreview: skipped (tab not visible)";
         return;
     }
     if (m_previewFunction == m_canvasFunction)
     {
-        qCritical() << "[PM] startPreview: already running canvas" << m_canvasFunction;
+        qDebug() << "[PM] startPreview: already running canvas" << m_canvasFunction;
         return;
     }
 
     Function *f = m_doc->function(m_canvasFunction);
     if (f == NULL)
     {
-        qCritical() << "[PM] startPreview: canvas" << m_canvasFunction << "not found";
+        qDebug() << "[PM] startPreview: canvas" << m_canvasFunction << "not found";
         return;
     }
 
-    qCritical() << "[PM] startPreview: starting" << m_canvasFunction << f->name();
+    qDebug() << "[PM] startPreview: starting" << m_canvasFunction << f->name();
     f->start(m_doc->masterTimer(), FunctionParent::master());
     m_previewFunction = m_canvasFunction;
     // Seed the Effect-palette cache so the first canvas modification
@@ -1091,7 +1106,7 @@ void ProgrammingManager::stopPreview()
     if (m_previewFunction == Function::invalidId())
         return;
     Function *f = m_doc->function(m_previewFunction);
-    qCritical() << "[PM] stopPreview: stopping" << m_previewFunction
+    qDebug() << "[PM] stopPreview: stopping" << m_previewFunction
                 << (f ? f->name() : "(null)");
     if (f != NULL)
         f->stop(FunctionParent::master());
@@ -1344,7 +1359,7 @@ void ProgrammingManager::recomputePower()
                       .arg(perFixture.value(fx->id(), 0.0), 0, 'f', 0).arg(ch);
         }
         m_doc->inputOutputMap()->releaseUniverses(false);
-        qCritical() << "[PWR] totalWatts=" << totalWatts << "amps=" << totalAmps << sample;
+        qDebug() << "[PWR] totalWatts=" << totalWatts << "amps=" << totalAmps << sample;
     }
 
     m_powerAmpsLabel->setText(tr("%1 A").arg(totalAmps, 0, 'f', 1));
@@ -1371,28 +1386,28 @@ void ProgrammingManager::startOperateScene()
     // after stopPreview().  The m_operateFunction guard prevents double-starts.
     if (m_doc->mode() != Doc::Operate)
     {
-        qCritical() << "[PM] startOperateScene: skipped (mode is Design)";
+        qDebug() << "[PM] startOperateScene: skipped (mode is Design)";
         return;
     }
     if (!isVisible())
     {
-        qCritical() << "[PM] startOperateScene: skipped (tab not visible)";
+        qDebug() << "[PM] startOperateScene: skipped (tab not visible)";
         return;
     }
     if (m_operateFunction == m_canvasFunction)
     {
-        qCritical() << "[PM] startOperateScene: already running canvas" << m_canvasFunction;
+        qDebug() << "[PM] startOperateScene: already running canvas" << m_canvasFunction;
         return;
     }
 
     Function *f = m_doc->function(m_canvasFunction);
     if (!f)
     {
-        qCritical() << "[PM] startOperateScene: canvas" << m_canvasFunction << "not found";
+        qDebug() << "[PM] startOperateScene: canvas" << m_canvasFunction << "not found";
         return;
     }
 
-    qCritical() << "[PM] startOperateScene: starting" << m_canvasFunction << f->name();
+    qDebug() << "[PM] startOperateScene: starting" << m_canvasFunction << f->name();
     f->start(m_doc->masterTimer(), FunctionParent::master());
     m_operateFunction = m_canvasFunction;
 }
@@ -1401,7 +1416,7 @@ void ProgrammingManager::stopOperateScene()
 {
     if (m_operateFunction == Function::invalidId()) return;
     Function *f = m_doc->function(m_operateFunction);
-    qCritical() << "[PM] stopOperateScene: stopping" << m_operateFunction
+    qDebug() << "[PM] stopOperateScene: stopping" << m_operateFunction
                 << (f ? f->name() : "(null)");
     if (f) f->stop(FunctionParent::master());
     m_operateFunction = Function::invalidId();
@@ -1421,7 +1436,7 @@ void ProgrammingManager::slotModeChanged()
         // skips the restart).  Clear the stale handles and start a fresh
         // preview.  This is a start only (no stop), so there's no MasterTimer
         // start/stop race — the previous run is already fully stopped.
-        qCritical() << "[PM] slotModeChanged → Design:"
+        qDebug() << "[PM] slotModeChanged → Design:"
                     << "operateFunction=" << m_operateFunction
                     << "previewFunction=" << m_previewFunction
                     << "canvasFunction=" << m_canvasFunction
@@ -1440,7 +1455,7 @@ void ProgrammingManager::slotModeChanged()
     {
         // Design → Operate: reclassify the running preview as operate scene.
         // Do NOT stop and restart — same function, no timing gap, lights stay on.
-        qCritical() << "[PM] slotModeChanged → Operate:"
+        qDebug() << "[PM] slotModeChanged → Operate:"
                     << "previewFunction=" << m_previewFunction
                     << "operateFunction=" << m_operateFunction
                     << "canvasFunction=" << m_canvasFunction
@@ -1448,14 +1463,14 @@ void ProgrammingManager::slotModeChanged()
         if (m_previewFunction != Function::invalidId())
         {
             Function *f = m_doc->function(m_previewFunction);
-            qCritical() << "[PM]   reclassify preview→operate:" << m_previewFunction
+            qDebug() << "[PM]   reclassify preview→operate:" << m_previewFunction
                         << (f ? f->name() : "(null)") << "running=" << (f ? f->isRunning() : false);
             m_operateFunction = m_previewFunction;
             m_previewFunction = Function::invalidId();
         }
         else
         {
-            qCritical() << "[PM]   no preview function, starting fresh operate scene";
+            qDebug() << "[PM]   no preview function, starting fresh operate scene";
             startOperateScene();  // nothing was running; start fresh
         }
         updatePowerFooterActive(); // Operate → hide footer, stop timer
@@ -1495,7 +1510,7 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
 
 void ProgrammingManager::hideEvent(QHideEvent *ev)
 {
-    qCritical() << "[PMVIS] hideEvent: Programming tab HIDDEN -> stopping preview"
+    qDebug() << "[PMVIS] hideEvent: Programming tab HIDDEN -> stopping preview"
                 << "spontaneous=" << ev->spontaneous();
     stopPreview();
     stopOperateScene(); // don't leave a scene outputting when you leave the tab
@@ -1506,22 +1521,50 @@ void ProgrammingManager::hideEvent(QHideEvent *ev)
     QWidget::hideEvent(ev);
 }
 
-QString ProgrammingManager::selectedFuncFolderPath() const
+QString ProgrammingManager::funcFolderPathFor(QTreeWidgetItem *it) const
 {
-    const QList<QTreeWidgetItem*> sel = m_funcTree->selectedItems();
-    if (sel.isEmpty())
+    if (it == NULL)
         return QString();
-    QTreeWidgetItem *it = sel.first();
     const QString colPath = it->text(1); // COL_PATH
     if (colPath.isEmpty() == false)
-        return colPath; // a folder/category is selected
+        return colPath; // a folder/category row
     Function *f = m_doc->function(m_funcTree->itemFunctionId(it));
     return f != NULL ? f->path() : QString();
 }
 
+QString ProgrammingManager::selectedFuncFolderPath() const
+{
+    const QList<QTreeWidgetItem*> sel = m_funcTree->selectedItems();
+    return sel.isEmpty() ? QString() : funcFolderPathFor(sel.first());
+}
+
 void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
 {
+    // Which function(s) is this menu acting on? (Right-click doesn't change the
+    // selection, so resolve the target from the item under the cursor.)
+    QTreeWidgetItem *clickedItem = m_funcTree->itemAt(pos);
+    const QList<quint32> targetIds = funcTreeTargetIds(clickedItem);
+    // A new function is created in the folder the user clicked in, not wherever
+    // the selection happened to be.
+    const QString clickedFolder = funcFolderPathFor(clickedItem);
+
     QMenu menu(this);
+
+    // Duplicate / Delete first, but only when a function is actually targeted —
+    // on empty space or a folder the menu is just the "New …" palette.
+    QAction *aDuplicate = NULL;
+    QAction *aDelete    = NULL;
+    if (!targetIds.isEmpty())
+    {
+        aDuplicate = menu.addAction(targetIds.size() > 1
+                                        ? tr("Duplicate %1 Functions").arg(targetIds.size())
+                                        : tr("Duplicate"));
+        aDelete = menu.addAction(targetIds.size() > 1
+                                     ? tr("Delete %1 Functions").arg(targetIds.size())
+                                     : tr("Delete"));
+        menu.addSeparator();
+    }
+
     QAction *aScene  = menu.addAction(tr("New Scene"));
     QAction *aChaser = menu.addAction(tr("New Chaser"));
     QAction *aColl   = menu.addAction(tr("New Collection"));
@@ -1535,6 +1578,16 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     QAction *chosen = menu.exec(m_funcTree->viewport()->mapToGlobal(pos));
     if (chosen == NULL)
         return;
+    if (chosen == aDuplicate)
+    {
+        duplicateFunctions(targetIds);
+        return;
+    }
+    if (chosen == aDelete)
+    {
+        deleteFunctions(targetIds);
+        return;
+    }
     if (chosen == aFolder)
     {
         m_funcTree->addFolder();
@@ -1556,7 +1609,7 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     if (f == NULL)
         return;
 
-    const QString folder = selectedFuncFolderPath();
+    const QString folder = clickedFolder;
     if (folder.isEmpty() == false)
         f->setPath(folder);
 
@@ -1579,6 +1632,145 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
         loadCanvas(f->id());
     else
         loadFunctionEditor(f);
+}
+
+QList<quint32> ProgrammingManager::funcTreeTargetIds(QTreeWidgetItem *clicked) const
+{
+    QList<quint32> ids;
+
+    // If the clicked row is part of a multi-selection, act on the whole
+    // selection; otherwise act on the clicked row alone. Folder rows carry no
+    // function id and are skipped.
+    const QList<QTreeWidgetItem*> selected = m_funcTree->selectedItems();
+    const bool clickedIsSelected = clicked != NULL && selected.contains(clicked);
+
+    const QList<QTreeWidgetItem*> &rows =
+        clickedIsSelected ? selected
+                          : (clicked != NULL ? QList<QTreeWidgetItem*>{clicked}
+                                             : QList<QTreeWidgetItem*>{});
+    for (QTreeWidgetItem *it : rows)
+    {
+        const quint32 fid = m_funcTree->itemFunctionId(it);
+        if (fid != Function::invalidId() && !ids.contains(fid))
+            ids.append(fid);
+    }
+    return ids;
+}
+
+void ProgrammingManager::duplicateFunctions(const QList<quint32> &fids)
+{
+    Function *last = NULL;
+    for (quint32 fid : fids)
+    {
+        Function *src = m_doc->function(fid);
+        if (src == NULL)
+            continue;
+
+        Function *copy = src->createCopy(m_doc);
+        if (copy == NULL)
+            continue;
+
+        // Smart-increment the source name ("Verse 1" -> "Verse 2",
+        // "01-01.02-Reville" -> "01-01.03-Reville"), same as the Function
+        // Manager, rather than a generic "(Copy)" suffix.
+        copy->setName(m_doc->nextDuplicateName(src));
+        last = copy;
+    }
+
+    if (last == NULL)
+        return;
+
+    // The tree rebuilt itself as each copy was added; re-fetch the item.
+    QTreeWidgetItem *it = m_funcTree->functionItem(last);
+    if (it != NULL)
+    {
+        m_funcTree->setCurrentItem(it);
+        m_funcTree->scrollToItem(it);
+    }
+}
+
+void ProgrammingManager::addFunctionsToCollection(quint32 containerId,
+                                                  const QList<quint32> &fids)
+{
+    Collection *col = qobject_cast<Collection*>(m_doc->function(containerId));
+    if (col == NULL)
+        return;
+
+    int added = 0;
+    int skipped = 0;
+    for (quint32 fid : fids)
+    {
+        // Skip the collection itself, anything already in it, and anything that
+        // would form a cycle (a function that already contains this collection).
+        Function *f = m_doc->function(fid);
+        if (f == NULL || fid == containerId || col->functions().contains(fid)
+                || f->contains(containerId))
+        {
+            skipped++;
+            continue;
+        }
+        if (col->addFunction(fid))
+            added++;
+        else
+            skipped++;
+    }
+
+    if (added > 0)
+    {
+        m_doc->setModified();
+
+        // Rebuild the nav tree's nested view if this collection's members are on
+        // screen, and refresh the canvas editor if this collection is open.
+        if (m_memberContainer == containerId)
+            syncMemberNodes(containerId);
+        if (m_canvasFunction == containerId && m_funcEditor != NULL)
+            loadFunctionEditor(col);   // cheapest correct refresh of the member list
+    }
+
+    if (skipped > 0 && added == 0)
+        QMessageBox::information(this, tr("Nothing added"),
+            tr("Those functions are already in the collection (or would create a loop)."));
+}
+
+void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
+{
+    if (fids.isEmpty())
+        return;
+
+    QStringList names;
+    int inContainers = 0;   // how many targets are referenced by a chaser/collection
+    for (quint32 fid : fids)
+    {
+        if (Function *f = m_doc->function(fid))
+        {
+            names.append(f->name());
+            if (functionUsageCount(fid) > 0)
+                inContainers++;
+        }
+    }
+    if (names.isEmpty())
+        return;
+
+    QString msg = fids.size() > 1
+        ? tr("Delete %1 functions?\n\n%2").arg(names.size()).arg(names.join(", "))
+        : tr("Delete function \"%1\"?").arg(names.first());
+    // These may be shown as members of an open collection/chaser; deleting is
+    // GLOBAL, not just an unlink, so call that out.
+    if (inContainers > 0)
+        msg += tr("\n\nThis also removes %1 from every chaser and collection that uses %2.")
+                   .arg(inContainers > 1 || fids.size() > 1 ? tr("them") : tr("it"))
+                   .arg(inContainers > 1 || fids.size() > 1 ? tr("them") : tr("it"));
+
+    if (QMessageBox::question(this, tr("Delete Functions"), msg,
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
+            != QMessageBox::Yes)
+        return;
+
+    // Delete by id, never by tree item: the first deletion emits functionRemoved,
+    // which rebuilds the func tree (and tears down the canvas if it held one of
+    // these) — so any QTreeWidgetItem* captured before the loop would dangle.
+    for (quint32 fid : fids)
+        m_doc->deleteFunction(fid);
 }
 
 void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
@@ -1608,19 +1800,35 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
     menu.addSeparator();
     QAction *aNewFolder = menu.addAction(tr("New folder…"));
 
+    // Palettes the menu acts on: the whole selection if the clicked row is part
+    // of it, else just the clicked row.
+    const QList<quint32> targetPalettes =
+        paletteTreeTargetIds(m_paletteTree->itemAt(pos));
+
     QAction *aMove = NULL;
     QAction *aDuplicate = NULL;
+    QAction *aBundle = NULL;
     const quint32 pid =
         m_paletteTree->itemPaletteId(m_paletteTree->itemAt(pos));
     if (pid != QLCPalette::invalidId())
     {
         aDuplicate = menu.addAction(tr("Duplicate"));
         aMove = menu.addAction(tr("Move to folder…"));
+        menu.addSeparator();
+        aBundle = menu.addAction(targetPalettes.size() > 1
+                                     ? tr("Save %1 palettes as Bundle…").arg(targetPalettes.size())
+                                     : tr("Save as Bundle…"));
     }
 
     QAction *chosen = menu.exec(m_paletteTree->viewport()->mapToGlobal(pos));
     if (chosen == NULL)
         return;
+
+    if (chosen == aBundle)
+    {
+        saveBundleFromPalettes(targetPalettes);
+        return;
+    }
 
     if (newActions.contains(chosen))
     {
@@ -2220,6 +2428,36 @@ void ProgrammingManager::slotSaveAsBundle()
     {
         QMessageBox::information(this, tr("Look is empty"),
             tr("Add at least one palette to the look before saving it as a Bundle."));
+        return;
+    }
+    saveBundleFromPalettes(paletteIds);
+}
+
+QList<quint32> ProgrammingManager::paletteTreeTargetIds(QTreeWidgetItem *clicked) const
+{
+    QList<quint32> ids;
+    const QList<QTreeWidgetItem*> selected = m_paletteTree->selectedItems();
+    const bool clickedIsSelected = clicked != NULL && selected.contains(clicked);
+
+    const QList<QTreeWidgetItem*> &rows =
+        clickedIsSelected ? selected
+                          : (clicked != NULL ? QList<QTreeWidgetItem*>{clicked}
+                                             : QList<QTreeWidgetItem*>{});
+    for (QTreeWidgetItem *it : rows)
+    {
+        const quint32 id = m_paletteTree->itemPaletteId(it);
+        if (id != QLCPalette::invalidId() && !ids.contains(id))
+            ids.append(id);
+    }
+    return ids;
+}
+
+void ProgrammingManager::saveBundleFromPalettes(const QList<quint32> &paletteIds)
+{
+    if (paletteIds.isEmpty())
+    {
+        QMessageBox::information(this, tr("No palettes"),
+            tr("Select at least one palette to save as a Bundle."));
         return;
     }
 

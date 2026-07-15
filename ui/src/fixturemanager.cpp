@@ -86,6 +86,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_groupEditor(NULL)
     , m_groupEditorId(FixtureGroup::invalidId())
     , m_currentTabIndex(0)
+    , m_ctxUniverse(InputOutputMap::invalidUniverse())
     , m_addAction(NULL)
     , m_addRGBAction(NULL)
     , m_removeAction(NULL)
@@ -1263,6 +1264,10 @@ void FixtureManager::initToolBar()
 void FixtureManager::addFixture()
 {
     AddFixture af(this, m_doc);
+    // Seed the dialog with the universe the context menu was opened in, so
+    // right-clicking inside a universe adds there instead of the global default.
+    if (m_ctxUniverse != InputOutputMap::invalidUniverse())
+        af.preselectUniverse(m_ctxUniverse);
     if (af.exec() == QDialog::Rejected)
         return;
 
@@ -2166,8 +2171,31 @@ void FixtureManager::copySelectionIntoGroup(FixtureGroup* target,
     m_doc->setModified();
 }
 
-void FixtureManager::slotContextMenuRequested(const QPoint&)
+void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 {
+    // Which universe was the click in? A universe row carries PROP_UNIVERSE; a
+    // fixture row inherits its fixture's universe. "Add fixture" (fired from the
+    // menu below) reads m_ctxUniverse to default the dialog to that universe.
+    m_ctxUniverse = InputOutputMap::invalidUniverse();
+    if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
+    {
+        const QVariant uniVar = clicked->data(KColumnName, PROP_UNIVERSE);
+        if (uniVar.isValid())
+        {
+            m_ctxUniverse = uniVar.toUInt();
+        }
+        else
+        {
+            const QVariant fv = clicked->data(KColumnName, PROP_ID);
+            if (fv.isValid() && clicked->data(KColumnName, PROP_HEAD).isValid() == false)
+            {
+                Fixture *fxi = m_doc->fixture(fv.toUInt());
+                if (fxi != NULL)
+                    m_ctxUniverse = fxi->universe();
+            }
+        }
+    }
+
     QMenu menu(this);
     menu.addAction(m_addAction);
     menu.addAction(m_addRGBAction);
@@ -2234,6 +2262,12 @@ void FixtureManager::slotContextMenuRequested(const QPoint&)
     }
 
     QAction *chosen = menu.exec(QCursor::pos());
+
+    // addFixture() (fired from m_addAction during exec above) has already
+    // consumed the context; clear it so a later toolbar Add starts from the
+    // global default.
+    m_ctxUniverse = InputOutputMap::invalidUniverse();
+
     if (chosen == NULL)
         return;
 

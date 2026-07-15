@@ -45,6 +45,27 @@ static const char* PALETTE_CATEGORY = "Palettes";
 
 // MIME type for function drag/drop to external widgets
 static const char* FUNCTION_DRAG_MIME_TYPE = "application/x-qlcplus-functions";
+
+// Resolve a drop target item to the Collection it represents, so a function
+// dropped there is added to that collection. The target may be the collection's
+// own node, or one of its nested member rows (drop "into" the expanded list) —
+// walk up until a Collection is found. Returns invalidId if none.
+//
+// Reads Qt::UserRole directly rather than itemFunctionId(), which rejects
+// top-level items (parent == NULL) and so would miss a collection at the root.
+static quint32 collectionForDropTarget(Doc *doc, QTreeWidgetItem *item)
+{
+    for (QTreeWidgetItem *it = item; it != NULL; it = it->parent())
+    {
+        const QVariant var = it->data(COL_NAME, Qt::UserRole);
+        if (var.isValid() == false)
+            continue;
+        Function *f = doc->function(var.toUInt());
+        if (f != NULL && f->type() == Function::CollectionType)
+            return f->id();
+    }
+    return Function::invalidId();
+}
 // MIME type for palette drag/drop to external widgets
 static const char* PALETTE_DRAG_MIME_TYPE = "application/x-qlcplus-palettes";
 
@@ -809,7 +830,33 @@ QMimeData* FunctionsTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &ite
 
 void FunctionsTreeWidget::mousePressEvent(QMouseEvent *event)
 {
+    // Preserve a multi-selection when the user right-clicks INSIDE it. Qt's
+    // default collapses the selection to the clicked row on a right-press, which
+    // would make a context-menu Delete/Duplicate act on one item instead of the
+    // several the user had selected. Remember the selection, let the base class
+    // run, then restore it if it was collapsed.
+    QList<QTreeWidgetItem*> keepSelection;
+    QTreeWidgetItem *rightClicked = NULL;
+    if (event->button() == Qt::RightButton)
+    {
+        rightClicked = itemAt(event->pos());
+        if (rightClicked != NULL && rightClicked->isSelected()
+                && selectedItems().size() > 1)
+            keepSelection = selectedItems();
+    }
+
     QTreeWidget::mousePressEvent(event);
+
+    if (keepSelection.size() > 1 && selectedItems() != keepSelection)
+    {
+        const bool wasBlocked = blockSignals(true);
+        clearSelection();
+        for (QTreeWidgetItem *it : qAsConst(keepSelection))
+            it->setSelected(true);
+        if (rightClicked != NULL)
+            setCurrentItem(rightClicked);
+        blockSignals(wasBlocked);
+    }
 
     m_draggedItems = selectedItems();
     m_dragStartPosition = event->pos();
@@ -922,7 +969,8 @@ void FunctionsTreeWidget::dragEnterEvent(QDragEnterEvent *event)
 {
     if (m_externalDragMode)
     {
-        if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE))
+        if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE)
+                || event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
             event->acceptProposedAction();
         else
             event->ignore();
@@ -935,22 +983,32 @@ void FunctionsTreeWidget::dragMoveEvent(QDragMoveEvent *event)
 {
     if (m_externalDragMode)
     {
-        if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE) == false)
-        {
-            event->ignore();
-            return;
-        }
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
         QTreeWidgetItem *target = itemAt(event->pos());
 #else
         QTreeWidgetItem *target = itemAt(event->position().toPoint());
 #endif
-        // A folder, a palette leaf (join its folder), the Palettes category,
-        // or the empty root are valid targets.
-        if (target == NULL || itemNodeKind(target) == PaletteNode)
-            event->acceptProposedAction();
-        else
-            event->ignore();
+        if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE))
+        {
+            // A folder, a palette leaf (join its folder), the Palettes category,
+            // or the empty root are valid targets.
+            if (target == NULL || itemNodeKind(target) == PaletteNode)
+                event->acceptProposedAction();
+            else
+                event->ignore();
+            return;
+        }
+        if (event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
+        {
+            // Functions can be dropped onto a Collection node (or into its
+            // expanded member list) to add them to that collection.
+            if (collectionForDropTarget(m_doc, target) != Function::invalidId())
+                event->acceptProposedAction();
+            else
+                event->ignore();
+            return;
+        }
+        event->ignore();
         return;
     }
     QTreeWidget::dragMoveEvent(event);
@@ -964,10 +1022,40 @@ void FunctionsTreeWidget::dropEvent(QDropEvent *event)
     QTreeWidgetItem *dropItem = itemAt(event->position().toPoint());
 #endif
 
-    // External/Programming mode: move the dragged palettes into the folder
-    // under the cursor (don't do any Qt item reparenting; the owner rebuilds).
+    // External/Programming mode.
     if (m_externalDragMode)
     {
+        // Function(s) dropped onto a Collection node → add them as members. The
+        // owner (ProgrammingManager) performs the membership change and refresh;
+        // dedup and circular-reference checks live there.
+        if (event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
+        {
+            const quint32 containerId = collectionForDropTarget(m_doc, dropItem);
+            if (containerId == Function::invalidId())
+            {
+                event->ignore();
+                return;
+            }
+
+            QList<quint32> fids;
+            QByteArray data = event->mimeData()->data(FUNCTION_DRAG_MIME_TYPE);
+            QDataStream stream(&data, QIODevice::ReadOnly);
+            while (stream.atEnd() == false)
+            {
+                quint32 fid = 0;
+                stream >> fid;
+                fids << fid;
+            }
+
+            m_draggedItems.clear();
+            event->acceptProposedAction();
+            if (fids.isEmpty() == false)
+                emit functionsDroppedOnCollection(containerId, fids);
+            return;
+        }
+
+        // Otherwise: move the dragged palettes into the folder under the cursor
+        // (don't do any Qt item reparenting; the owner rebuilds).
         if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE) == false)
         {
             event->ignore();

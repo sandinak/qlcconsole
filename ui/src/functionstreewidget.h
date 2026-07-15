@@ -190,6 +190,12 @@ signals:
      *  onto a folder, so the owner can refresh the tree. */
     void paletteDroppedToFolder();
 
+    /** Emitted (external/Programming mode) when function(s) are dropped onto a
+     *  Collection node — @p containerId is the target collection, @p fids the
+     *  dropped functions (scenes, other collections, …). The owner does the
+     *  actual membership change (dedup / circular-ref checks live there). */
+    void functionsDroppedOnCollection(quint32 containerId, const QList<quint32> &fids);
+
     /** Emitted when a palette is renamed in-place so canvas tiles can update. */
     void paletteRenamed(quint32 paletteId);
 

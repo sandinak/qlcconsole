@@ -482,6 +482,16 @@ void AddFixture::slotModeActivated(int modeIndex)
     }
 }
 
+void AddFixture::preselectUniverse(quint32 universe)
+{
+    if ((int)universe >= m_universeCombo->count())
+        return;
+    m_universeCombo->setCurrentIndex((int)universe);
+    // Same path the combo's activated() signal drives, so the address is
+    // re-found within the chosen universe.
+    slotUniverseActivated((int)universe);
+}
+
 void AddFixture::slotUniverseActivated(int universe)
 {
     m_universeValue = universe;

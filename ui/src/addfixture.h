@@ -79,6 +79,10 @@ public:
     /** Get the assigned DMX universe */
     quint32 universe() const;
 
+    /** Pre-select a universe (e.g. the one the user right-clicked in) and move
+     *  the default address into it. Call after construction, before exec(). */
+    void preselectUniverse(quint32 universe);
+
     /** Get the number of similar fixtures to add */
     int amount() const;
 

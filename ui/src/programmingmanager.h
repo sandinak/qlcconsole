@@ -142,10 +142,32 @@ private:
      *  function names by an earlier nesting bug. */
     void repairFunctionNames();
 
+    /** Folder path a func-tree row lives in (its own path, or the folder path if
+     *  it is a folder row). Empty for null / root. */
+    QString funcFolderPathFor(QTreeWidgetItem *item) const;
     /** Folder path of the current func-tree selection (for new functions). */
     QString selectedFuncFolderPath() const;
     /** How many chasers/collections reference this function. */
     int functionUsageCount(quint32 fid) const;
+
+    /** Function ids the func-tree context menu should act on: the whole current
+     *  selection if @p clicked is part of it, otherwise just @p clicked. Folder
+     *  rows contribute no id. */
+    QList<quint32> funcTreeTargetIds(QTreeWidgetItem *clicked) const;
+    /** Same convention for the palette tree. */
+    QList<quint32> paletteTreeTargetIds(QTreeWidgetItem *clicked) const;
+    /** Open the Bundle editor pre-filled with @p paletteIds and save the result. */
+    void saveBundleFromPalettes(const QList<quint32> &paletteIds);
+    /** Duplicate each function (smart-incremented name), select the last copy. */
+    void duplicateFunctions(const QList<quint32> &fids);
+    /** Delete each function after confirmation. Collects by id first, since the
+     *  first deletion rebuilds the tree and invalidates every item pointer. */
+    void deleteFunctions(const QList<quint32> &fids);
+
+    /** Add @p fids to collection @p containerId (skipping self / duplicates /
+     *  cycles) and refresh the nav tree + canvas editor if they show it. Called
+     *  when functions are dropped onto a collection node in the nav tree. */
+    void addFunctionsToCollection(quint32 containerId, const QList<quint32> &fids);
 
     /** Show the members/steps of the given collection/chaser nested under
      *  its node in the function tree (read-only nav; invalidId clears). */

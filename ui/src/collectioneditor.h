@@ -58,6 +58,8 @@ private slots:
     void slotMoveUp();
     void slotMoveDown();
     void slotTestClicked();
+    /** Right-click menu on the member list: Remove (the existing multi-remove). */
+    void slotTreeContextMenu(const QPoint& pos);
 
 private:
     FunctionParent functionParent() const;
@@ -83,6 +85,10 @@ protected:
 
     /** Handle drop events */
     void handleDropEvent(QDropEvent* event);
+
+    /** Reorder members from an internal drag: move the selected rows to the drop
+     *  point and rewrite the collection's function order to match. */
+    void reorderFromDrop(QDropEvent* event);
 };
 
 /** @} */

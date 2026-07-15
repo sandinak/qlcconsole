@@ -20,12 +20,15 @@
 #include <QTreeWidgetItem>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
+#include <algorithm>
 #include <QTreeWidget>
 #include <QDropEvent>
 #include <QMimeData>
 #include <QSettings>
 #include <QLineEdit>
 #include <QLabel>
+#include <QMenu>
+#include <QAction>
 
 #include "functionselection.h"
 #include "collectioneditor.h"
@@ -62,10 +65,25 @@ CollectionEditor::CollectionEditor(QWidget* parent, Collection* fc, Doc* doc)
 
     m_nameEdit->setText(m_collection->name());
 
-    // Enable drag & drop on the function list
+    // Enable drag & drop on the function list.
+    //   - Internal drag REORDERS a member (drag it to a new position).
+    //   - External function drops ADD members (from the nav tree).
+    // Enabling drag also stops a plain click-drag on a row from rubber-band
+    // selecting across rows — dragging now moves the row, and multi-select is
+    // Shift/Ctrl-click (ExtendedSelection), as the user expects.
     m_tree->setAcceptDrops(true);
-    m_tree->setDragDropMode(QAbstractItemView::DropOnly);
+    m_tree->setDragEnabled(true);
+    m_tree->setDragDropMode(QAbstractItemView::DragDrop);
+    m_tree->setDefaultDropAction(Qt::MoveAction);
+    m_tree->setDropIndicatorShown(true);
     m_tree->viewport()->installEventFilter(this);
+
+    // Right-click to remove selected members (the tree is ExtendedSelection and
+    // slotRemove() already handles the whole selection — there just wasn't a
+    // context menu to reach it, only the Remove button).
+    m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_tree, SIGNAL(customContextMenuRequested(const QPoint&)),
+            this, SLOT(slotTreeContextMenu(const QPoint&)));
 
     updateFunctionList();
 }
@@ -94,9 +112,13 @@ void CollectionEditor::slotAdd()
         m_functionSelection = new FunctionSelection(this, m_doc);
     }
 
-    // Set up disabled functions (prevent circular references)
+    // Set up disabled functions: the collection itself, anything that would
+    // create a circular reference, and every function already in the collection
+    // (a collection holds each at most once, so re-picking one is a no-op —
+    // grey it out instead of letting the user think it was added again).
     QList<quint32> disabledList;
     disabledList << m_collection->id();
+    disabledList << m_collection->functions();
     foreach (Function* func, m_doc->functions())
     {
         if (func->contains(m_collection->id()))
@@ -129,6 +151,27 @@ void CollectionEditor::slotRemove()
         m_collection->removeFunction(id);
         delete item;
     }
+}
+
+void CollectionEditor::slotTreeContextMenu(const QPoint& pos)
+{
+    // Right-click a row that isn't selected → select it first, so the menu acts
+    // on what the user pointed at.
+    QTreeWidgetItem* clicked = m_tree->itemAt(pos);
+    if (clicked != NULL && clicked->isSelected() == false)
+        m_tree->setCurrentItem(clicked);
+
+    const int count = m_tree->selectedItems().size();
+    if (count == 0)
+        return;
+
+    QMenu menu(this);
+    QAction* removeAction = menu.addAction(
+        count > 1 ? tr("Remove %1 functions from collection").arg(count)
+                  : tr("Remove from collection"));
+
+    if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == removeAction)
+        slotRemove();
 }
 
 void CollectionEditor::slotMoveUp()
@@ -240,6 +283,12 @@ bool CollectionEditor::canAddFunction(quint32 fid) const
     if (fid == m_collection->id())
         return false;
 
+    // A collection holds each function at most once — reject one already in it.
+    // (The engine's addFunction dedups silently, but rejecting here keeps the
+    // drop path from claiming success and lets slotAdd give feedback.)
+    if (m_collection->functions().contains(fid))
+        return false;
+
     // Cannot add functions that contain this collection (circular reference)
     Function* function = m_doc->function(fid);
     if (function != NULL && function->contains(m_collection->id()))
@@ -274,7 +323,12 @@ void CollectionEditor::handleDragEnterEvent(QDragEnterEvent* event)
 {
     if (event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
     {
-        event->setDropAction(Qt::CopyAction);
+        event->setDropAction(Qt::CopyAction);   // external add
+        event->accept();
+    }
+    else if (event->source() == m_tree)
+    {
+        event->setDropAction(Qt::MoveAction);   // internal reorder
         event->accept();
     }
     else
@@ -288,19 +342,28 @@ void CollectionEditor::handleDragMoveEvent(QDragMoveEvent* event)
         event->setDropAction(Qt::CopyAction);
         event->accept();
     }
+    else if (event->source() == m_tree)
+    {
+        event->setDropAction(Qt::MoveAction);
+        event->accept();
+    }
     else
         event->ignore();
 }
 
 void CollectionEditor::handleDropEvent(QDropEvent* event)
 {
+    // Internal reorder: an item from THIS tree dropped back onto it.
     if (!event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
     {
-        event->ignore();
+        if (event->source() == m_tree)
+            reorderFromDrop(event);
+        else
+            event->ignore();
         return;
     }
 
-    // Decode the function IDs from mime data
+    // External add: function IDs dragged in from the nav tree.
     QByteArray data = event->mimeData()->data(FUNCTION_DRAG_MIME_TYPE);
     QDataStream stream(&data, QIODevice::ReadOnly);
 
@@ -326,5 +389,96 @@ void CollectionEditor::handleDropEvent(QDropEvent* event)
     else
     {
         event->ignore();
+    }
+}
+
+void CollectionEditor::reorderFromDrop(QDropEvent* event)
+{
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    const QPoint dropPos = event->pos();
+#else
+    const QPoint dropPos = event->position().toPoint();
+#endif
+
+    // The rows being moved, in their current visual order.
+    QList<QTreeWidgetItem*> sel = m_tree->selectedItems();
+    if (sel.isEmpty())
+    {
+        event->ignore();
+        return;
+    }
+    std::sort(sel.begin(), sel.end(), [this](QTreeWidgetItem* a, QTreeWidgetItem* b) {
+        return m_tree->indexOfTopLevelItem(a) < m_tree->indexOfTopLevelItem(b);
+    });
+
+    QList<quint32> dragged;
+    QSet<quint32> draggedSet;
+    for (QTreeWidgetItem* it : qAsConst(sel))
+    {
+        const quint32 fid = it->data(0, PROP_ID).toUInt();
+        dragged << fid;
+        draggedSet.insert(fid);
+    }
+
+    // Current full order.
+    QList<quint32> order;
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+        order << m_tree->topLevelItem(i)->data(0, PROP_ID).toUInt();
+
+    // Where to drop: above/below the row under the cursor (end if past the last).
+    QTreeWidgetItem* target = m_tree->itemAt(dropPos);
+    quint32 targetFid = Function::invalidId();
+    bool below = true;
+    if (target != NULL)
+    {
+        targetFid = target->data(0, PROP_ID).toUInt();
+        const QRect r = m_tree->visualItemRect(target);
+        below = dropPos.y() > r.center().y();
+    }
+
+    // Rebuild the order: pull the dragged ids out, then reinsert them as a block
+    // at the drop point.
+    QList<quint32> reduced;
+    for (quint32 fid : qAsConst(order))
+        if (!draggedSet.contains(fid))
+            reduced << fid;
+
+    int insertAt;
+    if (targetFid == Function::invalidId() || draggedSet.contains(targetFid))
+        insertAt = reduced.size();               // dropped past the end, or onto itself
+    else
+    {
+        const int ti = reduced.indexOf(targetFid);
+        insertAt = (ti < 0) ? reduced.size() : (below ? ti + 1 : ti);
+    }
+
+    QList<quint32> newOrder = reduced;
+    for (int i = 0; i < dragged.size(); i++)
+        newOrder.insert(insertAt + i, dragged.at(i));
+
+    // Accept as a COPY, never a MOVE: we rebuild the list ourselves below, so
+    // Qt's own post-drop clearOrRemove() (which fires on a returned MoveAction)
+    // must not run — by the time it would, it'd be deleting rebuilt/stale rows.
+    event->setDropAction(Qt::CopyAction);
+    event->accept();
+    if (newOrder == order)
+        return;   // dropped back where it started
+
+    // Apply the new order to the collection. The engine has no bulk reorder, so
+    // clear the membership and re-add in the target order (same primitive the
+    // Move Up/Down buttons use).
+    for (quint32 fid : qAsConst(order))
+        m_collection->removeFunction(fid);
+    for (quint32 fid : qAsConst(newOrder))
+        m_collection->addFunction(fid);
+
+    updateFunctionList();
+
+    // Keep the moved rows selected so the user can move them again.
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+    {
+        QTreeWidgetItem* it = m_tree->topLevelItem(i);
+        if (draggedSet.contains(it->data(0, PROP_ID).toUInt()))
+            it->setSelected(true);
     }
 }

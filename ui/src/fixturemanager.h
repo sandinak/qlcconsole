@@ -180,6 +180,10 @@ private:
     QString channelsGroupInfo(const ChannelsGroup *channelsGroup) const;
 
 private:
+    /** Universe the fixture-list context menu was opened in, so "Add fixture"
+     *  defaults to it. invalidUniverse() = no context (toolbar / empty space). */
+    quint32 m_ctxUniverse;
+
     QSplitter* m_splitter;
     FixtureTreeWidget* m_fixtures_tree;
     QTreeWidget* m_channel_groups_tree;
