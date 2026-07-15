@@ -1269,13 +1269,13 @@ void ProgrammerController::autoBindFromProfile()
 
     bool changed = false;
     const auto universeList = m_doc->inputOutputMap()->universes();
-    qCritical() << "[AutoBind] scanning" << universeList.size() << "universes; panBound=" << m_panBound << "tiltBound=" << m_tiltBound;
+    qDebug() << "[AutoBind] scanning" << universeList.size() << "universes; panBound=" << m_panBound << "tiltBound=" << m_tiltBound;
     for (quint32 u = 0; u < (quint32)universeList.size(); ++u)
     {
         InputPatch *ip = m_doc->inputOutputMap()->inputPatch(u);
         if (!ip)
         {
-            qCritical() << "[AutoBind] universe" << u << "- no input patch";
+            qDebug() << "[AutoBind] universe" << u << "- no input patch";
             continue;
         }
         QLCIOPlugin *plugin = ip->plugin();
@@ -1286,7 +1286,7 @@ void ProgrammerController::autoBindFromProfile()
         // assignment in the I/O panel — so no hidProfileName() check needed here.
         const int panCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("pan"));
         const int tiltCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("tilt"));
-        qCritical() << "[AutoBind] universe" << u << "plugin=" << plugin->name()
+        qDebug() << "[AutoBind] universe" << u << "plugin=" << plugin->name()
                     << "input=" << ip->input() << "profile=" << ip->hidProfileName()
                     << "panCh=" << panCh << "tiltCh=" << tiltCh;
 
@@ -1333,7 +1333,7 @@ void ProgrammerController::autoBindFromProfile()
     // Always connect input so we receive events even when no profile is assigned.
     // Without this, manual bind capture (bindPanAxis/bindTiltAxis) never fires.
     connectControllerInput();
-    qCritical() << "[AutoBind] RESULT: panBound=" << m_panBound << "(u=" << m_panUniverse << "ch=" << m_panChannel << ")"
+    qDebug() << "[AutoBind] RESULT: panBound=" << m_panBound << "(u=" << m_panUniverse << "ch=" << m_panChannel << ")"
                 << "tiltBound=" << m_tiltBound << "(u=" << m_tiltUniverse << "ch=" << m_tiltChannel << ")"
                 << "inputConnected=" << m_controllerInputConnected;
 }
@@ -1400,7 +1400,7 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         if (!seen.contains(key))
         {
             seen.insert(key);
-            qCritical() << "[Input] first event: u=" << universe << "ch=" << channel
+            qDebug() << "[Input] first event: u=" << universe << "ch=" << channel
                         << "val=" << value
                         << " | panBound=" << m_panBound
                         << "(u=" << m_panUniverse << "ch=" << m_panChannel << ")"

@@ -214,7 +214,7 @@ bool PowerDistribution::loadXML(QXmlStreamReader &root, Doc *doc)
 
     int nc = 0;
     foreach (const PowerSource &s, m_sources) nc += s.circuits.size();
-    qCritical() << "[PWRIO] loadXML: sources=" << m_sources.size() << "circuits=" << nc;
+    qDebug() << "[PWRIO] loadXML: sources=" << m_sources.size() << "circuits=" << nc;
     return true;
 }
 
@@ -224,7 +224,7 @@ bool PowerDistribution::saveXML(QXmlStreamWriter *doc, bool includeFixtures) con
 
     int dbgC = 0;
     foreach (const PowerSource &s, m_sources) dbgC += s.circuits.size();
-    qCritical() << "[PWRIO] saveXML: sources=" << m_sources.size() << "circuits=" << dbgC
+    qDebug() << "[PWRIO] saveXML: sources=" << m_sources.size() << "circuits=" << dbgC
                 << "fixtures=" << includeFixtures;
 
     if (m_sources.isEmpty())

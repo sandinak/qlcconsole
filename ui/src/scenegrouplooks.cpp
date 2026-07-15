@@ -469,7 +469,7 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
                 changed = true;
                 palettesAdded = true;
                 QLCPalette *ap = m_doc->palette(pid);
-                qCritical() << "[DROP] add palette/look" << pid
+                qDebug() << "[DROP] add palette/look" << pid
                             << (ap ? ap->name() : "?")
                             << "type=" << (ap ? (int)ap->type() : -1);
             }
@@ -490,7 +490,7 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
                 m_scene->addFixtureGroup(gid);
                 changed = true;
 
-                qCritical() << "[DROP] add group" << gid << (g ? g->name() : "?")
+                qDebug() << "[DROP] add group" << gid << (g ? g->name() : "?")
                             << "members=" << g->fixtureList()
                             << "| scene fixtures BEFORE=" << m_scene->fixtures()
                             << "groups=" << m_scene->fixtureGroups();
@@ -532,12 +532,12 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
                     if (keep.isEmpty())
                         m_scene->removeFixture(fid);
 
-                    qCritical() << "[DROP]   fixture" << fid
+                    qDebug() << "[DROP]   fixture" << fid
                                 << "coveredByLooks=" << (keep.isEmpty())
                                 << "keptBakedValues=" << keep.size();
                 }
 
-                qCritical() << "[DROP] scene fixtures AFTER=" << m_scene->fixtures()
+                qDebug() << "[DROP] scene fixtures AFTER=" << m_scene->fixtures()
                             << "groups=" << m_scene->fixtureGroups();
             }
         }
@@ -556,7 +556,7 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
             {
                 m_scene->addFixture(fid);
                 changed = true;
-                qCritical() << "[DROP] add single fixture" << fid
+                qDebug() << "[DROP] add single fixture" << fid
                             << "| scene fixtures now=" << m_scene->fixtures();
             }
         }
