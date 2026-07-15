@@ -25,6 +25,7 @@
 #include <QElapsedTimer>
 
 class QTreeWidgetItem;
+class Scene;
 class Function;
 class FunctionsTreeWidget;
 class FixtureGroupSource;
@@ -89,6 +90,19 @@ private slots:
 
     // Highlight
     void slotHighlightToggled(bool on);
+    /** Momentarily flash the selected fixtures to identify them in the rig. */
+    void slotFlashSelection();
+
+    // Blind (mute physical output, keep 2D preview). The toggle itself is a
+    // global toolbar action (App); here we only reflect the engine state in the
+    // canvas banner so building in-tab shows the muted-rig warning.
+    void slotBlindStateChanged(bool on);
+
+    // Park (hold fixtures out of cue output)
+    void slotParkSelection();
+    void slotUnparkAll();
+    /** Refresh Park/Unpark button state from the ProgrammerController. */
+    void slotParkChanged();
 
     // Followspot
     void slotFollowSpotBindX();
@@ -110,6 +124,8 @@ private slots:
     void slotFollowSpotPinChanged(bool visible, float xMeters, float yMeters);
 
 private:
+    /** Enable/label the Park button (Park vs Unpark) from selection + park state. */
+    void updateParkButtonLabel();
     void loadCanvas(quint32 sceneId);
     /** Host the stock editor for a non-scene function in the canvas. */
     void loadFunctionEditor(Function *function);
@@ -157,7 +173,7 @@ private:
     /** Same convention for the palette tree. */
     QList<quint32> paletteTreeTargetIds(QTreeWidgetItem *clicked) const;
     /** Open the Bundle editor pre-filled with @p paletteIds and save the result. */
-    void saveBundleFromPalettes(const QList<quint32> &paletteIds);
+    void saveBundleFromPalettes(const QList<quint32> &paletteIds, Scene *sourceScene = nullptr);
     /** Duplicate each function (smart-incremented name), select the last copy. */
     void duplicateFunctions(const QList<quint32> &fids);
     /** Delete each function after confirmation. Collects by id first, since the
@@ -226,6 +242,9 @@ private:
 
     // Bundle stamp undo (one-level: save prior palette list, restore on Ctrl+Z)
     QList<quint32>       m_stampUndoPalettes;
+    // Per-look fade overrides (paletteId -> {fadeInMs, fadeOutMs}) at stamp time,
+    // so undo restores them (stamping removePalette()s them away).
+    QHash<quint32, QPair<int, int> > m_stampUndoFades;
     quint32              m_stampUndoSceneId = quint32(-1);
 
     // Last Effect-palette set synced to ESR — used to avoid recreating instances
@@ -234,6 +253,12 @@ private:
 
     // Toolbar buttons
     QPushButton *m_highlightBtn;
+    QPushButton *m_flashBtn    = nullptr;
+    QPushButton *m_parkBtn     = nullptr;
+    QPushButton *m_unparkBtn   = nullptr;
+    // Blind-active in-context indicator (blue, EOS-style) — the global status-bar
+    // chip lives in App; this banner is the tab-local, can't-miss-it version.
+    QLabel      *m_blindBanner = nullptr;
 
     // BPM / internal beat generator
     QPushButton  *m_bpmBtn;

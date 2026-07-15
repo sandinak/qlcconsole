@@ -8,6 +8,7 @@
 #include "bundleeditor.h"
 #include "bundlecache.h"
 #include "qlcpalette.h"
+#include "scene.h"
 #include "doc.h"
 
 #include <QVBoxLayout>
@@ -40,10 +41,15 @@ static QString paletteTypeLabel(QLCPalette *p)
     }
 }
 
-static BundleEntry entryFromPalette(QLCPalette *p)
+static BundleEntry entryFromPalette(QLCPalette *p, Scene *scene)
 {
     BundleEntry e;
     e.name = p->name();
+    if (scene != nullptr)
+    {
+        e.fadeIn  = scene->paletteFadeIn(p->id());
+        e.fadeOut = scene->paletteFadeOut(p->id());
+    }
 
     switch (p->type())
     {
@@ -94,12 +100,13 @@ static BundleEntry entryFromPalette(QLCPalette *p)
 
 BundleEditor::BundleEditor(Doc *doc, BundleCache *cache,
                            const QList<quint32> &sourcePalettes,
+                           Scene *sourceScene,
                            QWidget *parent)
     : QDialog(parent), m_doc(doc), m_cache(cache), m_editMode(false)
 {
     setWindowTitle(tr("Save as Bundle…"));
     buildUi(false);
-    populatePaletteList(sourcePalettes);
+    populatePaletteList(sourcePalettes, sourceScene);
     updateContainsFromEntries();
 }
 
@@ -209,7 +216,7 @@ void BundleEditor::buildUi(bool editMode)
     connect(bbox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
 
-void BundleEditor::populatePaletteList(const QList<quint32> &paletteIds)
+void BundleEditor::populatePaletteList(const QList<quint32> &paletteIds, Scene *sourceScene)
 {
     m_bundle.palettes.clear();
     m_paletteList->clear();
@@ -217,11 +224,15 @@ void BundleEditor::populatePaletteList(const QList<quint32> &paletteIds)
     {
         QLCPalette *p = m_doc->palette(pid);
         if (!p) continue;
-        BundleEntry e = entryFromPalette(p);
+        BundleEntry e = entryFromPalette(p, sourceScene);
         if (!e.isValid() || e.type == "Other") continue;
         m_bundle.palettes << e;
-        m_paletteList->addItem(
-            QString("[%1]  %2").arg(e.type, e.name));
+        QString label = QString("[%1]  %2").arg(e.type, e.name);
+        if (e.fadeIn >= 0 || e.fadeOut >= 0)
+            label += QString("   (fade %1/%2s)")
+                     .arg(e.fadeIn  >= 0 ? QString::number(e.fadeIn  / 1000.0, 'g', 3) : QStringLiteral("–"))
+                     .arg(e.fadeOut >= 0 ? QString::number(e.fadeOut / 1000.0, 'g', 3) : QStringLiteral("–"));
+        m_paletteList->addItem(label);
     }
 }
 

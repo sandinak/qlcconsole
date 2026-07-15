@@ -55,6 +55,10 @@ QJsonObject BundleEntry::toJson() const
         o["frost"] = frost;
         o["iris"]  = iris;
     }
+
+    // Per-look fade override (any type). Written only when set.
+    if (fadeIn  >= 0) o["fadeIn"]  = fadeIn;
+    if (fadeOut >= 0) o["fadeOut"] = fadeOut;
     return o;
 }
 
@@ -92,6 +96,9 @@ BundleEntry BundleEntry::fromJson(const QJsonObject &o)
         e.frost = o["frost"].toInt(0);
         e.iris  = o["iris"].toInt(255);
     }
+
+    e.fadeIn  = o.contains("fadeIn")  ? o["fadeIn"].toInt(-1)  : -1;
+    e.fadeOut = o.contains("fadeOut") ? o["fadeOut"].toInt(-1) : -1;
     return e;
 }
 

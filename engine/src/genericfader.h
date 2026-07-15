@@ -142,6 +142,15 @@ public:
       * all the intensity channels will be updated */
     void setFadeOut(bool enable, uint fadeTime);
 
+    /** As setFadeOut(enable, fadeTime), but honouring a per-channel fade-time
+     *  override (keyed by channelHash(fixtureID, channel), in ms). Channels
+     *  absent from @a channelFadeTimes use @a fadeTime; those present use their
+     *  own time (0 = snap). Unlike the 2-arg overload this ALWAYS targets the
+     *  channels, so a 0 default still drives them to 0 — needed when a scene's
+     *  own fade-out is 0 but some looks carry a non-zero fade-out override
+     *  (a "pulse": fast in, slow out). */
+    void setFadeOut(bool enable, uint fadeTime, const QHash<quint32, uint> &channelFadeTimes);
+
     /**
      * Set the blend mode to be applied in the write method
      *

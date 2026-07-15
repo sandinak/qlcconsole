@@ -36,7 +36,9 @@
 
 #define KXMLQLCPowerSource          QStringLiteral("Source")
 #define KXMLQLCPowerSourceName      QStringLiteral("Name")
+#define KXMLQLCPowerSourceType      QStringLiteral("Type")
 #define KXMLQLCPowerSourceVoltage   QStringLiteral("Voltage")
+#define KXMLQLCPowerSourceConnector QStringLiteral("Connector")
 #define KXMLQLCPowerSourceVA        QStringLiteral("VARating")
 #define KXMLQLCPowerSourceRuntimeM  QStringLiteral("RuntimeMin")
 #define KXMLQLCPowerSourceRuntimeW  QStringLiteral("RuntimeWatts")
@@ -47,6 +49,8 @@
 #define KXMLQLCPowerCircuitVoltage  QStringLiteral("Voltage")
 #define KXMLQLCPowerCircuitRated    QStringLiteral("RatedAmps")
 #define KXMLQLCPowerCircuitDerate   QStringLiteral("Derate")
+#define KXMLQLCPowerCircuitDemand   QStringLiteral("Demand")
+#define KXMLQLCPowerCircuitConnector QStringLiteral("Connector")
 #define KXMLQLCPowerCircuitFixture  QStringLiteral("Fixture")
 
 /****************************************************************************
@@ -58,11 +62,13 @@ PowerCircuit::PowerCircuit()
     , voltage(0)            // 0 == inherit the source voltage
     , ratedAmps(20)
     , deratePercent(80)
+    , demandPercent(0)      // 0 == inherit the workspace default
 {
 }
 
 PowerSource::PowerSource()
     : name(QStringLiteral("Source"))
+    , type(Distro)
     , voltage(120)
     , vaRating(0)
     , runtimeMinutes(0)
@@ -99,6 +105,14 @@ void PowerDistribution::assignFixture(quint32 fxId, int sourceIdx, int circuitId
 {
     if (sourceIdx < 0 || sourceIdx >= m_sources.size())
         return;
+    // Assigning directly to a source with no circuits yet (a wall socket, a
+    // single-outlet UPS, a fresh distro) creates its first circuit on demand.
+    if (circuitIdx == 0 && m_sources[sourceIdx].circuits.isEmpty())
+    {
+        PowerCircuit cir;
+        cir.name = m_sources[sourceIdx].name;
+        m_sources[sourceIdx].circuits.append(cir);
+    }
     if (circuitIdx < 0 || circuitIdx >= m_sources[sourceIdx].circuits.size())
         return;
 
@@ -153,8 +167,14 @@ bool PowerDistribution::loadXML(QXmlStreamReader &root, Doc *doc)
         QXmlStreamAttributes sattrs = root.attributes();
         if (sattrs.hasAttribute(KXMLQLCPowerSourceVoltage))
             src.voltage = sattrs.value(KXMLQLCPowerSourceVoltage).toString().toDouble();
+        if (sattrs.hasAttribute(KXMLQLCPowerSourceConnector))
+            src.connector = sattrs.value(KXMLQLCPowerSourceConnector).toString();
         if (sattrs.hasAttribute(KXMLQLCPowerSourceVA))
             src.vaRating = sattrs.value(KXMLQLCPowerSourceVA).toString().toDouble();
+        if (sattrs.hasAttribute(KXMLQLCPowerSourceType))
+            src.type = sattrs.value(KXMLQLCPowerSourceType).toString().toInt();
+        else if (src.vaRating > 0.0)
+            src.type = PowerSource::Battery;   // migrate pre-Type UPS sources
         if (sattrs.hasAttribute(KXMLQLCPowerSourceRuntimeM))
             src.runtimeMinutes = sattrs.value(KXMLQLCPowerSourceRuntimeM).toString().toDouble();
         if (sattrs.hasAttribute(KXMLQLCPowerSourceRuntimeW))
@@ -183,6 +203,10 @@ bool PowerDistribution::loadXML(QXmlStreamReader &root, Doc *doc)
                     cir.ratedAmps = cattrs.value(KXMLQLCPowerCircuitRated).toString().toDouble();
                 if (cattrs.hasAttribute(KXMLQLCPowerCircuitDerate))
                     cir.deratePercent = cattrs.value(KXMLQLCPowerCircuitDerate).toString().toInt();
+                if (cattrs.hasAttribute(KXMLQLCPowerCircuitDemand))
+                    cir.demandPercent = cattrs.value(KXMLQLCPowerCircuitDemand).toString().toInt();
+                if (cattrs.hasAttribute(KXMLQLCPowerCircuitConnector))
+                    cir.connector = cattrs.value(KXMLQLCPowerCircuitConnector).toString();
 
                 while (root.readNextStartElement())
                 {
@@ -212,20 +236,12 @@ bool PowerDistribution::loadXML(QXmlStreamReader &root, Doc *doc)
         m_sources.append(src);
     }
 
-    int nc = 0;
-    foreach (const PowerSource &s, m_sources) nc += s.circuits.size();
-    qDebug() << "[PWRIO] loadXML: sources=" << m_sources.size() << "circuits=" << nc;
     return true;
 }
 
 bool PowerDistribution::saveXML(QXmlStreamWriter *doc, bool includeFixtures) const
 {
     Q_ASSERT(doc != NULL);
-
-    int dbgC = 0;
-    foreach (const PowerSource &s, m_sources) dbgC += s.circuits.size();
-    qDebug() << "[PWRIO] saveXML: sources=" << m_sources.size() << "circuits=" << dbgC
-                << "fixtures=" << includeFixtures;
 
     if (m_sources.isEmpty())
         return true;
@@ -235,7 +251,11 @@ bool PowerDistribution::saveXML(QXmlStreamWriter *doc, bool includeFixtures) con
     foreach (const PowerSource &src, m_sources)
     {
         doc->writeStartElement(KXMLQLCPowerSource);
+        if (src.type != PowerSource::Distro)
+            doc->writeAttribute(KXMLQLCPowerSourceType, QString::number(src.type));
         doc->writeAttribute(KXMLQLCPowerSourceVoltage, QString::number(src.voltage));
+        if (src.connector.isEmpty() == false)
+            doc->writeAttribute(KXMLQLCPowerSourceConnector, src.connector);
         if (src.vaRating > 0.0)
             doc->writeAttribute(KXMLQLCPowerSourceVA, QString::number(src.vaRating));
         if (src.runtimeMinutes > 0.0)
@@ -256,6 +276,10 @@ bool PowerDistribution::saveXML(QXmlStreamWriter *doc, bool includeFixtures) con
                 doc->writeAttribute(KXMLQLCPowerCircuitVoltage, QString::number(cir.voltage));
             doc->writeAttribute(KXMLQLCPowerCircuitRated, QString::number(cir.ratedAmps));
             doc->writeAttribute(KXMLQLCPowerCircuitDerate, QString::number(cir.deratePercent));
+            if (cir.demandPercent > 0)
+                doc->writeAttribute(KXMLQLCPowerCircuitDemand, QString::number(cir.demandPercent));
+            if (cir.connector.isEmpty() == false)
+                doc->writeAttribute(KXMLQLCPowerCircuitConnector, cir.connector);
             doc->writeTextElement(KXMLQLCPowerCircuitName, cir.name);
 
             if (includeFixtures)

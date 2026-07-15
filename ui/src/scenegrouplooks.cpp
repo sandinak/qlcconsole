@@ -24,6 +24,8 @@
 #include <QSet>
 #include <QMap>
 #include <QTimer>
+#include <QStyledItemDelegate>
+#include <QDoubleSpinBox>
 
 #include <algorithm>
 
@@ -43,6 +45,59 @@
 // Target kinds, stored at Qt::UserRole + 1 on target items.
 enum { TargetGroup = 0, TargetFixture = 1, TargetTypeFolder = 2 };
 #define TARGET_KIND_ROLE (Qt::UserRole + 1)
+
+// Looks tree columns. Column 0 carries the palette id at Qt::UserRole; the
+// In/Out columns carry their fade override in ms at Qt::UserRole (-1 = "step",
+// i.e. follow the chaser step / scene fade).
+enum { LookColName = 0, LookColIn = 1, LookColOut = 2, LookColCount = 3 };
+
+/** Human "1.5 s" / "step" text for a fade override in ms (-1 = step). */
+static QString fadeCellText(int ms)
+{
+    if (ms < 0)
+        return QObject::tr("step");
+    return QString::number(ms / 1000.0, 'g', 3) + QObject::tr(" s");
+}
+
+/** Editable fade-time cell: a QDoubleSpinBox in seconds whose minimum reads
+ *  "step" (fall back to the step/scene fade). Only the In/Out columns edit. */
+class FadeSpinDelegate final : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &,
+                          const QModelIndex &index) const override
+    {
+        if (index.column() != LookColIn && index.column() != LookColOut)
+            return nullptr;
+        QDoubleSpinBox *sp = new QDoubleSpinBox(parent);
+        sp->setDecimals(2);
+        sp->setSingleStep(0.1);
+        sp->setRange(-0.1, 600.0);              // -0.1 == the "step" value
+        sp->setSpecialValueText(QObject::tr("step"));
+        sp->setSuffix(QObject::tr(" s"));
+        return sp;
+    }
+
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override
+    {
+        QDoubleSpinBox *sp = qobject_cast<QDoubleSpinBox*>(editor);
+        if (sp == nullptr) return;
+        const int ms = index.data(Qt::UserRole).toInt();
+        sp->setValue(ms >= 0 ? ms / 1000.0 : sp->minimum());
+    }
+
+    void setModelData(QWidget *editor, QAbstractItemModel *model,
+                      const QModelIndex &index) const override
+    {
+        QDoubleSpinBox *sp = qobject_cast<QDoubleSpinBox*>(editor);
+        if (sp == nullptr) return;
+        const int ms = sp->value() < 0 ? -1 : int(sp->value() * 1000.0 + 0.5);
+        model->setData(index, ms, Qt::UserRole);
+        model->setData(index, fadeCellText(ms), Qt::DisplayRole);
+    }
+};
 
 // Human label + stable bucket key for grouping fixed fixtures by type.
 static QString fixtureTypeLabel(const Fixture *f)
@@ -99,17 +154,40 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     // --- Looks column ---
     QVBoxLayout *lookCol = new QVBoxLayout();
     lookCol->addWidget(new QLabel(tr("Looks"), this));
-    m_lookList = new QListWidget(this);
+    m_lookList = new QTreeWidget(this);
+    m_lookList->setColumnCount(LookColCount);
+    m_lookList->setHeaderLabels(QStringList() << tr("Look") << tr("Fade In") << tr("Fade Out"));
+    if (QTreeWidgetItem *hdr = m_lookList->headerItem())
+    {
+        const QString fadeTip = tr("Per-look fade time (this look's channels only).\n"
+                                   "0 = snap instantly; \"step\" = follow the chaser step / scene fade.\n"
+                                   "Double-click a cell to edit; right-click a row to reset to \"step\".");
+        hdr->setToolTip(LookColIn,  fadeTip);
+        hdr->setToolTip(LookColOut, fadeTip);
+    }
+    m_lookList->setRootIsDecorated(false);
     m_lookList->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_lookList->setAllColumnsShowFocus(true);
+    m_lookList->header()->setStretchLastSection(false);
+    m_lookList->header()->setSectionResizeMode(LookColName, QHeaderView::Stretch);
+    m_lookList->header()->setSectionResizeMode(LookColIn, QHeaderView::ResizeToContents);
+    m_lookList->header()->setSectionResizeMode(LookColOut, QHeaderView::ResizeToContents);
+    // Double-click an In/Out cell to give that look its own fade time.
+    m_lookList->setItemDelegate(new FadeSpinDelegate(m_lookList));
+    m_lookList->setEditTriggers(QAbstractItemView::DoubleClicked);
     // Order = precedence: looks lower in the list are applied last and win on
     // any channel they share (pan/tilt, colour, dimmer). Reorder by dragging
     // within the list or with the Up/Down buttons.
     m_lookList->setDragDropMode(QAbstractItemView::InternalMove);
     m_lookList->setDefaultDropAction(Qt::MoveAction);
+    m_lookList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_lookList->setToolTip(
         tr("Order sets precedence: lower looks are applied last and override "
            "earlier ones on shared channels.\n"
-           "Drag to reorder, or use the Up/Down buttons."));
+           "Drag to reorder, or use the Up/Down buttons.\n"
+           "Double-click Fade In / Fade Out to set a per-look fade time. "
+           "0 = snap instantly; \"step\" = follow the chaser step / scene fade "
+           "(spin below 0, or right-click → Reset, to return to \"step\")."));
     lookCol->addWidget(m_lookList);
     QHBoxLayout *lookBtns = new QHBoxLayout();
     m_removeLookButton = new QPushButton(tr("Remove"), this);
@@ -134,10 +212,15 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
             this, SLOT(slotLooksReordered()));
     connect(m_lookList, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotLookSelectionChanged()));
-    // Double-click (re)loads the look into the editor even if it was already
-    // selected (a plain click on an already-selected look fires no change).
-    connect(m_lookList, SIGNAL(itemDoubleClicked(QListWidgetItem*)),
-            this, SLOT(slotLookDoubleClicked(QListWidgetItem*)));
+    // Double-click the name column (re)loads the look into the editor even if it
+    // was already selected; double-click In/Out edits that cell (via delegate).
+    connect(m_lookList, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
+            this, SLOT(slotLookDoubleClicked(QTreeWidgetItem*,int)));
+    // A committed In/Out edit pushes the per-look fade to the scene.
+    connect(m_lookList, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+            this, SLOT(slotLookFadeEdited(QTreeWidgetItem*,int)));
+    connect(m_lookList, SIGNAL(customContextMenuRequested(QPoint)),
+            this, SLOT(slotLookContextMenu(QPoint)));
     connect(m_targetList, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotTargetSelectionChanged()));
     connect(m_targetList, SIGNAL(customContextMenuRequested(QPoint)),
@@ -393,33 +476,44 @@ void SceneGroupLooks::reload()
     // deselect the palette and clear the LookEditor.
     quint32 selPid = QLCPalette::invalidId();
     {
-        const QList<QListWidgetItem*> prevSel = m_lookList->selectedItems();
+        const QList<QTreeWidgetItem*> prevSel = m_lookList->selectedItems();
         if (!prevSel.isEmpty())
-            selPid = prevSel.first()->data(Qt::UserRole).toUInt();
+            selPid = prevSel.first()->data(LookColName, Qt::UserRole).toUInt();
     }
 
     m_lookList->blockSignals(true);
     m_lookList->clear();
     foreach (quint32 pid, m_scene->palettes())
     {
-        QListWidgetItem *it = new QListWidgetItem(lookLabel(pid), m_lookList);
-        it->setData(Qt::UserRole, pid);
         QLCPalette *p = m_doc->palette(pid);
-        if (p != NULL)
-            it->setIcon(QIcon(p->iconResource()));
-    }
+        const bool isEffect = (p != NULL && p->type() == QLCPalette::Effect);
 
-    // Restore selection (setCurrentRow fires currentItemChanged after unblock)
-    if (selPid != QLCPalette::invalidId())
-    {
-        for (int i = 0; i < m_lookList->count(); ++i)
-        {
-            if (m_lookList->item(i)->data(Qt::UserRole).toUInt() == selPid)
-            {
-                m_lookList->setCurrentRow(i);
-                break;
-            }
-        }
+        QTreeWidgetItem *it = new QTreeWidgetItem(m_lookList);
+        it->setText(LookColName, lookLabel(pid));
+        it->setData(LookColName, Qt::UserRole, pid);
+        if (p != NULL)
+            it->setIcon(LookColName, QIcon(p->iconResource()));
+
+        // In/Out fade cells (ms at Qt::UserRole; -1 = "step"). Effect looks are
+        // faded by the script runner, not the scene, so their cells are inert.
+        const int inMs  = isEffect ? -1 : m_scene->paletteFadeIn(pid);
+        const int outMs = isEffect ? -1 : m_scene->paletteFadeOut(pid);
+        it->setData(LookColIn,  Qt::UserRole, inMs);
+        it->setData(LookColOut, Qt::UserRole, outMs);
+        it->setText(LookColIn,  isEffect ? QStringLiteral("—") : fadeCellText(inMs));
+        it->setText(LookColOut, isEffect ? QStringLiteral("—") : fadeCellText(outMs));
+        it->setTextAlignment(LookColIn,  Qt::AlignRight | Qt::AlignVCenter);
+        it->setTextAlignment(LookColOut, Qt::AlignRight | Qt::AlignVCenter);
+
+        // Flat rows only: draggable + (In/Out) editable, but NOT drop targets,
+        // so an internal-move drop lands between rows rather than nesting.
+        Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled;
+        if (!isEffect)
+            f |= Qt::ItemIsEditable;
+        it->setFlags(f);
+
+        if (selPid != QLCPalette::invalidId() && pid == selPid)
+            it->setSelected(true);
     }
     m_lookList->blockSignals(false);
 }
@@ -683,18 +777,80 @@ void SceneGroupLooks::slotTargetContextMenu(const QPoint &pos)
 
 void SceneGroupLooks::slotLookSelectionChanged()
 {
-    const QList<QListWidgetItem*> sel = m_lookList->selectedItems();
+    const QList<QTreeWidgetItem*> sel = m_lookList->selectedItems();
     emit lookSelected(sel.isEmpty() ? QLCPalette::invalidId()
-                                    : sel.first()->data(Qt::UserRole).toUInt());
+                                    : sel.first()->data(LookColName, Qt::UserRole).toUInt());
 }
 
-void SceneGroupLooks::slotLookDoubleClicked(QListWidgetItem *item)
+void SceneGroupLooks::slotLookDoubleClicked(QTreeWidgetItem *item, int column)
 {
     if (item == NULL)
         return;
+    // Double-clicking In/Out opens the fade editor (delegate) — leave it be.
+    if (column != LookColName)
+        return;
     // Force-load this look into the editor (switches the bottom panel away
     // from the per-fixture channel editor).
-    emit lookSelected(item->data(Qt::UserRole).toUInt());
+    emit lookSelected(item->data(LookColName, Qt::UserRole).toUInt());
+}
+
+void SceneGroupLooks::slotLookFadeEdited(QTreeWidgetItem *item, int column)
+{
+    if (item == NULL || (column != LookColIn && column != LookColOut))
+        return;
+    const quint32 pid = item->data(LookColName, Qt::UserRole).toUInt();
+    if (pid == QLCPalette::invalidId())
+        return;
+    // Keep the display text in step with the committed value.
+    const int inMs  = item->data(LookColIn,  Qt::UserRole).toInt();
+    const int outMs = item->data(LookColOut, Qt::UserRole).toInt();
+    m_scene->setPaletteFade(pid, inMs, outMs);
+    m_doc->setModified();
+    emit sceneModified();
+}
+
+void SceneGroupLooks::slotLookContextMenu(const QPoint &pos)
+{
+    QTreeWidgetItem *clicked = m_lookList->itemAt(pos);
+    QList<QTreeWidgetItem*> rows = m_lookList->selectedItems();
+    if (clicked != NULL && rows.contains(clicked) == false)
+        rows = QList<QTreeWidgetItem*>() << clicked;
+    // Only looks that carry a fade (non-Effect, editable) can be reset.
+    rows.erase(std::remove_if(rows.begin(), rows.end(), [](QTreeWidgetItem *it) {
+                   return (it->flags() & Qt::ItemIsEditable) == 0;
+               }), rows.end());
+    if (rows.isEmpty())
+        return;
+
+    QMenu menu(m_lookList);
+    QAction *rin   = menu.addAction(tr("Reset Fade In to step"));
+    QAction *rout  = menu.addAction(tr("Reset Fade Out to step"));
+    QAction *rboth = menu.addAction(tr("Reset both to step"));
+    QAction *chosen = menu.exec(m_lookList->viewport()->mapToGlobal(pos));
+    if (chosen == NULL)
+        return;
+
+    const bool resetIn  = (chosen == rin  || chosen == rboth);
+    const bool resetOut = (chosen == rout || chosen == rboth);
+
+    m_lookList->blockSignals(true);
+    foreach (QTreeWidgetItem *it, rows)
+    {
+        const quint32 pid = it->data(LookColName, Qt::UserRole).toUInt();
+        int inMs  = it->data(LookColIn,  Qt::UserRole).toInt();
+        int outMs = it->data(LookColOut, Qt::UserRole).toInt();
+        if (resetIn)  inMs  = -1;
+        if (resetOut) outMs = -1;
+        it->setData(LookColIn,  Qt::UserRole, inMs);
+        it->setData(LookColOut, Qt::UserRole, outMs);
+        it->setText(LookColIn,  fadeCellText(inMs));
+        it->setText(LookColOut, fadeCellText(outMs));
+        m_scene->setPaletteFade(pid, inMs, outMs);
+    }
+    m_lookList->blockSignals(false);
+
+    m_doc->setModified();
+    emit sceneModified();
 }
 
 void SceneGroupLooks::slotTargetSelectionChanged()
@@ -741,13 +897,13 @@ void SceneGroupLooks::slotTargetSelectionChanged()
 
 void SceneGroupLooks::slotRemoveLook()
 {
-    const QList<QListWidgetItem*> sel = m_lookList->selectedItems();
+    const QList<QTreeWidgetItem*> sel = m_lookList->selectedItems();
     if (sel.isEmpty())
         return;
     // Detach from the scene only; leave the palette in the Doc so any
     // other scene referencing it keeps working.
-    foreach (QListWidgetItem *it, sel)
-        m_scene->removePalette(it->data(Qt::UserRole).toUInt());
+    foreach (QTreeWidgetItem *it, sel)
+        m_scene->removePalette(it->data(LookColName, Qt::UserRole).toUInt());
     m_doc->setModified();
     reload();
     emit sceneModified();
@@ -765,16 +921,16 @@ void SceneGroupLooks::slotMoveLookDown()
 
 void SceneGroupLooks::moveSelectedLooks(int delta)
 {
-    const QList<QListWidgetItem*> sel = m_lookList->selectedItems();
+    const QList<QTreeWidgetItem*> sel = m_lookList->selectedItems();
     if (sel.isEmpty() || delta == 0)
         return;
 
     // Abort if any selected item would move past an edge — move the whole
     // selection as a block or not at all (mirrors Collection/Chaser editors).
-    foreach (QListWidgetItem *it, sel)
+    foreach (QTreeWidgetItem *it, sel)
     {
-        const int row = m_lookList->row(it) + delta;
-        if (row < 0 || row >= m_lookList->count())
+        const int row = m_lookList->indexOfTopLevelItem(it) + delta;
+        if (row < 0 || row >= m_lookList->topLevelItemCount())
             return;
     }
 
@@ -782,8 +938,8 @@ void SceneGroupLooks::moveSelectedLooks(int delta)
     // moving up, descending when moving down. Each swap only touches the two
     // adjacent rows, so the original indices stay valid as we go.
     QList<int> rows;
-    foreach (QListWidgetItem *it, sel)
-        rows << m_lookList->row(it);
+    foreach (QTreeWidgetItem *it, sel)
+        rows << m_lookList->indexOfTopLevelItem(it);
     std::sort(rows.begin(), rows.end());
     if (delta > 0)
         std::reverse(rows.begin(), rows.end());
@@ -791,8 +947,8 @@ void SceneGroupLooks::moveSelectedLooks(int delta)
     m_lookList->blockSignals(true);
     foreach (int row, rows)
     {
-        QListWidgetItem *it = m_lookList->takeItem(row);
-        m_lookList->insertItem(row + delta, it);
+        QTreeWidgetItem *it = m_lookList->takeTopLevelItem(row);
+        m_lookList->insertTopLevelItem(row + delta, it);
         it->setSelected(true);
     }
     m_lookList->blockSignals(false);
@@ -810,8 +966,8 @@ void SceneGroupLooks::slotLooksReordered()
 void SceneGroupLooks::applyLookOrderFromList()
 {
     QList<quint32> order;
-    for (int i = 0; i < m_lookList->count(); ++i)
-        order << m_lookList->item(i)->data(Qt::UserRole).toUInt();
+    for (int i = 0; i < m_lookList->topLevelItemCount(); ++i)
+        order << m_lookList->topLevelItem(i)->data(LookColName, Qt::UserRole).toUInt();
 
     if (m_scene->reorderPalettes(order))
     {

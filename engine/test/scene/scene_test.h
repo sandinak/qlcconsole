@@ -42,6 +42,7 @@ private slots:
     void loadWrongType();
     void loadWrongRoot();
     void save();
+    void paletteFadeTime();
     void copyFrom();
     void createCopy();
 

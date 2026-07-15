@@ -37,10 +37,13 @@ class BundleEditor : public QDialog
 public:
     /**
      * Create mode: pre-populate the palette list from @p sourcePalettes
-     * (the IDs of palettes currently in the look, in order).
+     * (the IDs of palettes currently in the look, in order). If @p sourceScene
+     * is given, each entry also captures that scene's per-look fade override so
+     * the bundle carries the fade timing.
      */
     BundleEditor(Doc *doc, BundleCache *cache,
                  const QList<quint32> &sourcePalettes,
+                 Scene *sourceScene = nullptr,
                  QWidget *parent = nullptr);
 
     /**
@@ -70,7 +73,7 @@ private slots:
 
 private:
     void buildUi(bool editMode);
-    void populatePaletteList(const QList<quint32> &paletteIds);
+    void populatePaletteList(const QList<quint32> &paletteIds, Scene *sourceScene);
     void populatePaletteList(const QList<BundleEntry> &entries);
     void updateContainsFromEntries();
     void updateOkButton();

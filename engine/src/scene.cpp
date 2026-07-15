@@ -35,6 +35,12 @@
 #include "doc.h"
 #include "bus.h"
 
+// Optional per-look fade override (ms), stored on the scene's <Palette> ref.
+#define KXMLQLCScenePaletteFadeIn   QStringLiteral("FadeIn")
+#define KXMLQLCScenePaletteFadeOut  QStringLiteral("FadeOut")
+// Legacy single-value attribute (fork pre-split), read as fade-in only.
+#define KXMLQLCScenePaletteFadeTime QStringLiteral("FadeTime")
+
 /*****************************************************************************
  * Initialization
  *****************************************************************************/
@@ -98,6 +104,7 @@ bool Scene::copyFrom(const Function* function)
     const QList<quint32> srcFixtures = scene->fixtures();
     const QList<quint32> srcGroups = scene->fixtureGroups();
     const QList<quint32> srcPalettes = scene->palettes();
+    const QHash<quint32, PaletteFade> srcPaletteFades = scene->paletteFades();
 
     {
         QMutexLocker locker(&m_valueListMutex);
@@ -115,6 +122,7 @@ bool Scene::copyFrom(const Function* function)
         // palettes so the operator can add/remove looks independently without
         // spawning clones.
         m_palettes = srcPalettes;
+        m_paletteFade = srcPaletteFades;
     }
 
     return Function::copyFrom(function);
@@ -326,6 +334,7 @@ void Scene::clear()
     m_fixtures.clear();
     m_fixtureGroups.clear();
     m_palettes.clear();
+    m_paletteFade.clear();
 }
 
 void Scene::resetRuntime()
@@ -479,6 +488,7 @@ void Scene::addPalette(quint32 id)
 bool Scene::removePalette(quint32 id)
 {
     QMutexLocker locker(&m_bindingsMutex);
+    m_paletteFade.remove(id);
     return m_palettes.removeOne(id);
 }
 
@@ -506,6 +516,58 @@ bool Scene::reorderPalettes(const QList<quint32> &orderedIds)
         return false;
     m_palettes = reordered;
     return true;
+}
+
+void Scene::setPaletteFade(quint32 paletteId, int fadeInMs, int fadeOutMs)
+{
+    bool changedIt = false;
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        PaletteFade pf;
+        pf.fadeInMs = fadeInMs < 0 ? -1 : fadeInMs;
+        pf.fadeOutMs = fadeOutMs < 0 ? -1 : fadeOutMs;
+
+        if (pf.isEmpty())
+        {
+            changedIt = (m_paletteFade.remove(paletteId) > 0);
+        }
+        else
+        {
+            QHash<quint32, PaletteFade>::iterator it = m_paletteFade.find(paletteId);
+            if (it == m_paletteFade.end())
+            {
+                m_paletteFade.insert(paletteId, pf);
+                changedIt = true;
+            }
+            else if (it.value().fadeInMs != pf.fadeInMs ||
+                     it.value().fadeOutMs != pf.fadeOutMs)
+            {
+                it.value() = pf;
+                changedIt = true;
+            }
+        }
+    }
+
+    if (changedIt)
+        emit changed(this->id());
+}
+
+int Scene::paletteFadeIn(quint32 paletteId) const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_paletteFade.value(paletteId).fadeInMs;
+}
+
+int Scene::paletteFadeOut(quint32 paletteId) const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_paletteFade.value(paletteId).fadeOutMs;
+}
+
+QHash<quint32, Scene::PaletteFade> Scene::paletteFades() const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_paletteFade;
 }
 
 /*****************************************************************************
@@ -586,11 +648,17 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
         doc->writeEndElement();
     }
 
-    /* Save referenced Palettes */
+    /* Save referenced Palettes (+ optional per-look fade in/out overrides) */
+    const QHash<quint32, PaletteFade> savedFades = paletteFades();
     foreach (quint32 pId, palettes())
     {
         doc->writeStartElement(KXMLQLCPalette);
         doc->writeAttribute(KXMLQLCPaletteID, QString::number(pId));
+        const PaletteFade pf = savedFades.value(pId);
+        if (pf.fadeInMs >= 0)
+            doc->writeAttribute(KXMLQLCScenePaletteFadeIn, QString::number(pf.fadeInMs));
+        if (pf.fadeOutMs >= 0)
+            doc->writeAttribute(KXMLQLCScenePaletteFadeOut, QString::number(pf.fadeOutMs));
         doc->writeEndElement();
     }
 
@@ -702,6 +770,16 @@ bool Scene::loadXML(QXmlStreamReader &root)
         {
             quint32 id = root.attributes().value(KXMLQLCPaletteID).toString().toUInt();
             addPalette(id);
+            const QXmlStreamAttributes attrs = root.attributes();
+            int fadeIn = -1, fadeOut = -1;
+            if (attrs.hasAttribute(KXMLQLCScenePaletteFadeIn))
+                fadeIn = attrs.value(KXMLQLCScenePaletteFadeIn).toString().toInt();
+            else if (attrs.hasAttribute(KXMLQLCScenePaletteFadeTime)) // legacy single value
+                fadeIn = attrs.value(KXMLQLCScenePaletteFadeTime).toString().toInt();
+            if (attrs.hasAttribute(KXMLQLCScenePaletteFadeOut))
+                fadeOut = attrs.value(KXMLQLCScenePaletteFadeOut).toString().toInt();
+            if (fadeIn >= 0 || fadeOut >= 0)
+                setPaletteFade(id, fadeIn, fadeOut);
             root.skipCurrentElement();
         }
         else
@@ -892,23 +970,58 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
 void Scene::handleFadersEnd(MasterTimer *timer)
 {
     uint fadeout = overrideFadeOutSpeed() == defaultSpeed() ? fadeOutSpeed() : overrideFadeOutSpeed();
+    if (tempoType() == Beats)
+        fadeout = beatsToTime(fadeout, timer->beatTimeDuration());
 
-    /* If no fade out is needed, dismiss all the requested faders.
-     * Otherwise, set all the faders to fade out and let Universe dismiss them
-     * when done */
-    if (fadeout == 0)
+    // Per-look fade-OUT overrides: resolve each palette that carries an explicit
+    // fade-out into the channels it drives (keyed by channelHash), so those
+    // channels release over their own time while the rest use the scene fade-out.
+    // Lets a look "pulse" (e.g. snap in, release slow).
+    QHash<quint32, uint> channelFadeOut;
+    bool anyPositiveOverride = false;
+    const QHash<quint32, PaletteFade> paletteFadeMap = paletteFades();
+    for (QHash<quint32, PaletteFade>::const_iterator pit = paletteFadeMap.constBegin();
+         pit != paletteFadeMap.constEnd(); ++pit)
+    {
+        const int outMs = pit.value().fadeOutMs;
+        if (outMs < 0)
+            continue;
+        QLCPalette *palette = doc()->palette(pit.key());
+        if (palette == NULL || palette->type() == QLCPalette::Effect)
+            continue;
+        uint t = uint(outMs);
+        if (tempoType() == Beats)
+            t = beatsToTime(t, timer->beatTimeDuration());
+        if (t > 0)
+            anyPositiveOverride = true;
+
+        QList<SceneValue> vals = palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this);
+        vals += palette->valuesFromFixtures(doc(), fixtures(), this);
+        foreach (const SceneValue &scv, vals)
+            channelFadeOut.insert(GenericFader::channelHash(scv.fxi, scv.channel), t);
+    }
+
+    /* If no fade out is needed at all, dismiss all the requested faders.
+     * Otherwise, set the faders to fade out (honouring per-look overrides) and
+     * let Universe dismiss them when done. */
+    if (fadeout == 0 && anyPositiveOverride == false)
     {
         dismissAllFaders();
     }
-    else
+    else if (channelFadeOut.isEmpty())
     {
-        if (tempoType() == Beats)
-            fadeout = beatsToTime(fadeout, timer->beatTimeDuration());
-
         foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
         {
             if (!fader.isNull())
                 fader->setFadeOut(true, fadeout);
+        }
+    }
+    else
+    {
+        foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+        {
+            if (!fader.isNull())
+                fader->setFadeOut(true, fadeout, channelFadeOut);
         }
     }
 
@@ -966,6 +1079,11 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 processValue(timer, ua, fadeIn, scv);
             }
 
+            // Per-look fade-IN overrides: a palette with its own explicit fade-in
+            // uses it for its channels only; the rest fall back to the step/scene
+            // fadeIn. Lets colour snap while movers glide within one cue.
+            const QHash<quint32, PaletteFade> paletteFadeMap = paletteFades();
+
             foreach (quint32 paletteID, palettes())
             {
                 QLCPalette *palette = doc()->palette(paletteID);
@@ -974,11 +1092,14 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 if (palette->type() == QLCPalette::Effect)
                     continue; // EffectScriptRunner handles these as a DMXSource
 
+                const int inOverride = paletteFadeMap.value(paletteID).fadeInMs;
+                const uint pFade = inOverride >= 0 ? uint(inOverride) : fadeIn;
+
                 foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this))
-                    processValue(timer, ua, fadeIn, scv);
+                    processValue(timer, ua, pFade, scv);
 
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this))
-                    processValue(timer, ua, fadeIn, scv);
+                    processValue(timer, ua, pFade, scv);
             }
         }
         else if (m_reaimRequested || m_repaletteRequested)

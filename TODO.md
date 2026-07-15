@@ -9,6 +9,145 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### Decided 2026-07-15 — show-timeline design session
+Context: audience is students + show choir; the fork nails *building* looks but
+the *run* side was still stock. Established that stock chaser + VC Cue List +
+APC40 already give a GO cue stack, so the gaps are narrower than first thought.
+
+- [x] **Per-look (per-parameter) fade times — IN + OUT** *(BUILT — needs GUI test)*
+      — separate fade-in and fade-out times stored **per look/palette applied to a
+      scene**, not just per chaser step. Rule: the chaser step's fade is the
+      cue-wide default; a look with its own explicit time **overrides it for that
+      look's channels only** (per direction); "step" = fall back to the step fade.
+      Lets colour snap in while movers glide, and a look punch in fast / release
+      slow (a "pulse": 0 in, slow out).
+      Engine: `Scene` gains a `paletteId → {fadeInMs, fadeOutMs}` override map
+      (`m_paletteFade`, guarded by `m_bindingsMutex`) with `setPaletteFade(id,
+      inMs, outMs)` (each <0 clears that direction; 0 = snap), `paletteFadeIn/Out(id)`
+      and `paletteFades()`. `Scene::write()` passes each non-Effect palette's
+      fade-IN override (or step `fadeIn`) to `processValue`. Fade-OUT:
+      `handleFadersEnd()` resolves each palette carrying an explicit fade-out into
+      the channels it drives and calls the new `GenericFader::setFadeOut(enable,
+      default, perChannelMap)` (channelHash → ms) so those channels release over
+      their own time while the rest use the scene fade-out; a 0 scene fade-out no
+      longer dismisses faders instantly when a look has a positive out override.
+      Effect palettes excluded (EffectScriptRunner owns their timing). Persisted
+      as optional `FadeIn`/`FadeOut` attrs on the scene's `<Palette>` ref (legacy
+      single `FadeTime` still read as fade-in); round-trip + copyFrom +
+      removePalette/clear cleanup unit-tested (`Scene_Test::paletteFadeTime`).
+      **Bundles carry it**: `BundleEntry` gains `fadeIn`/`fadeOut` (JSON
+      round-trip); "Save as Bundle" captures the scene's per-look fades,
+      stamping restores them, stamp-undo preserves them.
+      UI: the Programming-tab **Looks list is now a 3-column tree (Look | In |
+      Out)** — double-click In/Out to set a per-look time (spin whose minimum
+      reads "step" = follow the step/scene fade); Effect looks show "—". The Look
+      editor also has "Fade in [step] out [step]" spinners. Editing refreshes the
+      live preview. Still needs: GUI confirmation that colour snaps while movers
+      glide, and a pulse (fast in / slow out) releases correctly within a chaser.
+
+      **TESTING PLAN — per-look fade times** *(run `build/main/qlcplus -o
+      surfacetesting.qxw`, Design mode, Programming tab; a scene with ≥2 looks on
+      movers+LEDs, e.g. a Colour look and a Pan/Tilt or Aim look on the same
+      fixtures):*
+      - [ ] **Columns read right** — Looks list shows `Look | Fade In | Fade Out`;
+            new looks show `step / step`; header + row tooltips explain 0 vs step.
+      - [ ] **Set an in-fade** — double-click a look's *Fade In*, set 2 s. Live
+            preview: on scene (re)start that look's channels glide over 2 s while
+            other looks still snap/step. Cell shows `2 s`.
+      - [ ] **Colour-snaps-while-movers-glide** — Colour look Fade In = 0 (snap),
+            Pan/Tilt look Fade In = 3 s. Restart preview: colour pops, heads glide.
+            (The headline use-case.)
+      - [ ] **Pulse (fast in / slow out)** — a look with Fade In = 0, Fade Out =
+            4 s. Put the scene in a chaser; on step-OFF that look's channels
+            release over 4 s while the rest follow the step fade. Verify the 4 s
+            out survives even when the scene's own fade-out is 0.
+      - [ ] **Reset to step** — right-click a look → *Reset Fade In / Out / both to
+            step*; cell returns to `step`. Also: spin a cell below 0 → `step`.
+      - [ ] **0 ≠ step** — confirm 0 s (snap) and `step` (inherit) behave
+            differently against a chaser step with a non-zero fade.
+      - [ ] **Precedence intact** — reordering looks (drag / Up-Down) still works
+            and doesn't disturb the fade cells; effect looks show `—` (inert).
+      - [ ] **Persistence** — set in/out on a couple looks, **save**, quit, reload
+            → cells restore. Check the `.qxw`: `<Palette … FadeIn=… FadeOut=…/>`.
+      - [ ] **Bundle round-trip** — *Save as Bundle* from a scene carrying per-look
+            fades → open the JSON, confirm `fadeIn/fadeOut`; **Stamp** it onto
+            another scene → fades restored; **Ctrl-Z** (undo stamp) → prior fades
+            restored.
+      - [ ] **Look editor mirror** — the bottom Look editor's "Fade in/out"
+            spinners match the tree; editing either path updates the other on
+            reselect and refreshes preview.
+- [x] **Blind / Park / Highlight batch** *(DONE — needs GUI test)* — classroom-safety
+      trio, all as Programming-tab toolbar buttons.
+      - **Blind** = build without hitting the stage. Engine adds a per-universe
+        output-inhibit flag (`Universe::setInhibitOutput`): `dumpOutput()` returns
+        early so the physical plugins get nothing, but `processFaders()` still emits
+        `universeWritten()`, so the 2D monitor / preview keeps updating. Toggled via
+        `InputOutputMap::setOutputInhibited` (mirrors `setBlackout`, re-dumps on
+        release so the rig catches up). Distinct from blackout. It's a **global**
+        output state, so the toggle is a **main-toolbar action next to Blackout**
+        (`App::m_controlBlindAction`, `:/blind.png` eye-with-slash), NOT a
+        Programming-tab button — engine `outputInhibitedChanged` is the single source
+        of truth that syncs every indicator. **Blue** (EOS/MA) indicators: the
+        toolbar action, a full-width **canvas banner** in the Programming tab, and —
+        while armed — the **entire app status-bar footer turns blue** with a white
+        "● BLIND — rig muted, preview only" caption (survives tab switches, since the
+        footer is always visible). Design-mode only: the toolbar action is disabled
+        in Operate and force-cleared on →Operate (`App::slotModeChanged`), so a muted
+        rig never survives into a live show. Not persisted.
+        (Also fixed a fork wart: the **Show-mode Lock** toolbar button reused
+        `:/blackout.png` and looked like a second Blackout — now a padlock,
+        `:/lock.png` locked / `:/unlock.png` open.)
+      - **Highlight** was already a persistent toggle; added a **Flash** button that
+        momentarily flashes the selected fixtures to identify them (wires the existing
+        `ProgrammerController::flashFixture`).
+      - **Park** = hold fixtures out of cue output. New `ParkEffect` DMXSource (mirror
+        of `HighlightEffect`) holds captured per-channel values at `forceLTP` every
+        tick. `ProgrammerController::parkFixtures` snapshots each fixture's current
+        pre-GM output (claim/preGMValue/release) so a fixture freezes where it sits;
+        unpark releases. **Persists** to the `.qxw` as `<Park>` (round-trip
+        unit-verified) via thin Doc forwarders; cleared on workspace clear + fixture
+        removal. Toolbar **Park** button is context-sensitive (Park ⇄ Unpark on the
+        selection) plus **Unpark all**.
+      Still needs: GUI confirmation of the three toolbar buttons + that Blind darkens
+      the rig while the 2D monitor still shows the look (couldn't drive the GUI
+      headless this session — no accessibility permission).
+- [ ] **Show timeline in the Programming tab + MTC follow** *(DECIDED — big,
+      phased; supersedes the old "Timecode / cue sheet" idea)* —
+      **Key finding: the Show *engine* is already generic.** `ShowFunction`
+      stores only `{functionID, startTime, duration}` and `ShowRunner` starts
+      `doc->function(id)` without checking type (showfunction.h:44, showrunner.cpp:70/182),
+      so **Collections already run on a timeline today** — the "scenes only" wall
+      is purely the Show Manager *UI* (no Collection item widget; Track is
+      scene-bound via `Track(sceneID)`). Plan:
+      - **Reuse the Show engine wholesale** (Show / Track / ShowFunction /
+        ShowRunner) — it already handles multi-track, per-item intensity
+        override, tempo Time/Beats, pause, elapsed clock.
+      - **Lift-and-adapt the Show Manager's timeline widgets** (ui/src/showmanager/
+        multitrackview, trackitem, showitem — already-debugged QGraphicsView blocks
+        w/ drag/resize) into the Programming tab; **de-scene** them so a row can
+        hold **any function, incl. Collections** (first-class here).
+      - **Retire the old Show Manager UI** once superseded (two timeline tools
+        confuse students) but **keep reading `<Show>` XML** so existing shows load;
+        new-timeline shows round-trip as `<Show>`.
+      - **MTC follow, not beat clock** — Logic emits absolute MIDI Timecode
+        (`0xF1` quarter-frame + full-frame on locate); drive the runner's
+        `m_elapsedTime` (showrunner.h:71) from incoming TC instead of MasterTimer.
+        Beat clock (`0xF8`, pulses only) was rejected — drifts, breaks on locate.
+        Hook lives in the MIDI plugin (plugins/midi/src/).
+      - **Hybrid manual/timecode GO** — click-track sections follow MTC; **spoken
+        scenes have no click**, so when TC stops the timeline freezes and the
+        operator drives with manual GO. Falls out naturally from `m_elapsedTime`
+        not advancing.
+      - **Timecode status chip in the footer** — grey = no MTC source bound,
+        amber = connected but not advancing (= "you're driving now" / spoken
+        scene), green = rolling w/ live `HH:MM:SS:FF @fps` readout + pulse on each
+        full-frame. Pairs with the existing power footer.
+      - **Load/latency footer chip** (pairs with this work; see [[perf-load-indicator-idea]])
+        — measure MasterTimer tick duration vs the ~20 ms budget, surface
+        dropped/late ticks. Earns its keep precisely because timeline + MTC +
+        per-look fades + live effects all pile onto that tick.
+      Open detail settled: lift-and-adapt the existing widgets (not draw fresh).
+
 - [ ] **Power/amperage estimate + power-distribution model (NEW, needs GUI test)** —
       Design-mode-only estimate of the previewed look's electrical load, shown in a
       Programming-tab **footer** (`Estimated load: X.X A | Y.YY kW | OVERLOAD`), plus a
@@ -38,6 +177,18 @@ move to the bottom or get deleted. See also the session memory under
       XML round-trip (incl. circuit voltage + UPS fields) + runtime scaling unit-verified;
       live compute path runs without hang. Still needs: visual confirmation of the
       footer/dialog and tuning of the Mover/fallback watt constants against real fixtures.
+
+- [ ] **Venue / house-power source type (BACKLOG)** — model building/house power as
+      a source whose **circuits are the wall outlets**, with a service rating (main
+      breaker), so sockets that share a house circuit are grouped and flagged when
+      they'd trip together. Decided (2026-07-15) to keep the current standalone
+      **wall-socket source** (`PowerSource::WallSocket`, single implicit circuit) for
+      quick one-offs and add **House panel / Venue** as an *additional* source `Type`
+      later — not to replace wall sockets. Ties into the `.venue` export (venue-fixed
+      infrastructure): house panels would travel with the venue, fixture assignments
+      stay with the show. Power pane already supports per-source Type + flat (≤1
+      circuit) vs multi-circuit rendering, so this is mostly a new Type + a
+      service-rating field + overload roll-up at the panel level.
 
 - [ ] **2D Monitor: fixture facing arrow + set-facing (DRAFT, needs GUI test)** —
       moving heads now draw a green facing arrow showing `FixtureRigProps.panZeroDir`
@@ -77,17 +228,7 @@ move to the bottom or get deleted. See also the session memory under
       leave both?
 
 ### Medium complexity — clear value
-- [ ] **Highlight mode (identify)** — flash a selected fixture/group to
-      full-bright white (bypassing programming) so you can identify it in
-      the rig. Standard on EOS / MA2. One ProgrammerController call +
-      a toolbar button; clears on deselect. *(relatd to park)*
-- [ ] **Park / unpark DMX** — hold a channel or fixture at a fixed DMX
-      value regardless of cue output. ProgrammerController maintains a
-      "parked" overlay; unpark removes it. Useful for stuck fixtures or
-      setting a fixture aside during programming.
-- [ ] **Blind vs live preview toggle** — Programming tab currently always
-      previews live in Design mode. Add a Blind button: edits don't hit
-      DMX until you "take" them. Normal EOS workflow.
+- *(Highlight / Park / Blind — DONE, moved to "In progress / next" batch above.)*
 - [ ] **Scene capture from live DMX** — "Snapshot" action reads current
       universe output and writes it into a new or existing scene as baked
       values. Essential for capturing looks built on an external console.
@@ -100,10 +241,8 @@ move to the bottom or get deleted. See also the session memory under
       fader (0–100%) that scales all dimmer output for that group, without
       editing the scene. Overlays on top of palette paramount. Useful for
       live balancing without touching cues.
-- [ ] **Look transition times** — each look applied to a scene can carry a
-      fade-in / fade-out time, used when the scene is triggered. Scene
-      stores the fade alongside the palette ref; runtime applies via
-      FadeChannel. *Pairs with blind/live toggle.*
+- [ ] **Look transition times** — *DECIDED, promoted to "In progress / next" as
+      "Per-look (per-parameter) fade times"; see there for the override rule.*
 
 ---
 
@@ -130,8 +269,8 @@ move to the bottom or get deleted. See also the session memory under
 - [ ] **Shareable effect "looks"/groupings** — portable bundles of effect
       groupings (rolling sweep, colour patterns) that users can share.
       *Depends on scriptable effect engine.*
-- [ ] **Timecode / cue sheet** — trigger cues from MIDI timecode or OSC
-      timestamps, for locked-to-music shows.
+- [ ] **Timecode / cue sheet** — *DECIDED & promoted; see "Show timeline in the
+      Programming tab + MTC follow" under In progress / next.*
 - [ ] **More movement shapes / draw-your-own** — beyond built-in EFX shapes,
       let users draw custom movement paths on an XY canvas.
 - [ ] **Dimmer curve per fixture / channel** — override the default linear

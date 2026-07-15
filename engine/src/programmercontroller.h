@@ -35,8 +35,11 @@
 
 class ProgrammerFlasher;
 class HighlightEffect;
+class ParkEffect;
 class QLCPalette;
 class Scene;
+class QXmlStreamReader;
+class QXmlStreamWriter;
 
 /**
  * Fork-owned holder for all "programmer mode" state and logic.
@@ -127,6 +130,26 @@ public:
      *  full white on every DMX tick (bypasses running functions). */
     bool isHighlightActive() const;
     void setHighlightActive(bool active);
+
+    /*********************************************************************
+     * Park (hold fixtures out of cue output)
+     *********************************************************************/
+public:
+    /** Park @p fixtureIds: capture each fixture's current output values and
+     *  hold them on every DMX tick (forceLTP), overriding running functions,
+     *  until unparked. Persists to the workspace. */
+    void parkFixtures(const QList<quint32> &fixtureIds);
+    /** Release the park on @p fixtureIds. */
+    void unparkFixtures(const QList<quint32> &fixtureIds);
+    /** Release every park. */
+    void unparkAllFixtures();
+    bool isFixtureParked(quint32 fixtureId) const;
+    QList<quint32> parkedFixtures() const;
+    bool hasParkedFixtures() const;
+
+    /** Workspace persistence — driven by Doc's thin forwarders. */
+    bool saveParkXML(QXmlStreamWriter *doc) const;
+    bool loadParkXML(QXmlStreamReader &root);
 
     /*********************************************************************
      * Design-mode joystick (writes pan/tilt into the focused scene)
@@ -232,6 +255,8 @@ signals:
     void programmerSelectionChanged();
     /** Emitted when highlight active state changes. */
     void highlightActiveChanged(bool active);
+    /** Emitted when the parked-fixtures set changes. */
+    void parkChanged();
     /** Emitted when a pan or tilt axis binding is captured or cleared. */
     void axisBindingChanged();
     /** Emitted when a controller button with a named action is pressed.
@@ -361,6 +386,8 @@ private:
     /** Persistent highlight DMXSource — holds selected fixtures at white. */
     HighlightEffect *m_highlightEffect = nullptr;
     bool m_highlightActive = false;
+    /** Persistent park DMXSource — holds parked fixtures at captured values. */
+    ParkEffect *m_parkEffect = nullptr;
     // Controller axis binding (program-wide)
     quint32 m_panUniverse = 0,  m_panChannel  = 0;
     quint32 m_tiltUniverse = 0, m_tiltChannel = 0;

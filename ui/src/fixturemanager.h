@@ -37,6 +37,7 @@ class OutputMap;
 class QSplitter;
 class QAction;
 class QMenu;
+class PowerDistributionWidget;
 
 /** @addtogroup ui_fixtures
  * @{
@@ -134,6 +135,14 @@ private:
     /** Create the text browser for displaying information */
     void createInfo();
 
+    /** Delete whichever widget currently occupies the right pane (info / group
+     *  layout editor / power view) so a new one can take splitter index 1. */
+    void clearRightPane();
+
+    /** Show the power-distribution view in the right pane (creating it if the
+     *  slot currently holds the info browser or a group editor). */
+    void showPower();
+
 private slots:
     /** Callback for fixture list selection changes */
     void slotSelectionChanged();
@@ -193,6 +202,7 @@ private:
     FixtureGroupEditor* m_groupEditor;
     quint32 m_groupEditorId; //!< id of the group m_groupEditor is editing
     int m_currentTabIndex;
+    PowerDistributionWidget* m_power; //!< rightmost pane: circuits + live load
 
     /********************************************************************
      * Menu & Toolbar & Actions

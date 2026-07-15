@@ -22,6 +22,7 @@
 #define SCENE_H
 
 #include <QMutex>
+#include <QHash>
 #include <QList>
 
 #include "genericfader.h"
@@ -271,8 +272,36 @@ public:
      *  palettes/effects in. Returns true if the order actually changed. */
     bool reorderPalettes(const QList<quint32> &orderedIds);
 
+    /** Per-look fade override (milliseconds), separate fade-IN and fade-OUT.
+     *  A palette applied to this scene fades its channels over the step/scene
+     *  fade by default; an explicit override here applies ONLY to that
+     *  palette's channels, letting (say) colour snap in while movers glide, or
+     *  a look punch in fast and release slow (a "pulse"). -1 = no override for
+     *  that direction (falls back to the step/scene fade); 0 is a valid
+     *  override meaning "snap instantly". */
+    struct PaletteFade
+    {
+        int fadeInMs = -1;
+        int fadeOutMs = -1;
+        bool isEmpty() const { return fadeInMs < 0 && fadeOutMs < 0; }
+    };
+
+    void setPaletteFade(quint32 paletteId, int fadeInMs, int fadeOutMs);
+
+    /** The per-look fade-in / fade-out override for @a paletteId in ms, or -1
+     *  if none is set for that direction. */
+    int paletteFadeIn(quint32 paletteId) const;
+    int paletteFadeOut(quint32 paletteId) const;
+
+    /** Snapshot of all per-palette fade overrides, keyed by palette id. Only
+     *  palettes with an explicit override in either direction appear. */
+    QHash<quint32, PaletteFade> paletteFades() const;
+
 private:
     QList<quint32> m_palettes;
+    /** paletteId -> fade override (see setPaletteFade). Guarded by
+     *  m_bindingsMutex like m_palettes. */
+    QHash<quint32, PaletteFade> m_paletteFade;
 
     /*********************************************************************
      * Load & Save

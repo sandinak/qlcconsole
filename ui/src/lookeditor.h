@@ -28,6 +28,7 @@ class PathDrawWidget;
 class GradientDirectionWidget;
 class QSlider;
 class QCheckBox;
+class QDoubleSpinBox;
 class QComboBox;
 class QPushButton;
 class QLabel;
@@ -77,6 +78,8 @@ private slots:
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
     void slotBeamChanged(int);
+    /** Per-look fade override (checkbox + seconds spin) changed. */
+    void slotFadeTimeChanged();
 
 private:
     /** Whether any target fixture of the context scene has a channel in the
@@ -114,6 +117,14 @@ private:
     QLineEdit *m_nameEdit;   //!< editable palette name
     QLabel    *m_title;      //!< "used by N scene(s)" info line
     QLabel    *m_warning;
+
+    // Per-look fade override row (per scene+palette; hidden when no context
+    // scene or for Effect palettes, which the script runner fades itself).
+    // Each spin's minimum is a special "step" value meaning "fall back to the
+    // chaser step / scene fade" (independent in vs out — a pulse = 0 in, slow out).
+    QWidget        *m_fadeRow = nullptr;
+    QDoubleSpinBox *m_fadeInSpin = nullptr;
+    QDoubleSpinBox *m_fadeOutSpin = nullptr;
     QStackedWidget *m_stack;
     int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageAim, m_pageBeam, m_pageSingle, m_pageStrobe;
 

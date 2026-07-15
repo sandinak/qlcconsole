@@ -184,7 +184,11 @@ public slots:
     void slotControlFullScreen();
     void slotControlFullScreen(bool usingGeometry);
     void slotControlBlackout();
+    /** Toggle global Blind (output inhibit) from the main toolbar. */
+    void slotControlBlind(bool checked);
     void slotBlackoutChanged(bool state);
+    /** Show/hide the global Blind (output-inhibited) status-bar chip. */
+    void slotOutputInhibitedChanged(bool state);
     void slotShowModeLock(bool checked);
     void slotShowLockedChanged(bool locked);
     void slotControlPanic();
@@ -219,6 +223,7 @@ private:
     QAction* m_addressToolAction;
     QAction* m_controlFullScreenAction;
     QAction* m_controlBlackoutAction;
+    QAction* m_controlBlindAction;
     QAction* m_showLockAction;
     QAction* m_controlPanicAction;
     QAction* m_dumpDmxAction;
@@ -377,6 +382,7 @@ private:
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;
     QLabel* m_statusShowLockLabel;
+    QLabel* m_statusBlindLabel;
     QString m_statusMessage;
 };
 

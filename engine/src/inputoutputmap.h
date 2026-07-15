@@ -120,6 +120,21 @@ public:
      */
     bool blackout() const;
 
+    /**
+     * Fork "Blind" support. Inhibits physical output on every universe (the
+     * output plugins receive nothing) while leaving universeWritten() intact,
+     * so the 2D monitor / preview still reflects the look. Independent of
+     * blackout; used by the Programming tab to build looks without the stage
+     * rig responding. Not persisted.
+     *
+     * @param inhibit If true, mute all physical output, otherwise resume
+     * @return true if the state changed
+     */
+    bool setOutputInhibited(bool inhibit);
+
+    /** Get the current Blind (output-inhibited) state. */
+    bool outputInhibited() const;
+
 signals:
     /**
      * Signal that is sent when blackout state is changed.
@@ -128,9 +143,14 @@ signals:
      */
     void blackoutChanged(bool state);
 
+    /** Sent when the Blind (output-inhibited) state changes. */
+    void outputInhibitedChanged(bool state);
+
 private:
     /** Current blackout state */
     bool m_blackout;
+    /** Current Blind (output-inhibited) state */
+    bool m_outputInhibited = false;
 
     /*********************************************************************
      * Universes

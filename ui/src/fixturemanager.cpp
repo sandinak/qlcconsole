@@ -22,6 +22,8 @@
 #include <QTreeWidgetItem>
 #include <QTextBrowser>
 #include <QVBoxLayout>
+#include <QLabel>
+#include <QFont>
 #include <QTreeWidget>
 #include <QScrollArea>
 #include <QMessageBox>
@@ -47,6 +49,8 @@
 #include "qlcfile.h"
 
 #include "createfixturegroup.h"
+#include "powerdistributionwidget.h"
+#include "powerdistribution.h"
 #include "fixturegroupeditor.h"
 #include "fixturetreewidget.h"
 #include "channelsselection.h"
@@ -62,7 +66,9 @@
 #include "doc.h"
 #include "monitor/monitor.h"
 
-#define SETTINGS_SPLITTER "fixturemanager/splitterstate"
+// Bumped when the power pane was added as a third section: an older 2-section
+// saved state would collapse the new pane to zero width and hide it.
+#define SETTINGS_SPLITTER "fixturemanager/splitterstate_pwr"
 
 // List view column numbers
 #define KColumnName     0
@@ -86,6 +92,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_groupEditor(NULL)
     , m_groupEditorId(FixtureGroup::invalidId())
     , m_currentTabIndex(0)
+    , m_power(NULL)
     , m_ctxUniverse(InputOutputMap::invalidUniverse())
     , m_addAction(NULL)
     , m_addRGBAction(NULL)
@@ -426,7 +433,9 @@ void FixtureManager::initDataView()
 */
     connect(tabs, SIGNAL(currentChanged(int)), this, SLOT(slotTabChanged(int)));
 
-    /* Create the text view */
+    /* Create the initial right-hand pane. slotSelectionChanged() then swaps this
+     * slot between the info browser, a fixture-group's layout editor, and the
+     * power-distribution view depending on what's selected. */
     createInfo();
 
     slotSelectionChanged();
@@ -555,26 +564,58 @@ void FixtureManager::fixtureSelected(quint32 id)
     slotModeChanged(m_doc->mode());
 }
 
-void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
+void FixtureManager::clearRightPane()
 {
-    QByteArray state = m_splitter->saveState();
-
+    // The right pane (splitter index 1) hosts exactly one of these at a time;
+    // delete whichever is present so a new occupant can take the slot.
     if (m_info != NULL)
     {
         delete m_info;
         m_info = NULL;
     }
-
     if (m_groupEditor != NULL)
     {
         delete m_groupEditor;
         m_groupEditor = NULL;
         m_groupEditorId = FixtureGroup::invalidId();
     }
+    if (m_power != NULL)
+    {
+        delete m_power;
+        m_power = NULL;
+    }
+}
+
+void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
+{
+    if (m_groupEditor != NULL && m_groupEditorId == grp->id())
+        return; // already editing this group's layout
+
+    QByteArray state = m_splitter->saveState();
+    clearRightPane();
 
     m_groupEditor = new FixtureGroupEditor(grp, m_doc, this);
     m_groupEditorId = grp->id();
-    m_splitter->addWidget(m_groupEditor);
+    m_splitter->insertWidget(1, m_groupEditor);
+
+    m_splitter->restoreState(state);
+}
+
+void FixtureManager::showPower()
+{
+    if (m_power != NULL)
+    {
+        m_power->refresh();
+        return; // already showing the power view
+    }
+
+    QByteArray state = m_splitter->saveState();
+    clearRightPane();
+
+    // Embedded next to the fixture tree, so no built-in fixtures list: assignment
+    // is driven from the tree's right-click menu.
+    m_power = new PowerDistributionWidget(m_doc, false, this);
+    m_splitter->insertWidget(1, m_power);
 
     m_splitter->restoreState(state);
 }
@@ -582,141 +623,68 @@ void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
 void FixtureManager::createInfo()
 {
     QByteArray state = m_splitter->saveState();
-
-    if (m_info != NULL)
-    {
-        delete m_info;
-        m_info = NULL;
-    }
-
-    if (m_groupEditor != NULL)
-    {
-        delete m_groupEditor;
-        m_groupEditor = NULL;
-        m_groupEditorId = FixtureGroup::invalidId();
-    }
+    clearRightPane();
 
     m_info = new QTextBrowser(this);
-    m_splitter->addWidget(m_info);
+    m_splitter->insertWidget(1, m_info);
 
     m_splitter->restoreState(state);
 }
 
 void FixtureManager::slotSelectionChanged()
 {
-    int selectedCount = m_fixtures_tree->selectedItems().size();
+    const QList<QTreeWidgetItem*> items = m_fixtures_tree->selectedItems();
+    const int selectedCount = items.size();
+
+    // A single fixture group → its layout editor.
     if (selectedCount == 1)
     {
-        QTreeWidgetItem* item = m_fixtures_tree->selectedItems().first();
-        Q_ASSERT(item != NULL);
-
-        // Set the text view's contents
-        QVariant fxivar = item->data(KColumnName, PROP_ID);
-        QVariant grpvar = item->data(KColumnName, PROP_GROUP);
-        // Single-click only SELECTS now (so a fixture can be dragged onto an
-        // open group editor without it being torn down); double-click opens
-        // the group editor / fixture properties (see slotDoubleClicked).
-        if (fxivar.isValid() == false && grpvar.isValid() == false)
+        const QVariant grpvar = items.first()->data(KColumnName, PROP_GROUP);
+        if (grpvar.isValid() == true)
         {
-            QString info = "<HTML><BODY>";
-            QString uniName;
-            double totalWeight = 0;
-            int totalPower = 0;
-            QVariant uniID = item->data(KColumnName, PROP_UNIVERSE);
-            if (uniID.isValid() == true)
-                uniName = m_doc->inputOutputMap()->getUniverseNameByID(uniID.toUInt());
-
-            foreach (Fixture *fixture, m_doc->fixtures())
-            {
-                if (fixture == NULL || fixture->universe() != uniID.toUInt() || fixture->fixtureMode() == NULL)
-                    continue;
-
-                QLCFixtureMode *mode = fixture->fixtureMode();
-                totalWeight += mode->physical().weight();
-                totalPower += mode->physical().powerConsumption();
-            }
-
-            if (m_info == NULL)
-                createInfo();
-
-            info += QString("<H1>%1</H1><P>%2 <B>%3</B></P>")
-                    .arg(uniName).arg(tr("This group contains all fixtures of"))
-                    .arg(uniName);
-
-            info += QString("<BR><P><B>%1</B>: %2Kg<BR><B>%3</B>: %4W</P>")
-                    .arg(tr("Total estimated weight")).arg(QString::number(totalWeight))
-                    .arg(tr("Maximum estimated power consumption")).arg(totalPower);
-
-            info += "</BODY></HTML>";
-
-            m_info->setText(info);
+            FixtureGroup *grp = m_doc->fixtureGroup(grpvar.toUInt());
+            if (grp != NULL)
+                fixtureGroupSelected(grp);
+            slotModeChanged(m_doc->mode());
+            return;
         }
     }
-    else
+
+    // While a group's layout editor is open, keep it as long as the selection is
+    // only fixtures — so a fixture can be dragged from the tree onto the layout
+    // grid without the editor being torn down mid-drag. A universe row or empty
+    // selection still switches away (below).
+    if (m_groupEditor != NULL && selectedCount >= 1)
     {
-        // More than one or less than one selected
-        QString info = "<HTML><BODY>";
-        if (selectedCount > 1)
+        bool onlyFixtures = true;
+        foreach (QTreeWidgetItem *it, items)
         {
-            // Enable removal of multiple items in design mode
-            if (m_doc->mode() == Doc::Design)
-            {
-                double totalWeight = 0;
-                int totalPower = 0;
-
-                info += tr("<H1>Multiple fixtures selected</H1>" \
-                          "<P>Click <IMG SRC=\"" ":/edit_remove.png\">" \
-                          " to remove the selected fixtures.</P>");
-
-                foreach (QTreeWidgetItem *item, m_fixtures_tree->selectedItems())
-                {
-                    QVariant fxID = item->data(KColumnName, PROP_ID);
-                    if (fxID.isValid() == false)
-                        continue;
-
-                    Fixture *fixture = m_doc->fixture(fxID.toUInt());
-
-                    if (fixture == NULL || fixture->fixtureMode() == NULL)
-                        continue;
-
-                    QLCFixtureMode *mode = fixture->fixtureMode();
-                    totalWeight += mode->physical().weight();
-                    totalPower += mode->physical().powerConsumption();
-                }
-
-                info += QString("<BR><P><B>%1</B>: %2Kg<BR><B>%3</B>: %4W</P>")
-                        .arg(tr("Total estimated weight")).arg(QString::number(totalWeight))
-                        .arg(tr("Maximum estimated power consumption")).arg(totalPower);
-            }
-            else
-            {
-                info += tr("<H1>Multiple fixtures selected</H1>" \
-                          "<P>Fixture list modification is not permitted" \
-                          " in operate mode.</P>");
-            }
+            const bool isFixture = it->data(KColumnName, PROP_ID).isValid()
+                    && it->data(KColumnName, PROP_HEAD).isValid() == false;
+            if (isFixture == false) { onlyFixtures = false; break; }
         }
-        else
+        if (onlyFixtures)
         {
-            if (m_fixtures_tree->topLevelItemCount() <= 0)
-            {
-                info += tr("<H1>No fixtures</H1>" \
-                          "<P>Click <IMG SRC=\"" ":/edit_add.png\">" \
-                          " to add fixtures.</P>");
-            }
-            else
-            {
-                info += tr("<H1>Nothing selected</H1>" \
-                          "<P>Select a fixture from the list or " \
-                          "click <IMG SRC=\"" ":/edit_add.png\">" \
-                          " to add fixtures.</P>");
-            }
+            slotModeChanged(m_doc->mode());
+            return;
         }
-        info += "</BODY></HTML>";
+    }
 
+    // Empty rig → onboarding hint in the info browser.
+    if (selectedCount == 0 && m_fixtures_tree->topLevelItemCount() <= 0)
+    {
         if (m_info == NULL)
             createInfo();
-        m_info->setText(info);
+        m_info->setText(tr("<HTML><BODY><H1>No fixtures</H1>"
+                           "<P>Click <IMG SRC=\"" ":/edit_add.png\">"
+                           " to add fixtures.</P></BODY></HTML>"));
+        slotModeChanged(m_doc->mode());
+        return;
     }
+
+    // Anything else — a fixture, a universe, nothing, or a multi-selection — shows
+    // the power systems in the wide right-hand pane.
+    showPower();
 
     // Enable/disable actions
     slotModeChanged(m_doc->mode());
@@ -2261,6 +2229,47 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         }
     }
 
+    // Assign the selected fixtures to a power circuit (or remove them). Circuits
+    // live in the power-distribution model shown in the pane on the right.
+    QMenu *circuitMenu = NULL;
+    QAction *removeFromCircuit = NULL;
+    if (selFixtures.isEmpty() == false)
+    {
+        menu.addSeparator();
+        PowerDistribution *pd = m_doc->powerDistribution();
+        circuitMenu = menu.addMenu(selFixtures.size() > 1
+            ? tr("Add %1 fixtures to power circuit").arg(selFixtures.size())
+            : tr("Add to power circuit"));
+        bool haveCircuit = false;
+        for (int s = 0; s < pd->sources().size(); s++)
+        {
+            const PowerSource &src = pd->sources().at(s);
+            if (src.circuits.size() <= 1)
+            {
+                // A wall socket, single-outlet UPS, or fresh source takes fixtures
+                // directly (its single/implicit circuit, created on demand).
+                haveCircuit = true;
+                QAction *a = circuitMenu->addAction(tr("%1 (direct)").arg(src.name));
+                a->setData(QPoint(s, 0));
+                continue;
+            }
+            for (int c = 0; c < src.circuits.size(); c++)
+            {
+                haveCircuit = true;
+                QAction *a = circuitMenu->addAction(tr("%1 / %2")
+                        .arg(src.name).arg(src.circuits.at(c).name));
+                a->setData(QPoint(s, c));   // (source, circuit) indices
+            }
+        }
+        if (haveCircuit == false)
+        {
+            QAction *none = circuitMenu->addAction(
+                tr("(no circuits yet — add one in the Power pane)"));
+            none->setEnabled(false);
+        }
+        removeFromCircuit = menu.addAction(tr("Remove from power circuit"));
+    }
+
     QAction *chosen = menu.exec(QCursor::pos());
 
     // addFixture() (fired from m_addAction during exec above) has already
@@ -2317,6 +2326,25 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             copySelectionIntoGroup(target, selFixtures, selGroups);
             updateView();
         }
+    }
+    else if (circuitMenu != NULL && circuitMenu->actions().contains(chosen))
+    {
+        const QPoint sc = chosen->data().toPoint();
+        PowerDistribution *pd = m_doc->powerDistribution();
+        foreach (quint32 fid, selFixtures)
+            pd->assignFixture(fid, sc.x(), sc.y());
+        m_doc->setModified();
+        if (m_power != NULL)
+            m_power->refresh();
+    }
+    else if (chosen == removeFromCircuit)
+    {
+        PowerDistribution *pd = m_doc->powerDistribution();
+        foreach (quint32 fid, selFixtures)
+            pd->unassignFixture(fid);
+        m_doc->setModified();
+        if (m_power != NULL)
+            m_power->refresh();
     }
 }
 

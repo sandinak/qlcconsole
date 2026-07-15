@@ -44,6 +44,7 @@
 #include "mastertimer.h"
 #include "programmerflasher.h"
 #include "highlighteffect.h"
+#include "parkeffect.h"
 #include "capturemanager.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
@@ -61,6 +62,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
     qDebug() << "[PC] ProgrammerController constructed";
     m_programmerFlasher = new ProgrammerFlasher(m_doc);
     m_highlightEffect = new HighlightEffect(m_doc);
+    m_parkEffect = new ParkEffect(m_doc);
 
     connect(this, &ProgrammerController::programmerSelectionChanged,
             this, &ProgrammerController::slotSyncEffectFixtures);
@@ -1189,6 +1191,117 @@ void ProgrammerController::setHighlightActive(bool active)
     if (m_highlightEffect)
         m_highlightEffect->setFixtures(active ? selection : QList<quint32>());
     emit highlightActiveChanged(active);
+}
+
+/*****************************************************************************
+ * Park
+ *****************************************************************************/
+
+void ProgrammerController::parkFixtures(const QList<quint32> &fixtureIds)
+{
+    if (fixtureIds.isEmpty() || m_parkEffect == nullptr)
+        return;
+
+    // Capture each fixture's current pre-Grand-Master output so a parked
+    // fixture freezes exactly where it sits. claimUniverses() shares the
+    // MasterTimer write mutex; release read-only (changed=false).
+    QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
+
+    bool changed = false;
+    for (quint32 fid : fixtureIds)
+    {
+        Fixture *fxi = m_doc->fixture(fid);
+        if (fxi == NULL || fxi->fixtureMode() == NULL)
+            continue;
+
+        const int uni = (int)fxi->universe();
+        QHash<quint32, uchar> values;
+        const quint32 nCh = fxi->channels();
+        for (quint32 c = 0; c < nCh; c++)
+        {
+            const int absAddr = (int)fxi->address() + (int)c;
+            if (absAddr >= UNIVERSE_SIZE)
+                break;
+            uchar v = 0;
+            if (uni >= 0 && uni < universes.size() && universes[uni] != NULL)
+                v = universes[uni]->preGMValue(absAddr);
+            values.insert(c, v);
+        }
+
+        if (!values.isEmpty())
+        {
+            m_parkEffect->parkFixture(fid, values);
+            changed = true;
+        }
+    }
+
+    m_doc->inputOutputMap()->releaseUniverses(false);
+
+    if (changed)
+    {
+        m_doc->setModified();
+        emit parkChanged();
+    }
+}
+
+void ProgrammerController::unparkFixtures(const QList<quint32> &fixtureIds)
+{
+    if (m_parkEffect == nullptr)
+        return;
+
+    bool changed = false;
+    for (quint32 fid : fixtureIds)
+    {
+        if (m_parkEffect->isParked(fid))
+        {
+            m_parkEffect->unparkFixture(fid);
+            changed = true;
+        }
+    }
+
+    if (changed)
+    {
+        m_doc->setModified();
+        emit parkChanged();
+    }
+}
+
+void ProgrammerController::unparkAllFixtures()
+{
+    if (m_parkEffect == nullptr || m_parkEffect->isEmpty())
+        return;
+    m_parkEffect->unparkAll();
+    m_doc->setModified();
+    emit parkChanged();
+}
+
+bool ProgrammerController::isFixtureParked(quint32 fixtureId) const
+{
+    return m_parkEffect != nullptr && m_parkEffect->isParked(fixtureId);
+}
+
+QList<quint32> ProgrammerController::parkedFixtures() const
+{
+    return m_parkEffect != nullptr ? m_parkEffect->parkedFixtures() : QList<quint32>();
+}
+
+bool ProgrammerController::hasParkedFixtures() const
+{
+    return m_parkEffect != nullptr && !m_parkEffect->isEmpty();
+}
+
+bool ProgrammerController::saveParkXML(QXmlStreamWriter *doc) const
+{
+    return m_parkEffect != nullptr ? m_parkEffect->saveXML(doc) : true;
+}
+
+bool ProgrammerController::loadParkXML(QXmlStreamReader &root)
+{
+    if (m_parkEffect == nullptr)
+        return false;
+    const bool ok = m_parkEffect->loadXML(root);
+    emit parkChanged();
+    return ok;
 }
 
 /*****************************************************************************

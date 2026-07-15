@@ -61,6 +61,7 @@
 #include "qlcphysical.h"
 #include "fixturegroup.h"
 #include "programmercontroller.h"
+#include "parkeffect.h"
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
  #include "audiocapture_qt5.h"
@@ -229,6 +230,11 @@ void Doc::clearContents()
 
     if (m_powerDist != NULL)
         m_powerDist->reset();
+
+    // Drop any parked fixtures so a quarantine doesn't bleed into the next
+    // workspace (loadXML re-populates from <Park> if present).
+    if (m_programmer != NULL)
+        m_programmer->unparkAllFixtures();
 
     destroyAudioCapture();
 
@@ -924,6 +930,7 @@ bool Doc::deleteFixture(quint32 id)
             m_powerDist->removeFixture(id);
 
         m_programmer->removeFromProgrammerSelection(QList<quint32>() << id);
+        m_programmer->unparkFixtures(QList<quint32>() << id);
 
         emit fixtureRemoved(id);
         setModified();
@@ -1743,6 +1750,13 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             powerDistribution()->loadXML(doc, this);
         }
+        else if (doc.name() == KXMLQLCPark)
+        {
+            if (m_programmer != NULL)
+                m_programmer->loadParkXML(doc);
+            else
+                doc.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown engine tag:" << doc.name();
@@ -1817,6 +1831,9 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
 
     if (m_powerDist != NULL)
         m_powerDist->saveXML(doc);
+
+    if (m_programmer != NULL)
+        m_programmer->saveParkXML(doc);
 
     if (m_monitorProps != NULL)
         m_monitorProps->saveXML(doc, this);

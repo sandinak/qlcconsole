@@ -121,6 +121,35 @@ bool InputOutputMap::blackout() const
     return m_blackout;
 }
 
+bool InputOutputMap::setOutputInhibited(bool inhibit)
+{
+    if (m_outputInhibited == inhibit)
+        return false;
+
+    m_outputInhibited = inhibit;
+
+    // Atomic bool per universe, same as blackout; no mutex needed.
+    foreach (Universe *universe, m_universeArray)
+    {
+        universe->setInhibitOutput(inhibit);
+
+        // Push the current values through immediately: while inhibited
+        // dumpOutput() is a no-op (rig goes dark); when resuming, this forces
+        // the plugins to catch up to the latest look right away.
+        const QByteArray postGM = universe->postGMValues()->mid(0, universe->usedChannels());
+        universe->dumpOutput(postGM, true);
+    }
+
+    emit outputInhibitedChanged(m_outputInhibited);
+
+    return true;
+}
+
+bool InputOutputMap::outputInhibited() const
+{
+    return m_outputInhibited;
+}
+
 /*****************************************************************************
  * Universes
  *****************************************************************************/

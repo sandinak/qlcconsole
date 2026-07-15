@@ -21,6 +21,7 @@
 class QListWidget;
 class QListWidgetItem;
 class QTreeWidget;
+class QTreeWidgetItem;
 class QPushButton;
 class QLabel;
 class Scene;
@@ -81,7 +82,11 @@ private slots:
     /** Sync the scene's palette order from the list after an internal drag. */
     void slotLooksReordered();
     void slotLookSelectionChanged();
-    void slotLookDoubleClicked(QListWidgetItem *item);
+    void slotLookDoubleClicked(QTreeWidgetItem *item, int column);
+    /** A look's In/Out fade cell was edited: push it to the scene. */
+    void slotLookFadeEdited(QTreeWidgetItem *item, int column);
+    /** Right-click a look: reset its fade In/Out to "step" (inherit). */
+    void slotLookContextMenu(const QPoint &pos);
     void slotTargetSelectionChanged();
     void slotTargetContextMenu(const QPoint &pos);
 
@@ -109,7 +114,7 @@ private:
 
     QLabel *m_targetsLabel;     //!< "Targets (N fixtures)"
     QTreeWidget *m_targetList;  //!< groups + fixtures grouped by type
-    QListWidget *m_lookList;
+    QTreeWidget *m_lookList;    //!< Look | In | Out (In/Out editable per look)
     QPushButton *m_removeTargetButton;
     QPushButton *m_removeLookButton;
     QPushButton *m_moveLookUpButton;

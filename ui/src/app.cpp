@@ -127,6 +127,7 @@ App::App()
     , m_addressToolAction(NULL)
     , m_controlFullScreenAction(NULL)
     , m_controlBlackoutAction(NULL)
+    , m_controlBlindAction(NULL)
     , m_controlPanicAction(NULL)
     , m_dumpDmxAction(NULL)
     , m_liveEditAction(NULL)
@@ -157,6 +158,7 @@ App::App()
     , m_statusSelectionLabel(NULL)
     , m_statusPadModeLabel(NULL)
     , m_statusShowLockLabel(NULL)
+    , m_statusBlindLabel(NULL)
 {
     QCoreApplication::setOrganizationName("qlcplus");
     QCoreApplication::setOrganizationDomain("qlcplus.org");
@@ -379,6 +381,7 @@ void App::init()
 
     // Listen to blackout changes and toggle m_controlBlackoutAction
     connect(m_doc->inputOutputMap(), SIGNAL(blackoutChanged(bool)), this, SLOT(slotBlackoutChanged(bool)));
+    connect(m_doc->inputOutputMap(), SIGNAL(outputInhibitedChanged(bool)), this, SLOT(slotOutputInhibitedChanged(bool)));
 
     // Listen to DMX value changes and update each Fixture values array
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32, const QByteArray&)),
@@ -754,12 +757,21 @@ void App::slotModeChanged(Doc::Mode mode)
         m_modeToggleAction->setIcon(QIcon(":/design.png"));
         m_modeToggleAction->setText(tr("Design"));
         m_modeToggleAction->setToolTip(tr("Switch to design mode"));
+
+        // Blind is a Design-only build aid — never let a muted rig survive into
+        // a live show. Force it off and disable the toggle in Operate.
+        if (m_doc != NULL)
+            m_doc->inputOutputMap()->setOutputInhibited(false);
+        if (m_controlBlindAction != NULL)
+            m_controlBlindAction->setEnabled(false);
     }
     else if (mode == Doc::Design)
     {
         /* Enable editing features */
         m_fileNewAction->setEnabled(true);
         m_fileOpenAction->setEnabled(true);
+        if (m_controlBlindAction != NULL)
+            m_controlBlindAction->setEnabled(true);
         m_liveEditAction->setEnabled(false);
         m_liveEditVirtualConsoleAction->setEnabled(false);
         m_captureLiveEditsAction->setEnabled(false);
@@ -813,10 +825,24 @@ void App::initActions()
     connect(m_controlBlackoutAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlackout()));
     m_controlBlackoutAction->setChecked(m_doc->inputOutputMap()->blackout());
 
+    // Blind — global output inhibit: mute the physical rig while the 2D preview
+    // keeps updating, so looks can be built without hitting the stage. Design-mode
+    // only (disabled in Operate; forced off on →Operate). Sibling of Blackout.
+    m_controlBlindAction = new QAction(QIcon(":/blind.png"), tr("Toggle Bl&ind"), this);
+    m_controlBlindAction->setCheckable(true);
+    m_controlBlindAction->setToolTip(tr(
+        "Blind: mute the physical rig but keep the 2D preview live, so you can "
+        "build a look without hitting the stage. Turn off to take it live. "
+        "Design mode only."));
+    connect(m_controlBlindAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlind(bool)));
+    m_controlBlindAction->setChecked(m_doc->inputOutputMap()->outputInhibited());
+
     // Show-mode lock — when on, programmer parameter writes drop
     // silently. Selection nav, save, revert, pad-mode all still work.
     // Designed to prevent accidental edits during a live show.
-    m_showLockAction = new QAction(QIcon(":/blackout.png"),
+    // (Uses a padlock icon, NOT the blackout icon, so it isn't mistaken for a
+    // second Blackout button.)
+    m_showLockAction = new QAction(QIcon(":/unlock.png"),
                                    tr("Show-mode &Lock"), this);
     m_showLockAction->setShortcut(QKeySequence("CTRL+L"));
     m_showLockAction->setCheckable(true);
@@ -948,6 +974,7 @@ void App::initToolBar()
     m_toolbar->addAction(m_controlPanicAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_controlBlackoutAction);
+    m_toolbar->addAction(m_controlBlindAction);
     m_toolbar->addAction(m_showLockAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_modeToggleAction);
@@ -1290,6 +1317,44 @@ void App::slotBlackoutChanged(bool state)
     m_controlBlackoutAction->setChecked(state);
 }
 
+void App::slotControlBlind(bool checked)
+{
+    // Blind is a Design-mode build aid; refuse to arm it during a live show.
+    if (checked && m_doc != NULL && m_doc->mode() != Doc::Design)
+    {
+        if (m_controlBlindAction != NULL)
+            m_controlBlindAction->setChecked(false);
+        return;
+    }
+    if (m_doc != NULL)
+        m_doc->inputOutputMap()->setOutputInhibited(checked);
+}
+
+void App::slotOutputInhibitedChanged(bool state)
+{
+    // Engine is the source of truth: keep the toolbar action and the status chip
+    // in step (Blind may be cleared elsewhere, e.g. forced off on →Operate).
+    if (m_controlBlindAction != NULL && m_controlBlindAction->isChecked() != state)
+        m_controlBlindAction->setChecked(state);
+
+    if (m_statusBlindLabel != NULL)
+    {
+        m_statusBlindLabel->setText(state ? tr("● BLIND — rig muted, preview only ") : QString());
+        m_statusBlindLabel->setVisible(state);
+    }
+
+    // Turn the WHOLE footer blue while Blind is armed so it's unmistakable at a
+    // glance. Force white text on the plain labels for contrast; labels that set
+    // their own colour (dirty/autosave) keep theirs (their inline stylesheet wins
+    // over this ancestor rule), which still reads fine on blue.
+    QStatusBar *sb = statusBar();
+    if (sb != NULL)
+        sb->setStyleSheet(state
+            ? QStringLiteral("QStatusBar { background: #1565c0; } "
+                             "QStatusBar QLabel { color: white; }")
+            : QString());
+}
+
 void App::slotShowModeLock(bool checked)
 {
     if (m_doc != NULL)
@@ -1299,7 +1364,12 @@ void App::slotShowModeLock(bool checked)
 void App::slotShowLockedChanged(bool locked)
 {
     if (m_showLockAction != NULL)
+    {
         m_showLockAction->setChecked(locked);
+        // Closed padlock when locked, open when not — reads as a lock, not a
+        // second Blackout button.
+        m_showLockAction->setIcon(QIcon(locked ? ":/lock.png" : ":/unlock.png"));
+    }
     if (m_statusShowLockLabel != NULL)
     {
         if (locked)
@@ -2331,6 +2401,19 @@ void App::initStatusBar()
     m_statusShowLockLabel->setAlignment(Qt::AlignRight);
     m_statusShowLockLabel->hide();
     sb->addPermanentWidget(m_statusShowLockLabel);
+
+    // Blind indicator (global — Blind is an app-wide output mute, so it lives in
+    // the status bar and stays visible across tabs). While armed the WHOLE footer
+    // turns blue; this label is the white "BLIND" caption on it. Starts empty +
+    // hidden (QStatusBar re-shows permanent widgets when it first appears, so a
+    // label with permanent text would show even when inactive — keep it empty
+    // until slotOutputInhibitedChanged fills it in). Driven by
+    // InputOutputMap::outputInhibitedChanged.
+    m_statusBlindLabel = new QLabel(this);
+    m_statusBlindLabel->setAlignment(Qt::AlignRight);
+    m_statusBlindLabel->setStyleSheet("QLabel { color: white; font-weight: bold; }");
+    m_statusBlindLabel->hide();
+    sb->addPermanentWidget(m_statusBlindLabel);
 
     // Programmer dirty indicator (between mode and autosave). Hidden
     // when clean, red bullet + text when dirty. Mirrors the in-frame

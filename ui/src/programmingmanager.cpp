@@ -126,6 +126,22 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_highlightBtn->setToolTip(tr("Drive selected fixtures to full white so you can identify them in the rig"));
         toolbar->addWidget(m_highlightBtn);
 
+        m_flashBtn = new QPushButton(tr("Flash"), this);
+        m_flashBtn->setToolTip(tr("Momentarily flash the selected fixtures to identify them in the rig"));
+        m_flashBtn->setEnabled(false);
+        toolbar->addWidget(m_flashBtn);
+
+        m_parkBtn = new QPushButton(tr("Park"), this);
+        m_parkBtn->setToolTip(tr("Hold the selected fixtures at their current values, out of cue "
+                                 "output, until unparked (saved with the workspace)"));
+        m_parkBtn->setEnabled(false);
+        toolbar->addWidget(m_parkBtn);
+
+        m_unparkBtn = new QPushButton(tr("Unpark all"), this);
+        m_unparkBtn->setToolTip(tr("Release every parked fixture"));
+        m_unparkBtn->setEnabled(false);
+        toolbar->addWidget(m_unparkBtn);
+
         toolbar->addStretch(1);
 
         // BPM / internal beat generator
@@ -165,8 +181,30 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
         m_canvasLayout->addLayout(toolbar);
 
+        // Blind-active banner: full-width blue bar pinned at the very top of the
+        // canvas (above the toolbar) so "the rig is muted" can't be missed while
+        // the 2D preview keeps showing the look. Hidden until Blind is armed.
+        m_blindBanner = new QLabel(tr("⬤  BLIND — rig muted, preview only.  "
+                                      "Turn off Blind to take the look live."), this);
+        m_blindBanner->setAlignment(Qt::AlignCenter);
+        m_blindBanner->setStyleSheet(
+            QStringLiteral("QLabel { background: #1565c0; color: white; font-weight: bold; "
+                           "padding: 4px; border-radius: 3px; }"));
+        m_blindBanner->hide();
+        m_canvasLayout->insertWidget(0, m_blindBanner);
+
         connect(m_highlightBtn, &QPushButton::toggled,
                 this, &ProgrammingManager::slotHighlightToggled);
+        connect(m_flashBtn, &QPushButton::clicked,
+                this, &ProgrammingManager::slotFlashSelection);
+        // Blind is armed from the global toolbar (App); reflect the engine state
+        // in the canvas banner so building in-tab shows the muted-rig warning.
+        connect(m_doc->inputOutputMap(), &InputOutputMap::outputInhibitedChanged,
+                this, &ProgrammingManager::slotBlindStateChanged);
+        connect(m_parkBtn, &QPushButton::clicked,
+                this, &ProgrammingManager::slotParkSelection);
+        connect(m_unparkBtn, &QPushButton::clicked,
+                this, &ProgrammingManager::slotUnparkAll);
         connect(m_saveBtn, &QPushButton::clicked,
                 this, &ProgrammingManager::slotSavePositions);
         connect(m_speedSpin, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -234,6 +272,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                     this, &ProgrammingManager::slotFollowSpotBindingChanged);
             connect(pc, &ProgrammerController::highlightActiveChanged,
                     m_highlightBtn, &QPushButton::setChecked);
+            connect(pc, &ProgrammerController::parkChanged,
+                    this, &ProgrammingManager::slotParkChanged);
             connect(pc, &ProgrammerController::joystickUpdated,
                     this, &ProgrammingManager::slotJoystickUpdated);
             connect(pc, &ProgrammerController::buttonActionTriggered,
@@ -840,6 +880,9 @@ void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
     // know which fixtures to steer.
     if (ProgrammerController *pc = m_doc->programmer())
         pc->setProgrammerSelection(fixtureIds);
+    if (m_flashBtn)
+        m_flashBtn->setEnabled(!fixtureIds.isEmpty());
+    updateParkButtonLabel();
     if (Monitor::instance() != NULL)
         Monitor::instance()->highlightFixtures(fixtureIds);
     Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
@@ -1335,33 +1378,6 @@ void ProgrammingManager::recomputePower()
         totalAmps += it.value() / defaultVoltage;
     }
 
-    // TEMP power diagnostic: log only when the total moves, plus a sample of the
-    // first fixture's intensity-channel preGM values, to see if intensity edits
-    // reach the universe the estimate reads.
-    static double s_lastWatts = -1.0;
-    if (qAbs(totalWatts - s_lastWatts) > 0.5)
-    {
-        s_lastWatts = totalWatts;
-        QString sample;
-        QList<Universe*> u2 = m_doc->inputOutputMap()->claimUniverses();
-        const QList<Fixture*> fxs = m_doc->fixtures();
-        for (int n = 0; n < fxs.size() && n < 3; n++)
-        {
-            Fixture *fx = fxs.at(n);
-            if (!fx || !fx->fixtureMode()) continue;
-            QString ch;
-            const QVector<QLCChannel*> cs = fx->fixtureMode()->channels();
-            for (int i = 0; i < cs.size(); i++)
-                if (cs.at(i)->group() == QLCChannel::Intensity)
-                    ch += QString(" ch%1=%2").arg(i)
-                          .arg(int(u2.at(fx->universe())->preGMValue(fx->address() + i)));
-            sample += QString(" [fx%1 w=%2%3]").arg(fx->id())
-                      .arg(perFixture.value(fx->id(), 0.0), 0, 'f', 0).arg(ch);
-        }
-        m_doc->inputOutputMap()->releaseUniverses(false);
-        qDebug() << "[PWR] totalWatts=" << totalWatts << "amps=" << totalAmps << sample;
-    }
-
     m_powerAmpsLabel->setText(tr("%1 A").arg(totalAmps, 0, 'f', 1));
     m_powerKwLabel->setText(tr("%1 kW").arg(totalWatts / 1000.0, 0, 'f', 2));
     m_powerOverloadLabel->setVisible(overload);
@@ -1453,6 +1469,9 @@ void ProgrammingManager::slotModeChanged()
     }
     else
     {
+        // (Blind's Design-only force-off is owned by App::slotModeChanged, which
+        // clears the global output inhibit; the banner follows via the signal.)
+
         // Design → Operate: reclassify the running preview as operate scene.
         // Do NOT stop and restart — same function, no timing gap, lights stay on.
         qDebug() << "[PM] slotModeChanged → Operate:"
@@ -1505,6 +1524,9 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
         pc->autoBindFromProfile();
     startPreview();
     updatePowerFooterActive();
+    slotParkChanged(); // reflect any parks restored from the workspace
+    // Blind survives tab switches — reflect the current engine state on return.
+    slotBlindStateChanged(m_doc->inputOutputMap()->outputInhibited());
     QWidget::showEvent(ev);
 }
 
@@ -1514,6 +1536,9 @@ void ProgrammingManager::hideEvent(QHideEvent *ev)
                 << "spontaneous=" << ev->spontaneous();
     stopPreview();
     stopOperateScene(); // don't leave a scene outputting when you leave the tab
+    // NOTE: Blind is intentionally left engaged across tab switches — it's a
+    // global output mute with a persistent status-bar chip, so it stays visible
+    // and safe even when this tab isn't shown. It's still forced off on →Operate.
     if (Monitor *mon = Monitor::instance())
         disconnect(mon, &Monitor::fixturesSelected,
                    this, &ProgrammingManager::slotFixturesSelected);
@@ -2058,6 +2083,92 @@ void ProgrammingManager::slotHighlightToggled(bool on)
         pc->setHighlightActive(on);
 }
 
+void ProgrammingManager::slotFlashSelection()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc == NULL)
+        return;
+    for (quint32 fid : m_selectedFixtures)
+        pc->flashFixture(fid);
+}
+
+/*****************************************************************************
+ * Blind (mute physical output, keep 2D preview)
+ *****************************************************************************/
+
+void ProgrammingManager::slotBlindStateChanged(bool on)
+{
+    // Reflect the engine's Blind state in the in-context canvas banner.
+    if (m_blindBanner != nullptr)
+        m_blindBanner->setVisible(on);
+}
+
+/*****************************************************************************
+ * Park (hold fixtures out of cue output)
+ *****************************************************************************/
+
+void ProgrammingManager::slotParkSelection()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc == NULL || m_selectedFixtures.isEmpty())
+        return;
+
+    // Toggle: if the whole selection is already parked, unpark it; else park.
+    bool allParked = true;
+    for (quint32 fid : m_selectedFixtures)
+        if (!pc->isFixtureParked(fid))
+            allParked = false;
+
+    if (allParked)
+        pc->unparkFixtures(m_selectedFixtures);
+    else
+        pc->parkFixtures(m_selectedFixtures);
+}
+
+void ProgrammingManager::slotUnparkAll()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc)
+        pc->unparkAllFixtures();
+}
+
+void ProgrammingManager::slotParkChanged()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc == NULL)
+        return;
+    if (m_unparkBtn)
+        m_unparkBtn->setEnabled(pc->hasParkedFixtures());
+    updateParkButtonLabel();
+}
+
+void ProgrammingManager::updateParkButtonLabel()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc == NULL || m_parkBtn == NULL)
+        return;
+
+    // If every selected fixture is already parked, offer Unpark instead of Park.
+    bool anySel = !m_selectedFixtures.isEmpty();
+    bool allParked = anySel;
+    for (quint32 fid : m_selectedFixtures)
+        if (!pc->isFixtureParked(fid))
+            allParked = false;
+
+    m_parkBtn->setEnabled(anySel);
+    if (anySel && allParked)
+    {
+        m_parkBtn->setText(tr("Unpark"));
+        m_parkBtn->setToolTip(tr("Release the park on the selected fixtures"));
+    }
+    else
+    {
+        m_parkBtn->setText(tr("Park"));
+        m_parkBtn->setToolTip(tr("Hold the selected fixtures at their current values, out of cue "
+                                 "output, until unparked (saved with the workspace)"));
+    }
+}
+
 /*****************************************************************************
  * Followspot
  *****************************************************************************/
@@ -2296,9 +2407,16 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
     const QLCBundle bundle = m_bundleCache->bundle(bundleName);
     if (!bundle.isValid()) return;
 
-    // Save undo snapshot before replacing
+    // Save undo snapshot before replacing (palette list + per-look fades)
     m_stampUndoSceneId   = scene->id();
     m_stampUndoPalettes  = scene->palettes();
+    m_stampUndoFades.clear();
+    for (quint32 pid : m_stampUndoPalettes)
+    {
+        const int in = scene->paletteFadeIn(pid), out = scene->paletteFadeOut(pid);
+        if (in >= 0 || out >= 0)
+            m_stampUndoFades[pid] = qMakePair(in, out);
+    }
 
     // Replace: remove all existing palettes from this scene before stamping
     for (quint32 pid : m_stampUndoPalettes)
@@ -2384,6 +2502,9 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
         }
 
         scene->addPalette(paletteId);
+        // Restore the look's fade override carried by the bundle (if any).
+        if (entry.fadeIn >= 0 || entry.fadeOut >= 0)
+            scene->setPaletteFade(paletteId, entry.fadeIn, entry.fadeOut);
     }
 
     m_doc->setModified();
@@ -2430,7 +2551,7 @@ void ProgrammingManager::slotSaveAsBundle()
             tr("Add at least one palette to the look before saving it as a Bundle."));
         return;
     }
-    saveBundleFromPalettes(paletteIds);
+    saveBundleFromPalettes(paletteIds, scene);
 }
 
 QList<quint32> ProgrammingManager::paletteTreeTargetIds(QTreeWidgetItem *clicked) const
@@ -2452,7 +2573,7 @@ QList<quint32> ProgrammingManager::paletteTreeTargetIds(QTreeWidgetItem *clicked
     return ids;
 }
 
-void ProgrammingManager::saveBundleFromPalettes(const QList<quint32> &paletteIds)
+void ProgrammingManager::saveBundleFromPalettes(const QList<quint32> &paletteIds, Scene *sourceScene)
 {
     if (paletteIds.isEmpty())
     {
@@ -2461,7 +2582,7 @@ void ProgrammingManager::saveBundleFromPalettes(const QList<quint32> &paletteIds
         return;
     }
 
-    BundleEditor dlg(m_doc, m_bundleCache, paletteIds, this);
+    BundleEditor dlg(m_doc, m_bundleCache, paletteIds, sourceScene, this);
     if (dlg.exec() != QDialog::Accepted) return;
 
     if (!m_bundleCache->saveBundle(dlg.bundle()))
@@ -2484,13 +2605,16 @@ void ProgrammingManager::slotUndoStamp()
     for (quint32 pid : scene->palettes())
         scene->removePalette(pid);
 
-    // Restore the saved palette list
+    // Restore the saved palette list + their per-look fade overrides
     for (quint32 pid : m_stampUndoPalettes)
         scene->addPalette(pid);
+    for (auto it = m_stampUndoFades.constBegin(); it != m_stampUndoFades.constEnd(); ++it)
+        scene->setPaletteFade(it.key(), it.value().first, it.value().second);
 
     // Consume the undo entry so a second Ctrl-Z won't repeat
     m_stampUndoSceneId  = quint32(-1);
     m_stampUndoPalettes.clear();
+    m_stampUndoFades.clear();
 
     m_doc->setModified();
     m_paletteTree->updateTree();

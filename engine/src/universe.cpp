@@ -183,6 +183,16 @@ bool Universe::monitor() const
     return m_monitor;
 }
 
+void Universe::setInhibitOutput(bool enable)
+{
+    m_inhibitOutput = enable;
+}
+
+bool Universe::inhibitOutput() const
+{
+    return m_inhibitOutput;
+}
+
 void Universe::slotGMValueChanged()
 {
     {
@@ -700,6 +710,12 @@ OutputPatch *Universe::feedbackPatch() const
 
 void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
 {
+    // Fork Blind: hold the physical rig dark while the preview keeps running.
+    // processFaders() still emits universeWritten() (the 2D monitor source),
+    // so the look is visible on screen but never reaches the output plugins.
+    if (m_inhibitOutput)
+        return;
+
     if (m_outputPatchList.count() == 0)
         return;
 

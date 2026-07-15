@@ -382,6 +382,30 @@ void GenericFader::setFadeOut(bool enable, uint fadeTime)
     }
 }
 
+void GenericFader::setFadeOut(bool enable, uint fadeTime, const QHash<quint32, uint> &channelFadeTimes)
+{
+    m_fadeOut = enable;
+
+    QReadLocker l(&m_channelsLock);
+    QMutableHashIterator <quint32,FadeChannel> it(m_channels);
+    while (it.hasNext() == true)
+    {
+        FadeChannel& fc(it.next().value());
+
+        fc.setStart(fc.current());
+        if (((fc.flags() & FadeChannel::Flashing) == 0) &&
+            ((fc.flags() & FadeChannel::Intensity) == 0))
+            fc.addFlag(FadeChannel::SetTarget);
+        fc.setTarget(0);
+        fc.setElapsed(0);
+        fc.setReady(false);
+        // Per-channel override (keyed by channelHash) wins over the default.
+        const uint t = channelFadeTimes.value(it.key(), fadeTime);
+        fc.setFadeTime(fc.canFade() ? t : 0);
+        fc.removeFlag(FadeChannel::Flashing);
+    }
+}
+
 void GenericFader::setBlendMode(Universe::BlendMode mode)
 {
     m_blendMode = mode;

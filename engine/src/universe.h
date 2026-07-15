@@ -153,6 +153,16 @@ public:
      */
     bool monitor() const;
 
+    /**
+     * Fork "Blind" support: when enabled, dumpOutput() skips the physical
+     * output plugins while processFaders() still emits universeWritten(), so
+     * the 2D monitor / preview keeps updating but the stage rig stays dark.
+     * Distinct from blackout (which pushes zeros to the plugins). Not
+     * persisted; toggled by the Programming tab's Blind button.
+     */
+    void setInhibitOutput(bool enable);
+    bool inhibitOutput() const;
+
     uchar applyPassthrough(int channel, uchar value);
 
 protected slots:
@@ -190,6 +200,8 @@ protected:
     bool m_passthrough;
     /** Flag to monitor the universe changes */
     bool m_monitor;
+    /** Fork Blind: when true, dumpOutput() skips the physical plugins. */
+    bool m_inhibitOutput = false;
 
     /************************************************************************
      * Patches

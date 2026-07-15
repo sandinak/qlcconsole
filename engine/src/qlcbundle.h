@@ -28,6 +28,12 @@ struct BundleEntry
     QString type;   //!< "Color", "Dimmer", "Effect", "PanTilt", "Beam"
     QString name;   //!< Display name for the stamped palette
 
+    // Per-look fade override (ms) carried with the entry so a stamped bundle
+    // restores each look's fade timing. -1 = no override (use the step/scene
+    // fade). See Scene::setPaletteFade.
+    int fadeIn  = -1;
+    int fadeOut = -1;
+
     // Color
     QString color;  //!< Hex "#rrggbb"
     QString wauv;   //!< Hex for white/amber/uv combined, optional

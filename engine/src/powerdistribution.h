@@ -51,6 +51,8 @@ public:
     double  voltage;            //!< circuit voltage; 0 == inherit from source
     double  ratedAmps;          //!< breaker rating in amps (e.g. 20)
     int     deratePercent;      //!< usable fraction of the rating (e.g. 80)
+    int     demandPercent;      //!< diversity/demand factor; 0 == inherit global default
+    QString connector;          //!< receptacle this circuit provides; empty == auto-suggest
     QList<quint32> fixtures;    //!< assigned fixture IDs
 
     /** Continuous load the breaker should not exceed (amps) */
@@ -59,6 +61,13 @@ public:
     /** Circuit voltage, falling back to the source's voltage when unset */
     double effectiveVoltage(double sourceVoltage) const
     { return voltage > 0.0 ? voltage : sourceVoltage; }
+
+    /** Demand/diversity factor (percent), falling back to the workspace default
+     *  when this circuit has no explicit override. Models "not everything on this
+     *  circuit is lit at once": design load = connected load x demand%. Distinct
+     *  from the derate, which trims the breaker's limit. */
+    int effectiveDemandPercent(int defaultPercent) const
+    { return demandPercent > 0 ? demandPercent : defaultPercent; }
 };
 
 /**
@@ -71,8 +80,20 @@ class PowerSource
 public:
     PowerSource();
 
+    /** How a source is wired. Drives its circuit layout and whether fixtures
+     *  attach to it directly (a wall socket) or through circuits. */
+    enum SourceType
+    {
+        Distro      = 0,   //!< generic distro/panel: one feed → many circuits
+        WallSocket  = 1,   //!< single outlet: no circuits, fixtures attach directly
+        BreakoutBox = 2,   //!< one feed split into a fixed set of circuits
+        Battery     = 3    //!< UPS/battery: VA-limited, many circuits
+    };
+
     QString name;
+    int     type;               //!< SourceType
     double  voltage;            //!< nominal voltage (e.g. 120)
+    QString connector;          //!< input feed connector — the power FOR the source
     QList<PowerCircuit> circuits;
 
     // Physical location on the 2D stage plot (metres). Venue-fixed: it travels
@@ -89,7 +110,9 @@ public:
     double  runtimeMinutes;     //!< datasheet runtime...
     double  runtimeWatts;       //!< ...at this load (watts)
 
-    bool isUPS() const { return vaRating > 0.0; }
+    bool isUPS() const { return type == Battery; }
+    /** A wall socket carries fixtures on a single implicit circuit (index 0). */
+    bool isWallSocket() const { return type == WallSocket; }
 
     /** Estimated runtime (minutes) at a given load; -1 if not modelable. */
     double estimateRuntimeMinutes(double loadWatts) const

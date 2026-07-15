@@ -487,6 +487,78 @@ void Scene_Test::save()
     QVERIFY(xmlReader.readElementText() == "0,150,3,10,5,100");
 }
 
+void Scene_Test::paletteFadeTime()
+{
+    Scene s(m_doc);
+
+    // No override by default (both directions).
+    s.addPalette(7);
+    QCOMPARE(s.paletteFadeIn(7), -1);
+    QCOMPARE(s.paletteFadeOut(7), -1);
+
+    // Independent in/out overrides (incl. 0 = snap) are remembered.
+    s.setPaletteFade(7, 2000, 3000);
+    QCOMPARE(s.paletteFadeIn(7), 2000);
+    QCOMPARE(s.paletteFadeOut(7), 3000);
+    s.setPaletteFade(7, 0, 1500);   // pulse: snap in, slow out
+    QCOMPARE(s.paletteFadeIn(7), 0);
+    QCOMPARE(s.paletteFadeOut(7), 1500);
+
+    // Clearing only one direction keeps the other.
+    s.setPaletteFade(7, -1, 1500);
+    QCOMPARE(s.paletteFadeIn(7), -1);
+    QCOMPARE(s.paletteFadeOut(7), 1500);
+
+    // Clearing both drops the entry.
+    s.setPaletteFade(7, -1, -1);
+    QCOMPARE(s.paletteFadeIn(7), -1);
+    QCOMPARE(s.paletteFadeOut(7), -1);
+
+    // Removing the palette drops any override with it.
+    s.setPaletteFade(7, 500, 500);
+    s.addPalette(9);
+    s.setPaletteFade(9, 1500, 2500);
+    s.removePalette(7);
+    QCOMPARE(s.paletteFadeIn(7), -1);
+    QCOMPARE(s.paletteFadeIn(9), 1500);
+    QCOMPARE(s.paletteFadeOut(9), 2500);
+
+    // XML round-trip: only the palette with an override carries FadeIn/FadeOut.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(s.saveXML(&xmlWriter) == true);
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+
+    Scene s2(m_doc);
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+    QVERIFY(s2.loadXML(xmlReader) == true);
+    QVERIFY(s2.palettes().contains(9));
+    QCOMPARE(s2.paletteFadeIn(9), 1500);
+    QCOMPARE(s2.paletteFadeOut(9), 2500);
+
+    // Legacy single-value FadeTime attribute loads as fade-in only.
+    const char *legacy =
+        "<Function Type=\"Scene\" Name=\"L\">"
+        "<Palette ID=\"4\" FadeTime=\"800\"/>"
+        "</Function>";
+    Scene s4(m_doc);
+    QXmlStreamReader legacyReader(legacy);
+    legacyReader.readNextStartElement();
+    QVERIFY(s4.loadXML(legacyReader) == true);
+    QCOMPARE(s4.paletteFadeIn(4), 800);
+    QCOMPARE(s4.paletteFadeOut(4), -1);
+
+    // copyFrom carries the override map.
+    Scene s3(m_doc);
+    QVERIFY(s3.copyFrom(&s2) == true);
+    QCOMPARE(s3.paletteFadeIn(9), 1500);
+    QCOMPARE(s3.paletteFadeOut(9), 2500);
+}
+
 void Scene_Test::copyFrom()
 {
     Scene s1(m_doc);
