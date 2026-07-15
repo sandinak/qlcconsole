@@ -38,6 +38,7 @@ private slots:
     void duration();
     void load();
     void save();
+    void followTimecode();
 
 private:
     Doc *m_doc;

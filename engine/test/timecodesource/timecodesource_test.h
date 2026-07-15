@@ -1,6 +1,6 @@
 /*
   Q Light Controller Plus - Test Unit
-  showrunner_test.h
+  timecodesource_test.h
 
   Copyright (c) Massimo Callegari
 
@@ -17,33 +17,20 @@
   limitations under the License.
 */
 
-#ifndef SHOWRUNNER_TEST_H
-#define SHOWRUNNER_TEST_H
+#ifndef TIMECODESOURCE_TEST_H
+#define TIMECODESOURCE_TEST_H
 
 #include <QObject>
 
-class Doc;
-class Show;
-class Track;
-class Scene;
-
-class ShowRunner_Test final : public QObject
+class TimecodeSource_Test final : public QObject
 {
     Q_OBJECT
 
 private slots:
-    void initTestCase();
-    void cleanupTestCase();
-    void initRunner();
-    void intensity();
-    void stopRunner();
-    void timecodeFollow();
-
-private:
-    Doc *m_doc;
-    Show *m_show;
-    Track *m_track;
-    Scene *m_scene;
+    void defaults();
+    void updateAndRunning();
+    void watchdogStops();
+    void overrideFilter();
 };
 
 #endif

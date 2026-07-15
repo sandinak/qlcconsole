@@ -330,5 +330,32 @@ void Show_Test::save()
     QVERIFY(xmlReader.attributes().value("isMute").toString() == "1");
 }
 
+void Show_Test::followTimecode()
+{
+    // Default off, and not written when off.
+    Show s(m_doc);
+    s.setID(10);
+    QCOMPARE(s.timecodeFollow(), false);
+
+    s.setTimecodeFollow(true);
+    QCOMPARE(s.timecodeFollow(), true);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(s.saveXML(&xmlWriter) == true);
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+
+    // Round-trip into a fresh Show.
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement(); // Function
+
+    Show s2(m_doc);
+    QVERIFY(s2.loadXML(xmlReader) == true);
+    QCOMPARE(s2.timecodeFollow(), true);
+}
+
 
 QTEST_APPLESS_MAIN(Show_Test)

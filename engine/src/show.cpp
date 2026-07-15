@@ -26,12 +26,14 @@
 
 #include "showrunner.h"
 #include "function.h"
+#include "qlcfile.h"
 #include "show.h"
 #include "doc.h"
 
 #define KXMLQLCShowTimeDivision QStringLiteral("TimeDivision")
 #define KXMLQLCShowTimeType     QStringLiteral("Type")
 #define KXMLQLCShowTimeBPM      QStringLiteral("BPM")
+#define KXMLQLCShowFollowTC     QStringLiteral("FollowTimecode")
 
 /*****************************************************************************
  * Initialization
@@ -373,6 +375,8 @@ bool Show::saveXML(QXmlStreamWriter *doc) const
     doc->writeStartElement(KXMLQLCShowTimeDivision);
     doc->writeAttribute(KXMLQLCShowTimeType, tempoToString(m_timeDivisionType));
     doc->writeAttribute(KXMLQLCShowTimeBPM, QString::number(m_timeDivisionBPM));
+    if (m_timecodeFollow)
+        doc->writeAttribute(KXMLQLCShowFollowTC, KXMLQLCTrue);
     doc->writeEndElement();
 
     foreach (Track *track, m_tracks)
@@ -406,6 +410,8 @@ bool Show::loadXML(QXmlStreamReader &root)
             QString type = root.attributes().value(KXMLQLCShowTimeType).toString();
             int bpm = root.attributes().value(KXMLQLCShowTimeBPM).toString().toInt();
             setTimeDivision(stringToTempo(type), bpm);
+            if (root.attributes().hasAttribute(KXMLQLCShowFollowTC))
+                m_timecodeFollow = (root.attributes().value(KXMLQLCShowFollowTC).toString() == KXMLQLCTrue);
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLQLCTrack)

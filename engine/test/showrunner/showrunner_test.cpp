@@ -72,4 +72,35 @@ void ShowRunner_Test::stopRunner()
     QCOMPARE(runner.m_runningQueue.count(), 0);
 }
 
+void ShowRunner_Test::timecodeFollow()
+{
+    ShowRunner runner(m_doc, m_show->id());
+
+    // Off by default.
+    QCOMPARE(runner.m_timecodeFollow, false);
+
+    runner.setTimecodeFollow(true);
+    QCOMPARE(runner.m_timecodeFollow, true);
+    QCOMPARE(runner.m_externalTimeSet, false);
+
+    runner.setExternalTime(5000);
+    QCOMPARE(runner.m_externalTime, quint32(5000));
+    QCOMPARE(runner.m_externalTimeSet, true);
+
+    // Seek past the only function (start 0, dur 1000): it is skipped so the
+    // start phase would not restart it.
+    runner.seekTo(5000);
+    QCOMPARE(runner.m_elapsedTime, quint32(5000));
+    QCOMPARE(runner.m_currentTimeFunctionIndex, runner.m_timeFunctions.count());
+
+    // Seek into the middle of the function: it stays active (index 0).
+    runner.seekTo(500);
+    QCOMPARE(runner.m_elapsedTime, quint32(500));
+    QCOMPARE(runner.m_currentTimeFunctionIndex, 0);
+
+    // Disabling follow clears the external-time latch.
+    runner.setTimecodeFollow(false);
+    QCOMPARE(runner.m_externalTimeSet, false);
+}
+
 QTEST_APPLESS_MAIN(ShowRunner_Test)

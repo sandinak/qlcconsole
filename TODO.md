@@ -111,42 +111,63 @@ APC40 already give a GO cue stack, so the gaps are narrower than first thought.
       Still needs: GUI confirmation of the three toolbar buttons + that Blind darkens
       the rig while the 2D monitor still shows the look (couldn't drive the GUI
       headless this session — no accessibility permission).
-- [ ] **Show timeline in the Programming tab + MTC follow** *(DECIDED — big,
-      phased; supersedes the old "Timecode / cue sheet" idea)* —
-      **Key finding: the Show *engine* is already generic.** `ShowFunction`
-      stores only `{functionID, startTime, duration}` and `ShowRunner` starts
-      `doc->function(id)` without checking type (showfunction.h:44, showrunner.cpp:70/182),
-      so **Collections already run on a timeline today** — the "scenes only" wall
-      is purely the Show Manager *UI* (no Collection item widget; Track is
-      scene-bound via `Track(sceneID)`). Plan:
-      - **Reuse the Show engine wholesale** (Show / Track / ShowFunction /
-        ShowRunner) — it already handles multi-track, per-item intensity
-        override, tempo Time/Beats, pause, elapsed clock.
-      - **Lift-and-adapt the Show Manager's timeline widgets** (ui/src/showmanager/
-        multitrackview, trackitem, showitem — already-debugged QGraphicsView blocks
-        w/ drag/resize) into the Programming tab; **de-scene** them so a row can
-        hold **any function, incl. Collections** (first-class here).
-      - **Retire the old Show Manager UI** once superseded (two timeline tools
-        confuse students) but **keep reading `<Show>` XML** so existing shows load;
-        new-timeline shows round-trip as `<Show>`.
-      - **MTC follow, not beat clock** — Logic emits absolute MIDI Timecode
-        (`0xF1` quarter-frame + full-frame on locate); drive the runner's
-        `m_elapsedTime` (showrunner.h:71) from incoming TC instead of MasterTimer.
-        Beat clock (`0xF8`, pulses only) was rejected — drifts, breaks on locate.
-        Hook lives in the MIDI plugin (plugins/midi/src/).
-      - **Hybrid manual/timecode GO** — click-track sections follow MTC; **spoken
-        scenes have no click**, so when TC stops the timeline freezes and the
-        operator drives with manual GO. Falls out naturally from `m_elapsedTime`
-        not advancing.
-      - **Timecode status chip in the footer** — grey = no MTC source bound,
-        amber = connected but not advancing (= "you're driving now" / spoken
-        scene), green = rolling w/ live `HH:MM:SS:FF @fps` readout + pulse on each
-        full-frame. Pairs with the existing power footer.
-      - **Load/latency footer chip** (pairs with this work; see [[perf-load-indicator-idea]])
-        — measure MasterTimer tick duration vs the ~20 ms budget, surface
-        dropped/late ticks. Earns its keep precisely because timeline + MTC +
-        per-look fades + live effects all pile onto that tick.
-      Open detail settled: lift-and-adapt the existing widgets (not draw fresh).
+- [x] **Show timeline + MTC follow** *(BUILT — needs GUI + live-MTC test)* —
+      Decision revised (Branson, 2026-07-15): **expand the existing Show Manager
+      in place** rather than lift widgets into the Programming tab or make a new
+      tab. The Show engine was already function-generic, so the work was UI +
+      timecode plumbing.
+      - **Collections are first-class on the timeline.** New `CollectionItem`
+        (ui/src/showmanager/, modeled on RGBMatrixItem — a plain block, no
+        per-step preview). `MultiTrackView::addCollection` stamps a default 10s
+        duration when the collection reports no finite totalDuration (scenes) so
+        the block is visible and the ShowRunner doesn't stop it instantly
+        (stopTime == startTime). `slotAddItem` (append + new-track) and
+        `updateMultiTrackView` (load) dispatch CollectionType; FunctionSelection
+        filter now allows it. Distinct violet collection colour.
+      - **MTC parse (plugin).** `MidiMtcDecoder` assembles HH:MM:SS:FF from 8
+        quarter-frame (0xF1) nibbles (+2 frame offset) and full-frame locate
+        SysEx (exact); reports ms + fps. Fed by CoreMIDI/ALSA/Win32 input paths;
+        `MidiInputDevice::mtcTimeChanged` → `MidiPlugin` → new
+        `QLCIOPlugin::timeCodeChanged`. Unit-tested (midi_test). NOTE: macOS
+        CoreMIDI drops whole-packet SysEx, so full-frame locate isn't delivered
+        there — quarter-frames (the running case) are.
+      - **Engine follow.** `TimecodeSource` (Doc-owned, lazy) aggregates
+        positions; a 200ms watchdog flips running→false when TC stops (freeze =
+        manual GO / spoken scene). Auto-detect by default; `setSourceUniverse()`
+        = override. Routed: `timeCodeChanged` → InputPatch (line-filtered) →
+        InputOutputMap → Doc wires it to the source. `ShowRunner` gains
+        `setTimecodeFollow`/`setExternalTime`; write() sets m_elapsedTime from
+        the external position (never auto-finishes); a backward move is a
+        `seekTo()` locate (stop running, skip past ended funcs, restart active
+        ones with correct offset); cross-thread access mutex-guarded. `Show`
+        forwards + persists `<TimeDivision FollowTimecode="True">`.
+      - **Footer chips** (system-health row in the Show Manager): timecode chip
+        grey/amber/green + live `HH:MM:SS:FF @fps`; load chip = MasterTimer tick
+        compute vs budget (green/amber ≥60%/red ≥100%). `MasterTimer` now always
+        measures per-tick compute into an atomic (`tickComputeMs()`).
+      - Toolbar: **Follow MIDI Time Code** toggle (per-show) + source combo
+        (Auto / lock to a universe).
+      Unit tests: MTC decoder, TimecodeSource watchdog+override, ShowRunner
+      follow/seek, Show FollowTimecode round-trip — all pass.
+
+      **TESTING PLAN — show timeline + MTC** *(needs a MIDI source; Logic Pro
+      sending MTC into a CoreMIDI port patched as a QLC+ input universe):*
+      - [ ] **Collection on a track** — Show Manager → add a Collection; it
+            renders as a violet block, drags/resizes, plays back (its scenes
+            fire), round-trips through save/reload.
+      - [ ] **Follow toggle** — enable "Follow MIDI Time Code"; play the show;
+            roll MTC from Logic → the cursor/looks chase the timecode; the
+            footer timecode chip goes green with live HH:MM:SS:FF.
+      - [ ] **Freeze / manual GO** — stop MTC (spoken scene) → chip goes amber
+            "holding", the show freezes at position; resume MTC → it chases again.
+      - [ ] **Locate** — jump Logic's playhead backward/forward → the show
+            relocates (seekTo) and the right looks are active at the new position.
+      - [ ] **Source override** — with two MIDI inputs, set the source combo to
+            one universe; confirm only that source drives the clock.
+      - [ ] **Load chip** — under a heavy look, watch the load chip climb; verify
+            amber/red thresholds read sensibly against the 20ms budget.
+      - [ ] **Persistence** — enable Follow, save, reload → toggle restores;
+            check `.qxw` for `<TimeDivision … FollowTimecode="True">`.
 
 - [ ] **Power/amperage estimate + power-distribution model (NEW, needs GUI test)** —
       Design-mode-only estimate of the previewed look's electrical load, shown in a
