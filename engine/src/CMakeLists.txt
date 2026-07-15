@@ -87,6 +87,7 @@ add_library(${module_name} SHARED
     sequence.cpp sequence.h
     show.cpp show.h
     showfunction.cpp showfunction.h
+    timecodesource.cpp timecodesource.h
     showrunner.cpp showrunner.h
     track.cpp track.h
     universe.cpp universe.h

@@ -47,6 +47,7 @@ class RGBScriptsCache;
 class AudioPluginCache;
 class MonitorProperties;
 class PowerDistribution;
+class TimecodeSource;
 class CaptureManager;
 class ProgrammerFlasher;
 class ProgrammerController;
@@ -176,6 +177,7 @@ private:
     mutable QSharedPointer<AudioCapture> m_inputCapture;
     MonitorProperties *m_monitorProps;
     PowerDistribution *m_powerDist;
+    TimecodeSource *m_timecodeSource;
 
     /*********************************************************************
      * Main operating mode
@@ -960,6 +962,14 @@ public:
 public:
     /** Returns a reference to the power distribution model instance */
     PowerDistribution *powerDistribution();
+
+    /*********************************************************************
+     * Timecode
+     *********************************************************************/
+public:
+    /** Returns the shared timecode source (e.g. MIDI Time Code) that the
+     *  Show timeline can follow. Lazily created. */
+    TimecodeSource *timecodeSource();
 
     /*********************************************************************
      * Load & Save

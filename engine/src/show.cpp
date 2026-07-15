@@ -43,6 +43,7 @@ Show::Show(Doc* doc) : Function(doc, Function::ShowType)
     , m_latestTrackId(0)
     , m_latestShowFunctionID(0)
     , m_runner(NULL)
+    , m_timecodeFollow(false)
 {
     setName(tr("New Show"));
 
@@ -478,9 +479,29 @@ void Show::preRun(MasterTimer* timer)
     foreach (Track *track, m_tracks)
         m_runner->adjustIntensity(getAttributeValue(i++), track);
 
+    m_runner->setTimecodeFollow(m_timecodeFollow);
+
     connect(m_runner, SIGNAL(timeChanged(quint32)), this, SIGNAL(timeChanged(quint32)));
     connect(m_runner, SIGNAL(showFinished()), this, SIGNAL(showFinished()));
     m_runner->start();
+}
+
+void Show::setTimecodeFollow(bool enable)
+{
+    m_timecodeFollow = enable;
+    if (m_runner != NULL)
+        m_runner->setTimecodeFollow(enable);
+}
+
+bool Show::timecodeFollow() const
+{
+    return m_timecodeFollow;
+}
+
+void Show::setExternalTime(quint32 ms)
+{
+    if (m_runner != NULL)
+        m_runner->setExternalTime(ms);
 }
 
 void Show::setPause(bool enable)

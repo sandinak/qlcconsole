@@ -473,6 +473,8 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         {
             connect(ip, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)),
                     this, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
+            connect(ip, SIGNAL(inputTimeCodeChanged(quint32,quint32,uchar)),
+                    this, SIGNAL(inputTimeCodeChanged(quint32,quint32,uchar)));
             if (ip->plugin()->capabilities() & QLCIOPlugin::Beats)
             {
                 connect(ip, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)),

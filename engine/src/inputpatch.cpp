@@ -81,6 +81,8 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
     {
         disconnect(m_plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)),
                    this, SLOT(slotValueChanged(quint32,quint32,quint32,uchar,QString)));
+        disconnect(m_plugin, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)),
+                   this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
         m_plugin->closeInput(m_pluginLine, m_universe);
     }
 
@@ -102,6 +104,8 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
     {
         connect(m_plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)),
                 this, SLOT(slotValueChanged(quint32,quint32,quint32,uchar,QString)));
+        connect(m_plugin, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)),
+                this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
         result = m_plugin->openInput(m_pluginLine, m_universe);
 
         if (m_profile != NULL)
@@ -241,6 +245,18 @@ void InputPatch::slotValueChanged(quint32 universe, quint32 input, quint32 chann
             }
         }
     }
+}
+
+void InputPatch::slotTimeCodeChanged(quint32 universe, quint32 input,
+                                     quint32 msPosition, uchar fps)
+{
+    // Only forward timecode arriving on this patch's own line.
+    if (input != m_pluginLine)
+        return;
+    if (universe != UINT_MAX && universe != m_universe)
+        return;
+
+    emit inputTimeCodeChanged(m_universe, msPosition, fps);
 }
 
 void InputPatch::setProfilePageControls()

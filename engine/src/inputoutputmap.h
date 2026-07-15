@@ -542,6 +542,10 @@ signals:
     /** Everyone interested in input data should connect to this signal */
     void inputValueChanged(quint32 universe, quint32 channel, uchar value, const QString& key = 0);
 
+    /** Emitted when an input line delivers an absolute timeline position
+     *  (e.g. MIDI Time Code). Consumed by the Doc's timecode source. */
+    void inputTimeCodeChanged(quint32 universe, quint32 msPosition, uchar fps);
+
     /*************************************************************************
      * Input profiles
      *************************************************************************/

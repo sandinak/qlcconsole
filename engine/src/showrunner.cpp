@@ -43,6 +43,9 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
     , m_elapsedBeats(0)
     , beatSynced(false)
     , m_totalRunTime(0)
+    , m_timecodeFollow(false)
+    , m_externalTimeSet(false)
+    , m_externalTime(0)
 {
     Q_ASSERT(m_doc != NULL);
     Q_ASSERT(showID != Show::invalidId());
@@ -141,9 +144,66 @@ FunctionParent ShowRunner::functionParent() const
     return FunctionParent(FunctionParent::Function, m_show->id());
 }
 
+void ShowRunner::setTimecodeFollow(bool enable)
+{
+    QMutexLocker locker(&m_tcMutex);
+    m_timecodeFollow = enable;
+    if (enable == false)
+        m_externalTimeSet = false;
+}
+
+void ShowRunner::setExternalTime(quint32 ms)
+{
+    QMutexLocker locker(&m_tcMutex);
+    m_externalTime = ms;
+    m_externalTimeSet = true;
+}
+
+void ShowRunner::seekTo(quint32 targetMs)
+{
+    // Stop everything currently playing.
+    for (int i = 0; i < m_runningQueue.count(); i++)
+        m_runningQueue.at(i).first->stop(functionParent());
+    m_runningQueue.clear();
+
+    // Rewind and skip past functions that have fully ended before the target,
+    // so write()'s start phase only (re)starts the ones actually active now.
+    m_currentTimeFunctionIndex = 0;
+    while (m_currentTimeFunctionIndex < m_timeFunctions.count())
+    {
+        ShowFunction *sf = m_timeFunctions.at(m_currentTimeFunctionIndex);
+        if (sf->startTime() + sf->duration(m_doc) <= targetMs)
+            m_currentTimeFunctionIndex++;
+        else
+            break;
+    }
+
+    m_currentBeatFunctionIndex = 0;
+    m_elapsedTime = targetMs;
+}
+
 void ShowRunner::write(MasterTimer *timer)
 {
     //qDebug() << Q_FUNC_INFO << "elapsed:" << m_elapsedTime << ", total:" << m_totalRunTime;
+
+    // In timecode-follow mode the elapsed clock is driven by an external
+    // absolute position rather than the MasterTimer tick. A backward jump is
+    // treated as a locate (seek); a forward move just advances the clock and
+    // lets the normal start/stop phases below react.
+    bool following = false;
+    {
+        QMutexLocker locker(&m_tcMutex);
+        following = m_timecodeFollow;
+        if (following && m_externalTimeSet)
+        {
+            quint32 target = m_externalTime;
+            locker.unlock();
+            if (target < m_elapsedTime)
+                seekTo(target);
+            else
+                m_elapsedTime = target;
+        }
+    }
 
     // Phase 1. Check all the Functions that need to be started
     // m_timeFunctions is ordered by startup time, so when we found an entry
@@ -268,16 +328,22 @@ void ShowRunner::write(MasterTimer *timer)
         }
     }
 
-    // Phase 3. Check if this is the end of the Show
-    if (m_elapsedTime >= m_totalRunTime)
+    // Phase 3. Check if this is the end of the Show. In timecode-follow mode
+    // the external source owns the clock (it may loop or relocate), so we
+    // never auto-finish — we just report the position and hold.
+    if (following == false)
     {
-        if (m_show != NULL)
-            m_show->stop(functionParent());
-        emit showFinished();
-        return;
+        if (m_elapsedTime >= m_totalRunTime)
+        {
+            if (m_show != NULL)
+                m_show->stop(functionParent());
+            emit showFinished();
+            return;
+        }
+
+        m_elapsedTime += MasterTimer::tick();
     }
 
-    m_elapsedTime += MasterTimer::tick();
     emit timeChanged(m_elapsedTime);
 }
 

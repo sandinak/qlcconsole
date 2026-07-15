@@ -194,6 +194,18 @@ public:
     /** @reimp */
     void postRun(MasterTimer* timer, QList<Universe*> universes) override;
 
+    /*********************************************************************
+     * Timecode follow (e.g. MIDI Time Code)
+     *********************************************************************/
+public:
+    /** Enable/disable following an external absolute timecode. Persisted so
+     *  a show remembers whether it is timecode-driven. */
+    void setTimecodeFollow(bool enable);
+    bool timecodeFollow() const;
+
+    /** Push the current external absolute position (ms) to the runner. */
+    void setExternalTime(quint32 ms);
+
 protected slots:
     /** Called whenever one of this function's child functions stops */
     void slotChildStopped(quint32 fid);
@@ -206,6 +218,8 @@ protected:
     ShowRunner *m_runner;
     /** Number of currently running children */
     QSet <quint32> m_runningChildren;
+    /** Whether this show follows an external timecode (persisted) */
+    bool m_timecodeFollow;
 
     /*************************************************************************
      * Attributes

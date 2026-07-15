@@ -55,6 +55,32 @@ public:
 
     void write(MasterTimer *timer);
 
+    /*********************************************************************
+     * Timecode follow (e.g. MIDI Time Code)
+     *********************************************************************/
+public:
+    /** When enabled, the runner's elapsed clock is driven by an external
+     *  absolute position (setExternalTime) instead of the MasterTimer tick.
+     *  When external positions stop arriving the clock simply holds at its
+     *  last value, which yields manual-GO / spoken-scene behaviour. */
+    void setTimecodeFollow(bool enable);
+    bool timecodeFollow() const { return m_timecodeFollow; }
+
+    /** Set the external absolute position (ms) to follow. Thread-safe:
+     *  called from the UI thread while write() runs on the timer thread. */
+    void setExternalTime(quint32 ms);
+
+private:
+    /** Relocate the runner to an absolute position: stop running functions,
+     *  skip past ones that already ended, and let write() restart the ones
+     *  active at the new position (with the correct time offset). */
+    void seekTo(quint32 targetMs);
+
+    bool m_timecodeFollow;
+    bool m_externalTimeSet;
+    quint32 m_externalTime;
+    QMutex m_tcMutex;
+
 private:
     const Doc *m_doc;
 

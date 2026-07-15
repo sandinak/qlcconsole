@@ -132,6 +132,10 @@ signals:
     void inputValueChanged(quint32 inputUniverse, quint32 channel,
                            uchar value, const QString& key = 0);
 
+    /** Emitted when the patched plugin delivers an absolute timeline
+     *  position (e.g. MIDI Time Code) on this patch's line. */
+    void inputTimeCodeChanged(quint32 inputUniverse, quint32 msPosition, uchar fps);
+
     void inputNameChanged();
     void pluginNameChanged();
     void profileNameChanged();
@@ -139,6 +143,9 @@ signals:
 private slots:
     void slotValueChanged(quint32 universe, quint32 input,
                           quint32 channel, uchar value, const QString& key = 0);
+
+    void slotTimeCodeChanged(quint32 universe, quint32 input,
+                             quint32 msPosition, uchar fps);
 
 private:
     /** The reference of the plugin associated by this Input patch */

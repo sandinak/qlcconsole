@@ -41,6 +41,7 @@
 
 #include "monitorproperties.h"
 #include "powerdistribution.h"
+#include "timecodesource.h"
 #include "audioplugincache.h"
 #include "capturemanager.h"
 #include "rgbscriptscache.h"
@@ -84,6 +85,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_ioMap(new InputOutputMap(this, universes))
     , m_monitorProps(NULL)
     , m_powerDist(NULL)
+    , m_timecodeSource(NULL)
     , m_mode(Design)
     , m_kiosk(false)
     , m_loadStatus(Cleared)
@@ -127,6 +129,11 @@ Doc::Doc(QObject* parent, int universes)
     connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
             m_programmer, SLOT(slotProgrammerFunctionStopped(quint32)),
             Qt::DirectConnection);
+
+    // Route absolute input timecode (e.g. MIDI Time Code) into the shared
+    // timecode source that the Show timeline can follow.
+    connect(m_ioMap, SIGNAL(inputTimeCodeChanged(quint32,quint32,uchar)),
+            timecodeSource(), SLOT(updateTimeCode(quint32,quint32,uchar)));
 
     // Effect script runner — drives JS effect instances for scenes that
     // reference Effect-type palettes. Queued connections are fine here
@@ -1683,6 +1690,14 @@ PowerDistribution *Doc::powerDistribution()
         m_powerDist = new PowerDistribution();
 
     return m_powerDist;
+}
+
+TimecodeSource *Doc::timecodeSource()
+{
+    if (m_timecodeSource == NULL)
+        m_timecodeSource = new TimecodeSource(this);
+
+    return m_timecodeSource;
 }
 
 /*****************************************************************************
