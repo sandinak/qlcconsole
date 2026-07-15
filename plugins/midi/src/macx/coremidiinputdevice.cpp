@@ -67,6 +67,14 @@ static void MidiInProc(const MIDIPacketList* pktList, void* readProcRefCon,
                     data2 = 127;
             }
 
+            // MIDI Time Code quarter-frame: assemble SMPTE position from the
+            // single data byte and surface an absolute timeline position.
+            if (cmd == MIDI_TIME_CODE)
+            {
+                self->feedMTCQuarterFrame(data1);
+                continue;
+            }
+
             if (cmd >= MIDI_BEAT_CLOCK && cmd <= MIDI_BEAT_STOP)
             {
                 if (self->processMBC(cmd) == false)

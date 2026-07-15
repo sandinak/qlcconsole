@@ -209,6 +209,8 @@ bool MidiPlugin::openInput(quint32 input, quint32 universe)
     {
         connect(dev, SIGNAL(valueChanged(QVariant,ushort,uchar)),
                 this, SLOT(slotValueChanged(QVariant,ushort,uchar)));
+        connect(dev, SIGNAL(mtcTimeChanged(QVariant,quint32,uchar)),
+                this, SLOT(slotMtcTimeChanged(QVariant,quint32,uchar)));
         addToMap(universe, input, Input);
         return dev->open();
     }
@@ -226,6 +228,8 @@ void MidiPlugin::closeInput(quint32 input, quint32 universe)
         dev->close();
         disconnect(dev, SIGNAL(valueChanged(QVariant,ushort,uchar)),
                    this, SLOT(slotValueChanged(QVariant,ushort,uchar)));
+        disconnect(dev, SIGNAL(mtcTimeChanged(QVariant,quint32,uchar)),
+                   this, SLOT(slotMtcTimeChanged(QVariant,quint32,uchar)));
     }
 }
 
@@ -336,6 +340,19 @@ void MidiPlugin::slotValueChanged(const QVariant& uid, ushort channel, uchar val
         {
             emit valueChanged(UINT_MAX, i, channel, value,
                               channel == CHANNEL_OFFSET_MBC_BEAT ? "beat" : "");
+            break;
+        }
+    }
+}
+
+void MidiPlugin::slotMtcTimeChanged(const QVariant& uid, quint32 msPosition, uchar fps)
+{
+    for (int i = 0; i < m_enumerator->inputDevices().size(); i++)
+    {
+        MidiInputDevice* dev = m_enumerator->inputDevices().at(i);
+        if (dev->uid() == uid)
+        {
+            emit timeCodeChanged(UINT_MAX, i, msPosition, fps);
             break;
         }
     }

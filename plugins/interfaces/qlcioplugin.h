@@ -284,6 +284,19 @@ signals:
      */
     void valueChanged(quint32 universe, quint32 input, quint32 channel, uchar value, const QString& key = 0);
 
+    /**
+     * Tells that an absolute timeline position has been received on an input
+     * line (e.g. MIDI Time Code). Unlike valueChanged() this carries a full
+     * 32-bit position rather than a single channel value, so it is delivered
+     * on a dedicated signal that the engine's timecode source consumes.
+     *
+     * @param universe The universe ID detected from the data received
+     * @param input The input line the timecode arrived on
+     * @param msPosition Absolute timeline position in milliseconds
+     * @param fps Nominal frame rate reported by the timecode source
+     */
+    void timeCodeChanged(quint32 universe, quint32 input, quint32 msPosition, uchar fps);
+
     /*************************************************************************
      * Configure
      *************************************************************************/

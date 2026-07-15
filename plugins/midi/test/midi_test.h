@@ -28,6 +28,9 @@ class Midi_Test final : public QObject
 
 private slots:
     void midiToInput();
+    void mtcQuarterFrame();
+    void mtcFullFrame();
+    void mtcPartialIgnored();
 };
 
 #endif

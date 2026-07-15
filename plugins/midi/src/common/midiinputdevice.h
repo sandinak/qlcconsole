@@ -21,6 +21,7 @@
 #define MIDIINPUTDEVICE_H
 
 #include "mididevice.h"
+#include "midimtcdecoder.h"
 
 class MidiInputDevice : public MidiDevice
 {
@@ -32,8 +33,23 @@ public:
 
     void emitValueChanged(uint channel, uchar value);
 
+    /** Feed a MIDI Time Code quarter-frame data byte (the byte after 0xF1).
+     *  When a full SMPTE time is assembled, emits mtcTimeChanged(). */
+    void feedMTCQuarterFrame(uchar data);
+
+    /** Feed a full-frame MTC SysEx payload (F0 7F .. F7). Emits
+     *  mtcTimeChanged() if it is a valid full-frame message. */
+    void feedMTCFullFrame(const QByteArray &sysex);
+
 signals:
     void valueChanged(const QVariant& uid, ushort channel, uchar value);
+
+    /** Emitted with an absolute timeline position (ms) and nominal fps
+     *  whenever incoming MTC assembles a complete SMPTE time. */
+    void mtcTimeChanged(const QVariant& uid, quint32 msPosition, uchar fps);
+
+private:
+    MidiMtcDecoder m_mtcDecoder;
 };
 
 #endif

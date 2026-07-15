@@ -252,6 +252,13 @@ void AlsaMidiInputThread::readEvent()
                     data1 = ev->data.control.value;
                 break;
 
+                case SND_SEQ_EVENT_QFRAME:
+                    // MIDI Time Code quarter-frame. Feed the decoder directly
+                    // and leave cmd = 0 so it is not treated as input below.
+                    device->feedMTCQuarterFrame(uchar(ev->data.control.value & 0xFF));
+                    cmd = 0;
+                break;
+
                 default:
                 break;
             }

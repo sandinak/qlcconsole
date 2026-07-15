@@ -35,3 +35,15 @@ void MidiInputDevice::emitValueChanged(uint channel, uchar value)
 {
     emit valueChanged(uid(), channel, value);
 }
+
+void MidiInputDevice::feedMTCQuarterFrame(uchar data)
+{
+    if (m_mtcDecoder.feedQuarterFrame(data))
+        emit mtcTimeChanged(uid(), m_mtcDecoder.milliseconds(), uchar(m_mtcDecoder.fps()));
+}
+
+void MidiInputDevice::feedMTCFullFrame(const QByteArray &sysex)
+{
+    if (m_mtcDecoder.feedFullFrame(sysex))
+        emit mtcTimeChanged(uid(), m_mtcDecoder.milliseconds(), uchar(m_mtcDecoder.fps()));
+}

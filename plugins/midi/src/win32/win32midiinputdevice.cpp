@@ -38,6 +38,13 @@ static void CALLBACK MidiInProc(HMIDIIN hMidiIn, UINT wMsg,
         BYTE data1 = (dwParam1 & 0xFF00) >> 8;
         BYTE data2 = (dwParam1 & 0xFF0000) >> 16;
 
+        // MIDI Time Code quarter-frame: assemble SMPTE position from data1.
+        if (cmd == MIDI_TIME_CODE)
+        {
+            self->feedMTCQuarterFrame(data1);
+            return;
+        }
+
         if (cmd >= MIDI_BEAT_CLOCK && cmd <= MIDI_BEAT_STOP)
         {
             if (self->processMBC(cmd) == false)

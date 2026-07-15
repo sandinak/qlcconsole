@@ -122,6 +122,9 @@ private slots:
     /** Catch MIDI input device valueChanged signals */
     void slotValueChanged(const QVariant& uid, ushort channel, uchar value);
 
+    /** Catch MIDI input device Time Code signals */
+    void slotMtcTimeChanged(const QVariant& uid, quint32 msPosition, uchar fps);
+
     /*************************************************************************
      * Configuration
      *************************************************************************/
