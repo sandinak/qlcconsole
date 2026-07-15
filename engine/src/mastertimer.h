@@ -21,6 +21,7 @@
 #ifndef MASTERTIMER_H
 #define MASTERTIMER_H
 
+#include <QAtomicInteger>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QObject>
@@ -74,6 +75,12 @@ public:
     /** Get the length of one timer tick in milliseconds */
     static uint tick();
 
+    /** Compute time of the most recent tick, in milliseconds. This is how
+     *  long the engine spent producing DMX for one tick (functions + DMX
+     *  sources), i.e. the engine load against the per-tick budget (tick()).
+     *  Lock-free; safe to read from the UI thread. */
+    double tickComputeMs() const;
+
 signals:
     void tickReady();
 
@@ -87,6 +94,10 @@ private:
 
     /** Duration in milliseconds of a single tick */
     static uint s_tick;
+
+    /** Compute time of the last tick in microseconds. Written on the timer
+     *  thread, read on the UI thread; atomic keeps that lock-free. */
+    QAtomicInteger<quint32> m_tickComputeUs;
 
     /** The private reference to a MasterTimer platform dependent implementation */
     MasterTimerPrivate* d_ptr;

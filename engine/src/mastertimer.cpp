@@ -95,6 +95,8 @@ MasterTimer::MasterTimer(Doc* doc)
     Q_ASSERT(doc != NULL);
     Q_ASSERT(d_ptr != NULL);
 
+    m_tickComputeUs.storeRelaxed(0);
+
     QSettings settings;
     QVariant var = settings.value(MASTERTIMER_FREQUENCY);
     if (var.isValid() == true)
@@ -168,12 +170,17 @@ void MasterTimer::timerTick()
     QList<Universe *> universes = doc->inputOutputMap()->claimUniverses();
 
     const bool tlog = tickLogEnabled();
+    // Always measure the tick compute time — it is a single QElapsedTimer and
+    // feeds the always-on load indicator (m_tickComputeUs). The verbose
+    // per-tick logging below stays gated behind tickLogEnabled().
     QElapsedTimer computeTimer;
-    if (tlog)
-        computeTimer.start();
+    computeTimer.start();
 
     timerTickFunctions(universes);
     timerTickDMXSources(universes);
+
+    const double ms = computeTimer.nsecsElapsed() / 1.0e6;
+    m_tickComputeUs.storeRelaxed(quint32(computeTimer.nsecsElapsed() / 1000));
 
     if (tlog)
     {
@@ -182,7 +189,6 @@ void MasterTimer::timerTick()
         static double sumMs = 0, maxMs = 0;
         static quint64 overruns = 0;
         const double budgetMs = double(s_tick);
-        double ms = computeTimer.nsecsElapsed() / 1.0e6;
         nTicks++;
         sumMs += ms;
         if (ms > maxMs) maxMs = ms;
@@ -216,6 +222,11 @@ uint MasterTimer::frequency()
 uint MasterTimer::tick()
 {
     return s_tick;
+}
+
+double MasterTimer::tickComputeMs() const
+{
+    return m_tickComputeUs.loadRelaxed() / 1000.0;
 }
 
 /*****************************************************************************

@@ -38,6 +38,7 @@ class QToolBar;
 class QSpinBox;
 class QAction;
 class QLabel;
+class QTimer;
 class Doc;
 
 /** @addtogroup ui_shows
@@ -139,6 +140,16 @@ private:
     QComboBox *m_timeDivisionCombo;
     QSpinBox *m_bpmField;
 
+    /* MIDI Time Code follow */
+    QAction *m_followMtcAction;
+    QComboBox *m_tcSourceCombo;
+
+    /* System-health footer chips */
+    QLabel *m_tcChip;
+    QLabel *m_loadChip;
+    QTimer *m_footerTimer;
+    int m_tcFps;
+
 protected slots:
     /** Slot called when the user selects a show from
      *  the shows combo box */
@@ -163,6 +174,20 @@ protected slots:
     void slotStopPlayback();
     void slotStartPlayback();
     void slotShowStopped();
+
+    /*********************************************************************
+     * MIDI Time Code follow
+     *********************************************************************/
+protected slots:
+    void slotFollowMtcToggled(bool enable);
+    void slotTcSourceChanged(int index);
+    void slotTimecodePosition(quint32 msPosition);
+    void slotTimecodeRunningChanged(bool running);
+    void slotUpdateFooter();
+
+private:
+    void updateTimecodeChip();
+    void updateTcSourceCombo();
 
     /*********************************************************************
      * Time division
