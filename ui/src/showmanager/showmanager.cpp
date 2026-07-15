@@ -47,6 +47,7 @@
 #include "qlcmacros.h"
 #include "sequence.h"
 #include "chaser.h"
+#include "collection.h"
 
 #define SETTINGS_HSPLITTER "showmanager/hsplitter"
 #define SETTINGS_VSPLITTER "showmanager/vsplitter"
@@ -607,8 +608,8 @@ void ShowManager::slotAddItem()
     fs.setDisabledFunctions(disabledList);
 
     fs.setMultiSelection(false);
-    fs.setFilter(Function::SceneType | Function::ChaserType | Function::SequenceType | Function::AudioType | Function::RGBMatrixType | Function::EFXType);
-    fs.disableFilters(Function::ShowType | Function::ScriptType | Function::CollectionType);
+    fs.setFilter(Function::SceneType | Function::ChaserType | Function::SequenceType | Function::AudioType | Function::RGBMatrixType | Function::EFXType | Function::CollectionType);
+    fs.disableFilters(Function::ShowType | Function::ScriptType);
     fs.showNewTrack(true);
 
     if (fs.exec() == QDialog::Accepted)
@@ -745,6 +746,18 @@ void ShowManager::slotAddItem()
                 /** 8.2) It is necessary to create a new track (below) */
                 createTrack = true;
             }
+            else if (selectedFunc->type() == Function::CollectionType)
+            {
+                /** 9.1) add collection to the currently selected track */
+                if (m_currentTrack != NULL)
+                {
+                    m_showview->addCollection(qobject_cast<Collection*>(selectedFunc), m_currentTrack);
+                    m_doc->setModified();
+                    return;
+                }
+                /** 9.2) It is necessary to create a new track (below) */
+                createTrack = true;
+            }
         }
 
         if (createTrack == true)
@@ -828,6 +841,12 @@ void ShowManager::slotAddItem()
                 /** 8.2) add video to the new track */
                 Video *video = qobject_cast<Video*> (selectedFunc);
                 m_showview->addVideo(video, m_currentTrack);
+            }
+            else if (selectedFunc->type() == Function::CollectionType)
+            {
+                /** 9.2) add collection to the new track */
+                Collection *collection = qobject_cast<Collection*> (selectedFunc);
+                m_showview->addCollection(collection, m_currentTrack);
             }
         }
         m_doc->setModified();
@@ -1707,6 +1726,11 @@ void ShowManager::updateMultiTrackView()
                 {
                     Video *video = qobject_cast<Video*>(fn);
                     m_showview->addVideo(video, track, sf);
+                }
+                else if (fn->type() == Function::CollectionType)
+                {
+                    Collection *collection = qobject_cast<Collection*>(fn);
+                    m_showview->addCollection(collection, track, sf);
                 }
             }
         }

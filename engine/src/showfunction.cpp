@@ -128,6 +128,7 @@ QColor ShowFunction::defaultColor(Function::Type type)
         case Function::RGBMatrixType: return QColor(101, 155, 155);
         case Function::EFXType:       return QColor(128, 60, 60);
         case Function::VideoType:     return QColor(147, 140, 20);
+        case Function::CollectionType: return QColor(120, 80, 140);
         default: return QColor(100, 100, 100);
     }
 }

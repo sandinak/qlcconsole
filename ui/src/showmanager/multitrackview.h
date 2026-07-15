@@ -27,12 +27,14 @@
 #include <QWidget>
 
 #include "rgbmatrixitem.h"
+#include "collectionitem.h"
 #include "sequenceitem.h"
 #include "headeritems.h"
 #include "trackitem.h"
 #include "audioitem.h"
 #include "efxitem.h"
 #include "videoitem.h"
+#include "collection.h"
 #include "chaser.h"
 #include "track.h"
 
@@ -74,6 +76,9 @@ public:
 
     /** Add a new RGB Matrix item to the given track */
     void addRGBMatrix(RGBMatrix *rgbm, Track *track = NULL, ShowFunction *sf = NULL);
+
+    /** Add a new Collection item to the given track */
+    void addCollection(Collection *collection, Track *track = NULL, ShowFunction *sf = NULL);
 
     /** Add a new EFX item to the given track */
     void addEFX(EFX *efx, Track *track = NULL, ShowFunction *sf = NULL);

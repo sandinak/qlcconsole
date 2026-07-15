@@ -273,6 +273,31 @@ void MultiTrackView::addRGBMatrix(RGBMatrix *rgbm, Track *track, ShowFunction *s
     setItemCommonProperties(item, func, trackNum);
 }
 
+void MultiTrackView::addCollection(Collection *collection, Track *track, ShowFunction *sf)
+{
+    if (m_tracks.isEmpty())
+        return;
+
+    int trackNum = getTrackIndex(track);
+
+    if (track == NULL)
+        track = m_tracks.at(trackNum)->getTrack();
+
+    ShowFunction *func = sf;
+    if (func == NULL)
+    {
+        func = track->createShowFunction(collection->id());
+        // A collection of scenes reports no finite total duration; give the
+        // timeline block an explicit default so it is visible/draggable and
+        // the ShowRunner doesn't stop it instantly (stopTime == startTime).
+        if (func->duration() == 0 && collection->totalDuration() == 0)
+            func->setDuration(10000);
+    }
+
+    CollectionItem *item = new CollectionItem(collection, func);
+    setItemCommonProperties(item, func, trackNum);
+}
+
 void MultiTrackView::addEFX(EFX *efx, Track *track, ShowFunction *sf)
 {
     if (m_tracks.isEmpty())
