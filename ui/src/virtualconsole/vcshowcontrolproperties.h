@@ -23,6 +23,7 @@
 #include <QDialog>
 
 class QComboBox;
+class QCheckBox;
 class InputSelectionWidget;
 class VCShowControl;
 class Doc;
@@ -47,6 +48,7 @@ private:
     Doc *m_doc;
 
     QComboBox *m_showCombo;
+    QCheckBox *m_cueInfoCheck;
     InputSelectionWidget *m_playInput;
     InputSelectionWidget *m_stopInput;
     InputSelectionWidget *m_followInput;

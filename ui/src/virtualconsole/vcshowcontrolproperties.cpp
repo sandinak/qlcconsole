@@ -21,6 +21,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QLabel>
 #include <QScrollArea>
 
@@ -53,6 +54,10 @@ VCShowControlProperties::VCShowControlProperties(VCShowControl *sc, Doc *doc)
     }
     showRow->addWidget(m_showCombo, 1);
     main->addLayout(showRow);
+
+    m_cueInfoCheck = new QCheckBox(tr("Show current / next cue (name + note)"), this);
+    m_cueInfoCheck->setChecked(m_sc->showCueInfo());
+    main->addWidget(m_cueInfoCheck);
 
     // External-input rows (each MIDI-mappable).
     QScrollArea *scroll = new QScrollArea(this);
@@ -93,6 +98,7 @@ VCShowControlProperties::~VCShowControlProperties()
 void VCShowControlProperties::accept()
 {
     m_sc->setShow(m_showCombo->currentData().toUInt());
+    m_sc->setShowCueInfo(m_cueInfoCheck->isChecked());
     m_sc->setInputSource(m_playInput->inputSource(),    VCShowControl::playInputSourceId);
     m_sc->setInputSource(m_stopInput->inputSource(),    VCShowControl::stopInputSourceId);
     m_sc->setInputSource(m_followInput->inputSource(),  VCShowControl::followInputSourceId);

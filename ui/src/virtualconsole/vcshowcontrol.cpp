@@ -29,7 +29,10 @@
 #include "vcshowcontrol.h"
 #include "vcshowcontrolproperties.h"
 #include "mastertimer.h"
+#include "chaser.h"
+#include "chaserstep.h"
 #include "show.h"
+#include "track.h"
 #include "doc.h"
 
 #define HYSTERESIS 3
@@ -42,10 +45,13 @@ const quint8 VCShowControl::suspendInputSourceId = 3;
 VCShowControl::VCShowControl(QWidget *parent, Doc *doc)
     : VCWidget(parent, doc)
     , m_showID(Function::invalidId())
+    , m_showCueInfo(true)
     , m_nameLabel(NULL)
     , m_statusLabel(NULL)
     , m_timeLabel(NULL)
     , m_sectionLabel(NULL)
+    , m_currentCueLabel(NULL)
+    , m_nextCueLabel(NULL)
     , m_stopButton(NULL)
     , m_playButton(NULL)
     , m_followButton(NULL)
@@ -90,6 +96,16 @@ VCShowControl::VCShowControl(QWidget *parent, Doc *doc)
     m_sectionLabel->setAlignment(Qt::AlignCenter);
     v->addWidget(m_sectionLabel);
 
+    // Current + next cue (name + note of the running chaser inside the show).
+    m_currentCueLabel = new QLabel(this);
+    m_currentCueLabel->setTextFormat(Qt::PlainText);
+    m_currentCueLabel->setStyleSheet("QLabel { color:#cfe4ff; }");
+    v->addWidget(m_currentCueLabel);
+    m_nextCueLabel = new QLabel(this);
+    m_nextCueLabel->setTextFormat(Qt::PlainText);
+    m_nextCueLabel->setStyleSheet("QLabel { color:#9fb3c8; }");
+    v->addWidget(m_nextCueLabel);
+
     // Transport row.
     QHBoxLayout *row = new QHBoxLayout();
     row->setSpacing(3);
@@ -130,6 +146,7 @@ VCShowControl::VCShowControl(QWidget *parent, Doc *doc)
 
     // Design mode: controls inert so the widget can be selected/moved.
     slotModeChanged(m_doc->mode());
+    setShowCueInfo(m_showCueInfo);
     refresh();
 }
 
@@ -254,6 +271,79 @@ void VCShowControl::slotShowTimeChanged(quint32 ms)
         }
     }
     m_sectionLabel->setText(section);
+
+    refreshCueInfo();
+}
+
+void VCShowControl::setShowCueInfo(bool show)
+{
+    m_showCueInfo = show;
+    if (m_currentCueLabel != NULL) m_currentCueLabel->setVisible(show);
+    if (m_nextCueLabel != NULL) m_nextCueLabel->setVisible(show);
+    refreshCueInfo();
+}
+
+QString VCShowControl::cueText(Chaser *chaser, int stepIdx) const
+{
+    if (chaser == NULL || stepIdx < 0 || stepIdx >= chaser->stepsCount())
+        return QString();
+    const ChaserStep s = chaser->steps().at(stepIdx);
+    QString name = s.note;
+    if (name.isEmpty())
+    {
+        Function *f = m_doc->function(s.fid);
+        name = (f != NULL) ? f->name() : tr("Cue %1").arg(stepIdx + 1);
+    }
+    return QString("%1. %2").arg(stepIdx + 1).arg(name);
+}
+
+void VCShowControl::refreshCueInfo()
+{
+    if (m_currentCueLabel == NULL || m_nextCueLabel == NULL)
+        return;
+
+    if (m_showCueInfo == false)
+    {
+        m_currentCueLabel->clear();
+        m_nextCueLabel->clear();
+        return;
+    }
+
+    // Find a running chaser/sequence referenced by the bound show and read its
+    // current + next step. (First running one wins — the common single-cuelist
+    // show; multi-chaser shows just track the first.)
+    Show *show = showFunction();
+    Chaser *chaser = NULL;
+    if (show != NULL && show->isRunning())
+    {
+        foreach (Track *track, show->tracks())
+        {
+            foreach (ShowFunction *sf, track->showFunctions())
+            {
+                Function *f = m_doc->function(sf->functionID());
+                Chaser *c = qobject_cast<Chaser *>(f);
+                if (c != NULL && c->isRunning())
+                {
+                    chaser = c;
+                    break;
+                }
+            }
+            if (chaser != NULL)
+                break;
+        }
+    }
+
+    if (chaser == NULL)
+    {
+        m_currentCueLabel->clear();
+        m_nextCueLabel->clear();
+        return;
+    }
+
+    int cur = chaser->currentStepIndex();
+    m_currentCueLabel->setText(tr("▶ %1").arg(cueText(chaser, cur)));
+    QString next = cueText(chaser, cur + 1);
+    m_nextCueLabel->setText(next.isEmpty() ? QString() : tr("⏭ %1").arg(next));
 }
 
 void VCShowControl::slotShowRunning(quint32 id)
@@ -407,6 +497,7 @@ bool VCShowControl::copyFrom(const VCWidget *widget)
         return false;
 
     setShow(sc->show());
+    setShowCueInfo(sc->showCueInfo());
     return VCWidget::copyFrom(widget);
 }
 
@@ -436,6 +527,8 @@ bool VCShowControl::loadXML(QXmlStreamReader &root)
     QXmlStreamAttributes attrs = root.attributes();
     if (attrs.hasAttribute(KXMLQLCVCShowControlFunction))
         setShow(attrs.value(KXMLQLCVCShowControlFunction).toString().toUInt());
+    if (attrs.hasAttribute(KXMLQLCVCShowControlCueInfo))
+        setShowCueInfo(attrs.value(KXMLQLCVCShowControlCueInfo).toString() != "0");
 
     while (root.readNextStartElement())
     {
@@ -483,6 +576,7 @@ bool VCShowControl::saveXML(QXmlStreamWriter *doc)
 
     if (m_showID != Function::invalidId())
         doc->writeAttribute(KXMLQLCVCShowControlFunction, QString::number(m_showID));
+    doc->writeAttribute(KXMLQLCVCShowControlCueInfo, m_showCueInfo ? "1" : "0");
 
     saveXMLCommon(doc);
     saveXMLWindowState(doc);

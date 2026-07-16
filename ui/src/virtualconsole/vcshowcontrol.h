@@ -32,6 +32,7 @@ class Show;
 
 #define KXMLQLCVCShowControl         QStringLiteral("ShowControl")
 #define KXMLQLCVCShowControlFunction QStringLiteral("Function")
+#define KXMLQLCVCShowControlCueInfo  QStringLiteral("CueInfo")
 #define KXMLQLCVCShowControlPlay     QStringLiteral("Play")
 #define KXMLQLCVCShowControlStop     QStringLiteral("Stop")
 #define KXMLQLCVCShowControlFollow   QStringLiteral("Follow")
@@ -69,6 +70,11 @@ public:
     void setShow(quint32 id);
     quint32 show() const { return m_showID; }
 
+    /** Show/hide the current + next cue lines (name + note of the running
+     *  chaser inside the show). */
+    void setShowCueInfo(bool show);
+    bool showCueInfo() const { return m_showCueInfo; }
+
 protected:
     Show *showFunction() const;
     FunctionParent functionParent() const;
@@ -101,11 +107,20 @@ protected slots:
 private:
     /** Refresh all labels + button states from the bound show. */
     void refresh();
+    /** Update the current/next cue lines from the running chaser (if any). */
+    void refreshCueInfo();
+    /** The label for a step: its note (description), else the fired function
+     *  name, else "Cue N". */
+    QString cueText(class Chaser *chaser, int stepIdx) const;
+
+    bool m_showCueInfo;
 
     QLabel *m_nameLabel;
     QLabel *m_statusLabel;
     QLabel *m_timeLabel;
     QLabel *m_sectionLabel;
+    QLabel *m_currentCueLabel;
+    QLabel *m_nextCueLabel;
     QToolButton *m_stopButton;
     QToolButton *m_playButton;
     QToolButton *m_followButton;
