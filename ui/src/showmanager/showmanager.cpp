@@ -1671,30 +1671,17 @@ ShowFunction *ShowManager::addFunctionToTrack(Function *f, Track *track, quint32
 
     Function::Type t = f->type();
 
-    // A bare Scene has no timeline item of its own; wrap it in a single-shot
-    // 10 s Sequence bound to it, exactly like the toolbar Add flow.
+    // A bare Scene is placed directly as a simple timed clip (SceneItem). The
+    // ShowRunner runs the Scene for the clip's duration — no hidden Sequence /
+    // chase wrapper (which used to clutter the Functions list and confuse the
+    // "a scene became a chase?" mental model).
     if (t == Function::SceneType)
     {
         Scene *scene = qobject_cast<Scene*>(f);
-        Function *nf = new Sequence(m_doc);
-        Sequence *seq = qobject_cast<Sequence*>(nf);
-        seq->setBoundSceneID(scene->id());
-        if (m_doc->addFunction(nf) == false)
-        {
-            delete nf;
-            return NULL;
-        }
-        seq->setDirection(Function::Forward);
-        seq->setRunOrder(Function::SingleShot);
-        seq->setDurationMode(Chaser::PerStep);
-        seq->setName(QString("%1 %2").arg(tr("New Sequence")).arg(seq->id()));
-        ChaserStep step(scene->id(), scene->fadeInSpeed(), 10000, scene->fadeOutSpeed());
-        step.values.append(scene->values());
-        seq->addStep(step);
-
-        ShowFunction *sf = track->createShowFunction(seq->id());
+        ShowFunction *sf = track->createShowFunction(scene->id());
         sf->setStartTime(startTime);
-        m_showview->addSequence(seq, track, sf);
+        sf->setDuration(SceneItem::defaultDuration());
+        m_showview->addScene(scene, track, sf);
         return sf;
     }
 
@@ -2601,7 +2588,12 @@ void ShowManager::updateMultiTrackView()
             Function *fn = m_doc->function(sf->functionID());
             if (fn != NULL)
             {
-                if (fn->type() == Function::ChaserType)
+                if (fn->type() == Function::SceneType)
+                {
+                    Scene *scene = qobject_cast<Scene*>(fn);
+                    m_showview->addScene(scene, track, sf);
+                }
+                else if (fn->type() == Function::ChaserType)
                 {
                     Chaser *chaser = qobject_cast<Chaser*>(fn);
                     m_showview->addSequence(chaser, track, sf);

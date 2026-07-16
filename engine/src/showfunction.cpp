@@ -129,6 +129,7 @@ QColor ShowFunction::defaultColor(Function::Type type)
         case Function::EFXType:       return QColor(128, 60, 60);
         case Function::VideoType:     return QColor(147, 140, 20);
         case Function::CollectionType: return QColor(120, 80, 140);
+        case Function::SceneType:     return QColor(70, 110, 150);
         default: return QColor(100, 100, 100);
     }
 }

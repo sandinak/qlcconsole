@@ -115,6 +115,7 @@ add_library(${module_name}
     showmanager/headeritems.cpp showmanager/headeritems.h
     showmanager/multitrackview.cpp showmanager/multitrackview.h
     showmanager/rgbmatrixitem.cpp showmanager/rgbmatrixitem.h
+    showmanager/sceneitem.cpp showmanager/sceneitem.h
     showmanager/sequenceitem.cpp showmanager/sequenceitem.h
     showmanager/showeditor.cpp showmanager/showeditor.h showmanager/showeditor.ui
     showmanager/showitem.cpp showmanager/showitem.h

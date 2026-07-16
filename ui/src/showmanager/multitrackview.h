@@ -30,6 +30,7 @@
 
 #include "rgbmatrixitem.h"
 #include "collectionitem.h"
+#include "sceneitem.h"
 #include "sequenceitem.h"
 #include "headeritems.h"
 #include "trackitem.h"
@@ -90,6 +91,9 @@ public:
 
     /** Add a new Collection item to the given track */
     void addCollection(Collection *collection, Track *track = NULL, ShowFunction *sf = NULL);
+
+    /** Place a bare Scene on a track as a simple timed clip. */
+    void addScene(Scene *scene, Track *track = NULL, ShowFunction *sf = NULL);
 
     /** Add a new EFX item to the given track */
     void addEFX(EFX *efx, Track *track = NULL, ShowFunction *sf = NULL);

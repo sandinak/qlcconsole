@@ -406,6 +406,31 @@ void MultiTrackView::addCollection(Collection *collection, Track *track, ShowFun
     setItemCommonProperties(item, func, trackNum);
 }
 
+void MultiTrackView::addScene(Scene *scene, Track *track, ShowFunction *sf)
+{
+    if (m_tracks.isEmpty())
+        return;
+
+    int trackNum = getTrackIndex(track);
+
+    if (track == NULL)
+        track = m_tracks.at(trackNum)->getTrack();
+
+    ShowFunction *func = sf;
+    if (func == NULL)
+    {
+        func = track->createShowFunction(scene->id());
+        // A Scene has no intrinsic duration; give the clip a default so it's
+        // visible/draggable and the ShowRunner doesn't stop it instantly
+        // (stopTime == startTime when duration is 0).
+        if (func->duration() == 0)
+            func->setDuration(SceneItem::defaultDuration());
+    }
+
+    SceneItem *item = new SceneItem(scene, func);
+    setItemCommonProperties(item, func, trackNum);
+}
+
 void MultiTrackView::addEFX(EFX *efx, Track *track, ShowFunction *sf)
 {
     if (m_tracks.isEmpty())
