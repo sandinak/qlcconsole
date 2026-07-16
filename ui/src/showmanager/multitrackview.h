@@ -252,7 +252,8 @@ signals:
     void markerDeleteRequested(quint32 time);
     void markerColorRequested(quint32 time);
     /** A marker was dragged/resized: replace oldStart with [newStart,newEnd]. */
-    void markerMovedRequested(quint32 oldStart, quint32 newStart, quint32 newEnd);
+    void markerMovedRequested(quint32 oldStart, quint32 newStart, quint32 newEnd,
+                              QString label, QColor color);
 
     /** Emitted when an item is dragged below the last track: the caller should
      *  (after confirming) make a new track and move the item onto it. */

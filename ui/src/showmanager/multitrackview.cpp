@@ -932,9 +932,11 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
             qreal sx = getPositionFromTime(key);
             qreal ex = getPositionFromTime(end);
 
-            if (end <= key || qAbs(sp.x() - ex) <= 6)
+            // Generous edge zones so stretching is easy to grab.
+            const qreal edge = 10.0;
+            if (end <= key || qAbs(sp.x() - ex) <= edge)
                 m_markerDragMode = 3;                 // resize right (or extend a point)
-            else if (qAbs(sp.x() - sx) <= 6)
+            else if (qAbs(sp.x() - sx) <= edge)
                 m_markerDragMode = 2;                 // resize left
             else
                 m_markerDragMode = 1;                 // move
@@ -998,7 +1000,8 @@ void MultiTrackView::mouseReleaseEvent(QMouseEvent * e)
     if (m_markerDragMode != 0)
     {
         m_markerDragMode = 0;
-        emit markerMovedRequested(m_markerOrigStart, m_dragStart, m_dragEnd);
+        emit markerMovedRequested(m_markerOrigStart, m_dragStart, m_dragEnd,
+                                  m_dragLabel, m_dragColor);
         m_markerOrigStart = UINT_MAX;
         QGraphicsView::mouseReleaseEvent(e);
         return;
