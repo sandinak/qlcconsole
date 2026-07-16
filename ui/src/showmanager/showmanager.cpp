@@ -1209,8 +1209,8 @@ void ShowManager::slotAddSequence()
         sequence->setRunOrder(Function::SingleShot);
         m_currentScene->setVisible(false);
         f->setName(QString("%1 %2").arg(tr("New Sequence")).arg(f->id()));
-        showSceneEditor(m_currentScene);
-        showRightEditor(f);
+        // No editor-to-the-right in this view (see slotShowItemMoved); the
+        // sequence's steps are edited in the Functions/Programming tabs.
         m_showview->addSequence(sequence, m_currentTrack);
     }
 }
@@ -2106,72 +2106,34 @@ void ShowManager::slotShowItemMoved(ShowItem *item, quint32 time, bool moved)
     if (moved)
         pushUndoSnapshot();
 
+    Q_UNUSED(time)
+
     quint32 fid = item->functionID();
     Function *f = m_doc->function(fid);
     if (f == NULL)
         return;
 
-    Sequence *sequence = NULL;
-
-    if (f->type() == Function::SequenceType)
-        sequence = qobject_cast<Sequence*>(f);
-
+    // NOTE: clicking a timeline item no longer opens a Scene/Chaser editor on
+    // the right. Building a full SceneEditor console (every fixture/channel) on
+    // each click was slow enough to beachball on larger rigs, and content is
+    // edited in the Programming / Functions tabs anyway — the timeline is for
+    // arranging and timing. We just select the item + activate its track here.
+    Sequence *sequence = qobject_cast<Sequence*>(f);
     if (sequence != NULL)
     {
         quint32 sceneID = sequence->boundSceneID();
-        Function *sf = m_doc->function(sceneID);
-
-        if (sf == NULL)
-        {
-            // The bound Scene no longer exists. Invalidate the Sequence
-            sequence->setBoundSceneID(Function::invalidId());
-        }
-        else
-        {
-            Scene *boundScene = qobject_cast<Scene*>(sf);
-
-            // if the clicked item represents another Sequence,
-            // destroy the Scene editor cause they might share
-            // the same bound Scene and Scene values might be overwritten
-            if (fid != m_editorFunctionID)
-                showSceneEditor(NULL);
-
-            if (boundScene != m_currentScene || m_sceneEditor == NULL)
-            {
-                m_currentScene = boundScene;
-                showSceneEditor(m_currentScene);
-            }
-
-            /* activate the new track */
-            m_currentTrack = m_show->getTrackFromSceneID(sceneID);
-            // A sequence may live on a track not bound to its scene (e.g. moved
-            // between tracks, or a scene dropped onto an existing track); fall
-            // back to the item's own track row.
-            if (m_currentTrack == NULL)
-                m_currentTrack = m_show->tracks().value(item->getTrackIndex(), NULL);
-            if (m_currentTrack != NULL)
-                m_showview->activateTrack(m_currentTrack);
-            showRightEditor(f);
-
-            if (m_currentEditor != NULL)
-            {
-                ChaserEditor *editor = qobject_cast<ChaserEditor*>(m_currentEditor);
-                editor->selectStepAtTime(time - item->getStartTime());
-            }
-        }
+        m_currentScene = qobject_cast<Scene*>(m_doc->function(sceneID));
+        m_currentTrack = m_show->getTrackFromSceneID(sceneID);
+        if (m_currentTrack == NULL)
+            m_currentTrack = m_show->tracks().value(item->getTrackIndex(), NULL);
     }
     else
     {
-        Track *track = m_show->tracks().value(item->getTrackIndex(), NULL);
-        if (track != NULL)
-        {
-            m_showview->activateTrack(track);
-            m_currentTrack = track;
-        }
         m_currentScene = NULL;
-        showSceneEditor(NULL);
-        showRightEditor(f);
+        m_currentTrack = m_show->tracks().value(item->getTrackIndex(), NULL);
     }
+    if (m_currentTrack != NULL)
+        m_showview->activateTrack(m_currentTrack);
 
     m_copyAction->setEnabled(true);
     m_deleteAction->setEnabled(true);
