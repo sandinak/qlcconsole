@@ -484,6 +484,9 @@ void MultiTrackView::moveCursor(quint32 timePos)
     int newPos = getPositionFromTime(timePos);
     m_cursor->setPos(newPos, 0);
     m_cursor->setTime(timePos);
+    // Keep the playhead on-screen as it advances (scrolls only when it nears an
+    // edge; a no-op while already visible).
+    ensureVisible(QRectF(newPos, m_cursor->y(), 1, 1), 80, 0);
 }
 
 void MultiTrackView::rewindCursor()

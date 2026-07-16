@@ -1619,20 +1619,30 @@ void ShowManager::slotTcSourceChanged(int index)
 
 void ShowManager::slotTimecodePosition(quint32 msPosition)
 {
-    if (m_followMtcAction != NULL && m_followMtcAction->isChecked() && m_show != NULL)
+    if (m_show == NULL)
+        return;
+
+    // Map the absolute timecode onto the (0-based) timeline via the offset.
+    quint32 offset = m_show->timecodeOffset();
+    // Auto-align to the SMPTE hour: Logic rolls from 01:00:00:00 by default, so
+    // if no offset is set yet and timecode arrives hours-based, snap timeline 0
+    // to that hour boundary. The user can still override via the TC 0… menu.
+    if (offset == 0 && msPosition >= 3600000)
     {
-        // Map the absolute timecode onto the (0-based) timeline via the offset.
-        quint32 offset = m_show->timecodeOffset();
-        quint32 pos = (msPosition > offset) ? msPosition - offset : 0;
-
-        if (m_show->isRunning() && m_show->isPaused() == false)
-            m_show->setExternalTime(pos);
-
-        // Always chase the cursor to the incoming position (belt and braces —
-        // works whether or not the show is running).
-        m_showview->moveCursor(pos);
-        slotUpdateTime(pos);
+        offset = (msPosition / 3600000) * 3600000;
+        m_show->setTimecodeOffset(offset);
     }
+    quint32 pos = (msPosition > offset) ? msPosition - offset : 0;
+
+    // Always chase the cursor to where the timecode sits on this timeline, so
+    // the playhead tracks Logic regardless of the Follow toggle / run state.
+    m_showview->moveCursor(pos);
+    slotUpdateTime(pos);
+
+    // Follow mode additionally drives cue playback.
+    if (m_followMtcAction != NULL && m_followMtcAction->isChecked() &&
+        m_show->isRunning() && m_show->isPaused() == false)
+        m_show->setExternalTime(pos);
 }
 
 void ShowManager::slotTimecodeRunningChanged(bool running)
