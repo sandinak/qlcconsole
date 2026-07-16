@@ -81,6 +81,12 @@ public:
      *  Lock-free; safe to read from the UI thread. */
     double tickComputeMs() const;
 
+    /** Peak per-tick compute time (ms) since the last call — reading resets
+     *  the peak, so a UI poll shows the worst tick in its window. This is what
+     *  a load indicator should display; the instantaneous last tick is far too
+     *  noisy/small on a light show. */
+    double tickComputePeakMs();
+
 signals:
     void tickReady();
 
@@ -98,6 +104,9 @@ private:
     /** Compute time of the last tick in microseconds. Written on the timer
      *  thread, read on the UI thread; atomic keeps that lock-free. */
     QAtomicInteger<quint32> m_tickComputeUs;
+
+    /** Peak per-tick compute (us) since the UI last read it (read = reset). */
+    QAtomicInteger<quint32> m_tickComputePeakUs;
 
     /** The private reference to a MasterTimer platform dependent implementation */
     MasterTimerPrivate* d_ptr;

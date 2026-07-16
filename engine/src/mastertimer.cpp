@@ -96,6 +96,7 @@ MasterTimer::MasterTimer(Doc* doc)
     Q_ASSERT(d_ptr != NULL);
 
     m_tickComputeUs.storeRelaxed(0);
+    m_tickComputePeakUs.storeRelaxed(0);
 
     QSettings settings;
     QVariant var = settings.value(MASTERTIMER_FREQUENCY);
@@ -180,7 +181,10 @@ void MasterTimer::timerTick()
     timerTickDMXSources(universes);
 
     const double ms = computeTimer.nsecsElapsed() / 1.0e6;
-    m_tickComputeUs.storeRelaxed(quint32(computeTimer.nsecsElapsed() / 1000));
+    const quint32 us = quint32(computeTimer.nsecsElapsed() / 1000);
+    m_tickComputeUs.storeRelaxed(us);
+    if (us > m_tickComputePeakUs.loadRelaxed())
+        m_tickComputePeakUs.storeRelaxed(us);
 
     if (tlog)
     {
@@ -227,6 +231,11 @@ uint MasterTimer::tick()
 double MasterTimer::tickComputeMs() const
 {
     return m_tickComputeUs.loadRelaxed() / 1000.0;
+}
+
+double MasterTimer::tickComputePeakMs()
+{
+    return m_tickComputePeakUs.fetchAndStoreRelaxed(0) / 1000.0;
 }
 
 /*****************************************************************************

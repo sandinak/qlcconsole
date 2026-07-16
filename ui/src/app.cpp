@@ -2523,11 +2523,13 @@ void App::slotUpdateHealthFooter()
 {
     if (m_statusLoadLabel != NULL && m_doc != NULL && m_doc->masterTimer() != NULL)
     {
-        double ms = m_doc->masterTimer()->tickComputeMs();
+        // Peak tick over the poll window — far more informative than the last
+        // tick, which is tiny/noisy on a light show.
+        double ms = m_doc->masterTimer()->tickComputePeakMs();
         double budget = double(MasterTimer::tick());
         int pct = budget > 0 ? int((ms / budget) * 100.0) : 0;
         m_statusLoadLabel->setText(tr("Load: %1 / %2 ms (%3%)")
-                                   .arg(ms, 0, 'f', 1).arg(int(budget)).arg(pct));
+                                   .arg(ms, 0, 'f', 2).arg(int(budget)).arg(pct));
         const char *green = "QLabel { color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px; }";
         const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";
         const char *red   = "QLabel { color:#ffffff; background:#c62828; padding:1px 6px; border-radius:3px; }";
