@@ -37,6 +37,10 @@ TrackItem::TrackItem(Track *track, int number)
     , m_isLocked(false)
     , m_nameProxy(NULL)
     , m_editing(false)
+    , m_pressSceneY(0)
+    , m_baseY(0)
+    , m_dragging(false)
+    , m_onButtonRow(false)
 {
     m_font = qApp->font();
     m_font.setBold(true);
@@ -129,17 +133,27 @@ void TrackItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     m_isActive = true;
     QGraphicsItem::mousePressEvent(event);
-    if (m_soloRegion->contains(event->pos().toPoint()))
+
+    // Remember whether the press was on a button (solo/mute/lock) row — a drag
+    // there must NOT start a reorder.
+    const QPoint p = event->pos().toPoint();
+    m_onButtonRow = m_soloRegion->contains(p) || m_muteRegion->contains(p) ||
+                    m_lockRegion->contains(p);
+    m_pressSceneY = event->scenePos().y();
+    m_baseY = pos().y();
+    m_dragging = false;
+
+    if (m_soloRegion->contains(p))
     {
         m_isSolo = !m_isSolo;
         emit itemSoloFlagChanged(this, m_isSolo);
     }
-    if (m_muteRegion->contains(event->pos().toPoint()))
+    if (m_muteRegion->contains(p))
     {
         m_isMute = !m_isMute;
         emit itemMuteFlagChanged(this, m_isMute);
     }
-    if (m_lockRegion->contains(event->pos().toPoint()))
+    if (m_lockRegion->contains(p))
     {
         m_isLocked = !m_isLocked;
         if (m_track != NULL)
@@ -148,6 +162,40 @@ void TrackItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
         emit itemLockChanged(this, m_isLocked);
     }
     emit itemClicked(this);
+}
+
+void TrackItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    // Vertical drag on the header body reorders the track. Give live feedback by
+    // lifting the item with the cursor; the actual swap happens on release.
+    if (m_onButtonRow || m_editing || (event->buttons() & Qt::LeftButton) == 0)
+        return;
+
+    const qreal dy = event->scenePos().y() - m_pressSceneY;
+    if (m_dragging == false && qAbs(dy) < TRACK_HEIGHT / 3)
+        return;
+
+    m_dragging = true;
+    setY(m_baseY + dy);
+    setZValue(1000);        // float above sibling tracks while dragging
+}
+
+void TrackItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (m_dragging)
+    {
+        m_dragging = false;
+        setZValue(0);
+        const qreal dy = event->scenePos().y() - m_pressSceneY;
+        int delta = qRound(dy / qreal(TRACK_HEIGHT));
+        // Snap back; the view rebuilds at the new order if we actually moved.
+        setY(m_baseY);
+        if (delta != 0 && m_track != NULL)
+            emit itemMoveUpDown(m_track, delta);
+        event->accept();
+        return;
+    }
+    QGraphicsItem::mouseReleaseEvent(event);
 }
 
 void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)

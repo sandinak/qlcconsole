@@ -2296,10 +2296,14 @@ void ShowManager::slotTrackDoubleClicked(Track *track)
 
 void ShowManager::slotTrackMoved(Track *track, int direction)
 {
-    if (m_show != NULL)
+    if (m_show != NULL && direction != 0)
     {
         pushUndoSnapshot();
-        m_show->moveTrack(track, direction);
+        // direction is a signed row delta (±1 from the context menu, or several
+        // rows from a header drag-reorder). moveTrack() swaps one row at a time.
+        const int step = direction > 0 ? 1 : -1;
+        for (int i = 0; i < qAbs(direction); i++)
+            m_show->moveTrack(track, step);
     }
     updateMultiTrackView();
     m_doc->setModified();

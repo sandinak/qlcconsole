@@ -77,6 +77,8 @@ public:
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *) override;
 
@@ -130,6 +132,12 @@ private:
     QGraphicsProxyWidget *m_nameProxy;
     /** True while the inline name editor is open (hide the painted name) */
     bool m_editing;
+
+    /** Drag-to-reorder state (vertical drag on the track header). */
+    qreal m_pressSceneY;
+    qreal m_baseY;         // the item's resting y at press time
+    bool  m_dragging;      // a reorder drag is in progress
+    bool  m_onButtonRow;   // press landed on a solo/mute/lock button (no drag)
 };
 
 /** @} */
