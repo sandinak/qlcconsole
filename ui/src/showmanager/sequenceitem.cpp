@@ -20,6 +20,8 @@
 #include <QApplication>
 #include <QPainter>
 #include <QMenu>
+#include <QGraphicsSceneMouseEvent>
+#include <QGraphicsSceneHoverEvent>
 
 #include "sequenceitem.h"
 #include "chaserstep.h"
@@ -29,6 +31,9 @@ SequenceItem::SequenceItem(Chaser *seq, ShowFunction *func)
     : ShowItem(func)
     , m_chaser(seq)
     , m_selectedStep(-1)
+    , m_stepResizeIdx(-1)
+    , m_stepResizeOrigDur(0)
+    , m_stepResizePressX(0)
 {
     Q_ASSERT(seq != NULL);
 
@@ -192,6 +197,124 @@ void SequenceItem::slotSequenceChanged(quint32)
     if (m_function)
         m_function->setDuration(m_chaser->totalDuration());
     updateTooltip();
+}
+
+quint32 SequenceItem::effectiveStepDuration(int idx) const
+{
+    if (idx < 0 || idx >= m_chaser->stepsCount())
+        return 0;
+    if (m_chaser->durationMode() == Chaser::Common)
+        return m_chaser->duration();
+    return m_chaser->steps().at(idx).duration;
+}
+
+int SequenceItem::stepBoundaryAt(qreal localX) const
+{
+    const float timeUnit = 50.0f / float(m_timeScale);
+    const int count = m_chaser->stepsCount();
+    float xpos = 0;
+    for (int i = 0; i < count; i++)
+    {
+        quint32 dur = effectiveStepDuration(i);
+        if (dur == Function::infiniteSpeed())
+            dur = 10 * 1000 * 1000;
+        xpos += (timeUnit * float(dur)) / 1000.0f;
+        // The final divider coincides with the item's right stretch handle —
+        // leave that to ShowItem so whole-item resize still works.
+        if (i < count - 1 && qAbs(localX - xpos) <= 4.0)
+            return i;
+    }
+    return -1;
+}
+
+void SequenceItem::ensurePerStepDurations()
+{
+    if (m_chaser->durationMode() == Chaser::PerStep)
+        return;
+    // Stamp each step with its current effective hold, then switch mode so
+    // future edits are per-step.
+    const quint32 common = m_chaser->duration();
+    for (int i = 0; i < m_chaser->stepsCount(); i++)
+    {
+        ChaserStep s = m_chaser->steps().at(i);
+        s.duration = common;
+        m_chaser->replaceStep(s, i);
+    }
+    m_chaser->setDurationMode(Chaser::PerStep);
+}
+
+void SequenceItem::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
+{
+    // Split cursor over an interior step divider to advertise cue retiming.
+    if (m_editable && m_locked == false && stepBoundaryAt(event->pos().x()) >= 0)
+        setCursor(Qt::SplitHCursor);
+    else
+        ShowItem::hoverMoveEvent(event);
+}
+
+void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (m_editable && m_locked == false && event->button() == Qt::LeftButton
+        && edgeAt(event->pos().x()) == NoEdge)
+    {
+        int idx = stepBoundaryAt(event->pos().x());
+        if (idx >= 0)
+        {
+            ensurePerStepDurations();
+            m_stepResizeIdx = idx;
+            m_stepResizeOrigDur = m_chaser->steps().at(idx).duration;
+            m_stepResizePressX = event->scenePos().x();
+            m_selectedStep = idx;
+            setFlag(QGraphicsItem::ItemIsMovable, false);
+            setSelected(true);
+            update();
+            event->accept();
+            return;
+        }
+    }
+    ShowItem::mousePressEvent(event);
+}
+
+void SequenceItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (m_stepResizeIdx >= 0)
+    {
+        const float timeUnit = 50.0f / float(m_timeScale);
+        const qreal dx = event->scenePos().x() - m_stepResizePressX;
+        qint64 newDur = qint64(m_stepResizeOrigDur) + qint64((dx / timeUnit) * 1000.0);
+        if (newDur < 100)
+            newDur = 100;                   // keep a cue at least 0.1 s
+
+        ChaserStep s = m_chaser->steps().at(m_stepResizeIdx);
+        if (quint32(newDur) != s.duration)
+        {
+            s.duration = quint32(newDur);
+            m_chaser->replaceStep(s, m_stepResizeIdx);
+            prepareGeometryChange();
+            calculateWidth();
+            if (m_function)
+                m_function->setDuration(m_chaser->totalDuration());
+            update();
+        }
+        event->accept();
+        return;
+    }
+    ShowItem::mouseMoveEvent(event);
+}
+
+void SequenceItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (m_stepResizeIdx >= 0)
+    {
+        m_stepResizeIdx = -1;
+        setFlag(QGraphicsItem::ItemIsMovable, m_locked == false && m_editable);
+        updateTooltip();
+        // Commit through the resize path (marks modified + resolves overlaps).
+        emit itemResized(this, false);
+        event->accept();
+        return;
+    }
+    ShowItem::mouseReleaseEvent(event);
 }
 
 void SequenceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)

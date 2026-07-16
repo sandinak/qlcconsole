@@ -66,6 +66,14 @@ protected:
     /** @reimp */
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *) override;
 
+    /** Drag a step boundary to retime individual cues. When the press is on an
+     *  interior step divider we resize that step's hold; otherwise we defer to
+     *  the base ShowItem (whole-item move / outer stretch). */
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+    void hoverMoveEvent(QGraphicsSceneHoverEvent *event) override;
+
 protected slots:
     void slotSequenceChanged(quint32);
 
@@ -73,12 +81,29 @@ private:
     /** Calculate sequence width for paint() and boundingRect() */
     void calculateWidth();
 
+    /** The effective hold (duration) of step @p idx, honouring Common mode. */
+    quint32 effectiveStepDuration(int idx) const;
+
+    /** Index of the step whose RIGHT divider sits within a few px of localX, or
+     *  -1. Excludes the final divider (that's the item's stretch handle). */
+    int stepBoundaryAt(qreal localX) const;
+
+    /** Ensure per-step durations are the source of truth (switch a Common-mode
+     *  chaser to PerStep, stamping each step with its current effective hold),
+     *  so retiming one cue doesn't move the others. */
+    void ensurePerStepDurations();
+
 private:
     /** Reference to the actual Chaser Function which holds the sequence steps */
     Chaser *m_chaser;
 
     /** index of the selected step for highlighting (-1 if none) */
     int m_selectedStep;
+
+    /** Step-divider drag state. */
+    int m_stepResizeIdx;         // step being retimed (-1 = none)
+    quint32 m_stepResizeOrigDur; // its hold at press time
+    qreal m_stepResizePressX;    // scene-x at press
 };
 
 /** @} */
