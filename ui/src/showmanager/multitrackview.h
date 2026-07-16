@@ -56,10 +56,10 @@ public:
     /** Set the multitrack view size in pixels */
     void setViewSize(int width, int height);
 
-    /** Provide the section markers (time ms -> label) to render in the lane. */
-    void setMarkers(const QMap<quint32, QString> &markers);
+    /** Provide the section markers (start ms -> (end ms, label)) to render. */
+    void setMarkers(const QMap<quint32, QPair<quint32, QString> > &markers);
 
-    /** Marker time nearest the given scene X within the lane, else UINT_MAX. */
+    /** Start-key of the marker region under the given scene X, else UINT_MAX. */
     quint32 markerAt(qreal sceneX) const;
 
     /** Auto calculation of view size based on items */
@@ -181,8 +181,16 @@ private:
     bool m_snapToGrid;
     /** Master editable gate (false = timeline read-only) */
     bool m_editable;
-    /** Section markers: time (ms) -> label */
-    QMap<quint32, QString> m_markers;
+    /** Section markers: start (ms) -> (end (ms), label) */
+    QMap<quint32, QPair<quint32, QString> > m_markers;
+
+    /** Marker drag state (in the lane): 0=none 1=move 2=resizeLeft 3=resizeRight */
+    int m_markerDragMode;
+    quint32 m_markerOrigStart; // original start key when the drag began
+    quint32 m_dragStart;       // working start during drag
+    quint32 m_dragEnd;         // working end during drag
+    QString m_dragLabel;       // working label during drag
+    qreal m_markerGrabDx;      // px between grab point and marker start (move)
 
 protected:
     /** Paints the time-division grid behind all items so the divisions are
@@ -203,6 +211,8 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
 
 public slots:
+    void mousePressEvent(QMouseEvent *e) override;
+    void mouseMoveEvent(QMouseEvent *e) override;
     void mouseReleaseEvent(QMouseEvent *e) override;
     void wheelEvent(QWheelEvent *event) override;
 
@@ -238,6 +248,8 @@ signals:
     void markerAddRequested(quint32 time);
     void markerEditRequested(quint32 time);
     void markerDeleteRequested(quint32 time);
+    /** A marker was dragged/resized: replace oldStart with [newStart,newEnd]. */
+    void markerMovedRequested(quint32 oldStart, quint32 newStart, quint32 newEnd);
 
     /** Emitted when an item is dragged below the last track: the caller should
      *  (after confirming) make a new track and move the item onto it. */

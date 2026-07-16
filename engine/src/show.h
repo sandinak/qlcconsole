@@ -163,17 +163,18 @@ protected:
      * Markers (timeline section labels)
      *********************************************************************/
 public:
-    /** Add or update a marker (section label) at the given time (ms). */
-    void setMarker(quint32 time, const QString &label);
+    /** Add or update a section marker spanning [start, end] ms with a label,
+     *  keyed by its start time. An empty label removes it. */
+    void setMarker(quint32 start, quint32 end, const QString &label);
 
-    /** Remove the marker at the given time, if any. */
-    void removeMarker(quint32 time);
+    /** Remove the marker whose start time is the given value, if any. */
+    void removeMarker(quint32 start);
 
-    /** All markers as a time(ms) -> label map (sorted by time). */
-    QMap<quint32, QString> markers() const;
+    /** All markers as start(ms) -> (end(ms), label), sorted by start. */
+    QMap<quint32, QPair<quint32, QString> > markers() const;
 
 private:
-    QMap<quint32, QString> m_markers;
+    QMap<quint32, QPair<quint32, QString> > m_markers;
 
     /*********************************************************************
      * Save & Load

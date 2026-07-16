@@ -223,6 +223,7 @@ protected slots:
     void slotMarkerAddRequested(quint32 time);
     void slotMarkerEditRequested(quint32 time);
     void slotMarkerDeleteRequested(quint32 time);
+    void slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 newEnd);
     void slotToggleSnapToGrid(bool enable);
     void slotChangeSize(int width, int height);
     void slotStepSelectionChanged(int index);

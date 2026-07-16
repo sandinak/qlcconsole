@@ -361,15 +361,15 @@ void Show_Test::markers()
 {
     Show s(m_doc);
     s.setID(11);
-    s.setMarker(0, "Intro");
-    s.setMarker(30000, "Verse 1");
-    s.setMarker(60000, "Chorus");
+    s.setMarker(0, 15000, "Intro");
+    s.setMarker(30000, 45000, "Verse 1");
+    s.setMarker(60000, 90000, "Chorus");
     // Empty label removes / never adds.
-    s.setMarker(90000, "");
+    s.setMarker(90000, 100000, "");
     QCOMPARE(s.markers().count(), 3);
     s.removeMarker(30000);
     QCOMPARE(s.markers().count(), 2);
-    s.setMarker(30000, "Verse 1");
+    s.setMarker(30000, 45000, "Verse 1");
 
     QBuffer buffer;
     buffer.open(QIODevice::WriteOnly | QIODevice::Text);
@@ -385,9 +385,10 @@ void Show_Test::markers()
     Show s2(m_doc);
     QVERIFY(s2.loadXML(xmlReader) == true);
     QCOMPARE(s2.markers().count(), 3);
-    QCOMPARE(s2.markers().value(0), QString("Intro"));
-    QCOMPARE(s2.markers().value(30000), QString("Verse 1"));
-    QCOMPARE(s2.markers().value(60000), QString("Chorus"));
+    QCOMPARE(s2.markers().value(0).second, QString("Intro"));
+    QCOMPARE(s2.markers().value(0).first, quint32(15000));
+    QCOMPARE(s2.markers().value(30000).second, QString("Verse 1"));
+    QCOMPARE(s2.markers().value(60000).first, quint32(90000));
 }
 
 

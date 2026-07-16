@@ -176,6 +176,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotMarkerEditRequested(quint32)));
     connect(m_showview, SIGNAL(markerDeleteRequested(quint32)),
             this, SLOT(slotMarkerDeleteRequested(quint32)));
+    connect(m_showview, SIGNAL(markerMovedRequested(quint32,quint32,quint32)),
+            this, SLOT(slotMarkerMoved(quint32,quint32,quint32)));
     connect(m_showview, SIGNAL(itemDroppedBelowTracks(ShowItem*)),
             this, SLOT(slotItemDroppedBelowTracks(ShowItem*)));
 
@@ -1502,12 +1504,23 @@ void ShowManager::slotMarkerAddRequested(quint32 time)
     if (m_show == NULL)
         return;
     bool ok = false;
-    QString label = QInputDialog::getText(this, tr("Add Marker"),
-                        tr("Label for this point in the show:"),
+    QString label = QInputDialog::getText(this, tr("Add Section Marker"),
+                        tr("Label for this section of the show:"),
                         QLineEdit::Normal, QString(), &ok);
     if (ok == false || label.trimmed().isEmpty())
         return;
-    m_show->setMarker(time, label.trimmed());
+
+    // Default the section to run until the next marker, else 15 s.
+    quint32 end = time + 15000;
+    QMapIterator<quint32, QPair<quint32, QString> > it(m_show->markers());
+    while (it.hasNext())
+    {
+        it.next();
+        if (it.key() > time && it.key() < end)
+            end = it.key();
+    }
+
+    m_show->setMarker(time, end, label.trimmed());
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
 }
@@ -1516,13 +1529,13 @@ void ShowManager::slotMarkerEditRequested(quint32 time)
 {
     if (m_show == NULL || time == UINT_MAX)
         return;
+    QPair<quint32, QString> m = m_show->markers().value(time);
     bool ok = false;
     QString label = QInputDialog::getText(this, tr("Rename Marker"),
-                        tr("Marker label:"), QLineEdit::Normal,
-                        m_show->markers().value(time), &ok);
+                        tr("Marker label:"), QLineEdit::Normal, m.second, &ok);
     if (ok == false)
         return;
-    m_show->setMarker(time, label.trimmed()); // empty label removes it
+    m_show->setMarker(time, m.first, label.trimmed()); // empty label removes it
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
 }
@@ -1532,6 +1545,19 @@ void ShowManager::slotMarkerDeleteRequested(quint32 time)
     if (m_show == NULL || time == UINT_MAX)
         return;
     m_show->removeMarker(time);
+    m_showview->setMarkers(m_show->markers());
+    m_doc->setModified();
+}
+
+void ShowManager::slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 newEnd)
+{
+    if (m_show == NULL || oldStart == UINT_MAX)
+        return;
+    QString label = m_show->markers().value(oldStart).second;
+    if (label.isEmpty())
+        return;
+    m_show->removeMarker(oldStart);
+    m_show->setMarker(newStart, newEnd, label);
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
 }

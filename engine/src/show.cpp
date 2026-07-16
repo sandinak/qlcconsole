@@ -37,6 +37,8 @@
 #define KXMLQLCShowTCOffset     QStringLiteral("TimecodeOffset")
 #define KXMLQLCShowMarker       QStringLiteral("Marker")
 #define KXMLQLCShowMarkerTime   QStringLiteral("Time")
+#define KXMLQLCShowMarkerStart  QStringLiteral("Start")
+#define KXMLQLCShowMarkerEnd    QStringLiteral("End")
 
 /*****************************************************************************
  * Initialization
@@ -385,14 +387,15 @@ bool Show::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLQLCShowTCOffset, QString::number(m_timecodeOffset));
     doc->writeEndElement();
 
-    // Timeline markers (section labels)
-    QMapIterator<quint32, QString> mit(m_markers);
+    // Timeline markers (section regions)
+    QMapIterator<quint32, QPair<quint32, QString> > mit(m_markers);
     while (mit.hasNext())
     {
         mit.next();
         doc->writeStartElement(KXMLQLCShowMarker);
-        doc->writeAttribute(KXMLQLCShowMarkerTime, QString::number(mit.key()));
-        doc->writeCharacters(mit.value());
+        doc->writeAttribute(KXMLQLCShowMarkerStart, QString::number(mit.key()));
+        doc->writeAttribute(KXMLQLCShowMarkerEnd, QString::number(mit.value().first));
+        doc->writeCharacters(mit.value().second);
         doc->writeEndElement();
     }
 
@@ -435,10 +438,21 @@ bool Show::loadXML(QXmlStreamReader &root)
         }
         else if (root.name() == KXMLQLCShowMarker)
         {
-            quint32 t = root.attributes().value(KXMLQLCShowMarkerTime).toString().toUInt();
+            QXmlStreamAttributes a = root.attributes();
+            quint32 start = 0, end = 0;
+            if (a.hasAttribute(KXMLQLCShowMarkerStart))
+            {
+                start = a.value(KXMLQLCShowMarkerStart).toString().toUInt();
+                end = a.value(KXMLQLCShowMarkerEnd).toString().toUInt();
+            }
+            else // legacy point marker
+            {
+                start = a.value(KXMLQLCShowMarkerTime).toString().toUInt();
+                end = start;
+            }
             QString label = root.readElementText();
             if (label.isEmpty() == false)
-                m_markers.insert(t, label);
+                m_markers.insert(start, qMakePair(end < start ? start : end, label));
         }
         else if (root.name() == KXMLQLCTrack)
         {
@@ -550,20 +564,20 @@ quint32 Show::timecodeOffset() const
  * Markers
  *********************************************************************/
 
-void Show::setMarker(quint32 time, const QString &label)
+void Show::setMarker(quint32 start, quint32 end, const QString &label)
 {
     if (label.isEmpty())
-        m_markers.remove(time);
+        m_markers.remove(start);
     else
-        m_markers.insert(time, label);
+        m_markers.insert(start, qMakePair(end < start ? start : end, label));
 }
 
-void Show::removeMarker(quint32 time)
+void Show::removeMarker(quint32 start)
 {
-    m_markers.remove(time);
+    m_markers.remove(start);
 }
 
-QMap<quint32, QString> Show::markers() const
+QMap<quint32, QPair<quint32, QString> > Show::markers() const
 {
     return m_markers;
 }
