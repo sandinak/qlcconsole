@@ -51,9 +51,33 @@ static QString seqMsToText(quint32 ms)
 /** Height (px) of the top strip that carries the chase name. */
 #define SEQ_TITLE_STRIP_H 15
 
-/** Y (px) at which the draggable fade handle nubs are drawn — inside the fade
- *  band, below the title/move strip, so grabbing them edits the fade. */
-#define SEQ_HANDLE_Y 26
+/** Top of the fade band: fades live in the BOTTOM part of a cue so their grab
+ *  points sit well clear of the top move-strip and the middle timing band. */
+#define SEQ_FADE_BAND_TOP (TRACK_HEIGHT * 0.60)
+
+/** Y (px) at which the draggable fade handle nubs are drawn — near the BOTTOM of
+ *  the cue (bottom of the fade wedge's vertical edge), so there's clear vertical
+ *  space between the top move-strip and the fade grab points. */
+#define SEQ_HANDLE_Y (TRACK_HEIGHT - 9)
+
+/** Draw a small horizontal ‹—› double-arrow centred at (cx, cy), half-width w —
+ *  a grab-hint for a horizontal drag. */
+static void seqDrawMoveArrows(QPainter *p, qreal cx, qreal cy, qreal w,
+                              const QColor &col)
+{
+    p->save();
+    p->setBrush(col);
+    p->setPen(Qt::NoPen);
+    QPolygonF l; l << QPointF(cx - w, cy) << QPointF(cx - w + 4, cy - 3)
+                   << QPointF(cx - w + 4, cy + 3);
+    QPolygonF r; r << QPointF(cx + w, cy) << QPointF(cx + w - 4, cy - 3)
+                   << QPointF(cx + w - 4, cy + 3);
+    p->drawPolygon(l);
+    p->drawPolygon(r);
+    p->setPen(QPen(col, 1));
+    p->drawLine(QPointF(cx - w + 3, cy), QPointF(cx + w - 3, cy));
+    p->restore();
+}
 
 SequenceItem::SequenceItem(Chaser *seq, ShowFunction *func)
     : ShowItem(func)
@@ -62,6 +86,7 @@ SequenceItem::SequenceItem(Chaser *seq, ShowFunction *func)
     , m_cueDrag(CueNone)
     , m_cueDragIdx(-1)
     , m_cueDragPressX(0)
+    , m_cueDragOrigFade(0)
 {
     Q_ASSERT(seq != NULL);
 
@@ -170,13 +195,16 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
                       << QPointF(xpos + fw, bot);
                 painter->drawPolygon(wedge);
             }
-            // Handle nub sits in the FADE BAND (below the title strip) so it's
-            // grabbable — drawing it at the very top put it in the move zone.
+            // Handle nub near the BOTTOM of the cue; on hover it grows a ‹—›
+            // arrow hint showing this is a horizontal fade-drag grab point.
             if (stepWidth > 14)
             {
                 float hx = xpos + qMax(fw, 6.0f);
                 painter->setBrush(QColor(120, 200, 255, 235));
                 painter->drawEllipse(QPointF(hx, SEQ_HANDLE_Y), 3.5, 3.5);
+                if (m_hovered)
+                    seqDrawMoveArrows(painter, hx, SEQ_HANDLE_Y, 8.0,
+                                      QColor(150, 215, 255, 235));
                 painter->setBrush(QColor(255, 255, 255, 55));
             }
         }
@@ -194,6 +222,9 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
                 float hx = xEnd - qMax(fw, 6.0f);
                 painter->setBrush(QColor(120, 200, 255, 235));
                 painter->drawEllipse(QPointF(hx, SEQ_HANDLE_Y), 3.5, 3.5);
+                if (m_hovered)
+                    seqDrawMoveArrows(painter, hx, SEQ_HANDLE_Y, 8.0,
+                                      QColor(150, 215, 255, 235));
                 painter->setBrush(QColor(255, 255, 255, 55));
             }
         }
@@ -211,8 +242,10 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
         // the fired scene's name, else "Cue N".
         const QString blockLabel = step.note.isEmpty() ? cueLabel(stepIdx) : step.note;
         painter->setPen(QPen(Qt::white, 1));
+        // Keep the label in the timing band (above the fade band) so it never
+        // sits over the fade grab points at the bottom.
         QRect textRect = QRect(xpos + 3, SEQ_TITLE_STRIP_H + 1,
-                               stepWidth - 4, TRACK_HEIGHT - SEQ_TITLE_STRIP_H - 4);
+                               stepWidth - 4, int(SEQ_FADE_BAND_TOP) - SEQ_TITLE_STRIP_H - 1);
         painter->drawText(textRect, Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap,
                           blockLabel);
 
@@ -228,6 +261,12 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
     // Title strip across the top so the chase name (drawn next by postPaint)
     // sits on its own band, clear of the cue labels below it.
     painter->fillRect(QRectF(0, 0, m_width, SEQ_TITLE_STRIP_H), QColor(0, 0, 0, 110));
+
+    // On hover, a ‹—› arrow hint in the strip advertises the whole-block move
+    // grab (object handle = top bar). Drawn at the right so it clears the name.
+    if (m_hovered && m_locked == false && m_width > 60)
+        seqDrawMoveArrows(painter, m_width - 34, SEQ_TITLE_STRIP_H / 2.0, 9.0,
+                          QColor(230, 230, 230, 230));
 
     ShowItem::postPaint(painter);
 }
@@ -457,10 +496,23 @@ void SequenceItem::setStepDuration(int idx, qint64 ms)
     m_chaser->replaceStep(s, idx);
 }
 
-// Bands (within the item's height) for cue editing: the title strip carries the
-// chase name + is the whole-block move handle; the fade band edits per-cue fades;
-// the timing band rolls dividers / slips cues.
-#define SEQ_FADE_BAND_BOTTOM (TRACK_HEIGHT * 0.55)
+// Bands (top→bottom within a cue): TITLE strip = whole-block move; TIMING band
+// (middle) = roll dividers / slip cues; FADE band (bottom) = per-cue fades. The
+// fade grab is at the bottom so it's well clear of the top move-strip.
+
+void SequenceItem::hoverEnterEvent(QGraphicsSceneHoverEvent *event)
+{
+    m_hovered = true;
+    update();
+    ShowItem::hoverEnterEvent(event);
+}
+
+void SequenceItem::hoverLeaveEvent(QGraphicsSceneHoverEvent *event)
+{
+    m_hovered = false;
+    update();
+    ShowItem::hoverLeaveEvent(event);
+}
 
 void SequenceItem::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
 {
@@ -475,8 +527,8 @@ void SequenceItem::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
 
     if (m_editable && y < SEQ_TITLE_STRIP_H && m_locked == false)
         setCursor(Qt::OpenHandCursor);                   // title strip = move block
-    else if (m_editable && y >= SEQ_TITLE_STRIP_H && y < SEQ_FADE_BAND_BOTTOM && cue >= 0)
-        setCursor(Qt::SizeHorCursor);                    // fade band
+    else if (m_editable && y >= SEQ_FADE_BAND_TOP && cue >= 0)
+        setCursor(Qt::SizeHorCursor);                    // fade band (bottom)
     else if (m_editable && edgeAt(x) == NoEdge && stepBoundaryAt(x) >= 0)
         setCursor(Qt::SplitHCursor);                     // divider = roll
     else if (m_editable && edgeAt(x) == NoEdge && cue >= 0)
@@ -490,7 +542,7 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     const bool alt = event->modifiers() & Qt::AltModifier;
     const qreal x = event->pos().x();
     const qreal y = event->pos().y();
-    const bool inFadeBand = (y >= SEQ_TITLE_STRIP_H && y < SEQ_FADE_BAND_BOTTOM);
+    const bool inFadeBand = (y >= SEQ_FADE_BAND_TOP);
 
     // 1. Whole-block move: Alt-drag anywhere, or drag the top title strip.
     //    Disabled when position-locked (cue/fade editing below still works).
@@ -516,14 +568,24 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     {
         int cue = cueAt(x);
 
-        // Fade band: set the cue's fade-in (left half) or fade-out (right half).
+        // Fade band: grab the fade-in or fade-out — whichever handle the press is
+        // CLOSER to (so both are reachable). The drag is RELATIVE to the fade's
+        // value at press, so it never jumps to the cursor.
         if (inFadeBand && cue >= 0)
         {
-            float sx, ex;
-            cueBounds(cue, sx, ex);
             ensurePerStepDurations();
             ensurePerStepFades();
-            m_cueDrag = (x - sx) < (ex - sx) / 2.0f ? CueFadeIn : CueFadeOut;
+            const float timeUnit = 50.0f / float(m_timeScale);
+            float sx, ex;
+            cueBounds(cue, sx, ex);
+            const ChaserStep s = m_chaser->steps().at(cue);
+            const float fwIn  = qMax((timeUnit * float(s.fadeIn))  / 1000.0f, 6.0f);
+            const float fwOut = qMax((timeUnit * float(s.fadeOut)) / 1000.0f, 6.0f);
+            const float hxIn  = sx + fwIn;      // fade-in handle x
+            const float hxOut = ex - fwOut;     // fade-out handle x
+            const bool isIn = qAbs(x - hxIn) <= qAbs(x - hxOut);
+            m_cueDrag = isIn ? CueFadeIn : CueFadeOut;
+            m_cueDragOrigFade = isIn ? s.fadeIn : s.fadeOut;
             m_cueDragIdx = cue;
             m_cueDragPressX = event->scenePos().x();
             m_selectedStep = cue;
@@ -566,23 +628,24 @@ void SequenceItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
     {
         const float timeUnit = 50.0f / float(m_timeScale);
         const int i = m_cueDragIdx;
-        float sx, ex;
-        cueBounds(i, sx, ex);
         const qint64 dur = qint64(stepDisplayMs(i));
-        const qreal localX = event->pos().x();
+        // RELATIVE to the value at press (drag from where you grabbed — no jump).
+        // Dragging RIGHT grows fade-in; dragging LEFT grows fade-out.
+        const qint64 ddt = qint64(((event->scenePos().x() - m_cueDragPressX) / timeUnit) * 1000.0);
         ChaserStep s = m_chaser->steps().at(i);
         QString readout;
         if (m_cueDrag == CueFadeIn)
         {
-            qint64 ms = qint64(((localX - sx) / timeUnit) * 1000.0);
-            ms = qBound<qint64>(0, ms, dur);
+            // Never overlap the fade-out: fadeIn + fadeOut <= cue duration.
+            qint64 ms = qBound<qint64>(0, qint64(m_cueDragOrigFade) + ddt,
+                                       dur - qint64(s.fadeOut));
             s.fadeIn = quint32(ms);
             readout = tr("%1 fade in %2").arg(cueLabel(i)).arg(seqMsToText(quint32(ms)));
         }
         else
         {
-            qint64 ms = qint64(((ex - localX) / timeUnit) * 1000.0);
-            ms = qBound<qint64>(0, ms, dur);
+            qint64 ms = qBound<qint64>(0, qint64(m_cueDragOrigFade) - ddt,
+                                       dur - qint64(s.fadeIn));
             s.fadeOut = quint32(ms);
             readout = tr("%1 fade out %2").arg(cueLabel(i)).arg(seqMsToText(quint32(ms)));
         }

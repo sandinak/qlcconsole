@@ -78,6 +78,8 @@ protected:
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void hoverMoveEvent(QGraphicsSceneHoverEvent *event) override;
+    void hoverEnterEvent(QGraphicsSceneHoverEvent *event) override;
+    void hoverLeaveEvent(QGraphicsSceneHoverEvent *event) override;
 
 protected slots:
     void slotSequenceChanged(quint32);
@@ -132,11 +134,15 @@ private:
     /** Geometry (scene-x) of cue @p idx: its start and end. */
     void cueBounds(int idx, float &startX, float &endX) const;
 
+    /** True while the pointer is over this item — shows the grab-hint arrows. */
+    bool m_hovered = false;
+
     /** In-block cue drag state. */
     enum CueDrag { CueNone = 0, CueRoll, CueSlip, CueFadeIn, CueFadeOut };
     CueDrag m_cueDrag;           // active in-block edit (else defer to ShowItem)
     int m_cueDragIdx;            // roll: left cue index; slip/fade: cue index
     qreal m_cueDragPressX;       // scene-x at press
+    quint32 m_cueDragOrigFade;   // the dragged fade's value at press (relative drag)
     QList<quint32> m_cueOrigDur; // per-step durations captured at press
 };
 
