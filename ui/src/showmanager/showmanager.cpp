@@ -1340,10 +1340,10 @@ void ShowManager::slotShowStopped()
     slotUpdateTime(m_showview->getTimeFromCursor());
 }
 
-void ShowManager::addFunctionToTrack(Function *f, Track *track, quint32 startTime)
+ShowFunction *ShowManager::addFunctionToTrack(Function *f, Track *track, quint32 startTime)
 {
     if (f == NULL || track == NULL)
-        return;
+        return NULL;
 
     Function::Type t = f->type();
 
@@ -1358,7 +1358,7 @@ void ShowManager::addFunctionToTrack(Function *f, Track *track, quint32 startTim
         if (m_doc->addFunction(nf) == false)
         {
             delete nf;
-            return;
+            return NULL;
         }
         seq->setDirection(Function::Forward);
         seq->setRunOrder(Function::SingleShot);
@@ -1371,7 +1371,7 @@ void ShowManager::addFunctionToTrack(Function *f, Track *track, quint32 startTim
         ShowFunction *sf = track->createShowFunction(seq->id());
         sf->setStartTime(startTime);
         m_showview->addSequence(seq, track, sf);
-        return;
+        return sf;
     }
 
     ShowFunction *sf = track->createShowFunction(f->id());
@@ -1405,8 +1405,10 @@ void ShowManager::addFunctionToTrack(Function *f, Track *track, quint32 startTim
         break;
         default:
             track->removeShowFunction(sf); // unsupported on a timeline
+            return NULL;
         break;
     }
+    return sf;
 }
 
 void ShowManager::slotFunctionDropped(quint32 funcID, quint32 startTime, Track *track)
@@ -1433,7 +1435,9 @@ void ShowManager::slotFunctionDropped(quint32 funcID, quint32 startTime, Track *
 
     m_currentTrack = track;
     m_showview->activateTrack(track);
-    addFunctionToTrack(f, track, startTime);
+    ShowFunction *sf = addFunctionToTrack(f, track, startTime);
+    if (sf != NULL)
+        m_showview->resolveCollisions(track, sf); // DAW-style push
 
     m_doc->setModified();
     m_addSequenceAction->setEnabled(true);

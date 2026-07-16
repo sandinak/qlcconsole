@@ -33,6 +33,7 @@
 #include <QSlider>
 #include <QMenu>
 #include <QDebug>
+#include <algorithm>
 
 #include "showitem.h"
 
@@ -447,6 +448,78 @@ void MultiTrackView::activateTrack(Track *track)
     }
 }
 
+static bool compareItemStart(ShowItem *a, ShowItem *b)
+{
+    return a->getStartTime() < b->getStartTime();
+}
+
+void MultiTrackView::resolveTrackCollisions(int trackIndex, ShowItem *anchor)
+{
+    if (anchor == NULL)
+        return;
+
+    // Every other item on the same track, in start-time order.
+    QList<ShowItem *> others;
+    foreach (ShowItem *it, m_items)
+    {
+        if (it != anchor && it->getTrackIndex() == trackIndex)
+            others.append(it);
+    }
+    std::sort(others.begin(), others.end(), compareItemStart);
+
+    quint32 aStart = anchor->getStartTime();
+    quint32 aDur = anchor->getDuration();
+
+    // 1) Butt the anchor after any earlier item it would overlap.
+    quint32 newStart = aStart;
+    foreach (ShowItem *o, others)
+    {
+        if (o->getStartTime() <= aStart)
+        {
+            quint32 oEnd = o->getStartTime() + o->getDuration();
+            if (oEnd > newStart)
+                newStart = oEnd;
+        }
+    }
+    if (newStart != aStart)
+    {
+        anchor->setStartTime(newStart);
+        anchor->setPos(getPositionFromTime(newStart) + 2, anchor->y());
+    }
+
+    // 2) Ripple later items to the right so nothing overlaps.
+    quint32 cursor = newStart + aDur;
+    foreach (ShowItem *o, others)
+    {
+        if (o->getStartTime() < newStart)
+            continue; // earlier item, already clear of the anchor
+        if (o->getStartTime() < cursor)
+        {
+            o->setStartTime(cursor);
+            o->setPos(getPositionFromTime(cursor) + 2, o->y());
+        }
+        cursor = o->getStartTime() + o->getDuration();
+    }
+
+    m_scene->update();
+    updateViewSize();
+}
+
+void MultiTrackView::resolveCollisions(Track *track, ShowFunction *sf)
+{
+    ShowItem *anchor = NULL;
+    foreach (ShowItem *it, m_items)
+    {
+        if (it->showFunction() == sf)
+        {
+            anchor = it;
+            break;
+        }
+    }
+    if (anchor != NULL)
+        resolveTrackCollisions(getTrackIndex(track), anchor);
+}
+
 ShowItem *MultiTrackView::getSelectedItem() const
 {
     foreach (ShowItem *item, m_items)
@@ -814,6 +887,10 @@ void MultiTrackView::slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *it
         }
     }
 
+    // DAW-style push: keep the track free of overlaps.
+    if (moved)
+        resolveTrackCollisions(newTrackNum, item);
+
     m_scene->update();
     emit showItemMoved(item, getTimeFromPosition(item->x() + event->pos().toPoint().x()), moved);
 }
@@ -839,6 +916,9 @@ void MultiTrackView::slotItemResized(ShowItem *item, bool leftEdge)
 
     // Commit the new duration to the item/function (recomputes the width).
     item->setDuration(duration, false);
+
+    // DAW-style push: a longer item may now overlap its neighbour.
+    resolveTrackCollisions(item->getTrackIndex(), item);
 
     m_scene->update();
     updateViewSize();

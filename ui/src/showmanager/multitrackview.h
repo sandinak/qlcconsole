@@ -99,7 +99,15 @@ public:
     /** get the selected Show item. If none, returns NULL */
     ShowItem *getSelectedItem() const;
 
+    /** DAW-style push: after an item is added/moved/resized, remove any
+     *  overlaps on its track by butting the anchor after earlier items and
+     *  rippling later items to the right. @param sf identifies the anchor. */
+    void resolveCollisions(Track *track, ShowFunction *sf);
+
 private:
+    /** Core collision resolver, anchored on the given item. */
+    void resolveTrackCollisions(int trackIndex, ShowItem *anchor);
+
     /** Retrieve the index of the given Track.
      *  If trk is NULL, this function returns the currently
      *  selected track.

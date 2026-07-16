@@ -113,8 +113,9 @@ private:
     FunctionsTreeWidget *m_funcTree;
 
     /** Add a function to a track at a given start time, creating the right
-     *  timeline item for its type (scenes are wrapped in a Sequence). */
-    void addFunctionToTrack(Function *f, Track *track, quint32 startTime);
+     *  timeline item for its type (scenes are wrapped in a Sequence). Returns
+     *  the created ShowFunction (for collision resolution), or NULL. */
+    ShowFunction *addFunctionToTrack(Function *f, Track *track, quint32 startTime);
 
     /*********************************************************************
      * Menus, toolbar & actions
