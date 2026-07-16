@@ -215,6 +215,14 @@ App::~App()
     if (SimpleDesk::instance() != NULL)
         delete SimpleDesk::instance();
 
+    // The Programming tab is NOT a singleton like the other managers, so it
+    // isn't torn down above — it would otherwise be destroyed by the tab widget
+    // AFTER m_doc below, and its embedded ChaserEditor's destructor touches
+    // m_doc->functions() → use-after-free / segfault on exit. Delete it (and its
+    // editors) while the Doc is still alive.
+    if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
+        delete pm;
+
     if (m_dumpProperties != NULL)
         delete m_dumpProperties;
 
