@@ -103,10 +103,15 @@ protected slots:
     void slotShowTimeChanged(quint32 ms);
     void slotShowRunning(quint32 id);
     void slotShowStopped(quint32 id);
+    /** Track the raw incoming MIDI Time Code even when the show isn't running
+     *  (matches the footer chip). */
+    void slotTimecodeChanged(quint32 ms);
 
 private:
     /** Refresh all labels + button states from the bound show. */
     void refresh();
+    /** Format @p ms into the big timecode label. */
+    void setTimecodeLabel(quint32 ms);
     /** Update the current/next cue lines from the running chaser (if any). */
     void refreshCueInfo();
     /** The label for a step: its note (description), else the fired function

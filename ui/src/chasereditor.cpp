@@ -28,6 +28,7 @@
 #include <QPushButton>
 #include <QMessageBox>
 #include <QLineEdit>
+#include <QApplication>
 #include <QSettings>
 #include <QDebug>
 #include <QUrl>
@@ -1319,6 +1320,15 @@ void ChaserEditor::slotModeChanged(Doc::Mode mode)
 
 void ChaserEditor::slotStepChanged(int stepNumber)
 {
+    // Don't steal the current item (which closes an open cell editor) while the
+    // user is editing a cell — a running preview would otherwise kick you out of
+    // a note/fade edit on every step and truncate what you'd typed. Detect the
+    // inline editor as a QLineEdit descendant of the tree that currently has
+    // focus (QAbstractItemView::state() is protected, so we can't read it).
+    QWidget *fw = QApplication::focusWidget();
+    if (fw != NULL && qobject_cast<QLineEdit *>(fw) != NULL && m_tree->isAncestorOf(fw))
+        return;
+
     // Select only the item at step StepNumber
     // If stepNumber is outside of bounds, select nothing
     m_tree->setCurrentItem(m_tree->topLevelItem(stepNumber));

@@ -29,6 +29,7 @@
 #include "vcshowcontrol.h"
 #include "vcshowcontrolproperties.h"
 #include "mastertimer.h"
+#include "timecodesource.h"
 #include "chaser.h"
 #include "chaserstep.h"
 #include "show.h"
@@ -144,6 +145,12 @@ VCShowControl::VCShowControl(QWidget *parent, Doc *doc)
     connect(m_followButton, SIGNAL(clicked()), this, SLOT(slotFollowClicked()));
     connect(m_suspendButton, SIGNAL(clicked()), this, SLOT(slotSuspendClicked()));
 
+    // Track raw incoming MIDI Time Code (like the footer chip) so the timecode
+    // reads even before/without a running show.
+    if (m_doc->timecodeSource() != NULL)
+        connect(m_doc->timecodeSource(), SIGNAL(timeChanged(quint32)),
+                this, SLOT(slotTimecodeChanged(quint32)));
+
     // Design mode: controls inert so the widget can be selected/moved.
     slotModeChanged(m_doc->mode());
     setShowCueInfo(m_showCueInfo);
@@ -245,14 +252,28 @@ void VCShowControl::slotStopClicked()    { stopShow(); }
 void VCShowControl::slotFollowClicked()  { toggleFollow(); }
 void VCShowControl::slotSuspendClicked() { toggleSuspend(); }
 
-void VCShowControl::slotShowTimeChanged(quint32 ms)
+void VCShowControl::setTimecodeLabel(quint32 ms)
 {
-    // Timecode
     uint totalSec = ms / 1000;
     m_timeLabel->setText(QString("%1:%2:%3")
                          .arg(totalSec / 3600, 2, 10, QChar('0'))
                          .arg((totalSec % 3600) / 60, 2, 10, QChar('0'))
                          .arg(totalSec % 60, 2, 10, QChar('0')));
+}
+
+void VCShowControl::slotTimecodeChanged(quint32 ms)
+{
+    // While the show runs it drives its own (offset-adjusted, interpolated)
+    // clock via slotShowTimeChanged; otherwise mirror the raw incoming TC.
+    Show *show = showFunction();
+    if (show != NULL && show->isRunning())
+        return;
+    setTimecodeLabel(ms);
+}
+
+void VCShowControl::slotShowTimeChanged(quint32 ms)
+{
+    setTimecodeLabel(ms);
 
     // Current section marker (the region [start, end] containing the position).
     Show *show = showFunction();
