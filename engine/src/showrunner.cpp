@@ -22,6 +22,9 @@
 
 #include "showrunner.h"
 #include "function.h"
+#include "chaser.h"
+#include "chaserstep.h"
+#include "chaseraction.h"
 #include "track.h"
 #include "show.h"
 
@@ -141,6 +144,8 @@ void ShowRunner::stop()
     }
 
     m_runningQueue.clear();
+    m_childStartMs.clear();
+    m_lastDrivenStep.clear();
     m_suspended = false;
     m_tcHolding = false;
     {
@@ -190,6 +195,8 @@ void ShowRunner::seekTo(quint32 targetMs)
     for (int i = 0; i < m_runningQueue.count(); i++)
         m_runningQueue.at(i).first->stop(functionParent());
     m_runningQueue.clear();
+    m_childStartMs.clear();
+    m_lastDrivenStep.clear();
 
     // Rewind and skip past functions that have fully ended before the target,
     // so write()'s start phase only (re)starts the ones actually active now.
@@ -205,6 +212,41 @@ void ShowRunner::seekTo(quint32 targetMs)
 
     m_currentBeatFunctionIndex = 0;
     m_elapsedTime = targetMs;
+}
+
+int ShowRunner::stepIndexAtLocalMs(Chaser *c, quint32 localMs) const
+{
+    const int count = c->stepsCount();
+    if (count == 0)
+        return -1;
+
+    // Sum finite step durations for a Loop wrap; bail on an infinite hold.
+    quint32 total = 0;
+    bool hasInfinite = false;
+    for (int i = 0; i < count; i++)
+    {
+        quint32 d = (c->durationMode() == Chaser::Common) ? c->duration()
+                                                          : c->stepAt(i)->duration;
+        if (d == Function::infiniteSpeed()) { hasInfinite = true; break; }
+        total += d;
+    }
+
+    // Loop run order: wrap the local time into one pass (fully-finite chasers).
+    if (hasInfinite == false && total > 0 && c->runOrder() == Function::Loop)
+        localMs %= total;
+
+    quint32 acc = 0;
+    for (int i = 0; i < count; i++)
+    {
+        quint32 d = (c->durationMode() == Chaser::Common) ? c->duration()
+                                                          : c->stepAt(i)->duration;
+        if (d == Function::infiniteSpeed())
+            return i;               // manual-GO step: holds here, not time-driven
+        if (localMs < acc + d)
+            return i;
+        acc += d;
+    }
+    return count - 1;               // SingleShot / past the end: clamp to last
 }
 
 void ShowRunner::write(MasterTimer *timer)
@@ -305,6 +347,8 @@ void ShowRunner::write(MasterTimer *timer)
             for (int i = 0; i < m_runningQueue.count(); i++)
                 m_runningQueue.at(i).first->stop(functionParent());
             m_runningQueue.clear();
+            m_childStartMs.clear();
+            m_lastDrivenStep.clear();
         }
         else
         {
@@ -382,6 +426,7 @@ void ShowRunner::write(MasterTimer *timer)
                 f->setFadePriority(Universe::Background);
             f->start(m_doc->masterTimer(), functionParent(), functionTimeOffset);
             m_runningQueue.append(QPair<Function *, quint32>(f, sf->startTime() + sf->duration(m_doc)));
+            m_childStartMs.insert(f, sf->startTime());
             m_currentTimeFunctionIndex++;
         }
         else
@@ -428,6 +473,7 @@ void ShowRunner::write(MasterTimer *timer)
                 f->setFadePriority(Universe::Background);
             f->start(m_doc->masterTimer(), functionParent(), functionTimeOffset);
             m_runningQueue.append(QPair<Function *, quint32>(f, sf->startTime() + sf->duration(m_doc)));
+            m_childStartMs.insert(f, sf->startTime());
             m_currentBeatFunctionIndex++;
         }
         else
@@ -451,6 +497,40 @@ void ShowRunner::write(MasterTimer *timer)
             func->stop(functionParent());
             // remove it from the running queue
             m_runningQueue.removeAt(i);
+            m_childStartMs.remove(func);
+            m_lastDrivenStep.remove(func);
+        }
+    }
+
+    // Chaser lockstep: drive each running chaser's step from the SHOW clock so
+    // its cues fire at their show-timeline positions — following TC speed and
+    // locates, and (via the pause-on-hold above) freezing when TC stops. Forward
+    // correction only, edge-triggered on the target step, so the chaser's own 1x
+    // advance and boundary races don't cause flicker; a backward locate restarts
+    // the chaser (seekTo) at step 0 and this drives it back up to the target.
+    for (int i = 0; i < m_runningQueue.count(); i++)
+    {
+        Function *f = m_runningQueue.at(i).first;
+        Chaser *c = qobject_cast<Chaser *>(f);
+        if (c == NULL || c->tempoType() != Function::Time)
+            continue;
+
+        const quint32 startMs = m_childStartMs.value(f, 0);
+        const quint32 localMs = (m_elapsedTime > startMs) ? m_elapsedTime - startMs : 0;
+        const int target = stepIndexAtLocalMs(c, localMs);
+        if (target < 0)
+            continue;
+
+        if (target > c->currentStepIndex() && m_lastDrivenStep.value(f, -1) != target)
+        {
+            ChaserAction a;
+            a.m_action = ChaserSetStepIndex;
+            a.m_stepIndex = target;
+            a.m_masterIntensity = 1.0;
+            a.m_stepIntensity = 1.0;
+            a.m_fadeMode = Chaser::FromFunction;   // use the step's own fade times
+            c->setAction(a);
+            m_lastDrivenStep.insert(f, target);
         }
     }
 

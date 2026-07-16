@@ -23,11 +23,13 @@
 #include <QObject>
 #include <QMutex>
 #include <QMap>
+#include <QHash>
 
 #include <function.h>
 
 class ShowFunction;
 class Function;
+class Chaser;
 class Track;
 class Show;
 class Doc;
@@ -133,6 +135,19 @@ private:
 
     /** List of the currently running Functions and their stop time */
     QList < QPair<Function *, quint32> > m_runningQueue;
+
+    /*********************************************************************
+     * Chaser lockstep — a chaser block's cues follow the SHOW clock
+     *********************************************************************/
+private:
+    /** Step index a chaser should be on at @p localMs into its block (honours
+     *  Common/PerStep durations, infinite holds, Loop wrap). -1 if none. */
+    int stepIndexAtLocalMs(Chaser *c, quint32 localMs) const;
+
+    /** Show start time (ms) of each running child — for the lockstep offset. */
+    QHash<Function *, quint32> m_childStartMs;
+    /** Last step the show clock drove each chaser to (edge-trigger, no re-fire). */
+    QHash<Function *, int> m_lastDrivenStep;
 
 private:
     FunctionParent functionParent() const;
