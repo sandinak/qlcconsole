@@ -490,12 +490,25 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
 
                 for (int i = 0; i < fixture->heads(); i++)
                 {
+                    // White/Amber/UV emitter values: explicit wauv, else auto
+                    // White = min(R,G,B) so RGBW fixtures light their white LED.
+                    QColor emitters = wauv;
+                    if (emitters.isValid() == false)
+                        emitters = QColor(qMin(col.red(), qMin(col.green(), col.blue())), 0, 0);
+
+                    quint32 whiteCh = fixture->channelNumber(QLCChannel::White, QLCChannel::MSB, i);
+                    // Proper RGBW: extract the white the fixture will emit back
+                    // OUT of the RGB primaries, so the rendered/emitted colour
+                    // matches the one that was picked instead of washing toward
+                    // white (R+W, G+W, B+W). Only when there's a white channel.
+                    int wSub = (whiteCh != QLCChannel::invalid()) ? int(uchar(emitters.red())) : 0;
+
                     QVector<quint32> rgbCh = fixture->rgbChannels(i);
                     if (rgbCh.size() == 3)
                     {
-                        list << SceneValue(id, rgbCh.at(0), uchar(col.red()));
-                        list << SceneValue(id, rgbCh.at(1), uchar(col.green()));
-                        list << SceneValue(id, rgbCh.at(2), uchar(col.blue()));
+                        list << SceneValue(id, rgbCh.at(0), uchar(qMax(0, col.red()   - wSub)));
+                        list << SceneValue(id, rgbCh.at(1), uchar(qMax(0, col.green() - wSub)));
+                        list << SceneValue(id, rgbCh.at(2), uchar(qMax(0, col.blue()  - wSub)));
                     }
                     QVector<quint32> cmyCh = fixture->cmyChannels(i);
                     if (cmyCh.size() == 3)
@@ -553,19 +566,13 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         }
                     }
 
-                    // Extra emitters (White/Amber/UV). Use the explicit wauv
-                    // value if the palette has one; otherwise auto-derive White
-                    // additively (W = min(R,G,B), per fixture) so RGBW fixtures
-                    // light their white emitter for whites/pastels — Amber/UV
-                    // default to 0. (Covers legacy RGB-only colour palettes.)
-                    QColor emitters = wauv;
-                    if (emitters.isValid() == false)
-                        emitters = QColor(qMin(col.red(), qMin(col.green(), col.blue())), 0, 0);
+                    // Extra emitter channels. White carries the value extracted
+                    // from RGB above (so R'+W reconstructs the picked colour);
+                    // Amber/UV are additive and default to 0.
+                    if (whiteCh != QLCChannel::invalid())
+                        list << SceneValue(id, whiteCh, uchar(emitters.red()));
                     {
-                        quint32 channel = fixture->channelNumber(QLCChannel::White, QLCChannel::MSB, i);
-                        if (channel != QLCChannel::invalid())
-                            list << SceneValue(id, channel, uchar(emitters.red()));
-                        channel = fixture->channelNumber(QLCChannel::Amber, QLCChannel::MSB, i);
+                        quint32 channel = fixture->channelNumber(QLCChannel::Amber, QLCChannel::MSB, i);
                         if (channel != QLCChannel::invalid())
                             list << SceneValue(id, channel, uchar(emitters.green()));
                         channel = fixture->channelNumber(QLCChannel::UV, QLCChannel::MSB, i);
