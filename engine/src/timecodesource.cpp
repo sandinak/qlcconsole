@@ -22,9 +22,11 @@
 #include "timecodesource.h"
 
 /** No timecode for this long (ms) => the source is considered stopped. A full
- *  SMPTE time assembles roughly every 80 ms (every two frames), so a couple of
- *  missed completions comfortably fits here. */
-#define TIMECODE_WATCHDOG_MS 200
+ *  SMPTE time assembles roughly every 80 ms (every two frames), but the updates
+ *  reach us as queued cross-thread calls on a busy UI thread, so completions
+ *  can bunch up. Keep a generous window so steady playback never flickers to
+ *  "holding"; it still detects a genuine stop within about half a second. */
+#define TIMECODE_WATCHDOG_MS 600
 
 TimecodeSource::TimecodeSource(QObject *parent)
     : QObject(parent)
