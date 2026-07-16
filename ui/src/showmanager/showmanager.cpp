@@ -18,7 +18,9 @@
 */
 
 #include <QInputDialog>
+#include <QToolButton>
 #include <QLineEdit>
+#include <QMenu>
 #include <QColorDialog>
 #include <QMessageBox>
 #include <QFileDialog>
@@ -405,6 +407,27 @@ void ShowManager::initToolbar()
             this, SLOT(slotTcSourceChanged(int)));
     m_toolbar->addWidget(m_tcSourceCombo);
     updateTcSourceCombo();
+
+    // Timecode offset: which incoming SMPTE time maps to timeline 0. Logic
+    // usually rolls from 01:00:00:00, so offer that as a one-click default.
+    QToolButton *tcOffBtn = new QToolButton();
+    tcOffBtn->setText(tr("TC 0…"));
+    tcOffBtn->setToolTip(tr("Set which incoming timecode value lines up with the "
+                            "start of this show's timeline."));
+    tcOffBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *tcMenu = new QMenu(tcOffBtn);
+    QAction *tcHour = tcMenu->addAction(tr("Timeline 0 = 01:00:00:00 (Logic default)"));
+    QAction *tcNow  = tcMenu->addAction(tr("Timeline 0 = current timecode"));
+    QAction *tcZero = tcMenu->addAction(tr("No offset (timeline 0 = 00:00:00:00)"));
+    connect(tcHour, &QAction::triggered, this, [this]() {
+        if (m_show) { m_show->setTimecodeOffset(3600000); m_doc->setModified(); } });
+    connect(tcNow, &QAction::triggered, this, [this]() {
+        if (m_show) { m_show->setTimecodeOffset(m_doc->timecodeSource()->positionMs());
+                      m_doc->setModified(); } });
+    connect(tcZero, &QAction::triggered, this, [this]() {
+        if (m_show) { m_show->setTimecodeOffset(0); m_doc->setModified(); } });
+    tcOffBtn->setMenu(tcMenu);
+    m_toolbar->addWidget(tcOffBtn);
 
     /* Create an empty widget between help items to flush them to the right */
     QWidget* widget = new QWidget(this);
@@ -1598,20 +1621,17 @@ void ShowManager::slotTimecodePosition(quint32 msPosition)
 {
     if (m_followMtcAction != NULL && m_followMtcAction->isChecked() && m_show != NULL)
     {
-        if (m_show->isRunning())
-        {
-            // Feed the runner: it drives m_elapsedTime and moves the cursor via
-            // the show's timeChanged signal.
-            if (m_show->isPaused() == false)
-                m_show->setExternalTime(msPosition);
-        }
-        else
-        {
-            // Not playing yet — still track the cursor so the operator sees the
-            // incoming position on the timeline.
-            m_showview->moveCursor(msPosition);
-            slotUpdateTime(msPosition);
-        }
+        // Map the absolute timecode onto the (0-based) timeline via the offset.
+        quint32 offset = m_show->timecodeOffset();
+        quint32 pos = (msPosition > offset) ? msPosition - offset : 0;
+
+        if (m_show->isRunning() && m_show->isPaused() == false)
+            m_show->setExternalTime(pos);
+
+        // Always chase the cursor to the incoming position (belt and braces —
+        // works whether or not the show is running).
+        m_showview->moveCursor(pos);
+        slotUpdateTime(pos);
     }
 }
 
@@ -1623,9 +1643,11 @@ void ShowManager::slotTimecodeRunningChanged(bool running)
     if (running && m_followMtcAction != NULL && m_followMtcAction->isChecked() &&
         m_show != NULL && m_show->isRunning() == false)
     {
+        quint32 offset = m_show->timecodeOffset();
+        quint32 tc = m_doc->timecodeSource()->positionMs();
+        quint32 pos = (tc > offset) ? tc - offset : 0;
         cursorMovedDuringPause = false;
-        m_show->start(m_doc->masterTimer(), functionParent(),
-                      m_doc->timecodeSource()->positionMs());
+        m_show->start(m_doc->masterTimer(), functionParent(), pos);
         m_playAction->setIcon(QIcon(":/player_pause.png"));
     }
 }

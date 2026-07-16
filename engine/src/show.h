@@ -223,6 +223,12 @@ public:
     /** Push the current external absolute position (ms) to the runner. */
     void setExternalTime(quint32 ms);
 
+    /** Timecode value (ms) that maps to timeline position 0. Incoming timecode
+     *  is offset by this, so a show Logic drives at SMPTE 01:00:00:00 lines up
+     *  with a 0-based timeline. Persisted. */
+    void setTimecodeOffset(quint32 ms);
+    quint32 timecodeOffset() const;
+
 protected slots:
     /** Called whenever one of this function's child functions stops */
     void slotChildStopped(quint32 fid);
@@ -237,6 +243,8 @@ protected:
     QSet <quint32> m_runningChildren;
     /** Whether this show follows an external timecode (persisted) */
     bool m_timecodeFollow;
+    /** Timecode-to-timeline offset in ms (persisted) */
+    quint32 m_timecodeOffset;
 
     /*************************************************************************
      * Attributes

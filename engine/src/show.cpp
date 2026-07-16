@@ -34,6 +34,7 @@
 #define KXMLQLCShowTimeType     QStringLiteral("Type")
 #define KXMLQLCShowTimeBPM      QStringLiteral("BPM")
 #define KXMLQLCShowFollowTC     QStringLiteral("FollowTimecode")
+#define KXMLQLCShowTCOffset     QStringLiteral("TimecodeOffset")
 #define KXMLQLCShowMarker       QStringLiteral("Marker")
 #define KXMLQLCShowMarkerTime   QStringLiteral("Time")
 
@@ -48,6 +49,7 @@ Show::Show(Doc* doc) : Function(doc, Function::ShowType)
     , m_latestShowFunctionID(0)
     , m_runner(NULL)
     , m_timecodeFollow(false)
+    , m_timecodeOffset(0)
 {
     setName(tr("New Show"));
 
@@ -379,6 +381,8 @@ bool Show::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLQLCShowTimeBPM, QString::number(m_timeDivisionBPM));
     if (m_timecodeFollow)
         doc->writeAttribute(KXMLQLCShowFollowTC, KXMLQLCTrue);
+    if (m_timecodeOffset != 0)
+        doc->writeAttribute(KXMLQLCShowTCOffset, QString::number(m_timecodeOffset));
     doc->writeEndElement();
 
     // Timeline markers (section labels)
@@ -425,6 +429,8 @@ bool Show::loadXML(QXmlStreamReader &root)
             setTimeDivision(stringToTempo(type), bpm);
             if (root.attributes().hasAttribute(KXMLQLCShowFollowTC))
                 m_timecodeFollow = (root.attributes().value(KXMLQLCShowFollowTC).toString() == KXMLQLCTrue);
+            if (root.attributes().hasAttribute(KXMLQLCShowTCOffset))
+                m_timecodeOffset = root.attributes().value(KXMLQLCShowTCOffset).toString().toUInt();
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLQLCShowMarker)
@@ -528,6 +534,16 @@ void Show::setExternalTime(quint32 ms)
 {
     if (m_runner != NULL)
         m_runner->setExternalTime(ms);
+}
+
+void Show::setTimecodeOffset(quint32 ms)
+{
+    m_timecodeOffset = ms;
+}
+
+quint32 Show::timecodeOffset() const
+{
+    return m_timecodeOffset;
 }
 
 /*********************************************************************
