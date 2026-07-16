@@ -1583,6 +1583,23 @@ void ShowManager::slotStartPlayback()
     }
     else
     {
+        // Under LIVE timecode follow the timeline is slaved to the incoming code
+        // (Logic is the master), so the local Play button must NOT pause the
+        // show. Pausing freezes the playhead, the timecode readout and every
+        // chaser on the timeline (they stop tracking the code) — which reads as
+        // "Play does nothing / everything froze". Treat Play as "make sure we're
+        // rolling": resume if a stale pause left it held, otherwise no-op.
+        const bool followingLive = m_show->timecodeFollow()
+                && m_doc->timecodeSource() != NULL
+                && m_doc->timecodeSource()->isRunning();
+        if (followingLive)
+        {
+            if (m_show->isPaused())
+                m_show->setPause(false);
+            m_playAction->setIcon(QIcon(":/player_pause.png"));
+            return;
+        }
+
         if (m_show->isPaused())
         {
             m_playAction->setIcon(QIcon(":/player_pause.png"));
@@ -1651,6 +1668,11 @@ void ShowManager::toggleTimelineSuspended()
     if (m_show == NULL || m_show->isRunning() == false)
         return;
     setTimelineSuspended(m_show->isTimelineSuspended() == false);
+}
+
+quint32 ShowManager::currentShowId() const
+{
+    return m_show != NULL ? m_show->id() : Function::invalidId();
 }
 
 void ShowManager::setFollowTimecode(bool enable)
@@ -2045,8 +2067,10 @@ void ShowManager::slotTimecodePosition(quint32 msPosition)
         // drives the cursor via slotUpdateTimeAndCursor — feeding it here as
         // well would move the cursor twice per update (the "choppy" second
         // run). So only feed the runner; let it drive the (smooth) cursor.
-        if (m_followMtcAction != NULL && m_followMtcAction->isChecked() &&
-            m_show->isPaused() == false)
+        // Gate on the show's own follow flag (the source of truth), so arming
+        // Follow from ANY surface — the toolbar toggle OR a VC Show Control
+        // widget (which sets show->setTimecodeFollow directly) — routes the TC.
+        if (m_show->timecodeFollow() && m_show->isPaused() == false)
             m_show->setExternalTime(pos);
     }
     else
@@ -2062,8 +2086,8 @@ void ShowManager::slotTimecodeRunningChanged(bool running)
     // When timecode starts rolling and we are set to follow, run the show from
     // the current position so cues fire and the cursor chases Logic. When it
     // stops the runner simply holds its position (manual GO), so we don't stop.
-    if (running && m_followMtcAction != NULL && m_followMtcAction->isChecked() &&
-        m_show != NULL && m_show->isRunning() == false && showMayOutput())
+    if (running && m_show != NULL && m_show->timecodeFollow() &&
+        m_show->isRunning() == false && showMayOutput())
     {
         quint32 offset = m_show->timecodeOffset();
         quint32 tc = m_doc->timecodeSource()->positionMs();

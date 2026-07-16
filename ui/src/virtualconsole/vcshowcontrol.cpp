@@ -37,6 +37,7 @@
 #include "chaserstep.h"
 #include "show.h"
 #include "track.h"
+#include "showmanager.h"
 #include "doc.h"
 
 #define HYSTERESIS 3
@@ -260,7 +261,14 @@ void VCShowControl::toggleFollow()
     Show *show = showFunction();
     if (show == NULL)
         return;
-    show->setTimecodeFollow(show->timecodeFollow() == false);
+    const bool enable = show->timecodeFollow() == false;
+    // Route through the Show Manager when it owns this show, so the global
+    // Follow-MTC toolbar toggle stays in sync; otherwise set the flag directly.
+    if (ShowManager::instance() != NULL &&
+        ShowManager::instance()->currentShowId() == m_showID)
+        ShowManager::instance()->setFollowTimecode(enable);
+    else
+        show->setTimecodeFollow(enable);
     refresh();
 }
 
@@ -345,16 +353,17 @@ void VCShowControl::slotPoll()
 void VCShowControl::slotTimecodeChanged(quint32 ms)
 {
     Show *show = showFunction();
-    // Route incoming TC into a running, follow-armed show so it actually TRACKS
-    // the timecode even when this widget (not the Show Manager) is driving it.
-    // The show's own clock then updates the label via slotShowTimeChanged.
-    if (show != NULL && show->isRunning() && show->timecodeFollow())
-    {
-        quint32 off = show->timecodeOffset();
-        show->setExternalTime(ms > off ? ms - off : 0);
+
+    // While the show is RUNNING, its own clock owns the readout (updated by
+    // slotShowTimeChanged). Do NOT write the raw MTC here or the two fight and
+    // the readout flip-flops (free-run 00:00 vs MTC 01:00). We also do NOT route
+    // the TC into the show here — the Show Manager is the single router for the
+    // running show (it applies the timeline offset + first-TC auto-snap); a
+    // second router with a different offset would make the show clock jump.
+    if (show != NULL && show->isRunning())
         return;
-    }
-    // Idle / not following: mirror the raw incoming TC in the label.
+
+    // Idle: mirror the raw incoming TC so the timecode still reads.
     setTimecodeLabel(ms);
 }
 

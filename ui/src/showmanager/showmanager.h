@@ -85,6 +85,9 @@ public:
      *  action / global button). No-op when no show is running. */
     void toggleTimelineSuspended();
 
+    /** Id of the currently-selected show (invalid if none). */
+    quint32 currentShowId() const;
+
     /** Arm/disarm timecode-follow on the current show (global control). */
     void setFollowTimecode(bool enable);
     bool followTimecode() const;
