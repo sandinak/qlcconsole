@@ -1978,10 +1978,17 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
 
     /* End the document and close all the open elements */
     doc.writeEndDocument();
-    file.close();
 #ifdef Q_OS_UNIX
-    sync();
+    // Flush just this file's data to disk before the atomic rename below.
+    // A global sync() flushes EVERY dirty buffer system-wide and blocks the
+    // UI thread — seconds of beachball when the workspace lives on a slow or
+    // external volume (e.g. /Volumes/Ext). fsync() on this fd only writes our
+    // ~tens-of-KB workspace, which is milliseconds.
+    file.flush();
+    if (file.handle() != -1)
+        fsync(file.handle());
 #endif
+    file.close();
 
     // Save to actual requested file name
     QFile currFile(fileName);
@@ -2267,11 +2274,15 @@ void App::slotAutosave()
 
     doc.writeEndElement();
     doc.writeEndDocument();
-    file.close();
-
 #ifdef Q_OS_UNIX
-    sync();
+    // fsync this file only — a global sync() beachballs the UI on external
+    // volumes (see saveXML). Autosave runs on a timer, so an inline global
+    // sync() would periodically freeze the app too.
+    file.flush();
+    if (file.handle() != -1)
+        fsync(file.handle());
 #endif
+    file.close();
 
     // Move temp file to actual autosave file
     QFile autosaveFile(autosavePath);
