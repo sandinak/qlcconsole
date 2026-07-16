@@ -129,6 +129,8 @@ App::App()
     , m_controlFullScreenAction(NULL)
     , m_controlBlackoutAction(NULL)
     , m_controlBlindAction(NULL)
+    , m_timelineSuspendAction(NULL)
+    , m_followMtcAction(NULL)
     , m_controlPanicAction(NULL)
     , m_dumpDmxAction(NULL)
     , m_liveEditAction(NULL)
@@ -162,6 +164,7 @@ App::App()
     , m_statusBlindLabel(NULL)
     , m_statusTimecodeLabel(NULL)
     , m_statusLoadLabel(NULL)
+    , m_statusTimelineLabel(NULL)
     , m_healthTimer(NULL)
 {
     QCoreApplication::setOrganizationName("qlcplus");
@@ -786,6 +789,9 @@ void App::slotModeChanged(Doc::Mode mode)
         m_modeToggleAction->setText(tr("Operate"));
         m_modeToggleAction->setToolTip(tr("Switch to operate mode"));
     }
+
+    // The "under timeline control" chip + exit button are Operate-only.
+    slotTimelineControlChanged();
 }
 
 /*****************************************************************************
@@ -856,6 +862,22 @@ void App::initActions()
         "Save, Revert, and pad-mode toggles still work."));
     connect(m_showLockAction, SIGNAL(triggered(bool)),
             this, SLOT(slotShowModeLock(bool)));
+
+    // Exit / resume timeline control — an Operate-mode VC takeover. While a show
+    // is driving the rig, checking this suspends the timeline's output (the
+    // Virtual Console owns the rig) while the playhead keeps tracking timecode,
+    // so unchecking resumes exactly where the timeline now is. Enabled only when
+    // a show is actually running in Operate. Sibling of the transport controls.
+    m_timelineSuspendAction = new QAction(QIcon(":/player_pause.png"),
+                                          tr("Exit &Timeline Control"), this);
+    m_timelineSuspendAction->setCheckable(true);
+    m_timelineSuspendAction->setEnabled(false);
+    m_timelineSuspendAction->setToolTip(tr(
+        "Suspend the running timeline so the Virtual Console owns the rig. The "
+        "playhead keeps tracking timecode; turn off to resume timeline control. "
+        "Available while a show is running in Operate mode."));
+    connect(m_timelineSuspendAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotControlTimelineSuspend(bool)));
 
     m_liveEditAction = new QAction(QIcon(":/liveedit.png"), tr("Live edit a function"), this);
     connect(m_liveEditAction, SIGNAL(triggered()), this, SLOT(slotFunctionLiveEdit()));
@@ -980,6 +1002,7 @@ void App::initToolBar()
     m_toolbar->addAction(m_controlBlackoutAction);
     m_toolbar->addAction(m_controlBlindAction);
     m_toolbar->addAction(m_showLockAction);
+    m_toolbar->addAction(m_timelineSuspendAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_modeToggleAction);
 
@@ -2409,6 +2432,16 @@ void App::initStatusBar()
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
     sb->addWidget(m_statusLoadLabel, 0);
 
+    // "Under timeline control" chip — visible only in Operate while a show drives
+    // the rig. Green = timeline driving; amber = suspended (VC takeover). Sits
+    // with the centred health chips (the timeline is a global runtime state).
+    m_statusTimelineLabel = new QLabel(this);
+    m_statusTimelineLabel->setToolTip(tr("Timeline control. Green: the show timeline "
+        "is driving the rig. Amber: suspended — the Virtual Console has taken over "
+        "(the playhead keeps tracking; resume to hand it back)."));
+    m_statusTimelineLabel->hide();
+    sb->addWidget(m_statusTimelineLabel, 0);
+
     if (m_doc != NULL)
     {
         TimecodeSource *tc = m_doc->timecodeSource();
@@ -2416,6 +2449,18 @@ void App::initStatusBar()
         connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeStatusChanged()));
     }
     slotTimecodeStatusChanged();
+
+    // Keep the timeline chip + exit button in sync with the ShowManager's
+    // running/suspended state. (The singleton exists — its tab is built before
+    // the status bar.)
+    if (ShowManager::instance() != NULL)
+    {
+        connect(ShowManager::instance(), SIGNAL(timelineControlChanged()),
+                this, SLOT(slotTimelineControlChanged()));
+        connect(ShowManager::instance(), SIGNAL(followTimecodeChanged(bool)),
+                this, SLOT(slotFollowTimecodeChanged(bool)));
+    }
+    slotTimelineControlChanged();
 
     m_healthTimer = new QTimer(this);
     m_healthTimer->setInterval(500);
@@ -2557,6 +2602,73 @@ void App::slotUpdateHealthFooter()
 
     // Safety refresh for the timecode chip between watchdog transitions.
     slotTimecodeStatusChanged();
+}
+
+void App::slotControlTimelineSuspend(bool checked)
+{
+    if (ShowManager::instance() != NULL)
+        ShowManager::instance()->setTimelineSuspended(checked);
+    // The ShowManager emits timelineControlChanged(), which refreshes the chip
+    // and button; call directly too in case nothing was running (no-op there).
+    slotTimelineControlChanged();
+}
+
+void App::slotTimelineControlChanged()
+{
+    ShowManager *sm = ShowManager::instance();
+    const bool active = sm != NULL && sm->timelineControlActive();
+    const bool suspended = sm != NULL && sm->timelineSuspended();
+    // "Running" here means a show is running in Operate (driving or suspended) —
+    // the state in which the exit/resume control is meaningful.
+    const bool running = active || suspended;
+
+    if (m_statusTimelineLabel != NULL)
+    {
+        const char *green = "QLabel { color:#ffffff; background:#1565c0; padding:1px 6px; border-radius:3px; font-weight:bold; }";
+        const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; font-weight:bold; }";
+        if (active)
+        {
+            m_statusTimelineLabel->setText(tr("● UNDER TIMELINE CONTROL"));
+            m_statusTimelineLabel->setStyleSheet(green);
+            m_statusTimelineLabel->show();
+        }
+        else if (suspended)
+        {
+            m_statusTimelineLabel->setText(tr("❚❚ TIMELINE SUSPENDED — VC control"));
+            m_statusTimelineLabel->setStyleSheet(amber);
+            m_statusTimelineLabel->show();
+        }
+        else
+        {
+            m_statusTimelineLabel->hide();
+        }
+    }
+
+    if (m_timelineSuspendAction != NULL)
+    {
+        m_timelineSuspendAction->setEnabled(running);
+        m_timelineSuspendAction->blockSignals(true);
+        m_timelineSuspendAction->setChecked(suspended);
+        m_timelineSuspendAction->blockSignals(false);
+        m_timelineSuspendAction->setText(suspended ? tr("Resume &Timeline Control")
+                                                    : tr("Exit &Timeline Control"));
+    }
+}
+
+void App::slotFollowTimecodeToggled(bool checked)
+{
+    if (ShowManager::instance() != NULL)
+        ShowManager::instance()->setFollowTimecode(checked);
+}
+
+void App::slotFollowTimecodeChanged(bool enabled)
+{
+    if (m_followMtcAction != NULL && m_followMtcAction->isChecked() != enabled)
+    {
+        m_followMtcAction->blockSignals(true);
+        m_followMtcAction->setChecked(enabled);
+        m_followMtcAction->blockSignals(false);
+    }
 }
 
 void App::slotProgrammerSelectionChanged()

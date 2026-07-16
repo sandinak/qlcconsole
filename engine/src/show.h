@@ -236,6 +236,11 @@ public:
     /** Push the current external absolute position (ms) to the runner. */
     void setExternalTime(quint32 ms);
 
+    /** Suspend/resume timeline OUTPUT while keeping the playhead position
+     *  (Operate-mode VC takeover). Runtime-only, not persisted. */
+    void setTimelineSuspended(bool enable);
+    bool isTimelineSuspended() const;
+
     /** Timecode value (ms) that maps to timeline position 0. Incoming timecode
      *  is offset by this, so a show Logic drives at SMPTE 01:00:00:00 lines up
      *  with a 0-based timeline. Persisted. */

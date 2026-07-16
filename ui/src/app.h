@@ -191,6 +191,13 @@ public slots:
     void slotOutputInhibitedChanged(bool state);
     void slotShowModeLock(bool checked);
     void slotShowLockedChanged(bool locked);
+    /** Toggle the running show's timeline suspend (Operate-mode VC takeover). */
+    void slotControlTimelineSuspend(bool checked);
+    /** Refresh the footer "under timeline control" chip + exit button state. */
+    void slotTimelineControlChanged();
+    /** Arm/disarm global timecode-follow from the main toolbar. */
+    void slotFollowTimecodeToggled(bool checked);
+    void slotFollowTimecodeChanged(bool enabled);
     void slotControlPanic();
     void slotFadeAndStopAll();
     void slotRunningFunctionsChanged();
@@ -225,6 +232,10 @@ private:
     QAction* m_controlBlackoutAction;
     QAction* m_controlBlindAction;
     QAction* m_showLockAction;
+    /** Exit/resume timeline control (Operate-mode VC takeover). */
+    QAction* m_timelineSuspendAction;
+    /** Global Follow-MTC toggle (moved out of the Show Manager toolbar). */
+    QAction* m_followMtcAction;
     QAction* m_controlPanicAction;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
@@ -391,6 +402,8 @@ private:
     QLabel* m_statusBlindLabel;
     QLabel* m_statusTimecodeLabel;
     QLabel* m_statusLoadLabel;
+    /** "Under timeline control" / "Timeline suspended" chip (Operate mode). */
+    QLabel* m_statusTimelineLabel;
     QTimer* m_healthTimer;
     QString m_statusMessage;
 };

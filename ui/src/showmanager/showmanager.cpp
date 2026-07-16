@@ -1373,6 +1373,73 @@ void ShowManager::slotStartPlayback()
 void ShowManager::slotShowStopped()
 {
     slotUpdateTime(m_showview->getTimeFromCursor());
+    emit timelineControlChanged();
+}
+
+void ShowManager::slotShowRunningChanged()
+{
+    emit timelineControlChanged();
+}
+
+/*********************************************************************
+ * Timeline control (global coordination — Operate mode)
+ *********************************************************************/
+
+bool ShowManager::timelineControlActive() const
+{
+    // The timeline drives the rig only in Operate, while a show is running and
+    // not suspended. In Design the active-tab ownership model applies instead.
+    return m_doc->mode() == Doc::Operate &&
+           m_show != NULL && m_show->isRunning() &&
+           m_show->isTimelineSuspended() == false;
+}
+
+bool ShowManager::timelineSuspended() const
+{
+    return m_show != NULL && m_show->isRunning() && m_show->isTimelineSuspended();
+}
+
+void ShowManager::setTimelineSuspended(bool enable)
+{
+    if (m_show == NULL || m_show->isRunning() == false)
+        return;
+    if (m_show->isTimelineSuspended() == enable)
+        return;
+
+    m_show->setTimelineSuspended(enable);
+    emit timelineControlChanged();
+}
+
+void ShowManager::toggleTimelineSuspended()
+{
+    if (m_show == NULL || m_show->isRunning() == false)
+        return;
+    setTimelineSuspended(m_show->isTimelineSuspended() == false);
+}
+
+void ShowManager::setFollowTimecode(bool enable)
+{
+    if (m_followMtcAction != NULL && m_followMtcAction->isChecked() != enable)
+    {
+        // The toolbar action's toggled() slot does the real work + persistence.
+        m_followMtcAction->setChecked(enable);
+    }
+    else
+    {
+        slotFollowMtcToggled(enable);
+    }
+    // slotFollowMtcToggled emits followTimecodeChanged for us (either via the
+    // action's toggled() or the direct call above).
+}
+
+bool ShowManager::followTimecode() const
+{
+    return m_show != NULL && m_show->timecodeFollow();
+}
+
+void ShowManager::toggleFollowTimecode()
+{
+    setFollowTimecode(followTimecode() == false);
 }
 
 ShowFunction *ShowManager::addFunctionToTrack(Function *f, Track *track, quint32 startTime)
@@ -1686,6 +1753,10 @@ void ShowManager::slotFollowMtcToggled(bool enable)
     if (m_followMtcAction != NULL)
         m_followMtcAction->setText(enable ? tr("● FOLLOWING MTC")
                                           : tr("Follow MTC (off)"));
+
+    // Keep global indicators (main-toolbar toggle, MIDI-mappable VC buttons) in
+    // sync however the follow arming was changed.
+    emit followTimecodeChanged(enable);
 }
 
 void ShowManager::updateTcSourceCombo()
@@ -2255,6 +2326,9 @@ void ShowManager::updateMultiTrackView()
     connect(m_show, SIGNAL(timeChanged(quint32)), this, SLOT(slotUpdateTimeAndCursor(quint32)), Qt::UniqueConnection);
     connect(m_show, SIGNAL(showFinished()), this, SLOT(slotStopPlayback()), Qt::UniqueConnection);
     connect(m_show, SIGNAL(stopped(quint32)), this, SLOT(slotShowStopped()), Qt::UniqueConnection);
+    // Refresh the global timeline-control indicator when the show starts (e.g.
+    // via MTC auto-start, not just the Play button).
+    connect(m_show, SIGNAL(running(quint32)), this, SLOT(slotShowRunningChanged()), Qt::UniqueConnection);
 
     Track *firstTrack = NULL;
 

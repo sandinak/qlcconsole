@@ -75,6 +75,7 @@
 #include "apputil.h"
 #include "chaser.h"
 #include "doc.h"
+#include "showmanager.h"
 
 const QSize VCButton::defaultSize(QSize(50, 50));
 
@@ -689,6 +690,25 @@ void VCButton::setAction(Action action)
         }
     }
 
+    // SuspendTimeline / FollowTimecode → follow the global ShowManager state so
+    // the button LED reflects whether the timeline is suspended / following.
+    if (ShowManager::instance() != NULL)
+    {
+        if (m_action == SuspendTimeline && action != SuspendTimeline)
+            disconnect(ShowManager::instance(), SIGNAL(timelineControlChanged()),
+                       this, SLOT(slotTimelineControlChanged()));
+        else if (m_action != SuspendTimeline && action == SuspendTimeline)
+            connect(ShowManager::instance(), SIGNAL(timelineControlChanged()),
+                    this, SLOT(slotTimelineControlChanged()));
+
+        if (m_action == FollowTimecode && action != FollowTimecode)
+            disconnect(ShowManager::instance(), SIGNAL(followTimecodeChanged(bool)),
+                       this, SLOT(slotFollowTimecodeChanged(bool)));
+        else if (m_action != FollowTimecode && action == FollowTimecode)
+            connect(ShowManager::instance(), SIGNAL(followTimecodeChanged(bool)),
+                    this, SLOT(slotFollowTimecodeChanged(bool)));
+    }
+
     // Action update
     m_action = action;
     updateIcon();
@@ -706,6 +726,12 @@ void VCButton::setAction(Action action)
     else if (m_action == RevertProgrammer)
         setToolTip(tr("Discard programmer edits — restore edited "
                       "scenes to their saved values"));
+    else if (m_action == SuspendTimeline)
+        setToolTip(tr("Suspend / resume the running show timeline "
+                      "(VC takeover). Lit while suspended."));
+    else if (m_action == FollowTimecode)
+        setToolTip(tr("Arm / disarm Follow MIDI Time Code on the current show. "
+                      "Lit while following."));
 
     if (m_action == SelectFixtures)
         slotProgrammerSelectionChanged();
@@ -715,6 +741,10 @@ void VCButton::setAction(Action action)
         slotPadModeChanged(m_doc->padMode());
     if (m_action == FixturePadCell)
         slotProgrammerSubSelectionChanged();
+    if (m_action == SuspendTimeline)
+        slotTimelineControlChanged();
+    if (m_action == FollowTimecode)
+        slotFollowTimecodeChanged(false);
 }
 
 VCButton::Action VCButton::action() const
@@ -744,6 +774,10 @@ QString VCButton::actionToString(VCButton::Action action)
         return QString(KXMLQLCVCButtonActionChaserStepNext);
     else if (action == ChaserStepPrev)
         return QString(KXMLQLCVCButtonActionChaserStepPrev);
+    else if (action == SuspendTimeline)
+        return QString(KXMLQLCVCButtonActionSuspendTimeline);
+    else if (action == FollowTimecode)
+        return QString(KXMLQLCVCButtonActionFollowTimecode);
     else
         return QString(KXMLQLCVCButtonActionToggle);
 }
@@ -770,6 +804,10 @@ VCButton::Action VCButton::stringToAction(const QString& str)
         return ChaserStepNext;
     else if (str == KXMLQLCVCButtonActionChaserStepPrev)
         return ChaserStepPrev;
+    else if (str == KXMLQLCVCButtonActionSuspendTimeline)
+        return SuspendTimeline;
+    else if (str == KXMLQLCVCButtonActionFollowTimecode)
+        return FollowTimecode;
     else
         return Toggle;
 }
@@ -945,6 +983,28 @@ void VCButton::slotPadModeChanged(Doc::PadMode mode)
     if (m_action != PadModeSelect)
         return;
     setState(mode == m_padMode ? Active : Inactive);
+}
+
+void VCButton::slotTimelineControlChanged()
+{
+    if (m_action != SuspendTimeline)
+        return;
+    // Lit when the timeline is suspended (this button has taken it over).
+    const bool suspended = ShowManager::instance() != NULL &&
+                           ShowManager::instance()->timelineSuspended();
+    setState(suspended ? Active : Inactive);
+    updateFeedback();
+}
+
+void VCButton::slotFollowTimecodeChanged(bool enabled)
+{
+    Q_UNUSED(enabled)
+    if (m_action != FollowTimecode)
+        return;
+    const bool following = ShowManager::instance() != NULL &&
+                           ShowManager::instance()->followTimecode();
+    setState(following ? Active : Inactive);
+    updateFeedback();
 }
 
 void VCButton::slotProgrammerSubSelectionChanged()
@@ -1550,6 +1610,20 @@ void VCButton::pressFunction()
     {
         m_doc->stepCurrentChaser(-1);
         blink(120);
+    }
+    else if (m_action == SuspendTimeline)
+    {
+        if (ShowManager::instance() != NULL)
+            ShowManager::instance()->toggleTimelineSuspended();
+        else
+            blink(150);
+    }
+    else if (m_action == FollowTimecode)
+    {
+        if (ShowManager::instance() != NULL)
+            ShowManager::instance()->toggleFollowTimecode();
+        else
+            blink(150);
     }
 }
 

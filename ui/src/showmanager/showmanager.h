@@ -65,9 +65,41 @@ public:
     /** Start from scratch; clear everything */
     void clearContents();
 
+    /*********************************************************************
+     * Timeline control (global coordination — Operate mode)
+     *********************************************************************/
+public:
+    /** True when the timeline is actively driving the rig: Operate mode, a show
+     *  running, and not suspended. Drives the footer "under timeline control"
+     *  indicator. */
+    bool timelineControlActive() const;
+
+    /** True when a running timeline has been suspended (VC takeover). */
+    bool timelineSuspended() const;
+
+    /** Suspend/resume the running show's output (keeps the playhead position).
+     *  No-op when no show is running. Emits timelineControlChanged(). */
+    void setTimelineSuspended(bool enable);
+
+    /** Toggle timeline suspend on the running show (for the MIDI-mappable VC
+     *  action / global button). No-op when no show is running. */
+    void toggleTimelineSuspended();
+
+    /** Arm/disarm timecode-follow on the current show (global control). */
+    void setFollowTimecode(bool enable);
+    bool followTimecode() const;
+    void toggleFollowTimecode();
+
 signals:
     /** Emitted when the FunctionManager's tab is de/activated */
     void functionManagerActive(bool active);
+
+    /** Emitted when the timeline-control state changes (running/suspended/mode)
+     *  so global indicators (footer, toolbar) can refresh. */
+    void timelineControlChanged();
+
+    /** Emitted when the current show's timecode-follow arming changes. */
+    void followTimecodeChanged(bool enabled);
 
 protected:
     /** @reimp */
@@ -177,6 +209,7 @@ protected slots:
     void slotStopPlayback();
     void slotStartPlayback();
     void slotShowStopped();
+    void slotShowRunningChanged();
 
     /*********************************************************************
      * MIDI Time Code follow

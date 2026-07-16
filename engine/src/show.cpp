@@ -556,6 +556,19 @@ void Show::setExternalTime(quint32 ms)
         m_runner->setExternalTime(ms);
 }
 
+void Show::setTimelineSuspended(bool enable)
+{
+    // Suspend is a runtime-only takeover state; it is meaningful only while the
+    // show is running, so there is nothing to remember when the runner is gone.
+    if (m_runner != NULL)
+        m_runner->setSuspended(enable);
+}
+
+bool Show::isTimelineSuspended() const
+{
+    return m_runner != NULL && m_runner->isSuspended();
+}
+
 void Show::setTimecodeOffset(quint32 ms)
 {
     m_timecodeOffset = ms;

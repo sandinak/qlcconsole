@@ -165,6 +165,20 @@
        </widget>
       </item>
       <item>
+       <widget class="QRadioButton" name="m_suspendTimeline">
+        <property name="text">
+         <string>Timeline: Suspend / resume (VC takeover)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QRadioButton" name="m_followTimecode">
+        <property name="text">
+         <string>Timeline: Follow MIDI Time Code</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QGroupBox" name="m_selectionGroup">
         <property name="title">
          <string>Selection Configuration</string>

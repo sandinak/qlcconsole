@@ -70,6 +70,23 @@ public:
      *  called from the UI thread while write() runs on the timer thread. */
     void setExternalTime(quint32 ms);
 
+    /*********************************************************************
+     * Timeline suspend (Operate-mode VC takeover)
+     *********************************************************************/
+public:
+    /** Suspend/resume timeline OUTPUT while keeping the playhead position.
+     *  While suspended the runner stops every running child function (so the
+     *  Virtual Console owns the rig) but the elapsed clock keeps tracking the
+     *  timecode, so releasing the takeover resumes exactly where the timeline
+     *  now is. Thread-safe: set from the UI thread, applied on the timer thread
+     *  inside write(). */
+    void setSuspended(bool enable);
+    bool isSuspended() const;
+
+private:
+    bool m_suspended;        // effective state, owned by the timer thread
+    bool m_suspendRequest;   // requested state, guarded by m_tcMutex
+
 private:
     /** Relocate the runner to an absolute position: stop running functions,
      *  skip past ones that already ended, and let write() restart the ones

@@ -81,6 +81,10 @@ VCButtonProperties::VCButtonProperties(VCButton* button, Doc* doc)
         m_stopAll->setChecked(true);
     else if (button->action() == VCButton::SelectFixtures)
         m_selectFixtures->setChecked(true);
+    else if (button->action() == VCButton::SuspendTimeline)
+        m_suspendTimeline->setChecked(true);
+    else if (button->action() == VCButton::FollowTimecode)
+        m_followTimecode->setChecked(true);
     else
         m_toggle->setChecked(true);
     m_fadeOutTime = m_button->stopAllFadeTime();
@@ -117,6 +121,8 @@ VCButtonProperties::VCButtonProperties(VCButton* button, Doc* doc)
     connect(m_stopAll, SIGNAL(toggled(bool)), this, SLOT(slotActionToggled()));
     connect(m_flash, SIGNAL(toggled(bool)), this, SLOT(slotActionToggled()));
     connect(m_selectFixtures, SIGNAL(toggled(bool)), this, SLOT(slotActionToggled()));
+    connect(m_suspendTimeline, SIGNAL(toggled(bool)), this, SLOT(slotActionToggled()));
+    connect(m_followTimecode, SIGNAL(toggled(bool)), this, SLOT(slotActionToggled()));
 
     connect(m_speedDialButton, SIGNAL(toggled(bool)),
             this, SLOT(slotSpeedDialToggle(bool)));
@@ -391,6 +397,14 @@ void VCButtonProperties::accept()
     else if (m_selectFixtures->isChecked() == true)
     {
         m_button->setAction(VCButton::SelectFixtures);
+    }
+    else if (m_suspendTimeline->isChecked() == true)
+    {
+        m_button->setAction(VCButton::SuspendTimeline);
+    }
+    else if (m_followTimecode->isChecked() == true)
+    {
+        m_button->setAction(VCButton::FollowTimecode);
     }
     else
     {

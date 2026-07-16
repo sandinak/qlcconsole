@@ -59,6 +59,8 @@ class QEvent;
 #define KXMLQLCVCButtonActionFixturePadCell   QStringLiteral("FixturePadCell")
 #define KXMLQLCVCButtonActionChaserStepNext   QStringLiteral("ChaserStepNext")
 #define KXMLQLCVCButtonActionChaserStepPrev   QStringLiteral("ChaserStepPrev")
+#define KXMLQLCVCButtonActionSuspendTimeline  QStringLiteral("SuspendTimeline")
+#define KXMLQLCVCButtonActionFollowTimecode   QStringLiteral("FollowTimecode")
 #define KXMLQLCVCButtonAttrPadMode            QStringLiteral("PadMode")
 #define KXMLQLCVCButtonAttrPadRow             QStringLiteral("PadRow")
 #define KXMLQLCVCButtonAttrPadCol             QStringLiteral("PadCol")
@@ -281,7 +283,8 @@ public:
     enum Action { Toggle, Flash, Blackout, StopAll, SelectFixtures,
                   SaveProgrammer, RevertProgrammer,
                   PadModeSelect, FixturePadCell,
-                  ChaserStepNext, ChaserStepPrev };
+                  ChaserStepNext, ChaserStepPrev,
+                  SuspendTimeline, FollowTimecode };
 
     /** SelectFixtures sub-mode: how the click affects the selection. */
     enum SelectionMode { SelectReplace, SelectAdd, SelectRemove, SelectToggle };
@@ -463,6 +466,14 @@ protected slots:
 
     /** Listent to OutputMap::blackoutChanged() signals in Blackout mode */
     void slotBlackoutChanged(bool state);
+
+    /** SuspendTimeline: reflect the running timeline's suspended state in the
+     *  button LED (active = suspended / VC in control). */
+    void slotTimelineControlChanged();
+
+    /** FollowTimecode: reflect the current show's follow-arm state (active =
+     *  following). */
+    void slotFollowTimecodeChanged(bool enabled);
 
 protected:
     /** Check if the button's parent is a VCSoloFrame */

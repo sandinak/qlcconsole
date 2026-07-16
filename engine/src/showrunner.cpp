@@ -48,6 +48,8 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
     , m_externalTimeFresh(false)
     , m_externalTime(0)
     , m_msSinceFresh(0)
+    , m_suspended(false)
+    , m_suspendRequest(false)
 {
     Q_ASSERT(m_doc != NULL);
     Q_ASSERT(showID != Show::invalidId());
@@ -138,6 +140,11 @@ void ShowRunner::stop()
     }
 
     m_runningQueue.clear();
+    m_suspended = false;
+    {
+        QMutexLocker locker(&m_tcMutex);
+        m_suspendRequest = false;
+    }
     qDebug() << "ShowRunner stopped";
 }
 
@@ -160,6 +167,19 @@ void ShowRunner::setExternalTime(quint32 ms)
     m_externalTime = ms;
     m_externalTimeSet = true;
     m_externalTimeFresh = true;
+}
+
+void ShowRunner::setSuspended(bool enable)
+{
+    // Only record the request here; the actual stop/seek is done on the timer
+    // thread inside write() so we never mutate m_runningQueue concurrently.
+    QMutexLocker locker(&m_tcMutex);
+    m_suspendRequest = enable;
+}
+
+bool ShowRunner::isSuspended() const
+{
+    return m_suspended;
 }
 
 void ShowRunner::seekTo(quint32 targetMs)
@@ -244,6 +264,38 @@ void ShowRunner::write(MasterTimer *timer)
                 }
             }
         }
+    }
+
+    // Timeline suspend (Operate-mode VC takeover). The elapsed clock above keeps
+    // tracking the timecode so the playhead stays synced with Logic; here we
+    // simply hand the rig to the Virtual Console: on entering suspend, stop every
+    // running child function (releasing its faders); on leaving, relocate to the
+    // current position so the functions active NOW restart with the right offset.
+    bool wantSuspend;
+    {
+        QMutexLocker locker(&m_tcMutex);
+        wantSuspend = m_suspendRequest;
+    }
+    if (wantSuspend != m_suspended)
+    {
+        m_suspended = wantSuspend;
+        if (m_suspended)
+        {
+            for (int i = 0; i < m_runningQueue.count(); i++)
+                m_runningQueue.at(i).first->stop(functionParent());
+            m_runningQueue.clear();
+        }
+        else
+        {
+            // Resume: re-establish the functions active at the current position.
+            // seekTo() sets the indices/clock; the start phase below restarts them.
+            seekTo(m_elapsedTime);
+        }
+    }
+    if (m_suspended)
+    {
+        emit timeChanged(m_elapsedTime);
+        return;
     }
 
     // Phase 1. Check all the Functions that need to be started
