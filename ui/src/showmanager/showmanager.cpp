@@ -1760,7 +1760,7 @@ void ShowManager::slotTimecodeRunningChanged(bool running)
     // the current position so cues fire and the cursor chases Logic. When it
     // stops the runner simply holds its position (manual GO), so we don't stop.
     if (running && m_followMtcAction != NULL && m_followMtcAction->isChecked() &&
-        m_show != NULL && m_show->isRunning() == false)
+        m_show != NULL && m_show->isRunning() == false && showMayOutput())
     {
         quint32 offset = m_show->timecodeOffset();
         quint32 tc = m_doc->timecodeSource()->positionMs();
@@ -2382,6 +2382,13 @@ void ShowManager::hideEvent(QHideEvent* ev)
     emit functionManagerActive(false);
     QWidget::hideEvent(ev);
 
+    // Design mode: the active tab owns the rig. Leaving the Show tab releases
+    // output so the show doesn't keep writing under (and fighting) whatever tab
+    // is now active — e.g. the Programming-tab live preview. In Operate mode the
+    // show runs globally and is left alone.
+    if (m_doc->mode() == Doc::Design && m_show != NULL && m_show->isRunning())
+        slotStopPlayback();
+
     if (m_currentEditor != NULL)
     {
         m_vsplitter->widget(1)->layout()->removeWidget(m_currentEditor);
@@ -2407,4 +2414,12 @@ void ShowManager::hideEvent(QHideEvent* ev)
 FunctionParent ShowManager::functionParent() const
 {
     return FunctionParent::master();
+}
+
+bool ShowManager::showMayOutput() const
+{
+    // Operate mode: the show runs globally (VC-vs-timeline priority is handled
+    // separately). Design mode: only the active tab owns the rig, so the show
+    // may output only while the Show tab itself is visible.
+    return m_doc->mode() == Doc::Operate || isVisible();
 }

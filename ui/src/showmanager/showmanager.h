@@ -242,6 +242,12 @@ protected slots:
 
 private:
     FunctionParent functionParent() const;
+
+    /** May the show currently drive DMX output? In Operate mode: always (VC
+        coordination handles priority). In Design mode: only when the Show tab
+        is the active/visible tab — the active tab owns the rig, so a background
+        show doesn't fight the Programming-tab live preview. */
+    bool showMayOutput() const;
 };
 
 /** @} */
