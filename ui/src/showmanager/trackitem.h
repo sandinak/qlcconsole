@@ -27,6 +27,8 @@
 
 #include "track.h"
 
+class QGraphicsProxyWidget;
+
 #define TRACK_HEIGHT        80
 #define TRACK_WIDTH         150
 
@@ -78,6 +80,9 @@ protected:
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *) override;
 
+    /** Begin editing the track name inline (embedded line edit over the title). */
+    void startInlineRename();
+
 protected slots:
     void slotTrackChanged(quint32 id);
     void slotMoveUpClicked();
@@ -85,10 +90,12 @@ protected slots:
     void slotChangeNameClicked();
     void slotDeleteTrackClicked();
     void slotNewTrackClicked();
+    void slotRenameCommitted();
 
 signals:
     void itemClicked(TrackItem *);
     void itemDoubleClicked(TrackItem *);
+    void itemRenamed(Track *);
     void itemSoloFlagChanged(TrackItem *, bool);
     void itemMuteFlagChanged(TrackItem *, bool);
     void itemMoveUpDown(Track *, int);
@@ -115,6 +122,9 @@ private:
     QAction *m_changeName;
     QAction *m_delete;
     QAction *m_newTrack;
+
+    /** Inline name editor (embedded QLineEdit while renaming) */
+    QGraphicsProxyWidget *m_nameProxy;
 };
 
 /** @} */

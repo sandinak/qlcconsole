@@ -135,6 +135,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotTrackMoved(Track*,int)));
     connect(m_showview, SIGNAL(trackDelete(Track*)),
             this, SLOT(slotTrackDelete(Track*)));
+    connect(m_showview, &MultiTrackView::trackModified,
+            m_doc, &Doc::setModified);
 
     // split the multitrack view into two (left: tracks, right: function editors)
     m_vsplitter = new QSplitter(Qt::Horizontal, this);

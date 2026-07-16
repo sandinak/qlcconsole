@@ -233,6 +233,7 @@ signals:
     void trackDoubleClicked(Track *track);
     void trackMoved(Track *, int);
     void trackDelete(Track *);
+    void trackModified();
 };
 
 /** @} */

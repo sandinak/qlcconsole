@@ -19,7 +19,10 @@
 
 
 #include <QGraphicsSceneMouseEvent>
+#include <QGraphicsProxyWidget>
+#include <QGraphicsScene>
 #include <QApplication>
+#include <QLineEdit>
 #include <QPainter>
 #include <QMenu>
 
@@ -31,6 +34,8 @@ TrackItem::TrackItem(Track *track, int number)
     , m_track(track)
     , m_isMute(false)
     , m_isSolo(false)
+    , m_isLocked(false)
+    , m_nameProxy(NULL)
 {
     m_font = qApp->font();
     m_font.setBold(true);
@@ -158,9 +163,56 @@ void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
     menu.exec(QCursor::pos());
 }
 
-void TrackItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *)
+void TrackItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
 {
-    emit itemDoubleClicked(this);
+    // Double-clicking the name area (below the buttons) renames inline;
+    // elsewhere keeps the old behaviour.
+    if (event->pos().y() >= 44)
+        startInlineRename();
+    else
+        emit itemDoubleClicked(this);
+}
+
+void TrackItem::startInlineRename()
+{
+    if (m_nameProxy != NULL || scene() == NULL)
+        return;
+
+    QLineEdit *edit = new QLineEdit(m_name);
+    edit->setAlignment(Qt::AlignLeft);
+    edit->selectAll();
+    m_nameProxy = scene()->addWidget(edit);
+    m_nameProxy->setZValue(1000);
+    m_nameProxy->setPos(mapToScene(4, 46));
+    edit->setFixedWidth(TRACK_WIDTH - 12);
+    edit->setFocus();
+    connect(edit, SIGNAL(editingFinished()), this, SLOT(slotRenameCommitted()));
+}
+
+void TrackItem::slotRenameCommitted()
+{
+    if (m_nameProxy == NULL)
+        return;
+
+    QLineEdit *edit = qobject_cast<QLineEdit *>(m_nameProxy->widget());
+    if (edit != NULL)
+    {
+        QString newName = edit->text().trimmed();
+        if (newName.isEmpty() == false && m_track != NULL && newName != m_name)
+        {
+            m_name = newName;
+            m_track->setName(newName);
+            emit itemRenamed(m_track);
+        }
+    }
+
+    // Tear down the editor (guard re-entrancy: editingFinished can fire twice).
+    QGraphicsProxyWidget *proxy = m_nameProxy;
+    m_nameProxy = NULL;
+    if (scene() != NULL)
+        scene()->removeItem(proxy);
+    proxy->deleteLater();
+    update();
 }
 
 QRectF TrackItem::boundingRect() const
@@ -248,7 +300,7 @@ void TrackItem::slotMoveDownClicked()
 
 void TrackItem::slotChangeNameClicked()
 {
-    emit itemDoubleClicked(this);
+    startInlineRename();
 }
 
 void TrackItem::slotDeleteTrackClicked()

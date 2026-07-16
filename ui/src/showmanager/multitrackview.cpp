@@ -211,6 +211,8 @@ void MultiTrackView::addTrack(Track *track)
             this, SIGNAL(newTrackRequested()));
     connect(trackItem, SIGNAL(itemLockChanged(TrackItem*,bool)),
             this, SLOT(slotTrackLockFlagChanged(TrackItem*,bool)));
+    connect(trackItem, SIGNAL(itemRenamed(Track*)),
+            this, SIGNAL(trackModified()));
 }
 
 void MultiTrackView::slotTrackLockFlagChanged(TrackItem *, bool)
