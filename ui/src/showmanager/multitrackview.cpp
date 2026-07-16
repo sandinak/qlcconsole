@@ -491,9 +491,12 @@ void MultiTrackView::moveCursor(quint32 timePos)
     int newPos = getPositionFromTime(timePos);
     m_cursor->setPos(newPos, 0);
     m_cursor->setTime(timePos);
-    // Keep the playhead on-screen as it advances (scrolls only when it nears an
-    // edge; a no-op while already visible).
-    ensureVisible(QRectF(newPos, m_cursor->y(), 1, 1), 80, 0);
+    // Page the view only when the playhead leaves the visible area: one jump
+    // (cursor lands ~10% from the left with room ahead), then it traverses the
+    // page. Scrolling every frame caused the choppy follow-scroll.
+    QRectF vis = mapToScene(viewport()->rect()).boundingRect();
+    if (newPos < vis.left() || newPos > vis.right())
+        centerOn(newPos + (vis.width() * 0.4), vis.center().y());
 }
 
 void MultiTrackView::rewindCursor()

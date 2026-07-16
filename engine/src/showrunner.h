@@ -78,6 +78,7 @@ private:
 
     bool m_timecodeFollow;
     bool m_externalTimeSet;
+    bool m_externalTimeFresh; // a new external position arrived since last tick
     quint32 m_externalTime;
     QMutex m_tcMutex;
 

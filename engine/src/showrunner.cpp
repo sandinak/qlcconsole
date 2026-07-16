@@ -45,6 +45,7 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
     , m_totalRunTime(0)
     , m_timecodeFollow(false)
     , m_externalTimeSet(false)
+    , m_externalTimeFresh(false)
     , m_externalTime(0)
 {
     Q_ASSERT(m_doc != NULL);
@@ -157,6 +158,7 @@ void ShowRunner::setExternalTime(quint32 ms)
     QMutexLocker locker(&m_tcMutex);
     m_externalTime = ms;
     m_externalTimeSet = true;
+    m_externalTimeFresh = true;
 }
 
 void ShowRunner::seekTo(quint32 targetMs)
@@ -186,22 +188,39 @@ void ShowRunner::write(MasterTimer *timer)
 {
     //qDebug() << Q_FUNC_INFO << "elapsed:" << m_elapsedTime << ", total:" << m_totalRunTime;
 
-    // In timecode-follow mode the elapsed clock is driven by an external
-    // absolute position rather than the MasterTimer tick. A backward jump is
-    // treated as a locate (seek); a forward move just advances the clock and
-    // lets the normal start/stop phases below react.
+    // In timecode-follow mode the elapsed clock chases an external absolute
+    // position. Incoming timecode only arrives ~12x/second, so snapping to it
+    // each tick makes the cursor jump in ~80ms steps. Instead we ADVANCE the
+    // clock at the tick rate between updates (smooth 50Hz) and RESYNC when a
+    // fresh position arrives — a small forward correction if we drifted, or a
+    // locate (seek) on a real backward jump.
     bool following = false;
     {
         QMutexLocker locker(&m_tcMutex);
         following = m_timecodeFollow;
-        if (following && m_externalTimeSet)
+        bool set = m_externalTimeSet;
+        bool fresh = m_externalTimeFresh;
+        quint32 target = m_externalTime;
+        m_externalTimeFresh = false;
+        locker.unlock();
+
+        if (following && set)
         {
-            quint32 target = m_externalTime;
-            locker.unlock();
-            if (target < m_elapsedTime)
-                seekTo(target);
+            if (fresh)
+            {
+                qint64 drift = qint64(target) - qint64(m_elapsedTime);
+                if (drift < -200)      // meaningfully behind => a locate
+                    seekTo(target);
+                else if (drift > 0)    // behind/forward-jump => catch up
+                    m_elapsedTime = target;
+                // else: slightly ahead of the source — keep the smooth clock and
+                // let timecode catch up, so the cursor never jitters backward.
+            }
             else
-                m_elapsedTime = target;
+            {
+                // No new position this tick: keep moving smoothly.
+                m_elapsedTime += MasterTimer::tick();
+            }
         }
     }
 
