@@ -80,6 +80,7 @@ private:
     bool m_externalTimeSet;
     bool m_externalTimeFresh; // a new external position arrived since last tick
     quint32 m_externalTime;
+    quint32 m_msSinceFresh;   // ms of interpolation since the last fresh position
     QMutex m_tcMutex;
 
 private:

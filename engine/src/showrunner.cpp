@@ -47,6 +47,7 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
     , m_externalTimeSet(false)
     , m_externalTimeFresh(false)
     , m_externalTime(0)
+    , m_msSinceFresh(0)
 {
     Q_ASSERT(m_doc != NULL);
     Q_ASSERT(showID != Show::invalidId());
@@ -208,6 +209,7 @@ void ShowRunner::write(MasterTimer *timer)
         {
             if (fresh)
             {
+                m_msSinceFresh = 0;
                 qint64 drift = qint64(target) - qint64(m_elapsedTime);
                 if (drift < -200)      // meaningfully behind => a locate
                     seekTo(target);
@@ -218,8 +220,12 @@ void ShowRunner::write(MasterTimer *timer)
             }
             else
             {
-                // No new position this tick: keep moving smoothly.
-                m_elapsedTime += MasterTimer::tick();
+                // No new position this tick. Keep moving smoothly for a short
+                // window (rides over normal MTC jitter), then HOLD — this is the
+                // freeze/manual-GO fallback when Logic stops sending timecode.
+                m_msSinceFresh += MasterTimer::tick();
+                if (m_msSinceFresh <= 300)
+                    m_elapsedTime += MasterTimer::tick();
             }
         }
     }
