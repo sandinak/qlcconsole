@@ -238,6 +238,17 @@ public:
      */
     virtual void postPaint(QPainter *painter);
 
+protected:
+    /** Rectangle the function name is drawn in (postPaint). A subclass that
+     *  draws its own content in the body (e.g. a chase's per-cue labels) can
+     *  override this to keep the name in a compact strip. */
+    virtual QRectF nameRect() const { return QRectF(3, 5, m_width - 5, 72); }
+    /** When true the name is drawn on a single elided line (for a title strip);
+     *  otherwise it word-wraps in nameRect(). */
+    virtual bool nameSingleLine() const { return false; }
+
+public:
+
 protected slots:
     /**
      * @brief slotAlignToCursorClicked slot called when the user requests to align the item

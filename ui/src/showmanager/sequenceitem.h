@@ -63,6 +63,11 @@ public:
     Chaser *getChaser() const;
 
 protected:
+    /** @reimp — keep the chase name in a compact top strip so it doesn't clash
+     *  with the per-cue labels drawn in the body. */
+    QRectF nameRect() const override;
+    bool nameSingleLine() const override { return true; }
+
     /** @reimp */
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *) override;
 
@@ -96,9 +101,12 @@ private:
     /** Index of the cue (step) whose body contains localX, or -1. */
     int cueAt(qreal localX) const;
 
-    /** The display label for cue @p idx: its note, else the fired function's
-     *  name, else "Cue N". */
+    /** The cue's NAME: the fired function/scene name, else "Cue N". */
     QString cueLabel(int idx) const;
+
+    /** Rich-text tooltip for cue @p idx: chase name, cue name, timing, and the
+     *  step note (description) at the bottom if present. */
+    QString cueTooltip(int idx) const;
 
     /** Ensure per-step durations are the source of truth (switch a Common-mode
      *  chaser to PerStep, stamping each step with its current effective hold),

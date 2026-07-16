@@ -48,6 +48,9 @@ static QString seqMsToText(quint32 ms)
 /** Smallest hold (ms) a cue can be dragged to. */
 #define SEQ_MIN_STEP_MS 100
 
+/** Height (px) of the top strip that carries the chase name. */
+#define SEQ_TITLE_STRIP_H 15
+
 SequenceItem::SequenceItem(Chaser *seq, ShowFunction *func)
     : ShowItem(func)
     , m_chaser(seq)
@@ -176,9 +179,11 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
             painter->drawRect(xpos, 0, stepWidth, TRACK_HEIGHT - 3);
         }
 
-        // Cue label: the cue's name (note → fired-function name → "Cue N").
+        // Cue label: the cue's name (note → fired-function name → "Cue N"),
+        // drawn BELOW the title strip so it doesn't clash with the chase name.
         painter->setPen(QPen(Qt::white, 1));
-        QRect textRect = QRect(xpos + 3, 1, stepWidth - 4, TRACK_HEIGHT - 4);
+        QRect textRect = QRect(xpos + 3, SEQ_TITLE_STRIP_H + 1,
+                               stepWidth - 4, TRACK_HEIGHT - SEQ_TITLE_STRIP_H - 4);
         painter->drawText(textRect, Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap,
                           cueLabel(stepIdx));
 
@@ -191,7 +196,17 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
         stepIdx++;
     }
 
+    // Title strip across the top so the chase name (drawn next by postPaint)
+    // sits on its own band, clear of the cue labels below it.
+    painter->fillRect(QRectF(0, 0, m_width, SEQ_TITLE_STRIP_H), QColor(0, 0, 0, 110));
+
     ShowItem::postPaint(painter);
+}
+
+QRectF SequenceItem::nameRect() const
+{
+    // Compact top strip; leave room for the type badge in the top-right corner.
+    return QRectF(4, 0, qMax(10, m_width - 24), SEQ_TITLE_STRIP_H);
 }
 
 void SequenceItem::setTimeScale(int val)
@@ -295,15 +310,42 @@ int SequenceItem::cueAt(qreal localX) const
 
 QString SequenceItem::cueLabel(int idx) const
 {
+    // The cue's NAME = the scene/function it fires (its note is a separate
+    // "description", shown only in the tooltip).
     if (idx < 0 || idx >= m_chaser->stepsCount())
         return QString();
     const ChaserStep s = m_chaser->steps().at(idx);
-    if (s.note.isEmpty() == false)
-        return s.note;
     Function *f = (m_chaser->doc() != NULL) ? m_chaser->doc()->function(s.fid) : NULL;
     if (f != NULL)
         return f->name();
     return tr("Cue %1").arg(idx + 1);
+}
+
+QString SequenceItem::cueTooltip(int idx) const
+{
+    QString head = QString("<b>%1</b>").arg(m_chaser->name().toHtmlEscaped());
+    if (idx < 0 || idx >= m_chaser->stepsCount())
+        return head;
+
+    const ChaserStep s = m_chaser->steps().at(idx);
+    uint fi = (m_chaser->fadeInMode() == Chaser::Common) ? m_chaser->fadeInSpeed() : s.fadeIn;
+    uint fo = (m_chaser->fadeOutMode() == Chaser::Common) ? m_chaser->fadeOutSpeed() : s.fadeOut;
+    quint32 dur = effectiveStepDuration(idx);
+
+    quint32 start = getStartTime();
+    for (int k = 0; k < idx; k++)
+        start += stepDisplayMs(k);
+
+    QString t = head;
+    t += QString("<br>%1").arg(tr("Cue %1: %2").arg(idx + 1)
+                               .arg(cueLabel(idx).toHtmlEscaped()));
+    t += QString("<br>%1").arg(tr("fade in %1 · hold %2 · fade out %3 · starts %4")
+            .arg(seqMsToText(fi)).arg(seqMsToText(dur))
+            .arg(seqMsToText(fo)).arg(seqMsToText(start)));
+    // Description (the step note), at the bottom if present.
+    if (s.note.isEmpty() == false)
+        t += QString("<br><i>%1</i>").arg(s.note.toHtmlEscaped());
+    return t;
 }
 
 void SequenceItem::ensurePerStepDurations()
@@ -347,6 +389,12 @@ void SequenceItem::setStepDuration(int idx, qint64 ms)
 
 void SequenceItem::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
 {
+    // Cue-aware tooltip: chase name + the hovered cue's name, timing and (if set)
+    // its description, instead of the plain whole-item timing tooltip.
+    int cue = cueAt(event->pos().x());
+    if (cue >= 0)
+        setToolTip(cueTooltip(cue));
+
     // Split cursor over an interior divider (roll); move cursor over a cue body
     // (slip); otherwise the base ShowItem cursors (open-hand / resize handles).
     if (m_editable && m_locked == false && edgeAt(event->pos().x()) == NoEdge
