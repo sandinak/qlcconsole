@@ -53,6 +53,8 @@ AudioItem::AudioItem(Audio *aud, ShowFunction *func)
     calculateWidth();
     connect(m_audio, SIGNAL(changed(quint32)),
             this, SLOT(slotAudioChanged(quint32)));
+    connect(m_audio, SIGNAL(nameChanged(quint32)),
+            this, SLOT(slotAudioChanged(quint32)));
 
     /* Preview actions */
     m_previewLeftAction = new QAction(tr("Preview Left Channel"), this);

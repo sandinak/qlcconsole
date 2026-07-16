@@ -73,6 +73,10 @@ SequenceItem::SequenceItem(Chaser *seq, ShowFunction *func)
 
     connect(m_chaser, SIGNAL(changed(quint32)),
             this, SLOT(slotSequenceChanged(quint32)));
+    // Function::setName emits nameChanged (not changed), so repaint the title
+    // strip when the chase is renamed elsewhere.
+    connect(m_chaser, SIGNAL(nameChanged(quint32)),
+            this, SLOT(slotSequenceChanged(quint32)));
     setIconResource(":/sequence.png");
 }
 

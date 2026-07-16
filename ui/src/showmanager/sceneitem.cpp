@@ -39,6 +39,8 @@ SceneItem::SceneItem(Scene *scene, ShowFunction *func)
 
     calculateWidth();
     connect(m_scene, SIGNAL(changed(quint32)), this, SLOT(slotSceneChanged(quint32)));
+    // setName emits nameChanged (not changed) — repaint the block on rename.
+    connect(m_scene, SIGNAL(nameChanged(quint32)), this, SLOT(slotSceneChanged(quint32)));
     setIconResource(":/scene.png");
 }
 

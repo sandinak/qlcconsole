@@ -45,6 +45,8 @@ CollectionItem::CollectionItem(Collection *collection, ShowFunction *func)
 
     calculateWidth();
     connect(m_collection, SIGNAL(changed(quint32)), this, SLOT(slotCollectionChanged(quint32)));
+    // setName emits nameChanged (not changed) — repaint the block on rename.
+    connect(m_collection, SIGNAL(nameChanged(quint32)), this, SLOT(slotCollectionChanged(quint32)));
     setIconResource(":/collection.png");
 }
 

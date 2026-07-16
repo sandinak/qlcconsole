@@ -45,6 +45,8 @@ VideoItem::VideoItem(Video *vid, ShowFunction *func)
     calculateWidth();
     connect(m_video, SIGNAL(changed(quint32)),
             this, SLOT(slotVideoChanged(quint32)));
+    connect(m_video, SIGNAL(nameChanged(quint32)),
+            this, SLOT(slotVideoChanged(quint32)));
     connect(m_video, SIGNAL(totalTimeChanged(qint64)),
             this, SLOT(slotVideoDurationChanged(qint64)));
 
