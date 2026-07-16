@@ -504,9 +504,12 @@ QColor MonitorFixtureItem::computeColor(const FixtureHead *head, const QByteArra
 
     if (head->m_rgb.count() > 0)
     {
-        int r = values.at(head->m_rgb.at(0));
-        int g = values.at(head->m_rgb.at(1));
-        int b = values.at(head->m_rgb.at(2));
+        // uchar cast is essential: QByteArray::at() returns a signed char, so
+        // any DMX value > 127 would become negative and QColor would clamp the
+        // whole colour to black (fixtures went dark past ~50% intensity).
+        int r = uchar(values.at(head->m_rgb.at(0)));
+        int g = uchar(values.at(head->m_rgb.at(1)));
+        int b = uchar(values.at(head->m_rgb.at(2)));
         // Fold in white (adds to all primaries) and amber (warm: R + ~0.5·G)
         // so RGBW/RGBA emitters contribute to the rendered colour.
         foreach (quint32 w, head->m_white)
