@@ -84,6 +84,7 @@ protected slots:
     void slotMoveDownClicked();
     void slotChangeNameClicked();
     void slotDeleteTrackClicked();
+    void slotNewTrackClicked();
 
 signals:
     void itemClicked(TrackItem *);
@@ -92,6 +93,7 @@ signals:
     void itemMuteFlagChanged(TrackItem *, bool);
     void itemMoveUpDown(Track *, int);
     void itemRequestDelete(Track *);
+    void itemRequestNewTrack();
 
 private:
     QString m_name;
@@ -109,6 +111,7 @@ private:
     QAction *m_moveDown;
     QAction *m_changeName;
     QAction *m_delete;
+    QAction *m_newTrack;
 };
 
 /** @} */

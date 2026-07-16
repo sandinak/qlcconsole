@@ -96,6 +96,10 @@ public:
     /** Set the given track to active state */
     void activateTrack(Track *track);
 
+    /** Move an existing item onto another track (reassigns its ShowFunction
+     *  and resolves overlaps on the destination). */
+    void moveItemToTrack(ShowItem *item, Track *dest);
+
     /** get the selected Show item. If none, returns NULL */
     ShowItem *getSelectedItem() const;
 
@@ -204,6 +208,13 @@ signals:
     /** Emitted when the user asks (via right-click) to insert a function at a
      *  timeline position. @param track NULL to make a new track. */
     void addAtRequested(quint32 startTime, Track *track);
+
+    /** Emitted when the user asks to create a new (empty) track. */
+    void newTrackRequested();
+
+    /** Emitted when an item is dragged below the last track: the caller should
+     *  (after confirming) make a new track and move the item onto it. */
+    void itemDroppedBelowTracks(ShowItem *item);
 
     void showItemMoved(ShowItem *item, quint32 time, bool moved);
     void viewClicked(QMouseEvent * e);

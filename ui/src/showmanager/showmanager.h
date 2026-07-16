@@ -225,6 +225,8 @@ protected slots:
     void slotShowItemDurationChanged(ShowItem *item, int msec, bool stretch);
     void slotFunctionDropped(quint32 funcID, quint32 startTime, Track *track);
     void slotAddAtRequested(quint32 startTime, Track *track);
+    void slotNewTrackRequested();
+    void slotItemDroppedBelowTracks(ShowItem *item);
     void slotToggleSnapToGrid(bool enable);
     void slotChangeSize(int width, int height);
     void slotStepSelectionChanged(int index);

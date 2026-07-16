@@ -63,9 +63,13 @@ TrackItem::TrackItem(Track *track, int number)
     connect(m_changeName, SIGNAL(triggered()),
             this, SLOT(slotChangeNameClicked()));
 
-    m_delete = new QAction(QIcon(":/editdelete.png"), tr("Delete"), this);
+    m_delete = new QAction(QIcon(":/editdelete.png"), tr("Delete track"), this);
     connect(m_delete, SIGNAL(triggered()),
             this, SLOT(slotDeleteTrackClicked()));
+
+    m_newTrack = new QAction(QIcon(":/edit_add.png"), tr("New track"), this);
+    connect(m_newTrack, SIGNAL(triggered()),
+            this, SLOT(slotNewTrackClicked()));
 }
 
 Track *TrackItem::getTrack() const
@@ -132,10 +136,13 @@ void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
     menuFont.setPixelSize(14);
     menu.setFont(menuFont);
 
+    menu.addAction(m_newTrack);
+    menu.addAction(m_changeName);
+    menu.addSeparator();
     if (m_number > 0)
         menu.addAction(m_moveUp);
     menu.addAction(m_moveDown);
-    menu.addAction(m_changeName);
+    menu.addSeparator();
     menu.addAction(m_delete);
     menu.exec(QCursor::pos());
 }
@@ -227,4 +234,9 @@ void TrackItem::slotChangeNameClicked()
 void TrackItem::slotDeleteTrackClicked()
 {
     emit itemRequestDelete(m_track);
+}
+
+void TrackItem::slotNewTrackClicked()
+{
+    emit itemRequestNewTrack();
 }

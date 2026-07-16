@@ -206,6 +206,30 @@ void MultiTrackView::addTrack(Track *track)
             this, SIGNAL(trackMoved(Track*,int)));
     connect(trackItem, SIGNAL(itemRequestDelete(Track*)),
             this, SIGNAL(trackDelete(Track*)));
+    connect(trackItem, SIGNAL(itemRequestNewTrack()),
+            this, SIGNAL(newTrackRequested()));
+}
+
+void MultiTrackView::moveItemToTrack(ShowItem *item, Track *dest)
+{
+    if (item == NULL || dest == NULL)
+        return;
+
+    int destIdx = getTrackIndex(dest);
+    int oldIdx = item->getTrackIndex();
+    Track *oldTrk = (oldIdx >= 0 && oldIdx < m_tracks.count())
+                    ? m_tracks.at(oldIdx)->getTrack() : NULL;
+    ShowFunction *sf = item->showFunction();
+    if (oldTrk != NULL && sf != NULL && oldTrk != dest)
+    {
+        oldTrk->removeShowFunction(sf, false);
+        dest->addShowFunction(sf);
+    }
+    item->setTrackIndex(destIdx);
+    item->setPos(item->x(), HEADER_HEIGHT + 1 + (destIdx * TRACK_HEIGHT));
+    resolveTrackCollisions(destIdx, item);
+    m_scene->update();
+    updateViewSize();
 }
 
 void MultiTrackView::setItemCommonProperties(ShowItem *item, ShowFunction *func, int trackNum)
@@ -701,7 +725,12 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
     QPointF scenePos = mapToScene(event->pos());
     if (scenePos.x() < TRACK_WIDTH)
     {
-        QGraphicsView::contextMenuEvent(event);
+        // Blank part of the track-header column: offer to create a track.
+        // (TrackItems handle their own right-click menu.)
+        QMenu hmenu;
+        QAction *newAct = hmenu.addAction(tr("New track"));
+        if (hmenu.exec(event->globalPos()) == newAct)
+            emit newTrackRequested();
         return;
     }
 
@@ -831,15 +860,22 @@ void MultiTrackView::slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *it
     bool moved = true;
     quint32 s_time = 0;
     int oldTrackNum = item->getTrackIndex();
+    int guessRow = qRound((item->y() - 36.0) / double(TRACK_HEIGHT));
+
+    // Dropped below the last track: ask the manager to make a new track for it.
+    if (m_tracks.count() > 0 && guessRow >= m_tracks.count())
+    {
+        qreal xpos = qMax<qreal>(TRACK_WIDTH + 2, item->x());
+        item->setStartTime(getTimeFromPosition(xpos - 2));
+        emit itemDroppedBelowTracks(item);
+        return;
+    }
 
     // Destination track resolved from the drop Y position — this is what lets
     // an item be dragged from one track (row) to another.
     int newTrackNum = oldTrackNum;
     if (m_tracks.count() > 0)
-    {
-        int guess = qRound((item->y() - 36.0) / double(TRACK_HEIGHT));
-        newTrackNum = qBound(0, guess, m_tracks.count() - 1);
-    }
+        newTrackNum = qBound(0, guessRow, m_tracks.count() - 1);
     bool trackChanged = (newTrackNum != oldTrackNum);
 
     int ypos = HEADER_HEIGHT + 1 + (newTrackNum * TRACK_HEIGHT);

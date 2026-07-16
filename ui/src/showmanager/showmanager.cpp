@@ -167,6 +167,10 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotFunctionDropped(quint32,quint32,Track*)));
     connect(m_showview, SIGNAL(addAtRequested(quint32,Track*)),
             this, SLOT(slotAddAtRequested(quint32,Track*)));
+    connect(m_showview, SIGNAL(newTrackRequested()),
+            this, SLOT(slotNewTrackRequested()));
+    connect(m_showview, SIGNAL(itemDroppedBelowTracks(ShowItem*)),
+            this, SLOT(slotItemDroppedBelowTracks(ShowItem*)));
 
     // add container for function editors
     QWidget* ccontainer = new QWidget(this);
@@ -1476,6 +1480,46 @@ void ShowManager::slotAddAtRequested(quint32 startTime, Track *track)
     slotFunctionDropped(ids.first(), startTime, track);
 }
 
+void ShowManager::slotNewTrackRequested()
+{
+    if (m_show == NULL)
+        return;
+
+    Track *track = new Track();
+    track->setName(tr("Track %1").arg(m_show->tracks().count() + 1));
+    m_show->addTrack(track);
+    m_showview->addTrack(track);
+    m_currentTrack = track;
+    m_showview->activateTrack(track);
+    m_doc->setModified();
+    m_showview->updateViewSize();
+}
+
+void ShowManager::slotItemDroppedBelowTracks(ShowItem *item)
+{
+    if (item == NULL || m_show == NULL)
+        return;
+
+    if (QMessageBox::question(this, tr("New Track"),
+            tr("Create a new track for \"%1\"?").arg(item->functionName()),
+            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+    {
+        // Declined: rebuild so the item snaps back to its original track.
+        updateMultiTrackView();
+        return;
+    }
+
+    Track *track = new Track();
+    track->setName(tr("Track %1").arg(m_show->tracks().count() + 1));
+    m_show->addTrack(track);
+    m_showview->addTrack(track);
+    m_showview->moveItemToTrack(item, track);
+    m_currentTrack = track;
+    m_showview->activateTrack(track);
+    m_doc->setModified();
+    m_showview->updateViewSize();
+}
+
 /*********************************************************************
  * MIDI Time Code follow
  *********************************************************************/
@@ -1821,16 +1865,34 @@ void ShowManager::slotTrackMoved(Track *track, int direction)
 
 void ShowManager::slotTrackDelete(Track *track)
 {
-    if (track == NULL)
+    if (track == NULL || m_show == NULL)
         return;
 
-    quint32 deleteID = m_showview->deleteSelectedItem();
-    if (deleteID != Function::invalidId())
+    // Gut check — and if the track carries items, list them.
+    QList<ShowFunction *> sfs = track->showFunctions();
+    QString msg = tr("Delete track \"%1\"?").arg(track->name());
+    if (sfs.isEmpty() == false)
     {
-        m_show->removeTrack(deleteID);
-        m_doc->setModified();
-        updateMultiTrackView();
+        msg += QString("\n\n") + tr("This will remove %1 item(s) from the timeline:")
+                                 .arg(sfs.count()) + QString("\n");
+        foreach (ShowFunction *sf, sfs)
+        {
+            Function *f = m_doc->function(sf->functionID());
+            if (f != NULL)
+                msg += QString("\n • ") + f->name();
+        }
+        msg += QString("\n\n") + tr("(The functions themselves are kept.)");
     }
+
+    if (QMessageBox::question(this, tr("Delete Track"), msg,
+                              QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    if (m_currentTrack == track)
+        m_currentTrack = NULL;
+    m_show->removeTrack(track->id());
+    m_doc->setModified();
+    updateMultiTrackView();
 }
 
 void ShowManager::slotChangeColor()
