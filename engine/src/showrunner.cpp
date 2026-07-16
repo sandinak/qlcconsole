@@ -214,8 +214,9 @@ void ShowRunner::write(MasterTimer *timer)
 
             // Timecode is "live" while fresh positions keep arriving; a short
             // window rides over normal MTC jitter. Once it lapses, HOLD (the
-            // freeze / manual-GO fallback when Logic stops).
-            if (m_msSinceFresh <= 300)
+            // freeze / manual-GO fallback when Logic stops) — kept small so the
+            // playhead stops promptly on pause.
+            if (m_msSinceFresh <= 150)
             {
                 // Smooth base advance every frame (this is what keeps the cursor
                 // gliding at 50Hz regardless of the ~12Hz MTC rate).

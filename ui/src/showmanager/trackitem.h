@@ -128,6 +128,8 @@ private:
 
     /** Inline name editor (embedded QLineEdit while renaming) */
     QGraphicsProxyWidget *m_nameProxy;
+    /** True while the inline name editor is open (hide the painted name) */
+    bool m_editing;
 };
 
 /** @} */

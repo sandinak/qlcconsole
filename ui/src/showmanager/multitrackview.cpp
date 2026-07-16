@@ -56,6 +56,13 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
     setSceneRect(0, 0, VIEW_DEFAULT_WIDTH, VIEW_DEFAULT_HEIGHT);
     setScene(m_scene);
 
+    // Cache the division grid (drawBackground) and repaint only changed regions
+    // so moving the playhead doesn't re-rasterise the whole grid every frame —
+    // that was making the cursor chunky once the grid + markers were added.
+    setCacheMode(QGraphicsView::CacheBackground);
+    setViewportUpdateMode(QGraphicsView::MinimalViewportUpdate);
+    setOptimizationFlag(QGraphicsView::DontSavePainterState, true);
+
     m_timeSlider = new QSlider(Qt::Horizontal);
     m_timeSlider->setRange(1, 15);
     m_timeSlider->setValue(3);
@@ -517,38 +524,23 @@ void MultiTrackView::moveCursor(quint32 timePos)
 
 void MultiTrackView::setPlayheadTarget(quint32 timePos)
 {
-    if (m_playheadTimer->isActive() == false)
-    {
-        m_playheadDisplay = timePos; // start locked (no lag at kickoff)
-        m_playheadTimer->start();
-    }
-    m_playheadTarget = timePos;
+    // Drive the cursor directly. With the grid cached and minimal-region
+    // updates, the per-frame repaint is cheap, so the engine's smooth 50Hz
+    // clock renders smoothly without an easing animator (which only added lag).
+    moveCursor(timePos);
 }
 
 void MultiTrackView::stopPlayhead()
 {
-    m_playheadTimer->stop();
+    if (m_playheadTimer->isActive())
+        m_playheadTimer->stop();
 }
 
 void MultiTrackView::slotAnimatePlayhead()
 {
-    double diff = double(m_playheadTarget) - m_playheadDisplay;
-    if (qAbs(diff) < 0.5)
-    {
-        // Caught up. Idle for a while, then stop so we don't spin at 60Hz; the
-        // next setPlayheadTarget restarts us.
-        if (++m_playheadIdleFrames > 60)
-            m_playheadTimer->stop();
-        return;
-    }
-    m_playheadIdleFrames = 0;
-
-    if (qAbs(diff) > 2000.0)
-        m_playheadDisplay = m_playheadTarget; // a seek/locate — snap
-    else
-        m_playheadDisplay += diff * 0.30;     // ease ~30% toward target
-
-    moveCursor(quint32(m_playheadDisplay + 0.5));
+    // (Animator retained but unused; direct drive proved smoother once the grid
+    // background was cached.)
+    m_playheadTimer->stop();
 }
 
 void MultiTrackView::rewindCursor()
@@ -922,14 +914,19 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
     const qreal laneTop = HEADER_HEIGHT;
     const qreal bottom = rect.bottom();
 
-    // Row label ("MARKERS") pinned to the left header column so it's always
-    // clear what this lane is.
+    // Row label ("MARKERS") pinned to the left header column. Only paint it
+    // when the exposed region actually covers the header column and lane — so a
+    // playhead repaint on the right doesn't redo it every frame.
     qreal leftX = mapToScene(0, 0).x();
-    painter->fillRect(QRectF(leftX, laneTop, TRACK_WIDTH, MARKER_LANE_HEIGHT),
-                      QColor(48, 61, 72));
-    painter->setPen(QPen(QColor(200, 200, 200), 1));
-    painter->drawText(QRectF(leftX + 6, laneTop, TRACK_WIDTH - 8, MARKER_LANE_HEIGHT),
-                      Qt::AlignVCenter | Qt::AlignLeft, tr("MARKERS"));
+    if (rect.left() <= leftX + TRACK_WIDTH && rect.bottom() >= laneTop
+        && rect.top() <= laneTop + MARKER_LANE_HEIGHT)
+    {
+        painter->fillRect(QRectF(leftX, laneTop, TRACK_WIDTH, MARKER_LANE_HEIGHT),
+                          QColor(48, 61, 72));
+        painter->setPen(QPen(QColor(200, 200, 200), 1));
+        painter->drawText(QRectF(leftX + 6, laneTop, TRACK_WIDTH - 8, MARKER_LANE_HEIGHT),
+                          Qt::AlignVCenter | Qt::AlignLeft, tr("MARKERS"));
+    }
 
     // Collect the markers to draw (the map is never mutated by dragging; we
     // just substitute the dragged marker's live geometry here).

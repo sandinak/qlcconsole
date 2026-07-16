@@ -36,6 +36,7 @@ TrackItem::TrackItem(Track *track, int number)
     , m_isSolo(false)
     , m_isLocked(false)
     , m_nameProxy(NULL)
+    , m_editing(false)
 {
     m_font = qApp->font();
     m_font.setBold(true);
@@ -183,13 +184,19 @@ void TrackItem::startInlineRename()
     if (m_nameProxy != NULL || scene() == NULL)
         return;
 
+    m_editing = true;
+    update(); // hide the painted name so it doesn't show under the editor
+
     QLineEdit *edit = new QLineEdit(m_name);
     edit->setAlignment(Qt::AlignLeft);
     edit->selectAll();
     m_nameProxy = scene()->addWidget(edit);
     m_nameProxy->setZValue(1000);
-    m_nameProxy->setPos(mapToScene(4, 46));
     edit->setFixedWidth(TRACK_WIDTH - 12);
+    edit->setFixedHeight(22);
+    // The painted name sits at the bottom of the header (local y 47..75,
+    // AlignBottom); place the editor over that area so it lines up.
+    m_nameProxy->setPos(mapToScene(3, TRACK_HEIGHT - 26));
     edit->setFocus();
     connect(edit, SIGNAL(editingFinished()), this, SLOT(slotRenameCommitted()));
 }
@@ -214,6 +221,7 @@ void TrackItem::slotRenameCommitted()
     // Tear down the editor (guard re-entrancy: editingFinished can fire twice).
     QGraphicsProxyWidget *proxy = m_nameProxy;
     m_nameProxy = NULL;
+    m_editing = false;
     if (scene() != NULL)
         scene()->removeItem(proxy);
     proxy->deleteLater();
@@ -284,13 +292,17 @@ void TrackItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
     if (m_track->getSceneID() != Function::invalidId())
         painter->drawPixmap(TRACK_WIDTH - 33, 5, 24, 24, QIcon(":/scene.png").pixmap(24, 24));
 
-    painter->setFont(m_font);
-    // draw shadow
-    painter->setPen(QPen(QColor(10, 10, 10, 150), 2));
-    painter->drawText(QRect(5, 47, TRACK_WIDTH - 7, 28), Qt::AlignLeft | Qt::TextWordWrap | Qt::AlignBottom, m_name);
-    // draw track name
-    painter->setPen(QPen(QColor(200, 200, 200, 255), 2));
-    painter->drawText(QRect(4, 47, TRACK_WIDTH - 7, 28), Qt::AlignLeft | Qt::TextWordWrap | Qt::AlignBottom, m_name);
+    // Track name (hidden while the inline editor is open).
+    if (m_editing == false)
+    {
+        painter->setFont(m_font);
+        // draw shadow
+        painter->setPen(QPen(QColor(10, 10, 10, 150), 2));
+        painter->drawText(QRect(5, 47, TRACK_WIDTH - 7, 28), Qt::AlignLeft | Qt::TextWordWrap | Qt::AlignBottom, m_name);
+        // draw track name
+        painter->setPen(QPen(QColor(200, 200, 200, 255), 2));
+        painter->drawText(QRect(4, 47, TRACK_WIDTH - 7, 28), Qt::AlignLeft | Qt::TextWordWrap | Qt::AlignBottom, m_name);
+    }
 }
 
 void TrackItem::slotTrackChanged(quint32 id)
