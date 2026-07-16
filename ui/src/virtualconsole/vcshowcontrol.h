@@ -123,6 +123,9 @@ private:
     QString cueText(class Chaser *chaser, int stepIdx) const;
 
     bool m_showCueInfo;
+    /** Previous "timecode rolling" state — auto-start fires only on the rising
+     *  edge (TC not-rolling → rolling), so it never fights manual Play/Stop. */
+    bool m_tcWasRolling = false;
 
     QLabel *m_nameLabel;
     QLabel *m_statusLabel;

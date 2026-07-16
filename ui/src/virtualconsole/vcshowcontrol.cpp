@@ -223,18 +223,32 @@ void VCShowControl::setShow(quint32 id)
  * Transport / state
  *********************************************************************/
 
+static void scDbg(const QString &line)
+{
+    if (qEnvironmentVariableIntValue("QLC_SHOW_DEBUG") == 0)
+        return;
+    QFile f("/tmp/qlc_showdebug.log");
+    if (f.open(QIODevice::Append | QIODevice::Text))
+        QTextStream(&f) << line << "\n";
+}
+
 void VCShowControl::playShow()
 {
     Show *show = showFunction();
+    scDbg(QString("[WIDGET-PLAY] showValid=%1 running=%2")
+          .arg(show != NULL).arg(show && show->isRunning()));
     if (show == NULL || show->isRunning())
         return;
     show->start(m_doc->masterTimer(), functionParent());
+    scDbg(QString("[WIDGET-PLAY] started; running now=%1").arg(show->isRunning()));
     refresh();
 }
 
 void VCShowControl::stopShow()
 {
     Show *show = showFunction();
+    scDbg(QString("[WIDGET-STOP] showValid=%1 running=%2")
+          .arg(show != NULL).arg(show && show->isRunning()));
     if (show == NULL || show->isRunning() == false)
         return;
     show->stop(functionParent());
@@ -310,12 +324,20 @@ void VCShowControl::slotPoll()
             }
         }
     }
-    if (show != NULL && m_doc->mode() == Doc::Operate
-        && show->timecodeFollow() && show->isRunning() == false
-        && m_doc->timecodeSource() != NULL && m_doc->timecodeSource()->isRunning())
+    // Auto-start ONLY on the rising edge of "timecode rolling" (not continuously)
+    // so it never fights a manual Stop — otherwise the poll would restart the
+    // show ~400 ms after you stopped it, and manual Play would always find it
+    // already running.
+    const bool tcRolling = (m_doc->timecodeSource() != NULL
+                            && m_doc->timecodeSource()->isRunning());
+    if (tcRolling && m_tcWasRolling == false
+        && show != NULL && m_doc->mode() == Doc::Operate
+        && show->timecodeFollow() && show->isRunning() == false)
     {
         playShow();
     }
+    m_tcWasRolling = tcRolling;
+
     refresh();
     refreshCueInfo();
 }
