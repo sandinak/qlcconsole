@@ -97,6 +97,7 @@ Function::Function(QObject *parent)
     , m_lastOverrideAttributeId(OVERRIDE_ATTRIBUTE_START_ID)
     , m_preserveAttributes(false)
     , m_blendMode(Universe::NormalBlend)
+    , m_fadePriority(Universe::Auto)
 {
 }
 
@@ -126,6 +127,7 @@ Function::Function(Doc* doc, Type t)
     , m_lastOverrideAttributeId(OVERRIDE_ATTRIBUTE_START_ID)
     , m_preserveAttributes(false)
     , m_blendMode(Universe::NormalBlend)
+    , m_fadePriority(Universe::Auto)
 {
     Q_ASSERT(doc != NULL);
     registerAttribute(tr("Intensity"), Multiply | Single);
@@ -1050,6 +1052,10 @@ void Function::postRun(MasterTimer *timer, QList<Universe *> universes)
         if (m_preserveAttributes == false)
             resetAttributes();
 
+        // Drop any borrowed fader priority (e.g. lowered by the Show timeline)
+        // so a later direct start of this same function runs at the default.
+        m_fadePriority = Universe::Auto;
+
         m_functionStopped.wakeAll();
     }
 
@@ -1467,4 +1473,14 @@ void Function::setBlendMode(Universe::BlendMode mode)
 Universe::BlendMode Function::blendMode() const
 {
     return m_blendMode;
+}
+
+void Function::setFadePriority(int priority)
+{
+    m_fadePriority = priority;
+}
+
+int Function::fadePriority() const
+{
+    return m_fadePriority;
 }

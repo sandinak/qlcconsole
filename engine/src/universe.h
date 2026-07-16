@@ -342,6 +342,8 @@ protected:
 public:
     enum FaderPriority
     {
+        Background = -1, /** Below Auto: the Show timeline's base layer, so a
+                            Virtual Console action at Auto overrides it per-channel */
         Auto = 0,
         Override,
         Flashing, /** Priority to override slider values and running chasers by flash scene */

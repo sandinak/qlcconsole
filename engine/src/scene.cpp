@@ -909,7 +909,10 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
     QSharedPointer<GenericFader> fader = m_fadersMap.value(universe->id(), QSharedPointer<GenericFader>());
     if (fader.isNull())
     {
-        fader = universe->requestFader();
+        // fadePriority() is normally Auto; the Show timeline lowers it to
+        // Background so a Virtual Console action (Auto) overrides this scene on
+        // the channels it touches (Operate-mode VC-vs-timeline arbitration).
+        fader = universe->requestFader(Universe::FaderPriority(fadePriority()));
         fader->adjustIntensity(getAttributeValue(Intensity));
         fader->setBlendMode(blendMode());
         fader->setName(name());

@@ -577,6 +577,10 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
         newStep->m_intensityOverrideId = func->requestAttributeOverride(Function::Intensity, mIntensity * sIntensity);
     }
 
+    // Propagate the chaser's fader priority to the step (the Show timeline
+    // lowers a chaser to Background so the VC overrides it; steps must inherit).
+    func->setFadePriority(m_chaser->fadePriority());
+
     // Start the fire up!
     func->start(timer, functionParent(), 0, newStep->m_fadeIn, newStep->m_fadeOut,
                 func->defaultSpeed(), m_chaser->tempoType());

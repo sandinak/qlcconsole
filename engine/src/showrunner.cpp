@@ -353,6 +353,12 @@ void ShowRunner::write(MasterTimer *timer)
                 }
             }
 
+            // In Operate the timeline is the low-priority BASE layer: run its
+            // functions at Background so a Virtual Console action (Auto) wins on
+            // the channels it touches. Propagates to children (chaser steps /
+            // collection members); postRun() restores Auto when they stop.
+            if (m_doc->mode() == Doc::Operate)
+                f->setFadePriority(Universe::Background);
             f->start(m_doc->masterTimer(), functionParent(), functionTimeOffset);
             m_runningQueue.append(QPair<Function *, quint32>(f, sf->startTime() + sf->duration(m_doc)));
             m_currentTimeFunctionIndex++;
@@ -393,6 +399,12 @@ void ShowRunner::write(MasterTimer *timer)
                 }
             }
 
+            // In Operate the timeline is the low-priority BASE layer: run its
+            // functions at Background so a Virtual Console action (Auto) wins on
+            // the channels it touches. Propagates to children (chaser steps /
+            // collection members); postRun() restores Auto when they stop.
+            if (m_doc->mode() == Doc::Operate)
+                f->setFadePriority(Universe::Background);
             f->start(m_doc->masterTimer(), functionParent(), functionTimeOffset);
             m_runningQueue.append(QPair<Function *, quint32>(f, sf->startTime() + sf->duration(m_doc)));
             m_currentBeatFunctionIndex++;

@@ -327,6 +327,9 @@ void Collection::preRun(MasterTimer *timer)
                     this, SLOT(slotChildStarted(quint32)));
 
             //function->adjustAttribute(getAttributeValue(Function::Intensity), Function::Intensity);
+            // Propagate this collection's fader priority to each member (the Show
+            // timeline lowers a collection to Background so the VC overrides it).
+            function->setFadePriority(fadePriority());
             function->start(timer, functionParent(), 0, overrideFadeInSpeed(), overrideFadeOutSpeed(), overrideDuration());
         }
         m_tick = 1;

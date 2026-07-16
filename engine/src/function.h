@@ -1008,8 +1008,25 @@ public:
      */
     virtual Universe::BlendMode blendMode() const;
 
+    /*********************************************************************
+     * Fader priority (Show-timeline vs. Virtual Console arbitration)
+     *********************************************************************/
+public:
+    /**
+     * Priority (a Universe::FaderPriority value) at which this function's
+     * output faders are requested. Defaults to Universe::Auto. The Show
+     * timeline lowers this to Universe::Background on the functions it runs (in
+     * Operate mode) so a Virtual Console action at the normal Auto priority
+     * overrides the timeline on the channels it touches. Parents propagate their
+     * value to the children they start; postRun() restores the default so a
+     * function never keeps a borrowed priority after it stops.
+     */
+    void setFadePriority(int priority);
+    int fadePriority() const;
+
 private:
     Universe::BlendMode m_blendMode;
+    int m_fadePriority;
 };
 
 /** @} */
