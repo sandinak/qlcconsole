@@ -273,17 +273,33 @@ void VCShowControl::setTimecodeLabel(quint32 ms)
 
 void VCShowControl::slotPoll()
 {
+    // Auto-start a follow-armed show when timecode starts rolling, so the widget
+    // goes LIVE on its own — independent of the Show Manager (which only
+    // auto-starts its own currently-selected show). Operate mode only.
+    Show *show = showFunction();
+    if (show != NULL && m_doc->mode() == Doc::Operate
+        && show->timecodeFollow() && show->isRunning() == false
+        && m_doc->timecodeSource() != NULL && m_doc->timecodeSource()->isRunning())
+    {
+        playShow();
+    }
     refresh();
     refreshCueInfo();
 }
 
 void VCShowControl::slotTimecodeChanged(quint32 ms)
 {
-    // While the show runs it drives its own (offset-adjusted, interpolated)
-    // clock via slotShowTimeChanged; otherwise mirror the raw incoming TC.
     Show *show = showFunction();
-    if (show != NULL && show->isRunning())
+    // Route incoming TC into a running, follow-armed show so it actually TRACKS
+    // the timecode even when this widget (not the Show Manager) is driving it.
+    // The show's own clock then updates the label via slotShowTimeChanged.
+    if (show != NULL && show->isRunning() && show->timecodeFollow())
+    {
+        quint32 off = show->timecodeOffset();
+        show->setExternalTime(ms > off ? ms - off : 0);
         return;
+    }
+    // Idle / not following: mirror the raw incoming TC in the label.
     setTimecodeLabel(ms);
 }
 
