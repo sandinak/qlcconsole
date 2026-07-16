@@ -63,30 +63,42 @@ MidiEnumeratorPrivate::~MidiEnumeratorPrivate()
     m_client = 0;
 }
 
-QString MidiEnumeratorPrivate::extractName(MIDIEndpointRef endpoint)
+static QString cfStringProperty(MIDIEndpointRef endpoint, CFStringRef property)
 {
     CFStringRef str = NULL;
-    QString name;
+    QString result;
 
-    /* Get the name property */
-    OSStatus s = MIDIObjectGetStringProperty(endpoint, kMIDIPropertyModel, &str);
-    if (s != 0)
+    if (MIDIObjectGetStringProperty(endpoint, property, &str) == 0 && str != NULL)
     {
-        s = MIDIObjectGetStringProperty(endpoint, kMIDIPropertyDisplayName, &str);
-        if (s != 0)
-            qWarning() << "Unable to get manufacturer for MIDI endpoint:" << endpoint;
-    }
-
-    if (s == 0)
-    {
-        /* Convert the name into a QString. */
-        CFIndex size = CFStringGetLength(str) + 1;
-        char* buf = (char*) malloc(size);
-        if (CFStringGetCString(str, buf, size, kCFStringEncodingISOLatin1))
-            name = QString(buf);
-
-        free(buf);
+        CFIndex size = CFStringGetMaximumSizeForEncoding(
+                           CFStringGetLength(str), kCFStringEncodingUTF8) + 1;
+        char *buf = (char *) malloc(size);
+        if (buf != NULL)
+        {
+            if (CFStringGetCString(str, buf, size, kCFStringEncodingUTF8))
+                result = QString::fromUtf8(buf);
+            free(buf);
+        }
         CFRelease(str);
+    }
+    return result.trimmed();
+}
+
+QString MidiEnumeratorPrivate::extractName(MIDIEndpointRef endpoint)
+{
+    // Prefer the user-facing display name (which CoreMIDI composes for network
+    // sessions, IAC and other virtual endpoints); fall back to the plain name,
+    // then the device model. Some endpoints report an empty Model with a
+    // successful read, which used to leave the name blank in the I/O map.
+    QString name = cfStringProperty(endpoint, kMIDIPropertyDisplayName);
+    if (name.isEmpty())
+        name = cfStringProperty(endpoint, kMIDIPropertyName);
+    if (name.isEmpty())
+        name = cfStringProperty(endpoint, kMIDIPropertyModel);
+    if (name.isEmpty())
+    {
+        qWarning() << "Unable to get a name for MIDI endpoint:" << endpoint;
+        name = QString("MIDI %1").arg(quintptr(endpoint));
     }
 
     return name;
