@@ -93,10 +93,6 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     , m_playAction(NULL)
     , m_followMtcAction(NULL)
     , m_tcSourceCombo(NULL)
-    , m_tcChip(NULL)
-    , m_loadChip(NULL)
-    , m_footerTimer(NULL)
-    , m_tcFps(30)
 {
     Q_ASSERT(s_instance == NULL);
     s_instance = this;
@@ -186,34 +182,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     container->layout()->setContentsMargins(0, 0, 0, 0);
     m_splitter->widget(1)->hide();
 
-    // ---- System-health footer (timecode + engine load chips) ----
-    QWidget *footer = new QWidget(this);
-    QHBoxLayout *footerLay = new QHBoxLayout(footer);
-    footerLay->setContentsMargins(6, 2, 6, 2);
-    footerLay->setSpacing(10);
-
-    m_tcChip = new QLabel(tr("MTC: no source"));
-    m_tcChip->setToolTip(tr("MIDI Time Code status. Grey: no source bound. "
-                            "Amber: connected but not advancing (spoken scene / manual GO). "
-                            "Green: rolling — the show follows Logic."));
-    footerLay->addWidget(m_tcChip);
-
-    m_loadChip = new QLabel(tr("Load: —"));
-    m_loadChip->setToolTip(tr("Engine tick compute time vs the per-tick budget. "
-                              "Amber above 60%%, red at/over budget (dropped frames likely)."));
-    footerLay->addWidget(m_loadChip);
-
-    footerLay->addStretch(1);
-    layout()->addWidget(footer);
-    updateTimecodeChip();
-
-    // Poll the load chip (and refresh the timecode chip) periodically.
-    m_footerTimer = new QTimer(this);
-    m_footerTimer->setInterval(500);
-    connect(m_footerTimer, SIGNAL(timeout()), this, SLOT(slotUpdateFooter()));
-    m_footerTimer->start();
-
-    // Follow incoming timecode: drive the running show and the footer chip.
+    // Follow incoming timecode: drive the running show + cursor. (The MTC and
+    // engine-load chips are app-wide and live in the main status-bar footer.)
     TimecodeSource *tc = m_doc->timecodeSource();
     connect(tc, SIGNAL(timeChanged(quint32)), this, SLOT(slotTimecodePosition(quint32)));
     connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeRunningChanged(bool)));
@@ -1528,7 +1498,6 @@ void ShowManager::slotFollowMtcToggled(bool enable)
 {
     if (m_show != NULL)
         m_show->setTimecodeFollow(enable);
-    updateTimecodeChip();
 }
 
 void ShowManager::updateTcSourceCombo()
@@ -1564,8 +1533,6 @@ void ShowManager::slotTcSourceChanged(int index)
 
 void ShowManager::slotTimecodePosition(quint32 msPosition)
 {
-    m_tcFps = m_doc->timecodeSource()->fps();
-
     if (m_followMtcAction != NULL && m_followMtcAction->isChecked() && m_show != NULL)
     {
         if (m_show->isRunning())
@@ -1583,7 +1550,6 @@ void ShowManager::slotTimecodePosition(quint32 msPosition)
             slotUpdateTime(msPosition);
         }
     }
-    updateTimecodeChip();
 }
 
 void ShowManager::slotTimecodeRunningChanged(bool running)
@@ -1599,70 +1565,6 @@ void ShowManager::slotTimecodeRunningChanged(bool running)
                       m_doc->timecodeSource()->positionMs());
         m_playAction->setIcon(QIcon(":/player_pause.png"));
     }
-    updateTimecodeChip();
-}
-
-void ShowManager::updateTimecodeChip()
-{
-    if (m_tcChip == NULL)
-        return;
-
-    TimecodeSource *tc = m_doc->timecodeSource();
-    const char *green = "color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px;";
-    const char *amber = "color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px;";
-    const char *grey  = "color:#dddddd; background:#555555; padding:1px 6px; border-radius:3px;";
-
-    if (tc->lastUniverse() < 0)
-    {
-        m_tcChip->setText(tr("MTC: no source"));
-        m_tcChip->setStyleSheet(grey);
-        return;
-    }
-
-    quint32 ms = tc->positionMs();
-    int fps = tc->fps() > 0 ? tc->fps() : 30;
-    uint totalSec = ms / 1000;
-    int hh = totalSec / 3600;
-    int mm = (totalSec % 3600) / 60;
-    int ss = totalSec % 60;
-    int ff = int((ms % 1000) * fps / 1000);
-
-    QString code = QString("%1:%2:%3:%4")
-            .arg(hh, 2, 10, QChar('0')).arg(mm, 2, 10, QChar('0'))
-            .arg(ss, 2, 10, QChar('0')).arg(ff, 2, 10, QChar('0'));
-
-    if (tc->isRunning())
-    {
-        m_tcChip->setText(QString("MTC ● %1 @%2fps").arg(code).arg(fps));
-        m_tcChip->setStyleSheet(green);
-    }
-    else
-    {
-        m_tcChip->setText(QString("MTC ❚❚ %1 (holding)").arg(code));
-        m_tcChip->setStyleSheet(amber);
-    }
-}
-
-void ShowManager::slotUpdateFooter()
-{
-    // Engine load chip.
-    if (m_loadChip != NULL)
-    {
-        double ms = m_doc->masterTimer()->tickComputeMs();
-        double budget = double(MasterTimer::tick());
-        int pct = budget > 0 ? int((ms / budget) * 100.0) : 0;
-        m_loadChip->setText(tr("Load: %1 / %2 ms (%3%)")
-                            .arg(ms, 0, 'f', 1).arg(int(budget)).arg(pct));
-
-        const char *green = "color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px;";
-        const char *amber = "color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px;";
-        const char *red   = "color:#ffffff; background:#c62828; padding:1px 6px; border-radius:3px;";
-        m_loadChip->setStyleSheet(pct >= 100 ? red : (pct >= 60 ? amber : green));
-    }
-
-    // Refresh the timecode chip as a safety net (position/state may have
-    // advanced without a signal reaching us between watchdog ticks).
-    updateTimecodeChip();
 }
 
 void ShowManager::slotTimeDivisionTypeChanged(int idx)

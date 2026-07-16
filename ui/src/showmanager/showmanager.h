@@ -153,12 +153,6 @@ private:
     QAction *m_followMtcAction;
     QComboBox *m_tcSourceCombo;
 
-    /* System-health footer chips */
-    QLabel *m_tcChip;
-    QLabel *m_loadChip;
-    QTimer *m_footerTimer;
-    int m_tcFps;
-
 protected slots:
     /** Slot called when the user selects a show from
      *  the shows combo box */
@@ -192,10 +186,8 @@ protected slots:
     void slotTcSourceChanged(int index);
     void slotTimecodePosition(quint32 msPosition);
     void slotTimecodeRunningChanged(bool running);
-    void slotUpdateFooter();
 
 private:
-    void updateTimecodeChip();
     void updateTcSourceCombo();
 
     /*********************************************************************

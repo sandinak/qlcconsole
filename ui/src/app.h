@@ -374,6 +374,12 @@ private slots:
     /** Pad-grid mode changed — refresh the "Pad: ..." label. */
     void slotPadModeChanged(Doc::PadMode mode);
 
+    /** Refresh the global timecode chip (position/state colour). */
+    void slotTimecodeStatusChanged();
+
+    /** Poll + refresh the global engine-load chip (and timecode chip). */
+    void slotUpdateHealthFooter();
+
 private:
     QLabel* m_statusModeLabel;
     QLabel* m_statusDirtyLabel;
@@ -383,6 +389,9 @@ private:
     QLabel* m_statusPadModeLabel;
     QLabel* m_statusShowLockLabel;
     QLabel* m_statusBlindLabel;
+    QLabel* m_statusTimecodeLabel;
+    QLabel* m_statusLoadLabel;
+    QTimer* m_healthTimer;
     QString m_statusMessage;
 };
 

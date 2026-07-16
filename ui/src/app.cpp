@@ -41,6 +41,7 @@
 #include "dmxdumpfactory.h"
 #include "showmanager.h"
 #include "mastertimer.h"
+#include "timecodesource.h"
 #include "addresstool.h"
 #include "simpledesk.h"
 #include "appsettings.h"
@@ -159,6 +160,9 @@ App::App()
     , m_statusPadModeLabel(NULL)
     , m_statusShowLockLabel(NULL)
     , m_statusBlindLabel(NULL)
+    , m_statusTimecodeLabel(NULL)
+    , m_statusLoadLabel(NULL)
+    , m_healthTimer(NULL)
 {
     QCoreApplication::setOrganizationName("qlcplus");
     QCoreApplication::setOrganizationDomain("qlcplus.org");
@@ -2423,6 +2427,34 @@ void App::initStatusBar()
     m_statusProgrammerLabel->hide();
     sb->addPermanentWidget(m_statusProgrammerLabel);
 
+    // Global system-health chips: MIDI Time Code + engine load. These are
+    // app-wide (the timecode source and MasterTimer are global), so they live
+    // in the status bar and stay visible across tabs.
+    m_statusTimecodeLabel = new QLabel(this);
+    m_statusTimecodeLabel->setToolTip(tr("MIDI Time Code. Grey: no source. "
+        "Amber: connected but not advancing (spoken scene / manual GO). "
+        "Green: rolling."));
+    sb->addPermanentWidget(m_statusTimecodeLabel);
+
+    m_statusLoadLabel = new QLabel(this);
+    m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
+        "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
+    sb->addPermanentWidget(m_statusLoadLabel);
+
+    if (m_doc != NULL)
+    {
+        TimecodeSource *tc = m_doc->timecodeSource();
+        connect(tc, SIGNAL(timeChanged(quint32)), this, SLOT(slotTimecodeStatusChanged()));
+        connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeStatusChanged()));
+    }
+    slotTimecodeStatusChanged();
+
+    m_healthTimer = new QTimer(this);
+    m_healthTimer->setInterval(500);
+    connect(m_healthTimer, SIGNAL(timeout()), this, SLOT(slotUpdateHealthFooter()));
+    m_healthTimer->start();
+    slotUpdateHealthFooter();
+
     // Create autosave label (right side)
     m_statusAutosaveLabel = new QLabel(this);
     m_statusAutosaveLabel->setAlignment(Qt::AlignRight);
@@ -2445,6 +2477,65 @@ void App::initStatusBar()
     }
 
     updateStatusBar();
+}
+
+void App::slotTimecodeStatusChanged()
+{
+    if (m_statusTimecodeLabel == NULL || m_doc == NULL)
+        return;
+
+    TimecodeSource *tc = m_doc->timecodeSource();
+    const char *green = "QLabel { color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px; }";
+    const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";
+    const char *grey  = "QLabel { color:#dddddd; background:#555555; padding:1px 6px; border-radius:3px; }";
+
+    if (tc->lastUniverse() < 0)
+    {
+        m_statusTimecodeLabel->setText(tr("MTC: no source"));
+        m_statusTimecodeLabel->setStyleSheet(grey);
+        return;
+    }
+
+    quint32 ms = tc->positionMs();
+    int fps = tc->fps() > 0 ? tc->fps() : 30;
+    uint totalSec = ms / 1000;
+    int hh = totalSec / 3600;
+    int mm = (totalSec % 3600) / 60;
+    int ss = totalSec % 60;
+    int ff = int((ms % 1000) * fps / 1000);
+    QString code = QString("%1:%2:%3:%4")
+            .arg(hh, 2, 10, QChar('0')).arg(mm, 2, 10, QChar('0'))
+            .arg(ss, 2, 10, QChar('0')).arg(ff, 2, 10, QChar('0'));
+
+    if (tc->isRunning())
+    {
+        m_statusTimecodeLabel->setText(QString("MTC ● %1 @%2fps").arg(code).arg(fps));
+        m_statusTimecodeLabel->setStyleSheet(green);
+    }
+    else
+    {
+        m_statusTimecodeLabel->setText(QString("MTC ❚❚ %1 (holding)").arg(code));
+        m_statusTimecodeLabel->setStyleSheet(amber);
+    }
+}
+
+void App::slotUpdateHealthFooter()
+{
+    if (m_statusLoadLabel != NULL && m_doc != NULL && m_doc->masterTimer() != NULL)
+    {
+        double ms = m_doc->masterTimer()->tickComputeMs();
+        double budget = double(MasterTimer::tick());
+        int pct = budget > 0 ? int((ms / budget) * 100.0) : 0;
+        m_statusLoadLabel->setText(tr("Load: %1 / %2 ms (%3%)")
+                                   .arg(ms, 0, 'f', 1).arg(int(budget)).arg(pct));
+        const char *green = "QLabel { color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px; }";
+        const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";
+        const char *red   = "QLabel { color:#ffffff; background:#c62828; padding:1px 6px; border-radius:3px; }";
+        m_statusLoadLabel->setStyleSheet(pct >= 100 ? red : (pct >= 60 ? amber : green));
+    }
+
+    // Safety refresh for the timecode chip between watchdog transitions.
+    slotTimecodeStatusChanged();
 }
 
 void App::slotProgrammerSelectionChanged()
