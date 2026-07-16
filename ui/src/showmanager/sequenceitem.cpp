@@ -152,26 +152,40 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
         // glance: fade-in rises from the cue start, fade-out falls to the end.
         painter->setPen(Qt::NoPen);
         painter->setBrush(QColor(255, 255, 255, 55));
-        if (stepFadeIn > 0)
         {
+            // Fade-in wedge + a draggable handle nub at its apex (drawn even at
+            // fade 0, a bit inside the cue, so a fade can be pulled out).
             float fw = qMin(stepWidth, (timeUnit * float(stepFadeIn)) / 1000.0f);
-            if (fw > 1.0f)
+            if (stepFadeIn > 0 && fw > 1.0f)
             {
                 QPolygonF wedge;
                 wedge << QPointF(xpos, bot) << QPointF(xpos + fw, top)
                       << QPointF(xpos + fw, bot);
                 painter->drawPolygon(wedge);
             }
+            if (stepWidth > 14)
+            {
+                float hx = xpos + qMax(fw, 6.0f);
+                painter->setBrush(QColor(255, 255, 255, 200));
+                painter->drawEllipse(QPointF(hx, top + 3), 3.0, 3.0);
+                painter->setBrush(QColor(255, 255, 255, 55));
+            }
         }
-        if (stepFadeOut > 0)
         {
             float fw = qMin(stepWidth, (timeUnit * float(stepFadeOut)) / 1000.0f);
-            if (fw > 1.0f)
+            if (stepFadeOut > 0 && fw > 1.0f)
             {
                 QPolygonF wedge;
                 wedge << QPointF(xEnd - fw, bot) << QPointF(xEnd - fw, top)
                       << QPointF(xEnd, bot);
                 painter->drawPolygon(wedge);
+            }
+            if (stepWidth > 14)
+            {
+                float hx = xEnd - qMax(fw, 6.0f);
+                painter->setBrush(QColor(255, 255, 255, 200));
+                painter->drawEllipse(QPointF(hx, top + 3), 3.0, 3.0);
+                painter->setBrush(QColor(255, 255, 255, 55));
             }
         }
 
@@ -370,6 +384,47 @@ void SequenceItem::ensurePerStepDurations()
     m_chaser->setDurationMode(Chaser::PerStep);
 }
 
+void SequenceItem::ensurePerStepFades()
+{
+    if (m_chaser->fadeInMode() != Chaser::PerStep)
+    {
+        const quint32 common = m_chaser->fadeInSpeed();
+        for (int i = 0; i < m_chaser->stepsCount(); i++)
+        {
+            ChaserStep s = m_chaser->steps().at(i);
+            if (m_chaser->fadeInMode() == Chaser::Common)
+                s.fadeIn = common;
+            m_chaser->replaceStep(s, i);
+        }
+        m_chaser->setFadeInMode(Chaser::PerStep);
+    }
+    if (m_chaser->fadeOutMode() != Chaser::PerStep)
+    {
+        const quint32 common = m_chaser->fadeOutSpeed();
+        for (int i = 0; i < m_chaser->stepsCount(); i++)
+        {
+            ChaserStep s = m_chaser->steps().at(i);
+            if (m_chaser->fadeOutMode() == Chaser::Common)
+                s.fadeOut = common;
+            m_chaser->replaceStep(s, i);
+        }
+        m_chaser->setFadeOutMode(Chaser::PerStep);
+    }
+}
+
+void SequenceItem::cueBounds(int idx, float &startX, float &endX) const
+{
+    const float timeUnit = 50.0f / float(m_timeScale);
+    float xpos = 0;
+    for (int i = 0; i < m_chaser->stepsCount(); i++)
+    {
+        float w = (timeUnit * float(stepDisplayMs(i))) / 1000.0f;
+        if (i == idx) { startX = xpos; endX = xpos + w; return; }
+        xpos += w;
+    }
+    startX = endX = 0;
+}
+
 void SequenceItem::snapshotDurations()
 {
     m_cueOrigDur.clear();
@@ -393,40 +448,83 @@ void SequenceItem::setStepDuration(int idx, qint64 ms)
     m_chaser->replaceStep(s, idx);
 }
 
+// Bands (within the item's height) for cue editing: the title strip carries the
+// chase name + is the whole-block move handle; the fade band edits per-cue fades;
+// the timing band rolls dividers / slips cues.
+#define SEQ_FADE_BAND_BOTTOM (TRACK_HEIGHT * 0.55)
+
 void SequenceItem::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
 {
+    const qreal x = event->pos().x();
+    const qreal y = event->pos().y();
+
     // Cue-aware tooltip: chase name + the hovered cue's name, timing and (if set)
-    // its description, instead of the plain whole-item timing tooltip.
-    int cue = cueAt(event->pos().x());
+    // its description.
+    int cue = cueAt(x);
     if (cue >= 0)
         setToolTip(cueTooltip(cue));
 
-    // Split cursor over an interior divider (roll); move cursor over a cue body
-    // (slip); otherwise the base ShowItem cursors (open-hand / resize handles).
-    if (m_editable && m_locked == false && edgeAt(event->pos().x()) == NoEdge
-        && stepBoundaryAt(event->pos().x()) >= 0)
-        setCursor(Qt::SplitHCursor);
-    else if (m_editable && m_locked == false && edgeAt(event->pos().x()) == NoEdge
-             && (event->modifiers() & Qt::AltModifier) == 0)
-        setCursor(Qt::SizeHorCursor);
+    if (m_editable && y < SEQ_TITLE_STRIP_H && m_locked == false)
+        setCursor(Qt::OpenHandCursor);                   // title strip = move block
+    else if (m_editable && y >= SEQ_TITLE_STRIP_H && y < SEQ_FADE_BAND_BOTTOM && cue >= 0)
+        setCursor(Qt::SizeHorCursor);                    // fade band
+    else if (m_editable && edgeAt(x) == NoEdge && stepBoundaryAt(x) >= 0)
+        setCursor(Qt::SplitHCursor);                     // divider = roll
+    else if (m_editable && edgeAt(x) == NoEdge && cue >= 0)
+        setCursor(Qt::SizeHorCursor);                    // cue body = slip
     else
         ShowItem::hoverMoveEvent(event);
 }
 
 void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
-    // Alt/Option forces a whole-block move (defer to ShowItem). Otherwise, an
-    // interior divider = ROLL (retime the two adjacent cues, total fixed); a cue
-    // body = SLIP (move that cue, keep its length, neighbours absorb).
     const bool alt = event->modifiers() & Qt::AltModifier;
-    if (m_editable && m_locked == false && event->button() == Qt::LeftButton
-        && alt == false && edgeAt(event->pos().x()) == NoEdge)
-    {
-        int div = stepBoundaryAt(event->pos().x());
-        int cue = (div < 0) ? cueAt(event->pos().x()) : -1;
+    const qreal x = event->pos().x();
+    const qreal y = event->pos().y();
 
-        // Slip needs a neighbour on each side; edge cues fall through to a
-        // whole-block move (there's nothing to absorb the shift otherwise).
+    // Whole-block move: Alt-drag anywhere, or drag the top title strip. Disabled
+    // when the item is position-locked (but cue/fade editing below still works).
+    if (m_locked == false && event->button() == Qt::LeftButton
+        && (alt || y < SEQ_TITLE_STRIP_H))
+    {
+        ShowItem::mousePressEvent(event);
+        return;
+    }
+    // Outer stretch handles (right edge = extend last cue) — position edit, so
+    // locked items skip it.
+    if (m_locked == false && edgeAt(x) != NoEdge)
+    {
+        ShowItem::mousePressEvent(event);
+        return;
+    }
+
+    // In-block cue editing — allowed even when the block is position-locked, as
+    // long as the track/master gate (m_editable) permits.
+    if (m_editable && event->button() == Qt::LeftButton && edgeAt(x) == NoEdge)
+    {
+        int cue = cueAt(x);
+
+        // Fade band: set the hovered cue's fade-in (left half) or fade-out.
+        if (y >= SEQ_TITLE_STRIP_H && y < SEQ_FADE_BAND_BOTTOM && cue >= 0)
+        {
+            float sx, ex;
+            cueBounds(cue, sx, ex);
+            ensurePerStepDurations();
+            ensurePerStepFades();
+            m_cueDrag = (x - sx) < (ex - sx) / 2.0f ? CueFadeIn : CueFadeOut;
+            m_cueDragIdx = cue;
+            m_cueDragPressX = event->scenePos().x();
+            m_selectedStep = cue;
+            setFlag(QGraphicsItem::ItemIsMovable, false);
+            setSelected(true);
+            update();
+            event->accept();
+            return;
+        }
+
+        // Timing band: divider = roll, cue body = slip (interior cues only).
+        int div = stepBoundaryAt(x);
+        cue = (div < 0) ? cue : -1;
         if (div >= 0 || (cue > 0 && cue < m_chaser->stepsCount() - 1))
         {
             ensurePerStepDurations();
@@ -447,6 +545,39 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 
 void SequenceItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
+    // Fade drag: set the cue's fade-in / fade-out from the cursor position.
+    if ((m_cueDrag == CueFadeIn || m_cueDrag == CueFadeOut)
+        && m_cueDragIdx >= 0 && m_cueDragIdx < m_chaser->stepsCount())
+    {
+        const float timeUnit = 50.0f / float(m_timeScale);
+        const int i = m_cueDragIdx;
+        float sx, ex;
+        cueBounds(i, sx, ex);
+        const qint64 dur = qint64(stepDisplayMs(i));
+        const qreal localX = event->pos().x();
+        ChaserStep s = m_chaser->steps().at(i);
+        QString readout;
+        if (m_cueDrag == CueFadeIn)
+        {
+            qint64 ms = qint64(((localX - sx) / timeUnit) * 1000.0);
+            ms = qBound<qint64>(0, ms, dur);
+            s.fadeIn = quint32(ms);
+            readout = tr("%1 fade in %2").arg(cueLabel(i)).arg(seqMsToText(quint32(ms)));
+        }
+        else
+        {
+            qint64 ms = qint64(((ex - localX) / timeUnit) * 1000.0);
+            ms = qBound<qint64>(0, ms, dur);
+            s.fadeOut = quint32(ms);
+            readout = tr("%1 fade out %2").arg(cueLabel(i)).arg(seqMsToText(quint32(ms)));
+        }
+        m_chaser->replaceStep(s, i);
+        update();
+        QToolTip::showText(event->screenPos(), readout);
+        event->accept();
+        return;
+    }
+
     if (m_cueDrag != CueNone && m_cueOrigDur.count() == m_chaser->stepsCount())
     {
         const float timeUnit = 50.0f / float(m_timeScale);

@@ -125,10 +125,17 @@ private:
     /** index of the selected step for highlighting (-1 if none) */
     int m_selectedStep;
 
+    /** Ensure per-step fade in/out are the source of truth (switch Common/Default
+     *  fade modes to PerStep, seeding each step) so a dragged fade sticks. */
+    void ensurePerStepFades();
+
+    /** Geometry (scene-x) of cue @p idx: its start and end. */
+    void cueBounds(int idx, float &startX, float &endX) const;
+
     /** In-block cue drag state. */
-    enum CueDrag { CueNone = 0, CueRoll, CueSlip };
+    enum CueDrag { CueNone = 0, CueRoll, CueSlip, CueFadeIn, CueFadeOut };
     CueDrag m_cueDrag;           // active in-block edit (else defer to ShowItem)
-    int m_cueDragIdx;            // roll: left cue index; slip: cue index
+    int m_cueDragIdx;            // roll: left cue index; slip/fade: cue index
     qreal m_cueDragPressX;       // scene-x at press
     QList<quint32> m_cueOrigDur; // per-step durations captured at press
 };
