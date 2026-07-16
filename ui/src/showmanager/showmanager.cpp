@@ -1495,36 +1495,53 @@ void ShowManager::slotPaste()
 
 void ShowManager::slotDelete()
 {
-    if (m_doc->isShowLocked())
+    if (m_show == NULL || m_doc->isShowLocked())
         return;
 
-    // find out if we're deleting a show item or a track
-    bool isTrack = true;
-    ShowItem *selectedItem = m_showview->getSelectedItem();
-    if (selectedItem != NULL)
-        isTrack = false;
+    // Delete removes the SELECTED timeline item(s). It no longer nukes a track
+    // by surprise when nothing is selected — tracks are deleted via the track
+    // header's right-click menu (which confirms). Nothing selected => no-op.
+    QList<ShowItem *> items = m_showview->selectedItems();
+    if (items.isEmpty())
+        return;
 
-    // get the ID of the function to delete (invalidId if nothing was selected)
-    quint32 deleteID = m_showview->deleteSelectedItem();
-    if (deleteID != Function::invalidId())
+    // Gut-check when deleting more than one item.
+    if (items.count() > 1)
     {
-        if (isTrack == false)
+        QString msg = tr("Delete %1 items from the timeline?").arg(items.count())
+                      + QString("\n");
+        foreach (ShowItem *it, items)
+            msg += QString("\n • ") + it->functionName();
+        msg += QString("\n\n") + tr("(The functions themselves are kept.)");
+        if (QMessageBox::question(this, tr("Delete items"), msg,
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            return;
+    }
+
+    pushUndoSnapshot();
+    hideRightEditor();
+    showSceneEditor(NULL);
+
+    // Remove each item's ShowFunction from its owning track. Find the owner by
+    // membership (robust vs. track-index drift).
+    foreach (ShowItem *it, items)
+    {
+        ShowFunction *sf = it->showFunction();
+        if (sf == NULL)
+            continue;
+        foreach (Track *track, m_show->tracks())
         {
-            if (m_currentTrack != NULL)
+            if (track->showFunctions().contains(sf))
             {
-                hideRightEditor();
-                showSceneEditor(NULL);
-                m_currentTrack->removeShowFunction(selectedItem->showFunction());
-                m_doc->setModified();
+                track->removeShowFunction(sf);
+                break;
             }
         }
-        else
-        {
-            m_show->removeTrack(deleteID);
-            m_doc->setModified();
-            updateMultiTrackView();
-        }
     }
+
+    m_currentScene = NULL;
+    m_doc->setModified();
+    updateMultiTrackView();   // rebuild cleanly (keeps view/model in sync)
 }
 
 void ShowManager::slotStopPlayback()

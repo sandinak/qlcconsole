@@ -125,6 +125,10 @@ public:
     /** get the selected Show item. If none, returns NULL */
     ShowItem *getSelectedItem() const;
 
+    /** All currently-selected Show items (multi-select via Shift-click or
+     *  rubber-band). */
+    QList<ShowItem *> selectedItems() const;
+
     /** DAW-style push: after an item is added/moved/resized, remove any
      *  overlaps on its track by butting the anchor after earlier items and
      *  rippling later items to the right. @param sf identifies the anchor. */
@@ -198,6 +202,10 @@ private:
     /** Master editable gate (false = timeline read-only) */
     bool m_editable;
     QString m_emptyMessage;    // centred hint when the canvas has no content
+
+    QRubberBand *m_rubberBand; // marquee selection in the tracks area
+    QPoint m_rubberOrigin;     // viewport-space press point for the marquee
+    bool m_rubberActive;       // a marquee drag is in progress
     /** Section markers: start (ms) -> ShowMarker */
     QMap<quint32, ShowMarker> m_markers;
 

@@ -21,6 +21,7 @@
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <QRubberBand>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
@@ -111,6 +112,8 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
     m_playheadTimer->setInterval(16);
     connect(m_playheadTimer, SIGNAL(timeout()), this, SLOT(slotAnimatePlayhead()));
 
+    m_rubberBand = NULL;
+    m_rubberActive = false;
     m_markerDragMode = 0;
     m_markerOrigStart = UINT_MAX;
     m_dragStart = 0;
@@ -665,6 +668,15 @@ ShowItem *MultiTrackView::getSelectedItem() const
     return NULL;
 }
 
+QList<ShowItem *> MultiTrackView::selectedItems() const
+{
+    QList<ShowItem *> sel;
+    foreach (ShowItem *item, m_items)
+        if (item->isSelected())
+            sel.append(item);
+    return sel;
+}
+
 quint32 MultiTrackView::getTimeFromCursor() const
 {
     quint32 s_time = (double)(m_cursor->x() - TRACK_WIDTH) *
@@ -1055,11 +1067,37 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
         }
     }
 
+    // Marquee (rubber-band) selection: press on empty space in the tracks area
+    // (not on an item). Shift/Ctrl extends the current selection.
+    if (e->button() == Qt::LeftButton && m_editable &&
+        sp.x() > TRACK_WIDTH && sp.y() >= TRACKS_TOP &&
+        dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL)
+    {
+        const bool extend = e->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier);
+        if (extend == false)
+            m_scene->clearSelection();
+        m_rubberActive = true;
+        m_rubberOrigin = e->pos();
+        if (m_rubberBand == NULL)
+            m_rubberBand = new QRubberBand(QRubberBand::Rectangle, viewport());
+        m_rubberBand->setGeometry(QRect(m_rubberOrigin, QSize()));
+        m_rubberBand->show();
+        e->accept();
+        return;
+    }
+
     QGraphicsView::mousePressEvent(e);
 }
 
 void MultiTrackView::mouseMoveEvent(QMouseEvent *e)
 {
+    if (m_rubberActive && m_rubberBand != NULL)
+    {
+        m_rubberBand->setGeometry(QRect(m_rubberOrigin, e->pos()).normalized());
+        e->accept();
+        return;
+    }
+
     if (m_markerDragMode != 0)
     {
         QPointF sp = mapToScene(e->pos());
@@ -1098,6 +1136,27 @@ void MultiTrackView::mouseMoveEvent(QMouseEvent *e)
 
 void MultiTrackView::mouseReleaseEvent(QMouseEvent * e)
 {
+    // Commit a marquee selection.
+    if (m_rubberActive)
+    {
+        m_rubberActive = false;
+        if (m_rubberBand != NULL)
+        {
+            const QRect bandVp = m_rubberBand->geometry();
+            m_rubberBand->hide();
+            // Select every ShowItem whose viewport rect intersects the marquee.
+            foreach (ShowItem *item, m_items)
+            {
+                QRect itemVp = mapFromScene(item->sceneBoundingRect()).boundingRect();
+                if (bandVp.intersects(itemVp))
+                    item->setSelected(true);
+            }
+        }
+        emit viewClicked(e);   // refresh toolbar enable-state
+        e->accept();
+        return;
+    }
+
     // Commit a marker drag.
     if (m_markerDragMode != 0)
     {
