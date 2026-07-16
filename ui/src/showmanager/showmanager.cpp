@@ -1706,8 +1706,8 @@ void ShowManager::slotTimecodePosition(quint32 msPosition)
     }
     else
     {
-        // Not playing — chase the cursor directly so the playhead still tracks.
-        m_showview->moveCursor(pos);
+        // Not playing — smooth-follow the cursor so the playhead still tracks.
+        m_showview->setPlayheadTarget(pos);
         slotUpdateTime(pos);
     }
 }
@@ -1856,7 +1856,9 @@ void ShowManager::slotUpdateTimeAndCursor(quint32 msec_time)
 {
     //qDebug() << Q_FUNC_INFO << "time: " << msec_time;
     slotUpdateTime(msec_time);
-    m_showview->moveCursor(msec_time);
+    // Feed the smooth playhead animator rather than moving the cursor directly
+    // (engine time updates arrive in cross-thread bursts and would look chunky).
+    m_showview->setPlayheadTarget(msec_time);
 }
 
 void ShowManager::slotUpdateTime(quint32 msec_time)

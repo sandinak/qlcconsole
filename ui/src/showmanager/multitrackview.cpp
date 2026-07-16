@@ -31,6 +31,7 @@
 #include <QScrollBar>
 #include <QPainter>
 #include <QSlider>
+#include <QTimer>
 #include <QMenu>
 #include <QDebug>
 #include <algorithm>
@@ -90,6 +91,17 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
 
     m_vdivider = NULL;
     m_editable = true;
+
+    // Smooth playhead animator: eases the cursor toward the latest target at
+    // 60Hz on the main thread, so motion stays smooth even though the engine's
+    // time updates arrive in cross-thread bursts.
+    m_playheadDisplay = 0;
+    m_playheadTarget = 0;
+    m_playheadIdleFrames = 0;
+    m_playheadTimer = new QTimer(this);
+    m_playheadTimer->setInterval(16);
+    connect(m_playheadTimer, SIGNAL(timeout()), this, SLOT(slotAnimatePlayhead()));
+
     m_markerDragMode = 0;
     m_markerOrigStart = UINT_MAX;
     m_dragStart = 0;
@@ -499,8 +511,47 @@ void MultiTrackView::moveCursor(quint32 timePos)
         centerOn(newPos + (vis.width() * 0.4), vis.center().y());
 }
 
+void MultiTrackView::setPlayheadTarget(quint32 timePos)
+{
+    if (m_playheadTimer->isActive() == false)
+    {
+        m_playheadDisplay = timePos; // start locked (no lag at kickoff)
+        m_playheadTimer->start();
+    }
+    m_playheadTarget = timePos;
+}
+
+void MultiTrackView::stopPlayhead()
+{
+    m_playheadTimer->stop();
+}
+
+void MultiTrackView::slotAnimatePlayhead()
+{
+    double diff = double(m_playheadTarget) - m_playheadDisplay;
+    if (qAbs(diff) < 0.5)
+    {
+        // Caught up. Idle for a while, then stop so we don't spin at 60Hz; the
+        // next setPlayheadTarget restarts us.
+        if (++m_playheadIdleFrames > 60)
+            m_playheadTimer->stop();
+        return;
+    }
+    m_playheadIdleFrames = 0;
+
+    if (qAbs(diff) > 2000.0)
+        m_playheadDisplay = m_playheadTarget; // a seek/locate — snap
+    else
+        m_playheadDisplay += diff * 0.30;     // ease ~30% toward target
+
+    moveCursor(quint32(m_playheadDisplay + 0.5));
+}
+
 void MultiTrackView::rewindCursor()
 {
+    stopPlayhead();
+    m_playheadDisplay = 0;
+    m_playheadTarget = 0;
     m_cursor->setPos(TRACK_WIDTH, 0);
     m_cursor->setTime(0);
 }

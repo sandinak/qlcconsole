@@ -44,6 +44,8 @@
  * @{
  */
 
+class QTimer;
+
 class MultiTrackView final : public QGraphicsView
 {
     Q_OBJECT
@@ -155,8 +157,16 @@ public:
      * Cursor
      *********************************************************************/
 public:
-    /** Move cursor to a given time */
+    /** Move cursor to a given time (immediate). */
     void moveCursor(quint32 timePos);
+
+    /** Smooth-follow target for the playhead: a local 60Hz animator eases the
+     *  cursor toward this, decoupled from the (bursty, cross-thread) engine
+     *  updates, so the motion stays smooth with a touch of lag. */
+    void setPlayheadTarget(quint32 timePos);
+
+    /** Stop the smooth playhead animator (on playback stop). */
+    void stopPlayhead();
 
     /** Reset cursor to initial position */
     void rewindCursor();
@@ -184,6 +194,12 @@ private:
     bool m_editable;
     /** Section markers: start (ms) -> ShowMarker */
     QMap<quint32, ShowMarker> m_markers;
+
+    /** Smooth playhead animator (main-thread, decoupled from engine updates) */
+    QTimer *m_playheadTimer;
+    double m_playheadDisplay;
+    quint32 m_playheadTarget;
+    int m_playheadIdleFrames;
 
     /** Marker drag state (in the lane): 0=none 1=move 2=resizeLeft 3=resizeRight */
     int m_markerDragMode;
@@ -231,6 +247,7 @@ protected slots:
     void slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *item);
     void slotItemResized(ShowItem *item, bool leftEdge);
     void slotAlignToCursor(ShowItem *item);
+    void slotAnimatePlayhead();
 
 signals:
     /** A function was dragged from a tree and dropped on the timeline.
