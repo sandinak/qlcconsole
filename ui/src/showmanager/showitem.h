@@ -293,6 +293,10 @@ protected:
     /** Show a horizontal-resize cursor when hovering over a stretch handle. */
     void hoverMoveEvent(QGraphicsSceneHoverEvent *event) override;
 
+    /** Snap the item's Y to a track row during moves so it never floats
+     *  between rows (keeps items aligned to their tracks while dragging). */
+    QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
+
     /**
      * @brief contextMenuEvent overridden method to handle the mouse right click over an item
      * and request the display of a contextual menu.

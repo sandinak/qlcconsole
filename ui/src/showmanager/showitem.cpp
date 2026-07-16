@@ -51,6 +51,7 @@ ShowItem::ShowItem(ShowFunction *function, QObject *)
 
     setCursor(Qt::OpenHandCursor);
     setFlag(QGraphicsItem::ItemIsSelectable, true);
+    setFlag(QGraphicsItem::ItemSendsGeometryChanges, true);
     setAcceptHoverEvents(true);
 
     m_font = qApp->font();
@@ -336,6 +337,21 @@ void ShowItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     setCursor(Qt::OpenHandCursor);
     m_pressed = false;
     emit itemDropped(event, this);
+}
+
+QVariant ShowItem::itemChange(GraphicsItemChange change, const QVariant &value)
+{
+    if (change == ItemPositionChange && scene() != NULL)
+    {
+        // Keep the item locked to a track row (clean multiples of TRACK_HEIGHT
+        // from the first row), so it never floats between tracks while dragging.
+        QPointF newPos = value.toPointF();
+        const qreal base = TRACKS_TOP + 1;
+        int row = qMax(0, qRound((newPos.y() - base) / double(TRACK_HEIGHT)));
+        newPos.setY(base + row * TRACK_HEIGHT);
+        return newPos;
+    }
+    return QGraphicsItem::itemChange(change, value);
 }
 
 void ShowItem::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
