@@ -1676,7 +1676,13 @@ void ShowManager::slotShowItemMoved(ShowItem *item, quint32 time, bool moved)
 
             /* activate the new track */
             m_currentTrack = m_show->getTrackFromSceneID(sceneID);
-            m_showview->activateTrack(m_currentTrack);
+            // A sequence may live on a track not bound to its scene (e.g. moved
+            // between tracks, or a scene dropped onto an existing track); fall
+            // back to the item's own track row.
+            if (m_currentTrack == NULL)
+                m_currentTrack = m_show->tracks().value(item->getTrackIndex(), NULL);
+            if (m_currentTrack != NULL)
+                m_showview->activateTrack(m_currentTrack);
             showRightEditor(f);
 
             if (m_currentEditor != NULL)
@@ -1688,9 +1694,12 @@ void ShowManager::slotShowItemMoved(ShowItem *item, quint32 time, bool moved)
     }
     else
     {
-        Track *track = m_show->tracks().at(item->getTrackIndex());
-        m_showview->activateTrack(track);
-        m_currentTrack = track;
+        Track *track = m_show->tracks().value(item->getTrackIndex(), NULL);
+        if (track != NULL)
+        {
+            m_showview->activateTrack(track);
+            m_currentTrack = track;
+        }
         m_currentScene = NULL;
         showSceneEditor(NULL);
         showRightEditor(f);

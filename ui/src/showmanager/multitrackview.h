@@ -183,6 +183,7 @@ protected slots:
     void slotViewScrolled(int);
 
     void slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *item);
+    void slotItemResized(ShowItem *item, bool leftEdge);
     void slotAlignToCursor(ShowItem *item);
 
 signals:

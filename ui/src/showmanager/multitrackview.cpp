@@ -227,6 +227,8 @@ void MultiTrackView::setItemCommonProperties(ShowItem *item, ShowFunction *func,
 
     connect(item, SIGNAL(itemDropped(QGraphicsSceneMouseEvent *, ShowItem *)),
             this, SLOT(slotItemMoved(QGraphicsSceneMouseEvent *, ShowItem *)));
+    connect(item, SIGNAL(itemResized(ShowItem*,bool)),
+            this, SLOT(slotItemResized(ShowItem*,bool)));
     connect(item, SIGNAL(alignToCursor(ShowItem*)),
             this, SLOT(slotAlignToCursor(ShowItem*)));
     m_scene->addItem(item);
@@ -755,15 +757,28 @@ void MultiTrackView::slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *it
     // align to the appropriate track
     bool moved = true;
     quint32 s_time = 0;
-    int trackNum = item->getTrackIndex();
-    int ypos = HEADER_HEIGHT + 1 + (trackNum * TRACK_HEIGHT);
+    int oldTrackNum = item->getTrackIndex();
+
+    // Destination track resolved from the drop Y position — this is what lets
+    // an item be dragged from one track (row) to another.
+    int newTrackNum = oldTrackNum;
+    if (m_tracks.count() > 0)
+    {
+        int guess = qRound((item->y() - 36.0) / double(TRACK_HEIGHT));
+        newTrackNum = qBound(0, guess, m_tracks.count() - 1);
+    }
+    bool trackChanged = (newTrackNum != oldTrackNum);
+
+    int ypos = HEADER_HEIGHT + 1 + (newTrackNum * TRACK_HEIGHT);
     int shift = qAbs(item->getDraggingPos().x() - item->x());
 
     if (item->x() < TRACK_WIDTH + 2)
     {
         item->setPos(TRACK_WIDTH + 2, ypos); // avoid moving an item too early...
     }
-    else if (shift < 3) // a drag of less than 3 pixel doesn't move the item
+    // a tiny horizontal drag on the SAME track is treated as a click; but a
+    // change of track is always a move even with no horizontal shift.
+    else if (shift < 3 && trackChanged == false)
     {
         //qDebug() << "Drag too short (" << shift << "px) not allowed!";
         item->setPos(item->getDraggingPos());
@@ -785,8 +800,50 @@ void MultiTrackView::slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *it
 
     item->setStartTime(s_time);
 
+    // Move the underlying ShowFunction to the destination track in the engine.
+    if (trackChanged && oldTrackNum < m_tracks.count() && newTrackNum < m_tracks.count())
+    {
+        Track *oldTrk = m_tracks.at(oldTrackNum)->getTrack();
+        Track *newTrk = m_tracks.at(newTrackNum)->getTrack();
+        ShowFunction *sf = item->showFunction();
+        if (oldTrk != NULL && newTrk != NULL && sf != NULL && oldTrk != newTrk)
+        {
+            oldTrk->removeShowFunction(sf, false);
+            newTrk->addShowFunction(sf);
+            item->setTrackIndex(newTrackNum);
+        }
+    }
+
     m_scene->update();
     emit showItemMoved(item, getTimeFromPosition(item->x() + event->pos().toPoint().x()), moved);
+}
+
+void MultiTrackView::slotItemResized(ShowItem *item, bool leftEdge)
+{
+    if (item == NULL)
+        return;
+
+    // Translate the item's new pixel geometry into start time + duration.
+    quint32 startTime = getTimeFromPosition(item->x() - 2);
+    quint32 endTime = getTimeFromPosition(item->x() - 2 + item->getWidth());
+    if (endTime < startTime)
+        endTime = startTime;
+    quint32 duration = endTime - startTime;
+
+    if (leftEdge)
+    {
+        item->setStartTime(startTime);
+        // Snap the left edge to the computed start time.
+        item->setPos(getPositionFromTime(startTime) + 2, item->y());
+    }
+
+    // Commit the new duration to the item/function (recomputes the width).
+    item->setDuration(duration, false);
+
+    m_scene->update();
+    updateViewSize();
+    // Reuse the move path for selection + Doc setModified() bookkeeping.
+    emit showItemMoved(item, startTime, true);
 }
 
 void MultiTrackView::slotAlignToCursor(ShowItem *item)

@@ -27,6 +27,7 @@
 #include <QFont>
 
 class ShowFunction;
+class QGraphicsSceneHoverEvent;
 
 /** @addtogroup ui_functions
  * @{
@@ -254,6 +255,13 @@ signals:
      */
     void alignToCursor(ShowItem *);
 
+    /**
+     * @brief itemResized emitted when the user finishes dragging one of the
+     * item's stretch handles. @param leftEdge true if the left handle was
+     * dragged (start time changed as well as duration).
+     */
+    void itemResized(ShowItem *item, bool leftEdge);
+
 protected:
     /**
      * @brief mousePressEvent overridden method to handle the mouse pressure over the item.
@@ -263,10 +271,19 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
 
     /**
+     * @brief mouseMoveEvent overridden to implement stretch-handle resizing.
+     * When a resize is not in progress it defers to the base class (item move).
+     */
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
+
+    /**
      * @brief mouseReleaseEvent overridden method to handle the mouse release event over an item.
      * This method emits the itemDropped signal to be handled by the above layers
      */
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+
+    /** Show a horizontal-resize cursor when hovering over a stretch handle. */
+    void hoverMoveEvent(QGraphicsSceneHoverEvent *event) override;
 
     /**
      * @brief contextMenuEvent overridden method to handle the mouse right click over an item
@@ -305,6 +322,13 @@ protected:
     /** Contextual menu actions */
     QAction *m_alignToCursor;
     QAction *m_lockAction;
+
+    /** Stretch-handle resize state */
+    enum ResizeEdge { NoEdge = 0, LeftEdge, RightEdge };
+    ResizeEdge edgeAt(qreal localX) const;
+    ResizeEdge m_resizeEdge;
+    int m_resizeStartWidth;
+    QPointF m_resizeStartPos;
 };
 
 /** @} */
