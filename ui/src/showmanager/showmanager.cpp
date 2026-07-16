@@ -85,6 +85,7 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     , m_addShowAction(NULL)
     , m_renameShowAction(NULL)
     , m_deleteShowAction(NULL)
+    , m_undoAction(NULL)
     , m_addTrackAction(NULL)
     , m_addSequenceAction(NULL)
     , m_addAudioAction(NULL)
@@ -278,6 +279,12 @@ void ShowManager::initActions()
     connect(m_deleteShowAction, SIGNAL(triggered(bool)),
             this, SLOT(slotDeleteShow()));
 
+    m_undoAction = new QAction(QIcon(":/back.png"), tr("&Undo"), this);
+    m_undoAction->setShortcut(QKeySequence::Undo);   // Ctrl/Cmd+Z
+    m_undoAction->setToolTip(tr("Undo the last timeline edit"));
+    m_undoAction->setEnabled(false);
+    connect(m_undoAction, SIGNAL(triggered(bool)), this, SLOT(slotUndo()));
+
     m_addTrackAction = new QAction(QIcon(":/edit_add.png"),
                                    tr("Add a &track or an existing function"), this);
     m_addTrackAction->setShortcut(QKeySequence("CTRL+N"));
@@ -398,6 +405,7 @@ void ShowManager::initToolbar()
     m_toolbar->addAction(m_addVideoAction);
 
     m_toolbar->addSeparator();
+    m_toolbar->addAction(m_undoAction);
     m_toolbar->addAction(m_copyAction);
     m_toolbar->addAction(m_pasteAction);
     m_toolbar->addAction(m_deleteAction);
@@ -574,6 +582,10 @@ void ShowManager::slotShowsComboChanged(int idx)
     if (m_selectedShowIndex != idx)
     {
         m_selectedShowIndex = idx;
+        // Undo history is per-show; switching shows starts fresh.
+        m_undoStack.clear();
+        if (m_undoAction != NULL)
+            m_undoAction->setEnabled(false);
         hideRightEditor();
         updateMultiTrackView();
     }
@@ -785,6 +797,120 @@ void ShowManager::updateShowControls()
         m_deleteShowAction->setEnabled(hasShow);
     if (m_addTrackAction != NULL)
         m_addTrackAction->setEnabled(hasShow);
+}
+
+/*********************************************************************
+ * Undo (coarse whole-timeline snapshots)
+ *********************************************************************/
+
+ShowManager::TimelineSnapshot ShowManager::captureSnapshot() const
+{
+    TimelineSnapshot snap;
+    if (m_show == NULL)
+        return snap;
+
+    foreach (Track *track, m_show->tracks())
+    {
+        TrackSnapshot ts;
+        ts.name = track->name();
+        ts.mute = track->isMute();
+        ts.color = track->color();
+        ts.sceneID = track->getSceneID();
+        foreach (ShowFunction *sf, track->showFunctions())
+        {
+            SFSnapshot fs;
+            fs.functionID = sf->functionID();
+            fs.startTime = sf->startTime();
+            fs.duration = sf->duration();
+            fs.color = sf->color();
+            ts.funcs.append(fs);
+        }
+        snap.tracks.append(ts);
+    }
+    snap.markers = m_show->markers();
+    return snap;
+}
+
+void ShowManager::pushUndoSnapshot()
+{
+    if (m_show == NULL)
+        return;
+
+    m_undoStack.append(captureSnapshot());
+    // Keep only the last handful of changes.
+    const int kMaxUndo = 25;
+    while (m_undoStack.count() > kMaxUndo)
+        m_undoStack.removeFirst();
+
+    if (m_undoAction != NULL)
+        m_undoAction->setEnabled(true);
+}
+
+void ShowManager::restoreSnapshot(const TimelineSnapshot &snap)
+{
+    if (m_show == NULL)
+        return;
+
+    // The current selection/editor point into objects we're about to delete.
+    hideRightEditor();
+    showSceneEditor(NULL);
+    m_currentTrack = NULL;
+    m_currentScene = NULL;
+
+    // Tear down the current tracks (removeTrack deletes the Track + its
+    // ShowFunctions). Iterate over a copied id list — tracks() is live.
+    QList<quint32> ids;
+    foreach (Track *t, m_show->tracks())
+        ids.append(t->id());
+    foreach (quint32 id, ids)
+        m_show->removeTrack(id);
+
+    // Rebuild tracks + their placed functions.
+    foreach (const TrackSnapshot &ts, snap.tracks)
+    {
+        Track *track = new Track(ts.sceneID);
+        track->setName(ts.name);
+        track->setMute(ts.mute);
+        track->setColor(ts.color);
+        m_show->addTrack(track);
+        foreach (const SFSnapshot &fs, ts.funcs)
+        {
+            ShowFunction *sf = track->createShowFunction(fs.functionID);
+            sf->setStartTime(fs.startTime);
+            sf->setDuration(fs.duration);
+            sf->setColor(fs.color);
+        }
+    }
+
+    // Replace markers.
+    const QList<quint32> curKeys = m_show->markers().keys();
+    foreach (quint32 k, curKeys)
+        m_show->removeMarker(k);
+    QMapIterator<quint32, ShowMarker> mit(snap.markers);
+    while (mit.hasNext())
+    {
+        mit.next();
+        m_show->setMarker(mit.key(), mit.value().end, mit.value().label, mit.value().color);
+    }
+
+    m_doc->setModified();
+    updateMultiTrackView();
+}
+
+void ShowManager::slotUndo()
+{
+    if (m_undoStack.isEmpty() || m_show == NULL)
+        return;
+
+    // Don't disturb a live playback with a structural rebuild.
+    if (m_show->isRunning())
+        m_show->stopAndWait();
+
+    TimelineSnapshot snap = m_undoStack.takeLast();
+    restoreSnapshot(snap);
+
+    if (m_undoAction != NULL)
+        m_undoAction->setEnabled(m_undoStack.isEmpty() == false);
 }
 
 void ShowManager::slotAddItem()
@@ -1609,6 +1735,8 @@ void ShowManager::slotFunctionDropped(quint32 funcID, quint32 startTime, Track *
     if (f->id() == m_show->id() || f->contains(m_show->id()))
         return;
 
+    pushUndoSnapshot();
+
     // No track under the drop => create a fresh track for it.
     if (track == NULL)
     {
@@ -1704,6 +1832,7 @@ void ShowManager::slotMarkerAddRequested(quint32 time)
     static const char *palette[] = { "#e0a820", "#4a90d9", "#5aa469", "#c0504d",
                                      "#8e6fb0", "#3fa8a0", "#d07030" };
     int idx = m_show->markers().count() % 7;
+    pushUndoSnapshot();
     m_show->setMarker(time, end, label.trimmed(), QColor(palette[idx]));
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
@@ -1719,6 +1848,7 @@ void ShowManager::slotMarkerEditRequested(quint32 time)
                         tr("Marker label:"), QLineEdit::Normal, m.label, &ok);
     if (ok == false)
         return;
+    pushUndoSnapshot();
     m_show->setMarker(time, m.end, label.trimmed(), m.color); // empty label removes it
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
@@ -1729,6 +1859,7 @@ void ShowManager::slotMarkerRelabel(quint32 time, QString label)
     if (m_show == NULL || time == UINT_MAX)
         return;
     ShowMarker m = m_show->markers().value(time);
+    pushUndoSnapshot();
     // Empty label removes the marker (consistent with setMarker semantics).
     m_show->setMarker(time, m.end, label, m.color);
     m_showview->setMarkers(m_show->markers());
@@ -1744,6 +1875,7 @@ void ShowManager::slotMarkerColorRequested(quint32 time)
                                       this, tr("Marker Colour"));
     if (c.isValid() == false)
         return;
+    pushUndoSnapshot();
     m_show->setMarker(time, m.end, m.label, c);
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
@@ -1753,6 +1885,7 @@ void ShowManager::slotMarkerDeleteRequested(quint32 time)
 {
     if (m_show == NULL || time == UINT_MAX)
         return;
+    pushUndoSnapshot();
     m_show->removeMarker(time);
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
@@ -1763,6 +1896,7 @@ void ShowManager::slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 ne
 {
     if (m_show == NULL || oldStart == UINT_MAX || label.isEmpty())
         return;
+    pushUndoSnapshot();
     m_show->removeMarker(oldStart);
     m_show->setMarker(newStart, newEnd, label, color);
     m_showview->setMarkers(m_show->markers());
@@ -1774,6 +1908,7 @@ void ShowManager::slotNewTrackRequested()
     if (m_show == NULL || m_doc->isShowLocked())
         return;
 
+    pushUndoSnapshot();
     Track *track = new Track();
     track->setName(tr("Track %1").arg(m_show->tracks().count() + 1));
     m_show->addTrack(track);
@@ -1963,6 +2098,10 @@ void ShowManager::slotShowItemMoved(ShowItem *item, quint32 time, bool moved)
     if (item == NULL)
         return;
 
+    // Snapshot before a real reposition so Ctrl-Z can put it back.
+    if (moved)
+        pushUndoSnapshot();
+
     quint32 fid = item->functionID();
     Function *f = m_doc->function(fid);
     if (f == NULL)
@@ -2141,7 +2280,10 @@ void ShowManager::slotTrackDoubleClicked(Track *track)
 void ShowManager::slotTrackMoved(Track *track, int direction)
 {
     if (m_show != NULL)
+    {
+        pushUndoSnapshot();
         m_show->moveTrack(track, direction);
+    }
     updateMultiTrackView();
     m_doc->setModified();
 }
@@ -2171,6 +2313,7 @@ void ShowManager::slotTrackDelete(Track *track)
                               QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
         return;
 
+    pushUndoSnapshot();
     if (m_currentTrack == track)
         m_currentTrack = NULL;
     m_show->removeTrack(track->id());
@@ -2238,6 +2381,7 @@ void ShowManager::slotShowItemStartTimeChanged(ShowItem *item, int msec)
 
     if (item->isLocked() == false)
     {
+        pushUndoSnapshot();
         item->setStartTime(msec);
         item->setPos(m_showview->getPositionFromTime(msec), item->y());
         m_doc->setModified();
@@ -2249,6 +2393,7 @@ void ShowManager::slotShowItemDurationChanged(ShowItem *item, int msec, bool str
     if (item == NULL)
         return;
 
+    pushUndoSnapshot();
     item->setDuration(msec, stretch);
     m_doc->setModified();
 }

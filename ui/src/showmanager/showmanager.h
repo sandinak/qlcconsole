@@ -198,6 +198,8 @@ protected slots:
     void slotRenameShow();
     /** Delete the current show (with confirmation). */
     void slotDeleteShow();
+    /** Undo the last timeline edit (Ctrl-Z). */
+    void slotUndo();
 
     void slotAddItem();
     void slotAddSequence();
@@ -291,6 +293,45 @@ private:
     /** Enable/disable the show-scoped toolbar actions (rename/delete show, add
      *  track, …) based on whether a show currently exists. */
     void updateShowControls();
+
+    /*********************************************************************
+     * Undo (coarse whole-timeline snapshots)
+     *********************************************************************/
+private:
+    /** One ShowFunction placement on a track. */
+    struct SFSnapshot
+    {
+        quint32 functionID;
+        quint32 startTime;
+        quint32 duration;
+        QColor  color;
+    };
+    /** One track's identity + its placed functions. */
+    struct TrackSnapshot
+    {
+        QString name;
+        bool    mute;
+        QColor  color;
+        quint32 sceneID;
+        QList<SFSnapshot> funcs;
+    };
+    /** The whole timeline of the current show (tracks + markers). */
+    struct TimelineSnapshot
+    {
+        QList<TrackSnapshot> tracks;
+        QMap<quint32, ShowMarker> markers;
+    };
+
+    /** Capture the current show's timeline. */
+    TimelineSnapshot captureSnapshot() const;
+    /** Rebuild the current show's timeline from a snapshot + refresh the view. */
+    void restoreSnapshot(const TimelineSnapshot &snap);
+    /** Push a pre-edit snapshot onto the undo stack (bounded). Call at the TOP
+     *  of a mutating slot, before it changes the model. No-op if no show. */
+    void pushUndoSnapshot();
+
+    QList<TimelineSnapshot> m_undoStack;
+    QAction *m_undoAction;
 };
 
 /** @} */
