@@ -794,11 +794,13 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         QMenu mmenu;
         QAction *addAct = mmenu.addAction(tr("Add marker here…"));
         QAction *renAct = NULL;
+        QAction *colAct = NULL;
         QAction *delAct = NULL;
         if (hit != UINT_MAX)
         {
             mmenu.addSeparator();
             renAct = mmenu.addAction(tr("Rename marker…"));
+            colAct = mmenu.addAction(tr("Change colour…"));
             delAct = mmenu.addAction(tr("Delete marker"));
         }
         QAction *chosen = mmenu.exec(event->globalPos());
@@ -806,6 +808,8 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
             emit markerAddRequested(startTime);
         else if (chosen != NULL && chosen == renAct)
             emit markerEditRequested(hit);
+        else if (chosen != NULL && chosen == colAct)
+            emit markerColorRequested(hit);
         else if (chosen != NULL && chosen == delAct)
             emit markerDeleteRequested(hit);
         return;
@@ -822,7 +826,7 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         emit addAtRequested(startTime, track);
 }
 
-void MultiTrackView::setMarkers(const QMap<quint32, QPair<quint32, QString> > &markers)
+void MultiTrackView::setMarkers(const QMap<quint32, ShowMarker> &markers)
 {
     m_markers = markers;
     if (viewport() != NULL)
@@ -834,12 +838,12 @@ quint32 MultiTrackView::markerAt(qreal sceneX) const
     // The marker whose [start, end] region (padded a little for point markers)
     // contains sceneX; nearest start wins on overlap.
     quint32 best = UINT_MAX;
-    QMapIterator<quint32, QPair<quint32, QString> > it(m_markers);
+    QMapIterator<quint32, ShowMarker> it(m_markers);
     while (it.hasNext())
     {
         it.next();
         qreal sx = getPositionFromTime(it.key());
-        qreal ex = getPositionFromTime(it.value().first);
+        qreal ex = getPositionFromTime(it.value().end);
         if (sceneX >= sx - 4 && sceneX <= ex + 4)
             best = it.key();
     }
@@ -850,18 +854,6 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsView::drawForeground(painter, rect);
 
-    // Collect the markers to draw (the map is never mutated by dragging; we
-    // just substitute the dragged marker's live geometry here).
-    QMap<quint32, QPair<quint32, QString> > toDraw = m_markers;
-    if (m_markerDragMode != 0)
-    {
-        toDraw.remove(m_markerOrigStart);
-        toDraw.insert(m_dragStart, qMakePair(m_dragEnd, m_dragLabel));
-    }
-
-    if (toDraw.isEmpty())
-        return;
-
     QFont f = painter->font();
     f.setPixelSize(11);
     f.setBold(true);
@@ -870,33 +862,55 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
     const qreal laneTop = HEADER_HEIGHT;
     const qreal bottom = rect.bottom();
 
-    QMapIterator<quint32, QPair<quint32, QString> > it(toDraw);
+    // Row label ("MARKERS") pinned to the left header column so it's always
+    // clear what this lane is.
+    qreal leftX = mapToScene(0, 0).x();
+    painter->fillRect(QRectF(leftX, laneTop, TRACK_WIDTH, MARKER_LANE_HEIGHT),
+                      QColor(48, 61, 72));
+    painter->setPen(QPen(QColor(200, 200, 200), 1));
+    painter->drawText(QRectF(leftX + 6, laneTop, TRACK_WIDTH - 8, MARKER_LANE_HEIGHT),
+                      Qt::AlignVCenter | Qt::AlignLeft, tr("MARKERS"));
+
+    // Collect the markers to draw (the map is never mutated by dragging; we
+    // just substitute the dragged marker's live geometry here).
+    QMap<quint32, ShowMarker> toDraw = m_markers;
+    if (m_markerDragMode != 0)
+    {
+        toDraw.remove(m_markerOrigStart);
+        toDraw.insert(m_dragStart, ShowMarker(m_dragEnd, m_dragLabel, m_dragColor));
+    }
+
+    QMapIterator<quint32, ShowMarker> it(toDraw);
     while (it.hasNext())
     {
         it.next();
         qreal sx = getPositionFromTime(it.key());
-        qreal ex = getPositionFromTime(it.value().first);
+        qreal ex = getPositionFromTime(it.value().end);
         if (ex < sx + 4)
             ex = sx + 4; // keep zero-length markers visible
         if (ex < rect.left() || sx > rect.right() || ex < TRACK_WIDTH)
             continue;
         sx = qMax<qreal>(sx, TRACK_WIDTH);
 
+        QColor col = it.value().color.isValid() ? it.value().color : QColor(224, 168, 32);
+
         // Region band in the lane + boundary lines through the tracks.
         painter->setPen(Qt::NoPen);
-        painter->setBrush(QColor(224, 168, 32, 210));
+        painter->setBrush(col);
         painter->drawRect(QRectF(sx, laneTop + 1, ex - sx, MARKER_LANE_HEIGHT - 2));
-        painter->setPen(QPen(QColor(255, 210, 80, 110), 1));
+        QColor line = col.lighter(130);
+        line.setAlpha(120);
+        painter->setPen(QPen(line, 1));
         painter->drawLine(QPointF(sx, TRACKS_TOP), QPointF(sx, bottom));
         painter->drawLine(QPointF(ex, TRACKS_TOP), QPointF(ex, bottom));
-        // subtle fill across the region through the tracks
-        painter->fillRect(QRectF(sx, TRACKS_TOP, ex - sx, bottom - TRACKS_TOP),
-                          QColor(255, 210, 80, 16));
+        QColor fill = col;
+        fill.setAlpha(16);
+        painter->fillRect(QRectF(sx, TRACKS_TOP, ex - sx, bottom - TRACKS_TOP), fill);
 
-        // Label clipped to the band.
-        painter->setPen(QPen(Qt::black, 1));
+        // Label clipped to the band, in a contrasting colour.
+        painter->setPen(QPen(col.lightnessF() > 0.6 ? Qt::black : Qt::white, 1));
         QRectF textRect(sx + 4, laneTop + 1, (ex - sx) - 6, MARKER_LANE_HEIGHT - 2);
-        painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, it.value().second);
+        painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, it.value().label);
     }
 }
 
@@ -911,7 +925,8 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
         quint32 key = markerAt(sp.x());
         if (key != UINT_MAX)
         {
-            quint32 end = m_markers.value(key).first;
+            ShowMarker m = m_markers.value(key);
+            quint32 end = m.end;
             qreal sx = getPositionFromTime(key);
             qreal ex = getPositionFromTime(end);
 
@@ -925,7 +940,8 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
             m_markerOrigStart = key;
             m_dragStart = key;
             m_dragEnd = end;
-            m_dragLabel = m_markers.value(key).second;
+            m_dragLabel = m.label;
+            m_dragColor = m.color;
             m_markerGrabDx = sp.x() - sx;
             viewport()->update();
             e->accept();

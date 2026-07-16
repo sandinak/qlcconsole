@@ -385,10 +385,10 @@ void Show_Test::markers()
     Show s2(m_doc);
     QVERIFY(s2.loadXML(xmlReader) == true);
     QCOMPARE(s2.markers().count(), 3);
-    QCOMPARE(s2.markers().value(0).second, QString("Intro"));
-    QCOMPARE(s2.markers().value(0).first, quint32(15000));
-    QCOMPARE(s2.markers().value(30000).second, QString("Verse 1"));
-    QCOMPARE(s2.markers().value(60000).first, quint32(90000));
+    QCOMPARE(s2.markers().value(0).label, QString("Intro"));
+    QCOMPARE(s2.markers().value(0).end, quint32(15000));
+    QCOMPARE(s2.markers().value(30000).label, QString("Verse 1"));
+    QCOMPARE(s2.markers().value(60000).end, quint32(90000));
 }
 
 

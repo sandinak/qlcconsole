@@ -24,12 +24,23 @@
 #include <QList>
 #include <QSet>
 #include <QMap>
+#include <QColor>
 
 #include "function.h"
 #include "track.h"
 
 class QXmlStreamReader;
 class ShowRunner;
+
+/** A timeline section marker: a labelled, coloured [start, end] region. */
+struct ShowMarker
+{
+    quint32 end;
+    QString label;
+    QColor color;
+    ShowMarker(quint32 e = 0, const QString &l = QString(), const QColor &c = QColor())
+        : end(e), label(l), color(c) {}
+};
 
 /** @addtogroup engine_functions Functions
  * @{
@@ -163,18 +174,19 @@ protected:
      * Markers (timeline section labels)
      *********************************************************************/
 public:
-    /** Add or update a section marker spanning [start, end] ms with a label,
-     *  keyed by its start time. An empty label removes it. */
-    void setMarker(quint32 start, quint32 end, const QString &label);
+    /** Add or update a section marker spanning [start, end] ms with a label
+     *  and colour, keyed by its start time. An empty label removes it. */
+    void setMarker(quint32 start, quint32 end, const QString &label,
+                   const QColor &color = QColor());
 
     /** Remove the marker whose start time is the given value, if any. */
     void removeMarker(quint32 start);
 
-    /** All markers as start(ms) -> (end(ms), label), sorted by start. */
-    QMap<quint32, QPair<quint32, QString> > markers() const;
+    /** All markers as start(ms) -> ShowMarker, sorted by start. */
+    QMap<quint32, ShowMarker> markers() const;
 
 private:
-    QMap<quint32, QPair<quint32, QString> > m_markers;
+    QMap<quint32, ShowMarker> m_markers;
 
     /*********************************************************************
      * Save & Load

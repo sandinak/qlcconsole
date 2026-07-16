@@ -26,6 +26,7 @@
 #include <QSlider>
 #include <QWidget>
 #include <QMap>
+#include <QColor>
 
 #include "rgbmatrixitem.h"
 #include "collectionitem.h"
@@ -56,8 +57,8 @@ public:
     /** Set the multitrack view size in pixels */
     void setViewSize(int width, int height);
 
-    /** Provide the section markers (start ms -> (end ms, label)) to render. */
-    void setMarkers(const QMap<quint32, QPair<quint32, QString> > &markers);
+    /** Provide the section markers (start ms -> ShowMarker) to render. */
+    void setMarkers(const QMap<quint32, ShowMarker> &markers);
 
     /** Start-key of the marker region under the given scene X, else UINT_MAX. */
     quint32 markerAt(qreal sceneX) const;
@@ -181,8 +182,8 @@ private:
     bool m_snapToGrid;
     /** Master editable gate (false = timeline read-only) */
     bool m_editable;
-    /** Section markers: start (ms) -> (end (ms), label) */
-    QMap<quint32, QPair<quint32, QString> > m_markers;
+    /** Section markers: start (ms) -> ShowMarker */
+    QMap<quint32, ShowMarker> m_markers;
 
     /** Marker drag state (in the lane): 0=none 1=move 2=resizeLeft 3=resizeRight */
     int m_markerDragMode;
@@ -190,6 +191,7 @@ private:
     quint32 m_dragStart;       // working start during drag
     quint32 m_dragEnd;         // working end during drag
     QString m_dragLabel;       // working label during drag
+    QColor m_dragColor;        // working colour during drag
     qreal m_markerGrabDx;      // px between grab point and marker start (move)
 
 protected:
@@ -248,6 +250,7 @@ signals:
     void markerAddRequested(quint32 time);
     void markerEditRequested(quint32 time);
     void markerDeleteRequested(quint32 time);
+    void markerColorRequested(quint32 time);
     /** A marker was dragged/resized: replace oldStart with [newStart,newEnd]. */
     void markerMovedRequested(quint32 oldStart, quint32 newStart, quint32 newEnd);
 

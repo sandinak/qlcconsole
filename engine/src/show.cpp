@@ -39,6 +39,7 @@
 #define KXMLQLCShowMarkerTime   QStringLiteral("Time")
 #define KXMLQLCShowMarkerStart  QStringLiteral("Start")
 #define KXMLQLCShowMarkerEnd    QStringLiteral("End")
+#define KXMLQLCShowMarkerColor  QStringLiteral("Color")
 
 /*****************************************************************************
  * Initialization
@@ -388,14 +389,16 @@ bool Show::saveXML(QXmlStreamWriter *doc) const
     doc->writeEndElement();
 
     // Timeline markers (section regions)
-    QMapIterator<quint32, QPair<quint32, QString> > mit(m_markers);
+    QMapIterator<quint32, ShowMarker> mit(m_markers);
     while (mit.hasNext())
     {
         mit.next();
         doc->writeStartElement(KXMLQLCShowMarker);
         doc->writeAttribute(KXMLQLCShowMarkerStart, QString::number(mit.key()));
-        doc->writeAttribute(KXMLQLCShowMarkerEnd, QString::number(mit.value().first));
-        doc->writeCharacters(mit.value().second);
+        doc->writeAttribute(KXMLQLCShowMarkerEnd, QString::number(mit.value().end));
+        if (mit.value().color.isValid())
+            doc->writeAttribute(KXMLQLCShowMarkerColor, mit.value().color.name());
+        doc->writeCharacters(mit.value().label);
         doc->writeEndElement();
     }
 
@@ -450,9 +453,12 @@ bool Show::loadXML(QXmlStreamReader &root)
                 start = a.value(KXMLQLCShowMarkerTime).toString().toUInt();
                 end = start;
             }
+            QColor color;
+            if (a.hasAttribute(KXMLQLCShowMarkerColor))
+                color = QColor(a.value(KXMLQLCShowMarkerColor).toString());
             QString label = root.readElementText();
             if (label.isEmpty() == false)
-                m_markers.insert(start, qMakePair(end < start ? start : end, label));
+                m_markers.insert(start, ShowMarker(end < start ? start : end, label, color));
         }
         else if (root.name() == KXMLQLCTrack)
         {
@@ -564,12 +570,12 @@ quint32 Show::timecodeOffset() const
  * Markers
  *********************************************************************/
 
-void Show::setMarker(quint32 start, quint32 end, const QString &label)
+void Show::setMarker(quint32 start, quint32 end, const QString &label, const QColor &color)
 {
     if (label.isEmpty())
         m_markers.remove(start);
     else
-        m_markers.insert(start, qMakePair(end < start ? start : end, label));
+        m_markers.insert(start, ShowMarker(end < start ? start : end, label, color));
 }
 
 void Show::removeMarker(quint32 start)
@@ -577,7 +583,7 @@ void Show::removeMarker(quint32 start)
     m_markers.remove(start);
 }
 
-QMap<quint32, QPair<quint32, QString> > Show::markers() const
+QMap<quint32, ShowMarker> Show::markers() const
 {
     return m_markers;
 }

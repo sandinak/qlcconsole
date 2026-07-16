@@ -18,6 +18,7 @@
 */
 
 #include <QInputDialog>
+#include <QColorDialog>
 #include <QToolButton>
 #include <QLineEdit>
 #include <QMenu>
@@ -176,6 +177,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotMarkerEditRequested(quint32)));
     connect(m_showview, SIGNAL(markerDeleteRequested(quint32)),
             this, SLOT(slotMarkerDeleteRequested(quint32)));
+    connect(m_showview, SIGNAL(markerColorRequested(quint32)),
+            this, SLOT(slotMarkerColorRequested(quint32)));
     connect(m_showview, SIGNAL(markerMovedRequested(quint32,quint32,quint32)),
             this, SLOT(slotMarkerMoved(quint32,quint32,quint32)));
     connect(m_showview, SIGNAL(itemDroppedBelowTracks(ShowItem*)),
@@ -1512,7 +1515,7 @@ void ShowManager::slotMarkerAddRequested(quint32 time)
 
     // Default the section to run until the next marker, else 15 s.
     quint32 end = time + 15000;
-    QMapIterator<quint32, QPair<quint32, QString> > it(m_show->markers());
+    QMapIterator<quint32, ShowMarker> it(m_show->markers());
     while (it.hasNext())
     {
         it.next();
@@ -1520,7 +1523,11 @@ void ShowManager::slotMarkerAddRequested(quint32 time)
             end = it.key();
     }
 
-    m_show->setMarker(time, end, label.trimmed());
+    // Give new markers a colour cycled from a small palette.
+    static const char *palette[] = { "#e0a820", "#4a90d9", "#5aa469", "#c0504d",
+                                     "#8e6fb0", "#3fa8a0", "#d07030" };
+    int idx = m_show->markers().count() % 7;
+    m_show->setMarker(time, end, label.trimmed(), QColor(palette[idx]));
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
 }
@@ -1529,13 +1536,27 @@ void ShowManager::slotMarkerEditRequested(quint32 time)
 {
     if (m_show == NULL || time == UINT_MAX)
         return;
-    QPair<quint32, QString> m = m_show->markers().value(time);
+    ShowMarker m = m_show->markers().value(time);
     bool ok = false;
     QString label = QInputDialog::getText(this, tr("Rename Marker"),
-                        tr("Marker label:"), QLineEdit::Normal, m.second, &ok);
+                        tr("Marker label:"), QLineEdit::Normal, m.label, &ok);
     if (ok == false)
         return;
-    m_show->setMarker(time, m.first, label.trimmed()); // empty label removes it
+    m_show->setMarker(time, m.end, label.trimmed(), m.color); // empty label removes it
+    m_showview->setMarkers(m_show->markers());
+    m_doc->setModified();
+}
+
+void ShowManager::slotMarkerColorRequested(quint32 time)
+{
+    if (m_show == NULL || time == UINT_MAX)
+        return;
+    ShowMarker m = m_show->markers().value(time);
+    QColor c = QColorDialog::getColor(m.color.isValid() ? m.color : QColor("#e0a820"),
+                                      this, tr("Marker Colour"));
+    if (c.isValid() == false)
+        return;
+    m_show->setMarker(time, m.end, m.label, c);
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
 }
@@ -1553,11 +1574,11 @@ void ShowManager::slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 ne
 {
     if (m_show == NULL || oldStart == UINT_MAX)
         return;
-    QString label = m_show->markers().value(oldStart).second;
-    if (label.isEmpty())
+    ShowMarker m = m_show->markers().value(oldStart);
+    if (m.label.isEmpty())
         return;
     m_show->removeMarker(oldStart);
-    m_show->setMarker(newStart, newEnd, label);
+    m_show->setMarker(newStart, newEnd, m.label, m.color);
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
 }
