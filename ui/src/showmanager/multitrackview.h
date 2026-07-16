@@ -93,6 +93,13 @@ public:
      *  given track */
     void deleteShowItem(Track *track, ShowFunction *sf);
 
+    /** Master read-only gate for the whole timeline (e.g. the show lock). */
+    void setEditable(bool editable);
+    bool isEditable() const { return m_editable; }
+
+    /** Recompute per-item editability from the master gate + per-track locks. */
+    void updateItemsEditability();
+
     /** Set the given track to active state */
     void activateTrack(Track *track);
 
@@ -165,6 +172,8 @@ private:
     QList <TrackItem *> m_tracks;
     QList <ShowItem *>m_items;
     bool m_snapToGrid;
+    /** Master editable gate (false = timeline read-only) */
+    bool m_editable;
 
 protected:
     /** Paints the time-division grid behind all items so the divisions are
@@ -192,6 +201,7 @@ protected slots:
     void slotTrackDoubleClicked(TrackItem *track);
     void slotTrackSoloFlagChanged(TrackItem*, bool);
     void slotTrackMuteFlagChanged(TrackItem*, bool);
+    void slotTrackLockFlagChanged(TrackItem*, bool);
     void slotViewScrolled(int);
 
     void slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *item);

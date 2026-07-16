@@ -30,6 +30,7 @@
 #define KXMLQLCTrackName      QStringLiteral("Name")
 #define KXMLQLCTrackSceneID   QStringLiteral("SceneID")
 #define KXMLQLCTrackIsMute    QStringLiteral("isMute")
+#define KXMLQLCTrackIsLocked  QStringLiteral("Locked")
 
 #define KXMLQLCTrackFunctions QStringLiteral("Functions")
 
@@ -39,6 +40,7 @@ Track::Track(quint32 sceneID, QObject *parent)
     , m_showId(Function::invalidId())
     , m_sceneID(sceneID)
     , m_isMute(false)
+    , m_isLocked(false)
 {
     setName(tr("New Track"));
 }
@@ -123,6 +125,21 @@ bool Track::isMute()
     return m_isMute;
 }
 
+void Track::setLocked(bool locked)
+{
+    if (m_isLocked == locked)
+        return;
+
+    m_isLocked = locked;
+
+    emit lockedChanged(locked);
+}
+
+bool Track::isLocked() const
+{
+    return m_isLocked;
+}
+
 /*********************************************************************
  * Sequences
  *********************************************************************/
@@ -188,6 +205,8 @@ bool Track::saveXML(QXmlStreamWriter *doc)
     if (m_sceneID != Scene::invalidId())
         doc->writeAttribute(KXMLQLCTrackSceneID, QString::number(m_sceneID));
     doc->writeAttribute(KXMLQLCTrackIsMute, QString::number(m_isMute));
+    if (m_isLocked)
+        doc->writeAttribute(KXMLQLCTrackIsLocked, QString::number(1));
 
     /* Save the list of Functions if any is present */
     if (m_functions.isEmpty() == false)
@@ -243,6 +262,9 @@ bool Track::loadXML(QXmlStreamReader &root)
         return false;
     }
     m_isMute = mute;
+
+    if (attrs.hasAttribute(KXMLQLCTrackIsLocked))
+        m_isLocked = (attrs.value(KXMLQLCTrackIsLocked).toString().toInt() != 0);
 
     /* look for show functions */
     while (root.readNextStartElement())

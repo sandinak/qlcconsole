@@ -129,6 +129,23 @@ private:
     bool m_isMute;
 
     /*********************************************************************
+     * Lock state
+     *********************************************************************/
+public:
+    /** Set the lock state of this track (locked = read-only on the timeline) */
+    void setLocked(bool locked);
+
+    /** Return the lock state of the track */
+    bool isLocked() const;
+
+signals:
+    void lockedChanged(bool locked);
+
+private:
+    /** Flag to lock/unlock this track (read-only on the timeline) */
+    bool m_isLocked;
+
+    /*********************************************************************
      * Functions
      *********************************************************************/
 public:

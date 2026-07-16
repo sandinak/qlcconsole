@@ -89,6 +89,7 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
     connect(horizontalScrollBar(), SIGNAL(valueChanged(int)), this, SLOT(slotViewScrolled(int)));
 
     m_vdivider = NULL;
+    m_editable = true;
     // draw horizontal and vertical lines for tracks
     updateTracksDividers();
 
@@ -208,6 +209,31 @@ void MultiTrackView::addTrack(Track *track)
             this, SIGNAL(trackDelete(Track*)));
     connect(trackItem, SIGNAL(itemRequestNewTrack()),
             this, SIGNAL(newTrackRequested()));
+    connect(trackItem, SIGNAL(itemLockChanged(TrackItem*,bool)),
+            this, SLOT(slotTrackLockFlagChanged(TrackItem*,bool)));
+}
+
+void MultiTrackView::slotTrackLockFlagChanged(TrackItem *, bool)
+{
+    // A track's lock changed: refresh which items are editable.
+    updateItemsEditability();
+}
+
+void MultiTrackView::setEditable(bool editable)
+{
+    m_editable = editable;
+    updateItemsEditability();
+}
+
+void MultiTrackView::updateItemsEditability()
+{
+    foreach (ShowItem *item, m_items)
+    {
+        int idx = item->getTrackIndex();
+        bool trackLocked = (idx >= 0 && idx < m_tracks.count())
+                           ? m_tracks.at(idx)->getTrack()->isLocked() : false;
+        item->setEditable(m_editable && !trackLocked);
+    }
 }
 
 void MultiTrackView::moveItemToTrack(ShowItem *item, Track *dest)
@@ -258,6 +284,9 @@ void MultiTrackView::setItemCommonProperties(ShowItem *item, ShowFunction *func,
             this, SLOT(slotAlignToCursor(ShowItem*)));
     m_scene->addItem(item);
     m_items.append(item);
+    bool trackLocked = (trackNum >= 0 && trackNum < m_tracks.count())
+                       ? m_tracks.at(trackNum)->getTrack()->isLocked() : false;
+    item->setEditable(m_editable && !trackLocked);
     int new_scene_width = item->x() + item->getWidth();
     if (new_scene_width > VIEW_DEFAULT_WIDTH && new_scene_width > m_scene->width())
         setViewSize(new_scene_width + 500, VIEW_DEFAULT_HEIGHT);
@@ -652,7 +681,7 @@ void MultiTrackView::drawBackground(QPainter *painter, const QRectF &rect)
 
 void MultiTrackView::dragEnterEvent(QDragEnterEvent *event)
 {
-    if (event->mimeData()->hasFormat(SM_FUNCTION_MIME))
+    if (m_editable && event->mimeData()->hasFormat(SM_FUNCTION_MIME))
     {
         event->setDropAction(Qt::CopyAction);
         event->accept();
@@ -663,7 +692,7 @@ void MultiTrackView::dragEnterEvent(QDragEnterEvent *event)
 
 void MultiTrackView::dragMoveEvent(QDragMoveEvent *event)
 {
-    if (event->mimeData()->hasFormat(SM_FUNCTION_MIME))
+    if (m_editable && event->mimeData()->hasFormat(SM_FUNCTION_MIME))
     {
         event->setDropAction(Qt::CopyAction);
         event->accept();
@@ -674,7 +703,7 @@ void MultiTrackView::dragMoveEvent(QDragMoveEvent *event)
 
 void MultiTrackView::dropEvent(QDropEvent *event)
 {
-    if (!event->mimeData()->hasFormat(SM_FUNCTION_MIME))
+    if (m_editable == false || !event->mimeData()->hasFormat(SM_FUNCTION_MIME))
     {
         event->ignore();
         return;
@@ -696,6 +725,13 @@ void MultiTrackView::dropEvent(QDropEvent *event)
     int row = int((scenePos.y() - HEADER_HEIGHT) / TRACK_HEIGHT);
     if (row >= 0 && row < m_tracks.count())
         track = m_tracks.at(row)->getTrack();
+
+    // Don't drop onto a locked track.
+    if (track != NULL && track->isLocked())
+    {
+        event->ignore();
+        return;
+    }
 
     QByteArray data = event->mimeData()->data(SM_FUNCTION_MIME);
     QDataStream stream(&data, QIODevice::ReadOnly);
@@ -721,6 +757,10 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         QGraphicsView::contextMenuEvent(event);
         return;
     }
+
+    // Read-only timeline: no add/track menus.
+    if (m_editable == false)
+        return;
 
     QPointF scenePos = mapToScene(event->pos());
     if (scenePos.x() < TRACK_WIDTH)

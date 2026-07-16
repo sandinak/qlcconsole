@@ -94,6 +94,7 @@ signals:
     void itemMoveUpDown(Track *, int);
     void itemRequestDelete(Track *);
     void itemRequestNewTrack();
+    void itemLockChanged(TrackItem *, bool locked);
 
 private:
     QString m_name;
@@ -106,6 +107,8 @@ private:
     bool m_isMute;
     QRectF *m_soloRegion;
     bool m_isSolo;
+    QRectF *m_lockRegion;
+    bool m_isLocked;
 
     QAction *m_moveUp;
     QAction *m_moveDown;

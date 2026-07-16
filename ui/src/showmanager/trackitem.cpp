@@ -44,13 +44,16 @@ TrackItem::TrackItem(Track *track, int number)
     {
         m_name = m_track->name();
         m_isMute = m_track->isMute();
+        m_isLocked = m_track->isLocked();
         connect(m_track, SIGNAL(changed(quint32)), this, SLOT(slotTrackChanged(quint32)));
     }
     else
         m_name = QString("Track %1").arg(m_number + 1);
 
-    m_soloRegion = new QRectF(17.0, 10.0, 25.0, 16.0);
-    m_muteRegion = new QRectF(45.0, 10.0, 25.0, 16.0);
+    // Buttons left-to-right: Mute, Solo, Lock.
+    m_muteRegion = new QRectF(17.0, 10.0, 25.0, 16.0);
+    m_soloRegion = new QRectF(45.0, 10.0, 25.0, 16.0);
+    m_lockRegion = new QRectF(73.0, 10.0, 25.0, 16.0);
 
     m_moveUp = new QAction(QIcon(":/up.png"), tr("Move up"), this);
     connect(m_moveUp, SIGNAL(triggered()),
@@ -126,6 +129,14 @@ void TrackItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
         m_isMute = !m_isMute;
         emit itemMuteFlagChanged(this, m_isMute);
     }
+    if (m_lockRegion->contains(event->pos().toPoint()))
+    {
+        m_isLocked = !m_isLocked;
+        if (m_track != NULL)
+            m_track->setLocked(m_isLocked);
+        update();
+        emit itemLockChanged(this, m_isLocked);
+    }
     emit itemClicked(this);
 }
 
@@ -178,22 +189,31 @@ void TrackItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
         painter->setBrush(QBrush(QColor(129, 145, 160, 255)));
     painter->drawRoundedRect(1, 1, 10, 40, 2, 2);
 
+    painter->setFont(m_btnFont);
+
+    // draw mute button (leftmost)
+    if (m_isMute)
+        painter->setBrush(QBrush(QColor(255, 0, 0, 255)));
+    else
+        painter->setBrush(QBrush(QColor(129, 145, 160, 255)));
+    painter->drawRoundedRect(m_muteRegion->toRect(), 3.0, 3.0);
+    painter->drawText(25, 23, "M");
+
     // draw solo button
     if (m_isSolo)
         painter->setBrush(QBrush(QColor(255, 255, 0, 255)));
     else
         painter->setBrush(QBrush(QColor(129, 145, 160, 255)));
     painter->drawRoundedRect(m_soloRegion->toRect(), 3.0, 3.0);
-    painter->setFont(m_btnFont);
-    painter->drawText(25, 23, "S");
+    painter->drawText(53, 23, "S");
 
-    // draw mute button
-    if (m_isMute)
-        painter->setBrush(QBrush(QColor(255, 0, 0, 255)));
+    // draw lock button (right of Solo)
+    if (m_isLocked)
+        painter->setBrush(QBrush(QColor(255, 140, 0, 255)));
     else
         painter->setBrush(QBrush(QColor(129, 145, 160, 255)));
-    painter->drawRoundedRect(m_muteRegion->toRect(), 3.0, 3.0);
-    painter->drawText(51, 23, "M");
+    painter->drawRoundedRect(m_lockRegion->toRect(), 3.0, 3.0);
+    painter->drawText(81, 23, "L");
 
     // draw bound Scene indicator
     if (m_track->getSceneID() != Function::invalidId())

@@ -43,6 +43,7 @@ ShowItem::ShowItem(ShowFunction *function, QObject *)
     , m_function(function)
     , m_alignToCursor(NULL)
     , m_lockAction(NULL)
+    , m_editable(true)
     , m_resizeEdge(NoEdge)
     , m_resizeStartWidth(0)
 {
@@ -187,8 +188,22 @@ void ShowItem::setLocked(bool locked)
     m_locked = locked;
     if (m_function)
         m_function->setLocked(locked);
-    setFlag(QGraphicsItem::ItemIsMovable, !locked);
+    updateMovable();
     update();
+}
+
+void ShowItem::setEditable(bool editable)
+{
+    if (m_editable == editable)
+        return;
+    m_editable = editable;
+    updateMovable();
+    update();
+}
+
+void ShowItem::updateMovable()
+{
+    setFlag(QGraphicsItem::ItemIsMovable, m_editable && !m_locked);
 }
 
 bool ShowItem::isLocked() const
@@ -242,8 +257,9 @@ ShowItem::ResizeEdge ShowItem::edgeAt(qreal localX) const
 
 void ShowItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
-    // Begin a stretch-resize when pressing on a handle (unless locked).
-    if (m_locked == false && event->button() == Qt::LeftButton)
+    // Begin a stretch-resize when pressing on a handle (unless locked or the
+    // timeline is read-only via a track / master lock).
+    if (m_locked == false && m_editable && event->button() == Qt::LeftButton)
     {
         ResizeEdge e = edgeAt(event->pos().x());
         if (e != NoEdge)
@@ -324,10 +340,12 @@ void ShowItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 
 void ShowItem::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
 {
-    if (m_locked == false && edgeAt(event->pos().x()) != NoEdge)
+    if (m_locked == false && m_editable && edgeAt(event->pos().x()) != NoEdge)
         setCursor(Qt::SizeHorCursor);
-    else
+    else if (m_editable && m_locked == false)
         setCursor(Qt::OpenHandCursor);
+    else
+        setCursor(Qt::ArrowCursor);
     QGraphicsItem::hoverMoveEvent(event);
 }
 
@@ -388,8 +406,8 @@ void ShowItem::postPaint(QPainter *painter)
     painter->setPen(QPen(QColor(220, 220, 220, 255), 2));
     painter->drawText(QRect(3, 5, m_width - 5, 72), Qt::AlignLeft | Qt::TextWordWrap, functionName());
 
-    // Stretch handles at each end (hidden when locked).
-    if (m_locked == false && m_width > (EDGE_GRAB * 2))
+    // Stretch handles at each end (hidden when locked or read-only).
+    if (m_locked == false && m_editable && m_width > (EDGE_GRAB * 2))
     {
         int h = TRACK_HEIGHT - 3;
         painter->setPen(Qt::NoPen);

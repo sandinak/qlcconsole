@@ -219,6 +219,7 @@ protected slots:
     void slotAddAtRequested(quint32 startTime, Track *track);
     void slotNewTrackRequested();
     void slotItemDroppedBelowTracks(ShowItem *item);
+    void slotShowLockedChanged(bool locked);
     void slotToggleSnapToGrid(bool enable);
     void slotChangeSize(int width, int height);
     void slotStepSelectionChanged(int index);

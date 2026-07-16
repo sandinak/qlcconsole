@@ -183,6 +183,14 @@ public:
     virtual bool isLocked() const;
 
     /**
+     * @brief setEditable master/track read-only gate, separate from the
+     * per-item lock. When not editable the item can't be moved or resized and
+     * shows no stretch handles, but its own lock state is left untouched.
+     */
+    void setEditable(bool editable);
+    bool isEditable() const { return m_editable; }
+
+    /**
      * @brief setFunctionID set the QLC+ Function ID associated to this item
      *
      * @param id the Function unique ID
@@ -322,6 +330,10 @@ protected:
     /** Contextual menu actions */
     QAction *m_alignToCursor;
     QAction *m_lockAction;
+
+    /** Master/track read-only gate (separate from the per-item lock). */
+    bool m_editable;
+    void updateMovable();
 
     /** Stretch-handle resize state */
     enum ResizeEdge { NoEdge = 0, LeftEdge, RightEdge };

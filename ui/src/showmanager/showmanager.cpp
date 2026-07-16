@@ -191,6 +191,9 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     connect(m_doc, SIGNAL(clearing()), this, SLOT(slotDocClearing()));
     connect(m_doc, SIGNAL(functionRemoved(quint32)), this, SLOT(slotFunctionRemoved(quint32)));
     connect(m_doc, SIGNAL(loaded()), this, SLOT(slotDocLoaded()));
+    // Master show lock makes the whole timeline read-only.
+    connect(m_doc, SIGNAL(showLockedChanged(bool)), this, SLOT(slotShowLockedChanged(bool)));
+    m_showview->setEditable(m_doc->isShowLocked() == false);
 
     QSettings settings;
     QVariant var = settings.value(SETTINGS_HSPLITTER);
@@ -652,7 +655,7 @@ void ShowManager::slotAddShow()
 
 void ShowManager::slotAddItem()
 {
-    if (m_show == NULL)
+    if (m_show == NULL || m_doc->isShowLocked())
         return;
 
     FunctionSelection fs(this, m_doc);
@@ -1232,6 +1235,9 @@ void ShowManager::slotPaste()
 
 void ShowManager::slotDelete()
 {
+    if (m_doc->isShowLocked())
+        return;
+
     // find out if we're deleting a show item or a track
     bool isTrack = true;
     ShowItem *selectedItem = m_showview->getSelectedItem();
@@ -1387,7 +1393,11 @@ ShowFunction *ShowManager::addFunctionToTrack(Function *f, Track *track, quint32
 
 void ShowManager::slotFunctionDropped(quint32 funcID, quint32 startTime, Track *track)
 {
-    if (m_show == NULL)
+    if (m_show == NULL || m_doc->isShowLocked())
+        return;
+
+    // Don't drop onto a locked track.
+    if (track != NULL && track->isLocked())
         return;
 
     Function *f = m_doc->function(funcID);
@@ -1423,7 +1433,7 @@ void ShowManager::slotFunctionDropped(quint32 funcID, quint32 startTime, Track *
 
 void ShowManager::slotAddAtRequested(quint32 startTime, Track *track)
 {
-    if (m_show == NULL)
+    if (m_show == NULL || m_doc->isShowLocked())
         return;
 
     FunctionSelection fs(this, m_doc);
@@ -1450,9 +1460,14 @@ void ShowManager::slotAddAtRequested(quint32 startTime, Track *track)
     slotFunctionDropped(ids.first(), startTime, track);
 }
 
+void ShowManager::slotShowLockedChanged(bool locked)
+{
+    m_showview->setEditable(locked == false);
+}
+
 void ShowManager::slotNewTrackRequested()
 {
-    if (m_show == NULL)
+    if (m_show == NULL || m_doc->isShowLocked())
         return;
 
     Track *track = new Track();
@@ -1467,7 +1482,7 @@ void ShowManager::slotNewTrackRequested()
 
 void ShowManager::slotItemDroppedBelowTracks(ShowItem *item)
 {
-    if (item == NULL || m_show == NULL)
+    if (item == NULL || m_show == NULL || m_doc->isShowLocked())
         return;
 
     if (QMessageBox::question(this, tr("New Track"),
@@ -1767,7 +1782,7 @@ void ShowManager::slotTrackMoved(Track *track, int direction)
 
 void ShowManager::slotTrackDelete(Track *track)
 {
-    if (track == NULL || m_show == NULL)
+    if (track == NULL || m_show == NULL || m_doc->isShowLocked())
         return;
 
     // Gut check — and if the track carries items, list them.
