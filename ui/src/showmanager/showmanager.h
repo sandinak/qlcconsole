@@ -165,6 +165,8 @@ private:
     QComboBox *m_showsCombo;
     QLabel *m_timeLabel;
     QAction *m_addShowAction;
+    QAction *m_renameShowAction;
+    QAction *m_deleteShowAction;
     QAction *m_addTrackAction;
     QAction *m_addSequenceAction;
     QAction *m_addAudioAction;
@@ -192,6 +194,10 @@ protected slots:
 
     /** Slot called when the user request to add a new show */
     void slotAddShow();
+    /** Rename the current show (inline dialog). */
+    void slotRenameShow();
+    /** Delete the current show (with confirmation). */
+    void slotDeleteShow();
 
     void slotAddItem();
     void slotAddSequence();
@@ -281,6 +287,10 @@ private:
         is the active/visible tab — the active tab owns the rig, so a background
         show doesn't fight the Programming-tab live preview. */
     bool showMayOutput() const;
+
+    /** Enable/disable the show-scoped toolbar actions (rename/delete show, add
+     *  track, …) based on whether a show currently exists. */
+    void updateShowControls();
 };
 
 /** @} */

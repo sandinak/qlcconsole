@@ -108,6 +108,10 @@ public:
     void setEditable(bool editable);
     bool isEditable() const { return m_editable; }
 
+    /** Big centred hint drawn over the empty canvas (no show / no tracks).
+     *  Empty string clears it. */
+    void setEmptyMessage(const QString &msg);
+
     /** Recompute per-item editability from the master gate + per-track locks. */
     void updateItemsEditability();
 
@@ -193,6 +197,7 @@ private:
     bool m_snapToGrid;
     /** Master editable gate (false = timeline read-only) */
     bool m_editable;
+    QString m_emptyMessage;    // centred hint when the canvas has no content
     /** Section markers: start (ms) -> ShowMarker */
     QMap<quint32, ShowMarker> m_markers;
 

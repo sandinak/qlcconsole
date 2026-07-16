@@ -83,6 +83,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     , m_toolbar(NULL)
     , m_showsCombo(NULL)
     , m_addShowAction(NULL)
+    , m_renameShowAction(NULL)
+    , m_deleteShowAction(NULL)
     , m_addTrackAction(NULL)
     , m_addSequenceAction(NULL)
     , m_addAudioAction(NULL)
@@ -264,6 +266,18 @@ void ShowManager::initActions()
     connect(m_addShowAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddShow()));
 
+    m_renameShowAction = new QAction(QIcon(":/editclear.png"),
+                                     tr("&Rename show…"), this);
+    m_renameShowAction->setToolTip(tr("Rename the current show"));
+    connect(m_renameShowAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotRenameShow()));
+
+    m_deleteShowAction = new QAction(QIcon(":/editdelete.png"),
+                                     tr("&Delete show…"), this);
+    m_deleteShowAction->setToolTip(tr("Delete the current show"));
+    connect(m_deleteShowAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotDeleteShow()));
+
     m_addTrackAction = new QAction(QIcon(":/edit_add.png"),
                                    tr("Add a &track or an existing function"), this);
     m_addTrackAction->setShortcut(QKeySequence("CTRL+N"));
@@ -374,6 +388,8 @@ void ShowManager::initToolbar()
     connect(m_showsCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotShowsComboChanged(int)));
     m_toolbar->addWidget(m_showsCombo);
+    m_toolbar->addAction(m_renameShowAction);
+    m_toolbar->addAction(m_deleteShowAction);
     m_toolbar->addSeparator();
 
     m_toolbar->addAction(m_addTrackAction);
@@ -531,9 +547,13 @@ void ShowManager::updateShowsCombo()
     if (m_showsCombo->count() == 0)
     {
         m_showview->resetView();
+        m_showview->setEmptyMessage(tr("No show yet.\n\nClick the “New Show” button "
+            "(top-left) to create one, then drop scenes, chasers or collections "
+            "onto its tracks."));
         m_show = NULL;
         m_currentScene = NULL;
         m_currentTrack = NULL;
+        updateShowControls();
         return;
     }
 
@@ -544,6 +564,8 @@ void ShowManager::updateShowsCombo()
 
     if (oldIndex != m_selectedShowIndex)
         updateMultiTrackView();
+
+    updateShowControls();
 }
 
 void ShowManager::slotShowsComboChanged(int idx)
@@ -704,6 +726,65 @@ void ShowManager::slotAddShow()
             m_currentTrack = NULL;
         }
     }
+}
+
+void ShowManager::slotRenameShow()
+{
+    if (m_show == NULL || m_doc->isShowLocked())
+        return;
+
+    bool ok = false;
+    QString name = QInputDialog::getText(this, tr("Rename show"),
+                                         tr("Show name:"), QLineEdit::Normal,
+                                         m_show->name(), &ok);
+    if (ok == false || name.trimmed().isEmpty())
+        return;
+
+    m_show->setName(name.trimmed());
+    m_doc->setModified();
+    // Rebuild the combo (keeps it alphabetically sorted + reselects this show).
+    m_selectedShowIndex = -1;
+    for (int i = 0; i < m_showsCombo->count(); i++)
+        if (m_showsCombo->itemData(i).toUInt() == m_show->id())
+            m_selectedShowIndex = i;
+    updateShowsCombo();
+}
+
+void ShowManager::slotDeleteShow()
+{
+    if (m_show == NULL || m_doc->isShowLocked())
+        return;
+
+    if (QMessageBox::question(this, tr("Delete show"),
+            tr("Delete the show \"%1\"? This removes its timeline (tracks and "
+               "their timing); the scenes/chasers it references are NOT deleted.")
+                .arg(m_show->name()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    if (m_show->isRunning())
+        m_show->stopAndWait();
+
+    quint32 id = m_show->id();
+    hideRightEditor();
+    showSceneEditor(NULL);
+    m_currentScene = NULL;
+    m_currentTrack = NULL;
+    m_show = NULL;
+    m_selectedShowIndex = 0;
+    m_doc->deleteFunction(id);   // fires functionRemoved → updateShowsCombo
+    updateShowsCombo();
+}
+
+void ShowManager::updateShowControls()
+{
+    const bool hasShow = (m_showsCombo != NULL && m_showsCombo->count() > 0);
+    if (m_renameShowAction != NULL)
+        m_renameShowAction->setEnabled(hasShow);
+    if (m_deleteShowAction != NULL)
+        m_deleteShowAction->setEnabled(hasShow);
+    if (m_addTrackAction != NULL)
+        m_addTrackAction->setEnabled(hasShow);
 }
 
 void ShowManager::slotAddItem()
@@ -2414,6 +2495,14 @@ void ShowManager::updateMultiTrackView()
     }
     if (m_doc->clipboard()->hasFunction())
         m_pasteAction->setEnabled(true);
+
+    // Empty-canvas hint: an existing show with no tracks yet.
+    if (firstTrack == NULL)
+        m_showview->setEmptyMessage(tr("Empty show — drop a scene, chaser or "
+            "collection here, or right-click to add a track."));
+    else
+        m_showview->setEmptyMessage(QString());
+
     m_showview->updateViewSize();
 }
 

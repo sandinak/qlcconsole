@@ -923,9 +923,35 @@ quint32 MultiTrackView::markerAt(qreal sceneX) const
     return best;
 }
 
+void MultiTrackView::setEmptyMessage(const QString &msg)
+{
+    if (m_emptyMessage == msg)
+        return;
+    m_emptyMessage = msg;
+    if (viewport() != NULL)
+        viewport()->update();
+}
+
 void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsView::drawForeground(painter, rect);
+
+    // Empty-canvas hint (no show defined / no tracks yet). Pinned to the
+    // viewport centre so it's obvious there's nowhere to drop yet.
+    if (m_emptyMessage.isEmpty() == false && m_tracks.isEmpty())
+    {
+        painter->save();
+        painter->resetTransform();      // draw in viewport (device) coordinates
+        const QRect vp = viewport()->rect();
+        QFont f = painter->font();
+        f.setPixelSize(18);
+        f.setBold(true);
+        painter->setFont(f);
+        painter->setPen(QColor(150, 165, 180));
+        painter->drawText(vp.adjusted(40, 0, -40, 0),
+                          Qt::AlignCenter | Qt::TextWordWrap, m_emptyMessage);
+        painter->restore();
+    }
 
     QFont f = painter->font();
     f.setPixelSize(11);
