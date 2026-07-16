@@ -50,6 +50,7 @@
 #include "sequence.h"
 #include "chaser.h"
 #include "collection.h"
+#include "functionstreewidget.h"
 #include "timecodesource.h"
 #include "mastertimer.h"
 #include "inputoutputmap.h"
@@ -73,6 +74,7 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     , m_splitter(NULL)
     , m_vsplitter(NULL)
     , m_showview(NULL)
+    , m_funcTree(NULL)
     , m_toolbar(NULL)
     , m_showsCombo(NULL)
     , m_addShowAction(NULL)
@@ -145,7 +147,26 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     mcontainer->setLayout(new QHBoxLayout);
     mcontainer->layout()->setContentsMargins(0, 0, 0, 0);
     m_vsplitter->addWidget(mcontainer);
-    m_vsplitter->widget(0)->layout()->addWidget(m_showview);
+
+    // Drag source: a function tree on the left of the timeline. Drag any
+    // function onto a track row / time position to insert it there.
+    QSplitter *timelineSplit = new QSplitter(Qt::Horizontal, this);
+    m_funcTree = new FunctionsTreeWidget(m_doc, this);
+    m_funcTree->setDisplayFilter(FunctionsTreeWidget::FunctionsOnly);
+    m_funcTree->setExternalDragMode(true);
+    m_funcTree->setHeaderLabel(tr("Functions — drag onto a track"));
+    m_funcTree->updateTree();
+    m_funcTree->setMaximumWidth(280);
+    timelineSplit->addWidget(m_funcTree);
+    timelineSplit->addWidget(m_showview);
+    timelineSplit->setStretchFactor(0, 0);
+    timelineSplit->setStretchFactor(1, 1);
+    m_vsplitter->widget(0)->layout()->addWidget(timelineSplit);
+
+    connect(m_showview, SIGNAL(functionDropped(quint32,quint32,Track*)),
+            this, SLOT(slotFunctionDropped(quint32,quint32,Track*)));
+    connect(m_showview, SIGNAL(addAtRequested(quint32,Track*)),
+            this, SLOT(slotAddAtRequested(quint32,Track*)));
 
     // add container for function editors
     QWidget* ccontainer = new QWidget(this);
@@ -1319,6 +1340,138 @@ void ShowManager::slotShowStopped()
     slotUpdateTime(m_showview->getTimeFromCursor());
 }
 
+void ShowManager::addFunctionToTrack(Function *f, Track *track, quint32 startTime)
+{
+    if (f == NULL || track == NULL)
+        return;
+
+    Function::Type t = f->type();
+
+    // A bare Scene has no timeline item of its own; wrap it in a single-shot
+    // 10 s Sequence bound to it, exactly like the toolbar Add flow.
+    if (t == Function::SceneType)
+    {
+        Scene *scene = qobject_cast<Scene*>(f);
+        Function *nf = new Sequence(m_doc);
+        Sequence *seq = qobject_cast<Sequence*>(nf);
+        seq->setBoundSceneID(scene->id());
+        if (m_doc->addFunction(nf) == false)
+        {
+            delete nf;
+            return;
+        }
+        seq->setDirection(Function::Forward);
+        seq->setRunOrder(Function::SingleShot);
+        seq->setDurationMode(Chaser::PerStep);
+        seq->setName(QString("%1 %2").arg(tr("New Sequence")).arg(seq->id()));
+        ChaserStep step(scene->id(), scene->fadeInSpeed(), 10000, scene->fadeOutSpeed());
+        step.values.append(scene->values());
+        seq->addStep(step);
+
+        ShowFunction *sf = track->createShowFunction(seq->id());
+        sf->setStartTime(startTime);
+        m_showview->addSequence(seq, track, sf);
+        return;
+    }
+
+    ShowFunction *sf = track->createShowFunction(f->id());
+    sf->setStartTime(startTime);
+
+    switch (t)
+    {
+        case Function::ChaserType:
+        case Function::SequenceType:
+            m_showview->addSequence(qobject_cast<Chaser*>(f), track, sf);
+        break;
+        case Function::AudioType:
+            m_showview->addAudio(qobject_cast<Audio*>(f), track, sf);
+        break;
+        case Function::RGBMatrixType:
+            m_showview->addRGBMatrix(qobject_cast<RGBMatrix*>(f), track, sf);
+        break;
+        case Function::EFXType:
+            m_showview->addEFX(qobject_cast<EFX*>(f), track, sf);
+        break;
+        case Function::VideoType:
+            m_showview->addVideo(qobject_cast<Video*>(f), track, sf);
+        break;
+        case Function::CollectionType:
+        {
+            Collection *c = qobject_cast<Collection*>(f);
+            if (sf->duration() == 0 && c != NULL && c->totalDuration() == 0)
+                sf->setDuration(10000);
+            m_showview->addCollection(c, track, sf);
+        }
+        break;
+        default:
+            track->removeShowFunction(sf); // unsupported on a timeline
+        break;
+    }
+}
+
+void ShowManager::slotFunctionDropped(quint32 funcID, quint32 startTime, Track *track)
+{
+    if (m_show == NULL)
+        return;
+
+    Function *f = m_doc->function(funcID);
+    if (f == NULL)
+        return;
+
+    // Forbid dropping the show into itself (directly or transitively).
+    if (f->id() == m_show->id() || f->contains(m_show->id()))
+        return;
+
+    // No track under the drop => create a fresh track for it.
+    if (track == NULL)
+    {
+        track = new Track();
+        track->setName(tr("Track %1").arg(m_show->tracks().count() + 1));
+        m_show->addTrack(track);
+        m_showview->addTrack(track);
+    }
+
+    m_currentTrack = track;
+    m_showview->activateTrack(track);
+    addFunctionToTrack(f, track, startTime);
+
+    m_doc->setModified();
+    m_addSequenceAction->setEnabled(true);
+    m_addAudioAction->setEnabled(true);
+    m_addVideoAction->setEnabled(true);
+    m_deleteAction->setEnabled(true);
+    m_showview->updateViewSize();
+}
+
+void ShowManager::slotAddAtRequested(quint32 startTime, Track *track)
+{
+    if (m_show == NULL)
+        return;
+
+    FunctionSelection fs(this, m_doc);
+    QList<quint32> disabledList;
+    foreach (Function *function, m_doc->functions())
+    {
+        if (function->contains(m_show->id()))
+            disabledList << function->id();
+    }
+    fs.setDisabledFunctions(disabledList);
+    fs.setMultiSelection(false);
+    fs.setFilter(Function::SceneType | Function::ChaserType | Function::SequenceType |
+                 Function::AudioType | Function::RGBMatrixType | Function::EFXType |
+                 Function::CollectionType);
+    fs.disableFilters(Function::ShowType | Function::ScriptType);
+
+    if (fs.exec() != QDialog::Accepted)
+        return;
+
+    QList<quint32> ids = fs.selection();
+    if (ids.isEmpty())
+        return;
+
+    slotFunctionDropped(ids.first(), startTime, track);
+}
+
 /*********************************************************************
  * MIDI Time Code follow
  *********************************************************************/
@@ -1986,6 +2139,8 @@ void ShowManager::showEvent(QShowEvent* ev)
     m_showview->show();
     m_showview->horizontalScrollBar()->setSliderPosition(0);
     m_showview->verticalScrollBar()->setSliderPosition(0);
+    if (m_funcTree != NULL)
+        m_funcTree->updateTree();
     updateShowsCombo();
 }
 

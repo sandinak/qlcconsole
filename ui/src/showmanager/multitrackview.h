@@ -154,6 +154,21 @@ private:
     QList <ShowItem *>m_items;
     bool m_snapToGrid;
 
+protected:
+    /** Paints the time-division grid behind all items so the divisions are
+     *  always visible (not only when snap-to-grid is enabled). */
+    void drawBackground(QPainter *painter, const QRectF &rect) override;
+
+    /** Accept functions dragged in from a function tree and drop them onto
+     *  the track row / time position under the cursor. */
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
+
+    /** Right-click on an empty part of the timeline to insert a function at
+     *  that track row / time position. */
+    void contextMenuEvent(QContextMenuEvent *event) override;
+
 public slots:
     void mouseReleaseEvent(QMouseEvent *e) override;
     void wheelEvent(QWheelEvent *event) override;
@@ -171,6 +186,16 @@ protected slots:
     void slotAlignToCursor(ShowItem *item);
 
 signals:
+    /** A function was dragged from a tree and dropped on the timeline.
+     *  @param funcID the dropped function id
+     *  @param startTime start time (ms) computed from the drop x position
+     *  @param track the track row under the drop, or NULL to make a new track */
+    void functionDropped(quint32 funcID, quint32 startTime, Track *track);
+
+    /** Emitted when the user asks (via right-click) to insert a function at a
+     *  timeline position. @param track NULL to make a new track. */
+    void addAtRequested(quint32 startTime, Track *track);
+
     void showItemMoved(ShowItem *item, quint32 time, bool moved);
     void viewClicked(QMouseEvent * e);
     void timeChanged(quint32 msec);

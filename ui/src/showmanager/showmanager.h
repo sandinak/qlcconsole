@@ -40,6 +40,8 @@ class QAction;
 class QLabel;
 class QTimer;
 class Doc;
+class Function;
+class FunctionsTreeWidget;
 
 /** @addtogroup ui_shows
  * @{
@@ -107,6 +109,12 @@ private:
     QSplitter *m_splitter; // main view splitter (horizontal)
     QSplitter *m_vsplitter; // multitrack view splitter (vertical)
     MultiTrackView *m_showview;
+    /** Drag source: functions to drop onto timeline tracks */
+    FunctionsTreeWidget *m_funcTree;
+
+    /** Add a function to a track at a given start time, creating the right
+     *  timeline item for its type (scenes are wrapped in a Sequence). */
+    void addFunctionToTrack(Function *f, Track *track, quint32 startTime);
 
     /*********************************************************************
      * Menus, toolbar & actions
@@ -214,6 +222,8 @@ protected slots:
     void slotShowTimingsTool();
     void slotShowItemStartTimeChanged(ShowItem *item, int msec);
     void slotShowItemDurationChanged(ShowItem *item, int msec, bool stretch);
+    void slotFunctionDropped(quint32 funcID, quint32 startTime, Track *track);
+    void slotAddAtRequested(quint32 startTime, Track *track);
     void slotToggleSnapToGrid(bool enable);
     void slotChangeSize(int width, int height);
     void slotStepSelectionChanged(int index);

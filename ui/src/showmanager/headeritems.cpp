@@ -58,9 +58,6 @@ void ShowHeaderItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *op
     painter->setBrush(QBrush(QColor(150, 150, 150, 255)));
     painter->drawRect(0, 0, m_width, 35);
 
-    if (m_type > Show::Time)
-        m_timeStep = ((float)(120 * HALF_SECOND_WIDTH) / (float)m_BPMValue) / (float)m_timeScale;
-
     // draw vertical timing lines and time labels
     int tmpSec = 0;
     for (int i = 0; i < m_width / m_timeStep; i++)
@@ -110,9 +107,18 @@ void ShowHeaderItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *op
 
 }
 
+void ShowHeaderItem::updateTimeStep()
+{
+    if (m_type > Show::Time)
+        m_timeStep = ((float)(120 * HALF_SECOND_WIDTH) / (float)m_BPMValue) / (float)m_timeScale;
+    else
+        m_timeStep = HALF_SECOND_WIDTH;
+}
+
 void ShowHeaderItem::setTimeScale(int val)
 {
     m_timeScale = val;
+    updateTimeStep();
     update();
 }
 
@@ -141,6 +147,7 @@ void ShowHeaderItem::setTimeDivisionType(Show::TimeDivision type)
         else if (m_type == Show::BPM_2_4)
             m_timeHit = 2;
     }
+    updateTimeStep();
     update();
 }
 
@@ -155,6 +162,7 @@ void ShowHeaderItem::setBPMValue(int value)
     {
         m_BPMValue = value;
     }
+    updateTimeStep();
     update();
 }
 
@@ -168,6 +176,16 @@ float ShowHeaderItem::getTimeDivisionStep() const
     if (m_type > Show::Time && m_timeStep <= 5)
         return m_timeStep * m_timeHit;
     return m_timeStep;
+}
+
+float ShowHeaderItem::getTimeStep() const
+{
+    return m_timeStep;
+}
+
+int ShowHeaderItem::getTimeHit() const
+{
+    return m_timeHit;
 }
 
 void ShowHeaderItem::setWidth(int w)

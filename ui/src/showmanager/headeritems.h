@@ -61,8 +61,19 @@ public:
     int getHalfSecondWidth() const;
     float getTimeDivisionStep() const;
 
+    /** Pixel distance between adjacent time-division bars (kept current for
+     *  the timeline grid, not only computed at paint time). */
+    float getTimeStep() const;
+
+    /** How many division bars make up one labelled (major) bar. */
+    int getTimeHit() const;
+
     void setWidth(int);
     void setHeight(int);
+
+private:
+    /** Recompute m_timeStep from the current type / BPM / scale. */
+    void updateTimeStep();
 
 signals:
     void itemClicked(QGraphicsSceneMouseEvent *);

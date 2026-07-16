@@ -21,11 +21,22 @@
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QDataStream>
+#include <QContextMenuEvent>
 #include <QMouseEvent>
 #include <QMessageBox>
 #include <QScrollBar>
+#include <QPainter>
 #include <QSlider>
+#include <QMenu>
 #include <QDebug>
+
+#include "showitem.h"
+
+static const char *SM_FUNCTION_MIME = "application/x-qlcplus-functions";
 
 #include "multitrackview.h"
 #include "track.h"
@@ -79,6 +90,12 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
     m_vdivider = NULL;
     // draw horizontal and vertical lines for tracks
     updateTracksDividers();
+
+    // Accept functions dragged in from the function tree. Drops are delivered
+    // to the VIEWPORT, so enabling acceptDrops on the view alone is not enough
+    // (the viewport was created with drops disabled) — enable it explicitly.
+    setAcceptDrops(true);
+    viewport()->setAcceptDrops(true);
 }
 
 void MultiTrackView::updateTracksDividers()
@@ -477,6 +494,8 @@ int MultiTrackView::getTrackIndex(Track *trk) const
 void MultiTrackView::setHeaderType(Show::TimeDivision type)
 {
     m_header->setTimeDivisionType(type);
+    if (viewport() != NULL)
+        viewport()->update();
 }
 
 Show::TimeDivision MultiTrackView::getHeaderType() const
@@ -487,6 +506,8 @@ Show::TimeDivision MultiTrackView::getHeaderType() const
 void MultiTrackView::setBPMValue(int value)
 {
     m_header->setBPMValue(value);
+    if (viewport() != NULL)
+        viewport()->update();
 }
 
 void MultiTrackView::setSnapToGrid(bool enable)
@@ -496,6 +517,129 @@ void MultiTrackView::setSnapToGrid(bool enable)
         m_header->setHeight(m_scene->height());
     else
         m_header->setHeight(HEADER_HEIGHT);
+}
+
+void MultiTrackView::drawBackground(QPainter *painter, const QRectF &rect)
+{
+    QGraphicsView::drawBackground(painter, rect);
+
+    if (m_header == NULL)
+        return;
+
+    float step = m_header->getTimeStep();
+    if (step < 1.0f)
+        return;
+
+    int hit = m_header->getTimeHit();
+    const qreal top = qMax(rect.top(), qreal(HEADER_HEIGHT));
+    const qreal bottom = rect.bottom();
+    const qreal right = rect.right();
+
+    // First division at/after the visible-left edge.
+    int i = qMax(0, int((rect.left() - TRACK_WIDTH) / step));
+    for (;; i++)
+    {
+        qreal x = TRACK_WIDTH + (i * step) + 1;
+        if (x > right)
+            break;
+        if (x < TRACK_WIDTH)
+            continue;
+        bool major = (hit > 0) && (i % hit == 0);
+        // Subtle light lines over the dark timeline; majors a touch brighter.
+        painter->setPen(QPen(QColor(255, 255, 255, major ? 45 : 18), 0));
+        painter->drawLine(QPointF(x, top), QPointF(x, bottom));
+    }
+}
+
+void MultiTrackView::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasFormat(SM_FUNCTION_MIME))
+    {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+    }
+    else
+        event->ignore();
+}
+
+void MultiTrackView::dragMoveEvent(QDragMoveEvent *event)
+{
+    if (event->mimeData()->hasFormat(SM_FUNCTION_MIME))
+    {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+    }
+    else
+        event->ignore();
+}
+
+void MultiTrackView::dropEvent(QDropEvent *event)
+{
+    if (!event->mimeData()->hasFormat(SM_FUNCTION_MIME))
+    {
+        event->ignore();
+        return;
+    }
+
+    QPointF scenePos = mapToScene(event->pos());
+
+    // A drop to the left of the tracks column is not on the timeline.
+    if (scenePos.x() < TRACK_WIDTH)
+    {
+        event->ignore();
+        return;
+    }
+
+    quint32 startTime = getTimeFromPosition(scenePos.x());
+
+    // Resolve the track row under the drop (NULL => make a new track).
+    Track *track = NULL;
+    int row = int((scenePos.y() - HEADER_HEIGHT) / TRACK_HEIGHT);
+    if (row >= 0 && row < m_tracks.count())
+        track = m_tracks.at(row)->getTrack();
+
+    QByteArray data = event->mimeData()->data(SM_FUNCTION_MIME);
+    QDataStream stream(&data, QIODevice::ReadOnly);
+    quint32 cascade = 0;
+    while (!stream.atEnd())
+    {
+        quint32 fid;
+        stream >> fid;
+        // Cascade multiple dropped functions in time so they don't stack.
+        emit functionDropped(fid, startTime + cascade, track);
+        cascade += 2000;
+    }
+
+    event->setDropAction(Qt::CopyAction);
+    event->accept();
+}
+
+void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
+{
+    // Let a ShowItem show its own (delete/lock/align) menu.
+    if (dynamic_cast<ShowItem *>(itemAt(event->pos())) != NULL)
+    {
+        QGraphicsView::contextMenuEvent(event);
+        return;
+    }
+
+    QPointF scenePos = mapToScene(event->pos());
+    if (scenePos.x() < TRACK_WIDTH)
+    {
+        QGraphicsView::contextMenuEvent(event);
+        return;
+    }
+
+    quint32 startTime = getTimeFromPosition(scenePos.x());
+    Track *track = NULL;
+    int row = int((scenePos.y() - HEADER_HEIGHT) / TRACK_HEIGHT);
+    if (row >= 0 && row < m_tracks.count())
+        track = m_tracks.at(row)->getTrack();
+
+    QMenu menu;
+    QAction *addAct = menu.addAction(tr("Add function here…"));
+    if (menu.exec(event->globalPos()) == addAct)
+        emit addAtRequested(startTime, track);
 }
 
 void MultiTrackView::mouseReleaseEvent(QMouseEvent * e)
@@ -559,6 +703,9 @@ void MultiTrackView::slotTimeScaleChanged(int val)
     int newCursorPos = getPositionFromTime(m_cursor->getTime());
     m_cursor->setPos(newCursorPos + 2, m_cursor->y());
     updateViewSize();
+    // The division grid is drawn in drawBackground(); repaint it after a zoom.
+    if (viewport() != NULL)
+        viewport()->update();
 }
 
 void MultiTrackView::slotTrackClicked(TrackItem *track)
