@@ -20,14 +20,26 @@
 #include <QApplication>
 #include <QPainter>
 #include <QMenu>
+#include <QToolTip>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsSceneHoverEvent>
 
 #include "sequenceitem.h"
+#include "multitrackview.h"
 #include "chaserstep.h"
 #include "trackitem.h"
 #include "function.h"
 #include "doc.h"
+
+/** Format a millisecond span compactly for the drag readout. */
+static QString seqMsToText(quint32 ms)
+{
+    if (ms < 10000)
+        return QString("%1 s").arg(ms / 1000.0, 0, 'f', 1);
+    uint totalSec = ms / 1000;
+    return QString("%1:%2").arg(totalSec / 60)
+            .arg(totalSec % 60, 2, 10, QChar('0'));
+}
 
 /** Nominal on-timeline width (ms) for a manual-GO (infinite) or un-timed (0)
  *  step, so every cue stays visible and draggable. */
@@ -386,24 +398,43 @@ void SequenceItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         const float timeUnit = 50.0f / float(m_timeScale);
         const qint64 ddt = qint64(((event->scenePos().x() - m_cueDragPressX) / timeUnit) * 1000.0);
         const int i = m_cueDragIdx;
+        MultiTrackView *view = qobject_cast<MultiTrackView *>(
+                    scene() != NULL ? scene()->views().value(0) : NULL);
+        const quint32 itemStart = getStartTime();
+        QString readout;
 
         if (m_cueDrag == CueRoll)
         {
-            // Move the divider between cue i and i+1: grow one, shrink the other,
-            // keeping their sum (and every downstream cue) fixed.
+            // Divider between cue i and i+1. Snap its ABSOLUTE timeline position
+            // to grid/markers/playhead, then split the pair around it (their sum
+            // and every downstream cue stay fixed).
+            qint64 prefix = itemStart;
+            for (int k = 0; k < i; k++) prefix += m_cueOrigDur.at(k);
             const qint64 sum = qint64(m_cueOrigDur.at(i)) + qint64(m_cueOrigDur.at(i + 1));
-            qint64 left = qint64(m_cueOrigDur.at(i)) + ddt;
-            left = qBound<qint64>(SEQ_MIN_STEP_MS, left, sum - SEQ_MIN_STEP_MS);
+            qint64 dividerAbs = prefix + qint64(m_cueOrigDur.at(i)) + ddt;
+            if (view != NULL)
+                dividerAbs = view->snapTimeMs(quint32(qMax<qint64>(0, dividerAbs)));
+            qint64 left = qBound<qint64>(SEQ_MIN_STEP_MS, dividerAbs - prefix, sum - SEQ_MIN_STEP_MS);
             setStepDuration(i, left);
             setStepDuration(i + 1, sum - left);
+            readout = tr("%1: %2  |  %3: %4")
+                    .arg(cueLabel(i)).arg(seqMsToText(quint32(left)))
+                    .arg(cueLabel(i + 1)).arg(seqMsToText(quint32(sum - left)));
         }
-        else // CueSlip: move cue i, keep its length; prev grows, next shrinks.
+        else // CueSlip: move cue i (keep its length); prev grows, next shrinks.
         {
+            qint64 prefix = itemStart;
+            for (int k = 0; k < i - 1; k++) prefix += m_cueOrigDur.at(k);
             const qint64 prevSum = qint64(m_cueOrigDur.at(i - 1)) + qint64(m_cueOrigDur.at(i + 1));
-            qint64 prev = qint64(m_cueOrigDur.at(i - 1)) + ddt;
-            prev = qBound<qint64>(SEQ_MIN_STEP_MS, prev, prevSum - SEQ_MIN_STEP_MS);
+            qint64 startAbs = prefix + qint64(m_cueOrigDur.at(i - 1)) + ddt;
+            if (view != NULL)
+                startAbs = view->snapTimeMs(quint32(qMax<qint64>(0, startAbs)));
+            qint64 prev = qBound<qint64>(SEQ_MIN_STEP_MS, startAbs - prefix, prevSum - SEQ_MIN_STEP_MS);
             setStepDuration(i - 1, prev);
             setStepDuration(i + 1, prevSum - prev);
+            readout = tr("%1 starts %2  (hold %3)")
+                    .arg(cueLabel(i)).arg(seqMsToText(quint32(prefix + prev)))
+                    .arg(seqMsToText(m_cueOrigDur.at(i)));
         }
 
         prepareGeometryChange();
@@ -411,6 +442,8 @@ void SequenceItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         if (m_function)
             m_function->setDuration(m_chaser->totalDuration());
         update();
+        // Live numeric readout at the cursor.
+        QToolTip::showText(event->screenPos(), readout);
         event->accept();
         return;
     }

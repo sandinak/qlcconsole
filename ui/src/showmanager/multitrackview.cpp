@@ -717,6 +717,47 @@ quint32 MultiTrackView::getTimeFromPosition(qreal pos) const
             (double)(m_header->getHalfSecondWidth() * 2));
 }
 
+quint32 MultiTrackView::snapTimeMs(quint32 timeMs) const
+{
+    if (m_snapToGrid == false || m_header == NULL)
+        return timeMs;
+
+    // ms per pixel at the current zoom (getTimeFromPosition is linear in x).
+    const double msPerPx = double(getTimeFromPosition(TRACK_WIDTH + 200)) / 200.0;
+    if (msPerPx <= 0.0)
+        return timeMs;
+
+    const quint32 thresh = quint32(8.0 * msPerPx);   // ~8 px snap zone
+    quint32 best = timeMs;
+    quint32 bestDist = thresh + 1;
+    auto consider = [&](quint32 t)
+    {
+        quint32 d = (t > timeMs) ? (t - timeMs) : (timeMs - t);
+        if (d <= thresh && d < bestDist) { bestDist = d; best = t; }
+    };
+
+    // Grid line
+    const float stepPx = m_header->getTimeStep();
+    if (stepPx >= 1.0f)
+    {
+        const double gridMs = stepPx * msPerPx;
+        if (gridMs >= 1.0)
+            consider(quint32(qRound64(timeMs / gridMs) * qint64(qRound(gridMs))));
+    }
+    // Section marker edges
+    QMapIterator<quint32, ShowMarker> it(m_markers);
+    while (it.hasNext())
+    {
+        it.next();
+        consider(it.key());
+        consider(it.value().end);
+    }
+    // Playhead
+    consider(getTimeFromCursor());
+
+    return best;
+}
+
 quint32 MultiTrackView::getPositionFromTime(quint32 time) const
 {
     if (time == 0)

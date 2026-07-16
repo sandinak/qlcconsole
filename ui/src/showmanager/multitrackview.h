@@ -47,6 +47,7 @@
 
 class QTimer;
 class QGraphicsProxyWidget;
+class QRubberBand;
 
 class MultiTrackView final : public QGraphicsView
 {
@@ -192,6 +193,12 @@ public:
 
     /** Return the time (in msec) from a given X position */
     quint32 getTimeFromPosition(qreal pos) const;
+
+    /** Snap an absolute time (ms) to the nearest grid line, section marker edge
+     *  or the playhead within a small pixel threshold. Honours the Snap-to-grid
+     *  toggle (returns @p timeMs unchanged when snapping is off). Used by cue
+     *  editing on a chase block. */
+    quint32 snapTimeMs(quint32 timeMs) const;
 
 private:
     QGraphicsScene *m_scene;
