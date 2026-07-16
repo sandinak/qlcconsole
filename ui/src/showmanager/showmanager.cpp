@@ -181,6 +181,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotMarkerDeleteRequested(quint32)));
     connect(m_showview, SIGNAL(markerColorRequested(quint32)),
             this, SLOT(slotMarkerColorRequested(quint32)));
+    connect(m_showview, SIGNAL(markerRelabelRequested(quint32,QString)),
+            this, SLOT(slotMarkerRelabel(quint32,QString)));
     connect(m_showview, SIGNAL(markerMovedRequested(quint32,quint32,quint32,QString,QColor)),
             this, SLOT(slotMarkerMoved(quint32,quint32,quint32,QString,QColor)));
     connect(m_showview, SIGNAL(itemDroppedBelowTracks(ShowItem*)),
@@ -1558,6 +1560,17 @@ void ShowManager::slotMarkerEditRequested(quint32 time)
     if (ok == false)
         return;
     m_show->setMarker(time, m.end, label.trimmed(), m.color); // empty label removes it
+    m_showview->setMarkers(m_show->markers());
+    m_doc->setModified();
+}
+
+void ShowManager::slotMarkerRelabel(quint32 time, QString label)
+{
+    if (m_show == NULL || time == UINT_MAX)
+        return;
+    ShowMarker m = m_show->markers().value(time);
+    // Empty label removes the marker (consistent with setMarker semantics).
+    m_show->setMarker(time, m.end, label, m.color);
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
 }

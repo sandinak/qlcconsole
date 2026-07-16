@@ -45,6 +45,7 @@
  */
 
 class QTimer;
+class QGraphicsProxyWidget;
 
 class MultiTrackView final : public QGraphicsView
 {
@@ -210,6 +211,10 @@ private:
     QColor m_dragColor;        // working colour during drag
     qreal m_markerGrabDx;      // px between grab point and marker start (move)
 
+    /** Inline marker rename state */
+    QGraphicsProxyWidget *m_markerEditProxy;
+    quint32 m_markerEditKey;
+
 protected:
     /** Paints the time-division grid behind all items so the divisions are
      *  always visible (not only when snap-to-grid is enabled). */
@@ -232,7 +237,14 @@ public slots:
     void mousePressEvent(QMouseEvent *e) override;
     void mouseMoveEvent(QMouseEvent *e) override;
     void mouseReleaseEvent(QMouseEvent *e) override;
+    void mouseDoubleClickEvent(QMouseEvent *e) override;
     void wheelEvent(QWheelEvent *event) override;
+
+private:
+    /** Begin an inline (embedded line-edit) rename of a marker. */
+    void startMarkerEdit(quint32 key);
+private slots:
+    void slotMarkerEditCommitted();
 
 protected slots:
     void slotHeaderClicked(QGraphicsSceneMouseEvent *event);
@@ -268,6 +280,8 @@ signals:
     void markerEditRequested(quint32 time);
     void markerDeleteRequested(quint32 time);
     void markerColorRequested(quint32 time);
+    /** Inline rename committed: set the marker's label. */
+    void markerRelabelRequested(quint32 time, QString label);
     /** A marker was dragged/resized: replace oldStart with [newStart,newEnd]. */
     void markerMovedRequested(quint32 oldStart, quint32 newStart, quint32 newEnd,
                               QString label, QColor color);

@@ -33,6 +33,8 @@
 #include <QSlider>
 #include <QTimer>
 #include <QMenu>
+#include <QLineEdit>
+#include <QGraphicsProxyWidget>
 #include <QDebug>
 #include <algorithm>
 
@@ -107,6 +109,8 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
     m_dragStart = 0;
     m_dragEnd = 0;
     m_markerGrabDx = 0;
+    m_markerEditProxy = NULL;
+    m_markerEditKey = UINT_MAX;
     // draw horizontal and vertical lines for tracks
     updateTracksDividers();
 
@@ -1079,6 +1083,58 @@ void MultiTrackView::mouseReleaseEvent(QMouseEvent * e)
 
     QGraphicsView::mouseReleaseEvent(e);
     //qDebug() << Q_FUNC_INFO << "View clicked at pos: " << e->pos().x() << e->pos().y();
+}
+
+void MultiTrackView::mouseDoubleClickEvent(QMouseEvent *e)
+{
+    QPointF sp = mapToScene(e->pos());
+    // Double-click a marker in the lane => inline rename.
+    if (sp.x() >= TRACK_WIDTH && sp.y() >= HEADER_HEIGHT && sp.y() < TRACKS_TOP)
+    {
+        quint32 key = markerAt(sp.x());
+        if (key != UINT_MAX)
+        {
+            startMarkerEdit(key);
+            e->accept();
+            return;
+        }
+    }
+    QGraphicsView::mouseDoubleClickEvent(e);
+}
+
+void MultiTrackView::startMarkerEdit(quint32 key)
+{
+    if (m_markerEditProxy != NULL || m_markers.contains(key) == false)
+        return;
+
+    m_markerEditKey = key;
+    QLineEdit *edit = new QLineEdit(m_markers.value(key).label);
+    edit->selectAll();
+    m_markerEditProxy = m_scene->addWidget(edit);
+    m_markerEditProxy->setZValue(1500);
+    m_markerEditProxy->setPos(getPositionFromTime(key) + 3, HEADER_HEIGHT);
+    edit->setFixedWidth(140);
+    edit->setFixedHeight(MARKER_LANE_HEIGHT);
+    edit->setFocus();
+    connect(edit, SIGNAL(editingFinished()), this, SLOT(slotMarkerEditCommitted()));
+}
+
+void MultiTrackView::slotMarkerEditCommitted()
+{
+    if (m_markerEditProxy == NULL)
+        return;
+
+    QLineEdit *edit = qobject_cast<QLineEdit *>(m_markerEditProxy->widget());
+    if (edit != NULL)
+        emit markerRelabelRequested(m_markerEditKey, edit->text().trimmed());
+
+    // Tear down (guard against editingFinished firing twice).
+    QGraphicsProxyWidget *proxy = m_markerEditProxy;
+    m_markerEditProxy = NULL;
+    m_markerEditKey = UINT_MAX;
+    m_scene->removeItem(proxy);
+    proxy->deleteLater();
+    viewport()->update();
 }
 
 void MultiTrackView::wheelEvent(QWheelEvent *event)
