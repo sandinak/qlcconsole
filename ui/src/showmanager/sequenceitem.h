@@ -93,10 +93,22 @@ private:
      *  -1. Excludes the final divider (that's the item's stretch handle). */
     int stepBoundaryAt(qreal localX) const;
 
+    /** Index of the cue (step) whose body contains localX, or -1. */
+    int cueAt(qreal localX) const;
+
+    /** The display label for cue @p idx: its note, else the fired function's
+     *  name, else "Cue N". */
+    QString cueLabel(int idx) const;
+
     /** Ensure per-step durations are the source of truth (switch a Common-mode
      *  chaser to PerStep, stamping each step with its current effective hold),
      *  so retiming one cue doesn't move the others. */
     void ensurePerStepDurations();
+
+    /** Snapshot every step's current display duration (px-stable drag math). */
+    void snapshotDurations();
+    /** Write @p ms into step @p idx's duration (clamped to a 0.1 s minimum). */
+    void setStepDuration(int idx, qint64 ms);
 
 private:
     /** Reference to the actual Chaser Function which holds the sequence steps */
@@ -105,10 +117,12 @@ private:
     /** index of the selected step for highlighting (-1 if none) */
     int m_selectedStep;
 
-    /** Step-divider drag state. */
-    int m_stepResizeIdx;         // step being retimed (-1 = none)
-    quint32 m_stepResizeOrigDur; // its hold at press time
-    qreal m_stepResizePressX;    // scene-x at press
+    /** In-block cue drag state. */
+    enum CueDrag { CueNone = 0, CueRoll, CueSlip };
+    CueDrag m_cueDrag;           // active in-block edit (else defer to ShowItem)
+    int m_cueDragIdx;            // roll: left cue index; slip: cue index
+    qreal m_cueDragPressX;       // scene-x at press
+    QList<quint32> m_cueOrigDur; // per-step durations captured at press
 };
 
 /** @} */
