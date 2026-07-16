@@ -142,6 +142,9 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
 
         const float top = 1.0f;
         const float bot = TRACK_HEIGHT - 3;
+        // Fades live BELOW the title/move strip so they never intrude on the
+        // block-move handle (object handles = top bar; fades stay under it).
+        const float fadeTop = SEQ_TITLE_STRIP_H + 1;
         const float xEnd = xpos + stepWidth;
 
         // Shade each step (alternating) so the steps read as distinct aligned
@@ -163,7 +166,7 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
             if (stepFadeIn > 0 && fw > 1.0f)
             {
                 QPolygonF wedge;
-                wedge << QPointF(xpos, bot) << QPointF(xpos + fw, top)
+                wedge << QPointF(xpos, bot) << QPointF(xpos + fw, fadeTop)
                       << QPointF(xpos + fw, bot);
                 painter->drawPolygon(wedge);
             }
@@ -182,7 +185,7 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
             if (stepFadeOut > 0 && fw > 1.0f)
             {
                 QPolygonF wedge;
-                wedge << QPointF(xEnd - fw, bot) << QPointF(xEnd - fw, top)
+                wedge << QPointF(xEnd - fw, bot) << QPointF(xEnd - fw, fadeTop)
                       << QPointF(xEnd, bot);
                 painter->drawPolygon(wedge);
             }

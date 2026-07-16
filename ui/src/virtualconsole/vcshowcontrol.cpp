@@ -21,6 +21,7 @@
 #include <QHBoxLayout>
 #include <QToolButton>
 #include <QLabel>
+#include <QTimer>
 #include <QApplication>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
@@ -57,6 +58,7 @@ VCShowControl::VCShowControl(QWidget *parent, Doc *doc)
     , m_playButton(NULL)
     , m_followButton(NULL)
     , m_suspendButton(NULL)
+    , m_pollTimer(NULL)
     , m_playLatest(0)
     , m_stopLatest(0)
     , m_followLatest(0)
@@ -150,6 +152,14 @@ VCShowControl::VCShowControl(QWidget *parent, Doc *doc)
     if (m_doc->timecodeSource() != NULL)
         connect(m_doc->timecodeSource(), SIGNAL(timeChanged(quint32)),
                 this, SLOT(slotTimecodeChanged(quint32)));
+
+    // Poll timer keeps the status chip (LIVE / HOLDING / MTC), section marker and
+    // cue lines current even when a signal is missed (e.g. TC starts/stops while
+    // the show is already running).
+    m_pollTimer = new QTimer(this);
+    m_pollTimer->setInterval(400);
+    connect(m_pollTimer, SIGNAL(timeout()), this, SLOT(slotPoll()));
+    m_pollTimer->start();
 
     // Design mode: controls inert so the widget can be selected/moved.
     slotModeChanged(m_doc->mode());
@@ -261,6 +271,12 @@ void VCShowControl::setTimecodeLabel(quint32 ms)
                          .arg(totalSec % 60, 2, 10, QChar('0')));
 }
 
+void VCShowControl::slotPoll()
+{
+    refresh();
+    refreshCueInfo();
+}
+
 void VCShowControl::slotTimecodeChanged(quint32 ms)
 {
     // While the show runs it drives its own (offset-adjusted, interpolated)
@@ -275,9 +291,17 @@ void VCShowControl::slotShowTimeChanged(quint32 ms)
 {
     setTimecodeLabel(ms);
 
-    // Current section marker (the region [start, end] containing the position).
+    updateSection(ms);
+    refreshCueInfo();
+}
+
+void VCShowControl::updateSection(quint32 ms)
+{
+    // Current section marker (the region [start, end] containing the position),
+    // shown with the marker's own colour.
     Show *show = showFunction();
     QString section;
+    QColor color;
     if (show != NULL)
     {
         QMapIterator<quint32, ShowMarker> it(show->markers());
@@ -287,13 +311,21 @@ void VCShowControl::slotShowTimeChanged(quint32 ms)
             if (ms >= it.key() && ms < it.value().end)
             {
                 section = it.value().label;
+                color = it.value().color;
                 break;
             }
         }
     }
     m_sectionLabel->setText(section);
-
-    refreshCueInfo();
+    if (section.isEmpty() || color.isValid() == false)
+        m_sectionLabel->setStyleSheet(QString());
+    else
+    {
+        const QString fg = (color.lightnessF() > 0.6) ? "#000" : "#fff";
+        m_sectionLabel->setStyleSheet(QString(
+            "QLabel { background:%1; color:%2; padding:1px 8px; border-radius:3px; font-weight:bold; }")
+            .arg(color.name()).arg(fg));
+    }
 }
 
 void VCShowControl::setShowCueInfo(bool show)
@@ -412,15 +444,36 @@ void VCShowControl::refresh()
 
     if (m_statusLabel != NULL)
     {
+        const char *amber = "QLabel { color:#000; background:#f5a623; padding:0 5px; border-radius:3px; font-weight:bold; }";
+        const char *blue  = "QLabel { color:#fff; background:#1565c0; padding:0 5px; border-radius:3px; font-weight:bold; }";
+        const char *green = "QLabel { color:#fff; background:#2e7d32; padding:0 5px; border-radius:3px; font-weight:bold; }";
+        const bool tcRolling = (m_doc->timecodeSource() != NULL
+                                && m_doc->timecodeSource()->isRunning());
         if (suspended)
         {
             m_statusLabel->setText(tr("SUSPENDED"));
-            m_statusLabel->setStyleSheet("QLabel { color:#000; background:#f5a623; padding:0 5px; border-radius:3px; font-weight:bold; }");
+            m_statusLabel->setStyleSheet(amber);
+        }
+        else if (running && following && tcRolling)
+        {
+            m_statusLabel->setText(tr("● LIVE · MTC"));   // following, TC rolling
+            m_statusLabel->setStyleSheet(green);
+        }
+        else if (running && following)
+        {
+            m_statusLabel->setText(tr("❚❚ HOLDING · MTC")); // armed, waiting for TC
+            m_statusLabel->setStyleSheet(amber);
         }
         else if (running)
         {
-            m_statusLabel->setText(tr("LIVE"));
-            m_statusLabel->setStyleSheet("QLabel { color:#fff; background:#1565c0; padding:0 5px; border-radius:3px; font-weight:bold; }");
+            m_statusLabel->setText(tr("● LIVE"));          // free-run playback
+            m_statusLabel->setStyleSheet(blue);
+        }
+        else if (following)
+        {
+            // Stopped but follow armed — Play will hold for MTC, not free-run.
+            m_statusLabel->setText(tr("MTC armed"));
+            m_statusLabel->setStyleSheet("QLabel { color:#ddd; background:#555; padding:0 5px; border-radius:3px; }");
         }
         else
         {
