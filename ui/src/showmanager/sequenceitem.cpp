@@ -51,6 +51,10 @@ static QString seqMsToText(quint32 ms)
 /** Height (px) of the top strip that carries the chase name. */
 #define SEQ_TITLE_STRIP_H 15
 
+/** Y (px) at which the draggable fade handle nubs are drawn — inside the fade
+ *  band, below the title/move strip, so grabbing them edits the fade. */
+#define SEQ_HANDLE_Y 26
+
 SequenceItem::SequenceItem(Chaser *seq, ShowFunction *func)
     : ShowItem(func)
     , m_chaser(seq)
@@ -163,11 +167,13 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
                       << QPointF(xpos + fw, bot);
                 painter->drawPolygon(wedge);
             }
+            // Handle nub sits in the FADE BAND (below the title strip) so it's
+            // grabbable — drawing it at the very top put it in the move zone.
             if (stepWidth > 14)
             {
                 float hx = xpos + qMax(fw, 6.0f);
-                painter->setBrush(QColor(255, 255, 255, 200));
-                painter->drawEllipse(QPointF(hx, top + 3), 3.0, 3.0);
+                painter->setBrush(QColor(120, 200, 255, 235));
+                painter->drawEllipse(QPointF(hx, SEQ_HANDLE_Y), 3.5, 3.5);
                 painter->setBrush(QColor(255, 255, 255, 55));
             }
         }
@@ -183,8 +189,8 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
             if (stepWidth > 14)
             {
                 float hx = xEnd - qMax(fw, 6.0f);
-                painter->setBrush(QColor(255, 255, 255, 200));
-                painter->drawEllipse(QPointF(hx, top + 3), 3.0, 3.0);
+                painter->setBrush(QColor(120, 200, 255, 235));
+                painter->drawEllipse(QPointF(hx, SEQ_HANDLE_Y), 3.5, 3.5);
                 painter->setBrush(QColor(255, 255, 255, 55));
             }
         }
@@ -481,31 +487,34 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     const bool alt = event->modifiers() & Qt::AltModifier;
     const qreal x = event->pos().x();
     const qreal y = event->pos().y();
+    const bool inFadeBand = (y >= SEQ_TITLE_STRIP_H && y < SEQ_FADE_BAND_BOTTOM);
 
-    // Whole-block move: Alt-drag anywhere, or drag the top title strip. Disabled
-    // when the item is position-locked (but cue/fade editing below still works).
+    // 1. Whole-block move: Alt-drag anywhere, or drag the top title strip.
+    //    Disabled when position-locked (cue/fade editing below still works).
     if (m_locked == false && event->button() == Qt::LeftButton
         && (alt || y < SEQ_TITLE_STRIP_H))
     {
         ShowItem::mousePressEvent(event);
         return;
     }
-    // Outer stretch handles (right edge = extend last cue) — position edit, so
-    // locked items skip it.
-    if (m_locked == false && edgeAt(x) != NoEdge)
+
+    // 2. Outer stretch handle (right edge = extend last cue) — but NOT in the
+    //    fade band, so a first/last cue's fade handle near the block edge is not
+    //    stolen by the resize grab. Grab the edge lower down (timing band).
+    if (m_locked == false && inFadeBand == false && edgeAt(x) != NoEdge)
     {
         ShowItem::mousePressEvent(event);
         return;
     }
 
-    // In-block cue editing — allowed even when the block is position-locked, as
-    // long as the track/master gate (m_editable) permits.
-    if (m_editable && event->button() == Qt::LeftButton && edgeAt(x) == NoEdge)
+    // 3. In-block cue editing — allowed even when position-locked, if the
+    //    track/master gate (m_editable) permits.
+    if (m_editable && event->button() == Qt::LeftButton)
     {
         int cue = cueAt(x);
 
-        // Fade band: set the hovered cue's fade-in (left half) or fade-out.
-        if (y >= SEQ_TITLE_STRIP_H && y < SEQ_FADE_BAND_BOTTOM && cue >= 0)
+        // Fade band: set the cue's fade-in (left half) or fade-out (right half).
+        if (inFadeBand && cue >= 0)
         {
             float sx, ex;
             cueBounds(cue, sx, ex);
@@ -523,21 +532,24 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
         }
 
         // Timing band: divider = roll, cue body = slip (interior cues only).
-        int div = stepBoundaryAt(x);
-        cue = (div < 0) ? cue : -1;
-        if (div >= 0 || (cue > 0 && cue < m_chaser->stepsCount() - 1))
+        if (edgeAt(x) == NoEdge)
         {
-            ensurePerStepDurations();
-            snapshotDurations();
-            m_cueDrag = (div >= 0) ? CueRoll : CueSlip;
-            m_cueDragIdx = (div >= 0) ? div : cue;
-            m_cueDragPressX = event->scenePos().x();
-            m_selectedStep = m_cueDragIdx;
-            setFlag(QGraphicsItem::ItemIsMovable, false);
-            setSelected(true);
-            update();
-            event->accept();
-            return;
+            int div = stepBoundaryAt(x);
+            cue = (div < 0) ? cue : -1;
+            if (div >= 0 || (cue > 0 && cue < m_chaser->stepsCount() - 1))
+            {
+                ensurePerStepDurations();
+                snapshotDurations();
+                m_cueDrag = (div >= 0) ? CueRoll : CueSlip;
+                m_cueDragIdx = (div >= 0) ? div : cue;
+                m_cueDragPressX = event->scenePos().x();
+                m_selectedStep = m_cueDragIdx;
+                setFlag(QGraphicsItem::ItemIsMovable, false);
+                setSelected(true);
+                update();
+                event->accept();
+                return;
+            }
         }
     }
     ShowItem::mousePressEvent(event);
