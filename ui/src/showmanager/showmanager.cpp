@@ -1522,18 +1522,39 @@ void ShowManager::slotTimecodePosition(quint32 msPosition)
 {
     m_tcFps = m_doc->timecodeSource()->fps();
 
-    // Drive the running show only while following and actually playing.
-    if (m_followMtcAction != NULL && m_followMtcAction->isChecked() &&
-        m_show != NULL && m_show->isRunning() && m_show->isPaused() == false)
+    if (m_followMtcAction != NULL && m_followMtcAction->isChecked() && m_show != NULL)
     {
-        m_show->setExternalTime(msPosition);
+        if (m_show->isRunning())
+        {
+            // Feed the runner: it drives m_elapsedTime and moves the cursor via
+            // the show's timeChanged signal.
+            if (m_show->isPaused() == false)
+                m_show->setExternalTime(msPosition);
+        }
+        else
+        {
+            // Not playing yet — still track the cursor so the operator sees the
+            // incoming position on the timeline.
+            m_showview->moveCursor(msPosition);
+            slotUpdateTime(msPosition);
+        }
     }
     updateTimecodeChip();
 }
 
 void ShowManager::slotTimecodeRunningChanged(bool running)
 {
-    Q_UNUSED(running)
+    // When timecode starts rolling and we are set to follow, run the show from
+    // the current position so cues fire and the cursor chases Logic. When it
+    // stops the runner simply holds its position (manual GO), so we don't stop.
+    if (running && m_followMtcAction != NULL && m_followMtcAction->isChecked() &&
+        m_show != NULL && m_show->isRunning() == false)
+    {
+        cursorMovedDuringPause = false;
+        m_show->start(m_doc->masterTimer(), functionParent(),
+                      m_doc->timecodeSource()->positionMs());
+        m_playAction->setIcon(QIcon(":/player_pause.png"));
+    }
     updateTimecodeChip();
 }
 
