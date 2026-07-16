@@ -25,6 +25,8 @@
 #include <QApplication>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QFile>
+#include <QTextStream>
 #include <QDebug>
 
 #include "vcshowcontrol.h"
@@ -277,6 +279,37 @@ void VCShowControl::slotPoll()
     // goes LIVE on its own — independent of the Show Manager (which only
     // auto-starts its own currently-selected show). Operate mode only.
     Show *show = showFunction();
+
+    // Env-gated diagnostics (QLC_SHOW_DEBUG=1 → /tmp/qlc_showdebug.log). qDebug is
+    // swallowed by main.cpp, so log to a file. Remove once the runtime issues are
+    // understood.
+    static const bool dbg = qEnvironmentVariableIntValue("QLC_SHOW_DEBUG") != 0;
+    if (dbg)
+    {
+        static int n = 0;
+        if ((n++ % 5) == 0) // ~ every 2 s
+        {
+            QFile f("/tmp/qlc_showdebug.log");
+            if (f.open(QIODevice::Append | QIODevice::Text))
+            {
+                Chaser *dc = NULL;
+                if (show != NULL)
+                    foreach (Track *t, show->tracks())
+                        foreach (ShowFunction *sf, t->showFunctions())
+                            if ((dc = qobject_cast<Chaser *>(m_doc->function(sf->functionID()))) != NULL && dc->isRunning())
+                                break;
+                QTextStream(&f) << "[WIDGET] id=" << m_showID
+                    << " showValid=" << (show != NULL)
+                    << " running=" << (show && show->isRunning())
+                    << " follow=" << (show && show->timecodeFollow())
+                    << " suspended=" << (show && show->isTimelineSuspended())
+                    << " mode=" << (m_doc->mode() == Doc::Operate ? "OP" : "DES")
+                    << " tcRolling=" << (m_doc->timecodeSource() && m_doc->timecodeSource()->isRunning())
+                    << " runningChaser=" << (dc && dc->isRunning())
+                    << "\n";
+            }
+        }
+    }
     if (show != NULL && m_doc->mode() == Doc::Operate
         && show->timecodeFollow() && show->isRunning() == false
         && m_doc->timecodeSource() != NULL && m_doc->timecodeSource()->isRunning())

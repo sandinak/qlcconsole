@@ -20,6 +20,8 @@
 #include <QInputDialog>
 #include <QColorDialog>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QTextStream>
 #include <QToolButton>
 #include <QLineEdit>
 #include <QMenu>
@@ -1560,6 +1562,18 @@ void ShowManager::slotStartPlayback()
 {
     if (m_showsCombo->count() == 0 || m_show == NULL)
         return;
+
+    if (qEnvironmentVariableIntValue("QLC_SHOW_DEBUG") != 0)
+    {
+        QFile f("/tmp/qlc_showdebug.log");
+        if (f.open(QIODevice::Append | QIODevice::Text))
+            QTextStream(&f) << "[PLAY] show=" << m_show->id()
+                << " running=" << m_show->isRunning()
+                << " paused=" << m_show->isPaused()
+                << " suspended=" << m_show->isTimelineSuspended()
+                << " mode=" << (m_doc->mode() == Doc::Operate ? "OP" : "DES")
+                << " mayOutput=" << showMayOutput() << "\n";
+    }
 
     if (m_show->isRunning() == false)
     {
