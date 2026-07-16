@@ -96,6 +96,16 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
         if (stepDuration == Function::infiniteSpeed())
             stepDuration = 10 * 1000 * 1000;
 
+        float stepWidth = ((timeUnit * (float)stepDuration) / 1000);
+
+        // Shade each step (alternating) so the steps read as distinct aligned
+        // blocks within the chaser rather than one flat bar.
+        if (stepWidth > 1.0f)
+        {
+            QColor shade = (stepIdx % 2 == 0) ? m_color.lighter(118) : m_color.darker(112);
+            painter->fillRect(QRectF(xpos, 0, stepWidth, TRACK_HEIGHT - 3), shade);
+        }
+
         // draw fade in line
         if (stepFadeIn > 0)
         {
@@ -107,7 +117,6 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
                 painter->drawLine(xpos, TRACK_HEIGHT - 4, fadeXpos, 1);
             }
         }
-        float stepWidth = ((timeUnit * (float)stepDuration) / 1000);
         // draw selected step
         if (stepIdx == m_selectedStep)
         {
@@ -116,8 +125,12 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
             painter->drawRect(xpos, 0, stepWidth, TRACK_HEIGHT - 3);
         }
 
-        QRect textRect = QRect(xpos + 1, 0, stepWidth - 1, TRACK_HEIGHT - 3);
-        painter->drawText(textRect, Qt::AlignBottom, step.note);
+        // Step label (falls back to the step number when unnamed), top-aligned
+        // and clipped to the step so each aligned step is identifiable.
+        QString label = step.note.isEmpty() ? tr("%1").arg(stepIdx + 1) : step.note;
+        painter->setPen(QPen(Qt::white, 1));
+        QRect textRect = QRect(xpos + 2, 1, stepWidth - 3, TRACK_HEIGHT - 4);
+        painter->drawText(textRect, Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap, label);
 
         xpos += stepWidth;
 
