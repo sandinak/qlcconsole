@@ -181,8 +181,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotMarkerDeleteRequested(quint32)));
     connect(m_showview, SIGNAL(markerColorRequested(quint32)),
             this, SLOT(slotMarkerColorRequested(quint32)));
-    connect(m_showview, SIGNAL(markerMovedRequested(quint32,quint32,quint32)),
-            this, SLOT(slotMarkerMoved(quint32,quint32,quint32)));
+    connect(m_showview, SIGNAL(markerMovedRequested(quint32,quint32,quint32,QString,QColor)),
+            this, SLOT(slotMarkerMoved(quint32,quint32,quint32,QString,QColor)));
     connect(m_showview, SIGNAL(itemDroppedBelowTracks(ShowItem*)),
             this, SLOT(slotItemDroppedBelowTracks(ShowItem*)));
 
@@ -1585,15 +1585,13 @@ void ShowManager::slotMarkerDeleteRequested(quint32 time)
     m_doc->setModified();
 }
 
-void ShowManager::slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 newEnd)
+void ShowManager::slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 newEnd,
+                                  QString label, QColor color)
 {
-    if (m_show == NULL || oldStart == UINT_MAX)
-        return;
-    ShowMarker m = m_show->markers().value(oldStart);
-    if (m.label.isEmpty())
+    if (m_show == NULL || oldStart == UINT_MAX || label.isEmpty())
         return;
     m_show->removeMarker(oldStart);
-    m_show->setMarker(newStart, newEnd, m.label, m.color);
+    m_show->setMarker(newStart, newEnd, label, color);
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
 }
@@ -1696,15 +1694,22 @@ void ShowManager::slotTimecodePosition(quint32 msPosition)
     }
     quint32 pos = (msPosition > offset) ? msPosition - offset : 0;
 
-    // Always chase the cursor to where the timecode sits on this timeline, so
-    // the playhead tracks Logic regardless of the Follow toggle / run state.
-    m_showview->moveCursor(pos);
-    slotUpdateTime(pos);
-
-    // Follow mode additionally drives cue playback.
-    if (m_followMtcAction != NULL && m_followMtcAction->isChecked() &&
-        m_show->isRunning() && m_show->isPaused() == false)
-        m_show->setExternalTime(pos);
+    if (m_show->isRunning())
+    {
+        // The runner emits timeChanged() every tick (50 Hz) and that already
+        // drives the cursor via slotUpdateTimeAndCursor — feeding it here as
+        // well would move the cursor twice per update (the "choppy" second
+        // run). So only feed the runner; let it drive the (smooth) cursor.
+        if (m_followMtcAction != NULL && m_followMtcAction->isChecked() &&
+            m_show->isPaused() == false)
+            m_show->setExternalTime(pos);
+    }
+    else
+    {
+        // Not playing — chase the cursor directly so the playhead still tracks.
+        m_showview->moveCursor(pos);
+        slotUpdateTime(pos);
+    }
 }
 
 void ShowManager::slotTimecodeRunningChanged(bool running)
@@ -2176,9 +2181,11 @@ void ShowManager::updateMultiTrackView()
     m_timeDivisionCombo->setCurrentIndex(tIdx);
 
     connect(m_bpmField, SIGNAL(valueChanged(int)), this, SLOT(slotBPMValueChanged(int)));
-    connect(m_show, SIGNAL(timeChanged(quint32)), this, SLOT(slotUpdateTimeAndCursor(quint32)));
-    connect(m_show, SIGNAL(showFinished()), this, SLOT(slotStopPlayback()));
-    connect(m_show, SIGNAL(stopped(quint32)), this, SLOT(slotShowStopped()));
+    // UniqueConnection so re-selecting the same show doesn't stack duplicate
+    // connections (which would move the cursor N times per tick — choppy).
+    connect(m_show, SIGNAL(timeChanged(quint32)), this, SLOT(slotUpdateTimeAndCursor(quint32)), Qt::UniqueConnection);
+    connect(m_show, SIGNAL(showFinished()), this, SLOT(slotStopPlayback()), Qt::UniqueConnection);
+    connect(m_show, SIGNAL(stopped(quint32)), this, SLOT(slotShowStopped()), Qt::UniqueConnection);
 
     Track *firstTrack = NULL;
 
