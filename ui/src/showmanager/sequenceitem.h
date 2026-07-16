@@ -84,6 +84,11 @@ private:
     /** The effective hold (duration) of step @p idx, honouring Common mode. */
     quint32 effectiveStepDuration(int idx) const;
 
+    /** On-timeline display width (ms) of step @p idx: effectiveStepDuration(),
+     *  but a nominal value for manual-GO (infinite) / un-timed (0) steps so each
+     *  cue stays visible + draggable. Used by paint/calculateWidth/boundaries. */
+    quint32 stepDisplayMs(int idx) const;
+
     /** Index of the step whose RIGHT divider sits within a few px of localX, or
      *  -1. Excludes the final divider (that's the item's stretch handle). */
     int stepBoundaryAt(qreal localX) const;

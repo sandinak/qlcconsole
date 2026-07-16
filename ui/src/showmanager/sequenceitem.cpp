@@ -27,6 +27,10 @@
 #include "chaserstep.h"
 #include "trackitem.h"
 
+/** Nominal on-timeline width (ms) for a manual-GO (infinite) or un-timed (0)
+ *  step, so every cue stays visible and draggable. */
+#define SEQ_NOMINAL_STEP_MS 3000
+
 SequenceItem::SequenceItem(Chaser *seq, ShowFunction *func)
     : ShowItem(func)
     , m_chaser(seq)
@@ -52,24 +56,32 @@ SequenceItem::SequenceItem(Chaser *seq, ShowFunction *func)
     setIconResource(":/sequence.png");
 }
 
+quint32 SequenceItem::stepDisplayMs(int idx) const
+{
+    // The width a step OCCUPIES on the timeline. A manual-GO step (infinite hold)
+    // or a not-yet-timed step (0) would otherwise blow the block out to a huge
+    // width (the old code clamped infinite to 10,000,000 ms, so a single step
+    // filled the whole view and the others were invisible). Give those a nominal
+    // visible width so every cue reads as its own draggable sub-block.
+    quint32 dur = effectiveStepDuration(idx);
+    if (dur == Function::infiniteSpeed() || dur == 0)
+        return SEQ_NOMINAL_STEP_MS;
+    return dur;
+}
+
 void SequenceItem::calculateWidth()
 {
-    int newWidth = 0;
-    quint32 seq_duration = m_chaser->totalDuration();
     float timeUnit = 50.0 / float(getTimeScale());
+    // Width = sum of the per-step DISPLAY durations, so the block always exactly
+    // spans its sub-blocks (paint uses the same per-step widths).
+    double totalMs = 0;
+    const int count = m_chaser->stepsCount();
+    for (int i = 0; i < count; i++)
+        totalMs += stepDisplayMs(i);
 
-    if (seq_duration == Function::infiniteSpeed())
-    {
-        newWidth = timeUnit * 10000;
-    }
-    else
-    {
-        if (seq_duration != 0)
-            newWidth = (timeUnit * float(seq_duration)) / 1000.0;
-
-        if (newWidth < timeUnit)
-            newWidth = timeUnit;
-    }
+    int newWidth = (timeUnit * float(totalMs)) / 1000.0;
+    if (newWidth < timeUnit)
+        newWidth = timeUnit;
     setWidth(newWidth);
 }
 
@@ -88,19 +100,16 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
     {
         uint stepFadeIn = step.fadeIn;
         uint stepFadeOut = step.fadeOut;
-        uint stepDuration = step.duration;
 
         if (m_chaser->fadeInMode() == Chaser::Common)
             stepFadeIn = m_chaser->fadeInSpeed();
         if (m_chaser->fadeOutMode() == Chaser::Common)
             stepFadeOut = m_chaser->fadeOutSpeed();
-        if (m_chaser->durationMode() == Chaser::Common)
-            stepDuration = m_chaser->duration();
 
-        // avoid hanging on infinite duration
-        if (stepDuration == Function::infiniteSpeed())
-            stepDuration = 10 * 1000 * 1000;
-
+        // Display width per step (manual-GO / un-timed steps get a nominal width
+        // so they stay visible — see stepDisplayMs()). Matches stepBoundaryAt()
+        // and calculateWidth() so dividers line up with the drag hit-zones.
+        quint32 stepDuration = stepDisplayMs(stepIdx);
         float stepWidth = ((timeUnit * (float)stepDuration) / 1000);
 
         // Shade each step (alternating) so the steps read as distinct aligned
@@ -215,10 +224,7 @@ int SequenceItem::stepBoundaryAt(qreal localX) const
     float xpos = 0;
     for (int i = 0; i < count; i++)
     {
-        quint32 dur = effectiveStepDuration(i);
-        if (dur == Function::infiniteSpeed())
-            dur = 10 * 1000 * 1000;
-        xpos += (timeUnit * float(dur)) / 1000.0f;
+        xpos += (timeUnit * float(stepDisplayMs(i))) / 1000.0f;
         // The final divider coincides with the item's right stretch handle —
         // leave that to ShowItem so whole-item resize still works.
         if (i < count - 1 && qAbs(localX - xpos) <= 4.0)
