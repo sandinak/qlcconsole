@@ -19,6 +19,7 @@
 
 #include <QInputDialog>
 #include <QColorDialog>
+#include <QElapsedTimer>
 #include <QToolButton>
 #include <QLineEdit>
 #include <QMenu>
@@ -408,6 +409,19 @@ void ShowManager::initToolbar()
     m_toolbar->addSeparator();
 
     m_toolbar->addAction(m_followMtcAction);
+    // Make the Follow-MTC toggle obviously on/off: show its text and a bright
+    // green background + border when armed.
+    if (QToolButton *fb = qobject_cast<QToolButton *>(
+            m_toolbar->widgetForAction(m_followMtcAction)))
+    {
+        fb->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        fb->setStyleSheet(
+            "QToolButton { padding: 2px 8px; }"
+            "QToolButton:checked { background: #2e7d32; color: white; font-weight: bold;"
+            " border: 1px solid #7bd88a; border-radius: 3px; }");
+    }
+    slotFollowMtcToggled(m_followMtcAction->isChecked());
+
     m_tcSourceCombo = new QComboBox();
     m_tcSourceCombo->setFixedWidth(150);
     m_tcSourceCombo->setToolTip(tr("MIDI Time Code source. Auto = follow any input "
@@ -1657,6 +1671,9 @@ void ShowManager::slotFollowMtcToggled(bool enable)
 {
     if (m_show != NULL)
         m_show->setTimecodeFollow(enable);
+    if (m_followMtcAction != NULL)
+        m_followMtcAction->setText(enable ? tr("● FOLLOWING MTC")
+                                          : tr("Follow MTC (off)"));
 }
 
 void ShowManager::updateTcSourceCombo()
@@ -1867,10 +1884,35 @@ void ShowManager::slotShowItemMoved(ShowItem *item, quint32 time, bool moved)
 
 void ShowManager::slotUpdateTimeAndCursor(quint32 msec_time)
 {
-    //qDebug() << Q_FUNC_INFO << "time: " << msec_time;
+    // --- TEMP diagnostics: measure the real UI update interval + jitter. ---
+    // Enable with env QLC_CURSOR_DEBUG=1. Logs every 50 updates: how often the
+    // cursor is actually driven (expect ~20ms mean if the 50Hz engine updates
+    // reach the UI cleanly; a high max = batching; ~80ms mean = 12Hz path).
+    static const bool dbg = qEnvironmentVariableIntValue("QLC_CURSOR_DEBUG") != 0;
+    if (dbg)
+    {
+        static QElapsedTimer et;
+        static int n = 0;
+        static qint64 sum = 0, mx = 0, prevMs = 0;
+        static quint32 prevVal = 0;
+        if (et.isValid())
+        {
+            qint64 e = et.nsecsElapsed() / 1000000;
+            sum += e; if (e > mx) mx = e;
+            if (++n % 50 == 0)
+            {
+                qWarning("[CURSOR] running=%d %d upd: interval mean %.1fms max %lldms; "
+                         "value step ~%dms", m_show && m_show->isRunning(), n,
+                         double(sum) / n, mx, int(msec_time) - int(prevVal));
+                sum = 0; mx = 0; n = 0;
+            }
+        }
+        prevVal = msec_time;
+        prevMs = 0; (void)prevMs;
+        et.restart();
+    }
+
     slotUpdateTime(msec_time);
-    // Feed the smooth playhead animator rather than moving the cursor directly
-    // (engine time updates arrive in cross-thread bursts and would look chunky).
     m_showview->setPlayheadTarget(msec_time);
 }
 
