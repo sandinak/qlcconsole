@@ -86,6 +86,7 @@ public:
 private:
     bool m_suspended;        // effective state, owned by the timer thread
     bool m_suspendRequest;   // requested state, guarded by m_tcMutex
+    bool m_tcHolding;        // TC stopped while following → children paused (fades freeze)
 
 private:
     /** Relocate the runner to an absolute position: stop running functions,

@@ -50,6 +50,7 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
     , m_msSinceFresh(0)
     , m_suspended(false)
     , m_suspendRequest(false)
+    , m_tcHolding(false)
 {
     Q_ASSERT(m_doc != NULL);
     Q_ASSERT(showID != Show::invalidId());
@@ -141,6 +142,7 @@ void ShowRunner::stop()
 
     m_runningQueue.clear();
     m_suspended = false;
+    m_tcHolding = false;
     {
         QMutexLocker locker(&m_tcMutex);
         m_suspendRequest = false;
@@ -236,6 +238,18 @@ void ShowRunner::write(MasterTimer *timer)
             // window rides over normal MTC jitter. Once it lapses, HOLD (the
             // freeze / manual-GO fallback when Logic stops) — kept small so the
             // playhead stops promptly on pause.
+            // Freeze/thaw the running children (scenes, chasers, …) with the
+            // timecode: when TC stops, the show clock holds — but the children's
+            // own fades/steps run on the MasterTimer and would keep going. Pause
+            // them so an in-progress fade FREEZES at TC-stop and resumes on
+            // TC-restart (Branson: "the fade stops").
+            const bool holding = (m_msSinceFresh > 150);
+            if (holding != m_tcHolding)
+            {
+                m_tcHolding = holding;
+                setPause(holding);
+            }
+
             if (m_msSinceFresh <= 150)
             {
                 // Smooth base advance every frame (this is what keeps the cursor
@@ -264,6 +278,13 @@ void ShowRunner::write(MasterTimer *timer)
                 }
             }
         }
+    }
+
+    // If follow was disarmed while the children were frozen (TC-hold), thaw them.
+    if (following == false && m_tcHolding)
+    {
+        setPause(false);
+        m_tcHolding = false;
     }
 
     // Timeline suspend (Operate-mode VC takeover). The elapsed clock above keeps

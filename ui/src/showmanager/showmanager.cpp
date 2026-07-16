@@ -2073,9 +2073,11 @@ void ShowManager::slotTimecodePosition(quint32 msPosition)
         if (m_show->timecodeFollow() && m_show->isPaused() == false)
             m_show->setExternalTime(pos);
     }
-    else
+    else if (m_show->timecodeFollow())
     {
-        // Not playing — smooth-follow the cursor so the playhead still tracks.
+        // Not playing but follow ARMED — chase the cursor so the playhead tracks.
+        // When not armed the playhead must NOT drift with stray timecode; it moves
+        // only under Play.
         m_showview->setPlayheadTarget(pos);
         slotUpdateTime(pos);
     }

@@ -363,8 +363,11 @@ void VCShowControl::slotTimecodeChanged(quint32 ms)
     if (show != NULL && show->isRunning())
         return;
 
-    // Idle: mirror the raw incoming TC so the timecode still reads.
-    setTimecodeLabel(ms);
+    // Idle: mirror the raw incoming TC ONLY when follow is armed. If it isn't
+    // armed, the readout must NOT drift with stray timecode — it moves only under
+    // Play (free-run).
+    if (show != NULL && show->timecodeFollow())
+        setTimecodeLabel(ms);
 }
 
 void VCShowControl::slotShowTimeChanged(quint32 ms)
@@ -508,10 +511,39 @@ void VCShowControl::refresh()
     if (m_playButton != NULL)
         m_playButton->setIcon(QIcon(running ? ":/player_pause.png" : ":/player_play.png"));
 
+    // "Configured for timecode" = a TC source has been seen or explicitly locked.
+    const bool operate = (m_doc->mode() == Doc::Operate);
+    TimecodeSource *tc = m_doc->timecodeSource();
+    const bool tcAvailable = (tc != NULL &&
+                              (tc->lastUniverse() >= 0 || tc->sourceUniverse() >= 0));
+
     if (m_followButton != NULL)
     {
         m_followButton->blockSignals(true);
         m_followButton->setChecked(following);
+        // Unusable when no timecode is configured; GREEN when armed; AMBER
+        // "warning" when TC is available but NOT armed (operator not syncing).
+        m_followButton->setEnabled(operate && tcAvailable);
+        if (tcAvailable == false)
+        {
+            m_followButton->setStyleSheet(QString());
+            m_followButton->setToolTip(tr("No MIDI Time Code source configured — "
+                                          "follow unavailable"));
+        }
+        else if (following)
+        {
+            m_followButton->setStyleSheet("QToolButton { background:#2e7d32; "
+                "border:1px solid #7bd88a; border-radius:3px; }");
+            m_followButton->setToolTip(tr("Armed — following MIDI Time Code"));
+        }
+        else
+        {
+            m_followButton->setStyleSheet("QToolButton { background:#c9761f; "
+                "border:1px solid #f0a45a; border-radius:3px; }");
+            m_followButton->setToolTip(tr("MIDI Time Code available but NOT armed — "
+                                          "press to sync (playback will free-run "
+                                          "otherwise)"));
+        }
         m_followButton->blockSignals(false);
     }
     if (m_suspendButton != NULL)
@@ -551,9 +583,16 @@ void VCShowControl::refresh()
         }
         else if (following)
         {
-            // Stopped but follow armed — Play will hold for MTC, not free-run.
-            m_statusLabel->setText(tr("MTC armed"));
-            m_statusLabel->setStyleSheet("QLabel { color:#ddd; background:#555; padding:0 5px; border-radius:3px; }");
+            // Stopped but armed — ready to sync (Play will hold for MTC).
+            m_statusLabel->setText(tr("✓ MTC ARMED"));
+            m_statusLabel->setStyleSheet(green);
+        }
+        else if (tcAvailable)
+        {
+            // Timecode is available but the operator has NOT armed follow — warn
+            // that playback will free-run, ignoring the timecode.
+            m_statusLabel->setText(tr("⚠ MTC NOT ARMED"));
+            m_statusLabel->setStyleSheet("QLabel { color:#fff; background:#c0392b; padding:0 5px; border-radius:3px; font-weight:bold; }");
         }
         else
         {
