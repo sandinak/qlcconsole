@@ -37,10 +37,20 @@ Punch-list from Branson while driving the timeline. All on `programmer-mode`.
       stretch the whole item.
 - [x] **Fixture Manager: in-place rename** — Return / F2 on a fixture row edits its
       name inline (like folders); commit renames the fixture (2D monitor follows).
-- [ ] **Timeline drag beachball (OPEN — needs a sample)** — dragging a marker or a
-      large item beachballs. Root cause not yet confirmed; needs a `sample` of the
-      hung process (or a short screen recording) to pinpoint before fixing — a
-      speculative item-cache change risks huge pixmaps on very wide items.
+- [x] **Timeline beachball (FIXED)** — clicking a timeline item synchronously
+      built a full SceneEditor console (every fixture + channel) AND a ChaserEditor
+      on the right splitter; on a real rig that beach-balled on nearly every click /
+      chase selection. Removed the open-editor-on-click behaviour entirely (the
+      timeline is for arranging/timing; content is edited in Programming/Functions).
+      Clicking now just selects + activates the track.
+- [x] **Chase "one big block" / no sub-cues (FIXED)** — manual-GO steps (infinite
+      hold) were clamped to 10,000,000 ms so one step filled the view. Added
+      SequenceItem::stepDisplayMs() (nominal 3 s for infinite/0) used by paint +
+      width + divider hit-test, so every cue shows as a distinct draggable
+      sub-block.
+- [ ] **Editor-to-the-right removed from the Show tab** — if arranging vs. content
+      editing causes workflow friction with the Programming tab, revisit (Branson,
+      2026-07-16). Right/bottom SceneEditor+ChaserEditor panels now stay hidden.
 
 ### Decided 2026-07-16 — show / VC / timeline coordination
 Context: in Operate the Show timeline and the Virtual Console both drive the rig
