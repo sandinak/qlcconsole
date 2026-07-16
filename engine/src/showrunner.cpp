@@ -208,24 +208,39 @@ void ShowRunner::write(MasterTimer *timer)
         if (following && set)
         {
             if (fresh)
-            {
                 m_msSinceFresh = 0;
-                qint64 drift = qint64(target) - qint64(m_elapsedTime);
-                if (drift < -200)      // meaningfully behind => a locate
-                    seekTo(target);
-                else if (drift > 0)    // behind/forward-jump => catch up
-                    m_elapsedTime = target;
-                // else: slightly ahead of the source — keep the smooth clock and
-                // let timecode catch up, so the cursor never jitters backward.
-            }
             else
-            {
-                // No new position this tick. Keep moving smoothly for a short
-                // window (rides over normal MTC jitter), then HOLD — this is the
-                // freeze/manual-GO fallback when Logic stops sending timecode.
                 m_msSinceFresh += MasterTimer::tick();
-                if (m_msSinceFresh <= 300)
-                    m_elapsedTime += MasterTimer::tick();
+
+            // Timecode is "live" while fresh positions keep arriving; a short
+            // window rides over normal MTC jitter. Once it lapses, HOLD (the
+            // freeze / manual-GO fallback when Logic stops).
+            if (m_msSinceFresh <= 300)
+            {
+                // Smooth base advance every frame (this is what keeps the cursor
+                // gliding at 50Hz regardless of the ~12Hz MTC rate).
+                m_elapsedTime += MasterTimer::tick();
+
+                // Gentle phase-lock toward the true position when one arrives:
+                // snap only on a real locate/jump, otherwise ease a fraction of
+                // the drift so the motion stays smooth (no per-update chunking).
+                if (fresh)
+                {
+                    qint64 drift = qint64(target) - qint64(m_elapsedTime);
+                    if (drift < -200 || drift > 500)
+                    {
+                        if (target < m_elapsedTime)
+                            seekTo(target);
+                        else
+                            m_elapsedTime = target;
+                    }
+                    else if (drift > 0)
+                    {
+                        m_elapsedTime += drift / 4; // ease forward ~25% per update
+                    }
+                    // drift <= 0 (slightly ahead): no backward nudge — the base
+                    // advance keeps gliding and timecode catches up.
+                }
             }
         }
     }
