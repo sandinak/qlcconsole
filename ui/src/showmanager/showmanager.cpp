@@ -408,19 +408,17 @@ void ShowManager::initToolbar()
     m_toolbar->addAction(m_playAction);
     m_toolbar->addSeparator();
 
-    m_toolbar->addAction(m_followMtcAction);
-    // Make the Follow-MTC toggle obviously on/off: show its text and a bright
-    // green background + border when armed.
-    if (QToolButton *fb = qobject_cast<QToolButton *>(
-            m_toolbar->widgetForAction(m_followMtcAction)))
-    {
-        fb->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        fb->setStyleSheet(
-            "QToolButton { padding: 2px 8px; }"
-            "QToolButton:checked { background: #2e7d32; color: white; font-weight: bold;"
-            " border: 1px solid #7bd88a; border-radius: 3px; }");
-    }
+    // The Follow-MTC TOGGLE now lives on the global main toolbar (App), so it is
+    // reachable from any tab and MIDI-mappable via a VC FollowTimecode button.
+    // m_followMtcAction is kept as the internal per-show state holder (its
+    // toggled() still runs slotFollowMtcToggled) but is no longer shown here.
+    // The MTC SOURCE + timeline-offset controls stay here — they are Show-Manager
+    // configuration, not the global arming toggle.
     slotFollowMtcToggled(m_followMtcAction->isChecked());
+
+    // Small caption so it's clear these configure the (global) MTC follow.
+    QLabel *tcLabel = new QLabel(tr("  MTC: "));
+    m_toolbar->addWidget(tcLabel);
 
     m_tcSourceCombo = new QComboBox();
     m_tcSourceCombo->setFixedWidth(150);
@@ -2301,13 +2299,17 @@ void ShowManager::updateMultiTrackView()
         return;
     }
 
-    // Reflect this show's timecode-follow state in the toolbar toggle.
+    // Reflect this show's timecode-follow state in the (now internal) action and
+    // push it to the global main-toolbar toggle + any MIDI-mapped VC buttons.
     if (m_followMtcAction != NULL)
     {
         m_followMtcAction->blockSignals(true);
         m_followMtcAction->setChecked(m_show->timecodeFollow());
         m_followMtcAction->blockSignals(false);
     }
+    emit followTimecodeChanged(m_show->timecodeFollow());
+    // The active show changed — its running state defines timeline control.
+    emit timelineControlChanged();
     updateTcSourceCombo();
     m_showview->setMarkers(m_show->markers());
 

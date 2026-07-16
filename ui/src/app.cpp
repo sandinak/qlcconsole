@@ -863,6 +863,19 @@ void App::initActions()
     connect(m_showLockAction, SIGNAL(triggered(bool)),
             this, SLOT(slotShowModeLock(bool)));
 
+    // Follow MIDI Time Code — global toggle (moved out of the Show Manager
+    // toolbar so it is reachable from anywhere and MIDI-mappable via a VC
+    // FollowTimecode button). Arms/disarms MTC-follow on the current show.
+    m_followMtcAction = new QAction(QIcon(":/clock.png"),
+                                    tr("Follow MIDI Time &Code"), this);
+    m_followMtcAction->setCheckable(true);
+    m_followMtcAction->setToolTip(tr(
+        "Follow incoming MIDI Time Code (e.g. from Logic) on the current show. "
+        "The timeline chases the timecode; when it stops, the show holds for "
+        "manual GO. Set the source/offset in the Show Manager toolbar."));
+    connect(m_followMtcAction, SIGNAL(toggled(bool)),
+            this, SLOT(slotFollowTimecodeToggled(bool)));
+
     // Exit / resume timeline control — an Operate-mode VC takeover. While a show
     // is driving the rig, checking this suspends the timeline's output (the
     // Virtual Console owns the rig) while the playhead keeps tracking timecode,
@@ -1002,6 +1015,7 @@ void App::initToolBar()
     m_toolbar->addAction(m_controlBlackoutAction);
     m_toolbar->addAction(m_controlBlindAction);
     m_toolbar->addAction(m_showLockAction);
+    m_toolbar->addAction(m_followMtcAction);
     m_toolbar->addAction(m_timelineSuspendAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_modeToggleAction);
@@ -2459,6 +2473,7 @@ void App::initStatusBar()
                 this, SLOT(slotTimelineControlChanged()));
         connect(ShowManager::instance(), SIGNAL(followTimecodeChanged(bool)),
                 this, SLOT(slotFollowTimecodeChanged(bool)));
+        slotFollowTimecodeChanged(ShowManager::instance()->followTimecode());
     }
     slotTimelineControlChanged();
 
