@@ -9,6 +9,39 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### 2026-07-16 — Show Manager timeline usability batch *(BUILT — needs GUI test)*
+Punch-list from Branson while driving the timeline. All on `programmer-mode`.
+- [x] **Empty-state hint + Show CRUD** — the timeline shows a centred hint when
+      there's no show ("click New Show…") or an empty show ("drop a scene/chaser/
+      collection, or right-click to add a track"). Rename show… / Delete show…
+      toolbar actions next to the shows combo (delete confirms; keeps referenced
+      functions). Show-scoped actions disabled when no show exists.
+- [x] **Coarse whole-timeline Undo (Ctrl-Z)** — 25-deep snapshot stack of tracks
+      (name/mute/colour/scene) + placed ShowFunctions + markers; restore rebuilds
+      the timeline. Pushed before item move/resize/drop/delete, track add/delete/
+      reorder, and every marker edit. Per-show (cleared on show switch).
+      Limitation: does NOT capture a Chaser's internal step timing (that lives on
+      the function — see chase-cue retiming below).
+- [x] **Multi-select + safe multi-delete** — Shift/Ctrl-click + rubber-band
+      marquee; Delete removes the selected item(s) (one straight away, >1 with a
+      confirm) and is undoable. Delete no longer nukes a track by surprise when
+      nothing is selected (tracks go via the header right-click, which confirms).
+- [x] **Track header drag-to-reorder** — vertical drag on a track header reorders
+      (multi-row honoured), in addition to the right-click Move up/down; undoable.
+- [x] **Bare Scene = simple timed clip** — dropping a Scene no longer wraps it in
+      a hidden 1-step Sequence; it's a SceneItem clip the ShowRunner runs for its
+      duration (default 5 s). Existing Sequence-wrapped scenes still load.
+- [x] **Chase cue retiming** — drag a chaser block's interior step dividers to set
+      each cue's hold against the timeline (split cursor on hover; min 0.1 s;
+      Common-mode chasers convert to PerStep on first drag). Outer edges still
+      stretch the whole item.
+- [x] **Fixture Manager: in-place rename** — Return / F2 on a fixture row edits its
+      name inline (like folders); commit renames the fixture (2D monitor follows).
+- [ ] **Timeline drag beachball (OPEN — needs a sample)** — dragging a marker or a
+      large item beachballs. Root cause not yet confirmed; needs a `sample` of the
+      hung process (or a short screen recording) to pinpoint before fixing — a
+      speculative item-cache change risks huge pixmaps on very wide items.
+
 ### Decided 2026-07-16 — show / VC / timeline coordination
 Context: in Operate the Show timeline and the Virtual Console both drive the rig
 and needed an arbitration + visualisation model. Decisions (Branson, 2026-07-16):
