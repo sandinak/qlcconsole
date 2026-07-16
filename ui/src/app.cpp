@@ -2381,20 +2381,47 @@ void App::initStatusBar()
 {
     QStatusBar* sb = statusBar();
 
-    // Create mode label (left side)
+    // Create mode label (far left). No stretch: a dedicated spacer centres the
+    // global MTC/Load chips between the mode label and the right-hand chips.
     m_statusModeLabel = new QLabel(this);
     m_statusModeLabel->setMinimumWidth(300);
-    sb->addWidget(m_statusModeLabel, 1);
+    sb->addWidget(m_statusModeLabel, 0);
 
-    // Unsaved-changes indicator. Added as a PERMANENT widget so it sits in the
-    // same framed/aligned group as the autosave label (a normal addWidget item
-    // renders at a slightly different baseline than the permanent ones).
-    m_statusDirtyLabel = new QLabel(this);
-    // Match the other permanent status labels' alignment exactly (they use
-    // AlignRight, i.e. top-aligned) so the baseline lines up with "Autosave".
-    m_statusDirtyLabel->setAlignment(Qt::AlignRight);
-    sb->addPermanentWidget(m_statusDirtyLabel);
-    slotDocModified(m_doc != NULL ? m_doc->isModified() : false);
+    // Spacer that pushes the centred health chips (MTC/Load, created below)
+    // rightward off the mode label. The status bar's built-in message area
+    // supplies the balancing stretch on their right, so the two chips sit
+    // centred between the mode label and the right-hand permanent chip group.
+    QWidget *centreSpacer = new QWidget(this);
+    sb->addWidget(centreSpacer, 1);
+
+    // Global system-health chips: MIDI Time Code + engine load. These are
+    // app-wide (the timecode source and MasterTimer are global), so they live
+    // in the status bar and stay visible across tabs. Centred (not in the
+    // right-hand group) per the footer layout.
+    m_statusTimecodeLabel = new QLabel(this);
+    m_statusTimecodeLabel->setToolTip(tr("MIDI Time Code. Grey: no source. "
+        "Amber: connected but not advancing (spoken scene / manual GO). "
+        "Green: rolling."));
+    sb->addWidget(m_statusTimecodeLabel, 0);
+
+    m_statusLoadLabel = new QLabel(this);
+    m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
+        "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
+    sb->addWidget(m_statusLoadLabel, 0);
+
+    if (m_doc != NULL)
+    {
+        TimecodeSource *tc = m_doc->timecodeSource();
+        connect(tc, SIGNAL(timeChanged(quint32)), this, SLOT(slotTimecodeStatusChanged()));
+        connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeStatusChanged()));
+    }
+    slotTimecodeStatusChanged();
+
+    m_healthTimer = new QTimer(this);
+    m_healthTimer->setInterval(500);
+    connect(m_healthTimer, SIGNAL(timeout()), this, SLOT(slotUpdateHealthFooter()));
+    m_healthTimer->start();
+    slotUpdateHealthFooter();
 
     // Programmer selection indicator (between mode and dirty). Hidden
     // when nothing is selected, otherwise shows fully-selected fixture
@@ -2438,35 +2465,16 @@ void App::initStatusBar()
     m_statusProgrammerLabel->hide();
     sb->addPermanentWidget(m_statusProgrammerLabel);
 
-    // Global system-health chips: MIDI Time Code + engine load. These are
-    // app-wide (the timecode source and MasterTimer are global), so they live
-    // in the status bar and stay visible across tabs.
-    m_statusTimecodeLabel = new QLabel(this);
-    m_statusTimecodeLabel->setToolTip(tr("MIDI Time Code. Grey: no source. "
-        "Amber: connected but not advancing (spoken scene / manual GO). "
-        "Green: rolling."));
-    sb->addPermanentWidget(m_statusTimecodeLabel);
+    // Unsaved-changes indicator. Placed immediately before the autosave label so
+    // "unsaved changes" sits adjacent to "last autosave" at the far right.
+    // Permanent widget (same framed/aligned group as autosave — a normal
+    // addWidget item renders at a slightly different baseline).
+    m_statusDirtyLabel = new QLabel(this);
+    m_statusDirtyLabel->setAlignment(Qt::AlignRight);
+    sb->addPermanentWidget(m_statusDirtyLabel);
+    slotDocModified(m_doc != NULL ? m_doc->isModified() : false);
 
-    m_statusLoadLabel = new QLabel(this);
-    m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
-        "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
-    sb->addPermanentWidget(m_statusLoadLabel);
-
-    if (m_doc != NULL)
-    {
-        TimecodeSource *tc = m_doc->timecodeSource();
-        connect(tc, SIGNAL(timeChanged(quint32)), this, SLOT(slotTimecodeStatusChanged()));
-        connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeStatusChanged()));
-    }
-    slotTimecodeStatusChanged();
-
-    m_healthTimer = new QTimer(this);
-    m_healthTimer->setInterval(500);
-    connect(m_healthTimer, SIGNAL(timeout()), this, SLOT(slotUpdateHealthFooter()));
-    m_healthTimer->start();
-    slotUpdateHealthFooter();
-
-    // Create autosave label (right side)
+    // Autosave label (far right, adjacent to the unsaved-changes indicator).
     m_statusAutosaveLabel = new QLabel(this);
     m_statusAutosaveLabel->setAlignment(Qt::AlignRight);
     sb->addPermanentWidget(m_statusAutosaveLabel);
