@@ -628,6 +628,20 @@ void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
     if (column == COL_FADEIN)
     {
         fadeIn = newValue;
+        // Typing a per-step fade while the chaser is in "Default" mode (cells
+        // empty, edits ignored) auto-enables Per Step, so fades can just be typed
+        // without first hunting for the mode radios.
+        if (m_chaser->fadeInMode() == Chaser::Default)
+        {
+            m_chaser->setFadeInMode(Chaser::PerStep);
+            if (m_fadeInPerStepRadio != NULL)
+            {
+                m_fadeInPerStepRadio->blockSignals(true);
+                m_fadeInPerStepRadio->setChecked(true);
+                m_fadeInPerStepRadio->blockSignals(false);
+            }
+            updateTreeNeeded = true;
+        }
         if (m_chaser->fadeInMode() == Chaser::Common)
         {
             m_chaser->setFadeInSpeed(fadeIn);
@@ -661,6 +675,17 @@ void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
     else if (column == COL_FADEOUT)
     {
         fadeOut = newValue;
+        if (m_chaser->fadeOutMode() == Chaser::Default)
+        {
+            m_chaser->setFadeOutMode(Chaser::PerStep);
+            if (m_fadeOutPerStepRadio != NULL)
+            {
+                m_fadeOutPerStepRadio->blockSignals(true);
+                m_fadeOutPerStepRadio->setChecked(true);
+                m_fadeOutPerStepRadio->blockSignals(false);
+            }
+            updateTreeNeeded = true;
+        }
         if (m_chaser->fadeOutMode() == Chaser::Common)
         {
             m_chaser->setFadeOutSpeed(fadeOut);
