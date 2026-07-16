@@ -9,6 +9,67 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### Decided 2026-07-16 — show / VC / timeline coordination
+Context: in Operate the Show timeline and the Virtual Console both drive the rig
+and needed an arbitration + visualisation model. Decisions (Branson, 2026-07-16):
+global Follow-MTC on the main toolbar; exit = suspend-and-keep-position; VC
+overrides the timeline per-channel (timeline = low-priority base). Built in three
+milestones on `programmer-mode` (commits 36ca4ee42, c96eb2411, dd44eacaa).
+
+- [x] **Footer "under timeline control" + MIDI-mappable exit** *(BUILT — needs GUI test)*
+      - `ShowRunner::setSuspended()` — resumable VC takeover: stops the running
+        child functions (rig → VC) but the elapsed clock keeps tracking timecode,
+        so resume = `seekTo(now)` and the right cues restart. Applied on the timer
+        thread (request flag under the TC mutex); reset on stop.
+        `Show::setTimelineSuspended/isTimelineSuspended` forwarders (runtime only).
+      - `ShowManager` (singleton) global surface: `timelineControlActive()`,
+        `timelineSuspended()`, `setTimelineSuspended()`, `toggleTimelineSuspended()`
+        + `timelineControlChanged()` (emitted on start incl. MTC auto-start, stop,
+        suspend, show-select).
+      - App footer chip: "● UNDER TIMELINE CONTROL" (blue) / "❚❚ TIMELINE SUSPENDED
+        — VC control" (amber), Operate-only. Main-toolbar **Exit/Resume Timeline
+        Control** action (enabled only while a show runs in Operate).
+      - MIDI-mappable **VCButton SuspendTimeline** action (LED = suspended);
+        selectable in Button Properties, mapped via the button's input source.
+- [x] **Global Follow-MTC toggle** *(BUILT — needs GUI test)* — moved out of the
+      Show Manager toolbar onto the **main toolbar** (`App::m_followMtcAction`,
+      :/clock.png); drives `ShowManager::setFollowTimecode()` on the current show.
+      MTC **source** combo + timeline-**offset** button stay in the Show Manager
+      (show config). MIDI-mappable **VCButton FollowTimecode** action (LED =
+      following). Selecting a different show re-broadcasts its follow state.
+- [x] **Operate: VC overrides timeline per-channel** *(BUILT — needs GUI test)* —
+      `Universe::Background (-1)` priority below `Auto`; `Function::fadePriority()`
+      (default Auto, restored in `postRun`); `Scene` requests its fader at that
+      priority; `ShowRunner` lowers started functions to Background in Operate and
+      it propagates through `ChaserRunner` (steps) + `Collection` (members). VC at
+      Auto therefore wins LTP on touched channels. Intensity stays HTP (VC adds,
+      can't dim below the base — full override = Exit Timeline Control).
+      **Visualisation is inherent**: the timeline runs the same function objects
+      the VC binds to by id, so a timeline-activated scene lights its VCButton
+      (Monitoring/amber) and a timeline chase drives the bound VCCueList step.
+      Limitation: EFX/RGBMatrix/Audio on the timeline are not yet prioritised
+      (Scene is the dominant look case).
+
+      **TESTING PLAN — show/VC/timeline coordination** *(Operate mode, a show on
+      the timeline + a VC with buttons/cuelists bound to the SAME functions):*
+      - [ ] **Footer chip** — enter Operate + run the show: footer shows blue "●
+            UNDER TIMELINE CONTROL". Toolbar **Exit Timeline Control** enables.
+      - [ ] **Suspend keeps position** — click Exit Timeline Control: rig hands to
+            VC, chip goes amber "SUSPENDED — VC control", playhead keeps moving with
+            MTC. Click Resume: the cue active at the CURRENT position restarts (no
+            rewind).
+      - [ ] **MIDI exit** — map an APC40 button to a VCButton set to *Suspend
+            timeline*; its LED lights while suspended; press toggles takeover.
+      - [ ] **Global Follow-MTC** — the toggle is on the main toolbar; arming it
+            from any tab makes the current show chase Logic; a VCButton set to
+            *Follow MIDI Time Code* mirrors + toggles it (LED = following).
+      - [ ] **VC overrides per-channel** — timeline runs a wash on all LEDs; hit a
+            VC button running a different colour on a subset → that subset follows
+            VC, the rest stay on the timeline wash. Release → timeline reclaims them.
+      - [ ] **Visualisation** — a scene the timeline activates shows its VC button
+            in Monitoring (amber); a chase on the timeline moves the bound VCCueList's
+            highlighted step in lock-step.
+
 ### Decided 2026-07-15 — show-timeline design session
 Context: audience is students + show choir; the fork nails *building* looks but
 the *run* side was still stock. Established that stock chaser + VC Cue List +
