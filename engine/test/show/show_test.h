@@ -39,6 +39,7 @@ private slots:
     void load();
     void save();
     void followTimecode();
+    void markers();
 
 private:
     Doc *m_doc;

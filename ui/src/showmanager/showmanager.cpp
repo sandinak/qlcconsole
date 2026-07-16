@@ -18,6 +18,7 @@
 */
 
 #include <QInputDialog>
+#include <QLineEdit>
 #include <QColorDialog>
 #include <QMessageBox>
 #include <QFileDialog>
@@ -167,6 +168,12 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotAddAtRequested(quint32,Track*)));
     connect(m_showview, SIGNAL(newTrackRequested()),
             this, SLOT(slotNewTrackRequested()));
+    connect(m_showview, SIGNAL(markerAddRequested(quint32)),
+            this, SLOT(slotMarkerAddRequested(quint32)));
+    connect(m_showview, SIGNAL(markerEditRequested(quint32)),
+            this, SLOT(slotMarkerEditRequested(quint32)));
+    connect(m_showview, SIGNAL(markerDeleteRequested(quint32)),
+            this, SLOT(slotMarkerDeleteRequested(quint32)));
     connect(m_showview, SIGNAL(itemDroppedBelowTracks(ShowItem*)),
             this, SLOT(slotItemDroppedBelowTracks(ShowItem*)));
 
@@ -1467,6 +1474,45 @@ void ShowManager::slotShowLockedChanged(bool locked)
     m_showview->setEditable(locked == false);
 }
 
+void ShowManager::slotMarkerAddRequested(quint32 time)
+{
+    if (m_show == NULL)
+        return;
+    bool ok = false;
+    QString label = QInputDialog::getText(this, tr("Add Marker"),
+                        tr("Label for this point in the show:"),
+                        QLineEdit::Normal, QString(), &ok);
+    if (ok == false || label.trimmed().isEmpty())
+        return;
+    m_show->setMarker(time, label.trimmed());
+    m_showview->setMarkers(m_show->markers());
+    m_doc->setModified();
+}
+
+void ShowManager::slotMarkerEditRequested(quint32 time)
+{
+    if (m_show == NULL || time == UINT_MAX)
+        return;
+    bool ok = false;
+    QString label = QInputDialog::getText(this, tr("Rename Marker"),
+                        tr("Marker label:"), QLineEdit::Normal,
+                        m_show->markers().value(time), &ok);
+    if (ok == false)
+        return;
+    m_show->setMarker(time, label.trimmed()); // empty label removes it
+    m_showview->setMarkers(m_show->markers());
+    m_doc->setModified();
+}
+
+void ShowManager::slotMarkerDeleteRequested(quint32 time)
+{
+    if (m_show == NULL || time == UINT_MAX)
+        return;
+    m_show->removeMarker(time);
+    m_showview->setMarkers(m_show->markers());
+    m_doc->setModified();
+}
+
 void ShowManager::slotNewTrackRequested()
 {
     if (m_show == NULL || m_doc->isShowLocked())
@@ -2024,6 +2070,7 @@ void ShowManager::updateMultiTrackView()
         m_followMtcAction->blockSignals(false);
     }
     updateTcSourceCombo();
+    m_showview->setMarkers(m_show->markers());
 
     // disconnect BPM field and update the view manually, to
     // prevent m_show time division override

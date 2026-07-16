@@ -30,6 +30,11 @@
 #define HEADER_HEIGHT       35
 #define HALF_SECOND_WIDTH   25
 
+/** Height of the marker/label lane drawn between the time ruler and the
+ *  tracks, and the resulting Y where tracks begin. */
+#define MARKER_LANE_HEIGHT  18
+#define TRACKS_TOP          (HEADER_HEIGHT + MARKER_LANE_HEIGHT)
+
 /** @addtogroup ui_functions
  * @{
  */

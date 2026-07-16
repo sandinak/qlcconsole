@@ -23,6 +23,7 @@
 #include <QMutex>
 #include <QList>
 #include <QSet>
+#include <QMap>
 
 #include "function.h"
 #include "track.h"
@@ -157,6 +158,22 @@ public:
 protected:
     /** Latest assigned unique ShowFunction ID */
     quint32 m_latestShowFunctionID;
+
+    /*********************************************************************
+     * Markers (timeline section labels)
+     *********************************************************************/
+public:
+    /** Add or update a marker (section label) at the given time (ms). */
+    void setMarker(quint32 time, const QString &label);
+
+    /** Remove the marker at the given time, if any. */
+    void removeMarker(quint32 time);
+
+    /** All markers as a time(ms) -> label map (sorted by time). */
+    QMap<quint32, QString> markers() const;
+
+private:
+    QMap<quint32, QString> m_markers;
 
     /*********************************************************************
      * Save & Load

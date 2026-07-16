@@ -357,5 +357,38 @@ void Show_Test::followTimecode()
     QCOMPARE(s2.timecodeFollow(), true);
 }
 
+void Show_Test::markers()
+{
+    Show s(m_doc);
+    s.setID(11);
+    s.setMarker(0, "Intro");
+    s.setMarker(30000, "Verse 1");
+    s.setMarker(60000, "Chorus");
+    // Empty label removes / never adds.
+    s.setMarker(90000, "");
+    QCOMPARE(s.markers().count(), 3);
+    s.removeMarker(30000);
+    QCOMPARE(s.markers().count(), 2);
+    s.setMarker(30000, "Verse 1");
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(s.saveXML(&xmlWriter) == true);
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement(); // Function
+
+    Show s2(m_doc);
+    QVERIFY(s2.loadXML(xmlReader) == true);
+    QCOMPARE(s2.markers().count(), 3);
+    QCOMPARE(s2.markers().value(0), QString("Intro"));
+    QCOMPARE(s2.markers().value(30000), QString("Verse 1"));
+    QCOMPARE(s2.markers().value(60000), QString("Chorus"));
+}
+
 
 QTEST_APPLESS_MAIN(Show_Test)

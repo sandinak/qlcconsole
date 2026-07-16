@@ -25,6 +25,7 @@
 #include <QGraphicsView>
 #include <QSlider>
 #include <QWidget>
+#include <QMap>
 
 #include "rgbmatrixitem.h"
 #include "collectionitem.h"
@@ -54,6 +55,12 @@ public:
 
     /** Set the multitrack view size in pixels */
     void setViewSize(int width, int height);
+
+    /** Provide the section markers (time ms -> label) to render in the lane. */
+    void setMarkers(const QMap<quint32, QString> &markers);
+
+    /** Marker time nearest the given scene X within the lane, else UINT_MAX. */
+    quint32 markerAt(qreal sceneX) const;
 
     /** Auto calculation of view size based on items */
     void updateViewSize();
@@ -174,11 +181,16 @@ private:
     bool m_snapToGrid;
     /** Master editable gate (false = timeline read-only) */
     bool m_editable;
+    /** Section markers: time (ms) -> label */
+    QMap<quint32, QString> m_markers;
 
 protected:
     /** Paints the time-division grid behind all items so the divisions are
      *  always visible (not only when snap-to-grid is enabled). */
     void drawBackground(QPainter *painter, const QRectF &rect) override;
+
+    /** Paints the section-marker lane (labels + drop lines) over the tracks. */
+    void drawForeground(QPainter *painter, const QRectF &rect) override;
 
     /** Accept functions dragged in from a function tree and drop them onto
      *  the track row / time position under the cursor. */
@@ -221,6 +233,11 @@ signals:
 
     /** Emitted when the user asks to create a new (empty) track. */
     void newTrackRequested();
+
+    /** Section-marker CRUD requests (handled by the Show Manager). */
+    void markerAddRequested(quint32 time);
+    void markerEditRequested(quint32 time);
+    void markerDeleteRequested(quint32 time);
 
     /** Emitted when an item is dragged below the last track: the caller should
      *  (after confirming) make a new track and move the item onto it. */

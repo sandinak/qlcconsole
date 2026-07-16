@@ -112,7 +112,7 @@ void MultiTrackView::updateTracksDividers()
     if (m_vdivider != NULL)
         m_scene->removeItem(m_vdivider);
 
-    int ypos = 35 + TRACK_HEIGHT;
+    int ypos = TRACKS_TOP + TRACK_HEIGHT;
     int hDivNum = 6;
     if (m_tracks.count() > 5)
         hDivNum = m_tracks.count();
@@ -191,7 +191,7 @@ void MultiTrackView::addTrack(Track *track)
 
     TrackItem *trackItem = new TrackItem(track, m_tracks.count());
     trackItem->setName(track->name());
-    trackItem->setPos(0, HEADER_HEIGHT + (TRACK_HEIGHT * m_tracks.count()));
+    trackItem->setPos(0, TRACKS_TOP + (TRACK_HEIGHT * m_tracks.count()));
     m_scene->addItem(trackItem);
     m_tracks.append(trackItem);
     activateTrack(track);
@@ -254,7 +254,7 @@ void MultiTrackView::moveItemToTrack(ShowItem *item, Track *dest)
         dest->addShowFunction(sf);
     }
     item->setTrackIndex(destIdx);
-    item->setPos(item->x(), HEADER_HEIGHT + 1 + (destIdx * TRACK_HEIGHT));
+    item->setPos(item->x(), TRACKS_TOP + 1 + (destIdx * TRACK_HEIGHT));
     resolveTrackCollisions(destIdx, item);
     m_scene->update();
     updateViewSize();
@@ -271,10 +271,10 @@ void MultiTrackView::setItemCommonProperties(ShowItem *item, ShowFunction *func,
     if (func->startTime() == UINT_MAX)
     {
         item->setStartTime(getTimeFromCursor());
-        item->setPos(m_cursor->x() + 2, 36 + (trackNum * TRACK_HEIGHT));
+        item->setPos(m_cursor->x() + 2, (TRACKS_TOP + 1) + (trackNum * TRACK_HEIGHT));
     }
     else
-        item->setPos(getPositionFromTime(func->startTime()) + 2, 36 + (trackNum * TRACK_HEIGHT));
+        item->setPos(getPositionFromTime(func->startTime()) + 2, (TRACKS_TOP + 1) + (trackNum * TRACK_HEIGHT));
 
     item->setTimeScale(timeScale);
 
@@ -661,7 +661,7 @@ void MultiTrackView::drawBackground(QPainter *painter, const QRectF &rect)
         return;
 
     int hit = m_header->getTimeHit();
-    const qreal top = qMax(rect.top(), qreal(HEADER_HEIGHT));
+    const qreal top = qMax(rect.top(), qreal(TRACKS_TOP));
     const qreal bottom = rect.bottom();
     const qreal right = rect.right();
 
@@ -724,7 +724,7 @@ void MultiTrackView::dropEvent(QDropEvent *event)
 
     // Resolve the track row under the drop (NULL => make a new track).
     Track *track = NULL;
-    int row = int((scenePos.y() - HEADER_HEIGHT) / TRACK_HEIGHT);
+    int row = int((scenePos.y() - TRACKS_TOP) / TRACK_HEIGHT);
     if (row >= 0 && row < m_tracks.count())
         track = m_tracks.at(row)->getTrack();
 
@@ -777,8 +777,34 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
     }
 
     quint32 startTime = getTimeFromPosition(scenePos.x());
+
+    // Right-click in the marker lane (between the ruler and the tracks):
+    // add / rename / delete a section marker.
+    if (scenePos.y() < TRACKS_TOP)
+    {
+        quint32 hit = markerAt(scenePos.x());
+        QMenu mmenu;
+        QAction *addAct = mmenu.addAction(tr("Add marker here…"));
+        QAction *renAct = NULL;
+        QAction *delAct = NULL;
+        if (hit != UINT_MAX)
+        {
+            mmenu.addSeparator();
+            renAct = mmenu.addAction(tr("Rename marker…"));
+            delAct = mmenu.addAction(tr("Delete marker"));
+        }
+        QAction *chosen = mmenu.exec(event->globalPos());
+        if (chosen == addAct)
+            emit markerAddRequested(startTime);
+        else if (chosen != NULL && chosen == renAct)
+            emit markerEditRequested(hit);
+        else if (chosen != NULL && chosen == delAct)
+            emit markerDeleteRequested(hit);
+        return;
+    }
+
     Track *track = NULL;
-    int row = int((scenePos.y() - HEADER_HEIGHT) / TRACK_HEIGHT);
+    int row = int((scenePos.y() - TRACKS_TOP) / TRACK_HEIGHT);
     if (row >= 0 && row < m_tracks.count())
         track = m_tracks.at(row)->getTrack();
 
@@ -786,6 +812,72 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
     QAction *addAct = menu.addAction(tr("Add function here…"));
     if (menu.exec(event->globalPos()) == addAct)
         emit addAtRequested(startTime, track);
+}
+
+void MultiTrackView::setMarkers(const QMap<quint32, QString> &markers)
+{
+    m_markers = markers;
+    if (viewport() != NULL)
+        viewport()->update();
+}
+
+quint32 MultiTrackView::markerAt(qreal sceneX) const
+{
+    // Hit-test within ~8px of a marker's line.
+    quint32 best = UINT_MAX;
+    qreal bestDist = 8.0;
+    QMapIterator<quint32, QString> it(m_markers);
+    while (it.hasNext())
+    {
+        it.next();
+        qreal mx = getPositionFromTime(it.key());
+        qreal d = qAbs(mx - sceneX);
+        if (d < bestDist)
+        {
+            bestDist = d;
+            best = it.key();
+        }
+    }
+    return best;
+}
+
+void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
+{
+    QGraphicsView::drawForeground(painter, rect);
+
+    if (m_markers.isEmpty())
+        return;
+
+    QFont f = painter->font();
+    f.setPixelSize(11);
+    f.setBold(true);
+    painter->setFont(f);
+
+    const qreal laneTop = HEADER_HEIGHT;
+    const qreal bottom = rect.bottom();
+
+    QMapIterator<quint32, QString> it(m_markers);
+    while (it.hasNext())
+    {
+        it.next();
+        qreal x = getPositionFromTime(it.key());
+        if (x < TRACK_WIDTH || x < rect.left() - 200 || x > rect.right())
+            continue;
+
+        // Drop line through the tracks.
+        painter->setPen(QPen(QColor(255, 210, 80, 120), 1));
+        painter->drawLine(QPointF(x, TRACKS_TOP), QPointF(x, bottom));
+
+        // Flag + label in the lane.
+        const QString &label = it.value();
+        int w = QFontMetrics(f).horizontalAdvance(label) + 10;
+        QRectF flag(x, laneTop + 1, w, MARKER_LANE_HEIGHT - 2);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QColor(224, 168, 32, 235));
+        painter->drawRect(flag);
+        painter->setPen(QPen(Qt::black, 1));
+        painter->drawText(flag.adjusted(5, 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft, label);
+    }
 }
 
 void MultiTrackView::mouseReleaseEvent(QMouseEvent * e)
@@ -902,7 +994,7 @@ void MultiTrackView::slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *it
     bool moved = true;
     quint32 s_time = 0;
     int oldTrackNum = item->getTrackIndex();
-    int guessRow = qRound((item->y() - 36.0) / double(TRACK_HEIGHT));
+    int guessRow = qRound((item->y() - double(TRACKS_TOP + 1)) / double(TRACK_HEIGHT));
 
     // Dropped below the last track: ask the manager to make a new track for it.
     if (m_tracks.count() > 0 && guessRow >= m_tracks.count())
@@ -920,7 +1012,7 @@ void MultiTrackView::slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *it
         newTrackNum = qBound(0, guessRow, m_tracks.count() - 1);
     bool trackChanged = (newTrackNum != oldTrackNum);
 
-    int ypos = HEADER_HEIGHT + 1 + (newTrackNum * TRACK_HEIGHT);
+    int ypos = TRACKS_TOP + 1 + (newTrackNum * TRACK_HEIGHT);
     int shift = qAbs(item->getDraggingPos().x() - item->x());
 
     if (item->x() < TRACK_WIDTH + 2)

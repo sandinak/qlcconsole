@@ -34,6 +34,8 @@
 #define KXMLQLCShowTimeType     QStringLiteral("Type")
 #define KXMLQLCShowTimeBPM      QStringLiteral("BPM")
 #define KXMLQLCShowFollowTC     QStringLiteral("FollowTimecode")
+#define KXMLQLCShowMarker       QStringLiteral("Marker")
+#define KXMLQLCShowMarkerTime   QStringLiteral("Time")
 
 /*****************************************************************************
  * Initialization
@@ -379,6 +381,17 @@ bool Show::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLQLCShowFollowTC, KXMLQLCTrue);
     doc->writeEndElement();
 
+    // Timeline markers (section labels)
+    QMapIterator<quint32, QString> mit(m_markers);
+    while (mit.hasNext())
+    {
+        mit.next();
+        doc->writeStartElement(KXMLQLCShowMarker);
+        doc->writeAttribute(KXMLQLCShowMarkerTime, QString::number(mit.key()));
+        doc->writeCharacters(mit.value());
+        doc->writeEndElement();
+    }
+
     foreach (Track *track, m_tracks)
         track->saveXML(doc);
 
@@ -413,6 +426,13 @@ bool Show::loadXML(QXmlStreamReader &root)
             if (root.attributes().hasAttribute(KXMLQLCShowFollowTC))
                 m_timecodeFollow = (root.attributes().value(KXMLQLCShowFollowTC).toString() == KXMLQLCTrue);
             root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLQLCShowMarker)
+        {
+            quint32 t = root.attributes().value(KXMLQLCShowMarkerTime).toString().toUInt();
+            QString label = root.readElementText();
+            if (label.isEmpty() == false)
+                m_markers.insert(t, label);
         }
         else if (root.name() == KXMLQLCTrack)
         {
@@ -508,6 +528,28 @@ void Show::setExternalTime(quint32 ms)
 {
     if (m_runner != NULL)
         m_runner->setExternalTime(ms);
+}
+
+/*********************************************************************
+ * Markers
+ *********************************************************************/
+
+void Show::setMarker(quint32 time, const QString &label)
+{
+    if (label.isEmpty())
+        m_markers.remove(time);
+    else
+        m_markers.insert(time, label);
+}
+
+void Show::removeMarker(quint32 time)
+{
+    m_markers.remove(time);
+}
+
+QMap<quint32, QString> Show::markers() const
+{
+    return m_markers;
 }
 
 void Show::setPause(bool enable)
