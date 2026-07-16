@@ -105,12 +105,24 @@ QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items
 
 void FixtureTreeWidget::keyPressEvent(QKeyEvent* event)
 {
-    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter
+         || event->key() == Qt::Key_F2)
         && state() != QAbstractItemView::EditingState)
     {
         QTreeWidgetItem *it = currentItem();
         if (it && it->data(KColumnName, PROP_FOLDER).isValid())
         {
+            editItem(it, KColumnName);
+            return;
+        }
+        // Rename a fixture in place. Only in a plain (non-checkable) tree, and
+        // only for a real fixture row (has a fixture id, not a head/channel).
+        if (it && m_channelSelection == false
+            && it->data(KColumnName, PROP_ID).isValid()
+            && it->data(KColumnName, PROP_HEAD).isValid() == false
+            && it->data(KColumnName, PROP_CHANNEL).isValid() == false)
+        {
+            it->setFlags(it->flags() | Qt::ItemIsEditable);
             editItem(it, KColumnName);
             return;
         }
@@ -122,6 +134,39 @@ void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
 {
     if (column != KColumnName || !item)
         return;
+
+    // In-place fixture rename (Return / F2 on a fixture row). We only act when
+    // the row is ARMED (ItemIsEditable set in keyPressEvent) — fixture items are
+    // not otherwise editable, so this cleanly ignores the itemChanged storm that
+    // setText()/setData() fire while the tree is being (re)built.
+    if ((item->flags() & Qt::ItemIsEditable)
+        && item->data(KColumnName, PROP_ID).isValid()
+        && item->data(KColumnName, PROP_HEAD).isValid() == false
+        && item->data(KColumnName, PROP_CHANNEL).isValid() == false)
+    {
+        // Disarm FIRST so the setText()/setFlags() below can't re-enter here.
+        item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+
+        bool ok = false;
+        quint32 fid = item->data(KColumnName, PROP_ID).toString().toUInt(&ok);
+        Fixture *fxi = ok ? m_doc->fixture(fid) : NULL;
+        if (fxi != NULL)
+        {
+            const QString newName = item->text(KColumnName).trimmed();
+            if (newName.isEmpty() == false && newName != fxi->name())
+            {
+                fxi->setName(newName);
+                m_doc->setModified();
+            }
+            else if (item->text(KColumnName) != fxi->name())
+            {
+                // Reject empty/no-op edits — restore the shown name.
+                item->setText(KColumnName, fxi->name());
+            }
+        }
+        return;
+    }
+
     const QVariant folderVar = item->data(KColumnName, PROP_FOLDER);
     if (!folderVar.isValid())
         return;
