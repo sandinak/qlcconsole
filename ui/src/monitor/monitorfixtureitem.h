@@ -82,6 +82,11 @@ struct FixtureHead
 
     quint32 m_dimmer;
     quint32 m_masterDimmer;
+    // Top of each dimmer channel's intensity range (strobe/effect capabilities
+    // may sit above it, e.g. Betopper LM70). Alpha scales by this so a fixture
+    // driven to full dimmer reads full-bright even when that DMX value is <255.
+    uchar m_dimmerCeiling;
+    uchar m_masterDimmerCeiling;
     quint32 m_panChannel;
     int m_panMaxDegrees;
     qreal m_panDegrees;

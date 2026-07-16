@@ -972,6 +972,50 @@ const QList <QLCCapability*> QLCChannel::capabilities() const
     return m_capabilities;
 }
 
+uchar QLCChannel::dimmerCeiling() const
+{
+    int ceiling = 255;
+    foreach (QLCCapability *cap, m_capabilities)
+    {
+        bool isEffect = false;
+        switch (cap->preset())
+        {
+            case QLCCapability::StrobeSlowToFast:
+            case QLCCapability::StrobeFastToSlow:
+            case QLCCapability::StrobeRandom:
+            case QLCCapability::StrobeRandomSlowToFast:
+            case QLCCapability::StrobeRandomFastToSlow:
+            case QLCCapability::StrobeFrequency:
+            case QLCCapability::StrobeFreqRange:
+            case QLCCapability::PulseSlowToFast:
+            case QLCCapability::PulseFastToSlow:
+            case QLCCapability::PulseFrequency:
+            case QLCCapability::PulseFreqRange:
+            case QLCCapability::RampUpSlowToFast:
+            case QLCCapability::RampUpFastToSlow:
+            case QLCCapability::RampDownSlowToFast:
+            case QLCCapability::RampDownFastToSlow:
+            case QLCCapability::RampUpFrequency:
+            case QLCCapability::RampUpFreqRange:
+            case QLCCapability::RampDownFrequency:
+            case QLCCapability::RampDownFreqRange:
+            case QLCCapability::ShutterClose:
+                isEffect = true;
+                break;
+            default:
+                break;
+        }
+        if (isEffect && int(cap->min()) - 1 < ceiling)
+            ceiling = int(cap->min()) - 1;
+    }
+
+    // Whole channel looked like an effect (shouldn't happen for an intensity
+    // channel): fall back to no clamping rather than a dead 0 ceiling.
+    if (ceiling < 1)
+        ceiling = 255;
+    return uchar(ceiling);
+}
+
 QLCCapability* QLCChannel::searchCapability(uchar value) const
 {
     QListIterator <QLCCapability*> it(m_capabilities);

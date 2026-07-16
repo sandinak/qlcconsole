@@ -165,14 +165,22 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
         fxiItem->m_dimmer = head.channelNumber(QLCChannel::Intensity, QLCChannel::MSB);
         if (fxiItem->m_dimmer == QLCChannel::invalid())
             fxiItem->m_dimmer = head.channelNumber(QLCChannel::White, QLCChannel::MSB);
+        fxiItem->m_dimmerCeiling = 255;
         if (fxiItem->m_dimmer != QLCChannel::invalid())
         {
+            const QLCChannel *dch = fxi->channel(fxiItem->m_dimmer);
+            if (dch != NULL)
+                fxiItem->m_dimmerCeiling = dch->dimmerCeiling();
             qDebug() << "Set dimmer to:" << fxiItem->m_dimmer;
         }
 
         fxiItem->m_masterDimmer = fxi->masterIntensityChannel();
+        fxiItem->m_masterDimmerCeiling = 255;
         if (fxiItem->m_masterDimmer != QLCChannel::invalid())
         {
+            const QLCChannel *mch = fxi->channel(fxiItem->m_masterDimmer);
+            if (mch != NULL)
+                fxiItem->m_masterDimmerCeiling = mch->dimmerCeiling();
             qDebug() << "Set master dimmer to:" << fxiItem->m_masterDimmer;
         }
 
@@ -535,17 +543,20 @@ uchar MonitorFixtureItem::computeAlpha(const FixtureHead *head, const QByteArray
     if (head->m_masterDimmer != UINT_MAX /*QLCChannel::invalid()*/)
     {
         mul *= static_cast<uchar>(values.at(head->m_masterDimmer));
-        div *= 255U;
+        // Scale by the dimmer ceiling, not 255, so a fixture driven to full
+        // dimmer reads full-bright even when that value sits below a strobe band.
+        div *= (head->m_masterDimmerCeiling > 0 ? head->m_masterDimmerCeiling : 255U);
     }
 
     if (head->m_dimmer != UINT_MAX /*QLCChannel::invalid()*/)
     {
         mul *= static_cast<uchar>(values.at(head->m_dimmer));
-        div *= 255U;
+        div *= (head->m_dimmerCeiling > 0 ? head->m_dimmerCeiling : 255U);
     }
 
     //qDebug() << mul << "/" << div << "=" << (mul /div);
-    return mul / div;
+    unsigned alpha = mul / div;
+    return alpha > 255U ? 255 : uchar(alpha);
 }
 
 FixtureHead::ShutterState MonitorFixtureItem::computeShutter(const FixtureHead *head, const QByteArray & values)

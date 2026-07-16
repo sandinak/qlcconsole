@@ -460,13 +460,21 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     dValue = int((qreal(intFanValue - dValue) * factor) + dValue);
 
                 if (masterIntensityChannel != QLCChannel::invalid())
-                    list << SceneValue(id, masterIntensityChannel, uchar(dValue));
+                {
+                    const QLCChannel *ch = fixture->channel(masterIntensityChannel);
+                    int ceiling = (ch != NULL) ? int(ch->dimmerCeiling()) : 255;
+                    list << SceneValue(id, masterIntensityChannel, uchar(dValue * ceiling / 255));
+                }
 
                 for (int i = 0; i < fixture->heads(); i++)
                 {
                     quint32 headDimmerChannel = fixture->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, i);
                     if (headDimmerChannel != QLCChannel::invalid())
-                        list << SceneValue(id, headDimmerChannel, uchar(dValue));
+                    {
+                        const QLCChannel *ch = fixture->channel(headDimmerChannel);
+                        int ceiling = (ch != NULL) ? int(ch->dimmerCeiling()) : 255;
+                        list << SceneValue(id, headDimmerChannel, uchar(dValue * ceiling / 255));
+                    }
                 }
             }
             break;
@@ -760,6 +768,33 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 quint32 shCh = (fixture->fixtureMode() != nullptr)
                     ? fixture->fixtureMode()->channelNumber(QLCChannel::Shutter, QLCChannel::MSB)
                     : QLCChannel::invalid();
+                if (shCh == QLCChannel::invalid())
+                {
+                    // Fixtures like the Betopper LM70 pack strobe into the top
+                    // of the intensity channel (dimmerCeiling() < 255 flags the
+                    // effect band). Fall back to that channel so a strobe look
+                    // still works; the capability interpolation below finds the
+                    // Strobe* range on it.
+                    quint32 iCh = fixture->masterIntensityChannel();
+                    const QLCChannel *ich = (iCh != QLCChannel::invalid())
+                        ? fixture->channel(iCh) : nullptr;
+                    if (ich != nullptr && ich->dimmerCeiling() < 255)
+                        shCh = iCh;
+                    else
+                    {
+                        for (int i = 0; i < fixture->heads(); i++)
+                        {
+                            quint32 hCh = fixture->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, i);
+                            const QLCChannel *hch = (hCh != QLCChannel::invalid())
+                                ? fixture->channel(hCh) : nullptr;
+                            if (hch != nullptr && hch->dimmerCeiling() < 255)
+                            {
+                                shCh = hCh;
+                                break;
+                            }
+                        }
+                    }
+                }
                 if (shCh == QLCChannel::invalid())
                     break;
                 const QLCChannel *ch = fixture->channel(shCh);

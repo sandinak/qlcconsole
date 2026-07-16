@@ -348,6 +348,16 @@ public:
     /** Get a list of channel's capabilities */
     const QList <QLCCapability*> capabilities() const;
 
+    /**
+     * Highest DMX value on this channel that still means "dimmer/intensity"
+     * rather than a strobe/pulse/ramp effect that many fixtures pack into the
+     * top of the same channel (e.g. Betopper LM70: 0-127 dimmer, 128-254
+     * strobe). Returns 255 for a plain linear intensity channel (no such
+     * effect capabilities), so callers can map/scale intensity into
+     * [0, dimmerCeiling()] and never trip the strobe band.
+     */
+    uchar dimmerCeiling() const;
+
     /** Search for a particular capability by its channel value */
     QLCCapability* searchCapability(uchar value) const;
 
