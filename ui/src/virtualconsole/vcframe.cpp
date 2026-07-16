@@ -43,6 +43,7 @@
 #include "vcsoloframe.h"
 #include "vcspeeddial.h"
 #include "vccuelist.h"
+#include "vcshowcontrol.h"
 #include "vcbutton.h"
 #include "vcslider.h"
 #include "vcmatrix.h"
@@ -1231,6 +1232,18 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
             {
                 addWidgetToPageMap(cuelist);
                 cuelist->show();
+            }
+        }
+        else if (root.name() == KXMLQLCVCShowControl)
+        {
+            /* Create a new show control into its parent */
+            VCShowControl* sc = new VCShowControl(this, m_doc);
+            if (sc->loadXML(root) == false)
+                delete sc;
+            else
+            {
+                addWidgetToPageMap(sc);
+                sc->show();
             }
         }
         else if (root.name() == KXMLQLCVCSpeedDial)

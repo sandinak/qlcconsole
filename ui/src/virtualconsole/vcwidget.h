@@ -133,7 +133,8 @@ public:
         LabelWidget,
         AudioTriggersWidget,
         AnimationWidget,
-        ClockWidget
+        ClockWidget,
+        ShowControlWidget
     };
 
 public:

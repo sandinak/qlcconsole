@@ -56,6 +56,7 @@
 #include "vclabel.h"
 #include "vcxypad.h"
 #include "vcclock.h"
+#include "vcshowcontrol.h"
 #include "functionwizard.h"
 #include "programmerframewizard.h"
 #include "doc.h"
@@ -351,6 +352,9 @@ void VirtualConsole::initActions()
     m_addAnimationAction = new QAction(QIcon(":/animation.png"), tr("New Animation"), this);
     connect(m_addAnimationAction, SIGNAL(triggered(bool)), this, SLOT(slotAddAnimation()), Qt::QueuedConnection);
 
+    m_addShowControlAction = new QAction(QIcon(":/show.png"), tr("New Show control"), this);
+    connect(m_addShowControlAction, SIGNAL(triggered(bool)), this, SLOT(slotAddShowControl()), Qt::QueuedConnection);
+
     /* Put add actions under the same group */
     m_addActionGroup = new QActionGroup(this);
     m_addActionGroup->setExclusive(false);
@@ -368,6 +372,7 @@ void VirtualConsole::initActions()
     m_addActionGroup->addAction(m_addAudioTriggersAction);
     m_addActionGroup->addAction(m_addClockAction);
     m_addActionGroup->addAction(m_addAnimationAction);
+    m_addActionGroup->addAction(m_addShowControlAction);
 
     /* Tools menu actions */
     m_toolsSettingsAction = new QAction(QIcon(":/configure.png"), tr("Virtual Console Settings"), this);
@@ -505,6 +510,7 @@ void VirtualConsole::initMenuBar()
     m_addMenu->addAction(m_addSoloFrameAction);
     m_addMenu->addAction(m_addLabelAction);
     m_addMenu->addAction(m_addClockAction);
+    m_addMenu->addAction(m_addShowControlAction);
     m_addMenu->addSeparator();
     m_addMenu->addAction(m_addProgrammerFrameAction);
 
@@ -1004,6 +1010,17 @@ void VirtualConsole::slotAddAnimation()
 
     VCMatrix* matrix = new VCMatrix(parent, m_doc);
     setupWidget(matrix, parent);
+    m_doc->setModified();
+}
+
+void VirtualConsole::slotAddShowControl()
+{
+    VCWidget* parent(closestParent());
+    if (parent == NULL)
+        return;
+
+    VCShowControl* sc = new VCShowControl(parent, m_doc);
+    setupWidget(sc, parent);
     m_doc->setModified();
 }
 
