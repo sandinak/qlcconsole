@@ -163,7 +163,11 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
         }
 
         fxiItem->m_dimmer = head.channelNumber(QLCChannel::Intensity, QLCChannel::MSB);
-        if (fxiItem->m_dimmer == QLCChannel::invalid())
+        // Only treat White as the master dimmer for fixtures with NO RGB. On an
+        // RGBW fixture (e.g. Betopper LM70) White is a colour emitter already
+        // folded into computeColor(); using it as the alpha/dimmer makes any
+        // saturated non-white colour (white=0, e.g. pure blue) go invisible.
+        if (fxiItem->m_dimmer == QLCChannel::invalid() && fxiItem->m_rgb.isEmpty())
             fxiItem->m_dimmer = head.channelNumber(QLCChannel::White, QLCChannel::MSB);
         fxiItem->m_dimmerCeiling = 255;
         if (fxiItem->m_dimmer != QLCChannel::invalid())
