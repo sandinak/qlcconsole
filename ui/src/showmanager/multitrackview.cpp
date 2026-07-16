@@ -850,10 +850,14 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsView::drawForeground(painter, rect);
 
-    // Collect the markers to draw (live-editing the dragged one).
+    // Collect the markers to draw (the map is never mutated by dragging; we
+    // just substitute the dragged marker's live geometry here).
     QMap<quint32, QPair<quint32, QString> > toDraw = m_markers;
     if (m_markerDragMode != 0)
+    {
+        toDraw.remove(m_markerOrigStart);
         toDraw.insert(m_dragStart, qMakePair(m_dragEnd, m_dragLabel));
+    }
 
     if (toDraw.isEmpty())
         return;
@@ -923,7 +927,6 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
             m_dragEnd = end;
             m_dragLabel = m_markers.value(key).second;
             m_markerGrabDx = sp.x() - sx;
-            m_markers.remove(key); // drawn from the drag state while dragging
             viewport()->update();
             e->accept();
             return;
@@ -1162,6 +1165,47 @@ void MultiTrackView::slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *it
     // DAW-style push: keep the track free of overlaps.
     if (moved)
         resolveTrackCollisions(newTrackNum, item);
+
+    // Multi-select: apply the same track/time delta to every OTHER selected
+    // item and commit each to the engine (Qt only reports the grabbed one).
+    if (moved)
+    {
+        qint64 rowDelta = qint64(newTrackNum) - oldTrackNum;
+        quint32 oldStart = getTimeFromPosition(
+            qMax<qreal>(TRACK_WIDTH + 2, item->getDraggingPos().x()) - 2);
+        qint64 timeDelta = qint64(s_time) - qint64(oldStart);
+
+        foreach (ShowItem *o, m_items)
+        {
+            if (o == item || o->isSelected() == false)
+                continue;
+
+            int oldR = o->getTrackIndex();
+            int newR = qBound(0, int(oldR + rowDelta),
+                              m_tracks.count() > 0 ? m_tracks.count() - 1 : 0);
+            qint64 nt = qint64(o->getStartTime()) + timeDelta;
+            if (nt < 0)
+                nt = 0;
+
+            o->setStartTime(quint32(nt));
+            o->setPos(getPositionFromTime(quint32(nt)) + 2,
+                      TRACKS_TOP + 1 + (newR * TRACK_HEIGHT));
+
+            if (newR != oldR && oldR < m_tracks.count() && newR < m_tracks.count())
+            {
+                Track *ot = m_tracks.at(oldR)->getTrack();
+                Track *nt2 = m_tracks.at(newR)->getTrack();
+                ShowFunction *sf = o->showFunction();
+                if (ot != NULL && nt2 != NULL && sf != NULL && ot != nt2)
+                {
+                    ot->removeShowFunction(sf, false);
+                    nt2->addShowFunction(sf);
+                    o->setTrackIndex(newR);
+                }
+            }
+            resolveTrackCollisions(newR, o);
+        }
+    }
 
     m_scene->update();
     emit showItemMoved(item, getTimeFromPosition(item->x() + event->pos().toPoint().x()), moved);
