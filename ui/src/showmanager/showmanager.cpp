@@ -1670,7 +1670,19 @@ void ShowManager::slotItemDroppedBelowTracks(ShowItem *item)
 void ShowManager::slotFollowMtcToggled(bool enable)
 {
     if (m_show != NULL)
+    {
         m_show->setTimecodeFollow(enable);
+
+        // Turning follow OFF ends the follow session: otherwise the runner
+        // reverts to normal playback and free-runs the cursor forward. Stop it
+        // and park the playhead.
+        if (enable == false && m_show->isRunning())
+        {
+            m_show->stop(functionParent());
+            m_showview->stopPlayhead();
+            m_playAction->setIcon(QIcon(":/player_play.png"));
+        }
+    }
     if (m_followMtcAction != NULL)
         m_followMtcAction->setText(enable ? tr("● FOLLOWING MTC")
                                           : tr("Follow MTC (off)"));

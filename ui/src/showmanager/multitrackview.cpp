@@ -524,10 +524,17 @@ void MultiTrackView::moveCursor(quint32 timePos)
 
 void MultiTrackView::setPlayheadTarget(quint32 timePos)
 {
-    // Drive the cursor directly. With the grid cached and minimal-region
-    // updates, the per-frame repaint is cheap, so the engine's smooth 50Hz
-    // clock renders smoothly without an easing animator (which only added lag).
-    moveCursor(timePos);
+    // Interpolate on the UI: the source is often only ~12Hz (MTC follow with the
+    // show not running) or bursty (50Hz cross-thread), so a local 60Hz animator
+    // eases the cursor toward the latest target for smooth motion. The grid is
+    // cached, so each frame's repaint is cheap enough to sustain 60Hz.
+    m_playheadTarget = timePos;
+    m_playheadIdleFrames = 0;
+    if (m_playheadTimer->isActive() == false)
+    {
+        m_playheadDisplay = timePos; // start locked (no kickoff lag)
+        m_playheadTimer->start();
+    }
 }
 
 void MultiTrackView::stopPlayhead()
@@ -538,9 +545,23 @@ void MultiTrackView::stopPlayhead()
 
 void MultiTrackView::slotAnimatePlayhead()
 {
-    // (Animator retained but unused; direct drive proved smoother once the grid
-    // background was cached.)
-    m_playheadTimer->stop();
+    double diff = double(m_playheadTarget) - m_playheadDisplay;
+    if (qAbs(diff) < 0.5)
+    {
+        // Caught up: idle briefly, then stop so we don't spin at 60Hz. The next
+        // setPlayheadTarget restarts us.
+        if (++m_playheadIdleFrames > 45)
+            m_playheadTimer->stop();
+        return;
+    }
+    m_playheadIdleFrames = 0;
+
+    if (qAbs(diff) > 2000.0)
+        m_playheadDisplay = m_playheadTarget; // seek/locate — snap
+    else
+        m_playheadDisplay += diff * 0.5;      // snappy ease (~2-frame catch-up)
+
+    moveCursor(quint32(m_playheadDisplay + 0.5));
 }
 
 void MultiTrackView::rewindCursor()
