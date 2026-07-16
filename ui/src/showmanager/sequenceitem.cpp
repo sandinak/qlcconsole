@@ -179,13 +179,15 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
             painter->drawRect(xpos, 0, stepWidth, TRACK_HEIGHT - 3);
         }
 
-        // Cue label: the cue's name (note → fired-function name → "Cue N"),
-        // drawn BELOW the title strip so it doesn't clash with the chase name.
+        // Cue label, drawn BELOW the title strip so it doesn't clash with the
+        // chase name: the step note (the user's cue description) when set, else
+        // the fired scene's name, else "Cue N".
+        const QString blockLabel = step.note.isEmpty() ? cueLabel(stepIdx) : step.note;
         painter->setPen(QPen(Qt::white, 1));
         QRect textRect = QRect(xpos + 3, SEQ_TITLE_STRIP_H + 1,
                                stepWidth - 4, TRACK_HEIGHT - SEQ_TITLE_STRIP_H - 4);
         painter->drawText(textRect, Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap,
-                          cueLabel(stepIdx));
+                          blockLabel);
 
         xpos = xEnd;
 
