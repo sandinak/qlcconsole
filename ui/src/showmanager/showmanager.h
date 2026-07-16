@@ -220,6 +220,7 @@ protected slots:
     void slotNewTrackRequested();
     void slotItemDroppedBelowTracks(ShowItem *item);
     void slotShowLockedChanged(bool locked);
+    void slotTrackColorChangeRequested(Track *track);
     void slotMarkerAddRequested(quint32 time);
     void slotMarkerEditRequested(quint32 time);
     void slotMarkerDeleteRequested(quint32 time);

@@ -40,6 +40,7 @@ EFXItem::EFXItem(EFX *efx, ShowFunction *func)
 
     calculateWidth();
     connect(m_efx, SIGNAL(changed(quint32)), this, SLOT(slotEFXChanged(quint32)));
+    setIconResource(":/efx.png");
 }
 
 void EFXItem::calculateWidth()

@@ -37,6 +37,8 @@ VideoItem::VideoItem(Video *vid, ShowFunction *func)
     else
         setColor(ShowFunction::defaultColor(Function::VideoType));
 
+    setIconResource(":/video.png");
+
     if (func->duration() == 0)
         func->setDuration(m_video->totalDuration());
 

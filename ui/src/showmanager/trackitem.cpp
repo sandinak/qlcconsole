@@ -78,6 +78,10 @@ TrackItem::TrackItem(Track *track, int number)
     m_newTrack = new QAction(QIcon(":/edit_add.png"), tr("New track"), this);
     connect(m_newTrack, SIGNAL(triggered()),
             this, SLOT(slotNewTrackClicked()));
+
+    m_color = new QAction(QIcon(":/color.png"), tr("Track colour…"), this);
+    connect(m_color, SIGNAL(triggered()),
+            this, SLOT(slotColorClicked()));
 }
 
 Track *TrackItem::getTrack() const
@@ -154,6 +158,7 @@ void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
 
     menu.addAction(m_newTrack);
     menu.addAction(m_changeName);
+    menu.addAction(m_color);
     menu.addSeparator();
     if (m_number > 0)
         menu.addAction(m_moveUp);
@@ -225,11 +230,19 @@ void TrackItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
     Q_UNUSED(option);
     Q_UNUSED(widget);
 
-    // draw background gradient
+    // draw background gradient (tinted by the track's colour if it has one)
     QLinearGradient linearGrad(QPointF(0, 0), QPointF(0, TRACK_HEIGHT));
-    linearGrad.setColorAt(0, QColor(50, 64, 75, 255));
-    //linearGrad.setColorAt(1, QColor(99, 127, 148, 255));
-    linearGrad.setColorAt(1, QColor(76, 98, 115, 255));
+    QColor tc = (m_track != NULL) ? m_track->color() : QColor();
+    if (tc.isValid())
+    {
+        linearGrad.setColorAt(0, tc.darker(160));
+        linearGrad.setColorAt(1, tc);
+    }
+    else
+    {
+        linearGrad.setColorAt(0, QColor(50, 64, 75, 255));
+        linearGrad.setColorAt(1, QColor(76, 98, 115, 255));
+    }
     painter->setBrush(linearGrad);
     painter->drawRect(0, 0, TRACK_WIDTH - 4, TRACK_HEIGHT - 1);
 
@@ -311,4 +324,9 @@ void TrackItem::slotDeleteTrackClicked()
 void TrackItem::slotNewTrackClicked()
 {
     emit itemRequestNewTrack();
+}
+
+void TrackItem::slotColorClicked()
+{
+    emit itemColorChangeRequested(m_track);
 }

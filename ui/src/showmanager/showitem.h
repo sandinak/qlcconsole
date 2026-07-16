@@ -335,9 +335,17 @@ protected:
     QAction *m_alignToCursor;
     QAction *m_lockAction;
 
+public:
+    /** Resource path of a small type badge drawn in the item corner. */
+    void setIconResource(const QString &r) { m_iconResource = r; }
+
+protected:
     /** Master/track read-only gate (separate from the per-item lock). */
     bool m_editable;
     void updateMovable();
+
+    /** Type-badge icon resource (set by each subclass). */
+    QString m_iconResource;
 
     /** Stretch-handle resize state */
     enum ResizeEdge { NoEdge = 0, LeftEdge, RightEdge };

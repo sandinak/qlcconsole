@@ -45,6 +45,8 @@ AudioItem::AudioItem(Audio *aud, ShowFunction *func)
     else
         setColor(ShowFunction::defaultColor(Function::AudioType));
 
+    setIconResource(":/audio.png");
+
     if (func->duration() == 0)
         func->setDuration(aud->totalDuration());
 

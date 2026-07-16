@@ -45,6 +45,7 @@ CollectionItem::CollectionItem(Collection *collection, ShowFunction *func)
 
     calculateWidth();
     connect(m_collection, SIGNAL(changed(quint32)), this, SLOT(slotCollectionChanged(quint32)));
+    setIconResource(":/collection.png");
 }
 
 void CollectionItem::calculateWidth()

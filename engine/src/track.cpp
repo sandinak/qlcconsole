@@ -31,6 +31,7 @@
 #define KXMLQLCTrackSceneID   QStringLiteral("SceneID")
 #define KXMLQLCTrackIsMute    QStringLiteral("isMute")
 #define KXMLQLCTrackIsLocked  QStringLiteral("Locked")
+#define KXMLQLCTrackColor     QStringLiteral("Color")
 
 #define KXMLQLCTrackFunctions QStringLiteral("Functions")
 
@@ -140,6 +141,17 @@ bool Track::isLocked() const
     return m_isLocked;
 }
 
+QColor Track::color() const
+{
+    return m_color;
+}
+
+void Track::setColor(const QColor &color)
+{
+    m_color = color;
+    emit changed(m_id);
+}
+
 /*********************************************************************
  * Sequences
  *********************************************************************/
@@ -207,6 +219,8 @@ bool Track::saveXML(QXmlStreamWriter *doc)
     doc->writeAttribute(KXMLQLCTrackIsMute, QString::number(m_isMute));
     if (m_isLocked)
         doc->writeAttribute(KXMLQLCTrackIsLocked, QString::number(1));
+    if (m_color.isValid())
+        doc->writeAttribute(KXMLQLCTrackColor, m_color.name());
 
     /* Save the list of Functions if any is present */
     if (m_functions.isEmpty() == false)
@@ -265,6 +279,9 @@ bool Track::loadXML(QXmlStreamReader &root)
 
     if (attrs.hasAttribute(KXMLQLCTrackIsLocked))
         m_isLocked = (attrs.value(KXMLQLCTrackIsLocked).toString().toInt() != 0);
+
+    if (attrs.hasAttribute(KXMLQLCTrackColor))
+        m_color = QColor(attrs.value(KXMLQLCTrackColor).toString());
 
     /* look for show functions */
     while (root.readNextStartElement())

@@ -44,6 +44,7 @@ SequenceItem::SequenceItem(Chaser *seq, ShowFunction *func)
 
     connect(m_chaser, SIGNAL(changed(quint32)),
             this, SLOT(slotSequenceChanged(quint32)));
+    setIconResource(":/sequence.png");
 }
 
 void SequenceItem::calculateWidth()

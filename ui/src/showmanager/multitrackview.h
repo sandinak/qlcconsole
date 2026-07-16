@@ -266,6 +266,7 @@ signals:
     void trackMoved(Track *, int);
     void trackDelete(Track *);
     void trackModified();
+    void trackColorChangeRequested(Track *);
 };
 
 /** @} */

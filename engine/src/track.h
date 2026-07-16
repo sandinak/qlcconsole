@@ -22,6 +22,7 @@
 
 #include <QObject>
 #include <QHash>
+#include <QColor>
 
 #include "showfunction.h"
 #include "scene.h"
@@ -144,6 +145,17 @@ signals:
 private:
     /** Flag to lock/unlock this track (read-only on the timeline) */
     bool m_isLocked;
+
+    /*********************************************************************
+     * Colour
+     *********************************************************************/
+public:
+    /** Get/Set a display colour for the track header (invalid = default). */
+    QColor color() const;
+    void setColor(const QColor &color);
+
+private:
+    QColor m_color;
 
     /*********************************************************************
      * Functions

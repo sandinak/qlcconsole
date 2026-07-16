@@ -91,6 +91,7 @@ protected slots:
     void slotDeleteTrackClicked();
     void slotNewTrackClicked();
     void slotRenameCommitted();
+    void slotColorClicked();
 
 signals:
     void itemClicked(TrackItem *);
@@ -102,6 +103,7 @@ signals:
     void itemRequestDelete(Track *);
     void itemRequestNewTrack();
     void itemLockChanged(TrackItem *, bool locked);
+    void itemColorChangeRequested(Track *);
 
 private:
     QString m_name;
@@ -122,6 +124,7 @@ private:
     QAction *m_changeName;
     QAction *m_delete;
     QAction *m_newTrack;
+    QAction *m_color;
 
     /** Inline name editor (embedded QLineEdit while renaming) */
     QGraphicsProxyWidget *m_nameProxy;

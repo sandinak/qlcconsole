@@ -439,6 +439,11 @@ void ShowItem::postPaint(QPainter *painter)
         }
     }
 
+    // Type badge in the top-right corner (DAW-style).
+    if (m_iconResource.isEmpty() == false && m_width > 24)
+        painter->drawPixmap(m_width - 20, 4, 16, 16,
+                            QIcon(m_iconResource).pixmap(16, 16));
+
     if (m_locked)
         painter->drawPixmap(3, TRACK_HEIGHT >> 1, 24, 24, QIcon(":/lock.png").pixmap(24, 24));
 

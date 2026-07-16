@@ -39,6 +39,7 @@ RGBMatrixItem::RGBMatrixItem(RGBMatrix *rgbm, ShowFunction *func)
 
     calculateWidth();
     connect(m_matrix, SIGNAL(changed(quint32)), this, SLOT(slotRGBMatrixChanged(quint32)));
+    setIconResource(":/rgbmatrix.png");
 }
 
 void RGBMatrixItem::calculateWidth()

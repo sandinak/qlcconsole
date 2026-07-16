@@ -141,6 +141,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotTrackDelete(Track*)));
     connect(m_showview, &MultiTrackView::trackModified,
             m_doc, &Doc::setModified);
+    connect(m_showview, SIGNAL(trackColorChangeRequested(Track*)),
+            this, SLOT(slotTrackColorChangeRequested(Track*)));
 
     // split the multitrack view into two (left: tracks, right: function editors)
     m_vsplitter = new QSplitter(Qt::Horizontal, this);
@@ -1500,6 +1502,19 @@ void ShowManager::slotAddAtRequested(quint32 startTime, Track *track)
 void ShowManager::slotShowLockedChanged(bool locked)
 {
     m_showview->setEditable(locked == false);
+}
+
+void ShowManager::slotTrackColorChangeRequested(Track *track)
+{
+    if (track == NULL)
+        return;
+    QColor c = QColorDialog::getColor(track->color().isValid() ? track->color()
+                                      : QColor(76, 98, 115), this, tr("Track Colour"));
+    if (c.isValid() == false)
+        return;
+    track->setColor(c);
+    m_doc->setModified();
+    // Track::changed() -> TrackItem repaints; nothing else needed.
 }
 
 void ShowManager::slotMarkerAddRequested(quint32 time)
