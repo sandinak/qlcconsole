@@ -18,6 +18,7 @@
 */
 
 #include <QGraphicsSceneEvent>
+#include <QGraphicsScene>
 #include <QApplication>
 #include <QPainter>
 #include <QDebug>
@@ -277,11 +278,26 @@ void ShowItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
         }
     }
 
+    // Shift-click extends the selection (like a DAW / most apps) rather than
+    // replacing it. Qt only treats Ctrl/Cmd as additive, so for Shift we
+    // capture the current selection and restore it after the base handler
+    // (which would otherwise clear it).
+    const bool shift = event->modifiers() & Qt::ShiftModifier;
+    QList<QGraphicsItem *> prevSel;
+    if (shift && scene() != NULL)
+        prevSel = scene()->selectedItems();
+
     QGraphicsItem::mousePressEvent(event);
     m_pos = this->pos();
     if (event->button() == Qt::LeftButton)
         m_pressed = true;
     this->setSelected(true);
+
+    if (shift)
+    {
+        foreach (QGraphicsItem *it, prevSel)
+            it->setSelected(true);
+    }
 }
 
 void ShowItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
