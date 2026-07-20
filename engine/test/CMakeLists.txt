@@ -1,5 +1,11 @@
 project(test)
 
+# Point the tests at the SOURCE resources (fixtures/inputprofiles/rgbscripts) via
+# an absolute path, so fixture-dependent tests actually run in an out-of-tree
+# build (the old relative paths in resource_paths.h resolve into the empty
+# build/resources/ dir). Applies to every test target added below.
+add_compile_definitions(QLC_TEST_RESOURCE_ROOT="${CMAKE_SOURCE_DIR}/resources/")
+
 add_subdirectory(bus)
 add_subdirectory(channelsgroup)
 add_subdirectory(channelmodifier)
