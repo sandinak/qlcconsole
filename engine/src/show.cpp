@@ -79,6 +79,7 @@ quint32 Show::totalDuration()
 {
     quint32 totalDuration = 0;
 
+    QMutexLocker locker(&m_tracksMutex);
     foreach (Track *track, m_tracks)
     {
         foreach (ShowFunction *sf, track->showFunctions())
@@ -235,6 +236,8 @@ bool Show::addTrack(Track *track, quint32 id)
 {
     Q_ASSERT(track != NULL);
 
+    QMutexLocker locker(&m_tracksMutex);
+
     // No ID given, this method can assign one
     if (id == Track::invalidId())
         id = createTrackId();
@@ -250,6 +253,7 @@ bool Show::addTrack(Track *track, quint32 id)
 
 bool Show::removeTrack(quint32 id)
 {
+    QMutexLocker locker(&m_tracksMutex);
     if (m_tracks.contains(id) == true)
     {
         Track* track = m_tracks.take(id);
@@ -271,11 +275,13 @@ bool Show::removeTrack(quint32 id)
 
 Track* Show::track(quint32 id) const
 {
+    QMutexLocker locker(&m_tracksMutex);
     return m_tracks.value(id, NULL);
 }
 
 Track* Show::getTrackFromSceneID(quint32 id)
 {
+    QMutexLocker locker(&m_tracksMutex);
     foreach (Track *track, m_tracks)
     {
         if (track->getSceneID() == id)
@@ -286,6 +292,7 @@ Track* Show::getTrackFromSceneID(quint32 id)
 
 Track *Show::getTrackFromShowFunctionID(quint32 id)
 {
+    QMutexLocker locker(&m_tracksMutex);
     foreach (Track *track, m_tracks)
         if (track->showFunction(id) != NULL)
             return track;
@@ -295,6 +302,7 @@ Track *Show::getTrackFromShowFunctionID(quint32 id)
 
 int Show::getTracksCount()
 {
+    QMutexLocker locker(&m_tracksMutex);
     return m_tracks.size();
 }
 
@@ -302,6 +310,8 @@ void Show::moveTrack(Track *track, int direction)
 {
     if (track == NULL)
         return;
+
+    QMutexLocker locker(&m_tracksMutex);
 
     qint32 trkID = track->id();
     if (trkID == 0 && direction == -1)
@@ -334,21 +344,24 @@ void Show::moveTrack(Track *track, int direction)
 
 QList <Track*> Show::tracks() const
 {
+    QMutexLocker locker(&m_tracksMutex);
     return m_tracks.values();
 }
 
 void Show::setTrackIntensity(quint32 trackId, qreal fraction)
 {
-    Track *track = m_tracks.value(trackId, NULL);
+    Track *track = this->track(trackId);   // locked lookup
     if (track == NULL)
         return;
     track->setIntensity(fraction);
+    QMutexLocker rlock(&m_runnerMutex);
     if (m_runner != NULL)
         m_runner->adjustIntensity(fraction, track); // live scale while running
 }
 
 quint32 Show::createTrackId()
 {
+    QMutexLocker locker(&m_tracksMutex);
     while (m_tracks.contains(m_latestTrackId) == true ||
            m_latestTrackId == Track::invalidId())
     {
@@ -369,6 +382,7 @@ quint32 Show::getLatestShowFunctionId()
 
 ShowFunction *Show::showFunction(quint32 id)
 {
+    QMutexLocker locker(&m_tracksMutex);
     foreach (Track *track, m_tracks)
     {
         ShowFunction *sf = track->showFunction(id);
@@ -419,8 +433,11 @@ bool Show::saveXML(QXmlStreamWriter *doc) const
         doc->writeEndElement();
     }
 
-    foreach (Track *track, m_tracks)
-        track->saveXML(doc);
+    {
+        QMutexLocker locker(&m_tracksMutex);
+        foreach (Track *track, m_tracks)
+            track->saveXML(doc);
+    }
 
     /* End the <Function> tag */
     doc->writeEndElement();
@@ -498,6 +515,7 @@ bool Show::loadXML(QXmlStreamReader &root)
 
 void Show::postLoad()
 {
+    QMutexLocker locker(&m_tracksMutex);
     foreach (Track* track, m_tracks)
     {
         if (track->postLoad(doc()))
@@ -513,6 +531,7 @@ bool Show::contains(quint32 functionId) const
     if (functionId == id())
         return true;
 
+    QMutexLocker locker(&m_tracksMutex);
     foreach (Track* track, m_tracks)
     {
         if (track->contains(doc, functionId))
@@ -526,6 +545,7 @@ QList<quint32> Show::components() const
 {
     QList<quint32> ids;
 
+    QMutexLocker locker(&m_tracksMutex);
     foreach (Track* track, m_tracks)
         ids.append(track->components());
 
@@ -540,14 +560,17 @@ void Show::preRun(MasterTimer* timer)
 {
     Function::preRun(timer);
     m_runningChildren.clear();
-    if (m_runner != NULL)
     {
-        m_runner->stop();
-        delete m_runner;
+        QMutexLocker rlock(&m_runnerMutex);
+        if (m_runner != NULL)
+        {
+            m_runner->stop();
+            delete m_runner;
+        }
+        m_runner = new ShowRunner(doc(), this->id(), elapsed());
     }
-
-    m_runner = new ShowRunner(doc(), this->id(), elapsed());
     int i = 0;
+    QMutexLocker locker(&m_tracksMutex);
     foreach (Track *track, m_tracks)
         m_runner->adjustIntensity(getAttributeValue(i++), track);
 
@@ -669,11 +692,14 @@ void Show::postRun(MasterTimer* timer, QList<Universe *> universes)
     if (d != NULL && d->mode() == Doc::Operate && d->lastLookEnabled())
         d->captureLastLook(id(), universes);
 
-    if (m_runner != NULL)
     {
-        m_runner->stop();
-        delete m_runner;
-        m_runner = NULL;
+        QMutexLocker rlock(&m_runnerMutex);
+        if (m_runner != NULL)
+        {
+            m_runner->stop();
+            delete m_runner;
+            m_runner = NULL;
+        }
     }
     Function::postRun(timer, universes);
 }
@@ -691,9 +717,10 @@ int Show::adjustAttribute(qreal fraction, int attributeId)
 {
     int attrIndex = Function::adjustAttribute(fraction, attributeId);
 
+    QMutexLocker rlock(&m_runnerMutex);
     if (m_runner != NULL)
     {
-        QList<Track*> trkList = m_tracks.values();
+        QList<Track*> trkList = tracks();   // locked snapshot
         if (trkList.isEmpty() == false &&
             attrIndex >= 0 && attrIndex < trkList.count())
         {

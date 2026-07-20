@@ -38,6 +38,7 @@ private slots:
     void intensity();
     void stopRunner();
     void timecodeFollow();
+    void timecodeDriveAndFreeze();
 
 private:
     Doc *m_doc;

@@ -22,6 +22,14 @@
 
 #include <QObject>
 
+/** Milliseconds of no fresh timecode before a followed show is treated as
+ *  HELD/frozen. ONE constant shared by the ShowRunner freeze (showrunner.cpp)
+ *  and the watchdog that drives the "holding" footer chip (timecodesource.cpp),
+ *  so the rig-freeze and the indicator can never drift apart. Must stay above
+ *  normal quarter-frame spacing (~8ms at 30fps) so steady playback never
+ *  flickers to "holding". */
+#define SHOW_TC_HOLD_MS 180
+
 class QTimer;
 
 /** @addtogroup engine Engine

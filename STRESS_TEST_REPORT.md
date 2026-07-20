@@ -126,32 +126,34 @@ VCButton round-trip — all SAFE.)
 
 ---
 
-## 4. Things to EVALUATE (not fixed — need your call / a live rig)
+## 4. Follow-up items — NOW FIXED (2026-07-20)
 
-### E1 — Edit-during-run in the **Show Manager tab** (not just the embedded editor)
-F4's fix guards the embedded Programming-tab editor. The **full Show Manager tab** edits
-the same `Show::tracks()`/`Track::showFunctions()` the timer thread now walks per frame,
-and I did **not** add the stop-before-edit guard there (to avoid changing that tab's
-established UX under time pressure). Exposure is the same UAF if you edit a running
-show's structure from the Show Manager. **Options:** (a) add the same stop-before-edit
-guard there; (b) the robust general fix — mutex-guard `Show::m_tracks` / `Track::m_functions`
-so the runner can walk them safely while the UI edits (bigger, touches core, benefits
-stock too). Recommend (a) short-term, (b) as the real fix.
+### E1 — Edit-during-run UAF (core fix) — **FIXED**
+Both halves done: (a) **core** — `Show::m_tracks` and `Track::m_functions` are now
+guarded by recursive mutexes (mirrors the shipped `Chaser::m_stepListMutex` pattern), so
+the timer thread's per-frame walks and the UI's edits can't corrupt the lists; lock order
+is always `tracksMutex → functionsMutex` (verified, no AB-BA). Benefits stock too. (b) the
+**stop-before-edit** guard is now also on the **Show Manager tab** structural slots
+(drop / add / delete / move track + delete clip), guaranteeing no track/ShowFunction is
+*freed* while the runner references it. Full-suite regression: 0 new failures, 0 crashes.
 
-### E2 — `Show::setTrackIntensity` reads `m_runner` unlocked (UAF window)
-Mirrors the pre-existing stock `Show::adjustAttribute` pattern: the UI reads `m_runner`
-while the timer thread can `delete m_runner` in `postRun` at show stop. Low-probability
-(fader drag exactly as the show ends), but real. A proper fix needs `m_runner` lifetime
-synchronization in `Show` — a small core change worth doing alongside E1.
+### E2 — `Show::m_runner` lifetime — **FIXED**
+New `Show::m_runnerMutex` guards `m_runner` across threads: the UI accessors
+(`setTrackIntensity`, `adjustAttribute`) and the timer thread's create/delete
+(`preRun`/`postRun`) all lock it. `write()` shares the timer thread with pre/postRun so it
+needs no lock. Order `runnerMutex → tracksMutex` (consistent).
 
-### E3 — `TIMECODE_WATCHDOG_MS` 600→200 (freeze chip)
-Behavioral change (chip now flips ~when the rig freezes). Confirm on a live MTC rig that
-200ms doesn't false-trigger "holding" on your source's frame cadence (should be safe;
-~25 missed quarter-frames at 30fps).
+### E3 — Freeze threshold unified — **FIXED**
+The ShowRunner freeze and the watchdog chip now derive from **one** shared constant
+`SHOW_TC_HOLD_MS` (180, in `timecodesource.h`), so they can never drift. (Still worth a
+live-MTC confirm that 180ms doesn't false-trigger on your source — ~22 missed
+quarter-frames at 30fps, should be safe.)
 
-### E4 — Live-MTC path still unverified end-to-end
-Independent of this session: the whole follow-MTC drive has never been run against Logic.
-`testing_st.md` §C/§G is the plan.
+### E4 — MTC drive now has automated coverage — **PARTLY ADDRESSED**
+Added `ShowRunner_Test::timecodeDriveAndFreeze` — drives the real `write()`-based chase →
+freeze (after `SHOW_TC_HOLD_MS`) → thaw, plus the existing seek/latch test. This exercises
+the load-bearing timecode logic without a rig. A **live Logic-MTC** run is still the final
+sign-off (`testing_st.md` §C/§G) — that can only be done on-site.
 
 ### E5 — Pre-existing benign warnings
 `fixturegroupsource.h:58` / `functionstreewidget.h:216` — `mimeData` overload missing

@@ -1502,10 +1502,25 @@ void ShowManager::slotPaste()
     }
 }
 
+void ShowManager::stopForStructuralEdit()
+{
+    // Editing the show's STRUCTURE (add/delete/move a track or clip) mutates the
+    // track/ShowFunction lists the runner walks every frame on the timer thread.
+    // Stop + WAIT so there's no concurrent access / freed object mid-frame.
+    if (m_show != NULL && m_show->isRunning())
+    {
+        m_show->stop(functionParent());
+        m_show->stopAndWait();
+        if (m_playAction != NULL)
+            m_playAction->setIcon(QIcon(":/player_play.png"));
+    }
+}
+
 void ShowManager::slotDelete()
 {
     if (m_show == NULL || m_doc->isShowLocked())
         return;
+    stopForStructuralEdit();
 
     // Delete removes the SELECTED timeline item(s). It no longer nukes a track
     // by surprise when nothing is selected — tracks are deleted via the track
@@ -1769,6 +1784,7 @@ void ShowManager::slotFunctionDropped(quint32 funcID, quint32 startTime, Track *
 {
     if (m_show == NULL || m_doc->isShowLocked())
         return;
+    stopForStructuralEdit();
 
     // Don't drop onto a locked track.
     if (track != NULL && track->isLocked())
@@ -1811,6 +1827,7 @@ void ShowManager::slotAddAtRequested(quint32 startTime, Track *track)
 {
     if (m_show == NULL || m_doc->isShowLocked())
         return;
+    stopForStructuralEdit();
 
     FunctionSelection fs(this, m_doc);
     QList<quint32> disabledList;
@@ -1978,6 +1995,7 @@ void ShowManager::slotNewTrackRequested()
 {
     if (m_show == NULL || m_doc->isShowLocked())
         return;
+    stopForStructuralEdit();
 
     pushUndoSnapshot();
     Track *track = new Track();
@@ -2343,6 +2361,7 @@ void ShowManager::slotTrackMoved(Track *track, int direction)
 {
     if (m_show != NULL && direction != 0)
     {
+        stopForStructuralEdit();
         pushUndoSnapshot();
         // direction is a signed row delta (±1 from the context menu, or several
         // rows from a header drag-reorder). moveTrack() swaps one row at a time.
@@ -2358,6 +2377,7 @@ void ShowManager::slotTrackDelete(Track *track)
 {
     if (track == NULL || m_show == NULL || m_doc->isShowLocked())
         return;
+    stopForStructuralEdit();
 
     // Gut check — and if the track carries items, list them.
     QList<ShowFunction *> sfs = track->showFunctions();

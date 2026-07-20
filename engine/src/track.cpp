@@ -234,6 +234,7 @@ ShowFunction *Track::createShowFunction(quint32 functionID)
     quint32 uId = show == NULL ? 0 : show->getLatestShowFunctionId();
     ShowFunction *func = new ShowFunction(uId);
     func->setFunctionID(functionID);
+    QMutexLocker locker(&m_functionsMutex);
     m_functions.append(func);
 
     return func;
@@ -244,6 +245,7 @@ bool Track::addShowFunction(ShowFunction *func)
     if (func == NULL || func->functionID() == Function::invalidId())
         return false;
 
+    QMutexLocker locker(&m_functionsMutex);
     m_functions.append(func);
 
     return true;
@@ -251,6 +253,7 @@ bool Track::addShowFunction(ShowFunction *func)
 
 ShowFunction *Track::showFunction(quint32 id)
 {
+    QMutexLocker locker(&m_functionsMutex);
     foreach (ShowFunction *sf, m_functions)
         if (sf->id() == id)
             return sf;
@@ -260,6 +263,7 @@ ShowFunction *Track::showFunction(quint32 id)
 
 bool Track::removeShowFunction(ShowFunction *function, bool performDelete)
 {
+    QMutexLocker locker(&m_functionsMutex);
     if (m_functions.contains(function) == false)
         return false;
 
@@ -272,6 +276,7 @@ bool Track::removeShowFunction(ShowFunction *function, bool performDelete)
 
 QList <ShowFunction *> Track::showFunctions() const
 {
+    QMutexLocker locker(&m_functionsMutex);
     return m_functions;
 }
 
@@ -304,12 +309,10 @@ bool Track::saveXML(QXmlStreamWriter *doc)
     if (m_intensity < 1.0)
         doc->writeAttribute(KXMLQLCTrackIntensity, QString::number(m_intensity, 'f', 4));
 
-    /* Save the list of Functions if any is present */
-    if (m_functions.isEmpty() == false)
-    {
-        foreach (ShowFunction *func, showFunctions())
-            func->saveXML(doc);
-    }
+    /* Save the list of Functions if any is present (locked snapshot). */
+    const QList<ShowFunction *> fns = showFunctions();
+    foreach (ShowFunction *func, fns)
+        func->saveXML(doc);
 
     doc->writeEndElement();
 
@@ -420,6 +423,7 @@ bool Track::loadXML(QXmlStreamReader &root)
 bool Track::postLoad(Doc* doc)
 {
     bool modified = false;
+    QMutexLocker locker(&m_functionsMutex);
     QMutableListIterator<ShowFunction*> it(m_functions);
     while (it.hasNext())
     {
@@ -470,6 +474,7 @@ bool Track::contains(Doc* doc, quint32 functionId) const
     if (m_sceneID == functionId)
         return true;
 
+    QMutexLocker locker(&m_functionsMutex);
     QListIterator<ShowFunction*> it(m_functions);
     while (it.hasNext())
     {
@@ -493,6 +498,7 @@ QList<quint32> Track::components() const
 {
     QList<quint32> ids;
 
+    QMutexLocker locker(&m_functionsMutex);
     QListIterator<ShowFunction*> it(m_functions);
     while (it.hasNext())
     {

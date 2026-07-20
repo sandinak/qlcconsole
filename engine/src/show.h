@@ -162,6 +162,15 @@ protected:
     /** Map of the available tracks coupled by ID */
     QMap <quint32,Track*> m_tracks;
 
+    /** Guards m_tracks: the ShowRunner walks tracks() every frame on the timer
+     *  thread while the UI adds/removes/moves on the main thread. Recursive so a
+     *  locked accessor can call another. */
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
+    mutable QMutex m_tracksMutex;
+#else
+    mutable QRecursiveMutex m_tracksMutex;
+#endif
+
     /** Latest assigned track ID */
     quint32 m_latestTrackId;
 
@@ -275,6 +284,11 @@ signals:
 
 protected:
     ShowRunner *m_runner;
+    /** Guards m_runner's lifetime: the UI thread (setTrackIntensity /
+     *  adjustAttribute) reads it while the timer thread creates/deletes it in
+     *  preRun/postRun. write() shares the timer thread with pre/postRun so it
+     *  needs no lock. */
+    QMutex m_runnerMutex;
     /** Number of currently running children */
     QSet <quint32> m_runningChildren;
     /** Whether this show follows an external timecode (persisted) */

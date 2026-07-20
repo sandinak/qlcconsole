@@ -106,4 +106,37 @@ void ShowRunner_Test::timecodeFollow()
     QCOMPARE(runner.m_externalTimeSet, false);
 }
 
+// Drives the actual write()-based timecode chase → freeze → thaw (the MTC drive
+// that was previously only exercised end-to-end on a rig).
+void ShowRunner_Test::timecodeDriveAndFreeze()
+{
+    ShowRunner runner(m_doc, m_show->id());
+    runner.setTimecodeFollow(true);
+    MasterTimer *mt = m_doc->masterTimer();
+    QList<Universe*> unis = m_doc->inputOutputMap()->universes();
+
+    // Fresh code + a tick: the clock resyncs toward it and we are NOT holding.
+    runner.setExternalTime(400);
+    runner.write(mt, unis);
+    QVERIFY(runner.m_elapsedTime > 0);       // chasing the external position
+    QCOMPARE(runner.m_tcHolding, false);
+
+    // Keep feeding fresh code: stays live.
+    for (int i = 0; i < 5; i++) { runner.setExternalTime(400 + i * 20); runner.write(mt, unis); }
+    QCOMPARE(runner.m_tcHolding, false);
+
+    // Stop feeding (transport stops): after SHOW_TC_HOLD_MS of silence it FREEZES.
+    int guard = 0;
+    while (runner.m_tcHolding == false && guard++ < 1000)
+        runner.write(mt, unis);
+    QCOMPARE(runner.m_tcHolding, true);      // held on TC-stop
+
+    // Fresh code again thaws it (resume chasing).
+    runner.setExternalTime(600);
+    runner.write(mt, unis);
+    QCOMPARE(runner.m_tcHolding, false);
+
+    runner.stop();
+}
+
 QTEST_APPLESS_MAIN(ShowRunner_Test)

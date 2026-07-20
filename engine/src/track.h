@@ -21,6 +21,7 @@
 #define TRACK_H
 
 #include <QObject>
+#include <QMutex>
 #include <QHash>
 #include <QColor>
 
@@ -244,6 +245,15 @@ public:
 private:
     /** List of Function IDs present in this track */
     QList <ShowFunction *> m_functions;
+
+    /** Guards m_functions: the ShowRunner walks showFunctions() every frame on
+     *  the timer thread while the UI adds/removes on the main thread. Recursive
+     *  so a locked accessor can call another. (Mirrors Chaser::m_stepListMutex.) */
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
+    mutable QMutex m_functionsMutex;
+#else
+    mutable QRecursiveMutex m_functionsMutex;
+#endif
 
     /*********************************************************************
      * Load & Save

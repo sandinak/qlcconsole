@@ -152,6 +152,10 @@ private:
      *  the created ShowFunction (for collision resolution), or NULL. */
     ShowFunction *addFunctionToTrack(Function *f, Track *track, quint32 startTime);
 
+    /** Stop + wait for the runner before a structural edit, so the timer thread
+     *  isn't walking the track/ShowFunction lists we're about to mutate (UAF). */
+    void stopForStructuralEdit();
+
     /*********************************************************************
      * Menus, toolbar & actions
      *********************************************************************/

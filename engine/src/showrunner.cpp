@@ -29,6 +29,7 @@
 #include "chaseraction.h"
 #include "track.h"
 #include "universe.h"
+#include "timecodesource.h"
 #include "show.h"
 
 #define TIMER_INTERVAL 50
@@ -456,17 +457,17 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
             // own fades/steps run on the MasterTimer and would keep going. Pause
             // them so an in-progress fade FREEZES at TC-stop and resumes on
             // TC-restart (Branson: "the fade stops").
-            // Freeze threshold. Kept in step with TIMECODE_WATCHDOG_MS
-            // (timecodesource.cpp, ~200) so the footer "holding" chip flips
-            // right around when the rig actually freezes here.
-            const bool holding = (m_msSinceFresh > 150);
+            // Freeze threshold — the SAME shared constant the watchdog uses for
+            // the "holding" chip (SHOW_TC_HOLD_MS), so the rig freeze and the
+            // indicator flip together.
+            const bool holding = (m_msSinceFresh > SHOW_TC_HOLD_MS);
             if (holding != m_tcHolding)
             {
                 m_tcHolding = holding;
                 setPause(holding);
             }
 
-            if (m_msSinceFresh <= 150)
+            if (m_msSinceFresh <= SHOW_TC_HOLD_MS)
             {
                 // Smooth base advance every frame (this is what keeps the cursor
                 // gliding at 50Hz regardless of the ~12Hz MTC rate).

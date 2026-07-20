@@ -30,7 +30,7 @@
  *  freeze threshold (m_msSinceFresh > 150 in showrunner.cpp) so the "holding"
  *  chip flips right around when the rig actually freezes — it used to be 600,
  *  which left the chip green for up to ~450ms after the show had frozen. */
-#define TIMECODE_WATCHDOG_MS 200
+#define TIMECODE_WATCHDOG_MS SHOW_TC_HOLD_MS   // shared with the ShowRunner freeze
 
 TimecodeSource::TimecodeSource(QObject *parent)
     : QObject(parent)
