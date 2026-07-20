@@ -113,6 +113,12 @@ public:
     void setEditable(bool editable);
     bool isEditable() const { return m_editable; }
 
+    /** Compact mode: size the scene to the actual track count (min 1) instead
+     *  of the fixed 600px / 6-row minimum. Keeps the embedded editor from
+     *  rendering unused rows and showing a scrollbar for an empty show. The
+     *  full Show Manager tab leaves this off (its roomy empty canvas). */
+    void setCompact(bool compact);
+
     /** Big centred hint drawn over the empty canvas (no show / no tracks).
      *  Empty string clears it. */
     void setEmptyMessage(const QString &msg);
@@ -203,6 +209,7 @@ public:
 private:
     QGraphicsScene *m_scene;
     QSlider *m_timeSlider;
+    QGraphicsProxyWidget *m_sliderProxy = nullptr; //!< zoom slider in the frozen corner
     ShowHeaderItem *m_header;
     ShowCursorItem *m_cursor;
     QGraphicsItem * m_vdivider;
@@ -212,6 +219,8 @@ private:
     bool m_snapToGrid;
     /** Master editable gate (false = timeline read-only) */
     bool m_editable;
+    /** Size to actual track count instead of the 600px/6-row minimum. */
+    bool m_compact = false;
     QString m_emptyMessage;    // centred hint when the canvas has no content
 
     QRubberBand *m_rubberBand; // marquee selection in the tracks area
@@ -247,6 +256,9 @@ protected:
     /** Paints the section-marker lane (labels + drop lines) over the tracks. */
     void drawForeground(QPainter *painter, const QRectF &rect) override;
 
+    /** Freeze the track-header column at the viewport's left edge on scroll. */
+    void scrollContentsBy(int dx, int dy) override;
+
     /** Accept functions dragged in from a function tree and drop them onto
      *  the track row / time position under the cursor. */
     void dragEnterEvent(QDragEnterEvent *event) override;
@@ -265,6 +277,9 @@ public slots:
     void wheelEvent(QWheelEvent *event) override;
 
 private:
+    /** Keep the track-header column, the vertical divider and the zoom slider
+     *  frozen at the viewport's left edge (called on scroll + layout change). */
+    void pinLeftColumn();
     /** Begin an inline (embedded line-edit) rename of a marker. */
     void startMarkerEdit(quint32 key);
 private slots:
@@ -304,6 +319,7 @@ signals:
     void markerEditRequested(quint32 time);
     void markerDeleteRequested(quint32 time);
     void markerColorRequested(quint32 time);
+    void markerSetCueListRequested(quint32 time);
     /** Inline rename committed: set the marker's label. */
     void markerRelabelRequested(quint32 time, QString label);
     /** A marker was dragged/resized: replace oldStart with [newStart,newEnd]. */
@@ -323,6 +339,7 @@ signals:
     void trackDelete(Track *);
     void trackModified();
     void trackColorChangeRequested(Track *);
+    void trackIntensityChanged(Track *, qreal);
 };
 
 /** @} */

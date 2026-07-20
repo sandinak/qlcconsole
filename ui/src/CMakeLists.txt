@@ -101,6 +101,7 @@ add_library(${module_name}
     bundleeditor.cpp bundleeditor.h
     bundlebrowser.cpp bundlebrowser.h
     lookeditor.cpp lookeditor.h
+    effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h
@@ -120,6 +121,7 @@ add_library(${module_name}
     showmanager/showeditor.cpp showmanager/showeditor.h showmanager/showeditor.ui
     showmanager/showitem.cpp showmanager/showitem.h
     showmanager/showmanager.cpp showmanager/showmanager.h
+    showmanager/showtimelineeditor.cpp showmanager/showtimelineeditor.h
     showmanager/timingstool.cpp showmanager/timingstool.h
     showmanager/trackitem.cpp showmanager/trackitem.h
     showmanager/videoitem.cpp showmanager/videoitem.h

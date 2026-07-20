@@ -24,6 +24,7 @@
 #include <QMutex>
 #include <QMap>
 #include <QHash>
+#include <QSet>
 
 #include <function.h>
 
@@ -33,6 +34,7 @@ class Chaser;
 class Track;
 class Show;
 class Doc;
+class Universe;
 
 /** @addtogroup engine_functions Functions
  * @{
@@ -55,7 +57,7 @@ public:
     /** Stop the runner */
     void stop();
 
-    void write(MasterTimer *timer);
+    void write(MasterTimer *timer, const QList<Universe*> &universes);
 
     /*********************************************************************
      * Timecode follow (e.g. MIDI Time Code)
@@ -140,14 +142,37 @@ private:
      * Chaser lockstep — a chaser block's cues follow the SHOW clock
      *********************************************************************/
 private:
-    /** Step index a chaser should be on at @p localMs into its block (honours
-     *  Common/PerStep durations, infinite holds, Loop wrap). -1 if none. */
-    int stepIndexAtLocalMs(Chaser *c, quint32 localMs) const;
+    /** Step a chaser should be on at @p localMs into its block: walk the
+     *  cumulative timeline dwells and return the cue whose span contains it
+     *  (clamped to the last cue past the end). -1 if the chaser has no steps. */
+    int stepAtLocalMs(Chaser *c, quint32 localMs) const;
+
+    /** Release show-clock ownership of a child being stopped/relocated (so a
+     *  later standalone run of the same chaser self-advances again) and drop its
+     *  lockstep state. */
+    void releaseChild(Function *f);
+
+    /** True if @p track currently produces no output: muted, or (when any track
+     *  is soloed) neither soloed nor solo-safe. @p anySolo is precomputed once. */
+    bool trackSilent(Track *track, bool anySolo) const;
+
+    /** The track owning the ShowFunction that references @p f, or NULL. */
+    Track *trackForFunction(Function *f) const;
+
+    /** Start the ShowFunction @p sf (owned by @p track) at @p offset ms into it,
+     *  wiring intensity override + fade priority + show-clock. Shared by the
+     *  normal start phase and the live-unmute path. */
+    void startChild(ShowFunction *sf, Track *track, quint32 offset);
+
+    /** Per-frame enforcement of live mute/solo/solo-safe: stop children of tracks
+     *  that just went silent, start the active cues of tracks that just became
+     *  audible. Targeted (only changed tracks), so it doesn't disturb the rest. */
+    void enforceLiveMuteSolo();
 
     /** Show start time (ms) of each running child — for the lockstep offset. */
     QHash<Function *, quint32> m_childStartMs;
-    /** Last step the show clock drove each chaser to (edge-trigger, no re-fire). */
-    QHash<Function *, int> m_lastDrivenStep;
+    /** Track ids that were effectively silent last frame (live mute/solo diff). */
+    QSet<quint32> m_lastSilent;
 
 private:
     FunctionParent functionParent() const;

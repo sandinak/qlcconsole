@@ -47,8 +47,19 @@
 #include "effectscript.h"
 #include "effectscriptcache.h"
 #include "effectpresetcache.h"
+#include "effectscripteditor.h"
 #include <QStandardItemModel>
 #include <QFileInfo>
+#include <QFile>
+#include <QDir>
+#include <QFileDialog>
+#include <QStandardPaths>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSettings>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QRegularExpression>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QPushButton>
@@ -508,6 +519,17 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_effectScriptCombo = new QComboBox(effectPage);
     m_effectScriptCombo->setToolTip(tr("Pick an Effect (or a raw Generator) for this look"));
     efScriptRow->addWidget(m_effectScriptCombo, 1);
+
+    m_newScriptButton = new QPushButton(tr("New script…"), effectPage);
+    m_newScriptButton->setToolTip(tr("Create a new effect script from a template and open it in the editor"));
+    connect(m_newScriptButton, &QPushButton::clicked, this, &LookEditor::slotNewEffectScript);
+    efScriptRow->addWidget(m_newScriptButton);
+
+    m_editScriptButton = new QPushButton(tr("Edit script…"), effectPage);
+    m_editScriptButton->setToolTip(tr("Edit this Generator's underlying .js script"));
+    connect(m_editScriptButton, &QPushButton::clicked, this, &LookEditor::slotEditEffectScript);
+    efScriptRow->addWidget(m_editScriptButton);
+
     efv->addLayout(efScriptRow);
 
     // Short description label (one line, shown below combo)
@@ -555,6 +577,18 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Save the current Generator + settings as a reusable named Effect.
     QHBoxLayout *efSaveRow = new QHBoxLayout();
     efSaveRow->addStretch(1);
+    m_importEffectButton = new QPushButton(tr("Import…"), effectPage);
+    m_importEffectButton->setToolTip(
+        tr("Import a shared Effect file (.qxfx) — installs its script if you don't have it"));
+    efSaveRow->addWidget(m_importEffectButton);
+    connect(m_importEffectButton, &QPushButton::clicked, this, &LookEditor::slotImportEffect);
+
+    m_exportEffectButton = new QPushButton(tr("Export…"), effectPage);
+    m_exportEffectButton->setToolTip(
+        tr("Export this Effect to a portable .qxfx file (script + settings) to share"));
+    efSaveRow->addWidget(m_exportEffectButton);
+    connect(m_exportEffectButton, &QPushButton::clicked, this, &LookEditor::slotExportEffect);
+
     m_saveAsEffectButton = new QPushButton(tr("Save as Effect…"), effectPage);
     m_saveAsEffectButton->setToolTip(
         tr("Save this Generator + its current settings as a named Effect you can reuse"));
@@ -1931,6 +1965,273 @@ void LookEditor::slotSaveAsEffect()
     populateEffectPicker(p);
     m_effectScriptCombo->blockSignals(false);
     emit paletteChanged(m_paletteId);
+}
+
+void LookEditor::slotExportEffect()
+{
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (!p || p->type() != QLCPalette::Effect || !m_doc->effectScriptRunner())
+        return;
+    if (p->scriptPath().isEmpty())
+    {
+        QMessageBox::information(this, tr("Export Effect"),
+            tr("Pick a Generator first, then export it."));
+        return;
+    }
+
+    EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
+    const QString base = scache->nameFromPath(p->scriptPath());
+    const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
+
+    // Read the script source so the file is portable (a recipient who lacks the
+    // script gets it on import).
+    QString source;
+    QFile sf(scache->scriptPath(base));
+    if (sf.open(QIODevice::ReadOnly | QIODevice::Text))
+        source = QString::fromUtf8(sf.readAll());
+
+    QJsonObject obj;
+    obj["qlcplusEffect"] = 1;
+    obj["name"] = p->effectPreset().isEmpty() ? (p->name().isEmpty() ? base : p->name())
+                                              : p->effectPreset();
+    obj["script"] = base;
+    obj["category"] = EffectScriptCache::categoryForTypes(meta.fixtureTypes);
+    obj["description"] = meta.description;
+    obj["scriptSource"] = source;
+    QJsonObject params;
+    const QMap<QString, double> pv = p->effectParamValues();
+    for (auto it = pv.constBegin(); it != pv.constEnd(); ++it)
+        params[it.key()] = it.value();
+    obj["params"] = params;
+    QJsonObject strs;
+    const QMap<QString, QString> sp = p->effectStringParams();
+    for (auto it = sp.constBegin(); it != sp.constEnd(); ++it)
+        strs[it.key()] = it.value();
+    obj["stringParams"] = strs;
+
+    const QString suggested = obj["name"].toString() + ".qxfx";
+    QString path = QFileDialog::getSaveFileName(this, tr("Export Effect"),
+        QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).filePath(suggested),
+        tr("QLC+ Effect (*.qxfx)"));
+    if (path.isEmpty())
+        return;
+    if (!path.endsWith(".qxfx"))
+        path += ".qxfx";
+
+    QFile out(path);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QMessageBox::warning(this, tr("Export Effect"),
+            tr("Could not write \"%1\".").arg(path));
+        return;
+    }
+    out.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    QMessageBox::information(this, tr("Export Effect"),
+        tr("Exported to \"%1\".").arg(QFileInfo(path).fileName()));
+}
+
+void LookEditor::slotImportEffect()
+{
+    if (!m_doc->effectScriptRunner())
+        return;
+
+    QString path = QFileDialog::getOpenFileName(this, tr("Import Effect"),
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation),
+        tr("QLC+ Effect (*.qxfx);;All files (*)"));
+    if (path.isEmpty())
+        return;
+
+    QFile in(path);
+    if (!in.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QMessageBox::warning(this, tr("Import Effect"), tr("Could not read the file."));
+        return;
+    }
+    QJsonParseError perr;
+    QJsonDocument doc = QJsonDocument::fromJson(in.readAll(), &perr);
+    if (perr.error != QJsonParseError::NoError || !doc.isObject())
+    {
+        QMessageBox::warning(this, tr("Import Effect"), tr("Not a valid Effect file."));
+        return;
+    }
+    QJsonObject obj = doc.object();
+    const QString base = obj["script"].toString();
+    const QString name = obj["name"].toString();
+    if (base.isEmpty() || name.isEmpty())
+    {
+        QMessageBox::warning(this, tr("Import Effect"), tr("The file is missing a script or name."));
+        return;
+    }
+
+    EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
+    EffectPresetCache *pcache = m_doc->effectScriptRunner()->presetCache();
+
+    // Install the embedded script if we don't already have one by that name.
+    if (scache->scriptPath(base).isEmpty())
+    {
+        const QString source = obj["scriptSource"].toString();
+        if (source.isEmpty())
+        {
+            QMessageBox::warning(this, tr("Import Effect"),
+                tr("This Effect needs the script \"%1\", which you don't have and the "
+                   "file doesn't include.").arg(base));
+            return;
+        }
+        QDir udir = EffectScriptCache::userScriptsDirectory();
+        udir.mkpath(".");
+        QFile js(udir.filePath(base + ".js"));
+        if (!js.open(QIODevice::WriteOnly | QIODevice::Text))
+        {
+            QMessageBox::warning(this, tr("Import Effect"),
+                tr("Could not install the script. Check folder permissions."));
+            return;
+        }
+        js.write(source.toUtf8());
+        js.close();
+        scache->rescan();
+    }
+
+    EffectPresetCache::Preset preset;
+    preset.name        = name;
+    preset.script      = base;
+    preset.category    = obj["category"].toString();
+    preset.description = obj["description"].toString();
+    const QJsonObject params = obj["params"].toObject();
+    for (auto it = params.constBegin(); it != params.constEnd(); ++it)
+        preset.params[it.key()] = it.value().toDouble();
+
+    if (pcache->contains(name) &&
+        QMessageBox::question(this, tr("Import Effect"),
+            tr("An Effect named \"%1\" already exists. Replace it?").arg(name),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    if (!pcache->savePreset(preset))
+    {
+        QMessageBox::warning(this, tr("Import Effect"), tr("Could not save the imported Effect."));
+        return;
+    }
+
+    // Reflect the new script/preset in the picker.
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p != nullptr && p->type() == QLCPalette::Effect)
+    {
+        m_effectScriptCombo->blockSignals(true);
+        populateEffectPicker(p);
+        m_effectScriptCombo->blockSignals(false);
+    }
+    QMessageBox::information(this, tr("Import Effect"),
+        tr("Imported \"%1\". It's now in the Effect picker.").arg(name));
+}
+
+void LookEditor::openScriptInEditor(const QString &filePath)
+{
+    if (filePath.isEmpty())
+        return;
+    const QString mode = QSettings().value(QStringLiteral("effectscript/editor"),
+                                           QStringLiteral("internal")).toString();
+    if (mode == QLatin1String("external"))
+    {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
+        return;
+    }
+    EffectScriptEditor dlg(filePath, m_doc, this);
+    dlg.exec();
+    // The editor rescans on save; refresh the picker in case a name changed.
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p != nullptr && p->type() == QLCPalette::Effect)
+    {
+        m_effectScriptCombo->blockSignals(true);
+        populateEffectPicker(p);
+        m_effectScriptCombo->blockSignals(false);
+    }
+}
+
+void LookEditor::slotNewEffectScript()
+{
+    if (!m_doc->effectScriptRunner())
+        return;
+
+    bool ok = false;
+    QString name = QInputDialog::getText(this, tr("New Effect Script"),
+        tr("Script name (letters, numbers, hyphens):"), QLineEdit::Normal,
+        tr("my-effect"), &ok).trimmed();
+    if (!ok || name.isEmpty())
+        return;
+    // Sanitize to a safe basename.
+    name.replace(QRegularExpression("[^A-Za-z0-9_-]"), "-");
+
+    EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
+    if (!scache->scriptPath(name).isEmpty())
+    {
+        QMessageBox::information(this, tr("New Effect Script"),
+            tr("A script named \"%1\" already exists.").arg(name));
+        return;
+    }
+
+    QDir udir = EffectScriptCache::userScriptsDirectory();
+    udir.mkpath(".");
+    const QString path = udir.filePath(name + ".js");
+
+    // A minimal, commented, valid template the user fills in.
+    const QString tmpl = QString(
+        "/*\n"
+        "  QLC+ Effect Script: %1\n"
+        "  Return per-fixture intents each tick (pan/tilt degrees, r/g/b 0-255,\n"
+        "  dimmer 0-1). Only the keys you set are written (Override), so the\n"
+        "  scene's other palettes fall through on channels you omit.\n"
+        "*/\n"
+        "(function() {\n"
+        "    var effect = new Object;\n"
+        "    effect.apiVersion   = 1;\n"
+        "    effect.name         = \"%1\";\n"
+        "    effect.description  = \"Describe your effect\";\n"
+        "    effect.author       = \"You\";\n"
+        "    effect.fixtureTypes = [\"moving\"];   // or [\"wash\"], [] = all\n"
+        "\n"
+        "    effect.parameters = [\n"
+        "        { name: \"speed\", description: \"Cycles per second\", min: -3.0, max: 3.0, defaultValue: 0.3 }\n"
+        "    ];\n"
+        "\n"
+        "    effect.tick = function(fixtures, inputs, palettes, params, state) {\n"
+        "        var t     = inputs._time !== undefined ? inputs._time : 0;\n"
+        "        var speed = params.speed !== undefined ? params.speed : 0.3;\n"
+        "        return fixtures.map(function(f, i) {\n"
+        "            if (!f.hasPanTilt) return {};\n"
+        "            var phase = t * speed * 2 * Math.PI + i;\n"
+        "            return {\n"
+        "                pan:  (0.5 + 0.2 * Math.sin(phase)) * f.panRange,\n"
+        "                tilt: (0.5 + 0.15 * Math.cos(phase)) * f.tiltRange\n"
+        "            };\n"
+        "        });\n"
+        "    };\n"
+        "\n"
+        "    return effect;\n"
+        "})()\n").arg(name);
+
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QMessageBox::warning(this, tr("New Effect Script"),
+            tr("Could not create the script. Check folder permissions."));
+        return;
+    }
+    f.write(tmpl.toUtf8());
+    f.close();
+    scache->rescan();
+    openScriptInEditor(path);
+}
+
+void LookEditor::slotEditEffectScript()
+{
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (!p || p->type() != QLCPalette::Effect || p->scriptPath().isEmpty())
+    {
+        QMessageBox::information(this, tr("Edit Effect Script"),
+            tr("Pick a Generator first, then edit its script."));
+        return;
+    }
+    openScriptInEditor(p->scriptPath());
 }
 
 void LookEditor::slotEffectParamChanged(int value)

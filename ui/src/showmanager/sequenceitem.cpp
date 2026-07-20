@@ -20,9 +20,13 @@
 #include <QApplication>
 #include <QPainter>
 #include <QMenu>
+#include <QMessageBox>
+#include <QInputDialog>
 #include <QToolTip>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsSceneHoverEvent>
+#include <QGraphicsSceneContextMenuEvent>
+#include <QGraphicsView>
 
 #include "sequenceitem.h"
 #include "multitrackview.h"
@@ -147,7 +151,10 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
     ShowItem::paint(painter, option, widget);
 
     if (this->isSelected() == false)
+    {
         m_selectedStep = -1;
+        m_selectedSteps.clear();
+    }
 
     foreach (ChaserStep step, m_chaser->steps())
     {
@@ -229,12 +236,16 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
             }
         }
 
-        // draw selected step
-        if (stepIdx == m_selectedStep)
+        // draw selected step(s): a translucent wash over every cue in the
+        // multi-selection plus a yellow outline; the anchor cue gets a brighter
+        // outline so it's clear which cue Shift extends from.
+        if (m_selectedSteps.contains(stepIdx) || stepIdx == m_selectedStep)
         {
-            painter->setPen(QPen(Qt::yellow, 2));
-            painter->setBrush(QBrush(Qt::NoBrush));
+            painter->setBrush(QColor(255, 235, 90, 60));
+            painter->setPen(QPen(stepIdx == m_selectedStep ? Qt::yellow
+                                                           : QColor(230, 200, 60), 2));
             painter->drawRect(xpos, 0, stepWidth, TRACK_HEIGHT - 3);
+            painter->setBrush(Qt::NoBrush);
         }
 
         // Cue label, drawn BELOW the title strip so it doesn't clash with the
@@ -568,6 +579,19 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     {
         int cue = cueAt(x);
 
+        // Multi-select: a Shift / Ctrl / Cmd click on a cue changes the SELECTION
+        // (build a group to delete / move / scale) and does NOT start a drag.
+        const Qt::KeyboardModifiers selMods =
+            event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::MetaModifier);
+        if (selMods && cue >= 0)
+        {
+            selectCue(cue, event->modifiers());
+            setSelected(true);
+            update();
+            event->accept();
+            return;
+        }
+
         // Fade band: grab the fade-in or fade-out — whichever handle the press is
         // CLOSER to (so both are reachable). The drag is RELATIVE to the fade's
         // value at press, so it never jumps to the cursor.
@@ -588,7 +612,7 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
             m_cueDragOrigFade = isIn ? s.fadeIn : s.fadeOut;
             m_cueDragIdx = cue;
             m_cueDragPressX = event->scenePos().x();
-            m_selectedStep = cue;
+            selectCue(cue, Qt::NoModifier);
             setFlag(QGraphicsItem::ItemIsMovable, false);
             setSelected(true);
             update();
@@ -599,7 +623,29 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
         // Timing band: divider = roll, cue body = slip (interior cues only).
         if (edgeAt(x) == NoEdge)
         {
+            const int bodyCue = cue;
             int div = stepBoundaryAt(x);
+
+            // Group move: a plain drag on a cue that's part of a contiguous
+            // interior multi-selection slides the whole group as a unit (the
+            // cues either side absorb the slide; the group keeps its timing).
+            int gLo, gHi;
+            if (div < 0 && bodyCue >= 0 && m_selectedSteps.count() > 1
+                && isCueSelected(bodyCue) && selectionContiguousInterior(gLo, gHi))
+            {
+                ensurePerStepDurations();
+                snapshotDurations();
+                m_cueDrag = CueGroupMove;
+                m_groupLo = gLo;
+                m_groupHi = gHi;
+                m_cueDragPressX = event->scenePos().x();
+                setFlag(QGraphicsItem::ItemIsMovable, false);
+                setSelected(true);
+                update();
+                event->accept();
+                return;
+            }
+
             cue = (div < 0) ? cue : -1;
             if (div >= 0 || (cue > 0 && cue < m_chaser->stepsCount() - 1))
             {
@@ -608,8 +654,18 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
                 m_cueDrag = (div >= 0) ? CueRoll : CueSlip;
                 m_cueDragIdx = (div >= 0) ? div : cue;
                 m_cueDragPressX = event->scenePos().x();
-                m_selectedStep = m_cueDragIdx;
+                selectCue(m_cueDragIdx, Qt::NoModifier);
                 setFlag(QGraphicsItem::ItemIsMovable, false);
+                setSelected(true);
+                update();
+                event->accept();
+                return;
+            }
+            // A plain click on a cue body that isn't a drag target (first/last
+            // cue) still selects that single cue.
+            if (bodyCue >= 0)
+            {
+                selectCue(bodyCue, Qt::NoModifier);
                 setSelected(true);
                 update();
                 event->accept();
@@ -684,6 +740,26 @@ void SequenceItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
                     .arg(cueLabel(i)).arg(seqMsToText(quint32(left)))
                     .arg(cueLabel(i + 1)).arg(seqMsToText(quint32(sum - left)));
         }
+        else if (m_cueDrag == CueGroupMove)
+        {
+            // Slide the whole selected run [a..b] (their durations unchanged): the
+            // cue before (a-1) grows/shrinks and the cue after (b+1) absorbs it.
+            const int a = m_groupLo, b = m_groupHi;
+            if (a >= 1 && b + 1 < m_cueOrigDur.count())
+            {
+                qint64 prefix = itemStart;
+                for (int k = 0; k < a - 1; k++) prefix += m_cueOrigDur.at(k);
+                const qint64 giveSum = qint64(m_cueOrigDur.at(a - 1)) + qint64(m_cueOrigDur.at(b + 1));
+                qint64 startAbs = prefix + qint64(m_cueOrigDur.at(a - 1)) + ddt;
+                if (view != NULL)
+                    startAbs = view->snapTimeMs(quint32(qMax<qint64>(0, startAbs)));
+                qint64 prev = qBound<qint64>(SEQ_MIN_STEP_MS, startAbs - prefix, giveSum - SEQ_MIN_STEP_MS);
+                setStepDuration(a - 1, prev);
+                setStepDuration(b + 1, giveSum - prev);
+                readout = tr("Moved %1 cues → starts %2")
+                        .arg(b - a + 1).arg(seqMsToText(quint32(prefix + prev)));
+            }
+        }
         else // CueSlip: move cue i (keep its length); prev grows, next shrinks.
         {
             qint64 prefix = itemStart;
@@ -719,6 +795,7 @@ void SequenceItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     {
         m_cueDrag = CueNone;
         m_cueDragIdx = -1;
+        m_groupLo = m_groupHi = -1;
         m_cueOrigDur.clear();
         setFlag(QGraphicsItem::ItemIsMovable, m_locked == false && m_editable);
         updateTooltip();
@@ -730,15 +807,163 @@ void SequenceItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     ShowItem::mouseReleaseEvent(event);
 }
 
-void SequenceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
+void SequenceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
     QMenu menu;
     QFont menuFont = qApp->font();
     menuFont.setPixelSize(14);
     menu.setFont(menuFont);
 
+    // Right-clicking a cue that isn't part of the current selection selects just
+    // that cue, so the menu acts on what you clicked.
+    if (m_editable && event != NULL)
+    {
+        int cue = cueAt(event->pos().x());
+        if (cue >= 0 && isCueSelected(cue) == false)
+        {
+            selectCue(cue, Qt::NoModifier);
+            setSelected(true);
+            update();
+        }
+    }
+
+    // Cue (multi-)selection actions.
+    if (m_editable && m_selectedSteps.isEmpty() == false)
+    {
+        const int n = m_selectedSteps.count();
+        QAction *del = menu.addAction(n > 1 ? tr("Delete %1 selected cues").arg(n)
+                                            : tr("Delete cue"));
+        connect(del, &QAction::triggered, this, [this]() { deleteSelectedCues(); });
+
+        QAction *scale = menu.addAction(n > 1 ? tr("Scale %1 cues' timing…").arg(n)
+                                              : tr("Scale cue timing…"));
+        connect(scale, &QAction::triggered, this, [this]() {
+            bool ok = false;
+            double pct = QInputDialog::getDouble(
+                (scene() && !scene()->views().isEmpty()) ? scene()->views().first() : NULL,
+                tr("Scale cue timing"),
+                tr("Stretch/compress the selected cue(s) by percent\n"
+                   "(200 = twice as long, 50 = half):"),
+                100.0, 1.0, 10000.0, 0, &ok);
+            if (ok && pct > 0.0)
+                scaleSelectedCues(pct / 100.0);
+        });
+        menu.addSeparator();
+    }
+
     foreach (QAction *action, getDefaultActions())
         menu.addAction(action);
 
     menu.exec(QCursor::pos());
+}
+
+void SequenceItem::selectCue(int idx, Qt::KeyboardModifiers mods)
+{
+    const int count = m_chaser ? m_chaser->stepsCount() : 0;
+    if (idx < 0 || idx >= count)
+        return;
+
+    if ((mods & Qt::ShiftModifier) && m_selectedStep >= 0 && m_selectedStep < count)
+    {
+        // Range from the anchor to idx (inclusive); anchor stays put.
+        m_selectedSteps.clear();
+        const int lo = qMin(m_selectedStep, idx);
+        const int hi = qMax(m_selectedStep, idx);
+        for (int i = lo; i <= hi; i++)
+            m_selectedSteps.insert(i);
+    }
+    else if (mods & (Qt::ControlModifier | Qt::MetaModifier))
+    {
+        // Toggle this cue in/out of the selection.
+        if (m_selectedSteps.contains(idx))
+        {
+            m_selectedSteps.remove(idx);
+            if (m_selectedStep == idx)
+                m_selectedStep = m_selectedSteps.isEmpty() ? -1 : *m_selectedSteps.constBegin();
+        }
+        else
+        {
+            m_selectedSteps.insert(idx);
+            m_selectedStep = idx;   // moved anchor
+        }
+    }
+    else
+    {
+        // Plain: single selection.
+        m_selectedSteps.clear();
+        m_selectedSteps.insert(idx);
+        m_selectedStep = idx;
+    }
+}
+
+bool SequenceItem::isCueSelected(int idx) const
+{
+    return idx == m_selectedStep || m_selectedSteps.contains(idx);
+}
+
+void SequenceItem::deleteSelectedCues()
+{
+    if (m_chaser == NULL || m_selectedSteps.isEmpty())
+        return;
+
+    QList<int> idxs = m_selectedSteps.values();
+    std::sort(idxs.begin(), idxs.end());
+
+    QWidget *parent = (scene() && !scene()->views().isEmpty()) ? scene()->views().first() : NULL;
+    const QString msg = (idxs.count() == 1)
+        ? tr("Delete cue %1 from \"%2\"?\nThis can't be undone.")
+              .arg(idxs.first() + 1).arg(m_chaser->name())
+        : tr("Delete %1 cues from \"%2\"?\nThis can't be undone.")
+              .arg(idxs.count()).arg(m_chaser->name());
+    if (QMessageBox::question(parent, tr("Delete cues"), msg,
+                              QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    // Remove high→low so earlier indices stay valid as we delete.
+    for (int i = idxs.count() - 1; i >= 0; i--)
+        m_chaser->removeStep(idxs.at(i));
+
+    m_selectedSteps.clear();
+    m_selectedStep = -1;
+
+    prepareGeometryChange();
+    calculateWidth();
+    if (m_function)
+        m_function->setDuration(m_chaser->totalDuration());
+    updateTooltip();
+    update();
+}
+
+bool SequenceItem::selectionContiguousInterior(int &lo, int &hi) const
+{
+    if (m_chaser == NULL || m_selectedSteps.isEmpty())
+        return false;
+    QList<int> idxs = m_selectedSteps.values();
+    std::sort(idxs.begin(), idxs.end());
+    lo = idxs.first();
+    hi = idxs.last();
+    if (hi - lo + 1 != idxs.count())        // must be a solid run
+        return false;
+    if (lo <= 0 || hi >= m_chaser->stepsCount() - 1)   // needs a give-cue each side
+        return false;
+    return true;
+}
+
+void SequenceItem::scaleSelectedCues(double factor)
+{
+    if (m_chaser == NULL || m_selectedSteps.isEmpty() || factor <= 0.0)
+        return;
+
+    ensurePerStepDurations();
+    QList<int> idxs = m_selectedSteps.values();
+    std::sort(idxs.begin(), idxs.end());
+    foreach (int i, idxs)
+        setStepDuration(i, qint64(qRound64(double(stepDisplayMs(i)) * factor)));
+
+    prepareGeometryChange();
+    calculateWidth();
+    if (m_function)
+        m_function->setDuration(m_chaser->totalDuration());
+    updateTooltip();
+    update();
 }

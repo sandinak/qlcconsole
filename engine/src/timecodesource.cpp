@@ -24,9 +24,13 @@
 /** No timecode for this long (ms) => the source is considered stopped. A full
  *  SMPTE time assembles roughly every 80 ms (every two frames), but the updates
  *  reach us as queued cross-thread calls on a busy UI thread, so completions
- *  can bunch up. Keep a generous window so steady playback never flickers to
- *  "holding"; it still detects a genuine stop within about half a second. */
-#define TIMECODE_WATCHDOG_MS 600
+ *  can bunch up. The window must stay above normal quarter-frame spacing
+ *  (~8ms at 30fps, ~200ms = ~25 missed frames = a genuine stop) so steady
+ *  playback never flickers to "holding". Kept close to ShowRunner's own
+ *  freeze threshold (m_msSinceFresh > 150 in showrunner.cpp) so the "holding"
+ *  chip flips right around when the rig actually freezes — it used to be 600,
+ *  which left the chip green for up to ~450ms after the show had frozen. */
+#define TIMECODE_WATCHDOG_MS 200
 
 TimecodeSource::TimecodeSource(QObject *parent)
     : QObject(parent)

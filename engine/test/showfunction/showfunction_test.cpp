@@ -37,7 +37,7 @@ void ShowFunction_Test::defaults()
     QCOMPARE(sf.isLocked(), false);
     QVERIFY(sf.intensityOverrideId() == -1);
 
-    QCOMPARE(sf.defaultColor(Function::SceneType), QColor(100, 100, 100));
+    QCOMPARE(sf.defaultColor(Function::SceneType), QColor(70, 110, 150));
     QCOMPARE(sf.defaultColor(Function::ChaserType), QColor(85, 107, 128));
     QCOMPARE(sf.defaultColor(Function::AudioType), QColor(96, 128, 83));
     QCOMPARE(sf.defaultColor(Function::RGBMatrixType), QColor(101, 155, 155));

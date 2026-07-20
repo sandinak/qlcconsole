@@ -50,9 +50,11 @@ Chaser::Chaser(Doc *doc)
     , m_fadeOutMode(Default)
     , m_holdMode(Common)
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
+    , m_stepListMutex(QMutex::Recursive)
     , m_runnerMutex(QMutex::Recursive)
 #endif
     , m_runner(NULL)
+    , m_showClocked(false)
 {
     setName(tr("New Chaser"));
 
@@ -200,11 +202,13 @@ bool Chaser::moveStep(int sourceIdx, int destIdx)
 
 int Chaser::stepsCount() const
 {
+    QMutexLocker stepListLocker(&m_stepListMutex);
     return m_steps.count();
 }
 
 ChaserStep *Chaser::stepAt(int idx)
 {
+    QMutexLocker stepListLocker(&m_stepListMutex);
     if (idx >= 0 && idx < m_steps.count())
         return &(m_steps[idx]);
 
@@ -213,6 +217,7 @@ ChaserStep *Chaser::stepAt(int idx)
 
 QList <ChaserStep> Chaser::steps() const
 {
+    QMutexLocker stepListLocker(&m_stepListMutex);
     return m_steps;
 }
 
@@ -625,6 +630,7 @@ void Chaser::createRunner(quint32 startTime)
     }
     m_runner->moveToThread(QCoreApplication::instance()->thread());
     m_runner->setParent(this);
+    m_runner->setExternalClock(m_showClocked);
     m_runner->setAction(m_startupAction);
     m_startupAction.m_action = ChaserNoAction;
 }
@@ -638,6 +644,14 @@ void Chaser::preRun(MasterTimer* timer)
     }
 
     Function::preRun(timer);
+}
+
+void Chaser::setShowClocked(bool enable)
+{
+    m_showClocked = enable;
+    QMutexLocker runnerLocker(&m_runnerMutex);
+    if (m_runner != NULL)
+        m_runner->setExternalClock(enable);
 }
 
 void Chaser::setPause(bool enable)

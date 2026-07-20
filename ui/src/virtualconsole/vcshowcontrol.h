@@ -133,6 +133,7 @@ private:
     QLabel *m_sectionLabel;
     QLabel *m_currentCueLabel;
     QLabel *m_nextCueLabel;
+    QLabel *m_manualCueLabel;  //!< the current section's linked manual GO cue list
     QToolButton *m_stopButton;
     QToolButton *m_playButton;
     QToolButton *m_followButton;

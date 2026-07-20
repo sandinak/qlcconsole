@@ -32,14 +32,19 @@
 class QXmlStreamReader;
 class ShowRunner;
 
-/** A timeline section marker: a labelled, coloured [start, end] region. */
+/** A timeline section marker: a labelled, coloured [start, end] region.
+ *  Optionally links a MANUAL cue list (a Chaser) that covers this off-clock
+ *  section, so the run-of-show knows which GO stack to fire here — the timecode
+ *  ↔ manual-cue seam. cueListId == Function::invalidId() means "no link". */
 struct ShowMarker
 {
     quint32 end;
     QString label;
     QColor color;
-    ShowMarker(quint32 e = 0, const QString &l = QString(), const QColor &c = QColor())
-        : end(e), label(l), color(c) {}
+    quint32 cueListId;
+    ShowMarker(quint32 e = 0, const QString &l = QString(), const QColor &c = QColor(),
+               quint32 cue = Function::invalidId())
+        : end(e), label(l), color(c), cueListId(cue) {}
 };
 
 /** @addtogroup engine_functions Functions
@@ -145,6 +150,10 @@ public:
     /** Get a list of available tracks */
     QList <Track*> tracks() const;
 
+    /** Set a track's intensity submaster (0..1) and, if the show is running,
+     *  apply it live to that track's output. Persists on the Track. */
+    void setTrackIntensity(quint32 trackId, qreal fraction);
+
 private:
     /** Create a new track ID */
     quint32 createTrackId();
@@ -175,9 +184,18 @@ protected:
      *********************************************************************/
 public:
     /** Add or update a section marker spanning [start, end] ms with a label
-     *  and colour, keyed by its start time. An empty label removes it. */
+     *  and colour, keyed by its start time. An empty label removes it. An
+     *  existing marker's linked cue list is PRESERVED across relabel/recolour
+     *  edits (use setMarkerCueList to change the link). */
     void setMarker(quint32 start, quint32 end, const QString &label,
                    const QColor &color = QColor());
+
+    /** Link (or clear, with invalidId) the manual cue list covering the marker
+     *  at @p start. No-op if there is no marker there. */
+    void setMarkerCueList(quint32 start, quint32 cueListId);
+
+    /** The cue list linked to the marker at @p start, or invalidId if none. */
+    quint32 markerCueList(quint32 start) const;
 
     /** Remove the marker whose start time is the given value, if any. */
     void removeMarker(quint32 start);

@@ -61,6 +61,7 @@ class QEvent;
 #define KXMLQLCVCButtonActionChaserStepPrev   QStringLiteral("ChaserStepPrev")
 #define KXMLQLCVCButtonActionSuspendTimeline  QStringLiteral("SuspendTimeline")
 #define KXMLQLCVCButtonActionFollowTimecode   QStringLiteral("FollowTimecode")
+#define KXMLQLCVCButtonActionClearLastLook    QStringLiteral("ClearLastLook")
 #define KXMLQLCVCButtonAttrPadMode            QStringLiteral("PadMode")
 #define KXMLQLCVCButtonAttrPadRow             QStringLiteral("PadRow")
 #define KXMLQLCVCButtonAttrPadCol             QStringLiteral("PadCol")
@@ -284,7 +285,7 @@ public:
                   SaveProgrammer, RevertProgrammer,
                   PadModeSelect, FixturePadCell,
                   ChaserStepNext, ChaserStepPrev,
-                  SuspendTimeline, FollowTimecode };
+                  SuspendTimeline, FollowTimecode, ClearLastLook };
 
     /** SelectFixtures sub-mode: how the click affects the selection. */
     enum SelectionMode { SelectReplace, SelectAdd, SelectRemove, SelectToggle };

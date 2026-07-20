@@ -40,6 +40,7 @@ ChaserRunner::ChaserRunner(const Doc *doc, const Chaser *chaser, quint32 startTi
     , m_updateOverrideSpeeds(false)
     , m_startOffset(0)
     , m_lastRunStepIdx(-1)
+    , m_externalClock(false)
     , m_lastFunctionID(Function::invalidId())
     , m_roundTime(new QElapsedTimer())
     , m_order()
@@ -779,7 +780,12 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
             qDebug() << "[ChaserRunner] Function" << step->m_function->name() << "duration:" << step->m_duration << "beats:" << step->m_elapsedBeats;
         }
 
-        if (step->m_duration != Function::infiniteSpeed() &&
+        // External-clock (show-driven) chasers never auto-advance on their own
+        // elapsed time: the ShowRunner steps them from the show/timecode clock,
+        // and infinite-hold cues stay manual-GO barriers. Only explicit actions
+        // (SetStepIndex / Next / Previous, handled above) change the step.
+        if (m_externalClock == false &&
+            step->m_duration != Function::infiniteSpeed() &&
             ((m_chaser->tempoType() == Function::Time && step->m_elapsed >= step->m_duration) ||
              (m_chaser->tempoType() == Function::Beats && step->m_elapsedBeats >= step->m_duration)))
         {

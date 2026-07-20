@@ -15,9 +15,11 @@ set(SCRIPT_FILES
     figure8.js
     fire.js
     followspot.js
+    diamond.js
     gobo-chase.js
     iris-pulse.js
     lightning.js
+    lissajous.js
     native-strobe.js
     orbit.js
     pantilt-phaser.js

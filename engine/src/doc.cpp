@@ -23,6 +23,7 @@
 #include <QRegularExpression>
 #include <QStringList>
 #include <QString>
+#include <QSet>
 #include <QThread>
 #include <QDebug>
 #include <QList>
@@ -63,6 +64,7 @@
 #include "fixturegroup.h"
 #include "programmercontroller.h"
 #include "parkeffect.h"
+#include "lastlookeffect.h"
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
  #include "audiocapture_qt5.h"
@@ -128,6 +130,14 @@ Doc::Doc(QObject* parent, int universes)
             Qt::DirectConnection);
     connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
             m_programmer, SLOT(slotProgrammerFunctionStopped(quint32)),
+            Qt::DirectConnection);
+
+    // Last-look persistence: a stopped show holds its final look (Operate) via
+    // this DMXSource holder; any newly started function replaces it (whole-look
+    // replace). The hold is captured in Show::postRun.
+    m_lastLook = new LastLookEffect(this);
+    connect(m_masterTimer, SIGNAL(functionStarted(quint32)),
+            this, SLOT(slotClearLastLookOnStart(quint32)),
             Qt::DirectConnection);
 
     // Route absolute input timecode (e.g. MIDI Time Code) into the shared
@@ -229,6 +239,9 @@ Doc::~Doc()
 void Doc::clearContents()
 {
     emit clearing();
+
+    if (m_lastLook != NULL)
+        m_lastLook->clear();
 
     m_clipboard->resetContents();
 
@@ -754,6 +767,11 @@ void Doc::setMode(Doc::Mode mode)
 
     m_mode = mode;
 
+    // Leaving Operate (→ Design) drops any held last look: you're building
+    // again, not running a show.
+    if (mode == Design && m_lastLook != NULL)
+        m_lastLook->clear();
+
     if (mode == Operate)
         m_autosaveTimer.stop();
     else if (m_modified)
@@ -776,6 +794,107 @@ void Doc::setMode(Doc::Mode mode)
     }
 
     emit modeChanged(m_mode);
+}
+
+void Doc::setLastLookEnabled(bool enable)
+{
+    m_lastLookEnabled = enable;
+    if (!enable && m_lastLook != NULL)
+        m_lastLook->clear();
+}
+
+// Recursively collect the fixture IDs a function ultimately drives. Leaf types
+// (Scene/EFX/RGBMatrix) report fixtures via components(); container types
+// (Chaser/Sequence/Collection/Show) report member function IDs, recursed into.
+static void collectFunctionFixtures(const Doc *doc, quint32 fid,
+                                    QSet<quint32> &fixtures,
+                                    QSet<quint32> &visited, int depth)
+{
+    if (depth > 8 || doc == NULL || visited.contains(fid))
+        return;
+    visited.insert(fid);
+
+    Function *f = doc->function(fid);
+    if (f == NULL)
+        return;
+
+    switch (f->type())
+    {
+        case Function::SceneType:
+        case Function::EFXType:
+        case Function::RGBMatrixType:
+            foreach (quint32 fxi, f->components())
+                fixtures.insert(fxi);
+            break;
+        case Function::ChaserType:
+        case Function::SequenceType:
+        case Function::CollectionType:
+        case Function::ShowType:
+            foreach (quint32 mid, f->components())
+                collectFunctionFixtures(doc, mid, fixtures, visited, depth + 1);
+            break;
+        default:
+            break;
+    }
+}
+
+QList<quint32> Doc::functionFixtures(quint32 fid) const
+{
+    QSet<quint32> fixtures;
+    QSet<quint32> visited;
+    collectFunctionFixtures(this, fid, fixtures, visited, 0);
+    return fixtures.values();
+}
+
+void Doc::captureLastLook(quint32 fid, const QList<Universe*> &universes,
+                          bool append) const
+{
+    if (m_lastLook == NULL)
+        return;
+
+    QList<LastLookEffect::ChannelHold> holds;
+    foreach (quint32 fxiId, functionFixtures(fid))
+    {
+        Fixture *fxi = fixture(fxiId);
+        if (fxi == NULL)
+            continue;
+        const int uniId = int(fxi->universe());
+        if (uniId < 0 || uniId >= universes.size())
+            continue;
+        Universe *uni = universes.at(uniId);
+        if (uni == NULL)
+            continue;
+        const int base = int(fxi->address());
+        const int chans = int(fxi->channels());
+        for (int c = 0; c < chans; c++)
+        {
+            const int addr = base + c;
+            if (addr < 0 || addr >= UNIVERSE_SIZE)
+                continue;
+            LastLookEffect::ChannelHold h;
+            h.fixtureId = fxiId;
+            h.universeId = uniId;
+            h.address = addr;
+            h.value = uni->preGMValue(addr);
+            holds.append(h);
+        }
+    }
+    if (holds.isEmpty() == false)
+    {
+        if (append)
+            m_lastLook->addHold(holds);
+        else
+            m_lastLook->hold(holds);
+    }
+}
+
+void Doc::slotClearLastLookOnStart(quint32 fid)
+{
+    // Per-channel (per-fixture) yield: a newly started cue drops only the held
+    // channels on the fixtures it drives; the rest of the last look keeps
+    // holding. A full new state covering every held fixture clears it entirely.
+    if (m_lastLook != NULL && m_lastLook->isActive())
+        m_lastLook->releaseFixtures(functionFixtures(fid));
 }
 
 Doc::Mode Doc::mode() const

@@ -25,7 +25,10 @@
 #include <QList>
 
 #include "showrunner.h"
+#include "lastlookeffect.h"
 #include "function.h"
+#include "fixture.h"
+#include "universe.h"
 #include "qlcfile.h"
 #include "show.h"
 #include "doc.h"
@@ -40,6 +43,7 @@
 #define KXMLQLCShowMarkerStart  QStringLiteral("Start")
 #define KXMLQLCShowMarkerEnd    QStringLiteral("End")
 #define KXMLQLCShowMarkerColor  QStringLiteral("Color")
+#define KXMLQLCShowMarkerCueList QStringLiteral("CueList")
 
 /*****************************************************************************
  * Initialization
@@ -333,6 +337,16 @@ QList <Track*> Show::tracks() const
     return m_tracks.values();
 }
 
+void Show::setTrackIntensity(quint32 trackId, qreal fraction)
+{
+    Track *track = m_tracks.value(trackId, NULL);
+    if (track == NULL)
+        return;
+    track->setIntensity(fraction);
+    if (m_runner != NULL)
+        m_runner->adjustIntensity(fraction, track); // live scale while running
+}
+
 quint32 Show::createTrackId()
 {
     while (m_tracks.contains(m_latestTrackId) == true ||
@@ -398,6 +412,9 @@ bool Show::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLQLCShowMarkerEnd, QString::number(mit.value().end));
         if (mit.value().color.isValid())
             doc->writeAttribute(KXMLQLCShowMarkerColor, mit.value().color.name());
+        if (mit.value().cueListId != Function::invalidId())
+            doc->writeAttribute(KXMLQLCShowMarkerCueList,
+                                QString::number(mit.value().cueListId));
         doc->writeCharacters(mit.value().label);
         doc->writeEndElement();
     }
@@ -456,9 +473,12 @@ bool Show::loadXML(QXmlStreamReader &root)
             QColor color;
             if (a.hasAttribute(KXMLQLCShowMarkerColor))
                 color = QColor(a.value(KXMLQLCShowMarkerColor).toString());
+            quint32 cue = Function::invalidId();
+            if (a.hasAttribute(KXMLQLCShowMarkerCueList))
+                cue = a.value(KXMLQLCShowMarkerCueList).toString().toUInt();
             QString label = root.readElementText();
             if (label.isEmpty() == false)
-                m_markers.insert(start, ShowMarker(end < start ? start : end, label, color));
+                m_markers.insert(start, ShowMarker(end < start ? start : end, label, color, cue));
         }
         else if (root.name() == KXMLQLCTrack)
         {
@@ -586,9 +606,30 @@ quint32 Show::timecodeOffset() const
 void Show::setMarker(quint32 start, quint32 end, const QString &label, const QColor &color)
 {
     if (label.isEmpty())
+    {
         m_markers.remove(start);
-    else
-        m_markers.insert(start, ShowMarker(end < start ? start : end, label, color));
+        return;
+    }
+    // Preserve an existing marker's cue-list link across relabel/recolour edits.
+    const quint32 cue = m_markers.contains(start) ? m_markers.value(start).cueListId
+                                                  : Function::invalidId();
+    m_markers.insert(start, ShowMarker(end < start ? start : end, label, color, cue));
+}
+
+void Show::setMarkerCueList(quint32 start, quint32 cueListId)
+{
+    if (m_markers.contains(start) == false)
+        return;
+    ShowMarker m = m_markers.value(start);
+    m.cueListId = cueListId;
+    m_markers.insert(start, m);
+}
+
+quint32 Show::markerCueList(quint32 start) const
+{
+    if (m_markers.contains(start) == false)
+        return Function::invalidId();
+    return m_markers.value(start).cueListId;
 }
 
 void Show::removeMarker(quint32 start)
@@ -610,16 +651,24 @@ void Show::setPause(bool enable)
 
 void Show::write(MasterTimer* timer, QList<Universe *> universes)
 {
-    Q_UNUSED(universes);
-
     if (isPaused())
         return;
 
-    m_runner->write(timer);
+    m_runner->write(timer, universes);
 }
 
 void Show::postRun(MasterTimer* timer, QList<Universe *> universes)
 {
+    // Last-look persistence: before the runner releases its children (which
+    // would let HTP intensity fall to 0 on the next tick), snapshot the show's
+    // current per-channel output and hand it to the hold. Operate-only; a new
+    // cue / blackout / →Design clears it. Captured here because postRun is the
+    // single choke point (any stop reason) that still has the universes and
+    // runs before release, on the timer thread.
+    Doc *d = doc();
+    if (d != NULL && d->mode() == Doc::Operate && d->lastLookEnabled())
+        d->captureLastLook(id(), universes);
+
     if (m_runner != NULL)
     {
         m_runner->stop();

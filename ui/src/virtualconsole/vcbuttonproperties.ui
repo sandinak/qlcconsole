@@ -179,6 +179,13 @@
        </widget>
       </item>
       <item>
+       <widget class="QRadioButton" name="m_clearLastLook">
+        <property name="text">
+         <string>Timeline: Clear held last look</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QGroupBox" name="m_selectionGroup">
         <property name="title">
          <string>Selection Configuration</string>

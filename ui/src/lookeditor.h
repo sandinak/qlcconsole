@@ -157,6 +157,13 @@ private:
     QWidget     *m_effectDynWidget;   //!< rebuilt when script selection changes
     QCheckBox   *m_effectPersistentCb = nullptr; //!< QLCPalette::persistent()
     QPushButton *m_saveAsEffectButton = nullptr;
+    QPushButton *m_exportEffectButton = nullptr;
+    QPushButton *m_importEffectButton = nullptr;
+    QPushButton *m_newScriptButton = nullptr;
+    QPushButton *m_editScriptButton = nullptr;
+
+    /** Open @p filePath in the in-app or OS editor per the app preference. */
+    void openScriptInEditor(const QString &filePath);
 
 private slots:
     void slotNameEdited();
@@ -164,6 +171,14 @@ private slots:
     void slotEffectScriptChanged(int index);
     /** Save the current Generator + settings as a named Effect (preset). */
     void slotSaveAsEffect();
+    /** Export the current Effect to a portable .qxfx (script source + settings). */
+    void slotExportEffect();
+    /** Import a .qxfx: install its script (if missing) + save the preset. */
+    void slotImportEffect();
+    /** Create a new effect script from a template and open it in the editor. */
+    void slotNewEffectScript();
+    /** Open the current Generator's .js in the editor. */
+    void slotEditEffectScript();
     void slotEffectParamChanged(int value);
     void slotEffectEnumParamChanged(int index);
     void slotEffectPaletteBindingChanged(int index);

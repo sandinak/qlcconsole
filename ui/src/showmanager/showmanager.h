@@ -269,6 +269,7 @@ protected slots:
     void slotMarkerEditRequested(quint32 time);
     void slotMarkerDeleteRequested(quint32 time);
     void slotMarkerColorRequested(quint32 time);
+    void slotMarkerSetCueList(quint32 time);
     void slotMarkerRelabel(quint32 time, QString label);
     void slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 newEnd,
                          QString label, QColor color);

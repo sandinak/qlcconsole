@@ -40,6 +40,8 @@
 #include "fixturemanager.h"
 #include "dmxdumpfactory.h"
 #include "showmanager.h"
+#include "show.h"
+#include "chaser.h"
 #include "mastertimer.h"
 #include "timecodesource.h"
 #include "addresstool.h"
@@ -52,6 +54,7 @@
 #include "vcframe.h"
 #include "app.h"
 #include "doc.h"
+#include "lastlookeffect.h"
 
 #include "qlcfixturedefcache.h"
 #include "audioplugincache.h"
@@ -131,6 +134,8 @@ App::App()
     , m_controlBlindAction(NULL)
     , m_timelineSuspendAction(NULL)
     , m_followMtcAction(NULL)
+    , m_lastLookAction(NULL)
+    , m_clearLastLookAction(NULL)
     , m_controlPanicAction(NULL)
     , m_dumpDmxAction(NULL)
     , m_liveEditAction(NULL)
@@ -884,6 +889,25 @@ void App::initActions()
     connect(m_followMtcAction, SIGNAL(toggled(bool)),
             this, SLOT(slotFollowTimecodeToggled(bool)));
 
+    // Last-look persistence: a stopped/finished show holds its final look instead
+    // of blacking out (Operate). The toggle enables/disables the behaviour; the
+    // clear action drops a currently-held look (also a MIDI-mappable VCButton).
+    m_lastLookAction = new QAction(QIcon(":/star.png"), tr("Hold &Last Look"), this);
+    m_lastLookAction->setCheckable(true);
+    m_lastLookAction->setChecked(m_doc->lastLookEnabled());
+    m_lastLookAction->setToolTip(tr(
+        "When a show stops or ends (Operate), hold its final look on the rig "
+        "instead of blacking out, until the next cue takes over."));
+    connect(m_lastLookAction, SIGNAL(toggled(bool)),
+            this, SLOT(slotLastLookToggled(bool)));
+
+    m_clearLastLookAction = new QAction(QIcon(":/fileclose.png"),
+                                        tr("&Clear Held Last Look"), this);
+    m_clearLastLookAction->setToolTip(tr(
+        "Drop a stopped show's held last look now (the held channels go dark)."));
+    connect(m_clearLastLookAction, SIGNAL(triggered()),
+            this, SLOT(slotClearLastLook()));
+
     // Exit / resume timeline control — an Operate-mode VC takeover. While a show
     // is driving the rig, checking this suspends the timeline's output (the
     // Virtual Console owns the rig) while the playhead keeps tracking timecode,
@@ -1025,6 +1049,8 @@ void App::initToolBar()
     m_toolbar->addAction(m_showLockAction);
     m_toolbar->addAction(m_followMtcAction);
     m_toolbar->addAction(m_timelineSuspendAction);
+    m_toolbar->addAction(m_lastLookAction);
+    m_toolbar->addAction(m_clearLastLookAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_modeToggleAction);
 
@@ -2594,14 +2620,45 @@ void App::slotTimecodeStatusChanged()
             .arg(hh, 2, 10, QChar('0')).arg(mm, 2, 10, QChar('0'))
             .arg(ss, 2, 10, QChar('0')).arg(ff, 2, 10, QChar('0'));
 
+    // Append the run-of-show context: the current section (marker) under the
+    // playhead and, if that section links a manual cue list, its next GO — so
+    // the always-visible footer tells the operator where they are in the set
+    // and what to fire, from any tab.
+    QString ctx;
+    if (ShowManager::instance() != NULL)
+    {
+        Show *show = qobject_cast<Show*>(
+            m_doc->function(ShowManager::instance()->currentShowId()));
+        if (show != NULL && show->isRunning())
+        {
+            const quint32 off = show->timecodeOffset();
+            const quint32 posMs = (ms > off) ? ms - off : 0;
+            QMapIterator<quint32, ShowMarker> it(show->markers());
+            while (it.hasNext())
+            {
+                it.next();
+                if (posMs >= it.key() && posMs < it.value().end)
+                {
+                    ctx = QString("  ·  %1").arg(it.value().label);
+                    Chaser *mc = qobject_cast<Chaser*>(
+                        m_doc->function(it.value().cueListId));
+                    if (mc != NULL)
+                        ctx += mc->isRunning() ? tr("  ·  ▶ manual armed: %1").arg(mc->name())
+                                               : tr("  ·  manual: %1").arg(mc->name());
+                    break;
+                }
+            }
+        }
+    }
+
     if (tc->isRunning())
     {
-        m_statusTimecodeLabel->setText(QString("MTC ● %1 @%2fps").arg(code).arg(fps));
+        m_statusTimecodeLabel->setText(QString("MTC ● %1 @%2fps%3").arg(code).arg(fps).arg(ctx));
         m_statusTimecodeLabel->setStyleSheet(green);
     }
     else
     {
-        m_statusTimecodeLabel->setText(QString("MTC ❚❚ %1 (holding)").arg(code));
+        m_statusTimecodeLabel->setText(QString("MTC ❚❚ %1 (holding)%2").arg(code).arg(ctx));
         m_statusTimecodeLabel->setStyleSheet(amber);
     }
 }
@@ -2692,6 +2749,18 @@ void App::slotFollowTimecodeChanged(bool enabled)
         m_followMtcAction->setChecked(enabled);
         m_followMtcAction->blockSignals(false);
     }
+}
+
+void App::slotLastLookToggled(bool checked)
+{
+    if (m_doc != NULL)
+        m_doc->setLastLookEnabled(checked); // disabling also clears any held look
+}
+
+void App::slotClearLastLook()
+{
+    if (m_doc != NULL && m_doc->lastLook() != NULL)
+        m_doc->lastLook()->clear();
 }
 
 void App::slotProgrammerSelectionChanged()

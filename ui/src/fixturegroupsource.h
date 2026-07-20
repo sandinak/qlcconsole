@@ -47,6 +47,10 @@ public slots:
     /** Rebuild the tree from the Doc's fixtures and groups. */
     void reload();
 
+signals:
+    /** A group row was double-clicked (host may visualize/edit it). */
+    void groupDoubleClicked(quint32 groupId);
+
 protected:
     /** Provide group/fixture IDs for dragging onto scene drop zones. */
     QMimeData* mimeData(const QList<QTreeWidgetItem*> &items) const
@@ -62,10 +66,18 @@ private:
     void dropEvent(QDropEvent *event) override;
 
 private slots:
-    /** Right-click: move a group into a folder. */
+    /** Right-click: move a group into a folder, or create a new fixture group
+     *  from the selected fixtures. */
     void slotContextMenu(const QPoint &pos);
 
+    /** Emit groupDoubleClicked when a group row is double-clicked. */
+    void slotItemDoubleClicked(QTreeWidgetItem *item, int column);
+
 private:
+    /** Create a new FixtureGroup from the given fixtures (name/size prompted
+     *  via CreateFixtureGroup), assigning each fixture's heads into the grid. */
+    void createGroupFromFixtures(const QList<quint32> &fixtureIds);
+
     /** Get/create the folder item for a "/"-separated path (empty=root). */
     QTreeWidgetItem *folderItem(const QString &path);
 

@@ -12,12 +12,15 @@
 #include <QDropEvent>
 #include <QHeaderView>
 #include <QMenu>
+#include <QMessageBox>
 #include <QInputDialog>
 #include <QMap>
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 
+#include "createfixturegroup.h"
 #include "fixturegroupsource.h"
 #include "inputoutputmap.h"
 #include "fixturegroup.h"
@@ -46,6 +49,8 @@ FixtureGroupSource::FixtureGroupSource(Doc *doc, QWidget *parent)
     setContextMenuPolicy(Qt::CustomContextMenu);
     connect(this, SIGNAL(customContextMenuRequested(QPoint)),
             this, SLOT(slotContextMenu(QPoint)));
+    connect(this, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
+            this, SLOT(slotItemDoubleClicked(QTreeWidgetItem*,int)));
 
     reload();
 
@@ -198,49 +203,163 @@ void FixtureGroupSource::addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f)
 
 void FixtureGroupSource::slotContextMenu(const QPoint &pos)
 {
-    // Collect every selected group (so "Move to folder…" applies to all of
-    // them, not just the one under the cursor).
+    // Collect the selection, split by kind. A right-click doesn't change the
+    // selection, so also fold in the row under the cursor.
     QList<quint32> groupIds;
+    QList<quint32> fixtureIds;
     foreach (QTreeWidgetItem *it, selectedItems())
-        if (it->data(0, KindRole).toInt() == GroupNode)
-            groupIds << it->data(0, IdRole).toUInt();
-
-    // Include the right-clicked group even if it wasn't part of the selection.
-    QTreeWidgetItem *item = itemAt(pos);
-    if (item != NULL && item->data(0, KindRole).toInt() == GroupNode)
     {
-        const quint32 gid = item->data(0, IdRole).toUInt();
-        if (groupIds.contains(gid) == false)
-            groupIds << gid;
+        const int kind = it->data(0, KindRole).toInt();
+        if (kind == GroupNode)
+            groupIds << it->data(0, IdRole).toUInt();
+        else if (kind == FixtureNode)
+            fixtureIds << it->data(0, IdRole).toUInt();
     }
-    if (groupIds.isEmpty())
+
+    QTreeWidgetItem *item = itemAt(pos);
+    if (item != NULL)
+    {
+        const int kind = item->data(0, KindRole).toInt();
+        const quint32 id = item->data(0, IdRole).toUInt();
+        if (kind == GroupNode && groupIds.contains(id) == false)
+            groupIds << id;
+        else if (kind == FixtureNode && fixtureIds.contains(id) == false)
+            fixtureIds << id;
+    }
+
+    if (groupIds.isEmpty() && fixtureIds.isEmpty())
         return;
 
     QMenu menu(this);
-    QAction *move = menu.addAction(groupIds.size() > 1
-        ? tr("Move %1 groups to folder…").arg(groupIds.size())
-        : tr("Move to folder…"));
-    if (menu.exec(viewport()->mapToGlobal(pos)) != move)
-        return;
+    // Creating a group is the fixture-node action; moving to a folder is the
+    // group-node action. Both can appear when the selection mixes kinds.
+    QAction *create = NULL;
+    if (fixtureIds.isEmpty() == false)
+        create = menu.addAction(fixtureIds.size() > 1
+            ? tr("Create fixture group from %1 fixtures…").arg(fixtureIds.size())
+            : tr("Create fixture group from fixture…"));
 
-    FixtureGroup *first = m_doc->fixtureGroup(groupIds.first());
-    const QString cur = (first != NULL) ? first->path() : QString();
-    bool ok = false;
-    const QString path = QInputDialog::getText(
-        this, tr("Move groups to folder"),
-        tr("Folder path (e.g. \"Movers/Front\"; empty for none):"),
-        QLineEdit::Normal, cur, &ok);
-    if (!ok)
-        return;
-
-    const QString p = path.trimmed();
-    foreach (quint32 gid, groupIds)
+    QAction *rename = NULL;
+    QAction *move = NULL;
+    QAction *del = NULL;
+    if (groupIds.isEmpty() == false)
     {
-        FixtureGroup *g = m_doc->fixtureGroup(gid);
-        if (g != NULL)
-            g->setPath(p); // emits changed() -> Doc::fixtureGroupChanged -> reload()
+        if (groupIds.size() == 1)
+            rename = menu.addAction(tr("Rename group…"));
+        move = menu.addAction(groupIds.size() > 1
+            ? tr("Move %1 groups to folder…").arg(groupIds.size())
+            : tr("Move to folder…"));
+        menu.addSeparator();
+        del = menu.addAction(groupIds.size() > 1
+            ? tr("Delete %1 groups").arg(groupIds.size())
+            : tr("Delete group"));
     }
+
+    QAction *chosen = menu.exec(viewport()->mapToGlobal(pos));
+    if (chosen == NULL)
+        return;
+
+    if (chosen == create)
+    {
+        createGroupFromFixtures(fixtureIds);
+        return;
+    }
+    if (chosen == rename)
+    {
+        FixtureGroup *g = m_doc->fixtureGroup(groupIds.first());
+        if (g == NULL)
+            return;
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, tr("Rename group"),
+                                 tr("Group name:"), QLineEdit::Normal, g->name(), &ok);
+        if (ok && name.trimmed().isEmpty() == false)
+        {
+            g->setName(name.trimmed()); // emits changed() -> reload()
+            m_doc->setModified();
+        }
+        return;
+    }
+    if (chosen == del)
+    {
+        const QString msg = groupIds.size() > 1
+            ? tr("Delete these %1 fixture groups? (The fixtures themselves are kept.)")
+                  .arg(groupIds.size())
+            : tr("Delete this fixture group? (The fixtures themselves are kept.)");
+        if (QMessageBox::question(this, tr("Delete group"), msg,
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            return;
+        foreach (quint32 gid, groupIds)
+            m_doc->deleteFixtureGroup(gid); // emits fixtureGroupRemoved -> reload()
+        m_doc->setModified();
+        return;
+    }
+    if (chosen == move)
+    {
+        FixtureGroup *first = m_doc->fixtureGroup(groupIds.first());
+        const QString cur = (first != NULL) ? first->path() : QString();
+        bool ok = false;
+        const QString path = QInputDialog::getText(
+            this, tr("Move groups to folder"),
+            tr("Folder path (e.g. \"Movers/Front\"; empty for none):"),
+            QLineEdit::Normal, cur, &ok);
+        if (!ok)
+            return;
+
+        const QString p = path.trimmed();
+        foreach (quint32 gid, groupIds)
+        {
+            FixtureGroup *g = m_doc->fixtureGroup(gid);
+            if (g != NULL)
+                g->setPath(p); // emits changed() -> Doc::fixtureGroupChanged -> reload()
+        }
+        m_doc->setModified();
+    }
+}
+
+void FixtureGroupSource::slotItemDoubleClicked(QTreeWidgetItem *item, int column)
+{
+    Q_UNUSED(column)
+    if (item == NULL || item->data(0, KindRole).toInt() != GroupNode)
+        return;
+    emit groupDoubleClicked(item->data(0, IdRole).toUInt());
+}
+
+void FixtureGroupSource::createGroupFromFixtures(const QList<quint32> &fixtureIds)
+{
+    if (fixtureIds.isEmpty())
+        return;
+
+    // Total head count across the selection sizes a roughly-square grid to
+    // drop into (mirrors FixtureManager::addFixtureToGroup).
+    int headTotal = 0;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fxi = m_doc->fixture(fid);
+        if (fxi != NULL)
+            headTotal += fxi->heads();
+    }
+    qreal side = sqrt(qMax(1, headTotal));
+    if (side != floor(side))
+        side += 1; // not a perfect square: give the grid an extra row/column
+    if (side < 1)
+        side = 4;
+
+    CreateFixtureGroup cfg(this);
+    cfg.setSize(QSize(int(side), int(side)));
+    if (cfg.exec() != QDialog::Accepted)
+        return;
+
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName(cfg.name());
+    grp->setSize(cfg.size());
+    m_doc->addFixtureGroup(grp);
+
+    foreach (quint32 fid, fixtureIds)
+        grp->assignFixture(fid); // lays each fixture's heads into the grid
+
     m_doc->setModified();
+    // addFixtureGroup already triggers a reload via Doc::fixtureGroupAdded; the
+    // new group appears in the tree ready to drag onto a scene.
 }
 
 QMimeData* FixtureGroupSource::buildMimeData(const QList<QTreeWidgetItem*> &items) const

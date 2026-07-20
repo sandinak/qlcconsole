@@ -32,6 +32,11 @@
 #define KXMLQLCTrackIsMute    QStringLiteral("isMute")
 #define KXMLQLCTrackIsLocked  QStringLiteral("Locked")
 #define KXMLQLCTrackColor     QStringLiteral("Color")
+#define KXMLQLCTrackIsSolo    QStringLiteral("Solo")
+#define KXMLQLCTrackSoloSafe  QStringLiteral("SoloSafe")
+#define KXMLQLCTrackHoldLast  QStringLiteral("HoldLast")
+#define KXMLQLCTrackPriority  QStringLiteral("Priority")
+#define KXMLQLCTrackIntensity QStringLiteral("Intensity")
 
 #define KXMLQLCTrackFunctions QStringLiteral("Functions")
 
@@ -141,6 +146,73 @@ bool Track::isLocked() const
     return m_isLocked;
 }
 
+void Track::setSolo(bool solo)
+{
+    if (m_isSolo == solo)
+        return;
+    m_isSolo = solo;
+    emit soloChanged(solo);
+    emit changed(m_id);
+}
+
+bool Track::isSolo() const
+{
+    return m_isSolo;
+}
+
+void Track::setSoloSafe(bool safe)
+{
+    if (m_soloSafe == safe)
+        return;
+    m_soloSafe = safe;
+    emit changed(m_id);
+}
+
+bool Track::isSoloSafe() const
+{
+    return m_soloSafe;
+}
+
+void Track::setHoldLast(bool hold)
+{
+    if (m_holdLast == hold)
+        return;
+    m_holdLast = hold;
+    emit changed(m_id);
+}
+
+bool Track::isHoldLast() const
+{
+    return m_holdLast;
+}
+
+void Track::setPriority(Track::Priority p)
+{
+    if (m_priority == p)
+        return;
+    m_priority = p;
+    emit changed(m_id);
+}
+
+Track::Priority Track::priority() const
+{
+    return m_priority;
+}
+
+void Track::setIntensity(qreal fraction)
+{
+    fraction = qBound(qreal(0.0), fraction, qreal(1.0));
+    if (qFuzzyCompare(m_intensity, fraction))
+        return;
+    m_intensity = fraction;
+    emit changed(m_id);
+}
+
+qreal Track::intensity() const
+{
+    return m_intensity;
+}
+
 QColor Track::color() const
 {
     return m_color;
@@ -221,6 +293,16 @@ bool Track::saveXML(QXmlStreamWriter *doc)
         doc->writeAttribute(KXMLQLCTrackIsLocked, QString::number(1));
     if (m_color.isValid())
         doc->writeAttribute(KXMLQLCTrackColor, m_color.name());
+    if (m_isSolo)
+        doc->writeAttribute(KXMLQLCTrackIsSolo, QString::number(1));
+    if (m_soloSafe)
+        doc->writeAttribute(KXMLQLCTrackSoloSafe, QString::number(1));
+    if (m_holdLast)
+        doc->writeAttribute(KXMLQLCTrackHoldLast, QString::number(1));
+    if (m_priority != Normal)
+        doc->writeAttribute(KXMLQLCTrackPriority, QString::number(int(m_priority)));
+    if (m_intensity < 1.0)
+        doc->writeAttribute(KXMLQLCTrackIntensity, QString::number(m_intensity, 'f', 4));
 
     /* Save the list of Functions if any is present */
     if (m_functions.isEmpty() == false)
@@ -282,6 +364,20 @@ bool Track::loadXML(QXmlStreamReader &root)
 
     if (attrs.hasAttribute(KXMLQLCTrackColor))
         m_color = QColor(attrs.value(KXMLQLCTrackColor).toString());
+
+    if (attrs.hasAttribute(KXMLQLCTrackIsSolo))
+        m_isSolo = (attrs.value(KXMLQLCTrackIsSolo).toString().toInt() != 0);
+    if (attrs.hasAttribute(KXMLQLCTrackSoloSafe))
+        m_soloSafe = (attrs.value(KXMLQLCTrackSoloSafe).toString().toInt() != 0);
+    if (attrs.hasAttribute(KXMLQLCTrackHoldLast))
+        m_holdLast = (attrs.value(KXMLQLCTrackHoldLast).toString().toInt() != 0);
+    if (attrs.hasAttribute(KXMLQLCTrackPriority))
+    {
+        const int p = attrs.value(KXMLQLCTrackPriority).toString().toInt();
+        m_priority = (p == Background) ? Background : (p == Override ? Override : Normal);
+    }
+    if (attrs.hasAttribute(KXMLQLCTrackIntensity))
+        m_intensity = qBound(0.0, attrs.value(KXMLQLCTrackIntensity).toString().toDouble(), 1.0);
 
     /* look for show functions */
     while (root.readNextStartElement())

@@ -112,6 +112,17 @@ VCShowControl::VCShowControl(QWidget *parent, Doc *doc)
     m_nextCueLabel->setStyleSheet("QLabel { color:#9fb3c8; }");
     v->addWidget(m_nextCueLabel);
 
+    // The current off-clock section's LINKED manual cue list (the timecode↔manual
+    // seam): tells the operator which GO stack covers a spoken/break section and
+    // what its next cue is, so a freeze doesn't mean hunting for the right list.
+    m_manualCueLabel = new QLabel(this);
+    m_manualCueLabel->setTextFormat(Qt::PlainText);
+    m_manualCueLabel->setWordWrap(true);
+    m_manualCueLabel->setStyleSheet(
+        "QLabel { color:#ffd27f; background:#3a2f14; padding:2px 8px; border-radius:3px; }");
+    m_manualCueLabel->setVisible(false);
+    v->addWidget(m_manualCueLabel);
+
     // Transport row.
     QHBoxLayout *row = new QHBoxLayout();
     row->setSpacing(3);
@@ -385,6 +396,7 @@ void VCShowControl::updateSection(quint32 ms)
     Show *show = showFunction();
     QString section;
     QColor color;
+    quint32 manualCue = Function::invalidId();
     if (show != NULL)
     {
         QMapIterator<quint32, ShowMarker> it(show->markers());
@@ -395,11 +407,40 @@ void VCShowControl::updateSection(quint32 ms)
             {
                 section = it.value().label;
                 color = it.value().color;
+                manualCue = it.value().cueListId;
                 break;
             }
         }
     }
     m_sectionLabel->setText(section);
+
+    // Surface the current section's linked manual cue list (the seam).
+    if (m_manualCueLabel != NULL)
+    {
+        Chaser *mc = qobject_cast<Chaser *>(m_doc->function(manualCue));
+        if (mc == NULL)
+        {
+            m_manualCueLabel->setVisible(false);
+            m_manualCueLabel->clear();
+        }
+        else
+        {
+            const bool armed = mc->isRunning();
+            // Next GO = the step after the current one if armed, else cue 1.
+            const int nextIdx = armed ? mc->currentStepIndex() + 1 : 0;
+            QString nxt = cueText(mc, nextIdx);
+            QString txt = armed ? tr("▶ ARMED — %1").arg(mc->name())
+                                : tr("Manual: %1").arg(mc->name());
+            if (nxt.isEmpty() == false)
+                txt += tr("  ·  next GO: %1").arg(nxt);
+            m_manualCueLabel->setText(txt);
+            // Brighter/green when armed so the operator sees it's live and GO-able.
+            m_manualCueLabel->setStyleSheet(armed
+                ? "QLabel { color:#0a2a12; background:#7bd88f; padding:2px 8px; border-radius:3px; font-weight:bold; }"
+                : "QLabel { color:#ffd27f; background:#3a2f14; padding:2px 8px; border-radius:3px; }");
+            m_manualCueLabel->setVisible(true);
+        }
+    }
     if (section.isEmpty() || color.isValid() == false)
         m_sectionLabel->setStyleSheet(QString());
     else
@@ -495,6 +536,8 @@ void VCShowControl::slotShowStopped(quint32 id)
         m_timeLabel->setText("00:00:00");
     if (m_sectionLabel != NULL)
         m_sectionLabel->setText(QString());
+    if (m_manualCueLabel != NULL)
+        m_manualCueLabel->setVisible(false);
     refresh();
 }
 

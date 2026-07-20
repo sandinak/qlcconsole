@@ -104,6 +104,17 @@ public:
     int currentStepIndex() const;
 
     /**
+     * External-clock mode. When enabled the runner NEVER advances a step on its
+     * own elapsed time — the step changes only on an explicit action
+     * (SetStepIndex from a ShowRunner driving the cue by the show clock, or a
+     * manual GO / Next / Previous). Used when a chaser block runs inside a Show
+     * so its cues follow the SHOW/timecode clock instead of free-running on the
+     * MasterTimer (see ShowRunner). Infinite-hold cues stay manual-GO barriers.
+     */
+    void setExternalClock(bool enable) { m_externalClock = enable; }
+    bool isExternalClock() const { return m_externalClock; }
+
+    /**
      * Compute next step for manual fading
      */
     int computeNextStep(int currentStepIndex) const;
@@ -155,6 +166,7 @@ private:
     quint32 m_startOffset;                  //! Start step offset time in milliseconds
     ChaserAction m_pendingAction;           //! Action to be performed on steps at the next write call
     int m_lastRunStepIdx;                   //! Index of the last step ran
+    bool m_externalClock;                   //! If true, steps advance only on explicit action (show-clock driven)
     quint32 m_lastFunctionID;               //! ID of the last Function ran (Scene only)
     QElapsedTimer *m_roundTime;             //! Counts the time between steps
     QVector<int> m_order;                   //! Array of step indices in a randomized order

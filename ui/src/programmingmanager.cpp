@@ -50,6 +50,10 @@
 #include "collectioneditor.h"
 #include "efxeditor.h"
 #include "rgbmatrixeditor.h"
+#include "show.h"
+#include "showmanager/showtimelineeditor.h"
+#include "fixturegroupeditor.h"
+#include "fixturegroup.h"
 #include "chaserstep.h"
 #include "chaseraction.h"
 #include "scenevalue.h"
@@ -141,6 +145,12 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_unparkBtn->setToolTip(tr("Release every parked fixture"));
         m_unparkBtn->setEnabled(false);
         toolbar->addWidget(m_unparkBtn);
+
+        m_snapshotBtn = new QPushButton(tr("Snapshot"), this);
+        m_snapshotBtn->setToolTip(tr("Bake the current live DMX output into the open "
+            "scene as static values — capture a look built on an external console."));
+        connect(m_snapshotBtn, SIGNAL(clicked()), this, SLOT(slotSnapshotLive()));
+        toolbar->addWidget(m_snapshotBtn);
 
         toolbar->addStretch(1);
 
@@ -395,6 +405,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     srcCol->addWidget(m_fixGroupSource, 2);
     connect(m_fixGroupSource, &QTreeWidget::itemSelectionChanged,
             this, &ProgrammingManager::slotFixGroupSourceSelectionChanged);
+    // Double-click a group in the source tree -> visualize/edit its head layout
+    // in the central canvas.
+    connect(m_fixGroupSource, &FixtureGroupSource::groupDoubleClicked,
+            this, &ProgrammingManager::loadGroupEditor);
 
     splitter->addWidget(sourcePanel);
 
@@ -499,7 +513,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // Ctrl-Z undoes the last bundle stamp.
     QShortcut *undoSc = new QShortcut(QKeySequence::Undo, this);
     undoSc->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(undoSc, &QShortcut::activated, this, &ProgrammingManager::slotUndoStamp);
+    connect(undoSc, &QShortcut::activated, this, &ProgrammingManager::slotUndo);
 }
 
 ProgrammingManager::~ProgrammingManager()
@@ -570,6 +584,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     m_lookEditor->show();
     m_lookEditor->setContextScene(scene);
     m_doc->setFocusedScene(sceneId);
+    resetUndoFor(sceneId);   // start a fresh undo history for this scene
 
     m_canvas = new SceneGroupLooks(scene, m_doc, this, /*includeFixtureTargets*/ true);
     connect(m_canvas, SIGNAL(sceneModified()), this, SLOT(slotCanvasModified()));
@@ -623,6 +638,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
 
     stopPreview();
     m_currentScene = Function::invalidId();
+    resetUndoFor(Function::invalidId());  // scene undo doesn't apply to func editors
     m_canvasFunction = f->id();
     m_lookEditor->setPalette(QLCPalette::invalidId());
     m_lookEditor->setContextScene(NULL);
@@ -654,6 +670,12 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     case Function::RGBMatrixType:
         ed = new RGBMatrixEditor(this, qobject_cast<RGBMatrix*>(f), m_doc);
         break;
+    case Function::ShowType:
+        // Embedded timeline: build the show additively by dragging functions
+        // from the left tree onto tracks (byte-compatible drag payload).
+        ed = new ShowTimelineEditor(this, qobject_cast<Show*>(f), m_doc);
+        dragIn = true;
+        break;
     default:
         break;
     }
@@ -679,8 +701,45 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     m_funcEditor = ed;
     m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_funcEditor, 1);
     m_funcEditor->show();
-    startPreview();   // run it live so the view reflects it (Design mode)
+    // A Show owns its own transport (Play/Stop in the timeline editor) — never
+    // auto-play it on open. Other editors preview live so the view reflects them.
+    if (f->type() != Function::ShowType)
+        startPreview();
     updateTitle();
+}
+
+void ProgrammingManager::loadGroupEditor(quint32 groupId)
+{
+    FixtureGroup *grp = m_doc->fixtureGroup(groupId);
+    if (grp == NULL)
+        return;
+
+    stopPreview();
+    m_currentScene = Function::invalidId();
+    resetUndoFor(Function::invalidId());
+    m_canvasFunction = Function::invalidId(); // nothing previewable
+    m_lookEditor->setPalette(QLCPalette::invalidId());
+    m_lookEditor->setContextScene(NULL);
+    if (Monitor::instance() != NULL)
+        Monitor::instance()->setActiveScene(Function::invalidId());
+
+    m_funcTree->setExternalDragMode(false);
+    syncMemberNodes(Function::invalidId());
+    clearEditors();
+
+    m_canvasPlaceholder->hide();
+    m_fixtureScroll->hide();
+    m_fixtureMixedNote->hide();
+    m_lookEditor->hide(); // group layout editor stands alone in the canvas
+
+    // Reuse the func-editor slot as the hosted canvas widget so clearEditors()
+    // tears it down on the next selection.
+    m_funcEditor = new FixtureGroupEditor(grp, m_doc, this);
+    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_funcEditor, 1);
+    m_funcEditor->show();
+
+    m_canvasTitle->setText(tr("Fixture group: %1   —   %n head(s)", "", grp->headList().count())
+                           .arg(grp->name()));
 }
 
 void ProgrammingManager::updateTitle()
@@ -1228,6 +1287,9 @@ void ProgrammingManager::refreshPreview()
 
 void ProgrammingManager::slotCanvasModified()
 {
+    // Record the pre-edit state for Ctrl+Z (the baseline still holds the state
+    // from before this edit; push it and re-capture).
+    pushUndoSnapshot();
     // Re-apply the scene's targets/looks to the live preview (resetRuntime
     // if running, else start) — no start/stop churn.
     refreshPreview();
@@ -1595,6 +1657,7 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     QAction *aColl   = menu.addAction(tr("New Collection"));
     QAction *aEFX    = menu.addAction(tr("New EFX"));
     QAction *aMatrix = menu.addAction(tr("New RGB Matrix"));
+    QAction *aShow   = menu.addAction(tr("New Show"));
     menu.addSeparator();
     QAction *aFolder = menu.addAction(tr("New Folder"));
     menu.addSeparator();
@@ -1631,6 +1694,7 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     else if (chosen == aColl)   { f = new Collection(m_doc); base = tr("New Collection"); }
     else if (chosen == aEFX)    { f = new EFX(m_doc);        base = tr("New EFX"); }
     else if (chosen == aMatrix) { f = new RGBMatrix(m_doc);  base = tr("New RGB Matrix"); }
+    else if (chosen == aShow)   { f = new Show(m_doc);       base = tr("New Show"); }
     if (f == NULL)
         return;
 
@@ -1845,6 +1909,15 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
                                      : tr("Save as Bundle…"));
     }
 
+    QAction *aDelete = NULL;
+    if (targetPalettes.isEmpty() == false)
+    {
+        menu.addSeparator();
+        aDelete = menu.addAction(targetPalettes.size() > 1
+                                     ? tr("Delete %1 palettes").arg(targetPalettes.size())
+                                     : tr("Delete"));
+    }
+
     QAction *chosen = menu.exec(m_paletteTree->viewport()->mapToGlobal(pos));
     if (chosen == NULL)
         return;
@@ -1852,6 +1925,36 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
     if (chosen == aBundle)
     {
         saveBundleFromPalettes(targetPalettes);
+        return;
+    }
+
+    if (chosen == aDelete)
+    {
+        // Count how many scenes reference these palettes so the operator knows
+        // the looks that will lose them (deletePalette detaches them cleanly).
+        QSet<quint32> usingScenes;
+        foreach (Function *f, m_doc->functions())
+        {
+            Scene *s = qobject_cast<Scene*>(f);
+            if (s == NULL)
+                continue;
+            foreach (quint32 pid2, targetPalettes)
+                if (s->palettes().contains(pid2))
+                    usingScenes.insert(s->id());
+        }
+        QString msg = targetPalettes.size() > 1
+            ? tr("Delete these %1 palettes?").arg(targetPalettes.size())
+            : tr("Delete this palette?");
+        if (usingScenes.isEmpty() == false)
+            msg += QString("\n\n") + tr("%n scene(s) use them; the look will be "
+                       "removed from those scenes.", "", usingScenes.count());
+        if (QMessageBox::question(this, tr("Delete palette"), msg,
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            return;
+        // Collect ids first — the first delete rebuilds the tree.
+        foreach (quint32 delId, targetPalettes)
+            m_doc->deletePalette(delId);
+        m_paletteTree->updateTree();
         return;
     }
 
@@ -2130,6 +2233,70 @@ void ProgrammingManager::slotUnparkAll()
     ProgrammerController *pc = m_doc->programmer();
     if (pc)
         pc->unparkAllFixtures();
+}
+
+void ProgrammingManager::slotSnapshotLive()
+{
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (scene == NULL)
+    {
+        QMessageBox::information(this, tr("Snapshot"),
+            tr("Open a scene in the canvas first — the snapshot bakes into it."));
+        return;
+    }
+
+    // Read the current pre-Grand-Master output for every patched fixture and
+    // collect the values; apply AFTER releasing the universe lock (never run a
+    // dialog while holding it). A fixture with all-zero output is skipped.
+    QList<SceneValue> captured;
+    int fixCount = 0;
+    {
+        QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
+        foreach (Fixture *fxi, m_doc->fixtures())
+        {
+            if (fxi == NULL)
+                continue;
+            const quint32 uni = fxi->universe();
+            if (uni >= quint32(universes.size()))
+                continue;
+            Universe *u = universes[uni];
+            const quint32 base = fxi->address();
+            const quint32 chans = fxi->channels();
+
+            bool hasOutput = false;
+            for (quint32 c = 0; c < chans; c++)
+                if (u->preGMValue(int(base + c)) != 0) { hasOutput = true; break; }
+            if (hasOutput == false)
+                continue;
+
+            fixCount++;
+            for (quint32 c = 0; c < chans; c++)
+                captured.append(SceneValue(fxi->id(), c, u->preGMValue(int(base + c))));
+        }
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
+
+    if (captured.isEmpty())
+    {
+        QMessageBox::information(this, tr("Snapshot"),
+            tr("Nothing to capture — no fixture is currently outputting."));
+        return;
+    }
+
+    if (QMessageBox::question(this, tr("Snapshot into \"%1\"").arg(scene->name()),
+            tr("Bake the current live output of %1 fixture(s) (%2 channel values) "
+               "into this scene as static values? Existing values on those "
+               "channels are overwritten.").arg(fixCount).arg(captured.count()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    foreach (const SceneValue &scv, captured)
+        scene->setValue(scv, /*blind*/ false, /*checkHTP*/ false);
+
+    m_doc->setModified();
+    if (m_canvas != NULL)
+        m_canvas->reload();   // show the newly baked values (scene already open)
+    refreshPreview();
 }
 
 void ProgrammingManager::slotParkChanged()
@@ -2592,6 +2759,79 @@ void ProgrammingManager::saveBundleFromPalettes(const QList<quint32> &paletteIds
         return;
     }
     m_bundleBrowser->refresh();
+}
+
+Scene *ProgrammingManager::snapshotScene(Scene *scene)
+{
+    if (scene == NULL)
+        return NULL;
+    Scene *snap = new Scene(m_doc); // detached (not addFunction'd); we own it
+    snap->copyFrom(scene);          // full state: values/fixtures/groups/palettes/fades
+    return snap;
+}
+
+void ProgrammingManager::resetUndoFor(quint32 sceneId)
+{
+    qDeleteAll(m_undoStack);
+    m_undoStack.clear();
+    delete m_undoBaseline;
+    m_undoBaseline = NULL;
+    m_undoSceneId = sceneId;
+    if (sceneId != Function::invalidId())
+    {
+        Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId));
+        m_undoBaseline = snapshotScene(scene);
+    }
+}
+
+void ProgrammingManager::pushUndoSnapshot()
+{
+    // Only track scene-canvas edits, and only for the scene the baseline is for.
+    if (m_currentScene == Function::invalidId() || m_currentScene != m_undoSceneId
+            || m_undoBaseline == NULL)
+        return;
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (scene == NULL)
+        return;
+
+    // The baseline is the pre-edit state — push it; the edit is now current, so
+    // re-capture the baseline as the current state for the next edit.
+    m_undoStack.append(m_undoBaseline);
+    const int kMaxUndo = 25;
+    while (m_undoStack.size() > kMaxUndo)
+        delete m_undoStack.takeFirst();
+    m_undoBaseline = snapshotScene(scene);
+}
+
+void ProgrammingManager::slotUndo()
+{
+    // General scene undo first; fall back to the bundle-stamp undo when there's
+    // no scene-edit history to unwind.
+    if (m_undoStack.isEmpty() || m_currentScene != m_undoSceneId)
+    {
+        slotUndoStamp();
+        return;
+    }
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    if (scene == NULL)
+    {
+        slotUndoStamp();
+        return;
+    }
+
+    Scene *snap = m_undoStack.takeLast();
+    const QString keepName = scene->name(); // undo canvas edits, not a tree rename
+    scene->copyFrom(snap);   // restore the pre-edit state
+    scene->setName(keepName);
+    delete snap;
+    // The restored state is the new baseline (don't let the reload re-push it).
+    delete m_undoBaseline;
+    m_undoBaseline = snapshotScene(scene);
+
+    m_doc->setModified();
+    if (m_canvas != NULL)
+        m_canvas->reload();
+    refreshPreview();
 }
 
 void ProgrammingManager::slotUndoStamp()

@@ -24,6 +24,7 @@
 #include <QObject>
 #include <QAction>
 #include <QFont>
+#include <QSet>
 
 #include "showitem.h"
 #include "chaser.h"
@@ -124,8 +125,30 @@ private:
     /** Reference to the actual Chaser Function which holds the sequence steps */
     Chaser *m_chaser;
 
-    /** index of the selected step for highlighting (-1 if none) */
+    /** index of the selected step: the multi-select ANCHOR (Shift extends a range
+     *  from here) and the primary selection for single-cue edits. -1 if none. */
     int m_selectedStep;
+
+    /** Multi-selected cue indices (for group delete / move / scale). Always kept
+     *  in sync so that m_selectedStep, when >= 0, is also a member. */
+    QSet<int> m_selectedSteps;
+
+    /** Update the cue selection for a click on cue @p idx with @p mods:
+     *  plain = just this cue; Shift = range from the anchor; Ctrl/Cmd = toggle. */
+    void selectCue(int idx, Qt::KeyboardModifiers mods);
+
+    /** True if cue @p idx is part of the current (multi-)selection. */
+    bool isCueSelected(int idx) const;
+
+    /** Delete every selected cue from the chaser (confirmed). Rebuilds width. */
+    void deleteSelectedCues();
+
+    /** Scale the durations of the selected cues by @p factor (group stretch). */
+    void scaleSelectedCues(double factor);
+
+    /** If the selection is a solid interior run [lo..hi] (a cue on each side to
+     *  absorb the slide), report its bounds. Used to enable a group MOVE drag. */
+    bool selectionContiguousInterior(int &lo, int &hi) const;
 
     /** Ensure per-step fade in/out are the source of truth (switch Common/Default
      *  fade modes to PerStep, seeding each step) so a dragged fade sticks. */
@@ -138,9 +161,11 @@ private:
     bool m_hovered = false;
 
     /** In-block cue drag state. */
-    enum CueDrag { CueNone = 0, CueRoll, CueSlip, CueFadeIn, CueFadeOut };
+    enum CueDrag { CueNone = 0, CueRoll, CueSlip, CueFadeIn, CueFadeOut, CueGroupMove };
     CueDrag m_cueDrag;           // active in-block edit (else defer to ShowItem)
     int m_cueDragIdx;            // roll: left cue index; slip/fade: cue index
+    int m_groupLo = -1;          // CueGroupMove: first selected cue
+    int m_groupHi = -1;          // CueGroupMove: last selected cue
     qreal m_cueDragPressX;       // scene-x at press
     quint32 m_cueDragOrigFade;   // the dragged fade's value at press (relative drag)
     QList<quint32> m_cueOrigDur; // per-step durations captured at press

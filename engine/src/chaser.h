@@ -161,7 +161,16 @@ signals:
 
 protected:
     QList <ChaserStep> m_steps;
-    QMutex m_stepListMutex;
+    // Guards m_steps. Recursive because createRunner() holds it while building a
+    // ChaserRunner that calls steps() back. mutable so the const readers
+    // (steps/stepsCount) can lock — they MUST, or a UI-thread repaint racing the
+    // timer thread's step reads crashes (SequenceItem::paint copying m_steps
+    // mid-reallocation).
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
+    mutable QMutex m_stepListMutex;
+#else
+    mutable QRecursiveMutex m_stepListMutex;
+#endif
 
     /*********************************************************************
      * Speed modes
@@ -236,6 +245,14 @@ public:
     /** Compute next step for manual fading */
     int computeNextStep(int currentStepIndex) const;
 
+    /** Run this chaser under an external (show/timecode) clock: its cues advance
+     *  only when a ShowRunner steps them from the show clock (or the operator
+     *  GOes), never on the chaser's own MasterTimer elapsed time. Set by
+     *  ShowRunner when the chaser is a block on a Show timeline; must be cleared
+     *  when the show releases it so standalone playback self-advances again. */
+    void setShowClocked(bool enable);
+    bool isShowClocked() const { return m_showClocked; }
+
     /** Get the running step number. */
     int runningStepsNumber() const;
 
@@ -290,6 +307,7 @@ private:
     QRecursiveMutex m_runnerMutex;
 #endif
     ChaserRunner* m_runner;
+    bool m_showClocked;     //! Steps driven by a ShowRunner's clock, not the MasterTimer
 
     /*************************************************************************
      * Intensity

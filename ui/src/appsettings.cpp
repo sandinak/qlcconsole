@@ -22,6 +22,7 @@
 #include <QGroupBox>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QSettings>
 #include <QSpinBox>
 #include <QLabel>
 #include <QPushButton>
@@ -90,6 +91,27 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     tabLayout->addStretch();
     mainLayout->addWidget(tabGroup);
 
+    // --- Effects ---
+    QGroupBox *fxGroup = new QGroupBox(tr("Effects"), this);
+    QHBoxLayout *fxLayout = new QHBoxLayout(fxGroup);
+    fxLayout->addWidget(new QLabel(tr("Effect script editor:"), fxGroup));
+    m_scriptEditorCombo = new QComboBox(fxGroup);
+    m_scriptEditorCombo->addItem(tr("In-app editor"), QStringLiteral("internal"));
+    m_scriptEditorCombo->addItem(tr("External editor (system default)"), QStringLiteral("external"));
+    m_scriptEditorCombo->setToolTip(
+        tr("Where \"New/Edit effect script…\" opens a .js — the built-in editor or "
+           "your operating system's default editor for .js files."));
+    {
+        QSettings s;
+        const QString cur = s.value(QStringLiteral("effectscript/editor"),
+                                    QStringLiteral("internal")).toString();
+        int idx = m_scriptEditorCombo->findData(cur);
+        m_scriptEditorCombo->setCurrentIndex(idx < 0 ? 0 : idx);
+    }
+    fxLayout->addWidget(m_scriptEditorCombo);
+    fxLayout->addStretch();
+    mainLayout->addWidget(fxGroup);
+
     // Add stretch to push buttons to bottom
     mainLayout->addStretch();
 
@@ -119,6 +141,10 @@ void AppSettings::accept()
     // Apply tab label mode
     const int mode = m_tabLabelModeCombo->currentData().toInt();
     m_app->setTabLabelMode(mode);
+
+    // Effect script editor preference (read by the Look Editor authoring flow).
+    QSettings().setValue(QStringLiteral("effectscript/editor"),
+                         m_scriptEditorCombo->currentData().toString());
 
     QDialog::accept();
 }

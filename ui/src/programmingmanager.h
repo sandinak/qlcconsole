@@ -82,6 +82,10 @@ private slots:
     void slotSaveAsBundle();
     void slotUndoStamp();
 
+    /** General canvas undo (Ctrl+Z): revert the open scene one edit. Falls back
+     *  to the bundle-stamp undo when there's no scene-edit history. */
+    void slotUndo();
+
     // Power/amperage estimate (Design mode only)
     /** Re-estimate the load of the previewed look and refresh the footer. */
     void recomputePower();
@@ -97,6 +101,9 @@ private slots:
     // global toolbar action (App); here we only reflect the engine state in the
     // canvas banner so building in-tab shows the muted-rig warning.
     void slotBlindStateChanged(bool on);
+
+    // Snapshot live DMX into the open scene (capture an external-console look)
+    void slotSnapshotLive();
 
     // Park (hold fixtures out of cue output)
     void slotParkSelection();
@@ -129,6 +136,9 @@ private:
     void loadCanvas(quint32 sceneId);
     /** Host the stock editor for a non-scene function in the canvas. */
     void loadFunctionEditor(Function *function);
+    /** Host the fixture-group head-layout editor in the canvas (visualize a
+     *  group double-clicked in the Fixtures & Groups source). */
+    void loadGroupEditor(quint32 groupId);
     /** Tear down whichever canvas editor is currently shown. */
     void clearEditors();
     void updateTitle();
@@ -247,6 +257,19 @@ private:
     QHash<quint32, QPair<int, int> > m_stampUndoFades;
     quint32              m_stampUndoSceneId = quint32(-1);
 
+    // General per-scene undo: detached Scene copies of the pre-edit state.
+    // m_undoBaseline holds the state as of the last load/undo; on each canvas
+    // edit it is pushed to m_undoStack and re-captured. Scene-canvas only.
+    QList<Scene*>        m_undoStack;
+    Scene               *m_undoBaseline = nullptr;
+    quint32              m_undoSceneId = quint32(-1);
+    /** Snapshot @p scene's full state into a detached Scene (caller owns it). */
+    Scene *snapshotScene(Scene *scene);
+    /** Reset the undo history for a newly loaded scene (id invalid clears it). */
+    void resetUndoFor(quint32 sceneId);
+    /** Record the pre-edit baseline before the current edit takes effect. */
+    void pushUndoSnapshot();
+
     // Last Effect-palette set synced to ESR — used to avoid recreating instances
     // on every refreshPreview() call when only non-Effect palettes changed.
     QList<quint32>       m_lastSyncedEffectPalettes;
@@ -256,6 +279,7 @@ private:
     QPushButton *m_flashBtn    = nullptr;
     QPushButton *m_parkBtn     = nullptr;
     QPushButton *m_unparkBtn   = nullptr;
+    QPushButton *m_snapshotBtn = nullptr;
     // Blind-active in-context indicator (blue, EOS-style) — the global status-bar
     // chip lives in App; this banner is the tab-local, can't-miss-it version.
     QLabel      *m_blindBanner = nullptr;

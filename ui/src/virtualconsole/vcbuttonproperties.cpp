@@ -85,6 +85,8 @@ VCButtonProperties::VCButtonProperties(VCButton* button, Doc* doc)
         m_suspendTimeline->setChecked(true);
     else if (button->action() == VCButton::FollowTimecode)
         m_followTimecode->setChecked(true);
+    else if (button->action() == VCButton::ClearLastLook)
+        m_clearLastLook->setChecked(true);
     else
         m_toggle->setChecked(true);
     m_fadeOutTime = m_button->stopAllFadeTime();
@@ -405,6 +407,10 @@ void VCButtonProperties::accept()
     else if (m_followTimecode->isChecked() == true)
     {
         m_button->setAction(VCButton::FollowTimecode);
+    }
+    else if (m_clearLastLook->isChecked() == true)
+    {
+        m_button->setAction(VCButton::ClearLastLook);
     }
     else
     {

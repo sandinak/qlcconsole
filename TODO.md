@@ -9,6 +9,292 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### 2026-07-19 — Effect engine: sharing, authoring, EFX-parity scripts *(BUILT — needs GUI test)*
+Clarification: the scriptable effect engine was already built (EffectScriptRunner /
+EffectInstance / 30+ scripts / intent boundary / palette-fed looks / drawn-path
+canvas). These fill the remaining gaps additively — EFX and core untouched.
+- [x] **EFX-parity scripts** — `lissajous.js` (arbitrary X/Y freq + phase = full
+      stock-EFX Lissajous; Circle/Fig-8 are special cases) and `diamond.js`
+      (rotated-square path). Registered in `resources/effectscripts/CMakeLists.txt`.
+      Answers "absorb old EFX?": no migration — scripts already cover EFX patterns
+      and go beyond (colour/dimmer/gobo/live-input); these add the two shapes that
+      had no script. Keep EFX (core Function type) as-is.
+- [x] **Export / Import effects** — Look-Editor effect page buttons. Export writes a
+      portable `.qxfx` (JSON: preset name/script/category/description + pinned
+      params + **embedded script source**). Import installs the script into the user
+      dir if missing (then rescans) + saves the preset — so a recipient without the
+      script can still use it. (`LookEditor::slotExportEffect/slotImportEffect`.)
+- [x] **In-app + external authoring** — "New script…" (template → user dir → open)
+      + "Edit script…" (current Generator's .js). Opens in either the new in-app
+      `EffectScriptEditor` (mono QPlainTextEdit + Save-rescans + Reload) or the OS
+      default editor, per a new **App Settings → Effects → "Effect script editor"**
+      preference (`QSettings effectscript/editor`). Both wired.
+- Scripts node-eval verified (lissajous/diamond produce sane pan/tilt). Full build
+      clean. See `testing_st.md` §J.
+
+### 2026-07-19 — Per-track flags: intensity / solo-safe / hold-last / priority *(BUILT — needs test)*
+Four new per-track controls on the Show timeline (model + XML + UI + runtime).
+- [x] **Intensity submaster** — a draggable **fader bar** on each track header
+      (amber below 100%) scales that track's dimmer output live. `Track::m_intensity`
+      (0..1, XML `Intensity=`); `Show::setTrackIntensity(id, v)` sets it + calls
+      `ShowRunner::adjustIntensity` live; the runner also inits `m_intensityMap`
+      from `track->intensity()` at start. Persists.
+- [x] **Solo-safe / mute-exempt** — track flag (context menu): solo + "any-solo
+      silences others" never touch it (house/work light/safety). `Track::m_soloSafe`.
+- [x] **Solo made model-backed + non-destructive** — `Track::m_isSolo` (was UI-only,
+      implemented by baking mute into other tracks). `ShowRunner` queue-build now
+      skips a track if muted OR (any solo & not soloed & not solo-safe). Solos are
+      additive. `slotTrackSoloFlagChanged` no longer writes mute into siblings.
+- [x] **Hold-last** — track flag: when the track's cue ends, its look is snapshotted
+      into the last-look holder (append) instead of releasing to black; the track's
+      next cue clears it (per-fixture yield). Captured in ShowRunner Phase-2 stop
+      using the threaded `universes`; Operate + `lastLookEnabled` gated. New
+      `LastLookEffect::addHold` (accumulate) + `Doc::captureLastLook(..., append)`.
+- [x] **Priority / role** — track enum Background/Normal/Override (context menu →
+      submenu). `ShowRunner` sets each started child's `setFadePriority`
+      (Background=-1 / Auto=0 / Override) so a base-wash track yields and an accent
+      track wins LTP. `Track::m_priority` (XML `Priority=`).
+- UI: TrackItem context menu (solo-safe/hold-last/priority) + the intensity bar
+      (drag). New signals `itemPropertiesChanged`/`itemIntensityChanged` →
+      `MultiTrackView::trackIntensityChanged` → `Show::setTrackIntensity` in both
+      hosts. Engine tests green: track 8, show 11, showrunner 6, lastlookeffect 6.
+      Note: intensity is live. See `testing_st.md` §I.
+- [x] **Mute/solo/solo-safe now LIVE mid-run** — the runner builds its queue from
+      ALL tracks and enforces silence per frame (`enforceLiveMuteSolo`): it stops
+      the children of tracks that just went silent and starts the active cues of
+      tracks that just became audible — targeted (only changed tracks, no full
+      re-seek, so other tracks don't blip). `startChild` factored + shared with the
+      normal start phase; the start gate reads `m_lastSilent`. UI already writes
+      `Track::setMute/setSolo`, so no extra plumbing. Priority still applies at
+      child start (not re-applied live). showrunner 6/6.
+
+### 2026-07-19 — Timeline: frozen track-header column *(BUILT — needs GUI test)*
+- [x] The **track-header column** (names/mute/solo/lock), the **zoom slider corner**
+      and the **vertical divider** now stay pinned at the viewport's left edge when
+      the timeline scrolls horizontally, instead of scrolling off. `MultiTrackView`:
+      `scrollContentsBy` override + `pinLeftColumn()` sets each `TrackItem` (and the
+      divider/slider proxy) x to the current scroll offset (`mapToScene(0,0).x()`)
+      and floats them above clips (`TRACK_HEADER_Z=800`, below cursor/drag). Re-pinned
+      on add-track / divider rebuild. `drawForeground` marker bands/lines now clamp
+      to `leftX+TRACK_WIDTH` so they don't paint over the frozen column (the pinned
+      "MARKERS" label already used `leftX`). Shared widget → both the embedded
+      Programming-tab timeline and the full Show Manager tab benefit.
+
+### 2026-07-19 — Suspend-hold + operator arming/visibility + canvas undo *(BUILT — needs test)*
+- [x] **Suspend = HOLD, not release** — Exit Timeline Control (VC takeover) now
+      captures the current look into the last-look holder BEFORE releasing the
+      show's children, so handing to the VC no longer blacks out channels the VC
+      isn't driving. New `Doc::captureLastLook(fid, universes)` (shared by
+      `Show::postRun` + the suspend path); `ShowRunner::write` now takes universes
+      (threaded from `Show::write`) so the suspend block can snapshot preGM. On
+      resume the restarted cues reclaim their fixtures (per-fixture yield). Gated
+      on `lastLookEnabled`.
+- [x] **Auto-arm the linked manual cue list at a freeze** — when MTC stops mid-show
+      in a section that links a cue list (the seam), `ShowManager` STARTS that
+      chaser (edge-triggered on the freeze): its first cue goes live and it becomes
+      the current chaser so a mapped GO / APC step drives it. Skips if already
+      running. `VCShowControl` shows it **green "▶ ARMED — <name> · next GO: <cue>"**.
+- [x] **Footer run-of-show readout** — the app's MTC chip now appends the current
+      **section** + linked **manual cue** (armed/next) under the playhead, driven by
+      the per-position `timeChanged` update — visible from any tab, not just the VC
+      Show Control widget.
+- [x] **General canvas Undo (Ctrl+Z)** — per-scene undo in the Programming canvas:
+      detached `Scene` copies (`copyFrom`, full state incl. values/targets/looks/
+      fades) snapshotted at load + before each edit (`slotCanvasModified` →
+      `pushUndoSnapshot`, 25-deep). `slotUndo` restores the pre-edit state (keeps
+      the current name so a tree rename isn't reverted), reloads the canvas +
+      preview; falls back to the old bundle-stamp undo when there's no scene-edit
+      history. Cleared when leaving to a func/group editor.
+- Engine touched-tests green: show 11, showrunner 6, lastlookeffect 6, track 8,
+      showfunction 5. See `testing_st.md` §G.
+
+### 2026-07-19 — Batch: audit quick-wins *(BUILT — needs GUI test)*
+- [x] **Palette Delete** — Programming-tab palette-tree right-click → "Delete"
+      (single/multi). Confirms, counts scenes that reference each palette (warns
+      the looks will lose them), then `Doc::deletePalette` (which already detaches
+      from scenes). Closes the CRUD hole.
+- [x] **Fixture group rename + delete in the panel** — `FixtureGroupSource`
+      right-click on group(s): **Rename group…** (single) + **Delete group(s)**
+      (confirms; fixtures kept). No more round-trip to Fixture Manager for these.
+- [x] **Live-DMX snapshot → scene** — Programming-tab **Snapshot** toolbar button
+      bakes the current pre-GM output of every outputting fixture into the open
+      scene as static `SceneValue`s (`checkHTP=false`, exact values). Reads under
+      `claimUniverses`, collects, releases, THEN confirms + applies (no dialog
+      under the lock). Captures a look built on an external console. Canvas
+      reloads to show the baked values.
+- [x] **Freeze-threshold reconcile** — `TIMECODE_WATCHDOG_MS` 600 → **200** so the
+      footer "holding" chip flips ~when the rig actually freezes (ShowRunner's
+      `m_msSinceFresh > 150`), not up to ~450 ms later. Safe: the watchdog's
+      running=false only drives the chip + the Play "followingLive" check; show
+      auto-start is on the rising edge (immediate) and the freeze is independent.
+      Cross-ref comments added in both files.
+- [x] **Stale test fixes** — `ShowFunction_Test`/`Track_Test` expected the old grey
+      SceneType default colour; updated to the fork's blue `(70,110,150)`. Both
+      green now (engine touched-tests: track 8/8, showfunction 5/5, show 11/11,
+      lastlookeffect 6/6).
+
+### 2026-07-19 — Finish embedded show timeline + close timecode↔manual seam *(BUILT — needs GUI test)*
+Two audit gaps closed together.
+- [x] **Embedded timeline is now a full editor** (`ShowTimelineEditor`): transport
+      **Play/Pause + Stop** toolbar (owns the show's playback — no more auto-play
+      on open; `ProgrammingManager::loadFunctionEditor` skips `startPreview` for
+      ShowType and the editor stops the show on teardown); **per-clip delete**
+      (Delete key + toolbar, multi-select confirm); **track rename** (double-click),
+      **reorder** (drag/menu → `moveTrack`), **colour**; full **section-marker CRUD**
+      (add/rename/recolour/delete/relabel/move) wired from `MultiTrackView`;
+      right-click empty slot → **Add here** (FunctionSelection). Playhead cursor +
+      play icon track the show's running state.
+- [x] **Marker → manual cue list link (the seam)** — `ShowMarker` gains
+      `cueListId` (engine/src/show.{h,cpp}); `setMarker` PRESERVES it across
+      relabel/recolour, `setMarkerCueList`/`markerCueList` set/read it, move carries
+      it, XML round-trips as `CueList=` attr (back-compat). New MultiTrackView
+      marker menu **"Link manual cue list…"** → `markerSetCueListRequested` →
+      handler (Chaser-only FunctionSelection) in BOTH `ShowTimelineEditor` and
+      `ShowManager`. Linked markers draw a **⏵ glyph** in the timeline lane.
+- [x] **Runtime surfacing** — `VCShowControl` now shows the current section's
+      **linked manual cue list + its next GO** (amber `m_manualCueLabel`), so when
+      the show freezes in a spoken/break section the operator sees which stack to
+      GO and what's next — no more hunting. Driven by `updateSection` off the
+      section marker under the playhead.
+- Engine `Show_Test` 11/11 pass. (Pre-existing unrelated failures in
+      `Track_Test`/`ShowFunction_Test` = stale default-colour asserts, not touched
+      here.) Still compact vs Show Manager: no undo, no MTC source combo, no footer
+      chips in the embed (those stay in the full tab). See `testing_st.md` §D/§E.
+
+### 2026-07-19 — Last-look persistence (Change B, phase 1) *(BUILT — needs live test)*
+A stopped/finished Show no longer blacks out the rig in Operate — it HOLDS its
+final look until the next cue. Closes the long-standing "Change B (intensity
+persistence)" gap for shows (was "not built — risky core-mixer work").
+- [x] **`LastLookEffect` holder** (`engine/src/lastlookeffect.{h,cpp}`) — a
+      DMXSource that re-asserts captured per-channel values every tick via
+      `uni->write(forceLTP=true)` (survives `zeroIntensityChannels`). Same proven
+      pattern as `ParkEffect`/`HighlightEffect` (which both hold intensity), so no
+      HTP-mixer surgery. Runtime-only, not persisted.
+- [x] **Capture** in `Show::postRun` (single choke point: any stop reason, still
+      has universes, runs before the runner releases children). Operate-only +
+      `Doc::lastLookEnabled()`. Walks the show's fixtures (recursive
+      `collectShowFixtures`: Scene/EFX/RGBMatrix = leaves→fixtures; Chaser/
+      Collection/Show = containers→recurse), snapshots each channel's current
+      `preGMValue`, installs the hold.
+- [x] **Per-fixture (per-channel) yield** — a newly started function drops only the
+      held channels on the fixtures IT drives; the rest keep holding
+      (`Doc::slotClearLastLookOnStart` → `functionFixtures(fid)` →
+      `LastLookEffect::releaseFixtures`). A full new state covering every held
+      fixture clears it entirely (= the old whole-look replace). Also cleared on
+      →Design (`setMode`) and `clearContents`. Fixture collector shared:
+      `Doc::functionFixtures` (recurses containers; Scene/EFX/RGBMatrix = leaves).
+- [x] **Owned by Doc** (`m_lastLook`, `lastLook()` accessor, `setLastLookEnabled`);
+      default ON in Operate.
+- [x] **Toolbar controls** (main toolbar, next to Follow-MTC/Suspend): **Hold Last
+      Look** checkable toggle (`:/star.png`, `Doc::setLastLookEnabled`) + **Clear
+      Held Last Look** momentary (`:/fileclose.png`, `lastLook()->clear()`).
+- [x] **MIDI-mappable VCButton action** `ClearLastLook` ("Timeline: Clear held last
+      look") — enum + string + actionToString/stringToAction + dispatch + a radio
+      in vcbuttonproperties.ui + load/save. APC40 can drop a held look.
+- [x] **Unit test** `LastLookEffect_Test` (hold asserts forceLTP + persists; clear
+      releases; empty = inactive; per-fixture release yields only that fixture) —
+      6/6 pass.
+- Scope: SHOW stops only (not bare scene/chaser stops). Does NOT change the
+      running-show VC-grab-persistence case (separate symmetric-LTP concern).
+      Needs live confirm — see `testing_st.md` §B.
+
+### 2026-07-19 — Programming tab: Shows editable + create-group from fixtures *(BUILT — needs GUI test)*
+Two asks: build Shows additively in the Programming canvas, and make fixture
+groups from the lower-right Fixtures & Groups panel.
+- [x] **Shows in the Programming canvas** — selecting a Show in the left tree now
+      hosts an embedded timeline in the canvas instead of the "edit in Functions"
+      placeholder. New `ui/src/showmanager/showtimelineeditor.{h,cpp}`
+      (`ShowTimelineEditor`) wraps a `MultiTrackView` + the minimal show-side
+      orchestration (populate from the show, create tracks, place dropped
+      functions via a ported `addFunctionToTrack`, persist moves, delete track,
+      playhead cursor on preview). Hosted in
+      `ProgrammingManager::loadFunctionEditor` (`case ShowType`, `dragIn = true`);
+      **"New Show"** added to the func-tree create menu. Drag-in needed **zero**
+      new plumbing — the Programming func tree's external-drag payload is
+      byte-identical to the timeline drop handler (both MIME
+      `application/x-qlcplus-functions`, a `quint32` fid stream). A Show is a
+      Function, so the tab's existing `startPreview` runs it live.
+      Deliberately compact (phase 1): the full Show Manager tab keeps the shows
+      combo, MTC source, footer chips, markers, undo stack and cue-level tools;
+      this editor is for additive building. Follow-ups: share ONE orchestration
+      core between this and ShowManager (currently `addFunctionToTrack` /
+      populate loop are ported, not shared); undo; markers; whether a Show should
+      auto-play on open (it does, matching collection/chaser preview).
+- [x] **Compact timeline sizing** — the embedded timeline was rendering the
+      fixed 6-row / 600px minimum (empty phantom tracks + a scrollbar). Added
+      `MultiTrackView::setCompact(bool)`: in compact mode `updateViewSize` sizes
+      the scene height to the actual track count (min 1) and `updateTracksDividers`
+      draws one divider per existing track. `ShowTimelineEditor` turns it on; the
+      full Show Manager tab keeps its roomy empty canvas.
+- [x] **Double-click a group → visualize in the canvas** — double-clicking a
+      group in the lower-right Fixtures & Groups source now hosts a
+      `FixtureGroupEditor` (head-layout grid) in the central pane.
+      `FixtureGroupSource::groupDoubleClicked(quint32)` →
+      `ProgrammingManager::loadGroupEditor` (reuses the func-editor canvas slot;
+      title shows group name + head count). It's the real editor, so the layout
+      is editable there too, not just visualized.
+- [x] **Drop-to-timeline landed offset to the right (FIXED)** — in external-drag
+      mode the func tree used Qt's default full-row drag pixmap, whose hotspot is
+      the grab point (mid-row), so blocks landed ~grab-offset px right of the
+      ghost. Added `FunctionsTreeWidget::startDrag` override routing external
+      drags through `startExternalDrag()` with a small icon ghost + explicit
+      `setHotSpot(0,0)`, so the ghost tracks the cursor and the block lands under
+      the pointer. Affects every external-drag consumer (Collection/Chaser/Show
+      editors + the show timeline). Needs GUI confirm.
+- [x] **Right-click → Create fixture group from fixtures** — the lower-right
+      `FixtureGroupSource` panel's context menu now offers "Create fixture group
+      from N fixtures…" on selected fixture rows (was group-nodes-only). Reuses
+      the Fixture Manager path: `CreateFixtureGroup` dialog (name + auto-sized
+      grid from head count) → `new FixtureGroup` → `addFixtureGroup` →
+      `assignFixture` per fixture. New group appears in the tree ready to drag
+      onto a scene. No engine changes.
+
+### 2026-07-19 — Show timeline: crash fix + cue multi-select *(BUILT — needs GUI test)*
+- [x] **Crash fix (thread safety)** — `Chaser::steps/stepsCount/stepAt` now lock
+      `m_stepListMutex` (made recursive+mutable). Unlocked reads raced the
+      timer-thread MTC show-drive and crashed `SequenceItem::paint`
+      (EXC_BAD_ACCESS). `ShowRunner` uses a locked `steps()` copy, never
+      `stepAt()` pointers. See memory `chaser_steps_thread_safety`.
+- [x] **Cue multi-select** in `SequenceItem`: `m_selectedSteps` set; plain click =
+      single, **Shift-click** = range from anchor, **Ctrl/Cmd-click** = toggle;
+      all selected cues wash yellow (anchor brighter).
+- [x] **Delete** — right-click → "Delete N cues" (confirmed; not undoable — chaser
+      step timing isn't in the timeline undo stack).
+- [x] **Scale** — right-click → "Scale cue timing…" → percent dialog
+      (`scaleSelectedCues`).
+- [x] **Move** — plain-drag a cue inside a contiguous **interior** multi-selection
+      slides the group as a unit (`CueGroupMove`; neighbours a-1/b+1 absorb the
+      slide, group timing preserved). Needs a give-cue each side.
+- Note: cue editing needs the block **unlocked** (Full Show block is `Locked=1`)
+      only for whole-block move/stretch; interior divider/slip edits work locked.
+      Editability gated by `isShowLocked()` + track lock, not mode. Backlog: Delete
+      key shortcut; rubber-band cue select; undo for cue edits.
+
+### 2026-07-19 — MTC show = pure timecode cue drive *(BUILT — needs live-MTC test)*
+A show is now purely timecode-driven — **every cue fires on the clock, none wait**
+(the earlier "barrier / manual-GO inside the show" attempt was reverted). Spoken
+cues belong in a SEPARATE hand cue list, not the show.
+- [x] **External-clock chaser** — `ChaserRunner::setExternalClock` (via
+      `Chaser::setShowClocked`); a show-clocked chaser never self-advances on its
+      own MasterTimer time, only on an explicit SetStepIndex from ShowRunner.
+      Cleared in `releaseChild` so standalone runs self-advance again.
+- [x] **Position drive** — `ShowRunner::stepAtLocalMs` picks the cue whose
+      cumulative on-timeline span contains `localMs = elapsed − blockStart`;
+      `stepTimelineMs` = ChaserStep duration, else nominal `SHOW_NOMINAL_CUE_MS`
+      (3000, matches SequenceItem) for a 0/∞ cue. Lockstep drives
+      `if (target != cur)` — bidirectional, so a Logic locate/scrub jumps the cue.
+- [x] **Freeze on MTC-stop** — chasers pause again with the other children so
+      in-progress fades freeze; the frozen clock also issues no step change.
+- [x] **Symmetric LTP** — removed the show's `Background` priority demotion; show
+      cues write at Auto, last-writer-wins vs the VC (see LTP notes below).
+- Diagnostics: `QLC_SHOW_DEBUG=1` → `/tmp/qlc_showdebug.log` logs `[GATE]`,
+      `[START]`, and per-chaser `[RUNNER]` (cur/localMs/tgt/curFnRunning).
+- Authoring: drag sub-cues in Show Manager to position each cue on the clock;
+      un-positioned 0/∞ cues default to 3 s.
+- **Still open — Change B (intensity persistence)**: a stopped show's last look
+      still drops intensity to 0 (HTP zeroed each frame); "last cue persists until
+      overwritten" needs core-mixer work. Not built.
+
 ### 2026-07-16 — Show Manager timeline usability batch *(BUILT — needs GUI test)*
 Punch-list from Branson while driving the timeline. All on `programmer-mode`.
 - [x] **Empty-state hint + Show CRUD** — the timeline shows a centred hint when

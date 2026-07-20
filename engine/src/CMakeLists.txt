@@ -73,6 +73,7 @@ add_library(${module_name} SHARED
     programmerflasher.cpp programmerflasher.h
     highlighteffect.cpp highlighteffect.h
     parkeffect.cpp parkeffect.h
+    lastlookeffect.cpp lastlookeffect.h
     effectscript.cpp effectscript.h
     effectscriptcache.cpp effectscriptcache.h
     effectpresetcache.cpp effectpresetcache.h

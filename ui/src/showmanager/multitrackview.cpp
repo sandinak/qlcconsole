@@ -48,6 +48,10 @@ static const char *SM_FUNCTION_MIME = "application/x-qlcplus-functions";
 
 #define VIEW_DEFAULT_WIDTH  2000
 #define VIEW_DEFAULT_HEIGHT 600
+// Z of the frozen left track-header column: above clips (~0) so it occludes
+// them as they scroll under it, below the playhead cursor (999) and a dragged
+// track (1000).
+#define TRACK_HEADER_Z      800
 
 MultiTrackView::MultiTrackView(QWidget *parent) :
         QGraphicsView(parent)
@@ -84,7 +88,9 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
                           "border-radius: 4px;"
                           "}");
     connect(m_timeSlider, SIGNAL(valueChanged(int)), this, SLOT(slotTimeScaleChanged(int)));
-    m_scene->addWidget(m_timeSlider);
+    m_sliderProxy = m_scene->addWidget(m_timeSlider);
+    if (m_sliderProxy != NULL)
+        m_sliderProxy->setZValue(TRACK_HEADER_Z + 1); // sits in the pinned corner
 
     m_header = new ShowHeaderItem(m_scene->width());
     m_header->setPos(TRACK_WIDTH, 0);
@@ -144,9 +150,14 @@ void MultiTrackView::updateTracksDividers()
         m_scene->removeItem(m_vdivider);
 
     int ypos = TRACKS_TOP + TRACK_HEIGHT;
-    int hDivNum = 6;
-    if (m_tracks.count() > 5)
-        hDivNum = m_tracks.count();
+    // Compact mode draws exactly one divider per existing track (min 1) so an
+    // embedded/empty show doesn't render a stack of unused rows. The full tab
+    // keeps its roomy 6-row minimum.
+    int hDivNum;
+    if (m_compact)
+        hDivNum = qMax(1, m_tracks.count());
+    else
+        hDivNum = (m_tracks.count() > 5) ? m_tracks.count() : 6;
     for (int j = 0; j < hDivNum; j++)
     {
         QGraphicsItem *item = m_scene->addRect(0, ypos + (j * TRACK_HEIGHT),
@@ -159,6 +170,7 @@ void MultiTrackView::updateTracksDividers()
     m_vdivider = m_scene->addRect(TRACK_WIDTH - 3, 0, 3, m_scene->height(),
                         QPen(QColor(150, 150, 150, 255)),
                         QBrush(QColor(190, 190, 190, 255)));
+    pinLeftColumn(); // freeze the (recreated) divider + header column
 }
 
 void MultiTrackView::setViewSize(int width, int height)
@@ -185,6 +197,17 @@ void MultiTrackView::updateViewSize()
             gWidth = item->x() + item->getWidth();
     }
 
+    // Compact mode: size the scene height to the actual track count (min 1) so
+    // unused rows never render and an empty show shows no vertical scrollbar.
+    if (m_compact)
+    {
+        int rows = qMax(1, m_tracks.count());
+        gHeight = TRACKS_TOP + (rows * TRACK_HEIGHT) + 2;
+        m_cursor->setHeight(gHeight);
+        setViewSize(gWidth + 1000, gHeight);
+        return;
+    }
+
     if ((m_tracks.count() * TRACK_HEIGHT) + HEADER_HEIGHT > VIEW_DEFAULT_HEIGHT)
     {
         gHeight = (m_tracks.count() * TRACK_HEIGHT) + HEADER_HEIGHT;
@@ -193,6 +216,15 @@ void MultiTrackView::updateViewSize()
 
     if (gWidth > VIEW_DEFAULT_WIDTH || gHeight > VIEW_DEFAULT_HEIGHT)
         setViewSize(gWidth + 1000, gHeight);
+}
+
+void MultiTrackView::setCompact(bool compact)
+{
+    if (m_compact == compact)
+        return;
+    m_compact = compact;
+    updateTracksDividers();
+    updateViewSize();
 }
 
 void MultiTrackView::resetView()
@@ -223,9 +255,11 @@ void MultiTrackView::addTrack(Track *track)
     TrackItem *trackItem = new TrackItem(track, m_tracks.count());
     trackItem->setName(track->name());
     trackItem->setPos(0, TRACKS_TOP + (TRACK_HEIGHT * m_tracks.count()));
+    trackItem->setZValue(TRACK_HEADER_Z); // frozen header column floats above clips
     m_scene->addItem(trackItem);
     m_tracks.append(trackItem);
     activateTrack(track);
+    pinLeftColumn(); // freeze at the current horizontal scroll position
     connect(trackItem, SIGNAL(itemClicked(TrackItem*)),
             this, SLOT(slotTrackClicked(TrackItem*)));
     connect(trackItem, SIGNAL(itemDoubleClicked(TrackItem*)),
@@ -246,6 +280,10 @@ void MultiTrackView::addTrack(Track *track)
             this, SIGNAL(trackModified()));
     connect(trackItem, SIGNAL(itemColorChangeRequested(Track*)),
             this, SIGNAL(trackColorChangeRequested(Track*)));
+    connect(trackItem, SIGNAL(itemPropertiesChanged(Track*)),
+            this, SIGNAL(trackModified()));
+    connect(trackItem, SIGNAL(itemIntensityChanged(Track*,qreal)),
+            this, SIGNAL(trackIntensityChanged(Track*,qreal)));
 }
 
 void MultiTrackView::slotTrackLockFlagChanged(TrackItem *, bool)
@@ -946,12 +984,14 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         QAction *addAct = mmenu.addAction(tr("Add marker here…"));
         QAction *renAct = NULL;
         QAction *colAct = NULL;
+        QAction *cueAct = NULL;
         QAction *delAct = NULL;
         if (hit != UINT_MAX)
         {
             mmenu.addSeparator();
             renAct = mmenu.addAction(tr("Rename marker…"));
             colAct = mmenu.addAction(tr("Change colour…"));
+            cueAct = mmenu.addAction(tr("Link manual cue list…"));
             delAct = mmenu.addAction(tr("Delete marker"));
         }
         QAction *chosen = mmenu.exec(event->globalPos());
@@ -961,6 +1001,8 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
             emit markerEditRequested(hit);
         else if (chosen != NULL && chosen == colAct)
             emit markerColorRequested(hit);
+        else if (chosen != NULL && chosen == cueAct)
+            emit markerSetCueListRequested(hit);
         else if (chosen != NULL && chosen == delAct)
             emit markerDeleteRequested(hit);
         return;
@@ -1070,9 +1112,11 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
         qreal ex = getPositionFromTime(it.value().end);
         if (ex < sx + 4)
             ex = sx + 4; // keep zero-length markers visible
-        if (ex < rect.left() || sx > rect.right() || ex < TRACK_WIDTH)
+        // Clamp to the content area (right of the FROZEN header column, which
+        // floats at leftX..leftX+TRACK_WIDTH) so bands/lines never paint over it.
+        if (ex < rect.left() || sx > rect.right() || ex < leftX + TRACK_WIDTH)
             continue;
-        sx = qMax<qreal>(sx, TRACK_WIDTH);
+        sx = qMax<qreal>(sx, leftX + TRACK_WIDTH);
 
         QColor col = it.value().color.isValid() ? it.value().color : QColor(224, 168, 32);
 
@@ -1089,10 +1133,15 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
         fill.setAlpha(16);
         painter->fillRect(QRectF(sx, TRACKS_TOP, ex - sx, bottom - TRACKS_TOP), fill);
 
-        // Label clipped to the band, in a contrasting colour.
+        // Label clipped to the band, in a contrasting colour. A link glyph marks
+        // a section that has a manual GO cue list attached (the timecode↔manual
+        // seam), so the run-of-show is visible at a glance.
         painter->setPen(QPen(col.lightnessF() > 0.6 ? Qt::black : Qt::white, 1));
         QRectF textRect(sx + 4, laneTop + 1, (ex - sx) - 6, MARKER_LANE_HEIGHT - 2);
-        painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, it.value().label);
+        const bool linked = (it.value().cueListId != Function::invalidId());
+        const QString lbl = linked ? (QString("\xE2\x8F\xB5 ") + it.value().label)
+                                   : it.value().label;
+        painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, lbl);
     }
 }
 
@@ -1370,14 +1419,13 @@ void MultiTrackView::slotTrackDoubleClicked(TrackItem *track)
 
 void MultiTrackView::slotTrackSoloFlagChanged(TrackItem* track, bool solo)
 {
-    foreach (TrackItem *item, m_tracks)
-    {
-        if (item != track)
-            item->setFlags(false, solo);
-        Track *trk = item->getTrack();
-        if (trk != NULL)
-            trk->setMute(item->isMute());
-    }
+    // Model-backed solo (non-destructive): the runner silences any track that is
+    // neither soloed nor solo-safe — we no longer bake mute into the other
+    // tracks' saved state. Solos are additive (several may be soloed at once).
+    Track *trk = (track != NULL) ? track->getTrack() : NULL;
+    if (trk != NULL)
+        trk->setSolo(solo);
+    emit trackModified();
 }
 
 void MultiTrackView::slotTrackMuteFlagChanged(TrackItem* item, bool mute)
@@ -1389,7 +1437,37 @@ void MultiTrackView::slotTrackMuteFlagChanged(TrackItem* item, bool mute)
 
 void MultiTrackView::slotViewScrolled(int)
 {
-    //qDebug() << Q_FUNC_INFO << "Percentage: " << value;
+    pinLeftColumn();
+}
+
+void MultiTrackView::scrollContentsBy(int dx, int dy)
+{
+    QGraphicsView::scrollContentsBy(dx, dy);
+    // Keep the track-header column (and the zoom-slider corner + vertical
+    // divider) frozen at the left edge as the timeline scrolls horizontally.
+    pinLeftColumn();
+}
+
+void MultiTrackView::pinLeftColumn()
+{
+    // Scene-x at the viewport's left edge (identity transform → scroll offset).
+    const qreal x0 = mapToScene(QPoint(0, 0)).x();
+
+    foreach (TrackItem *t, m_tracks)
+    {
+        if (t == NULL)
+            continue;
+        t->setX(x0);              // freeze horizontally; vertical scroll unaffected
+        if (t->zValue() < TRACK_HEADER_Z)
+            t->setZValue(TRACK_HEADER_Z);
+    }
+    if (m_vdivider != NULL)
+    {
+        m_vdivider->setX(x0);     // divider rect is drawn at local TRACK_WIDTH-3
+        m_vdivider->setZValue(TRACK_HEADER_Z);
+    }
+    if (m_sliderProxy != NULL)
+        m_sliderProxy->setX(x0);
 }
 
 void MultiTrackView::slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *item)

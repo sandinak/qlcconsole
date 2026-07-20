@@ -147,6 +147,67 @@ private:
     bool m_isLocked;
 
     /*********************************************************************
+     * Solo / solo-safe (mute-exempt)
+     *********************************************************************/
+public:
+    /** Solo this track (model-backed so the runner honours it). When any track
+     *  is soloed, only soloed (and solo-safe) tracks output. */
+    void setSolo(bool solo);
+    bool isSolo() const;
+
+    /** Solo-safe / mute-exempt: solo and "mute others" never silence this track
+     *  (house lights, work light, a safety look). It can still be muted directly. */
+    void setSoloSafe(bool safe);
+    bool isSoloSafe() const;
+
+signals:
+    void soloChanged(bool solo);
+
+private:
+    bool m_isSolo = false;
+    bool m_soloSafe = false;
+
+    /*********************************************************************
+     * Hold-last (keep the last look across gaps)
+     *********************************************************************/
+public:
+    /** When true, the track holds its last cue's look (via the last-look holder)
+     *  when its content ends, instead of releasing to black — a "stays up
+     *  between numbers" track. Operate only. */
+    void setHoldLast(bool hold);
+    bool isHoldLast() const;
+
+private:
+    bool m_holdLast = false;
+
+    /*********************************************************************
+     * Priority / role (output arbitration)
+     *********************************************************************/
+public:
+    /** How this track's output arbitrates vs other tracks and the VC:
+     *  Background = low (a base wash yields to everything);
+     *  Normal = Auto (last-writer-wins, the default);
+     *  Override = high (an accent track wins LTP). */
+    enum Priority { Background = 0, Normal = 1, Override = 2 };
+    void setPriority(Priority p);
+    Priority priority() const;
+
+private:
+    Priority m_priority = Normal;
+
+    /*********************************************************************
+     * Intensity submaster (0..1 scales this track's dimmer output)
+     *********************************************************************/
+public:
+    /** Per-track intensity submaster (0.0..1.0). Scales the track's dimmer
+     *  output live, without editing cues — a fader per track. Default 1.0. */
+    void setIntensity(qreal fraction);
+    qreal intensity() const;
+
+private:
+    qreal m_intensity = 1.0;
+
+    /*********************************************************************
      * Colour
      *********************************************************************/
 public:

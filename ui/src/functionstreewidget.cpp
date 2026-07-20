@@ -862,9 +862,25 @@ void FunctionsTreeWidget::mousePressEvent(QMouseEvent *event)
     m_dragStartPosition = event->pos();
 }
 
+void FunctionsTreeWidget::startDrag(Qt::DropActions supportedActions)
+{
+    // External-drag consumers (Collection/Chaser/Show editors, the show
+    // timeline) place a block at the drop point. Qt's default drag pixmap is
+    // the whole rendered row with its hotspot at the grab point (often mid-row),
+    // so the block lands to the RIGHT of the ghost by the grab offset. Use our
+    // own small ghost pinned to the cursor (hotspot 0,0) instead.
+    if (m_externalDragMode)
+    {
+        startExternalDrag();
+        return;
+    }
+    QTreeWidget::startDrag(supportedActions);
+}
+
 void FunctionsTreeWidget::mouseMoveEvent(QMouseEvent *event)
 {
     // If external drag mode is enabled, let Qt handle the drag with our mimeData
+    // (which routes through our startDrag() override for a cursor-anchored ghost).
     if (m_externalDragMode)
     {
         QTreeWidget::mouseMoveEvent(event);
@@ -953,7 +969,8 @@ void FunctionsTreeWidget::startExternalDrag()
     QDrag *drag = new QDrag(this);
     drag->setMimeData(mimeData);
 
-    // Set a visual hint - use the first function's icon
+    // Set a visual hint - use the first function's icon, anchored at the cursor
+    // (hotspot at the pixmap's top-left) so the drop lands under the pointer.
     if (!m_draggedItems.isEmpty())
     {
         QTreeWidgetItem *firstItem = m_draggedItems.first();
@@ -961,6 +978,7 @@ void FunctionsTreeWidget::startExternalDrag()
         if (!icon.isNull())
             drag->setPixmap(icon.pixmap(32, 32));
     }
+    drag->setHotSpot(QPoint(0, 0));
 
     drag->exec(Qt::CopyAction);
 }

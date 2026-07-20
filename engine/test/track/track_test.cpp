@@ -175,8 +175,8 @@ void Track_Test::functions()
 
     // invalid ShowFunction has been removed
     QVERIFY(t.showFunctions().count() == 2);
-    // invalid color has been fixed
-    QVERIFY(sf2->color() == QColor(100, 100, 100));
+    // invalid color has been fixed (SceneType default; fork changed it to blue)
+    QVERIFY(sf2->color() == QColor(70, 110, 150));
     // check SceneID set from sequence
     //QVERIFY(t.getSceneID() == 890);
 

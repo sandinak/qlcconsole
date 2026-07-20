@@ -106,6 +106,10 @@ signals:
     void itemRequestNewTrack();
     void itemLockChanged(TrackItem *, bool locked);
     void itemColorChangeRequested(Track *);
+    /** A per-track flag (solo-safe / hold-last / priority) changed via the menu. */
+    void itemPropertiesChanged(Track *);
+    /** The intensity submaster bar was dragged (0..1). */
+    void itemIntensityChanged(Track *, qreal);
 
 private:
     QString m_name;
@@ -120,6 +124,9 @@ private:
     bool m_isSolo;
     QRectF *m_lockRegion;
     bool m_isLocked;
+    /** Draggable intensity-submaster bar region + drag state. */
+    QRectF *m_intensityRegion;
+    bool m_intensityDrag;
 
     QAction *m_moveUp;
     QAction *m_moveDown;

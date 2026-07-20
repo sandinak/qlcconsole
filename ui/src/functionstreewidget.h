@@ -202,6 +202,10 @@ signals:
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
+    /** In external-drag mode, use a small ghost anchored at the cursor (hotspot
+     *  0,0) so dropped items land under the pointer — Qt's default full-row
+     *  pixmap grabs at the press point and makes drops land offset to the right. */
+    void startDrag(Qt::DropActions supportedActions) override;
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dropEvent(QDropEvent *event) override;

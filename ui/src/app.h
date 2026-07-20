@@ -198,6 +198,8 @@ public slots:
     /** Arm/disarm global timecode-follow from the main toolbar. */
     void slotFollowTimecodeToggled(bool checked);
     void slotFollowTimecodeChanged(bool enabled);
+    void slotLastLookToggled(bool checked);
+    void slotClearLastLook();
     void slotControlPanic();
     void slotFadeAndStopAll();
     void slotRunningFunctionsChanged();
@@ -236,6 +238,9 @@ private:
     QAction* m_timelineSuspendAction;
     /** Global Follow-MTC toggle (moved out of the Show Manager toolbar). */
     QAction* m_followMtcAction;
+    /** Last-look persistence: toggle (enable) + momentary clear of a held look. */
+    QAction* m_lastLookAction;
+    QAction* m_clearLastLookAction;
     QAction* m_controlPanicAction;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;

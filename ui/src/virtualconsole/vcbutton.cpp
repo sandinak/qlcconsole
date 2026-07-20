@@ -75,6 +75,7 @@
 #include "apputil.h"
 #include "chaser.h"
 #include "doc.h"
+#include "lastlookeffect.h"
 #include "showmanager.h"
 
 const QSize VCButton::defaultSize(QSize(50, 50));
@@ -778,6 +779,8 @@ QString VCButton::actionToString(VCButton::Action action)
         return QString(KXMLQLCVCButtonActionSuspendTimeline);
     else if (action == FollowTimecode)
         return QString(KXMLQLCVCButtonActionFollowTimecode);
+    else if (action == ClearLastLook)
+        return QString(KXMLQLCVCButtonActionClearLastLook);
     else
         return QString(KXMLQLCVCButtonActionToggle);
 }
@@ -808,6 +811,8 @@ VCButton::Action VCButton::stringToAction(const QString& str)
         return SuspendTimeline;
     else if (str == KXMLQLCVCButtonActionFollowTimecode)
         return FollowTimecode;
+    else if (str == KXMLQLCVCButtonActionClearLastLook)
+        return ClearLastLook;
     else
         return Toggle;
 }
@@ -1624,6 +1629,13 @@ void VCButton::pressFunction()
             ShowManager::instance()->toggleFollowTimecode();
         else
             blink(150);
+    }
+    else if (m_action == ClearLastLook)
+    {
+        // Drop a stopped show's held last look — go dark on the held channels.
+        if (m_doc != NULL && m_doc->lastLook() != NULL)
+            m_doc->lastLook()->clear();
+        blink(120);
     }
 }
 

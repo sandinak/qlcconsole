@@ -51,6 +51,7 @@ class TimecodeSource;
 class CaptureManager;
 class ProgrammerFlasher;
 class ProgrammerController;
+class LastLookEffect;
 class EffectScriptRunner;
 
 /** @addtogroup engine Engine
@@ -580,9 +581,36 @@ public:
         QObject child of Doc (auto-deleted). */
     EffectScriptRunner *effectScriptRunner() const { return m_effectScriptRunner; }
 
+    /** Fork-owned "last-look persistence" holder: keeps a stopped show's final
+        look on the rig (Operate) instead of blacking out. QObject child of Doc
+        (auto-deleted). */
+    LastLookEffect *lastLook() const { return m_lastLook; }
+
+    /** True while last-look persistence is enabled (Operate only). Default on. */
+    bool lastLookEnabled() const { return m_lastLookEnabled; }
+    void setLastLookEnabled(bool enable);
+
+    /** All fixture IDs a function ultimately drives (recurses containers;
+     *  Scene/EFX/RGBMatrix are the fixture-bearing leaves). */
+    QList<quint32> functionFixtures(quint32 fid) const;
+
+    /** Snapshot the current pre-GM output of everything function @p fid drives
+     *  and install it as the held last look (so the rig doesn't blackout when
+     *  that function releases its faders). Must be called on the timer thread
+     *  with the tick's live @p universes. Caller decides whether to invoke. */
+    void captureLastLook(quint32 fid, const QList<Universe*> &universes,
+                         bool append = false) const;
+
 private:
     ProgrammerController *m_programmer = nullptr;
     EffectScriptRunner   *m_effectScriptRunner = nullptr;
+    LastLookEffect       *m_lastLook = nullptr;
+    bool                  m_lastLookEnabled = true;
+
+private slots:
+    /** Any new function starting replaces the held last look (whole-look
+        replace). Clears the hold. */
+    void slotClearLastLookOnStart(quint32 fid);
 
     /*********************************************************************
      * Fixture Instances

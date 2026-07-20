@@ -27,6 +27,7 @@
 #include <QMenu>
 
 #include "trackitem.h"
+#include "track.h"
 
 TrackItem::TrackItem(Track *track, int number)
     : m_number(number)
@@ -41,6 +42,7 @@ TrackItem::TrackItem(Track *track, int number)
     , m_baseY(0)
     , m_dragging(false)
     , m_onButtonRow(false)
+    , m_intensityDrag(false)
 {
     m_font = qApp->font();
     m_font.setBold(true);
@@ -54,6 +56,7 @@ TrackItem::TrackItem(Track *track, int number)
     {
         m_name = m_track->name();
         m_isMute = m_track->isMute();
+        m_isSolo = m_track->isSolo();
         m_isLocked = m_track->isLocked();
         connect(m_track, SIGNAL(changed(quint32)), this, SLOT(slotTrackChanged(quint32)));
     }
@@ -64,6 +67,8 @@ TrackItem::TrackItem(Track *track, int number)
     m_muteRegion = new QRectF(17.0, 10.0, 25.0, 16.0);
     m_soloRegion = new QRectF(45.0, 10.0, 25.0, 16.0);
     m_lockRegion = new QRectF(73.0, 10.0, 25.0, 16.0);
+    // Intensity submaster bar (drag horizontally), between the buttons and name.
+    m_intensityRegion = new QRectF(8.0, 30.0, TRACK_WIDTH - 20.0, 9.0);
 
     m_moveUp = new QAction(QIcon(":/up.png"), tr("Move up"), this);
     connect(m_moveUp, SIGNAL(triggered()),
@@ -138,10 +143,24 @@ void TrackItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     // there must NOT start a reorder.
     const QPoint p = event->pos().toPoint();
     m_onButtonRow = m_soloRegion->contains(p) || m_muteRegion->contains(p) ||
-                    m_lockRegion->contains(p);
+                    m_lockRegion->contains(p) || m_intensityRegion->contains(p);
     m_pressSceneY = event->scenePos().y();
     m_baseY = pos().y();
     m_dragging = false;
+
+    // Intensity submaster: grab the bar and drag to set the level.
+    if (m_intensityRegion->contains(event->pos()) && m_track != NULL)
+    {
+        m_intensityDrag = true;
+        const qreal lvl = qBound(qreal(0.0),
+            (event->pos().x() - m_intensityRegion->left()) / m_intensityRegion->width(),
+            qreal(1.0));
+        m_track->setIntensity(lvl);
+        update();
+        emit itemIntensityChanged(m_track, lvl);
+        emit itemClicked(this);
+        return;
+    }
 
     if (m_soloRegion->contains(p))
     {
@@ -166,6 +185,18 @@ void TrackItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 
 void TrackItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
+    // Dragging the intensity bar scales the submaster live.
+    if (m_intensityDrag && m_track != NULL)
+    {
+        const qreal lvl = qBound(qreal(0.0),
+            (event->pos().x() - m_intensityRegion->left()) / m_intensityRegion->width(),
+            qreal(1.0));
+        m_track->setIntensity(lvl);
+        update();
+        emit itemIntensityChanged(m_track, lvl);
+        return;
+    }
+
     // Vertical drag on the header body reorders the track. Give live feedback by
     // lifting the item with the cursor; the actual swap happens on release.
     if (m_onButtonRow || m_editing || (event->buttons() & Qt::LeftButton) == 0)
@@ -182,6 +213,12 @@ void TrackItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
 void TrackItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (m_intensityDrag)
+    {
+        m_intensityDrag = false;
+        event->accept();
+        return;
+    }
     if (m_dragging)
     {
         m_dragging = false;
@@ -209,12 +246,50 @@ void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
     menu.addAction(m_changeName);
     menu.addAction(m_color);
     menu.addSeparator();
+
+    // Per-track flags (act directly on the model; the view saves + repaints).
+    QAction *aSoloSafe = NULL, *aHoldLast = NULL;
+    QAction *aBg = NULL, *aNormal = NULL, *aOverride = NULL;
+    if (m_track != NULL)
+    {
+        aSoloSafe = menu.addAction(tr("Solo-safe (mute-exempt)"));
+        aSoloSafe->setCheckable(true);
+        aSoloSafe->setChecked(m_track->isSoloSafe());
+
+        aHoldLast = menu.addAction(tr("Hold last look (stays up between cues)"));
+        aHoldLast->setCheckable(true);
+        aHoldLast->setChecked(m_track->isHoldLast());
+
+        QMenu *prio = menu.addMenu(tr("Priority / role"));
+        aBg = prio->addAction(tr("Background (yields to all)"));
+        aNormal = prio->addAction(tr("Normal (last-writer wins)"));
+        aOverride = prio->addAction(tr("Override (wins LTP)"));
+        for (QAction *a : { aBg, aNormal, aOverride })
+            a->setCheckable(true);
+        aBg->setChecked(m_track->priority() == Track::Background);
+        aNormal->setChecked(m_track->priority() == Track::Normal);
+        aOverride->setChecked(m_track->priority() == Track::Override);
+        menu.addSeparator();
+    }
+
     if (m_number > 0)
         menu.addAction(m_moveUp);
     menu.addAction(m_moveDown);
     menu.addSeparator();
     menu.addAction(m_delete);
-    menu.exec(QCursor::pos());
+
+    QAction *chosen = menu.exec(QCursor::pos());
+    if (chosen != NULL && m_track != NULL)
+    {
+        if (chosen == aSoloSafe)        m_track->setSoloSafe(aSoloSafe->isChecked());
+        else if (chosen == aHoldLast)   m_track->setHoldLast(aHoldLast->isChecked());
+        else if (chosen == aBg)         m_track->setPriority(Track::Background);
+        else if (chosen == aNormal)     m_track->setPriority(Track::Normal);
+        else if (chosen == aOverride)   m_track->setPriority(Track::Override);
+        else return;
+        update();
+        emit itemPropertiesChanged(m_track);
+    }
 }
 
 void TrackItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
@@ -335,6 +410,26 @@ void TrackItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
         painter->setBrush(QBrush(QColor(129, 145, 160, 255)));
     painter->drawRoundedRect(m_lockRegion->toRect(), 3.0, 3.0);
     painter->drawText(81, 23, "L");
+
+    // Intensity submaster bar: a horizontal fader (drag to scale the track's
+    // dimmer output live). Full = 100%.
+    {
+        const qreal lvl = (m_track != NULL) ? m_track->intensity() : 1.0;
+        const QRectF bar = *m_intensityRegion;
+        painter->setPen(QPen(QColor(20, 20, 20, 200), 1));
+        painter->setBrush(QBrush(QColor(40, 46, 52)));
+        painter->drawRoundedRect(bar, 2.0, 2.0);
+        QRectF fill = bar.adjusted(1, 1, -1, -1);
+        fill.setWidth(fill.width() * lvl);
+        // Amber below 100% so a pulled-down track is obvious.
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QBrush(lvl >= 0.999 ? QColor(90, 164, 105) : QColor(224, 168, 32)));
+        painter->drawRoundedRect(fill, 2.0, 2.0);
+        painter->setPen(QPen(QColor(230, 230, 230, 180), 1));
+        QFont pf = m_btnFont; pf.setPixelSize(9); painter->setFont(pf);
+        painter->drawText(bar.adjusted(3, -1, -3, 0), Qt::AlignRight | Qt::AlignVCenter,
+                          QString::number(int(lvl * 100 + 0.5)) + "%");
+    }
 
     // draw bound Scene indicator
     if (m_track->getSceneID() != Function::invalidId())

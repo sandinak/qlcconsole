@@ -149,6 +149,11 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             m_doc, &Doc::setModified);
     connect(m_showview, SIGNAL(trackColorChangeRequested(Track*)),
             this, SLOT(slotTrackColorChangeRequested(Track*)));
+    connect(m_showview, &MultiTrackView::trackIntensityChanged,
+            this, [this](Track *t, qreal v) {
+                if (m_show != NULL && t != NULL)
+                    m_show->setTrackIntensity(t->id(), v);
+            });
 
     // split the multitrack view into two (left: tracks, right: function editors)
     m_vsplitter = new QSplitter(Qt::Horizontal, this);
@@ -187,6 +192,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotMarkerDeleteRequested(quint32)));
     connect(m_showview, SIGNAL(markerColorRequested(quint32)),
             this, SLOT(slotMarkerColorRequested(quint32)));
+    connect(m_showview, SIGNAL(markerSetCueListRequested(quint32)),
+            this, SLOT(slotMarkerSetCueList(quint32)));
     connect(m_showview, SIGNAL(markerRelabelRequested(quint32,QString)),
             this, SLOT(slotMarkerRelabel(quint32,QString)));
     connect(m_showview, SIGNAL(markerMovedRequested(quint32,quint32,quint32,QString,QColor)),
@@ -1937,8 +1944,32 @@ void ShowManager::slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 ne
     if (m_show == NULL || oldStart == UINT_MAX || label.isEmpty())
         return;
     pushUndoSnapshot();
+    // Carry the manual-cue-list link across the move (new start = new key).
+    const quint32 cue = m_show->markerCueList(oldStart);
     m_show->removeMarker(oldStart);
     m_show->setMarker(newStart, newEnd, label, color);
+    if (cue != Function::invalidId())
+        m_show->setMarkerCueList(newStart, cue);
+    m_showview->setMarkers(m_show->markers());
+    m_doc->setModified();
+}
+
+void ShowManager::slotMarkerSetCueList(quint32 time)
+{
+    if (m_show == NULL || time == UINT_MAX)
+        return;
+
+    // Link a Chaser (manual GO cue list) covering this off-clock section.
+    FunctionSelection fs(this, m_doc);
+    fs.setMultiSelection(false);
+    fs.setFilter(Function::ChaserType);
+    fs.disableFilters(Function::SceneType | Function::CollectionType | Function::EFXType |
+                      Function::RGBMatrixType | Function::AudioType | Function::VideoType |
+                      Function::ShowType | Function::ScriptType | Function::SequenceType);
+    if (fs.exec() != QDialog::Accepted || fs.selection().isEmpty())
+        return;
+    pushUndoSnapshot();
+    m_show->setMarkerCueList(time, fs.selection().first());
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
 }
@@ -2097,6 +2128,31 @@ void ShowManager::slotTimecodeRunningChanged(bool running)
         cursorMovedDuringPause = false;
         m_show->start(m_doc->masterTimer(), functionParent(), pos);
         m_playAction->setIcon(QIcon(":/player_pause.png"));
+    }
+    else if (running == false && m_show != NULL && m_show->timecodeFollow()
+             && m_show->isRunning())
+    {
+        // FREEZE (timecode stopped mid-show): if the section we're holding in has
+        // a linked manual cue list, ARM it — start it so its first cue is live and
+        // it becomes the current chaser (a mapped GO / APC step drives it). This
+        // turns the song→spoken handoff from "hunt for the right list" into "it's
+        // already up and ready". Fires once on the freeze edge; skips if the list
+        // is already running.
+        const quint32 offset = m_show->timecodeOffset();
+        const quint32 tc = m_doc->timecodeSource()->positionMs();
+        const quint32 posMs = (tc > offset) ? tc - offset : 0;
+        QMapIterator<quint32, ShowMarker> it(m_show->markers());
+        while (it.hasNext())
+        {
+            it.next();
+            if (posMs >= it.key() && posMs < it.value().end)
+            {
+                Chaser *mc = qobject_cast<Chaser*>(m_doc->function(it.value().cueListId));
+                if (mc != NULL && mc->isRunning() == false && showMayOutput())
+                    mc->start(m_doc->masterTimer(), functionParent());
+                break;
+            }
+        }
     }
 }
 
