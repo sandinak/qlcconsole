@@ -250,6 +250,29 @@ public:
     QHash<quint32, QHash<quint32, uchar>> programmerValues() const;
     void revertProgrammer();
 
+    /*********************************************************************
+     * Static MIDI triggers  (Control Map — Phase 0 prototype)
+     *
+     * Widget-independent binding of a MIDI note/CC directly to a Function
+     * (a scene / "look"): a press toggles the function start/stop, and the
+     * control's LED mirrors the function's running state via input feedback.
+     * No Virtual Console widget is involved. This is the deliberately-thin
+     * slice that validates the hardware loop (button semantics, feedback
+     * scaling, FunctionParent ownership) before the full Doc-owned
+     * ControlMap model lands — see CONTROLMAP.md.
+     *********************************************************************/
+public:
+    /** Enter learn mode: the next input event (value > 0) binds that
+     *  (universe, channel) as the toggle trigger for @p functionId.
+     *  Replaces any prior binding for that function or that control. */
+    void learnFunctionTrigger(quint32 functionId);
+    /** Drop the MIDI trigger bound to @p functionId (and clear its LED). */
+    void clearFunctionTrigger(quint32 functionId);
+    /** True if @p functionId currently has a MIDI trigger bound. */
+    bool hasFunctionTrigger(quint32 functionId) const;
+    /** Human-readable "Uni N Ch M" label for the binding, empty if unbound. */
+    QString functionTriggerLabel(quint32 functionId) const;
+
 signals:
     /** Emitted whenever the programmer selection changes. */
     void programmerSelectionChanged();
@@ -287,6 +310,10 @@ signals:
 
     /** Emitted when joystick sensitivity changes. */
     void joystickSensitivityChanged(float s);
+
+    /** Emitted when a static MIDI function-trigger is learned or cleared.
+     *  @p label is empty on clear. */
+    void functionTriggerChanged(quint32 functionId, const QString &label);
 
 private slots:
     /** Maintain m_runningScenes as functions start / stop. */
@@ -400,6 +427,17 @@ private:
     bool m_capturingTilt = false;
     bool m_controllerInputConnected = false;
 
+    // Static MIDI triggers (Control Map — Phase 0 prototype).
+    // GUI-thread only: learn/clear and slotControllerInputChanged (queued from
+    // the input plugin) all run on the GUI thread, so no lock is needed.
+    struct FunctionTrigger { quint32 universe; quint32 channel; quint32 functionId; };
+    QList<FunctionTrigger> m_functionTriggers;
+    /** started/stopped feedback connections per bound function, so a
+     *  clear/re-learn tears down exactly its own lambdas. */
+    QHash<quint32, QVector<QMetaObject::Connection>> m_triggerConns;
+    bool    m_capturingTrigger  = false;
+    quint32 m_captureTriggerFid = Function::invalidId();
+
     /** Show-mode safety lock. */
     bool m_showLocked = false;
     /** Scenes whose values have been mutated by the programmer
@@ -491,6 +529,12 @@ private:
 
     /** Put @p scene back the way @p snap found it. */
     void restoreSceneFromSnapshot(Scene *scene, const SceneSnapshot &snap);
+
+    /** Wire a bound function's started/stopped signals to LED feedback and
+     *  push its current running state to the control once. */
+    void hookTriggerFeedback(const FunctionTrigger &t);
+    /** Send LED/state feedback (255 = on, 0 = off) to a bound control. */
+    void sendTriggerFeedback(quint32 universe, quint32 channel, bool on);
 };
 
 #endif // PROGRAMMERCONTROLLER_H

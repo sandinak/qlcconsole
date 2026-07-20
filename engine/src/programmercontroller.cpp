@@ -24,6 +24,7 @@
 #include <climits>
 
 #include <QMutexLocker>
+#include <QVariant>
 
 #include "programmercontroller.h"
 
@@ -1503,6 +1504,28 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         return;
     }
 
+    // Static MIDI trigger learn: bind the next real press (value > 0) to the
+    // captured function. Ignore note-off / fader-zero so a release doesn't bind.
+    if (m_capturingTrigger && value > 0)
+    {
+        const quint32 fid = m_captureTriggerFid;
+        // One control drives one function: drop any prior binding for this
+        // function OR this control before adding the new one.
+        for (int i = m_functionTriggers.size() - 1; i >= 0; --i)
+        {
+            const FunctionTrigger &e = m_functionTriggers[i];
+            if (e.functionId == fid || (e.universe == universe && e.channel == channel))
+                m_functionTriggers.removeAt(i);
+        }
+        const FunctionTrigger t { universe, channel, fid };
+        m_functionTriggers.append(t);
+        m_capturingTrigger  = false;
+        m_captureTriggerFid = Function::invalidId();
+        hookTriggerFeedback(t);
+        emit functionTriggerChanged(fid, functionTriggerLabel(fid));
+        return;
+    }
+
     const float norm = value / 255.0f;
 
     // Trace every event so we can see incoming u/ch vs bound u/ch.
@@ -1539,6 +1562,28 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         return;
     }
 
+    /* Static MIDI trigger dispatch: a press toggles the bound function
+     * start/stop. Feedback follows via the function's started/stopped signals
+     * (wired in hookTriggerFeedback). Matches before button actions so a
+     * trigger control isn't also treated as a profile button action. */
+    if (value > 0)
+    {
+        for (const FunctionTrigger &t : m_functionTriggers)
+        {
+            if (t.universe != universe || t.channel != channel)
+                continue;
+            Function *f = m_doc->function(t.functionId);
+            if (f == nullptr)
+                continue;
+            const FunctionParent parent(FunctionParent::ManualVCWidget, t.functionId);
+            if (f->isRunning())
+                f->stop(parent);
+            else
+                f->start(m_doc->masterTimer(), parent);
+            return;
+        }
+    }
+
     /* Button action dispatch: only on press (value > 0) */
     if (value > 0 && m_doc->inputOutputMap())
     {
@@ -1550,6 +1595,86 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
                 emit buttonActionTriggered(action);
         }
     }
+}
+
+/*****************************************************************************
+ * Static MIDI triggers (Control Map — Phase 0 prototype)
+ *****************************************************************************/
+
+void ProgrammerController::learnFunctionTrigger(quint32 functionId)
+{
+    m_captureTriggerFid = functionId;
+    m_capturingTrigger  = true;
+    // Make sure we're subscribed to input even when no HID/joystick profile is
+    // assigned — otherwise the learn capture would never fire.
+    connectControllerInput();
+}
+
+void ProgrammerController::clearFunctionTrigger(quint32 functionId)
+{
+    for (int i = m_functionTriggers.size() - 1; i >= 0; --i)
+    {
+        if (m_functionTriggers[i].functionId != functionId)
+            continue;
+        sendTriggerFeedback(m_functionTriggers[i].universe,
+                            m_functionTriggers[i].channel, false);
+        m_functionTriggers.removeAt(i);
+    }
+    for (const QMetaObject::Connection &c : m_triggerConns.take(functionId))
+        disconnect(c);
+    emit functionTriggerChanged(functionId, QString());
+}
+
+bool ProgrammerController::hasFunctionTrigger(quint32 functionId) const
+{
+    for (const FunctionTrigger &t : m_functionTriggers)
+        if (t.functionId == functionId)
+            return true;
+    return false;
+}
+
+QString ProgrammerController::functionTriggerLabel(quint32 functionId) const
+{
+    for (const FunctionTrigger &t : m_functionTriggers)
+        if (t.functionId == functionId)
+            return QString("Uni %1 Ch %2").arg(t.universe + 1).arg(t.channel);
+    return QString();
+}
+
+void ProgrammerController::hookTriggerFeedback(const FunctionTrigger &t)
+{
+    Function *f = m_doc->function(t.functionId);
+    if (f == nullptr)
+        return;
+
+    // Re-learn on the same function: drop the previous feedback lambdas first so
+    // state changes don't fan out to a stale control.
+    for (const QMetaObject::Connection &c : m_triggerConns.take(t.functionId))
+        disconnect(c);
+
+    const quint32 u = t.universe, ch = t.channel;
+    // started/stopped are emitted on the MasterTimer (DMX) thread. `this` lives
+    // on the GUI thread, so AutoConnection queues these — sendFeedBack then runs
+    // on the GUI thread, matching how VC widgets push feedback.
+    QVector<QMetaObject::Connection> conns;
+    conns << connect(f, &Function::running, this,
+                     [this, u, ch](quint32) { sendTriggerFeedback(u, ch, true); });
+    // Function::stopped is overloaded (signal + bool stopped() const) — cast to
+    // the signal to disambiguate its address.
+    conns << connect(f, static_cast<void (Function::*)(quint32)>(&Function::stopped), this,
+                     [this, u, ch](quint32) { sendTriggerFeedback(u, ch, false); });
+    m_triggerConns.insert(t.functionId, conns);
+
+    sendTriggerFeedback(u, ch, f->isRunning());
+}
+
+void ProgrammerController::sendTriggerFeedback(quint32 universe, quint32 channel, bool on)
+{
+    if (m_doc->inputOutputMap() == nullptr)
+        return;
+    // 255 → MIDI 127 (Note On / CC max); 0 → Note Off / CC 0, per the MIDI
+    // plugin's feedbackToMidi() scaling.
+    m_doc->inputOutputMap()->sendFeedBack(universe, channel, on ? 255 : 0, QVariant());
 }
 
 void ProgrammerController::applyDesignJoystick()

@@ -1652,6 +1652,21 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
         menu.addSeparator();
     }
 
+    // Static MIDI trigger (Control Map — Phase 0): bind a controller button/pad
+    // straight to this function, no Virtual Console widget required.
+    QAction *aLearnMidi = NULL;
+    QAction *aClearMidi = NULL;
+    if (targetIds.size() == 1)
+    {
+        ProgrammerController *pc = m_doc->programmer();
+        const quint32 fid = targetIds.first();
+        aLearnMidi = menu.addAction(tr("Learn MIDI Trigger…"));
+        if (pc != NULL && pc->hasFunctionTrigger(fid))
+            aClearMidi = menu.addAction(tr("Clear MIDI Trigger (%1)")
+                                            .arg(pc->functionTriggerLabel(fid)));
+        menu.addSeparator();
+    }
+
     QAction *aScene  = menu.addAction(tr("New Scene"));
     QAction *aChaser = menu.addAction(tr("New Chaser"));
     QAction *aColl   = menu.addAction(tr("New Collection"));
@@ -1684,6 +1699,29 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     if (chosen == aRepair)
     {
         repairFunctionNames();
+        return;
+    }
+    if (chosen == aLearnMidi)
+    {
+        ProgrammerController *pc = m_doc->programmer();
+        if (pc != NULL && !targetIds.isEmpty())
+        {
+            const quint32 fid = targetIds.first();
+            pc->learnFunctionTrigger(fid);
+            Function *tf = m_doc->function(fid);
+            QMessageBox::information(this, tr("Learn MIDI Trigger"),
+                tr("Press a button or pad on your MIDI controller now to bind it "
+                   "to \"%1\".\n\nThe control will toggle the function and its LED "
+                   "will follow the run state.")
+                    .arg(tf != NULL ? tf->name() : tr("this function")));
+        }
+        return;
+    }
+    if (chosen == aClearMidi)
+    {
+        if (ProgrammerController *pc = m_doc->programmer())
+            if (!targetIds.isEmpty())
+                pc->clearFunctionTrigger(targetIds.first());
         return;
     }
 

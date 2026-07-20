@@ -9,6 +9,29 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### 2026-07-20 — Control Map: static MIDI mapping (no VC widget) *(Phase 0 BUILT — needs hardware test)*
+Bind hardware MIDI controls straight to actions with **no Virtual Console
+widget** taking up screen space. Full design + phased plan in `CONTROLMAP.md`.
+- [x] **Phase 0 — vertical slice** *(in `ProgrammerController`, in-memory, not
+      persisted; validates the hardware loop before locking the schema):*
+      `learnFunctionTrigger`/`clearFunctionTrigger`/`hasFunctionTrigger`/
+      `functionTriggerLabel`; learn captures the next press in
+      `slotControllerInputChanged`; a press toggles `Function::start/stop`;
+      LED follows `running`/`stopped` via `InputOutputMap::sendFeedBack`.
+      UI: right-click a function in the Programming-tab function tree →
+      **Learn / Clear MIDI Trigger**. *Needs a physical wing to confirm
+      press→toggle→LED end to end.*
+- [ ] **Phase 1** — `engine/src/controlmap.{h,cpp}` model owned by `Doc`,
+      `<ControlMap>` persistence, dedicated dispatcher + `FunctionParent`.
+- [ ] **Phase 2** — Control Map grid dialog (rows of `InputSelectionWidget`
+      + target picker + mode), reached off a menu — not a VC widget.
+- [ ] **Phase 3** — fader/intensity + submaster targets.
+- [ ] **Phase 4** — look/palette (via ProgrammerController) + global actions
+      (blackout / GM / blind / park / chaser next-prev / timeline transport).
+      *This is the old "MIDI-mapped look recall" backlog item.*
+- [ ] **Phase 5** — feedback polish (resend-on-connect, Note-Off semantics).
+- [ ] **Phase 6** — banking/pages *(decision-gated; reserve `page` in Phase 1)*.
+
 ### 2026-07-19 — Effect engine: sharing, authoring, EFX-parity scripts *(BUILT — needs GUI test)*
 Clarification: the scriptable effect engine was already built (EffectScriptRunner /
 EffectInstance / 30+ scripts / intent boundary / palette-fed looks / drawn-path
@@ -687,9 +710,9 @@ APC40 already give a GO cue stack, so the gaps are narrower than first thought.
 - [ ] **Dimmer curve per fixture / channel** — override the default linear
       dimmer response with square, cubic, etc. curves, per fixture or group.
       Stored in Scene or FixtureGroup; applied at writeDMX time.
-- [ ] **MIDI-mapped look recall** — bind a palette/look to a MIDI note or CC
-      so a controller can fire looks without Virtual Console. Would reuse the
-      InputProfileEditor + ProgrammerController.
+- [ ] **MIDI-mapped look recall** — *PROMOTED into the Control Map feature
+      (Phase 4); see "Control Map: static MIDI mapping" under In progress / next
+      and `CONTROLMAP.md`.*
 
 ---
 
