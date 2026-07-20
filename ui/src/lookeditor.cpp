@@ -2055,7 +2055,12 @@ void LookEditor::slotImportEffect()
         return;
     }
     QJsonObject obj = doc.object();
-    const QString base = obj["script"].toString();
+    // SANITIZE the script basename before it's ever used as a file name — a
+    // crafted .qxfx could otherwise set "script" to "../../foo" or an absolute
+    // path and make the install write escape the user scripts dir with
+    // attacker-controlled content. Mirror the New-script / savePreset sanitizing.
+    QString base = obj["script"].toString();
+    base.replace(QRegularExpression("[^A-Za-z0-9_-]"), "-");
     const QString name = obj["name"].toString();
     if (base.isEmpty() || name.isEmpty())
     {

@@ -128,6 +128,9 @@ private:
     QRectF *m_intensityRegion;
     bool m_intensityDrag;
 
+public:
+    ~TrackItem() override;
+
     QAction *m_moveUp;
     QAction *m_moveDown;
     QAction *m_changeName;

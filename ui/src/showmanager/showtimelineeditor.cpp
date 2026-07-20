@@ -120,6 +120,17 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
     QShortcut *del = new QShortcut(QKeySequence::Delete, this);
     connect(del, SIGNAL(activated()), this, SLOT(slotDeleteSelected()));
 
+    // The Show can be deleted (Functions tab) or the workspace cleared while this
+    // editor is still alive (it's torn down via deleteLater, which defers past the
+    // synchronous delete). Drop our pointer so the destructor never touches a
+    // freed Show. functionRemoved is emitted BEFORE the delete, so m_show is still
+    // valid here.
+    connect(m_doc, &Doc::functionRemoved, this, [this](quint32 fid) {
+        if (m_show != NULL && fid == m_show->id())
+            m_show = NULL;
+    });
+    connect(m_doc, &Doc::clearing, this, [this]() { m_show = NULL; });
+
     reload();
     updateTransportState();
 }
@@ -135,6 +146,20 @@ ShowTimelineEditor::~ShowTimelineEditor()
 FunctionParent ShowTimelineEditor::functionParent() const
 {
     return FunctionParent::master();
+}
+
+void ShowTimelineEditor::stopForStructuralEdit()
+{
+    // Editing the show's STRUCTURE (add/delete/move a track or clip) mutates the
+    // track/ShowFunction lists the runner walks every frame on the timer thread —
+    // deleting one mid-run is a use-after-free. Stop the runner and WAIT for it to
+    // finish this frame before we mutate, so there's no concurrent access.
+    if (m_show != NULL && m_show->isRunning())
+    {
+        m_show->stop(functionParent());
+        m_show->stopAndWait();
+        updateTransportState();
+    }
 }
 
 void ShowTimelineEditor::reload()
@@ -277,6 +302,7 @@ void ShowTimelineEditor::slotFunctionDropped(quint32 funcID, quint32 startTime,
 {
     if (m_show == NULL || m_doc->isShowLocked())
         return;
+    stopForStructuralEdit();
 
     if (track != NULL && track->isLocked())
         return;
@@ -344,6 +370,7 @@ void ShowTimelineEditor::slotNewTrackRequested()
 {
     if (m_show == NULL || m_doc->isShowLocked())
         return;
+    stopForStructuralEdit();
 
     Track *track = new Track();
     track->setName(tr("Track %1").arg(m_show->tracks().count() + 1));
@@ -360,6 +387,7 @@ void ShowTimelineEditor::slotDeleteSelected()
 {
     if (m_show == NULL || m_doc->isShowLocked())
         return;
+    stopForStructuralEdit();
 
     QList<ShowItem *> items = m_showview->selectedItems();
     if (items.isEmpty())
@@ -408,6 +436,7 @@ void ShowTimelineEditor::slotTrackDelete(Track *track)
 {
     if (track == NULL || m_show == NULL || m_doc->isShowLocked())
         return;
+    stopForStructuralEdit();
 
     QList<ShowFunction *> sfs = track->showFunctions();
     QString msg = tr("Delete track \"%1\"?").arg(track->name());
@@ -454,6 +483,7 @@ void ShowTimelineEditor::slotTrackMoved(Track *track, int direction)
 {
     if (m_show == NULL || direction == 0)
         return;
+    stopForStructuralEdit();
     const int step = direction > 0 ? 1 : -1;
     for (int i = 0; i < qAbs(direction); i++)
         m_show->moveTrack(track, step);

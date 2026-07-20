@@ -58,7 +58,10 @@ void ShowRunner_Test::initRunner()
 void ShowRunner_Test::intensity()
 {
     ShowRunner runner(m_doc, m_show->id());
+    // adjustIntensity() now QUEUES the change (thread-safe vs the timer thread);
+    // the timer thread applies it via applyPendingIntensity() in write().
     runner.adjustIntensity(0.5, m_track);
+    runner.applyPendingIntensity();
     QCOMPARE(runner.m_intensityMap[m_track->id()], 0.5);
 }
 

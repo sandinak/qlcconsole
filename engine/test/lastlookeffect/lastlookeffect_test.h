@@ -35,6 +35,9 @@ private slots:
     void clearReleases();
     void emptyHoldIsInactive();
     void releaseFixtureYieldsOnlyThatFixture();
+    void registrationCycle();
+    void addHoldAccumulates();
+    void concurrentStress();
 
 private:
     Doc* m_doc;

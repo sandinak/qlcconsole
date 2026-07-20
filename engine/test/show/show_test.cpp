@@ -371,6 +371,14 @@ void Show_Test::markers()
     QCOMPARE(s.markers().count(), 2);
     s.setMarker(30000, 45000, "Verse 1");
 
+    // Link a manual cue list to the "Verse 1" section (the timecode↔manual seam).
+    s.setMarkerCueList(30000, 777);
+    QCOMPARE(s.markerCueList(30000), quint32(777));
+    // The link must SURVIVE a relabel / recolour (setMarker preserves it).
+    s.setMarker(30000, 45000, "Verse One", QColor("#123456"));
+    QCOMPARE(s.markerCueList(30000), quint32(777));
+    QCOMPARE(s.markers().value(30000).label, QString("Verse One"));
+
     QBuffer buffer;
     buffer.open(QIODevice::WriteOnly | QIODevice::Text);
     QXmlStreamWriter xmlWriter(&buffer);
@@ -387,8 +395,11 @@ void Show_Test::markers()
     QCOMPARE(s2.markers().count(), 3);
     QCOMPARE(s2.markers().value(0).label, QString("Intro"));
     QCOMPARE(s2.markers().value(0).end, quint32(15000));
-    QCOMPARE(s2.markers().value(30000).label, QString("Verse 1"));
+    QCOMPARE(s2.markers().value(30000).label, QString("Verse One"));
     QCOMPARE(s2.markers().value(60000).end, quint32(90000));
+    // Cue-list link round-trips; an unlinked marker reads back as invalid.
+    QCOMPARE(s2.markerCueList(30000), quint32(777));
+    QCOMPARE(s2.markerCueList(0), Function::invalidId());
 }
 
 

@@ -38,6 +38,8 @@ private slots:
     void load();
     void functions();
     void save();
+    void newFlagsRoundTrip();
+    void garbageAttrsAreSafe();
 
 private:
     Doc *m_doc;

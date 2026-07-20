@@ -21,8 +21,32 @@ LastLookEffect::LastLookEffect(Doc *doc)
 
 LastLookEffect::~LastLookEffect()
 {
+    QMutexLocker regLock(&m_regMutex);
     if (m_registered && m_doc && m_doc->masterTimer())
         m_doc->masterTimer()->unregisterDMXSource(this);
+}
+
+// Reconcile the DMX-source registration to the CURRENT entries. Serialized by
+// m_regMutex so entries-vs-registered can't diverge under concurrent hold/clear
+// from the UI + timer threads; re-reads the live entry count so a stale decision
+// (computed before another thread mutated) can never win. Must NOT be called
+// while holding m_mutex — register/unregister take the MasterTimer's list mutex,
+// and writeDMX holds that then takes m_mutex, so nesting the other way deadlocks.
+void LastLookEffect::syncRegistration()
+{
+    QMutexLocker regLock(&m_regMutex);
+    bool want;
+    {
+        QMutexLocker locker(&m_mutex);
+        want = !m_entries.isEmpty();
+    }
+    if (want == m_registered || m_doc == NULL || m_doc->masterTimer() == NULL)
+        return;
+    if (want)
+        m_doc->masterTimer()->registerDMXSource(this);
+    else
+        m_doc->masterTimer()->unregisterDMXSource(this);
+    m_registered = want;
 }
 
 void LastLookEffect::hold(const QList<ChannelHold> &channels)
@@ -31,18 +55,7 @@ void LastLookEffect::hold(const QList<ChannelHold> &channels)
         QMutexLocker locker(&m_mutex);
         m_entries = channels;
     }
-
-    const bool hasWork = !channels.isEmpty();
-    if (hasWork && !m_registered && m_doc && m_doc->masterTimer())
-    {
-        m_doc->masterTimer()->registerDMXSource(this);
-        m_registered = true;
-    }
-    else if (!hasWork && m_registered && m_doc && m_doc->masterTimer())
-    {
-        m_doc->masterTimer()->unregisterDMXSource(this);
-        m_registered = false;
-    }
+    syncRegistration();
 }
 
 void LastLookEffect::addHold(const QList<ChannelHold> &channels)
@@ -65,12 +78,7 @@ void LastLookEffect::addHold(const QList<ChannelHold> &channels)
         merged.append(channels);
         m_entries = merged;
     }
-
-    if (!m_registered && m_doc && m_doc->masterTimer())
-    {
-        m_doc->masterTimer()->registerDMXSource(this);
-        m_registered = true;
-    }
+    syncRegistration();
 }
 
 void LastLookEffect::releaseFixtures(const QList<quint32> &fixtureIds)
@@ -79,7 +87,6 @@ void LastLookEffect::releaseFixtures(const QList<quint32> &fixtureIds)
         return;
 
     const QSet<quint32> drop = QSet<quint32>(fixtureIds.begin(), fixtureIds.end());
-    bool nowEmpty = false;
     {
         QMutexLocker locker(&m_mutex);
         if (m_entries.isEmpty())
@@ -92,14 +99,8 @@ void LastLookEffect::releaseFixtures(const QList<quint32> &fixtureIds)
         if (kept.size() == m_entries.size())
             return; // nothing dropped — the started cue touched no held fixture
         m_entries = kept;
-        nowEmpty = m_entries.isEmpty();
     }
-
-    if (nowEmpty && m_registered && m_doc && m_doc->masterTimer())
-    {
-        m_doc->masterTimer()->unregisterDMXSource(this);
-        m_registered = false;
-    }
+    syncRegistration();
 }
 
 void LastLookEffect::clear()

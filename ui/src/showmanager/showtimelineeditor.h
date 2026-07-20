@@ -57,6 +57,10 @@ private:
     /** FunctionParent used to start/stop the show from this editor. */
     FunctionParent functionParent() const;
 
+    /** Stop + wait for the runner before a structural edit, so the timer thread
+     *  isn't walking the track/ShowFunction lists we're about to mutate (UAF). */
+    void stopForStructuralEdit();
+
     /** Sync the play/stop action enabled state + play icon from show state. */
     void updateTransportState();
 

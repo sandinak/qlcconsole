@@ -134,6 +134,14 @@ bool TrackItem::isMute() const
     return m_isMute;
 }
 
+TrackItem::~TrackItem()
+{
+    delete m_muteRegion;
+    delete m_soloRegion;
+    delete m_lockRegion;
+    delete m_intensityRegion;
+}
+
 void TrackItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     m_isActive = true;
@@ -432,7 +440,7 @@ void TrackItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
     }
 
     // draw bound Scene indicator
-    if (m_track->getSceneID() != Function::invalidId())
+    if (m_track != NULL && m_track->getSceneID() != Function::invalidId())
         painter->drawPixmap(TRACK_WIDTH - 33, 5, 24, 24, QIcon(":/scene.png").pixmap(24, 24));
 
     // Track name (hidden while the inline editor is open).

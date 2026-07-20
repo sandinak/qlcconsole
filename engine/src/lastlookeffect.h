@@ -75,11 +75,17 @@ public:
     void writeDMX(MasterTimer *timer, QList<Universe*> universes) override;
 
 private:
+    /** Reconcile registration to the current entries (serialized; safe vs the
+     *  timer thread). Never call while holding m_mutex. */
+    void syncRegistration();
+
     Doc *m_doc;
 
     /** Guards m_entries (read on the DMX thread, written on stop/clear). */
     mutable QMutex m_mutex;
     QList<ChannelHold> m_entries;
+    /** Serializes registration reconciliation; guards m_registered. */
+    QMutex m_regMutex;
     bool m_registered = false;
 };
 

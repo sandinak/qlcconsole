@@ -191,7 +191,13 @@ public:
     void adjustIntensity(qreal fraction, Track *track);
 
 private:
-    QMap<quint32, qreal> m_intensityMap;
+    /** Apply queued track-intensity changes on the timer thread (drains
+     *  m_pendingIntensity). Called from write(). */
+    void applyPendingIntensity();
+
+    QMap<quint32, qreal> m_intensityMap;      //!< timer-thread owned
+    /** UI-thread intensity requests, guarded by m_tcMutex; drained in write(). */
+    QMap<quint32, qreal> m_pendingIntensity;
 
 };
 

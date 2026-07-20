@@ -228,4 +228,59 @@ void Track_Test::save()
 }
 
 
+void Track_Test::newFlagsRoundTrip()
+{
+    Track t(1);
+    t.setId(7);
+    t.setName("Movers");
+    t.setSolo(true);
+    t.setSoloSafe(true);
+    t.setHoldLast(true);
+    t.setPriority(Track::Override);
+    t.setIntensity(0.6);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    QVERIFY(t.saveXML(&w) == true);
+    w.setDevice(NULL);
+    buffer.close();
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader r(&buffer);
+    r.readNextStartElement();
+    Track t2(2);
+    QVERIFY(t2.loadXML(r) == true);
+    QCOMPARE(t2.isSolo(), true);
+    QCOMPARE(t2.isSoloSafe(), true);
+    QCOMPARE(t2.isHoldLast(), true);
+    QCOMPARE(t2.priority(), Track::Override);
+    QVERIFY(qAbs(t2.intensity() - 0.6) < 0.001);
+
+    // Defaults for a track with none of the new attrs (old file back-compat).
+    Track base(3);
+    QCOMPARE(base.isSolo(), false);
+    QCOMPARE(base.isSoloSafe(), false);
+    QCOMPARE(base.isHoldLast(), false);
+    QCOMPARE(base.priority(), Track::Normal);
+    QVERIFY(qAbs(base.intensity() - 1.0) < 0.001);
+}
+
+void Track_Test::garbageAttrsAreSafe()
+{
+    // Malformed Priority/Intensity must not corrupt state (clamp/default).
+    const char *xml =
+        "<Track ID=\"1\" Name=\"X\" isMute=\"0\" Priority=\"99\" Intensity=\"abc\">"
+        "</Track>";
+    QBuffer buffer;
+    buffer.setData(xml, int(strlen(xml)));
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader r(&buffer);
+    r.readNextStartElement();
+    Track t(9);
+    QVERIFY(t.loadXML(r) == true);
+    QCOMPARE(t.priority(), Track::Normal);        // out-of-range -> Normal
+    QVERIFY(qAbs(t.intensity() - 1.0) < 0.001);   // unparsable -> stays default 1.0
+}
+
 QTEST_APPLESS_MAIN(Track_Test)

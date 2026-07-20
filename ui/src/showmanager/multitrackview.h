@@ -55,6 +55,7 @@ class MultiTrackView final : public QGraphicsView
 
 public:
     MultiTrackView(QWidget *parent = 0);
+    ~MultiTrackView();
 
     /** Update tracks horizontal dividers when the view changes */
     void updateTracksDividers();

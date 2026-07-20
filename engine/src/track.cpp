@@ -377,7 +377,12 @@ bool Track::loadXML(QXmlStreamReader &root)
         m_priority = (p == Background) ? Background : (p == Override ? Override : Normal);
     }
     if (attrs.hasAttribute(KXMLQLCTrackIntensity))
-        m_intensity = qBound(0.0, attrs.value(KXMLQLCTrackIntensity).toString().toDouble(), 1.0);
+    {
+        bool iok = false;
+        const double iv = attrs.value(KXMLQLCTrackIntensity).toString().toDouble(&iok);
+        if (iok)   // garbage must not silently darken the track to 0
+            m_intensity = qBound(0.0, iv, 1.0);
+    }
 
     /* look for show functions */
     while (root.readNextStartElement())

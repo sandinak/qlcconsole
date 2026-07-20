@@ -16,6 +16,8 @@
 */
 
 #include <QtTest>
+#include <thread>
+#include <atomic>
 
 #include "lastlookeffect_test.h"
 #include "lastlookeffect.h"
@@ -126,6 +128,99 @@ void LastLookEffect_Test::releaseFixtureYieldsOnlyThatFixture()
     ll.hold(holds);
     ll.releaseFixtures(QList<quint32>() << 99);
     QVERIFY(ll.isActive() == true);
+}
+
+void LastLookEffect_Test::registrationCycle()
+{
+    // Registration must stay consistent with entries across hold/clear/re-hold
+    // (the m_registered race fix). isActive() reflects registration state.
+    LastLookEffect ll(m_doc);
+    QVERIFY(ll.isActive() == false);
+
+    ll.hold(QList<LastLookEffect::ChannelHold>() << LastLookEffect::ChannelHold{1, 0, 0, uchar(200)});
+    QVERIFY(ll.isActive() == true);
+
+    ll.clear();
+    QVERIFY(ll.isActive() == false);
+
+    // Re-hold after clear must re-register (the stuck-unregistered failure mode).
+    ll.addHold(QList<LastLookEffect::ChannelHold>() << LastLookEffect::ChannelHold{2, 0, 5, uchar(90)});
+    QVERIFY(ll.isActive() == true);
+
+    // Draining the last fixture leaves it inactive (not stuck-registered-empty).
+    ll.releaseFixtures(QList<quint32>() << 2);
+    QVERIFY(ll.isActive() == false);
+}
+
+void LastLookEffect_Test::addHoldAccumulates()
+{
+    LastLookEffect ll(m_doc);
+    ll.hold(QList<LastLookEffect::ChannelHold>() << LastLookEffect::ChannelHold{1, 0, 0, uchar(100)});
+    // A second track's look accumulates (hold-last across tracks), doesn't replace.
+    ll.addHold(QList<LastLookEffect::ChannelHold>() << LastLookEffect::ChannelHold{2, 0, 5, uchar(150)});
+
+    QList<Universe*> unis = m_doc->inputOutputMap()->universes();
+    unis.at(0)->reset(0, 6);
+    ll.writeDMX(nullptr, unis);
+    QCOMPARE(unis.at(0)->preGMValue(0), uchar(100));   // fixture 1 still held
+    QCOMPARE(unis.at(0)->preGMValue(5), uchar(150));   // fixture 2 added
+
+    // Re-adding fixture 1 with a new value REPLACES its old entry (fresh look).
+    ll.addHold(QList<LastLookEffect::ChannelHold>() << LastLookEffect::ChannelHold{1, 0, 0, uchar(40)});
+    unis.at(0)->reset(0, 6);
+    ll.writeDMX(nullptr, unis);
+    QCOMPARE(unis.at(0)->preGMValue(0), uchar(40));    // replaced, not duplicated
+    QCOMPARE(unis.at(0)->preGMValue(5), uchar(150));   // fixture 2 unchanged
+}
+
+void LastLookEffect_Test::concurrentStress()
+{
+    // Hammer the holder from three threads (mutate on two, writeDMX on a third)
+    // the way the real UI + timer threads do, to shake out the m_entries /
+    // m_registered synchronization. Passing = no crash / no data race abort;
+    // finishing with a consistent state is asserted at the end.
+    LastLookEffect ll(m_doc);
+    QList<Universe*> unis = m_doc->inputOutputMap()->universes();
+    QVERIFY(unis.size() >= 1);
+
+    std::atomic<bool> stop(false);
+    const int N = 20000;
+
+    std::thread t1([&]() {                       // "timer thread" captures + yields
+        for (int i = 0; i < N; i++)
+        {
+            QList<LastLookEffect::ChannelHold> h;
+            h.append({quint32(i % 8), 0, i % 400, uchar(i)});
+            ll.addHold(h);
+            ll.releaseFixtures(QList<quint32>() << quint32(i % 8));
+        }
+    });
+    std::thread t2([&]() {                        // "UI thread" clears / re-holds
+        for (int i = 0; i < N; i++)
+        {
+            QList<LastLookEffect::ChannelHold> h;
+            h.append({quint32(4 + (i % 4)), 0, 100 + (i % 200), uchar(i)});
+            ll.hold(h);
+            if (i % 3 == 0)
+                ll.clear();
+        }
+    });
+    std::thread t3([&]() {                        // universe thread ticks writeDMX
+        while (!stop.load())
+            ll.writeDMX(nullptr, unis);
+    });
+
+    t1.join();
+    t2.join();
+    stop.store(true);
+    t3.join();
+
+    // After all mutations settle, one more op must leave a consistent state.
+    ll.clear();
+    QVERIFY(ll.isActive() == false);
+    ll.addHold(QList<LastLookEffect::ChannelHold>() << LastLookEffect::ChannelHold{1, 0, 0, uchar(200)});
+    QVERIFY(ll.isActive() == true);   // registration recovered after the storm
+    ll.clear();
 }
 
 QTEST_MAIN(LastLookEffect_Test)

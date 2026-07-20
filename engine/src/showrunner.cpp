@@ -335,6 +335,14 @@ void ShowRunner::startChild(ShowFunction *sf, Track *track, quint32 offset)
     if (f == NULL)
         return;
 
+    // Never start a function that's already in the running queue. Without this,
+    // enforceLiveMuteSolo() (un-mute path) and the Phase-1 start loop can both
+    // start the same cue in one frame (e.g. after a suspend/resume that re-seeks
+    // and re-establishes the index), doubling it in the queue + double-releasing.
+    for (int i = 0; i < m_runningQueue.count(); i++)
+        if (m_runningQueue.at(i).first == f)
+            return;
+
     int intOverrideId = f->requestAttributeOverride(Function::Intensity,
                                                     m_intensityMap.value(track->id(), 1.0));
     sf->setIntensityOverrideId(intOverrideId);
@@ -577,6 +585,9 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
             return;
     }
 
+    // Apply any queued track-intensity submaster changes (from the UI thread).
+    applyPendingIntensity();
+
     // Live mute/solo/solo-safe: stop/start only the tracks whose silence changed
     // since last frame, so toggling them mid-run takes effect immediately. Not
     // while suspended (the VC owns the rig then). Also refreshes m_lastSilent,
@@ -798,21 +809,38 @@ void ShowRunner::adjustIntensity(qreal fraction, Track *track)
 {
     if (track == NULL)
         return;
+    // Called from the UI thread (track submaster fader, Show::adjustAttribute)
+    // AND the timer thread (preRun). Never touch m_intensityMap / m_runningQueue
+    // here — they belong to the timer thread and it mutates them every frame.
+    // Record the request; applyPendingIntensity() applies it on the timer thread.
+    QMutexLocker locker(&m_tcMutex);
+    m_pendingIntensity[track->id()] = fraction;
+}
 
-    qDebug() << Q_FUNC_INFO << "Track ID: " << track->id() << ", val:" << fraction;
-    m_intensityMap[track->id()] = fraction;
-
-    foreach (ShowFunction *sf, track->showFunctions())
+void ShowRunner::applyPendingIntensity()
+{
+    QMap<quint32, qreal> pending;
     {
-        Function *f = m_doc->function(sf->functionID());
-        if (f == NULL)
-            continue;
+        QMutexLocker locker(&m_tcMutex);
+        if (m_pendingIntensity.isEmpty())
+            return;
+        pending.swap(m_pendingIntensity);
+    }
 
-        for (int i = 0; i < m_runningQueue.count(); i++)
+    for (auto it = pending.constBegin(); it != pending.constEnd(); ++it)
+    {
+        m_intensityMap[it.key()] = it.value();
+        Track *track = (m_show != NULL) ? m_show->track(it.key()) : NULL;
+        if (track == NULL)
+            continue;
+        foreach (ShowFunction *sf, track->showFunctions())
         {
-            Function *rf = m_runningQueue.at(i).first;
-            if (f == rf)
-                f->adjustAttribute(fraction, sf->intensityOverrideId());
+            Function *f = m_doc->function(sf->functionID());
+            if (f == NULL)
+                continue;
+            for (int i = 0; i < m_runningQueue.count(); i++)
+                if (m_runningQueue.at(i).first == f)
+                    f->adjustAttribute(it.value(), sf->intensityOverrideId());
         }
     }
 }

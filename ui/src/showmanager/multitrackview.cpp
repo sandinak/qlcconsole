@@ -229,18 +229,38 @@ void MultiTrackView::setCompact(bool compact)
 
 void MultiTrackView::resetView()
 {
+    // removeItem() hands ownership back to us, so DELETE the items (they are
+    // re-created on the next populate). Without this every timeline rebuild
+    // leaked its TrackItems/ShowItems — invisible in stock (one persistent view)
+    // but the fork rebuilds a fresh view per Programming-tab Show open + on every
+    // edit (reload() -> resetView()).
     for (int t = 0; t < m_tracks.count(); t++)
+    {
         m_scene->removeItem(m_tracks.at(t));
+        delete m_tracks.at(t);
+    }
     m_tracks.clear();
 
     for (int i = 0; i < m_items.count(); i++)
+    {
         m_scene->removeItem(m_items.at(i));
+        delete m_items.at(i);
+    }
     m_items.clear();
 
     rewindCursor();
     this->horizontalScrollBar()->setSliderPosition(0);
     this->verticalScrollBar()->setSliderPosition(0);
     m_scene->update();
+}
+
+MultiTrackView::~MultiTrackView()
+{
+    // QGraphicsView does not own an unparented scene — delete it (which deletes
+    // the header/cursor/divider items still in it). Without this, each embedded
+    // ShowTimelineEditor leaked its whole scene on teardown.
+    delete m_scene;
+    m_scene = NULL;
 }
 
 void MultiTrackView::addTrack(Track *track)
