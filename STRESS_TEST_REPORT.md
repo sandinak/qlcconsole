@@ -19,7 +19,7 @@ Branch `programmer-mode`, commit `278f9b937` (session work) + follow-up stress f
 
 | Area | Method | Result |
 |---|---|---|
-| Full engine suite (59 test binaries) | build + run all | **0 crashes**; 35 run-and-pass, 24 can't run (see note) |
+| Full engine suite (59 test binaries) | build + run all | **0 crashes**; **51 pass, 8 fail** (was 35/24 before the resource-path fix below) |
 | My touched suites | targeted run | track 10/10 · show 11/11 · showrunner 6/6 · lastlookeffect 9/9 · showfunction 5/5 · universe 26/26 · function 36/36 · genericdmxsource 4/4 · collection 16/16 · scenevalue 9/9 |
 | Timer-thread engine code (last-look, live mute/solo, ShowRunner) | 3× parallel adversarial code review | 9 findings (§2) |
 | Programming-tab undo + UI memory safety | adversarial review | verified safe (§2) |
@@ -28,13 +28,20 @@ Branch `programmer-mode`, commit `278f9b937` (session work) + follow-up stress f
 | App startup + workspace load/teardown | headless (offscreen) run on a COPY | no crash markers |
 | Compiler warnings on all changed files | -Wall build scan | none new (2 pre-existing benign) |
 
-**Note on the 24 "failing" suites:** every one fails at `initTestCase()` on
-`fixtureDefCache()->loadMap(dir) == false` (or an empty rgbscripts/i18n dir). That's
-the compile-time `INTERNAL_FIXTUREDIR` pointing at an install path absent in a dev
-build — it hits **stock, unmodified** suites (chaser/scene/sequence/efx/doc/…)
-identically and is an environment limitation, **not a regression**. The count and set
-are byte-identical before and after my fixes. Suites that don't need fixture defs (and
-exercise my code) all pass.
+**Test-harness fix (2026-07-20):** the fixture-dependent suites were aborting at
+`initTestCase()` on `fixtureDefCache()->loadMap()` because `resource_paths.h` used
+relative paths that resolve into the empty `build/resources/` dir in an out-of-tree
+CMake build. Added a `QLC_TEST_RESOURCE_ROOT` compile definition (absolute source
+`resources/` path). Result: **35→51 passing**. The show-engine-relevant suites now
+actually run against real fixtures and all pass: **chaser 23/23, scene 20/20, efx
+50/50, sequence, collection 16/16, fixture, fixturegroup, fadechannel, genericfader,
+mastertimer 12/12, rgbmatrix 9/9, function 36/36** — real coverage of the code my
+ShowRunner/Show/Track changes touch. The remaining 8 failures need genuinely different
+artifacts (built I/O plugins for inputoutputmap/inputpatch/outputpatch; installed `.qm`
+for qlci18n; test-specific data for qlcfile/qlcfixturedefcache; one installed-scripts
+subtest in rgbscript) — none related to this work. (`mastertimer` also appears in the
+harness list but is a timing-sensitive real-timer-thread test that passes 12/12
+standalone; it only flakes under the harness's parallel build+run load.)
 
 ---
 
