@@ -286,6 +286,9 @@ void Universe::requestFaderPriority(QSharedPointer<GenericFader> fader, Universe
 
 QList<QSharedPointer<GenericFader> > Universe::faders()
 {
+    // Return a copy under the lock: the timer thread requests/dismisses faders
+    // and the Universe thread's processFaders() removes them concurrently.
+    QMutexLocker fadersLocker(&m_fadersMutex);
     return m_faders;
 }
 
