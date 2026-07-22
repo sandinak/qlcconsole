@@ -525,8 +525,12 @@ protected:
     void writeDMXParameter(MasterTimer *timer, QList<Universe*> universes);
 
 private:
-    /** Map used to lookup a GenericFader instance for a Universe ID */
+    /** Map used to lookup a GenericFader instance for a Universe ID.
+     *  Structurally mutated by writeDMXLevel/writeDMXParameter on the MasterTimer
+     *  thread and read/torn-down on the GUI thread (adjustIntensity, reset,
+     *  mode change) — guard every access with m_fadersMapMutex. */
     QMap<quint32, QSharedPointer<GenericFader> > m_fadersMap;
+    QMutex m_fadersMapMutex;
 
     /*********************************************************************
      * Top label

@@ -51,7 +51,8 @@ public:
     /** Start the runner */
     void start();
 
-    /** If running, pauses the runner and all the current running functions. */
+    /** If running, pauses the runner and all the current running functions.
+     *  Thread-safe: records a request applied on the timer thread in write(). */
     void setPause(bool enable);
 
     /** Stop the runner */
@@ -88,8 +89,13 @@ public:
     bool isSuspended() const;
 
 private:
+    /** Walk m_runningQueue applying pause/resume. Timer-thread only (write()). */
+    void applyPauseToChildren(bool enable);
+
     bool m_suspended;        // effective state, owned by the timer thread
     bool m_suspendRequest;   // requested state, guarded by m_tcMutex
+    bool m_pausePending;     // GUI-thread pause request, guarded by m_tcMutex
+    bool m_pausePendingValue;// requested pause state, guarded by m_tcMutex
     bool m_tcHolding;        // TC stopped while following → children paused (fades freeze)
 
 private:

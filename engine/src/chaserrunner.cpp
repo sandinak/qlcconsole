@@ -139,11 +139,16 @@ uint ChaserRunner::stepFadeIn(int stepIdx) const
                 speed = m_chaser->fadeInSpeed();
             break;
             case Chaser::PerStep:
-                // Each step specifies its own fade in speed
-                if (stepIdx >= 0 && stepIdx < m_chaser->stepsCount())
-                    speed = m_chaser->steps().at(stepIdx).fadeIn;
+            {
+                // Each step specifies its own fade in speed. Take a single
+                // snapshot: stepsCount() then steps().at() are separately locked,
+                // so the GUI thread could shrink the list between them (crash).
+                const QList<ChaserStep> steps = m_chaser->steps();
+                if (stepIdx >= 0 && stepIdx < steps.count())
+                    speed = steps.at(stepIdx).fadeIn;
                 else
                     speed = Function::defaultSpeed();
+            }
             break;
             default:
             case Chaser::Default:
@@ -175,11 +180,15 @@ uint ChaserRunner::stepFadeOut(int stepIdx) const
                 speed = m_chaser->fadeOutSpeed();
             break;
             case Chaser::PerStep:
-                // Each step specifies its own fade out speed
-                if (stepIdx >= 0 && stepIdx < m_chaser->stepsCount())
-                    speed = m_chaser->steps().at(stepIdx).fadeOut;
+            {
+                // Each step specifies its own fade out speed. Single snapshot to
+                // avoid a TOCTOU between stepsCount() and steps().at().
+                const QList<ChaserStep> steps = m_chaser->steps();
+                if (stepIdx >= 0 && stepIdx < steps.count())
+                    speed = steps.at(stepIdx).fadeOut;
                 else
                     speed = Function::defaultSpeed();
+            }
             break;
             default:
             case Chaser::Default:
@@ -213,11 +222,15 @@ uint ChaserRunner::stepDuration(int stepIdx) const
                 speed = m_chaser->duration();
             break;
             case Chaser::PerStep:
-                // Each step specifies its own duration
-                if (stepIdx >= 0 && stepIdx < m_chaser->stepsCount())
-                    speed = m_chaser->steps().at(stepIdx).duration;
+            {
+                // Each step specifies its own duration. Single snapshot to avoid a
+                // TOCTOU between stepsCount() and steps().at().
+                const QList<ChaserStep> steps = m_chaser->steps();
+                if (stepIdx >= 0 && stepIdx < steps.count())
+                    speed = steps.at(stepIdx).duration;
                 else
                     speed = m_chaser->duration();
+            }
             break;
         }
     }
@@ -482,13 +495,19 @@ void ChaserRunner::clearRunningList()
 void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity, qreal sIntensity,
                                 int fadeControl, quint32 elapsed)
 {
-    if (m_chaser == NULL || m_chaser->stepsCount() == 0)
+    if (m_chaser == NULL)
         return;
 
-    if (index < 0 || index >= m_chaser->stepsCount())
+    // Single snapshot of the step list — bound-check and index against the SAME
+    // copy so the GUI thread cannot shrink it between the check and the .at().
+    const QList<ChaserStep> steps = m_chaser->steps();
+    if (steps.isEmpty())
+        return;
+
+    if (index < 0 || index >= steps.count())
         index = 0; // fallback to the first step
 
-    ChaserStep step(m_chaser->steps().at(index));
+    ChaserStep step(steps.at(index));
     Function *func = m_doc->function(step.fid);
     if (func == NULL)
         return;

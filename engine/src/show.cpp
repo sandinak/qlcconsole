@@ -584,6 +584,7 @@ void Show::preRun(MasterTimer* timer)
 void Show::setTimecodeFollow(bool enable)
 {
     m_timecodeFollow = enable;
+    QMutexLocker rlock(&m_runnerMutex);
     if (m_runner != NULL)
         m_runner->setTimecodeFollow(enable);
 }
@@ -595,6 +596,9 @@ bool Show::timecodeFollow() const
 
 void Show::setExternalTime(quint32 ms)
 {
+    // Fires on every MTC frame from the GUI thread; the timer thread deletes
+    // m_runner in postRun. Without the lock, a show-stop mid-timecode is a UAF.
+    QMutexLocker rlock(&m_runnerMutex);
     if (m_runner != NULL)
         m_runner->setExternalTime(ms);
 }
@@ -603,12 +607,14 @@ void Show::setTimelineSuspended(bool enable)
 {
     // Suspend is a runtime-only takeover state; it is meaningful only while the
     // show is running, so there is nothing to remember when the runner is gone.
+    QMutexLocker rlock(&m_runnerMutex);
     if (m_runner != NULL)
         m_runner->setSuspended(enable);
 }
 
 bool Show::isTimelineSuspended() const
 {
+    QMutexLocker rlock(&m_runnerMutex);
     return m_runner != NULL && m_runner->isSuspended();
 }
 
@@ -667,8 +673,11 @@ QMap<quint32, ShowMarker> Show::markers() const
 
 void Show::setPause(bool enable)
 {
-    if (m_runner != NULL)
-        m_runner->setPause(enable);
+    {
+        QMutexLocker rlock(&m_runnerMutex);
+        if (m_runner != NULL)
+            m_runner->setPause(enable);
+    }
     Function::setPause(enable);
 }
 

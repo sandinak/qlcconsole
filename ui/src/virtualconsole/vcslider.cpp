@@ -222,7 +222,9 @@ VCSlider::~VCSlider()
        design mode must unregister the slider. */
     m_doc->masterTimer()->unregisterDMXSource(this);
 
-    // request to delete all the active faders
+    // request to delete all the active faders (unregisterDMXSource above already
+    // serialised against the in-flight tick; lock for consistency)
+    QMutexLocker fLocker(&m_fadersMapMutex);
     foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
     {
         if (!fader.isNull())
@@ -370,7 +372,9 @@ void VCSlider::slotModeChanged(Doc::Mode mode)
         if (needsDMXSource)
         {
             m_doc->masterTimer()->unregisterDMXSource(this);
-            // request to delete all the active faders
+            // request to delete all the active faders (unregisterDMXSource above
+            // already serialised against the in-flight tick; lock for consistency)
+            QMutexLocker fLocker(&m_fadersMapMutex);
             foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
             {
                 if (!fader.isNull())
@@ -1107,8 +1111,14 @@ void VCSlider::slotResetButtonClicked()
     m_resetButton->setStyleSheet(QString("QToolButton{ background: %1; }")
                                  .arg(m_slider->palette().window().color().name()));
 
-    // request to delete all the active fader channels
-    foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+    // request to delete all the active fader channels. Snapshot under the lock:
+    // the MasterTimer thread may be inserting into m_fadersMap concurrently.
+    QList<QSharedPointer<GenericFader> > faders;
+    {
+        QMutexLocker fLocker(&m_fadersMapMutex);
+        faders = m_fadersMap.values();
+    }
+    foreach (QSharedPointer<GenericFader> fader, faders)
     {
         if (!fader.isNull())
             fader->removeAll();
@@ -1435,18 +1445,24 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
 
             quint32 universe = fxi->universe();
 
-            QSharedPointer<GenericFader> fader = m_fadersMap.value(universe, QSharedPointer<GenericFader>());
-            if (fader.isNull())
+            // Guard only the map lookup/insert; the fader QSharedPointer keeps
+            // the entry alive for the per-channel work below without the lock.
+            QSharedPointer<GenericFader> fader;
             {
-                fader = universes[universe]->requestFader(m_monitorEnabled ? Universe::Override : Universe::Auto);
-                fader->adjustIntensity(intensity());
-                m_fadersMap[universe] = fader;
-                if (m_monitorEnabled)
+                QMutexLocker fLocker(&m_fadersMapMutex);
+                fader = m_fadersMap.value(universe, QSharedPointer<GenericFader>());
+                if (fader.isNull())
                 {
-                    qDebug() << "VC slider monitor enabled";
-                    fader->setMonitoring(true);
-                    connect(fader.data(), SIGNAL(preWriteData(quint32,QByteArray)),
-                            this, SLOT(slotUniverseWritten(quint32,QByteArray)));
+                    fader = universes[universe]->requestFader(m_monitorEnabled ? Universe::Override : Universe::Auto);
+                    fader->adjustIntensity(intensity());
+                    m_fadersMap[universe] = fader;
+                    if (m_monitorEnabled)
+                    {
+                        qDebug() << "VC slider monitor enabled";
+                        fader->setMonitoring(true);
+                        connect(fader.data(), SIGNAL(preWriteData(quint32,QByteArray)),
+                                this, SLOT(slotUniverseWritten(quint32,QByteArray)));
+                    }
                 }
             }
 
@@ -1613,13 +1629,16 @@ void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes
         if (universe >= (quint32)universes.size())
             return;
 
-        QSharedPointer<GenericFader> fader =
-            m_fadersMap.value(universe, QSharedPointer<GenericFader>());
-        if (fader.isNull())
+        QSharedPointer<GenericFader> fader;
         {
-            fader = universes[universe]->requestFader();
-            fader->adjustIntensity(intensity());
-            m_fadersMap[universe] = fader;
+            QMutexLocker fLocker(&m_fadersMapMutex);
+            fader = m_fadersMap.value(universe, QSharedPointer<GenericFader>());
+            if (fader.isNull())
+            {
+                fader = universes[universe]->requestFader();
+                fader->adjustIntensity(intensity());
+                m_fadersMap[universe] = fader;
+            }
         }
 
         FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe],
@@ -2090,7 +2109,14 @@ void VCSlider::adjustIntensity(qreal val)
     }
     else if (sliderMode() == Level)
     {
-        foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+        // Snapshot under the lock: writeDMXLevel/writeDMXParameter insert into
+        // m_fadersMap on the MasterTimer thread while this runs on the GUI thread.
+        QList<QSharedPointer<GenericFader> > faders;
+        {
+            QMutexLocker fLocker(&m_fadersMapMutex);
+            faders = m_fadersMap.values();
+        }
+        foreach (QSharedPointer<GenericFader> fader, faders)
         {
             if (!fader.isNull())
                 fader->adjustIntensity(val);

@@ -285,10 +285,11 @@ signals:
 protected:
     ShowRunner *m_runner;
     /** Guards m_runner's lifetime: the UI thread (setTrackIntensity /
-     *  adjustAttribute) reads it while the timer thread creates/deletes it in
-     *  preRun/postRun. write() shares the timer thread with pre/postRun so it
-     *  needs no lock. */
-    QMutex m_runnerMutex;
+     *  adjustAttribute / setExternalTime / setPause / setTimecodeFollow /
+     *  setTimelineSuspended) reads it while the timer thread creates/deletes it
+     *  in preRun/postRun. write() shares the timer thread with pre/postRun so it
+     *  needs no lock. mutable: const isTimelineSuspended() must lock it too. */
+    mutable QMutex m_runnerMutex;
     /** Number of currently running children */
     QSet <quint32> m_runningChildren;
     /** Whether this show follows an external timecode (persisted) */

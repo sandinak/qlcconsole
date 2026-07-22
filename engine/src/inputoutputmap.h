@@ -120,6 +120,14 @@ public:
      */
     bool blackout() const;
 
+private:
+    /** Apply blackout to every universe and push output. The caller MUST hold
+     *  m_universeMutex (or otherwise be serialised against the MasterTimer tick).
+     *  Returns true if the state changed. Does not emit. */
+    bool applyBlackout(bool blackout);
+
+public:
+
     /**
      * Fork "Blind" support. Inhibits physical output on every universe (the
      * output plugins receive nothing) while leaving universeWritten() intact,

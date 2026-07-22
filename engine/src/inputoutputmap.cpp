@@ -82,16 +82,17 @@ bool InputOutputMap::toggleBlackout()
     return m_blackout;
 }
 
-bool InputOutputMap::setBlackout(bool blackout)
+bool InputOutputMap::applyBlackout(bool blackout)
 {
-    /* Don't do blackout twice */
+    // Iterates m_universeArray and pushes output. The CALLER must hold
+    // m_universeMutex (or otherwise be serialised against the MasterTimer tick),
+    // so we never call dumpOutput() on a universe concurrently with the tick and
+    // never read m_universeArray while the GUI restructures it.
     if (m_blackout == blackout)
         return false;
 
     m_blackout = blackout;
 
-    // blackout is an atomic setting, so it's safe to do it
-    // without mutex locking
     foreach (Universe *universe, m_universeArray)
     {
         for (int i = 0; i < universe->outputPatchesCount(); i++)
@@ -105,15 +106,37 @@ bool InputOutputMap::setBlackout(bool blackout)
         universe->dumpOutput(postGM, true);
     }
 
-    emit blackoutChanged(m_blackout);
-
     return true;
+}
+
+bool InputOutputMap::setBlackout(bool blackout)
+{
+    // GUI entry (blackout button / menu): the caller does NOT hold
+    // m_universeMutex, so take it here to serialise with the MasterTimer tick.
+    bool changed;
+    {
+        QMutexLocker locker(&m_universeMutex);
+        changed = applyBlackout(blackout);
+    }
+
+    if (changed)
+        emit blackoutChanged(m_blackout);
+
+    return changed;
 }
 
 void InputOutputMap::requestBlackout(BlackoutRequest blackout)
 {
-    if (blackout != BlackoutRequestNone)
-        setBlackout(blackout == BlackoutRequestOn ? true : false);
+    if (blackout == BlackoutRequestNone)
+        return;
+
+    // Called from a script command during Function::write(), i.e. on the
+    // MasterTimer thread while the tick already holds m_universeMutex (via
+    // claimUniverses). The mutex is non-recursive, so apply WITHOUT re-locking.
+    bool changed = applyBlackout(blackout == BlackoutRequestOn);
+
+    if (changed)
+        emit blackoutChanged(m_blackout);
 }
 
 bool InputOutputMap::blackout() const
@@ -128,16 +151,22 @@ bool InputOutputMap::setOutputInhibited(bool inhibit)
 
     m_outputInhibited = inhibit;
 
-    // Atomic bool per universe, same as blackout; no mutex needed.
-    foreach (Universe *universe, m_universeArray)
+    // GUI entry only: take m_universeMutex to serialise the universe iteration
+    // and the dumpOutput() calls with the MasterTimer tick (which holds the same
+    // lock via claimUniverses), so we never touch a universe's output or the
+    // array concurrently with the tick / a structural change.
     {
-        universe->setInhibitOutput(inhibit);
+        QMutexLocker locker(&m_universeMutex);
+        foreach (Universe *universe, m_universeArray)
+        {
+            universe->setInhibitOutput(inhibit);
 
-        // Push the current values through immediately: while inhibited
-        // dumpOutput() is a no-op (rig goes dark); when resuming, this forces
-        // the plugins to catch up to the latest look right away.
-        const QByteArray postGM = universe->postGMValues()->mid(0, universe->usedChannels());
-        universe->dumpOutput(postGM, true);
+            // Push the current values through immediately: while inhibited
+            // dumpOutput() is a no-op (rig goes dark); when resuming, this forces
+            // the plugins to catch up to the latest look right away.
+            const QByteArray postGM = universe->postGMValues()->mid(0, universe->usedChannels());
+            universe->dumpOutput(postGM, true);
+        }
     }
 
     emit outputInhibitedChanged(m_outputInhibited);

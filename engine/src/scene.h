@@ -179,7 +179,9 @@ signals:
 
 protected:
     QMap <SceneValue, uchar> m_values;
-    QMutex m_valueListMutex;
+    // mutable: const readers (values()/components()/saveXML()) must lock it too.
+    // Guards BOTH m_values and m_fadersMap against the MasterTimer thread.
+    mutable QMutex m_valueListMutex;
     bool m_reaimRequested = false;
     bool m_repaletteRequested = false;
 

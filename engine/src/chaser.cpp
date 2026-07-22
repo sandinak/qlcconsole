@@ -669,6 +669,11 @@ void Chaser::setPause(bool enable)
 
 void Chaser::write(MasterTimer* timer, QList<Universe *> universes)
 {
+    // Take m_runnerMutex up front: m_startupAction is written by the GUI thread
+    // (setPause/setAction) under this same lock, so the pause-request read/clear
+    // below must hold it too — not just the m_runner->write() call.
+    QMutexLocker runnerLocker(&m_runnerMutex);
+
     if (isPaused() && m_startupAction.m_action != ChaserPauseRequest)
         return;
 
@@ -680,7 +685,6 @@ void Chaser::write(MasterTimer* timer, QList<Universe *> universes)
     }
 
     {
-        QMutexLocker runnerLocker(&m_runnerMutex);
         QMutexLocker stepListLocker(&m_stepListMutex);
         Q_ASSERT(m_runner != NULL);
 

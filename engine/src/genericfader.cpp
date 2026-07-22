@@ -359,7 +359,7 @@ void GenericFader::setFadeOut(bool enable, uint fadeTime)
     if (fadeTime == 0)
         return;
 
-    QReadLocker l(&m_channelsLock);
+    QWriteLocker l(&m_channelsLock); // mutates FadeChannel fields — needs exclusive lock
     QMutableHashIterator <quint32,FadeChannel> it(m_channels);
     while (it.hasNext() == true)
     {
@@ -386,7 +386,7 @@ void GenericFader::setFadeOut(bool enable, uint fadeTime, const QHash<quint32, u
 {
     m_fadeOut = enable;
 
-    QReadLocker l(&m_channelsLock);
+    QWriteLocker l(&m_channelsLock); // mutates FadeChannel fields — needs exclusive lock
     QMutableHashIterator <quint32,FadeChannel> it(m_channels);
     while (it.hasNext() == true)
     {
@@ -419,7 +419,7 @@ void GenericFader::setMonitoring(bool enable)
 void GenericFader::resetCrossfade()
 {
     qDebug() << name() << "resetting crossfade channels";
-    QReadLocker l(&m_channelsLock);
+    QWriteLocker l(&m_channelsLock); // mutates FadeChannel flags — needs exclusive lock
     QMutableHashIterator <quint32,FadeChannel> it(m_channels);
     while (it.hasNext() == true)
     {

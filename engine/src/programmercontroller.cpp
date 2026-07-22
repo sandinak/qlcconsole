@@ -2305,8 +2305,13 @@ void ProgrammerController::revertProgrammer()
 
 void ProgrammerController::setFocusedScene(quint32 sceneId)
 {
-    m_focusedSceneId = sceneId;
-    m_focusedPaletteId = QLCPalette::invalidId();
+    {
+        // Guard the focus IDs: routeProgrammerEditByChannelType() reads them on
+        // the DMX thread. Scope excludes seedStageAimFromScene() (it re-locks).
+        QMutexLocker locker(&m_stateMutex);
+        m_focusedSceneId = sceneId;
+        m_focusedPaletteId = QLCPalette::invalidId();
+    }
     m_stageAimValid = false;
 
     // Entering a follow-spot scene that aims at an existing target: start the
@@ -2420,6 +2425,9 @@ void ProgrammerController::setJoystickSensitivity(float s)
 
 void ProgrammerController::setFocusedPalette(quint32 paletteId)
 {
+    // Guard the focus ID: routeProgrammerEditByChannelType() reads it on the DMX
+    // thread (VCSlider::writeDMXParameter).
+    QMutexLocker locker(&m_stateMutex);
     m_focusedPaletteId = paletteId;
 }
 
@@ -2658,19 +2666,28 @@ quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGro
     QLCPalette *pal = nullptr;
     quint32 owningSceneId = Function::invalidId();
 
-    if (m_focusedPaletteId != QLCPalette::invalidId())
+    // Snapshot the focus IDs once under the lock: the GUI thread mutates them via
+    // setFocusedScene()/setFocusedPalette() while this runs on the DMX thread.
+    quint32 focusedPaletteId, focusedSceneId;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        focusedPaletteId = m_focusedPaletteId;
+        focusedSceneId = m_focusedSceneId;
+    }
+
+    if (focusedPaletteId != QLCPalette::invalidId())
     {
         // User has a specific look selected → use it if the type matches.
-        pal = m_doc->palette(m_focusedPaletteId);
+        pal = m_doc->palette(focusedPaletteId);
         if (!pal || !paletteTypeMatchesChannel(pal->type(), qlcChannelGroup, groupIndex))
             return Function::invalidId();
 
         // Find which scene owns this palette so we can mark it edited.
-        if (m_focusedSceneId != Function::invalidId())
+        if (focusedSceneId != Function::invalidId())
         {
-            Scene *s = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
-            if (s && s->palettes().contains(m_focusedPaletteId))
-                owningSceneId = m_focusedSceneId;
+            Scene *s = qobject_cast<Scene*>(m_doc->function(focusedSceneId));
+            if (s && s->palettes().contains(focusedPaletteId))
+                owningSceneId = focusedSceneId;
         }
         // Fallback: search running scenes.
         if (owningSceneId == Function::invalidId())
@@ -2685,7 +2702,7 @@ quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGro
                 collectActiveScenes(m_doc, m_doc->function(runningScenes.at(i)), candidates);
             for (Scene *s : qAsConst(candidates))
             {
-                if (s->palettes().contains(m_focusedPaletteId))
+                if (s->palettes().contains(focusedPaletteId))
                 {
                     owningSceneId = s->id();
                     break;
@@ -2693,11 +2710,11 @@ quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGro
             }
         }
     }
-    else if (m_focusedSceneId != Function::invalidId())
+    else if (focusedSceneId != Function::invalidId())
     {
         // Scene selected but no specific look → find the first palette in
         // the scene whose type matches the channel group being edited.
-        Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
+        Scene *scene = qobject_cast<Scene*>(m_doc->function(focusedSceneId));
         if (!scene)
             return Function::invalidId();
         for (quint32 pid : scene->palettes())
@@ -2706,7 +2723,7 @@ quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGro
             if (p && paletteTypeMatchesChannel(p->type(), qlcChannelGroup, groupIndex))
             {
                 pal = p;
-                owningSceneId = m_focusedSceneId;
+                owningSceneId = focusedSceneId;
                 break;
             }
         }

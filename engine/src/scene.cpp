@@ -227,16 +227,19 @@ void Scene::unsetValue(quint32 fxi, quint32 ch)
 
 uchar Scene::value(quint32 fxi, quint32 ch)
 {
+    QMutexLocker locker(&m_valueListMutex);
     return m_values.value(SceneValue(fxi, ch, 0), 0);
 }
 
 bool Scene::checkValue(SceneValue val)
 {
+    QMutexLocker locker(&m_valueListMutex);
     return m_values.contains(val);
 }
 
 QList <SceneValue> Scene::values() const
 {
+    QMutexLocker locker(&m_valueListMutex);
     return m_values.keys();
 }
 
@@ -244,6 +247,7 @@ QList<quint32> Scene::components() const
 {
     QList<quint32> ids;
 
+    QMutexLocker locker(&m_valueListMutex);
     QMap <SceneValue, uchar>::const_iterator it = m_values.begin();
     for (; it != m_values.end(); it++)
     {
@@ -262,8 +266,17 @@ QColor Scene::colorValue(quint32 fxi)
     bool found = false;
     QColor CMYcol;
 
-    QMap <SceneValue, uchar>::iterator it = m_values.begin();
-    for (; it != m_values.end(); it++)
+    // Snapshot under the lock, then walk the copy: the doc()->fixture() lookups
+    // below must not run while holding m_valueListMutex (the MasterTimer thread
+    // mutates m_values concurrently via write()/setValue()).
+    QMap <SceneValue, uchar> valuesCopy;
+    {
+        QMutexLocker locker(&m_valueListMutex);
+        valuesCopy = m_values;
+    }
+
+    QMap <SceneValue, uchar>::const_iterator it = valuesCopy.begin();
+    for (; it != valuesCopy.end(); it++)
     {
         const SceneValue& scv = it.key();
 
@@ -606,8 +619,14 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
     }
 
     /* Scene contents */
-    // make a copy of the Scene values cause we need to empty it in the process
-    QList<SceneValue> values = m_values.keys();
+    // make a copy of the Scene values cause we need to empty it in the process.
+    // Snapshot under the lock: the MasterTimer thread mutates m_values via
+    // write()/setValue() while the GUI thread serialises.
+    QList<SceneValue> values;
+    {
+        QMutexLocker locker(&m_valueListMutex);
+        values = m_values.keys();
+    }
 
     // loop through the Scene Fixtures in the order they've been added
     // (locked copies: the MasterTimer thread reads these lists too)
@@ -1007,28 +1026,33 @@ void Scene::handleFadersEnd(MasterTimer *timer)
     /* If no fade out is needed at all, dismiss all the requested faders.
      * Otherwise, set the faders to fade out (honouring per-look overrides) and
      * let Universe dismiss them when done. */
-    if (fadeout == 0 && anyPositiveOverride == false)
+    // Guard m_fadersMap against resetRuntime()/adjustAttribute() etc. on the GUI
+    // thread. Lock scope ends before setBlendFunctionID() below, which re-locks.
     {
-        dismissAllFaders();
-    }
-    else if (channelFadeOut.isEmpty())
-    {
-        foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+        QMutexLocker locker(&m_valueListMutex);
+        if (fadeout == 0 && anyPositiveOverride == false)
         {
-            if (!fader.isNull())
-                fader->setFadeOut(true, fadeout);
+            dismissAllFaders();
         }
-    }
-    else
-    {
-        foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+        else if (channelFadeOut.isEmpty())
         {
-            if (!fader.isNull())
-                fader->setFadeOut(true, fadeout, channelFadeOut);
+            foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+            {
+                if (!fader.isNull())
+                    fader->setFadeOut(true, fadeout);
+            }
         }
-    }
+        else
+        {
+            foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+            {
+                if (!fader.isNull())
+                    fader->setFadeOut(true, fadeout, channelFadeOut);
+            }
+        }
 
-    m_fadersMap.clear();
+        m_fadersMap.clear();
+    }
 
     // autonomously reset a blend function if set
     setBlendFunctionID(Function::invalidId());
@@ -1173,10 +1197,13 @@ void Scene::setPause(bool enable)
     if (!isRunning())
         return;
 
-    foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
     {
-        if (!fader.isNull())
-            fader->setPaused(enable);
+        QMutexLocker locker(&m_valueListMutex);
+        foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+        {
+            if (!fader.isNull())
+                fader->setPaused(enable);
+        }
     }
     Function::setPause(enable);
 }
@@ -1191,6 +1218,7 @@ int Scene::adjustAttribute(qreal fraction, int attributeId)
 
     if (attrIndex == Intensity)
     {
+        QMutexLocker locker(&m_valueListMutex);
         foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
         {
             if (!fader.isNull())
@@ -1199,6 +1227,7 @@ int Scene::adjustAttribute(qreal fraction, int attributeId)
     }
     else if (attrIndex == ParentIntensity)
     {
+        QMutexLocker locker(&m_valueListMutex);
         foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
         {
             if (!fader.isNull())
@@ -1220,10 +1249,13 @@ void Scene::setBlendMode(Universe::BlendMode mode)
 
     qDebug() << "Scene" << name() << "blend mode set to" << Universe::blendModeToString(mode);
 
-    foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
     {
-        if (!fader.isNull())
-            fader->setBlendMode(mode);
+        QMutexLocker locker(&m_valueListMutex);
+        foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+        {
+            if (!fader.isNull())
+                fader->setBlendMode(mode);
+        }
     }
 
     Function::setBlendMode(mode);
@@ -1239,6 +1271,7 @@ void Scene::setBlendFunctionID(quint32 fid)
     m_blendFunctionID = fid;
     if (isRunning() && fid == Function::invalidId())
     {
+        QMutexLocker locker(&m_valueListMutex);
         foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
         {
             if (!fader.isNull())

@@ -85,6 +85,8 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
     , m_msSinceFresh(0)
     , m_suspended(false)
     , m_suspendRequest(false)
+    , m_pausePending(false)
+    , m_pausePendingValue(false)
     , m_tcHolding(false)
 {
     Q_ASSERT(m_doc != NULL);
@@ -155,11 +157,23 @@ void ShowRunner::start()
 
 void ShowRunner::setPause(bool enable)
 {
-    // Freeze every child on MTC-stop: the show-clocked chaser already holds its
-    // cue (a frozen clock issues no step change), and pausing additionally
-    // freezes any in-progress fade so the whole look stops dead. A SEPARATE cue
-    // list (not a show child) is untouched, so a hand cue can still override the
-    // frozen fixtures while the show is paused.
+    // Called from the GUI thread (Show::setPause, the transport Pause button).
+    // Only record the request here; the actual walk of m_runningQueue is done on
+    // the timer thread inside write() so we never touch that queue concurrently
+    // with write()'s own removeAt/clear. Mirrors m_suspendRequest.
+    QMutexLocker locker(&m_tcMutex);
+    m_pausePending = true;
+    m_pausePendingValue = enable;
+}
+
+void ShowRunner::applyPauseToChildren(bool enable)
+{
+    // Timer-thread only (write()). Freeze every child on MTC-stop: the
+    // show-clocked chaser already holds its cue (a frozen clock issues no step
+    // change), and pausing additionally freezes any in-progress fade so the
+    // whole look stops dead. A SEPARATE cue list (not a show child) is untouched,
+    // so a hand cue can still override the frozen fixtures while the show is
+    // paused.
     for (int i = 0; i < m_runningQueue.count(); i++)
     {
         Function *f = m_runningQueue.at(i).first;
@@ -188,6 +202,7 @@ void ShowRunner::stop()
     {
         QMutexLocker locker(&m_tcMutex);
         m_suspendRequest = false;
+        m_pausePending = false;
     }
     qDebug() << "ShowRunner stopped";
 }
@@ -464,7 +479,7 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
             if (holding != m_tcHolding)
             {
                 m_tcHolding = holding;
-                setPause(holding);
+                applyPauseToChildren(holding);
             }
 
             if (m_msSinceFresh <= SHOW_TC_HOLD_MS)
@@ -500,9 +515,24 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
     // If follow was disarmed while the children were frozen (TC-hold), thaw them.
     if (following == false && m_tcHolding)
     {
-        setPause(false);
+        applyPauseToChildren(false);
         m_tcHolding = false;
     }
+
+    // Apply a pause/resume requested from the GUI thread (transport Pause), on
+    // the timer thread so we don't race write()'s own m_runningQueue mutation.
+    bool doPause = false, pauseVal = false;
+    {
+        QMutexLocker locker(&m_tcMutex);
+        if (m_pausePending)
+        {
+            doPause = true;
+            pauseVal = m_pausePendingValue;
+            m_pausePending = false;
+        }
+    }
+    if (doPause)
+        applyPauseToChildren(pauseVal);
 
     // Timeline suspend (Operate-mode VC takeover). The elapsed clock above keeps
     // tracking the timecode so the playhead stays synced with Logic; here we
