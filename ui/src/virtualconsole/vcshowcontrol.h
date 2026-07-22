@@ -20,6 +20,8 @@
 #ifndef VCSHOWCONTROL_H
 #define VCSHOWCONTROL_H
 
+#include <QIcon>
+
 #include "vcwidget.h"
 
 class QToolButton;
@@ -139,6 +141,13 @@ private:
     QToolButton *m_followButton;
     QToolButton *m_suspendButton;
     class QTimer *m_pollTimer;
+
+    // Cached play/pause icons + last-applied state, so refresh() (called every
+    // 400ms + on events) doesn't reload the resource and re-set the icon when the
+    // running state hasn't actually flipped.
+    QIcon m_playIcon;
+    QIcon m_pauseIcon;
+    int m_playButtonState = -1;   //!< -1 unknown, 0 play, 1 pause
 
     /*********************************************************************
      * QLC+ Mode

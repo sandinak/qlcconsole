@@ -249,6 +249,10 @@ private:
     QAction* m_captureStoreAction;
     QAction* m_captureUndoAction;
     QMetaObject::Connection m_captureCountConnection;
+    /** Coalesces the ~50 Hz overrideRecorded burst into one buildPlan()/UI
+     *  refresh: buildPlan() walks the whole Doc and locks the override hash
+     *  (contending the DMX thread), so it must not run per DMX tick. */
+    QTimer* m_captureCoalesceTimer = nullptr;
     QAction* m_appSettingsAction;
 
     QAction* m_helpIndexAction;

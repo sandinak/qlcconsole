@@ -133,8 +133,11 @@ VCShowControl::VCShowControl(QWidget *parent, Doc *doc)
     m_stopButton->setToolTip(tr("Stop the show"));
     row->addWidget(m_stopButton);
 
+    m_playIcon = QIcon(":/player_play.png");
+    m_pauseIcon = QIcon(":/player_pause.png");
     m_playButton = new QToolButton(this);
-    m_playButton->setIcon(QIcon(":/player_play.png"));
+    m_playButton->setIcon(m_playIcon);
+    m_playButtonState = 0;
     m_playButton->setIconSize(QSize(22, 22));
     m_playButton->setToolTip(tr("Play the show from the current position"));
     row->addWidget(m_playButton);
@@ -357,6 +360,13 @@ void VCShowControl::slotPoll()
     }
     m_tcWasRolling = tcRolling;
 
+    // The periodic display refresh only matters while this widget is live. In
+    // Design mode or with no show bound nothing is changing to display, and
+    // slotModeChanged()/the transport slots already refresh on any real
+    // transition — so skip the per-400ms icon + stylesheet + track/cue walk.
+    if (show == NULL || m_doc->mode() != Doc::Operate)
+        return;
+
     refresh();
     refreshCueInfo();
 }
@@ -552,7 +562,16 @@ void VCShowControl::refresh()
         m_nameLabel->setText(show != NULL ? show->name() : tr("No show"));
 
     if (m_playButton != NULL)
-        m_playButton->setIcon(QIcon(running ? ":/player_pause.png" : ":/player_play.png"));
+    {
+        // Use the cached icons and only re-set when the state actually flips —
+        // avoids a resource reload + redundant repaint on every 400ms poll.
+        const int state = running ? 1 : 0;
+        if (state != m_playButtonState)
+        {
+            m_playButton->setIcon(running ? m_pauseIcon : m_playIcon);
+            m_playButtonState = state;
+        }
+    }
 
     // "Configured for timecode" = a TC source has been seen or explicitly locked.
     const bool operate = (m_doc->mode() == Doc::Operate);

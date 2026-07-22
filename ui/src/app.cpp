@@ -1521,11 +1521,21 @@ void App::slotCaptureLiveEdits(bool checked)
     {
         cm->setCapturing(true);
 
+        if (m_captureCoalesceTimer == nullptr)
+        {
+            m_captureCoalesceTimer = new QTimer(this);
+            m_captureCoalesceTimer->setSingleShot(true);
+            connect(m_captureCoalesceTimer, &QTimer::timeout,
+                    this, &App::slotCapturePendingChanged);
+        }
         if (m_captureCountConnection)
             disconnect(m_captureCountConnection);
+        // overrideRecorded fires ~50 Hz (queued from the DMX thread) while a
+        // control moves; coalesce the burst so buildPlan() runs at most ~10 Hz.
         m_captureCountConnection = connect(cm, &CaptureManager::overrideRecorded,
                                            this, [this](quint32, quint32, uchar) {
-            slotCapturePendingChanged();
+            if (!m_captureCoalesceTimer->isActive())
+                m_captureCoalesceTimer->start(100);
         });
         connect(cm, &CaptureManager::undoStackChanged,
                 this, &App::slotCaptureUndoStackChanged, Qt::UniqueConnection);
@@ -1554,6 +1564,8 @@ void App::slotCaptureLiveEdits(bool checked)
             disconnect(m_captureCountConnection);
             m_captureCountConnection = QMetaObject::Connection();
         }
+        if (m_captureCoalesceTimer != nullptr)
+            m_captureCoalesceTimer->stop();
         // Capture stopped: if anything was recorded, present the diff
         // dialog so the user can apply or save-as-new. The dialog itself
         // is responsible for clearing overrides on apply/cancel.

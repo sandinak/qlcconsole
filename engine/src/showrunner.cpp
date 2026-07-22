@@ -275,35 +275,16 @@ void ShowRunner::seekTo(quint32 targetMs)
 #define SHOW_NOMINAL_CUE_MS 3000
 
 // On-timeline dwell (ms) of a cue: its dragged/Common duration, or a nominal
-// dwell for an un-timed (0) or legacy infinite-hold cue. A show is pure timecode
-// — every cue is time-positioned; there are no manual-GO holds inside a show.
-static quint32 cueDwellMs(quint32 rawDuration)
-{
-    if (rawDuration == 0 || rawDuration == Function::infiniteSpeed())
-        return SHOW_NOMINAL_CUE_MS;
-    return rawDuration;
-}
-
+// A show is pure timecode — every cue is time-positioned; there are no manual-GO
+// holds inside a show, so an un-timed (0) or legacy infinite-hold cue dwells for
+// SHOW_NOMINAL_CUE_MS.
 int ShowRunner::stepAtLocalMs(Chaser *c, quint32 localMs) const
 {
-    // Work off a locked COPY of the steps (never stepAt() pointers): this runs on
-    // the timer thread while the UI may repaint / edit the same chaser, and an
-    // unlocked read of m_steps races those and crashes.
-    const QList<ChaserStep> steps = c->steps();
-    const int count = steps.count();
-    if (count == 0)
+    if (c == NULL)
         return -1;
-    const bool common = (c->durationMode() == Chaser::Common);
-    const quint32 commonDur = c->duration();
-    quint32 acc = 0;
-    for (int s = 0; s < count; s++)
-    {
-        quint32 dwell = cueDwellMs(common ? commonDur : steps.at(s).duration);
-        if (localMs < acc + dwell)
-            return s;
-        acc += dwell;
-    }
-    return count - 1;               // past the last cue: clamp (block stop ends it)
+    // Delegate to the chaser, which walks the cumulative dwell under its own step
+    // lock WITHOUT copying the step list (this is a per-tick, per-chaser hot path).
+    return c->stepIndexAtLocalMs(localMs, SHOW_NOMINAL_CUE_MS);
 }
 
 void ShowRunner::releaseChild(Function *f)

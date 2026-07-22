@@ -221,6 +221,30 @@ QList <ChaserStep> Chaser::steps() const
     return m_steps;
 }
 
+int Chaser::stepIndexAtLocalMs(quint32 localMs, quint32 untimedCueMs) const
+{
+    // Timer-thread hot path (show clock, every tick per running chaser): walk the
+    // cumulative dwell under the step lock WITHOUT copying m_steps.
+    QMutexLocker stepListLocker(&m_stepListMutex);
+    const int count = m_steps.count();
+    if (count == 0)
+        return -1;
+
+    const bool common = (m_holdMode == Chaser::Common);
+    const quint32 commonDur = duration();   // Function::duration() — simple read
+    quint32 acc = 0;
+    for (int s = 0; s < count; s++)
+    {
+        const quint32 raw = common ? commonDur : m_steps.at(s).duration;
+        const quint32 dwell =
+            (raw == 0 || raw == Function::infiniteSpeed()) ? untimedCueMs : raw;
+        if (localMs < acc + dwell)
+            return s;
+        acc += dwell;
+    }
+    return count - 1;               // past the last cue: clamp (block stop ends it)
+}
+
 void Chaser::setTotalDuration(quint32 msec)
 {
     if (durationMode() == Chaser::Common)

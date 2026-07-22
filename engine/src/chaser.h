@@ -138,6 +138,19 @@ public:
      */
     QList <ChaserStep> steps() const;
 
+    /**
+     * Index of the cue live at @a localMs when this chaser is driven by an
+     * external (show) clock, treating a 0 / infinite step duration as
+     * @a untimedCueMs. Computed under m_stepListMutex WITHOUT copying the step
+     * list — called every tick per running chaser, so it must not allocate.
+     * Returns -1 for an empty chaser, or the last index past the final cue.
+     *
+     * @param localMs Elapsed position within the chaser block (ms)
+     * @param untimedCueMs Dwell to assume for an un-timed (0/infinite) cue
+     * @return Live cue index, or -1 if empty
+     */
+    int stepIndexAtLocalMs(quint32 localMs, quint32 untimedCueMs) const;
+
     /** @reimpl */
     void setTotalDuration(quint32 msec) override;
 
