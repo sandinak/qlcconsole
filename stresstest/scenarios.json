@@ -29,6 +29,14 @@
     "seconds": 60,
     "args": ["--universes","6","--fixtures-per-uni","40","--scenes","20","--chasers","6","--matrices","4","--efx","4","--collections","2","--scripts","4"]
   },
+  "concurrency": {
+    "_comment": "Operator-vs-timer race+leak run: hammers the fork's hardened cross-thread accessors (Scene readers/setters, Show MTC/transport, blackout/inhibit) while the MasterTimer thread runs. Must survive AND not leak. Run under --sanitize thread for data races.",
+    "seconds": 300,
+    "sample_seconds": 20,
+    "leak_mb_per_hr_max": 15.0,
+    "fd_growth_max": 8,
+    "args": ["--universes","30","--fixtures-per-uni","120","--scenes","200","--chasers","40","--matrices","10","--efx","10","--collections","8","--shows","8"]
+  },
   "golden": {
     "_comment": "Deterministic workload for the output-regression hash: scenes/chasers/EFX only (RGB scripts can use randomness and would break determinism).",
     "ticks": 3000, "file": "golden.txt",

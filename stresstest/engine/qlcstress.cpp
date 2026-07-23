@@ -26,7 +26,7 @@
 #undef protected
 #undef private
 
-#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QElapsedTimer>
 #include <QXmlStreamWriter>
 #include <QCommandLineParser>
@@ -45,6 +45,10 @@
 #include "inputoutputmap.h"
 #include "fixture.h"
 #include "scene.h"
+#include "show.h"
+#include "rgbscriptscache.h"
+#include "qlcpalette.h"
+#include <QDir>
 #include "qlcfixturedefcache.h"
 #include "showbuilder.h"
 #include <QXmlStreamReader>
@@ -471,6 +475,27 @@ static bool loadWorkspace(Doc *doc, const QString &path, QString &err)
     return false;
 }
 
+// ---- pick which loaded functions to start (realistic "operate" run) ----------
+// A real show has hundreds of Scenes/Collections that are NOT all live at once —
+// the operator runs a cue list (Chaser), which steps through Collections, which
+// start their member Scenes/Matrices. So the default is to start the top-level
+// Chasers only and let them cascade, mirroring an actual run.
+static QList<Function*> selectStartFunctions(Doc *doc, const QString &what)
+{
+    QList<Function*> out;
+    for (Function *f : doc->functions())
+    {
+        if (f == NULL)
+            continue;
+        const bool isChaser = (f->type() == Function::ChaserType);
+        const bool isColl   = (f->type() == Function::CollectionType);
+        if (what == "all")                         out << f;
+        else if (what == "chasers" && isChaser)    out << f;
+        else if (what == "collections" && isColl)  out << f;
+    }
+    return out;
+}
+
 // ---- LOAD: load a workspace, report (robustness/corpus/fuzz target) ----------
 static int runLoad(const QString &path, const QString &fixtureDir)
 {
@@ -602,6 +627,153 @@ static int runChaos(Doc *doc, const ShowSpec &spec, const QString &fixtureDir,
     return 0;
 }
 
+// ---- CONCURRENCY: real timer thread vs a same-process "operator" hammering the
+// exact cross-thread accessors the fork hardened. This is the regression test
+// for the thread-safety batch: the MasterTimer thread runs Scene::write() /
+// writeDMX() / ShowRunner::write() while this loop (the GUI/operator side)
+// concurrently calls the Scene value+fader readers/setters, the Show MTC/
+// transport accessors, blackout/inhibit and Universe faders. Run under a normal
+// build for crash/leak, or under TSan for data races. Also drives external
+// timecode into running shows so the show-clocked chaser (stepIndexAtLocalMs)
+// and the m_runner accessors get real traffic.
+static int runConcurrency(Doc *doc, const QList<Function*> &funcs,
+                          const ShowSpec &spec, int seconds, int sampleSec)
+{
+    MasterTimer *mt = doc->masterTimer();
+    InputOutputMap *iomap = doc->inputOutputMap();
+    doc->setMode(Doc::Operate);
+    iomap->startUniverses();
+    mt->start();
+    startAll(doc, funcs);
+
+    QList<Scene*> scenes;
+    QList<Show*>  shows;
+    for (Function *f : funcs)
+    {
+        if (Scene *s = qobject_cast<Scene*>(f)) scenes << s;
+        else if (Show *sh = qobject_cast<Show*>(f)) { sh->setTimecodeFollow(true); shows << sh; }
+    }
+    QList<quint32> fxIds; for (Fixture *f : doc->fixtures()) fxIds << f->id();
+
+    // Per-scene fixture lists: setValue()/checkValue() target fixtures the scene
+    // actually OWNS (realistic live-edit). Editing a fixture NOT in the scene
+    // makes Scene::setValue() add it to the scene (by design), which would grow
+    // the scene unbounded across the run — a harness artifact, not an engine leak.
+    QHash<Scene*, QList<quint32>> sceneFx;
+    for (Scene *s : scenes)
+    {
+        QList<quint32> ids = s->fixtures();
+        if (ids.isEmpty()) ids = fxIds;   // fall back so the op still exercises the path
+        sceneFx.insert(s, ids);
+    }
+
+    // Op mask (env QLC_CONC_MASK, hex): bit N enables operation `case N` below,
+    // so a leak can be bisected without a rebuild. Default = all 14 ops.
+    quint32 opMask = 0x3FFF;
+    if (qEnvironmentVariableIsSet("QLC_CONC_MASK"))
+        opMask = qgetenv("QLC_CONC_MASK").toUInt(nullptr, 16);
+
+    fprintf(stdout, "concurrency: %d s — operator hammering hardened accessors while the "
+            "MasterTimer thread runs (%d scenes, %d shows, %d fixtures; opMask=0x%04X)\n",
+            seconds, int(scenes.size()), int(shows.size()), int(fxIds.size()), opMask);
+    fflush(stdout);
+
+    QRandomGenerator rng(spec.seed);
+    QElapsedTimer wall; wall.start();
+    double rss0 = residentMB(), rssPeak = rss0;
+    int fd0 = openFdCount();
+    struct Sample { double t, rss; int fd; };
+    QVector<Sample> samples;
+    qint64 nextSample = 0;
+    quint64 ops = 0;
+    quint32 showMs = 0;
+
+    while (wall.elapsed() < qint64(seconds) * 1000)
+    {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 15);
+
+        // A burst of accessor calls that race the timer thread each iteration.
+        for (int b = 0; b < 500; b++)
+        {
+            Scene *s = scenes.isEmpty() ? nullptr : scenes.at(rng.bounded(scenes.size()));
+            // Target a fixture the chosen scene owns (realistic live-edit); fall
+            // back to a global fixture for the reader-only ops when s is null.
+            const QList<quint32> &sfx = s ? sceneFx[s] : fxIds;
+            quint32 fx = sfx.isEmpty() ? 0u : sfx.at(rng.bounded(sfx.size()));
+            quint32 ch = rng.bounded(3);
+            const int op = rng.bounded(14);
+            if (!((opMask >> op) & 1u))
+                continue;            // op disabled by mask (leak bisection)
+            switch (op)
+            {
+                case 0:  if (s) (void)s->colorValue(); break;                          // A: reader
+                case 1:  if (s) (void)s->values(); break;                              // A
+                case 2:  if (s) (void)s->checkValue(SceneValue(fx, ch, 0)); break;     // A
+                case 3:  if (s) (void)s->value(fx, ch); break;                         // A
+                case 4:  if (s) (void)s->components(); break;                          // A
+                case 5:  if (s) s->setValue(fx, ch, uchar(rng.bounded(256))); break;   // writer
+                case 6:  if (s) s->adjustAttribute(rng.generateDouble(), Function::Intensity); break; // B: fadersMap
+                case 7:  if (s) s->setBlendMode(rng.bounded(2) ? Universe::AdditiveBlend
+                                                               : Universe::NormalBlend); break;       // B
+                case 8:  if (s && scenes.size() > 1) {                                 // B + crossfade read (A)
+                             Scene *o = scenes.at(rng.bounded(scenes.size()));
+                             s->setBlendFunctionID(rng.bounded(2) ? o->id() : Function::invalidId());
+                         } break;
+                case 9:  if (!shows.isEmpty()) shows.at(rng.bounded(shows.size()))->setExternalTime(showMs += 37); break; // C/P1
+                case 10: if (!shows.isEmpty()) shows.at(rng.bounded(shows.size()))->setPause(rng.bounded(2)); break;      // F
+                case 11: if (!shows.isEmpty()) { Show *sh = shows.at(rng.bounded(shows.size()));
+                             (void)sh->isTimelineSuspended(); sh->setTimelineSuspended(rng.bounded(2)); } break;         // C
+                case 12: iomap->setBlackout(rng.bounded(2)); break;                    // E
+                case 13: iomap->setOutputInhibited(rng.bounded(2)); break;             // E
+            }
+            ops++;
+        }
+
+        rssPeak = qMax(rssPeak, residentMB());
+        if (wall.elapsed() >= nextSample)
+        {
+            double t = wall.elapsed() / 1000.0, rss = residentMB();
+            int fd = openFdCount();
+            samples.append({t, rss, fd});
+            fprintf(stdout, "concurrency: t=%6.0fs  rss=%7.1f MB  fd=%d  ops=%llu  runningFuncs=%d\n",
+                    t, rss, fd, (unsigned long long)ops, mt->runningFunctions());
+            fflush(stdout);
+            nextSample += qint64(sampleSec) * 1000;
+        }
+    }
+
+    // leave nothing latched, then shut down cleanly
+    iomap->setBlackout(false);
+    iomap->setOutputInhibited(false);
+    mt->stopAllFunctions();
+    mt->stop();
+
+    // leak slope (MB/hr), warmup-excluded like soak
+    double leakPerHr = 0;
+    QVector<Sample> fit;
+    for (auto &s : samples) if (s.t >= 60.0) fit.append(s);
+    if (fit.size() < 2 && samples.size() >= 2) fit = samples.mid(1);
+    int n = fit.size();
+    if (n >= 2) {
+        double sx=0,sy=0,sxx=0,sxy=0;
+        for (auto &s : fit){ sx+=s.t; sy+=s.rss; sxx+=s.t*s.t; sxy+=s.t*s.rss; }
+        double d = n*sxx - sx*sx;
+        if (d != 0) leakPerHr = (n*sxy - sx*sy)/d*3600.0;
+    }
+    int fdEnd = samples.isEmpty()? fd0 : samples.last().fd;
+    fprintf(stdout, "concurrency: survived %llu ops; rss start=%.1f peak=%.1f end=%.1f MB; "
+            "leak rate=%.2f MB/hr%s; fd start=%d end=%d\n",
+            (unsigned long long)ops, rss0, rssPeak, samples.isEmpty()?rss0:samples.last().rss, leakPerHr,
+            seconds < 300 ? " (low confidence: run >=5min)" : "", fd0, fdEnd);
+    if (g_json)
+        fprintf(stdout, "RESULT_JSON {\"mode\":\"concurrency\",\"scenario\":\"%s\",\"seconds\":%d,"
+                "\"ops\":%llu,\"rssStart\":%.1f,\"rssEnd\":%.1f,\"rssPeak\":%.1f,\"leakMBperHr\":%.2f,"
+                "\"fdStart\":%d,\"fdEnd\":%d}\n",
+                qPrintable(g_scenario), seconds, (unsigned long long)ops, rss0,
+                samples.isEmpty()?rss0:samples.last().rss, rssPeak, leakPerHr, fd0, fdEnd);
+    return 0;
+}
+
 // ---- EMIT: build show and save canonical .qxw -------------------------------
 static int runEmit(Doc *doc, const ShowSpec &spec, const QString &outPath)
 {
@@ -647,7 +819,13 @@ int main(int argc, char *argv[])
 {
     qInstallMessageHandler(quietHandler);
     setvbuf(stdout, nullptr, _IOLBF, 0); // line-buffered so progress is visible when piped
-    QCoreApplication app(argc, argv);
+    // QGuiApplication (not QCoreApplication): a REAL loaded show may contain
+    // RGBText / RGBImage matrices that render via QFont/QImage and crash without
+    // a GUI application. Force the offscreen platform so it stays headless.
+    // Synthetic (buildShow) modes are unaffected.
+    if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM"))
+        qputenv("QT_QPA_PLATFORM", "offscreen");
+    QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("qlcplus");
     QCoreApplication::setApplicationName("qlcstress");
 
@@ -665,7 +843,7 @@ int main(int argc, char *argv[])
     QCommandLineOption oEfx("efx", "EFX count", "n", "16");
     QCommandLineOption oColl("collections", "collection count", "n", "8");
     QCommandLineOption oSeed("seed", "RNG seed", "n", "1");
-    QCommandLineOption oMode("mode", "flatout | realtime | ramp | soak | chaos", "mode", "flatout");
+    QCommandLineOption oMode("mode", "flatout | realtime | ramp | soak | chaos | concurrency", "mode", "flatout");
     QCommandLineOption oTicks("ticks", "flatout/ramp/golden tick count", "n", "5000");
     QCommandLineOption oSecs("seconds", "realtime/soak/chaos duration", "s", "15");
     QCommandLineOption oSampleSec("sample-seconds", "soak sampling interval", "s", "30");
@@ -682,10 +860,14 @@ int main(int argc, char *argv[])
     QCommandLineOption oShows("shows", "Show function count", "n", "0");
     QCommandLineOption oJson("json", "emit RESULT_JSON lines for the orchestrator");
     QCommandLineOption oScenario("scenario", "scenario name (for JSON)", "name", "adhoc");
+    QCommandLineOption oLoad("load", "engine modes: load a real .qxw instead of building a synthetic show", "file", "");
+    QCommandLineOption oStart("start", "with --load: what to start (chasers | collections | all | none)", "what", "chasers");
+    QCommandLineOption oInject("inject-effects", "attach Effect palettes (fork) to N scenes AND start them, so the EffectScriptRunner ticks — measures effect-script cost (realtime/concurrency only)", "n", "0");
+    QCommandLineOption oEffDir("effect-scripts-dir", "resources/effectscripts path", "dir", "../../resources/effectscripts");
     p.addOptions({oUni, oFpu, oScenes, oChasers, oMatrices, oEfx, oColl, oSeed,
                   oMode, oTicks, oSecs, oFreq, oFix, oScr,
                   oScripts, oSequences, oShows, oJson, oScenario,
-                  oSampleSec, oGoldenFile, oGoldenVerify, oChaosAggr});
+                  oSampleSec, oGoldenFile, oGoldenVerify, oChaosAggr, oLoad, oStart, oInject, oEffDir});
     p.process(app);
 
     const QStringList args = p.positionalArguments();
@@ -764,11 +946,93 @@ int main(int argc, char *argv[])
 
     if (cmd == "engine")
     {
+        const QString loadPath = p.value(oLoad);
+
         if (mode == "ramp")
+        {
+            if (!loadPath.isEmpty())
+                { fprintf(stderr, "ramp does not support --load (it scales a synthetic show)\n"); return 2; }
             return runRamp(spec, fixDir, scrDir, ticks);
+        }
 
         Doc *doc = new Doc(nullptr, spec.universes);
-        QList<Function*> funcs = buildShow(doc, spec, fixDir, scrDir);
+        QList<Function*> funcs;
+        if (!loadPath.isEmpty())
+        {
+            // Run a REAL workspace instead of a synthetic show.
+            QDir fdir(fixDir);
+            doc->fixtureDefCache()->loadMap(fdir);
+            doc->rgbScriptsCache()->load(QDir(scrDir));   // so RGBMatrix algos resolve
+            QString err;
+            if (!loadWorkspace(doc, loadPath, err))
+            {
+                fprintf(stderr, "load failed: %s (%s)\n", qPrintable(err), qPrintable(loadPath));
+                delete doc; return 2;
+            }
+            funcs = selectStartFunctions(doc, p.value(oStart));
+            int nScene=0,nColl=0,nChase=0,nMtx=0;
+            for (Function *f : doc->functions())
+            {
+                if (!f) continue;
+                switch (f->type()) {
+                    case Function::SceneType: nScene++; break;
+                    case Function::CollectionType: nColl++; break;
+                    case Function::ChaserType: nChase++; break;
+                    case Function::RGBMatrixType: nMtx++; break;
+                    default: break;
+                }
+            }
+            fprintf(stdout, "loaded %s: %d fixtures, %d functions (%d scenes, %d collections, "
+                    "%d chasers, %d matrices), %d universes; starting %d '%s' (cascades to members)\n",
+                    qPrintable(loadPath), int(doc->fixtures().size()), int(doc->functions().size()),
+                    nScene, nColl, nChase, nMtx, doc->inputOutputMap()->universesCount(),
+                    int(funcs.size()), qPrintable(p.value(oStart)));
+            fflush(stdout);
+
+            // Fork effect-script overlay: attach Effect palettes to N scenes and
+            // start those scenes too, so EffectScriptRunner spins up N instances
+            // and ticks them (this show predates effect scripts). Measures the
+            // per-instance cost the real rig adds on top of the base show.
+            const int injectN = p.value(oInject).toInt();
+            if (injectN > 0)
+            {
+                // A few RGB-compatible effect scripts, round-robined.
+                const QStringList names = { "color-chase.js", "amber-pulse.js",
+                    "color-gradient.js", "dimmer-phaser.js", "fire.js" };
+                const QString effDir = p.value(oEffDir);
+                QList<quint32> palIds;
+                for (const QString &n : names)
+                {
+                    const QString path = effDir + "/" + n;
+                    if (!QFile::exists(path)) continue;
+                    QLCPalette *pal = new QLCPalette(QLCPalette::Effect, doc);
+                    pal->setName("FX-" + n);
+                    pal->setScriptPath(path);
+                    if (doc->addPalette(pal)) palIds << pal->id(); else delete pal;
+                }
+                QList<quint32> scIds;
+                for (Function *f : doc->functions())
+                    if (f && f->type() == Function::SceneType) scIds << f->id();
+                QRandomGenerator irng(spec.seed);
+                int attached = 0;
+                for (int i = 0; i < injectN && !scIds.isEmpty() && !palIds.isEmpty(); i++)
+                {
+                    Scene *s = qobject_cast<Scene*>(doc->function(scIds.at(irng.bounded(scIds.size()))));
+                    if (!s) continue;
+                    s->addPalette(palIds.at(i % palIds.size()));
+                    funcs << s;              // start it so the effect actually ticks
+                    attached++;
+                }
+                fprintf(stdout, "inject-effects: attached %d Effect palettes (%d scripts) and started "
+                        "those scenes — EffectScriptRunner will tick %d instances\n",
+                        attached, int(palIds.size()), attached);
+                fflush(stdout);
+            }
+        }
+        else
+        {
+            funcs = buildShow(doc, spec, fixDir, scrDir);
+        }
         int rc = 0;
         if (mode == "realtime")
             rc = runRealtime(doc, funcs, seconds, spec);
@@ -776,6 +1040,8 @@ int main(int argc, char *argv[])
             rc = runSoak(doc, funcs, seconds, p.value(oSampleSec).toInt());
         else if (mode == "chaos")
             rc = runChaos(doc, spec, fixDir, scrDir, seconds, p.isSet(oChaosAggr));
+        else if (mode == "concurrency")
+            rc = runConcurrency(doc, funcs, spec, seconds, p.value(oSampleSec).toInt());
         else
         {
             TickStats s = runFlatout(doc, funcs, ticks, 50);

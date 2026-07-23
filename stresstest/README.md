@@ -127,6 +127,21 @@ Modes:
   resident memory.
 * **ramp** — repeats `flatout` while scaling universes to find the largest
   configuration that still fits in budget.
+* **concurrency** — starts the real `MasterTimer` thread, then hammers the
+  **cross-thread accessors the fork added locks to** from the operator side
+  (`Scene` value/fader readers+setters, `Show` MTC/transport, blackout/inhibit,
+  `Universe` faders) while the timer runs `Scene::write`/`writeDMX`/
+  `ShowRunner::write` concurrently. Also feeds external timecode into running
+  shows so the show-clocked chaser and the `m_runner` accessors get real
+  traffic. This is the **regression test for the thread-safety batch**: run it
+  under a normal build to catch a crash / leak, or under TSan to catch a data
+  race. Reports ops survived + a warmup-excluded RSS leak slope like `soak`.
+  Example:
+  ```sh
+  ./build/qlcstress engine --mode concurrency --seconds 300 --sample-seconds 20 \
+      --universes 30 --scenes 200 --chasers 40 --shows 8 \
+      --fixtures-dir ../../resources/fixtures
+  ```
 
 Key options: `--universes --fixtures-per-uni --scenes --chasers --matrices
 --efx --collections --ticks --seconds --freq --seed --fixtures-dir`.

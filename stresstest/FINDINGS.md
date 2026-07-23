@@ -172,3 +172,59 @@ blackout-flap, channel-spray; 97 rounds):
 * Engine function processing is effectively single-threaded (the MasterTimer
   thread does all `Function::write`s); only `processFaders` is parallel per
   universe. So **function compute is the scaling limit**, not I/O or channels.
+
+---
+
+## Fork thread-safety + real-rig runs (2026-07, programmer-mode)
+
+Added a `concurrency` mode (real MasterTimer thread vs an operator loop hammering
+the fork's hardened cross-thread accessors — Scene value/fader readers+setters,
+Show MTC/transport, blackout/inhibit, Universe faders — plus external timecode
+into shows) and a `--load`/`--start` path to run a **real .qxw** through any mode.
+All numbers Release engine, arm64, this host.
+
+### Thread-safety batch — validated clean
+* `concurrency` 5 min, synthetic (30 uni / 276 running funcs): **1,276,500 ops,
+  0 crashes, 0 asserts, 0 tick overruns, FD flat.** The locks added on the
+  Scene/Show/Chaser/VCSlider/IOMap/ProgrammerController paths hold under heavy
+  operator-vs-timer racing.
+* A monotonic RSS climb seen first was a **harness artifact**, isolated with the
+  new `QLC_CONC_MASK` op-mask to `Scene::setValue`: the operator was editing
+  fixtures NOT in the scene, and `Scene::setValue` adds an unknown fixture to the
+  scene by design. `GenericFader` dedups channels by hash (bounded). With the
+  operator restricted to in-scene fixtures, RSS is **flat** (full op-mix settles
+  ~77 MB). No engine leak.
+
+### Real show — CampEvo-2.0.qxw (pre-fork content)
+Loaded: **65 universes, 184 fixtures¹, 977 scenes, 162 collections, 122 RGB
+matrices, 2 chasers.** Run as operated (start the 2 chasers → cascade through
+collections). Cascaded runtime load = **~40 functions live at once**.
+
+| run | result | vs 20 ms budget |
+|-----|--------|-----------------|
+| flatout 2000 ticks | p50 0.09, p95 5.70, **p99 9.89**, max 15.0 ms, 0% overruns | within (½ budget) |
+| concurrency 40 s (+ operator race) | **172 M ops, 0 crash**, runningFuncs=40 steady | thread-safe |
+| memory | RSS flat ~52 MB, FD flat, leak −23 MB/hr | no leak |
+
+¹ 78 of 262 fixtures need defs absent from this repo's `resources/fixtures`;
+universe/function counts loaded fully, so numbers are representative (slightly
+optimistic on raw channel count, which is not the bottleneck).
+
+### Effect-script overlay (`--inject-effects N`, realtime 25 s on the real show)
+Effect scripts run on `EffectScriptRunner`'s OWN timer/thread, so they do NOT
+consume the MasterTimer tick budget:
+
+| injected effects | DMX gap p50 / p99 | late ticks (>1.5×) | RSS peak | user CPU |
+|-----------------:|-------------------|--------------------|---------:|--------:|
+| 0   | 20.6 / 29.4 ms | 0.4% | 79 MB | 12.3 s |
+| 100 | 20.8 / 30.0 ms | 1.0% | 85 MB | 14.2 s |
+| 200 | 20.8 / 31.7 ms | 2.2% | 86 MB | 16.0 s |
+
+Cost is main-thread CPU (~+15% at 200 concurrent effects), ~70 KB RSS/instance
+(bounded, no leak), and a small rise in DMX-tick jitter. 200 concurrent effects
+far exceeds a realistic rig (5–20 looks), so effect scripts fit comfortably.
+
+Note: the `realtime` inter-tick gap carries a fixed ~0.7 ms offscreen-QGuiApp +
+`processEvents` overhead (p50 20.6 even at zero load); the engine COMPUTE per
+tick is the `flatout` figure (p99 9.9 ms). Judge effect cost by the DELTA
+(late-tick %, RSS, CPU), not the absolute gap.

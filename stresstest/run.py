@@ -269,6 +269,33 @@ def cmd_chaos(args, cfg):
     return 0 if ok else 1
 
 
+def cmd_concurrency(args, cfg):
+    # Real timer thread vs operator hammering the fork's hardened cross-thread
+    # accessors. Must survive (no crash) AND not leak. This is the regression
+    # test for the thread-safety batch; run under --sanitize thread for races.
+    c = cfg.get("concurrency", {})
+    secs = args.seconds or c.get("seconds", 300)
+    sample = c.get("sample_seconds", 20)
+    leak_max = c.get("leak_mb_per_hr_max", 15.0)
+    fd_max = c.get("fd_growth_max", 8)
+    print(f"concurrency: {secs}s operator-vs-timer race/leak run (leak threshold {leak_max} MB/hr)\n")
+    res, out, rc = _engine(args, ["--mode", "concurrency", "--scenario", "concurrency",
+                                  "--seconds", str(secs), "--sample-seconds", str(sample)] + c.get("args", []))
+    save_results("concurrency", {"returncode": rc, "result": res})
+    survived = "survived" in out
+    if rc != 0 or not res or not survived:
+        print(f"\nconcurrency: RESULT FAIL (rc={rc}, survived={survived} -> crash/hang?)")
+        if any(m in out for m in SAN_MARKERS):
+            print("  " + next(l for l in out.splitlines() if "ERROR:" in l or "runtime error:" in l))
+        return 1
+    r = res[0]
+    leak = r.get("leakMBperHr", 0.0); fdg = r.get("fdEnd", 0) - r.get("fdStart", 0)
+    ok = (leak <= leak_max) and (fdg <= fd_max)
+    print(f"\nconcurrency: survived {r.get('ops', 0)} ops; leak={leak:.2f} MB/hr (max {leak_max}), "
+          f"fd growth={fdg} (max {fd_max}) -> {'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
 def cmd_golden(args, cfg):
     c = cfg.get("golden", {})
     gfile = os.path.join(HERE, c.get("file", "golden.txt"))
@@ -312,13 +339,13 @@ def cmd_robustness(args, cfg):
 def main():
     ap = argparse.ArgumentParser(description="QLC+ stress orchestrator")
     ap.add_argument("mode", choices=["validate", "baseline", "capability",
-                                     "soak", "chaos", "golden", "robustness"])
+                                     "soak", "chaos", "concurrency", "golden", "robustness"])
     ap.add_argument("--qlcstress", default=DEF_QLCSTRESS)
     ap.add_argument("--fixtures", default=DEF_FIXTURES)
     ap.add_argument("--scripts", default=DEF_SCRIPTS)
     ap.add_argument("--sanitize", default=None,
                     help="address|thread — run against a sanitizer build and fail on reports")
-    ap.add_argument("--seconds", type=int, default=0, help="override duration for soak/chaos")
+    ap.add_argument("--seconds", type=int, default=0, help="override duration for soak/chaos/concurrency")
     ap.add_argument("--golden-capture", action="store_true", help="golden: (re)capture instead of verify")
     args = ap.parse_args()
 
@@ -348,6 +375,8 @@ def main():
         return cmd_soak(args, cfg)
     if args.mode == "chaos":
         return cmd_chaos(args, cfg)
+    if args.mode == "concurrency":
+        return cmd_concurrency(args, cfg)
     if args.mode == "golden":
         return cmd_golden(args, cfg)
     if args.mode == "robustness":
