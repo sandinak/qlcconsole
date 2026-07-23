@@ -138,18 +138,23 @@ bool AudioCaptureQt5::readAudio(int maxSize)
 
     int bufferSize = maxSize * sizeof(*m_audioBuffer);
 
-    QByteArray readBuffer = m_input->readAll();
-    m_currentReadBuffer += readBuffer;
-
-    // qDebug() << "[QT readAudio] " << readBuffer.size() << "bytes read -> (" << m_currentReadBuffer.size() << "/" << bufferSize << ")";
+    m_currentReadBuffer += m_input->readAll();
 
     if (m_currentReadBuffer.size() < bufferSize)
-    {
-        // nothing has been read
-        return false;
-    }
+        return false; // not a full frame captured yet
 
-    memcpy(m_audioBuffer, m_currentReadBuffer.data(), bufferSize);
+    // Bound capture latency. macOS CoreAudio hands us audio in bursts, and a busy
+    // GUI thread can stall this capture thread — either way the backlog would grow
+    // and, because we only consume the OLDEST frame each call, we'd process ever-
+    // staler audio and the reactive output would drift further behind the music
+    // every cycle. If more than a couple of frames have queued, drop the stale
+    // whole-frames and keep only the most recent one (whole-frame granularity so
+    // the channel interleaving in m_audioBuffer stays aligned).
+    const int frames = m_currentReadBuffer.size() / bufferSize;
+    if (frames > 2)
+        m_currentReadBuffer.remove(0, (frames - 1) * bufferSize);
+
+    memcpy(m_audioBuffer, m_currentReadBuffer.constData(), bufferSize);
     m_currentReadBuffer.remove(0, bufferSize);
     return true;
 }
