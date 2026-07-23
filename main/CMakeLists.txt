@@ -63,11 +63,15 @@ endif()
 
 # DEV builds on macOS: main.cpp restricts the Qt plugin search path to
 # <build>/plugins (bundle-style) so a deployed .app only loads its own plugins.
-# But that dir has only QLC+'s output plugins — NOT Qt's imageformats — so the
-# un-deployed dev binary can decode only PNG (built-in); GIF/JPG/etc silently
-# fail to load (blank image objects in the 2D monitor). Mirror Qt's
-# imageformats/iconengines into <build>/plugins so the dev run finds them.
-# (A real macdeployqt bundle copies these itself, so this is dev-only.)
+# But that dir has only QLC+'s output plugins — NOT Qt's own plugins — so the
+# un-deployed dev binary is missing pieces Qt loads dynamically:
+#   * imageformats/iconengines — without them only PNG decodes (built-in);
+#     GIF/JPG/etc silently fail (blank image objects in the 2D monitor).
+#   * audio/mediaservice — without the CoreAudio backend, QAudioInput has no
+#     device at all: audio-input capture (audio triggers, RGB-audio, the I/O
+#     audio preview) silently gets NO signal.
+# Mirror all of them into <build>/plugins so the dev run finds them. (A real
+# macdeployqt bundle copies these itself, so this is dev-only.)
 if(APPLE AND QT_VERSION_MAJOR EQUAL 5 AND TARGET Qt5::qmake)
     get_target_property(_qlc_qmake Qt5::qmake IMPORTED_LOCATION)
     execute_process(COMMAND "${_qlc_qmake}" -query QT_INSTALL_PLUGINS
@@ -82,6 +86,21 @@ if(APPLE AND QT_VERSION_MAJOR EQUAL 5 AND TARGET Qt5::qmake)
                     "${_qlc_qt_plugins}/iconengines"
                     "${CMAKE_BINARY_DIR}/plugins/iconengines"
             COMMENT "Mirroring Qt imageformats/iconengines into build/plugins (dev)")
+    endif()
+    # QtMultimedia backends (audio input needs the CoreAudio plugin).
+    if(EXISTS "${_qlc_qt_plugins}/audio")
+        add_custom_command(TARGET ${module_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${_qlc_qt_plugins}/audio"
+                    "${CMAKE_BINARY_DIR}/plugins/audio"
+            COMMENT "Mirroring Qt audio backend into build/plugins (dev)")
+    endif()
+    if(EXISTS "${_qlc_qt_plugins}/mediaservice")
+        add_custom_command(TARGET ${module_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${_qlc_qt_plugins}/mediaservice"
+                    "${CMAKE_BINARY_DIR}/plugins/mediaservice"
+            COMMENT "Mirroring Qt mediaservice backend into build/plugins (dev)")
     endif()
 endif()
 
