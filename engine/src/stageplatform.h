@@ -84,6 +84,19 @@ public:
     QColor color() const { return m_color; }
     void   setColor(const QColor &c) { m_color = c; }
 
+    /** When locked, the 2-D Monitor will not let the user drag this platform. */
+    bool locked() const { return m_locked; }
+    void setLocked(bool l) { m_locked = l; }
+
+    /** Organizational layer this item belongs to on the 2D map (0 = Default). */
+    quint32 layerId() const { return m_layerId; }
+    void setLayerId(quint32 id) { m_layerId = id; }
+
+    /** Group this item belongs to on the 2D map (0 = ungrouped). Grouped items
+     *  select and move together. */
+    quint32 groupId() const { return m_groupId; }
+    void setGroupId(quint32 id) { m_groupId = id; }
+
     /********************************************************************
      * Load & Save
      ********************************************************************/
@@ -99,6 +112,9 @@ private:
     float   m_depth   = 2.0f;
     float   m_height  = 0.5f;
     QColor  m_color;
+    bool    m_locked  = false;
+    quint32 m_layerId = 0;   ///< 2D-map organizational layer (0 = Default)
+    quint32 m_groupId = 0;   ///< 2D-map group (0 = ungrouped)
 };
 
 /** @} */

@@ -85,7 +85,16 @@ Universe::~Universe()
             usleep(10000);
 
         m_running = false;
-        wait(1000);
+        // Wake the run loop immediately — it may be blocked on the semaphore
+        // (up to ~2 ticks) waiting for the next frame; without this the wait
+        // below can time out.
+        m_semaphore.release(1);
+        // Wait UNCONDITIONALLY for the thread to leave run(). The old wait(1000)
+        // gave up after a second and then let ~QThread run on a still-running
+        // thread, which Qt turns into a fatal "QThread: Destroyed while thread is
+        // still running" abort on shutdown. The loop exits within one frame of
+        // m_running=false, so this returns promptly.
+        wait();
     }
 
     delete m_inputPatch;

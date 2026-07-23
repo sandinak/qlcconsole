@@ -101,6 +101,9 @@ public:
     bool    placed;
     double  posX;
     double  posY;
+    bool    locked = false;     //!< when true, the 2D Monitor won't let it be dragged
+    quint32 layerId = 0;        //!< 2D-map organizational layer (0 = Default)
+    quint32 groupId = 0;        //!< 2D-map group (0 = ungrouped)
 
     // UPS / battery modeling (optional). A source is treated as a UPS when
     // vaRating > 0: its load is checked against the VA capacity, and runtime is

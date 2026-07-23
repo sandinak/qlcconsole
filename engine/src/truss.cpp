@@ -24,6 +24,8 @@
 #define KXMLTrussDirX       QStringLiteral("DirX")
 #define KXMLTrussDirY       QStringLiteral("DirY")
 #define KXMLTrussLocked     QStringLiteral("Locked")
+#define KXMLTrussLayerId    QStringLiteral("LayerId")
+#define KXMLTrussGroupId    QStringLiteral("GroupId")
 
 Truss::Truss(quint32 id, QObject *parent)
     : QObject(parent)
@@ -56,8 +58,12 @@ QVector3D Truss::positionAt(float offset) const
                              m_origin.y() + m_direction.y() * offset,
                              m_origin.z());
         case Vertical:
+            // A child BAR of vertical run is a hanging drop: it extends DOWNWARD
+            // from its origin (the attach point, minus the drop). A free-standing
+            // vertical truss (a tower) extends upward as before.
             return QVector3D(m_origin.x(), m_origin.y(),
-                             m_origin.z() + offset);
+                             isChildBar() ? m_origin.z() - offset
+                                          : m_origin.z() + offset);
         case Ground:
         default:
             // offset interpreted as distance along direction in XY plane
@@ -146,6 +152,29 @@ bool Truss::loadXML(QXmlStreamReader &root)
     setDirection(QPointF(attrs.value(KXMLTrussDirX).toFloat(),
                          attrs.value(KXMLTrussDirY).toFloat()));
     m_locked = (attrs.value(KXMLTrussLocked).toString() == "true");
+    m_layerId = attrs.value(KXMLTrussLayerId).toUInt();
+    m_groupId = attrs.value(KXMLTrussGroupId).toUInt();
+    if (attrs.hasAttribute(QStringLiteral("ParentTruss")))
+    {
+        m_parentTrussId = attrs.value(QStringLiteral("ParentTruss")).toUInt();
+        m_parentOffset  = attrs.value(QStringLiteral("ParentOffset")).toFloat();
+        if (attrs.hasAttribute(QStringLiteral("BarFace")))
+        {
+            m_barFace       = attrs.value(QStringLiteral("BarFace")).toInt();
+            m_barStandoff   = attrs.value(QStringLiteral("BarStandoff")).toFloat();
+            m_barRun        = attrs.value(QStringLiteral("BarRun")).toInt();
+            m_barCrossShift = attrs.value(QStringLiteral("BarCross")).toFloat();
+        }
+        else
+        {
+            // MIGRATE the old parentDrop/direction bar model: an old drop was a
+            // straight-down offset → Bottom face + standoff; a Vertical bar was a
+            // hanging drop, everything else ran along the truss.
+            m_barFace     = FaceBottom;
+            m_barStandoff = attrs.value(QStringLiteral("ParentDrop")).toFloat();
+            m_barRun      = (m_type == Vertical) ? RunDrop : RunAlong;
+        }
+    }
 
     root.skipCurrentElement();
     return true;
@@ -167,6 +196,20 @@ bool Truss::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLTrussDirY,    QString::number(double(m_direction.y()), 'f', 6));
     if (m_locked)
         doc->writeAttribute(KXMLTrussLocked, "true");
+    if (m_layerId != 0)
+        doc->writeAttribute(KXMLTrussLayerId, QString::number(m_layerId));
+    if (m_groupId != 0)
+        doc->writeAttribute(KXMLTrussGroupId, QString::number(m_groupId));
+    if (isChildBar())
+    {
+        doc->writeAttribute(QStringLiteral("ParentTruss"),  QString::number(m_parentTrussId));
+        doc->writeAttribute(QStringLiteral("ParentOffset"), QString::number(double(m_parentOffset), 'f', 3));
+        doc->writeAttribute(QStringLiteral("BarFace"),      QString::number(m_barFace));
+        doc->writeAttribute(QStringLiteral("BarStandoff"),  QString::number(double(m_barStandoff), 'f', 3));
+        doc->writeAttribute(QStringLiteral("BarRun"),       QString::number(m_barRun));
+        if (m_barCrossShift != 0.0f)
+            doc->writeAttribute(QStringLiteral("BarCross"), QString::number(double(m_barCrossShift), 'f', 3));
+    }
     doc->writeEndElement();
     return true;
 }

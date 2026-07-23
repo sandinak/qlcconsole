@@ -29,6 +29,8 @@
 #include <QSet>
 #include <QColor>
 
+#include <functional>
+
 #include "qlcfixturedefcache.h"
 #include "qlcmodifierscache.h"
 #include "inputoutputmap.h"
@@ -405,6 +407,21 @@ public:
      * and arbitrary names with embedded numbers.
      */
     QString nextDuplicateName(const Function *src) const;
+
+    /**
+     * Pattern-agnostic unique-name generator shared by every "increment the
+     * last number" caller (function duplication, fixture multi-add, …).
+     *
+     * Returns @p name unchanged if @p isTaken(name) is false. Otherwise bumps
+     * the rightmost run of digits (preserving zero-padding) until an untaken
+     * candidate is found — "US #3" → "US #4", "0.9.1-Startup" → "0.9.2-Startup".
+     * Falls back to appending " 2", " 3", … when the name has no digits.
+     *
+     * @p isTaken decides collisions, so the caller controls the namespace
+     * (functions in a folder, fixtures in the doc, an accumulating batch, …).
+     */
+    static QString nextUniqueName(const QString &name,
+                                  const std::function<bool(const QString &)> &isTaken);
 
     /**
      * Step the most-recently-started running Chaser forward/backward.

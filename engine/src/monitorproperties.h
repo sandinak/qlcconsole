@@ -22,6 +22,7 @@
 
 #include <QObject>
 #include <QVector3D>
+#include <QPointF>
 #include <QColor>
 #include <QFont>
 #include <QSize>
@@ -52,6 +53,8 @@ typedef struct
     QColor m_color;             ///< Generic: item color, Fixture: gel color
     int m_zoom;                 ///< Fixture: fixed zoom in degrees
     quint32 m_flags;            ///< Item flags as specified in the ItemsFlags enum
+    quint32 m_layerId = 0;      ///< 2D-map organizational layer (0 = Default)
+    quint32 m_groupId = 0;      ///< 2D-map group (0 = ungrouped)
 } PreviewItem;
 
 typedef struct
@@ -147,6 +150,12 @@ public:
     inline void setAimSubjectHeight(float metres) { m_aimSubjectHeight = metres; }
     inline float aimSubjectHeight() const { return m_aimSubjectHeight; }
 
+    /** The world point (metres, stage coordinates) that the 2D-view rulers and
+     *  coordinate readout treat as 0,0. Lets the operator zero measurements at
+     *  stage centre / a downstage mark / anywhere. Default (0,0). */
+    inline void setStageOrigin(const QPointF &metres) { m_stageOrigin = metres; }
+    inline QPointF stageOrigin() const { return m_stageOrigin; }
+
 private:
     QVector3D m_gridSize;
     GridUnits m_gridUnits;
@@ -156,6 +165,7 @@ private:
     int m_gridSubdivisions;
     int m_snapDivisions;
     float m_aimSubjectHeight;
+    QPointF m_stageOrigin;
 
     /********************************************************************
      * Items flags
@@ -166,7 +176,8 @@ public:
         HiddenFlag          = (1 << 0),
         InvertedPanFlag     = (1 << 1),
         InvertedTiltFlag    = (1 << 2),
-        MeshZUpFlag         = (1 << 3)
+        MeshZUpFlag         = (1 << 3),
+        VerticalStripFlag   = (1 << 4)   ///< lay multi-head fixtures out as a vertical strip
     };
 #if QT_VERSION >= 0x050500
     Q_ENUM(ItemFlags)
@@ -219,6 +230,14 @@ public:
     /** Get/Set the flags of a Fixture with with the given $fid, $head and $linked index */
     void setFixtureFlags(quint32 fid, quint16 head, quint16 linked, quint32 flags);
     quint32 fixtureFlags(quint32 fid, quint16 head, quint16 linked) const;
+
+    /** Get/Set the 2D-map organizational layer of a whole Fixture (base item). */
+    void setFixtureLayer(quint32 fid, quint32 layerId);
+    quint32 fixtureLayer(quint32 fid) const;
+
+    /** Get/Set the 2D-map group of a whole Fixture (base item; 0 = ungrouped). */
+    void setFixtureGroup(quint32 fid, quint32 groupId);
+    quint32 fixtureGroup(quint32 fid) const;
 
     /** Get/Set all the Fixture item properties of a Fixture with ID $fid */
     inline FixturePreviewItem fixtureProperties(quint32 fid) const { return m_fixtureItems[fid]; }
@@ -279,6 +298,126 @@ private:
     QMap <quint32, PreviewItem> m_genericItems;
 
     /********************************************************************
+     * Layers (2D map organization: visibility / lock / stacking)
+     ********************************************************************/
+public:
+    /** A named organizational layer for 2D-map items. Every placeable item
+     *  (fixture / truss / platform / target / power source) carries a layer id;
+     *  a layer bundles visibility, lock and stacking order for its members.
+     *  Layer id 0 is the always-present "Default" layer. */
+    struct MonitorLayer
+    {
+        quint32 id = 0;
+        QString name;
+        bool    visible = true;
+        bool    locked  = false;
+        int     order   = 0;    ///< ascending stacking / list order
+    };
+
+    /** Fixed id of the always-present Default layer. */
+    static const quint32 defaultLayerId = 0;
+
+    /** All layers, sorted by ascending order then id. Always includes Default. */
+    QList<MonitorLayer> layers() const;
+
+    /** Look up a layer by id. Unknown ids resolve to the Default layer so that
+     *  an item referencing a deleted layer still renders (as Default). */
+    MonitorLayer layer(quint32 id) const;
+
+    /** True if a layer with this id currently exists. */
+    bool hasLayer(quint32 id) const { return m_layers.contains(id); }
+
+    /** Create a new layer with the given name; returns its new id. */
+    quint32 addLayer(const QString &name);
+
+    /** Remove a layer. The Default layer cannot be removed. Members that still
+     *  reference the removed layer resolve to Default via layer(). */
+    void removeLayer(quint32 id);
+
+    /** Layer property mutators (no-ops on an unknown id). */
+    void setLayerName(quint32 id, const QString &name);
+    void setLayerVisible(quint32 id, bool visible);
+    void setLayerLocked(quint32 id, bool locked);
+    void setLayerOrder(quint32 id, int order);
+
+    /** The layer that newly-created items are assigned to. Falls back to
+     *  Default if set to an unknown id. Persisted with the workspace. */
+    quint32 activeLayerId() const { return m_activeLayerId; }
+    void setActiveLayerId(quint32 id) { m_activeLayerId = hasLayer(id) ? id : defaultLayerId; }
+
+    /** Next unused layer id. */
+    quint32 nextLayerId() const;
+
+private:
+    /** Ensure the Default layer (id 0) exists. Called by ctor/reset/load. */
+    void ensureDefaultLayer();
+
+    QMap<quint32, MonitorLayer> m_layers;
+    quint32 m_activeLayerId = defaultLayerId;
+
+    /********************************************************************
+     * Groups (2D map: named, layer-scoped, nestable collections)
+     ********************************************************************/
+public:
+    /** A named collection of map items that select and move together. A group
+     *  lives under exactly one layer, and may nest inside a parent group
+     *  (parentGroupId != 0) to form group-of-groups. Items reference their
+     *  IMMEDIATE group via their per-item groupId (0 = ungrouped). */
+    struct MonitorGroup
+    {
+        quint32 id = 0;
+        QString name;
+        quint32 layerId = 0;        ///< layer this group sits under
+        quint32 parentGroupId = 0;  ///< 0 = top-level (directly under the layer)
+        /** Auto-groups created for a truss/riser record their anchor item here,
+         *  so the Layers tree can present the group AS that item. Empty kind =
+         *  a plain folder (e.g. a manually-created group). */
+        QString anchorKind;         ///< "" / "truss" / "platform"
+        quint32 anchorId = 0;
+        /** Per-group position lock: freezes every member's position (like a
+         *  per-item lock — still selectable, just not draggable). */
+        bool    locked = false;
+    };
+
+    /** Set a group's position-lock flag (no-op if the group is unknown). */
+    void setGroupLocked(quint32 gid, bool locked);
+    /** True if @p gid or any of its ancestor groups is position-locked. */
+    bool groupChainLocked(quint32 gid) const;
+
+    /** All groups (unordered). */
+    QList<MonitorGroup> groups() const { return m_groups.values(); }
+    MonitorGroup group(quint32 id) const { return m_groups.value(id); }
+    bool hasGroup(quint32 id) const { return m_groups.contains(id); }
+
+    /** Register a new group with an explicit id (the view allocates ids so it
+     *  can account for items on every model, incl. power sources). */
+    void createGroup(quint32 id, const QString &name, quint32 layerId, quint32 parentGroupId = 0);
+
+    /** Create a registry entry for a pre-existing item groupId that has none
+     *  (migration from the anonymous first-cut groups). No-op if present. */
+    void ensureGroup(quint32 id, quint32 layerId);
+
+    /** Remove a group from the registry (does NOT rewrite item groupIds — the
+     *  caller promotes members first). */
+    void removeGroup(quint32 id);
+
+    void setGroupName(quint32 id, const QString &name);
+    void setGroupLayer(quint32 id, quint32 layerId);
+    void setGroupParent(quint32 id, quint32 parentGroupId);
+    /** Mark a group as anchored to an item (kind "truss"/"platform"); the tree
+     *  then renders the group as that item. Pass an empty kind to clear. */
+    void setGroupAnchor(quint32 id, const QString &kind, quint32 anchorId);
+
+    /** Immediate child groups of @p parentGroupId (pass 0 for top-level). */
+    QList<MonitorGroup> childGroups(quint32 parentGroupId) const;
+
+    /** Next unused group id (registry is authoritative once migrated). */
+    quint32 nextGroupId() const;
+
+private:
+    QMap<quint32, MonitorGroup> m_groups;
+
+    /********************************************************************
      * Trusses
      ********************************************************************/
 public:
@@ -296,6 +435,11 @@ public:
 
     /** Next unused truss ID. */
     quint32 nextTrussId() const;
+
+    /** Re-derive the origin of every child-bar truss from its parent (attach
+     *  point along the parent minus its drop). Call after any truss moves and
+     *  once after load. Iterates a few passes so a bar-on-a-bar also settles. */
+    void recomputeChildTrusses();
 
 private:
     QMap<quint32, Truss*> m_trusses;
@@ -323,8 +467,59 @@ public:
      *  Returns 0 if the point is not on any platform. */
     float platformHeightAt(float xMetres, float yMetres) const;
 
+    /** Id of the TOPMOST platform whose footprint contains (xMetres, yMetres),
+     *  or FixtureRigProps::invalidPlatformId() if none. Used to auto deck-mount a
+     *  fixture dropped over a platform. */
+    quint32 platformIdAt(float xMetres, float yMetres) const;
+
 private:
     QMap<quint32, StagePlatform*> m_platforms;
+
+    /********************************************************************
+     * Background / scenic images (placeable objects)
+     ********************************************************************/
+public:
+    /** A placeable image on the 2-D map. Each image lives on a plane and only
+     *  renders in the matching view: Floor → 2D Top (lies flat), FrontBackdrop
+     *  → Front elevation, SideBackdrop → Side elevation. The rectangle is in
+     *  METRES; the meaning of its axes depends on the plane:
+     *   - Floor:  (originX, originY) = upstage-left corner in XY; width→X,
+     *             height→Y (depth); drawn at Z = originZ.
+     *   - Front:  originX = horizontal (X), originZ = bottom edge; width→X,
+     *             height→Z (up).
+     *   - Side:   originY = horizontal (Y), originZ = bottom edge; width→Y,
+     *             height→Z (up). */
+    struct MonitorImage
+    {
+        quint32 id = 0;
+        QString name;
+        QString source;                 ///< image file path
+        enum Plane { Floor = 0, FrontBackdrop = 1, SideBackdrop = 2 };
+        int     plane = Floor;
+        float   originX = 0.0f, originY = 0.0f, originZ = 0.0f;
+        float   width = 2.0f, height = 2.0f;
+        float   rotation = 0.0f;         ///< degrees clockwise, about the centre
+        quint32 layerId = 0;
+        quint32 groupId = 0;
+        bool    locked = false;
+    };
+
+    /** All defined images. */
+    QList<MonitorImage> images() const { return m_images.values(); }
+    /** Look up an image by id (default-constructed MonitorImage if absent). */
+    MonitorImage image(quint32 id) const { return m_images.value(id); }
+    bool hasImage(quint32 id) const { return m_images.contains(id); }
+    /** Create a new image object from @p source; returns its new id. */
+    quint32 addImage(const QString &source);
+    /** Insert or replace an image (keyed by img.id). */
+    void setImage(const MonitorImage &img);
+    /** Remove the image with the given id. */
+    void removeImage(quint32 id);
+    /** Next unused image id. */
+    quint32 nextImageId() const;
+
+private:
+    QMap<quint32, MonitorImage> m_images;
 
     /********************************************************************
      * Stage targets

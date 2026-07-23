@@ -1007,13 +1007,16 @@ void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
         QLCPalette *pal = m_doc->palette(pid);
         if (pal == NULL)
             continue;
-        foreach (const SceneValue &scv, pal->valuesFromFixtureGroups(m_doc, s->fixtureGroups()))
+        // Honour the colour-set offset so stacked colour looks show on the right
+        // sets (primary/secondary/…) in the console preview, matching runtime.
+        const int cOff = QLCPalette::colorSetOffset(m_doc, s->palettes(), pid);
+        foreach (const SceneValue &scv, pal->valuesFromFixtureGroups(m_doc, s->fixtureGroups(), nullptr, cOff))
             if (scv.fxi == lead)
             {
                 m_fixtureConsole->setSceneValue(scv);
                 lockedChannels << scv.channel;
             }
-        foreach (const SceneValue &scv, pal->valuesFromFixtures(m_doc, s->fixtures()))
+        foreach (const SceneValue &scv, pal->valuesFromFixtures(m_doc, s->fixtures(), nullptr, cOff))
             if (scv.fxi == lead)
             {
                 m_fixtureConsole->setSceneValue(scv);

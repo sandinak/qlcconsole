@@ -44,6 +44,9 @@
 #define KXMLQLCPowerSourceRuntimeW  QStringLiteral("RuntimeWatts")
 #define KXMLQLCPowerSourcePosX      QStringLiteral("PosX")
 #define KXMLQLCPowerSourcePosY      QStringLiteral("PosY")
+#define KXMLQLCPowerSourceLocked    QStringLiteral("Locked")
+#define KXMLQLCPowerSourceLayerId   QStringLiteral("LayerId")
+#define KXMLQLCPowerSourceGroupId   QStringLiteral("GroupId")
 #define KXMLQLCPowerCircuit         QStringLiteral("Circuit")
 #define KXMLQLCPowerCircuitName     QStringLiteral("Name")
 #define KXMLQLCPowerCircuitVoltage  QStringLiteral("Voltage")
@@ -186,6 +189,12 @@ bool PowerDistribution::loadXML(QXmlStreamReader &root, Doc *doc)
             src.posX = sattrs.value(KXMLQLCPowerSourcePosX).toString().toDouble();
             src.posY = sattrs.value(KXMLQLCPowerSourcePosY).toString().toDouble();
         }
+        if (sattrs.hasAttribute(KXMLQLCPowerSourceLocked))
+            src.locked = (sattrs.value(KXMLQLCPowerSourceLocked).toString() == "true");
+        if (sattrs.hasAttribute(KXMLQLCPowerSourceLayerId))
+            src.layerId = sattrs.value(KXMLQLCPowerSourceLayerId).toString().toUInt();
+        if (sattrs.hasAttribute(KXMLQLCPowerSourceGroupId))
+            src.groupId = sattrs.value(KXMLQLCPowerSourceGroupId).toString().toUInt();
 
         while (root.readNextStartElement())
         {
@@ -267,6 +276,12 @@ bool PowerDistribution::saveXML(QXmlStreamWriter *doc, bool includeFixtures) con
             doc->writeAttribute(KXMLQLCPowerSourcePosX, QString::number(src.posX));
             doc->writeAttribute(KXMLQLCPowerSourcePosY, QString::number(src.posY));
         }
+        if (src.locked)
+            doc->writeAttribute(KXMLQLCPowerSourceLocked, "true");
+        if (src.layerId != 0)
+            doc->writeAttribute(KXMLQLCPowerSourceLayerId, QString::number(src.layerId));
+        if (src.groupId != 0)
+            doc->writeAttribute(KXMLQLCPowerSourceGroupId, QString::number(src.groupId));
         doc->writeTextElement(KXMLQLCPowerSourceName, src.name);
 
         foreach (const PowerCircuit &cir, src.circuits)

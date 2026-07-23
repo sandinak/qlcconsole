@@ -589,23 +589,16 @@ void Doc::setShowLocked(bool locked)
     m_programmer->setShowLocked(locked);
 }
 
-QString Doc::nextDuplicateName(const Function *src) const
+QString Doc::nextUniqueName(const QString &name,
+                            const std::function<bool(const QString &)> &isTaken)
 {
-    if (src == NULL)
-        return QString();
-    const QString name = src->name();
-    const QString path = src->path();
+    // The name is free as-is — keep it. (Duplication passes the source's own
+    // name, which IS taken, so it always bumps; multi-add passes fresh
+    // candidates that may already be free.)
+    if (name.isEmpty() || isTaken(name) == false)
+        return name;
 
-    auto isUnique = [this, &path](const QString &candidate) {
-        for (Function *fn : m_functions.values())
-        {
-            if (fn != NULL && fn->name() == candidate && fn->path() == path)
-                return false;
-        }
-        return true;
-    };
-
-    // Locate the rightmost run of digits in the source name.
+    // Locate the rightmost run of digits in the name.
     QRegularExpression re(QStringLiteral("(\\d+)"));
     QRegularExpressionMatchIterator it = re.globalMatch(name);
     QRegularExpressionMatch lastMatch;
@@ -619,25 +612,44 @@ QString Doc::nextDuplicateName(const Function *src) const
         const QString prefix = name.left(lastMatch.capturedStart(1));
         const QString suffix = name.mid(lastMatch.capturedEnd(1));
         // Try base+1, base+2, ... until we find one that's not taken.
-        for (int bump = 1; bump < 1000; ++bump)
+        for (int bump = 1; bump < 100000; ++bump)
         {
             const QString numStr = QString::number(base + bump)
                                        .rightJustified(width, QChar('0'));
             const QString candidate = prefix + numStr + suffix;
-            if (isUnique(candidate))
+            if (isTaken(candidate) == false)
                 return candidate;
         }
     }
 
-    // Fallback: append " 2", " 3", … (no digits found, or 1000 bumps
+    // Fallback: append " 2", " 3", … (no digits found, or the bump loop was
     // exhausted — both very unlikely).
-    for (int n = 2; n < 1000; ++n)
+    for (int n = 2; n < 100000; ++n)
     {
         const QString candidate = QStringLiteral("%1 %2").arg(name).arg(n);
-        if (isUnique(candidate))
+        if (isTaken(candidate) == false)
             return candidate;
     }
     return name + QStringLiteral(" (Copy)");
+}
+
+QString Doc::nextDuplicateName(const Function *src) const
+{
+    if (src == NULL)
+        return QString();
+    const QString path = src->path();
+
+    // A candidate collides if any OTHER function in the same folder owns it.
+    auto isTaken = [this, &path](const QString &candidate) {
+        for (Function *fn : m_functions.values())
+        {
+            if (fn != NULL && fn->name() == candidate && fn->path() == path)
+                return true;
+        }
+        return false;
+    };
+
+    return nextUniqueName(src->name(), isTaken);
 }
 
 quint32 Doc::saveBucketAsScene(const SaveBucket &bucket,

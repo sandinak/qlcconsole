@@ -111,6 +111,45 @@ public:
     bool locked() const { return m_locked; }
     void setLocked(bool l) { m_locked = l; }
 
+    /** Organizational layer this item belongs to on the 2D map (0 = Default). */
+    quint32 layerId() const { return m_layerId; }
+    void setLayerId(quint32 id) { m_layerId = id; }
+
+    /** Group this item belongs to on the 2D map (0 = ungrouped). Grouped items
+     *  select and move together. */
+    quint32 groupId() const { return m_groupId; }
+    void setGroupId(quint32 id) { m_groupId = id; }
+
+    /** Child-bar attachment (truss-LOCAL model). A truss can be a "bar" hung on
+     *  a PARENT truss; its full world geometry (origin/direction/type) is DERIVED
+     *  by MonitorProperties::recomputeChildTrusses() from these parent-relative
+     *  parameters, so it always follows the parent:
+     *    - parentOffset : ALONG the parent (metres from the parent's origin).
+     *    - barFace      : which face of the truss it rides (stage-relative).
+     *    - barStandoff  : distance off that face (0 = on the face).
+     *    - barRun       : Along (parallel) / Across (perpendicular boom) / Drop.
+     *  invalidId() parent = a free, independently-placed truss. */
+    enum BarFace { FaceBottom = 0, FaceTop = 1, FaceDownstage = 2,
+                   FaceUpstage = 3, FaceStageRight = 4, FaceStageLeft = 5 };
+    enum BarRun  { RunAlong = 0, RunAcross = 1, RunDrop = 2 };
+
+    quint32 parentTrussId() const { return m_parentTrussId; }
+    void setParentTrussId(quint32 id) { m_parentTrussId = id; }
+    float parentOffset() const { return m_parentOffset; }        ///< "Along"
+    void setParentOffset(float m) { m_parentOffset = m; }
+    int barFace() const { return m_barFace; }
+    void setBarFace(int f) { m_barFace = f; }
+    float barStandoff() const { return m_barStandoff; }
+    void setBarStandoff(float m) { m_barStandoff = m; }
+    int barRun() const { return m_barRun; }
+    void setBarRun(int r) { m_barRun = r; }
+    /** Shift (metres) of the bar along its OWN run relative to the attach point:
+     *  0 = centred on the attach; used to slide a crossbar left/right so the
+     *  truss meets it off-centre. */
+    float barCrossShift() const { return m_barCrossShift; }
+    void setBarCrossShift(float m) { m_barCrossShift = m; }
+    bool isChildBar() const { return m_parentTrussId != invalidId(); }
+
     /** Compute the world-space position of a fixture whose truss-offset
      *  (metres from origin along the truss direction) is @p offset. */
     QVector3D positionAt(float offset) const;
@@ -141,6 +180,14 @@ private:
     float     m_width;
     Profile   m_profile;
     bool      m_locked = false;
+    quint32   m_layerId = 0;   ///< 2D-map organizational layer (0 = Default)
+    quint32   m_groupId = 0;   ///< 2D-map group (0 = ungrouped)
+    quint32   m_parentTrussId = invalidId();  ///< parent truss for a child bar
+    float     m_parentOffset = 0.0f;          ///< "Along": metres along the parent
+    int       m_barFace = FaceBottom;         ///< face of the truss the bar rides
+    float     m_barStandoff = 0.0f;           ///< metres off that face
+    int       m_barRun = RunAlong;            ///< Along / Across / Drop
+    float     m_barCrossShift = 0.0f;         ///< shift along the run (0 = centred)
 };
 
 /** Per-fixture rig assignment.  Stored alongside MonitorProperties visual
@@ -162,6 +209,38 @@ struct FixtureRigProps
      *  the fixture's centre: effective = panMax - computed (before qBound). */
     bool             panInvert  = false;
     bool             tiltInvert = false;
+
+    /** Riser (stage-platform) face mount. When riserPlatformId is not invalid,
+     *  the fixture is mounted on a platform's face and its world position is
+     *  DERIVED from the platform geometry (so it follows the riser). Mutually
+     *  exclusive with truss binding in practice.
+     *   - riserFace: 0 = front (downstage) face, 1 = top surface.
+     *   - riserU: metres across the platform width (X extent), 0..width.
+     *   - riserV: front face → height up the face (Z, 0..height);
+     *             top face   → depth into the platform (Y, 0..depth). */
+    quint32          riserPlatformId = UINT_MAX;   ///< invalid = not riser-mounted
+    int              riserFace = 0;                ///< 0 = front, 1 = top
+    float            riserU = 0.0f;
+    float            riserV = 0.0f;
+
+    /** Vertical side a truss-bound fixture hangs on, relative to the truss
+     *  chord. Only affects the fixture's Z (elevation views): under-hung sits
+     *  below the truss (the physical norm), top-mounted rests on top, centered
+     *  stays on the truss centreline. */
+    enum TrussMountSide { UnderHung = 0, TopMounted = 1, Centered = 2 };
+    int              trussMountSide = UnderHung;
+
+    /** Deck mount: a fixture standing ON TOP of a stage platform ("floor
+     *  mounted"). Unlike a riser FACE mount it keeps its free XY position; only
+     *  its Z is derived — the platform's top height plus @c deckHeightOffset
+     *  (0 = base sits on the deck). Invalid platform id = not deck-mounted. */
+    quint32          deckPlatformId = UINT_MAX;
+    float            deckHeightOffset = 0.0f;       ///< metres above the deck top
+
+    static quint32 invalidPlatformId() { return UINT_MAX; }
+    bool onRiser() const { return riserPlatformId != UINT_MAX; }
+    bool onDeck()  const { return deckPlatformId  != UINT_MAX; }
+    enum RiserFace { RiserFront = 0, RiserTop = 1 };
 };
 
 /** @} */

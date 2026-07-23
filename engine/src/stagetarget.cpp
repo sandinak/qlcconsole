@@ -21,6 +21,9 @@
 #define KXMLStageTargetY       QStringLiteral("Y")
 #define KXMLStageTargetZ       QStringLiteral("Z")
 #define KXMLStageTargetColor   QStringLiteral("Color")
+#define KXMLStageTargetLocked  QStringLiteral("Locked")
+#define KXMLStageTargetLayerId QStringLiteral("LayerId")
+#define KXMLStageTargetGroupId QStringLiteral("GroupId")
 
 StageTarget::StageTarget(quint32 id, QObject *parent)
     : QObject(parent)
@@ -47,6 +50,9 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLStageTargetY))     m_position.setY(a.value(KXMLStageTargetY).toFloat());
     if (a.hasAttribute(KXMLStageTargetZ))     m_position.setZ(a.value(KXMLStageTargetZ).toFloat());
     if (a.hasAttribute(KXMLStageTargetColor)) m_color = QColor(a.value(KXMLStageTargetColor).toString());
+    if (a.hasAttribute(KXMLStageTargetLocked)) m_locked = (a.value(KXMLStageTargetLocked).toString() == "true");
+    if (a.hasAttribute(KXMLStageTargetLayerId)) m_layerId = a.value(KXMLStageTargetLayerId).toUInt();
+    if (a.hasAttribute(KXMLStageTargetGroupId)) m_groupId = a.value(KXMLStageTargetGroupId).toUInt();
 
     root.skipCurrentElement();
     return true;
@@ -62,6 +68,12 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLStageTargetZ,     QString::number(double(m_position.z()), 'f', 3));
     if (m_color.isValid())
         doc->writeAttribute(KXMLStageTargetColor, m_color.name());
+    if (m_locked)
+        doc->writeAttribute(KXMLStageTargetLocked, "true");
+    if (m_layerId != 0)
+        doc->writeAttribute(KXMLStageTargetLayerId, QString::number(m_layerId));
+    if (m_groupId != 0)
+        doc->writeAttribute(KXMLStageTargetGroupId, QString::number(m_groupId));
     doc->writeEndElement();
     return true;
 }

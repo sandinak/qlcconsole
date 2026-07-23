@@ -22,6 +22,9 @@
 #include <QDebug>
 #include <QFont>
 
+#include <algorithm>
+#include <cmath>
+
 #include "monitorproperties.h"
 #include "truss.h"
 #include "stageplatform.h"
@@ -44,6 +47,8 @@
 #define KXMLQLCMonitorLayoutLocked  QStringLiteral("LayoutLocked")
 #define KXMLQLCMonitorSnapDivisions QStringLiteral("SnapDivisions")
 #define KXMLQLCMonitorAimSubjectHeight QStringLiteral("AimSubjectHeight")
+#define KXMLQLCMonitorOriginX       QStringLiteral("OriginX")
+#define KXMLQLCMonitorOriginY       QStringLiteral("OriginY")
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
 #define KXMLQLCMonitorShowLabels    QStringLiteral("ShowLabels")
 
@@ -74,13 +79,32 @@
 #define KXMLQLCMonitorFixtureGelColor   QStringLiteral("GelColor")
 #define KXMLQLCMonitorFixtureFixedZoom  QStringLiteral("FixedZoom")
 
+#define KXMLQLCMonitorFixtureLayerId        QStringLiteral("LayerId")
+#define KXMLQLCMonitorFixtureGroupId        QStringLiteral("GroupId")
+#define KXMLQLCMonitorFixtureVertStrip      QStringLiteral("VertStrip")
 #define KXMLQLCMonitorFixtureHiddenFlag     QStringLiteral("Hidden")
 #define KXMLQLCMonitorFixtureInvPanFlag     QStringLiteral("InvertedPan")
 #define KXMLQLCMonitorFixtureInvTiltFlag    QStringLiteral("InvertedTilt")
 
+#define KXMLQLCMonitorLayer          QStringLiteral("MonitorLayer")
+#define KXMLQLCMonitorLayerID        QStringLiteral("ID")
+#define KXMLQLCMonitorLayerName      QStringLiteral("Name")
+#define KXMLQLCMonitorLayerVisible   QStringLiteral("Visible")
+#define KXMLQLCMonitorLayerLocked    QStringLiteral("Locked")
+#define KXMLQLCMonitorLayerOrder     QStringLiteral("Order")
+#define KXMLQLCMonitorActiveLayer    QStringLiteral("ActiveLayer")
+
+#define KXMLQLCMonitorGroup          QStringLiteral("MonitorGroup")
+#define KXMLQLCMonitorGroupID        QStringLiteral("ID")
+#define KXMLQLCMonitorGroupName      QStringLiteral("Name")
+#define KXMLQLCMonitorGroupLayer     QStringLiteral("LayerId")
+#define KXMLQLCMonitorGroupParent    QStringLiteral("ParentId")
+
 #define GRID_DEFAULT_WIDTH  5
 #define GRID_DEFAULT_HEIGHT 3
 #define GRID_DEFAULT_DEPTH  5
+
+const quint32 MonitorProperties::defaultLayerId;
 
 MonitorProperties::MonitorProperties()
     : m_font(QFont("Arial", 12))
@@ -97,6 +121,7 @@ MonitorProperties::MonitorProperties()
     , m_aimSubjectHeight(1.4f)
     , m_showLabels(false)
 {
+    ensureDefaultLayer();
 }
 
 void MonitorProperties::reset()
@@ -109,6 +134,7 @@ void MonitorProperties::reset()
     m_gridSubdivisions = 1;
     m_snapDivisions = 0;
     m_aimSubjectHeight = 1.4f;
+    m_stageOrigin = QPointF(0, 0);
     m_showLabels = false;
     m_fixtureItems.clear();
     m_genericItems.clear();
@@ -120,6 +146,11 @@ void MonitorProperties::reset()
     qDeleteAll(m_stageTargets);
     m_stageTargets.clear();
     m_rigProps.clear();
+    m_layers.clear();
+    m_activeLayerId = defaultLayerId;
+    ensureDefaultLayer();
+    m_groups.clear();
+    m_images.clear();
 }
 
 /********************************************************************
@@ -400,6 +431,30 @@ quint32 MonitorProperties::fixtureFlags(quint32 fid, quint16 head, quint16 linke
     }
 }
 
+void MonitorProperties::setFixtureLayer(quint32 fid, quint32 layerId)
+{
+    m_fixtureItems[fid].m_baseItem.m_layerId = layerId;
+}
+
+quint32 MonitorProperties::fixtureLayer(quint32 fid) const
+{
+    if (!m_fixtureItems.contains(fid))
+        return defaultLayerId;
+    return m_fixtureItems[fid].m_baseItem.m_layerId;
+}
+
+void MonitorProperties::setFixtureGroup(quint32 fid, quint32 groupId)
+{
+    m_fixtureItems[fid].m_baseItem.m_groupId = groupId;
+}
+
+quint32 MonitorProperties::fixtureGroup(quint32 fid) const
+{
+    if (!m_fixtureItems.contains(fid))
+        return 0;
+    return m_fixtureItems[fid].m_baseItem.m_groupId;
+}
+
 PreviewItem MonitorProperties::fixtureItem(quint32 fid, quint16 head, quint16 linked) const
 {
     if (head == 0 && linked == 0)
@@ -530,6 +585,190 @@ QString MonitorProperties::customBackground(quint32 fid)
 }
 
 /*********************************************************************
+ * Layers
+ *********************************************************************/
+
+void MonitorProperties::ensureDefaultLayer()
+{
+    if (m_layers.contains(defaultLayerId))
+        return;
+
+    MonitorLayer def;
+    def.id      = defaultLayerId;
+    def.name    = QStringLiteral("Default");
+    def.visible = true;
+    def.locked  = false;
+    def.order   = 0;
+    m_layers.insert(def.id, def);
+}
+
+QList<MonitorProperties::MonitorLayer> MonitorProperties::layers() const
+{
+    QList<MonitorLayer> list = m_layers.values();
+    std::sort(list.begin(), list.end(), [](const MonitorLayer &a, const MonitorLayer &b) {
+        if (a.order != b.order)
+            return a.order < b.order;
+        return a.id < b.id;
+    });
+    return list;
+}
+
+MonitorProperties::MonitorLayer MonitorProperties::layer(quint32 id) const
+{
+    // Unknown ids resolve to Default so items on a deleted layer still render.
+    return m_layers.value(id, m_layers.value(defaultLayerId));
+}
+
+quint32 MonitorProperties::nextLayerId() const
+{
+    quint32 id = 1; // 0 is reserved for Default
+    while (m_layers.contains(id))
+        ++id;
+    return id;
+}
+
+quint32 MonitorProperties::addLayer(const QString &name)
+{
+    MonitorLayer l;
+    l.id      = nextLayerId();
+    l.name    = name;
+    l.visible = true;
+    l.locked  = false;
+    // Stack the new layer on top of the current highest order.
+    int maxOrder = -1;
+    foreach (const MonitorLayer &m, m_layers)
+        maxOrder = qMax(maxOrder, m.order);
+    l.order = maxOrder + 1;
+    m_layers.insert(l.id, l);
+    return l.id;
+}
+
+void MonitorProperties::removeLayer(quint32 id)
+{
+    if (id == defaultLayerId)
+        return; // Default is permanent
+    m_layers.remove(id);
+    if (m_activeLayerId == id)
+        m_activeLayerId = defaultLayerId;
+}
+
+void MonitorProperties::setLayerName(quint32 id, const QString &name)
+{
+    if (m_layers.contains(id))
+        m_layers[id].name = name;
+}
+
+void MonitorProperties::setLayerVisible(quint32 id, bool visible)
+{
+    if (m_layers.contains(id))
+        m_layers[id].visible = visible;
+}
+
+void MonitorProperties::setLayerLocked(quint32 id, bool locked)
+{
+    if (m_layers.contains(id))
+        m_layers[id].locked = locked;
+}
+
+void MonitorProperties::setLayerOrder(quint32 id, int order)
+{
+    if (m_layers.contains(id))
+        m_layers[id].order = order;
+}
+
+/*********************************************************************
+ * Groups
+ *********************************************************************/
+
+quint32 MonitorProperties::nextGroupId() const
+{
+    quint32 id = 1; // 0 means "ungrouped"
+    while (m_groups.contains(id))
+        ++id;
+    return id;
+}
+
+void MonitorProperties::createGroup(quint32 id, const QString &name,
+                                    quint32 layerId, quint32 parentGroupId)
+{
+    if (id == 0)
+        return;
+    MonitorGroup g;
+    g.id            = id;
+    g.name          = name;
+    g.layerId       = layerId;
+    g.parentGroupId = parentGroupId;
+    m_groups.insert(id, g);
+}
+
+void MonitorProperties::ensureGroup(quint32 id, quint32 layerId)
+{
+    if (id == 0 || m_groups.contains(id))
+        return;
+    createGroup(id, QStringLiteral("Group %1").arg(id), layerId, 0);
+}
+
+void MonitorProperties::removeGroup(quint32 id)
+{
+    m_groups.remove(id);
+}
+
+void MonitorProperties::setGroupName(quint32 id, const QString &name)
+{
+    if (m_groups.contains(id))
+        m_groups[id].name = name;
+}
+
+void MonitorProperties::setGroupLayer(quint32 id, quint32 layerId)
+{
+    if (m_groups.contains(id))
+        m_groups[id].layerId = layerId;
+}
+
+void MonitorProperties::setGroupParent(quint32 id, quint32 parentGroupId)
+{
+    if (m_groups.contains(id))
+        m_groups[id].parentGroupId = parentGroupId;
+}
+
+void MonitorProperties::setGroupAnchor(quint32 id, const QString &kind, quint32 anchorId)
+{
+    if (m_groups.contains(id))
+    {
+        m_groups[id].anchorKind = kind;
+        m_groups[id].anchorId   = anchorId;
+    }
+}
+
+QList<MonitorProperties::MonitorGroup> MonitorProperties::childGroups(quint32 parentGroupId) const
+{
+    QList<MonitorGroup> out;
+    foreach (const MonitorGroup &g, m_groups)
+        if (g.parentGroupId == parentGroupId)
+            out << g;
+    return out;
+}
+
+void MonitorProperties::setGroupLocked(quint32 gid, bool locked)
+{
+    if (m_groups.contains(gid))
+        m_groups[gid].locked = locked;
+}
+
+bool MonitorProperties::groupChainLocked(quint32 gid) const
+{
+    int guard = 0;   // cycle safety
+    while (gid != 0 && m_groups.contains(gid) && guard++ < 64)
+    {
+        const MonitorGroup &g = m_groups[gid];
+        if (g.locked)
+            return true;
+        gid = g.parentGroupId;
+    }
+    return false;
+}
+
+/*********************************************************************
  * Trusses
  *********************************************************************/
 
@@ -549,12 +788,131 @@ Truss *MonitorProperties::addTruss()
     return t;
 }
 
+// Unit stage-space vector pointing OUT of a truss face. Stage convention here:
+// +X = stage-right, +Y = downstage (toward audience), +Z = up.
+static QVector3D barFaceVector(int face)
+{
+    switch (face)
+    {
+        case Truss::FaceTop:        return QVector3D(0, 0,  1);
+        case Truss::FaceDownstage:  return QVector3D(0,  1, 0);
+        case Truss::FaceUpstage:    return QVector3D(0, -1, 0);
+        case Truss::FaceStageRight: return QVector3D( 1, 0, 0);
+        case Truss::FaceStageLeft:  return QVector3D(-1, 0, 0);
+        case Truss::FaceBottom:
+        default:                    return QVector3D(0, 0, -1);
+    }
+}
+
+void MonitorProperties::recomputeChildTrusses()
+{
+    // Derive each bar's full world geometry (origin/direction/type) from its
+    // truss-LOCAL mount params: Along (parentOffset) · Face · Stand-off · Run.
+    // A few passes let a bar-on-a-bar settle; the cap guards accidental cycles.
+    for (int pass = 0; pass < 4; ++pass)
+    {
+        bool changed = false;
+        foreach (Truss *t, m_trusses)
+        {
+            if (!t->isChildBar())
+                continue;
+            Truss *parent = m_trusses.value(t->parentTrussId(), nullptr);
+            if (parent == nullptr || parent == t)
+                continue;
+
+            const QVector3D attach = parent->positionAt(t->parentOffset());
+            const QVector3D faceN  = barFaceVector(t->barFace());
+            const float half = parent->width() * 0.5f;
+            const QVector3D base = attach + faceN * (half + t->barStandoff());
+
+            QVector3D newOrigin;
+            Truss::TrussType newType;
+            QPointF newDir = parent->direction();
+
+            if (t->barRun() == Truss::RunDrop)
+            {
+                // Hangs straight down from the attach face (child Vertical goes
+                // downward — see Truss::positionAt).
+                newType   = Truss::Vertical;
+                newOrigin = base;
+            }
+            else
+            {
+                newType = Truss::Horizontal;
+                if (t->barRun() == Truss::RunAcross)
+                {
+                    // A crossbar runs perpendicular to BOTH the truss axis and the
+                    // mount face — i.e. across the face horizontally. On a tower's
+                    // downstage face that's stage-left↔right (X), not toward the
+                    // audience. cross = trussAxis × faceNormal.
+                    const QVector3D trussAxis = (parent->type() == Truss::Vertical)
+                        ? QVector3D(0, 0, 1)
+                        : QVector3D(parent->direction().x(), parent->direction().y(), 0);
+                    const QVector3D c = QVector3D::crossProduct(trussAxis, faceN);
+                    if (!qFuzzyIsNull(c.x()) || !qFuzzyIsNull(c.y()))
+                        newDir = QPointF(c.x(), c.y());
+                    else
+                        newDir = QPointF(-parent->direction().y(), parent->direction().x());
+                }
+                // else RunAlong → parallel to the parent (newDir already set).
+                const double dl = std::hypot(newDir.x(), newDir.y());
+                if (dl > 0.0) newDir /= dl;
+                // Centre the bar on the attach point along its run, then apply the
+                // cross-shift (slides the bar left/right so the truss meets it
+                // off-centre).
+                const QVector3D runVec(float(newDir.x()), float(newDir.y()), 0.0f);
+                newOrigin = base - runVec * (t->length() * 0.5f - t->barCrossShift());
+            }
+
+            if (newOrigin != t->origin() || newType != t->type()
+                || newDir != t->direction())
+            {
+                t->setOrigin(newOrigin);
+                t->setType(newType);
+                t->setDirection(newDir);
+                changed = true;
+            }
+        }
+        if (!changed)
+            break;
+    }
+}
+
 void MonitorProperties::removeTruss(quint32 id)
 {
+    // The group the truss anchored (its bound fixtures live here).
+    quint32 gid = 0;
+    if (Truss *t = m_trusses.value(id, nullptr))
+        gid = t->groupId();
+
     // Un-assign any fixtures that were on this truss.
     for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
         if (it->trussId == id)
             it->trussId = Truss::invalidId();
+
+    // Detach any child bars hung on this truss — they become free trusses in
+    // place (their last derived origin is kept).
+    foreach (Truss *t, m_trusses)
+        if (t->parentTrussId() == id)
+        {
+            t->setParentTrussId(Truss::invalidId());
+            t->setParentOffset(0.0f);
+            t->setBarStandoff(0.0f);
+        }
+
+    // Deleting the truss out from under its fixtures also DISASSOCIATES them
+    // from its group — otherwise they'd be left orphaned in a phantom folder
+    // whose anchor (the truss) no longer exists. Pull every member out and, if
+    // that group was dedicated to this truss, drop the group itself.
+    if (gid != 0)
+    {
+        for (auto it = m_fixtureItems.begin(); it != m_fixtureItems.end(); ++it)
+            if (it->m_baseItem.m_groupId == gid)
+                it->m_baseItem.m_groupId = 0;
+        const MonitorGroup g = m_groups.value(gid);
+        if (g.anchorKind == QStringLiteral("truss") && g.anchorId == id)
+            m_groups.remove(gid);
+    }
 
     delete m_trusses.take(id);
 }
@@ -581,6 +939,15 @@ StagePlatform *MonitorProperties::addPlatform()
 
 void MonitorProperties::removePlatform(quint32 id)
 {
+    // Un-mount any fixtures that were rigged on this riser (face or deck).
+    for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
+    {
+        if (it->riserPlatformId == id)
+            it->riserPlatformId = FixtureRigProps::invalidPlatformId();
+        if (it->deckPlatformId == id)
+            it->deckPlatformId = FixtureRigProps::invalidPlatformId();
+    }
+
     delete m_platforms.take(id);
 }
 
@@ -593,6 +960,49 @@ float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
             h = qMax(h, p->height());
     }
     return h;
+}
+
+quint32 MonitorProperties::nextImageId() const
+{
+    quint32 id = 0;
+    while (m_images.contains(id))
+        ++id;
+    return id;
+}
+
+quint32 MonitorProperties::addImage(const QString &source)
+{
+    MonitorImage img;
+    img.id = nextImageId();
+    img.source = source;
+    img.name = QStringLiteral("Image %1").arg(img.id + 1);
+    m_images.insert(img.id, img);
+    return img.id;
+}
+
+void MonitorProperties::setImage(const MonitorImage &img)
+{
+    m_images.insert(img.id, img);
+}
+
+void MonitorProperties::removeImage(quint32 id)
+{
+    m_images.remove(id);
+}
+
+quint32 MonitorProperties::platformIdAt(float xMetres, float yMetres) const
+{
+    quint32 best = FixtureRigProps::invalidPlatformId();
+    float bestH = -1.0f;
+    foreach (const StagePlatform *p, m_platforms)
+    {
+        if (p->containsPoint(xMetres, yMetres) && p->height() > bestH)
+        {
+            bestH = p->height();
+            best = p->id();
+        }
+    }
+    return best;
 }
 
 /*********************************************************************
@@ -643,7 +1053,48 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
     const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
     if (t != nullptr)
-        return t->positionAt(rp.trussOffset);
+    {
+        QVector3D p = t->positionAt(rp.trussOffset);
+        // Offset Z by the mount side (elevation only). Half the truss thickness.
+        const float half = t->width() * 0.5f;
+        if (rp.trussMountSide == FixtureRigProps::TopMounted)
+            p.setZ(p.z() + half);
+        else if (rp.trussMountSide == FixtureRigProps::UnderHung)
+            p.setZ(p.z() - half);
+        // Centered: leave on the chord.
+        return p;
+    }
+
+    // Deck mount: standing on top of a platform. Keep the free XY, derive Z from
+    // the platform's top height (+ offset) so it follows the platform.
+    if (rp.onDeck())
+    {
+        const StagePlatform *pl = m_platforms.value(rp.deckPlatformId, nullptr);
+        if (pl != nullptr)
+        {
+            const QVector3D p = m_fixtureItems[fid].m_baseItem.m_position;   // mm
+            return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f,
+                             pl->height() + rp.deckHeightOffset);
+        }
+    }
+
+    // Riser (platform) face mount: derive the world position from the platform
+    // geometry so the fixture follows the riser. (metres)
+    if (rp.onRiser())
+    {
+        const StagePlatform *pl = m_platforms.value(rp.riserPlatformId, nullptr);
+        if (pl != nullptr)
+        {
+            if (rp.riserFace == FixtureRigProps::RiserTop)
+                return QVector3D(pl->originX() + rp.riserU,
+                                 pl->originY() + rp.riserV, pl->height());
+            // Front (downstage) face: Y = the DOWNSTAGE edge (originY + depth —
+            // originY is the upstage edge in this plan view), X across the
+            // width, Z = height up the face.
+            return QVector3D(pl->originX() + rp.riserU,
+                             pl->originY() + pl->depth(), rp.riserV);
+        }
+    }
 
     // Free-placed: stored X/Y are in MILLIMETRES (see setFixturePosition callers,
     // which pass raw mm), but this function must return METRES to match the truss
@@ -691,6 +1142,10 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
 
     if (attrs.hasAttribute(KXMLQLCMonitorAimSubjectHeight))
         setAimSubjectHeight(attrs.value(KXMLQLCMonitorAimSubjectHeight).toString().toFloat());
+
+    if (attrs.hasAttribute(KXMLQLCMonitorOriginX) || attrs.hasAttribute(KXMLQLCMonitorOriginY))
+        setStageOrigin(QPointF(attrs.value(KXMLQLCMonitorOriginX).toString().toDouble(),
+                               attrs.value(KXMLQLCMonitorOriginY).toString().toDouble()));
 
     while (root.readNextStartElement())
     {
@@ -812,6 +1267,16 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 item.m_flags |= InvertedPanFlag;
             if (tAttrs.hasAttribute(KXMLQLCMonitorFixtureInvTiltFlag))
                 item.m_flags |= InvertedTiltFlag;
+            if (tAttrs.hasAttribute(KXMLQLCMonitorFixtureVertStrip))
+                item.m_flags |= VerticalStripFlag;
+
+            // Layer & group membership are per-fixture (base item) properties.
+            if (headIndex == 0 && linkedIndex == 0
+                    && tAttrs.hasAttribute(KXMLQLCMonitorFixtureLayerId))
+                item.m_layerId = tAttrs.value(KXMLQLCMonitorFixtureLayerId).toString().toUInt();
+            if (headIndex == 0 && linkedIndex == 0
+                    && tAttrs.hasAttribute(KXMLQLCMonitorFixtureGroupId))
+                item.m_groupId = tAttrs.value(KXMLQLCMonitorFixtureGroupId).toString().toUInt();
 
             setFixtureItem(fid, headIndex, linkedIndex, item);
             root.skipCurrentElement();
@@ -870,6 +1335,71 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             m_genericItems[itemID] = item;
             root.skipCurrentElement();
         }
+        else if (root.name() == KXMLQLCMonitorLayer)
+        {
+            QXmlStreamAttributes a = root.attributes();
+            MonitorLayer l;
+            l.id      = a.value(KXMLQLCMonitorLayerID).toUInt();
+            l.name    = a.value(KXMLQLCMonitorLayerName).toString();
+            // Absent Visible defaults to true (older files / hand edits).
+            l.visible = a.hasAttribute(KXMLQLCMonitorLayerVisible)
+                            ? a.value(KXMLQLCMonitorLayerVisible).toInt() != 0
+                            : true;
+            l.locked  = a.value(KXMLQLCMonitorLayerLocked).toInt() != 0;
+            l.order   = a.value(KXMLQLCMonitorLayerOrder).toInt();
+            if (l.name.isEmpty())
+                l.name = (l.id == defaultLayerId) ? QStringLiteral("Default")
+                                                  : QStringLiteral("Layer %1").arg(l.id);
+            m_layers.insert(l.id, l); // overwrites the pristine Default if id 0
+            root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLQLCMonitorActiveLayer)
+        {
+            m_activeLayerId = root.attributes().value(KXMLQLCMonitorLayerID).toUInt();
+            root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLQLCMonitorGroup)
+        {
+            QXmlStreamAttributes a = root.attributes();
+            const quint32 gid = a.value(KXMLQLCMonitorGroupID).toUInt();
+            if (gid != 0)
+            {
+                MonitorGroup g;
+                g.id            = gid;
+                g.name          = a.value(KXMLQLCMonitorGroupName).toString();
+                g.layerId       = a.value(KXMLQLCMonitorGroupLayer).toUInt();
+                g.parentGroupId = a.value(KXMLQLCMonitorGroupParent).toUInt();
+                g.anchorKind    = a.value(QStringLiteral("AnchorKind")).toString();
+                g.anchorId      = a.value(QStringLiteral("AnchorId")).toUInt();
+                g.locked        = a.value(QStringLiteral("Locked")).toInt() != 0;
+                if (g.name.isEmpty())
+                    g.name = QStringLiteral("Group %1").arg(gid);
+                m_groups.insert(gid, g);
+            }
+            root.skipCurrentElement();
+        }
+        else if (root.name() == QStringLiteral("MonitorImage"))
+        {
+            QXmlStreamAttributes a = root.attributes();
+            MonitorImage img;
+            img.id      = a.value(QStringLiteral("ID")).toUInt();
+            img.name    = a.value(QStringLiteral("Name")).toString();
+            img.source  = a.value(QStringLiteral("Source")).toString();
+            img.plane   = a.value(QStringLiteral("Plane")).toInt();
+            img.originX = a.value(QStringLiteral("X")).toFloat();
+            img.originY = a.value(QStringLiteral("Y")).toFloat();
+            img.originZ = a.value(QStringLiteral("Z")).toFloat();
+            img.width   = a.value(QStringLiteral("W")).toFloat();
+            img.height  = a.value(QStringLiteral("H")).toFloat();
+            img.rotation = a.value(QStringLiteral("Rot")).toFloat();
+            img.layerId = a.value(QStringLiteral("LayerId")).toUInt();
+            img.groupId = a.value(QStringLiteral("GroupId")).toUInt();
+            img.locked  = a.value(QStringLiteral("Locked")).toInt() != 0;
+            if (img.name.isEmpty())
+                img.name = QStringLiteral("Image %1").arg(img.id + 1);
+            m_images.insert(img.id, img);
+            root.skipCurrentElement();
+        }
         else if (root.name() == QStringLiteral("Truss"))
         {
             Truss *t = new Truss(nextTrussId(), this);
@@ -924,6 +1454,20 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             rp.tiltOffsetDeg  = a.value("TiltOfs").toFloat();
             rp.panInvert      = a.value("PanInv").toString() == QStringLiteral("1");
             rp.tiltInvert     = a.value("TiltInv").toString() == QStringLiteral("1");
+            if (a.hasAttribute("Riser"))
+            {
+                rp.riserPlatformId = a.value("Riser").toUInt();
+                rp.riserFace       = a.value("RiserFace").toInt();
+                rp.riserU          = a.value("RiserU").toFloat();
+                rp.riserV          = a.value("RiserV").toFloat();
+            }
+            if (a.hasAttribute("TrussSide"))
+                rp.trussMountSide = a.value("TrussSide").toInt();
+            if (a.hasAttribute("Deck"))
+            {
+                rp.deckPlatformId   = a.value("Deck").toUInt();
+                rp.deckHeightOffset = a.value("DeckH").toFloat();
+            }
             m_rigProps[fid] = rp;
             root.skipCurrentElement();
         }
@@ -933,6 +1477,33 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             root.skipCurrentElement();
         }
     }
+
+    // Guarantee the Default layer survives even if the file listed none, and
+    // that the active layer references something that actually exists.
+    ensureDefaultLayer();
+    if (!m_layers.contains(m_activeLayerId))
+        m_activeLayerId = defaultLayerId;
+
+    // MIGRATION: the old single global background image is now a placeable Floor
+    // image object. Convert it (once) so existing workspaces keep their plot.
+    if (!m_commonBackgroundImage.isEmpty())
+    {
+        MonitorImage img;
+        img.id     = nextImageId();
+        img.name   = QStringLiteral("Background");
+        img.source = m_commonBackgroundImage;
+        img.plane  = MonitorImage::Floor;
+        img.originX = 0.0f;
+        img.originY = 0.0f;
+        img.width   = m_gridSize.x();   // span the whole grid (metres/feet cells)
+        img.height  = m_gridSize.z();
+        m_images.insert(img.id, img);
+        m_commonBackgroundImage.clear();
+    }
+
+    // Sync child-bar truss origins to their parents.
+    recomputeChildTrusses();
+
     return true;
 }
 
@@ -949,6 +1520,11 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     if (snapDivisions() > 0)
         doc->writeAttribute(KXMLQLCMonitorSnapDivisions, QString::number(snapDivisions()));
         doc->writeAttribute(KXMLQLCMonitorAimSubjectHeight, QString::number(aimSubjectHeight()));
+    if (!stageOrigin().isNull())
+    {
+        doc->writeAttribute(KXMLQLCMonitorOriginX, QString::number(stageOrigin().x()));
+        doc->writeAttribute(KXMLQLCMonitorOriginY, QString::number(stageOrigin().y()));
+    }
 
     /* Font */
     doc->writeTextElement(KXMLQLCMonitorFont, font().toString());
@@ -1027,10 +1603,19 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
                 doc->writeAttribute(KXMLQLCMonitorFixtureInvPanFlag, KXMLQLCTrue);
             if (item.m_flags & InvertedTiltFlag)
                 doc->writeAttribute(KXMLQLCMonitorFixtureInvTiltFlag, KXMLQLCTrue);
+            if (item.m_flags & VerticalStripFlag)
+                doc->writeAttribute(KXMLQLCMonitorFixtureVertStrip, KXMLQLCTrue);
 
             // always write position
             doc->writeAttribute(KXMLQLCMonitorItemXPosition, QString::number(item.m_position.x()));
             doc->writeAttribute(KXMLQLCMonitorItemYPosition, QString::number(item.m_position.y()));
+
+#ifndef QMLUI
+            // Persist the mounting height (Z) in the widgets build too — the
+            // elevation views use it. Only when set, to keep files clean.
+            if (headIndex == 0 && linkedIndex == 0 && item.m_position.z() != 0.0)
+                doc->writeAttribute(KXMLQLCMonitorItemZPosition, QString::number(item.m_position.z()));
+#endif
 
 #ifdef QMLUI
             doc->writeAttribute(KXMLQLCMonitorItemZPosition, QString::number(item.m_position.z()));
@@ -1051,6 +1636,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
 
             if (item.m_zoom > 0)
                 doc->writeAttribute(KXMLQLCMonitorFixtureFixedZoom, QString::number(item.m_zoom));
+
+            // Layer & group membership are per-fixture (base item) properties.
+            if (headIndex == 0 && linkedIndex == 0 && item.m_layerId != 0)
+                doc->writeAttribute(KXMLQLCMonitorFixtureLayerId, QString::number(item.m_layerId));
+            if (headIndex == 0 && linkedIndex == 0 && item.m_groupId != 0)
+                doc->writeAttribute(KXMLQLCMonitorFixtureGroupId, QString::number(item.m_groupId));
 
             doc->writeEndElement();
         }
@@ -1127,6 +1718,79 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         doc->writeEndElement();
     }
 
+    // Layers. Skip entirely when the layer system is untouched (only a
+    // pristine Default, active layer = Default) so non-users get no XML noise.
+    {
+        const MonitorLayer def = m_layers.value(defaultLayerId);
+        const bool pristine = m_layers.size() == 1
+                && m_activeLayerId == defaultLayerId
+                && def.visible && !def.locked && def.order == 0
+                && def.name == QStringLiteral("Default");
+        if (!pristine)
+        {
+            foreach (const MonitorLayer &l, layers())
+            {
+                doc->writeStartElement(KXMLQLCMonitorLayer);
+                doc->writeAttribute(KXMLQLCMonitorLayerID,      QString::number(l.id));
+                doc->writeAttribute(KXMLQLCMonitorLayerName,    l.name);
+                doc->writeAttribute(KXMLQLCMonitorLayerVisible, QString::number(l.visible ? 1 : 0));
+                if (l.locked)
+                    doc->writeAttribute(KXMLQLCMonitorLayerLocked, QStringLiteral("1"));
+                doc->writeAttribute(KXMLQLCMonitorLayerOrder,   QString::number(l.order));
+                doc->writeEndElement();
+            }
+            if (m_activeLayerId != defaultLayerId)
+            {
+                doc->writeStartElement(KXMLQLCMonitorActiveLayer);
+                doc->writeAttribute(KXMLQLCMonitorLayerID, QString::number(m_activeLayerId));
+                doc->writeEndElement();
+            }
+        }
+    }
+
+    // Groups (structural — always written).
+    foreach (const MonitorGroup &g, m_groups)
+    {
+        doc->writeStartElement(KXMLQLCMonitorGroup);
+        doc->writeAttribute(KXMLQLCMonitorGroupID,    QString::number(g.id));
+        doc->writeAttribute(KXMLQLCMonitorGroupName,  g.name);
+        doc->writeAttribute(KXMLQLCMonitorGroupLayer, QString::number(g.layerId));
+        if (g.parentGroupId != 0)
+            doc->writeAttribute(KXMLQLCMonitorGroupParent, QString::number(g.parentGroupId));
+        if (!g.anchorKind.isEmpty())
+        {
+            doc->writeAttribute(QStringLiteral("AnchorKind"), g.anchorKind);
+            doc->writeAttribute(QStringLiteral("AnchorId"),   QString::number(g.anchorId));
+        }
+        if (g.locked)
+            doc->writeAttribute(QStringLiteral("Locked"), QStringLiteral("1"));
+        doc->writeEndElement();
+    }
+
+    // Placeable images
+    foreach (const MonitorImage &img, m_images)
+    {
+        doc->writeStartElement(QStringLiteral("MonitorImage"));
+        doc->writeAttribute(QStringLiteral("ID"),     QString::number(img.id));
+        doc->writeAttribute(QStringLiteral("Name"),   img.name);
+        doc->writeAttribute(QStringLiteral("Source"), img.source);
+        doc->writeAttribute(QStringLiteral("Plane"),  QString::number(img.plane));
+        doc->writeAttribute(QStringLiteral("X"),      QString::number(double(img.originX), 'f', 3));
+        doc->writeAttribute(QStringLiteral("Y"),      QString::number(double(img.originY), 'f', 3));
+        doc->writeAttribute(QStringLiteral("Z"),      QString::number(double(img.originZ), 'f', 3));
+        doc->writeAttribute(QStringLiteral("W"),      QString::number(double(img.width),  'f', 3));
+        doc->writeAttribute(QStringLiteral("H"),      QString::number(double(img.height), 'f', 3));
+        if (img.rotation != 0.0f)
+            doc->writeAttribute(QStringLiteral("Rot"), QString::number(double(img.rotation), 'f', 1));
+        if (img.layerId != 0)
+            doc->writeAttribute(QStringLiteral("LayerId"), QString::number(img.layerId));
+        if (img.groupId != 0)
+            doc->writeAttribute(QStringLiteral("GroupId"), QString::number(img.groupId));
+        if (img.locked)
+            doc->writeAttribute(QStringLiteral("Locked"), QStringLiteral("1"));
+        doc->writeEndElement();
+    }
+
     // Trusses
     foreach (const Truss *t, m_trusses)
         t->saveXML(doc);
@@ -1157,6 +1821,20 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("PanInv"),  QStringLiteral("1"));
         if (rp.tiltInvert)
             doc->writeAttribute(QStringLiteral("TiltInv"), QStringLiteral("1"));
+        if (rp.onRiser())
+        {
+            doc->writeAttribute(QStringLiteral("Riser"),     QString::number(rp.riserPlatformId));
+            doc->writeAttribute(QStringLiteral("RiserFace"), QString::number(rp.riserFace));
+            doc->writeAttribute(QStringLiteral("RiserU"),    QString::number(double(rp.riserU), 'f', 3));
+            doc->writeAttribute(QStringLiteral("RiserV"),    QString::number(double(rp.riserV), 'f', 3));
+        }
+        if (rp.trussMountSide != FixtureRigProps::UnderHung)
+            doc->writeAttribute(QStringLiteral("TrussSide"), QString::number(rp.trussMountSide));
+        if (rp.onDeck())
+        {
+            doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));
+            doc->writeAttribute(QStringLiteral("DeckH"), QString::number(double(rp.deckHeightOffset), 'f', 3));
+        }
         doc->writeEndElement();
     }
 

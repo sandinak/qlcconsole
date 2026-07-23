@@ -23,6 +23,9 @@
 #define KXMLPlatformDepth   QStringLiteral("Depth")
 #define KXMLPlatformHeight  QStringLiteral("Height")
 #define KXMLPlatformColor   QStringLiteral("Color")
+#define KXMLPlatformLocked  QStringLiteral("Locked")
+#define KXMLPlatformLayerId QStringLiteral("LayerId")
+#define KXMLPlatformGroupId QStringLiteral("GroupId")
 
 StagePlatform::StagePlatform(quint32 id, QObject *parent)
     : QObject(parent)
@@ -53,6 +56,9 @@ bool StagePlatform::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLPlatformDepth))   setDepth(a.value(KXMLPlatformDepth).toFloat());
     if (a.hasAttribute(KXMLPlatformHeight))  setHeight(a.value(KXMLPlatformHeight).toFloat());
     if (a.hasAttribute(KXMLPlatformColor))   m_color = QColor(a.value(KXMLPlatformColor).toString());
+    if (a.hasAttribute(KXMLPlatformLocked))  m_locked = (a.value(KXMLPlatformLocked).toString() == "true");
+    if (a.hasAttribute(KXMLPlatformLayerId)) m_layerId = a.value(KXMLPlatformLayerId).toUInt();
+    if (a.hasAttribute(KXMLPlatformGroupId)) m_groupId = a.value(KXMLPlatformGroupId).toUInt();
 
     root.skipCurrentElement();
     return true;
@@ -70,6 +76,12 @@ bool StagePlatform::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLPlatformHeight,  QString::number(double(m_height),  'f', 3));
     if (m_color.isValid())
         doc->writeAttribute(KXMLPlatformColor, m_color.name());
+    if (m_locked)
+        doc->writeAttribute(KXMLPlatformLocked, "true");
+    if (m_layerId != 0)
+        doc->writeAttribute(KXMLPlatformLayerId, QString::number(m_layerId));
+    if (m_groupId != 0)
+        doc->writeAttribute(KXMLPlatformGroupId, QString::number(m_groupId));
     doc->writeEndElement();
     return true;
 }

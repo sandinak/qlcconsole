@@ -599,8 +599,9 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
                     QLCPalette *p = m_doc->palette(pid);
                     if (p == NULL || p->type() == QLCPalette::Effect)
                         continue;
+                    const int cOff = QLCPalette::colorSetOffset(m_doc, m_scene->palettes(), pid);
                     foreach (const SceneValue &scv,
-                             p->valuesFromFixtureGroups(m_doc, QList<quint32>() << gid))
+                             p->valuesFromFixtureGroups(m_doc, QList<quint32>() << gid, nullptr, cOff))
                         covered.insert((quint64(scv.fxi) << 32) | scv.channel);
                 }
 
@@ -680,9 +681,10 @@ void SceneGroupLooks::reconcileAfterPaletteApply()
         QLCPalette *p = m_doc->palette(pid);
         if (p == NULL)
             continue;
-        foreach (const SceneValue &scv, p->valuesFromFixtureGroups(m_doc, m_scene->fixtureGroups()))
+        const int cOff = QLCPalette::colorSetOffset(m_doc, m_scene->palettes(), pid);
+        foreach (const SceneValue &scv, p->valuesFromFixtureGroups(m_doc, m_scene->fixtureGroups(), nullptr, cOff))
             covered.insert((quint64(scv.fxi) << 32) | scv.channel);
-        foreach (const SceneValue &scv, p->valuesFromFixtures(m_doc, m_scene->fixtures()))
+        foreach (const SceneValue &scv, p->valuesFromFixtures(m_doc, m_scene->fixtures(), nullptr, cOff))
             covered.insert((quint64(scv.fxi) << 32) | scv.channel);
     }
 
