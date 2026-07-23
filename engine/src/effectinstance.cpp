@@ -176,6 +176,12 @@ void EffectInstance::clearResults()
     m_lastResults.clear();
 }
 
+void EffectInstance::collectGarbage()
+{
+    if (m_script.isValid() && m_script.engine() != nullptr)
+        m_script.engine()->collectGarbage();
+}
+
 QList<EffectInstance::DmxWrite> EffectInstance::dmxWrites() const
 {
     QMutexLocker locker(&m_mutex);

@@ -90,6 +90,12 @@ public:
         pinned on the output at Override priority. */
     void clearResults();
 
+    /** Force a V4 garbage-collection pass on this instance's QJSEngine. runTick()
+        allocates a fresh fixtures array + per-fixture objects every tick, which
+        QJSEngine only reclaims lazily — under continuous ticking the heap grows
+        unbounded. The runner calls this periodically to bound RSS. */
+    void collectGarbage();
+
     // Returns the scene's fixture list filtered by the script's declared fixtureTypes.
     // If the script declares no types, all scene fixtures are returned.
     QList<quint32> effectiveFixtureIds() const;

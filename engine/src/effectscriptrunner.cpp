@@ -20,6 +20,10 @@
 #include <QDebug>
 
 static const int TICK_INTERVAL_MS = 20; // ~50 Hz, matches MasterTimer default
+// GC one effect instance every N ticks (round-robin). At 5 (~100 ms) a rig of N
+// effects has each instance collected every 5*N ticks, bounding the V4 heap
+// without a synchronized stop-the-world burst.
+static const int GC_EVERY_TICKS = 5;
 
 EffectScriptRunner::EffectScriptRunner(Doc *doc)
     : QObject(doc)
@@ -317,6 +321,17 @@ void EffectScriptRunner::slotTick()
         const QHash<quint32, QPointF> &deg = inst->lastIntentDegrees();
         for (auto it = deg.constBegin(); it != deg.constEnd(); ++it)
             m_lastSpotDeg[it.key()] = it.value();
+    }
+
+    // Bound the per-instance QJSEngine heap: runTick() allocates a fresh fixtures
+    // array + objects every tick, which V4 only reclaims lazily, so RSS creeps up
+    // over a long show. GC one instance every few ticks (round-robin, not all at
+    // once) so the cost is spread and no single tick stalls. This is on the main
+    // thread; writeDMX() reads m_publishedWrites, so the DMX thread never waits.
+    if (!m_instances.isEmpty() && (++m_gcTick % GC_EVERY_TICKS) == 0)
+    {
+        m_gcCursor = (m_gcCursor + 1) % m_instances.size();
+        m_instances.at(m_gcCursor)->collectGarbage();
     }
     locker.unlock();
 

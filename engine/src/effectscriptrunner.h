@@ -118,6 +118,13 @@ private:
     mutable QMutex   m_instanceMutex;
     QList<EffectInstance*> m_instances;
 
+    /** Round-robin cursor for periodic QJSEngine garbage collection: slotTick()
+     *  GCs one instance every few ticks so effect-script heaps stay bounded over
+     *  long shows (each runTick() allocates a fresh fixtures array). Spreading it
+     *  one-per-tick avoids a synchronized GC burst across all instances. */
+    int m_gcCursor = 0;
+    int m_gcTick = 0;
+
     /** Hand-off buffer: written by the main thread at the end of a tick, read by
      *  the MasterTimer thread in writeDMX(). Guarded by its own mutex, which is
      *  only ever held for a flat list copy — never across script evaluation. */
