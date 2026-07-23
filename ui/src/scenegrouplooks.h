@@ -73,6 +73,10 @@ protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+    /** Catch the look-list's internal drag-drop drop so we can sync the palette
+     *  order afterwards — QTreeWidget's internal move emits rowsRemoved/Inserted,
+     *  not rowsMoved, so we can't rely on a model signal for this. */
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
     void slotRemoveTarget();

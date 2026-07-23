@@ -206,10 +206,11 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     connect(m_removeLookButton, SIGNAL(clicked()), this, SLOT(slotRemoveLook()));
     connect(m_moveLookUpButton, SIGNAL(clicked()), this, SLOT(slotMoveLookUp()));
     connect(m_moveLookDownButton, SIGNAL(clicked()), this, SLOT(slotMoveLookDown()));
-    // Internal drag-drop reorder: the model emits rowsMoved when the user drops
-    // a dragged look at a new position — sync that order back to the scene.
-    connect(m_lookList->model(), SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)),
-            this, SLOT(slotLooksReordered()));
+    // Internal drag-drop reorder: QTreeWidget's internal move implements the drop
+    // as take + insert, so the model emits rowsRemoved/rowsInserted, NOT rowsMoved
+    // — a rowsMoved connection would silently never fire. Instead filter the
+    // list's drop event and sync the order once the move settles. (See eventFilter.)
+    m_lookList->viewport()->installEventFilter(this);
     connect(m_lookList, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotLookSelectionChanged()));
     // Double-click the name column (re)loads the look into the editor even if it
@@ -958,10 +959,21 @@ void SceneGroupLooks::moveSelectedLooks(int delta)
     applyLookOrderFromList();
 }
 
+bool SceneGroupLooks::eventFilter(QObject *watched, QEvent *event)
+{
+    // The look list reorders by internal drag-drop. QTreeWidget performs the drop
+    // as a take+insert (rowsRemoved + rowsInserted), so there is no rowsMoved to
+    // hook — instead we watch the viewport for the drop itself. Let the view
+    // process the drop normally (return false), then sync the resulting order.
+    if (watched == m_lookList->viewport() && event->type() == QEvent::Drop)
+        slotLooksReordered();
+    return QWidget::eventFilter(watched, event);
+}
+
 void SceneGroupLooks::slotLooksReordered()
 {
-    // Fired by the model after an internal drag-drop. Defer the sync so it runs
-    // once the drag fully settles, not mid-operation.
+    // Fired after an internal drag-drop. Defer the sync so it runs once the drop
+    // fully settles (items taken/inserted), not mid-operation.
     QTimer::singleShot(0, this, [this]() { applyLookOrderFromList(); });
 }
 
