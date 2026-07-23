@@ -57,7 +57,11 @@ set(SCRIPT_FILES
     strobe.js
     twinklefox.js
     verticalfall.js
+    waterflow.js
     waves.js
+    fountainlip.js
+    fountainbasin.js
+    lantern.js
 )
 
 # Only perform the copy if we're building for Android
