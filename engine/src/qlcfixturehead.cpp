@@ -112,6 +112,11 @@ QVector <quint32> QLCFixtureHead::rgbChannels() const
     return vector;
 }
 
+QVector<QVector<quint32> > QLCFixtureHead::rgbChannelSets() const
+{
+    return m_rgbSets;
+}
+
 QMap<int, quint32> QLCFixtureHead::channelsMap() const
 {
     return m_channelsMap;
@@ -173,6 +178,11 @@ void QLCFixtureHead::cacheChannels(const QLCFixtureMode* mode)
     m_colorWheels.clear();
     m_shutterChannels.clear();
     m_channelsMap.clear();
+    m_rgbSets.clear();
+
+    // Ordered MSB channels for each primary, so multiple RGB triples in one head
+    // (e.g. WLED primary/secondary/tertiary) can be zipped into ordered sets.
+    QVector<quint32> reds, greens, blues;
 
     foreach (quint32 i, m_channels)
     {
@@ -201,7 +211,19 @@ void QLCFixtureHead::cacheChannels(const QLCFixtureMode* mode)
             }
             else // all the other colors
             {
-                setMapIndex(ch->colour(), ch->controlByte(), i);
+                // First-wins: the channel map (channelNumber/rgbChannels) keeps the
+                // FIRST occurrence of each colour, so a single look colour targets
+                // the PRIMARY set, not the last one (was: last-wins).
+                if (channelNumber(ch->colour(), ch->controlByte()) == QLCChannel::invalid())
+                    setMapIndex(ch->colour(), ch->controlByte(), i);
+
+                // Record every primary MSB in order for rgbChannelSets().
+                if (ch->controlByte() == QLCChannel::MSB)
+                {
+                    if (ch->colour() == QLCChannel::Red)        reds << i;
+                    else if (ch->colour() == QLCChannel::Green) greens << i;
+                    else if (ch->colour() == QLCChannel::Blue)  blues << i;
+                }
             }
         }
         else if (ch->group() == QLCChannel::Colour && ch->controlByte() == QLCChannel::MSB)
@@ -213,6 +235,13 @@ void QLCFixtureHead::cacheChannels(const QLCFixtureMode* mode)
             m_shutterChannels << i;
         }
     }
+
+    // Zip the ordered primaries into RGB sets: set k = (k-th red, k-th green,
+    // k-th blue). A normal fixture yields one set; WLED-style fixtures yield one
+    // per effect colour (primary, secondary, tertiary, …).
+    const int rgbSetCount = qMin(reds.size(), qMin(greens.size(), blues.size()));
+    for (int k = 0; k < rgbSetCount; k++)
+        m_rgbSets << (QVector<quint32>() << reds.at(k) << greens.at(k) << blues.at(k));
 
     // if this head doesn't include any Pan/Tilt channel
     // try to retrieve them from the fixture Mode

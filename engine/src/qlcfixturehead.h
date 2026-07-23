@@ -88,6 +88,15 @@ public:
     QVector <quint32> rgbChannels() const;
 
     /**
+     * Get the ordered list of RGB channel SETS in this head. A fixture may define
+     * several RGB triples in one head (e.g. WLED primary/secondary/tertiary effect
+     * colours). Each entry is [red, green, blue] (MSB channels), in the order they
+     * appear in the mode; the first entry is the primary. rgbChannels() returns
+     * this first (primary) set. Empty if the head has no complete RGB triple.
+     */
+    QVector<QVector<quint32> > rgbChannelSets() const;
+
+    /**
      * Return a copy of the cached channel map
      */
     QMap<int, quint32> channelsMap() const;
@@ -120,6 +129,9 @@ private:
 protected:
     /** Indicates, whether cacheChannels() has already been called */
     bool m_channelsCached;
+
+    /** Ordered RGB triples in this head (primary first). See rgbChannelSets(). */
+    QVector<QVector<quint32> > m_rgbSets;
 
     /** A map of the cached channel indices, organized as follows:
      *  <int> channel type: @see QLCChannel::Group and QLCChannel::PrimaryColour

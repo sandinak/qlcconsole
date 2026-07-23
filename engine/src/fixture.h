@@ -286,6 +286,11 @@ public:
     /** @see QLCFixtureHead */
     QVector <quint32> rgbChannels(int head = 0) const;
 
+    /** Ordered RGB channel SETS for a head (primary first). A head may expose
+     *  several RGB triples (e.g. WLED primary/secondary/tertiary effect colours);
+     *  rgbChannels() returns the first. See QLCFixtureHead::rgbChannelSets(). */
+    QVector<QVector<quint32> > rgbChannelSets(int head = 0) const;
+
     /** @see QLCFixtureHead */
     QVector <quint32> cmyChannels(int head = 0) const;
 

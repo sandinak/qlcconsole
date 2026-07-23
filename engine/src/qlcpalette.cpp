@@ -485,6 +485,20 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 QColor col = startColor;
                 QColor wauv = wauvValue();
 
+                // Ordered look colours: values()[0] is the primary, [1], [2]… are
+                // secondary/tertiary, applied in order to a fixture's extra RGB
+                // sets (WLED-style). Fewer colours than sets → the extra sets are
+                // left untouched.
+                QVector<QColor> lookColours;
+                for (const QVariant &cv : values())
+                {
+                    QColor rgb, w;
+                    stringToColor(cv.toString(), rgb, w);
+                    lookColours << rgb;
+                }
+                if (lookColours.isEmpty())
+                    lookColours << startColor;
+
                 if (fType != Flat)
                 {
                     QColor endColor = fanningValue().value<QColor>();
@@ -511,12 +525,19 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     // white (R+W, G+W, B+W). Only when there's a white channel.
                     int wSub = (whiteCh != QLCChannel::invalid()) ? int(uchar(emitters.red())) : 0;
 
-                    QVector<quint32> rgbCh = fixture->rgbChannels(i);
-                    if (rgbCh.size() == 3)
+                    // Apply the look's colours in order to this head's RGB sets.
+                    // Set 0 (primary) uses the fanned colour + white extraction;
+                    // additional sets use the secondary/tertiary look colours
+                    // literally. Sets past the supplied colours are left untouched.
+                    const QVector<QVector<quint32> > rgbSets = fixture->rgbChannelSets(i);
+                    for (int s = 0; s < rgbSets.size() && s < lookColours.size(); s++)
                     {
-                        list << SceneValue(id, rgbCh.at(0), uchar(qMax(0, col.red()   - wSub)));
-                        list << SceneValue(id, rgbCh.at(1), uchar(qMax(0, col.green() - wSub)));
-                        list << SceneValue(id, rgbCh.at(2), uchar(qMax(0, col.blue()  - wSub)));
+                        const QColor c = (s == 0) ? col : lookColours.at(s);
+                        const int wsub = (s == 0) ? wSub : 0;
+                        const QVector<quint32> &set = rgbSets.at(s);
+                        list << SceneValue(id, set.at(0), uchar(qMax(0, c.red()   - wsub)));
+                        list << SceneValue(id, set.at(1), uchar(qMax(0, c.green() - wsub)));
+                        list << SceneValue(id, set.at(2), uchar(qMax(0, c.blue()  - wsub)));
                     }
                     QVector<quint32> cmyCh = fixture->cmyChannels(i);
                     if (cmyCh.size() == 3)
@@ -529,7 +550,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     // Color-wheel fixtures: snap to the nearest wheel slot.
                     // Only applies when the fixture has no RGB/CMY channels
                     // (those are already handled above with exact mixing).
-                    if (rgbCh.size() < 3 && cmyCh.size() < 3)
+                    if (rgbSets.isEmpty() && cmyCh.size() < 3)
                     {
                         QLCFixtureMode *mode = fixture->fixtureMode();
                         QLCFixtureHead fHead = fixture->head(i);

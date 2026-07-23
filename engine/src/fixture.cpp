@@ -312,6 +312,14 @@ QVector <quint32> Fixture::rgbChannels(int head) const
     return m_fixtureMode->heads().at(head).rgbChannels();
 }
 
+QVector<QVector<quint32> > Fixture::rgbChannelSets(int head) const
+{
+    if (m_fixtureMode == NULL || head < 0 || head >= m_fixtureMode->heads().size())
+        return QVector<QVector<quint32> > ();
+
+    return m_fixtureMode->heads().at(head).rgbChannelSets();
+}
+
 QVector <quint32> Fixture::cmyChannels(int head) const
 {
     if (m_fixtureMode == NULL || head < 0 || head >= m_fixtureMode->heads().size())
