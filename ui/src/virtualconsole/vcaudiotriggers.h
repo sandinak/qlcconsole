@@ -83,6 +83,9 @@ protected slots:
     void slotDisplaySpectrum(double *spectrumBands, int size, double maxMagnitude, quint32 power);
     void slotVolumeChanged(int volume);
     void slotUpdateVolumeSlider(int volume);
+    /** Capture could not start (e.g. macOS microphone permission): untoggle and
+     *  tell the user why. */
+    void slotCaptureError(QString message);
 
 protected:
     QHBoxLayout *m_hbox;

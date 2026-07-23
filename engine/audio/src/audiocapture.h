@@ -147,6 +147,11 @@ signals:
     void volumeChanged(int volume);
     void beatDetected();
 
+    /** Emitted when capture cannot start (e.g. microphone permission denied on
+     *  macOS). Carries a user-facing message. Emitted from the capture thread —
+     *  connect with Qt::QueuedConnection to handle it on the GUI thread. */
+    void captureError(QString message);
+
 protected:
     QMutex m_mutex;
 

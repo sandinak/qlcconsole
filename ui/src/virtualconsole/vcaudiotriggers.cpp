@@ -189,6 +189,12 @@ void VCAudioTriggers::enableCapture(bool enable)
                 this, SLOT(slotDisplaySpectrum(double*,int,double,quint32)));
         connect(m_inputCapture, SIGNAL(volumeChanged(int)),
                 this, SLOT(slotUpdateVolumeSlider(int)));
+        // Capture runs in its own thread — force a queued delivery so the error
+        // (and its message box) is handled on the GUI thread. UniqueConnection
+        // avoids stacking duplicates across repeated enable toggles.
+        connect(m_inputCapture, SIGNAL(captureError(QString)),
+                this, SLOT(slotCaptureError(QString)),
+                Qt::ConnectionType(Qt::QueuedConnection | Qt::UniqueConnection));
         m_inputCapture->registerBandsNumber(m_spectrum->barsNumber());
 
         m_button->blockSignals(true);
@@ -209,6 +215,8 @@ void VCAudioTriggers::enableCapture(bool enable)
                        this, SLOT(slotDisplaySpectrum(double*,int,double,quint32)));
             disconnect(m_inputCapture, SIGNAL(volumeChanged(int)),
                        this, SLOT(slotUpdateVolumeSlider(int)));
+            disconnect(m_inputCapture, SIGNAL(captureError(QString)),
+                       this, SLOT(slotCaptureError(QString)));
         }
 
         m_button->blockSignals(true);
@@ -217,6 +225,14 @@ void VCAudioTriggers::enableCapture(bool enable)
 
         emit captureEnabled(false);
     }
+}
+
+void VCAudioTriggers::slotCaptureError(QString message)
+{
+    // Capture failed to start (typically macOS microphone permission). Reflect
+    // the off state on the button and surface the reason to the user.
+    enableCapture(false);
+    QMessageBox::warning(this, tr("Audio input"), message);
 }
 
 void VCAudioTriggers::toggleEnableButton(bool toggle)

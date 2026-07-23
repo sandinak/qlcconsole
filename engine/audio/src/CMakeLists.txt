@@ -26,6 +26,14 @@ if(APPLE)
     set_target_properties(${module_name} PROPERTIES
         MACOSX_BUNDLE FALSE
     )
+    # macOS microphone-permission (TCC) helper for audio input capture.
+    target_sources(${module_name} PRIVATE
+        audiocapture_macpermission.mm audiocapture_macpermission.h
+    )
+    target_link_libraries(${module_name} PUBLIC
+        "-framework AVFoundation"
+        "-framework Foundation"
+    )
 endif()
 
 if(WIN32)
