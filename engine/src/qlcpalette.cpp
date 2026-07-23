@@ -322,7 +322,7 @@ static bool sceneHasFollowSpot(Doc *doc, const Scene *scene)
 }
 
 QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtures,
-                                                 const Scene *owner)
+                                                 const Scene *owner, int colorSetOffset)
 {
     QList<SceneValue> list;
 
@@ -529,12 +529,20 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     // Set 0 (primary) uses the fanned colour + white extraction;
                     // additional sets use the secondary/tertiary look colours
                     // literally. Sets past the supplied colours are left untouched.
+                    // colour[k] -> set[colorSetOffset + k]. Set 0 (traditional
+                    // primary) uses the fanned colour + white extraction; other
+                    // sets take the look colours literally. Sets past the fixture's
+                    // count are skipped, so stacking more colour looks than a
+                    // fixture has sets simply ignores the extras on that fixture.
                     const QVector<QVector<quint32> > rgbSets = fixture->rgbChannelSets(i);
-                    for (int s = 0; s < rgbSets.size() && s < lookColours.size(); s++)
+                    for (int k = 0; k < lookColours.size(); k++)
                     {
-                        const QColor c = (s == 0) ? col : lookColours.at(s);
-                        const int wsub = (s == 0) ? wSub : 0;
-                        const QVector<quint32> &set = rgbSets.at(s);
+                        const int setIdx = colorSetOffset + k;
+                        if (setIdx >= rgbSets.size())
+                            break;
+                        const QColor c = (setIdx == 0) ? col : lookColours.at(k);
+                        const int wsub = (setIdx == 0) ? wSub : 0;
+                        const QVector<quint32> &set = rgbSets.at(setIdx);
                         list << SceneValue(id, set.at(0), uchar(qMax(0, c.red()   - wsub)));
                         list << SceneValue(id, set.at(1), uchar(qMax(0, c.green() - wsub)));
                         list << SceneValue(id, set.at(2), uchar(qMax(0, c.blue()  - wsub)));
@@ -948,8 +956,22 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
     return list;
 }
 
+int QLCPalette::colorSetOffset(Doc *doc, const QList<quint32> &orderedPalettes, quint32 paletteId)
+{
+    int offset = 0;
+    for (quint32 pid : orderedPalettes)
+    {
+        if (pid == paletteId)
+            break;
+        QLCPalette *p = doc->palette(pid);
+        if (p != NULL && p->type() == Color)
+            offset += qMax(1, p->values().size()); // each colour look consumes >=1 set
+    }
+    return offset;
+}
+
 QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> groups,
-                                                      const Scene *owner)
+                                                      const Scene *owner, int colorSetOffset)
 {
     QList<quint32> fixturesList;
 
@@ -962,7 +984,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> g
         fixturesList.append(group->fixtureList());
     }
 
-    return valuesFromFixtures(doc, fixturesList, owner);
+    return valuesFromFixtures(doc, fixturesList, owner, colorSetOffset);
 }
 
 qreal QLCPalette::valueFactor(qreal progress)

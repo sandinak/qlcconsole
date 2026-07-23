@@ -211,14 +211,16 @@ void EffectInstance::buildSceneBaseValues()
     // matching Scene::write). Effect palettes are skipped — that's us.
     const QList<quint32> groups = scene->fixtureGroups();
     const QList<quint32> fixtures = scene->fixtures();
-    for (quint32 pid : scene->palettes())
+    const QList<quint32> orderedPalettes = scene->palettes();
+    for (quint32 pid : orderedPalettes)
     {
         QLCPalette *p = m_doc->palette(pid);
         if (p == nullptr || p->type() == QLCPalette::Effect)
             continue;
-        for (const SceneValue &sv : p->valuesFromFixtureGroups(m_doc, groups, scene))
+        const int cOff = QLCPalette::colorSetOffset(m_doc, orderedPalettes, pid);
+        for (const SceneValue &sv : p->valuesFromFixtureGroups(m_doc, groups, scene, cOff))
             m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
-        for (const SceneValue &sv : p->valuesFromFixtures(m_doc, fixtures, scene))
+        for (const SceneValue &sv : p->valuesFromFixtures(m_doc, fixtures, scene, cOff))
             m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
     }
 }

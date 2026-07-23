@@ -1023,8 +1023,9 @@ void Scene::handleFadersEnd(MasterTimer *timer)
         if (t > 0)
             anyPositiveOverride = true;
 
-        QList<SceneValue> vals = palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this);
-        vals += palette->valuesFromFixtures(doc(), fixtures(), this);
+        const int cOff = QLCPalette::colorSetOffset(doc(), palettes(), pit.key());
+        QList<SceneValue> vals = palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff);
+        vals += palette->valuesFromFixtures(doc(), fixtures(), this, cOff);
         foreach (const SceneValue &scv, vals)
             channelFadeOut.insert(GenericFader::channelHash(scv.fxi, scv.channel), t);
     }
@@ -1127,11 +1128,12 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
 
                 const int inOverride = paletteFadeMap.value(paletteID).fadeInMs;
                 const uint pFade = inOverride >= 0 ? uint(inOverride) : fadeIn;
+                const int cOff = QLCPalette::colorSetOffset(doc(), palettes(), paletteID);
 
-                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this))
+                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
                     processValue(timer, ua, pFade, scv);
 
-                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this))
+                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this, cOff))
                     processValue(timer, ua, pFade, scv);
             }
         }
@@ -1174,9 +1176,10 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                     palette->type() != QLCPalette::Aim &&
                     palette->type() != QLCPalette::PanTilt) continue;
 
-                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this))
+                const int cOff = QLCPalette::colorSetOffset(doc(), palettes(), paletteID);
+                foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
                     replaceOne(scv);
-                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this))
+                foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this, cOff))
                     replaceOne(scv);
             }
         }

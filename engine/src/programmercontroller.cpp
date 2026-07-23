@@ -522,10 +522,12 @@ quint32 ProgrammerController::tryRoutePaletteEdit(quint32 fid, quint32 ch,
 
             // Does this palette currently drive (fid, ch)? Pass the owning
             // scene: this runs on the DMX thread, where the Doc-wide function
-            // scan in the Aim branch would be a race.
+            // scan in the Aim branch would be a race. Honour the colour-set offset
+            // so a stacked colour look is matched against the set it actually drives.
             bool drives = false;
+            const int cOff = QLCPalette::colorSetOffset(m_doc, pids, pid);
             const QList<SceneValue> exp =
-                pal->valuesFromFixtureGroups(m_doc, groups, scene);
+                pal->valuesFromFixtureGroups(m_doc, groups, scene, cOff);
             for (const SceneValue &sv : exp)
             {
                 if (sv.fxi == fid && sv.channel == ch)

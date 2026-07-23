@@ -154,10 +154,28 @@ public:
      * the DMX path MUST pass it; the nullptr fallback exists only for GUI-side
      * callers with no scene context.
      */
+    /**
+     * @a colorSetOffset (Color type only) is the index of the fixture RGB set
+     * this look's FIRST colour targets, so a scene can stack several colour looks
+     * across a fixture's colour sets: the 1st colour look uses offset 0 (primary),
+     * and each look advances the offset by the number of colours it carries. A
+     * look's colour[k] lands on set[colorSetOffset + k]; sets past the fixture's
+     * count are ignored. 0 = normal (primary) for a single colour look.
+     */
     QList<SceneValue> valuesFromFixtures(Doc *doc, QList<quint32>fixtures,
-                                         const Scene *owner = nullptr);
+                                         const Scene *owner = nullptr, int colorSetOffset = 0);
     QList<SceneValue> valuesFromFixtureGroups(Doc *doc, QList<quint32>groups,
-                                              const Scene *owner = nullptr);
+                                              const Scene *owner = nullptr, int colorSetOffset = 0);
+
+    /**
+     * The RGB-set offset for @a paletteId given a scene's ordered look list:
+     * the total number of colours carried by the Color looks that PRECEDE it.
+     * Pass this as valuesFromFixtures(..., colorSetOffset) so stacked colour looks
+     * fill a fixture's colour sets in order (1st look -> primary, 2nd -> secondary,
+     * …). Non-colour palettes never advance the offset. Returns 0 for the first
+     * colour look and for any non-Color palette.
+     */
+    static int colorSetOffset(Doc *doc, const QList<quint32> &orderedPalettes, quint32 paletteId);
 
 protected:
     /** This method returns a normalized factor between 0.0 and 1.0
