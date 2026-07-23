@@ -1296,6 +1296,12 @@ void ProgrammingManager::slotCanvasModified()
     // Re-apply the scene's targets/looks to the live preview (resetRuntime
     // if running, else start) — no start/stop churn.
     refreshPreview();
+    // Re-populate the fixture console: a look add / remove / REORDER changes the
+    // channel values the selected fixture outputs, but the console is otherwise
+    // only rebuilt on a fixture-selection change — so a reorder would leave the
+    // sliders stale. Re-run the prefill for the current selection.
+    if (!m_selectedFixtures.isEmpty())
+        slotFixturesSelected(m_selectedFixtures);
     // Targets/looks changed → the load changed too.
     recomputePower();
 }
