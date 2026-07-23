@@ -949,8 +949,14 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
      *  and set its current value */
     if (blendFunctionID() != Function::invalidId())
     {
+        // blendScene != this is REQUIRED, not just sensible: write() already holds
+        // this scene's m_valueListMutex, and checkValue()/value() below re-lock it.
+        // A self-referential blend (blendFunctionID == our own id, e.g. set by a
+        // stray programmer action) would therefore self-deadlock the non-recursive
+        // mutex and wedge the whole MasterTimer tick. A scene cannot crossfade from
+        // itself anyway, so skip it.
         Scene *blendScene = qobject_cast<Scene *>(doc()->function(blendFunctionID()));
-        if (blendScene != NULL && blendScene->checkValue(scv))
+        if (blendScene != NULL && blendScene != this && blendScene->checkValue(scv))
         {
             fc->addFlag(FadeChannel::CrossFade);
             fc->setCurrent(blendScene->value(scv.fxi, scv.channel), chIndex);
@@ -1268,6 +1274,11 @@ quint32 Scene::blendFunctionID() const
 
 void Scene::setBlendFunctionID(quint32 fid)
 {
+    // A scene cannot crossfade from itself; treat a self-reference as "no blend"
+    // so write() never hits the self-deadlock guarded against in processValue().
+    if (fid == id())
+        fid = Function::invalidId();
+
     m_blendFunctionID = fid;
     if (isRunning() && fid == Function::invalidId())
     {
