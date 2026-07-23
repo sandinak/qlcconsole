@@ -329,32 +329,26 @@
  <Channel Name="Blue" Preset="IntensityBlue"/>
  <Channel Name="Secondary Red">
   <Group Byte="0">Intensity</Group>
-  <Colour>Red</Colour>
   <Capability Min="0" Max="255">Secondary Red</Capability>
  </Channel>
  <Channel Name="Secondary Green">
   <Group Byte="0">Intensity</Group>
-  <Colour>Green</Colour>
   <Capability Min="0" Max="255">Secondary Green</Capability>
  </Channel>
  <Channel Name="Secondary Blue">
   <Group Byte="0">Intensity</Group>
-  <Colour>Blue</Colour>
   <Capability Min="0" Max="255">Secondary Blue</Capability>
  </Channel>
  <Channel Name="Tertiary Red">
   <Group Byte="0">Intensity</Group>
-  <Colour>Red</Colour>
   <Capability Min="0" Max="255">Tertiary Red</Capability>
  </Channel>
  <Channel Name="Tertiary Green">
   <Group Byte="0">Intensity</Group>
-  <Colour>Green</Colour>
   <Capability Min="0" Max="255">Tertiary Green</Capability>
  </Channel>
  <Channel Name="Tertiary Blue">
   <Group Byte="0">Intensity</Group>
-  <Colour>Blue</Colour>
   <Capability Min="0" Max="255">Tertiary Blue</Capability>
  </Channel>
  <Mode Name="Effect (15ch)">
