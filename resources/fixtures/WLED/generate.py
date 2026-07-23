@@ -1,52 +1,100 @@
 #!/usr/bin/env python3
-# Generate a QLC+ fixture definition for WLED in ArtNet/E1.31 "Effect" DMX mode.
-# Channel map: https://kno.wled.ge/interfaces/e1.31-dmx/#effect
-# Effects/palettes: https://github.com/wled/WLED/wiki/List-of-effects-and-palettes
+"""Generate the QLC+ WLED fixture definition (ArtNet/E1.31 "Effect" DMX mode).
+
+Channel map: https://kno.wled.ge/interfaces/e1.31-dmx/#effect (15 channels).
+The Effect/Palette DMX value IS the WLED index, so lists are firmware-specific.
+The embedded lists below were pulled from a WLED 16.0.1 device (220 effects,
+72 palettes). To rebuild for a different firmware:
+
+    ./generate.py --device 192.168.20.185     # pulls /json/eff and /json/pal
+"""
+import sys, os, json
+from urllib.request import urlopen
 from xml.sax.saxutils import escape
 
 EFFECTS = [
- "Solid","Blink","Breathe","Wipe","Wipe Random","Random Colors","Sweep","Dynamic",
- "Colorloop","Rainbow","Scan","Dual Scan","Fade","Theater","Theater Rainbow","Running",
- "Saw","Twinkle","Dissolve","Dissolve Rnd","Sparkle","Sparkle Dark","Sparkle+","Strobe",
- "Strobe Rainbow","Strobe Mega","Blink Rainbow","Android","Chase","Chase Random",
- "Chase Rainbow","Chase Flash","Chase Flash Rnd","Rainbow Runner","Colorful","Traffic Light",
- "Sweep Random","Running 2","Aurora","Stream","Scanner","Lighthouse","Fireworks","Rain",
- "Merry Christmas","Fire Flicker","Gradient","Loading","Police","Police All","Two Dots",
- "Two Areas","Circus","Halloween","Tri Chase","Tri Wipe","Tri Fade","Lightning","ICU",
- "Multi Comet","Scanner Dual","Stream 2","Oscillate","Pride 2015","Juggle","Palette",
- "Fire 2012","Colorwaves","BPM","Fill Noise","Noise 1","Noise 2","Noise 3","Noise 4",
- "Colortwinkles","Lake","Meteor","Meteor Smooth","Railway","Ripple","Twinklefox","Twinklecat",
- "Halloween Eyes","Solid Pattern","Solid Pattern Tri","Spots","Spots Fade","Glitter","Candle",
- "Fireworks Starburst","Fireworks 1D","Bouncing Balls","Sinelon","Sinelon Dual","Sinelon Rainbow",
- "Popcorn","Drip","Plasma","Percent","Ripple Rainbow","Heartbeat","Pacifica","Candle Multi",
- "Solid Glitter","Sunrise","Phased","TwinkleUp","Noise Pal","Sine","Phased Noise","Flow",
- "Chunchun","Dancing Shadows","Washing machine","Candy Cane","Blends","TV Simulator","Dynamic Smooth",
+ 'Solid', 'Blink', 'Breathe', 'Wipe', 'Wipe Random', 'Random Colors',
+ 'Sweep', 'Dynamic', 'Colorloop', 'Rainbow', 'Scan', 'Scan Dual',
+ 'Fade', 'Theater', 'Theater Rainbow', 'Running', 'Saw', 'Twinkle',
+ 'Dissolve', 'Dissolve Rnd', 'Sparkle', 'Sparkle Dark', 'Sparkle+', 'Strobe',
+ 'Strobe Rainbow', 'Strobe Mega', 'Blink Rainbow', 'Android', 'Chase', 'Chase Random',
+ 'Chase Rainbow', 'Chase Flash', 'Chase Flash Rnd', 'Rainbow Runner', 'Colorful', 'Traffic Light',
+ 'Sweep Random', 'Chase 2', 'Aurora', 'Stream', 'Scanner', 'Lighthouse',
+ 'Fireworks', 'Rain', 'Tetrix', 'Fire Flicker', 'Gradient', 'Loading',
+ 'Rolling Balls', 'Fairy', 'Two Dots', 'Fairytwinkle', 'Running Dual', 'Image',
+ 'Chase 3', 'Tri Wipe', 'Tri Fade', 'Lightning', 'ICU', 'Multi Comet',
+ 'Scanner Dual', 'Stream 2', 'Oscillate', 'Pride 2015', 'Juggle', 'Palette',
+ 'Fire 2012', 'Colorwaves', 'Bpm', 'Fill Noise', 'Noise 1', 'Noise 2',
+ 'Noise 3', 'Noise 4', 'Colortwinkles', 'Lake', 'Meteor', 'Copy Segment',
+ 'Railway', 'Ripple', 'Twinklefox', 'Twinklecat', 'Halloween Eyes', 'Solid Pattern',
+ 'Solid Pattern Tri', 'Spots', 'Spots Fade', 'Glitter', 'Candle', 'Fireworks Starburst',
+ 'Fireworks 1D', 'Bouncing Balls', 'Sinelon', 'Sinelon Dual', 'Sinelon Rainbow', 'Popcorn',
+ 'Drip', 'Plasma', 'Percent', 'Ripple Rainbow', 'Heartbeat', 'Pacifica',
+ 'Candle Multi', 'Solid Glitter', 'Sunrise', 'Phased', 'Twinkleup', 'Noise Pal',
+ 'Sine', 'Phased Noise', 'Flow', 'Chunchun', 'Dancing Shadows', 'Washing Machine',
+ 'Rotozoomer', 'Blends', 'TV Simulator', 'Dynamic Smooth', 'Spaceships', 'Crazy Bees',
+ 'Ghost Rider', 'Blobs', 'Scrolling Text', 'Drift Rose', 'Distortion Waves', 'Soap',
+ 'Octopus', 'Waving Cell', 'Pixels', 'Pixelwave', 'Juggles', 'Matripix',
+ 'Gravimeter', 'Plasmoid', 'Puddles', 'Midnoise', 'Noisemeter', 'Freqwave',
+ 'Freqmatrix', 'GEQ', 'Waterfall', 'Freqpixels', 'RSVD', 'Noisefire',
+ 'Puddlepeak', 'Noisemove', 'Noise2D', 'Perlin Move', 'Ripple Peak', 'Firenoise',
+ 'Squared Swirl', 'PacMan', 'DNA', 'Matrix', 'Metaballs', 'Freqmap',
+ 'Gravcenter', 'Gravcentric', 'Gravfreq', 'DJ Light', 'Funky Plank', 'Shimmer',
+ 'Pulser', 'Blurz', 'Drift', 'Waverly', 'Sun Radiation', 'Colored Bursts',
+ 'Julia', 'RSVD', 'RSVD', 'RSVD', 'Game Of Life', 'Tartan',
+ 'Polar Lights', 'Swirl', 'Lissajous', 'Frizzles', 'Plasma Ball', 'Flow Stripe',
+ 'Hiphotic', 'Sindots', 'DNA Spiral', 'Black Hole', 'Wavesins', 'Rocktaves',
+ 'Akemi', 'PS Volcano', 'PS Fire', 'PS Fireworks', 'PS Vortex', 'PS Fuzzy Noise',
+ 'PS Ballpit', 'PS Box', 'PS Attractor', 'PS Impact', 'PS Waterfall', 'PS Spray',
+ 'PS GEQ 2D', 'PS GEQ Nova', 'PS Ghost Rider', 'PS Blobs', 'PS DripDrop', 'PS Pinball',
+ 'PS Dancing Shadows', 'PS Fireworks 1D', 'PS Sparkler', 'PS Hourglass', 'PS Spray 1D', 'PS 1D Balance',
+ 'PS Chase', 'PS Starburst', 'PS GEQ 1D', 'PS Fire 1D', 'PS Sonic Stream', 'PS Sonic Boom',
+ 'PS Springy', 'PS Galaxy', 'Color Clouds', 'Slow Transition',
 ]
 
 PALETTES = [
- "Default","Random Cycle","Primary color","Based on primary","Set colors","Based on set","Party",
- "Cloud","Lava","Ocean","Forest","Rainbow","Rainbow bands","Sunset","Rivendell","Breeze",
- "Red & Blue","Yellowout","Analoguous","Splash","Pastel","Sunset 2","Beech","Vintage","Departure",
- "Landscape","Beach","Sherbet","Hult","Hult 64","Drywet","Jul","Grintage","Rewhi","Tertiary",
- "Fire","Icefire","Cyane","Light Pink","Autumn","Magenta","Magred","Yelmag","Yelblu",
- "Orange & Teal","Tiamat","April Night","Orangery","C9","Sakura","Aurora","Atlantica","C9 2",
- "C9 New","Temperature","Aurora 2",
+ 'Default', '* Random Cycle', '* Color 1', '* Colors 1&2', '* Color Gradient', '* Colors Only',
+ 'Party', 'Cloud', 'Lava', 'Ocean', 'Forest', 'Rainbow',
+ 'Rainbow Bands', 'Sunset', 'Rivendell', 'Breeze', 'Red & Blue', 'Yellowout',
+ 'Analogous', 'Splash', 'Pastel', 'Sunset 2', 'Beach', 'Vintage',
+ 'Departure', 'Landscape', 'Beech', 'Sherbet', 'Hult', 'Hult 64',
+ 'Drywet', 'Jul', 'Grintage', 'Rewhi', 'Tertiary', 'Fire',
+ 'Icefire', 'Cyane', 'Light Pink', 'Autumn', 'Magenta', 'Magred',
+ 'Yelmag', 'Yelblu', 'Orange & Teal', 'Tiamat', 'April Night', 'Orangery',
+ 'C9', 'Sakura', 'Aurora', 'Atlantica', 'C9 2', 'C9 New',
+ 'Temperature', 'Aurora 2', 'Retro Clown', 'Candy', 'Toxy Reaf', 'Fairy Reaf',
+ 'Semi Blue', 'Pink Candy', 'Red Reaf', 'Aqua Flash', 'Yelblu Hot', 'Lite Light',
+ 'Red Flash', 'Blink Red', 'Red Shift', 'Red Tide', 'Candy2', 'Traffic Light',
 ]
 
-def caps(names, group):
-    out = []
-    for i, n in enumerate(names):
-        out.append(f'  <Capability Min="{i}" Max="{i}">{escape(n)}</Capability>')
+def fetch(ip):
+    e = json.load(urlopen(f"http://{ip}/json/eff", timeout=6))
+    p = json.load(urlopen(f"http://{ip}/json/pal", timeout=6))
+    return e, p
+
+def caps(names):
+    out = [f'  <Capability Min="{i}" Max="{i}">{escape(n)}</Capability>' for i, n in enumerate(names)]
     last = len(names) - 1
     if last < 255:
         out.append(f'  <Capability Min="{last+1}" Max="255">Reserved (clamps to {escape(names[last])})</Capability>')
     return "\n".join(out)
 
-effect_caps = caps(EFFECTS, "Effect")
-palette_caps = caps(PALETTES, "Colour")
-
-xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+def main():
+    eff, pal = EFFECTS, PALETTES
+    if len(sys.argv) == 3 and sys.argv[1] == "--device":
+        eff, pal = fetch(sys.argv[2])
+        print(f"fetched {len(eff)} effects, {len(pal)} palettes from {sys.argv[2]}")
+    phys = ("  <Physical>\n"
+            '   <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>\n'
+            '   <Dimensions Weight="0" Width="100" Height="100" Depth="30"/>\n'
+            '   <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>\n'
+            '   <Focus Type="Fixed" PanMax="0" TiltMax="0"/>\n'
+            '   <Technical PowerConsumption="15" DmxConnector="Other"/>\n'
+            "  </Physical>")
+    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE FixtureDefinition>
+<!-- WLED "Effect" DMX mode. Effect/palette lists ({len(eff)} effects,
+     {len(pal)} palettes); DMX value on the Effect/Palette channel = WLED index. -->
 <FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
  <Creator>
   <Name>Q Light Controller Plus</Name>
@@ -59,7 +107,7 @@ xml = f'''<?xml version="1.0" encoding="UTF-8"?>
  <Channel Name="Master Dimmer" Preset="IntensityMasterDimmer"/>
  <Channel Name="Effect">
   <Group Byte="0">Effect</Group>
-{effect_caps}
+{caps(eff)}
  </Channel>
  <Channel Name="Effect Speed">
   <Group Byte="0">Speed</Group>
@@ -71,7 +119,7 @@ xml = f'''<?xml version="1.0" encoding="UTF-8"?>
  </Channel>
  <Channel Name="Palette">
   <Group Byte="0">Colour</Group>
-{palette_caps}
+{caps(pal)}
  </Channel>
  <Channel Name="Effect Option">
   <Group Byte="0">Effect</Group>
@@ -111,13 +159,7 @@ xml = f'''<?xml version="1.0" encoding="UTF-8"?>
   <Capability Min="0" Max="255">Tertiary Blue</Capability>
  </Channel>
  <Mode Name="Effect (15ch)">
-  <Physical>
-   <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>
-   <Dimensions Weight="0" Width="100" Height="100" Depth="30"/>
-   <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
-   <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
-   <Technical PowerConsumption="15" DmxConnector="Other"/>
-  </Physical>
+{phys}
   <Channel Number="0">Master Dimmer</Channel>
   <Channel Number="1">Effect</Channel>
   <Channel Number="2">Effect Speed</Channel>
@@ -135,38 +177,23 @@ xml = f'''<?xml version="1.0" encoding="UTF-8"?>
   <Channel Number="14">Tertiary Blue</Channel>
  </Mode>
  <Mode Name="Single DRGB (4ch)">
-  <Physical>
-   <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>
-   <Dimensions Weight="0" Width="100" Height="100" Depth="30"/>
-   <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
-   <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
-   <Technical PowerConsumption="15" DmxConnector="Other"/>
-  </Physical>
+{phys}
   <Channel Number="0">Master Dimmer</Channel>
   <Channel Number="1">Red</Channel>
   <Channel Number="2">Green</Channel>
   <Channel Number="3">Blue</Channel>
  </Mode>
  <Mode Name="Single RGB (3ch)">
-  <Physical>
-   <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>
-   <Dimensions Weight="0" Width="100" Height="100" Depth="30"/>
-   <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
-   <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
-   <Technical PowerConsumption="15" DmxConnector="Other"/>
-  </Physical>
+{phys}
   <Channel Number="0">Red</Channel>
   <Channel Number="1">Green</Channel>
   <Channel Number="2">Blue</Channel>
  </Mode>
 </FixtureDefinition>
 '''
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "WLED-Effect-Mode.qxf")
+    open(out, "w").write(xml)
+    print("wrote", out, "with", len(eff), "effects,", len(pal), "palettes")
 
-import os
-outdir = "/Volumes/Ext/git/qlcplus/resources/fixtures/WLED"
-os.makedirs(outdir, exist_ok=True)
-path = os.path.join(outdir, "WLED-Effect-Mode.qxf")
-with open(path, "w") as f:
-    f.write(xml)
-print("wrote", path)
-print("effects:", len(EFFECTS), "palettes:", len(PALETTES))
+if __name__ == "__main__":
+    main()
