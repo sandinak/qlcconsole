@@ -218,12 +218,15 @@
           <item row="2" column="0">
            <widget class="QLabel" name="label_3">
             <property name="text">
-             <string>Level Monitor</string>
+             <string>Input Level</string>
             </property>
            </widget>
           </item>
           <item row="2" column="1">
            <widget class="QProgressBar" name="m_levelProgress">
+            <property name="toolTip">
+             <string>Live level of the selected audio INPUT device (press the monitor button to start).</string>
+            </property>
             <property name="maximum">
              <number>32767</number>
             </property>
@@ -237,6 +240,9 @@
           </item>
           <item row="2" column="2">
            <widget class="QToolButton" name="m_audioPreviewButton">
+            <property name="toolTip">
+             <string>Start/stop monitoring the input level of the selected audio input device.</string>
+            </property>
             <property name="text">
              <string notr="true"/>
             </property>
