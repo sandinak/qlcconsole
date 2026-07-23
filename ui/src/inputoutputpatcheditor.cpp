@@ -75,6 +75,7 @@ InputOutputPatchEditor::InputOutputPatchEditor(QWidget* parent, quint32 universe
     , m_currentFeedbackPluginName(KOutputNone)
     , m_currentFeedback(QLCIOPlugin::invalidLine())
     , m_inputCapture(NULL)
+    , m_audioPeakLevel(0)
 {
     Q_ASSERT(universe < m_ioMap->universesCount());
     Q_ASSERT(ioMap != NULL);
@@ -913,6 +914,8 @@ void InputOutputPatchEditor::slotAudioInputPreview(bool enable)
 
     if (enable == true)
     {
+        m_audioPeakLevel = 0;
+        m_levelProgress->setValue(0);
         connect(m_inputCapture, SIGNAL(dataProcessed(double*,int,double,quint32)),
                 this, SLOT(slotAudioUpdateLevel(double*,int,double,quint32)));
         m_inputCapture->registerBandsNumber(FREQ_SUBBANDS_DEFAULT_NUMBER);
@@ -931,5 +934,11 @@ void InputOutputPatchEditor::slotAudioUpdateLevel(double *spectrumBands, int siz
     Q_UNUSED(size)
     Q_UNUSED(maxMagnitude)
 
-    m_levelProgress->setValue(power);
+    // Decaying peak meter. The raw per-frame power spikes for a single ~20ms
+    // frame on a beat and drops straight back to zero, so on percussive or
+    // intermittent audio the bar just flickers imperceptibly (and sits at 0
+    // between beats). Rise instantly to a new peak, then fall back gradually so
+    // each beat visibly pulses the meter.
+    m_audioPeakLevel = qMax(int(power), (m_audioPeakLevel * 7) / 8);
+    m_levelProgress->setValue(qMin(m_audioPeakLevel, m_levelProgress->maximum()));
 }

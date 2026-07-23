@@ -106,6 +106,9 @@ private slots:
 
 private:
     AudioCapture *m_inputCapture;
+    /** Decaying peak for the input level meter, so percussive/intermittent audio
+     *  (beats) visibly pulses the bar instead of flashing for a single frame. */
+    int m_audioPeakLevel;
 };
 
 /** @} */
