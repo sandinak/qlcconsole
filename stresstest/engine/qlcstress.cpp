@@ -48,6 +48,7 @@
 #include "show.h"
 #include "rgbscriptscache.h"
 #include "qlcpalette.h"
+#include "ioplugincache.h"
 #include <QDir>
 #include "qlcfixturedefcache.h"
 #include "showbuilder.h"
@@ -475,6 +476,36 @@ static bool loadWorkspace(Doc *doc, const QString &path, QString &err)
     return false;
 }
 
+// ---- OPTIONAL: put real ArtNet on the wire ----------------------------------
+// The harness normally loads no I/O plugins, so nothing hits the network. With
+// --artnet <ip> we load the ArtNet plugin and patch every universe to broadcast
+// on the interface owning <ip>. This exercises the full output pipeline (universe
+// threads -> dumpOutput -> ArtNet plugin -> UDP) under the same stress load.
+// Point it at an ISOLATED VLAN — it broadcasts 50 Hz x N-universe ArtNet.
+static bool enableArtnetOutput(Doc *doc, const QString &pluginDir, const QString &ip)
+{
+    doc->ioPluginCache()->load(QDir(pluginDir));
+    InputOutputMap *iomap = doc->inputOutputMap();
+    const QStringList outs = iomap->pluginOutputs("ArtNet");
+    if (outs.isEmpty())
+    {
+        fprintf(stderr, "artnet: plugin not loaded or no interfaces (plugin-dir=%s)\n",
+                qPrintable(pluginDir));
+        return false;
+    }
+    fprintf(stdout, "artnet: ArtNet plugin loaded; interfaces = [%s]\n", qPrintable(outs.join(", ")));
+    if (!outs.contains(ip))
+        fprintf(stderr, "artnet: WARNING %s not among interfaces above; setOutputPatch may fall back to line 0\n",
+                qPrintable(ip));
+    quint32 patched = 0;
+    for (quint32 u = 0; u < iomap->universesCount(); u++)
+        if (iomap->setOutputPatch(u, "ArtNet", ip, 0, false, 0))
+            patched++;
+    fprintf(stdout, "artnet: patched %u/%u universes -> ArtNet broadcast on %s (QLC universe N = ArtNet universe N)\n",
+            patched, iomap->universesCount(), qPrintable(ip));
+    return patched > 0;
+}
+
 // ---- pick which loaded functions to start (realistic "operate" run) ----------
 // A real show has hundreds of Scenes/Collections that are NOT all live at once —
 // the operator runs a cue list (Chaser), which steps through Collections, which
@@ -864,10 +895,13 @@ int main(int argc, char *argv[])
     QCommandLineOption oStart("start", "with --load: what to start (chasers | collections | all | none)", "what", "chasers");
     QCommandLineOption oInject("inject-effects", "attach Effect palettes (fork) to N scenes AND start them, so the EffectScriptRunner ticks — measures effect-script cost (realtime/concurrency only)", "n", "0");
     QCommandLineOption oEffDir("effect-scripts-dir", "resources/effectscripts path", "dir", "../../resources/effectscripts");
+    QCommandLineOption oArtnet("artnet", "put REAL ArtNet on the wire: broadcast every universe on the interface owning this IP (use an ISOLATED VLAN)", "ip", "");
+    QCommandLineOption oPluginDir("plugin-dir", "dir with the built I/O plugin dylib(s) for --artnet", "dir", "../../build-stress/plugins/artnet/src");
     p.addOptions({oUni, oFpu, oScenes, oChasers, oMatrices, oEfx, oColl, oSeed,
                   oMode, oTicks, oSecs, oFreq, oFix, oScr,
                   oScripts, oSequences, oShows, oJson, oScenario,
-                  oSampleSec, oGoldenFile, oGoldenVerify, oChaosAggr, oLoad, oStart, oInject, oEffDir});
+                  oSampleSec, oGoldenFile, oGoldenVerify, oChaosAggr, oLoad, oStart, oInject, oEffDir,
+                  oArtnet, oPluginDir});
     p.process(app);
 
     const QStringList args = p.positionalArguments();
@@ -1033,6 +1067,15 @@ int main(int argc, char *argv[])
         {
             funcs = buildShow(doc, spec, fixDir, scrDir);
         }
+
+        // Optional real ArtNet output (isolated VLAN). Patch AFTER the universes
+        // exist (load/build) and BEFORE the run starts them.
+        if (!p.value(oArtnet).isEmpty())
+        {
+            if (!enableArtnetOutput(doc, p.value(oPluginDir), p.value(oArtnet)))
+                fprintf(stderr, "artnet: output NOT enabled — running compute-only\n");
+        }
+
         int rc = 0;
         if (mode == "realtime")
             rc = runRealtime(doc, funcs, seconds, spec);
