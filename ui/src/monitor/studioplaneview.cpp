@@ -20,11 +20,15 @@
 #include <QPainter>
 #include <QMouseEvent>
 #include <QResizeEvent>
+#include <QWheelEvent>
+#include <QPolygonF>
 #include <QtMath>
 
 #include "studioplaneview.h"
 #include "doc.h"
 #include "fixture.h"
+#include "truss.h"
+#include "stageplatform.h"
 #include "monitorproperties.h"
 
 static const int kDotRadius = 7;
@@ -189,6 +193,9 @@ void StudioPlaneView::paintEvent(QPaintEvent *)
     p.drawLine(QPointF(0, m_originPx.y()), QPointF(width(), m_originPx.y()));
     p.drawLine(QPointF(m_originPx.x(), 0), QPointF(m_originPx.x(), height()));
 
+    // --- reference structure (platforms / trusses) --------------------------
+    drawStructure(p);
+
     // --- plane legend -------------------------------------------------------
     p.setPen(QColor(150, 155, 165));
     const char *legend = (m_plane == Top)   ? "Top  ·  X →   Y ↓"
@@ -213,6 +220,68 @@ void StudioPlaneView::paintEvent(QPaintEvent *)
             p.drawText(QPointF(s.x() + kDotRadius + 3, s.y() + 4), fx->name());
         }
     }
+}
+
+void StudioPlaneView::drawStructure(QPainter &p) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // Platforms: draw the face relevant to the current plane, transformed into
+    // the group's LOCAL frame, so you can place fixtures against the riser.
+    p.setPen(QPen(QColor(150, 135, 85), 1.5));
+    p.setBrush(QColor(150, 135, 85, 45));
+    foreach (StagePlatform *pl, props->platforms())
+    {
+        if (pl == nullptr)
+            continue;
+        const float ox = pl->originX(), oy = pl->originY();
+        const float w = pl->width(), d = pl->depth(), h = pl->height();
+        QVector<QVector3D> face;
+        switch (m_plane)
+        {
+        case Front:   // downstage face (y = oy+d): X across, Z up
+            face = QVector<QVector3D>{ QVector3D(ox, oy + d, 0), QVector3D(ox + w, oy + d, 0),
+                                       QVector3D(ox + w, oy + d, h), QVector3D(ox, oy + d, h) };
+            break;
+        case Side:    // stage-right face (x = ox): Y across, Z up
+            face = QVector<QVector3D>{ QVector3D(ox, oy, 0), QVector3D(ox, oy + d, 0),
+                                       QVector3D(ox, oy + d, h), QVector3D(ox, oy, h) };
+            break;
+        case Top:
+        default:      // footprint (z = 0)
+            face = QVector<QVector3D>{ QVector3D(ox, oy, 0), QVector3D(ox + w, oy, 0),
+                                       QVector3D(ox + w, oy + d, 0), QVector3D(ox, oy + d, 0) };
+            break;
+        }
+        QPolygonF poly;
+        foreach (const QVector3D &c, face)
+            poly << worldToScreen(project(props->worldToGroupLocal(m_groupId, c)));
+        p.drawPolygon(poly);
+    }
+
+    // Trusses: a line from end to end (in the local frame).
+    p.setPen(QPen(QColor(95, 140, 165), 3));
+    foreach (Truss *t, props->trusses())
+    {
+        if (t == nullptr)
+            continue;
+        const QVector3D a = props->worldToGroupLocal(m_groupId, t->positionAt(0));
+        const QVector3D b = props->worldToGroupLocal(m_groupId, t->positionAt(t->length()));
+        p.drawLine(worldToScreen(project(a)), worldToScreen(project(b)));
+    }
+}
+
+void StudioPlaneView::wheelEvent(QWheelEvent *e)
+{
+    const double f = (e->angleDelta().y() > 0) ? 1.15 : (1.0 / 1.15);
+    const QPointF cur = e->position();
+    const QPointF w = screenToWorld(cur);         // world point under the cursor
+    m_scale = qBound(4.0, m_scale * f, 2000.0);
+    // Keep that world point pinned under the cursor after the zoom.
+    m_originPx = QPointF(cur.x() - w.x() * m_scale,
+                         cur.y() - vFactor(m_plane) * w.y() * m_scale);
+    update();
+    e->accept();
 }
 
 void StudioPlaneView::mousePressEvent(QMouseEvent *e)

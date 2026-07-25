@@ -62,10 +62,12 @@ protected:
     void mouseMoveEvent(QMouseEvent *) override;
     void mouseReleaseEvent(QMouseEvent *) override;
     void resizeEvent(QResizeEvent *) override;
+    void wheelEvent(QWheelEvent *) override;
 
 private:
     QList<quint32> members() const;
     void refit();                              ///< recompute scale/offset to fit
+    void drawStructure(QPainter &p) const;     ///< platforms + trusses as reference
     QPointF project(const QVector3D &local) const;   ///< local → in-plane (a,b) metres
     QVector3D unproject(const QPointF &ab, const QVector3D &prev) const; ///< (a,b) → local
     QPointF worldToScreen(const QPointF &ab) const;  ///< in-plane metres → pixels

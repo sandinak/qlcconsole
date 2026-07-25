@@ -995,6 +995,24 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
             menu.addAction(tr("Rename…"), this, [this, item]() {
                 m_tree->editItem(item, 0);
             });
+        // Remove from group — only meaningful when the leaf sits under a group.
+        if (m_editable)
+        {
+            QTreeWidgetItem *par = item->parent();
+            quint32 parentGroup = 0;
+            if (par != nullptr && par->data(0, NodeTypeRole).toInt() == NodeGroup)
+                parentGroup = par->data(0, NodeIdRole).toUInt();
+            if (parentGroup != 0)
+            {
+                const quint32 lyr = m_props->group(parentGroup).layerId;
+                menu.addAction(tr("Remove from group"), this, [this, kind, id, lyr]() {
+                    QList<QPair<QString, quint32> > one;
+                    one.append(qMakePair(kind, id));
+                    if (m_view) m_view->reparentToLayer(one, lyr);
+                    reload();
+                });
+            }
+        }
     }
     else if (type == NodeLayer)
     {
