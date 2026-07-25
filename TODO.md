@@ -9,6 +9,29 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### 2026-07-25 — Fixture Studio: 2D-map groups as editable studio objects *(DESIGN — see FIXTURESTUDIO_DESIGN.md)*
+Promote `MonitorGroup` to a first-class, editable **studio object**: a rigid body
+with a local frame (origin+rotation), members in group-local coords, world
+position **derived** (the truss/`fixtureRigPosition` pattern). Click a group →
+**3-plane (Top/Front/Side) editor**. FixtureGroup cell layouts **inform** (seed or
+adopt, never lock) the physical layout; cell space stays the script's coordinate
+system untouched. Decisions locked (2026-07-25 exploration): **(A) bind &
+reference**, not merge; **snapshot** FG-into-FG composition **with source-FG
+provenance** so live is a later flip; studio geometry orders composed cells.
+Motivating case: 8″×8″×8′ steps anchored on platforms, front/top FGs informed by
+the layout, composed into "all step fronts" / "all step tops".
+- [ ] **Phase 1** — studio-group core: `MonitorGroup` origin+rotation (model+XML+
+      full ABI rebuild); group-local coords + derived world pos; rigid move/rotate;
+      3-plane editor (reuse `monitorgraphicsview` + `riserfaceeditor`). *(~1.5–2.5 wk)*
+- [ ] **Phase 2** — FG binding: link + seed(cell×pitch)/adopt(current pos);
+      decoupled cell space; cell-index overlay. *(~2–4 days)*
+- [ ] **Phase 3** — functional composition: block-inclusion + **source-FG
+      provenance**; "Rebuild from members"; order composed cells by studio geometry.
+      *(~3–5 days)*
+- [ ] **Phase 4** — template/instance component library: template file (slots/
+      roles/layout/anchor); stamp flow; library browser. *(~1.5–2 wk)*
+- [ ] **Later** — live composition: rebuild on `FixtureGroup::changed(id)`. *(~1–2 days)*
+
 ### 2026-07-21 — 2D Monitor: bar-on-truss REBUILT on a truss-local model *(BUILT — needs eyeball)*
 Reworked start-to-finish (the parentDrop/direction model kept surprising us).
 A bar is still a child truss, but its world geometry is DERIVED from five
