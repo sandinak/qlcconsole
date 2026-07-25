@@ -137,6 +137,12 @@ public:
      *  local offsets) for @p groupId, refreshing the map live. */
     void openStudioGroupEditor(quint32 groupId);
 
+    /** Open @p groupId in the studio editor, first promoting a plain group into
+     *  a studio group (enable its frame, adopting current fixture positions) if
+     *  it is not one yet. This is the Layers-panel entry point — edit an
+     *  existing group (US-1, …) as a studio object directly. */
+    void openStudioGroupForGroup(quint32 groupId);
+
     /** Stamp a saved studio template (component) onto the current fixture
      *  selection: pick a .json, bind its roles to the selected fixtures in
      *  order, and drop a placed studio group. */

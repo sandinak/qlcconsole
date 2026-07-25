@@ -984,6 +984,59 @@ void MonitorGraphicsView::stampStudioTemplate()
     openStudioGroupEditor(gid);
 }
 
+void MonitorGraphicsView::openStudioGroupForGroup(quint32 groupId)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (groupId == 0 || !props->hasGroup(groupId))
+        return;
+
+    // Turn an existing plain group (e.g. "US-1") into a studio group in place:
+    // enable its local frame and ADOPT where its fixtures already sit (origin =
+    // their centroid, each local = world - origin) so nothing visually jumps.
+    // A group that is already a studio group is opened as-is.
+    if (!props->group(groupId).hasFrame)
+    {
+        // Members = fixtures whose group chain includes this group.
+        QList<quint32> members;
+        foreach (quint32 fid, props->fixtureItemsID())
+        {
+            quint32 g = props->fixtureGroup(fid);
+            int guard = 0;
+            while (g != 0 && guard++ < 64)
+            {
+                if (g == groupId) { members << fid; break; }
+                g = props->group(g).parentGroupId;
+            }
+        }
+
+        // Capture world positions BEFORE enabling the frame (afterwards
+        // fixtureRigPosition would return the not-yet-set derived value).
+        QMap<quint32, QVector3D> world;
+        QVector3D sum;
+        foreach (quint32 fid, members)
+        {
+            const QVector3D w = props->fixtureRigPosition(fid);
+            world.insert(fid, w);
+            sum += w;
+        }
+        const QVector3D origin = members.isEmpty() ? QVector3D()
+                                                   : (sum / float(members.size()));
+        props->setGroupFrame(groupId, origin, 0.0f);
+        props->setGroupHasFrame(groupId, true);
+        foreach (quint32 fid, members)
+        {
+            FixtureRigProps rp = props->fixtureRigProps(fid);
+            rp.groupLocal = props->worldToGroupLocal(groupId, world.value(fid));
+            props->setFixtureRigProps(fid, rp);
+            updateFixture(fid);
+        }
+        m_doc->setModified();
+        emit mapStructureChanged();
+    }
+
+    openStudioGroupEditor(groupId);
+}
+
 void MonitorGraphicsView::openStudioGroupEditor(quint32 groupId)
 {
     if (groupId == 0 || !m_doc->monitorProperties()->hasGroup(groupId))

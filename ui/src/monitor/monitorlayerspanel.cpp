@@ -927,6 +927,18 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
         menu.addAction(tr("Select on map"), this, [this, id]() {
             if (m_view) m_view->selectItemsInGroup(id);
         });
+        // Fixture Studio: edit this group as a studio object (rigid unit with a
+        // local frame + 3-D member layout). Promotes a plain group in place.
+        if (m_editable)
+        {
+            const bool isStudio = m_props->group(id).hasFrame;
+            menu.addAction(isStudio ? tr("Edit Studio Group…")
+                                    : tr("Edit as Studio Group…"),
+                           this, [this, id]() {
+                if (m_view) m_view->openStudioGroupForGroup(id);
+                reload();
+            });
+        }
         if (m_editable)
         {
             // Position lock. For an anchored group (truss/platform) this locks
