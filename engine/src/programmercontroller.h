@@ -241,6 +241,18 @@ public:
     void setPadMode(Doc::PadMode mode);
     quint32 activeProgrammerGroup() const;
 
+    /** Fixture Studio Phase 3 (FIXTURESTUDIO_DESIGN.md): rebuild a composite
+     *  FixtureGroup from the source groups recorded in its per-head sub-group
+     *  provenance tags. Re-pulls each source group's CURRENT layout as a
+     *  horizontal block; blocks are ordered by the X of the studio group bound
+     *  to each source (falling back to their present left-to-right order in the
+     *  composite), so a wipe across the composite sweeps the stage. The cell
+     *  matrix is the only thing touched — this is the on-command half of the
+     *  snapshot model; the live variant re-runs this on FixtureGroup::changed().
+     *  Returns the number of source blocks rebuilt (0 if @p destGid has no
+     *  provenance tags / is not a composite). */
+    int rebuildCompositeGroup(quint32 destGid);
+
     QSet<quint32> programmerSubSelection() const;
     bool isInProgrammerSubSelection(quint32 fid) const;
     void toggleInProgrammerSubSelection(quint32 fid);

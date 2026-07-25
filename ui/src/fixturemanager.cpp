@@ -66,6 +66,7 @@
 #include "fixture.h"
 #include "apputil.h"
 #include "doc.h"
+#include "programmercontroller.h"
 #include "monitor/monitor.h"
 
 // Bumped when the power pane was added as a third section: an older 2-section
@@ -2300,6 +2301,20 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         removeFromCircuit = menu.addAction(tr("Remove from power circuit"));
     }
 
+    // Fixture Studio: rebuild a composite group from the source groups recorded
+    // in its per-head provenance tags (re-pulls their current layout, ordered by
+    // studio geometry). Offered when exactly one group with provenance is picked.
+    QAction *rebuildComposite = NULL;
+    if (selGroups.size() == 1)
+    {
+        FixtureGroup *g = m_doc->fixtureGroup(selGroups.first());
+        if (g != NULL && g->headSubGroupMap().isEmpty() == false)
+        {
+            menu.addSeparator();
+            rebuildComposite = menu.addAction(tr("Rebuild composite from members"));
+        }
+    }
+
     QAction *chosen = menu.exec(QCursor::pos());
 
     // addFixture() (fired from m_addAction during exec above) has already
@@ -2309,6 +2324,14 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 
     if (chosen == NULL)
         return;
+
+    if (rebuildComposite != NULL && chosen == rebuildComposite)
+    {
+        const int blocks = m_doc->programmer()->rebuildCompositeGroup(selGroups.first());
+        if (blocks > 0)
+            updateView();
+        return;
+    }
 
     if (chosen == moveToFolder && selGroups.isEmpty() == false)
     {

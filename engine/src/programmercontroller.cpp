@@ -22,6 +22,10 @@
 #include <QDebug>
 #include <algorithm>
 #include <climits>
+#include <cmath>
+#include <limits>
+
+#include "monitorproperties.h"
 
 #include <QMutexLocker>
 #include <QVariant>
@@ -2236,6 +2240,95 @@ quint32 ProgrammerController::activeProgrammerGroup() const
             return g->id();
     }
     return Function::invalidId();
+}
+
+int ProgrammerController::rebuildCompositeGroup(quint32 destGid)
+{
+    FixtureGroup *dest = m_doc->fixtureGroup(destGid);
+    if (dest == NULL)
+        return 0;
+
+    // Distinct source FixtureGroup ids from the composite's provenance tags,
+    // plus each source's current left-to-right position (the fallback order).
+    const QMap<QLCPoint, quint32> tags = dest->headSubGroupMap();
+    QMap<quint32, int> srcMinX;
+    for (auto it = tags.constBegin(); it != tags.constEnd(); ++it)
+    {
+        const quint32 sid = it.value();
+        if (sid == 0 || sid == destGid)
+            continue;
+        if (!srcMinX.contains(sid) || it.key().x() < srcMinX.value(sid))
+            srcMinX[sid] = it.key().x();
+    }
+    if (srcMinX.isEmpty())
+        return 0;
+
+    // Order the sources by studio geometry: the X of the studio group bound to
+    // each source. Sources with a studio X sort first (ascending), then the
+    // rest by their current position in the composite (stable fallback).
+    MonitorProperties *mp = m_doc->monitorProperties();
+    auto studioX = [mp](quint32 sid) -> float {
+        if (mp != NULL)
+        {
+            foreach (const MonitorProperties::MonitorGroup &g, mp->groups())
+                if (g.boundFxGroup == sid)
+                    return g.origin.x();
+        }
+        return std::numeric_limits<float>::quiet_NaN();
+    };
+    QList<quint32> sources = srcMinX.keys();
+    std::sort(sources.begin(), sources.end(), [&](quint32 a, quint32 b) {
+        const float xa = studioX(a), xb = studioX(b);
+        const bool na = std::isnan(xa), nb = std::isnan(xb);
+        if (!na && !nb)
+        {
+            if (xa != xb)
+                return xa < xb;
+        }
+        else if (na != nb)
+        {
+            return nb;   // a has a known X, b does not → a first
+        }
+        return srcMinX.value(a) < srcMinX.value(b);
+    });
+
+    // Re-block each source's CURRENT layout horizontally, adjacent, in order.
+    QMap<QLCPoint, GroupHead> heads;
+    QMap<QLCPoint, quint32>   subGroups;
+    int curX = 0, maxY = 0, blocks = 0;
+    foreach (quint32 sid, sources)
+    {
+        FixtureGroup *src = m_doc->fixtureGroup(sid);
+        if (src == NULL)
+            continue;
+        const QMap<QLCPoint, GroupHead> sheads = src->headsMap();
+        if (sheads.isEmpty())
+            continue;
+
+        int minX = INT_MAX, minY = INT_MAX;
+        for (auto it = sheads.constBegin(); it != sheads.constEnd(); ++it)
+        {
+            minX = qMin(minX, it.key().x());
+            minY = qMin(minY, it.key().y());
+        }
+        int blockMaxX = curX;
+        for (auto it = sheads.constBegin(); it != sheads.constEnd(); ++it)
+        {
+            const int x = curX + (it.key().x() - minX);
+            const int y = it.key().y() - minY;
+            heads.insert(QLCPoint(x, y), it.value());
+            subGroups.insert(QLCPoint(x, y), sid);   // re-tag provenance
+            blockMaxX = qMax(blockMaxX, x);
+            maxY = qMax(maxY, y);
+        }
+        curX = blockMaxX + 1;
+        ++blocks;
+    }
+
+    // Atomic swap (heads + provenance tags + size) → a single changed() signal.
+    dest->restoreState(QSize(qMax(curX, 1), qMax(maxY + 1, 1)), heads, subGroups);
+    m_doc->setModified();
+    return blocks;
 }
 
 QSet<quint32> ProgrammerController::programmerSubSelection() const
