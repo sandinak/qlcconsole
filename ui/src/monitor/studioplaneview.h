@@ -23,6 +23,7 @@
 #include <QWidget>
 #include <QVector3D>
 #include <QHash>
+#include <QSet>
 
 class Doc;
 
@@ -50,11 +51,22 @@ public:
     /** Re-read members + refit the view (call after external edits). */
     void reload();
 
-    /** Auto-distribute members within the CURRENT plane: decide horizontal vs
-     *  vertical from whether the fixtures fit side-by-side across the feature
-     *  width, then lay them out in name order (left→right horizontally,
-     *  top→bottom vertically). */
-    void distributeEvenly();
+    /** The face index of the current view (0=Top, 1=Front, 2=Side). */
+    int currentFace() const { return int(m_plane); }
+
+    /** Auto-distribute @p ids on the CURRENT face: assign them to it, pin them
+     *  to its surface, and lay them out (horizontal vs vertical decided from
+     *  whether they fit side-by-side across the feature width; name order). If
+     *  @p ids is empty, distributes the fixtures already on the current face
+     *  (or all members if none are). */
+    void distributeEvenly(const QList<quint32> &ids = QList<quint32>());
+
+    /** Put @p ids on the current face WITHOUT relaying them out: set their mount
+     *  to this face and pin them to its surface, keeping their in-plane spot. */
+    void assignToFace(const QList<quint32> &ids);
+
+    /** Highlight a set of fixtures (e.g. the left-list selection). */
+    void setHighlight(const QList<quint32> &ids);
 
 signals:
     /** A member's local offset changed by a drag (live). */
@@ -77,6 +89,7 @@ private:
     void drawFixture(QPainter &p, quint32 fid) const;   ///< a fixture as an LED bar
     double fixtureLenM(quint32 fid) const;     ///< real physical length (metres)
     QVector3D fixtureAxis(quint32 fid) const;  ///< unit long-axis direction in the local frame
+    void facePin(const QList<quint32> &ids, int &mount, int &pinComp, double &pinVal) const;
     class StagePlatform *anchorPlatform() const;   ///< platform this group is slaved to, or null
     QPointF project(const QVector3D &local) const;   ///< local → in-plane (a,b) metres
     QVector3D unproject(const QPointF &ab, const QVector3D &prev) const; ///< (a,b) → local
@@ -94,6 +107,7 @@ private:
     quint32  m_dragFid = 0;
     bool     m_panning = false;
     QPointF  m_panLast;
+    QSet<quint32> m_highlight;
 };
 
 #endif // STUDIOPLANEVIEW_H

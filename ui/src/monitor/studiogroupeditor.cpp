@@ -28,11 +28,13 @@
 #include <QLineEdit>
 #include <QGroupBox>
 #include <QComboBox>
+#include <QListWidget>
 #include <QLabel>
 #include <QFileDialog>
 #include <QMessageBox>
 
 #include <climits>
+#include <QSet>
 
 #include "studiogroupeditor.h"
 #include "studiotemplate.h"
@@ -53,10 +55,25 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     const MonitorProperties::MonitorGroup g = props->group(m_groupId);
 
     setWindowTitle(tr("Studio Group — %1").arg(g.name));
-    resize(460, 420);
+    resize(760, 500);
     snapshot();
 
-    QVBoxLayout *root = new QVBoxLayout(this);
+    QHBoxLayout *outer = new QHBoxLayout(this);
+
+    // Left: the group's fixtures. Multi-select here, then Distribute / Put on
+    // face acts on the selection — like selecting in the 2D Layers panel.
+    QVBoxLayout *leftCol = new QVBoxLayout;
+    leftCol->addWidget(new QLabel(tr("Fixtures (multi-select)")));
+    m_list = new QListWidget(this);
+    m_list->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_list->setMinimumWidth(190);
+    leftCol->addWidget(m_list, 1);
+    outer->addLayout(leftCol);
+    connect(m_list, &QListWidget::itemSelectionChanged,
+            this, &StudioGroupEditor::syncHighlight);
+
+    QVBoxLayout *root = new QVBoxLayout;
+    outer->addLayout(root, 1);
 
     // --- Frame (rigid move/rotate of the whole unit) -----------------------
     QGroupBox *frameBox = new QGroupBox(tr("Frame"), this);
@@ -126,10 +143,27 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     bindBtns->addWidget(seedBtn);
     bindBtns->addWidget(adoptBtn);
     bindForm->addRow(QString(), bindBtns);
+
+    // FixtureGroup → face: put the picked group's fixtures onto a chosen face.
+    QHBoxLayout *faceRow = new QHBoxLayout;
+    m_faceCombo = new QComboBox(bindBox);
+    m_faceCombo->addItem(tr("Top"),   0);
+    m_faceCombo->addItem(tr("Front"), 1);
+    m_faceCombo->addItem(tr("Side"),  2);
+    m_faceCombo->setCurrentIndex(1);
+    QPushButton *grpFaceBtn = new QPushButton(tr("Put group on face"), bindBox);
+    grpFaceBtn->setToolTip(tr("Assign the picked FixtureGroup's fixtures to this "
+                              "face and distribute them on it"));
+    faceRow->addWidget(new QLabel(tr("onto")));
+    faceRow->addWidget(m_faceCombo);
+    faceRow->addWidget(grpFaceBtn);
+    faceRow->addStretch(1);
+    bindForm->addRow(QString(), faceRow);
     root->addWidget(bindBox);
 
     connect(seedBtn,  &QPushButton::clicked, this, &StudioGroupEditor::seedFromFixtureGroup);
     connect(adoptBtn, &QPushButton::clicked, this, &StudioGroupEditor::adoptFromFixtureGroup);
+    connect(grpFaceBtn, &QPushButton::clicked, this, &StudioGroupEditor::putGroupOnFace);
 
     // --- Graphical layout (drag members in Top / Front / Side) -------------
     QGroupBox *planeBox = new QGroupBox(tr("Layout"), this);
@@ -141,14 +175,18 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     m_planeCombo->addItem(tr("Side (Y → / Z ↑)"),  int(StudioPlaneView::Side));
     planeTop->addWidget(new QLabel(tr("View")));
     planeTop->addWidget(m_planeCombo);
-    QPushButton *distBtn = new QPushButton(tr("Distribute evenly"), planeBox);
-    distBtn->setToolTip(tr("Spread the fixtures evenly across the feature width, "
-                           "in name order"));
+    QPushButton *putBtn = new QPushButton(tr("Put on this face"), planeBox);
+    putBtn->setToolTip(tr("Move the selected fixtures onto the face shown, "
+                          "keeping their arrangement"));
+    planeTop->addWidget(putBtn);
+    QPushButton *distBtn = new QPushButton(tr("Distribute"), planeBox);
+    distBtn->setToolTip(tr("Spread the selected fixtures evenly on this face, in "
+                           "name order (all on this face if none selected)"));
     planeTop->addWidget(distBtn);
     planeTop->addStretch(1);
-    planeTop->addWidget(new QLabel(tr("drag a fixture to place it")));
     planeLay->addLayout(planeTop);
     connect(distBtn, &QPushButton::clicked, this, &StudioGroupEditor::distributeEvenly);
+    connect(putBtn, &QPushButton::clicked, this, &StudioGroupEditor::putSelectedOnFace);
     m_plane = new StudioPlaneView(m_doc, m_groupId, planeBox);
     planeLay->addWidget(m_plane, 1);
     root->addWidget(planeBox, 1);
@@ -246,6 +284,30 @@ void StudioGroupEditor::rebuildTable()
         m_table->setItem(r, 4, f);
         m_table->setItem(r, 5,
             new QTableWidgetItem(QString::number(double(rp.studioAngle), 'f', 1)));
+    }
+
+    // Left list: fixture name + its current face, preserving the selection.
+    if (m_list != nullptr)
+    {
+        QSet<quint32> wasSel;
+        foreach (QListWidgetItem *it, m_list->selectedItems())
+            wasSel.insert(it->data(Qt::UserRole).toUInt());
+        m_list->blockSignals(true);
+        m_list->clear();
+        static const char *faceName[3] = { "Top", "Front", "Side" };
+        foreach (quint32 fid, ids)
+        {
+            Fixture *fx = m_doc->fixture(fid);
+            const int mount = qBound(0, props->fixtureRigProps(fid).studioMount, 2);
+            QListWidgetItem *li = new QListWidgetItem(
+                tr("%1  ·  %2").arg(fx ? fx->name() : tr("Fixture %1").arg(fid))
+                               .arg(QString::fromLatin1(faceName[mount])));
+            li->setData(Qt::UserRole, fid);
+            m_list->addItem(li);
+            if (wasSel.contains(fid))
+                li->setSelected(true);
+        }
+        m_list->blockSignals(false);
     }
     m_loading = false;
 }
@@ -436,12 +498,60 @@ void StudioGroupEditor::rememberFixture(quint32 fid)
     m_snapGroupOf.insert(fid, props->fixtureGroup(fid));
 }
 
+QList<quint32> StudioGroupEditor::selectedFixtureIds() const
+{
+    QList<quint32> out;
+    if (m_list != nullptr)
+        foreach (QListWidgetItem *it, m_list->selectedItems())
+            out << it->data(Qt::UserRole).toUInt();
+    return out;
+}
+
+void StudioGroupEditor::syncHighlight()
+{
+    if (m_plane != nullptr)
+        m_plane->setHighlight(selectedFixtureIds());
+}
+
 void StudioGroupEditor::distributeEvenly()
 {
-    // The plane view owns the geometry (current plane, axes, feature extent),
-    // so it does the layout; its changed() signal refreshes our table + the map.
+    // The plane view owns the geometry; it lays out the current selection (or
+    // this face's fixtures if none selected). Its changed() refreshes our list.
     if (m_plane != nullptr)
-        m_plane->distributeEvenly();
+        m_plane->distributeEvenly(selectedFixtureIds());
+}
+
+void StudioGroupEditor::putSelectedOnFace()
+{
+    if (m_plane != nullptr)
+        m_plane->assignToFace(selectedFixtureIds());
+}
+
+void StudioGroupEditor::putGroupOnFace()
+{
+    const quint32 fgid = selectedFxGroup();
+    FixtureGroup *fg = m_doc->fixtureGroup(fgid);
+    if (fg == nullptr || m_plane == nullptr || m_faceCombo == nullptr)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    QList<quint32> ids;
+    foreach (quint32 fid, fg->fixtureList())
+    {
+        if (!props->containsFixture(fid))
+            continue;
+        rememberFixture(fid);
+        props->setFixtureGroup(fid, m_groupId);   // join the studio group
+        ids << fid;
+    }
+    if (ids.isEmpty())
+        return;
+
+    // Switch the view to the chosen face, then assign + distribute on it.
+    const int face = m_faceCombo->currentData().toInt();
+    m_planeCombo->setCurrentIndex(face);          // triggers m_plane->setPlane
+    m_plane->distributeEvenly(ids);
+    rebuildTable();
 }
 
 void StudioGroupEditor::snapshot()

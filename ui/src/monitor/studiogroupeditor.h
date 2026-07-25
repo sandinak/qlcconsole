@@ -30,6 +30,7 @@ class QDoubleSpinBox;
 class QLineEdit;
 class QTableWidget;
 class QComboBox;
+class QListWidget;
 class StudioPlaneView;
 class Doc;
 
@@ -61,10 +62,14 @@ private slots:
     void recenterOrigin();      ///< move origin to member centroid; members stay put
     void seedFromFixtureGroup();   ///< lay members out from the bound FG cell matrix
     void adoptFromFixtureGroup();  ///< pull bound FG members in at their current pos
-    void distributeEvenly();       ///< spread members evenly across the feature width
+    void distributeEvenly();       ///< distribute the list selection on the current face
+    void putSelectedOnFace();      ///< move the list selection onto the current face
+    void putGroupOnFace();         ///< assign a whole FixtureGroup to the current face
+    void syncHighlight();          ///< push the list selection to the canvas
 
 private:
     QList<quint32> members() const;   ///< fixtures under this frame group
+    QList<quint32> selectedFixtureIds() const;   ///< current left-list selection
     void rebuildTable();
     void snapshot();
     void revert();
@@ -91,6 +96,8 @@ private:
 
     StudioPlaneView *m_plane = nullptr;
     QComboBox       *m_planeCombo = nullptr;
+    QListWidget     *m_list = nullptr;
+    QComboBox       *m_faceCombo = nullptr;   ///< face for FixtureGroup → face
 
     // On-open snapshot for Cancel/revert.
     MonitorProperties::MonitorGroup   m_snapGroup;

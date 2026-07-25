@@ -60,6 +60,12 @@ void StudioPlaneView::reload()
     update();
 }
 
+void StudioPlaneView::setHighlight(const QList<quint32> &ids)
+{
+    m_highlight = QSet<quint32>(ids.begin(), ids.end());
+    update();
+}
+
 double StudioPlaneView::fixtureLenM(quint32 fid) const
 {
     // Real physical length of the fixture (metres), matching the old Face
@@ -300,14 +306,24 @@ void StudioPlaneView::drawFixture(QPainter &p, quint32 fid) const
     const QPointF a = cAB - halfAB;
     const QPointF b = cAB + halfAB;
 
+    const bool hi = m_highlight.contains(fid);
+
     QColor col = props->fixtureGelColor(fid, 0, 0);
     if (!col.isValid() || col == Qt::black)
         col = QColor(90, 160, 235);
-    if (drag)
-        col = QColor(255, 196, 64);
+    if (drag)     col = QColor(255, 196, 64);
+    else if (hi)  col = QColor(120, 220, 140);
+
+    // Selection halo behind the bar.
+    if (hi)
+    {
+        QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
+        p.setPen(halo);
+        p.drawLine(worldToScreen(a), worldToScreen(b));
+    }
 
     // The bar body.
-    QPen body(col.darker(140)); body.setWidth(drag ? 4 : 3); body.setCapStyle(Qt::RoundCap);
+    QPen body(col.darker(140)); body.setWidth((drag || hi) ? 4 : 3); body.setCapStyle(Qt::RoundCap);
     p.setPen(body);
     p.drawLine(worldToScreen(a), worldToScreen(b));
 
@@ -401,10 +417,66 @@ static qlonglong spvTrailingNum(const QString &s)
     return (i < s.size()) ? s.mid(i).toLongLong() : -1;
 }
 
-void StudioPlaneView::distributeEvenly()
+// Which local component the current plane pins to the face surface, and the
+// mount id + surface value (platform edge, or the set's average without one).
+void StudioPlaneView::facePin(const QList<quint32> &ids,
+                              int &mount, int &pinComp, double &pinVal) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
-    QList<quint32> ids = members();
+    StagePlatform *pl = anchorPlatform();
+    if (m_plane == Front)      { mount = 1; pinComp = 1; pinVal = pl ? pl->depth()  : 0.0; }
+    else if (m_plane == Side)  { mount = 2; pinComp = 0; pinVal = pl ? 0.0          : 0.0; }
+    else                       { mount = 0; pinComp = 2; pinVal = pl ? pl->height() : 0.0; }
+    if (pl == nullptr && !ids.isEmpty())
+    {
+        double s = 0.0;
+        foreach (quint32 fid, ids)
+        {
+            const QVector3D lp = props->fixtureRigProps(fid).groupLocal;
+            s += (pinComp == 0) ? lp.x() : (pinComp == 1) ? lp.y() : lp.z();
+        }
+        pinVal = s / ids.size();
+    }
+}
+
+void StudioPlaneView::assignToFace(const QList<quint32> &ids)
+{
+    if (ids.isEmpty())
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    int mount, pinComp; double pinVal;
+    facePin(ids, mount, pinComp, pinVal);
+    foreach (quint32 fid, ids)
+    {
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.studioMount = mount;
+        QVector3D lp = rp.groupLocal;               // keep its in-plane position
+        if (pinComp == 0)      lp.setX(float(pinVal));
+        else if (pinComp == 1) lp.setY(float(pinVal));
+        else                   lp.setZ(float(pinVal));
+        rp.groupLocal = lp;
+        props->setFixtureRigProps(fid, rp);
+    }
+    m_doc->setModified();
+    emit changed();
+    update();
+}
+
+void StudioPlaneView::distributeEvenly(const QList<quint32> &sel)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // Resolve the target set: an explicit selection, else the fixtures already
+    // on this face, else all members (bootstrap the first time).
+    QList<quint32> ids = sel;
+    if (ids.isEmpty())
+    {
+        foreach (quint32 fid, members())
+            if (props->fixtureRigProps(fid).studioMount == currentFace())
+                ids << fid;
+        if (ids.isEmpty())
+            ids = members();
+    }
     const int n = ids.size();
     if (n == 0)
         return;
@@ -462,24 +534,9 @@ void StudioPlaneView::distributeEvenly()
 
     // Distribute ONTO the face we're viewing, not into the interior: set each
     // fixture's mount to that face and PIN the out-of-plane axis to the face
-    // surface (Front → downstage edge y=depth, Top → deck z=height, Side →
-    // edge x=0). Without a platform, pin to the members' current average so the
-    // row stays planar.
-    StagePlatform *pl = anchorPlatform();
-    int mount; int pinComp; double pinVal;
-    if (m_plane == Front)      { mount = 1; pinComp = 1; pinVal = pl ? pl->depth()  : 0.0; }
-    else if (m_plane == Side)  { mount = 2; pinComp = 0; pinVal = pl ? 0.0          : 0.0; }
-    else                       { mount = 0; pinComp = 2; pinVal = pl ? pl->height() : 0.0; }
-    if (pl == nullptr)
-    {
-        double s = 0.0;
-        foreach (quint32 fid, ids)
-        {
-            const QVector3D lp = props->fixtureRigProps(fid).groupLocal;
-            s += (pinComp == 0) ? lp.x() : (pinComp == 1) ? lp.y() : lp.z();
-        }
-        pinVal = s / n;
-    }
+    // surface (Front → downstage edge, Top → deck, Side → edge).
+    int mount, pinComp; double pinVal;
+    facePin(ids, mount, pinComp, pinVal);
 
     for (int i = 0; i < n; ++i)
     {
