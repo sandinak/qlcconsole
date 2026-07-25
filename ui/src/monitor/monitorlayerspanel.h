@@ -144,6 +144,11 @@ private:
                         const QList<ItemDesc> &items);
     void addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d);
 
+    /** Remove the given (kind,id) leaves from their current group. A fixture
+     *  mounted on the group's anchor structure is also detached from that mount
+     *  (keeping its world position) so the auto-grouping cannot re-add it. */
+    void removeLeavesFromGroup(const QList<QPair<QString, quint32> > &targets);
+
     /** (kind,id) of every leaf item covered by the current tree selection
      *  (selected leaves plus every leaf under a selected group). */
     QList<QPair<QString, quint32> > selectedObjects() const;

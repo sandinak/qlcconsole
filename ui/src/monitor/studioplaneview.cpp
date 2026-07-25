@@ -196,29 +196,68 @@ void StudioPlaneView::paintEvent(QPaintEvent *)
     // --- reference structure (platforms / trusses) --------------------------
     drawStructure(p);
 
-    // --- plane legend -------------------------------------------------------
+    // --- plane legend (stage-relative) --------------------------------------
     p.setPen(QColor(150, 155, 165));
-    const char *legend = (m_plane == Top)   ? "Top  ·  X →   Y ↓"
-                       : (m_plane == Front) ? "Front  ·  X →   Z ↑"
-                                            : "Side  ·  Y →   Z ↑";
-    p.drawText(8, 18, QString::fromLatin1(legend));
+    QString legend = (m_plane == Top)   ? tr("Plan  ·  stage width →   downstage ↓")
+                   : (m_plane == Front) ? tr("Front elevation  ·  stage width →   height ↑")
+                                        : tr("Side elevation  ·  downstage →   height ↑");
+    const float frot = m_doc->monitorProperties()->group(m_groupId).rotation;
+    if (qAbs(frot) > 0.5f)
+        legend += tr("   (frame rotated %1°)").arg(double(frot), 0, 'f', 0);
+    p.drawText(8, 18, legend);
 
-    // --- members ------------------------------------------------------------
-    MonitorProperties *props = m_doc->monitorProperties();
+    // --- members (drawn as LED bars, not points) ----------------------------
     foreach (quint32 fid, members())
-    {
-        const QPointF s = worldToScreen(project(props->fixtureRigProps(fid).groupLocal));
-        const bool drag = (fid == m_dragFid);
-        p.setBrush(drag ? QColor(255, 196, 64) : QColor(90, 160, 235));
-        p.setPen(QPen(QColor(20, 22, 25), drag ? 2 : 1));
-        p.drawEllipse(s, kDotRadius, kDotRadius);
+        drawFixture(p, fid);
+}
 
-        Fixture *fx = m_doc->fixture(fid);
-        if (fx != nullptr)
-        {
-            p.setPen(QColor(210, 214, 220));
-            p.drawText(QPointF(s.x() + kDotRadius + 3, s.y() + 4), fx->name());
-        }
+void StudioPlaneView::drawFixture(QPainter &p, quint32 fid) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    Fixture *fx = m_doc->fixture(fid);
+    const int heads = (fx != nullptr) ? qMax(1, fx->heads()) : 1;
+    const QPointF cAB = project(props->fixtureRigProps(fid).groupLocal);
+    const bool drag = (fid == m_dragFid);
+
+    // A fixture is a line of heads. Approximate its physical extent from the head
+    // count and orient it (Top only) by its yaw relative to the frame; elevation
+    // planes draw it along the horizontal axis. ~5 cm per head.
+    const double halfLen = qMax(0.10, (heads - 1) * 0.05 / 2.0);   // metres
+    double th = 0.0;
+    if (m_plane == Top)
+        th = qDegreesToRadians(double(props->fixtureRotation(fid, 0, 0).z()
+                                      - props->group(m_groupId).rotation));
+    const QPointF dir(qCos(th), qSin(th));
+    const QPointF a = cAB - dir * halfLen;
+    const QPointF b = cAB + dir * halfLen;
+
+    QColor col = props->fixtureGelColor(fid, 0, 0);
+    if (!col.isValid() || col == Qt::black)
+        col = QColor(90, 160, 235);
+    if (drag)
+        col = QColor(255, 196, 64);
+
+    // The bar body.
+    QPen body(col.darker(140)); body.setWidth(drag ? 4 : 3); body.setCapStyle(Qt::RoundCap);
+    p.setPen(body);
+    p.drawLine(worldToScreen(a), worldToScreen(b));
+
+    // Individual heads as ticks along it.
+    p.setPen(Qt::NoPen);
+    p.setBrush(col);
+    for (int i = 0; i < heads; ++i)
+    {
+        const double t = (heads > 1) ? double(i) / (heads - 1) : 0.5;
+        const QPointF hpt = worldToScreen(a + (b - a) * t);
+        p.drawEllipse(hpt, 2.6, 2.6);
+    }
+
+    // Label near the centre.
+    if (fx != nullptr)
+    {
+        p.setPen(QColor(210, 214, 220));
+        const QPointF c = worldToScreen(cAB);
+        p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
     }
 }
 
@@ -228,12 +267,15 @@ void StudioPlaneView::drawStructure(QPainter &p) const
 
     // Platforms: draw the face relevant to the current plane, transformed into
     // the group's LOCAL frame, so you can place fixtures against the riser.
-    p.setPen(QPen(QColor(150, 135, 85), 1.5));
-    p.setBrush(QColor(150, 135, 85, 45));
     foreach (StagePlatform *pl, props->platforms())
     {
         if (pl == nullptr)
             continue;
+        QColor pc = pl->color();
+        if (!pc.isValid())
+            pc = QColor(150, 135, 85);
+        p.setPen(QPen(pc.darker(115), 1.5));
+        p.setBrush(QColor(pc.red(), pc.green(), pc.blue(), 70));
         const float ox = pl->originX(), oy = pl->originY();
         const float w = pl->width(), d = pl->depth(), h = pl->height();
         QVector<QVector3D> face;

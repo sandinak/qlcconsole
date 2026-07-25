@@ -64,6 +64,8 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "monitorlayerspanel.h"
 #include "monitorgraphicsview.h"
 #include "monitorproperties.h"
+#include "truss.h"
+#include "doc.h"
 #include "powerdistribution.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
@@ -803,6 +805,66 @@ QList<QPair<QString, quint32> > MonitorLayersPanel::selectedObjects() const
     return out;
 }
 
+void MonitorLayersPanel::removeLeavesFromGroup(const QList<QPair<QString, quint32> > &targets)
+{
+    if (targets.isEmpty())
+        return;
+
+    QList<quint32> refreshFixtures;
+    for (const QPair<QString, quint32> &t : targets)
+    {
+        const QString kind = t.first;
+        const quint32 id   = t.second;
+
+        if (kind == QStringLiteral("fixture"))
+        {
+            // Keep the fixture exactly where it is: read its current world
+            // position, then store it as a free position after we strip the
+            // frame / mount so nothing teleports.
+            const QVector3D w = m_props->fixtureRigPosition(id);        // metres
+            const quint32 g = m_props->fixtureGroup(id);
+            const MonitorProperties::MonitorGroup mg = m_props->group(g);
+            FixtureRigProps rp = m_props->fixtureRigProps(id);
+
+            // Detach the mount ONLY when this group represents that very anchor
+            // (else the auto-grouping re-forces the fixture straight back in).
+            if (mg.anchorKind == QStringLiteral("platform")
+                && (rp.riserPlatformId == mg.anchorId || rp.deckPlatformId == mg.anchorId))
+            {
+                if (rp.riserPlatformId == mg.anchorId)
+                    rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+                if (rp.deckPlatformId == mg.anchorId)
+                    rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
+            }
+            else if (mg.anchorKind == QStringLiteral("truss") && rp.trussId == mg.anchorId)
+            {
+                rp.trussId = Truss::invalidId();
+            }
+            rp.groupLocal = QVector3D();   // no longer studio-frame derived
+            m_props->setFixtureRigProps(id, rp);
+            m_props->setFixtureGroup(id, 0);
+            m_props->setFixturePosition(id, 0, 0,
+                QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z()));
+            refreshFixtures << id;
+        }
+        else if (m_view != nullptr)
+        {
+            QList<QPair<QString, quint32> > one;
+            one.append(t);
+            m_view->reparentToLayer(one, m_props->activeLayerId());
+        }
+    }
+
+    m_doc->setModified();
+    if (m_view != nullptr)
+    {
+        foreach (quint32 fid, refreshFixtures)
+            m_view->updateFixture(fid);
+        m_view->refreshItemLayerState();
+    }
+    reload();
+}
+
 quint32 MonitorLayersPanel::currentLayerId() const
 {
     QTreeWidgetItem *it = m_tree->currentItem();
@@ -995,21 +1057,35 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
             menu.addAction(tr("Rename…"), this, [this, item]() {
                 m_tree->editItem(item, 0);
             });
-        // Remove from group — only meaningful when the leaf sits under a group.
+        // Remove from group — operates on the whole selection (all in-group
+        // leaves), plus the clicked leaf. Handles anchor groups: a fixture
+        // mounted on the group's platform/truss is also detached so the
+        // auto-grouping can't immediately re-add it.
         if (m_editable)
         {
-            QTreeWidgetItem *par = item->parent();
-            quint32 parentGroup = 0;
-            if (par != nullptr && par->data(0, NodeTypeRole).toInt() == NodeGroup)
-                parentGroup = par->data(0, NodeIdRole).toUInt();
-            if (parentGroup != 0)
+            QList<QPair<QString, quint32> > targets;
+            QSet<QString> seen;
+            auto add = [&](const QString &k, quint32 i) {
+                const QString key = k + QLatin1Char(':') + QString::number(i);
+                if (!seen.contains(key)) { seen.insert(key); targets.append(qMakePair(k, i)); }
+            };
+            auto inGroup = [this](QTreeWidgetItem *leaf) -> bool {
+                QTreeWidgetItem *pp = leaf->parent();
+                return pp != nullptr && pp->data(0, NodeTypeRole).toInt() == NodeGroup;
+            };
+            if (inGroup(item))
+                add(kind, id);
+            foreach (QTreeWidgetItem *sel, m_tree->selectedItems())
+                if (sel->data(0, NodeTypeRole).toInt() == NodeItem && inGroup(sel))
+                    add(sel->data(0, NodeKindRole).toString(), sel->data(0, NodeIdRole).toUInt());
+
+            if (!targets.isEmpty())
             {
-                const quint32 lyr = m_props->group(parentGroup).layerId;
-                menu.addAction(tr("Remove from group"), this, [this, kind, id, lyr]() {
-                    QList<QPair<QString, quint32> > one;
-                    one.append(qMakePair(kind, id));
-                    if (m_view) m_view->reparentToLayer(one, lyr);
-                    reload();
+                const QString label = targets.size() > 1
+                    ? tr("Remove %1 items from group").arg(targets.size())
+                    : tr("Remove from group");
+                menu.addAction(label, this, [this, targets]() {
+                    removeLeavesFromGroup(targets);
                 });
             }
         }
