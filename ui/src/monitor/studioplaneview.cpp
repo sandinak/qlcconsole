@@ -460,6 +460,27 @@ void StudioPlaneView::distributeEvenly()
     // elevations (Z↑); place item 0 at the top in both cases.
     const bool topIsMaxB = (vFactor(m_plane) < 0);
 
+    // Distribute ONTO the face we're viewing, not into the interior: set each
+    // fixture's mount to that face and PIN the out-of-plane axis to the face
+    // surface (Front → downstage edge y=depth, Top → deck z=height, Side →
+    // edge x=0). Without a platform, pin to the members' current average so the
+    // row stays planar.
+    StagePlatform *pl = anchorPlatform();
+    int mount; int pinComp; double pinVal;
+    if (m_plane == Front)      { mount = 1; pinComp = 1; pinVal = pl ? pl->depth()  : 0.0; }
+    else if (m_plane == Side)  { mount = 2; pinComp = 0; pinVal = pl ? 0.0          : 0.0; }
+    else                       { mount = 0; pinComp = 2; pinVal = pl ? pl->height() : 0.0; }
+    if (pl == nullptr)
+    {
+        double s = 0.0;
+        foreach (quint32 fid, ids)
+        {
+            const QVector3D lp = props->fixtureRigProps(fid).groupLocal;
+            s += (pinComp == 0) ? lp.x() : (pinComp == 1) ? lp.y() : lp.z();
+        }
+        pinVal = s / n;
+    }
+
     for (int i = 0; i < n; ++i)
     {
         double a, b;
@@ -475,7 +496,12 @@ void StudioPlaneView::distributeEvenly()
             b = bOff + H * 0.5;                                   // centred vertically
         }
         FixtureRigProps rp = props->fixtureRigProps(ids.at(i));
-        rp.groupLocal = unproject(QPointF(a, b), rp.groupLocal);  // third axis preserved
+        rp.studioMount = mount;                                   // lay it on this face
+        QVector3D local = unproject(QPointF(a, b), rp.groupLocal);
+        if (pinComp == 0)      local.setX(float(pinVal));         // pin to the face surface
+        else if (pinComp == 1) local.setY(float(pinVal));
+        else                   local.setZ(float(pinVal));
+        rp.groupLocal = local;
         props->setFixtureRigProps(ids.at(i), rp);
     }
 
