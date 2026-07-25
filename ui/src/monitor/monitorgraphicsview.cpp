@@ -36,6 +36,7 @@
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "trussitem.h"
+#include "studiogroupeditor.h"
 #include "platformitem.h"
 #include "powersourceitem.h"
 #include "powerdistribution.h"
@@ -886,6 +887,69 @@ int MonitorGraphicsView::groupSelectedItems()
     emit mapSelectionChanged();
     emit mapStructureChanged();
     return sel.size();
+}
+
+quint32 MonitorGraphicsView::createStudioGroupFromSelection()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // Gather the selected fixtures.
+    QList<quint32> fids;
+    foreach (MonitorFixtureItem *mfi, selectedFixtureItems())
+    {
+        const quint32 fid = mfi->fixtureID();
+        if (fid != Fixture::invalidId())
+            fids << fid;
+    }
+    if (fids.size() < 2)
+        return 0;
+
+    // A studio group is a MonitorGroup carrying a local frame. Create a fresh
+    // one on the active layer; origin = centroid of the members' CURRENT world
+    // positions so nothing visually jumps when the frame is enabled.
+    const quint32 gid = props->nextGroupId();
+    props->createGroup(gid, tr("Studio %1").arg(gid), props->activeLayerId(), 0);
+
+    QVector3D sum;
+    foreach (quint32 fid, fids)
+        sum += props->fixtureRigPosition(fid);   // metres, pre-frame
+    const QVector3D origin = sum / float(fids.size());
+    props->setGroupFrame(gid, origin, 0.0f);
+    props->setGroupHasFrame(gid, true);
+
+    // Membership + per-member local offset (rotation 0 → local = world - origin).
+    // Capture world BEFORE joining the frame group, else fixtureRigPosition would
+    // already return the (as-yet-unset) derived position.
+    foreach (quint32 fid, fids)
+    {
+        const QVector3D world = props->fixtureRigPosition(fid);
+        props->setFixtureGroup(fid, gid);
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.groupLocal = props->worldToGroupLocal(gid, world);
+        props->setFixtureRigProps(fid, rp);
+    }
+
+    setGroupSubtreeLayer(gid, props->activeLayerId());
+    foreach (quint32 fid, fids)
+        updateFixture(fid);
+    m_doc->setModified();
+    emit mapStructureChanged();
+    return gid;
+}
+
+void MonitorGraphicsView::openStudioGroupEditor(quint32 groupId)
+{
+    if (groupId == 0 || !m_doc->monitorProperties()->hasGroup(groupId))
+        return;
+    StudioGroupEditor dlg(m_doc, groupId, this);
+    connect(&dlg, &StudioGroupEditor::changed, this, [this, groupId]() {
+        MonitorProperties *props = m_doc->monitorProperties();
+        foreach (quint32 fid, props->fixtureItemsID())
+            if (props->fixtureFrameGroup(fid) == groupId)
+                updateFixture(fid);
+        emit mapStructureChanged();
+    });
+    dlg.exec();
 }
 
 int MonitorGraphicsView::ungroupSelectedItems()
@@ -3016,6 +3080,17 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
                                            : tr("Lock Group Position"));
         }
 
+        // Fixture Studio: build a studio group (rigid unit with a local frame)
+        // from the current multi-selection, or edit the one this fixture is in.
+        menu.addSeparator();
+        const quint32 frameGid = props->fixtureFrameGroup(fid);
+        QAction *makeStudioAct = nullptr;
+        QAction *editStudioAct = nullptr;
+        if (frameGid != 0)
+            editStudioAct = menu.addAction(tr("Edit Studio Group…"));
+        if (selectedFixtureCount() >= 2)
+            makeStudioAct = menu.addAction(tr("Create Studio Group from Selection"));
+
         menu.addSeparator();
         QAction *removeAct = menu.addAction(tr("Remove from View"));
 
@@ -3024,6 +3099,14 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
             emit fixtureDoubleClicked(fid);
         else if (editTrussAct && chosen == editTrussAct)
             emit trussDoubleClicked(rp.trussId);
+        else if (makeStudioAct && chosen == makeStudioAct)
+        {
+            const quint32 ng = createStudioGroupFromSelection();
+            if (ng != 0)
+                openStudioGroupEditor(ng);
+        }
+        else if (editStudioAct && chosen == editStudioAct)
+            openStudioGroupEditor(frameGid);
         else if (chosen == removeAct)
         {
             removeFixture(fid);
@@ -3355,6 +3438,22 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                 rp.deckHeightOffset = 0.0f;  // sit on the new deck; edit Z to move it
                 props->setFixtureRigProps(fid, rp);
             }
+        }
+
+        // Studio-frame member: a top-view drag repositions the fixture WITHIN
+        // its group's local frame. Convert the new world position into a
+        // group-local offset (frame origin/rotation stay put) rather than
+        // storing an absolute position — the derived position then governs
+        // rendering (see MonitorProperties::fixtureRigPosition).
+        const quint32 frameGid = props->fixtureFrameGroup(fid);
+        if (frameGid != 0)
+        {
+            const QVector3D world(float(mmPos.x() / 1000.0),
+                                  float(mmPos.y() / 1000.0),
+                                  props->fixtureRigPosition(fid).z());
+            FixtureRigProps frp = props->fixtureRigProps(fid);
+            frp.groupLocal = props->worldToGroupLocal(frameGid, world);
+            props->setFixtureRigProps(fid, frp);
         }
 
         mfi->setRealPosition(mmPos);

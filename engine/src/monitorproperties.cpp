@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QDebug>
 #include <QFont>
+#include <QtMath>
 
 #include <algorithm>
 #include <cmath>
@@ -768,6 +769,75 @@ bool MonitorProperties::groupChainLocked(quint32 gid) const
     return false;
 }
 
+void MonitorProperties::setGroupHasFrame(quint32 id, bool on)
+{
+    if (m_groups.contains(id))
+        m_groups[id].hasFrame = on;
+}
+
+void MonitorProperties::setGroupFrame(quint32 id, const QVector3D &origin, float rotationDeg)
+{
+    if (m_groups.contains(id))
+    {
+        m_groups[id].origin   = origin;
+        m_groups[id].rotation = rotationDeg;
+    }
+}
+
+void MonitorProperties::setGroupOrigin(quint32 id, const QVector3D &origin)
+{
+    if (m_groups.contains(id))
+        m_groups[id].origin = origin;
+}
+
+void MonitorProperties::setGroupRotation(quint32 id, float rotationDeg)
+{
+    if (m_groups.contains(id))
+        m_groups[id].rotation = rotationDeg;
+}
+
+quint32 MonitorProperties::fixtureFrameGroup(quint32 fid) const
+{
+    if (!m_fixtureItems.contains(fid))
+        return 0;
+    quint32 gid = m_fixtureItems[fid].m_baseItem.m_groupId;
+    int guard = 0;   // cycle safety
+    while (gid != 0 && m_groups.contains(gid) && guard++ < 64)
+    {
+        const MonitorGroup &g = m_groups[gid];
+        if (g.hasFrame)
+            return gid;
+        gid = g.parentGroupId;
+    }
+    return 0;
+}
+
+QVector3D MonitorProperties::groupLocalToWorld(quint32 groupId, const QVector3D &local) const
+{
+    if (!m_groups.contains(groupId))
+        return local;
+    const MonitorGroup &g = m_groups[groupId];
+    const float r = qDegreesToRadians(g.rotation);
+    const float c = qCos(r), s = qSin(r);
+    return QVector3D(g.origin.x() + local.x() * c - local.y() * s,
+                     g.origin.y() + local.x() * s + local.y() * c,
+                     g.origin.z() + local.z());
+}
+
+QVector3D MonitorProperties::worldToGroupLocal(quint32 groupId, const QVector3D &world) const
+{
+    if (!m_groups.contains(groupId))
+        return world;
+    const MonitorGroup &g = m_groups[groupId];
+    const float r = qDegreesToRadians(g.rotation);
+    const float c = qCos(r), s = qSin(r);
+    const float dx = world.x() - g.origin.x();
+    const float dy = world.y() - g.origin.y();
+    return QVector3D(dx * c + dy * s,
+                     -dx * s + dy * c,
+                     world.z() - g.origin.z());
+}
+
 /*********************************************************************
  * Trusses
  *********************************************************************/
@@ -1049,6 +1119,16 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
 {
     if (!m_fixtureItems.contains(fid))
         return QVector3D();
+
+    // Studio frame takes precedence: if the fixture sits under a frame-bearing
+    // group, its world position is derived from that group's local frame
+    // (origin + Rz(rotation) * groupLocal). See MonitorGroup::hasFrame.
+    const quint32 frameGid = fixtureFrameGroup(fid);
+    if (frameGid != 0)
+    {
+        const FixtureRigProps &grp = m_rigProps.value(fid, FixtureRigProps());
+        return groupLocalToWorld(frameGid, grp.groupLocal);
+    }
 
     const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
     const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
@@ -1372,6 +1452,14 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 g.anchorKind    = a.value(QStringLiteral("AnchorKind")).toString();
                 g.anchorId      = a.value(QStringLiteral("AnchorId")).toUInt();
                 g.locked        = a.value(QStringLiteral("Locked")).toInt() != 0;
+                g.hasFrame      = a.value(QStringLiteral("Frame")).toInt() != 0;
+                if (g.hasFrame)
+                {
+                    g.origin   = QVector3D(a.value(QStringLiteral("OX")).toFloat(),
+                                           a.value(QStringLiteral("OY")).toFloat(),
+                                           a.value(QStringLiteral("OZ")).toFloat());
+                    g.rotation = a.value(QStringLiteral("Rot")).toFloat();
+                }
                 if (g.name.isEmpty())
                     g.name = QStringLiteral("Group %1").arg(gid);
                 m_groups.insert(gid, g);
@@ -1468,6 +1556,10 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.deckPlatformId   = a.value("Deck").toUInt();
                 rp.deckHeightOffset = a.value("DeckH").toFloat();
             }
+            if (a.hasAttribute("GLX") || a.hasAttribute("GLY") || a.hasAttribute("GLZ"))
+                rp.groupLocal = QVector3D(a.value("GLX").toFloat(),
+                                          a.value("GLY").toFloat(),
+                                          a.value("GLZ").toFloat());
             m_rigProps[fid] = rp;
             root.skipCurrentElement();
         }
@@ -1764,6 +1856,14 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         }
         if (g.locked)
             doc->writeAttribute(QStringLiteral("Locked"), QStringLiteral("1"));
+        if (g.hasFrame)
+        {
+            doc->writeAttribute(QStringLiteral("Frame"), QStringLiteral("1"));
+            doc->writeAttribute(QStringLiteral("OX"), QString::number(double(g.origin.x()), 'f', 3));
+            doc->writeAttribute(QStringLiteral("OY"), QString::number(double(g.origin.y()), 'f', 3));
+            doc->writeAttribute(QStringLiteral("OZ"), QString::number(double(g.origin.z()), 'f', 3));
+            doc->writeAttribute(QStringLiteral("Rot"), QString::number(double(g.rotation), 'f', 3));
+        }
         doc->writeEndElement();
     }
 
@@ -1834,6 +1934,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));
             doc->writeAttribute(QStringLiteral("DeckH"), QString::number(double(rp.deckHeightOffset), 'f', 3));
+        }
+        if (!rp.groupLocal.isNull())
+        {
+            doc->writeAttribute(QStringLiteral("GLX"), QString::number(double(rp.groupLocal.x()), 'f', 3));
+            doc->writeAttribute(QStringLiteral("GLY"), QString::number(double(rp.groupLocal.y()), 'f', 3));
+            doc->writeAttribute(QStringLiteral("GLZ"), QString::number(double(rp.groupLocal.z()), 'f', 3));
         }
         doc->writeEndElement();
     }

@@ -237,6 +237,15 @@ struct FixtureRigProps
     quint32          deckPlatformId = UINT_MAX;
     float            deckHeightOffset = 0.0f;       ///< metres above the deck top
 
+    /** Studio-group frame mount. When the fixture's monitor group (or an
+     *  ancestor) carries a frame (MonitorProperties::MonitorGroup::hasFrame),
+     *  its world position is DERIVED as group.origin + Rz(group.rotation) *
+     *  groupLocal, where groupLocal is in METRES relative to the group's
+     *  local-frame origin. Takes precedence over free/truss/riser placement.
+     *  Membership itself lives in the PreviewItem groupId; this only carries
+     *  the local offset within that frame. */
+    QVector3D        groupLocal;                   ///< metres, group-local offset
+
     static quint32 invalidPlatformId() { return UINT_MAX; }
     bool onRiser() const { return riserPlatformId != UINT_MAX; }
     bool onDeck()  const { return deckPlatformId  != UINT_MAX; }

@@ -127,6 +127,16 @@ public:
     /** Return all selected MonitorFixtureItems (may be empty). */
     QList<MonitorFixtureItem *> selectedFixtureItems() const;
 
+    /** Fixture Studio (FIXTURESTUDIO_DESIGN.md): promote the current fixture
+     *  multi-selection into a studio group — a MonitorGroup carrying a local
+     *  frame whose members' world positions are derived. Returns the new group
+     *  id, or 0 if fewer than two fixtures are selected. */
+    quint32 createStudioGroupFromSelection();
+
+    /** Open the modal studio-group editor (frame origin/rotation + member
+     *  local offsets) for @p groupId, refreshing the map live. */
+    void openStudioGroupEditor(quint32 groupId);
+
     /** Return the MonitorFixtureItem for the given fixture ID, or nullptr if not in the view. */
     MonitorFixtureItem *fixtureItemForId(quint32 fxId) const;
 

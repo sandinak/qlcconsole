@@ -377,6 +377,16 @@ public:
         /** Per-group position lock: freezes every member's position (like a
          *  per-item lock — still selectable, just not draggable). */
         bool    locked = false;
+        /** Studio frame. When hasFrame is true the group is a first-class
+         *  studio object: a rigid body with its own local coordinate frame.
+         *  Member fixtures store a group-local offset (FixtureRigProps::
+         *  groupLocal, metres) and their world position is DERIVED as
+         *  origin + Rz(rotation) * local (see fixtureRigPosition). When false
+         *  the group is a plain spatial grouping (members keep absolute
+         *  positions) — the backward-compatible default. */
+        bool      hasFrame = false;
+        QVector3D origin;            ///< world position of the local-frame origin (metres)
+        float     rotation = 0.0f;   ///< frame yaw about Z, degrees
     };
 
     /** Set a group's position-lock flag (no-op if the group is unknown). */
@@ -407,6 +417,24 @@ public:
     /** Mark a group as anchored to an item (kind "truss"/"platform"); the tree
      *  then renders the group as that item. Pass an empty kind to clear. */
     void setGroupAnchor(quint32 id, const QString &kind, quint32 anchorId);
+
+    /** Studio-frame mutators (no-op on unknown id). Toggling a frame does NOT
+     *  itself convert member positions — callers seed/adopt groupLocal via
+     *  worldToGroupLocal() around the toggle. */
+    void setGroupHasFrame(quint32 id, bool on);
+    void setGroupFrame(quint32 id, const QVector3D &origin, float rotationDeg);
+    void setGroupOrigin(quint32 id, const QVector3D &origin);
+    void setGroupRotation(quint32 id, float rotationDeg);
+
+    /** The nearest frame-bearing group for fixture @p fid — walks the fixture's
+     *  immediate group up its parent chain and returns the first group whose
+     *  hasFrame is set; 0 if the fixture is not under any studio frame. */
+    quint32 fixtureFrameGroup(quint32 fid) const;
+
+    /** Map a point between world space (metres) and a frame group's local
+     *  space (metres). Identity if @p groupId is unknown or frameless. */
+    QVector3D groupLocalToWorld(quint32 groupId, const QVector3D &local) const;
+    QVector3D worldToGroupLocal(quint32 groupId, const QVector3D &world) const;
 
     /** Immediate child groups of @p parentGroupId (pass 0 for top-level). */
     QList<MonitorGroup> childGroups(quint32 parentGroupId) const;
