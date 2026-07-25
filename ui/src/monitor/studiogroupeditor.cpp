@@ -196,22 +196,36 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
         m_plane->setPlane(StudioPlaneView::Plane(m_planeCombo->currentData().toInt()));
     });
     connect(m_plane, &StudioPlaneView::changed, this, [this]() {
-        if (!m_loading) { rebuildTable(); emit changed(); }
+        if (!m_loading) { rebuildList(); populateSelectionStrip(); emit changed(); }
     });
 
-    // --- Members (per-member group-local offset) ---------------------------
-    QGroupBox *memBox = new QGroupBox(tr("Members (group-local offset, metres)"), this);
-    QVBoxLayout *memLay = new QVBoxLayout(memBox);
-    m_table = new QTableWidget(memBox);
-    m_table->setColumnCount(6);
-    m_table->setHorizontalHeaderLabels(QStringList()
-        << tr("Fixture") << tr("Local X") << tr("Local Y") << tr("Local Z")
-        << tr("Face") << tr("Angle°"));
-    m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_table->verticalHeader()->setVisible(false);
-    m_table->setSelectionMode(QAbstractItemView::NoSelection);
-    memLay->addWidget(m_table);
-    root->addWidget(memBox, 1);
+    // --- Selected fixture(s): compact property strip (replaces the table) ---
+    QGroupBox *selBox = new QGroupBox(tr("Selected fixture(s)"), this);
+    QFormLayout *selForm = new QFormLayout(selBox);
+    m_selFace = new QComboBox(selBox);
+    m_selFace->addItem(tr("Top"), 0);
+    m_selFace->addItem(tr("Front"), 1);
+    m_selFace->addItem(tr("Side"), 2);
+    selForm->addRow(tr("Face"), m_selFace);
+    m_selAngle = mkSpin(-360.0, 360.0, tr(" °")); m_selAngle->setSingleStep(1.0);
+    selForm->addRow(tr("Angle"), m_selAngle);
+    m_selX = mkSpin(-1000.0, 1000.0, tr(" m"));
+    m_selY = mkSpin(-1000.0, 1000.0, tr(" m"));
+    m_selZ = mkSpin(-1000.0, 1000.0, tr(" m"));
+    QHBoxLayout *xyzRow = new QHBoxLayout;
+    xyzRow->addWidget(new QLabel(tr("X"))); xyzRow->addWidget(m_selX);
+    xyzRow->addWidget(new QLabel(tr("Y"))); xyzRow->addWidget(m_selY);
+    xyzRow->addWidget(new QLabel(tr("Z"))); xyzRow->addWidget(m_selZ);
+    selForm->addRow(tr("Local"), xyzRow);
+    root->addWidget(selBox);
+    root->addStretch(1);
+
+    connect(m_selFace, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) { applySelection(); });
+    connect(m_selAngle, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &StudioGroupEditor::applySelection);
+    connect(m_selX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &StudioGroupEditor::applySelection);
+    connect(m_selY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &StudioGroupEditor::applySelection);
+    connect(m_selZ, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &StudioGroupEditor::applySelection);
 
     QDialogButtonBox *bb = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -231,14 +245,14 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
                                  tr("Could not save template: %1").arg(err));
     });
 
-    rebuildTable();
+    rebuildList();
+    populateSelectionStrip();
 
     connect(m_name, &QLineEdit::editingFinished, this, &StudioGroupEditor::applyFrame);
     connect(m_ox,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &StudioGroupEditor::applyFrame);
     connect(m_oy,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &StudioGroupEditor::applyFrame);
     connect(m_oz,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &StudioGroupEditor::applyFrame);
     connect(m_rot, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &StudioGroupEditor::applyFrame);
-    connect(m_table, &QTableWidget::cellChanged, this, &StudioGroupEditor::applyMemberCell);
     connect(recenter, &QPushButton::clicked, this, &StudioGroupEditor::recenterOrigin);
     connect(bb, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, this, [this]() { revert(); reject(); });
@@ -254,61 +268,57 @@ QList<quint32> StudioGroupEditor::members() const
     return out;
 }
 
-void StudioGroupEditor::rebuildTable()
+void StudioGroupEditor::rebuildList()
 {
+    if (m_list == nullptr)
+        return;
     m_loading = true;
     MonitorProperties *props = m_doc->monitorProperties();
-    const QList<quint32> ids = members();
-    m_table->setRowCount(ids.size());
-    for (int r = 0; r < ids.size(); ++r)
+
+    // Preserve the selection across the rebuild.
+    QSet<quint32> wasSel;
+    foreach (QListWidgetItem *it, m_list->selectedItems())
+        wasSel.insert(it->data(Qt::UserRole).toUInt());
+
+    m_list->blockSignals(true);
+    m_list->clear();
+    static const char *faceName[3] = { "Top", "Front", "Side" };
+    foreach (quint32 fid, members())
     {
-        const quint32 fid = ids[r];
         Fixture *fx = m_doc->fixture(fid);
-        const QString nm = fx ? fx->name() : tr("Fixture %1").arg(fid);
-        const FixtureRigProps rp = props->fixtureRigProps(fid);
-        const QVector3D lp = rp.groupLocal;
-
-        QTableWidgetItem *n = new QTableWidgetItem(nm);
-        n->setData(Qt::UserRole, fid);
-        n->setFlags(n->flags() & ~Qt::ItemIsEditable);
-        m_table->setItem(r, 0, n);
-        const float v[3] = { lp.x(), lp.y(), lp.z() };
-        for (int c = 0; c < 3; ++c)
-            m_table->setItem(r, c + 1,
-                new QTableWidgetItem(QString::number(double(v[c]), 'f', 3)));
-
-        static const char *faceName[3] = { "Top", "Front", "Side" };
-        const int mount = qBound(0, rp.studioMount, 2);
-        QTableWidgetItem *f = new QTableWidgetItem(QString::fromLatin1(faceName[mount]));
-        f->setToolTip(tr("Face the fixture lies on: Top, Front or Side"));
-        m_table->setItem(r, 4, f);
-        m_table->setItem(r, 5,
-            new QTableWidgetItem(QString::number(double(rp.studioAngle), 'f', 1)));
+        const int mount = qBound(0, props->fixtureRigProps(fid).studioMount, 2);
+        QListWidgetItem *li = new QListWidgetItem(
+            tr("%1  ·  %2").arg(fx ? fx->name() : tr("Fixture %1").arg(fid))
+                           .arg(QString::fromLatin1(faceName[mount])));
+        li->setData(Qt::UserRole, fid);
+        m_list->addItem(li);
+        if (wasSel.contains(fid))
+            li->setSelected(true);
     }
+    m_list->blockSignals(false);
+    m_loading = false;
+}
 
-    // Left list: fixture name + its current face, preserving the selection.
-    if (m_list != nullptr)
-    {
-        QSet<quint32> wasSel;
-        foreach (QListWidgetItem *it, m_list->selectedItems())
-            wasSel.insert(it->data(Qt::UserRole).toUInt());
-        m_list->blockSignals(true);
-        m_list->clear();
-        static const char *faceName[3] = { "Top", "Front", "Side" };
-        foreach (quint32 fid, ids)
-        {
-            Fixture *fx = m_doc->fixture(fid);
-            const int mount = qBound(0, props->fixtureRigProps(fid).studioMount, 2);
-            QListWidgetItem *li = new QListWidgetItem(
-                tr("%1  ·  %2").arg(fx ? fx->name() : tr("Fixture %1").arg(fid))
-                               .arg(QString::fromLatin1(faceName[mount])));
-            li->setData(Qt::UserRole, fid);
-            m_list->addItem(li);
-            if (wasSel.contains(fid))
-                li->setSelected(true);
-        }
-        m_list->blockSignals(false);
-    }
+void StudioGroupEditor::populateSelectionStrip()
+{
+    const QList<quint32> ids = selectedFixtureIds();
+    const bool one = !ids.isEmpty();
+    m_selFace->setEnabled(one);
+    m_selAngle->setEnabled(one);
+    m_selX->setEnabled(one);
+    m_selY->setEnabled(one);
+    m_selZ->setEnabled(one);
+    if (!one)
+        return;
+
+    // Show the first selected fixture's values (edits apply to the whole set).
+    const FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(ids.first());
+    m_loading = true;
+    m_selFace->setCurrentIndex(qBound(0, rp.studioMount, 2));
+    m_selAngle->setValue(double(rp.studioAngle));
+    m_selX->setValue(double(rp.groupLocal.x()));
+    m_selY->setValue(double(rp.groupLocal.y()));
+    m_selZ->setValue(double(rp.groupLocal.z()));
     m_loading = false;
 }
 
@@ -325,40 +335,30 @@ void StudioGroupEditor::applyFrame()
     emit changed();
 }
 
-void StudioGroupEditor::applyMemberCell(int row, int col)
+void StudioGroupEditor::applySelection()
 {
-    if (m_loading || col < 1 || col > 5)
+    if (m_loading)
         return;
-    QTableWidgetItem *n = m_table->item(row, 0);
-    if (n == nullptr)
+    const QList<quint32> ids = selectedFixtureIds();
+    if (ids.isEmpty())
         return;
-    const quint32 fid = n->data(Qt::UserRole).toUInt();
     MonitorProperties *props = m_doc->monitorProperties();
-    FixtureRigProps rp = props->fixtureRigProps(fid);
-    const QString text = m_table->item(row, col)->text().trimmed();
+    const int mount = m_selFace->currentData().toInt();
+    const QVector3D local(float(m_selX->value()), float(m_selY->value()), float(m_selZ->value()));
+    const float angle = float(m_selAngle->value());
 
-    if (col >= 1 && col <= 3)
+    foreach (quint32 fid, ids)
     {
-        QVector3D lp = rp.groupLocal;
-        const float val = float(text.toDouble());
-        if (col == 1) lp.setX(val);
-        else if (col == 2) lp.setY(val);
-        else lp.setZ(val);
-        rp.groupLocal = lp;
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.studioMount = mount;
+        rp.studioAngle = angle;
+        // For a single selection, set the exact local; for many, only the face/
+        // angle apply (leaving each where it sits) — moving them all to one XYZ
+        // would stack them.
+        if (ids.size() == 1)
+            rp.groupLocal = local;
+        props->setFixtureRigProps(fid, rp);
     }
-    else if (col == 4)   // Face: Top / Front / Side (or 0/1/2)
-    {
-        const QChar c0 = text.isEmpty() ? QChar() : text.at(0).toUpper();
-        if (c0 == 'T') rp.studioMount = 0;
-        else if (c0 == 'F') rp.studioMount = 1;
-        else if (c0 == 'S') rp.studioMount = 2;
-        else rp.studioMount = qBound(0, text.toInt(), 2);
-    }
-    else   // col == 5, Angle
-    {
-        rp.studioAngle = float(text.toDouble());
-    }
-    props->setFixtureRigProps(fid, rp);
     if (m_plane) m_plane->reload();
     m_doc->setModified();
     emit changed();
@@ -397,7 +397,7 @@ void StudioGroupEditor::recenterOrigin()
     m_oy->setValue(double(newOrigin.y()));
     m_oz->setValue(double(newOrigin.z()));
     m_loading = false;
-    rebuildTable();
+    rebuildList();
     if (m_plane) m_plane->reload();
     m_doc->setModified();
     emit changed();
@@ -451,7 +451,7 @@ void StudioGroupEditor::seedFromFixtureGroup()
         ++placed;
     }
     Q_UNUSED(placed);
-    rebuildTable();
+    rebuildList();
     if (m_plane) m_plane->reload();
     m_doc->setModified();
     emit changed();
@@ -483,7 +483,7 @@ void StudioGroupEditor::adoptFromFixtureGroup()
         rp.groupLocal = props->worldToGroupLocal(m_groupId, world);
         props->setFixtureRigProps(fid, rp);
     }
-    rebuildTable();
+    rebuildList();
     if (m_plane) m_plane->reload();
     m_doc->setModified();
     emit changed();
@@ -511,6 +511,7 @@ void StudioGroupEditor::syncHighlight()
 {
     if (m_plane != nullptr)
         m_plane->setHighlight(selectedFixtureIds());
+    populateSelectionStrip();
 }
 
 void StudioGroupEditor::distributeEvenly()
@@ -551,7 +552,7 @@ void StudioGroupEditor::putGroupOnFace()
     const int face = m_faceCombo->currentData().toInt();
     m_planeCombo->setCurrentIndex(face);          // triggers m_plane->setPlane
     m_plane->distributeEvenly(ids);
-    rebuildTable();
+    rebuildList();
 }
 
 void StudioGroupEditor::snapshot()

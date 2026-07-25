@@ -966,32 +966,29 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
 
     if (type == NodeGroup)
     {
-        // An anchored group (truss / platform) is presented AS that object —
-        // offer Edit to open its editor directly (it's often covered on the
-        // canvas by the fixtures riding on it).
+        // Primary "Edit…" opens the Fixture Studio (the group's editing surface
+        // — layout, faces, orientation). Editing the physical feature it rides
+        // (riser size/colour, truss) is a separate, clearly-named entry.
         const MonitorProperties::MonitorGroup g = m_props->group(id);
+        if (m_editable)
+        {
+            menu.addAction(tr("Edit…"), this, [this, id]() {
+                if (m_view) m_view->openStudioGroupForGroup(id);
+                reload();
+            });
+        }
         if (!g.anchorKind.isEmpty())
         {
             const QString ak = g.anchorKind; const quint32 aid = g.anchorId;
-            menu.addAction(tr("Edit…"), this, [this, ak, aid]() {
+            const QString label = (ak == QStringLiteral("platform"))
+                ? tr("Riser properties…") : tr("Truss properties…");
+            menu.addAction(label, this, [this, ak, aid]() {
                 if (m_view) m_view->requestEditItem(ak, aid);
             });
         }
         menu.addAction(tr("Select on map"), this, [this, id]() {
             if (m_view) m_view->selectItemsInGroup(id);
         });
-        // Fixture Studio: edit this group as a studio object (rigid unit with a
-        // local frame + 3-D member layout). Promotes a plain group in place.
-        if (m_editable)
-        {
-            const bool isStudio = m_props->group(id).hasFrame;
-            menu.addAction(isStudio ? tr("Edit Studio Group…")
-                                    : tr("Edit as Studio Group…"),
-                           this, [this, id]() {
-                if (m_view) m_view->openStudioGroupForGroup(id);
-                reload();
-            });
-        }
         if (m_editable)
         {
             // Position lock. For an anchored group (truss/platform) this locks

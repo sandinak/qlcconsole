@@ -58,7 +58,7 @@ signals:
 
 private slots:
     void applyFrame();          ///< push origin/rotation/name → doc, emit changed()
-    void applyMemberCell(int row, int col);
+    void applySelection();      ///< apply the property strip to the selected fixtures
     void recenterOrigin();      ///< move origin to member centroid; members stay put
     void seedFromFixtureGroup();   ///< lay members out from the bound FG cell matrix
     void adoptFromFixtureGroup();  ///< pull bound FG members in at their current pos
@@ -70,7 +70,8 @@ private slots:
 private:
     QList<quint32> members() const;   ///< fixtures under this frame group
     QList<quint32> selectedFixtureIds() const;   ///< current left-list selection
-    void rebuildTable();
+    void rebuildList();               ///< repopulate the left fixture list
+    void populateSelectionStrip();    ///< load the strip from the current selection
     void snapshot();
     void revert();
     /** Record a fixture's pre-edit group + rig once, so Cancel can fully unwind
@@ -87,7 +88,13 @@ private:
     QDoubleSpinBox  *m_oy = nullptr;
     QDoubleSpinBox  *m_oz = nullptr;
     QDoubleSpinBox  *m_rot = nullptr;
-    QTableWidget    *m_table = nullptr;
+
+    // Compact property strip for the current selection (replaces the table).
+    QComboBox       *m_selFace = nullptr;
+    QDoubleSpinBox  *m_selAngle = nullptr;
+    QDoubleSpinBox  *m_selX = nullptr;
+    QDoubleSpinBox  *m_selY = nullptr;
+    QDoubleSpinBox  *m_selZ = nullptr;
 
     QComboBox       *m_fgCombo = nullptr;
     QDoubleSpinBox  *m_pitchX = nullptr;
