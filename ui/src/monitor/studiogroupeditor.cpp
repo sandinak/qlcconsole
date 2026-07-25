@@ -41,6 +41,7 @@
 #include "fixture.h"
 #include "fixturegroup.h"
 #include "grouphead.h"
+#include "stageplatform.h"
 
 StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     : QDialog(parent)
@@ -140,9 +141,14 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     m_planeCombo->addItem(tr("Side (Y → / Z ↑)"),  int(StudioPlaneView::Side));
     planeTop->addWidget(new QLabel(tr("View")));
     planeTop->addWidget(m_planeCombo);
+    QPushButton *distBtn = new QPushButton(tr("Distribute evenly"), planeBox);
+    distBtn->setToolTip(tr("Spread the fixtures evenly across the feature width, "
+                           "in name order"));
+    planeTop->addWidget(distBtn);
     planeTop->addStretch(1);
     planeTop->addWidget(new QLabel(tr("drag a fixture to place it")));
     planeLay->addLayout(planeTop);
+    connect(distBtn, &QPushButton::clicked, this, &StudioGroupEditor::distributeEvenly);
     m_plane = new StudioPlaneView(m_doc, m_groupId, planeBox);
     planeLay->addWidget(m_plane, 1);
     root->addWidget(planeBox, 1);
@@ -401,6 +407,66 @@ void StudioGroupEditor::rememberFixture(quint32 fid)
     MonitorProperties *props = m_doc->monitorProperties();
     m_snapRig.insert(fid, props->fixtureRigProps(fid));
     m_snapGroupOf.insert(fid, props->fixtureGroup(fid));
+}
+
+static qlonglong trailingNum(const QString &s)
+{
+    int i = s.size();
+    while (i > 0 && s.at(i - 1).isDigit())
+        --i;
+    return (i < s.size()) ? s.mid(i).toLongLong() : -1;
+}
+
+void StudioGroupEditor::distributeEvenly()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<quint32> ids = members();
+    const int n = ids.size();
+    if (n == 0)
+        return;
+
+    // Order by the trailing number in the fixture name (the "#N" step index),
+    // falling back to id — same intent as the old Face editor.
+    std::sort(ids.begin(), ids.end(), [this](quint32 a, quint32 b) {
+        Fixture *fa = m_doc->fixture(a), *fb = m_doc->fixture(b);
+        const QString na = fa ? fa->name() : QString::number(a);
+        const QString nb = fb ? fb->name() : QString::number(b);
+        const qlonglong ta = trailingNum(na), tb = trailingNum(nb);
+        if (ta >= 0 && tb >= 0 && ta != tb)
+            return ta < tb;
+        return a < b;
+    });
+
+    // Spread across the feature width (X) if platform-anchored, else across the
+    // members' current X extent. Keep a common depth (Y) and height (Z) = the
+    // current average, so they line up in a neat row.
+    const MonitorProperties::MonitorGroup g = props->group(m_groupId);
+    float width = 0.0f, x0 = 0.0f;
+    if (g.anchorKind == QStringLiteral("platform"))
+        if (StagePlatform *pl = m_doc->monitorProperties()->platform(g.anchorId))
+            width = pl->width();
+    double sy = 0, sz = 0, minX = 0, maxX = 0;
+    bool first = true;
+    foreach (quint32 fid, ids)
+    {
+        const QVector3D lp = props->fixtureRigProps(fid).groupLocal;
+        sy += lp.y(); sz += lp.z();
+        if (first) { minX = maxX = lp.x(); first = false; }
+        else { minX = qMin(minX, double(lp.x())); maxX = qMax(maxX, double(lp.x())); }
+    }
+    if (width <= 0.0f) { x0 = float(minX); width = float(qMax(0.5, maxX - minX)); }
+    const float cy = float(sy / n), cz = float(sz / n);
+
+    for (int i = 0; i < n; ++i)
+    {
+        FixtureRigProps rp = props->fixtureRigProps(ids.at(i));
+        rp.groupLocal = QVector3D(x0 + width * (i + 0.5f) / n, cy, cz);
+        props->setFixtureRigProps(ids.at(i), rp);
+    }
+    rebuildTable();
+    if (m_plane) m_plane->reload();
+    m_doc->setModified();
+    emit changed();
 }
 
 void StudioGroupEditor::snapshot()

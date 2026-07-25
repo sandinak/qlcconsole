@@ -61,6 +61,7 @@ private slots:
     void recenterOrigin();      ///< move origin to member centroid; members stay put
     void seedFromFixtureGroup();   ///< lay members out from the bound FG cell matrix
     void adoptFromFixtureGroup();  ///< pull bound FG members in at their current pos
+    void distributeEvenly();       ///< spread members evenly across the feature width
 
 private:
     QList<quint32> members() const;   ///< fixtures under this frame group

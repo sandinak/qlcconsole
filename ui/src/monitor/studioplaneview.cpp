@@ -27,6 +27,8 @@
 #include "studioplaneview.h"
 #include "doc.h"
 #include "fixture.h"
+#include "qlcfixturemode.h"
+#include "qlcphysical.h"
 #include "truss.h"
 #include "stageplatform.h"
 #include "monitorproperties.h"
@@ -56,6 +58,30 @@ void StudioPlaneView::reload()
 {
     refit();
     update();
+}
+
+double StudioPlaneView::fixtureLenM(quint32 fid) const
+{
+    // Real physical length of the fixture (metres), matching the old Face
+    // editor: the declared physical width, else a 0.3 m default (NOT a
+    // per-head guess — a 64-cell LED tape is not 3 m long).
+    Fixture *fx = m_doc->fixture(fid);
+    if (fx != nullptr)
+    {
+        const QLCFixtureMode *mode = fx->fixtureMode();
+        if (mode != nullptr && mode->physical().width() > 0)
+            return mode->physical().width() / 1000.0;
+    }
+    return 0.3;
+}
+
+StagePlatform *StudioPlaneView::anchorPlatform() const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const MonitorProperties::MonitorGroup g = props->group(m_groupId);
+    if (g.anchorKind == QStringLiteral("platform"))
+        return props->platform(g.anchorId);
+    return nullptr;
 }
 
 QList<quint32> StudioPlaneView::members() const
@@ -118,11 +144,25 @@ void StudioPlaneView::refit()
     MonitorProperties *props = m_doc->monitorProperties();
 
     double minA = 0, maxA = 0, minB = 0, maxB = 0;   // always include origin
-    foreach (quint32 fid, ids)
-    {
-        const QPointF ab = project(props->fixtureRigProps(fid).groupLocal);
+    auto include = [&](const QPointF &ab) {
         minA = qMin(minA, ab.x()); maxA = qMax(maxA, ab.x());
         minB = qMin(minB, ab.y()); maxB = qMax(maxB, ab.y());
+    };
+    foreach (quint32 fid, ids)
+        include(project(props->fixtureRigProps(fid).groupLocal));
+
+    // Frame the anchor feature too, so the view is scoped to what you're editing.
+    if (StagePlatform *pl = anchorPlatform())
+    {
+        const float ox = pl->originX(), oy = pl->originY();
+        const float w = pl->width(), d = pl->depth(), h = pl->height();
+        for (int i = 0; i < 8; ++i)
+        {
+            const QVector3D corner(ox + ((i & 1) ? w : 0),
+                                   oy + ((i & 2) ? d : 0),
+                                   (i & 4) ? h : 0);
+            include(project(props->worldToGroupLocal(m_groupId, corner)));
+        }
     }
     const double spanA = qMax(maxA - minA, 0.5);
     const double spanB = qMax(maxB - minB, 0.5);
@@ -164,10 +204,8 @@ quint32 StudioPlaneView::hitTest(const QPointF &px) const
     // horizontal bars drawn in the elevation views) are easy to grab.
     foreach (quint32 fid, members())
     {
-        Fixture *fx = m_doc->fixture(fid);
-        const int heads = (fx != nullptr) ? qMax(1, fx->heads()) : 1;
         const QPointF cAB = project(props->fixtureRigProps(fid).groupLocal);
-        const double halfLen = qMax(0.10, (heads - 1) * 0.05 / 2.0);
+        const double halfLen = qMax(0.05, fixtureLenM(fid) / 2.0);
         double th = 0.0;
         if (m_plane == Top)
             th = qDegreesToRadians(double(props->fixtureRotation(fid, 0, 0).z()
@@ -243,10 +281,10 @@ void StudioPlaneView::drawFixture(QPainter &p, quint32 fid) const
     const QPointF cAB = project(props->fixtureRigProps(fid).groupLocal);
     const bool drag = (fid == m_dragFid);
 
-    // A fixture is a line of heads. Approximate its physical extent from the head
-    // count and orient it (Top only) by its yaw relative to the frame; elevation
-    // planes draw it along the horizontal axis. ~5 cm per head.
-    const double halfLen = qMax(0.10, (heads - 1) * 0.05 / 2.0);   // metres
+    // A fixture is a line of heads spanning its real physical length. Orient it
+    // (Top only) by its yaw relative to the frame; elevation planes draw it along
+    // the horizontal axis.
+    const double halfLen = qMax(0.05, fixtureLenM(fid) / 2.0);   // metres
     double th = 0.0;
     if (m_plane == Top)
         th = qDegreesToRadians(double(props->fixtureRotation(fid, 0, 0).z()
@@ -288,13 +326,12 @@ void StudioPlaneView::drawFixture(QPainter &p, quint32 fid) const
 void StudioPlaneView::drawStructure(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
+    const MonitorProperties::MonitorGroup g = props->group(m_groupId);
 
-    // Platforms: draw the face relevant to the current plane, transformed into
-    // the group's LOCAL frame, so you can place fixtures against the riser.
-    foreach (StagePlatform *pl, props->platforms())
+    // Draw ONLY the feature this group is anchored to (the platform/truss you
+    // are working on), transformed into the local frame — not the whole stage.
+    if (StagePlatform *pl = anchorPlatform())
     {
-        if (pl == nullptr)
-            continue;
         QColor pc = pl->color();
         if (!pc.isValid())
             pc = QColor(150, 135, 85);
@@ -324,16 +361,15 @@ void StudioPlaneView::drawStructure(QPainter &p) const
             poly << worldToScreen(project(props->worldToGroupLocal(m_groupId, c)));
         p.drawPolygon(poly);
     }
-
-    // Trusses: a line from end to end (in the local frame).
-    p.setPen(QPen(QColor(95, 140, 165), 3));
-    foreach (Truss *t, props->trusses())
+    else if (g.anchorKind == QStringLiteral("truss"))
     {
-        if (t == nullptr)
-            continue;
-        const QVector3D a = props->worldToGroupLocal(m_groupId, t->positionAt(0));
-        const QVector3D b = props->worldToGroupLocal(m_groupId, t->positionAt(t->length()));
-        p.drawLine(worldToScreen(project(a)), worldToScreen(project(b)));
+        if (Truss *t = props->truss(g.anchorId))
+        {
+            p.setPen(QPen(QColor(95, 140, 165), 3));
+            const QVector3D a = props->worldToGroupLocal(m_groupId, t->positionAt(0));
+            const QVector3D b = props->worldToGroupLocal(m_groupId, t->positionAt(t->length()));
+            p.drawLine(worldToScreen(project(a)), worldToScreen(project(b)));
+        }
     }
 }
 
@@ -375,7 +411,18 @@ void StudioPlaneView::mouseMoveEvent(QMouseEvent *e)
         MonitorProperties *props = m_doc->monitorProperties();
         FixtureRigProps rp = props->fixtureRigProps(m_dragFid);
         const QPointF ab = screenToWorld(e->pos());
-        rp.groupLocal = unproject(ab, rp.groupLocal);
+        QVector3D local = unproject(ab, rp.groupLocal);
+
+        // Keep fixtures within the feature bounds. For a platform-slaved frame
+        // the local axes ARE the platform extent: x∈[0,width], y∈[0,depth],
+        // z∈[0,height].
+        if (StagePlatform *pl = anchorPlatform())
+        {
+            local.setX(qBound(0.0f, local.x(), pl->width()));
+            local.setY(qBound(0.0f, local.y(), pl->depth()));
+            local.setZ(qBound(0.0f, local.z(), pl->height()));
+        }
+        rp.groupLocal = local;
         props->setFixtureRigProps(m_dragFid, rp);
         m_doc->setModified();
         emit memberMoved(m_dragFid);
