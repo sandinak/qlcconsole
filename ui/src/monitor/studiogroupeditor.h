@@ -30,6 +30,7 @@ class QDoubleSpinBox;
 class QLineEdit;
 class QTableWidget;
 class QComboBox;
+class StudioPlaneView;
 class Doc;
 
 /** Fixture Studio — group editor.
@@ -86,6 +87,9 @@ private:
     QDoubleSpinBox  *m_pitchX = nullptr;
     QDoubleSpinBox  *m_pitchY = nullptr;
     quint32 selectedFxGroup() const;
+
+    StudioPlaneView *m_plane = nullptr;
+    QComboBox       *m_planeCombo = nullptr;
 
     // On-open snapshot for Cancel/revert.
     MonitorProperties::MonitorGroup   m_snapGroup;

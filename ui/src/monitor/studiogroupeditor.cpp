@@ -32,8 +32,11 @@
 #include <QFileDialog>
 #include <QMessageBox>
 
+#include <climits>
+
 #include "studiogroupeditor.h"
 #include "studiotemplate.h"
+#include "studioplaneview.h"
 #include "doc.h"
 #include "fixture.h"
 #include "fixturegroup.h"
@@ -126,6 +129,31 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
 
     connect(seedBtn,  &QPushButton::clicked, this, &StudioGroupEditor::seedFromFixtureGroup);
     connect(adoptBtn, &QPushButton::clicked, this, &StudioGroupEditor::adoptFromFixtureGroup);
+
+    // --- Graphical layout (drag members in Top / Front / Side) -------------
+    QGroupBox *planeBox = new QGroupBox(tr("Layout"), this);
+    QVBoxLayout *planeLay = new QVBoxLayout(planeBox);
+    QHBoxLayout *planeTop = new QHBoxLayout;
+    m_planeCombo = new QComboBox(planeBox);
+    m_planeCombo->addItem(tr("Top (X → / Y ↓)"),  int(StudioPlaneView::Top));
+    m_planeCombo->addItem(tr("Front (X → / Z ↑)"), int(StudioPlaneView::Front));
+    m_planeCombo->addItem(tr("Side (Y → / Z ↑)"),  int(StudioPlaneView::Side));
+    planeTop->addWidget(new QLabel(tr("View")));
+    planeTop->addWidget(m_planeCombo);
+    planeTop->addStretch(1);
+    planeTop->addWidget(new QLabel(tr("drag a fixture to place it")));
+    planeLay->addLayout(planeTop);
+    m_plane = new StudioPlaneView(m_doc, m_groupId, planeBox);
+    planeLay->addWidget(m_plane, 1);
+    root->addWidget(planeBox, 1);
+
+    connect(m_planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) {
+        m_plane->setPlane(StudioPlaneView::Plane(m_planeCombo->currentData().toInt()));
+    });
+    connect(m_plane, &StudioPlaneView::changed, this, [this]() {
+        if (!m_loading) { rebuildTable(); emit changed(); }
+    });
 
     // --- Members (per-member group-local offset) ---------------------------
     QGroupBox *memBox = new QGroupBox(tr("Members (group-local offset, metres)"), this);
@@ -236,6 +264,7 @@ void StudioGroupEditor::applyMemberCell(int row, int col)
     else lp.setZ(val);
     rp.groupLocal = lp;
     props->setFixtureRigProps(fid, rp);
+    if (m_plane) m_plane->reload();
     m_doc->setModified();
     emit changed();
 }
@@ -274,6 +303,7 @@ void StudioGroupEditor::recenterOrigin()
     m_oz->setValue(double(newOrigin.z()));
     m_loading = false;
     rebuildTable();
+    if (m_plane) m_plane->reload();
     m_doc->setModified();
     emit changed();
 }
@@ -296,14 +326,21 @@ void StudioGroupEditor::seedFromFixtureGroup()
     props->setGroupBinding(m_groupId, fgid, px, py);
     props->setGroupHasFrame(m_groupId, true);
 
-    // Centre the cell grid on the frame origin so the unit is symmetric.
-    const QSize sz = fg->size();
-    const float cx = (sz.width()  > 0) ? (sz.width()  - 1) / 2.0f : 0.0f;
-    const float cy = (sz.height() > 0) ? (sz.height() - 1) / 2.0f : 0.0f;
-
     // Cell layout → metric local offsets. The cell matrix itself is left
     // untouched — this only projects it into the studio frame (decoupled).
     const QMap<QLCPoint, GroupHead> heads = fg->headsMap();
+
+    // Centre on the ACTUALLY OCCUPIED cell bounds (not the declared grid size,
+    // which can be larger than the occupied area or not start at 0,0) so the
+    // seeded block is centred on the frame origin and lands where expected.
+    int minX = INT_MAX, maxX = INT_MIN, minY = INT_MAX, maxY = INT_MIN;
+    for (auto b = heads.constBegin(); b != heads.constEnd(); ++b)
+    {
+        minX = qMin(minX, b.key().x()); maxX = qMax(maxX, b.key().x());
+        minY = qMin(minY, b.key().y()); maxY = qMax(maxY, b.key().y());
+    }
+    const float cx = (minX <= maxX) ? (minX + maxX) / 2.0f : 0.0f;
+    const float cy = (minY <= maxY) ? (minY + maxY) / 2.0f : 0.0f;
     int placed = 0;
     for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
     {
@@ -320,6 +357,7 @@ void StudioGroupEditor::seedFromFixtureGroup()
     }
     Q_UNUSED(placed);
     rebuildTable();
+    if (m_plane) m_plane->reload();
     m_doc->setModified();
     emit changed();
 }
@@ -351,6 +389,7 @@ void StudioGroupEditor::adoptFromFixtureGroup()
         props->setFixtureRigProps(fid, rp);
     }
     rebuildTable();
+    if (m_plane) m_plane->reload();
     m_doc->setModified();
     emit changed();
 }
