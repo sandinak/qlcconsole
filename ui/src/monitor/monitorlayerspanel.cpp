@@ -822,25 +822,16 @@ void MonitorLayersPanel::removeLeavesFromGroup(const QList<QPair<QString, quint3
             // position, then store it as a free position after we strip the
             // frame / mount so nothing teleports.
             const QVector3D w = m_props->fixtureRigPosition(id);        // metres
-            const quint32 g = m_props->fixtureGroup(id);
-            const MonitorProperties::MonitorGroup mg = m_props->group(g);
             FixtureRigProps rp = m_props->fixtureRigProps(id);
 
-            // Detach the mount ONLY when this group represents that very anchor
-            // (else the auto-grouping re-forces the fixture straight back in).
-            if (mg.anchorKind == QStringLiteral("platform")
-                && (rp.riserPlatformId == mg.anchorId || rp.deckPlatformId == mg.anchorId))
-            {
-                if (rp.riserPlatformId == mg.anchorId)
-                    rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
-                if (rp.deckPlatformId == mg.anchorId)
-                    rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
-            }
-            else if (mg.anchorKind == QStringLiteral("truss") && rp.trussId == mg.anchorId)
-            {
-                rp.trussId = Truss::invalidId();
-            }
-            rp.groupLocal = QVector3D();   // no longer studio-frame derived
+            // Detach ANY structure mount so the auto-grouping cannot re-add the
+            // fixture (riser/deck-mounted fixtures are force-grouped with their
+            // platform on every refresh — the cause of "remove doesn't stick").
+            // The world position is preserved below, so nothing moves.
+            rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+            rp.deckPlatformId  = FixtureRigProps::invalidPlatformId();
+            rp.trussId         = Truss::invalidId();
+            rp.groupLocal      = QVector3D();   // no longer studio-frame derived
             m_props->setFixtureRigProps(id, rp);
             m_props->setFixtureGroup(id, 0);
             m_props->setFixturePosition(id, 0, 0,

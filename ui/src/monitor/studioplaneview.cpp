@@ -142,16 +142,40 @@ void StudioPlaneView::resizeEvent(QResizeEvent *)
     refit();
 }
 
+// Distance (squared) from point p to segment a-b, in screen space.
+static double distToSegSq(const QPointF &p, const QPointF &a, const QPointF &b)
+{
+    const QPointF ab = b - a;
+    const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+    double t = 0.0;
+    if (len2 > 1e-9)
+        t = qBound(0.0, ((p.x() - a.x()) * ab.x() + (p.y() - a.y()) * ab.y()) / len2, 1.0);
+    const QPointF proj = a + ab * t;
+    const double dx = p.x() - proj.x(), dy = p.y() - proj.y();
+    return dx * dx + dy * dy;
+}
+
 quint32 StudioPlaneView::hitTest(const QPointF &px) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     quint32 best = 0;
-    double bestD = (kDotRadius + 4) * (kDotRadius + 4);
+    double bestD = (kDotRadius + 5) * (kDotRadius + 5);
+    // Hit the whole LED bar, not just its centre, so wide fixtures (and the
+    // horizontal bars drawn in the elevation views) are easy to grab.
     foreach (quint32 fid, members())
     {
-        const QPointF s = worldToScreen(project(props->fixtureRigProps(fid).groupLocal));
-        const double dx = s.x() - px.x(), dy = s.y() - px.y();
-        const double d = dx * dx + dy * dy;
+        Fixture *fx = m_doc->fixture(fid);
+        const int heads = (fx != nullptr) ? qMax(1, fx->heads()) : 1;
+        const QPointF cAB = project(props->fixtureRigProps(fid).groupLocal);
+        const double halfLen = qMax(0.10, (heads - 1) * 0.05 / 2.0);
+        double th = 0.0;
+        if (m_plane == Top)
+            th = qDegreesToRadians(double(props->fixtureRotation(fid, 0, 0).z()
+                                          - props->group(m_groupId).rotation));
+        const QPointF dir(qCos(th), qSin(th));
+        const QPointF a = worldToScreen(cAB - dir * halfLen);
+        const QPointF b = worldToScreen(cAB + dir * halfLen);
+        const double d = distToSegSq(px, a, b);
         if (d <= bestD) { bestD = d; best = fid; }
     }
     return best;
@@ -332,29 +356,47 @@ void StudioPlaneView::mousePressEvent(QMouseEvent *e)
         return;
     m_dragFid = hitTest(e->pos());
     if (m_dragFid != 0)
+    {
         update();
+    }
+    else
+    {
+        // Clicked empty space → pan the view.
+        m_panning = true;
+        m_panLast = e->pos();
+        setCursor(Qt::ClosedHandCursor);
+    }
 }
 
 void StudioPlaneView::mouseMoveEvent(QMouseEvent *e)
 {
-    if (m_dragFid == 0)
-        return;
-    MonitorProperties *props = m_doc->monitorProperties();
-    FixtureRigProps rp = props->fixtureRigProps(m_dragFid);
-    const QPointF ab = screenToWorld(e->pos());
-    rp.groupLocal = unproject(ab, rp.groupLocal);
-    props->setFixtureRigProps(m_dragFid, rp);
-    m_doc->setModified();
-    emit memberMoved(m_dragFid);
-    emit changed();
-    update();
+    if (m_dragFid != 0)
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        FixtureRigProps rp = props->fixtureRigProps(m_dragFid);
+        const QPointF ab = screenToWorld(e->pos());
+        rp.groupLocal = unproject(ab, rp.groupLocal);
+        props->setFixtureRigProps(m_dragFid, rp);
+        m_doc->setModified();
+        emit memberMoved(m_dragFid);
+        emit changed();
+        update();
+    }
+    else if (m_panning)
+    {
+        m_originPx += (e->pos() - m_panLast);
+        m_panLast = e->pos();
+        update();
+    }
 }
 
 void StudioPlaneView::mouseReleaseEvent(QMouseEvent *)
 {
-    if (m_dragFid != 0)
+    if (m_dragFid != 0 || m_panning)
     {
         m_dragFid = 0;
+        m_panning = false;
+        unsetCursor();
         update();
     }
 }

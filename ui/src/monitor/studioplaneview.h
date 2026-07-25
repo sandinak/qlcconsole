@@ -83,6 +83,8 @@ private:
     double   m_scale = 60.0;   ///< pixels per metre
     QPointF  m_originPx;       ///< where local (0,0) lands on screen
     quint32  m_dragFid = 0;
+    bool     m_panning = false;
+    QPointF  m_panLast;
 };
 
 #endif // STUDIOPLANEVIEW_H
