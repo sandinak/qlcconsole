@@ -50,6 +50,12 @@ public:
     /** Re-read members + refit the view (call after external edits). */
     void reload();
 
+    /** Auto-distribute members within the CURRENT plane: decide horizontal vs
+     *  vertical from whether the fixtures fit side-by-side across the feature
+     *  width, then lay them out in name order (left→right horizontally,
+     *  top→bottom vertically). */
+    void distributeEvenly();
+
 signals:
     /** A member's local offset changed by a drag (live). */
     void memberMoved(quint32 fid);

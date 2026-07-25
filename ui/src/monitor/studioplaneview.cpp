@@ -386,6 +386,97 @@ void StudioPlaneView::wheelEvent(QWheelEvent *e)
     e->accept();
 }
 
+static qlonglong spvTrailingNum(const QString &s)
+{
+    int i = s.size();
+    while (i > 0 && s.at(i - 1).isDigit())
+        --i;
+    return (i < s.size()) ? s.mid(i).toLongLong() : -1;
+}
+
+void StudioPlaneView::distributeEvenly()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<quint32> ids = members();
+    const int n = ids.size();
+    if (n == 0)
+        return;
+
+    // Name order (trailing "#N", else natural id order).
+    std::sort(ids.begin(), ids.end(), [this](quint32 a, quint32 b) {
+        Fixture *fa = m_doc->fixture(a), *fb = m_doc->fixture(b);
+        const QString na = fa ? fa->name() : QString::number(a);
+        const QString nb = fb ? fb->name() : QString::number(b);
+        const qlonglong ta = spvTrailingNum(na), tb = spvTrailingNum(nb);
+        if (ta >= 0 && tb >= 0 && ta != tb)
+            return ta < tb;
+        return na < nb;
+    });
+
+    // In-plane feature extents (horizontal W, vertical H) and the origin corner
+    // of that extent in local coords (0,0 for a platform-slaved frame).
+    double W = 0, H = 0, aOff = 0, bOff = 0;
+    if (StagePlatform *pl = anchorPlatform())
+    {
+        switch (m_plane)
+        {
+        case Front: W = pl->width(); H = pl->height(); break;
+        case Side:  W = pl->depth(); H = pl->height(); break;
+        case Top:
+        default:    W = pl->width(); H = pl->depth();  break;
+        }
+    }
+    else
+    {
+        // No feature: use the members' current in-plane extent.
+        double minA = 0, maxA = 0, minB = 0, maxB = 0; bool first = true;
+        foreach (quint32 fid, ids)
+        {
+            const QPointF ab = project(props->fixtureRigProps(fid).groupLocal);
+            if (first) { minA = maxA = ab.x(); minB = maxB = ab.y(); first = false; }
+            else { minA = qMin(minA, ab.x()); maxA = qMax(maxA, ab.x());
+                   minB = qMin(minB, ab.y()); maxB = qMax(maxB, ab.y()); }
+        }
+        aOff = minA; bOff = minB;
+        W = qMax(0.5, maxA - minA);
+        H = qMax(0.5, maxB - minB);
+    }
+
+    // Representative fixture length along the horizontal axis. Auto-orient:
+    // if the fixtures cannot sit side-by-side across the width, STACK vertically.
+    double L = 0.0;
+    foreach (quint32 fid, ids)
+        L = qMax(L, fixtureLenM(fid));
+    const bool stackVertical = (double(n) * L > W + 1e-6);
+
+    // "top of screen" is the smaller b for Top (Y↓) and the larger b for the
+    // elevations (Z↑); place item 0 at the top in both cases.
+    const bool topIsMaxB = (vFactor(m_plane) < 0);
+
+    for (int i = 0; i < n; ++i)
+    {
+        double a, b;
+        if (stackVertical)
+        {
+            a = aOff + W * 0.5;                                   // centred across width
+            const double frac = topIsMaxB ? (n - i - 0.5) / n : (i + 0.5) / n;
+            b = bOff + H * frac;                                  // item 0 at the top
+        }
+        else
+        {
+            a = aOff + W * (i + 0.5) / n;                         // left → right
+            b = bOff + H * 0.5;                                   // centred vertically
+        }
+        FixtureRigProps rp = props->fixtureRigProps(ids.at(i));
+        rp.groupLocal = unproject(QPointF(a, b), rp.groupLocal);  // third axis preserved
+        props->setFixtureRigProps(ids.at(i), rp);
+    }
+
+    m_doc->setModified();
+    emit changed();
+    update();
+}
+
 void StudioPlaneView::mousePressEvent(QMouseEvent *e)
 {
     if (e->button() != Qt::LeftButton)
