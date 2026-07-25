@@ -22,6 +22,7 @@
 
 #include <QWidget>
 #include <QList>
+#include <QSet>
 
 #include "ui_addfixture.h"
 #include "fixture.h"
@@ -202,6 +203,15 @@ protected slots:
 
 protected:
     void checkOverlapping();
+
+    /** Names of all fixtures already in the doc, excluding the one being
+     *  edited (m_fixtureID). Used for prepopulation and conflict checks. */
+    QSet<QString> existingFixtureNames() const;
+
+    /** Show/hide the name-conflict warning. A single add uses the typed name
+     *  verbatim, so it warns when that name is taken; a multi add auto-numbers
+     *  to avoid collisions, so the warning stays hidden. */
+    void checkNameConflict();
 };
 
 /** @} */

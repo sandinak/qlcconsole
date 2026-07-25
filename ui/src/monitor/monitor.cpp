@@ -21,6 +21,8 @@
 #include <QApplication>
 #include <QActionGroup>
 #include <QColorDialog>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QCursor>
 #include <QDialog>
 #include <QLinearGradient>
@@ -31,7 +33,10 @@
 #include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QGridLayout>
 #include <QMenu>
+#include <QContextMenuEvent>
+#include <functional>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFontDialog>
@@ -76,6 +81,9 @@
 #include "fixture.h"
 #include "monitorbackgroundselection.h"
 #include "monitorgraphicsview.h"
+#include "monitorlayerspanel.h"
+#include "monitorruler.h"
+#include "riserfaceeditor.h"
 #include "trussitem.h"
 #include "platformitem.h"
 #include "feetinchesspinbox.h"
@@ -99,7 +107,9 @@
 #include "qlcfile.h"
 
 #define SETTINGS_GEOMETRY "monitor/geometry"
-#define SETTINGS_VSPLITTER "monitor/vsplitter"
+#define SETTINGS_VSPLITTER "monitor/vsplitter2"
+#define SETTINGS_LAYERS_PANEL "monitor/layerspanel3"
+#define SETTINGS_RULERS "monitor/rulers"
 
 Monitor* Monitor::s_instance = NULL;
 
@@ -119,10 +129,15 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     , m_graphicsToolBar(NULL)
     , m_splitter(NULL)
     , m_graphicsView(NULL)
+    , m_layersPanel(NULL)
     , m_gridWSpin(NULL)
     , m_gridHSpin(NULL)
     , m_unitsCombo(NULL)
+    , m_povCombo(NULL)
     , m_labelsAction(NULL)
+    , m_layersAction(NULL)
+    , m_groupAction(NULL)
+    , m_ungroupAction(NULL)
     , m_pasteAction(NULL)
 {
     Q_ASSERT(doc != NULL);
@@ -249,15 +264,45 @@ void Monitor::initGraphicsView()
     layout()->addWidget(m_splitter);
     QWidget* gcontainer = new QWidget(this);
     m_splitter->addWidget(gcontainer);
-    gcontainer->setLayout(new QVBoxLayout);
-    gcontainer->layout()->setContentsMargins(0, 0, 0, 0);
+    QVBoxLayout *gcLayout = new QVBoxLayout(gcontainer);
+    gcLayout->setContentsMargins(0, 0, 0, 0);
+    gcLayout->setSpacing(0);
+
+    // The canvas sits in a 2x2 grid: rulers along the top and left edges frame
+    // the graphics view; the top-left corner is a small filler. The footer bar
+    // is added below by initGraphicsFooter().
+    QWidget *viewArea = new QWidget(gcontainer);
+    QGridLayout *viewGrid = new QGridLayout(viewArea);
+    viewGrid->setContentsMargins(0, 0, 0, 0);
+    viewGrid->setSpacing(0);
 
     m_graphicsView = new MonitorGraphicsView(m_doc, this);
     m_graphicsView->setRenderHint(QPainter::Antialiasing);
     m_graphicsView->setAcceptDrops(true);
+    // No frame border so the rulers (aligned to the widget edge) line up
+    // exactly with the viewport pixels the tick math produces.
+    m_graphicsView->setFrameShape(QFrame::NoFrame);
     m_graphicsView->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     m_graphicsView->setBackgroundBrush(QBrush(QColor(11, 11, 11, 255), Qt::SolidPattern));
-    m_splitter->widget(0)->layout()->addWidget(m_graphicsView);
+    viewGrid->addWidget(m_graphicsView, 1, 1);
+    viewGrid->setRowStretch(1, 1);
+    viewGrid->setColumnStretch(1, 1);
+    gcLayout->addWidget(viewArea);
+
+    // Layers side panel, docked on the LEFT (first splitter pane) as most apps
+    // put their layers/objects panel. Hideable via the toolbar toggle.
+    m_layersPanel = new MonitorLayersPanel(m_doc, m_graphicsView, this);
+    m_splitter->insertWidget(0, m_layersPanel);
+    m_splitter->setStretchFactor(0, 0);   // panel: fixed-ish width
+    m_splitter->setStretchFactor(1, 1);   // canvas: takes the slack
+    // Never let a pane collapse to zero width — otherwise a splitter state saved
+    // when the panel was hidden restores it at 0px and the tree stays invisible.
+    m_splitter->setChildrenCollapsible(false);
+    // The panel's in-panel × hides it by un-checking the toolbar toggle.
+    connect(m_layersPanel, &MonitorLayersPanel::closeRequested, this, [this]() {
+        if (m_layersAction != NULL)
+            m_layersAction->setChecked(false);
+    });
 
     connect(m_graphicsView, SIGNAL(fixtureMoved(quint32,QPointF)),
             this, SLOT(slotFixtureMoved(quint32,QPointF)));
@@ -267,6 +312,16 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotFixtureDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::trussDoubleClicked,
             this, &Monitor::slotTrussDoubleClicked);
+    connect(m_graphicsView, &MonitorGraphicsView::trussRemoveRequested,
+            this, &Monitor::slotTrussRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::addBarToTrussRequested,
+            this, &Monitor::slotAddBarToTruss);
+    connect(m_graphicsView, &MonitorGraphicsView::platformRemoveRequested,
+            this, &Monitor::slotPlatformRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::imageDoubleClicked,
+            this, &Monitor::slotEditImage);
+    connect(m_graphicsView, &MonitorGraphicsView::imageRemoveRequested,
+            this, &Monitor::slotImageRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::platformDoubleClicked,
             this, &Monitor::slotPlatformDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
@@ -275,13 +330,278 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotCanvasContextMenu);
     connect(m_graphicsView, &MonitorGraphicsView::addFixtureToTrussRequested,
             this, &Monitor::slotAddFixtureToTruss);
+    connect(m_graphicsView, &MonitorGraphicsView::mapSelectionChanged,
+            this, &Monitor::slotMapSelectionChanged);
+    // QUEUED: a structure change can originate mid-drag-drop; rebuilding the
+    // tree synchronously would free rows Qt's drag machinery still holds. Queued
+    // delivery defers the reload until the drop event has fully unwound.
+    connect(m_graphicsView, &MonitorGraphicsView::mapStructureChanged,
+            this, [this]() { if (m_layersPanel) m_layersPanel->reload(); },
+            Qt::QueuedConnection);
 
     QSettings settings;
     QVariant var2 = settings.value(SETTINGS_VSPLITTER);
     if (var2.isValid() == true)
         m_splitter->restoreState(var2.toByteArray());
 
+    // Restore the layers-panel visibility (visible by default so it's
+    // discoverable). The matching toolbar action is synced in initGraphicsToolbar().
+    const bool showLayers = settings.value(SETTINGS_LAYERS_PANEL, true).toBool();
+    m_layersPanel->setVisible(showLayers);
+    if (showLayers)
+    {
+        // Guarantee the panel gets real width even if the restored splitter
+        // state (saved with one pane) would otherwise give it zero. Panel is the
+        // left pane (index 0).
+        const int total = qMax(600, m_splitter->width());
+        m_splitter->setSizes(QList<int>() << 260 << (total - 260));
+    }
+    if (m_layersAction != NULL)
+    {
+        m_layersAction->blockSignals(true);
+        m_layersAction->setChecked(showLayers);
+        m_layersAction->blockSignals(false);
+    }
+
+    initGraphicsFooter(gcontainer, viewArea);
+
     fillGraphicsView();
+}
+
+void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
+{
+    QGridLayout *viewGrid = qobject_cast<QGridLayout *>(viewArea->layout());
+
+    /* ---- Ruler strips framing the canvas (top + left edges) ---- */
+    m_rulerCorner = new QWidget(viewArea);
+    m_rulerCorner->setFixedSize(MonitorRuler::thickness(), MonitorRuler::thickness());
+    m_rulerCorner->setAutoFillBackground(true);
+    {
+        QPalette pal = m_rulerCorner->palette();
+        pal.setColor(QPalette::Window, QColor(26, 26, 26));
+        m_rulerCorner->setPalette(pal);
+    }
+    m_hRuler = new MonitorRuler(m_graphicsView, MonitorRuler::Horizontal, viewArea);
+    m_vRuler = new MonitorRuler(m_graphicsView, MonitorRuler::Vertical, viewArea);
+    if (viewGrid != NULL)
+    {
+        viewGrid->addWidget(m_rulerCorner, 0, 0);
+        viewGrid->addWidget(m_hRuler, 0, 1);
+        viewGrid->addWidget(m_vRuler, 1, 0);
+    }
+
+    // Live readout: mouse-move over the canvas updates the footer label and the
+    // ruler cursor markers.
+    connect(m_graphicsView, &MonitorGraphicsView::cursorReadout,
+            this, [this](QPointF hv) {
+        if (m_readoutLabel != NULL)
+            m_readoutLabel->setText(tr("%1: %2   %3: %4  %5")
+                .arg(m_graphicsView->axisName(true))
+                .arg(hv.x(), 0, 'f', 2)
+                .arg(m_graphicsView->axisName(false))
+                .arg(hv.y(), 0, 'f', 2)
+                .arg(m_graphicsView->unitSuffix()));
+    });
+    // Move the ruler cursor markers in sync (needs the viewport pixel, which we
+    // recompute from the readout is awkward — instead track the raw mouse via an
+    // event filter on the viewport).
+    m_graphicsView->viewport()->installEventFilter(this);
+
+    // After an origin pick completes, un-arm any UI affordance and refresh.
+    connect(m_graphicsView, &MonitorGraphicsView::originPicked,
+            this, [this]() { m_graphicsView->refreshRulers(); });
+
+    /* ---- Footer measurement bar ---- */
+    QWidget *footer = new QWidget(gcontainer);
+    footer->setAutoFillBackground(true);
+    {
+        QPalette pal = footer->palette();
+        pal.setColor(QPalette::Window, QColor(34, 34, 34));
+        footer->setPalette(pal);
+    }
+    QHBoxLayout *fl = new QHBoxLayout(footer);
+    fl->setContentsMargins(6, 2, 6, 2);
+    fl->setSpacing(6);
+
+    // Prominent mode chip on the far left — always shows what the 2D screen is
+    // currently doing (view POV · overlay · Build). Highlighted when in a
+    // non-default mode so it's obvious.
+    m_modeLabel = new QLabel(footer);
+    m_modeLabel->setAutoFillBackground(true);
+    m_modeLabel->setMargin(3);
+    fl->addWidget(m_modeLabel);
+    { QFrame *sep = new QFrame(); sep->setFrameShape(QFrame::VLine); fl->addWidget(sep); }
+
+    QVector3D gridSize = m_props->gridSize();
+
+    fl->addWidget(new QLabel(tr("Size")));
+    m_gridWSpin = new QSpinBox();
+    m_gridWSpin->setMinimum(1);
+    m_gridWSpin->setValue(gridSize.x());
+    fl->addWidget(m_gridWSpin);
+    connect(m_gridWSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridWidthChanged(int)));
+
+    fl->addWidget(new QLabel("x"));
+    m_gridHSpin = new QSpinBox();
+    m_gridHSpin->setMinimum(1);
+    m_gridHSpin->setValue(gridSize.z());
+    fl->addWidget(m_gridHSpin);
+    connect(m_gridHSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridHeightChanged(int)));
+
+    m_unitsCombo = new QComboBox();
+    m_unitsCombo->addItem(tr("Meters"), MonitorProperties::Meters);
+    m_unitsCombo->addItem(tr("Feet"), MonitorProperties::Feet);
+    if (m_props->gridUnits() == MonitorProperties::Feet)
+        m_unitsCombo->setCurrentIndex(1);
+    fl->addWidget(m_unitsCombo);
+    connect(m_unitsCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotGridUnitsChanged(int)));
+
+    fl->addWidget(new QLabel(tr("Subdiv")));
+    m_gridSubdivSpin = new QSpinBox();
+    m_gridSubdivSpin->setMinimum(1);
+    m_gridSubdivSpin->setMaximum(8);
+    m_gridSubdivSpin->setValue(m_props->gridSubdivisions());
+    m_gridSubdivSpin->setToolTip(tr("Number of sub-divisions drawn inside each grid cell"));
+    fl->addWidget(m_gridSubdivSpin);
+    connect(m_gridSubdivSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridSubdivisionsChanged(int)));
+
+    fl->addWidget(new QLabel(tr("Snap")));
+    m_snapCombo = new QComboBox();
+    m_snapCombo->addItem(tr("Off"), 0);
+    m_snapCombo->addItem(tr("Full"), 1);
+    m_snapCombo->addItem(tr("1/2"), 2);
+    m_snapCombo->addItem(tr("1/4"), 4);
+    {
+        int snapIdx = m_snapCombo->findData(m_props->snapDivisions());
+        if (snapIdx >= 0)
+            m_snapCombo->setCurrentIndex(snapIdx);
+    }
+    m_snapCombo->setToolTip(tr("Snap fixtures to the grid while moving them"));
+    fl->addWidget(m_snapCombo);
+    connect(m_snapCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotSnapChanged(int)));
+
+    /* separator */
+    {
+        QFrame *sep = new QFrame();
+        sep->setFrameShape(QFrame::VLine);
+        sep->setFrameShadow(QFrame::Sunken);
+        fl->addWidget(sep);
+    }
+
+    // Rulers show/hide toggle.
+    QToolButton *rulerBtn = new QToolButton(footer);
+    rulerBtn->setText(tr("Rulers"));
+    rulerBtn->setCheckable(true);
+    rulerBtn->setToolTip(tr("Show or hide the measurement rulers"));
+    fl->addWidget(rulerBtn);
+    connect(rulerBtn, &QToolButton::toggled, this, [this](bool on) { setRulersVisible(on); });
+
+    // Origin control: click-to-place or a preset.
+    QToolButton *originBtn = new QToolButton(footer);
+    originBtn->setText(tr("0,0"));
+    originBtn->setPopupMode(QToolButton::InstantPopup);
+    originBtn->setToolTip(tr("Set where the rulers read 0,0"));
+    {
+        QMenu *om = new QMenu(originBtn);
+        om->addAction(tr("Click to place 0,0…"), this, [this]() {
+            m_graphicsView->beginPickOrigin();
+        });
+        om->addSeparator();
+        om->addAction(tr("Stage centre"), this, [this]() {
+            const double mpu = double(m_props->gridUnits() == MonitorProperties::Feet ? 0.3048 : 1.0);
+            m_graphicsView->setStageOriginMetres(
+                QPointF(m_props->gridSize().x() * mpu / 2.0,
+                        m_props->gridSize().z() * mpu / 2.0));
+        });
+        om->addAction(tr("Downstage centre"), this, [this]() {
+            const double mpu = double(m_props->gridUnits() == MonitorProperties::Feet ? 0.3048 : 1.0);
+            m_graphicsView->setStageOriginMetres(
+                QPointF(m_props->gridSize().x() * mpu / 2.0,
+                        m_props->gridSize().z() * mpu));
+        });
+        om->addAction(tr("Top-left (0,0)"), this, [this]() {
+            m_graphicsView->setStageOriginMetres(QPointF(0, 0));
+        });
+        originBtn->setMenu(om);
+    }
+    fl->addWidget(originBtn);
+
+    fl->addStretch(1);
+
+    // Live coordinate readout, right-aligned.
+    m_readoutLabel = new QLabel(tr("—"));
+    m_readoutLabel->setMinimumWidth(160);
+    m_readoutLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    QFont rf = m_readoutLabel->font();
+    rf.setStyleHint(QFont::Monospace);
+    m_readoutLabel->setFont(rf);
+    fl->addWidget(m_readoutLabel);
+
+    qobject_cast<QVBoxLayout *>(gcontainer->layout())->addWidget(footer);
+
+    // Restore ruler visibility (default on).
+    QSettings settings;
+    const bool showRulers = settings.value(SETTINGS_RULERS, true).toBool();
+    rulerBtn->blockSignals(true);
+    rulerBtn->setChecked(showRulers);
+    rulerBtn->blockSignals(false);
+    setRulersVisible(showRulers);
+
+    updateModeIndicator();
+}
+
+bool Monitor::eventFilter(QObject *watched, QEvent *event)
+{
+    if (m_graphicsView != NULL && watched == m_graphicsView->viewport())
+    {
+        if (event->type() == QEvent::MouseMove)
+        {
+            QMouseEvent *me = static_cast<QMouseEvent *>(event);
+            if (m_hRuler != NULL) m_hRuler->setCursorPixel(me->pos().x());
+            if (m_vRuler != NULL) m_vRuler->setCursorPixel(me->pos().y());
+        }
+        else if (event->type() == QEvent::Leave)
+        {
+            if (m_hRuler != NULL) m_hRuler->setCursorPixel(-1);
+            if (m_vRuler != NULL) m_vRuler->setCursorPixel(-1);
+            if (m_readoutLabel != NULL) m_readoutLabel->setText(tr("—"));
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void Monitor::updateModeIndicator()
+{
+    if (m_modeLabel == NULL)
+        return;
+    const QString pov = m_povCombo ? m_povCombo->currentText() : QString();
+    const int overlay = m_mapView;
+    const bool build  = (m_graphicsView && m_graphicsView->buildFocus());
+
+    QString text;
+    QColor bg, fg(20, 20, 20);
+    if (build)                     { text = tr("BUILD");      bg = QColor(220, 150, 40); }
+    else if (overlay == ViewStage) { text = tr("STAGE ONLY"); bg = QColor(0, 150, 140); }
+    else if (overlay == ViewPower) { text = tr("POWER");      bg = QColor(150, 90, 200); }
+    else { text = pov; bg = QColor(66, 66, 66); fg = QColor(210, 210, 210); }
+    if (build || overlay != ViewNormal)
+        text += QStringLiteral("   ·   ") + pov;   // keep the POV visible too
+
+    QPalette pal = m_modeLabel->palette();
+    pal.setColor(QPalette::Window, bg);
+    pal.setColor(QPalette::WindowText, fg);
+    m_modeLabel->setPalette(pal);
+    QFont f = m_modeLabel->font(); f.setBold(true); m_modeLabel->setFont(f);
+    m_modeLabel->setText(text);
+}
+
+void Monitor::setRulersVisible(bool on)
+{
+    if (m_hRuler != NULL)      m_hRuler->setVisible(on);
+    if (m_vRuler != NULL)      m_vRuler->setVisible(on);
+    if (m_rulerCorner != NULL) m_rulerCorner->setVisible(on);
+    QSettings settings;
+    settings.setValue(SETTINGS_RULERS, on);
 }
 
 void Monitor::fillGraphicsView()
@@ -342,6 +662,12 @@ void Monitor::fillGraphicsView()
     updatePlotLockAppearance(m_props->layoutLocked());
     m_lockAction->blockSignals(false);
     m_graphicsView->setLayoutLocked(m_props->layoutLocked());
+
+    // Migrate any anonymous first-cut groups into the registry, then rebuild
+    // the Layers tree.
+    m_graphicsView->ensureGroupRegistry();
+    if (m_layersPanel != NULL)
+        m_layersPanel->reload();
 }
 
 void Monitor::showGraphicsView()
@@ -354,6 +680,18 @@ void Monitor::showGraphicsView()
     layout()->setMenuBar(m_graphicsToolBar);
     m_graphicsToolBar->show();
     m_graphicsView->show();
+
+    // Entering the 2D view always lands in the editable Top POV; sync the combo
+    // (which may still read "DMX" from the switch) without re-triggering it.
+    if (m_povCombo != NULL)
+    {
+        m_graphicsView->setViewPOV(MonitorGraphicsView::PovTop);
+        m_povCombo->blockSignals(true);
+        m_povCombo->setCurrentIndex(1);   // 2D — Top
+        m_povCombo->blockSignals(false);
+        if (m_lockAction != NULL) m_lockAction->setEnabled(true);
+        if (m_snapCombo != NULL)  m_snapCombo->setEnabled(true);
+    }
 
     // Graphics view needs to monitor all the universes
     for (quint32 i = 0; i < m_doc->inputOutputMap()->universesCount(); i++)
@@ -410,6 +748,12 @@ void Monitor::saveSettings()
         QSettings settings;
         settings.setValue(SETTINGS_VSPLITTER, m_splitter->saveState());
     }
+
+    // Persist the INTENDED visibility (the toolbar toggle), not isVisible():
+    // at quit time the Monitor window is closing so the panel already reports
+    // not-visible, which would wrongly save "hidden" on every exit.
+    if (m_layersAction != NULL)
+        settings.setValue(SETTINGS_LAYERS_PANEL, m_layersAction->isChecked());
 
     if (m_monitorWidget != NULL)
         m_props->setFont(m_monitorWidget->font());
@@ -569,6 +913,9 @@ void Monitor::initDMXToolbar()
         m_DMXToolBar->addAction(action);
         group->addAction(action);
     }
+
+    // Match the main window's icon/text display preference.
+    applyToolbarLabelMode();
 }
 
 void Monitor::initGraphicsToolbar()
@@ -581,73 +928,26 @@ void Monitor::initGraphicsToolbar()
     Q_ASSERT(layout() != NULL);
     layout()->setMenuBar(m_graphicsToolBar);
 
-    action = m_graphicsToolBar->addAction(tr("DMX View"));
-    m_graphicsToolBar->addSeparator();
-    action->setData(MonitorProperties::DMX);
-    connect(action, SIGNAL(triggered(bool)),
-            this, SLOT(slotSwitchMode()));
-
-    QLabel *label = new QLabel(tr("Size"));
-    label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_graphicsToolBar->addWidget(label);
-
-    QVector3D gridSize = m_props->gridSize();
-
-    m_gridWSpin = new QSpinBox();
-    m_gridWSpin->setMinimum(1);
-    m_gridWSpin->setValue(gridSize.x());
-    m_graphicsToolBar->addWidget(m_gridWSpin);
-    connect(m_gridWSpin, SIGNAL(valueChanged(int)),
-            this, SLOT(slotGridWidthChanged(int)));
-
-    QLabel *xlabel = new QLabel("x");
-    label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_graphicsToolBar->addWidget(xlabel);
-    m_gridHSpin = new QSpinBox();
-    m_gridHSpin->setMinimum(1);
-    m_gridHSpin->setValue(gridSize.z());
-    m_graphicsToolBar->addWidget(m_gridHSpin);
-    connect(m_gridHSpin, SIGNAL(valueChanged(int)),
-            this, SLOT(slotGridHeightChanged(int)));
-
-    m_unitsCombo = new QComboBox();
-    m_unitsCombo->addItem(tr("Meters"), MonitorProperties::Meters);
-    m_unitsCombo->addItem(tr("Feet"), MonitorProperties::Feet);
-    if (m_props->gridUnits() == MonitorProperties::Feet)
-        m_unitsCombo->setCurrentIndex(1);
-    m_graphicsToolBar->addWidget(m_unitsCombo);
-    connect(m_unitsCombo, SIGNAL(currentIndexChanged(int)),
-            this, SLOT(slotGridUnitsChanged(int)));
-
+    // Unified view selector: the DMX channel grid, or the 2D map from a chosen
+    // point of view. Front/Side are read-only elevation views.
+    QLabel *viewSelLabel = new QLabel(tr("View"));
+    viewSelLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_graphicsToolBar->addWidget(viewSelLabel);
+    m_povCombo = new QComboBox();
+    m_povCombo->addItem(tr("DMX"),        -1);
+    m_povCombo->addItem(tr("2D \342\200\224 Top"),   int(MonitorGraphicsView::PovTop));
+    m_povCombo->addItem(tr("2D \342\200\224 Front"), int(MonitorGraphicsView::PovFront));
+    m_povCombo->addItem(tr("2D \342\200\224 Side"),  int(MonitorGraphicsView::PovSide));
+    m_povCombo->setCurrentIndex(1);   // 2D Top
+    m_povCombo->setToolTip(tr("Choose the view: DMX channel grid, or the 2D map "
+                              "from top / front / side. Front & Side are read-only "
+                              "elevation views that show height."));
+    m_graphicsToolBar->addWidget(m_povCombo);
+    connect(m_povCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotPOVChanged(int)));
     m_graphicsToolBar->addSeparator();
 
-    QLabel *subdivLabel = new QLabel(tr("Subdivisions"));
-    subdivLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_graphicsToolBar->addWidget(subdivLabel);
-    m_gridSubdivSpin = new QSpinBox();
-    m_gridSubdivSpin->setMinimum(1);
-    m_gridSubdivSpin->setMaximum(8);
-    m_gridSubdivSpin->setValue(m_props->gridSubdivisions());
-    m_gridSubdivSpin->setToolTip(tr("Number of sub-divisions drawn inside each grid cell"));
-    m_graphicsToolBar->addWidget(m_gridSubdivSpin);
-    connect(m_gridSubdivSpin, SIGNAL(valueChanged(int)),
-            this, SLOT(slotGridSubdivisionsChanged(int)));
-
-    QLabel *snapLabel = new QLabel(tr("Snap"));
-    snapLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_graphicsToolBar->addWidget(snapLabel);
-    m_snapCombo = new QComboBox();
-    m_snapCombo->addItem(tr("Off"), 0);
-    m_snapCombo->addItem(tr("Full"), 1);
-    m_snapCombo->addItem(tr("1/2"), 2);
-    m_snapCombo->addItem(tr("1/4"), 4);
-    int snapIdx = m_snapCombo->findData(m_props->snapDivisions());
-    if (snapIdx >= 0)
-        m_snapCombo->setCurrentIndex(snapIdx);
-    m_snapCombo->setToolTip(tr("Snap fixtures to the grid while moving them"));
-    m_graphicsToolBar->addWidget(m_snapCombo);
-    connect(m_snapCombo, SIGNAL(currentIndexChanged(int)),
-            this, SLOT(slotSnapChanged(int)));
+    // Grid Size / Units / Subdivisions / Snap have moved to the footer
+    // measurement bar (initGraphicsFooter) to de-clutter the top toolbar.
 
     m_lockAction = m_graphicsToolBar->addAction(QIcon(":/lock.png"), tr("Edit Plot"));
     m_lockAction->setCheckable(true);
@@ -655,26 +955,23 @@ void Monitor::initGraphicsToolbar()
     updatePlotLockAppearance(m_props->layoutLocked());
     connect(m_lockAction, SIGNAL(toggled(bool)), this, SLOT(slotLockToggled(bool)));
 
-    m_graphicsToolBar->addSeparator();
-
-    // 2D-map view overlay: recolours the plot by a chosen dimension. Power tints
-    // fixtures by circuit; more views (DMX/Groups/...) slot in here later.
-    QLabel *viewLabel = new QLabel(tr("View"));
-    viewLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_graphicsToolBar->addWidget(viewLabel);
-    m_viewCombo = new QComboBox();
-    m_viewCombo->addItem(tr("Normal"),     ViewNormal);
-    m_viewCombo->addItem(tr("Power"),      ViewPower);
-    m_viewCombo->setToolTip(tr("Colour the plot by an overlay: Normal = live "
-                               "output; Power = tint each fixture by its circuit."));
-    m_graphicsToolBar->addWidget(m_viewCombo);
-    connect(m_viewCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotMapViewChanged(int)));
+    // Show/hide the Layers side panel. The toolbar is built before the panel
+    // exists (initGraphicsView runs next), so the checked state is synced there.
+    m_layersAction = m_graphicsToolBar->addAction(QIcon(":/frame.png"), tr("Layers"));
+    m_layersAction->setCheckable(true);
+    m_layersAction->setToolTip(tr("Show or hide the Layers panel"));
+    connect(m_layersAction, SIGNAL(toggled(bool)), this, SLOT(slotToggleLayersPanel(bool)));
 
     m_graphicsToolBar->addSeparator();
+    // Group/Ungroup, the Overlay selector, Copy/Paste, labels, background and
+    // Build focus now live in the "More" popup (built after Add/Remove below),
+    // to keep this toolbar lean. Grid/units/snap/rulers stay in the footer.
 
     // Consolidated Add button with popup menu
-    QToolButton *addBtn = new QToolButton(this);
+    m_addBtn = new QToolButton(this);
+    QToolButton *addBtn = m_addBtn;
     addBtn->setIcon(QIcon(":/edit_add.png"));
+    addBtn->setText(tr("Add"));
     addBtn->setToolTip(tr("Add…"));
     addBtn->setPopupMode(QToolButton::InstantPopup);
     {
@@ -685,6 +982,8 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddTruss()));
         addMenu->addAction(tr("Add Platform/Riser"),
                            this, SLOT(slotAddPlatform()));
+        addMenu->addAction(QIcon(":/image.png"), tr("Add Image"),
+                           this, SLOT(slotAddImage()));
         addMenu->addSeparator();
         addMenu->addAction(tr("Add Target Position"),
                            this, SLOT(slotAddTarget()));
@@ -696,34 +995,102 @@ void Monitor::initGraphicsToolbar()
     m_graphicsToolBar->addAction(QIcon(":/edit_remove.png"), tr("Remove selected"),
                                  this, SLOT(slotRemoveSelected()));
 
-    // Copy / paste of stage features (trusses, platforms, targets) so identical
-    // scenic elements can be replicated quickly.
-    QAction *copyAct = m_graphicsToolBar->addAction(
-        QIcon(":/editcopy.png"), tr("Copy selected features"),
-        this, SLOT(slotCopySelected()));
+    m_graphicsToolBar->addSeparator();
+
+    // "More" popup — the secondary view/edit tools, folded off the toolbar to
+    // keep it lean. (Most also have shortcuts and/or a right-click equivalent.)
+    m_moreBtn = new QToolButton(this);
+    QToolButton *moreBtn = m_moreBtn;
+    moreBtn->setIcon(QIcon(":/configure.png"));
+    moreBtn->setText(tr("More"));
+    moreBtn->setToolTip(tr("More view and editing tools"));
+    moreBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *moreMenu = new QMenu(moreBtn);
+
+    // Overlay (was a toolbar combo): recolour the plot by a chosen dimension.
+    QMenu *overlayMenu = moreMenu->addMenu(tr("Overlay"));
+    QActionGroup *overlayGroup = new QActionGroup(this);
+    struct { QString label; int mode; } overlays[] = {
+        { tr("Normal"),     ViewNormal },
+        { tr("Power"),      ViewPower  },
+        { tr("Stage only"), ViewStage  } };
+    for (const auto &ov : overlays)
+    {
+        QAction *oa = overlayMenu->addAction(ov.label);
+        oa->setCheckable(true);
+        oa->setActionGroup(overlayGroup);
+        oa->setChecked(ov.mode == m_mapView);
+        const int mode = ov.mode;
+        connect(oa, &QAction::triggered, this, [this, mode]() {
+            m_mapView = mode;
+            applyMapView(mode);
+            updateModeIndicator();
+        });
+    }
+
+    moreMenu->addSeparator();
+
+    // Group / ungroup the selection (also Cmd/Ctrl+G, Cmd/Ctrl+Shift+G, and the
+    // right-click menu). Enabled state is driven by the current selection.
+    m_groupAction = new QAction(QIcon(":/group.png"), tr("Group"), this);
+    m_groupAction->setToolTip(tr("Group the selected items so they select and move together (Ctrl+G)"));
+    m_groupAction->setEnabled(false);
+    connect(m_groupAction, SIGNAL(triggered()), this, SLOT(slotGroupItems()));
+    moreMenu->addAction(m_groupAction);
+
+    m_ungroupAction = new QAction(QIcon(":/ungroup.png"), tr("Ungroup"), this);
+    m_ungroupAction->setToolTip(tr("Ungroup the selected group (Ctrl+Shift+G)"));
+    m_ungroupAction->setEnabled(false);
+    connect(m_ungroupAction, SIGNAL(triggered()), this, SLOT(slotUngroupItems()));
+    moreMenu->addAction(m_ungroupAction);
+
+    moreMenu->addSeparator();
+
+    // Copy / paste of stage features (trusses, platforms, targets). addAction()
+    // keeps the Cmd/Ctrl+C/V shortcuts alive on the window even off the toolbar.
+    QAction *copyAct = new QAction(QIcon(":/editcopy.png"), tr("Copy selected features"), this);
     copyAct->setShortcut(QKeySequence::Copy);
     copyAct->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(copyAct, SIGNAL(triggered()), this, SLOT(slotCopySelected()));
+    moreMenu->addAction(copyAct);
     addAction(copyAct);
 
-    m_pasteAction = m_graphicsToolBar->addAction(
-        QIcon(":/editpaste.png"), tr("Paste features"),
-        this, SLOT(slotPasteFeatures()));
+    m_pasteAction = new QAction(QIcon(":/editpaste.png"), tr("Paste features"), this);
     m_pasteAction->setShortcut(QKeySequence::Paste);
     m_pasteAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     m_pasteAction->setEnabled(false);
+    connect(m_pasteAction, SIGNAL(triggered()), this, SLOT(slotPasteFeatures()));
+    moreMenu->addAction(m_pasteAction);
     addAction(m_pasteAction);
 
-    m_graphicsToolBar->addSeparator();
+    moreMenu->addSeparator();
 
-    m_graphicsToolBar->addAction(QIcon(":/image.png"), tr("Set background image"),
-                       this, SLOT(slotSetBackground()));
-    m_graphicsToolBar->addAction(QIcon(":/color.png"), tr("Set background color"),
-                       this, SLOT(slotSetBackgroundColor()));
-
-    m_labelsAction = m_graphicsToolBar->addAction(QIcon(":/label.png"), tr("Show/hide labels"));
+    m_labelsAction = new QAction(QIcon(":/label.png"), tr("Show/hide labels"), this);
     m_labelsAction->setCheckable(true);
     m_labelsAction->setChecked(m_props->labelsVisible());
     connect(m_labelsAction, SIGNAL(triggered(bool)), this, SLOT(slotShowLabels(bool)));
+    moreMenu->addAction(m_labelsAction);
+
+    // Background image is now a placeable object (Add ▸ Add Image) that lives in
+    // a layer; flat background colour stays here.
+    moreMenu->addAction(QIcon(":/color.png"), tr("Set background color"),
+                        this, SLOT(slotSetBackgroundColor()));
+
+    // Build/Rig focus: ghost the lights (faint + click-through) so you build
+    // structure (trusses/platforms/images) without fighting the fixtures.
+    m_buildAction = new QAction(QIcon(":/configure.png"), tr("Build focus"), this);
+    m_buildAction->setCheckable(true);
+    m_buildAction->setToolTip(tr("Build/Rig focus: ghost the fixtures and make "
+                                 "structure the click target, for laying out trusses "
+                                 "and platforms. Toggle off to return to lighting."));
+    connect(m_buildAction, &QAction::toggled, this, [this](bool on) {
+        if (m_graphicsView) m_graphicsView->setBuildFocus(on);
+        updateModeIndicator();
+    });
+    moreMenu->addAction(m_buildAction);
+
+    moreBtn->setMenu(moreMenu);
+    m_graphicsToolBar->addWidget(moreBtn);
 
     if (QLCFile::hasWindowManager() == false)
     {
@@ -738,6 +1105,27 @@ void Monitor::initGraphicsToolbar()
                 this, SLOT(close()));
         m_graphicsToolBar->addAction(action);
     }
+
+    // Match the main window's icon/text display preference.
+    applyToolbarLabelMode();
+}
+
+void Monitor::applyToolbarLabelMode()
+{
+    // Mirror App::TabLabelMode: 0 = Icon+Text (→ text under icon),
+    // 1 = Icons only, 2 = Text only. Same "workspace/tabLabelMode" setting.
+    Qt::ToolButtonStyle style = Qt::ToolButtonTextUnderIcon;
+    const int mode = QSettings().value(QStringLiteral("workspace/tabLabelMode"), 0).toInt();
+    if (mode == 1)
+        style = Qt::ToolButtonIconOnly;
+    else if (mode == 2)
+        style = Qt::ToolButtonTextOnly;
+
+    if (m_DMXToolBar)      m_DMXToolBar->setToolButtonStyle(style);
+    if (m_graphicsToolBar) m_graphicsToolBar->setToolButtonStyle(style);
+    // Custom buttons added via addWidget don't inherit the toolbar style.
+    if (m_addBtn)          m_addBtn->setToolButtonStyle(style);
+    if (m_moreBtn)         m_moreBtn->setToolButtonStyle(style);
 }
 
 void Monitor::slotChooseFont()
@@ -948,14 +1336,20 @@ void Monitor::slotSnapChanged(int index)
 
 void Monitor::slotMapViewChanged(int)
 {
-    if (m_viewCombo != NULL)
-        applyMapView(m_viewCombo->currentData().toInt());
+    // The overlay is now chosen from the "More ▸ Overlay" submenu, which sets
+    // m_mapView and calls applyMapView() directly. Kept for any external callers.
+    applyMapView(m_mapView);
+    updateModeIndicator();
 }
 
 void Monitor::applyMapView(int view)
 {
     if (m_graphicsView == NULL)
         return;
+
+    // "Stage only" hides fixtures/targets/power (handled in the view). It clears
+    // colour overlays too (falls through to the ViewNormal branch below).
+    m_graphicsView->setStageFeaturesOnly(view == ViewStage);
 
     if (view == ViewPower)
     {
@@ -1026,6 +1420,69 @@ void Monitor::slotLockToggled(bool locked)
     m_doc->setModified();
 }
 
+void Monitor::slotToggleLayersPanel(bool show)
+{
+    if (m_layersPanel == NULL)
+        return;
+    if (show)
+        m_layersPanel->reload();   // resync in case layers changed while hidden
+    m_layersPanel->setVisible(show);
+    if (show && m_splitter != NULL)
+    {
+        // Give the panel a real width when revealed (a splitter state saved
+        // while it was hidden would otherwise leave it at zero px). Panel is the
+        // left pane (index 0).
+        const int total = qMax(600, m_splitter->width());
+        m_splitter->setSizes(QList<int>() << 260 << (total - 260));
+    }
+}
+
+void Monitor::slotPOVChanged(int index)
+{
+    if (m_graphicsView == NULL || m_povCombo == NULL)
+        return;
+    const int data = m_povCombo->itemData(index).toInt();
+
+    if (data < 0)
+    {
+        // "DMX" entry: switch to the channel-grid view.
+        m_props->setDisplayMode(MonitorProperties::DMX);
+        showCurrentView();
+        return;
+    }
+
+    m_props->setDisplayMode(MonitorProperties::Graphics);
+    m_graphicsView->setViewPOV(MonitorGraphicsView::ViewPOV(data));
+
+    // Elevation views are read-only: the plot-lock and snap controls don't apply.
+    const bool elevation = (data != int(MonitorGraphicsView::PovTop));
+    if (m_lockAction != NULL) m_lockAction->setEnabled(!elevation);
+    if (m_snapCombo != NULL)  m_snapCombo->setEnabled(!elevation);
+    updateModeIndicator();
+}
+
+void Monitor::slotGroupItems()
+{
+    if (m_graphicsView != NULL)
+        m_graphicsView->groupSelectedItems();
+}
+
+void Monitor::slotUngroupItems()
+{
+    if (m_graphicsView != NULL)
+        m_graphicsView->ungroupSelectedItems();
+}
+
+void Monitor::slotMapSelectionChanged()
+{
+    if (m_graphicsView == NULL)
+        return;
+    if (m_groupAction != NULL)
+        m_groupAction->setEnabled(m_graphicsView->selectionGroupable());
+    if (m_ungroupAction != NULL)
+        m_ungroupAction->setEnabled(m_graphicsView->selectionHasGroup());
+}
+
 void Monitor::updatePlotLockAppearance(bool locked)
 {
     if (m_lockAction == NULL)
@@ -1076,9 +1533,11 @@ void Monitor::slotAddFixture()
             m_graphicsView->addFixture(fid, mm);
             m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
             m_props->setFixtureFlags(fid, 0, 0, 0);
+            m_props->setFixtureLayer(fid, m_props->activeLayerId());  // land on the selected layer
             m_doc->setModified();
         }
     }
+    if (m_layersPanel) m_layersPanel->reload();
     if (m_labelsAction->isChecked())
         slotShowLabels(true);
 }
@@ -1144,6 +1603,8 @@ void Monitor::slotRemoveSelected()
                 quint32 tid = ti->trussId();
                 m_props->removeTruss(tid);
                 m_graphicsView->updateTrusses();
+                m_graphicsView->refreshFixtureBindings();
+                if (m_layersPanel) m_layersPanel->reload();
                 m_doc->setModified();
             }
             return;
@@ -1259,7 +1720,8 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         t->setLength(c.length);
         t->setWidth(c.width);
         t->setProfile(Truss::Profile(c.profile));
-        t->setLocked(c.locked);
+        t->setLocked(false);   // a duplicate must be movable, even if the source was locked
+        t->setLayerId(m_props->activeLayerId());
         newTrussIds.append(t->id());
     }
 
@@ -1273,6 +1735,7 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         p->setDepth(c.depth);
         p->setHeight(c.height);
         p->setColor(c.color);
+        p->setLayerId(m_props->activeLayerId());
         newPlatformIds.append(p->id());
     }
 
@@ -1300,6 +1763,7 @@ void Monitor::pasteClipboard(float dxM, float dyM)
     m_graphicsView->updateTrusses();
     m_graphicsView->updatePlatforms();
     m_graphicsView->updateTargets();
+    if (m_layersPanel) m_layersPanel->reload();   // show the copies in the tree
     m_doc->setModified();
 
     // Register the paste on the canvas undo stack so Ctrl+Z removes the copies.
@@ -1327,6 +1791,219 @@ void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
 void Monitor::slotTrussDoubleClicked(quint32 tid)
 {
     slotEditTruss(tid);
+}
+
+void Monitor::slotTrussRemoveRequested(quint32 tid)
+{
+    Truss *t = m_props->truss(tid);
+    if (t == NULL)
+        return;
+    if (QMessageBox::question(this, tr("Remove Truss"),
+            tr("Remove truss '%1'?").arg(t->name()),
+            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+        return;
+    m_props->removeTruss(tid);
+    m_graphicsView->updateTrusses();
+    m_graphicsView->refreshFixtureBindings();   // ex-fixtures are no longer bound
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+quint32 Monitor::createBarOnTruss(quint32 parentId, float offset)
+{
+    Truss *parent = m_props->truss(parentId);
+    if (parent == NULL)
+        return Truss::invalidId();
+
+    Truss *bar = m_props->addTruss();
+    bar->setName(tr("Bar %1").arg(bar->id() + 1));
+    bar->setLength(qMax(1.0f, parent->length() * 0.3f));
+    // A bar/pipe is slimmer than the truss it hangs on (~50 mm pipe).
+    bar->setWidth(0.05f);
+    // Truss-LOCAL mount defaults, per parent orientation:
+    //  • Vertical tower  → a horizontal crossbar ACROSS the Downstage face
+    //    (the "bar across the front" case).
+    //  • Overhead truss  → an under-hung bar running along it.
+    bar->setParentTrussId(parentId);
+    bar->setParentOffset(offset >= 0.0f ? offset : parent->length() / 2.0f);   // Along
+    if (parent->type() == Truss::Vertical)
+    {
+        bar->setBarFace(Truss::FaceDownstage);
+        bar->setBarRun(Truss::RunAcross);
+    }
+    else
+    {
+        bar->setBarFace(Truss::FaceBottom);
+        bar->setBarRun(Truss::RunAlong);
+    }
+    bar->setBarStandoff(0.0f);
+    bar->setBarCrossShift(0.0f);
+    bar->setLayerId(parent->layerId());
+    m_props->recomputeChildTrusses();                  // derive world geometry
+    m_graphicsView->ensureTrussGroup(parentId);        // bar joins the parent's group
+    if (parent->groupId() != 0)
+        bar->setGroupId(parent->groupId());
+    return bar->id();
+}
+
+void Monitor::slotAddBarToTruss(quint32 parentId, float offset)
+{
+    const quint32 barId = createBarOnTruss(parentId, offset);
+    if (barId == Truss::invalidId())
+        return;
+    m_graphicsView->updateTrusses();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    slotEditTruss(barId);   // open the editor so the run/drop can be tweaked
+}
+
+void Monitor::slotPlatformRemoveRequested(quint32 pid)
+{
+    StagePlatform *p = m_props->platform(pid);
+    if (p == NULL)
+        return;
+    if (QMessageBox::question(this, tr("Remove Platform"),
+            tr("Remove platform '%1'?").arg(p->name()),
+            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+        return;
+    m_props->removePlatform(pid);
+    m_graphicsView->updatePlatforms();
+    m_graphicsView->refreshRiserFixtures();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotAddImage()
+{
+    const QString file = QFileDialog::getOpenFileName(this, tr("Choose Image"),
+        QString(), tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.svg)"));
+    if (file.isEmpty())
+        return;
+
+    const quint32 id = m_props->addImage(file);
+    MonitorProperties::MonitorImage img = m_props->image(id);
+    img.layerId = m_props->activeLayerId();
+    // Default a Floor decal at a sensible size.
+    img.plane   = MonitorProperties::MonitorImage::Floor;
+    img.width   = qMin(3.0f, float(m_props->gridSize().x()));
+    img.height  = qMin(3.0f, float(m_props->gridSize().z()));
+    // Centre it on the right-click point (m_pendingAddScenePos), like the other
+    // "Add … here" actions; falls back to (0,0) from the toolbar Add menu.
+    const QPointF mm = m_graphicsView->pixelsToRealPosition(
+        m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    img.originX = qMax(0.0f, float(mm.x() / 1000.0) - img.width / 2.0f);
+    img.originY = qMax(0.0f, float(mm.y() / 1000.0) - img.height / 2.0f);
+    m_props->setImage(img);
+
+    m_graphicsView->updateImages();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+
+    // Open the editor so the user can set plane / size straight away.
+    slotEditImage(id);
+}
+
+void Monitor::slotEditImage(quint32 id)
+{
+    if (!m_props->hasImage(id))
+        return;
+    MonitorProperties::MonitorImage img = m_props->image(id);
+
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const QString us  = isFeet ? tr(" ft") : tr(" m");
+    const double toD  = isFeet ? 3.28084 : 1.0;
+    const double frD  = isFeet ? (1.0 / 3.28084) : 1.0;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Image — %1").arg(img.name));
+    QFormLayout *form = new QFormLayout(&dlg);
+
+    QLineEdit *nameEdit = new QLineEdit(img.name);
+    form->addRow(tr("Name:"), nameEdit);
+
+    QLabel *srcLabel = new QLabel(QFileInfo(img.source).fileName());
+    srcLabel->setToolTip(img.source);
+    QPushButton *srcBtn = new QPushButton(tr("Change…"));
+    QString chosenSource = img.source;
+    connect(srcBtn, &QPushButton::clicked, this, [&]() {
+        const QString f = QFileDialog::getOpenFileName(&dlg, tr("Choose Image"),
+            QString(), tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.svg)"));
+        if (!f.isEmpty()) { chosenSource = f; srcLabel->setText(QFileInfo(f).fileName()); }
+    });
+    {
+        QWidget *row = new QWidget; QHBoxLayout *rl = new QHBoxLayout(row);
+        rl->setContentsMargins(0, 0, 0, 0);
+        rl->addWidget(srcLabel, 1); rl->addWidget(srcBtn);
+        form->addRow(tr("Image:"), row);
+    }
+
+    QComboBox *planeCb = new QComboBox;
+    planeCb->addItem(tr("Floor (2D Top)"),      int(MonitorProperties::MonitorImage::Floor));
+    planeCb->addItem(tr("Front backdrop"),      int(MonitorProperties::MonitorImage::FrontBackdrop));
+    planeCb->addItem(tr("Side backdrop"),       int(MonitorProperties::MonitorImage::SideBackdrop));
+    planeCb->setCurrentIndex(planeCb->findData(img.plane));
+    planeCb->setToolTip(tr("Which view this image belongs to: Floor shows in 2D Top, "
+                           "Front/Side show in the matching elevation view."));
+    form->addRow(tr("Plane:"), planeCb);
+
+    auto mkSpin = [&](double val, double lo, double hi) {
+        QDoubleSpinBox *s = new QDoubleSpinBox;
+        s->setRange(lo, hi); s->setDecimals(2); s->setSuffix(us);
+        s->setValue(val * toD); return s;
+    };
+    QDoubleSpinBox *wSpin = mkSpin(img.width,  0.05, 200);
+    QDoubleSpinBox *hSpin = mkSpin(img.height, 0.05, 200);
+    QDoubleSpinBox *xSpin = mkSpin(img.originX, -200, 200);
+    QDoubleSpinBox *ySpin = mkSpin(img.originY, -200, 200);
+    QDoubleSpinBox *zSpin = mkSpin(img.originZ, -50, 50);
+    QDoubleSpinBox *rotSpin = new QDoubleSpinBox;
+    rotSpin->setRange(-360, 360); rotSpin->setDecimals(1);
+    rotSpin->setSuffix(QString::fromUtf8("°"));
+    rotSpin->setValue(double(img.rotation));
+    rotSpin->setToolTip(tr("Rotate the image clockwise about its centre"));
+    form->addRow(tr("Width:"), wSpin);
+    form->addRow(tr("Height:"), hSpin);
+    form->addRow(tr("Rotation:"), rotSpin);
+    form->addRow(tr("X (stage right):"), xSpin);
+    form->addRow(tr("Y (upstage):"), ySpin);
+    form->addRow(tr("Z (bottom, elevation):"), zSpin);
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    form->addRow(bb);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    img.name    = nameEdit->text().trimmed().isEmpty() ? img.name : nameEdit->text().trimmed();
+    img.source  = chosenSource;
+    img.plane   = planeCb->currentData().toInt();
+    img.width   = float(wSpin->value() * frD);
+    img.height  = float(hSpin->value() * frD);
+    img.rotation = float(rotSpin->value());
+    img.originX = float(xSpin->value() * frD);
+    img.originY = float(ySpin->value() * frD);
+    img.originZ = float(zSpin->value() * frD);
+    m_props->setImage(img);
+
+    m_graphicsView->updateImages();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotImageRemoveRequested(quint32 id)
+{
+    if (!m_props->hasImage(id))
+        return;
+    if (QMessageBox::question(this, tr("Remove Image"),
+            tr("Remove image '%1'?").arg(m_props->image(id).name),
+            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+        return;
+    m_props->removeImage(id);
+    m_graphicsView->updateImages();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
 }
 
 void Monitor::slotPlatformDoubleClicked(quint32 pid)
@@ -1476,8 +2153,10 @@ void Monitor::slotAddPlatform()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     p->setOriginX(float(mm.x() / 1000.0));
     p->setOriginY(float(mm.y() / 1000.0));
+    p->setLayerId(m_props->activeLayerId());   // land on the selected layer
 
     m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 
     slotEditPlatform(p->id());
@@ -1547,6 +2226,32 @@ void Monitor::slotEditPlatform(quint32 pid)
     form->addRow(tr("Color:"), colorBtn);
 
     vl->addLayout(form);
+
+    // Riser face fixture layout (the 8-strips-on-the-front-face editor).
+    QPushButton *faceBtn = new QPushButton(tr("Fixtures on face…"), &dlg);
+    faceBtn->setToolTip(tr("Lay fixtures out on this riser's front or top face"));
+    connect(faceBtn, &QPushButton::clicked, [&]() {
+        RiserFaceEditor ed(m_doc, p, &dlg);
+        if (ed.exec() == QDialog::Accepted)
+        {
+            ed.applyToRig();
+            // Fixtures mounted for the first time may not be on the 2D view yet
+            // — add them so they render (position derives from the riser).
+            foreach (Fixture *fx, m_doc->fixtures())
+            {
+                if (fx == NULL) continue;
+                if (m_props->fixtureRigProps(fx->id()).riserPlatformId == p->id()
+                        && m_graphicsView->fixtureItemForId(fx->id()) == NULL)
+                    m_graphicsView->addFixture(fx->id());
+            }
+            m_graphicsView->ensurePlatformGroup(p->id());   // group riser + its fixtures
+            m_graphicsView->refreshRiserFixtures();
+            if (m_layersPanel) m_layersPanel->reload();
+            m_doc->setModified();
+        }
+    });
+    vl->addWidget(faceBtn);
+
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     vl->addWidget(bb);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
@@ -1564,6 +2269,8 @@ void Monitor::slotEditPlatform(quint32 pid)
     p->setColor(chosenColor);
 
     m_graphicsView->updatePlatforms();
+    m_graphicsView->refreshRiserFixtures();       // mounted fixtures follow size/height changes
+    if (m_layersPanel) m_layersPanel->reload();   // reflect the new name/colour in the tree
     m_doc->setModified();
 }
 
@@ -1577,11 +2284,54 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
                    this, SLOT(slotAddTruss()));
     menu.addAction(tr("Add Platform/Riser here"),
                    this, SLOT(slotAddPlatform()));
+    menu.addAction(QIcon(":/image.png"), tr("Add Image here"),
+                   this, SLOT(slotAddImage()));
     menu.addSeparator();
     menu.addAction(tr("Add Target Position here"),
                    this, SLOT(slotAddTarget()));
 
     menu.addSeparator();
+    QAction *groupAct = menu.addAction(QIcon(":/group.png"), tr("Group selected (Ctrl+G)"),
+                                       this, SLOT(slotGroupItems()));
+    groupAct->setEnabled(m_graphicsView != NULL && m_graphicsView->selectionGroupable());
+    QAction *ungroupAct = menu.addAction(QIcon(":/ungroup.png"), tr("Ungroup (Ctrl+Shift+G)"),
+                                         this, SLOT(slotUngroupItems()));
+    ungroupAct->setEnabled(m_graphicsView != NULL && m_graphicsView->selectionHasGroup());
+
+    // Align / distribute selected fixtures (Top view) — clean up a hand-placed
+    // row/column so their X/Y match exactly.
+    const int nFix = (m_graphicsView != NULL) ? m_graphicsView->selectedFixtureCount() : 0;
+    if (nFix >= 2)
+    {
+        menu.addSeparator();
+        QMenu *alignMenu = menu.addMenu(tr("Align fixtures"));
+        alignMenu->addAction(tr("Same Y (straight row)"), this, [this]() { m_graphicsView->alignSelectedFixtures(3); });
+        alignMenu->addAction(tr("Same X (straight column)"), this, [this]() { m_graphicsView->alignSelectedFixtures(0); });
+        alignMenu->addSeparator();
+        alignMenu->addAction(tr("Upstage edge"),   this, [this]() { m_graphicsView->alignSelectedFixtures(4); });
+        alignMenu->addAction(tr("Downstage edge"), this, [this]() { m_graphicsView->alignSelectedFixtures(5); });
+        alignMenu->addAction(tr("Left edge"),      this, [this]() { m_graphicsView->alignSelectedFixtures(1); });
+        alignMenu->addAction(tr("Right edge"),     this, [this]() { m_graphicsView->alignSelectedFixtures(2); });
+        if (nFix >= 3)
+        {
+            QMenu *distMenu = menu.addMenu(tr("Distribute fixtures"));
+            distMenu->addAction(tr("Evenly left↔right"), this, [this]() { m_graphicsView->distributeSelectedFixtures(true); });
+            distMenu->addAction(tr("Evenly up↔down"),    this, [this]() { m_graphicsView->distributeSelectedFixtures(false); });
+        }
+    }
+
+    menu.addSeparator();
+    // Duplicate = copy the current selection and paste it offset by ~0.5 m, in
+    // one step. Works for trusses / platforms / targets.
+    if (!m_graphicsView->scene()->selectedItems().isEmpty())
+    {
+        menu.addAction(QIcon(":/editcopy.png"), tr("Duplicate selected"),
+                       this, [this]() {
+            slotCopySelected();
+            if (clipboardHasFeatures())
+                pasteClipboard(0.5f, 0.5f);   // small offset so the copy is visible
+        });
+    }
     menu.addAction(QIcon(":/editcopy.png"), tr("Copy selected features"),
                    this, SLOT(slotCopySelected()));
     if (clipboardHasFeatures())
@@ -1861,6 +2611,15 @@ public:
         QString name;
         QColor  gelColor;
         float   offset;   // metres along truss (mutable by drag)
+        // When set, this slot is a child BAR hung on the truss (offset = its
+        // parentOffset) rather than a fixture — drawn as a relative-length
+        // segment, and the edit dialog writes offset back to the bar's
+        // parentOffset. barLength = the bar's own length (metres) for the segment.
+        quint32 barTrussId = Truss::invalidId();
+        float   barLength  = 0.0f;   ///< extent along the strip axis (segment size)
+        int     barRun     = 0;      ///< Truss::BarRun (Along/Across/Drop)
+        float   barTrueLen = 0.0f;   ///< the bar's real length (metres)
+        float   barCross   = 0.0f;   ///< bar cross-shift (metres, 0 = centred)
     };
 
     // isVertical: true for tower/boom trusses — draws a vertical elevation bar
@@ -1879,9 +2638,9 @@ public:
     {
         if (m_vertical)
         {
-            setMinimumWidth(120);
-            setMinimumHeight(260);
-            setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+            setMinimumWidth(150);
+            setMinimumHeight(360);   // room for long pipes/drops
+            setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
         }
         else
         {
@@ -1902,6 +2661,51 @@ public:
         update();
     }
 
+    /** Called with the metre offset when the user right-clicks the strip and
+     *  chooses "Add bar here". The dialog wires this to create a child bar. */
+    void setAddBarCallback(const std::function<void(float)> &cb) { m_addBarCb = cb; }
+
+    /** Add a bar marker to the strip (after it was created) and repaint. */
+    void addBarSlot(quint32 barId, const QString &name, float offset,
+                    float barLength, int barRun = 0, float trueLen = 0.0f)
+    {
+        Slot s;
+        s.fid = Fixture::invalidId();
+        s.barTrussId = barId;
+        s.barLength = barLength;
+        s.barRun = barRun;
+        s.barTrueLen = trueLen;
+        s.name = name;
+        s.offset = qBound(0.0f, offset, m_len);
+        m_slots.append(s);
+        update();
+    }
+
+protected:
+    // Metre offset along the truss for a widget-pixel position.
+    float offsetAtPos(const QPoint &p) const
+    {
+        if (m_vertical)
+        {
+            const QRect bar = vBarRect();
+            if (bar.height() <= 0) return 0.0f;
+            return qBound(0.0f, float(bar.bottom() - p.y()) / bar.height() * m_len, m_len);
+        }
+        const QRect bar = hBarRect();
+        if (bar.width() <= 0) return 0.0f;
+        return qBound(0.0f, float(p.x() - bar.left()) / bar.width() * m_len, m_len);
+    }
+
+    void contextMenuEvent(QContextMenuEvent *ev) override
+    {
+        if (!m_addBarCb) return;
+        const float off = offsetAtPos(ev->pos());
+        QMenu m(this);
+        QAction *add = m.addAction(tr("Add bar here"));
+        if (m.exec(ev->globalPos()) == add)
+            m_addBarCb(off);
+    }
+
 protected:
     enum { kPad = 14, kBarThick = 16, kHdW = 40, kHdH = 22 };
 
@@ -1916,8 +2720,38 @@ protected:
     QRect vBarRect() const
     {
         int margin = kPad + kHdH / 2;
-        int barX = width() / 2 - kBarThick / 2;
+        // Centre the bar in the space BETWEEN the tick-number gutter (left) and
+        // the length/label gutter (right) so it reads centred in the container.
+        const int leftGutter = 34, rightGutter = 66;
+        int barX = leftGutter + (width() - leftGutter - rightGutter - kBarThick) / 2;
+        barX = qMax(leftGutter, barX);
         return QRect(barX, margin, kBarThick, height() - 2 * margin);
+    }
+
+    // --- Front-elevation horizontal axis (vertical/tower strip only) ---
+    // A tower is shown as a vertical line; an Across crossbar is a horizontal
+    // segment placed by height (Along, vertical) and cross-shift (horizontal).
+    int towerCenterX() const { return vBarRect().center().x(); }
+    float hHalfRange() const
+    {
+        float h = 1.0f;
+        for (const Slot &s : m_slots)
+            if (s.barTrussId != Truss::invalidId() && s.barRun == 1 /*Across*/)
+                h = qMax(h, s.barTrueLen * 0.5f + qAbs(s.barCross));
+        return qMax(h, 0.5f);
+    }
+    qreal hScalePx() const
+    {
+        const int tx = towerCenterX();
+        int half = qMin(tx - 38, width() - tx - 70);
+        half = qMax(20, half);
+        return qreal(half) / hHalfRange();
+    }
+    // True for a slot drawn as a horizontal crossbar on the tower elevation.
+    bool isVerticalCrossbar(int i) const
+    {
+        return m_vertical && m_slots[i].barTrussId != Truss::invalidId()
+            && m_slots[i].barRun == 1 /*Across*/;
     }
 
     // Centre pixel for slot i in the appropriate axis
@@ -1940,14 +2774,50 @@ protected:
 
     QRect handleRect(int i) const
     {
-        int c = slotCentre(i);
+        const bool isBar = (m_slots[i].barTrussId != Truss::invalidId());
+        // Tower crossbar: a HORIZONTAL segment, placed by height + cross-shift.
+        if (isVerticalCrossbar(i))
+        {
+            const int kPipe = 12;
+            const QRect bar = vBarRect();
+            int y = bar.bottom() - int(m_slots[i].offset / m_len * bar.height());
+            y = qBound(bar.top(), y, bar.bottom());
+            const qreal sc = hScalePx();
+            int cx = towerCenterX() + int(m_slots[i].barCross * sc);
+            int w  = qMax(kPipe, int(m_slots[i].barTrueLen * sc));
+            return QRect(cx - w / 2, y - kPipe / 2, w, kPipe);
+        }
         if (m_vertical)
-            // Handle is horizontal slab centred on c (vertical axis)
+        {
+            const QRect bar = vBarRect();
+            int startY = bar.bottom() - int(m_slots[i].offset / m_len * bar.height());
+            if (isBar)
+            {
+                // A slim pipe of RELATIVE length running up from the attach point.
+                const int kPipe = 12;
+                int lenPx = qMax(kPipe, int(m_slots[i].barLength / m_len * bar.height()));
+                int top = qBound(bar.top(), startY - lenPx, bar.bottom() - kPipe);
+                return QRect(width() / 2 - kPipe / 2, top, kPipe,
+                             qMin(lenPx, bar.bottom() - top));
+            }
+            int c = qBound(bar.top(), startY, bar.bottom());
             return QRect(width() / 2 - kHdW / 2, c - kHdH / 2, kHdW, kHdH);
+        }
         else
-            return QRect(c - kHdW / 2,
-                         hBarRect().top() + kBarThick / 2 - kHdH / 2,
-                         kHdW, kHdH);
+        {
+            const QRect bar = hBarRect();
+            int startX = bar.left() + int(m_slots[i].offset / m_len * bar.width());
+            if (isBar)
+            {
+                const int kPipe = 12;
+                int lenPx = qMax(kPipe, int(m_slots[i].barLength / m_len * bar.width()));
+                int left = qBound(bar.left(), startX, bar.right() - kPipe);
+                return QRect(left, bar.top() + kBarThick / 2 - kPipe / 2,
+                             qMin(lenPx, bar.right() - left), kPipe);
+            }
+            int c = qBound(bar.left(), startX, bar.right());
+            return QRect(c - kHdW / 2, bar.top() + kBarThick / 2 - kHdH / 2, kHdW, kHdH);
+        }
     }
 
     float tickStep() const
@@ -2036,9 +2906,41 @@ protected:
                 if ((pass == 0) == dragging) continue;
 
                 QRect r = handleRect(i);
-                QColor fill = m_slots[i].gelColor.isValid()
-                              ? m_slots[i].gelColor : QColor(60, 120, 200);
+                const bool isBar = (m_slots[i].barTrussId != Truss::invalidId());
+                QColor fill = isBar ? QColor(220, 150, 40)   // bars = amber
+                            : (m_slots[i].gelColor.isValid()
+                              ? m_slots[i].gelColor : QColor(60, 120, 200));
                 if (dragging) fill = fill.lighter(135);
+
+                if (isBar)
+                {
+                    // Draw as a rounded PIPE with a light centreline highlight,
+                    // and the label BESIDE it (the pipe is too slim for text).
+                    p.setRenderHint(QPainter::Antialiasing, true);
+                    p.setBrush(fill);
+                    p.setPen(QPen(dragging ? Qt::white : QColor(150, 95, 15), 1));
+                    const int rad = qMin(r.width(), r.height()) / 2;
+                    p.drawRoundedRect(r, rad, rad);
+                    p.setPen(QPen(QColor(255, 225, 160, 180), 1));
+                    if (m_vertical)
+                        p.drawLine(r.center().x(), r.top() + 2, r.center().x(), r.bottom() - 2);
+                    else
+                        p.drawLine(r.left() + 2, r.center().y(), r.right() - 2, r.center().y());
+                    p.setRenderHint(QPainter::Antialiasing, false);
+
+                    QString label = m_slots[i].name;
+                    if (label.length() > 10) label = label.left(9) + QChar(0x2026);
+                    p.setPen(QColor(230, 200, 140));
+                    QFont f("sans-serif", 7); f.setBold(dragging); p.setFont(f);
+                    if (m_vertical)
+                        p.drawText(r.right() + 3, r.center().y() - 6, 60, 12,
+                                   Qt::AlignLeft | Qt::AlignVCenter, label);
+                    else
+                        p.drawText(r.center().x() - 30, r.top() - 13, 60, 12,
+                                   Qt::AlignHCenter | Qt::AlignBottom, label);
+                    continue;
+                }
+
                 p.fillRect(r, fill);
                 p.setPen(dragging ? Qt::white : QColor(200, 200, 200));
                 p.drawRect(r);
@@ -2101,7 +3003,9 @@ protected:
             {
                 m_dragIdx   = i;
                 m_anchorPx  = m_vertical ? ev->y() : ev->x();
+                m_anchorPxX = ev->x();
                 m_anchorOff = m_slots[i].offset;
+                m_anchorCross = m_slots[i].barCross;
                 setCursor(Qt::ClosedHandCursor);
                 update();
                 return;
@@ -2117,6 +3021,26 @@ protected:
             for (int i = 0; i < m_slots.size(); ++i)
                 if (handleRect(i).contains(ev->pos())) { overHandle = true; break; }
             setCursor(overHandle ? Qt::OpenHandCursor : Qt::ArrowCursor);
+            return;
+        }
+        if (isVerticalCrossbar(m_dragIdx))
+        {
+            // 2D placement: vertical = height (Along), horizontal = cross-shift.
+            const QRect bar = vBarRect();
+            if (bar.height() > 0)
+            {
+                float dOff = -float(ev->y() - m_anchorPx) / float(bar.height()) * m_len;
+                m_slots[m_dragIdx].offset = qBound(0.0f, m_anchorOff + dOff, m_len);
+            }
+            const qreal sc = hScalePx();
+            if (sc > 0.0)
+            {
+                float c = m_anchorCross + float(ev->x() - m_anchorPxX) / float(sc);
+                if (qAbs(c * sc) < 9.0)   // bump-snap to centred on the truss
+                    c = 0.0f;
+                m_slots[m_dragIdx].barCross = c;
+            }
+            update();
             return;
         }
         if (m_vertical)
@@ -2152,7 +3076,10 @@ private:
     QString     m_unitStr       = "m";
     int         m_dragIdx   = -1;
     int         m_anchorPx  = 0;
+    int         m_anchorPxX = 0;     ///< x anchor for 2D crossbar drag
     float       m_anchorOff = 0.0f;
+    float       m_anchorCross = 0.0f;
+    std::function<void(float)> m_addBarCb;
 };
 
 // ---------------------------------------------------------------------------
@@ -2161,6 +3088,14 @@ void Monitor::slotEditTruss(quint32 tid)
 {
     Truss *t = m_props->truss(tid);
     if (!t) return;
+
+    // Snapshot for live-preview revert on Cancel (only meaningful for a bar).
+    const float  origAlong    = t->parentOffset();
+    const int    origFace     = t->barFace();
+    const float  origStandoff = t->barStandoff();
+    const int    origRun      = t->barRun();
+    const float  origLen      = t->length();
+    const bool   origIsBar    = t->isChildBar();
 
     QDialog editDlg(this);
     editDlg.setWindowTitle(tr("Edit Truss — %1").arg(t->name()));
@@ -2173,8 +3108,14 @@ void Monitor::slotEditTruss(quint32 tid)
     form->addRow(tr("Name:"), nameEdit);
 
     QComboBox *typeCb = new QComboBox(&editDlg);
-    typeCb->addItems({ tr("Horizontal"), tr("Vertical"), tr("Ground") });
+    typeCb->addItems({ tr("Horizontal (flat / in-plane)"),
+                       tr("Vertical (tower / hanging drop)"),
+                       tr("Ground (floor)") });
     typeCb->setCurrentIndex(static_cast<int>(t->type()));
+    typeCb->setToolTip(tr("The PLANE, not the on-screen direction: a Horizontal "
+                          "truss/bar lies flat and can run any way in the plane — "
+                          "its screen orientation is the Direction angle below. "
+                          "Vertical = a tower, or (as a bar) a drop that hangs down."));
     form->addRow(tr("Type:"), typeCb);
 
     const bool isFeet_e = (m_props->gridUnits() == MonitorProperties::Feet);
@@ -2207,6 +3148,9 @@ void Monitor::slotEditTruss(quint32 tid)
     QDoubleSpinBox *dirAngle = new QDoubleSpinBox(&editDlg);
     dirAngle->setRange(0, 359); dirAngle->setSuffix(QString::fromUtf8("°"));
     dirAngle->setDecimals(1); dirAngle->setValue(existingAngle);
+    dirAngle->setToolTip(tr("On-screen run of a flat truss/bar: 0° = points stage-"
+                            "right, 90° = points upstage. This is what makes it look "
+                            "horizontal or vertical on the 2D map."));
     form->addRow(tr("Direction (°):"), dirAngle);
 
     QDoubleSpinBox *lenSpin = new QDoubleSpinBox(&editDlg);
@@ -2218,6 +3162,90 @@ void Monitor::slotEditTruss(quint32 tid)
     widthSpin->setRange(0.05, wMax_e); widthSpin->setSuffix(unitSfx_e); widthSpin->setDecimals(2);
     widthSpin->setValue(t->width() * toDisp_e);
     form->addRow(tr("Width:"), widthSpin);
+
+    // --- Bar attachment: make this truss a "bar" hung on a parent truss ---
+    QComboBox *parentCb = new QComboBox(&editDlg);
+    parentCb->addItem(tr("(free — not a bar)"), Truss::invalidId());
+    for (Truss *pt : m_props->trusses())
+        if (pt->id() != tid)   // can't parent to self
+            parentCb->addItem(pt->name().isEmpty() ? tr("Truss %1").arg(pt->id()) : pt->name(),
+                              pt->id());
+    { int pidx = parentCb->findData(t->parentTrussId()); parentCb->setCurrentIndex(pidx >= 0 ? pidx : 0); }
+    parentCb->setToolTip(tr("Hang this truss as a BAR on a parent truss. Its origin "
+                            "then follows the parent (Origin X/Y/Z are ignored)."));
+    form->addRow(tr("Bar on truss:"), parentCb);
+
+    // Along the parent truss (slides top↔bottom on a tower, left↔right overhead).
+    QDoubleSpinBox *alongSpin = new QDoubleSpinBox(&editDlg);
+    alongSpin->setRange(-lenMax_e, lenMax_e); alongSpin->setSuffix(unitSfx_e); alongSpin->setDecimals(2);
+    alongSpin->setValue(t->parentOffset() * toDisp_e);
+    alongSpin->setToolTip(tr("Position ALONG the parent truss"));
+    QLabel *alongLbl = new QLabel(tr("Along truss:")); form->addRow(alongLbl, alongSpin);
+
+    // Which face of the truss the bar rides (stage-relative).
+    QComboBox *faceCb = new QComboBox(&editDlg);
+    faceCb->addItem(tr("Bottom (under-hung)"), Truss::FaceBottom);
+    faceCb->addItem(tr("Top"),                 Truss::FaceTop);
+    faceCb->addItem(tr("Downstage (front)"),   Truss::FaceDownstage);
+    faceCb->addItem(tr("Upstage (back)"),      Truss::FaceUpstage);
+    faceCb->addItem(tr("Stage right"),         Truss::FaceStageRight);
+    faceCb->addItem(tr("Stage left"),          Truss::FaceStageLeft);
+    faceCb->setCurrentIndex(faceCb->findData(t->barFace()));
+    faceCb->setToolTip(tr("Which side of the truss the bar mounts on — e.g. "
+                          "Downstage to face the audience."));
+    QLabel *faceLbl = new QLabel(tr("Face:")); form->addRow(faceLbl, faceCb);
+
+    // Stand-off off that face (the drop / reach).
+    QDoubleSpinBox *standoffSpin = new QDoubleSpinBox(&editDlg);
+    standoffSpin->setRange(0, zMax_e); standoffSpin->setSuffix(unitSfx_e); standoffSpin->setDecimals(2);
+    standoffSpin->setValue(t->barStandoff() * toDisp_e);
+    standoffSpin->setToolTip(tr("Distance off that face (0 = on the truss)"));
+    QLabel *standoffLbl = new QLabel(tr("Stand-off:")); form->addRow(standoffLbl, standoffSpin);
+
+    // The bar's run.
+    QComboBox *runCb = new QComboBox(&editDlg);
+    runCb->addItem(tr("Along (parallel to truss)"),   Truss::RunAlong);
+    runCb->addItem(tr("Across (boom / cross-bar)"),   Truss::RunAcross);
+    runCb->addItem(tr("Drop (hangs straight down)"),  Truss::RunDrop);
+    runCb->setCurrentIndex(runCb->findData(t->barRun()));
+    runCb->setToolTip(tr("How the bar runs: along the truss, out as a boom, or "
+                         "hanging straight down."));
+    QLabel *runLbl = new QLabel(tr("Run:")); form->addRow(runLbl, runCb);
+
+    // A bar's geometry is DERIVED — hide the raw Origin/Direction/Type rows when
+    // this truss is a bar (and toggle live as the parent combo changes).
+    auto setBarMode = [&](bool isBar) {
+        alongLbl->setVisible(isBar); alongSpin->setVisible(isBar);
+        faceLbl->setVisible(isBar);  faceCb->setVisible(isBar);
+        standoffLbl->setVisible(isBar); standoffSpin->setVisible(isBar);
+        runLbl->setVisible(isBar);   runCb->setVisible(isBar);
+        // Raw geometry only for free trusses.
+        typeCb->setEnabled(!isBar);
+        originX->setEnabled(!isBar); originY->setEnabled(!isBar); originZ->setEnabled(!isBar);
+        dirAngle->setEnabled(!isBar);
+    };
+    setBarMode(parentCb->currentData().toUInt() != Truss::invalidId());
+    connect(parentCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg,
+            [=](int){ setBarMode(parentCb->currentData().toUInt() != Truss::invalidId()); });
+
+    // LIVE PREVIEW: apply the bar's mount params to the canvas as they change
+    // (only while it's already a bar), so the user sees it before committing.
+    auto applyBarPreview = [=]() {
+        if (!t->isChildBar())
+            return;
+        t->setParentOffset(float(alongSpin->value() * fromDisp_e));
+        t->setBarFace(faceCb->currentData().toInt());
+        t->setBarStandoff(float(standoffSpin->value() * fromDisp_e));
+        t->setBarRun(runCb->currentData().toInt());
+        t->setLength(lenSpin->value() * fromDisp_e);
+        m_props->recomputeChildTrusses();
+        m_graphicsView->followParentTrusses();
+    };
+    connect(alongSpin,    QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [=](double){ applyBarPreview(); });
+    connect(standoffSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [=](double){ applyBarPreview(); });
+    connect(lenSpin,      QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [=](double){ applyBarPreview(); });
+    connect(faceCb,       QOverload<int>::of(&QComboBox::currentIndexChanged),  &editDlg, [=](int){ applyBarPreview(); });
+    connect(runCb,        QOverload<int>::of(&QComboBox::currentIndexChanged),  &editDlg, [=](int){ applyBarPreview(); });
 
     // ------------------------------------------------------------------
     // Fixture placement strip
@@ -2235,6 +3263,31 @@ void Monitor::slotEditTruss(quint32 tid)
         s.gelColor = m_graphicsView->fixtureGelColor(s.fid);
         stripSlots.append(s);
     }
+    // Child BARS hung on this truss also ride the strip (draggable to reposition
+    // their attach point — "place bar on truss" via the Fixture Placement strip,
+    // which sits on the side for vertical trusses).
+    for (Truss *bar : m_props->trusses())
+    {
+        if (bar->parentTrussId() != tid)
+            continue;
+        TrussStripWidget::Slot s;
+        s.fid    = Fixture::invalidId();
+        s.barTrussId = bar->id();
+        // Segment length on the strip = the bar's extent along the PARENT'S strip
+        // axis. A tower's strip runs in height, so only a DROP bar extends along
+        // it; a flat truss's strip runs along it, so only an ALONG bar does.
+        // Everything else is a point marker at its attach position.
+        if (t->type() == Truss::Vertical)
+            s.barLength = (bar->barRun() == Truss::RunDrop) ? bar->length() : 0.0f;
+        else
+            s.barLength = (bar->barRun() == Truss::RunAlong) ? bar->length() : 0.0f;
+        s.barRun     = bar->barRun();
+        s.barTrueLen = bar->length();
+        s.barCross   = bar->barCrossShift();
+        s.offset = bar->parentOffset();
+        s.name   = bar->name().isEmpty() ? tr("Bar %1").arg(bar->id()) : bar->name();
+        stripSlots.append(s);
+    }
     // Sort by current offset so overlapping handles are predictable
     std::sort(stripSlots.begin(), stripSlots.end(),
               [](const TrussStripWidget::Slot &a, const TrussStripWidget::Slot &b){
@@ -2247,11 +3300,38 @@ void Monitor::slotEditTruss(quint32 tid)
     connect(lenSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             [strip, fromDisp_e](double v){ strip->setTrussLength(float(v * fromDisp_e)); });
 
-    QLabel *stripLabel = new QLabel(tr("Fixture Placement  (drag to reposition)"), &editDlg);
+    // Right-click the strip → "Add bar here": create a child bar attached at the
+    // clicked offset and show it as a draggable marker. The callback only fires
+    // while the modal dialog is open, so a stack-local tracks the bars created
+    // here — a Cancel removes them again.
+    QList<quint32> barsCreatedHere;
+    strip->setAddBarCallback([this, tid, t, strip, &barsCreatedHere](float offset) {
+        const quint32 barId = createBarOnTruss(tid, offset);
+        if (barId == Truss::invalidId())
+            return;
+        barsCreatedHere.append(barId);
+        Truss *bar = m_props->truss(barId);
+        // Extent along the PARENT'S strip axis (same rule as the pre-existing
+        // bars): a horizontal boom on a vertical tower is a point, not a pipe.
+        float ext = 0.0f;
+        if (bar != nullptr)
+        {
+            if (t->type() == Truss::Vertical)
+                ext = (bar->barRun() == Truss::RunDrop) ? bar->length() : 0.0f;
+            else
+                ext = (bar->barRun() == Truss::RunAlong) ? bar->length() : 0.0f;
+        }
+        strip->addBarSlot(barId, bar ? bar->name() : tr("Bar"), offset, ext,
+                          bar ? bar->barRun() : 0, bar ? bar->length() : 0.0f);
+    });
+
+    QLabel *stripLabel = new QLabel(tr("Fixture Placement  (drag to reposition; "
+                                       "right-click to add a bar)"), &editDlg);
     QFont sf = stripLabel->font(); sf.setBold(true); stripLabel->setFont(sf);
 
     if (isVertical)
     {
+        editDlg.setMinimumHeight(460);   // room for the taller elevation strip
         // For vertical trusses put the elevation strip to the right of the form.
         QHBoxLayout *contentRow = new QHBoxLayout;
         QVBoxLayout *formCol    = new QVBoxLayout;
@@ -2288,21 +3368,70 @@ void Monitor::slotEditTruss(quint32 tid)
     connect(btns, &QDialogButtonBox::rejected, &editDlg, &QDialog::reject);
 
     if (editDlg.exec() != QDialog::Accepted)
+    {
+        // Cancel: undo the live preview (restore the bar's original mount) and
+        // remove any bars created via the strip's "Add bar here".
+        if (origIsBar)
+        {
+            t->setParentOffset(origAlong);
+            t->setBarFace(origFace);
+            t->setBarStandoff(origStandoff);
+            t->setBarRun(origRun);
+            t->setLength(origLen);
+            m_props->recomputeChildTrusses();
+        }
+        for (quint32 barId : barsCreatedHere)
+            m_props->removeTruss(barId);
+        m_graphicsView->followParentTrusses();
+        if (m_layersPanel) m_layersPanel->reload();
         return;
+    }
 
     t->setName(nameEdit->text());
-    t->setType(static_cast<Truss::TrussType>(typeCb->currentIndex()));
-    t->setOrigin(QVector3D(originX->value() * fromDisp_e,
-                           originY->value() * fromDisp_e,
-                           originZ->value() * fromDisp_e));
-    float radians = float(qDegreesToRadians(dirAngle->value()));
-    t->setDirection(QPointF(qCos(radians), qSin(radians)));
     t->setLength(lenSpin->value() * fromDisp_e);
     t->setWidth(widthSpin->value() * fromDisp_e);
 
-    // Apply fixture placement changes from the strip.
+    const quint32 parentId = parentCb->currentData().toUInt();
+    t->setParentTrussId(parentId);
+    if (t->isChildBar())
+    {
+        // Truss-LOCAL bar: geometry (origin/direction/type) is DERIVED from these
+        // — the raw Type/Origin/Direction fields are ignored for a bar.
+        t->setParentOffset(float(alongSpin->value() * fromDisp_e));   // Along
+        t->setBarFace(faceCb->currentData().toInt());
+        t->setBarStandoff(float(standoffSpin->value() * fromDisp_e));
+        t->setBarRun(runCb->currentData().toInt());
+        m_props->recomputeChildTrusses();                // derive world geometry now
+        m_graphicsView->ensureTrussGroup(parentId);      // bar joins the parent's group
+        if (Truss *pt = m_props->truss(parentId))
+            if (pt->groupId() != 0)
+                t->setGroupId(pt->groupId());
+    }
+    else
+    {
+        // Free truss: apply the raw geometry fields.
+        t->setType(static_cast<Truss::TrussType>(typeCb->currentIndex()));
+        t->setOrigin(QVector3D(originX->value() * fromDisp_e,
+                               originY->value() * fromDisp_e,
+                               originZ->value() * fromDisp_e));
+        const float radians = float(qDegreesToRadians(dirAngle->value()));
+        t->setDirection(QPointF(qCos(radians), qSin(radians)));
+    }
+
+    // Apply placement changes from the strip.
     for (const TrussStripWidget::Slot &s : strip->placements())
     {
+        // A bar slot writes its dragged position (Along + cross-shift) back.
+        if (s.barTrussId != Truss::invalidId())
+        {
+            if (Truss *bar = m_props->truss(s.barTrussId))
+            {
+                bar->setParentOffset(s.offset);
+                bar->setBarCrossShift(s.barCross);
+            }
+            continue;
+        }
+
         FixtureRigProps rp = m_props->fixtureRigProps(s.fid);
         rp.trussOffset = s.offset;
         m_props->setFixtureRigProps(s.fid, rp);
@@ -2310,11 +3439,16 @@ void Monitor::slotEditTruss(quint32 tid)
         // Recompute mm position from the (possibly updated) truss geometry.
         QVector3D pos3d = t->positionAt(s.offset);  // metres
         QPointF mmPos(double(pos3d.x()) * 1000.0, double(pos3d.y()) * 1000.0);
-        m_props->setFixturePosition(s.fid, 0, 0, QVector3D(mmPos.x(), mmPos.y(), 0));
+        m_props->setFixturePosition(s.fid, 0, 0,
+                                    QVector3D(mmPos.x(), mmPos.y(), double(pos3d.z()) * 1000.0));
         m_graphicsView->moveFixtureTo(s.fid, mmPos);
     }
+    m_props->recomputeChildTrusses();   // bars moved on the strip re-derive origin
 
-    m_graphicsView->updateTrusses();
+    // followParentTrusses() redraws trusses AND re-derives/repositions any child
+    // bars (and their fixtures) — needed when the edited truss is a bar's parent.
+    m_graphicsView->followParentTrusses();
+    if (m_layersPanel) m_layersPanel->reload();   // reflect the new truss name in the tree
     m_doc->setModified();
 }
 
@@ -2400,8 +3534,10 @@ void Monitor::slotAddTruss()
     t->setDirection(QPointF(qCos(radians), qSin(radians)));
     t->setLength(length->value() * fromDisp_a);
     t->setWidth(width->value() * fromDisp_a);
+    t->setLayerId(m_props->activeLayerId());   // land on the selected layer
 
     m_graphicsView->updateTrusses();
+    if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 }
 
@@ -2486,7 +3622,10 @@ void Monitor::slotShowLabels(bool visible)
 void Monitor::slotFixtureMoved(quint32 fid, QPointF pos)
 {
     Q_ASSERT(m_graphicsView != NULL);
-    m_props->setFixturePosition(fid, 0, 0, QVector3D(pos.x(), pos.y(), 0));
+    // Preserve the mounting height (Z) — an XY move must not zero it, or the
+    // fixture would drop to the floor in the elevation views.
+    const float z = m_props->fixturePosition(fid, 0, 0).z();
+    m_props->setFixturePosition(fid, 0, 0, QVector3D(pos.x(), pos.y(), z));
     m_doc->setModified();
 }
 
@@ -2913,7 +4052,16 @@ void Monitor::showFixtureItemEditor()
     trussCb->addItem(tr("(none)"), QVariant(Truss::invalidId()));
     for (Truss *t : m_props->trusses())
         trussCb->addItem(t->name(), t->id());
-    rigForm->addRow(tr("Truss:"), trussCb);
+    QPushButton *detachTrussBtn = new QPushButton(tr("Remove from Truss"));
+    detachTrussBtn->setToolTip(tr("Detach this fixture from its truss"));
+    {
+        QWidget *trussRow = new QWidget;
+        QHBoxLayout *trussRowL = new QHBoxLayout(trussRow);
+        trussRowL->setContentsMargins(0, 0, 0, 0);
+        trussRowL->addWidget(trussCb, 1);
+        trussRowL->addWidget(detachTrussBtn);
+        rigForm->addRow(tr("Truss:"), trussRow);
+    }
 
     const bool isFeet_fx = (m_props->gridUnits() == MonitorProperties::Feet);
     const QString unitSfx_fx = isFeet_fx ? tr(" ft") : tr(" m");
@@ -2926,11 +4074,54 @@ void Monitor::showFixtureItemEditor()
     offsetSpin->setDecimals(2);
     rigForm->addRow(tr("Offset along truss:"), offsetSpin);
 
+    // The "Remove from Truss" button (built above) just resets the combo/offset;
+    // the detach is committed on OK where the rig props are written.
+    connect(detachTrussBtn, &QPushButton::clicked, this, [trussCb, offsetSpin]() {
+        trussCb->setCurrentIndex(0);   // (none)
+        offsetSpin->setValue(0.0);
+    });
+
+    // Which side of the truss the fixture hangs on (affects Z in elevation).
+    QComboBox *trussSideCb = new QComboBox;
+    trussSideCb->addItem(tr("Under-hung (below)"), QVariant(int(FixtureRigProps::UnderHung)));
+    trussSideCb->addItem(tr("Top-mounted (above)"), QVariant(int(FixtureRigProps::TopMounted)));
+    trussSideCb->addItem(tr("Centered (on chord)"), QVariant(int(FixtureRigProps::Centered)));
+    trussSideCb->setToolTip(tr("Vertical side of the truss the fixture sits on "
+                               "(shown in Front/Side elevation views)"));
+    rigForm->addRow(tr("Truss side:"), trussSideCb);
+
     QComboBox *mountCb = new QComboBox;
     mountCb->addItem(tr("Top-hung"),      QVariant(int(Truss::TopHung)));
     mountCb->addItem(tr("Floor mounted"), QVariant(int(Truss::FloorMounted)));
     mountCb->addItem(tr("Side arm"),      QVariant(int(Truss::SideArm)));
     rigForm->addRow(tr("Mounting:"), mountCb);
+
+    // Deck mount: a fixture standing on top of a platform ("floor mounted").
+    QComboBox *deckCb = new QComboBox;
+    deckCb->addItem(tr("(none)"), QVariant(FixtureRigProps::invalidPlatformId()));
+    for (StagePlatform *p : m_props->platforms())
+        deckCb->addItem(p->name(), p->id());
+    deckCb->setToolTip(tr("Stand this fixture on top of a platform; its height "
+                          "follows the platform's deck."));
+    rigForm->addRow(tr("On platform (deck):"), deckCb);
+
+    QDoubleSpinBox *deckHeightSpin = new QDoubleSpinBox;
+    deckHeightSpin->setRange(-20 * toDisp_fx, 20 * toDisp_fx);
+    deckHeightSpin->setSuffix(unitSfx_fx);
+    deckHeightSpin->setDecimals(2);
+    deckHeightSpin->setToolTip(tr("Height relative to the deck top (0 = sits on the "
+                                  "deck; negative drops it below / under the deck)"));
+    rigForm->addRow(tr("Height above deck:"), deckHeightSpin);
+
+    // Truss and deck mounts are mutually exclusive — picking one clears the other.
+    connect(trussCb, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [trussCb, deckCb](int) {
+        if (trussCb->currentData().toUInt() != Truss::invalidId())
+            deckCb->setCurrentIndex(0);
+    });
+    connect(deckCb, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [trussCb, deckCb](int) {
+        if (deckCb->currentData().toUInt() != FixtureRigProps::invalidPlatformId())
+            trussCb->setCurrentIndex(0);
+    });
 
     QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox;
     panZeroSpin->setRange(0, 359);
@@ -3012,6 +4203,11 @@ void Monitor::showFixtureItemEditor()
     }
     offsetSpin->setValue(double(rp.trussOffset) * toDisp_fx);
     mountCb->setCurrentIndex(static_cast<int>(rp.mountingType));
+    trussSideCb->setCurrentIndex(trussSideCb->findData(int(rp.trussMountSide)));
+    for (int i = 0; i < deckCb->count(); ++i)
+        if (deckCb->itemData(i).toUInt() == rp.deckPlatformId)
+        { deckCb->setCurrentIndex(i); break; }
+    deckHeightSpin->setValue(double(rp.deckHeightOffset) * toDisp_fx);
     panZeroSpin->setValue(double(rp.panZeroDir));
     panOffsetSpin->setValue(double(rp.panOffsetDeg));
     tiltOffsetSpin->setValue(double(rp.tiltOffsetDeg));
@@ -3402,12 +4598,19 @@ void Monitor::showFixtureItemEditor()
     newRp.trussId       = trussCb->currentData().toUInt();
     newRp.trussOffset   = float(offsetSpin->value() * fromDisp_fx);
     newRp.mountingType  = static_cast<Truss::MountingType>(mountCb->currentData().toInt());
+    newRp.trussMountSide = trussSideCb->currentData().toInt();
+    newRp.deckPlatformId = deckCb->currentData().toUInt();
+    newRp.deckHeightOffset = float(deckHeightSpin->value() * fromDisp_fx);
     newRp.panZeroDir    = float(panZeroSpin->value());
     newRp.panOffsetDeg  = float(panOffsetSpin->value());
     newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());
     newRp.panInvert     = panInvertCb->isChecked();
     newRp.tiltInvert    = tiltInvertCb->isChecked();
+    // Deck-mounting: default the fixture's Z to the platform top on first
+    // assignment so it "sits on" the deck (the editor height is an offset above).
     m_props->setFixtureRigProps(fxItem->fixtureID(), newRp);
+    if (newRp.onDeck())
+        m_graphicsView->updateFixture(fxItem->fixtureID());
 
     // Flush fader cache in any running scene that contains this fixture
     // (either as a fixed target or inside a fixture group) so target-geometry
@@ -3445,7 +4648,10 @@ void Monitor::showFixtureItemEditor()
         {
             QVector3D wp = t->positionAt(newRp.trussOffset);
             QPointF tp(wp.x() * 1000.0, wp.y() * 1000.0);
-            fxItem->setPos(m_graphicsView->realPositionToPixels(tp.x(), tp.y()));
+            // Centre the icon on the truss line (see MonitorGraphicsView::halfIcon).
+            const QPointF tpPx = m_graphicsView->realPositionToPixels(tp.x(), tp.y());
+            fxItem->setPos(tpPx.x() - fxItem->cellSize().width() / 2.0,
+                           tpPx.y() - fxItem->cellSize().height() / 2.0);
             fxItem->setRealPosition(tp);
             m_props->setFixturePosition(fxItem->fixtureID(), 0, 0,
                                         QVector3D(tp.x(), tp.y(), 0));

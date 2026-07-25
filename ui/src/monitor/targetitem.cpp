@@ -9,12 +9,14 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <QGraphicsSceneContextMenuEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsTextItem>
 #include <QStyleOptionGraphicsItem>
 #include <QPainter>
 #include <QPen>
 #include <QFont>
+#include <QMenu>
 
 #include "targetitem.h"
 #include "stagetarget.h"
@@ -30,7 +32,9 @@ TargetItem::TargetItem(StageTarget *target, Doc *doc, float pxX, float pxY,
 {
     setFlags(ItemIsMovable | ItemIsSelectable | ItemSendsGeometryChanges);
     setZValue(3.0);   // above fixtures so it's always clickable
-    setCursor(Qt::PointingHandCursor);
+    // Respect a persisted per-target lock: a locked target can't be dragged.
+    setFlag(ItemIsMovable, !target->locked());
+    setCursor(target->locked() ? Qt::ArrowCursor : Qt::PointingHandCursor);
     setPos(pxX, pxY);
 
     QString labelText = target->name();
@@ -77,6 +81,9 @@ void TargetItem::paint(QPainter *painter,
 
     const bool selected = option->state & QStyle::State_Selected;
     QColor col = m_target->color().isValid() ? m_target->color() : QColor(255, 180, 0);
+    // A locked target is drawn red so the frozen state reads at a glance.
+    if (m_target->locked())
+        col = QColor(200, 60, 60);
 
     // Outer ring
     QPen ringPen(col, selected ? 2.5 : 1.5);
@@ -121,4 +128,22 @@ void TargetItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
     emit itemDropped(this);
+}
+
+void TargetItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+{
+    QMenu menu;
+    QAction *lockAct = menu.addAction(
+        m_target->locked() ? tr("Unlock Target") : tr("Lock Target"));
+
+    if (menu.exec(event->screenPos()) == lockAct)
+    {
+        m_target->setLocked(!m_target->locked());
+        const bool canMove = !m_target->locked();
+        setFlag(ItemIsMovable, canMove);
+        setCursor(canMove ? Qt::PointingHandCursor : Qt::ArrowCursor);
+        update();
+        if (m_doc)
+            m_doc->setModified();
+    }
 }

@@ -69,6 +69,10 @@ public:
     void setHighlighted(bool highlighted);
     bool isHighlighted() const { return m_highlighted; }
 
+    /** In an elevation (Front/Side) view a vertical tower must draw as a line
+     *  segment (its height), not the top-down bullseye. Enable that here. */
+    void setElevationMode(bool on) { m_elevation = on; update(); }
+
     // QGraphicsItem interface
     QRectF boundingRect() const override;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
@@ -95,6 +99,7 @@ private:
     float               m_pxWid;
     QGraphicsTextItem  *m_label;       ///< child item — moves & rotates with this item
     bool                m_highlighted = false;
+    bool                m_elevation = false;   ///< draw vertical tower as a segment
 };
 
 /** @} */

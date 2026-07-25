@@ -29,3 +29,16 @@ Distant Future
   so a circle of 6 lights would be pointing to positions at 60 degree increments across the stage
   a line of 10 lights would all point to the line location at 10 intervals along it 
   etc.
+
+NEW: 
+Given the new features whats the best way to implement this workflow
+ - we have preshow operations that must be hand cue'd .. ( preshow, announcer, shout, etc. ) 
+ - we then have a click track that starts the time code and should sync lighting
+ - end of song we have a break with spoken voice from stage and a few cues 
+ - next song starts the light cue's again 
+ - something breaks and the operator wants to immediatelty take over cuing 
+etc.
+
+would we need a cue's that can be hand cue'd between the time coded cues .. would that work? 
+would we need another method ? 
+do we need a way to discretely identify who "owns" the cuestack at any moment? 

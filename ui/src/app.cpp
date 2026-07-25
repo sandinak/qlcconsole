@@ -129,7 +129,6 @@ App::App()
     , m_modeToggleAction(NULL)
     , m_controlMonitorAction(NULL)
     , m_addressToolAction(NULL)
-    , m_controlFullScreenAction(NULL)
     , m_controlBlackoutAction(NULL)
     , m_controlBlindAction(NULL)
     , m_timelineSuspendAction(NULL)
@@ -354,7 +353,8 @@ void App::init()
     initDoc();
     // Main view actions
     initActions();
-    // Main tool bar
+    // Slim live-control toolbar (the native menu bar is built in initMenuBar()
+    // below, after the workspace tabs exist so its "View" tab-jumps match them).
     initToolBar();
 
     m_dumpProperties = new DmxDumpFactoryProperties(KUniverseCount);
@@ -393,6 +393,10 @@ void App::init()
         m_tabLabelMode = settings.value(SETTINGS_TAB_LABEL_MODE, TabIconAndText).toInt();
     }
     applyTabLabelMode();
+
+    // Build the native menu bar now that the workspace tabs exist, so the
+    // View menu can offer accurate "jump to tab" entries.
+    initMenuBar();
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
     /* Detach the tab's widget onto a new window on doubleClick */
@@ -982,22 +986,21 @@ void App::initActions()
 
     m_controlPanicAction->setMenu(m_fadeAndStopMenu);
 
-    m_controlFullScreenAction = new QAction(QIcon(":/fullscreen.png"), tr("Toggle Full Screen"), this);
-    m_controlFullScreenAction->setCheckable(true);
-    m_controlFullScreenAction->setShortcut(QKeySequence("CTRL+F11"));
-    connect(m_controlFullScreenAction, SIGNAL(triggered(bool)), this, SLOT(slotControlFullScreen()));
-
     /* Help actions */
     m_helpIndexAction = new QAction(QIcon(":/help.png"), tr("&Index"), this);
     m_helpIndexAction->setShortcut(QKeySequence("SHIFT+F1"));
     connect(m_helpIndexAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpIndex()));
 
     m_helpAboutAction = new QAction(QIcon(":/qlcplus.png"), tr("&About QLC+"), this);
+    // macOS relocates this to the application menu ("About QLC+").
+    m_helpAboutAction->setMenuRole(QAction::AboutRole);
     connect(m_helpAboutAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpAbout()));
 
     /* Settings action */
     m_appSettingsAction = new QAction(QIcon(":/configure.png"), tr("&Settings"), this);
     m_appSettingsAction->setShortcut(QKeySequence(tr("CTRL+,", "Settings")));
+    // macOS relocates this to the application menu ("Preferences…").
+    m_appSettingsAction->setMenuRole(QAction::PreferencesRole);
     connect(m_appSettingsAction, SIGNAL(triggered(bool)), this, SLOT(slotAppSettings()));
 
     if (QLCFile::hasWindowManager() == false)
@@ -1016,52 +1019,112 @@ void App::initToolBar()
     m_toolbar->setAllowedAreas(Qt::TopToolBarArea);
     m_toolbar->setContextMenuPolicy(Qt::CustomContextMenu);
     addToolBar(m_toolbar);
-    m_toolbar->addAction(m_fileNewAction);
-    m_toolbar->addAction(m_fileOpenAction);
-    m_toolbar->addAction(m_fileSaveAction);
-    m_toolbar->addAction(m_fileSaveAsAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_controlMonitorAction);
-    m_toolbar->addAction(m_addressToolAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_controlFullScreenAction);
-    m_toolbar->addAction(m_appSettingsAction);
-    m_toolbar->addAction(m_helpIndexAction);
-    m_toolbar->addAction(m_helpAboutAction);
-    if (QLCFile::hasWindowManager() == false)
-        m_toolbar->addAction(m_quitAction);
 
-    /* Create an empty widget between help items to flush them to the right */
-    QWidget* widget = new QWidget(this);
-    widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    m_toolbar->addWidget(widget);
-    m_toolbar->addAction(m_dumpDmxAction);
-    m_toolbar->addAction(m_liveEditAction);
-    m_toolbar->addAction(m_liveEditVirtualConsoleAction);
-    m_toolbar->addAction(m_captureLiveEditsAction);
-    m_toolbar->addAction(m_captureStoreAction);
-    m_toolbar->addAction(m_captureUndoAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_controlPanicAction);
+    // Native-first layout: the full command set lives in the menu bar (see
+    // initMenuBar). The toolbar keeps only the handful of live show controls
+    // you reach for mid-show. A flexible spacer flushes them to the right so
+    // they sit away from the workspace tabs, where the Operate button has
+    // always been.
+    QWidget* spacer = new QWidget(this);
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_toolbar->addWidget(spacer);
+
+    m_toolbar->addAction(m_controlPanicAction);   // Stop ALL (hold = fade menu)
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_controlBlackoutAction);
     m_toolbar->addAction(m_controlBlindAction);
-    m_toolbar->addAction(m_showLockAction);
-    m_toolbar->addAction(m_followMtcAction);
-    m_toolbar->addAction(m_timelineSuspendAction);
-    m_toolbar->addAction(m_lastLookAction);
-    m_toolbar->addAction(m_clearLastLookAction);
     m_toolbar->addSeparator();
-    m_toolbar->addAction(m_modeToggleAction);
+    m_toolbar->addAction(m_modeToggleAction);      // Design/Operate (rightmost)
 
-    QToolButton* btn = qobject_cast<QToolButton*> (m_toolbar->widgetForAction(m_fileOpenAction));
-    Q_ASSERT(btn != NULL);
-    btn->setPopupMode(QToolButton::DelayedPopup);
+    QToolButton* btn = qobject_cast<QToolButton*>(m_toolbar->widgetForAction(m_controlPanicAction));
+    if (btn != NULL)
+        btn->setPopupMode(QToolButton::DelayedPopup); // click = stop, hold = fade menu
+}
+
+void App::initMenuBar()
+{
+    QMenuBar* mb = menuBar();
+
+    /* ---- File ---- */
+    QMenu* fileMenu = mb->addMenu(tr("&File"));
+    fileMenu->addAction(m_fileNewAction);
+    fileMenu->addAction(m_fileOpenAction);
+    // Recent-files list becomes an "Open Recent" submenu (kept up to date by
+    // updateFileOpenMenu(); no longer attached to the removed toolbar button).
     updateFileOpenMenu("");
+    if (m_fileOpenMenu != NULL)
+    {
+        m_fileOpenMenu->setTitle(tr("Open &Recent"));
+        fileMenu->addMenu(m_fileOpenMenu);
+    }
+    fileMenu->addSeparator();
+    fileMenu->addAction(m_fileSaveAction);
+    fileMenu->addAction(m_fileSaveAsAction);
+    fileMenu->addSeparator();
+    fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS
+    // Quit: m_quitAction only exists when there's no window manager (kiosk/RPi).
+    // On macOS it's NULL and, now that we own the menu bar, Qt no longer supplies
+    // a working Quit — so provide one with QuitRole (→ app menu) + the standard
+    // shortcut (⌘Q on macOS, Ctrl+Q elsewhere).
+    {
+        QAction *quitAction = m_quitAction;
+        if (quitAction == NULL)
+        {
+            quitAction = new QAction(tr("Quit QLC+"), this);
+            connect(quitAction, SIGNAL(triggered(bool)), this, SLOT(close()));
+        }
+        quitAction->setMenuRole(QAction::QuitRole);
+        quitAction->setShortcut(QKeySequence::Quit);
+        fileMenu->addAction(quitAction);
+    }
 
-    btn = qobject_cast<QToolButton*> (m_toolbar->widgetForAction(m_controlPanicAction));
-    Q_ASSERT(btn != NULL);
-    btn->setPopupMode(QToolButton::DelayedPopup);
+    /* ---- View: tools + jump to a workspace tab ---- */
+    QMenu* viewMenu = mb->addMenu(tr("&View"));
+    viewMenu->addAction(m_controlMonitorAction);
+    viewMenu->addAction(m_addressToolAction);
+    viewMenu->addSeparator();
+    // Jump-to-tab entries, taken from the real tab list (m_tabOriginals keeps
+    // each tab's label/icon regardless of the icon-only/text-only display mode).
+    for (int i = 0; i < m_tabOriginals.size(); i++)
+    {
+        QAction* jump = viewMenu->addAction(m_tabOriginals.at(i).second,
+                                            m_tabOriginals.at(i).first);
+        // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
+        // the Function Manager's "add function" shortcuts.
+        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg(i + 1)));
+        connect(jump, &QAction::triggered, this, [this, i]() {
+            if (i < m_tab->count())
+                m_tab->setCurrentIndex(i);
+        });
+    }
+
+    /* ---- Control: playback + live editing ---- */
+    QMenu* ctrlMenu = mb->addMenu(tr("&Control"));
+    ctrlMenu->addAction(m_modeToggleAction);
+    ctrlMenu->addSeparator();
+    ctrlMenu->addAction(m_controlBlackoutAction);
+    ctrlMenu->addAction(m_controlBlindAction);
+    ctrlMenu->addAction(m_showLockAction);
+    ctrlMenu->addSeparator();
+    ctrlMenu->addAction(m_controlPanicAction);      // fade-and-stop options as submenu
+    ctrlMenu->addAction(m_dumpDmxAction);
+    ctrlMenu->addSeparator();
+    QMenu* liveMenu = ctrlMenu->addMenu(tr("&Live Edit"));
+    liveMenu->addAction(m_liveEditAction);
+    liveMenu->addAction(m_liveEditVirtualConsoleAction);
+    liveMenu->addAction(m_captureLiveEditsAction);
+    liveMenu->addAction(m_captureStoreAction);
+    liveMenu->addAction(m_captureUndoAction);
+    ctrlMenu->addSeparator();
+    ctrlMenu->addAction(m_followMtcAction);
+    ctrlMenu->addAction(m_timelineSuspendAction);
+    ctrlMenu->addAction(m_lastLookAction);
+    ctrlMenu->addAction(m_clearLastLookAction);
+
+    /* ---- Help ---- */
+    QMenu* helpMenu = mb->addMenu(tr("&Help"));
+    helpMenu->addAction(m_helpIndexAction);
+    helpMenu->addAction(m_helpAboutAction);         // → app menu (About) on macOS
 }
 
 /*****************************************************************************
@@ -1192,9 +1255,9 @@ void App::updateFileOpenMenu(QString addRecent)
         }
     }
 
-    // Set the recent files menu to the file open action
-    if (menuRecentList.isEmpty() == false)
-        m_fileOpenAction->setMenu(m_fileOpenMenu);
+    // The recent files live in the File ▸ Open Recent submenu (added in
+    // initMenuBar). Disable that submenu when there are no recent files.
+    m_fileOpenMenu->setEnabled(menuRecentList.isEmpty() == false);
 }
 
 bool App::slotFileNew()
@@ -1681,42 +1744,6 @@ void App::slotReattachContext()
 
     context->setParent(m_tab);
     m_tab->insertTab(tabIndex, context, tabIcon, tabLabel);
-}
-
-void App::slotControlFullScreen()
-{
-    static int wstate = windowState();
-
-    if (windowState() & Qt::WindowFullScreen)
-    {
-        if (wstate & Qt::WindowMaximized)
-            showMaximized();
-        else
-            showNormal();
-        wstate = windowState();
-    }
-    else
-    {
-        wstate = windowState();
-        showFullScreen();
-
-        // In case slotControlFullScreen() is called programmatically (from main.cpp)
-        if (m_controlFullScreenAction->isChecked() == false)
-            m_controlFullScreenAction->setChecked(true);
-    }
-}
-
-void App::slotControlFullScreen(bool usingGeometry)
-{
-    if (usingGeometry == true)
-    {
-        QScreen *screen = QGuiApplication::screens().first();
-        setGeometry(screen->geometry());
-    }
-    else
-    {
-        slotControlFullScreen();
-    }
 }
 
 /*****************************************************************************
@@ -2281,10 +2308,14 @@ void App::applyTabLabelMode()
             m_toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
             break;
         default:
-            m_toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            m_toolbar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
             break;
         }
     }
+
+    // Keep the 2D monitor window's toolbars in sync if it is open.
+    if (Monitor::instance() != NULL)
+        Monitor::instance()->applyToolbarLabelMode();
 }
 
 QString App::autosaveFilePath() const

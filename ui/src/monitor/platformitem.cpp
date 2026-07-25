@@ -9,6 +9,7 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <QGraphicsSceneContextMenuEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsTextItem>
 #include <QStyleOptionGraphicsItem>
@@ -16,6 +17,7 @@
 #include <QTextOption>
 #include <QPainter>
 #include <QFont>
+#include <QMenu>
 
 #include "platformitem.h"
 #include "stageplatform.h"
@@ -35,7 +37,9 @@ PlatformItem::PlatformItem(StagePlatform *platform, Doc *doc,
 {
     setFlags(ItemIsMovable | ItemIsSelectable | ItemSendsGeometryChanges);
     setZValue(-1.0);   // below trusses and fixtures
-    setCursor(Qt::SizeAllCursor);
+    // Respect a persisted per-platform lock: a locked platform can't be dragged.
+    setFlag(ItemIsMovable, !platform->locked());
+    setCursor(platform->locked() ? Qt::ArrowCursor : Qt::SizeAllCursor);
     setPos(pxX, pxY);
 
     bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
@@ -87,6 +91,10 @@ void PlatformItem::paint(QPainter *painter,
     QColor border = fill;
     border.setAlpha(selected ? 255 : 180);
 
+    // A locked platform gets a red border so the frozen state reads at a glance.
+    if (m_platform->locked())
+        border = QColor(200, 60, 60, selected ? 255 : 200);
+
     painter->setPen(QPen(border, selected ? 2.0 : 1.5));
     painter->setBrush(QBrush(fill));
     painter->drawRect(QRectF(0, 0, m_pxW, m_pxD));
@@ -113,4 +121,22 @@ void PlatformItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
     emit itemDropped(this);
+}
+
+void PlatformItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+{
+    QMenu menu;
+    QAction *lockAct = menu.addAction(
+        m_platform->locked() ? tr("Unlock Platform") : tr("Lock Platform"));
+
+    if (menu.exec(event->screenPos()) == lockAct)
+    {
+        m_platform->setLocked(!m_platform->locked());
+        const bool canMove = !m_platform->locked();
+        setFlag(ItemIsMovable, canMove);
+        setCursor(canMove ? Qt::SizeAllCursor : Qt::ArrowCursor);
+        update();
+        if (m_doc)
+            m_doc->setModified();
+    }
 }

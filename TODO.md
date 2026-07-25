@@ -9,6 +9,255 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### 2026-07-21 — 2D Monitor: bar-on-truss REBUILT on a truss-local model *(BUILT — needs eyeball)*
+Reworked start-to-finish (the parentDrop/direction model kept surprising us).
+A bar is still a child truss, but its world geometry is DERIVED from five
+truss-LOCAL params, so placement reads the way you rig:
+- [x] **Model** — `Truss`: `parentOffset` (**Along**), `barFace`
+      (Bottom/Top/Downstage/Upstage/StageRight/StageLeft), `barStandoff`,
+      `barRun` (Along/Across/Drop). XML `BarFace/BarStandoff/BarRun` + migration
+      of old `ParentDrop`. Unit-tested `childBarFollowsParent` (face/run/standoff
+      derivation + follow + XML).
+- [x] **Derivation** — `recomputeChildTrusses` computes origin/direction/type:
+      `base = parent.positionAt(Along) + faceVector(Face)·(halfThick+Standoff)`;
+      Along→parallel, Across→boom toward the face, Drop→Vertical hanging; centred
+      on the attach point. "Across the front facing downstage" = Face=Downstage,
+      Run=Along.
+- [x] **Editor** — bar rows: Bar-on-truss · Along · Face · Stand-off · Run;
+      raw Type/Origin/Direction hidden for bars (derived). **Live preview** on the
+      canvas as controls change; **Cancel reverts** the mount + removes bars added
+      via the strip.
+- [x] **Strip** — extent is run-based (Along bar on a flat truss / Drop bar on a
+      tower = a segment; everything else = a point marker at its Along position).
+- [ ] **Eyeball**: Add Bar → set Face=Downstage → boom sits on the downstage face;
+      try Across / Drop; slide Along on the strip; move the parent → follows;
+      Cancel reverts; save/reload round-trips.
+
+### 2026-07-21 — 2D Monitor: horizontal bar on a truss (child-truss attach) *(superseded by the truss-local rebuild above)*
+A "bar" is modelled as a child truss hung on a parent truss, reusing the whole
+fixture-on-truss stack (binding, rendering, grouping, delete-cleanup).
+- [x] **Engine** — `Truss` gains `parentTrussId` / `parentOffset` / `parentDrop`
+      (+ `isChildBar`); XML `ParentTruss/ParentOffset/ParentDrop`.
+      `MonitorProperties::recomputeChildTrusses()` derives each bar's origin =
+      `parent.positionAt(parentOffset)` dropped in Z, iterated a few passes
+      (bar-on-bar) — called at end of `loadXML` and after any truss move/edit.
+      `removeTruss` detaches child bars (they become free trusses in place).
+      Unit-tested `childBarFollowsParent` (derive + move-follow + XML).
+- [x] **UI** — Truss editor: "Bar on truss" parent combo + "Position along
+      parent" + "Drop below attach"; on OK the origin is derived and the bar
+      joins the parent's group. `MonitorGraphicsView::followParentTrusses()`
+      re-derives + redraws bars + repositions their fixtures; called after edit
+      and (deferred via singleShot, to survive the drop) when a parent truss is
+      dragged.
+- [x] **Horizontal OR vertical bar run** — a child bar of type Horizontal is a
+      cross-bar/drop bar (runs in XY); type Vertical is a HANGING DROP that
+      extends DOWNWARD (`Truss::positionAt` + elevation render special-case
+      `isChildBar()`; free towers still extend up).
+- [x] **Place attach point on the Fixture-Placement strip** — the parent truss
+      editor's strip now shows child bars as amber draggable markers (offset =
+      the bar's parentOffset); dragging sets where the bar attaches. On the SIDE
+      elevation strip for vertical parent trusses. `TrussStripWidget::Slot`
+      gained `barTrussId`; the OK handler writes bar slots back to parentOffset +
+      recomputes.
+- [ ] **Eyeball**: attach a bar to a horizontal truss (drop below) and to a
+      vertical tower (boom); make a vertical hanging-drop bar; hang fixtures on
+      the bar; drag the bar along the parent's placement strip; move the parent →
+      bar + fixtures follow; delete the parent → bar detaches; save/reload.
+
+### 2026-07-21 — 2D Monitor: background image → placeable Image objects *(BUILT — needs eyeball)*
+Promoted the single global background image to first-class **Image objects** that
+live in layers/groups, with a per-image plane so each shows in the right view.
+- [x] **Engine** — `MonitorProperties::MonitorImage` registry (id/name/source/
+      plane/originX,Y,Z/width/height/layerId/groupId/locked) + `addImage`/
+      `setImage`/`removeImage`/`nextImageId`. XML `<MonitorImage>` round-trip
+      (unit-tested `imagesXmlRoundTrip`). Migration: an old global
+      `commonBackgroundImage` is converted to a Floor image spanning the grid on
+      load, then cleared.
+- [x] **Plane → view** — Floor shows in 2D Top (lies flat), FrontBackdrop in
+      Front elevation (X×Z at a Z height), SideBackdrop in Side (Y×Z). Only the
+      matching plane renders per POV (`updateImages`).
+- [x] **Item** — `MonitorImageItem` (ui/src/monitor) draws the pixmap scaled to
+      its rect; movable in-plane, selectable, lock tint; drop persists the new
+      origin (`slotImageMoved`, plane-aware inverse). z=0.5 (behind features,
+      above grid).
+- [x] **Integration** — images join the heterogeneous helpers (group/layer/
+      select/edit/itemFor), `refreshItemLayerState` (same lock-selectability
+      rule), Layers-tree leaves (kind "image", :/image.png icon, inline rename),
+      right-click Edit/Delete/Lock, double-click editor (name/plane/source/size/
+      X/Y/Z).
+- [x] **UI** — Add ▸ **Add Image** (file picker → editor). Removed the toolbar
+      "Set background image" button (colour button kept).
+- [ ] **Eyeball**: add a floor image (Top), a front backdrop (switch to Front),
+      move/resize/lock, group it, reload + save survive; confirm an old
+      workspace's background migrates to a floor image.
+
+### 2026-07-20 — 2D Monitor: explicit truss binding + fixture/truss context menus *(BUILT — needs eyeball)*
+Reworked truss↔fixture interaction so a truss no longer "grabs" overlapping
+fixtures, and made per-fixture operations reachable.
+- [x] **No more 2D drop-to-bind** — dropping an unbound fixture on a truss no
+      longer auto-binds it (removed the auto-grab in `slotFixtureMoved` + the
+      drop-target hover highlight). Already-bound fixtures still snap along the
+      truss and detach on escape (drag far off).
+- [x] **Explicit attach** — fixture right-click → **Attach to Truss ▶** (lists
+      trusses, checks the current one) OR drag the fixture onto a truss-anchored
+      group node in the Layers tree. Both route to
+      `MonitorGraphicsView::attachFixtureToTruss` (snaps to nearest point, joins
+      the truss group).
+- [x] **Detach** — fixture right-click → **Remove from Truss**
+      (`detachFixtureFromTruss`).
+- [x] **Double-click a truss-bound (or grouped) fixture** drills in (isolated
+      cyan highlight) so it can be slid along the truss or dragged clear to
+      detach. (Removed the old vertical-truss→open-editor shortcut.)
+- [x] **Truss right-click** → **Edit Truss…** / **Delete Truss** (new
+      `trussRemoveRequested` signal → `Monitor::slotTrussRemoveRequested`,
+      confirm + `removeTruss`).
+- [x] **Centre on truss** — a bound fixture's icon centres on the truss line
+      (not its top-left), across display / drag-snap / attach / editor
+      (`MonitorGraphicsView::halfIcon`).
+- [x] **2nd double-click opens the editor** (drill-in → act); right-click
+      fixture → **Edit Fixture… / Remove from View**; **Remove from Truss**
+      button in the editor's Rig Assignment.
+- [x] **Lock Position** on the truss & platform right-click menus (restored the
+      per-item lock the Edit/Delete menu had shadowed; OR-folds with layer lock).
+- [x] **Truss side** (under-hung / top-mounted / centred) — `FixtureRigProps::
+      trussMountSide` offsets the fixture's Z by ±half the truss thickness in
+      elevation views. XML `TrussSide` (written when ≠ under-hung).
+- [x] **Deck mount** — `FixtureRigProps::deckPlatformId` + `deckHeightOffset`: a
+      fixture stands ON a platform, keeping its free XY, Z = platform top +
+      offset (follows the platform). Editor "On platform (deck)" combo + height;
+      mutually exclusive with truss. XML `Deck`/`DeckH`; `removePlatform`
+      un-decks. `refreshRiserFixtures` repositions deck fixtures too.
+- [ ] **Eyeball**: no auto-bind on drop; attach via menu + tree; slide/detach;
+      right-click edit/delete/lock; centred-on-truss; truss-side Z in Front/Side;
+      deck-mount a light on a platform → sits at deck height.
+
+### 2026-07-20 — 2D Monitor: rulers + footer bar + settable 0,0 origin *(BUILT — needs eyeball)*
+Consolidate grid/measure controls into a **footer bar** in the 2D view and add
+fixed, toggleable **rulers** with a live coordinate readout and a user-settable
+0,0 origin.
+- [x] **Engine** — `MonitorProperties` stage origin (`stageOrigin()` QPointF in
+      metres) + `OriginX/OriginY` XML round-trip (written only when non-zero),
+      reset in `reset()`.
+- [x] **View** — `MonitorGraphicsView` ruler/readout API: `rulerTicks(horizontal)`
+      (viewport-pixel ticks, POV-aware Top X/Y, Front X/Z, Side Y/Z, origin-
+      offset), `viewportToReadout`, `axisName`, `unitSuffix`, `beginPickOrigin`
+      (click-to-place), `setStageOriginMetres`. `rulersChanged`/`cursorReadout`/
+      `originPicked` signals emitted on zoom/pan/resize/POV/metrics/move; mouse
+      tracking on; scrollbar pan wired.
+- [x] **UI** — `MonitorRuler` widget (top + left, dumb painter querying the view);
+      graphics view wrapped in a 2×2 grid (corner + rulers + canvas), `NoFrame`
+      so ticks line up with the viewport. Footer bar (`initGraphicsFooter`) holds
+      the moved **Size / Units / Subdiv / Snap** controls plus a **Rulers** toggle
+      (persisted), a **0,0** menu (click-to-place + Stage-centre / Downstage-centre
+      / Top-left presets), and a right-aligned live X/Y readout. Ruler cursor
+      markers via a viewport event filter.
+- [ ] **Eyeball**: open Monitor → 2D view; confirm rulers frame the canvas and
+      track zoom/pan, footer controls still drive the grid, live readout follows
+      the cursor, click-to-place + presets move 0,0, and origin survives a save.
+
+### 2026-07-20 — 2D Monitor: organizational Layers (OmniGraffle-style) *(BUILT — needs eyeball in Monitor window)*
+Layer approach for the 2D map: create layers, assign items to them, and
+hide/lock a whole layer at once ("generate and lock as we go"). New items land
+on the **active** layer.
+- [x] **Engine** — `MonitorProperties::MonitorLayer` registry (add/remove/
+      rename/reorder, visible/locked, active-layer; permanent Default id 0;
+      unknown ids resolve to Default). Per-item `layerId` on fixtures, trusses,
+      platforms, targets, power sources — all XML round-tripped, written only
+      when non-default. Unit-tested (`layers`, `layersXmlRoundTrip`).
+- [x] **View** — `MonitorGraphicsView::refreshItemLayerState()` folds the three
+      lock sources (global layout lock + per-item lock + layer lock) and layer
+      visibility onto every item; called from all rebuild paths + the global
+      lock toggle. `setSelectedItemsLayer` / `reassignLayerItems` helpers.
+- [x] **UI** — `MonitorLayersPanel` docked as the 2nd splitter pane; eye/lock/
+      rename/reorder rows, active = selected row, "Move selection here".
+      Toolbar toggle (hideable) with visibility persisted.
+- [ ] **Eyeball**: open Monitor → 2D view → toggle **Layers**; add a layer,
+      hide/lock it, confirm items on it hide/freeze and reload survives a save.
+
+### 2026-07-20 — 2D Monitor: group / ungroup + Layers TREE *(BUILT — needs eyeball)*
+Second half of the ask, then extended: groups are **named folders under their
+layer** in a full object tree, and **group-of-groups** (nesting) is supported.
+**Select-together, spatial-only.**
+- [x] **Engine** — per-item `groupId` (0=ungrouped) on all 5 item types +
+      `MonitorGroup` registry {id,name,layerId,parentGroupId} in
+      MonitorProperties (createGroup/ensureGroup/removeGroup/childGroups/
+      nextGroupId + `<MonitorGroup>` XML). Unit-tested (`groupRegistry`,
+      `groupsXmlRoundTrip` incl. nesting).
+- [x] **View** — nesting-aware: `topLevelGroup`, `groupIsUnder`,
+      `itemsUnderGroup` (recursive), select-together selects the whole outermost
+      subtree. `groupSelectedItems` combines ≥2 units (loose items + existing
+      top-level groups nest under a new parent), adopts the selection's DOMINANT
+      layer. `ungroupById`/`ungroupSelectedItems` dissolve one level (promote
+      children to parent). `ensureGroupRegistry` migrates anonymous first-cut
+      groups on load. Non-fixture move slots persist the whole selection.
+- [x] **UI** — Layers panel is now a **QTreeWidget**: Layer (eye/lock/rename) →
+      nested group folders → item leaves (fixtures/trusses/…). Click group =
+      select its items on map; double-click = rename; right-click = rename/
+      ungroup. Toolbar Group/Ungroup + Cmd/Ctrl+G / +Shift+G still there.
+      `mapStructureChanged` rebuilds the tree after canvas grouping.
+- [x] **Panel v2** (2026-07-20): left-docked, min-width 200, non-collapsible,
+      default-visible (key bump). 2-column tree (name | eye/lock). Inline rename
+      of layer/group via **Enter / F2 / double-click**. **Multi-select**
+      (ExtendedSelection) → right-click **Group selected** / **Move to layer →**.
+      Right-click **blank → New layer**. **Operate mode disables all editing**
+      (buttons/edit/eye/lock; `Doc::modeChanged`). In-panel **× hide** button
+      (unchecks the toolbar toggle).
+- [ ] **Eyeball**: rubber-band 2+ fixtures → Ctrl+G → new folder appears under
+      their layer; group two groups → nested folder; rename with Enter; multi-
+      select leaves → right-click Group/Move; save+reload holds.
+- [x] **Drag-to-reparent** (2026-07-20): drag item leaves / group folders onto a
+      layer or group in the tree to move/nest them (viewport drop intercepted,
+      cycle-guarded). View: `reparentToLayer/reparentToGroup/reparentGroupTo
+      Layer/reparentGroupToGroup` + `itemFor(kind,id)`.
+- [x] **Read-only elevation views** (2026-07-20 — NEEDS EYEBALL): toolbar
+      **View: Top / Front / Side**. `MonitorGraphicsView::ViewPOV` + `projectMm`
+      (Top=(X,Y); Front=(X,Z↑); Side=(Y,Z↑) off `floorPixelY()`). Every render
+      path branches only for non-Top so Top stays byte-identical: fixtures placed
+      by 3-D `fixtureRigPosition`; trusses drawn as projected end-to-end lines
+      (`TrussItem::setElevationMode` makes a vertical tower a segment, not the
+      top-down bullseye); platforms as front/side box faces; targets/power
+      projected. Elevation is read-only (`isElevation()` forces non-movable);
+      plot-lock + snap disabled. POV not persisted (always opens in Top).
+- [ ] **Eyeball elevation**: switch to Front — vertical trusses stand up with
+      fixtures at their heights; check platforms/targets/power placement. Likely
+      tuning: grid vertical extent uses `gridSize.height()` cells as ceiling;
+      aim-lines/FS-pin still computed top-view (may look off in elevation);
+      end-on trusses render as short stubs; h=0 platforms draw thin.
+- [ ] **Z-precedence in Top** (still open): now that `projectMm` exists, deriving
+      top-view `setZValue` from height is the natural follow-up.
+
+### 2026-07-20 — Truss auto-group + move-with-truss; fixture mounting *(NEEDS EYEBALL)*
+- [x] **#1a move-with-truss**: `slotTrussMoved` now repositions rigged fixtures
+      from `Truss::positionAt(offset)` (moveFixtureTo + emit fixtureMoved to
+      persist). Dragging a truss carries its fixtures.
+- [x] **#1b truss auto-group**: `ensureTrussGroup(trussId)` creates a group named
+      for the truss (on its layer) and pulls in still-ungrouped bound fixtures;
+      called from `ensureGroupRegistry` (load migration) and on drop-onto-truss
+      in slotFixtureMoved. KNOWN: ungrouping a truss then reloading re-groups it.
+- [x] **#2 fixture mounting**: right-click a fixture → **Set mounting height…**
+      (Z, metres) and **Heads: stack vertically (riser strip)**. Z now persists
+      in the widgets build (was `#ifdef QMLUI`-gated); vertical flag =
+      `MonitorProperties::VerticalStripFlag` (XML `VertStrip`), swaps the box
+      aspect in `updateFixture` so heads lay out in a column. Elevation places
+      the fixture at its mounting height. Unit-tested (Z + flag round-trip).
+- [x] **Layer "disappears" on move — FIXED**: `reload()` preserved scroll pos;
+      `setCurrentItem(active)` was scrolling the target layer out of view.
+- [x] **Fix (drag fixtures onto truss didn't group)**: already-grouped fixtures
+      weren't pulled into the truss group. Now newly-bound fixtures are FORCED
+      into the truss's group (tracked via `newlyBoundFx` in slotFixtureMoved),
+      overriding any prior group.
+- [x] **Targets excluded from the tree/grouping**: they're dynamic aim points
+      that move across levels during a show — omitted from `gatherItems`.
+- [x] **Fix (layer reorder made it disappear)**: `reorderLayer` renumbers ALL
+      layer orders 0..n-1 (no ties) + `selectLayerNode` scrolls the moved layer
+      back into view (setCurrentItem(active) had scrolled it off).
+- [ ] **Eyeball**: drag ungrouped/grouped fixtures onto a truss → they join the
+      truss folder; reorder layers → stays visible; Front view riser strips.
+- [ ] **#3 native beams** — deferred at Branson's request ("not yet").
+- [ ] **Known limits**: MIXED-type group drag persists only the grabbed type +
+      all fixtures; no group bbox outline on canvas; tree re-expands on reload
+      (no collapse memory); no drag-drop reparent yet.
+
 ### 2026-07-20 — Control Map: static MIDI mapping (no VC widget) *(Phase 0 BUILT — needs hardware test)*
 Bind hardware MIDI controls straight to actions with **no Virtual Console
 widget** taking up screen space. Full design + phased plan in `CONTROLMAP.md`.
@@ -31,6 +280,44 @@ widget** taking up screen space. Full design + phased plan in `CONTROLMAP.md`.
       *This is the old "MIDI-mapped look recall" backlog item.*
 - [ ] **Phase 5** — feedback polish (resend-on-connect, Note-Off semantics).
 - [ ] **Phase 6** — banking/pages *(decision-gated; reserve `page` in Phase 1)*.
+
+### 2026-07-20 — Smart name increment + fix Enter-to-rename *(BUILT — needs GUI test)*
+- [x] **Fix in-place fixture rename** — Return/Enter/F2 on a selected fixture now
+      opens the inline editor. Bug: `QTreeWidgetItem::setFlags()` emits
+      `itemChanged()` synchronously, so arming `ItemIsEditable` re-entered
+      `slotItemChanged`, disarmed the row, and made `editItem()` a no-op. Fixed by
+      `blockSignals()` around the arming (`ui/src/fixturetreewidget.cpp`).
+- [x] **Reusable unique-name helper** — `Doc::nextUniqueName(name, isTaken)`
+      (engine/src/doc.cpp): keeps `name` if free, else bumps the rightmost digit run
+      preserving zero-pad (`US #3`→`US #4`, `0.9.1-Startup`→`0.9.2-Startup`), falls
+      back to `" 2"`. `nextDuplicateName()` now delegates to it.
+- [x] **Fixture multi-add** continues past existing names and never collides
+      (accumulating used-name set; `ui/src/fixturemanager.cpp`). Per decision:
+      single typed names kept verbatim; only multi-add + duplicate auto-number.
+- [x] **Add Fixture dialog** prepopulates the Name field with a non-colliding
+      default (`nextUniqueName` vs existing fixtures) and shows a live orange
+      "name already exists" warning under the field for a single add (hidden for
+      multi-add, which auto-numbers). `ui/src/addfixture.{ui,h,cpp}`.
+- [x] **Test infra**: `ui/test/CMakeLists.txt` now defines `QLC_TEST_RESOURCE_ROOT`
+      (mirrors engine/test) so fixture-dependent UI tests run out-of-tree instead of
+      aborting at `loadMap()`. addfixture_test now 9/0.
+- [x] **Multi-add numbered base**: typing a name that already ends in a number
+      ("US #4") now INCREMENTS it (US #4, US #5, …) instead of bolting on a second
+      counter ("US #4 #1"). Unnumbered names keep the "#NN" suffix. Collision alert
+      now also fires for multi-add (informational: "numbered past it").
+
+### 2026-07-20 — 2D Monitor: per-item lock for stage features *(BUILT — needs GUI test)*
+Right-click → Lock/Unlock, mirroring the existing Truss lock. Locked items can't be
+dragged and draw with a red border. Persisted as a `Locked="true"` XML attribute.
+- [x] **StagePlatform** — `locked()`/`setLocked()` + XML; `PlatformItem` context menu,
+      movability gate, red border tint.
+- [x] **StageTarget** — same, `TargetItem` (red crosshair when locked).
+- [x] **PowerSource** — `PowerSource::locked` + XML; `PowerSourceItem` emits
+      `lockToggleRequested`, `MonitorGraphicsView::slotPowerSourceLockToggled`
+      toggles the model + rebuilds (item has no Doc/model pointer, so it routes
+      through the view like `itemDropped`).
+- [ ] Fixtures themselves are NOT per-item lockable yet (only the global layout
+      lock). Add if wanted, mirroring this pattern on MonitorFixtureItem.
 
 ### 2026-07-19 — Effect engine: sharing, authoring, EFX-parity scripts *(BUILT — needs GUI test)*
 Clarification: the scriptable effect engine was already built (EffectScriptRunner /

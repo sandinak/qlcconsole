@@ -80,10 +80,14 @@ add_library(${module_name}
     monitor/monitorfixtureitem.cpp monitor/monitorfixtureitem.h
     monitor/monitorfixturepropertieseditor.cpp monitor/monitorfixturepropertieseditor.h monitor/monitorfixturepropertieseditor.ui
     monitor/monitorgraphicsview.cpp monitor/monitorgraphicsview.h
+    monitor/monitorlayerspanel.cpp monitor/monitorlayerspanel.h
+    monitor/monitorruler.cpp monitor/monitorruler.h
+    monitor/monitorimageitem.cpp monitor/monitorimageitem.h
     monitor/monitorlayout.cpp monitor/monitorlayout.h
     monitor/trussitem.cpp monitor/trussitem.h
     monitor/platformitem.cpp monitor/platformitem.h
     monitor/powersourceitem.cpp monitor/powersourceitem.h
+    monitor/riserfaceeditor.cpp monitor/riserfaceeditor.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h

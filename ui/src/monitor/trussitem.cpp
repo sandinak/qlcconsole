@@ -112,7 +112,7 @@ void TrussItem::setHighlighted(bool highlighted)
 QRectF TrussItem::boundingRect() const
 {
     const qreal pad = 2.0;
-    if (m_truss->type() == Truss::Vertical)
+    if (m_truss->type() == Truss::Vertical && !m_elevation)
     {
         qreal r = m_pxWid / 2.0;
         return QRectF(-r - pad, -r - pad, m_pxWid + 2*pad, m_pxWid + 2*pad);
@@ -144,15 +144,16 @@ void TrussItem::paint(QPainter *painter,
     QPen innerPen(diagLine, 1.0);
     innerPen.setStyle(Qt::SolidLine);
 
-    if (m_truss->type() == Truss::Vertical)
+    if (m_truss->type() == Truss::Vertical && !m_elevation)
     {
-        // Tower footprint: filled circle with crosshairs
+        // Tower footprint: a SQUARE box-truss cross-section (top-down) with
+        // crosshairs — box truss reads as a square, not a circle.
         qreal r = m_pxWid / 2.0;
-        QBrush circleFill = m_highlighted ? QBrush(QColor(0, 120, 255, 80)) : QBrush(chordFill);
-        QPen  circlePen   = m_highlighted ? QPen(QColor(0, 160, 255, 200), 3.0) : outerPen;
-        painter->setPen(circlePen);
-        painter->setBrush(circleFill);
-        painter->drawEllipse(QPointF(0, 0), r, r);
+        QBrush boxFill = m_highlighted ? QBrush(QColor(0, 120, 255, 80)) : QBrush(chordFill);
+        QPen   boxPen  = m_highlighted ? QPen(QColor(0, 160, 255, 200), 3.0) : outerPen;
+        painter->setPen(boxPen);
+        painter->setBrush(boxFill);
+        painter->drawRect(QRectF(-r, -r, m_pxWid, m_pxWid));
         painter->setPen(innerPen);
         painter->drawLine(QPointF(-r * 0.8, 0), QPointF(r * 0.8, 0));
         painter->drawLine(QPointF(0, -r * 0.8), QPointF(0, r * 0.8));

@@ -31,14 +31,17 @@
 #include "monitorproperties.h"
 
 class MonitorGraphicsView;
+class MonitorLayersPanel;
 class MonitorFixture;
 class MonitorLayout;
 class QScrollArea;
 class QComboBox;
 class QSplitter;
 class QToolBar;
+class QToolButton;
 class QSpinBox;
 class QAction;
+class QLabel;
 class Fixture;
 class Monitor;
 class QTimer;
@@ -62,6 +65,12 @@ public:
 
     /** Create or show Monitor */
     static void createAndShow(QWidget* parent, Doc* doc);
+
+    /** Apply the workspace tab-label mode (icons only / text only / text under
+     *  icon) to the monitor's own toolbars, so this window matches the main
+     *  window. Reads the same "workspace/tabLabelMode" setting; called at
+     *  toolbar build and live from App when the preference changes. */
+    void applyToolbarLabelMode();
 
     /** Normal public destructor */
     ~Monitor();
@@ -95,6 +104,9 @@ protected:
 
     /** Initialize the monitor view in 2D graphics mode */
     void initGraphicsView();
+
+    /** Track the cursor over the canvas viewport to drive the ruler markers. */
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
     /** Initialize settings & fill fixtures */
     void fillGraphicsView();
@@ -222,6 +234,19 @@ protected slots:
     /** Slot called when the layout lock state is toggled */
     void slotLockToggled(bool locked);
 
+    /** Slot called when the Layers-panel toolbar toggle is clicked */
+    void slotToggleLayersPanel(bool show);
+
+    /** Slot called when the point-of-view combo (Top/Front/Side) changes */
+    void slotPOVChanged(int index);
+
+    /** Group / ungroup the current 2D-map selection. */
+    void slotGroupItems();
+    void slotUngroupItems();
+
+    /** Enable/disable the Group/Ungroup actions for the current selection. */
+    void slotMapSelectionChanged();
+
     /** Update the Plot/Locked toggle's icon, label and tooltip for the given
      *  state. "Edit Plot" (unlocked) vs "Plot Locked" (frozen for the show). */
     void updatePlotLockAppearance(bool locked);
@@ -247,6 +272,11 @@ protected slots:
     /** Open the truss-edit form for a specific truss ID (from double-click). */
     void slotEditTruss(quint32 tid);
 
+    /** Create a cross-bar hung on @p parentId at @p offset (metres; <0 = mid-
+     *  span), attached + grouped. Returns the new bar's id (invalid on failure).
+     *  Does NOT redraw/open an editor — callers decide. */
+    quint32 createBarOnTruss(quint32 parentId, float offset);
+
     /** Remove whichever fixture or truss is currently selected in the view. */
     void slotRemoveSelected();
 
@@ -258,6 +288,12 @@ protected slots:
 
     /** Open truss edit dialog on double-click. */
     void slotTrussDoubleClicked(quint32 tid);
+    void slotTrussRemoveRequested(quint32 tid);
+    void slotAddBarToTruss(quint32 parentId, float offset);
+    void slotPlatformRemoveRequested(quint32 pid);
+    void slotAddImage();
+    void slotEditImage(quint32 id);
+    void slotImageRemoveRequested(quint32 id);
 
     /** Show the Add context menu at the given scene position. */
     void slotCanvasContextMenu(QPointF scenePos);
@@ -303,24 +339,49 @@ protected slots:
 
 protected:
     QToolBar* m_graphicsToolBar;
+    /** Custom toolbar buttons (added via addWidget, so the toolbar's button
+     *  style doesn't reach them) — restyled explicitly in applyToolbarLabelMode(). */
+    QToolButton* m_addBtn = nullptr;
+    QToolButton* m_moreBtn = nullptr;
     QSplitter* m_splitter;
     /** Scene-space position of the last canvas right-click; used to place new
      *  fixtures/trusses at the cursor location. */
     QPointF m_pendingAddScenePos;
     MonitorGraphicsView* m_graphicsView;
+    MonitorLayersPanel* m_layersPanel;
     QSpinBox* m_gridWSpin;
     QSpinBox *m_gridHSpin;
     QComboBox *m_unitsCombo;
     QSpinBox *m_gridSubdivSpin;
     QComboBox *m_snapCombo;
-    QComboBox *m_viewCombo;
+    int m_mapView = 0;       ///< current 2D-map overlay (0=Normal/1=Power/2=Stage; was m_viewCombo)
+    QComboBox *m_povCombo;   ///< Top / Front / Side point of view
+
+    /* Footer measurement bar (built in initGraphicsFooter). */
+    class MonitorRuler *m_hRuler = nullptr;  ///< top ruler
+    class MonitorRuler *m_vRuler = nullptr;  ///< left ruler
+    QWidget   *m_rulerCorner = nullptr;      ///< top-left corner filler
+    QLabel    *m_readoutLabel = nullptr;     ///< live X/Y coordinate readout
+    QLabel    *m_modeLabel = nullptr;        ///< prominent current-mode chip
+    /** Refresh the footer mode chip from the POV / overlay / Build state. */
+    void updateModeIndicator();
+    QAction   *m_rulersAction = nullptr;     ///< show/hide rulers toggle
+    /** Build the footer bar (grid/units/snap controls + rulers toggle + origin
+     *  + live readout) and the ruler widgets around the graphics view. */
+    void initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea);
+    /** Show/hide the ruler strips (persisted). */
+    void setRulersVisible(bool on);
 
     /** 2D-map view overlays (see slotMapViewChanged). */
-    enum MapView { ViewNormal = 0, ViewPower = 1 };
+    enum MapView { ViewNormal = 0, ViewPower = 1, ViewStage = 2 };
     /** Apply a view overlay: tint/annotate every placed fixture. */
     void applyMapView(int view);
     QAction *m_labelsAction;
+    QAction *m_buildAction;
     QAction *m_lockAction;
+    QAction *m_layersAction;
+    QAction *m_groupAction;
+    QAction *m_ungroupAction;
     QAction *m_addPlatformAction;
     QAction *m_pasteAction;
 

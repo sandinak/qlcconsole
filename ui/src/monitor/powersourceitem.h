@@ -23,6 +23,7 @@
 #include <QList>
 
 class QGraphicsSceneMouseEvent;
+class QGraphicsSceneContextMenuEvent;
 
 /** \addtogroup ui_mon DMX Monitor
  * @{
@@ -36,10 +37,11 @@ class PowerSourceItem : public QObject, public QGraphicsItem
 public:
     /** @param sourceIndex index into PowerDistribution::sources() (the model
      *         has no stable id; the view keeps items in sync by index). */
-    PowerSourceItem(int sourceIndex, const QString &name,
+    PowerSourceItem(int sourceIndex, const QString &name, bool locked = false,
                     QGraphicsItem *parent = nullptr);
 
     int sourceIndex() const { return m_index; }
+    bool locked() const { return m_locked; }
 
     /** Enable/disable dragging (view calls this on lock change). */
     void setMovable(bool movable);
@@ -54,14 +56,20 @@ public:
 
 protected:
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+    void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
 
 signals:
     /** Emitted when the user finishes a drag so the view can persist the move. */
     void itemDropped(PowerSourceItem *item);
 
+    /** Emitted when the user toggles Lock/Unlock from the context menu. The view
+     *  persists the new state to PowerDistribution and rebuilds the item. */
+    void lockToggleRequested(int sourceIndex);
+
 private:
     int           m_index;
     QString       m_name;
+    bool          m_locked;
     QList<QColor> m_circuitColors;   ///< power-view: this source's circuit colours
 };
 

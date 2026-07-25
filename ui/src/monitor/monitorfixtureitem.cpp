@@ -31,6 +31,7 @@
 
 #include <QGraphicsSceneContextMenuEvent>
 #include <QMenu>
+#include <QInputDialog>
 
 #include <QPixmap>
 
@@ -740,10 +741,19 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     if (m_highlighted)
         defColor = QColor(255, 140, 0);   // orange — externally highlighted
     else if (this->isSelected() == true)
-        defColor = Qt::yellow;
+        defColor = (m_isolated && this->isSelected()) ? QColor(0, 220, 255) // cyan — drilled-in
+                                                      : Qt::yellow;
 
     {
         QPen bodyPen(defColor, 0); // cosmetic: 1px border at any zoom level
+        // Isolated (drilled-in) selection: a bright dashed border so it's clear
+        // we've grabbed this ONE sub-fixture, not the whole group.
+        if (m_isolated && this->isSelected())
+        {
+            bodyPen.setWidthF(2.0);
+            bodyPen.setStyle(Qt::DashLine);
+            bodyPen.setCosmetic(true);
+        }
         painter->setPen(bodyPen);
     }
 
@@ -871,6 +881,11 @@ void MonitorFixtureItem::setSnap(int divisions, qreal cellPixels, qreal xOffset,
 
 QVariant MonitorFixtureItem::itemChange(GraphicsItemChange change, const QVariant &value)
 {
+    // A drill-in (isolated) selection is transient: as soon as this fixture is
+    // deselected, drop the isolated state so it doesn't linger.
+    if (change == ItemSelectedHasChanged && !value.toBool())
+        m_isolated = false;
+
     // Snapping is intentionally NOT done per-item here: quantising each
     // selected fixture independently during a drag scrambles a multi-
     // selection's relative layout. The view snaps the whole move as a group on
@@ -983,6 +998,15 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         removeAct = menu.addAction(tr("Remove from Truss \"%1\"").arg(trussName));
     }
 
+    // Mounting height (Z) — used by the elevation views.
+    QAction *heightAct = NULL;
+    if (m_editable)
+    {
+        const QVector3D fp = props->fixturePosition(m_fid, 0, 0);
+        heightAct = menu.addAction(tr("Set mounting height… (%1 m)")
+                                   .arg(double(fp.z()) / 1000.0, 0, 'f', 2));
+    }
+
     if (menu.isEmpty())
     {
         event->ignore();
@@ -1006,7 +1030,22 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     else if (chosen == faceSR) { m_facingDeg = 90.0f;  commitFacing(); update(); }
     else if (chosen == faceUS) { m_facingDeg = 180.0f; commitFacing(); update(); }
     else if (chosen == faceSL) { m_facingDeg = 270.0f; commitFacing(); update(); }
-
+    else if (chosen == heightAct)
+    {
+        const QVector3D fp = props->fixturePosition(m_fid, 0, 0);
+        bool ok = false;
+        const double h = QInputDialog::getDouble(nullptr, tr("Mounting Height"),
+                             tr("Height above the floor (metres):"),
+                             double(fp.z()) / 1000.0, 0.0, 100.0, 2, &ok);
+        if (ok)
+        {
+            QVector3D np = fp;
+            np.setZ(float(h * 1000.0));
+            props->setFixturePosition(m_fid, 0, 0, np);
+            m_doc->setModified();
+            emit mountingChanged(m_fid);
+        }
+    }
     event->accept();
 }
 

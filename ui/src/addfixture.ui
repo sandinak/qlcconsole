@@ -53,11 +53,25 @@
        </widget>
       </item>
       <item row="0" column="2">
-       <widget class="QLineEdit" name="m_nameEdit">
-        <property name="toolTip">
-         <string>A friendly name for the new fixture</string>
+       <layout class="QVBoxLayout" name="m_nameLayout">
+        <property name="spacing">
+         <number>2</number>
         </property>
-       </widget>
+        <item>
+         <widget class="QLineEdit" name="m_nameEdit">
+          <property name="toolTip">
+           <string>A friendly name for the new fixture</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="m_nameErrorLabel">
+          <property name="text">
+           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; color:#e08000;&quot;&gt;A fixture with this name already exists.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item row="1" column="0">
        <widget class="QLabel" name="m_modeLabel">

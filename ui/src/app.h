@@ -170,6 +170,10 @@ public slots:
 private:
     void initActions();
     void initToolBar();
+    /** Build the native (macOS top-of-screen) menu bar: File/View/Control/Help.
+     *  About/Preferences/Quit are relocated to the application menu by Qt via
+     *  their QAction::menuRole on macOS. */
+    void initMenuBar();
     bool handleFileError(QFile::FileError error);
     bool saveModifiedDoc(const QString & title, const QString & message);
 
@@ -181,8 +185,6 @@ public slots:
 
     void slotControlMonitor();
     void slotAddressTool();
-    void slotControlFullScreen();
-    void slotControlFullScreen(bool usingGeometry);
     void slotControlBlackout();
     /** Toggle global Blind (output inhibit) from the main toolbar. */
     void slotControlBlind(bool checked);
@@ -230,7 +232,6 @@ private:
     QAction* m_modeToggleAction;
     QAction* m_controlMonitorAction;
     QAction* m_addressToolAction;
-    QAction* m_controlFullScreenAction;
     QAction* m_controlBlackoutAction;
     QAction* m_controlBlindAction;
     QAction* m_showLockAction;

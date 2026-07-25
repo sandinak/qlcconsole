@@ -21,6 +21,7 @@
 
 class QGraphicsTextItem;
 class QGraphicsSceneMouseEvent;
+class QGraphicsSceneContextMenuEvent;
 class StagePlatform;
 class Doc;
 
@@ -59,6 +60,7 @@ public:
 
 protected:
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+    void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
 
 signals:
     /** Emitted when the user finishes a drag so the view can persist the move. */

@@ -30,6 +30,14 @@ private slots:
     void defaults();
     void fixtureItems();
     void genericItems();
+    void layers();
+    void layersXmlRoundTrip();
+    void groupRegistry();
+    void groupsXmlRoundTrip();
+    void riserMount();
+    void stageOrigin();
+    void imagesXmlRoundTrip();
+    void childBarFollowsParent();
     void reset();
 };
 

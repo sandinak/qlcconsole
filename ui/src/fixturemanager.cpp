@@ -34,6 +34,8 @@
 #include <QToolBar>
 #include <QAction>
 #include <QString>
+#include <QSet>
+#include <QRegularExpression>
 #include <QDebug>
 #include <QIcon>
 #include <QMenu>
@@ -1287,15 +1289,43 @@ void FixtureManager::addFixture()
             name = tr("Generic Dimmer");
     }
 
+    /* Names already in use, so a multi-add continues past existing fixtures
+       and never collides. Seeded once and grown as we assign each name.
+       (A single add keeps the typed name verbatim — duplicates allowed.) */
+    QSet<QString> usedNames;
+    bool nameHasTrailingNumber = false;
+    if (af.amount() > 1)
+    {
+        for (Fixture *ef : m_doc->fixtures())
+            if (ef != NULL)
+                usedNames.insert(ef->name());
+        // If the typed name already ends in a number ("US #4"), treat it as the
+        // start of a run and INCREMENT that number (US #4, US #5, …) rather than
+        // bolting a second "#NN" counter onto it ("US #4 #1", "US #4 #2").
+        nameHasTrailingNumber =
+            QRegularExpression(QStringLiteral("\\d+$")).match(name.trimmed()).hasMatch();
+    }
+
     /* Add the rest (if any) WITH address gap */
     for (int i = 0; i < af.amount(); i++)
     {
         QString modname;
 
-        /* If we're adding more than one fixture,
-           append a number to the end of the name */
+        /* If we're adding more than one fixture, derive a unique name */
         if (af.amount() > 1)
-            modname = QString("%1 #%2").arg(name).arg(i + 1, AppUtil::digits(af.amount()), 10, QChar('0'));
+        {
+            // Numbered base: hand nextUniqueName the SAME name each pass — the
+            // accumulating usedNames set makes it land on the next free number
+            // (US #4 → US #5 → US #6). Unnumbered base: classic "Name #NN".
+            const QString base = nameHasTrailingNumber
+                ? name
+                : QString("%1 #%2").arg(name)
+                      .arg(i + 1, AppUtil::digits(af.amount()), 10, QChar('0'));
+            modname = Doc::nextUniqueName(base, [&usedNames](const QString &c) {
+                return usedNames.contains(c);
+            });
+            usedNames.insert(modname);
+        }
         else
             modname = name;
 

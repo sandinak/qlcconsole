@@ -9,22 +9,25 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <QGraphicsSceneContextMenuEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QStyleOptionGraphicsItem>
 #include <QPainter>
 #include <QFont>
+#include <QMenu>
 
 #include "powersourceitem.h"
 
 #define PSI_W 64.0
 #define PSI_H 26.0
 
-PowerSourceItem::PowerSourceItem(int sourceIndex, const QString &name,
+PowerSourceItem::PowerSourceItem(int sourceIndex, const QString &name, bool locked,
                                  QGraphicsItem *parent)
     : QObject(nullptr)
     , QGraphicsItem(parent)
     , m_index(sourceIndex)
     , m_name(name)
+    , m_locked(locked)
 {
     setFlags(ItemIsMovable | ItemIsSelectable | ItemSendsGeometryChanges);
     setZValue(0.5);   // above platforms, below fixtures
@@ -57,7 +60,8 @@ void PowerSourceItem::paint(QPainter *painter,
     const bool selected = option->state & QStyle::State_Selected;
 
     QColor fill(247, 181, 41);       // distro amber
-    QColor border = fill.darker(160);
+    QColor border = m_locked ? QColor(200, 60, 60)   // red border when locked
+                             : fill.darker(160);
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->setPen(QPen(border, selected ? 2.0 : 1.5));
     painter->setBrush(QBrush(fill));
@@ -91,4 +95,16 @@ void PowerSourceItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
     emit itemDropped(this);
+}
+
+void PowerSourceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+{
+    QMenu menu;
+    QAction *lockAct = menu.addAction(
+        m_locked ? tr("Unlock Power Source") : tr("Lock Power Source"));
+
+    // The model (and persistence) lives in PowerDistribution, which the view
+    // owns — it toggles the flag and rebuilds this item with the new state.
+    if (menu.exec(event->screenPos()) == lockAct)
+        emit lockToggleRequested(m_index);
 }

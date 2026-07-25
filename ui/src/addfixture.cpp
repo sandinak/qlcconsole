@@ -31,6 +31,7 @@
 #include <QLabel>
 #include <QDebug>
 #include <QAction>
+#include <QSet>
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
@@ -62,6 +63,7 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
 
     setupUi(this);
     m_addrErrorLabel->hide();
+    m_nameErrorLabel->hide();
 
     QAction* action = new QAction(this);
     action->setShortcut(QKeySequence(QKeySequence::Close));
@@ -539,6 +541,8 @@ void AddFixture::slotNameEdited(const QString &text)
     else
         m_nameEdit->setModified(true);
     m_nameValue = text;
+
+    checkNameConflict();
 }
 
 void AddFixture::slotAmountSpinChanged(int value)
@@ -546,6 +550,38 @@ void AddFixture::slotAmountSpinChanged(int value)
     m_amountValue = value;
 
     checkOverlapping();
+    checkNameConflict();
+}
+
+QSet<QString> AddFixture::existingFixtureNames() const
+{
+    QSet<QString> names;
+    for (Fixture *fxi : m_doc->fixtures())
+    {
+        if (fxi != NULL && fxi->id() != m_fixtureID)
+            names.insert(fxi->name());
+    }
+    return names;
+}
+
+void AddFixture::checkNameConflict()
+{
+    // Warn whenever the typed name is already taken. A single add would create a
+    // literal duplicate; a multi add auto-numbers PAST the collision — either
+    // way the user asked to be told the name is in use. The label wording adapts.
+    const bool conflict = m_nameEdit->isEnabled()
+                          && existingFixtureNames().contains(m_nameEdit->text());
+    if (conflict)
+    {
+        m_nameErrorLabel->setText(m_amountValue > 1
+            ? tr("<html><body><p><span style=\" color:#e08000;\">"
+                 "That name exists — the new fixtures will be numbered past it."
+                 "</span></p></body></html>")
+            : tr("<html><body><p><span style=\" color:#e08000;\">"
+                 "A fixture with this name already exists."
+                 "</span></p></body></html>"));
+    }
+    m_nameErrorLabel->setVisible(conflict);
 }
 
 void AddFixture::slotGapSpinChanged(int value)
@@ -597,6 +633,8 @@ void AddFixture::slotSelectionChanged()
         m_gapSpin->setEnabled(false);
         m_channelsSpin->setEnabled(false);
 
+        m_nameErrorLabel->hide();
+
         m_buttonBox->setStandardButtons(QDialogButtonBox::Cancel);
 
         return;
@@ -640,7 +678,9 @@ void AddFixture::slotSelectionChanged()
            if the user hasn't modified the friendly name field. */
         if (m_nameEdit->isModified() == false)
         {
-            m_nameEdit->setText(tr("Dimmers"));
+            const QSet<QString> used = existingFixtureNames();
+            m_nameEdit->setText(Doc::nextUniqueName(tr("Dimmers"),
+                [&used](const QString &c) { return used.contains(c); }));
             slotNameEdited(m_nameEdit->text());
             m_nameEdit->setModified(false);
         }
@@ -663,7 +703,9 @@ void AddFixture::slotSelectionChanged()
            if the user hasn't modified the friendly name field. */
         if (m_nameEdit->isModified() == false)
         {
-            m_nameEdit->setText(m_fixtureDef->model());
+            const QSet<QString> used = existingFixtureNames();
+            m_nameEdit->setText(Doc::nextUniqueName(m_fixtureDef->model(),
+                [&used](const QString &c) { return used.contains(c); }));
             slotNameEdited(m_nameEdit->text());
             m_nameEdit->setModified(false);
         }
@@ -694,6 +736,8 @@ void AddFixture::slotSelectionChanged()
     /* OK is again possible */
     m_buttonBox->setStandardButtons(QDialogButtonBox::Ok |
                                     QDialogButtonBox::Cancel);
+
+    checkNameConflict();
 }
 
 void AddFixture::slotTreeDoubleClicked(QTreeWidgetItem* item)

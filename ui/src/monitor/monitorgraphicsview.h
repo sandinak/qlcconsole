@@ -35,6 +35,7 @@ class TrussItem;
 class PlatformItem;
 class PowerSourceItem;
 class TargetItem;
+class MonitorImageItem;
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
@@ -48,6 +49,41 @@ class MonitorGraphicsView final : public QGraphicsView
 public:
     MonitorGraphicsView(Doc *doc, QWidget *parent = 0);
     ~MonitorGraphicsView();
+
+    /** Read-only point-of-view for the 2D projection. Top is the fully-editable
+     *  default; Front and Side are elevation views (display only). */
+    enum ViewPOV { PovTop = 0, PovFront = 1, PovSide = 2 };
+
+    /** Set the current point of view and rebuild the projection. */
+    void setViewPOV(ViewPOV pov);
+
+    /** Current point of view. */
+    ViewPOV viewPOV() const { return m_pov; }
+
+    /** True when the view is an elevation (Front/Side) — editing is disabled. */
+    bool isElevation() const { return m_pov != PovTop; }
+
+    /** True if @p t is a bar we allow the user to DRAG in the current elevation
+     *  view (WYSIWYG placement). Scope: a tower crossbar (Across) shown broadside
+     *  in the Front view → drag = height (Along) + horizontal (cross-shift). */
+    bool elevationBarDraggable(const class Truss *t) const;
+
+    /** True if the truss-bound fixture @p fid can be dragged in the current
+     *  elevation view — it slides ALONG its truss/bar (Front view only). */
+    bool elevationFixtureDraggable(quint32 fid) const;
+
+    /** "Stage view": hide everything except the scenic/structural features
+     *  (trusses, platforms, images) so the bare stage can be seen. Fixtures,
+     *  targets and power sources are hidden while on. */
+    void setStageFeaturesOnly(bool on);
+    bool stageFeaturesOnly() const { return m_stageOnly; }
+
+    /** "Build/Rig focus": fixtures are ghosted (faint + click-through) and
+     *  targets/power hidden, so trusses/platforms/images are the interaction
+     *  target — build structure without fighting the lights, while still seeing
+     *  where they are. */
+    void setBuildFocus(bool on);
+    bool buildFocus() const { return m_buildFocus; }
 
     /** Set the graphics view size in monitor units */
     void setGridSize(QSize size);
@@ -122,6 +158,11 @@ public:
      *  to a position in pixels */
     QPointF realPositionToPixels(qreal xpos, qreal ypos);
 
+    /** Project a world point (millimetres, X=stage-right, Y=upstage, Z=height)
+     *  to scene pixels for the current POV. Top: (X,Y); Front: (X,Z↑);
+     *  Side: (Y,Z↑). In Top view this equals realPositionToPixels(x,y). */
+    QPointF projectMm(qreal xMm, qreal yMm, qreal zMm) const;
+
     /** Inverse of realPositionToPixels — convert scene-pixel position to
      *  millimetres (same units as MonitorProperties fixture positions). */
     QPointF pixelsToRealPosition(qreal px, qreal py);
@@ -131,6 +172,10 @@ public:
      */
     void updateFixture(quint32 id);
 
+    /** Reposition every riser-mounted fixture from its platform geometry. Call
+     *  after a platform is moved/resized so its mounted fixtures follow. */
+    void refreshRiserFixtures();
+
     /** Set a background image for the view */
     void setBackgroundImage(QString filename);
 
@@ -139,6 +184,15 @@ public:
 
     /** Retrieve the path to the background image currently set */
     QString backgroundImage() { return m_backgroundImage; }
+
+    /** Re-sync every fixture item's "bound to truss" flag from its rig props.
+     *  Call after a truss is removed so its ex-fixtures stop behaving as bound. */
+    void refreshFixtureBindings();
+
+    /** Re-derive every child-bar truss's origin from its parent, redraw the
+     *  trusses, and reposition fixtures riding on the bars. Call after a truss
+     *  moves/resizes so bars (and their fixtures) follow their parent. */
+    void followParentTrusses();
 
     /** Rebuild the truss overlay items from MonitorProperties. */
     void updateTrusses();
@@ -153,6 +207,10 @@ public:
      *  "sourceIdx:circuitIdx"). Empty map restores the plain markers. */
     void setPowerSourceColors(const QHash<QString, QColor> &circuitColors);
 
+    /** Rebuild the placeable image items from MonitorProperties (only those on
+     *  the plane matching the current POV are shown). */
+    void updateImages();
+
     /** Rebuild the target marker items from MonitorProperties. */
     void updateTargets();
 
@@ -163,6 +221,105 @@ public:
 
     /** Rebuild the aim-line overlays for all selected TargetItems. */
     void updateAimLines();
+
+    /** Recompute every item's visibility and movability from the three lock
+     *  sources — the global layout lock, the item's own per-item lock, and its
+     *  organizational layer's visible/locked state. Call after any layer change
+     *  or global-lock toggle, and at the end of each item-rebuild path. */
+    void refreshItemLayerState();
+
+    /** Assign every currently-selected map item (fixture / truss / platform /
+     *  target / power source) to the given organizational layer, then refresh.
+     *  Returns the number of items reassigned. */
+    int setSelectedItemsLayer(quint32 layerId);
+
+    /** True if at least one map item is currently selected on the canvas. */
+    bool hasSelection() const;
+
+    /** How many fixtures are selected (align/distribute need >= 2 / >= 3). */
+    int selectedFixtureCount() const;
+
+    /** Align the selected fixtures' XY (Top view). Modes: 0=same X (column),
+     *  1=left, 2=right, 3=same Y (row), 4=top, 5=bottom. Returns count moved. */
+    int alignSelectedFixtures(int mode);
+    /** Evenly space the selected fixtures along X (horizontal) or Y. */
+    int distributeSelectedFixtures(bool horizontal);
+
+    /** Reassign every item on layer @p fromLayerId to @p toLayerId, then
+     *  refresh. Used when a layer is deleted so its members fall back to a real
+     *  layer (rather than an id that a future addLayer() could re-issue). */
+    void reassignLayerItems(quint32 fromLayerId, quint32 toLayerId);
+
+    /** Group the current canvas selection (needs >= 2 items) into a new map
+     *  group; returns the number of items grouped (0 if fewer than 2). Grouped
+     *  items select and move together. */
+    int groupSelectedItems();
+
+    /** Ungroup every group represented in the current selection; returns the
+     *  number of items ungrouped. */
+    int ungroupSelectedItems();
+
+    /** Dissolve a specific group by one level: its child groups and items are
+     *  promoted to the group's parent. Used by the Layers-tree context menu. */
+    void ungroupById(quint32 groupId);
+
+    /** True if the current selection contains at least one grouped item. */
+    bool selectionHasGroup() const;
+
+    /** True if the current selection has >= 2 items (i.e. is groupable). */
+    bool selectionGroupable() const;
+
+    /** Create registry entries for any item groupId that lacks one (migration
+     *  from the anonymous first-cut groups). Call after a workspace load. */
+    void ensureGroupRegistry();
+
+    /** Ensure a riser (platform) and the fixtures mounted on it share a map
+     *  group (named after the platform); mounted fixtures are forced in. Called
+     *  after the Face Editor mounts fixtures. */
+    void ensurePlatformGroup(quint32 platformId);
+
+    /** Ensure the truss and its bound fixtures share a map group: create the
+     *  group (named after the truss) if needed, and pull in any bound fixtures
+     *  that are still ungrouped. Leaves manually-grouped items alone. */
+    void ensureTrussGroup(quint32 trussId);
+
+    /** Select on the canvas every item under group @p gid (recursively through
+     *  nested sub-groups). Used by the Layers tree when a group folder is
+     *  clicked. */
+    void selectItemsInGroup(quint32 gid);
+
+    /** Select a single map item by kind ("fixture"/"truss"/"platform"/
+     *  "target"/"power") and id. Used by the Layers tree item leaves. */
+    void selectMapItem(const QString &kind, quint32 id);
+
+    /** Select a set of map items (kind,id) on the canvas at once. Used by the
+     *  Layers tree so a multi-selection there can be grouped / moved. */
+    void selectMapItems(const QList<QPair<QString, quint32> > &items);
+
+    /** Open the editor for a map item (emits the matching *DoubleClicked signal
+     *  the Monitor already handles). Used by a Layers-tree double-click. */
+    void requestEditItem(const QString &kind, quint32 id);
+
+    /** Reparent a set of (kind,id) items to a layer (loose, ungrouped). */
+    void reparentToLayer(const QList<QPair<QString, quint32> > &items, quint32 layerId);
+
+    /** Reparent a set of (kind,id) items into a group (adopting its layer). */
+    void reparentToGroup(const QList<QPair<QString, quint32> > &items, quint32 groupId);
+
+    /** Move a group to be top-level under a layer (subtree layer updated). */
+    void reparentGroupToLayer(quint32 groupId, quint32 layerId);
+
+    /** Nest a group inside another group (no-op if that would form a cycle). */
+    void reparentGroupToGroup(quint32 groupId, quint32 parentGroupId);
+
+    /** Bind fixture @p fid to truss @p trussId, snapping it to the nearest point
+     *  on the truss line and pulling it into the truss's group. Used by the
+     *  fixture context menu and the Layers-tree drag-onto-truss (2D drop-to-bind
+     *  was removed so assignment is now always explicit). */
+    void attachFixtureToTruss(quint32 fid, quint32 trussId);
+
+    /** Unbind fixture @p fid from its truss (leaves it where it sits). */
+    void detachFixtureFromTruss(quint32 fid);
 
     /** Show or hide the followspot beam-position pin on the floor map.
      *  @p xMeters, @p yMeters give the floor hit in metres (stage space).
@@ -175,6 +332,46 @@ public:
     /** Set the active scene whose target palette links are shown as aim lines.
      *  Pass Function::invalidId() to hide all aim lines. */
     void setActiveScene(quint32 sceneId);
+
+    /* -------------------------------------------------------------------- *
+     *  Rulers / coordinate readout / settable 0,0 origin
+     * -------------------------------------------------------------------- */
+
+    /** A single ruler graduation: its position along the ruler in *viewport*
+     *  pixels, the label to draw, and whether it's a major (labelled) tick. */
+    struct RulerTick { qreal pixel; QString label; bool major; };
+
+    /** Graduations for the top (horizontal=true) or left (horizontal=false)
+     *  ruler, already mapped through the current zoom/pan to viewport pixels
+     *  and offset by the stage origin. POV-aware (Top X/Y, Front X/Z, Side Y/Z). */
+    QVector<RulerTick> rulerTicks(bool horizontal) const;
+
+    /** Axis short name for the current POV: horizontal → X or Y; vertical →
+     *  Y or Z (height in elevation views). */
+    QString axisName(bool horizontal) const;
+
+    /** Unit suffix for readouts ("m" or "ft"), derived from the grid metric. */
+    QString unitSuffix() const;
+
+    /** Convert a viewport point to the display coordinate pair (horizontal,
+     *  vertical) in the current grid units, relative to the stage origin. */
+    QPointF viewportToReadout(const QPoint &vp) const;
+
+    /** The world point (metres, stage coords) shown as 0,0 by the rulers. */
+    QPointF stageOriginMetres() const;
+
+    /** Set the stage origin (metres) and refresh the rulers/readout. */
+    void setStageOriginMetres(const QPointF &metres);
+
+    /** Enter "click to place 0,0" mode: the next left-click on the canvas sets
+     *  the stage origin to that point instead of selecting. Top view only. */
+    void beginPickOrigin();
+
+    /** True while a beginPickOrigin() pick is armed. */
+    bool pickingOrigin() const { return m_pickingOrigin; }
+
+    /** Ask the rulers to repaint (grid metrics / origin / zoom changed). */
+    void refreshRulers() { emit rulersChanged(); }
 
 protected:
     /** Triggers the whole view repaint and metrics
@@ -239,11 +436,57 @@ protected slots:
 
     /** Slot called when a PowerSourceItem is dropped after a drag */
     void slotPowerSourceMoved(PowerSourceItem *item);
+    void slotPowerSourceLockToggled(int sourceIndex);
 
     /** Slot called when a TargetItem is dropped after a drag */
     void slotTargetMoved(TargetItem *item);
 
+    /** Slot called when a MonitorImageItem is dropped after a drag */
+    void slotImageMoved(MonitorImageItem *item);
+
 private:
+    /** Resolve a (kind,id) descriptor to its canvas item, or nullptr. */
+    QGraphicsItem *itemFor(const QString &kind, quint32 id) const;
+
+    /** Read/write the map-group id (0 = ungrouped) of a heterogeneous item. */
+    quint32 itemGroupId(QGraphicsItem *gi) const;
+    void setItemGroupId(QGraphicsItem *gi, quint32 gid);
+
+    /** All canvas items whose IMMEDIATE group is the given (non-zero) id. */
+    QList<QGraphicsItem *> itemsInGroup(quint32 gid) const;
+
+    /** All canvas items under @p top, following nested sub-groups. */
+    QList<QGraphicsItem *> itemsUnderGroup(quint32 top) const;
+
+    /** Walk parentGroupId up to the outermost group containing @p g. */
+    quint32 topLevelGroup(quint32 g) const;
+
+    /** True if group @p g is @p ancestor or nested somewhere beneath it. */
+    bool groupIsUnder(quint32 g, quint32 ancestor) const;
+
+    /** Read/write an item's layer (heterogeneous). */
+    quint32 itemLayerId(QGraphicsItem *gi) const;
+    void setItemLayer(QGraphicsItem *gi, quint32 layerId);
+
+    /** Move a whole group subtree (the group, its descendant groups and all
+     *  their items) onto @p layerId. */
+    void setGroupSubtreeLayer(quint32 gid, quint32 layerId);
+
+    /** Next unused map-group id (registry-authoritative once migrated). */
+    quint32 nextMapGroupId() const;
+
+    /** Count of structural items (trusses + platforms) in a group — used to
+     *  decide whether an auto-group is dedicated (anchorable) or a manual mix. */
+    int structuralMembersOf(quint32 gid) const;
+
+    /** Extend the current selection to include every group-mate of any selected
+     *  grouped item (the select-together behaviour). Re-entrancy guarded. */
+    void extendSelectionToGroups();
+
+    /** Scene-pixel Y of the floor (Z=0) line — bottom of the grid — used as the
+     *  baseline for elevation (Front/Side) views. */
+    qreal floorPixelY() const;
+
     /** Snap a scene-pixel coordinate to the current grid/subdivision. */
     QPointF snapScenePos(const QPointF &p) const;
     /** Snapshot the real positions of the items that are about to move. */
@@ -271,14 +514,48 @@ signals:
     /** Signal emitted when the user double-clicks a truss item */
     void trussDoubleClicked(quint32 tid);
 
+    /** Emitted from the truss context menu — Monitor confirms + removes it. */
+    void trussRemoveRequested(quint32 tid);
+
+    /** Emitted from the truss context menu / strip — add a bar hung on this
+     *  truss. @p offset < 0 means "use a sensible default (mid-span)". */
+    void addBarToTrussRequested(quint32 parentTrussId, float offset);
+
+    /** Emitted from the platform context menu — Monitor confirms + removes it. */
+    void platformRemoveRequested(quint32 pid);
+
+    /** Emitted when the user double-clicks / edits an image object. */
+    void imageDoubleClicked(quint32 imageId);
+    /** Emitted from the image context menu — Monitor confirms + removes it. */
+    void imageRemoveRequested(quint32 imageId);
+
     /** Signal emitted when the user double-clicks a platform item */
     void platformDoubleClicked(quint32 pid);
 
     /** Signal emitted when the user right-clicks empty canvas space */
     void contextMenuRequested(QPointF scenePos);
 
+    /** Emitted whenever the canvas selection changes, so the toolbar can update
+     *  the enabled state of the Group / Ungroup actions. */
+    void mapSelectionChanged();
+
+    /** Emitted when the group structure changes (group / ungroup), so the
+     *  Layers tree can rebuild its folders. */
+    void mapStructureChanged();
+
     /** Signal re-emitted from TrussItem: add a fixture at offset metres on truss. */
     void addFixtureToTrussRequested(quint32 trussId, float offsetMetres);
+
+    /** Emitted whenever the ruler mapping changes (zoom, pan, resize, POV,
+     *  grid metrics, origin) so the ruler widgets can repaint. */
+    void rulersChanged();
+
+    /** Emitted on mouse-move over the canvas with the live readout coordinate
+     *  (horizontal, vertical) in current grid units, relative to the origin. */
+    void cursorReadout(QPointF hv);
+
+    /** Emitted after the stage origin is set via a click-to-place pick. */
+    void originPicked();
 
 private:
     Doc *m_doc;
@@ -336,6 +613,9 @@ private:
     /** Interactive target marker items keyed by target ID. */
     QHash <quint32, TargetItem*> m_targetItems;
 
+    /** Placeable image items keyed by image ID. */
+    QHash <quint32, MonitorImageItem*> m_imageItems;
+
     /** Aim-line overlays (rebuilt on selection change). */
     QList <QGraphicsLineItem*> m_aimLines;
 
@@ -389,6 +669,37 @@ private:
     /** Positions snapshot taken at move-start, committed to m_moveUndo on
      *  drop if anything actually moved. */
     QHash<quint32, QPointF> m_pendingMoveUndo;
+
+    /** Guards extendSelectionToGroups() against the re-entrant selectionChanged
+     *  it triggers while adding group-mates to the selection. */
+    bool m_extendingSelection = false;
+
+    /** Current point of view (Top = editable default). */
+    ViewPOV m_pov = PovTop;
+
+    /** True while an update*() method is deleting+recreating items. Guards
+     *  extendSelectionToGroups from dynamic_cast-ing half-deleted items when
+     *  QGraphicsScene::removeItem fires selectionChanged mid-teardown. */
+    bool m_itemsRebuilding = false;
+
+    /** True while a "click to place 0,0" pick is armed (beginPickOrigin). */
+    bool m_pickingOrigin = false;
+
+    /** "Stage view" — hide fixtures/targets/power, keep only stage features. */
+    bool m_stageOnly = false;
+
+    /** "Build/Rig focus" — ghost fixtures (faint, click-through), hide
+     *  targets/power, so structure is the interaction target. */
+    bool m_buildFocus = false;
+
+    /** Topmost item at a scene point, skipping ghosted fixtures (so a Build-focus
+     *  pick reaches the structure beneath a faint fixture). */
+    QGraphicsItem *topPickableAt(const QPointF &scenePos) const;
+
+    /** Origin offset (in current grid units) for the horizontal / vertical
+     *  ruler axes, given the current POV. */
+    qreal originUnitsH() const;
+    qreal originUnitsV() const;
 };
 
 /** @} */

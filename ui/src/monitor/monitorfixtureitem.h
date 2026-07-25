@@ -121,6 +121,10 @@ public:
     /** Sets the dimension of this fixture */
     void setSize(QSize size);
 
+    /** The fixture cell size in scene pixels (its head-layout rectangle, drawn
+     *  from the item origin). Half of this centres the icon on a point. */
+    QSize cellSize() const { return QSize(m_width, m_height); }
+
     void setGelColor(QColor color) { m_gelColor = color; }
     QColor getColor() const { return m_gelColor; }
 
@@ -145,6 +149,23 @@ public:
     /** Mark this fixture as bound to a truss (shows cyan border). */
     void setBoundToTruss(bool b) { m_boundToTruss = b; update(); }
     bool isBoundToTruss() const  { return m_boundToTruss; }
+
+    /** "Ghost" the fixture for Build/Rig focus: drawn faint and made
+     *  click-through (declines mouse buttons) so structure beneath it is the
+     *  interaction target. */
+    void setGhosted(bool g)
+    {
+        m_ghosted = g;
+        setOpacity(g ? 0.28 : 1.0);
+        setAcceptedMouseButtons(g ? Qt::NoButton : Qt::AllButtons);
+    }
+    bool isGhosted() const { return m_ghosted; }
+
+    /** "Isolated" = drilled into its group to select this ONE fixture (double-
+     *  click). Draws a distinct bright dashed border so it's obvious the sub-
+     *  unit is selected, not the whole group. Cleared when deselected. */
+    void setIsolated(bool on) { m_isolated = on; update(); }
+    bool isIsolated() const   { return m_isolated; }
 
     /** Show a red escape-from-truss indicator while dragging far off the truss. */
     void setEscapeMode(bool e) { m_escapeMode = e; update(); }
@@ -201,6 +222,10 @@ private:
 signals:
     void itemDropped(MonitorFixtureItem *);
 
+    /** Emitted when the fixture's mounting height (Z) or head orientation
+     *  changes, so the view can reposition / relayout it. */
+    void mountingChanged(quint32 fid);
+
 private:
     Doc *m_doc;
 
@@ -248,6 +273,8 @@ private:
 
     bool m_boundToTruss  = false;
     bool m_escapeMode    = false;
+    bool m_isolated      = false;   ///< drilled-in single selection within a group
+    bool m_ghosted       = false;   ///< Build/Rig focus: faint + click-through
     bool m_highlighted   = false;
 
     /** True if any head has a Pan channel (i.e. a moving head): only these

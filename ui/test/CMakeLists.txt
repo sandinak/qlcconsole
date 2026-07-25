@@ -1,5 +1,11 @@
 project(test)
 
+# Point fixture/profile/script-dependent UI tests at the SOURCE resources via an
+# absolute path, so they run in an out-of-tree build instead of aborting at
+# loadMap() on the broken relative fallback in resource_paths.h (mirrors
+# engine/test/CMakeLists.txt).
+add_compile_definitions(QLC_TEST_RESOURCE_ROOT="${CMAKE_SOURCE_DIR}/resources/")
+
 add_subdirectory(aboutbox)
 add_subdirectory(addfixture)
 add_subdirectory(assignhotkey)

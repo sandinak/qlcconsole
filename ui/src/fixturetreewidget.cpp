@@ -122,7 +122,13 @@ void FixtureTreeWidget::keyPressEvent(QKeyEvent* event)
             && it->data(KColumnName, PROP_HEAD).isValid() == false
             && it->data(KColumnName, PROP_CHANNEL).isValid() == false)
         {
+            // Arm the row as editable, but WITHOUT notifying slotItemChanged:
+            // QTreeWidgetItem::setFlags() emits itemChanged() synchronously,
+            // which would immediately re-enter slotItemChanged, disarm the row,
+            // and leave editItem() below a no-op (no editor would open).
+            blockSignals(true);
             it->setFlags(it->flags() | Qt::ItemIsEditable);
+            blockSignals(false);
             editItem(it, KColumnName);
             return;
         }

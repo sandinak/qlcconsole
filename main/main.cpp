@@ -64,12 +64,6 @@ namespace QLCArgs
     /** If true, enables kiosk-mode (Operate mode locked, only virtual console) */
     bool kioskMode = false;
 
-    /** If true, opens the application in full screen mode */
-    bool fullScreen = false;
-
-    /** If true, adjusts the main window geometry instead of instructing the windowing system to "maximize" */
-    bool fullScreenResize = false;
-
     /** If true, create and run a class to enable a web server for remote controlling */
     bool enableWebAccess = false;
 
@@ -161,7 +155,6 @@ void printUsage()
     cout << "Options:" << endl;
     cout << "  -c or --closebutton <x,y,w,h>\tPlace a close button in virtual console (only when -k is specified)" << endl;
     cout << "  -d or --debug <level>\t\tSet debug output level (0-3, see QtMsgType)" << endl;
-    cout << "  -f or --fullscreen <method>\tStart the application in fullscreen mode (method is either 'normal' or 'resize')" << endl;
     cout << "  -g or --log\t\t\tLog debug messages to a file" << endl;
     cout << "  -h or --help\t\t\tPrint this help" << endl;
     cout << "  -k or --kiosk\t\t\tEnable kiosk mode (only virtual console in forced operate mode)" << endl;
@@ -222,12 +215,6 @@ bool parseArgs()
                 qWarning() << "Could not open log file!";
                 return false;
             }
-        }
-        else if (arg == "-f" || arg == "--fullscreen")
-        {
-            QLCArgs::fullScreen = true;
-            if (it.hasNext() == true && it.peekNext() == "resize")
-                QLCArgs::fullScreenResize = true;
         }
         else if (arg == "-r" || arg == "--overscan")
         {
@@ -356,8 +343,6 @@ int main(int argc, char** argv)
         app.slotModeOperate();
     if (QLCArgs::kioskMode == true)
         app.enableKioskMode();
-    if (QLCArgs::fullScreen == true)
-        app.slotControlFullScreen(QLCArgs::fullScreenResize);
     if (QLCArgs::kioskMode == true && QLCArgs::closeButtonRect.isValid() == true)
         app.createKioskCloseButton(QLCArgs::closeButtonRect);
 
