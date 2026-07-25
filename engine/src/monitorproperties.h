@@ -481,6 +481,12 @@ public:
      *  once after load. Iterates a few passes so a bar-on-a-bar also settles. */
     void recomputeChildTrusses();
 
+    /** Re-slave every platform-anchored studio group's local frame to its
+     *  platform (origin = the platform's reference corner, no rotation), so
+     *  members follow the platform when it moves. Call after any platform
+     *  move/resize and once after load. See recomputeAnchoredFrames impl. */
+    void recomputeAnchoredFrames();
+
 private:
     QMap<quint32, Truss*> m_trusses;
 

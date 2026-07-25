@@ -2227,16 +2227,24 @@ void Monitor::slotEditPlatform(quint32 pid)
 
     vl->addLayout(form);
 
-    // Riser face fixture layout (the 8-strips-on-the-front-face editor).
-    QPushButton *faceBtn = new QPushButton(tr("Fixtures on face…"), &dlg);
-    faceBtn->setToolTip(tr("Lay fixtures out on this riser's front or top face"));
+    // Fixtures on this riser. The Studio editor is the single placement surface
+    // (its Front plane IS the riser face); the Face editor is used only to
+    // ASSIGN fixtures to the riser when none are on it yet, then we hand off to
+    // the Studio editor for spatial layout.
+    QPushButton *faceBtn = new QPushButton(tr("Edit fixtures in Studio…"), &dlg);
+    faceBtn->setToolTip(tr("Place this riser's fixtures in the Fixture Studio "
+                           "(Top/Front/Side); the Front plane is the riser face"));
     connect(faceBtn, &QPushButton::clicked, [&]() {
-        RiserFaceEditor ed(m_doc, p, &dlg);
-        if (ed.exec() == QDialog::Accepted)
+        // Already have fixtures grouped on this riser → straight to the Studio.
+        m_graphicsView->ensurePlatformGroup(p->id());
+        quint32 gid = p->groupId();
+        if (gid == 0 || !m_props->hasGroup(gid))
         {
+            // No fixtures on this riser yet — assign them with the Face editor.
+            RiserFaceEditor ed(m_doc, p, &dlg);
+            if (ed.exec() != QDialog::Accepted)
+                return;
             ed.applyToRig();
-            // Fixtures mounted for the first time may not be on the 2D view yet
-            // — add them so they render (position derives from the riser).
             foreach (Fixture *fx, m_doc->fixtures())
             {
                 if (fx == NULL) continue;
@@ -2244,11 +2252,16 @@ void Monitor::slotEditPlatform(quint32 pid)
                         && m_graphicsView->fixtureItemForId(fx->id()) == NULL)
                     m_graphicsView->addFixture(fx->id());
             }
-            m_graphicsView->ensurePlatformGroup(p->id());   // group riser + its fixtures
-            m_graphicsView->refreshRiserFixtures();
-            if (m_layersPanel) m_layersPanel->reload();
-            m_doc->setModified();
+            m_graphicsView->ensurePlatformGroup(p->id());
+            gid = p->groupId();
         }
+        // Slave the group's frame to the platform, migrate riser mounts, and
+        // open the Studio editor for spatial fine-tuning.
+        if (gid != 0 && m_props->hasGroup(gid))
+            m_graphicsView->openStudioGroupForGroup(gid);
+        m_graphicsView->refreshRiserFixtures();
+        if (m_layersPanel) m_layersPanel->reload();
+        m_doc->setModified();
     });
     vl->addWidget(faceBtn);
 
@@ -2268,8 +2281,9 @@ void Monitor::slotEditPlatform(quint32 pid)
     p->setHeight(float(hSpin->value() * fromDisp_p));
     p->setColor(chosenColor);
 
+    m_props->recomputeAnchoredFrames();           // slaved studio frames follow the move/resize
     m_graphicsView->updatePlatforms();
-    m_graphicsView->refreshRiserFixtures();       // mounted fixtures follow size/height changes
+    m_graphicsView->refreshRiserFixtures();       // mounted + frame fixtures follow size/height
     if (m_layersPanel) m_layersPanel->reload();   // reflect the new name/colour in the tree
     m_doc->setModified();
 }

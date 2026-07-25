@@ -884,6 +884,27 @@ static QVector3D barFaceVector(int face)
     }
 }
 
+void MonitorProperties::recomputeAnchoredFrames()
+{
+    // A studio group anchored to a platform is SLAVED to it: its local frame
+    // origin tracks the platform's reference corner (upstage-left, at floor
+    // level) with no rotation (platforms are axis-aligned). Members stored in
+    // group-local metres therefore follow the platform when it moves/resizes —
+    // and the group's Front plane IS the riser face. Call after any platform
+    // move and once after load.
+    for (auto it = m_groups.begin(); it != m_groups.end(); ++it)
+    {
+        MonitorGroup &g = it.value();
+        if (!g.hasFrame || g.anchorKind != QStringLiteral("platform"))
+            continue;
+        const StagePlatform *pl = m_platforms.value(g.anchorId, nullptr);
+        if (pl == nullptr)
+            continue;
+        g.origin   = QVector3D(pl->originX(), pl->originY(), 0.0f);
+        g.rotation = 0.0f;
+    }
+}
+
 void MonitorProperties::recomputeChildTrusses()
 {
     // Derive each bar's full world geometry (origin/direction/type) from its
@@ -1611,6 +1632,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
 
     // Sync child-bar truss origins to their parents.
     recomputeChildTrusses();
+    // Re-slave platform-anchored studio frames to their platforms.
+    recomputeAnchoredFrames();
 
     return true;
 }

@@ -990,12 +990,12 @@ void MonitorGraphicsView::openStudioGroupForGroup(quint32 groupId)
     if (groupId == 0 || !props->hasGroup(groupId))
         return;
 
-    // Turn an existing plain group (e.g. "US-1") into a studio group in place:
-    // enable its local frame and ADOPT where its fixtures already sit (origin =
-    // their centroid, each local = world - origin) so nothing visually jumps.
+    // Turn an existing plain group (e.g. "US-1") into a studio group in place.
     // A group that is already a studio group is opened as-is.
     if (!props->group(groupId).hasFrame)
     {
+        const MonitorProperties::MonitorGroup g0 = props->group(groupId);
+
         // Members = fixtures whose group chain includes this group.
         QList<quint32> members;
         foreach (quint32 fid, props->fixtureItemsID())
@@ -1019,13 +1019,32 @@ void MonitorGraphicsView::openStudioGroupForGroup(quint32 groupId)
             world.insert(fid, w);
             sum += w;
         }
-        const QVector3D origin = members.isEmpty() ? QVector3D()
-                                                   : (sum / float(members.size()));
+
+        // If the group is anchored to a platform, SLAVE the frame to it (origin
+        // = the platform's corner) so the Front plane IS the riser face and the
+        // unit follows the platform. Otherwise adopt the members' centroid.
+        StagePlatform *pl = (g0.anchorKind == QStringLiteral("platform"))
+                                ? props->platform(g0.anchorId) : nullptr;
+        const QVector3D origin = (pl != nullptr)
+            ? QVector3D(pl->originX(), pl->originY(), 0.0f)
+            : (members.isEmpty() ? QVector3D() : (sum / float(members.size())));
         props->setGroupFrame(groupId, origin, 0.0f);
         props->setGroupHasFrame(groupId, true);
+
         foreach (quint32 fid, members)
         {
             FixtureRigProps rp = props->fixtureRigProps(fid);
+            // Migrate a platform mount into the frame: the world position was
+            // captured pre-frame, so convert it to a local offset and retire the
+            // riser/deck mount — the slaved frame now drives the fixture (one
+            // representation, no precedence collision).
+            if (pl != nullptr)
+            {
+                if (rp.riserPlatformId == g0.anchorId)
+                    rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+                if (rp.deckPlatformId == g0.anchorId)
+                    rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
+            }
             rp.groupLocal = props->worldToGroupLocal(groupId, world.value(fid));
             props->setFixtureRigProps(fid, rp);
             updateFixture(fid);
@@ -1632,7 +1651,9 @@ void MonitorGraphicsView::refreshRiserFixtures()
     for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
     {
         const FixtureRigProps rp = props->fixtureRigProps(it.key());
-        if (rp.onRiser() || rp.onDeck())   // deck fixtures follow the platform top too
+        // Riser/deck mounts follow the platform; so do members of a studio frame
+        // that is slaved to a platform (the unified placement path).
+        if (rp.onRiser() || rp.onDeck() || props->fixtureFrameGroup(it.key()) != 0)
             updateFixture(it.key());
     }
 }
@@ -2212,7 +2233,9 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
         m_doc->setModified();
     }
 
-    // Fixtures mounted on these risers follow them to the new position.
+    // Re-slave platform-anchored studio frames, then let mounted AND frame
+    // fixtures follow the platforms to their new position.
+    m_doc->monitorProperties()->recomputeAnchoredFrames();
     refreshRiserFixtures();
 }
 

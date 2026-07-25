@@ -491,6 +491,34 @@ void MonitorProperties_Test::studioFrameXmlRoundTrip()
     QCOMPARE(mp2.fixtureRigProps(9).groupLocal, QVector3D(0.4f, -0.6f, 1.2f));
 }
 
+void MonitorProperties_Test::studioFrameSlavedToPlatform()
+{
+    MonitorProperties mp;
+    StagePlatform *pl = mp.addPlatform();
+    pl->setOriginX(2); pl->setOriginY(3); pl->setWidth(4); pl->setDepth(1); pl->setHeight(0.8f);
+
+    // A studio group anchored to the platform: its frame is slaved to it.
+    const quint32 gid = 5;
+    mp.createGroup(gid, "US-1", MonitorProperties::defaultLayerId, 0);
+    mp.setGroupAnchor(gid, "platform", pl->id());
+    mp.setGroupHasFrame(gid, true);
+    mp.recomputeAnchoredFrames();
+    QCOMPARE(mp.group(gid).origin, QVector3D(2, 3, 0));
+
+    // A member placed in the frame derives origin + local.
+    mp.setFixturePosition(9, 0, 0, QVector3D(0, 0, 0));
+    mp.setFixtureGroup(9, gid);
+    FixtureRigProps rp; rp.groupLocal = QVector3D(1.0f, 1.0f, 0.5f);
+    mp.setFixtureRigProps(9, rp);
+    QCOMPARE(mp.fixtureRigPosition(9), QVector3D(3, 4, 0.5f));
+
+    // Move the platform: the slaved frame AND the member follow.
+    pl->setOriginX(5); pl->setOriginY(6);
+    mp.recomputeAnchoredFrames();
+    QCOMPARE(mp.group(gid).origin, QVector3D(5, 6, 0));
+    QCOMPARE(mp.fixtureRigPosition(9), QVector3D(6, 7, 0.5f));
+}
+
 void MonitorProperties_Test::reset()
 {
     MonitorProperties mp;

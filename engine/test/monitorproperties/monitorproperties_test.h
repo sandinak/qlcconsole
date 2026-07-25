@@ -40,6 +40,7 @@ private slots:
     void childBarFollowsParent();
     void studioFrameDerivation();
     void studioFrameXmlRoundTrip();
+    void studioFrameSlavedToPlatform();
     void reset();
 };
 
