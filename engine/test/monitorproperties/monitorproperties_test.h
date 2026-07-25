@@ -38,6 +38,8 @@ private slots:
     void stageOrigin();
     void imagesXmlRoundTrip();
     void childBarFollowsParent();
+    void studioFrameDerivation();
+    void studioFrameXmlRoundTrip();
     void reset();
 };
 

@@ -413,6 +413,84 @@ void MonitorProperties_Test::childBarFollowsParent()
     QCOMPARE(bar2->barRun(), int(Truss::RunAcross));
 }
 
+void MonitorProperties_Test::studioFrameDerivation()
+{
+    MonitorProperties mp;
+
+    // A studio group with a local frame, and a fixture placed in it.
+    mp.createGroup(1, "Pod", MonitorProperties::defaultLayerId, 0);
+    mp.setGroupHasFrame(1, true);
+    mp.setGroupFrame(1, QVector3D(5, 5, 0), 0.0f);
+
+    mp.setFixturePosition(7, 0, 0, QVector3D(0, 0, 0));   // fixture must exist
+    mp.setFixtureGroup(7, 1);
+    QCOMPARE(mp.fixtureFrameGroup(7), quint32(1));
+
+    FixtureRigProps rp;
+    rp.groupLocal = QVector3D(1, 2, 0.5f);
+    mp.setFixtureRigProps(7, rp);
+
+    // rotation 0 → world = origin + local, exactly.
+    QCOMPARE(mp.fixtureRigPosition(7), QVector3D(6, 7, 0.5f));
+
+    // rotate the frame 90°: local (1,0,0) about Z → world (origin.x, origin.y+1).
+    mp.setFixtureRigProps(7, [] { FixtureRigProps r; r.groupLocal = QVector3D(2, 0, 0); return r; }());
+    mp.setGroupRotation(1, 90.0f);
+    const QVector3D w = mp.fixtureRigPosition(7);
+    QVERIFY(qAbs(w.x() - 5.0f) < 1e-4f);
+    QVERIFY(qAbs(w.y() - 7.0f) < 1e-4f);
+
+    // world<->local inverse round-trips.
+    const QVector3D local = mp.worldToGroupLocal(1, w);
+    QVERIFY(qAbs(local.x() - 2.0f) < 1e-4f);
+    QVERIFY(qAbs(local.y() - 0.0f) < 1e-4f);
+
+    // Nested: a frameless child under a frame parent resolves to the parent.
+    mp.createGroup(2, "Sub", MonitorProperties::defaultLayerId, 1);   // parent = 1
+    mp.setFixturePosition(8, 0, 0, QVector3D(0, 0, 0));
+    mp.setFixtureGroup(8, 2);
+    QCOMPARE(mp.fixtureFrameGroup(8), quint32(1));   // walks up to the framed group
+
+    // A frameless group derives nothing (fixtureFrameGroup == 0).
+    mp.setGroupHasFrame(1, false);
+    QCOMPARE(mp.fixtureFrameGroup(7), quint32(0));
+}
+
+void MonitorProperties_Test::studioFrameXmlRoundTrip()
+{
+    MonitorProperties mp;
+    mp.createGroup(3, "Step", MonitorProperties::defaultLayerId, 0);
+    mp.setGroupHasFrame(3, true);
+    mp.setGroupFrame(3, QVector3D(1.5f, 2.5f, 0.25f), 30.0f);
+    mp.setGroupBinding(3, 42, 0.2f, 0.3f);
+
+    mp.setFixturePosition(9, 0, 0, QVector3D(0, 0, 0));
+    mp.setFixtureGroup(9, 3);
+    FixtureRigProps rp; rp.groupLocal = QVector3D(0.4f, -0.6f, 1.2f);
+    mp.setFixtureRigProps(9, rp);
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+
+    const MonitorProperties::MonitorGroup g = mp2.group(3);
+    QVERIFY(g.hasFrame);
+    QCOMPARE(g.origin, QVector3D(1.5f, 2.5f, 0.25f));
+    QCOMPARE(g.rotation, 30.0f);
+    QCOMPARE(g.boundFxGroup, quint32(42));
+    QCOMPARE(g.pitchX, 0.2f);
+    QCOMPARE(g.pitchY, 0.3f);
+    QCOMPARE(mp2.fixtureRigProps(9).groupLocal, QVector3D(0.4f, -0.6f, 1.2f));
+}
+
 void MonitorProperties_Test::reset()
 {
     MonitorProperties mp;
