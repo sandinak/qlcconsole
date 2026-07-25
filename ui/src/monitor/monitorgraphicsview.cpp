@@ -25,6 +25,8 @@
 #include <QScrollBar>
 #include <QShortcut>
 #include <QMenu>
+#include <QFileDialog>
+#include <QMessageBox>
 
 #include <QGraphicsRectItem>
 #include <QGraphicsEllipseItem>
@@ -37,6 +39,7 @@
 #include "monitorfixtureitem.h"
 #include "trussitem.h"
 #include "studiogroupeditor.h"
+#include "studiotemplate.h"
 #include "platformitem.h"
 #include "powersourceitem.h"
 #include "powerdistribution.h"
@@ -935,6 +938,50 @@ quint32 MonitorGraphicsView::createStudioGroupFromSelection()
     m_doc->setModified();
     emit mapStructureChanged();
     return gid;
+}
+
+void MonitorGraphicsView::stampStudioTemplate()
+{
+    QList<quint32> fids;
+    foreach (MonitorFixtureItem *mfi, selectedFixtureItems())
+    {
+        const quint32 fid = mfi->fixtureID();
+        if (fid != Fixture::invalidId())
+            fids << fid;
+    }
+    if (fids.isEmpty())
+        return;
+
+    const QString path = QFileDialog::getOpenFileName(this,
+        tr("Stamp Studio Template"), QString(),
+        tr("Fixture Studio Template (*.json)"));
+    if (path.isEmpty())
+        return;
+
+    const int roles = StudioTemplate::roleCount(path);
+    if (roles > 0 && fids.size() < roles)
+    {
+        const QMessageBox::StandardButton r = QMessageBox::question(this,
+            tr("Stamp Template"),
+            tr("The template has %1 roles but %2 fixtures are selected. "
+               "Only the first %2 roles will be filled. Continue?")
+                .arg(roles).arg(fids.size()));
+        if (r != QMessageBox::Yes)
+            return;
+    }
+
+    QString err;
+    const quint32 gid = StudioTemplate::stamp(m_doc, path, fids, &err);
+    if (gid == 0)
+    {
+        QMessageBox::warning(this, tr("Stamp Template"),
+                             tr("Could not stamp template: %1").arg(err));
+        return;
+    }
+    foreach (quint32 fid, fids)
+        updateFixture(fid);
+    emit mapStructureChanged();
+    openStudioGroupEditor(gid);
 }
 
 void MonitorGraphicsView::openStudioGroupEditor(quint32 groupId)
@@ -3090,6 +3137,9 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
             editStudioAct = menu.addAction(tr("Edit Studio Group…"));
         if (selectedFixtureCount() >= 2)
             makeStudioAct = menu.addAction(tr("Create Studio Group from Selection"));
+        QAction *stampTplAct = nullptr;
+        if (selectedFixtureCount() >= 1)
+            stampTplAct = menu.addAction(tr("Stamp Studio Template…"));
 
         menu.addSeparator();
         QAction *removeAct = menu.addAction(tr("Remove from View"));
@@ -3107,6 +3157,8 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
         }
         else if (editStudioAct && chosen == editStudioAct)
             openStudioGroupEditor(frameGid);
+        else if (stampTplAct && chosen == stampTplAct)
+            stampStudioTemplate();
         else if (chosen == removeAct)
         {
             removeFixture(fid);

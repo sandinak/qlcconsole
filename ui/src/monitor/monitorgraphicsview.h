@@ -137,6 +137,11 @@ public:
      *  local offsets) for @p groupId, refreshing the map live. */
     void openStudioGroupEditor(quint32 groupId);
 
+    /** Stamp a saved studio template (component) onto the current fixture
+     *  selection: pick a .json, bind its roles to the selected fixtures in
+     *  order, and drop a placed studio group. */
+    void stampStudioTemplate();
+
     /** Return the MonitorFixtureItem for the given fixture ID, or nullptr if not in the view. */
     MonitorFixtureItem *fixtureItemForId(quint32 fxId) const;
 

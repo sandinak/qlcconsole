@@ -89,6 +89,7 @@ add_library(${module_name}
     monitor/powersourceitem.cpp monitor/powersourceitem.h
     monitor/riserfaceeditor.cpp monitor/riserfaceeditor.h
     monitor/studiogroupeditor.cpp monitor/studiogroupeditor.h
+    monitor/studiotemplate.cpp monitor/studiotemplate.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h

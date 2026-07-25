@@ -29,8 +29,11 @@
 #include <QGroupBox>
 #include <QComboBox>
 #include <QLabel>
+#include <QFileDialog>
+#include <QMessageBox>
 
 #include "studiogroupeditor.h"
+#include "studiotemplate.h"
 #include "doc.h"
 #include "fixture.h"
 #include "fixturegroup.h"
@@ -139,7 +142,21 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
 
     QDialogButtonBox *bb = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    QPushButton *saveTplBtn = bb->addButton(tr("Save as Template…"),
+                                            QDialogButtonBox::ActionRole);
     root->addWidget(bb);
+
+    connect(saveTplBtn, &QPushButton::clicked, this, [this]() {
+        const QString path = QFileDialog::getSaveFileName(this,
+            tr("Save Studio Template"), QString(),
+            tr("Fixture Studio Template (*.json)"));
+        if (path.isEmpty())
+            return;
+        QString err;
+        if (!StudioTemplate::saveGroup(m_doc, m_groupId, path, &err))
+            QMessageBox::warning(this, tr("Save Template"),
+                                 tr("Could not save template: %1").arg(err));
+    });
 
     rebuildTable();
 
