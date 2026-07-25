@@ -27,11 +27,14 @@
 #include <QPushButton>
 #include <QLineEdit>
 #include <QGroupBox>
+#include <QComboBox>
 #include <QLabel>
 
 #include "studiogroupeditor.h"
 #include "doc.h"
 #include "fixture.h"
+#include "fixturegroup.h"
+#include "grouphead.h"
 
 StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     : QDialog(parent)
@@ -83,6 +86,43 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     QPushButton *recenter = new QPushButton(tr("Re-center origin on members"), frameBox);
     form->addRow(QString(), recenter);
     root->addWidget(frameBox);
+
+    // --- FixtureGroup binding (Phase 2) ------------------------------------
+    QGroupBox *bindBox = new QGroupBox(tr("FixtureGroup binding"), this);
+    QFormLayout *bindForm = new QFormLayout(bindBox);
+    m_fgCombo = new QComboBox(bindBox);
+    m_fgCombo->addItem(tr("(none)"), 0u);
+    foreach (FixtureGroup *fg, m_doc->fixtureGroups())
+    {
+        m_fgCombo->addItem(fg->name(), fg->id());
+        if (fg->id() == g.boundFxGroup)
+            m_fgCombo->setCurrentIndex(m_fgCombo->count() - 1);
+    }
+    bindForm->addRow(tr("Bind to"), m_fgCombo);
+
+    m_pitchX = mkSpin(0.001, 100.0, tr(" m/cell"));
+    m_pitchY = mkSpin(0.001, 100.0, tr(" m/cell"));
+    m_pitchX->setValue(double(g.pitchX > 0 ? g.pitchX : 0.5f));
+    m_pitchY->setValue(double(g.pitchY > 0 ? g.pitchY : 0.5f));
+    QHBoxLayout *pitchRow = new QHBoxLayout;
+    pitchRow->addWidget(new QLabel(tr("X"))); pitchRow->addWidget(m_pitchX);
+    pitchRow->addWidget(new QLabel(tr("Y"))); pitchRow->addWidget(m_pitchY);
+    bindForm->addRow(tr("Cell pitch"), pitchRow);
+
+    QHBoxLayout *bindBtns = new QHBoxLayout;
+    QPushButton *seedBtn  = new QPushButton(tr("Seed from cells"), bindBox);
+    QPushButton *adoptBtn = new QPushButton(tr("Adopt current positions"), bindBox);
+    seedBtn->setToolTip(tr("Lay the bound group's fixtures out on a grid at the "
+                           "cell pitch (their matrix layout → metric offsets)"));
+    adoptBtn->setToolTip(tr("Pull the bound group's fixtures in at where they "
+                            "already sit on the map (non-destructive)"));
+    bindBtns->addWidget(seedBtn);
+    bindBtns->addWidget(adoptBtn);
+    bindForm->addRow(QString(), bindBtns);
+    root->addWidget(bindBox);
+
+    connect(seedBtn,  &QPushButton::clicked, this, &StudioGroupEditor::seedFromFixtureGroup);
+    connect(adoptBtn, &QPushButton::clicked, this, &StudioGroupEditor::adoptFromFixtureGroup);
 
     // --- Members (per-member group-local offset) ---------------------------
     QGroupBox *memBox = new QGroupBox(tr("Members (group-local offset, metres)"), this);
@@ -221,13 +261,100 @@ void StudioGroupEditor::recenterOrigin()
     emit changed();
 }
 
+quint32 StudioGroupEditor::selectedFxGroup() const
+{
+    return m_fgCombo ? m_fgCombo->currentData().toUInt() : 0u;
+}
+
+void StudioGroupEditor::seedFromFixtureGroup()
+{
+    const quint32 fgid = selectedFxGroup();
+    FixtureGroup *fg = m_doc->fixtureGroup(fgid);
+    if (fg == nullptr)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    const float px = float(m_pitchX->value());
+    const float py = float(m_pitchY->value());
+    props->setGroupBinding(m_groupId, fgid, px, py);
+    props->setGroupHasFrame(m_groupId, true);
+
+    // Centre the cell grid on the frame origin so the unit is symmetric.
+    const QSize sz = fg->size();
+    const float cx = (sz.width()  > 0) ? (sz.width()  - 1) / 2.0f : 0.0f;
+    const float cy = (sz.height() > 0) ? (sz.height() - 1) / 2.0f : 0.0f;
+
+    // Cell layout → metric local offsets. The cell matrix itself is left
+    // untouched — this only projects it into the studio frame (decoupled).
+    const QMap<QLCPoint, GroupHead> heads = fg->headsMap();
+    int placed = 0;
+    for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
+    {
+        const quint32 fid = it.value().fxi;
+        if (fid == Fixture::invalidId() || !props->containsFixture(fid))
+            continue;   // fixture must be on the 2D map to be placed
+        rememberFixture(fid);
+        props->setFixtureGroup(fid, m_groupId);
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.groupLocal = QVector3D((it.key().x() - cx) * px,
+                                  (it.key().y() - cy) * py, 0.0f);
+        props->setFixtureRigProps(fid, rp);
+        ++placed;
+    }
+    Q_UNUSED(placed);
+    rebuildTable();
+    m_doc->setModified();
+    emit changed();
+}
+
+void StudioGroupEditor::adoptFromFixtureGroup()
+{
+    const quint32 fgid = selectedFxGroup();
+    FixtureGroup *fg = m_doc->fixtureGroup(fgid);
+    if (fg == nullptr)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    props->setGroupBinding(m_groupId, fgid,
+                           float(m_pitchX->value()), float(m_pitchY->value()));
+    props->setGroupHasFrame(m_groupId, true);
+
+    // Pull the bound group's fixtures in, keeping where they already sit — read
+    // each world position BEFORE it joins the frame (else fixtureRigPosition
+    // returns the not-yet-set derived value), then convert to a local offset.
+    foreach (quint32 fid, fg->fixtureList())
+    {
+        if (!props->containsFixture(fid))
+            continue;
+        const QVector3D world = props->fixtureRigPosition(fid);
+        rememberFixture(fid);
+        props->setFixtureGroup(fid, m_groupId);
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.groupLocal = props->worldToGroupLocal(m_groupId, world);
+        props->setFixtureRigProps(fid, rp);
+    }
+    rebuildTable();
+    m_doc->setModified();
+    emit changed();
+}
+
+void StudioGroupEditor::rememberFixture(quint32 fid)
+{
+    if (m_snapRig.contains(fid))
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    m_snapRig.insert(fid, props->fixtureRigProps(fid));
+    m_snapGroupOf.insert(fid, props->fixtureGroup(fid));
+}
+
 void StudioGroupEditor::snapshot()
 {
     MonitorProperties *props = m_doc->monitorProperties();
     m_snapGroup = props->group(m_groupId);
     m_snapRig.clear();
+    m_snapGroupOf.clear();
     foreach (quint32 fid, members())
-        m_snapRig.insert(fid, props->fixtureRigProps(fid));
+        rememberFixture(fid);
 }
 
 void StudioGroupEditor::revert()
@@ -236,8 +363,13 @@ void StudioGroupEditor::revert()
     props->setGroupName(m_groupId, m_snapGroup.name);
     props->setGroupHasFrame(m_groupId, m_snapGroup.hasFrame);
     props->setGroupFrame(m_groupId, m_snapGroup.origin, m_snapGroup.rotation);
+    props->setGroupBinding(m_groupId, m_snapGroup.boundFxGroup,
+                           m_snapGroup.pitchX, m_snapGroup.pitchY);
     for (auto it = m_snapRig.constBegin(); it != m_snapRig.constEnd(); ++it)
         props->setFixtureRigProps(it.key(), it.value());
+    // Restore prior group membership (unwinds seed/adopt pull-ins).
+    for (auto it = m_snapGroupOf.constBegin(); it != m_snapGroupOf.constEnd(); ++it)
+        props->setFixtureGroup(it.key(), it.value());
     m_doc->setModified();
     emit changed();
 }

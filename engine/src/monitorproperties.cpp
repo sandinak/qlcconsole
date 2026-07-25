@@ -796,6 +796,16 @@ void MonitorProperties::setGroupRotation(quint32 id, float rotationDeg)
         m_groups[id].rotation = rotationDeg;
 }
 
+void MonitorProperties::setGroupBinding(quint32 id, quint32 fxGroupId, float pitchX, float pitchY)
+{
+    if (m_groups.contains(id))
+    {
+        m_groups[id].boundFxGroup = fxGroupId;
+        m_groups[id].pitchX = pitchX;
+        m_groups[id].pitchY = pitchY;
+    }
+}
+
 quint32 MonitorProperties::fixtureFrameGroup(quint32 fid) const
 {
     if (!m_fixtureItems.contains(fid))
@@ -1460,6 +1470,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                                            a.value(QStringLiteral("OZ")).toFloat());
                     g.rotation = a.value(QStringLiteral("Rot")).toFloat();
                 }
+                if (a.hasAttribute(QStringLiteral("BoundFG")))
+                {
+                    g.boundFxGroup = a.value(QStringLiteral("BoundFG")).toUInt();
+                    g.pitchX = a.value(QStringLiteral("PitchX")).toFloat();
+                    g.pitchY = a.value(QStringLiteral("PitchY")).toFloat();
+                }
                 if (g.name.isEmpty())
                     g.name = QStringLiteral("Group %1").arg(gid);
                 m_groups.insert(gid, g);
@@ -1863,6 +1879,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("OY"), QString::number(double(g.origin.y()), 'f', 3));
             doc->writeAttribute(QStringLiteral("OZ"), QString::number(double(g.origin.z()), 'f', 3));
             doc->writeAttribute(QStringLiteral("Rot"), QString::number(double(g.rotation), 'f', 3));
+        }
+        if (g.boundFxGroup != 0)
+        {
+            doc->writeAttribute(QStringLiteral("BoundFG"), QString::number(g.boundFxGroup));
+            doc->writeAttribute(QStringLiteral("PitchX"), QString::number(double(g.pitchX), 'f', 3));
+            doc->writeAttribute(QStringLiteral("PitchY"), QString::number(double(g.pitchY), 'f', 3));
         }
         doc->writeEndElement();
     }

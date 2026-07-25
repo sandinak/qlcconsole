@@ -387,6 +387,14 @@ public:
         bool      hasFrame = false;
         QVector3D origin;            ///< world position of the local-frame origin (metres)
         float     rotation = 0.0f;   ///< frame yaw about Z, degrees
+        /** Fixture Studio binding (Phase 2). When boundFxGroup != 0 this studio
+         *  group is bound to an engine FixtureGroup: seeding lays members out
+         *  from that group's CELL matrix at pitchX/pitchY metres per cell. The
+         *  binding is provenance + seed spacing only — the cell layout stays the
+         *  script's coordinate space, decoupled from these metric offsets. */
+        quint32   boundFxGroup = 0;
+        float     pitchX = 0.5f;      ///< metres per cell in X (seed spacing)
+        float     pitchY = 0.5f;      ///< metres per cell in Y (seed spacing)
     };
 
     /** Set a group's position-lock flag (no-op if the group is unknown). */
@@ -425,6 +433,10 @@ public:
     void setGroupFrame(quint32 id, const QVector3D &origin, float rotationDeg);
     void setGroupOrigin(quint32 id, const QVector3D &origin);
     void setGroupRotation(quint32 id, float rotationDeg);
+
+    /** Record the FixtureGroup a studio group is bound to and its seed spacing
+     *  (metres per cell). Provenance + seed only; does not move members. */
+    void setGroupBinding(quint32 id, quint32 fxGroupId, float pitchX, float pitchY);
 
     /** The nearest frame-bearing group for fixture @p fid — walks the fixture's
      *  immediate group up its parent chain and returns the first group whose

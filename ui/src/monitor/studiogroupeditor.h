@@ -29,6 +29,7 @@
 class QDoubleSpinBox;
 class QLineEdit;
 class QTableWidget;
+class QComboBox;
 class Doc;
 
 /** Fixture Studio — group editor.
@@ -57,12 +58,17 @@ private slots:
     void applyFrame();          ///< push origin/rotation/name → doc, emit changed()
     void applyMemberCell(int row, int col);
     void recenterOrigin();      ///< move origin to member centroid; members stay put
+    void seedFromFixtureGroup();   ///< lay members out from the bound FG cell matrix
+    void adoptFromFixtureGroup();  ///< pull bound FG members in at their current pos
 
 private:
     QList<quint32> members() const;   ///< fixtures under this frame group
     void rebuildTable();
     void snapshot();
     void revert();
+    /** Record a fixture's pre-edit group + rig once, so Cancel can fully unwind
+     *  membership pulled in by seed/adopt. No-op if already remembered. */
+    void rememberFixture(quint32 fid);
 
 private:
     Doc     *m_doc;
@@ -76,9 +82,15 @@ private:
     QDoubleSpinBox  *m_rot = nullptr;
     QTableWidget    *m_table = nullptr;
 
+    QComboBox       *m_fgCombo = nullptr;
+    QDoubleSpinBox  *m_pitchX = nullptr;
+    QDoubleSpinBox  *m_pitchY = nullptr;
+    quint32 selectedFxGroup() const;
+
     // On-open snapshot for Cancel/revert.
     MonitorProperties::MonitorGroup   m_snapGroup;
     QMap<quint32, FixtureRigProps>    m_snapRig;
+    QMap<quint32, quint32>            m_snapGroupOf;   ///< fid -> prior monitor groupId
 };
 
 #endif // STUDIOGROUPEDITOR_H
