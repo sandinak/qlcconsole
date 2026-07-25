@@ -9,7 +9,43 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
-### 2026-07-25 — Fixture Studio: 2D-map groups as editable studio objects *(DESIGN — see FIXTURESTUDIO_DESIGN.md)*
+### 2026-07-25 — Fixture Studio: 2D-map groups as editable studio objects *(Phases 1–4 BUILT — needs eyeball; see FIXTURESTUDIO_DESIGN.md)*
+Foundational implementation landed across 5 commits (388958ab7 → ea9cad209).
+Engine core is unit-tested (monitorproperties_test studioFrameDerivation +
+studioFrameXmlRoundTrip, 16/16 pass); builds clean; app loads workspace with no
+regression. **Still needs interactive eyeball** — the UI flows below were built
+and compile but have not been exercised in the running app.
+- [x] **P1 engine** — `MonitorGroup` frame (hasFrame/origin/rotation), members'
+      `FixtureRigProps::groupLocal`, derived world pos via a new branch in
+      `fixtureRigPosition()` (the truss funnel), XML round-trip. **Tested.**
+- [x] **P1 UI** — `createStudioGroupFromSelection()` (origin=centroid, adopt
+      locals); member top-view drag edits `groupLocal`; `StudioGroupEditor`
+      (name/origin/rotation/per-member local X/Y/Z/re-center, live, snapshot-
+      revert); right-click Create/Edit. *(eyeball)*
+- [x] **P2** — bind a studio group to a FixtureGroup; **Seed from cells**
+      ((cell−centre)·pitch) / **Adopt current positions** (world→local);
+      `boundFxGroup`+pitch persisted; cell matrix left untouched. *(eyeball)*
+- [x] **P3** — `ProgrammerController::rebuildCompositeGroup()` re-pulls sources
+      from per-head provenance tags (already written by `copySelectionIntoGroup`),
+      re-blocks horizontally ordered by studio X; Fixture Manager “Rebuild
+      composite from members”. *(eyeball)*
+- [x] **P4** — component templates: `StudioTemplate::saveGroup()`/`stamp()` (JSON,
+      role/order arrangement); “Save as Template…” in the editor, “Stamp Studio
+      Template…” on a map selection. *(eyeball)*
+- [ ] **Deferred — graphical 3-plane (Top/Front/Side) canvas editor.** The form
+      editor already edits local X/Y/Z (3D-capable); the graphical canvas is the
+      richer authoring surface (needed to place a step's front-face vs top-deck
+      visually). Biggest single remaining chunk.
+- [ ] **Deferred by decision — live composition.** Snapshot chosen; provenance +
+      the single `rebuildCompositeGroup` entry point leave the door open. Enable
+      by re-running it on `FixtureGroup::changed(id)` when wanted.
+- [ ] **Eyeball checklist**: select 2+ fixtures → Create Studio Group → drag a
+      member (moves within frame) → Edit dialog: change origin/rotation (whole
+      unit moves/rotates), edit a local, Re-center; Bind a FixtureGroup → Seed
+      then Adopt; Save as Template → Stamp onto another selection; build a
+      composite FG then Rebuild-from-members; save/reload round-trips.
+
+### 2026-07-25 — Fixture Studio: DESIGN *(superseded by the BUILT entry above)*
 Promote `MonitorGroup` to a first-class, editable **studio object**: a rigid body
 with a local frame (origin+rotation), members in group-local coords, world
 position **derived** (the truss/`fixtureRigPosition` pattern). Click a group →
