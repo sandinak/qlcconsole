@@ -75,6 +75,20 @@ double StudioPlaneView::fixtureLenM(quint32 fid) const
     return 0.3;
 }
 
+QVector3D StudioPlaneView::fixtureAxis(quint32 fid) const
+{
+    const FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(fid);
+    const double th = qDegreesToRadians(double(rp.studioAngle));
+    const double c = qCos(th), s = qSin(th);
+    switch (rp.studioMount)
+    {
+    case 0:  return QVector3D(float(c), float(s), 0.0f);   // Top/deck: X-Y plane
+    case 2:  return QVector3D(0.0f, float(c), float(s));   // Side: Y-Z plane
+    case 1:
+    default: return QVector3D(float(c), 0.0f, float(s));   // Front/face: X-Z plane
+    }
+}
+
 StagePlatform *StudioPlaneView::anchorPlatform() const
 {
     MonitorProperties *props = m_doc->monitorProperties();
@@ -206,13 +220,9 @@ quint32 StudioPlaneView::hitTest(const QPointF &px) const
     {
         const QPointF cAB = project(props->fixtureRigProps(fid).groupLocal);
         const double halfLen = qMax(0.05, fixtureLenM(fid) / 2.0);
-        double th = 0.0;
-        if (m_plane == Top)
-            th = qDegreesToRadians(double(props->fixtureRotation(fid, 0, 0).z()
-                                          - props->group(m_groupId).rotation));
-        const QPointF dir(qCos(th), qSin(th));
-        const QPointF a = worldToScreen(cAB - dir * halfLen);
-        const QPointF b = worldToScreen(cAB + dir * halfLen);
+        const QPointF halfAB = project(fixtureAxis(fid) * float(halfLen));
+        const QPointF a = worldToScreen(cAB - halfAB);
+        const QPointF b = worldToScreen(cAB + halfAB);
         const double d = distToSegSq(px, a, b);
         if (d <= bestD) { bestD = d; best = fid; }
     }
@@ -281,17 +291,14 @@ void StudioPlaneView::drawFixture(QPainter &p, quint32 fid) const
     const QPointF cAB = project(props->fixtureRigProps(fid).groupLocal);
     const bool drag = (fid == m_dragFid);
 
-    // A fixture is a line of heads spanning its real physical length. Orient it
-    // (Top only) by its yaw relative to the frame; elevation planes draw it along
-    // the horizontal axis.
+    // A fixture is a line of heads spanning its real physical length along its
+    // 3-D long axis. Project that axis into the current plane: full length where
+    // the axis lies in the view, a DOT where it is perpendicular (e.g. an
+    // X-aligned tape seen from the Side).
     const double halfLen = qMax(0.05, fixtureLenM(fid) / 2.0);   // metres
-    double th = 0.0;
-    if (m_plane == Top)
-        th = qDegreesToRadians(double(props->fixtureRotation(fid, 0, 0).z()
-                                      - props->group(m_groupId).rotation));
-    const QPointF dir(qCos(th), qSin(th));
-    const QPointF a = cAB - dir * halfLen;
-    const QPointF b = cAB + dir * halfLen;
+    const QPointF halfAB = project(fixtureAxis(fid) * float(halfLen));
+    const QPointF a = cAB - halfAB;
+    const QPointF b = cAB + halfAB;
 
     QColor col = props->fixtureGelColor(fid, 0, 0);
     if (!col.isValid() || col == Qt::black)

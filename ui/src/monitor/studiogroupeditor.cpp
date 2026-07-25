@@ -165,9 +165,10 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     QGroupBox *memBox = new QGroupBox(tr("Members (group-local offset, metres)"), this);
     QVBoxLayout *memLay = new QVBoxLayout(memBox);
     m_table = new QTableWidget(memBox);
-    m_table->setColumnCount(4);
+    m_table->setColumnCount(6);
     m_table->setHorizontalHeaderLabels(QStringList()
-        << tr("Fixture") << tr("Local X") << tr("Local Y") << tr("Local Z"));
+        << tr("Fixture") << tr("Local X") << tr("Local Y") << tr("Local Z")
+        << tr("Face") << tr("Angle°"));
     m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_table->verticalHeader()->setVisible(false);
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
@@ -226,7 +227,8 @@ void StudioGroupEditor::rebuildTable()
         const quint32 fid = ids[r];
         Fixture *fx = m_doc->fixture(fid);
         const QString nm = fx ? fx->name() : tr("Fixture %1").arg(fid);
-        const QVector3D lp = props->fixtureRigProps(fid).groupLocal;
+        const FixtureRigProps rp = props->fixtureRigProps(fid);
+        const QVector3D lp = rp.groupLocal;
 
         QTableWidgetItem *n = new QTableWidgetItem(nm);
         n->setData(Qt::UserRole, fid);
@@ -236,6 +238,14 @@ void StudioGroupEditor::rebuildTable()
         for (int c = 0; c < 3; ++c)
             m_table->setItem(r, c + 1,
                 new QTableWidgetItem(QString::number(double(v[c]), 'f', 3)));
+
+        static const char *faceName[3] = { "Top", "Front", "Side" };
+        const int mount = qBound(0, rp.studioMount, 2);
+        QTableWidgetItem *f = new QTableWidgetItem(QString::fromLatin1(faceName[mount]));
+        f->setToolTip(tr("Face the fixture lies on: Top, Front or Side"));
+        m_table->setItem(r, 4, f);
+        m_table->setItem(r, 5,
+            new QTableWidgetItem(QString::number(double(rp.studioAngle), 'f', 1)));
     }
     m_loading = false;
 }
@@ -255,7 +265,7 @@ void StudioGroupEditor::applyFrame()
 
 void StudioGroupEditor::applyMemberCell(int row, int col)
 {
-    if (m_loading || col < 1 || col > 3)
+    if (m_loading || col < 1 || col > 5)
         return;
     QTableWidgetItem *n = m_table->item(row, 0);
     if (n == nullptr)
@@ -263,12 +273,29 @@ void StudioGroupEditor::applyMemberCell(int row, int col)
     const quint32 fid = n->data(Qt::UserRole).toUInt();
     MonitorProperties *props = m_doc->monitorProperties();
     FixtureRigProps rp = props->fixtureRigProps(fid);
-    QVector3D lp = rp.groupLocal;
-    const float val = float(m_table->item(row, col)->text().toDouble());
-    if (col == 1) lp.setX(val);
-    else if (col == 2) lp.setY(val);
-    else lp.setZ(val);
-    rp.groupLocal = lp;
+    const QString text = m_table->item(row, col)->text().trimmed();
+
+    if (col >= 1 && col <= 3)
+    {
+        QVector3D lp = rp.groupLocal;
+        const float val = float(text.toDouble());
+        if (col == 1) lp.setX(val);
+        else if (col == 2) lp.setY(val);
+        else lp.setZ(val);
+        rp.groupLocal = lp;
+    }
+    else if (col == 4)   // Face: Top / Front / Side (or 0/1/2)
+    {
+        const QChar c0 = text.isEmpty() ? QChar() : text.at(0).toUpper();
+        if (c0 == 'T') rp.studioMount = 0;
+        else if (c0 == 'F') rp.studioMount = 1;
+        else if (c0 == 'S') rp.studioMount = 2;
+        else rp.studioMount = qBound(0, text.toInt(), 2);
+    }
+    else   // col == 5, Angle
+    {
+        rp.studioAngle = float(text.toDouble());
+    }
     props->setFixtureRigProps(fid, rp);
     if (m_plane) m_plane->reload();
     m_doc->setModified();

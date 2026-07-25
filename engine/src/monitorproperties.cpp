@@ -1597,6 +1597,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.groupLocal = QVector3D(a.value("GLX").toFloat(),
                                           a.value("GLY").toFloat(),
                                           a.value("GLZ").toFloat());
+            if (a.hasAttribute("SM")) rp.studioMount = a.value("SM").toInt();
+            if (a.hasAttribute("SA")) rp.studioAngle = a.value("SA").toFloat();
             m_rigProps[fid] = rp;
             root.skipCurrentElement();
         }
@@ -1985,6 +1987,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("GLX"), QString::number(double(rp.groupLocal.x()), 'f', 3));
             doc->writeAttribute(QStringLiteral("GLY"), QString::number(double(rp.groupLocal.y()), 'f', 3));
             doc->writeAttribute(QStringLiteral("GLZ"), QString::number(double(rp.groupLocal.z()), 'f', 3));
+            doc->writeAttribute(QStringLiteral("SM"), QString::number(rp.studioMount));
+            doc->writeAttribute(QStringLiteral("SA"), QString::number(double(rp.studioAngle), 'f', 1));
         }
         doc->writeEndElement();
     }

@@ -76,6 +76,7 @@ private:
     void drawStructure(QPainter &p) const;     ///< the anchor feature as reference
     void drawFixture(QPainter &p, quint32 fid) const;   ///< a fixture as an LED bar
     double fixtureLenM(quint32 fid) const;     ///< real physical length (metres)
+    QVector3D fixtureAxis(quint32 fid) const;  ///< unit long-axis direction in the local frame
     class StagePlatform *anchorPlatform() const;   ///< platform this group is slaved to, or null
     QPointF project(const QVector3D &local) const;   ///< local → in-plane (a,b) metres
     QVector3D unproject(const QPointF &ab, const QVector3D &prev) const; ///< (a,b) → local

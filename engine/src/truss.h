@@ -246,6 +246,16 @@ struct FixtureRigProps
      *  the local offset within that frame. */
     QVector3D        groupLocal;                   ///< metres, group-local offset
 
+    /** Studio long-axis orientation. A fixture (e.g. an LED tape) has a long
+     *  axis that lies in one of the frame's planes; this records which plane and
+     *  the in-plane angle so the studio editor can project it correctly — full
+     *  length where the axis lies in the view, a dot where it is perpendicular.
+     *   studioMount: 0 = Top/deck (axis in X-Y), 1 = Front/face (axis in X-Z),
+     *                2 = Side (axis in Y-Z).
+     *   studioAngle: degrees, 0 = along the horizontal axis of that plane. */
+    int              studioMount = 1;              ///< default: front face
+    float            studioAngle = 0.0f;
+
     static quint32 invalidPlatformId() { return UINT_MAX; }
     bool onRiser() const { return riserPlatformId != UINT_MAX; }
     bool onDeck()  const { return deckPlatformId  != UINT_MAX; }

@@ -1041,9 +1041,16 @@ void MonitorGraphicsView::openStudioGroupForGroup(quint32 groupId)
             if (pl != nullptr)
             {
                 if (rp.riserPlatformId == g0.anchorId)
+                {
+                    // Preserve the fixture's face as its studio mount plane.
+                    rp.studioMount = (rp.riserFace == FixtureRigProps::RiserTop) ? 0 : 1;
                     rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+                }
                 if (rp.deckPlatformId == g0.anchorId)
+                {
+                    rp.studioMount = 0;   // deck = top plane
                     rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
+                }
             }
             rp.groupLocal = props->worldToGroupLocal(groupId, world.value(fid));
             props->setFixtureRigProps(fid, rp);
