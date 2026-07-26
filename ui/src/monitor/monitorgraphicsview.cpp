@@ -1529,6 +1529,18 @@ void MonitorGraphicsView::refreshFixtureLabels()
     showFixturesLabels(m_doc->monitorProperties()->labelsVisible());
 }
 
+QRect MonitorGraphicsView::selectionViewportRect() const
+{
+    const QList<MonitorFixtureItem *> items = selectedFixtureItems();
+    if (items.isEmpty())
+        return QRect();
+    QRectF scene;
+    foreach (MonitorFixtureItem *it, items)
+        scene = scene.isNull() ? it->sceneBoundingRect()
+                               : scene.united(it->sceneBoundingRect());
+    return mapFromScene(scene).boundingRect();
+}
+
 QColor MonitorGraphicsView::fixtureGelColor(quint32 id)
 {
     MonitorFixtureItem *item = m_fixtures[id];

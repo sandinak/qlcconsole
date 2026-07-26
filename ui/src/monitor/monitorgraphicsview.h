@@ -164,6 +164,11 @@ public:
      *  labels flag. Call after a layer's labels toggle changes. */
     void refreshFixtureLabels();
 
+    /** Bounding rect (viewport pixels) of the currently selected fixtures, or an
+     *  invalid QRect if none. Used to band the rulers with the selection's
+     *  extent while it is moved. */
+    QRect selectionViewportRect() const;
+
     /** Return the gel color of the fixture with the given ID */
     QColor fixtureGelColor(quint32 id);
 

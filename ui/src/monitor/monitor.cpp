@@ -599,6 +599,19 @@ bool Monitor::eventFilter(QObject *watched, QEvent *event)
             QMouseEvent *me = static_cast<QMouseEvent *>(event);
             if (m_hRuler != NULL) m_hRuler->setCursorPixel(me->pos().x());
             if (m_vRuler != NULL) m_vRuler->setCursorPixel(me->pos().y());
+            // Band the rulers with the selection's extent, so while you drag a
+            // fixture you can read exactly where it sits on the ruler.
+            const QRect sr = m_graphicsView->selectionViewportRect();
+            if (sr.isValid())
+            {
+                if (m_hRuler != NULL) m_hRuler->setItemRange(sr.left(), sr.right());
+                if (m_vRuler != NULL) m_vRuler->setItemRange(sr.top(), sr.bottom());
+            }
+            else
+            {
+                if (m_hRuler != NULL) m_hRuler->setItemRange(-1, -1);
+                if (m_vRuler != NULL) m_vRuler->setItemRange(-1, -1);
+            }
         }
         else if (event->type() == QEvent::Leave)
         {

@@ -118,6 +118,19 @@ void MonitorRuler::paintEvent(QPaintEvent *)
     if (horiz)
         p.drawText(QRect(2, 1, 60, height() - 2), Qt::AlignLeft | Qt::AlignVCenter, axis);
 
+    // Selection / dragged-item extent band (drawn under the cursor marker).
+    if (m_rangeA >= 0 && m_rangeB >= 0)
+    {
+        const int a = qMin(m_rangeA, m_rangeB);
+        const int b = qMax(m_rangeA, m_rangeB);
+        p.fillRect(horiz ? QRect(a, 0, qMax(2, b - a), height())
+                         : QRect(0, a, width(), qMax(2, b - a)),
+                   QColor(255, 196, 64, 90));
+        p.setPen(QPen(QColor(255, 196, 64), 1));
+        if (horiz) { p.drawLine(a, 0, a, height()); p.drawLine(b, 0, b, height()); }
+        else       { p.drawLine(0, a, width(), a);  p.drawLine(0, b, width(), b); }
+    }
+
     // Live cursor marker.
     if (m_cursorPixel >= 0)
     {
@@ -127,4 +140,13 @@ void MonitorRuler::paintEvent(QPaintEvent *)
         else
             p.drawLine(0, m_cursorPixel, width(), m_cursorPixel);
     }
+}
+
+void MonitorRuler::setItemRange(int pxA, int pxB)
+{
+    if (pxA == m_rangeA && pxB == m_rangeB)
+        return;
+    m_rangeA = pxA;
+    m_rangeB = pxB;
+    update();
 }

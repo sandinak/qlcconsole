@@ -55,6 +55,11 @@ public slots:
      *  (x for horizontal, y for vertical). Pass -1 to hide it. */
     void setCursorPixel(int px);
 
+    /** Highlight the extent of the current selection/dragged item as a band
+     *  between two viewport pixels along this ruler's axis. Pass (-1,-1) to
+     *  clear. Lets you read where the moving item sits on the ruler. */
+    void setItemRange(int pxA, int pxB);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
 
@@ -62,6 +67,8 @@ private:
     MonitorGraphicsView *m_view;
     Orientation m_orient;
     int m_cursorPixel = -1;
+    int m_rangeA = -1;
+    int m_rangeB = -1;
 };
 
 /** @} */
