@@ -22,6 +22,8 @@
 #include <QActionGroup>
 #include <QColorDialog>
 #include <QSet>
+#include <QStyleOptionComboBox>
+#include <QStyle>
 #include <algorithm>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -585,8 +587,9 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_overlayCombo->addItem(tr("Network"),    ViewNet);
     m_overlayCombo->addItem(tr("Stage only"), ViewStage);
     m_overlayCombo->setCurrentIndex(qMax(0, m_overlayCombo->findData(m_mapView)));
-    m_overlayCombo->setToolTip(tr("Recolour / filter the plot: Power, DMX universe, "
-                                  "Network transport, or Stage-only"));
+    m_overlayCombo->setToolTip(tr("Recolour / filter the plot — click to cycle, "
+                                  "arrow for the full list"));
+    m_overlayCombo->installEventFilter(this);   // click the box to cycle
     fl->addWidget(m_overlayCombo);
     connect(m_overlayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         m_mapView = m_overlayCombo->currentData().toInt();
@@ -594,6 +597,8 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     });
     addSep();
     fl->addWidget(new QLabel(tr("View:")));
+    m_povCombo->setToolTip(tr("Point of view — click to cycle, arrow for the full list"));
+    m_povCombo->installEventFilter(this);       // click the box to cycle
     fl->addWidget(m_povCombo);
     addSep();
 
@@ -628,14 +633,23 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
 
 bool Monitor::eventFilter(QObject *watched, QEvent *event)
 {
-    // Click the mode chip to cycle the 2D point of view (Top → Front → Side).
-    if (watched == m_modeLabel && event->type() == QEvent::MouseButtonPress
-        && m_povCombo != nullptr)
+    // Overlay / View dropdowns: clicking the BOX cycles to the next item; the
+    // drop-down ARROW still opens the full list.
+    if ((watched == m_overlayCombo || watched == m_povCombo)
+        && event->type() == QEvent::MouseButtonPress)
     {
-        const int idx = m_povCombo->currentIndex();
-        const int next = (idx >= 1 && idx < 3) ? idx + 1 : 1;   // DMX/Side → Top
-        m_povCombo->setCurrentIndex(next);
-        return true;
+        QComboBox *cb = static_cast<QComboBox *>(watched);
+        QMouseEvent *me = static_cast<QMouseEvent *>(event);
+        QStyleOptionComboBox opt;
+        opt.initFrom(cb);
+        opt.subControls = QStyle::SC_All;
+        const QRect arrow = cb->style()->subControlRect(
+            QStyle::CC_ComboBox, &opt, QStyle::SC_ComboBoxArrow, cb);
+        if (arrow.contains(me->pos()))
+            return false;                       // arrow → open the list as usual
+        if (cb->count() > 0)
+            cb->setCurrentIndex((cb->currentIndex() + 1) % cb->count());
+        return true;                            // box → cycle, no popup
     }
 
     if (m_graphicsView != NULL && watched == m_graphicsView->viewport())
