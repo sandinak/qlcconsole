@@ -254,6 +254,13 @@ void Monitor::showDMXView()
     m_DMXToolBar->show();
     m_scrollArea->show();
 
+    if (m_dmxViewCombo != NULL)
+    {
+        m_dmxViewCombo->blockSignals(true);
+        m_dmxViewCombo->setCurrentIndex(0);   // "DMX"
+        m_dmxViewCombo->blockSignals(false);
+    }
+
     for (quint32 i = 0; i < m_doc->inputOutputMap()->universesCount(); i++)
     {
         quint32 uniID = m_doc->inputOutputMap()->getUniverseID(i);
@@ -635,7 +642,7 @@ bool Monitor::eventFilter(QObject *watched, QEvent *event)
 {
     // Overlay / View dropdowns: clicking the BOX cycles to the next item; the
     // drop-down ARROW still opens the full list.
-    if ((watched == m_overlayCombo || watched == m_povCombo)
+    if ((watched == m_overlayCombo || watched == m_povCombo || watched == m_dmxViewCombo)
         && event->type() == QEvent::MouseButtonPress)
     {
         QComboBox *cb = static_cast<QComboBox *>(watched);
@@ -804,6 +811,12 @@ void Monitor::showGraphicsView()
         m_povCombo->blockSignals(true);
         m_povCombo->setCurrentIndex(1);   // 2D — Top
         m_povCombo->blockSignals(false);
+        if (m_dmxViewCombo != NULL)
+        {
+            m_dmxViewCombo->blockSignals(true);
+            m_dmxViewCombo->setCurrentIndex(1);
+            m_dmxViewCombo->blockSignals(false);
+        }
         if (m_lockAction != NULL) m_lockAction->setEnabled(true);
         if (m_snapCombo != NULL)  m_snapCombo->setEnabled(true);
     }
@@ -995,6 +1008,28 @@ void Monitor::initDMXToolbar()
     group->addAction(action);
     if (m_props->valueStyle() == MonitorProperties::PercentageValues)
         action->setChecked(true);
+
+    /* View selector — so you can leave the DMX grid back to the 2D map. Mirrors
+     *  the footer View combo; the Universe combo below sits to its right. */
+    m_DMXToolBar->addSeparator();
+    QLabel *dmxViewLabel = new QLabel(tr("View:"));
+    dmxViewLabel->setMargin(5);
+    m_DMXToolBar->addWidget(dmxViewLabel);
+    m_dmxViewCombo = new QComboBox(this);
+    m_dmxViewCombo->addItem(tr("DMX"),        -1);
+    m_dmxViewCombo->addItem(tr("2D \342\200\224 Top"),   int(MonitorGraphicsView::PovTop));
+    m_dmxViewCombo->addItem(tr("2D \342\200\224 Front"), int(MonitorGraphicsView::PovFront));
+    m_dmxViewCombo->addItem(tr("2D \342\200\224 Side"),  int(MonitorGraphicsView::PovSide));
+    m_dmxViewCombo->setToolTip(tr("Switch to the 2D map view — click to cycle, "
+                                  "arrow for the full list"));
+    m_dmxViewCombo->installEventFilter(this);   // click the box to cycle
+    m_DMXToolBar->addWidget(m_dmxViewCombo);
+    connect(m_dmxViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int idx) {
+        // Drive the footer combo, which owns the actual view-switch logic.
+        if (m_povCombo != NULL && m_povCombo->currentIndex() != idx)
+            m_povCombo->setCurrentIndex(idx);
+    });
 
     /* Universe combo box */
     m_DMXToolBar->addSeparator();
