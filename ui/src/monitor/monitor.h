@@ -354,6 +354,7 @@ protected:
     QComboBox *m_unitsCombo;
     QSpinBox *m_gridSubdivSpin;
     QComboBox *m_snapCombo;
+    QToolButton *m_snapToggle = nullptr;
     int m_mapView = 0;       ///< current 2D-map overlay (0=Normal/1=Power/2=Stage; was m_viewCombo)
     QComboBox *m_povCombo;   ///< Top / Front / Side point of view
 

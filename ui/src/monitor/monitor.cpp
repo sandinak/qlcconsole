@@ -429,6 +429,9 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_modeLabel = new QLabel(footer);
     m_modeLabel->setAutoFillBackground(true);
     m_modeLabel->setMargin(3);
+    m_modeLabel->setCursor(Qt::PointingHandCursor);
+    m_modeLabel->setToolTip(tr("Current view — click to switch (Top → Front → Side)"));
+    m_modeLabel->installEventFilter(this);
     fl->addWidget(m_modeLabel);
     { QFrame *sep = new QFrame(); sep->setFrameShape(QFrame::VLine); fl->addWidget(sep); }
 
@@ -465,20 +468,46 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->addWidget(m_gridSubdivSpin);
     connect(m_gridSubdivSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridSubdivisionsChanged(int)));
 
-    fl->addWidget(new QLabel(tr("Snap")));
+    // Separate the grid-size controls from the snap controls.
+    {
+        QFrame *sep = new QFrame();
+        sep->setFrameShape(QFrame::VLine);
+        sep->setFrameShadow(QFrame::Sunken);
+        fl->addWidget(sep);
+    }
+
+    // Snap: a dedicated on/off toggle, plus the division to snap to.
+    m_snapToggle = new QToolButton(footer);
+    m_snapToggle->setText(tr("Snap"));
+    m_snapToggle->setCheckable(true);
+    m_snapToggle->setChecked(m_props->snapDivisions() > 0);
+    m_snapToggle->setToolTip(tr("Snap fixtures to the grid while moving them"));
+    fl->addWidget(m_snapToggle);
+
     m_snapCombo = new QComboBox();
-    m_snapCombo->addItem(tr("Off"), 0);
     m_snapCombo->addItem(tr("Full"), 1);
     m_snapCombo->addItem(tr("1/2"), 2);
     m_snapCombo->addItem(tr("1/4"), 4);
     {
-        int snapIdx = m_snapCombo->findData(m_props->snapDivisions());
+        const int d = m_props->snapDivisions();
+        int snapIdx = m_snapCombo->findData(d > 0 ? d : 1);
         if (snapIdx >= 0)
             m_snapCombo->setCurrentIndex(snapIdx);
     }
-    m_snapCombo->setToolTip(tr("Snap fixtures to the grid while moving them"));
+    m_snapCombo->setEnabled(m_snapToggle->isChecked());
+    m_snapCombo->setToolTip(tr("Grid subdivision to snap to"));
     fl->addWidget(m_snapCombo);
-    connect(m_snapCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotSnapChanged(int)));
+
+    auto applySnap = [this]() {
+        const int div = m_snapToggle->isChecked() ? m_snapCombo->currentData().toInt() : 0;
+        m_snapCombo->setEnabled(m_snapToggle->isChecked());
+        m_graphicsView->setSnapDivisions(div);
+        m_props->setSnapDivisions(div);
+        m_doc->setModified();
+    };
+    connect(m_snapToggle, &QToolButton::toggled, this, [applySnap](bool) { applySnap(); });
+    connect(m_snapCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [applySnap](int) { applySnap(); });
 
     /* separator */
     {
@@ -496,11 +525,12 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->addWidget(rulerBtn);
     connect(rulerBtn, &QToolButton::toggled, this, [this](bool on) { setRulersVisible(on); });
 
-    // Origin control: click-to-place or a preset.
+    // Origin / centering control: click-to-place or a preset. The ⌖ glyph
+    // marks it as the "set the 0,0 origin / centre" control.
     QToolButton *originBtn = new QToolButton(footer);
-    originBtn->setText(tr("0,0"));
+    originBtn->setText(QString::fromUtf8("\xE2\x8C\x96") + tr(" 0,0"));
     originBtn->setPopupMode(QToolButton::InstantPopup);
-    originBtn->setToolTip(tr("Set where the rulers read 0,0"));
+    originBtn->setToolTip(tr("Set where the rulers read 0,0 (origin / centre)"));
     {
         QMenu *om = new QMenu(originBtn);
         om->addAction(tr("Click to place 0,0…"), this, [this]() {
@@ -552,6 +582,16 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
 
 bool Monitor::eventFilter(QObject *watched, QEvent *event)
 {
+    // Click the mode chip to cycle the 2D point of view (Top → Front → Side).
+    if (watched == m_modeLabel && event->type() == QEvent::MouseButtonPress
+        && m_povCombo != nullptr)
+    {
+        const int idx = m_povCombo->currentIndex();
+        const int next = (idx >= 1 && idx < 3) ? idx + 1 : 1;   // DMX/Side → Top
+        m_povCombo->setCurrentIndex(next);
+        return true;
+    }
+
     if (m_graphicsView != NULL && watched == m_graphicsView->viewport())
     {
         if (event->type() == QEvent::MouseMove)
@@ -955,13 +995,6 @@ void Monitor::initGraphicsToolbar()
     updatePlotLockAppearance(m_props->layoutLocked());
     connect(m_lockAction, SIGNAL(toggled(bool)), this, SLOT(slotLockToggled(bool)));
 
-    // Show/hide the Layers side panel. The toolbar is built before the panel
-    // exists (initGraphicsView runs next), so the checked state is synced there.
-    m_layersAction = m_graphicsToolBar->addAction(QIcon(":/frame.png"), tr("Layers"));
-    m_layersAction->setCheckable(true);
-    m_layersAction->setToolTip(tr("Show or hide the Layers panel"));
-    connect(m_layersAction, SIGNAL(toggled(bool)), this, SLOT(slotToggleLayersPanel(bool)));
-
     m_graphicsToolBar->addSeparator();
     // Group/Ungroup, the Overlay selector, Copy/Paste, labels, background and
     // Build focus now live in the "More" popup (built after Add/Remove below),
@@ -1091,6 +1124,18 @@ void Monitor::initGraphicsToolbar()
 
     moreBtn->setMenu(moreMenu);
     m_graphicsToolBar->addWidget(moreBtn);
+
+    // Push the Layers sidebar toggle to the far RIGHT of the toolbar, so it
+    // reads as the panel's show/hide handle.
+    {
+        QWidget *spacer = new QWidget(this);
+        spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        m_graphicsToolBar->addWidget(spacer);
+    }
+    m_layersAction = m_graphicsToolBar->addAction(QIcon(":/frame.png"), tr("Layers"));
+    m_layersAction->setCheckable(true);
+    m_layersAction->setToolTip(tr("Show or hide the Layers sidebar"));
+    connect(m_layersAction, SIGNAL(toggled(bool)), this, SLOT(slotToggleLayersPanel(bool)));
 
     if (QLCFile::hasWindowManager() == false)
     {
