@@ -9,6 +9,24 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### FUTURE — Programming tab: Show→tracks→functions subtree + type ordering *(Branson shower-thought; not started)*
+- Expand a **Show** in the Programming function tree into its **tracks**, each track
+  into the functions assigned to it (mirror the Show Manager timeline hierarchy).
+- Option to order top-level function types **hierarchically** (Show · Chaser ·
+  Collection · RGBMatrix · EFX · Scene) instead of alphanumeric.
+- Remove the "Remove NN" hack from the function-tree right-click menu.
+- Tree lives in `FunctionTreeWidget`; ordering = sort-key change, subtree =
+  tree-build change.
+
+### FUTURE — "Look" as the assembly unit (Scene/Collection rethink) *(Branson shower-thought; discussion captured)*
+Don't rename Scene/Collection (breaks traditional QLC users). Instead make the
+fork's **Look** first-class: give it (1) an explicit **fixture scope** (the
+"subpart vs whole stage" idea, as metadata) and (2) **palette/fixture state as the
+BASE that effects/RGBScripts consume** (parameterise effects by the Look's state
+vs discrete per-fixture config; old way still works). Continuous with palette-fed
+looks + dimmer-as-multiplier scene-base already built. Write a design doc first
+(à la FIXTURESTUDIO_DESIGN.md) before code.
+
 ### 2026-07-25 — Fixture Studio: 2D-map groups as editable studio objects *(Phases 1–4 BUILT — needs eyeball; see FIXTURESTUDIO_DESIGN.md)*
 Foundational implementation landed across 5 commits (388958ab7 → ea9cad209).
 Engine core is unit-tested (monitorproperties_test studioFrameDerivation +

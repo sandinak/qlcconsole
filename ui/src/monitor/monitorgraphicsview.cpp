@@ -1601,6 +1601,22 @@ void MonitorGraphicsView::setViewPOV(ViewPOV pov)
     emit rulersChanged();
 }
 
+// The fixture's 3-D long-axis (unit) direction, from its studio orientation.
+// Mirrors StudioPlaneView::fixtureAxis so the main monitor and the studio editor
+// agree. Defaults (Front face, angle 0) → along X, which is the common tape case.
+static QVector3D fixtureLongAxis(const FixtureRigProps &rp)
+{
+    const double th = qDegreesToRadians(double(rp.studioAngle));
+    const double c = qCos(th), s = qSin(th);
+    switch (rp.studioMount)
+    {
+    case 0:  return QVector3D(float(c), float(s), 0.0f);   // Top/deck: X-Y
+    case 2:  return QVector3D(0.0f, float(c), float(s));   // Side: Y-Z
+    case 1:
+    default: return QVector3D(float(c), 0.0f, float(s));   // Front/face: X-Z
+    }
+}
+
 void MonitorGraphicsView::updateFixture(quint32 id)
 {
     Fixture *fxi = m_doc->fixture(id);
@@ -1638,6 +1654,22 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     // provides per-LED detail.
     double pw = (double(width)  * m_cellPixels) / m_unitValue;
     double ph = (double(height) * m_cellPixels) / m_unitValue;
+
+    // Elevation views (Front/Side) FORESHORTEN the fixture by its 3-D long-axis
+    // orientation. A tape running along X shows full length in Front but
+    // collapses to a dot in Side (its length is perpendicular to that view) —
+    // the same projection the studio editor uses. The heads then lay out along
+    // whichever screen axis survives.
+    if (isElevation())
+    {
+        const QVector3D axis = fixtureLongAxis(m_doc->monitorProperties()->fixtureRigProps(id));
+        const double hAxis = (m_pov == PovFront) ? qAbs(double(axis.x())) : qAbs(double(axis.y()));
+        const double vAxis = qAbs(double(axis.z()));   // vertical screen axis is Z in both
+        const double L = pw, Th = ph;                  // physical width / thickness (px)
+        pw = qMax(3.0, L * hAxis + Th * vAxis);
+        ph = qMax(3.0, L * vAxis + Th * hAxis);
+    }
+
     const double kMinArea = 16.0 * 16.0;
     const double area = pw * ph;
     if (area > 0.0 && area < kMinArea)
