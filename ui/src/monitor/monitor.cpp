@@ -440,20 +440,39 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->setContentsMargins(6, 2, 6, 2);
     fl->setSpacing(6);
 
-    // Prominent mode chip on the far left — always shows what the 2D screen is
-    // currently doing (view POV · overlay · Build). Highlighted when in a
-    // non-default mode so it's obvious.
-    m_modeLabel = new QLabel(footer);
-    m_modeLabel->setAutoFillBackground(true);
-    m_modeLabel->setMargin(3);
-    m_modeLabel->setCursor(Qt::PointingHandCursor);
-    m_modeLabel->setToolTip(tr("Current view — click to switch (Top → Front → Side)"));
-    m_modeLabel->installEventFilter(this);
-    fl->addWidget(m_modeLabel);
-    { QFrame *sep = new QFrame(); sep->setFrameShape(QFrame::VLine); fl->addWidget(sep); }
+    auto addSep = [&]() {
+        QFrame *sep = new QFrame();
+        sep->setFrameShape(QFrame::VLine);
+        sep->setFrameShadow(QFrame::Sunken);
+        fl->addWidget(sep);
+    };
 
+    // ---- Overlay: [dropdown] ----  (far left; always shows the current lens)
+    fl->addWidget(new QLabel(tr("Overlay:")));
+    m_overlayCombo = new QComboBox(footer);
+    m_overlayCombo->addItem(tr("Normal"),     ViewNormal);
+    m_overlayCombo->addItem(tr("Power"),      ViewPower);
+    m_overlayCombo->addItem(tr("DMX"),        ViewDMX);
+    m_overlayCombo->addItem(tr("Network"),    ViewNet);
+    m_overlayCombo->addItem(tr("Stage only"), ViewStage);
+    m_overlayCombo->setCurrentIndex(qMax(0, m_overlayCombo->findData(m_mapView)));
+    m_overlayCombo->setToolTip(tr("Recolour / filter the plot: Power, DMX universe, "
+                                  "Network transport, or Stage-only"));
+    fl->addWidget(m_overlayCombo);
+    connect(m_overlayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        m_mapView = m_overlayCombo->currentData().toInt();
+        applyMapView(m_mapView);
+        updateModeIndicator();
+    });
+    addSep();
+
+    // ---- View: [dropdown] ----  (the POV, moved down from the toolbar)
+    fl->addWidget(new QLabel(tr("View:")));
+    fl->addWidget(m_povCombo);
+    addSep();
+
+    // ---- Size [x] [y] [units] ----
     QVector3D gridSize = m_props->gridSize();
-
     fl->addWidget(new QLabel(tr("Size")));
     m_gridWSpin = new QSpinBox();
     m_gridWSpin->setMinimum(1);
@@ -475,17 +494,9 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         m_unitsCombo->setCurrentIndex(1);
     fl->addWidget(m_unitsCombo);
     connect(m_unitsCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotGridUnitsChanged(int)));
+    addSep();
 
-    fl->addWidget(new QLabel(tr("Subdiv")));
-    m_gridSubdivSpin = new QSpinBox();
-    m_gridSubdivSpin->setMinimum(1);
-    m_gridSubdivSpin->setMaximum(8);
-    m_gridSubdivSpin->setValue(m_props->gridSubdivisions());
-    m_gridSubdivSpin->setToolTip(tr("Number of sub-divisions drawn inside each grid cell"));
-    fl->addWidget(m_gridSubdivSpin);
-    connect(m_gridSubdivSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridSubdivisionsChanged(int)));
-
-    // Grid lines show/hide — grouped with the subdivision control it relates to.
+    // ---- (Grid) [Subdiv] ----  toggle + its modifier
     QToolButton *gridBtn = new QToolButton(footer);
     gridBtn->setText(tr("Grid"));
     gridBtn->setCheckable(true);
@@ -496,14 +507,15 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         m_graphicsView->setGridVisible(on);
         QSettings().setValue(SETTINGS_GRID, on);
     });
-
-    // Separate the grid-size controls from the snap controls.
-    {
-        QFrame *sep = new QFrame();
-        sep->setFrameShape(QFrame::VLine);
-        sep->setFrameShadow(QFrame::Sunken);
-        fl->addWidget(sep);
-    }
+    fl->addWidget(new QLabel(tr("Subdiv")));
+    m_gridSubdivSpin = new QSpinBox();
+    m_gridSubdivSpin->setMinimum(1);
+    m_gridSubdivSpin->setMaximum(8);
+    m_gridSubdivSpin->setValue(m_props->gridSubdivisions());
+    m_gridSubdivSpin->setToolTip(tr("Number of sub-divisions drawn inside each grid cell"));
+    fl->addWidget(m_gridSubdivSpin);
+    connect(m_gridSubdivSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridSubdivisionsChanged(int)));
+    addSep();
 
     // Snap: a dedicated on/off toggle, plus the division to snap to.
     m_snapToggle = new QToolButton(footer);
@@ -586,6 +598,14 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->addWidget(originBtn);
 
     fl->addStretch(1);
+
+    // Compact status badge (view · overlay · BUILD) on the right — the Overlay
+    // and View dropdowns on the left are how you change state; this just makes
+    // a non-default/BUILD state impossible to miss.
+    m_modeLabel = new QLabel(footer);
+    m_modeLabel->setAutoFillBackground(true);
+    m_modeLabel->setMargin(3);
+    fl->addWidget(m_modeLabel);
 
     // Live coordinate readout, right-aligned.
     m_readoutLabel = new QLabel(tr("—"));
@@ -1021,9 +1041,9 @@ void Monitor::initGraphicsToolbar()
 
     // Unified view selector: the DMX channel grid, or the 2D map from a chosen
     // point of view. Front/Side are read-only elevation views.
-    QLabel *viewSelLabel = new QLabel(tr("View"));
-    viewSelLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_graphicsToolBar->addWidget(viewSelLabel);
+    // The View (POV) selector is created here (so early references are safe) but
+    // PLACED in the footer bar (initGraphicsFooter), alongside the Overlay/Size/
+    // Grid/Snap controls, so all the view modifiers live on one row.
     m_povCombo = new QComboBox();
     m_povCombo->addItem(tr("DMX"),        -1);
     m_povCombo->addItem(tr("2D \342\200\224 Top"),   int(MonitorGraphicsView::PovTop));
@@ -1033,9 +1053,7 @@ void Monitor::initGraphicsToolbar()
     m_povCombo->setToolTip(tr("Choose the view: DMX channel grid, or the 2D map "
                               "from top / front / side. Front & Side are read-only "
                               "elevation views that show height."));
-    m_graphicsToolBar->addWidget(m_povCombo);
     connect(m_povCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotPOVChanged(int)));
-    m_graphicsToolBar->addSeparator();
 
     // Grid Size / Units / Subdivisions / Snap have moved to the footer
     // measurement bar (initGraphicsFooter) to de-clutter the top toolbar.
@@ -1091,30 +1109,9 @@ void Monitor::initGraphicsToolbar()
     moreBtn->setPopupMode(QToolButton::InstantPopup);
     QMenu *moreMenu = new QMenu(moreBtn);
 
-    // Overlay (was a toolbar combo): recolour the plot by a chosen dimension.
-    QMenu *overlayMenu = moreMenu->addMenu(tr("Overlay"));
-    QActionGroup *overlayGroup = new QActionGroup(this);
-    struct { QString label; int mode; } overlays[] = {
-        { tr("Normal"),     ViewNormal },
-        { tr("Power"),      ViewPower  },
-        { tr("DMX"),        ViewDMX    },
-        { tr("Network"),    ViewNet    },
-        { tr("Stage only"), ViewStage  } };
-    for (const auto &ov : overlays)
-    {
-        QAction *oa = overlayMenu->addAction(ov.label);
-        oa->setCheckable(true);
-        oa->setActionGroup(overlayGroup);
-        oa->setChecked(ov.mode == m_mapView);
-        const int mode = ov.mode;
-        connect(oa, &QAction::triggered, this, [this, mode]() {
-            m_mapView = mode;
-            applyMapView(mode);
-            updateModeIndicator();
-        });
-    }
+    // Overlay now lives as a dropdown on the footer bar (initGraphicsFooter),
+    // so the current overlay is always visible instead of buried in this menu.
 
-    moreMenu->addSeparator();
 
     // Group / ungroup the selection (also Cmd/Ctrl+G, Cmd/Ctrl+Shift+G, and the
     // right-click menu). Enabled state is driven by the current selection.

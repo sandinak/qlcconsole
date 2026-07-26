@@ -357,6 +357,7 @@ protected:
     QToolButton *m_snapToggle = nullptr;
     int m_mapView = 0;       ///< current 2D-map overlay (0=Normal/1=Power/2=Stage; was m_viewCombo)
     QComboBox *m_povCombo;   ///< Top / Front / Side point of view
+    QComboBox *m_overlayCombo = nullptr;   ///< Normal / Power / DMX / Network / Stage
 
     /* Footer measurement bar (built in initGraphicsFooter). */
     class MonitorRuler *m_hRuler = nullptr;  ///< top ruler
