@@ -385,6 +385,19 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         pal.setColor(QPalette::Window, QColor(26, 26, 26));
         m_rulerCorner->setPalette(pal);
     }
+    // A small always-visible Layers popout handle at the top-left of the canvas
+    // (where the rulers start), floating over the view.
+    if (m_layersAction != NULL)
+    {
+        QToolButton *layersHandle = new QToolButton(m_graphicsView);
+        layersHandle->setDefaultAction(m_layersAction);
+        layersHandle->setAutoRaise(true);
+        layersHandle->setIconSize(QSize(16, 16));
+        layersHandle->setFixedSize(22, 22);
+        layersHandle->move(2, 2);
+        layersHandle->raise();
+    }
+
     m_hRuler = new MonitorRuler(m_graphicsView, MonitorRuler::Horizontal, viewArea);
     m_vRuler = new MonitorRuler(m_graphicsView, MonitorRuler::Vertical, viewArea);
     if (viewGrid != NULL)
@@ -472,6 +485,18 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->addWidget(m_gridSubdivSpin);
     connect(m_gridSubdivSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridSubdivisionsChanged(int)));
 
+    // Grid lines show/hide — grouped with the subdivision control it relates to.
+    QToolButton *gridBtn = new QToolButton(footer);
+    gridBtn->setText(tr("Grid"));
+    gridBtn->setCheckable(true);
+    gridBtn->setChecked(true);
+    gridBtn->setToolTip(tr("Show or hide the grid lines"));
+    fl->addWidget(gridBtn);
+    connect(gridBtn, &QToolButton::toggled, this, [this](bool on) {
+        m_graphicsView->setGridVisible(on);
+        QSettings().setValue(SETTINGS_GRID, on);
+    });
+
     // Separate the grid-size controls from the snap controls.
     {
         QFrame *sep = new QFrame();
@@ -512,26 +537,6 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     connect(m_snapToggle, &QToolButton::toggled, this, [applySnap](bool) { applySnap(); });
     connect(m_snapCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [applySnap](int) { applySnap(); });
-
-    /* separator */
-    {
-        QFrame *sep = new QFrame();
-        sep->setFrameShape(QFrame::VLine);
-        sep->setFrameShadow(QFrame::Sunken);
-        fl->addWidget(sep);
-    }
-
-    // Grid show/hide toggle.
-    QToolButton *gridBtn = new QToolButton(footer);
-    gridBtn->setText(tr("Grid"));
-    gridBtn->setCheckable(true);
-    gridBtn->setChecked(true);
-    gridBtn->setToolTip(tr("Show or hide the grid lines"));
-    fl->addWidget(gridBtn);
-    connect(gridBtn, &QToolButton::toggled, this, [this](bool on) {
-        m_graphicsView->setGridVisible(on);
-        QSettings().setValue(SETTINGS_GRID, on);
-    });
 
     /* separator */
     {
@@ -740,7 +745,7 @@ void Monitor::fillGraphicsView()
         }
     }
 
-    m_graphicsView->showFixturesLabels(m_props->labelsVisible());
+    m_graphicsView->refreshFixtureLabels();   // render the loaded per-layer state
 
     // apply the persisted lock state once all fixtures are present
     m_lockAction->blockSignals(true);
@@ -1173,14 +1178,9 @@ void Monitor::initGraphicsToolbar()
     moreBtn->setMenu(moreMenu);
     m_graphicsToolBar->addWidget(moreBtn);
 
-    // Push the Layers sidebar toggle to the far RIGHT of the toolbar, so it
-    // reads as the panel's show/hide handle.
-    {
-        QWidget *spacer = new QWidget(this);
-        spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        m_graphicsToolBar->addWidget(spacer);
-    }
-    m_layersAction = m_graphicsToolBar->addAction(QIcon(":/frame.png"), tr("Layers"));
+    // The Layers toggle is NOT on the toolbar — it lives as a small popout
+    // handle at the top-left of the canvas (added in initGraphicsFooter).
+    m_layersAction = new QAction(QIcon(":/frame.png"), tr("Layers"), this);
     m_layersAction->setCheckable(true);
     m_layersAction->setToolTip(tr("Show or hide the Layers sidebar"));
     connect(m_layersAction, SIGNAL(toggled(bool)), this, SLOT(slotToggleLayersPanel(bool)));
@@ -1740,8 +1740,7 @@ void Monitor::slotAddFixture()
         }
     }
     if (m_layersPanel) m_layersPanel->reload();
-    if (m_labelsAction->isChecked())
-        slotShowLabels(true);
+    m_graphicsView->refreshFixtureLabels();   // apply per-layer labels to the new item
 }
 
 void Monitor::slotRemoveFixture()
@@ -2616,8 +2615,7 @@ void Monitor::slotAddFixtureToTruss(quint32 trussId, float offsetMetres)
         m_props->setFixtureFlags(fid, 0, 0, 0);
         m_doc->setModified();
     }
-    if (m_labelsAction->isChecked())
-        slotShowLabels(true);
+    m_graphicsView->refreshFixtureLabels();   // apply per-layer labels to the new item
 }
 
 // ---------------------------------------------------------------------------
@@ -3831,8 +3829,9 @@ void Monitor::slotShowLabels(bool visible)
 {
     Q_ASSERT(m_graphicsView != NULL);
 
-    m_props->setLabelsVisible(visible);
-    m_graphicsView->refreshFixtureLabels();   // fixtures AND platforms, per layer
+    // Master: bulk-set every layer's labels flag, then render (per-layer flags
+    // are the source of truth, so the panel's per-layer toggles stay effective).
+    m_graphicsView->showFixturesLabels(visible);
 }
 
 void Monitor::slotFixtureMoved(quint32 fid, QPointF pos)

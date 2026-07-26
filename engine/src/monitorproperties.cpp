@@ -120,7 +120,7 @@ MonitorProperties::MonitorProperties()
     , m_gridSubdivisions(1)
     , m_snapDivisions(0)
     , m_aimSubjectHeight(1.4f)
-    , m_showLabels(false)
+    , m_showLabels(true)
 {
     ensureDefaultLayer();
 }
@@ -136,7 +136,7 @@ void MonitorProperties::reset()
     m_snapDivisions = 0;
     m_aimSubjectHeight = 1.4f;
     m_stageOrigin = QPointF(0, 0);
-    m_showLabels = false;
+    m_showLabels = true;
     m_fixtureItems.clear();
     m_genericItems.clear();
     m_commonBackgroundImage = QString();

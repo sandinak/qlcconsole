@@ -1514,27 +1514,26 @@ void MonitorGraphicsView::setFixtureRotation(quint32 id, ushort degrees)
 
 void MonitorGraphicsView::showFixturesLabels(bool visible)
 {
-    // A label shows only when the GLOBAL toggle is on AND its fixture's layer
-    // has labels enabled.
+    // Master toggle: bulk-set EVERY layer's labels flag, then render. The
+    // per-layer flag is the source of truth for what actually shows, so the
+    // per-layer toggles work regardless of this master's saved state.
     MonitorProperties *props = m_doc->monitorProperties();
-    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
-    {
-        const bool layerLabels = props->layer(props->fixtureLayer(it.key())).labels;
-        it.value()->showLabel(visible && layerLabels);
-    }
+    foreach (const MonitorProperties::MonitorLayer &lyr, props->layers())
+        props->setLayerLabels(lyr.id, visible);
+    props->setLabelsVisible(visible);
+    refreshFixtureLabels();
 }
 
 void MonitorGraphicsView::refreshFixtureLabels()
 {
+    // Rendering is driven purely by each item's LAYER labels flag.
     MonitorProperties *props = m_doc->monitorProperties();
-    const bool global = props->labelsVisible();
-    showFixturesLabels(global);
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        it.value()->showLabel(props->layer(props->fixtureLayer(it.key())).labels);
 
-    // Platforms carry their own name/size label; honour the global toggle AND
-    // their layer's labels flag, same as fixtures.
     foreach (PlatformItem *pi, m_platformItems)
         if (StagePlatform *p = pi->platform())
-            pi->showLabel(global && props->layer(p->layerId()).labels);
+            pi->showLabel(props->layer(p->layerId()).labels);
 }
 
 QRect MonitorGraphicsView::selectionViewportRect() const
@@ -2213,8 +2212,7 @@ void MonitorGraphicsView::updatePlatforms()
 
         PlatformItem *pi = new PlatformItem(p, m_doc, pxX, pxY, pxW, pxD);
         pi->setMovable(!m_layoutLocked);
-        pi->showLabel(m_doc->monitorProperties()->labelsVisible()
-                      && m_doc->monitorProperties()->layer(p->layerId()).labels);
+        pi->showLabel(m_doc->monitorProperties()->layer(p->layerId()).labels);
         m_scene->addItem(pi);
         m_platformItems.insert(p->id(), pi);
 
