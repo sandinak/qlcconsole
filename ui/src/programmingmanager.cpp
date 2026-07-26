@@ -1684,8 +1684,6 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     QAction *aShow   = menu.addAction(tr("New Show"));
     menu.addSeparator();
     QAction *aFolder = menu.addAction(tr("New Folder"));
-    menu.addSeparator();
-    QAction *aRepair = menu.addAction(tr("Repair: strip leading \"NN. \" from names"));
 
     QAction *chosen = menu.exec(m_funcTree->viewport()->mapToGlobal(pos));
     if (chosen == NULL)
@@ -1703,11 +1701,6 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     if (chosen == aFolder)
     {
         m_funcTree->addFolder();
-        return;
-    }
-    if (chosen == aRepair)
-    {
-        repairFunctionNames();
         return;
     }
     if (chosen == aLearnMidi)

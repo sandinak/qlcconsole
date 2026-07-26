@@ -18,6 +18,14 @@ move to the bottom or get deleted. See also the session memory under
 - Tree lives in `FunctionTreeWidget`; ordering = sort-key change, subtree =
   tree-build change.
 
+### FUTURE — More stage-feature objects (Branson shower-thought)
+Trusses and platforms should be fully discrete, reusable objects; consider adding
+other common stage features as first-class placeable map items: **flats**, **stands
+with a cross-bar** (T-bar/tripod), booms, drapes/legs, set pieces. Same scaffolding
+as truss/platform/power-source items (placeable, lockable, layerable, XML). Could
+share a small "stage feature" base + a library of parametric shapes. Ties into the
+Fixture-Studio "component template" idea (a stand-with-crossbar is a fixture host).
+
 ### FUTURE — "Look" as the assembly unit (Scene/Collection rethink) *(Branson shower-thought; discussion captured)*
 Don't rename Scene/Collection (breaks traditional QLC users). Instead make the
 fork's **Look** first-class: give it (1) an explicit **fixture scope** (the

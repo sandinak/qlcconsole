@@ -385,17 +385,18 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         pal.setColor(QPalette::Window, QColor(26, 26, 26));
         m_rulerCorner->setPalette(pal);
     }
-    // A small always-visible Layers popout handle at the top-left of the canvas
-    // (where the rulers start), floating over the view.
+    // The Layers popout handle lives IN the ruler corner (top-left, at the
+    // rulers' intersection), not floating over the grid.
     if (m_layersAction != NULL)
     {
-        QToolButton *layersHandle = new QToolButton(m_graphicsView);
+        QToolButton *layersHandle = new QToolButton(m_rulerCorner);
         layersHandle->setDefaultAction(m_layersAction);
         layersHandle->setAutoRaise(true);
-        layersHandle->setIconSize(QSize(16, 16));
-        layersHandle->setFixedSize(22, 22);
-        layersHandle->move(2, 2);
-        layersHandle->raise();
+        layersHandle->setIconSize(QSize(14, 14));
+        layersHandle->setToolTip(tr("Show or hide the Layers sidebar"));
+        QVBoxLayout *cl = new QVBoxLayout(m_rulerCorner);
+        cl->setContentsMargins(1, 1, 1, 1);
+        cl->addWidget(layersHandle);
     }
 
     m_hRuler = new MonitorRuler(m_graphicsView, MonitorRuler::Horizontal, viewArea);
@@ -447,33 +448,9 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         fl->addWidget(sep);
     };
 
-    // ---- Overlay: [dropdown] ----  (far left; always shows the current lens)
-    fl->addWidget(new QLabel(tr("Overlay:")));
-    m_overlayCombo = new QComboBox(footer);
-    m_overlayCombo->addItem(tr("Normal"),     ViewNormal);
-    m_overlayCombo->addItem(tr("Power"),      ViewPower);
-    m_overlayCombo->addItem(tr("DMX"),        ViewDMX);
-    m_overlayCombo->addItem(tr("Network"),    ViewNet);
-    m_overlayCombo->addItem(tr("Stage only"), ViewStage);
-    m_overlayCombo->setCurrentIndex(qMax(0, m_overlayCombo->findData(m_mapView)));
-    m_overlayCombo->setToolTip(tr("Recolour / filter the plot: Power, DMX universe, "
-                                  "Network transport, or Stage-only"));
-    fl->addWidget(m_overlayCombo);
-    connect(m_overlayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
-        m_mapView = m_overlayCombo->currentData().toInt();
-        applyMapView(m_mapView);
-        updateModeIndicator();
-    });
-    addSep();
-
-    // ---- View: [dropdown] ----  (the POV, moved down from the toolbar)
-    fl->addWidget(new QLabel(tr("View:")));
-    fl->addWidget(m_povCombo);
-    addSep();
-
-    // ---- Size [x] [y] [units] ----
+    // ---- Size: [x] [y] [units] ----  (Overlay + View live on the RIGHT below)
     QVector3D gridSize = m_props->gridSize();
-    fl->addWidget(new QLabel(tr("Size")));
+    fl->addWidget(new QLabel(tr("Size:")));
     m_gridWSpin = new QSpinBox();
     m_gridWSpin->setMinimum(1);
     m_gridWSpin->setValue(gridSize.x());
@@ -599,13 +576,26 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
 
     fl->addStretch(1);
 
-    // Compact status badge (view · overlay · BUILD) on the right — the Overlay
-    // and View dropdowns on the left are how you change state; this just makes
-    // a non-default/BUILD state impossible to miss.
-    m_modeLabel = new QLabel(footer);
-    m_modeLabel->setAutoFillBackground(true);
-    m_modeLabel->setMargin(3);
-    fl->addWidget(m_modeLabel);
+    // ---- Overlay + View, RIGHT-justified ----  the single source of state.
+    fl->addWidget(new QLabel(tr("Overlay:")));
+    m_overlayCombo = new QComboBox(footer);
+    m_overlayCombo->addItem(tr("Normal"),     ViewNormal);
+    m_overlayCombo->addItem(tr("Power"),      ViewPower);
+    m_overlayCombo->addItem(tr("DMX"),        ViewDMX);
+    m_overlayCombo->addItem(tr("Network"),    ViewNet);
+    m_overlayCombo->addItem(tr("Stage only"), ViewStage);
+    m_overlayCombo->setCurrentIndex(qMax(0, m_overlayCombo->findData(m_mapView)));
+    m_overlayCombo->setToolTip(tr("Recolour / filter the plot: Power, DMX universe, "
+                                  "Network transport, or Stage-only"));
+    fl->addWidget(m_overlayCombo);
+    connect(m_overlayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        m_mapView = m_overlayCombo->currentData().toInt();
+        applyMapView(m_mapView);
+    });
+    addSep();
+    fl->addWidget(new QLabel(tr("View:")));
+    fl->addWidget(m_povCombo);
+    addSep();
 
     // Live coordinate readout, right-aligned.
     m_readoutLabel = new QLabel(tr("—"));
