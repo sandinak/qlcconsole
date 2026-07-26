@@ -52,6 +52,9 @@ public:
     /** Enable or disable movement (called by MonitorGraphicsView on lock change). */
     void setMovable(bool movable);
 
+    /** Show or hide the platform's name/size label. */
+    void showLabel(bool visible);
+
     // QGraphicsItem interface
     QRectF boundingRect() const override;
     void   paint(QPainter *painter, const QStyleOptionGraphicsItem *option,

@@ -43,10 +43,15 @@ PlatformItem::PlatformItem(StagePlatform *platform, Doc *doc,
     setPos(pxX, pxY);
 
     bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
-    double dispH = double(platform->height()) * (isFeet ? 3.28084 : 1.0);
+    const double conv = isFeet ? 3.28084 : 1.0;
+    const double dispW = double(platform->width())  * conv;
+    const double dispD = double(platform->depth())  * conv;
+    const double dispH = double(platform->height()) * conv;
     QString unitStr = isFeet ? "ft" : "m";
+    // Full footprint × height so the size is unambiguous (was height only).
     m_label = new QGraphicsTextItem(
-        QString("%1\n(%2 %3)").arg(platform->name()).arg(dispH, 0, 'f', 2).arg(unitStr),
+        QString("%1\n(%2×%3×%4 %5)").arg(platform->name())
+            .arg(dispW, 0, 'f', 1).arg(dispD, 0, 'f', 1).arg(dispH, 0, 'f', 1).arg(unitStr),
         this);
     m_label->setDefaultTextColor(QColor(240, 240, 240, 220));
     m_label->setFont(QFont("Arial", 10, QFont::Bold));
@@ -70,6 +75,12 @@ void PlatformItem::setMovable(bool movable)
 {
     setFlag(ItemIsMovable, movable);
     setCursor(movable ? Qt::SizeAllCursor : Qt::ArrowCursor);
+}
+
+void PlatformItem::showLabel(bool visible)
+{
+    if (m_label != nullptr)
+        m_label->setVisible(visible);
 }
 
 QRectF PlatformItem::boundingRect() const

@@ -100,6 +100,7 @@
 #include "monitorlayout.h"
 #include "universe.h"
 #include "inputoutputmap.h"
+#include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
 #include "apputil.h"
@@ -112,6 +113,7 @@
 #define SETTINGS_VSPLITTER "monitor/vsplitter2"
 #define SETTINGS_LAYERS_PANEL "monitor/layerspanel3"
 #define SETTINGS_RULERS "monitor/rulers"
+#define SETTINGS_GRID   "monitor/grid"
 
 Monitor* Monitor::s_instance = NULL;
 
@@ -519,6 +521,26 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         fl->addWidget(sep);
     }
 
+    // Grid show/hide toggle.
+    QToolButton *gridBtn = new QToolButton(footer);
+    gridBtn->setText(tr("Grid"));
+    gridBtn->setCheckable(true);
+    gridBtn->setChecked(true);
+    gridBtn->setToolTip(tr("Show or hide the grid lines"));
+    fl->addWidget(gridBtn);
+    connect(gridBtn, &QToolButton::toggled, this, [this](bool on) {
+        m_graphicsView->setGridVisible(on);
+        QSettings().setValue(SETTINGS_GRID, on);
+    });
+
+    /* separator */
+    {
+        QFrame *sep = new QFrame();
+        sep->setFrameShape(QFrame::VLine);
+        sep->setFrameShadow(QFrame::Sunken);
+        fl->addWidget(sep);
+    }
+
     // Rulers show/hide toggle.
     QToolButton *rulerBtn = new QToolButton(footer);
     rulerBtn->setText(tr("Rulers"));
@@ -578,6 +600,13 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     rulerBtn->setChecked(showRulers);
     rulerBtn->blockSignals(false);
     setRulersVisible(showRulers);
+
+    // Restore grid visibility (default on).
+    const bool showGrid = settings.value(SETTINGS_GRID, true).toBool();
+    gridBtn->blockSignals(true);
+    gridBtn->setChecked(showGrid);
+    gridBtn->blockSignals(false);
+    m_graphicsView->setGridVisible(showGrid);
 
     updateModeIndicator();
 }
@@ -1469,9 +1498,15 @@ void Monitor::applyMapView(int view)
                 universes.append(fx->universe());
         std::sort(universes.begin(), universes.end());
         QHash<quint32, QColor> uniColor;
+        QHash<quint32, QString> uniXport;   // universe → transport (ArtNet/DMX/…)
+        InputOutputMap *iom = m_doc->inputOutputMap();
         for (int i = 0; i < universes.size(); i++)
+        {
             uniColor.insert(universes[i],
                 QColor::fromHsv(int(i * 360.0 / qMax(1, universes.size())) % 360, 200, 235));
+            OutputPatch *op = iom ? iom->outputPatch(universes[i], 0) : NULL;
+            uniXport.insert(universes[i], op ? op->pluginName() : QString());
+        }
 
         // Flag fixtures whose address ranges overlap on the SAME universe.
         QSet<quint32> conflicted;
@@ -1503,19 +1538,22 @@ void Monitor::applyMapView(int view)
             const quint32 uni = fx->universe() + 1;        // 1-based for display
             const quint32 a0 = fx->address() + 1;
             const quint32 a1 = fx->address() + fx->channels();
+            const QString xport = uniXport.value(fx->universe());
+            const QString via = xport.isEmpty() ? QString()
+                                                : QStringLiteral(" [%1]").arg(xport);
             if (conflicted.contains(fx->id()))
             {
                 it->setViewTint(QColor(210, 60, 60));       // clash = red
                 Fixture *other = m_doc->fixture(conflictWith.value(fx->id()));
-                it->setToolTip(tr("Universe %1 · A %2–%3 · ⚠ address clash with %4")
-                               .arg(uni).arg(a0).arg(a1)
+                it->setToolTip(tr("Universe %1%2 · A %3–%4 · ⚠ address clash with %5")
+                               .arg(uni).arg(via).arg(a0).arg(a1)
                                .arg(other ? other->name() : tr("another fixture")));
             }
             else
             {
                 it->setViewTint(uniColor.value(fx->universe(), QColor(120, 120, 120)));
-                it->setToolTip(tr("Universe %1 · A %2–%3 (%4 ch)")
-                               .arg(uni).arg(a0).arg(a1).arg(fx->channels()));
+                it->setToolTip(tr("Universe %1%2 · A %3–%4 (%5 ch)")
+                               .arg(uni).arg(via).arg(a0).arg(a1).arg(fx->channels()));
             }
         }
         m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
@@ -1528,7 +1566,7 @@ void Monitor::applyMapView(int view)
             if (it != NULL)
             {
                 it->setViewTint(QColor());
-                it->setToolTip(QString());
+                it->restoreBaseToolTip();   // hover always shows name/manuf/model/addr
             }
         }
         m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
@@ -3755,7 +3793,7 @@ void Monitor::slotShowLabels(bool visible)
     Q_ASSERT(m_graphicsView != NULL);
 
     m_props->setLabelsVisible(visible);
-    m_graphicsView->showFixturesLabels(visible);
+    m_graphicsView->refreshFixtureLabels();   // fixtures AND platforms, per layer
 }
 
 void Monitor::slotFixtureMoved(quint32 fid, QPointF pos)

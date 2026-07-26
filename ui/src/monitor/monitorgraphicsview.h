@@ -94,6 +94,11 @@ public:
     /** Set the number of sub-divisions drawn inside each grid cell */
     void setGridSubdivisions(int subdivisions);
 
+    /** Show/hide the grid lines (the cell geometry is still computed, so item
+     *  positions are unaffected). */
+    void setGridVisible(bool on);
+    bool gridVisible() const { return m_gridVisible; }
+
     /** Get the current number of grid sub-divisions */
     int gridSubdivisions() const { return m_gridSubdivisions; }
 
@@ -611,6 +616,7 @@ private:
 
     /** Flag to enable/disable the grid rendering */
     bool m_gridEnabled;
+    bool m_gridVisible = true;   ///< show/hide the grid LINES (geometry always computed)
 
     /** Number of sub-divisions drawn inside each grid cell */
     int m_gridSubdivisions;

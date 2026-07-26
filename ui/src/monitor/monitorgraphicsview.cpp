@@ -1526,7 +1526,15 @@ void MonitorGraphicsView::showFixturesLabels(bool visible)
 
 void MonitorGraphicsView::refreshFixtureLabels()
 {
-    showFixturesLabels(m_doc->monitorProperties()->labelsVisible());
+    MonitorProperties *props = m_doc->monitorProperties();
+    const bool global = props->labelsVisible();
+    showFixturesLabels(global);
+
+    // Platforms carry their own name/size label; honour the global toggle AND
+    // their layer's labels flag, same as fixtures.
+    foreach (PlatformItem *pi, m_platformItems)
+        if (StagePlatform *p = pi->platform())
+            pi->showLabel(global && props->layer(p->layerId()).labels);
 }
 
 QRect MonitorGraphicsView::selectionViewportRect() const
@@ -2205,6 +2213,8 @@ void MonitorGraphicsView::updatePlatforms()
 
         PlatformItem *pi = new PlatformItem(p, m_doc, pxX, pxY, pxW, pxD);
         pi->setMovable(!m_layoutLocked);
+        pi->showLabel(m_doc->monitorProperties()->labelsVisible()
+                      && m_doc->monitorProperties()->layer(p->layerId()).labels);
         m_scene->addItem(pi);
         m_platformItems.insert(p->id(), pi);
 
@@ -2837,6 +2847,13 @@ void MonitorGraphicsView::beginPickOrigin()
     viewport()->setCursor(Qt::CrossCursor);
 }
 
+void MonitorGraphicsView::setGridVisible(bool on)
+{
+    m_gridVisible = on;
+    foreach (QGraphicsLineItem *gi, m_gridItems)
+        gi->setVisible(on);
+}
+
 void MonitorGraphicsView::updateGrid()
 {
     // removeItem() hands ownership of the item back to the caller, so it has
@@ -2943,6 +2960,11 @@ void MonitorGraphicsView::updateGrid()
             m_bgItem->setY(m_yOffset);
             m_bgItem->setPixmap(m_bgPixmap.scaled(xPos - m_cellPixels - m_xOffset, yPos - m_cellPixels - m_yOffset));
         }
+
+        // The grid geometry (cell pixels/offsets) is always computed above so
+        // items position correctly; the LINES can be hidden independently.
+        foreach (QGraphicsItem *gi, m_gridItems)
+            gi->setVisible(m_gridVisible);
     }
 
     // Match the scene rect to the viewport so that, once zoomed in, the view

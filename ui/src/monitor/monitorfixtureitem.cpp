@@ -66,6 +66,7 @@ static QCursor smallOpenHandCursor()
 #include "qlcfixturemode.h"
 #include "qlccapability.h"
 #include "fixture.h"
+#include "qlcfixturedef.h"
 #include "truss.h"
 #include "doc.h"
 
@@ -117,7 +118,7 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
 
     m_name = fxi->name();
 
-    setToolTip(m_name);
+    setToolTip(baseToolTip());
 
     m_font = qApp->font();
     m_font.setPixelSize(8);
@@ -689,6 +690,27 @@ void MonitorFixtureItem::showLabel(bool visible)
     prepareGeometryChange();
     m_labelVisibility = visible;
     update();
+}
+
+QString MonitorFixtureItem::baseToolTip() const
+{
+    Fixture *fx = m_doc->fixture(m_fid);
+    if (fx == NULL)
+        return m_name;
+    QString tip = fx->name();
+    QLCFixtureDef *def = fx->fixtureDef();
+    if (def != NULL && !def->manufacturer().isEmpty())
+        tip += QStringLiteral("\n%1 %2").arg(def->manufacturer(), def->model());
+    tip += QObject::tr("\nUniverse %1 · A %2–%3")
+               .arg(fx->universe() + 1)
+               .arg(fx->address() + 1)
+               .arg(fx->address() + fx->channels());
+    return tip;
+}
+
+void MonitorFixtureItem::restoreBaseToolTip()
+{
+    setToolTip(baseToolTip());
 }
 
 qreal MonitorFixtureItem::facingReach() const

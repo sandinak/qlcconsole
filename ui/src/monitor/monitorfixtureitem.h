@@ -142,6 +142,11 @@ public:
     /** Show/hide this fixture item label */
     void showLabel(bool visible);
 
+    /** The default hover tooltip: name, manufacturer/model and universe/address.
+     *  Overlays temporarily replace it; restoreBaseToolTip() puts it back. */
+    QString baseToolTip() const;
+    void restoreBaseToolTip();
+
     /** Enable/disable the possibility to move this item.
      *  When disabled the item stays selectable (lock mode) */
     void setMovable(bool movable);
