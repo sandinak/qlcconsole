@@ -93,8 +93,11 @@ private:
     void closeEvent(QCloseEvent*) override;
     void setActiveWindow(const QString& name);
 
-#if defined(WIN32) || defined(Q_OS_WIN)
 protected:
+    /** Clicking the status-bar MTC chip opens the timecode-bind menu. */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+#if defined(WIN32) || defined(Q_OS_WIN)
     bool nativeEvent(const QByteArray & eventType, void * message, long * result);
     void disableTimerResolutionThrottling();
 #endif

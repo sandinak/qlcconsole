@@ -2515,7 +2515,9 @@ void App::initStatusBar()
     m_statusTimecodeLabel = new QLabel(this);
     m_statusTimecodeLabel->setToolTip(tr("MIDI Time Code. Grey: no source. "
         "Amber: connected but not advancing (spoken scene / manual GO). "
-        "Green: rolling."));
+        "Green: rolling.\n\nClick to bind the timecode source / Follow MTC."));
+    m_statusTimecodeLabel->setCursor(Qt::PointingHandCursor);
+    m_statusTimecodeLabel->installEventFilter(this);   // click → bind menu
     sb->addWidget(m_statusTimecodeLabel, 0);
 
     m_statusLoadLabel = new QLabel(this);
@@ -2633,6 +2635,62 @@ void App::initStatusBar()
     }
 
     updateStatusBar();
+}
+
+bool App::eventFilter(QObject *watched, QEvent *event)
+{
+    // Click the status-bar MTC chip → a menu to BIND the timecode: arm Follow
+    // MTC and pick which universe carries the code (or accept any).
+    if (watched == m_statusTimecodeLabel && event->type() == QEvent::MouseButtonPress
+        && m_doc != NULL)
+    {
+        TimecodeSource *tc = m_doc->timecodeSource();
+        QMenu menu(this);
+        if (m_followMtcAction != NULL)
+        {
+            menu.addAction(m_followMtcAction);
+            menu.addSeparator();
+        }
+        QAction *hdr = menu.addAction(tr("Timecode source universe"));
+        hdr->setEnabled(false);
+
+        QActionGroup *grp = new QActionGroup(&menu);
+        const qint32 cur = (tc != NULL) ? tc->sourceUniverse() : -1;
+
+        QAction *anyA = menu.addAction(tr("Any universe (auto-detect)"));
+        anyA->setCheckable(true);
+        anyA->setActionGroup(grp);
+        anyA->setChecked(cur < 0);
+        connect(anyA, &QAction::triggered, this, [tc]() { if (tc) tc->setSourceUniverse(-1); });
+
+        for (quint32 i = 0; i < m_doc->inputOutputMap()->universesCount(); i++)
+        {
+            const quint32 uniID = m_doc->inputOutputMap()->getUniverseID(i);
+            QString nm = m_doc->inputOutputMap()->getUniverseNameByIndex(i);
+            if (nm.isEmpty())
+                nm = tr("Universe %1").arg(i + 1);
+            QAction *a = menu.addAction(nm);
+            a->setCheckable(true);
+            a->setActionGroup(grp);
+            a->setChecked(qint32(uniID) == cur);
+            connect(a, &QAction::triggered, this, [tc, uniID]() {
+                if (tc) tc->setSourceUniverse(qint32(uniID));
+            });
+        }
+
+        if (tc != NULL && tc->lastUniverse() >= 0)
+        {
+            menu.addSeparator();
+            QAction *hint = menu.addAction(tr("(last code seen on universe %1)")
+                                               .arg(tc->lastUniverse() + 1));
+            hint->setEnabled(false);
+        }
+
+        QMouseEvent *me = static_cast<QMouseEvent *>(event);
+        menu.exec(m_statusTimecodeLabel->mapToGlobal(me->pos()));
+        return true;
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 void App::slotTimecodeStatusChanged()
