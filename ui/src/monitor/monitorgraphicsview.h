@@ -160,6 +160,10 @@ public:
     /** Show/hide fixtures items labels */
     void showFixturesLabels(bool visible);
 
+    /** Re-evaluate every fixture label from the global toggle AND its layer's
+     *  labels flag. Call after a layer's labels toggle changes. */
+    void refreshFixtureLabels();
+
     /** Return the gel color of the fixture with the given ID */
     QColor fixtureGelColor(quint32 id);
 

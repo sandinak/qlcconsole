@@ -671,6 +671,12 @@ void MonitorProperties::setLayerLocked(quint32 id, bool locked)
         m_layers[id].locked = locked;
 }
 
+void MonitorProperties::setLayerLabels(quint32 id, bool labels)
+{
+    if (m_layers.contains(id))
+        m_layers[id].labels = labels;
+}
+
 void MonitorProperties::setLayerOrder(quint32 id, int order)
 {
     if (m_layers.contains(id))
@@ -1457,6 +1463,10 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                             ? a.value(KXMLQLCMonitorLayerVisible).toInt() != 0
                             : true;
             l.locked  = a.value(KXMLQLCMonitorLayerLocked).toInt() != 0;
+            // Absent Labels defaults to true (older files / hand edits).
+            l.labels  = a.hasAttribute(QStringLiteral("Labels"))
+                            ? a.value(QStringLiteral("Labels")).toInt() != 0
+                            : true;
             l.order   = a.value(KXMLQLCMonitorLayerOrder).toInt();
             if (l.name.isEmpty())
                 l.name = (l.id == defaultLayerId) ? QStringLiteral("Default")
@@ -1869,6 +1879,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
                 doc->writeAttribute(KXMLQLCMonitorLayerVisible, QString::number(l.visible ? 1 : 0));
                 if (l.locked)
                     doc->writeAttribute(KXMLQLCMonitorLayerLocked, QStringLiteral("1"));
+                if (!l.labels)   // labels default on; only persist when hidden
+                    doc->writeAttribute(QStringLiteral("Labels"), QStringLiteral("0"));
                 doc->writeAttribute(KXMLQLCMonitorLayerOrder,   QString::number(l.order));
                 doc->writeEndElement();
             }

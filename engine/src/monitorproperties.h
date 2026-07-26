@@ -311,7 +311,8 @@ public:
         QString name;
         bool    visible = true;
         bool    locked  = false;
-        int     order   = 0;    ///< ascending stacking / list order
+        bool    labels  = true;   ///< show item labels for members of this layer
+        int     order   = 0;      ///< ascending stacking / list order
     };
 
     /** Fixed id of the always-present Default layer. */
@@ -338,6 +339,7 @@ public:
     void setLayerName(quint32 id, const QString &name);
     void setLayerVisible(quint32 id, bool visible);
     void setLayerLocked(quint32 id, bool locked);
+    void setLayerLabels(quint32 id, bool labels);
     void setLayerOrder(quint32 id, int order);
 
     /** The layer that newly-created items are assigned to. Falls back to

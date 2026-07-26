@@ -1514,8 +1514,19 @@ void MonitorGraphicsView::setFixtureRotation(quint32 id, ushort degrees)
 
 void MonitorGraphicsView::showFixturesLabels(bool visible)
 {
-    foreach (MonitorFixtureItem *item, m_fixtures)
-        item->showLabel(visible);
+    // A label shows only when the GLOBAL toggle is on AND its fixture's layer
+    // has labels enabled.
+    MonitorProperties *props = m_doc->monitorProperties();
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+    {
+        const bool layerLabels = props->layer(props->fixtureLayer(it.key())).labels;
+        it.value()->showLabel(visible && layerLabels);
+    }
+}
+
+void MonitorGraphicsView::refreshFixtureLabels()
+{
+    showFixturesLabels(m_doc->monitorProperties()->labelsVisible());
 }
 
 QColor MonitorGraphicsView::fixtureGelColor(quint32 id)

@@ -452,6 +452,18 @@ void MonitorLayersPanel::reload()
                     "rgb(42,120,60)", "rgb(120,46,46)");
         h->addWidget(eye);
 
+        QToolButton *lbl = new QToolButton(row);
+        lbl->setCheckable(true);
+        lbl->setChecked(lyr.labels);
+        lbl->setToolTip(lyr.labels ? tr("Labels shown — click to hide")
+                                   : tr("Labels hidden — click to show"));
+        lbl->setEnabled(m_editable);
+        lbl->setFixedSize(20, 20);
+        // "A" = labels on (blue), dimmed when off.
+        styleToggle(lbl, lyr.labels, QStringLiteral("A"),
+                    "rgb(50,96,150)", "rgb(64,64,68)");
+        h->addWidget(lbl);
+
         QToolButton *lock = new QToolButton(row);
         lock->setCheckable(true);
         lock->setChecked(lyr.locked);
@@ -469,6 +481,13 @@ void MonitorLayersPanel::reload()
         connect(eye, &QToolButton::toggled, this, [this, lid](bool on) {
             if (m_reloading) return;
             toggleVisible(lid, on);
+        });
+        connect(lbl, &QToolButton::toggled, this, [this, lid](bool on) {
+            if (m_reloading) return;
+            m_props->setLayerLabels(lid, on);
+            if (m_view) m_view->refreshFixtureLabels();
+            m_doc->setModified();
+            reload();
         });
         connect(lock, &QToolButton::toggled, this, [this, lid](bool on) {
             if (m_reloading) return;
