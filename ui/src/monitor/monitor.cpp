@@ -668,6 +668,7 @@ void Monitor::updateModeIndicator()
     else if (overlay == ViewStage) { text = tr("STAGE ONLY"); bg = QColor(0, 150, 140); }
     else if (overlay == ViewPower) { text = tr("POWER");      bg = QColor(150, 90, 200); }
     else if (overlay == ViewDMX)   { text = tr("DMX");        bg = QColor(40, 130, 180); }
+    else if (overlay == ViewNet)   { text = tr("NETWORK");    bg = QColor(60, 160, 120); }
     else { text = pov; bg = QColor(66, 66, 66); fg = QColor(210, 210, 210); }
     if (build || overlay != ViewNormal)
         text += QStringLiteral("   ·   ") + pov;   // keep the POV visible too
@@ -1092,6 +1093,7 @@ void Monitor::initGraphicsToolbar()
         { tr("Normal"),     ViewNormal },
         { tr("Power"),      ViewPower  },
         { tr("DMX"),        ViewDMX    },
+        { tr("Network"),    ViewNet    },
         { tr("Stage only"), ViewStage  } };
     for (const auto &ov : overlays)
     {
@@ -1555,6 +1557,43 @@ void Monitor::applyMapView(int view)
                 it->setToolTip(tr("Universe %1%2 · A %3–%4 (%5 ch)")
                                .arg(uni).arg(via).arg(a0).arg(a1).arg(fx->channels()));
             }
+        }
+        m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
+    }
+    else if (view == ViewNet)
+    {
+        // Colour fixtures by their universe's TRANSPORT (ArtNet / sACN / a DMX
+        // interface / unpatched), so you see which parts of the rig are on the
+        // network vs a physical DMX line.
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        auto transportOf = [iom](quint32 universe) -> QString {
+            OutputPatch *op = iom ? iom->outputPatch(universe, 0) : NULL;
+            const QString p = op ? op->pluginName() : QString();
+            return p.isEmpty() ? tr("(unpatched)") : p;
+        };
+
+        // Distinct hue per distinct transport name.
+        QStringList transports;
+        foreach (Fixture *fx, m_doc->fixtures())
+            if (fx != NULL)
+            {
+                const QString t = transportOf(fx->universe());
+                if (!transports.contains(t)) transports.append(t);
+            }
+        transports.sort();
+        QHash<QString, QColor> xportColor;
+        for (int i = 0; i < transports.size(); i++)
+            xportColor.insert(transports[i],
+                QColor::fromHsv(int(i * 360.0 / qMax(1, transports.size())) % 360, 190, 235));
+
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            if (fx == NULL) continue;
+            MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
+            if (it == NULL) continue;
+            const QString t = transportOf(fx->universe());
+            it->setViewTint(xportColor.value(t, QColor(120, 120, 120)));
+            it->setToolTip(tr("%1 · Universe %2").arg(t).arg(fx->universe() + 1));
         }
         m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
     }
