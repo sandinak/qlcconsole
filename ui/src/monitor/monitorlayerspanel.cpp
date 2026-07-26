@@ -424,27 +424,43 @@ void MonitorLayersPanel::reload()
         // Column 1: compact eye + lock toggles.
         QWidget *row = new QWidget(m_tree);
         QHBoxLayout *h = new QHBoxLayout(row);
-        h->setContentsMargins(0, 0, 0, 0);
-        h->setSpacing(0);
+        h->setContentsMargins(2, 1, 2, 1);
+        h->setSpacing(3);
+
+        // Emoji ignore CSS colour, so signal on/off with a state-coded
+        // BACKGROUND (green = visible, red = hidden; amber = locked, grey =
+        // unlocked) plus a bold glyph — clearly distinct at a glance.
+        auto styleToggle = [](QToolButton *b, bool on, const QString &glyph,
+                              const char *onBg, const char *offBg) {
+            b->setText(glyph);
+            QFont f = b->font(); f.setBold(true); b->setFont(f);
+            b->setStyleSheet(QString(
+                "QToolButton{border:none;border-radius:4px;background:%1;}"
+                "QToolButton:hover{border:1px solid rgba(255,255,255,0.4);}"
+                "QToolButton:disabled{background:rgba(90,90,94,0.25);}")
+                .arg(QLatin1String(on ? onBg : offBg)));
+        };
 
         QToolButton *eye = new QToolButton(row);
         eye->setCheckable(true);
         eye->setChecked(lyr.visible);
-        eye->setText(lyr.visible ? kEyeShown : kEyeHidden);
-        eye->setToolTip(tr("Show / hide this layer"));
-        eye->setAutoRaise(true);
+        eye->setToolTip(lyr.visible ? tr("Visible — click to hide")
+                                    : tr("Hidden — click to show"));
         eye->setEnabled(m_editable);
-        eye->setFixedSize(18, 18);
+        eye->setFixedSize(20, 20);
+        styleToggle(eye, lyr.visible, lyr.visible ? kEyeShown : kEyeHidden,
+                    "rgb(42,120,60)", "rgb(120,46,46)");
         h->addWidget(eye);
 
         QToolButton *lock = new QToolButton(row);
         lock->setCheckable(true);
         lock->setChecked(lyr.locked);
-        lock->setText(lyr.locked ? kLockOn : kLockOff);
-        lock->setToolTip(tr("Lock / unlock this layer"));
-        lock->setAutoRaise(true);
+        lock->setToolTip(lyr.locked ? tr("Locked — click to unlock")
+                                    : tr("Unlocked — click to lock"));
         lock->setEnabled(m_editable);
-        lock->setFixedSize(18, 18);
+        lock->setFixedSize(20, 20);
+        styleToggle(lock, lyr.locked, lyr.locked ? kLockOn : kLockOff,
+                    "rgb(168,120,30)", "rgb(64,64,68)");
         h->addWidget(lock);
         row->setLayout(h);
         m_tree->setItemWidget(layerNode, 1, row);
