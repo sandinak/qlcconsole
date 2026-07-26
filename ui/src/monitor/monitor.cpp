@@ -21,6 +21,8 @@
 #include <QApplication>
 #include <QActionGroup>
 #include <QColorDialog>
+#include <QSet>
+#include <algorithm>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QCursor>
@@ -636,6 +638,7 @@ void Monitor::updateModeIndicator()
     if (build)                     { text = tr("BUILD");      bg = QColor(220, 150, 40); }
     else if (overlay == ViewStage) { text = tr("STAGE ONLY"); bg = QColor(0, 150, 140); }
     else if (overlay == ViewPower) { text = tr("POWER");      bg = QColor(150, 90, 200); }
+    else if (overlay == ViewDMX)   { text = tr("DMX");        bg = QColor(40, 130, 180); }
     else { text = pov; bg = QColor(66, 66, 66); fg = QColor(210, 210, 210); }
     if (build || overlay != ViewNormal)
         text += QStringLiteral("   ·   ") + pov;   // keep the POV visible too
@@ -1059,6 +1062,7 @@ void Monitor::initGraphicsToolbar()
     struct { QString label; int mode; } overlays[] = {
         { tr("Normal"),     ViewNormal },
         { tr("Power"),      ViewPower  },
+        { tr("DMX"),        ViewDMX    },
         { tr("Stage only"), ViewStage  } };
     for (const auto &ov : overlays)
     {
@@ -1452,6 +1456,69 @@ void Monitor::applyMapView(int view)
         // Tint the source markers with their circuits' colours so a source and
         // the fixtures on its circuits read as the same colour.
         m_graphicsView->setPowerSourceColors(circuitColor);
+    }
+    else if (view == ViewDMX)
+    {
+        const QList<Fixture *> fixtures = m_doc->fixtures();
+
+        // A distinct hue per DMX universe — fixtures sharing a colour share a
+        // universe (a DMX output/run), so cabling reads at a glance.
+        QList<quint32> universes;
+        foreach (Fixture *fx, fixtures)
+            if (fx != NULL && !universes.contains(fx->universe()))
+                universes.append(fx->universe());
+        std::sort(universes.begin(), universes.end());
+        QHash<quint32, QColor> uniColor;
+        for (int i = 0; i < universes.size(); i++)
+            uniColor.insert(universes[i],
+                QColor::fromHsv(int(i * 360.0 / qMax(1, universes.size())) % 360, 200, 235));
+
+        // Flag fixtures whose address ranges overlap on the SAME universe.
+        QSet<quint32> conflicted;
+        QHash<quint32, quint32> conflictWith;
+        for (int i = 0; i < fixtures.size(); i++)
+        {
+            Fixture *a = fixtures.at(i);
+            if (a == NULL) continue;
+            const quint32 aS = a->address(), aE = a->address() + a->channels();
+            for (int j = i + 1; j < fixtures.size(); j++)
+            {
+                Fixture *b = fixtures.at(j);
+                if (b == NULL || a->universe() != b->universe()) continue;
+                const quint32 bS = b->address(), bE = b->address() + b->channels();
+                if (aS < bE && bS < aE)   // ranges overlap → address clash
+                {
+                    conflicted.insert(a->id()); conflicted.insert(b->id());
+                    conflictWith.insert(a->id(), b->id());
+                    conflictWith.insert(b->id(), a->id());
+                }
+            }
+        }
+
+        foreach (Fixture *fx, fixtures)
+        {
+            if (fx == NULL) continue;
+            MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
+            if (it == NULL) continue;
+            const quint32 uni = fx->universe() + 1;        // 1-based for display
+            const quint32 a0 = fx->address() + 1;
+            const quint32 a1 = fx->address() + fx->channels();
+            if (conflicted.contains(fx->id()))
+            {
+                it->setViewTint(QColor(210, 60, 60));       // clash = red
+                Fixture *other = m_doc->fixture(conflictWith.value(fx->id()));
+                it->setToolTip(tr("Universe %1 · A %2–%3 · ⚠ address clash with %4")
+                               .arg(uni).arg(a0).arg(a1)
+                               .arg(other ? other->name() : tr("another fixture")));
+            }
+            else
+            {
+                it->setViewTint(uniColor.value(fx->universe(), QColor(120, 120, 120)));
+                it->setToolTip(tr("Universe %1 · A %2–%3 (%4 ch)")
+                               .arg(uni).arg(a0).arg(a1).arg(fx->channels()));
+            }
+        }
+        m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
     }
     else // ViewNormal: clear overlays
     {

@@ -374,7 +374,7 @@ protected:
     void setRulersVisible(bool on);
 
     /** 2D-map view overlays (see slotMapViewChanged). */
-    enum MapView { ViewNormal = 0, ViewPower = 1, ViewStage = 2 };
+    enum MapView { ViewNormal = 0, ViewPower = 1, ViewStage = 2, ViewDMX = 3 };
     /** Apply a view overlay: tint/annotate every placed fixture. */
     void applyMapView(int view);
     QAction *m_labelsAction;
