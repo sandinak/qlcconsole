@@ -18,6 +18,7 @@
 */
 
 #include <QTimer>
+#include <cmath>
 
 #include "timecodesource.h"
 
@@ -39,7 +40,14 @@ TimecodeSource::TimecodeSource(QObject *parent)
     , m_running(false)
     , m_sourceUniverse(-1)
     , m_lastUniverse(-1)
+    , m_lastUpdateWall(-1)
+    , m_rate(1.0)
+    , m_gapIdx(0)
+    , m_gapCount(0)
 {
+    m_wall.start();
+    for (int i = 0; i < kGapWindow; i++)
+        m_gaps[i] = 0.0;
     m_watchdog = new QTimer(this);
     m_watchdog->setSingleShot(true);
     m_watchdog->setInterval(TIMECODE_WATCHDOG_MS);
@@ -80,11 +88,59 @@ qint32 TimecodeSource::lastUniverse() const
     return m_lastUniverse;
 }
 
+double TimecodeSource::rateEstimate() const
+{
+    return m_running ? m_rate : 0.0;
+}
+
+double TimecodeSource::avgIntervalMs() const
+{
+    if (m_gapCount == 0)
+        return 0.0;
+    double sum = 0.0;
+    for (int i = 0; i < m_gapCount; i++)
+        sum += m_gaps[i];
+    return sum / m_gapCount;
+}
+
+double TimecodeSource::jitterMs() const
+{
+    if (m_gapCount < 2)
+        return 0.0;
+    const double mean = avgIntervalMs();
+    double var = 0.0;
+    for (int i = 0; i < m_gapCount; i++)
+    {
+        const double d = m_gaps[i] - mean;
+        var += d * d;
+    }
+    return std::sqrt(var / m_gapCount);
+}
+
 void TimecodeSource::updateTimeCode(quint32 universe, quint32 msPosition, uchar fps)
 {
     // Override filter: ignore everything but the chosen source universe.
     if (m_sourceUniverse >= 0 && qint32(universe) != m_sourceUniverse)
         return;
+
+    // Sync-health measurement: inter-update interval (jitter) + advance rate.
+    const qint64 now = m_wall.elapsed();
+    if (m_lastUpdateWall >= 0)
+    {
+        const double gap = double(now - m_lastUpdateWall);
+        if (gap > 0.0 && gap < 2000.0)   // ignore stop/restart jumps
+        {
+            m_gaps[m_gapIdx] = gap;
+            m_gapIdx = (m_gapIdx + 1) % kGapWindow;
+            if (m_gapCount < kGapWindow)
+                m_gapCount++;
+            const double posDelta = double(qint64(msPosition) - qint64(m_positionMs));
+            const double inst = posDelta / gap;      // ms of code per ms of wall
+            if (inst > 0.2 && inst < 3.0)            // sane forward advance
+                m_rate = 0.85 * m_rate + 0.15 * inst;
+        }
+    }
+    m_lastUpdateWall = now;
 
     m_lastUniverse = qint32(universe);
     m_positionMs = msPosition;

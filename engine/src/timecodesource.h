@@ -21,6 +21,7 @@
 #define TIMECODESOURCE_H
 
 #include <QObject>
+#include <QElapsedTimer>
 
 /** Milliseconds of no fresh timecode before a followed show is treated as
  *  HELD/frozen. ONE constant shared by the ShowRunner freeze (showrunner.cpp)
@@ -89,6 +90,14 @@ public:
     /** Universe that most recently delivered timecode (-1 if none yet). */
     qint32 lastUniverse() const;
 
+    /** --- Sync health (measured per configuration) --- */
+    /** Estimated advance rate vs real time (≈1.00 when healthy); 0 if stopped. */
+    double rateEstimate() const;
+    /** Std-deviation of the interval between position updates, in ms (jitter). */
+    double jitterMs() const;
+    /** Mean interval between position updates, in ms (the effective update rate). */
+    double avgIntervalMs() const;
+
 public slots:
     /** Push a new absolute position received on the given universe. */
     void updateTimeCode(quint32 universe, quint32 msPosition, uchar fps);
@@ -110,6 +119,15 @@ private:
     qint32 m_sourceUniverse;
     qint32 m_lastUniverse;
     QTimer *m_watchdog;
+
+    // Sync-health measurement (updated on each accepted position).
+    QElapsedTimer m_wall;
+    qint64 m_lastUpdateWall;   ///< wall ms of the previous update (-1 = none)
+    double m_rate;             ///< EMA of advance rate vs real time
+    static const int kGapWindow = 32;
+    double m_gaps[kGapWindow]; ///< recent inter-update intervals (ms)
+    int m_gapIdx;
+    int m_gapCount;
 };
 
 /** @} */

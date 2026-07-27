@@ -2672,6 +2672,40 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     {
         TimecodeSource *tc = m_doc->timecodeSource();
         QMenu menu(this);
+
+        // --- Sync health: is the incoming clock steady and at real time? ---
+        // Read-only diagnostic measured in TimecodeSource: advance rate vs wall
+        // clock, inter-update jitter, and the effective update interval. Lets you
+        // validate a MTC feed per configuration before trusting it to drive cues.
+        if (tc != NULL && tc->lastUniverse() >= 0)
+        {
+            const double rate = tc->rateEstimate();
+            const double jit  = tc->jitterMs();
+            const double ivl  = tc->avgIntervalMs();
+            QString verdict;
+            if (!tc->isRunning())
+                verdict = tr("held (no fresh code)");
+            else if (qAbs(rate - 1.0) <= 0.05 && jit < 40.0)
+                verdict = tr("✓ healthy");
+            else if (qAbs(rate - 1.0) <= 0.15 && jit < 120.0)
+                verdict = tr("~ usable");
+            else
+                verdict = tr("⚠ unstable");
+
+            QAction *sh = menu.addAction(tr("Sync: %1").arg(verdict));
+            sh->setEnabled(false);
+            if (tc->isRunning())
+            {
+                QAction *det = menu.addAction(
+                    tr("   %1× real-time · jitter %2 ms · ~%3 ms/update")
+                        .arg(rate, 0, 'f', 2)
+                        .arg(qRound(jit))
+                        .arg(qRound(ivl)));
+                det->setEnabled(false);
+            }
+            menu.addSeparator();
+        }
+
         if (m_followMtcAction != NULL)
         {
             menu.addAction(m_followMtcAction);
