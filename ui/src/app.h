@@ -26,6 +26,7 @@
 #include <QList>
 #include <QFile>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QIcon>
 #include <QPair>
 
@@ -415,6 +416,13 @@ private:
     QLabel* m_statusBlindLabel;
     QLabel* m_statusTimecodeLabel;
     QLabel* m_statusLoadLabel;
+    // Smooth (extrapolated) MTC chip readout, decoupled from the chunky packet
+    // rate: anchor on each fresh position, then glide the display on a timer.
+    QTimer* m_tcDisplayTimer = nullptr;
+    QElapsedTimer m_tcWall;
+    quint32 m_tcAnchorMs = 0;
+    qint64  m_tcAnchorWallMs = 0;
+    QString m_tcLastStyle;
     /** "Under timeline control" / "Timeline suspended" chip (Operate mode). */
     QLabel* m_statusTimelineLabel;
     QTimer* m_healthTimer;

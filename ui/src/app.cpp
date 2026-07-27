@@ -2513,7 +2513,14 @@ void App::initStatusBar()
     // app-wide (the timecode source and MasterTimer are global), so they live
     // in the status bar and stay visible across tabs. Centred (not in the
     // right-hand group) per the footer layout.
+    // Monospace so the changing digits keep a constant width and don't jiggle
+    // the neighbouring chips as they update.
+    QFont chipFont = font();
+    chipFont.setStyleHint(QFont::Monospace);
+    chipFont.setFamily(QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
+
     m_statusTimecodeLabel = new QLabel(this);
+    m_statusTimecodeLabel->setFont(chipFont);
     m_statusTimecodeLabel->setToolTip(tr("MIDI Time Code. Grey: no source. "
         "Amber: connected but not advancing (spoken scene / manual GO). "
         "Green: rolling.\n\nClick to bind the timecode source / Follow MTC."));
@@ -2522,6 +2529,12 @@ void App::initStatusBar()
     sb->addWidget(m_statusTimecodeLabel, 0);
 
     m_statusLoadLabel = new QLabel(this);
+    m_statusLoadLabel->setFont(chipFont);
+    m_statusLoadLabel->setAlignment(Qt::AlignCenter);
+    // Fixed width sized to the widest reading, so the % / ms changing never
+    // shifts the MTC chip left/right.
+    m_statusLoadLabel->setFixedWidth(
+        QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("Load: 00.00 / 00 ms (000%)")) + 14);
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
     sb->addWidget(m_statusLoadLabel, 0);
@@ -2536,10 +2549,22 @@ void App::initStatusBar()
     m_statusTimelineLabel->hide();
     sb->addWidget(m_statusTimelineLabel, 0);
 
+    // Smooth the chip readout: anchor on each fresh position, then a ~30Hz timer
+    // glides the displayed time between packets (bounded, like the show cursor),
+    // so the chip reads smoothly even though MTC arrives in chunks.
+    m_tcWall.start();
+    m_tcDisplayTimer = new QTimer(this);
+    m_tcDisplayTimer->setInterval(33);
+    connect(m_tcDisplayTimer, &QTimer::timeout, this, &App::slotTimecodeStatusChanged);
+
     if (m_doc != NULL)
     {
         TimecodeSource *tc = m_doc->timecodeSource();
-        connect(tc, SIGNAL(timeChanged(quint32)), this, SLOT(slotTimecodeStatusChanged()));
+        connect(tc, &TimecodeSource::timeChanged, this, [this](quint32 ms) {
+            m_tcAnchorMs = ms;                       // fresh position → re-anchor
+            m_tcAnchorWallMs = m_tcWall.elapsed();
+            slotTimecodeStatusChanged();
+        });
         connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeStatusChanged()));
     }
     slotTimecodeStatusChanged();
@@ -2731,14 +2756,36 @@ void App::slotTimecodeStatusChanged()
     const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";
     const char *grey  = "QLabel { color:#dddddd; background:#555555; padding:1px 6px; border-radius:3px; }";
 
+    // Apply a stylesheet only when it actually changes — re-parsing CSS on every
+    // MTC packet is needless GUI-thread work on the timecode path.
+    auto applyStyle = [this](const char *s) {
+        if (m_tcLastStyle != QLatin1String(s))
+        {
+            m_tcLastStyle = QLatin1String(s);
+            m_statusTimecodeLabel->setStyleSheet(s);
+        }
+    };
+
     if (tc->lastUniverse() < 0)
     {
+        if (m_tcDisplayTimer != nullptr) m_tcDisplayTimer->stop();
         m_statusTimecodeLabel->setText(tr("MTC: no source"));
-        m_statusTimecodeLabel->setStyleSheet(grey);
+        applyStyle(grey);
         return;
     }
 
-    quint32 ms = tc->positionMs();
+    // While rolling, glide the readout from the last anchor at ~real time,
+    // capped so it can't run away (matches the show cursor's extrapolation).
+    const bool running = tc->isRunning();
+    if (m_tcDisplayTimer != nullptr)
+    {
+        if (running && !m_tcDisplayTimer->isActive())   m_tcDisplayTimer->start();
+        else if (!running && m_tcDisplayTimer->isActive()) m_tcDisplayTimer->stop();
+    }
+    qint64 dt = m_tcWall.elapsed() - m_tcAnchorWallMs;
+    if (dt < 0) dt = 0;
+    if (dt > 400) dt = 400;   // SHOW_TC_EXTRAP_CAP_MS
+    quint32 ms = running ? (m_tcAnchorMs + quint32(dt)) : m_tcAnchorMs;
     int fps = tc->fps() > 0 ? tc->fps() : 30;
     uint totalSec = ms / 1000;
     int hh = totalSec / 3600;
@@ -2780,15 +2827,15 @@ void App::slotTimecodeStatusChanged()
         }
     }
 
-    if (tc->isRunning())
+    if (running)
     {
         m_statusTimecodeLabel->setText(QString("MTC ● %1 @%2fps%3").arg(code).arg(fps).arg(ctx));
-        m_statusTimecodeLabel->setStyleSheet(green);
+        applyStyle(green);
     }
     else
     {
         m_statusTimecodeLabel->setText(QString("MTC ❚❚ %1 (holding)%2").arg(code).arg(ctx));
-        m_statusTimecodeLabel->setStyleSheet(amber);
+        applyStyle(amber);
     }
 }
 
