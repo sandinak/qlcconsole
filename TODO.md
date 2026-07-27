@@ -18,6 +18,23 @@ move to the bottom or get deleted. See also the session memory under
 - Tree lives in `FunctionTreeWidget`; ordering = sort-key change, subtree =
   tree-build change.
 
+### FUTURE — Timecode calibration / sync-health tool (Branson shower-thought)
+The per-show MTC `timecodeOffset` is manual today. Latency splits in two:
+- **Internal (measurable):** packet→process→DMX (GUI hop + tick), plus RATE
+  (×real-time), JITTER (inter-packet / phase-lock drift). QLC can timestamp and
+  report all of this per configuration and AUTO-FILL the internal portion of the
+  offset. Read-only measurement → low risk.
+- **External (NOT self-measurable):** RTP/USB transport delay + fixture response —
+  outside the software, no shared reference/feedback path. Needs calibration
+  against the real show.
+Build: (1) live **sync-health** panel/chip — rate, jitter, internal latency,
+healthy/unstable verdict; (2) **assisted offset calibration** — fire a test cue /
+tap on the beat a few times against the music, average → suggested offset; (3)
+auto-fill the internal-latency portion. Bottom line: the fixed offset can't be
+fully auto-computed (physics is external), but everything internal is measurable
+and the rest can be assisted+repeatable instead of blind. Related:
+[[perf_load_indicator_idea]] (MasterTimer tick timing is the internal-latency source).
+
 ### FUTURE — More stage-feature objects (Branson shower-thought)
 Trusses and platforms should be fully discrete, reusable objects; consider adding
 other common stage features as first-class placeable map items: **flats**, **stands
