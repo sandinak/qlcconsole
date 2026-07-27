@@ -642,6 +642,13 @@ void ProgrammingManager::clearEditors()
     m_doc->setFocusedPalette(QLCPalette::invalidId());
 }
 
+void ProgrammingManager::showFunction(quint32 fid)
+{
+    Function *f = m_doc->function(fid);
+    if (f != NULL)
+        loadFunctionEditor(f);
+}
+
 void ProgrammingManager::loadFunctionEditor(Function *f)
 {
     if (f == NULL)

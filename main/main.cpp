@@ -341,6 +341,9 @@ int main(int argc, char** argv)
     }
     if (QLCArgs::operate == true)
         app.slotModeOperate();
+
+    // Automated UI-screenshot hook (offscreen grabs); no-op unless QLC_SHOT_DIR set.
+    app.captureScenarioIfRequested();
     if (QLCArgs::kioskMode == true)
         app.enableKioskMode();
     if (QLCArgs::kioskMode == true && QLCArgs::closeButtonRect.isValid() == true)

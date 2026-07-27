@@ -21,6 +21,7 @@
 
 #include <QToolButton>
 #include <QtWidgets>
+#include <cstdio>
 #include <unistd.h>
 #include <QtCore>
 
@@ -2723,13 +2724,7 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         aCal->setEnabled(curShow != NULL);
         if (curShow == NULL)
             aCal->setToolTip(tr("Select a show in the Show Manager first."));
-        connect(aCal, &QAction::triggered, this, [this, curShow]() {
-            TimecodeCalibrationDialog *d =
-                new TimecodeCalibrationDialog(m_doc, curShow, this);
-            d->setAttribute(Qt::WA_DeleteOnClose);
-            d->show();
-            d->raise();
-        });
+        connect(aCal, &QAction::triggered, this, [this]() { openTimecodeCalibration(); });
         menu.addSeparator();
 
         QAction *hdr = menu.addAction(tr("Timecode source universe"));
@@ -2799,6 +2794,107 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         return true;
     }
     return QMainWindow::eventFilter(watched, event);
+}
+
+void App::openTimecodeCalibration()
+{
+    Show *curShow = qobject_cast<Show*>(
+        m_doc->function(ShowManager::instance() != NULL
+                            ? ShowManager::instance()->currentShowId()
+                            : Function::invalidId()));
+    TimecodeCalibrationDialog *d = new TimecodeCalibrationDialog(m_doc, curShow, this);
+    d->setAttribute(Qt::WA_DeleteOnClose);
+    d->show();
+    d->raise();
+}
+
+void App::captureScenarioIfRequested()
+{
+    // Automated UI-eyeballing hook. When QLC_SHOT_DIR is set, defer past startup
+    // so layout settles, then run ONE scripted scenario that navigates to a
+    // state and dumps offscreen PNG grabs (QWidget::grab() renders even under
+    // QT_QPA_PLATFORM=offscreen), then quits. No-op when the env is unset, so it
+    // never touches a normal interactive run.
+    const QByteArray dirEnv = qgetenv("QLC_SHOT_DIR");
+    if (dirEnv.isEmpty())
+        return;
+
+    QTimer::singleShot(700, this, [this, dirEnv]() {
+        const QString outDir = QString::fromLocal8Bit(dirEnv);
+        QDir().mkpath(outDir);
+
+        // Grabs can come out tiny if the window never got a real size offscreen.
+        if (width() < 400 || height() < 300)
+            resize(1280, 860);
+
+        auto save = [&](QWidget *w, const QString &name) {
+            if (w == NULL)
+                return;
+            const QString path = outDir + "/" + name + ".png";
+            w->grab().save(path);
+            fprintf(stderr, "[SHOT] %s\n", path.toLocal8Bit().constData());
+        };
+
+        // Optionally switch to a named tab (substring, case-insensitive).
+        const QString tabWant = QString::fromLocal8Bit(qgetenv("QLC_SHOT_TAB"));
+        if (tabWant.isEmpty() == false && m_tab != NULL)
+        {
+            for (int i = 0; i < m_tab->count(); i++)
+                if (m_tab->tabText(i).contains(tabWant, Qt::CaseInsensitive))
+                {
+                    m_tab->setCurrentIndex(i);
+                    break;
+                }
+        }
+
+        // In the Programming tab, select a function so its subtree nests +
+        // expands. QLC_SHOT_FUNC = name substring; default = first Show.
+        if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
+        {
+            const QString funcWant = QString::fromLocal8Bit(qgetenv("QLC_SHOT_FUNC"));
+            Function *pick = NULL;
+            foreach (Function *f, m_doc->functions())
+            {
+                if (f == NULL)
+                    continue;
+                if (funcWant.isEmpty() == false)
+                {
+                    if (f->name().contains(funcWant, Qt::CaseInsensitive))
+                    {
+                        pick = f;
+                        break;
+                    }
+                }
+                else if (f->type() == Function::ShowType && pick == NULL)
+                {
+                    pick = f;
+                }
+            }
+            if (pick != NULL)
+                pm->showFunction(pick->id());
+            // Expand the nav trees so nested subtrees (Show→tracks→functions)
+            // are visible in the grab.
+            foreach (QTreeWidget *tw, pm->findChildren<QTreeWidget *>())
+                tw->expandAll();
+        }
+
+        qApp->processEvents();
+        save(this, "main");
+
+        // Optionally pop + grab the timecode calibration dialog.
+        if (qgetenv("QLC_SHOT_CALIBRATE") == QByteArray("1"))
+        {
+            openTimecodeCalibration();
+            qApp->processEvents();
+            foreach (QWidget *w, qApp->topLevelWidgets())
+                if (TimecodeCalibrationDialog *d =
+                        qobject_cast<TimecodeCalibrationDialog *>(w))
+                    save(d, "calibrate");
+        }
+
+        if (qgetenv("QLC_SHOT_STAY") != QByteArray("1"))
+            qApp->quit();
+    });
 }
 
 void App::slotTimecodeStatusChanged()

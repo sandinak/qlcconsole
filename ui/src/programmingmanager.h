@@ -58,6 +58,11 @@ public:
     ProgrammingManager(QWidget *parent, Doc *doc);
     ~ProgrammingManager();
 
+    /** Select + host the function with the given id in the canvas, exactly as
+     *  clicking it in the nav tree would (nests its subtree, previews it).
+     *  Public entry for external navigation / automated screenshots. */
+    void showFunction(quint32 fid);
+
 protected:
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;

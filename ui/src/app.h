@@ -89,10 +89,17 @@ public:
     void enableOverscan();
     void disableGUI();
 
+    /** If QLC_SHOT_DIR is set, after load schedule a one-shot scenario that
+     *  navigates to a UI state and dumps offscreen PNG grabs (for automated UI
+     *  eyeballing), then quits. No-op when the env var is unset. */
+    void captureScenarioIfRequested();
+
 private:
     void init();
     void closeEvent(QCloseEvent*) override;
     void setActiveWindow(const QString& name);
+    /** Open the assisted timecode-offset calibration dialog for the current show. */
+    void openTimecodeCalibration();
 
 protected:
     /** Clicking the status-bar MTC chip opens the timecode-bind menu. */

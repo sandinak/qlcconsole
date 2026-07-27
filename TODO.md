@@ -9,6 +9,19 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### 2026-07-27 — Dev tooling: automated GUI verification *(BUILT)*
+So Claude can self-check UI work instead of relying solely on hand screenshots.
+- [x] **Offscreen snapshot harness** — `App::captureScenarioIfRequested()` (main.cpp
+      calls it post-load). Gated by `QLC_SHOT_DIR`; optional `QLC_SHOT_TAB`
+      (substring), `QLC_SHOT_FUNC` (default first Show), `QLC_SHOT_CALIBRATE=1`,
+      `QLC_SHOT_STAY=1`. Navigates, expands nav trees, `QWidget::grab()` → PNG
+      (works under `QT_QPA_PLATFORM=offscreen`), then quits. `[SHOT] <path>` to
+      stderr. Added `ProgrammingManager::showFunction(fid)` public nav entry.
+- [x] **QTest driver test** — `ui/test/functionstreewidget` (5/5): typeSortRank
+      table + role-order vs A–Z category ordering. Guards the type-order feature.
+- Deferred: headful `screencapture`/video for pixel/motion bugs (intrusive; stays
+      Branson's domain), and QTest input-driven tests for the calibrate dialog.
+
 ### FUTURE — Programming tab: Show→tracks→functions subtree + type ordering *(Branson shower-thought; not started)*
 - Expand a **Show** in the Programming function tree into its **tracks**, each track
   into the functions assigned to it (mirror the Show Manager timeline hierarchy).
