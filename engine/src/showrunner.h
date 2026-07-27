@@ -140,6 +140,10 @@ private:
 
     /** Total time the runner has to run */
     quint32 m_totalRunTime;
+    /** Effective end of the show: the configured length if set, else content end
+     *  (m_totalRunTime). Playback finishes/parks here and content past it is not
+     *  started (Logic-style clamp). */
+    quint32 m_endTime;
 
     /** List of the currently running Functions and their stop time */
     QList < QPair<Function *, quint32> > m_runningQueue;

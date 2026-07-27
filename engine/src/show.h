@@ -66,8 +66,17 @@ public:
     /** @reimp */
     QIcon getIcon() const override;
 
-    /** @reimp */
+    /** @reimp — the show's OFFICIAL length: the configured duration when set,
+     *  else the end of the last cue (contentDuration()). */
     quint32 totalDuration() override;
+
+    /** Raw end of the last placed function (the auto length). */
+    quint32 contentDuration();
+
+    /** Explicit show length in ms; 0 = auto (tracks contentDuration()). Persisted.
+     *  Governs park-at-end and clamps playback — content past it is not run. */
+    void setConfiguredDuration(quint32 ms);
+    quint32 configuredDuration() const;
 
     /*********************************************************************
      * Copying
@@ -296,6 +305,8 @@ protected:
     bool m_timecodeFollow;
     /** Timecode-to-timeline offset in ms (persisted) */
     quint32 m_timecodeOffset;
+    /** Explicit show length in ms; 0 = auto-fit content (persisted) */
+    quint32 m_configuredDuration;
 
     /*************************************************************************
      * Attributes

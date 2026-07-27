@@ -78,6 +78,7 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
     , m_elapsedBeats(0)
     , beatSynced(false)
     , m_totalRunTime(0)
+    , m_endTime(0)
     , m_timecodeFollow(false)
     , m_externalTimeSet(false)
     , m_externalTimeFresh(false)
@@ -128,6 +129,12 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
         // Initialize the intensity map from the track's submaster level.
         m_intensityMap[track->id()] = track->intensity();
     }
+
+    // Effective end of the show: an explicit configured length (the Logic-style
+    // end handle) overrides the content end, so playback finishes/parks there and
+    // content authored past it is clamped (never started).
+    m_endTime = (m_show->configuredDuration() > 0) ? m_show->configuredDuration()
+                                                   : m_totalRunTime;
 
     std::sort(m_timeFunctions.begin(), m_timeFunctions.end(), compareShowFunctions);
     std::sort(m_beatFunctions.begin(), m_beatFunctions.end(), compareShowFunctions);
@@ -403,6 +410,8 @@ void ShowRunner::enforceLiveMuteSolo()
                 continue;
             const quint32 start = sf->startTime();
             const quint32 end = start + sf->duration(m_doc);
+            if (start >= m_endTime)
+                continue; // clamped: authored past the show's end handle
             if (m_elapsedTime < start || m_elapsedTime >= end)
                 continue; // not active at the current position
             // Skip if already running.
@@ -618,6 +627,16 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
             break;
 
         ShowFunction *sf = m_timeFunctions.at(m_currentTimeFunctionIndex);
+
+        // Clamp (Logic-style end handle): a cue authored at/after the show's end
+        // is not started. m_timeFunctions is start-time sorted, so everything
+        // after it is past the end too — advance and skip.
+        if (sf->startTime() >= m_endTime)
+        {
+            m_currentTimeFunctionIndex++;
+            continue;
+        }
+
         quint32 funcStartTime = sf->startTime();
         quint32 functionTimeOffset = 0;
         Function *f = m_doc->function(sf->functionID());
@@ -803,7 +822,7 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
     // never auto-finish — we just report the position and hold.
     if (following == false)
     {
-        if (m_elapsedTime >= m_totalRunTime)
+        if (m_elapsedTime >= m_endTime)
         {
             if (m_show != NULL)
                 m_show->stop(functionParent());

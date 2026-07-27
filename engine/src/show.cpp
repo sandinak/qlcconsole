@@ -38,6 +38,7 @@
 #define KXMLQLCShowTimeBPM      QStringLiteral("BPM")
 #define KXMLQLCShowFollowTC     QStringLiteral("FollowTimecode")
 #define KXMLQLCShowTCOffset     QStringLiteral("TimecodeOffset")
+#define KXMLQLCShowDuration     QStringLiteral("Duration")
 #define KXMLQLCShowMarker       QStringLiteral("Marker")
 #define KXMLQLCShowMarkerTime   QStringLiteral("Time")
 #define KXMLQLCShowMarkerStart  QStringLiteral("Start")
@@ -57,6 +58,7 @@ Show::Show(Doc* doc) : Function(doc, Function::ShowType)
     , m_runner(NULL)
     , m_timecodeFollow(false)
     , m_timecodeOffset(0)
+    , m_configuredDuration(0)
 {
     setName(tr("New Show"));
 
@@ -75,7 +77,7 @@ QIcon Show::getIcon() const
     return QIcon(":/show.png");
 }
 
-quint32 Show::totalDuration()
+quint32 Show::contentDuration()
 {
     quint32 totalDuration = 0;
 
@@ -90,6 +92,25 @@ quint32 Show::totalDuration()
     }
 
     return totalDuration;
+}
+
+quint32 Show::totalDuration()
+{
+    // The show's official length: an explicit configured duration overrides the
+    // content end (Logic-style end marker); 0 = auto-fit the content.
+    if (m_configuredDuration > 0)
+        return m_configuredDuration;
+    return contentDuration();
+}
+
+void Show::setConfiguredDuration(quint32 ms)
+{
+    m_configuredDuration = ms;
+}
+
+quint32 Show::configuredDuration() const
+{
+    return m_configuredDuration;
 }
 
 /*****************************************************************************
@@ -414,6 +435,8 @@ bool Show::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLQLCShowFollowTC, KXMLQLCTrue);
     if (m_timecodeOffset != 0)
         doc->writeAttribute(KXMLQLCShowTCOffset, QString::number(m_timecodeOffset));
+    if (m_configuredDuration != 0)
+        doc->writeAttribute(KXMLQLCShowDuration, QString::number(m_configuredDuration));
     doc->writeEndElement();
 
     // Timeline markers (section regions)
@@ -471,6 +494,8 @@ bool Show::loadXML(QXmlStreamReader &root)
                 m_timecodeFollow = (root.attributes().value(KXMLQLCShowFollowTC).toString() == KXMLQLCTrue);
             if (root.attributes().hasAttribute(KXMLQLCShowTCOffset))
                 m_timecodeOffset = root.attributes().value(KXMLQLCShowTCOffset).toString().toUInt();
+            if (root.attributes().hasAttribute(KXMLQLCShowDuration))
+                m_configuredDuration = root.attributes().value(KXMLQLCShowDuration).toString().toUInt();
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLQLCShowMarker)

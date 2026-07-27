@@ -209,6 +209,37 @@ void Show_Test::duration()
 
     QVERIFY(show.totalDuration() == 3000);
 
+    // Content end is the auto length; configuredDuration overrides it (the
+    // Logic-style end handle), and 0 = auto.
+    QCOMPARE(show.contentDuration(), quint32(3000));
+    QCOMPARE(show.configuredDuration(), quint32(0));
+
+    show.setConfiguredDuration(5000);            // extend past content
+    QCOMPARE(show.configuredDuration(), quint32(5000));
+    QCOMPARE(show.totalDuration(), quint32(5000));
+    QCOMPARE(show.contentDuration(), quint32(3000)); // content unchanged
+
+    show.setConfiguredDuration(1500);            // contract before content
+    QCOMPARE(show.totalDuration(), quint32(1500));
+
+    show.setConfiguredDuration(0);               // back to auto
+    QCOMPARE(show.totalDuration(), quint32(3000));
+
+    // XML round-trip of the configured length.
+    show.setConfiguredDuration(5000);
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(show.saveXML(&xmlWriter) == true);
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement(); // Function
+    Show s2(m_doc);
+    QVERIFY(s2.loadXML(xmlReader) == true);
+    QCOMPARE(s2.configuredDuration(), quint32(5000));
 }
 
 void Show_Test::load()
