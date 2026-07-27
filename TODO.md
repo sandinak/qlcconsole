@@ -38,6 +38,15 @@ fully auto-computed (physics is external), but everything internal is measurable
 and the rest can be assisted+repeatable instead of blind. Related:
 [[perf_load_indicator_idea]] (MasterTimer tick timing is the internal-latency source).
 
+### FUTURE — Tiny tweak: mark the MTC-chip section label as show-sourced (Branson shower-thought)
+The MTC footer chip appends the current show SECTION under the playhead
+(`MTC ● …:12:03 · Startup`). An operator could misread the section name as
+arriving FROM the MTC stream — MTC carries only the SMPTE clock; the section is
+a LOCAL show marker looked up at that clock. Cheap typographic fix: scope the
+label so it reads as show-content (e.g. `▸ Startup` section glyph, or `→ Startup`
+implying "resolves to"). 1-line change in `App::slotTimecodeStatusChanged`
+(ui/src/app.cpp, the `ctx` string). Not behavioral; deferred pending decision.
+
 ### FUTURE — More stage-feature objects (Branson shower-thought)
 Trusses and platforms should be fully discrete, reusable objects; consider adding
 other common stage features as first-class placeable map items: **flats**, **stands
