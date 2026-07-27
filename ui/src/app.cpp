@@ -36,6 +36,7 @@
 #include "functionmanager.h"
 #include "programmingmanager.h"
 #include "inputoutputmap.h"
+#include "inputpatch.h"
 #include "virtualconsole.h"
 #include "fixturemanager.h"
 #include "dmxdumpfactory.h"
@@ -2663,12 +2664,25 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         anyA->setChecked(cur < 0);
         connect(anyA, &QAction::triggered, this, [tc]() { if (tc) tc->setSourceUniverse(-1); });
 
+        int patchedInputs = 0;
         for (quint32 i = 0; i < m_doc->inputOutputMap()->universesCount(); i++)
         {
             const quint32 uniID = m_doc->inputOutputMap()->getUniverseID(i);
             QString nm = m_doc->inputOutputMap()->getUniverseNameByIndex(i);
             if (nm.isEmpty())
                 nm = tr("Universe %1").arg(i + 1);
+            // Annotate with the MIDI input actually patched to this universe —
+            // MTC can only arrive where an input plugin is patched.
+            InputPatch *ip = m_doc->inputOutputMap()->inputPatch(uniID);
+            if (ip != NULL && !ip->pluginName().isEmpty())
+            {
+                nm += QString("  —  %1: %2").arg(ip->pluginName(), ip->inputName());
+                patchedInputs++;
+            }
+            else
+            {
+                nm += tr("  —  no MIDI input");
+            }
             QAction *a = menu.addAction(nm);
             a->setCheckable(true);
             a->setActionGroup(grp);
@@ -2678,13 +2692,27 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             });
         }
 
-        if (tc != NULL && tc->lastUniverse() >= 0)
+        menu.addSeparator();
+        if (patchedInputs == 0)
         {
-            menu.addSeparator();
+            QAction *warn = menu.addAction(tr("⚠ No MIDI input patched — no MTC can arrive"));
+            warn->setEnabled(false);
+        }
+        else if (tc != NULL && tc->lastUniverse() >= 0)
+        {
             QAction *hint = menu.addAction(tr("(last code seen on universe %1)")
                                                .arg(tc->lastUniverse() + 1));
             hint->setEnabled(false);
         }
+        else
+        {
+            QAction *hint = menu.addAction(tr("(waiting for the source to roll…)"));
+            hint->setEnabled(false);
+        }
+        menu.addAction(tr("Patch a MIDI input (Inputs/Outputs)…"), this, [this]() {
+            if (InputOutputManager::instance() != NULL && m_tab != NULL)
+                m_tab->setCurrentWidget(InputOutputManager::instance());
+        });
 
         QMouseEvent *me = static_cast<QMouseEvent *>(event);
         menu.exec(m_statusTimecodeLabel->mapToGlobal(me->pos()));
