@@ -223,6 +223,14 @@ void ShowCursorItem::setTime(quint32 t)
     m_time = t;
 }
 
+void ShowCursorItem::setPastEnd(bool pastEnd)
+{
+    if (m_pastEnd == pastEnd)
+        return;
+    m_pastEnd = pastEnd;
+    update();
+}
+
 quint32 ShowCursorItem::getTime() const
 {
     return m_time;
@@ -238,8 +246,10 @@ void ShowCursorItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *op
     Q_UNUSED(option);
     Q_UNUSED(widget);
 
-    painter->setBrush(QBrush(Qt::yellow, Qt::SolidPattern));
-    painter->setPen(QPen(Qt::yellow, 1));
+    // Parked past the show end reads as "complete" (cyan), a live playhead yellow.
+    const QColor c = m_pastEnd ? QColor(120, 205, 255) : Qt::yellow;
+    painter->setBrush(QBrush(c, Qt::SolidPattern));
+    painter->setPen(QPen(c, 1));
     QPolygonF CursorHead;
     CursorHead.append(QPointF(-5.0, 22.0));
     CursorHead.append(QPointF(5.0, 22.0));

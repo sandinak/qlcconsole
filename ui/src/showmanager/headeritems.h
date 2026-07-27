@@ -120,9 +120,14 @@ public:
 
     void setTime(quint32 t);
     quint32 getTime() const;
+
+    /** Tint the cursor when it is parked past the show end (reads as "complete"
+     *  rather than a live playhead). */
+    void setPastEnd(bool pastEnd);
 private:
     int m_height;
     quint32 m_time;
+    bool m_pastEnd = false;
 };
 
 /** @} */

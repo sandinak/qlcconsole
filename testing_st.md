@@ -302,6 +302,47 @@ Unit-tested already (no manual test needed): `LastLookEffect` holder mechanics
 - [ ] It opens in the OS default `.js` editor instead.
 - [ ] The preference persists across restarts.
 
+## §TC — Timecode + Show-length batch (2026-07-27)
+
+### §TC.1 Sync-health readout 🎚️
+1. Roll MTC from Logic into a patched input; click the footer **MTC chip**.
+- [ ] Top of the menu shows **Sync: ✓ healthy** and a line `1.00× · jitter N ms · ~M ms/update`.
+- [ ] Stop Logic → verdict flips to **held**; a jittery/RTP feed → **~ usable** or **⚠ unstable**.
+
+### §TC.2 Manual tap calibration 🎚️
+1. MTC chip menu → **Calibrate offset…**. Roll the show; pick a reference (Timeline
+   start, or a section marker). Tap **space** on the beat a few times over a couple rolls.
+- [ ] Each tap appends `#N manual … → offset …`; **mean + spread** update; feed health shows live.
+- [ ] **Apply offset** writes it (Current show offset updates); **±10 ms** trims; taps against an
+      unstable feed are flagged orange.
+
+### §TC.3 Audio click-track auto-tap 🎚️🎧 (needs a click bus → QLC audio input)
+1. In Calibrate, set **Click BPM** to the track tempo, press **● Listen (auto-tap)**.
+- [ ] The **beat lamp** flashes bright-green on *every* detected click (even with no TC rolling —
+      confirms QLC hears the input); **caught N** count rises only while TC rolls.
+- [ ] With a coarse offset already set, samples converge tight (low spread); **Detection latency**
+      seeds from the capture block — trim it until the mean stops drifting.
+- [ ] Stop → the previous beat source is restored (no lingering audio-beat mode).
+
+### §TC.4 Show length — end handle + clamp 🖥️
+1. Programming tab → select the **Show**; or the full Show Manager. Find the **END** handle
+   (blue = auto at content end) or use the **Length…** toolbar button.
+- [ ] **Drag** the handle (hover shows a ↔ resize cursor) → grid-snaps; **Length…** →
+      *Set length…* / *Fit to content* / *End at current playhead* all work.
+- [ ] Set length **shorter** than content → red **past-end warning** hatch over the clamped cues;
+      run it → those cues **do not fire**. *Fit to content* restores full playback.
+- [ ] Save + reload → the configured length round-trips (auto shows no `Duration=` in XML).
+
+### §TC.5 Park-at-end (the original bug) 🎚️
+1. Follow MTC and let the timecode run **past** the show's end.
+- [ ] The playhead **parks at the end handle** (no scrolling off into empty timeline) and tints
+      **cyan**; the footer chip reads **✓ complete +Xs past end**.
+- [ ] Rewind Logic back within the show → the cursor un-parks and re-syncs (yellow again).
+
+### §TC.6 MTC source dropdown removed 🖥️
+- [ ] The Show Manager toolbar no longer has the MTC **source** combo; the footer chip's bind
+      menu is the single place to pick the universe (offset presets / Length button still there).
+
 ## Notes / known gaps (not bugs to file)
 - Per-channel yield keys on **fixtures**, not individual channels: a new cue that
   touches a fixture drops **all** of that fixture's held channels.

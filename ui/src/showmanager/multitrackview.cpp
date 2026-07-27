@@ -614,10 +614,12 @@ void MultiTrackView::moveCursor(quint32 timePos)
     // the end handle instead of scrolling off into empty timeline. The engine
     // still tracks the real timecode; the footer chip shows any overage.
     const quint32 endMs = effectiveEndMs();
-    const quint32 shown = (endMs > 0 && timePos > endMs) ? endMs : timePos;
+    const bool pastEnd = (endMs > 0 && timePos > endMs);
+    const quint32 shown = pastEnd ? endMs : timePos;
     int newPos = getPositionFromTime(shown);
     m_cursor->setPos(newPos, 0);
     m_cursor->setTime(shown);
+    m_cursor->setPastEnd(pastEnd);
     // Page the view only when the playhead leaves the visible area: one jump
     // (cursor lands ~10% from the left with room ahead), then it traverses the
     // page. Scrolling every frame caused the choppy follow-scroll.
