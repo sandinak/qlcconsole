@@ -1265,17 +1265,18 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
         // The end line + grip flag + length label.
         if (ex >= clampLeft && ex >= rect.left() && ex <= rect.right() + 20)
         {
-            const QColor endCol = autoLen ? QColor(120, 150, 180) : QColor(230, 90, 90);
+            const QColor endCol = autoLen ? QColor(90, 190, 235) : QColor(230, 90, 90);
             painter->setPen(QPen(endCol, m_endDrag ? 2 : 1));
             painter->setBrush(Qt::NoBrush);
             painter->drawLine(QPointF(ex, HEADER_HEIGHT), QPointF(ex, bottom));
+            // A clear grip TAB straddling the line at the top ruler, with two
+            // grab lines so it reads as draggable.
             painter->setPen(Qt::NoPen);
             painter->setBrush(endCol);
-            QPolygonF flag;
-            flag << QPointF(ex, HEADER_HEIGHT)
-                 << QPointF(ex - 12, HEADER_HEIGHT)
-                 << QPointF(ex, HEADER_HEIGHT + 10);
-            painter->drawPolygon(flag);
+            painter->drawRect(QRectF(ex - 7, HEADER_HEIGHT, 14, 15));
+            painter->setPen(QPen(QColor(0, 0, 0, 130), 1));
+            painter->drawLine(QPointF(ex - 2, HEADER_HEIGHT + 4), QPointF(ex - 2, HEADER_HEIGHT + 11));
+            painter->drawLine(QPointF(ex + 2, HEADER_HEIGHT + 4), QPointF(ex + 2, HEADER_HEIGHT + 11));
 
             const quint32 sec = endMs / 1000;
             QString elbl = QString("END %1:%2")
@@ -1326,13 +1327,16 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
         }
     }
 
-    // Grab the show END handle (drag to set the show length). Along its whole
-    // line below the time ruler; small proximity zone.
-    if (e->button() == Qt::LeftButton && m_editable && sp.y() >= HEADER_HEIGHT)
+    // Grab the show END handle (drag to set the show length). Grabbable in the
+    // TOP ruler/lane strip (where the grip flag lives, clear of clips) — or along
+    // its line in an EMPTY tracks area. The auto handle sits at the last clip's
+    // right edge, so a clips-excluded grab would be unreachable there; the top
+    // strip avoids that conflict.
+    if (e->button() == Qt::LeftButton && m_editable)
     {
         const qreal ex = getPositionFromTime(effectiveEndMs());
-        if (qAbs(sp.x() - ex) <= 8.0 &&
-            dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL)
+        if (qAbs(sp.x() - ex) <= 10.0 &&
+            (sp.y() < TRACKS_TOP || dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL))
         {
             m_endDrag = true;
             m_endDragValue = effectiveEndMs();
@@ -1425,7 +1429,8 @@ void MultiTrackView::mouseMoveEvent(QMouseEvent *e)
     {
         const QPointF sp = mapToScene(e->pos());
         const qreal ex = getPositionFromTime(effectiveEndMs());
-        if (sp.y() >= HEADER_HEIGHT && qAbs(sp.x() - ex) <= 8.0)
+        if (qAbs(sp.x() - ex) <= 10.0 &&
+            (sp.y() < TRACKS_TOP || dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL))
         {
             viewport()->setCursor(Qt::SizeHorCursor);
             setToolTip(tr("Show end — drag to set the length (right-click: fit / set…)"));
