@@ -55,6 +55,36 @@ fully auto-computed (physics is external), but everything internal is measurable
 and the rest can be assisted+repeatable instead of blind. Related:
 [[perf_load_indicator_idea]] (MasterTimer tick timing is the internal-latency source).
 
+### FUTURE — Timecode: audio click-track AUTO-calibration (Branson idea, 2026-07-27)
+Replace the human finger in the assisted tap calibration with the **machine ear**:
+detect a click track on the AUDIO INPUT and auto-capture taps against the timeline.
+Infra already exists and is wired: `AudioCapture::beatDetected()`
+(engine/audio/src/audiocapture.h) fires per spectral-flux onset from
+`BeatTracker::processAudio()`, already connected in `InputOutputMap`
+(inputoutputmap.cpp ~1111). So the work is a UI "Listen (auto-tap)" mode on
+`TimecodeCalibrationDialog` that, on each `beatDetected()`, does what the spacebar
+does (capture `tc->positionMs()`, offset vs the expected beat) — hands-free, at
+every beat → hundreds of samples per pass.
+Two catches that ARE the design:
+- **Which beat? (phase).** A manual tap hits ONE known reference; auto-detect fires
+  on every beat, so an onset pins the offset only MODULO one beat period (±½ beat).
+  → auto-tap is a REFINEMENT after a coarse offset (one manual tap / the hour-snap)
+  resolves which beat; then averaging hundreds of onsets nails it tight + low-jitter.
+- **Audio-in latency is a NEW systematic term.** Onset is delayed by driver/OS input
+  latency + capture buffering (frameSize 2048 @ 44.1k ≈ 46 ms/block) + flux group
+  delay ≈ 50–100 ms, but CONSISTENT. Auto-tap trades the human's ~100 ms variable
+  reaction for the machine's ~50–100 ms consistent latency → jitter collapses, but
+  the systematic offset is RELOCATED not removed. Characterize it once per rig via
+  a **loopback** (QLC plays a click on its internal beat generator, hears it back,
+  delta = round-trip audio latency — this is TODO slice 3, "auto-fill internal
+  latency"), or fold the residual into the ±10 ms nudge.
+Verdict: build as an OPT-IN precision mode ON TOP of the manual tap (baseline stays
+the always-works path; audio mode is the power feature when a clean click bus is
+patched to QLC's input). Continuous with the assisted-calibration + sync-health
+work already built above. Effort ~1 wk for the honest version (auto-tap mode +
+loopback latency characterization); ~2–3 days for just the beatDetected→auto-sample
+slice against a coarse offset.
+
 ### FUTURE — Tiny tweak: mark the MTC-chip section label as show-sourced (Branson shower-thought)
 The MTC footer chip appends the current show SECTION under the playhead
 (`MTC ● …:12:03 · Startup`). An operator could misread the section name as
