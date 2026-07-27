@@ -27,10 +27,13 @@ The per-show MTC `timecodeOffset` is manual today. Latency splits in two:
 - **External (NOT self-measurable):** RTP/USB transport delay + fixture response —
   outside the software, no shared reference/feedback path. Needs calibration
   against the real show.
-Build: (1) live **sync-health** panel/chip — rate, jitter, internal latency,
-healthy/unstable verdict; (2) **assisted offset calibration** — fire a test cue /
-tap on the beat a few times against the music, average → suggested offset; (3)
-auto-fill the internal-latency portion. Bottom line: the fixed offset can't be
+Build: (1) live **sync-health** readout — rate, jitter, internal latency,
+healthy/unstable verdict; **[x] SLICE 1 BUILT** (rate/jitter/interval + verdict
+in the MTC chip's bind menu; measured in `TimecodeSource`). Still open: internal
+packet→DMX latency figure (needs plugin-side timestamping). (2) **assisted offset
+calibration** — fire a test cue / tap on the beat a few times against the music,
+average → suggested offset; (3) auto-fill the internal-latency portion. Bottom
+line: the fixed offset can't be
 fully auto-computed (physics is external), but everything internal is measurable
 and the rest can be assisted+repeatable instead of blind. Related:
 [[perf_load_indicator_idea]] (MasterTimer tick timing is the internal-latency source).
