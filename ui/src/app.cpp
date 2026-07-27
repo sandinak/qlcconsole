@@ -2870,6 +2870,13 @@ void App::captureScenarioIfRequested()
                     pick = f;
                 }
             }
+            // Optional: force a configured show length so the end handle renders
+            // as a distinct (red) line for screenshot verification.
+            const QByteArray lenEnv = qgetenv("QLC_SHOT_SHOWLEN");
+            if (lenEnv.isEmpty() == false && pick != NULL
+                    && pick->type() == Function::ShowType)
+                qobject_cast<Show *>(pick)->setConfiguredDuration(lenEnv.toUInt());
+
             if (pick != NULL)
                 pm->showFunction(pick->id());
             // Expand the nav trees so nested subtrees (Show→tracks→functions)
@@ -2880,6 +2887,16 @@ void App::captureScenarioIfRequested()
 
         qApp->processEvents();
         save(this, "main");
+
+        // Focused grab of just the embedded timeline view, if present (scrolled
+        // home so content + end handle are on-screen).
+        if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
+            if (QGraphicsView *tv = pm->findChild<QGraphicsView *>())
+            {
+                tv->horizontalScrollBar()->setValue(0);
+                qApp->processEvents();
+                save(tv, "timeline");
+            }
 
         // Optionally pop + grab the timecode calibration dialog.
         if (qgetenv("QLC_SHOT_CALIBRATE") == QByteArray("1"))
@@ -2960,8 +2977,13 @@ void App::slotTimecodeStatusChanged()
         {
             const quint32 off = show->timecodeOffset();
             const quint32 posMs = (ms > off) ? ms - off : 0;
+            // Past the show's end: the cursor parks at the end and the rig holds;
+            // surface the overage so "complete" reads clearly, not a frozen clock.
+            const quint32 endMs = show->totalDuration();
+            if (endMs > 0 && posMs > endMs)
+                ctx = tr("  ·  ✓ complete +%1s past end").arg((posMs - endMs) / 1000);
             QMapIterator<quint32, ShowMarker> it(show->markers());
-            while (it.hasNext())
+            while (ctx.isEmpty() && it.hasNext())
             {
                 it.next();
                 if (posMs >= it.key() && posMs < it.value().end)

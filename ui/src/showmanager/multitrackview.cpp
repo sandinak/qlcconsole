@@ -34,6 +34,7 @@
 #include <QSlider>
 #include <QTimer>
 #include <QMenu>
+#include <QInputDialog>
 #include <QLineEdit>
 #include <QGraphicsProxyWidget>
 #include <QDebug>
@@ -127,6 +128,9 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
     m_markerGrabDx = 0;
     m_markerEditProxy = NULL;
     m_markerEditKey = UINT_MAX;
+    m_configuredLength = 0;
+    m_endDrag = false;
+    m_endDragValue = 0;
     // draw horizontal and vertical lines for tracks
     updateTracksDividers();
 
@@ -195,6 +199,15 @@ void MultiTrackView::updateViewSize()
     {
         if (item->x() + item->getWidth() > gWidth)
             gWidth = item->x() + item->getWidth();
+    }
+
+    // Ensure the end handle (a configured length dragged past content) stays on
+    // the canvas, with headroom so it can always be grabbed and extended.
+    if (m_configuredLength > 0)
+    {
+        quint32 endX = getPositionFromTime(m_configuredLength) + 200;
+        if (endX > gWidth)
+            gWidth = endX;
     }
 
     // Compact mode: size the scene height to the actual track count (min 1) so
@@ -597,9 +610,14 @@ void MultiTrackView::deleteShowItem(Track *track, ShowFunction *sf)
 
 void MultiTrackView::moveCursor(quint32 timePos)
 {
-    int newPos = getPositionFromTime(timePos);
+    // Park at the show end: past the configured/content end the cursor stops at
+    // the end handle instead of scrolling off into empty timeline. The engine
+    // still tracks the real timecode; the footer chip shows any overage.
+    const quint32 endMs = effectiveEndMs();
+    const quint32 shown = (endMs > 0 && timePos > endMs) ? endMs : timePos;
+    int newPos = getPositionFromTime(shown);
     m_cursor->setPos(newPos, 0);
-    m_cursor->setTime(timePos);
+    m_cursor->setTime(shown);
     // Page the view only when the playhead leaves the visible area: one jump
     // (cursor lands ~10% from the left with room ahead), then it traverses the
     // page. Scrolling every frame caused the choppy follow-scroll.
@@ -982,6 +1000,34 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         return;
 
     QPointF scenePos = mapToScene(event->pos());
+
+    // Right-click near the show END handle: fit-to-content (auto) or set an
+    // exact length.
+    {
+        const qreal ex = getPositionFromTime(effectiveEndMs());
+        if (qAbs(scenePos.x() - ex) <= 10.0 && scenePos.y() >= HEADER_HEIGHT)
+        {
+            QMenu emenu;
+            QAction *fitAct = emenu.addAction(tr("Fit end to content (auto)"));
+            QAction *setAct = emenu.addAction(tr("Set show length…"));
+            QAction *chosen = emenu.exec(event->globalPos());
+            if (chosen == fitAct)
+            {
+                emit showLengthChangeRequested(0);
+            }
+            else if (chosen == setAct)
+            {
+                bool ok = false;
+                const double cur = effectiveEndMs() / 1000.0;
+                const double v = QInputDialog::getDouble(this, tr("Show length"),
+                            tr("Length (seconds):"), cur, 0.25, 86400.0, 2, &ok);
+                if (ok)
+                    emit showLengthChangeRequested(quint32(v * 1000.0));
+            }
+            return;
+        }
+    }
+
     if (scenePos.x() < TRACK_WIDTH)
     {
         // Blank part of the track-header column: offer to create a track.
@@ -1044,6 +1090,29 @@ void MultiTrackView::setMarkers(const QMap<quint32, ShowMarker> &markers)
     m_markers = markers;
     if (viewport() != NULL)
         viewport()->update();
+}
+
+void MultiTrackView::setConfiguredLength(quint32 ms)
+{
+    m_configuredLength = ms;
+    updateViewSize();   // grow the scene so a configured end past content is reachable
+    if (viewport() != NULL)
+        viewport()->update();
+}
+
+quint32 MultiTrackView::contentEndMs() const
+{
+    // End of the last placed item = the auto length. Derived from item geometry
+    // so the auto handle tracks edits without the host re-pushing.
+    qreal maxX = TRACK_WIDTH;
+    foreach (ShowItem *item, m_items)
+        maxX = qMax<qreal>(maxX, item->x() + item->getWidth());
+    return getTimeFromPosition(maxX);
+}
+
+quint32 MultiTrackView::effectiveEndMs() const
+{
+    return (m_configuredLength > 0) ? m_configuredLength : contentEndMs();
 }
 
 quint32 MultiTrackView::markerAt(qreal sceneX) const
@@ -1163,6 +1232,59 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
                                    : it.value().label;
         painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, lbl);
     }
+
+    // --- Show END handle (Logic-style): a draggable length marker with past-end
+    // shading and a warning zone over any content clamped beyond it. ---
+    {
+        const bool autoLen = (m_configuredLength == 0);
+        const quint32 endMs = m_endDrag ? m_endDragValue : effectiveEndMs();
+        const quint32 contentMs = contentEndMs();
+        const qreal ex = getPositionFromTime(endMs);
+        const qreal clampLeft = leftX + TRACK_WIDTH;
+
+        // Content authored PAST the end (clamped, not played): red warning hatch.
+        if (contentMs > endMs)
+        {
+            const qreal cx = getPositionFromTime(contentMs);
+            const qreal a = qMax<qreal>(ex, clampLeft);
+            if (cx > a)
+                painter->fillRect(QRectF(a, TRACKS_TOP, cx - a, bottom - TRACKS_TOP),
+                                  QColor(200, 60, 60, 45));
+        }
+
+        // Past-end shading from the handle to the right edge of the exposed area.
+        if (rect.right() > ex)
+        {
+            const qreal a = qMax<qreal>(ex, clampLeft);
+            painter->fillRect(QRectF(a, TRACKS_TOP, rect.right() - a, bottom - TRACKS_TOP),
+                              QColor(0, 0, 0, 38));
+        }
+
+        // The end line + grip flag + length label.
+        if (ex >= clampLeft && ex >= rect.left() && ex <= rect.right() + 20)
+        {
+            const QColor endCol = autoLen ? QColor(120, 150, 180) : QColor(230, 90, 90);
+            painter->setPen(QPen(endCol, m_endDrag ? 2 : 1));
+            painter->setBrush(Qt::NoBrush);
+            painter->drawLine(QPointF(ex, HEADER_HEIGHT), QPointF(ex, bottom));
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(endCol);
+            QPolygonF flag;
+            flag << QPointF(ex, HEADER_HEIGHT)
+                 << QPointF(ex - 12, HEADER_HEIGHT)
+                 << QPointF(ex, HEADER_HEIGHT + 10);
+            painter->drawPolygon(flag);
+
+            const quint32 sec = endMs / 1000;
+            QString elbl = QString("END %1:%2")
+                    .arg(sec / 60, 2, 10, QChar('0')).arg(sec % 60, 2, 10, QChar('0'));
+            if (autoLen)
+                elbl += tr(" (auto)");
+            painter->setPen(QPen(endCol.lighter(150), 1));
+            painter->drawText(QRectF(ex - 100, HEADER_HEIGHT + 1, 94, MARKER_LANE_HEIGHT),
+                              Qt::AlignVCenter | Qt::AlignRight, elbl);
+        }
+    }
 }
 
 void MultiTrackView::mousePressEvent(QMouseEvent *e)
@@ -1202,6 +1324,23 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
         }
     }
 
+    // Grab the show END handle (drag to set the show length). Along its whole
+    // line below the time ruler; small proximity zone.
+    if (e->button() == Qt::LeftButton && m_editable && sp.y() >= HEADER_HEIGHT)
+    {
+        const qreal ex = getPositionFromTime(effectiveEndMs());
+        if (qAbs(sp.x() - ex) <= 8.0 &&
+            dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL)
+        {
+            m_endDrag = true;
+            m_endDragValue = effectiveEndMs();
+            setCursor(Qt::SizeHorCursor);
+            viewport()->update();
+            e->accept();
+            return;
+        }
+    }
+
     // Marquee (rubber-band) selection: press on empty space in the tracks area
     // (not on an item). Shift/Ctrl extends the current selection.
     if (e->button() == Qt::LeftButton && m_editable &&
@@ -1229,6 +1368,19 @@ void MultiTrackView::mouseMoveEvent(QMouseEvent *e)
     if (m_rubberActive && m_rubberBand != NULL)
     {
         m_rubberBand->setGeometry(QRect(m_rubberOrigin, e->pos()).normalized());
+        e->accept();
+        return;
+    }
+
+    if (m_endDrag)
+    {
+        QPointF sp = mapToScene(e->pos());
+        quint32 t = (sp.x() > TRACK_WIDTH) ? getTimeFromPosition(sp.x()) : 0;
+        t = snapTimeMs(t);
+        if (t < 250)
+            t = 250;   // keep a sane minimum show length
+        m_endDragValue = t;
+        viewport()->update();
         e->accept();
         return;
     }
@@ -1288,6 +1440,16 @@ void MultiTrackView::mouseReleaseEvent(QMouseEvent * e)
             }
         }
         emit viewClicked(e);   // refresh toolbar enable-state
+        e->accept();
+        return;
+    }
+
+    // Commit an end-handle drag → set the show's configured length.
+    if (m_endDrag)
+    {
+        m_endDrag = false;
+        setCursor(Qt::ArrowCursor);
+        emit showLengthChangeRequested(m_endDragValue);
         e->accept();
         return;
     }

@@ -197,6 +197,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotMarkerRelabel(quint32,QString)));
     connect(m_showview, SIGNAL(markerMovedRequested(quint32,quint32,quint32,QString,QColor)),
             this, SLOT(slotMarkerMoved(quint32,quint32,quint32,QString,QColor)));
+    connect(m_showview, SIGNAL(showLengthChangeRequested(quint32)),
+            this, SLOT(slotShowLengthChangeRequested(quint32)));
     connect(m_showview, SIGNAL(itemDroppedBelowTracks(ShowItem*)),
             this, SLOT(slotItemDroppedBelowTracks(ShowItem*)));
 
@@ -1961,6 +1963,15 @@ void ShowManager::slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 ne
     m_doc->setModified();
 }
 
+void ShowManager::slotShowLengthChangeRequested(quint32 ms)
+{
+    if (m_show == NULL)
+        return;
+    m_show->setConfiguredDuration(ms);   // 0 = auto (fit content)
+    m_doc->setModified();
+    m_showview->setConfiguredLength(ms);
+}
+
 void ShowManager::slotMarkerSetCueList(quint32 time)
 {
     if (m_show == NULL || time == UINT_MAX)
@@ -2582,6 +2593,7 @@ void ShowManager::updateMultiTrackView()
     // The active show changed — its running state defines timeline control.
     emit timelineControlChanged();
     m_showview->setMarkers(m_show->markers());
+    m_showview->setConfiguredLength(m_show->configuredDuration());
 
     // disconnect BPM field and update the view manually, to
     // prevent m_show time division override

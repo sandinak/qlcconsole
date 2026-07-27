@@ -66,6 +66,10 @@ public:
     /** Provide the section markers (start ms -> ShowMarker) to render. */
     void setMarkers(const QMap<quint32, ShowMarker> &markers);
 
+    /** Push the show's configured length (0 = auto/fit-content) so the draggable
+     *  end handle, past-end shading and content-past-end warning render. */
+    void setConfiguredLength(quint32 ms);
+
     /** Start-key of the marker region under the given scene X, else UINT_MAX. */
     quint32 markerAt(qreal sceneX) const;
 
@@ -201,6 +205,11 @@ public:
     /** Return the time (in msec) from a given X position */
     quint32 getTimeFromPosition(qreal pos) const;
 
+    /** End (ms) of the last placed item — the auto length. */
+    quint32 contentEndMs() const;
+    /** The show's effective end: the configured length if set, else content end. */
+    quint32 effectiveEndMs() const;
+
     /** Snap an absolute time (ms) to the nearest grid line, section marker edge
      *  or the playhead within a small pixel threshold. Honours the Snap-to-grid
      *  toggle (returns @p timeMs unchanged when snapping is off). Used by cue
@@ -229,6 +238,12 @@ private:
     bool m_rubberActive;       // a marquee drag is in progress
     /** Section markers: start (ms) -> ShowMarker */
     QMap<quint32, ShowMarker> m_markers;
+
+    /** Show length (Logic-style end handle): configured length in ms, 0 = auto
+     *  (the handle rides the content end). Drag state while grabbing it. */
+    quint32 m_configuredLength;
+    bool    m_endDrag;
+    quint32 m_endDragValue;
 
     /** Smooth playhead animator (main-thread, decoupled from engine updates) */
     QTimer *m_playheadTimer;
@@ -326,6 +341,10 @@ signals:
     /** A marker was dragged/resized: replace oldStart with [newStart,newEnd]. */
     void markerMovedRequested(quint32 oldStart, quint32 newStart, quint32 newEnd,
                               QString label, QColor color);
+
+    /** The show end handle was dragged / menu-set. @p configuredMs is the new
+     *  length (0 = fit-to-content/auto). Host writes Show::setConfiguredDuration. */
+    void showLengthChangeRequested(quint32 configuredMs);
 
     /** Emitted when an item is dragged below the last track: the caller should
      *  (after confirming) make a new track and move the item onto it. */

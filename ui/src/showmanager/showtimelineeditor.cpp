@@ -115,6 +115,8 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
             this, SLOT(slotMarkerMoved(quint32,quint32,quint32,QString,QColor)));
     connect(m_showview, SIGNAL(markerSetCueListRequested(quint32)),
             this, SLOT(slotMarkerSetCueList(quint32)));
+    connect(m_showview, SIGNAL(showLengthChangeRequested(quint32)),
+            this, SLOT(slotShowLengthChangeRequested(quint32)));
 
     // Delete key removes the selected clip(s).
     QShortcut *del = new QShortcut(QKeySequence::Delete, this);
@@ -171,6 +173,7 @@ void ShowTimelineEditor::reload()
     m_showview->setHeaderType(m_show->timeDivisionType());
     m_showview->setBPMValue(m_show->timeDivisionBPM());
     m_showview->setMarkers(m_show->markers());
+    m_showview->setConfiguredLength(m_show->configuredDuration());
 
     // Move the playhead with the show while it is previewed live, and keep the
     // transport button in sync with its running state.
@@ -594,6 +597,15 @@ void ShowTimelineEditor::slotMarkerMoved(quint32 oldStart, quint32 newStart,
         m_show->setMarkerCueList(newStart, cue);
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
+}
+
+void ShowTimelineEditor::slotShowLengthChangeRequested(quint32 ms)
+{
+    if (m_show == NULL)
+        return;
+    m_show->setConfiguredDuration(ms);   // 0 = auto (fit content)
+    m_doc->setModified();
+    m_showview->setConfiguredLength(ms);
 }
 
 void ShowTimelineEditor::slotMarkerSetCueList(quint32 time)

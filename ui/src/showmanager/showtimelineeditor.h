@@ -87,6 +87,7 @@ private slots:
     void slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 newEnd,
                          QString label, QColor color);
     void slotMarkerSetCueList(quint32 time);
+    void slotShowLengthChangeRequested(quint32 ms);
 
     // Transport
     void slotPlayPause();
