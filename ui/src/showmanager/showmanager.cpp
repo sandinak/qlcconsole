@@ -475,6 +475,38 @@ void ShowManager::initToolbar()
     tcOffBtn->setMenu(tcMenu);
     m_toolbar->addWidget(tcOffBtn);
 
+    // Show LENGTH: an always-visible way to set where the show ends (where the
+    // playhead parks) — complements the draggable end handle on the timeline,
+    // which can sit off-screen when the content runs long.
+    QToolButton *lenBtn = new QToolButton();
+    lenBtn->setText(tr("Length…"));
+    lenBtn->setToolTip(tr("Set the show's length — where the timeline ends and the "
+                          "playhead parks. Content past it is not played."));
+    lenBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *lenMenu = new QMenu(lenBtn);
+    QAction *lenSet = lenMenu->addAction(tr("Set length…"));
+    QAction *lenFit = lenMenu->addAction(tr("Fit to content (auto)"));
+    QAction *lenCur = lenMenu->addAction(tr("End at current playhead"));
+    connect(lenSet, &QAction::triggered, this, [this]() {
+        if (m_show == NULL)
+            return;
+        bool ok = false;
+        const double cur = m_show->totalDuration() / 1000.0;
+        const double v = QInputDialog::getDouble(this, tr("Show length"),
+                    tr("Length (seconds):"), cur, 0.25, 86400.0, 2, &ok);
+        if (ok)
+            slotShowLengthChangeRequested(quint32(v * 1000.0));
+    });
+    connect(lenFit, &QAction::triggered, this, [this]() {
+        slotShowLengthChangeRequested(0);
+    });
+    connect(lenCur, &QAction::triggered, this, [this]() {
+        if (m_show != NULL)
+            slotShowLengthChangeRequested(m_showview->getTimeFromCursor());
+    });
+    lenBtn->setMenu(lenMenu);
+    m_toolbar->addWidget(lenBtn);
+
     /* Create an empty widget between help items to flush them to the right */
     QWidget* widget = new QWidget(this);
     widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);

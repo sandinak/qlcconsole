@@ -1418,6 +1418,23 @@ void MultiTrackView::mouseMoveEvent(QMouseEvent *e)
         return;
     }
 
+    // Hover feedback over the end handle so it's discoverable as draggable.
+    if (m_editable && m_markerDragMode == 0 && m_rubberActive == false && m_endDrag == false)
+    {
+        const QPointF sp = mapToScene(e->pos());
+        const qreal ex = getPositionFromTime(effectiveEndMs());
+        if (sp.y() >= HEADER_HEIGHT && qAbs(sp.x() - ex) <= 8.0)
+        {
+            viewport()->setCursor(Qt::SizeHorCursor);
+            setToolTip(tr("Show end — drag to set the length (right-click: fit / set…)"));
+        }
+        else if (viewport()->cursor().shape() == Qt::SizeHorCursor)
+        {
+            viewport()->unsetCursor();
+            setToolTip(QString());
+        }
+    }
+
     QGraphicsView::mouseMoveEvent(e);
 }
 

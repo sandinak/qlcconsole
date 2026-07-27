@@ -10,6 +10,8 @@
 #include <QAction>
 #include <QMessageBox>
 #include <QInputDialog>
+#include <QToolButton>
+#include <QMenu>
 #include <QColorDialog>
 #include <QShortcut>
 #include <QKeySequence>
@@ -64,6 +66,39 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
     connect(addTrack, SIGNAL(triggered()), this, SLOT(slotNewTrackRequested()));
     m_deleteAction = tb->addAction(QIcon(":/editdelete.png"), tr("Delete selected clip(s)"));
     connect(m_deleteAction, SIGNAL(triggered()), this, SLOT(slotDeleteSelected()));
+
+    // Show LENGTH: always-visible control (the drag handle can sit off-screen for
+    // long content). Set an exact length / fit to content / end at the playhead.
+    tb->addSeparator();
+    QToolButton *lenBtn = new QToolButton();
+    lenBtn->setText(tr("Length…"));
+    lenBtn->setToolTip(tr("Set the show's length — where the timeline ends and the "
+                          "playhead parks. Content past it is not played."));
+    lenBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *lenMenu = new QMenu(lenBtn);
+    QAction *lenSet = lenMenu->addAction(tr("Set length…"));
+    QAction *lenFit = lenMenu->addAction(tr("Fit to content (auto)"));
+    QAction *lenCur = lenMenu->addAction(tr("End at current playhead"));
+    connect(lenSet, &QAction::triggered, this, [this]() {
+        if (m_show == NULL)
+            return;
+        bool ok = false;
+        const double cur = m_show->totalDuration() / 1000.0;
+        const double v = QInputDialog::getDouble(this, tr("Show length"),
+                    tr("Length (seconds):"), cur, 0.25, 86400.0, 2, &ok);
+        if (ok)
+            slotShowLengthChangeRequested(quint32(v * 1000.0));
+    });
+    connect(lenFit, &QAction::triggered, this, [this]() {
+        slotShowLengthChangeRequested(0);
+    });
+    connect(lenCur, &QAction::triggered, this, [this]() {
+        if (m_show != NULL)
+            slotShowLengthChangeRequested(m_showview->getTimeFromCursor());
+    });
+    lenBtn->setMenu(lenMenu);
+    tb->addWidget(lenBtn);
+
     lay->addWidget(tb);
 
     m_showview = new MultiTrackView();
