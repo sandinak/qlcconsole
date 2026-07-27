@@ -54,6 +54,11 @@ static QString fmtCode(qint64 ms)
             .arg(ss, 2, 10, QChar('0')).arg(ff, 2, 10, QChar('0'));
 }
 
+// Beat-lamp states: a small round indicator next to the Listen button.
+static const char *LAMP_OFF   = "background:#555; border-radius:8px;";
+static const char *LAMP_ARMED = "background:#1b5e20; border-radius:8px;"; // dim green = ready
+static const char *LAMP_FLASH = "background:#7CFC00; border-radius:8px;"; // bright = beat!
+
 // Short mm:ss for the reference dropdown labels.
 static QString fmtClock(qint64 ms)
 {
@@ -69,6 +74,7 @@ TimecodeCalibrationDialog::TimecodeCalibrationDialog(Doc *doc, Show *show, QWidg
     , m_listening(false)
     , m_listenCoarse(0)
     , m_prevBeatType(0)
+    , m_beatCount(0)
     , m_suggested(0)
 {
     setWindowTitle(tr("Calibrate Timecode Offset — %1")
@@ -159,6 +165,16 @@ TimecodeCalibrationDialog::TimecodeCalibrationDialog(Doc *doc, Show *show, QWidg
     m_listenBtn->setAutoDefault(false);
     aBox->addWidget(m_listenBtn);
 
+    // Beat lamp + live count: glance-confirm QLC is hearing the click.
+    QHBoxLayout *lampRow = new QHBoxLayout;
+    m_beatLamp = new QLabel(this);
+    m_beatLamp->setFixedSize(16, 16);
+    m_beatLamp->setStyleSheet(LAMP_OFF);
+    lampRow->addWidget(m_beatLamp);
+    m_beatCountLabel = new QLabel(tr("Not listening."), this);
+    lampRow->addWidget(m_beatCountLabel, 1);
+    aBox->addLayout(lampRow);
+
     m_listenInfo = new QLabel(this);
     m_listenInfo->setWordWrap(true);
     m_listenInfo->setStyleSheet("color:#7f8c8d;");
@@ -218,6 +234,12 @@ TimecodeCalibrationDialog::TimecodeCalibrationDialog(Doc *doc, Show *show, QWidg
     m_liveTimer->setInterval(150);
     connect(m_liveTimer, &QTimer::timeout, this, &TimecodeCalibrationDialog::slotLiveRefresh);
     m_liveTimer->start();
+
+    // Brief flash decay for the beat lamp.
+    m_beatFlashTimer = new QTimer(this);
+    m_beatFlashTimer->setSingleShot(true);
+    connect(m_beatFlashTimer, &QTimer::timeout,
+            this, &TimecodeCalibrationDialog::slotBeatFlashOff);
 
     refreshStats();
     slotLiveRefresh();
@@ -297,9 +319,19 @@ void TimecodeCalibrationDialog::onAudioBeat()
 {
     if (m_listening == false)
         return;
+
+    // A beat was HEARD — flash the lamp regardless of whether we can sample it,
+    // so the operator can confirm the audio input + onset detection are working.
+    m_beatLamp->setStyleSheet(LAMP_FLASH);
+    m_beatFlashTimer->start(160);
+
     TimecodeSource *tc = (m_doc != NULL) ? m_doc->timecodeSource() : NULL;
     if (tc == NULL || tc->isRunning() == false)
+    {
+        m_beatCountLabel->setText(
+            tr("♪ Heard a beat — but no timecode rolling to sample against."));
         return;
+    }
     const double bpm = m_bpmSpin->value();
     if (bpm <= 0.0)
         return;
@@ -319,6 +351,17 @@ void TimecodeCalibrationDialog::onAudioBeat()
     addSample(off, tr("auto ♪  code %1  →  offset %2 ms")
               .arg(fmtCode(code))
               .arg(off >= 0 ? QString("+%1").arg(off) : QString::number(off)), shaky);
+
+    m_beatCount++;
+    m_beatCountLabel->setText(tr("● Listening — caught %1 · last %2 ms")
+                              .arg(m_beatCount)
+                              .arg(off >= 0 ? QString("+%1").arg(off) : QString::number(off)));
+}
+
+void TimecodeCalibrationDialog::slotBeatFlashOff()
+{
+    // Decay the lamp back to its steady state after a beat flash.
+    m_beatLamp->setStyleSheet(m_listening ? LAMP_ARMED : LAMP_OFF);
 }
 
 void TimecodeCalibrationDialog::slotListenToggled(bool on)
@@ -350,7 +393,10 @@ void TimecodeCalibrationDialog::slotListenToggled(bool on)
     }
 
     m_listening = true;
+    m_beatCount = 0;
     m_listenCoarse = m_suggested;   // stable disambiguator for this session
+    m_beatLamp->setStyleSheet(LAMP_ARMED);
+    m_beatCountLabel->setText(tr("● Listening — 0 beats caught…"));
     const int blockMs = io->audioInputBlockMs();
     if (blockMs > 0)                // seed detection latency ≈ 1.5 capture blocks
         m_latencySpin->setValue(qRound(blockMs * 1.5));
@@ -388,6 +434,14 @@ void TimecodeCalibrationDialog::stopListening()
         m_listenInfo->setText(tr("Stopped — beat source restored."));
         m_listenInfo->setStyleSheet("color:#7f8c8d;");
     }
+    if (m_beatFlashTimer != NULL)
+        m_beatFlashTimer->stop();
+    if (m_beatLamp != NULL)
+        m_beatLamp->setStyleSheet(LAMP_OFF);
+    if (m_beatCountLabel != NULL)
+        m_beatCountLabel->setText(m_beatCount > 0
+                                  ? tr("Stopped — %1 beats caught.").arg(m_beatCount)
+                                  : tr("Not listening."));
 }
 
 void TimecodeCalibrationDialog::slotGridChanged()

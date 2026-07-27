@@ -77,6 +77,8 @@ private slots:
     void onAudioBeat();
     /** Reference/BPM changed → the beat grid moved; drop stale samples. */
     void slotGridChanged();
+    /** Return the beat lamp to its steady state after a flash. */
+    void slotBeatFlashOff();
 
 private:
     /** Selected reference timeline position, in ms. */
@@ -108,9 +110,13 @@ private:
     QSpinBox       *m_latencySpin;   //< detection-latency correction (ms)
     QPushButton    *m_listenBtn;
     QLabel         *m_listenInfo;
+    QLabel         *m_beatLamp;      //< round indicator: off / armed / flash-on-beat
+    QLabel         *m_beatCountLabel;
+    QTimer         *m_beatFlashTimer;
     bool    m_listening;
     qint64  m_listenCoarse;          //< offset snapshot used to disambiguate beat
     int     m_prevBeatType;          //< beat generator to restore on stop
+    int     m_beatCount;             //< onsets sampled this listen session
 
     QList<qint64> m_offsets;   //< per-tap computed offsets (signed ms)
     qint64 m_suggested;        //< current suggested offset (mean ± nudges)
