@@ -1127,6 +1127,15 @@ InputOutputMap::BeatGeneratorType InputOutputMap::beatGeneratorType() const
     return m_beatGeneratorType;
 }
 
+int InputOutputMap::audioInputBlockMs() const
+{
+    if (m_beatGeneratorType != Audio || m_inputCapture == NULL
+            || m_inputCapture->sampleRate() == 0)
+        return -1;
+    return qRound(1000.0 * double(m_inputCapture->captureSize())
+                  / double(m_inputCapture->sampleRate()));
+}
+
 QString InputOutputMap::beatTypeToString(BeatGeneratorType type) const
 {
     switch (type)

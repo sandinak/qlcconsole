@@ -23,7 +23,9 @@
 #include <QDialog>
 #include <QList>
 
+class QDoubleSpinBox;
 class QComboBox;
+class QSpinBox;
 class QLabel;
 class QPushButton;
 class QListWidget;
@@ -55,6 +57,7 @@ class TimecodeCalibrationDialog : public QDialog
 
 public:
     TimecodeCalibrationDialog(Doc *doc, Show *show, QWidget *parent = 0);
+    ~TimecodeCalibrationDialog();
 
 protected:
     /** Space bar anywhere in the dialog = a tap (unless a combo popup ate it). */
@@ -67,12 +70,23 @@ private slots:
     void slotNudge();        //< sender() carries ±ms in its property
     void slotLiveRefresh();  //< live timecode readout + feed health
     void slotReferenceChanged();
+    /** Toggle audio click-track auto-tap: drive the beat generator from the
+     *  audio input and sample the offset on every detected onset. */
+    void slotListenToggled(bool on);
+    /** One detected audio onset → one grid-disambiguated offset sample. */
+    void onAudioBeat();
+    /** Reference/BPM changed → the beat grid moved; drop stale samples. */
+    void slotGridChanged();
 
 private:
     /** Selected reference timeline position, in ms. */
     qint64 referenceMs() const;
     /** Recompute mean/spread from the tap samples + refresh the labels. */
     void refreshStats();
+    /** Append one offset sample (shared by manual tap + audio auto-tap). */
+    void addSample(qint64 offsetMs, const QString &rowText, bool shaky);
+    /** Stop audio auto-tap + restore the previous beat generator. */
+    void stopListening();
 
 private:
     Doc *m_doc;
@@ -88,6 +102,15 @@ private:
     QPushButton *m_tapBtn;
     QPushButton *m_applyBtn;
     QTimer      *m_liveTimer;
+
+    // Audio click-track auto-tap.
+    QDoubleSpinBox *m_bpmSpin;
+    QSpinBox       *m_latencySpin;   //< detection-latency correction (ms)
+    QPushButton    *m_listenBtn;
+    QLabel         *m_listenInfo;
+    bool    m_listening;
+    qint64  m_listenCoarse;          //< offset snapshot used to disambiguate beat
+    int     m_prevBeatType;          //< beat generator to restore on stop
 
     QList<qint64> m_offsets;   //< per-tap computed offsets (signed ms)
     qint64 m_suggested;        //< current suggested offset (mean ± nudges)

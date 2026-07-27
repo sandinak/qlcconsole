@@ -630,6 +630,11 @@ public:
     void setBpmNumber(int bpm);
     int bpmNumber() const;
 
+    /** Audio input block latency in ms (captureSize / sampleRate) when the beat
+     *  generator is Audio and a capture device is live; -1 otherwise. A measured
+     *  floor for the auto-tap detection-latency correction. */
+    int audioInputBlockMs() const;
+
 protected slots:
     void slotMasterTimerBeat();
     void slotPluginBeat(quint32 universe, quint32 channel, uchar value, const QString &key);

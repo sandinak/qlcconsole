@@ -55,7 +55,24 @@ fully auto-computed (physics is external), but everything internal is measurable
 and the rest can be assisted+repeatable instead of blind. Related:
 [[perf_load_indicator_idea]] (MasterTimer tick timing is the internal-latency source).
 
-### FUTURE — Timecode: audio click-track AUTO-calibration (Branson idea, 2026-07-27)
+### Timecode: audio click-track AUTO-calibration (Branson idea, 2026-07-27) *(#1 + #2-partial BUILT)*
+- [x] **#1 auto-tap** — `TimecodeCalibrationDialog` "Listen (auto-tap)" mode:
+      drives the beat generator from the audio input (`setBeatGeneratorType(Audio)`,
+      restored on stop/close), samples the offset on each `InputOutputMap::beat()`
+      via the grid model (Click-BPM field + coarse-offset disambiguation), pooled
+      with the manual taps. Compile + layout verified (screenshot); AUDIO PATH
+      needs a hardware pass (offscreen can't feed a click).
+- [x] **#2 detection-latency correction (measured floor)** — editable "Detection
+      latency (ms)" seeded from the LIVE capture block via new
+      `InputOutputMap::audioInputBlockMs()` (= `AudioCapture::captureSize/sampleRate`,
+      ×1.5), subtracted from each auto-tap.
+- [ ] **#2 active loopback self-test** — DEFERRED: play a click on the audio output,
+      time round-trip to detection = true audio latency. Needs an audio-emit path
+      (AudioRenderer wants a decoder — rabbit hole) and is UNVERIFIABLE offscreen;
+      the editable/seeded latency + ±10 ms nudge cover it meanwhile.
+Original design notes below:
+
+### FUTURE(design) — Timecode: audio click-track AUTO-calibration (Branson idea, 2026-07-27)
 Replace the human finger in the assisted tap calibration with the **machine ear**:
 detect a click track on the AUDIO INPUT and auto-capture taps against the timeline.
 Infra already exists and is wired: `AudioCapture::beatDetected()`

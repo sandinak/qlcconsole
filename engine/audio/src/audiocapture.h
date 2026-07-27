@@ -82,6 +82,11 @@ public:
 
     static int maxFrequency() { return SPECTRUM_MAX_FREQUENCY; }
 
+    /** Live capture format — used to estimate the audio input+detection latency
+     *  (block latency ≈ captureSize / sampleRate). */
+    unsigned int sampleRate() const { return m_sampleRate; }
+    unsigned int captureSize() const { return m_captureSize; }
+
     /*!
      *  Adjusts the audio output volume
      */

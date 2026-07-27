@@ -20,15 +20,19 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QPushButton>
 #include <QListWidget>
+#include <QGroupBox>
 #include <QComboBox>
 #include <QKeyEvent>
+#include <QSpinBox>
 #include <QLabel>
 #include <QTimer>
 #include <QMap>
 
 #include "timecodecalibrationdialog.h"
+#include "inputoutputmap.h"
 #include "timecodesource.h"
 #include "show.h"
 #include "doc.h"
@@ -62,12 +66,15 @@ TimecodeCalibrationDialog::TimecodeCalibrationDialog(Doc *doc, Show *show, QWidg
     : QDialog(parent)
     , m_doc(doc)
     , m_show(show)
+    , m_listening(false)
+    , m_listenCoarse(0)
+    , m_prevBeatType(0)
     , m_suggested(0)
 {
     setWindowTitle(tr("Calibrate Timecode Offset — %1")
                    .arg(m_show != NULL ? m_show->name() : tr("(no show)")));
     setModal(false);
-    resize(460, 560);
+    resize(480, 700);
 
     m_suggested = (m_show != NULL) ? qint64(m_show->timecodeOffset()) : 0;
 
@@ -120,6 +127,44 @@ TimecodeCalibrationDialog::TimecodeCalibrationDialog(Doc *doc, Show *show, QWidg
     m_tapBtn->setDefault(false);
     lay->addWidget(m_tapBtn);
 
+    // --- Audio click-track auto-tap (hands-free precision) ---
+    QGroupBox *autoBox = new QGroupBox(tr("Or: auto-tap a click track on the audio input"), this);
+    QVBoxLayout *aBox = new QVBoxLayout(autoBox);
+    QHBoxLayout *aRow = new QHBoxLayout;
+    aRow->addWidget(new QLabel(tr("Click BPM:"), this));
+    m_bpmSpin = new QDoubleSpinBox(this);
+    m_bpmSpin->setRange(20.0, 400.0);
+    m_bpmSpin->setDecimals(2);
+    m_bpmSpin->setValue(m_doc != NULL && m_doc->inputOutputMap() != NULL
+                        && m_doc->inputOutputMap()->bpmNumber() > 0
+                        ? m_doc->inputOutputMap()->bpmNumber() : 120.0);
+    m_bpmSpin->setToolTip(tr("Tempo of the click track, so each detected beat maps "
+                             "to its expected timeline position."));
+    aRow->addWidget(m_bpmSpin);
+    aRow->addSpacing(8);
+    aRow->addWidget(new QLabel(tr("Detection latency:"), this));
+    m_latencySpin = new QSpinBox(this);
+    m_latencySpin->setRange(0, 500);
+    m_latencySpin->setSingleStep(5);
+    m_latencySpin->setSuffix(tr(" ms"));
+    m_latencySpin->setValue(70);
+    m_latencySpin->setToolTip(tr("Audio capture + onset-detection delay, subtracted "
+                                 "from each auto-tap. Seeded from the live capture "
+                                 "block; trim so the mean stops drifting."));
+    aRow->addWidget(m_latencySpin);
+    aBox->addLayout(aRow);
+
+    m_listenBtn = new QPushButton(tr("● Listen (auto-tap)"), this);
+    m_listenBtn->setCheckable(true);
+    m_listenBtn->setAutoDefault(false);
+    aBox->addWidget(m_listenBtn);
+
+    m_listenInfo = new QLabel(this);
+    m_listenInfo->setWordWrap(true);
+    m_listenInfo->setStyleSheet("color:#7f8c8d;");
+    aBox->addWidget(m_listenInfo);
+    lay->addWidget(autoBox);
+
     // --- Captured taps ---
     m_tapList = new QListWidget(this);
     lay->addWidget(m_tapList, 1);
@@ -164,6 +209,8 @@ TimecodeCalibrationDialog::TimecodeCalibrationDialog(Doc *doc, Show *show, QWidg
     connect(m_applyBtn, &QPushButton::clicked, this, &TimecodeCalibrationDialog::slotApply);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::close);
     connect(m_refCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotReferenceChanged()));
+    connect(m_listenBtn, &QPushButton::toggled, this, &TimecodeCalibrationDialog::slotListenToggled);
+    connect(m_bpmSpin, SIGNAL(valueChanged(double)), this, SLOT(slotGridChanged()));
 
     // Live readout: a light poll covers both fresh positions and the flip to
     // "holding" without wiring several engine signals.
@@ -174,6 +221,11 @@ TimecodeCalibrationDialog::TimecodeCalibrationDialog(Doc *doc, Show *show, QWidg
 
     refreshStats();
     slotLiveRefresh();
+}
+
+TimecodeCalibrationDialog::~TimecodeCalibrationDialog()
+{
+    stopListening();   // never leave the app stuck on the Audio beat generator
 }
 
 void TimecodeCalibrationDialog::keyPressEvent(QKeyEvent *event)
@@ -202,6 +254,8 @@ void TimecodeCalibrationDialog::slotReferenceChanged()
         m_tapList->clear();
         refreshStats();
     }
+    if (m_listening)
+        m_listenCoarse = m_suggested;
 }
 
 void TimecodeCalibrationDialog::slotTap()
@@ -218,22 +272,135 @@ void TimecodeCalibrationDialog::slotTap()
 
     const qint64 code = qint64(tc->positionMs());
     const qint64 off = code - referenceMs();
-    m_offsets << off;
+    const bool shaky = tc->jitterMs() > 120.0 || qAbs(tc->rateEstimate() - 1.0) > 0.15;
+    addSample(off, tr("manual  code %1  →  offset %2 ms")
+              .arg(fmtCode(code))
+              .arg(off >= 0 ? QString("+%1").arg(off) : QString::number(off)), shaky);
+}
 
+void TimecodeCalibrationDialog::addSample(qint64 offsetMs, const QString &detail, bool shaky)
+{
+    m_offsets << offsetMs;
     QListWidgetItem *row = new QListWidgetItem(
-        tr("#%1   code %2   →   offset %3 ms")
-            .arg(m_offsets.size()).arg(fmtCode(code))
-            .arg(off >= 0 ? QString("+%1").arg(off) : QString::number(off)));
-    // Flag taps taken against a shaky feed so they can be culled.
-    if (tc->jitterMs() > 120.0 || qAbs(tc->rateEstimate() - 1.0) > 0.15)
+        QString("#%1  %2").arg(m_offsets.size()).arg(detail));
+    if (shaky)
     {
         row->setForeground(QColor("#e67e22"));
-        row->setToolTip(tr("Feed was unstable at this tap — consider discarding."));
+        row->setToolTip(tr("Feed was unstable at this sample — consider discarding."));
     }
     m_tapList->addItem(row);
     m_tapList->scrollToBottom();
-
     refreshStats();
+}
+
+void TimecodeCalibrationDialog::onAudioBeat()
+{
+    if (m_listening == false)
+        return;
+    TimecodeSource *tc = (m_doc != NULL) ? m_doc->timecodeSource() : NULL;
+    if (tc == NULL || tc->isRunning() == false)
+        return;
+    const double bpm = m_bpmSpin->value();
+    if (bpm <= 0.0)
+        return;
+
+    const double beatPeriod = 60000.0 / bpm;
+    const qint64 latency = m_latencySpin->value();
+    const qint64 code = qint64(tc->positionMs());
+    const qint64 trueTC = code - latency;         // undo detection delay
+    const qint64 gridPhase = referenceMs();
+    // Which grid beat is this onset? Disambiguate with the armed coarse offset,
+    // then the offset sample is precise to within the onset's own jitter.
+    const double n = qRound(double(trueTC - m_listenCoarse - gridPhase) / beatPeriod);
+    const qint64 nearestBeat = gridPhase + qint64(n * beatPeriod);
+    const qint64 off = trueTC - nearestBeat;
+
+    const bool shaky = tc->jitterMs() > 120.0 || qAbs(tc->rateEstimate() - 1.0) > 0.15;
+    addSample(off, tr("auto ♪  code %1  →  offset %2 ms")
+              .arg(fmtCode(code))
+              .arg(off >= 0 ? QString("+%1").arg(off) : QString::number(off)), shaky);
+}
+
+void TimecodeCalibrationDialog::slotListenToggled(bool on)
+{
+    InputOutputMap *io = (m_doc != NULL) ? m_doc->inputOutputMap() : NULL;
+    if (io == NULL)
+    {
+        m_listenBtn->setChecked(false);
+        return;
+    }
+
+    if (on == false)
+    {
+        stopListening();
+        return;
+    }
+
+    // Drive the beat generator from the audio input for the calibration session.
+    m_prevBeatType = int(io->beatGeneratorType());
+    io->setBeatGeneratorType(InputOutputMap::Audio);
+    if (io->beatGeneratorType() != InputOutputMap::Audio)
+    {
+        m_listenInfo->setText(tr("⚠ Could not start audio beat detection — check the "
+                                 "audio input device in Inputs/Outputs."));
+        m_listenInfo->setStyleSheet("color:#c0392b;");
+        const QSignalBlocker b(m_listenBtn);
+        m_listenBtn->setChecked(false);
+        return;
+    }
+
+    m_listening = true;
+    m_listenCoarse = m_suggested;   // stable disambiguator for this session
+    const int blockMs = io->audioInputBlockMs();
+    if (blockMs > 0)                // seed detection latency ≈ 1.5 capture blocks
+        m_latencySpin->setValue(qRound(blockMs * 1.5));
+    connect(io, SIGNAL(beat()), this, SLOT(onAudioBeat()), Qt::UniqueConnection);
+
+    m_listenBtn->setText(tr("■ Stop listening"));
+    m_listenInfo->setText(tr("Listening — patch a click bus to QLC's audio input. Each "
+                             "detected beat adds a sample; coarse offset %1 ms resolves "
+                             "which beat%2. Restores the previous beat source when stopped.")
+                          .arg(m_listenCoarse)
+                          .arg(blockMs > 0 ? tr("; capture block ≈ %1 ms").arg(blockMs)
+                                           : QString()));
+    m_listenInfo->setStyleSheet("color:#2c3e50;");
+}
+
+void TimecodeCalibrationDialog::stopListening()
+{
+    if (m_listening == false)
+        return;
+    m_listening = false;
+    InputOutputMap *io = (m_doc != NULL) ? m_doc->inputOutputMap() : NULL;
+    if (io != NULL)
+    {
+        disconnect(io, SIGNAL(beat()), this, SLOT(onAudioBeat()));
+        io->setBeatGeneratorType(InputOutputMap::BeatGeneratorType(m_prevBeatType));
+    }
+    if (m_listenBtn != NULL)
+    {
+        m_listenBtn->setText(tr("● Listen (auto-tap)"));
+        const QSignalBlocker b(m_listenBtn);
+        m_listenBtn->setChecked(false);
+    }
+    if (m_listenInfo != NULL)
+    {
+        m_listenInfo->setText(tr("Stopped — beat source restored."));
+        m_listenInfo->setStyleSheet("color:#7f8c8d;");
+    }
+}
+
+void TimecodeCalibrationDialog::slotGridChanged()
+{
+    // BPM changed → prior samples were against a different beat grid.
+    if (m_offsets.isEmpty() == false)
+    {
+        m_offsets.clear();
+        m_tapList->clear();
+        refreshStats();
+    }
+    if (m_listening)
+        m_listenCoarse = m_suggested;
 }
 
 void TimecodeCalibrationDialog::slotClear()
