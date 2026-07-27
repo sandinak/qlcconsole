@@ -453,20 +453,24 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
             // own fades/steps run on the MasterTimer and would keep going. Pause
             // them so an in-progress fade FREEZES at TC-stop and resumes on
             // TC-restart (Branson: "the fade stops").
-            // Freeze threshold — the SAME shared constant the watchdog uses for
-            // the "holding" chip (SHOW_TC_HOLD_MS), so the rig freeze and the
-            // indicator flip together.
-            const bool holding = (m_msSinceFresh > SHOW_TC_HOLD_MS);
+            // Freeze at the EXTRAPOLATION CAP (not the longer chip debounce): the
+            // cursor is allowed to glide/extrapolate up to the cap past the last
+            // fresh position, then it holds — and the children freeze WITH it so
+            // fades stay tight to the cursor. This bounds overshoot on a genuine
+            // stop to the cap while the status chip separately rides jitter.
+            const bool holding = (m_msSinceFresh > SHOW_TC_EXTRAP_CAP_MS);
             if (holding != m_tcHolding)
             {
                 m_tcHolding = holding;
                 applyPauseToChildren(holding);
             }
 
-            if (m_msSinceFresh <= SHOW_TC_HOLD_MS)
+            if (m_msSinceFresh <= SHOW_TC_EXTRAP_CAP_MS)
             {
                 // Smooth base advance every frame (this is what keeps the cursor
-                // gliding at 50Hz regardless of the ~12Hz MTC rate).
+                // gliding at 50Hz regardless of the ~12Hz MTC rate) — but only
+                // within the extrapolation cap; beyond it we hold and wait for the
+                // next fresh position to phase-lock, so the cursor never runs away.
                 m_elapsedTime += MasterTimer::tick();
 
                 // Gentle phase-lock toward the true position when one arrives:

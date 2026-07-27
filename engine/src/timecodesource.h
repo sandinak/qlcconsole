@@ -28,14 +28,20 @@
  *  so the rig-freeze and the indicator can never drift apart. Must stay above
  *  normal quarter-frame spacing (~8ms at 30fps) so steady playback never
  *  flickers to "holding". */
-// How long to keep treating incoming timecode as "rolling" after the last
-// position update before declaring it held/stopped. Shared by the MTC status
-// chip AND the ShowRunner rig-freeze so they agree. Must comfortably exceed the
-// gap between MTC position updates (a full timecode arrives every ~2 frames,
-// ~66–83 ms) PLUS transport jitter. RTP/network MIDI bursts past 500 ms, so use
-// 1 s: a steady stream stays solid, while a genuine stop still holds the last
-// look within ~1 s (nothing blacks out during the window — position simply
-// isn't advancing).
+// The show cursor free-runs (extrapolates at ~real time) at most this far past
+// the last FRESH MTC position before it holds and the running children (scenes/
+// chasers) are frozen. This BOUNDS overshoot on a genuine stop to this value and
+// keeps in-progress fades tight to the timecode — independent of the longer,
+// purely-cosmetic indicator debounce below. Small = tight sync + minimal
+// overshoot; the phase-lock snaps back when the next position arrives.
+#define SHOW_TC_EXTRAP_CAP_MS 400
+
+// How long the MTC STATUS CHIP keeps reading "rolling" after the last position
+// update before flipping to "holding". Deliberately longer than the cap above so
+// the indicator does NOT flicker on RTP/network-MIDI jitter (gaps up to ~1 s).
+// This governs ONLY the indicator/last-look-hold; the show's own cursor and rig
+// response are governed by SHOW_TC_EXTRAP_CAP_MS, so a long value here no longer
+// means the timeline runs away.
 #define SHOW_TC_HOLD_MS 1000
 
 class QTimer;
