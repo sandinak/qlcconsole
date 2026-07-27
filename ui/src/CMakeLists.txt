@@ -72,6 +72,7 @@ add_library(${module_name}
     inputselectionwidget.cpp inputselectionwidget.h inputselectionwidget.ui
     knobwidget.cpp knobwidget.h
     livecapturedialog.cpp livecapturedialog.h
+    timecodecalibrationdialog.cpp timecodecalibrationdialog.h
     virtualconsole/programmermap.cpp virtualconsole/programmermap.h
     virtualconsole/programmerframewizard.cpp virtualconsole/programmerframewizard.h
     monitor/monitor.cpp monitor/monitor.h

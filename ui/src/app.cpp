@@ -42,6 +42,7 @@
 #include "dmxdumpfactory.h"
 #include "showmanager.h"
 #include "show.h"
+#include "timecodecalibrationdialog.h"
 #include "chaser.h"
 #include "mastertimer.h"
 #include "timecodesource.h"
@@ -2711,6 +2712,26 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             menu.addAction(m_followMtcAction);
             menu.addSeparator();
         }
+
+        // Assisted per-show offset calibration: tap in time with the music,
+        // average → suggested timecodeOffset. Needs a current show to write to.
+        Show *curShow = qobject_cast<Show*>(
+            m_doc->function(ShowManager::instance() != NULL
+                                ? ShowManager::instance()->currentShowId()
+                                : Function::invalidId()));
+        QAction *aCal = menu.addAction(tr("Calibrate offset…"));
+        aCal->setEnabled(curShow != NULL);
+        if (curShow == NULL)
+            aCal->setToolTip(tr("Select a show in the Show Manager first."));
+        connect(aCal, &QAction::triggered, this, [this, curShow]() {
+            TimecodeCalibrationDialog *d =
+                new TimecodeCalibrationDialog(m_doc, curShow, this);
+            d->setAttribute(Qt::WA_DeleteOnClose);
+            d->show();
+            d->raise();
+        });
+        menu.addSeparator();
+
         QAction *hdr = menu.addAction(tr("Timecode source universe"));
         hdr->setEnabled(false);
 

@@ -31,8 +31,12 @@ Build: (1) live **sync-health** readout — rate, jitter, internal latency,
 healthy/unstable verdict; **[x] SLICE 1 BUILT** (rate/jitter/interval + verdict
 in the MTC chip's bind menu; measured in `TimecodeSource`). Still open: internal
 packet→DMX latency figure (needs plugin-side timestamping). (2) **assisted offset
-calibration** — fire a test cue / tap on the beat a few times against the music,
-average → suggested offset; (3) auto-fill the internal-latency portion. Bottom
+calibration** — tap on the beat a few times against the music, average →
+suggested offset; **[x] BUILT** (`TimecodeCalibrationDialog`, opened from the MTC
+chip menu "Calibrate offset…"; tap vs. a chosen reference — timeline 0 or a
+section marker — averages taps, shows mean/spread + live feed health, Apply
+writes `Show::setTimecodeOffset`, ±10 ms trim). (3) auto-fill the internal-latency
+portion. Bottom
 line: the fixed offset can't be
 fully auto-computed (physics is external), but everything internal is measurable
 and the rest can be assisted+repeatable instead of blind. Related:
