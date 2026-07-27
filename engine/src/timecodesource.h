@@ -28,7 +28,13 @@
  *  so the rig-freeze and the indicator can never drift apart. Must stay above
  *  normal quarter-frame spacing (~8ms at 30fps) so steady playback never
  *  flickers to "holding". */
-#define SHOW_TC_HOLD_MS 180
+// How long to keep treating incoming timecode as "rolling" after the last
+// position update before declaring it held/stopped. Shared by the MTC status
+// chip AND the ShowRunner rig-freeze so they agree. Must comfortably exceed the
+// gap between MTC position updates (a full timecode arrives every ~2 frames,
+// ~66–83 ms) PLUS transport jitter — RTP/network MIDI can burst well past
+// 180 ms, which caused the chip to flicker running↔holding on a steady stream.
+#define SHOW_TC_HOLD_MS 500
 
 class QTimer;
 
