@@ -102,7 +102,6 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     , m_stopAction(NULL)
     , m_playAction(NULL)
     , m_followMtcAction(NULL)
-    , m_tcSourceCombo(NULL)
 {
     Q_ASSERT(s_instance == NULL);
     s_instance = this;
@@ -449,18 +448,9 @@ void ShowManager::initToolbar()
     // configuration, not the global arming toggle.
     slotFollowMtcToggled(m_followMtcAction->isChecked());
 
-    // Small caption so it's clear these configure the (global) MTC follow.
-    QLabel *tcLabel = new QLabel(tr("  MTC: "));
-    m_toolbar->addWidget(tcLabel);
-
-    m_tcSourceCombo = new QComboBox();
-    m_tcSourceCombo->setFixedWidth(150);
-    m_tcSourceCombo->setToolTip(tr("MIDI Time Code source. Auto = follow any input "
-                                   "sending timecode; or lock onto one universe."));
-    connect(m_tcSourceCombo, SIGNAL(currentIndexChanged(int)),
-            this, SLOT(slotTcSourceChanged(int)));
-    m_toolbar->addWidget(m_tcSourceCombo);
-    updateTcSourceCombo();
+    // MTC SOURCE selection now lives on the global footer MTC chip's bind menu
+    // (App status bar): it sets the same global TimecodeSource universe, so a
+    // per-tab combo here was redundant. Offset presets kept below.
 
     // Timecode offset: which incoming SMPTE time maps to timeline 0. Logic
     // usually rolls from 01:00:00:00, so offer that as a one-click default.
@@ -2062,37 +2052,6 @@ void ShowManager::slotFollowMtcToggled(bool enable)
     emit followTimecodeChanged(enable);
 }
 
-void ShowManager::updateTcSourceCombo()
-{
-    if (m_tcSourceCombo == NULL)
-        return;
-
-    m_tcSourceCombo->blockSignals(true);
-    qint32 current = m_doc->timecodeSource()->sourceUniverse();
-    m_tcSourceCombo->clear();
-    m_tcSourceCombo->addItem(tr("Auto (any source)"), -1);
-
-    QStringList names = m_doc->inputOutputMap()->universeNames();
-    for (int i = 0; i < names.count(); i++)
-    {
-        // Only offer universes that actually have an input patched.
-        if (m_doc->inputOutputMap()->inputPatch(i) != NULL)
-            m_tcSourceCombo->addItem(names.at(i), i);
-    }
-
-    int idx = m_tcSourceCombo->findData(current);
-    m_tcSourceCombo->setCurrentIndex(idx < 0 ? 0 : idx);
-    m_tcSourceCombo->blockSignals(false);
-}
-
-void ShowManager::slotTcSourceChanged(int index)
-{
-    if (m_tcSourceCombo == NULL || index < 0)
-        return;
-    qint32 uni = m_tcSourceCombo->itemData(index).toInt();
-    m_doc->timecodeSource()->setSourceUniverse(uni);
-}
-
 void ShowManager::slotTimecodePosition(quint32 msPosition)
 {
     if (m_show == NULL)
@@ -2622,7 +2581,6 @@ void ShowManager::updateMultiTrackView()
     emit followTimecodeChanged(m_show->timecodeFollow());
     // The active show changed — its running state defines timeline control.
     emit timelineControlChanged();
-    updateTcSourceCombo();
     m_showview->setMarkers(m_show->markers());
 
     // disconnect BPM field and update the view manually, to

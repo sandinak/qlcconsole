@@ -192,7 +192,6 @@ private:
 
     /* MIDI Time Code follow */
     QAction *m_followMtcAction;
-    QComboBox *m_tcSourceCombo;
 
 protected slots:
     /** Slot called when the user selects a show from
@@ -231,13 +230,10 @@ protected slots:
      *********************************************************************/
 protected slots:
     void slotFollowMtcToggled(bool enable);
-    void slotTcSourceChanged(int index);
     void slotTimecodePosition(quint32 msPosition);
     void slotTimecodeRunningChanged(bool running);
 
 private:
-    void updateTcSourceCombo();
-
     /*********************************************************************
      * Time division
      *********************************************************************/
