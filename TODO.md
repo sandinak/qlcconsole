@@ -9,6 +9,24 @@ move to the bottom or get deleted. See also the session memory under
 ## In progress / next
 *(pick from Backlog)*
 
+### 2026-07-27 — Show length: Logic-style end handle + park-at-end *(BUILT — needs hardware/eyeball)*
+Fixes "MTC past show end → cursor scrolls off and disappears." A show now has an
+EXPLICIT length (Logic-style end-of-project marker) that the cursor parks at.
+- [x] **P1 engine** — `Show::configuredDuration` (0=auto), `totalDuration()` =
+      configured?:content, `contentDuration()`; XML `<TimeDivision Duration=>`;
+      `ShowRunner` m_endTime = effective end → non-follow finish + **clamp**
+      (cues authored at/after the end are never started). Unit-tested (Show 11/11).
+- [x] **P2 UI** — draggable end handle in `MultiTrackView` (blue=auto/rides
+      content, red=configured; grip+label; drag=grid-snap; right-click Fit/Set
+      length; past-end shading + content-past-end warning; scene headroom). Wired
+      in BOTH hosts via `showLengthChangeRequested` → `setConfiguredDuration`.
+- [x] **P3 cursor** — `moveCursor()` clamps display to the end (parks, no runaway);
+      footer MTC chip "✓ complete +Xs past end".
+- [ ] **Eyeball/hardware**: drag feel + snapping; live park under real MTC past the
+      end; clamp (content past handle doesn't fire) during a timecode run.
+- [ ] **Deferred**: "End at SMPTE hh:mm:ss" convenience (needs offset — host menu);
+      bar/beat snapping when a BPM is set; cursor tint when past-end.
+
 ### 2026-07-27 — Dev tooling: automated GUI verification *(BUILT)*
 So Claude can self-check UI work instead of relying solely on hand screenshots.
 - [x] **Offscreen snapshot harness** — `App::captureScenarioIfRequested()` (main.cpp
