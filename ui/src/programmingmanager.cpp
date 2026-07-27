@@ -27,6 +27,7 @@
 #include <QSpinBox>
 #include <QFrame>
 #include <QSettings>
+#include <algorithm>
 
 #include <QDebug>
 #include "programmingmanager.h"
@@ -44,6 +45,8 @@
 #include "scene.h"
 #include "chaser.h"
 #include "collection.h"
+#include "track.h"
+#include "showfunction.h"
 #include "efx.h"
 #include "rgbmatrix.h"
 #include "chasereditor.h"
@@ -105,6 +108,14 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_funcTree->setColumnHidden(1, true);
     m_funcTree->setSortingEnabled(true);
     m_funcTree->sortByColumn(0, Qt::AscendingOrder);
+    // Order the top-level type categories by role (Show · Chaser · Collection ·
+    // RGB Matrix · EFX · Scene) rather than A–Z — persisted, toggle in the
+    // right-click menu.
+    {
+        QSettings s;
+        m_funcTree->setTypeOrderByRole(
+            s.value(QStringLiteral("programming/functree/typeOrderByRole"), true).toBool());
+    }
     m_funcTree->setContextMenuPolicy(Qt::CustomContextMenu);
     // Shift/Ctrl-click to select several functions at once, then drag, delete or
     // duplicate them together. mimeData() already streams every selected id.
@@ -1685,9 +1696,24 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     menu.addSeparator();
     QAction *aFolder = menu.addAction(tr("New Folder"));
 
+    menu.addSeparator();
+    // Order top-level type categories by role (Show · Chaser · Collection · RGB
+    // Matrix · EFX · Scene) vs. classic A–Z. Persisted.
+    QAction *aTypeOrder = menu.addAction(tr("Group types by role"));
+    aTypeOrder->setCheckable(true);
+    aTypeOrder->setChecked(m_funcTree->typeOrderByRole());
+
     QAction *chosen = menu.exec(m_funcTree->viewport()->mapToGlobal(pos));
     if (chosen == NULL)
         return;
+    if (chosen == aTypeOrder)
+    {
+        const bool en = aTypeOrder->isChecked();
+        m_funcTree->setTypeOrderByRole(en);
+        QSettings().setValue(
+            QStringLiteral("programming/functree/typeOrderByRole"), en);
+        return;
+    }
     if (chosen == aDuplicate)
     {
         duplicateFunctions(targetIds);
@@ -2110,31 +2136,37 @@ void ProgrammingManager::syncMemberNodes(quint32 containerId)
     m_funcTree->blockSignals(wasBlocked);
 }
 
-void ProgrammingManager::repairFunctionNames()
+QTreeWidgetItem *ProgrammingManager::addMemberLeaf(QTreeWidgetItem *parentNode, quint32 mid,
+                                                   int orderIdx, int width, bool ordered,
+                                                   QSet<quint32> &visited, int depth)
 {
-    // Strip leading zero-padded step-number prefixes ("001. 001. … name") that
-    // an earlier bug baked into function names. The prefix always has a space
-    // after the dot, so it won't touch genuine names like "00-01.02-Setup".
-    QRegularExpression re(QStringLiteral("^(\\s*\\d+\\.\\s+)+"));
-    int fixed = 0;
-    foreach (Function *f, m_doc->functions())
+    Function *mf = m_doc->function(mid);
+    if (mf == NULL)
+        return NULL;
+    // Prefix ordered (chaser step / timeline placement) members with a
+    // zero-padded index so the alphabetical tree keeps their order — BUT only
+    // when the member's own name doesn't already start with a number (users who
+    // encode order in the name, e.g. "00-01.02-…", shouldn't get a redundant
+    // prefix). The prefix is display-only; it is never written back to the name.
+    const QString mname = mf->name();
+    const bool nameIsNumbered = mname.isEmpty() == false && mname.at(0).isDigit();
+    QTreeWidgetItem *ci = new QTreeWidgetItem(parentNode);
+    ci->setText(0, (ordered && !nameIsNumbered)
+                ? QString("%1. %2").arg(orderIdx, width, 10, QChar('0')).arg(mname)
+                : mname);
+    ci->setIcon(0, mf->getIcon());
+    ci->setData(0, Qt::UserRole, mid); // so itemFunctionId() resolves it
+    // Read-only nav: selectable + double-click to edit, not draggable.
+    ci->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+
+    // Recurse into sub-containers (collection inside a chaser, a chaser on a
+    // show track, …), guarding against cycles. Leave collapsed — expand to drill.
+    if (visited.contains(mid) == false)
     {
-        if (f == NULL)
-            continue;
-        const QString cleaned = QString(f->name()).remove(re);
-        if (cleaned.isEmpty() == false && cleaned != f->name())
-        {
-            f->setName(cleaned);
-            fixed++;
-        }
+        visited.insert(mid);
+        addMemberChildren(ci, mid, visited, depth + 1);
     }
-    if (fixed > 0)
-    {
-        m_doc->setModified();
-        m_funcTree->updateTree();
-    }
-    QMessageBox::information(this, tr("Repair names"),
-        tr("Cleaned leading numbering from %n function name(s).", "", fixed));
+    return ci;
 }
 
 void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
@@ -2144,6 +2176,39 @@ void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
     if (depth > 8)
         return;
     Function *c = m_doc->function(containerId);
+
+    // Show → tracks → functions: mirror the Show Manager timeline hierarchy —
+    // one folder per track, the placed functions nested underneath in timeline
+    // (start-time) order. A track folder is an inert nav label (no function id).
+    if (Show *sh = qobject_cast<Show*>(c))
+    {
+        foreach (Track *trk, sh->tracks())
+        {
+            if (trk == NULL)
+                continue;
+            QTreeWidgetItem *tn = new QTreeWidgetItem(treeNode);
+            tn->setText(0, trk->name().isEmpty() ? tr("Track") : trk->name());
+            tn->setData(0, Qt::UserRole, Function::invalidId()); // not a function
+            tn->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+
+            QList<ShowFunction*> sfs = trk->showFunctions();
+            std::sort(sfs.begin(), sfs.end(), [](ShowFunction *a, ShowFunction *b) {
+                return a->startTime() < b->startTime();
+            });
+            const int width = qMax(2, QString::number(sfs.count()).length());
+            int idx = 0;
+            foreach (ShowFunction *sf, sfs)
+            {
+                if (sf == NULL)
+                    continue;
+                idx++;
+                addMemberLeaf(tn, sf->functionID(), idx, width, true, visited, depth);
+            }
+            tn->setExpanded(true);
+        }
+        return;
+    }
+
     QList<quint32> members;
     bool ordered = false; // chaser steps have a meaningful order; collections don't
     if (Collection *col = qobject_cast<Collection*>(c))
@@ -2157,40 +2222,12 @@ void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
     else
         return; // not a container
 
-    // The tree sorts alphabetically, so for ordered containers (chasers)
-    // prefix each child with a zero-padded step number — the sort then
-    // matches step order, and the number is useful to see.
     const int width = qMax(2, QString::number(members.count()).length());
     int idx = 0;
-
     foreach (quint32 mid, members)
     {
         idx++;
-        Function *mf = m_doc->function(mid);
-        if (mf == NULL)
-            continue;
-        // Prefix ordered (chaser) members with a zero-padded step number so
-        // the alphabetical tree keeps step order — BUT only when the member's
-        // own name doesn't already start with a number (users who encode order
-        // in the name, e.g. "00-01.02-…", shouldn't get a redundant prefix).
-        const QString mname = mf->name();
-        const bool nameIsNumbered = mname.isEmpty() == false && mname.at(0).isDigit();
-        QTreeWidgetItem *ci = new QTreeWidgetItem(treeNode);
-        ci->setText(0, (ordered && !nameIsNumbered)
-                    ? QString("%1. %2").arg(idx, width, 10, QChar('0')).arg(mname)
-                    : mname);
-        ci->setIcon(0, mf->getIcon());
-        ci->setData(0, Qt::UserRole, mid); // so itemFunctionId() resolves it
-        // Read-only nav: selectable + double-click to edit, not draggable.
-        ci->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-
-        // Recurse into sub-containers (collection inside a chaser, etc.),
-        // guarding against cycles. Leave them collapsed — expand to drill in.
-        if (visited.contains(mid) == false)
-        {
-            visited.insert(mid);
-            addMemberChildren(ci, mid, visited, depth + 1);
-        }
+        addMemberLeaf(treeNode, mid, idx, width, ordered, visited, depth);
     }
 }
 

@@ -164,10 +164,6 @@ private:
     /** Duplicate palette $pid ("… (copy)"), add it, and open it for editing. */
     void duplicatePalette(quint32 pid);
 
-    /** Strip leading "NN. " step-number prefixes accidentally baked into
-     *  function names by an earlier nesting bug. */
-    void repairFunctionNames();
-
     /** Folder path a func-tree row lives in (its own path, or the folder path if
      *  it is a folder row). Empty for null / root. */
     QString funcFolderPathFor(QTreeWidgetItem *item) const;
@@ -199,9 +195,16 @@ private:
      *  its node in the function tree (read-only nav; invalidId clears). */
     void syncMemberNodes(quint32 containerId);
     /** Recursively nest the members of a container function under treeNode
-     *  (collections-in-chasers-in-… ); visited guards against cycles. */
+     *  (collections-in-chasers-in-…, and shows as tracks→functions); visited
+     *  guards against cycles. */
     void addMemberChildren(QTreeWidgetItem *treeNode, quint32 containerId,
                            QSet<quint32> &visited, int depth);
+    /** Create one nested member leaf (with optional zero-padded order prefix)
+     *  under parentNode and recurse into it. Shared by chaser/collection member
+     *  lists and show-track placements. */
+    QTreeWidgetItem *addMemberLeaf(QTreeWidgetItem *parentNode, quint32 mid,
+                                   int orderIdx, int width, bool ordered,
+                                   QSet<quint32> &visited, int depth);
 
     /** Is fid anywhere in the container's tree (recursively)? */
     bool isContainerMember(quint32 containerId, quint32 fid) const;

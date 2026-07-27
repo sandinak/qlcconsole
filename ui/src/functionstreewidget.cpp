@@ -69,10 +69,64 @@ static quint32 collectionForDropTarget(Doc *doc, QTreeWidgetItem *item)
 // MIME type for palette drag/drop to external widgets
 static const char* PALETTE_DRAG_MIME_TYPE = "application/x-qlcplus-palettes";
 
+// Top-level function-TYPE category node. When the owning tree has
+// type-ordering-by-role enabled (typeOrderByRole()), categories sort by a
+// fixed role rank (Show · Chaser · Collection · RGB Matrix · EFX · Scene · …)
+// instead of alphabetically; otherwise it falls back to the classic name sort.
+// Only the top-level category rows are this subclass, so leaves (plain
+// QTreeWidgetItem) keep sorting by name within a category.
+class FunctionCategoryItem : public QTreeWidgetItem
+{
+public:
+    explicit FunctionCategoryItem(QTreeWidget *view) : QTreeWidgetItem(view) {}
+
+    bool operator<(const QTreeWidgetItem &other) const override
+    {
+        const FunctionsTreeWidget *w =
+            qobject_cast<const FunctionsTreeWidget *>(treeWidget());
+        if (w != NULL && w->typeOrderByRole())
+        {
+            const int ra = FunctionsTreeWidget::typeSortRank(
+                        data(COL_NAME, Qt::UserRole + 1).toInt());
+            const int rb = FunctionsTreeWidget::typeSortRank(
+                        other.data(COL_NAME, Qt::UserRole + 1).toInt());
+            if (ra != rb)
+                return ra < rb;
+        }
+        return text(COL_NAME) < other.text(COL_NAME);
+    }
+};
+
+int FunctionsTreeWidget::typeSortRank(int type)
+{
+    // Lower = earlier. Matches the rig-building order the Programming tab wants.
+    switch (type)
+    {
+    case Function::ShowType:       return 0;
+    case Function::ChaserType:     return 1;
+    case Function::CollectionType: return 2;
+    case Function::RGBMatrixType:  return 3;
+    case Function::EFXType:        return 4;
+    case Function::SceneType:      return 5;
+    case Function::ScriptType:     return 6;
+    default:                       return 100 + type; // audio/video/unknown last
+    }
+}
+
+void FunctionsTreeWidget::setTypeOrderByRole(bool enable)
+{
+    if (m_typeOrderByRole == enable)
+        return;
+    m_typeOrderByRole = enable;
+    // Re-sort the top-level categories under the new comparator.
+    sortItems(COL_NAME, Qt::AscendingOrder);
+}
+
 FunctionsTreeWidget::FunctionsTreeWidget(Doc *doc, QWidget *parent) :
     QTreeWidget(parent)
   , m_doc(doc)
   , m_displayFilter(ShowAll)
+  , m_typeOrderByRole(false)
   , m_externalDragMode(false)
 {
     sortItems(COL_NAME, Qt::AscendingOrder);
@@ -251,8 +305,9 @@ QTreeWidgetItem* FunctionsTreeWidget::parentItem(const Function* function)
     QString basePath = Function::typeToString(function->type());
     if (m_foldersMap.contains(QString(basePath + "/")) == false)
     {
-        // Parent item for the given type doesn't exist yet so create one
-        QTreeWidgetItem* item = new QTreeWidgetItem(this);
+        // Parent item for the given type doesn't exist yet so create one.
+        // FunctionCategoryItem so type-order-by-role can control sibling order.
+        QTreeWidgetItem* item = new FunctionCategoryItem(this);
         item->setText(COL_NAME, basePath);
         item->setIcon(COL_NAME, function->getIcon());
         item->setData(COL_NAME, Qt::UserRole, Function::invalidId());

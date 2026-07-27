@@ -80,6 +80,15 @@ public:
     /** Restrict what updateTree() shows. Call before updateTree(). */
     void setDisplayFilter(DisplayFilter filter);
 
+    /** Order top-level TYPE categories by a fixed role rank (Show · Chaser ·
+     *  Collection · RGB Matrix · EFX · Scene · …) instead of alphabetically.
+     *  Off by default (classic A–Z); the Programming tab turns it on. */
+    void setTypeOrderByRole(bool enable);
+    bool typeOrderByRole() const { return m_typeOrderByRole; }
+
+    /** Fixed sort rank for a Function::Type category (lower = earlier). */
+    static int typeSortRank(int type);
+
     /** Show only items whose name contains $text (case-insensitive).
      *  Pass an empty string to show everything. Parent folders are shown
      *  if at least one child matches. */
@@ -169,6 +178,9 @@ private:
     QHash <QString, QTreeWidgetItem *> m_foldersMap;
 
     DisplayFilter m_displayFilter;
+
+    /** When true, top-level type categories sort by typeSortRank() not name. */
+    bool m_typeOrderByRole;
 
     /*********************************************************************
      * Drag & Drop events
