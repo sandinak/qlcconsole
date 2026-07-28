@@ -1,0 +1,1067 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FunctionManager">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.4 GIT</Version>
+  <Author>branson</Author>
+ </Creator>
+ <Engine>
+  <InputOutputMap>
+   <BeatGenerator BeatType="Disabled" BPM="0"/>
+   <Universe Name="Universe 1" ID="0"/>
+  </InputOutputMap>
+  <!-- Staff LED strip: 20 fixtures, IDs 0-19, addresses 0-57 -->
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>0</ID>
+   <Name>Staff 1</Name>
+   <Universe>0</Universe>
+   <Address>0</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>1</ID>
+   <Name>Staff 2</Name>
+   <Universe>0</Universe>
+   <Address>3</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>2</ID>
+   <Name>Staff 3</Name>
+   <Universe>0</Universe>
+   <Address>6</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>3</ID>
+   <Name>Staff 4</Name>
+   <Universe>0</Universe>
+   <Address>9</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>4</ID>
+   <Name>Staff 5</Name>
+   <Universe>0</Universe>
+   <Address>12</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>5</ID>
+   <Name>Staff 6</Name>
+   <Universe>0</Universe>
+   <Address>15</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>6</ID>
+   <Name>Staff 7</Name>
+   <Universe>0</Universe>
+   <Address>18</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>7</ID>
+   <Name>Staff 8</Name>
+   <Universe>0</Universe>
+   <Address>21</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>8</ID>
+   <Name>Staff 9</Name>
+   <Universe>0</Universe>
+   <Address>24</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>9</ID>
+   <Name>Staff 10</Name>
+   <Universe>0</Universe>
+   <Address>27</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>10</ID>
+   <Name>Staff 11</Name>
+   <Universe>0</Universe>
+   <Address>30</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>11</ID>
+   <Name>Staff 12</Name>
+   <Universe>0</Universe>
+   <Address>33</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>12</ID>
+   <Name>Staff 13</Name>
+   <Universe>0</Universe>
+   <Address>36</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>13</ID>
+   <Name>Staff 14</Name>
+   <Universe>0</Universe>
+   <Address>39</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>14</ID>
+   <Name>Staff 15</Name>
+   <Universe>0</Universe>
+   <Address>42</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>15</ID>
+   <Name>Staff 16</Name>
+   <Universe>0</Universe>
+   <Address>45</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>16</ID>
+   <Name>Staff 17</Name>
+   <Universe>0</Universe>
+   <Address>48</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>17</ID>
+   <Name>Staff 18</Name>
+   <Universe>0</Universe>
+   <Address>51</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>18</ID>
+   <Name>Staff 19</Name>
+   <Universe>0</Universe>
+   <Address>54</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>19</ID>
+   <Name>Staff 20</Name>
+   <Universe>0</Universe>
+   <Address>57</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <!-- Stage floor 8x8: 64 fixtures, IDs 20-83, addresses 60-249 -->
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>20</ID>
+   <Name>Floor 1</Name>
+   <Universe>0</Universe>
+   <Address>60</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>21</ID>
+   <Name>Floor 2</Name>
+   <Universe>0</Universe>
+   <Address>63</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>22</ID>
+   <Name>Floor 3</Name>
+   <Universe>0</Universe>
+   <Address>66</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>23</ID>
+   <Name>Floor 4</Name>
+   <Universe>0</Universe>
+   <Address>69</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>24</ID>
+   <Name>Floor 5</Name>
+   <Universe>0</Universe>
+   <Address>72</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>25</ID>
+   <Name>Floor 6</Name>
+   <Universe>0</Universe>
+   <Address>75</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>26</ID>
+   <Name>Floor 7</Name>
+   <Universe>0</Universe>
+   <Address>78</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>27</ID>
+   <Name>Floor 8</Name>
+   <Universe>0</Universe>
+   <Address>81</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>28</ID>
+   <Name>Floor 9</Name>
+   <Universe>0</Universe>
+   <Address>84</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>29</ID>
+   <Name>Floor 10</Name>
+   <Universe>0</Universe>
+   <Address>87</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>30</ID>
+   <Name>Floor 11</Name>
+   <Universe>0</Universe>
+   <Address>90</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>31</ID>
+   <Name>Floor 12</Name>
+   <Universe>0</Universe>
+   <Address>93</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>32</ID>
+   <Name>Floor 13</Name>
+   <Universe>0</Universe>
+   <Address>96</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>33</ID>
+   <Name>Floor 14</Name>
+   <Universe>0</Universe>
+   <Address>99</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>34</ID>
+   <Name>Floor 15</Name>
+   <Universe>0</Universe>
+   <Address>102</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>35</ID>
+   <Name>Floor 16</Name>
+   <Universe>0</Universe>
+   <Address>105</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>36</ID>
+   <Name>Floor 17</Name>
+   <Universe>0</Universe>
+   <Address>108</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>37</ID>
+   <Name>Floor 18</Name>
+   <Universe>0</Universe>
+   <Address>111</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>38</ID>
+   <Name>Floor 19</Name>
+   <Universe>0</Universe>
+   <Address>114</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>39</ID>
+   <Name>Floor 20</Name>
+   <Universe>0</Universe>
+   <Address>117</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>40</ID>
+   <Name>Floor 21</Name>
+   <Universe>0</Universe>
+   <Address>120</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>41</ID>
+   <Name>Floor 22</Name>
+   <Universe>0</Universe>
+   <Address>123</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>42</ID>
+   <Name>Floor 23</Name>
+   <Universe>0</Universe>
+   <Address>126</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>43</ID>
+   <Name>Floor 24</Name>
+   <Universe>0</Universe>
+   <Address>129</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>44</ID>
+   <Name>Floor 25</Name>
+   <Universe>0</Universe>
+   <Address>132</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>45</ID>
+   <Name>Floor 26</Name>
+   <Universe>0</Universe>
+   <Address>135</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>46</ID>
+   <Name>Floor 27</Name>
+   <Universe>0</Universe>
+   <Address>138</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>47</ID>
+   <Name>Floor 28</Name>
+   <Universe>0</Universe>
+   <Address>141</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>48</ID>
+   <Name>Floor 29</Name>
+   <Universe>0</Universe>
+   <Address>144</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>49</ID>
+   <Name>Floor 30</Name>
+   <Universe>0</Universe>
+   <Address>147</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>50</ID>
+   <Name>Floor 31</Name>
+   <Universe>0</Universe>
+   <Address>150</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>51</ID>
+   <Name>Floor 32</Name>
+   <Universe>0</Universe>
+   <Address>153</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>52</ID>
+   <Name>Floor 33</Name>
+   <Universe>0</Universe>
+   <Address>156</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>53</ID>
+   <Name>Floor 34</Name>
+   <Universe>0</Universe>
+   <Address>159</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>54</ID>
+   <Name>Floor 35</Name>
+   <Universe>0</Universe>
+   <Address>162</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>55</ID>
+   <Name>Floor 36</Name>
+   <Universe>0</Universe>
+   <Address>165</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>56</ID>
+   <Name>Floor 37</Name>
+   <Universe>0</Universe>
+   <Address>168</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>57</ID>
+   <Name>Floor 38</Name>
+   <Universe>0</Universe>
+   <Address>171</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>58</ID>
+   <Name>Floor 39</Name>
+   <Universe>0</Universe>
+   <Address>174</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>59</ID>
+   <Name>Floor 40</Name>
+   <Universe>0</Universe>
+   <Address>177</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>60</ID>
+   <Name>Floor 41</Name>
+   <Universe>0</Universe>
+   <Address>180</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>61</ID>
+   <Name>Floor 42</Name>
+   <Universe>0</Universe>
+   <Address>183</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>62</ID>
+   <Name>Floor 43</Name>
+   <Universe>0</Universe>
+   <Address>186</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>63</ID>
+   <Name>Floor 44</Name>
+   <Universe>0</Universe>
+   <Address>189</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>64</ID>
+   <Name>Floor 45</Name>
+   <Universe>0</Universe>
+   <Address>192</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>65</ID>
+   <Name>Floor 46</Name>
+   <Universe>0</Universe>
+   <Address>195</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>66</ID>
+   <Name>Floor 47</Name>
+   <Universe>0</Universe>
+   <Address>198</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>67</ID>
+   <Name>Floor 48</Name>
+   <Universe>0</Universe>
+   <Address>201</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>68</ID>
+   <Name>Floor 49</Name>
+   <Universe>0</Universe>
+   <Address>204</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>69</ID>
+   <Name>Floor 50</Name>
+   <Universe>0</Universe>
+   <Address>207</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>70</ID>
+   <Name>Floor 51</Name>
+   <Universe>0</Universe>
+   <Address>210</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>71</ID>
+   <Name>Floor 52</Name>
+   <Universe>0</Universe>
+   <Address>213</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>72</ID>
+   <Name>Floor 53</Name>
+   <Universe>0</Universe>
+   <Address>216</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>73</ID>
+   <Name>Floor 54</Name>
+   <Universe>0</Universe>
+   <Address>219</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>74</ID>
+   <Name>Floor 55</Name>
+   <Universe>0</Universe>
+   <Address>222</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>75</ID>
+   <Name>Floor 56</Name>
+   <Universe>0</Universe>
+   <Address>225</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>76</ID>
+   <Name>Floor 57</Name>
+   <Universe>0</Universe>
+   <Address>228</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>77</ID>
+   <Name>Floor 58</Name>
+   <Universe>0</Universe>
+   <Address>231</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>78</ID>
+   <Name>Floor 59</Name>
+   <Universe>0</Universe>
+   <Address>234</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>79</ID>
+   <Name>Floor 60</Name>
+   <Universe>0</Universe>
+   <Address>237</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>80</ID>
+   <Name>Floor 61</Name>
+   <Universe>0</Universe>
+   <Address>240</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>81</ID>
+   <Name>Floor 62</Name>
+   <Universe>0</Universe>
+   <Address>243</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>82</ID>
+   <Name>Floor 63</Name>
+   <Universe>0</Universe>
+   <Address>246</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>83</ID>
+   <Name>Floor 64</Name>
+   <Universe>0</Universe>
+   <Address>249</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <!-- Uplights: 6 fixtures, IDs 84-89, addresses 252-267 -->
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>84</ID>
+   <Name>Uplight 1</Name>
+   <Universe>0</Universe>
+   <Address>252</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>85</ID>
+   <Name>Uplight 2</Name>
+   <Universe>0</Universe>
+   <Address>255</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>86</ID>
+   <Name>Uplight 3</Name>
+   <Universe>0</Universe>
+   <Address>258</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>87</ID>
+   <Name>Uplight 4</Name>
+   <Universe>0</Universe>
+   <Address>261</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>88</ID>
+   <Name>Uplight 5</Name>
+   <Universe>0</Universe>
+   <Address>264</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>89</ID>
+   <Name>Uplight 6</Name>
+   <Universe>0</Universe>
+   <Address>267</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <!-- Fixture Groups -->
+  <FixtureGroup ID="0">
+   <Name>Staff Strip</Name>
+   <Size X="1" Y="20"/>
+   <Head X="0" Y="0" Fixture="0">0</Head>
+   <Head X="0" Y="1" Fixture="1">0</Head>
+   <Head X="0" Y="2" Fixture="2">0</Head>
+   <Head X="0" Y="3" Fixture="3">0</Head>
+   <Head X="0" Y="4" Fixture="4">0</Head>
+   <Head X="0" Y="5" Fixture="5">0</Head>
+   <Head X="0" Y="6" Fixture="6">0</Head>
+   <Head X="0" Y="7" Fixture="7">0</Head>
+   <Head X="0" Y="8" Fixture="8">0</Head>
+   <Head X="0" Y="9" Fixture="9">0</Head>
+   <Head X="0" Y="10" Fixture="10">0</Head>
+   <Head X="0" Y="11" Fixture="11">0</Head>
+   <Head X="0" Y="12" Fixture="12">0</Head>
+   <Head X="0" Y="13" Fixture="13">0</Head>
+   <Head X="0" Y="14" Fixture="14">0</Head>
+   <Head X="0" Y="15" Fixture="15">0</Head>
+   <Head X="0" Y="16" Fixture="16">0</Head>
+   <Head X="0" Y="17" Fixture="17">0</Head>
+   <Head X="0" Y="18" Fixture="18">0</Head>
+   <Head X="0" Y="19" Fixture="19">0</Head>
+  </FixtureGroup>
+  <FixtureGroup ID="1">
+   <Name>Stage Floor</Name>
+   <Size X="8" Y="8"/>
+   <Head X="0" Y="0" Fixture="20">0</Head>
+   <Head X="1" Y="0" Fixture="21">0</Head>
+   <Head X="2" Y="0" Fixture="22">0</Head>
+   <Head X="3" Y="0" Fixture="23">0</Head>
+   <Head X="4" Y="0" Fixture="24">0</Head>
+   <Head X="5" Y="0" Fixture="25">0</Head>
+   <Head X="6" Y="0" Fixture="26">0</Head>
+   <Head X="7" Y="0" Fixture="27">0</Head>
+   <Head X="0" Y="1" Fixture="28">0</Head>
+   <Head X="1" Y="1" Fixture="29">0</Head>
+   <Head X="2" Y="1" Fixture="30">0</Head>
+   <Head X="3" Y="1" Fixture="31">0</Head>
+   <Head X="4" Y="1" Fixture="32">0</Head>
+   <Head X="5" Y="1" Fixture="33">0</Head>
+   <Head X="6" Y="1" Fixture="34">0</Head>
+   <Head X="7" Y="1" Fixture="35">0</Head>
+   <Head X="0" Y="2" Fixture="36">0</Head>
+   <Head X="1" Y="2" Fixture="37">0</Head>
+   <Head X="2" Y="2" Fixture="38">0</Head>
+   <Head X="3" Y="2" Fixture="39">0</Head>
+   <Head X="4" Y="2" Fixture="40">0</Head>
+   <Head X="5" Y="2" Fixture="41">0</Head>
+   <Head X="6" Y="2" Fixture="42">0</Head>
+   <Head X="7" Y="2" Fixture="43">0</Head>
+   <Head X="0" Y="3" Fixture="44">0</Head>
+   <Head X="1" Y="3" Fixture="45">0</Head>
+   <Head X="2" Y="3" Fixture="46">0</Head>
+   <Head X="3" Y="3" Fixture="47">0</Head>
+   <Head X="4" Y="3" Fixture="48">0</Head>
+   <Head X="5" Y="3" Fixture="49">0</Head>
+   <Head X="6" Y="3" Fixture="50">0</Head>
+   <Head X="7" Y="3" Fixture="51">0</Head>
+   <Head X="0" Y="4" Fixture="52">0</Head>
+   <Head X="1" Y="4" Fixture="53">0</Head>
+   <Head X="2" Y="4" Fixture="54">0</Head>
+   <Head X="3" Y="4" Fixture="55">0</Head>
+   <Head X="4" Y="4" Fixture="56">0</Head>
+   <Head X="5" Y="4" Fixture="57">0</Head>
+   <Head X="6" Y="4" Fixture="58">0</Head>
+   <Head X="7" Y="4" Fixture="59">0</Head>
+   <Head X="0" Y="5" Fixture="60">0</Head>
+   <Head X="1" Y="5" Fixture="61">0</Head>
+   <Head X="2" Y="5" Fixture="62">0</Head>
+   <Head X="3" Y="5" Fixture="63">0</Head>
+   <Head X="4" Y="5" Fixture="64">0</Head>
+   <Head X="5" Y="5" Fixture="65">0</Head>
+   <Head X="6" Y="5" Fixture="66">0</Head>
+   <Head X="7" Y="5" Fixture="67">0</Head>
+   <Head X="0" Y="6" Fixture="68">0</Head>
+   <Head X="1" Y="6" Fixture="69">0</Head>
+   <Head X="2" Y="6" Fixture="70">0</Head>
+   <Head X="3" Y="6" Fixture="71">0</Head>
+   <Head X="4" Y="6" Fixture="72">0</Head>
+   <Head X="5" Y="6" Fixture="73">0</Head>
+   <Head X="6" Y="6" Fixture="74">0</Head>
+   <Head X="7" Y="6" Fixture="75">0</Head>
+   <Head X="0" Y="7" Fixture="76">0</Head>
+   <Head X="1" Y="7" Fixture="77">0</Head>
+   <Head X="2" Y="7" Fixture="78">0</Head>
+   <Head X="3" Y="7" Fixture="79">0</Head>
+   <Head X="4" Y="7" Fixture="80">0</Head>
+   <Head X="5" Y="7" Fixture="81">0</Head>
+   <Head X="6" Y="7" Fixture="82">0</Head>
+   <Head X="7" Y="7" Fixture="83">0</Head>
+  </FixtureGroup>
+  <FixtureGroup ID="2">
+   <Name>Uplights</Name>
+   <Size X="3" Y="2"/>
+   <Head X="0" Y="0" Fixture="84">0</Head>
+   <Head X="1" Y="0" Fixture="85">0</Head>
+   <Head X="2" Y="0" Fixture="86">0</Head>
+   <Head X="0" Y="1" Fixture="87">0</Head>
+   <Head X="1" Y="1" Fixture="88">0</Head>
+   <Head X="2" Y="1" Fixture="89">0</Head>
+  </FixtureGroup>
+  <!-- Functions: purple 0xFF9400D3 = 4287889619 -->
+  <Function ID="0" Type="RGBMatrix" Name="Staff Rise">
+   <Speed FadeIn="0" FadeOut="0" Duration="10"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <Algorithm Type="Script">Staff Rise</Algorithm>
+   <Color Index="0">4287889619</Color>
+   <ControlMode>RGB</ControlMode>
+   <FixtureGroup>0</FixtureGroup>
+  </Function>
+  <Function ID="1" Type="RGBMatrix" Name="Stage Pulse">
+   <Speed FadeIn="0" FadeOut="0" Duration="10"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <Algorithm Type="Script">Stage Pulse</Algorithm>
+   <Color Index="0">4287889619</Color>
+   <ControlMode>RGB</ControlMode>
+   <FixtureGroup>1</FixtureGroup>
+  </Function>
+  <Function ID="2" Type="RGBMatrix" Name="Staff Uplights">
+   <Speed FadeIn="0" FadeOut="0" Duration="10"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <Algorithm Type="Script">Staff Uplights</Algorithm>
+   <Color Index="0">4287889619</Color>
+   <ControlMode>RGB</ControlMode>
+   <FixtureGroup>2</FixtureGroup>
+  </Function>
+ </Engine>
+ <VirtualConsole>
+  <Frame Caption="">
+   <Appearance>
+    <FrameStyle>None</FrameStyle>
+    <ForegroundColor>Default</ForegroundColor>
+    <BackgroundColor>Default</BackgroundColor>
+    <BackgroundImage>None</BackgroundImage>
+    <Font>Default</Font>
+   </Appearance>
+  </Frame>
+  <Properties>
+   <Size Width="1920" Height="1080"/>
+   <GrandMaster Visible="1" ChannelMode="Intensity" ValueMode="Reduce" SliderMode="Normal"/>
+  </Properties>
+ </VirtualConsole>
+ <SimpleDesk>
+  <Engine/>
+ </SimpleDesk>
+</Workspace>

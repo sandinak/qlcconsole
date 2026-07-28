@@ -62,6 +62,9 @@ set(SCRIPT_FILES
     fountainlip.js
     fountainbasin.js
     lantern.js
+    staffrise.js
+    stagepulse.js
+    staffuplights.js
 )
 
 # Only perform the copy if we're building for Android
