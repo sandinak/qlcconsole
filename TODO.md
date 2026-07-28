@@ -22,8 +22,8 @@ EXPLICIT length (Logic-style end-of-project marker) that the cursor parks at.
       in BOTH hosts via `showLengthChangeRequested` → `setConfiguredDuration`.
 - [x] **P3 cursor** — `moveCursor()` clamps display to the end (parks, no runaway);
       footer MTC chip "✓ complete +Xs past end".
-- [ ] **Eyeball/hardware**: drag feel + snapping; live park under real MTC past the
-      end; clamp (content past handle doesn't fire) during a timecode run.
+- [x] **Eyeball/hardware**: drag feel + snapping ✓ (2026-07-27); live park under real MTC past the
+      end ✓ (2026-07-28); clamp (content past handle doesn't fire) during a timecode run ✓.
 - [ ] **Deferred**: "End at SMPTE hh:mm:ss" convenience (needs offset — host menu);
       bar/beat snapping when a BPM is set; cursor tint when past-end.
 
@@ -477,7 +477,7 @@ widget** taking up screen space. Full design + phased plan in `CONTROLMAP.md`.
 - [ ] **Phase 5** — feedback polish (resend-on-connect, Note-Off semantics).
 - [ ] **Phase 6** — banking/pages *(decision-gated; reserve `page` in Phase 1)*.
 
-### 2026-07-20 — Smart name increment + fix Enter-to-rename *(BUILT — needs GUI test)*
+### 2026-07-20 — Smart name increment + fix Enter-to-rename *(BUILT — needs fixture-populated workspace to GUI test)*
 - [x] **Fix in-place fixture rename** — Return/Enter/F2 on a selected fixture now
       opens the inline editor. Bug: `QTreeWidgetItem::setFlags()` emits
       `itemChanged()` synchronously, so arming `ItemIsEditable` re-entered
@@ -538,7 +538,7 @@ canvas). These fill the remaining gaps additively — EFX and core untouched.
 - Scripts node-eval verified (lissajous/diamond produce sane pan/tilt). Full build
       clean. See `testing_st.md` §J.
 
-### 2026-07-19 — Per-track flags: intensity / solo-safe / hold-last / priority *(BUILT — needs test)*
+### 2026-07-19 — Per-track flags: intensity / solo-safe / hold-last / priority *(BUILT — TESTED 2026-07-28)*
 Four new per-track controls on the Show timeline (model + XML + UI + runtime).
 - [x] **Intensity submaster** — a draggable **fader bar** on each track header
       (amber below 100%) scales that track's dimmer output live. `Track::m_intensity`
@@ -574,7 +574,7 @@ Four new per-track controls on the Show timeline (model + XML + UI + runtime).
       `Track::setMute/setSolo`, so no extra plumbing. Priority still applies at
       child start (not re-applied live). showrunner 6/6.
 
-### 2026-07-19 — Timeline: frozen track-header column *(BUILT — needs GUI test)*
+### 2026-07-19 — Timeline: frozen track-header column *(BUILT — TESTED 2026-07-28)*
 - [x] The **track-header column** (names/mute/solo/lock), the **zoom slider corner**
       and the **vertical divider** now stay pinned at the viewport's left edge when
       the timeline scrolls horizontally, instead of scrolling off. `MultiTrackView`:
@@ -614,7 +614,7 @@ Four new per-track controls on the Show timeline (model + XML + UI + runtime).
 - Engine touched-tests green: show 11, showrunner 6, lastlookeffect 6, track 8,
       showfunction 5. See `testing_st.md` §G.
 
-### 2026-07-19 — Batch: audit quick-wins *(BUILT — needs GUI test)*
+### 2026-07-19 — Batch: audit quick-wins *(BUILT — partial GUI test 2026-07-28; Snapshot guard ✓, Circuits dialog ✓; palette delete + group rename need populated workspace)*
 - [x] **Palette Delete** — Programming-tab palette-tree right-click → "Delete"
       (single/multi). Confirms, counts scenes that reference each palette (warns
       the looks will lose them), then `Doc::deletePalette` (which already detaches
@@ -801,7 +801,7 @@ cues belong in a SEPARATE hand cue list, not the show.
       still drops intensity to 0 (HTP zeroed each frame); "last cue persists until
       overwritten" needs core-mixer work. Not built.
 
-### 2026-07-16 — Show Manager timeline usability batch *(BUILT — needs GUI test)*
+### 2026-07-16 — Show Manager timeline usability batch *(BUILT — partial GUI test 2026-07-28)*
 Punch-list from Branson while driving the timeline. All on `programmer-mode`.
 - [x] **Empty-state hint + Show CRUD** — the timeline shows a centred hint when
       there's no show ("click New Show…") or an empty show ("drop a scene/chaser/
@@ -1007,7 +1007,7 @@ APC40 already give a GO cue stack, so the gaps are narrower than first thought.
       Still needs: GUI confirmation of the three toolbar buttons + that Blind darkens
       the rig while the 2D monitor still shows the look (couldn't drive the GUI
       headless this session — no accessibility permission).
-- [x] **Show timeline + MTC follow** *(BUILT — needs GUI + live-MTC test)* —
+- [x] **Show timeline + MTC follow** *(BUILT — TESTED 2026-07-28)* —
       Decision revised (Branson, 2026-07-15): **expand the existing Show Manager
       in place** rather than lift widgets into the Programming tab or make a new
       tab. The Show engine was already function-generic, so the work was UI +
@@ -1046,23 +1046,22 @@ APC40 already give a GO cue stack, so the gaps are narrower than first thought.
       Unit tests: MTC decoder, TimecodeSource watchdog+override, ShowRunner
       follow/seek, Show FollowTimecode round-trip — all pass.
 
-      **TESTING PLAN — show timeline + MTC** *(needs a MIDI source; Logic Pro
-      sending MTC into a CoreMIDI port patched as a QLC+ input universe):*
-      - [ ] **Collection on a track** — Show Manager → add a Collection; it
+      **TESTING PLAN — show timeline + MTC** *(tested 2026-07-28 with Logic Pro → CoreMIDI):*
+      - [x] **Collection on a track** — Show Manager → add a Collection; it
             renders as a violet block, drags/resizes, plays back (its scenes
             fire), round-trips through save/reload.
-      - [ ] **Follow toggle** — enable "Follow MIDI Time Code"; play the show;
+      - [x] **Follow toggle** — enable "Follow MIDI Time Code"; play the show;
             roll MTC from Logic → the cursor/looks chase the timecode; the
             footer timecode chip goes green with live HH:MM:SS:FF.
-      - [ ] **Freeze / manual GO** — stop MTC (spoken scene) → chip goes amber
+      - [x] **Freeze / manual GO** — stop MTC (spoken scene) → chip goes amber
             "holding", the show freezes at position; resume MTC → it chases again.
-      - [ ] **Locate** — jump Logic's playhead backward/forward → the show
+      - [x] **Locate** — jump Logic's playhead backward/forward → the show
             relocates (seekTo) and the right looks are active at the new position.
-      - [ ] **Source override** — with two MIDI inputs, set the source combo to
+      - [x] **Source override** — with two MIDI inputs, set the source combo to
             one universe; confirm only that source drives the clock.
-      - [ ] **Load chip** — under a heavy look, watch the load chip climb; verify
+      - [x] **Load chip** — under a heavy look, watch the load chip climb; verify
             amber/red thresholds read sensibly against the 20ms budget.
-      - [ ] **Persistence** — enable Follow, save, reload → toggle restores;
+      - [x] **Persistence** — enable Follow, save, reload → toggle restores;
             check `.qxw` for `<TimeDivision … FollowTimecode="True">`.
 
 - [ ] **Power/amperage estimate + power-distribution model (NEW, needs GUI test)** —

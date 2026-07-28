@@ -990,8 +990,9 @@ void MultiTrackView::dropEvent(QDropEvent *event)
 
 void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
 {
-    // Let a ShowItem show its own (delete/lock/align) menu.
-    if (dynamic_cast<ShowItem *>(itemAt(event->pos())) != NULL)
+    // Let a ShowItem or TrackItem show its own context menu.
+    QGraphicsItem *hitItem = itemAt(event->pos());
+    if (dynamic_cast<ShowItem *>(hitItem) != NULL || dynamic_cast<TrackItem *>(hitItem) != NULL)
     {
         QGraphicsView::contextMenuEvent(event);
         return;
@@ -1032,8 +1033,7 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
 
     if (scenePos.x() < TRACK_WIDTH)
     {
-        // Blank part of the track-header column: offer to create a track.
-        // (TrackItems handle their own right-click menu.)
+        // Blank part of the track-header column (no item here): offer to create a track.
         QMenu hmenu;
         QAction *newAct = hmenu.addAction(tr("New track"));
         if (hmenu.exec(event->globalPos()) == newAct)
