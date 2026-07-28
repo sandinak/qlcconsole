@@ -1287,6 +1287,36 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
             painter->drawText(QRectF(ex - 100, HEADER_HEIGHT + 1, 94, MARKER_LANE_HEIGHT),
                               Qt::AlignVCenter | Qt::AlignRight, elbl);
         }
+
+        // Off-screen: pin a labeled END indicator to the viewport edge so the
+        // show end is never invisible on a long show (click it to jump there).
+        const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
+        const QColor edgeCol = autoLen ? QColor(90, 190, 235) : QColor(230, 90, 90);
+        const quint32 esec = endMs / 1000;
+        const QString etxt = QString("END %1:%2")
+                .arg(esec / 60, 2, 10, QChar('0')).arg(esec % 60, 2, 10, QChar('0'));
+        if (ex > vis.right() - 1)
+        {
+            const qreal x = vis.right() - 90;
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(edgeCol);
+            painter->drawRect(QRectF(x, HEADER_HEIGHT, 90, MARKER_LANE_HEIGHT));
+            painter->setPen(QPen(Qt::black, 1));
+            painter->drawText(QRectF(x + 3, HEADER_HEIGHT, 86, MARKER_LANE_HEIGHT),
+                              Qt::AlignVCenter | Qt::AlignLeft,
+                              etxt + QString::fromUtf8("  \xE2\x96\xB6"));
+        }
+        else if (ex < clampLeft + 1)
+        {
+            const qreal x = clampLeft;
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(edgeCol);
+            painter->drawRect(QRectF(x, HEADER_HEIGHT, 90, MARKER_LANE_HEIGHT));
+            painter->setPen(QPen(Qt::black, 1));
+            painter->drawText(QRectF(x + 3, HEADER_HEIGHT, 86, MARKER_LANE_HEIGHT),
+                              Qt::AlignVCenter | Qt::AlignLeft,
+                              QString::fromUtf8("\xE2\x97\x80  ") + etxt);
+        }
     }
 }
 
@@ -1321,6 +1351,24 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
             m_dragLabel = m.label;
             m_dragColor = m.color;
             m_markerGrabDx = sp.x() - sx;
+            viewport()->update();
+            e->accept();
+            return;
+        }
+    }
+
+    // Click the off-screen END edge indicator (in the marker lane) → scroll the
+    // view to the handle so it can be grabbed. Essential for long shows where the
+    // end is far off-screen.
+    if (e->button() == Qt::LeftButton && sp.y() >= HEADER_HEIGHT && sp.y() < TRACKS_TOP)
+    {
+        const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
+        const qreal exAbs = getPositionFromTime(effectiveEndMs());
+        const qreal clampL = mapToScene(0, 0).x() + TRACK_WIDTH;
+        if ((exAbs > vis.right() - 1 && sp.x() >= vis.right() - 90) ||
+            (exAbs < clampL + 1 && sp.x() <= clampL + 90))
+        {
+            centerOn(exAbs, sp.y());
             viewport()->update();
             e->accept();
             return;
