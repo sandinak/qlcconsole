@@ -1269,14 +1269,15 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
             painter->setPen(QPen(endCol, m_endDrag ? 2 : 1));
             painter->setBrush(Qt::NoBrush);
             painter->drawLine(QPointF(ex, HEADER_HEIGHT), QPointF(ex, bottom));
-            // A clear grip TAB straddling the line at the top ruler, with two
-            // grab lines so it reads as draggable.
+            // A wide grip TAB straddling the line at the top ruler, with three
+            // grab lines so it reads as draggable. Wide enough to hit at any zoom.
             painter->setPen(Qt::NoPen);
             painter->setBrush(endCol);
-            painter->drawRect(QRectF(ex - 7, HEADER_HEIGHT, 14, 15));
+            painter->drawRect(QRectF(ex - 21, HEADER_HEIGHT, 42, MARKER_LANE_HEIGHT));
             painter->setPen(QPen(QColor(0, 0, 0, 130), 1));
-            painter->drawLine(QPointF(ex - 2, HEADER_HEIGHT + 4), QPointF(ex - 2, HEADER_HEIGHT + 11));
-            painter->drawLine(QPointF(ex + 2, HEADER_HEIGHT + 4), QPointF(ex + 2, HEADER_HEIGHT + 11));
+            painter->drawLine(QPointF(ex - 4, HEADER_HEIGHT + 4), QPointF(ex - 4, HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
+            painter->drawLine(QPointF(ex,     HEADER_HEIGHT + 4), QPointF(ex,     HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
+            painter->drawLine(QPointF(ex + 4, HEADER_HEIGHT + 4), QPointF(ex + 4, HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
 
             const quint32 sec = endMs / 1000;
             QString elbl = QString("END %1:%2")
@@ -1383,7 +1384,7 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
     if (e->button() == Qt::LeftButton && m_editable)
     {
         const qreal ex = getPositionFromTime(effectiveEndMs());
-        if (qAbs(sp.x() - ex) <= 10.0 &&
+        if (qAbs(sp.x() - ex) <= 21.0 &&
             (sp.y() < TRACKS_TOP || dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL))
         {
             m_endDrag = true;
@@ -1477,7 +1478,7 @@ void MultiTrackView::mouseMoveEvent(QMouseEvent *e)
     {
         const QPointF sp = mapToScene(e->pos());
         const qreal ex = getPositionFromTime(effectiveEndMs());
-        if (qAbs(sp.x() - ex) <= 10.0 &&
+        if (qAbs(sp.x() - ex) <= 21.0 &&
             (sp.y() < TRACKS_TOP || dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL))
         {
             viewport()->setCursor(Qt::SizeHorCursor);
