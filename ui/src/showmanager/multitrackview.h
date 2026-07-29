@@ -216,6 +216,14 @@ public:
      *  editing on a chase block. */
     quint32 snapTimeMs(quint32 timeMs) const;
 
+    /** The show length (ms) an end-handle drag to @p scenePos maps to — absolute
+     *  for an on-screen grab, relative-to-anchor for the off-screen edge chip. */
+    quint32 computeEndDragValue(const QPointF &scenePos) const;
+    /** Grow the scene so a handle at @p ms (plus headroom) stays on the canvas. */
+    void ensureSceneWidthForDrag(quint32 ms);
+    /** Arm/disarm edge auto-scroll from the current drag point (viewport px). */
+    void updateDragAutoScroll(const QPoint &viewportPos);
+
 private:
     QGraphicsScene *m_scene;
     QSlider *m_timeSlider;
@@ -250,6 +258,12 @@ private:
     bool    m_endDragEdge;
     quint32 m_endDragAnchorMs;
     qreal   m_endDragAnchorX;
+    /** Auto-scroll while an end-handle drag is held near a horizontal edge, so
+     *  the show can be extended past the viewport without repeated manual
+     *  scrolling. Direction: -1 left, 0 none, +1 right. Pos = last drag point. */
+    QTimer *m_dragScrollTimer;
+    int     m_dragScrollDir;
+    QPoint  m_dragScrollPos;
 
     /** Smooth playhead animator (main-thread, decoupled from engine updates) */
     QTimer *m_playheadTimer;
@@ -305,6 +319,7 @@ private:
     /** Begin an inline (embedded line-edit) rename of a marker. */
     void startMarkerEdit(quint32 key);
 private slots:
+    void slotDragAutoScroll();
     void slotMarkerEditCommitted();
 
 protected slots:

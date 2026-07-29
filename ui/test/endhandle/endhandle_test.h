@@ -21,6 +21,7 @@ private slots:
     void offscreenEdgeClickJumpsNoLengthChange();
     void onscreenHandleStillDraggable();
     void onscreenHandleWinsOverMarkerBehind();
+    void dragToRightEdgeAutoScrollsAndGrows();
 };
 
 #endif

@@ -154,4 +154,49 @@ void EndHandle_Test::onscreenHandleWinsOverMarkerBehind()
     QVERIFY2(lenSpy.takeFirst().at(0).toUInt() > 20000, "drag right should lengthen");
 }
 
+void EndHandle_Test::dragToRightEdgeAutoScrollsAndGrows()
+{
+    // Grab the on-screen handle and hold the drag at the right viewport edge:
+    // the view should auto-scroll right and the scene should grow so the show
+    // keeps extending without the user scrolling manually.
+    MultiTrackView v;
+    v.setEditable(true);
+    v.resize(1000, 400);
+    v.setConfiguredLength(20000);
+    v.show();
+    QApplication::processEvents();
+    v.horizontalScrollBar()->setValue(0);
+    v.verticalScrollBar()->setValue(0);
+    QApplication::processEvents();
+
+    QSignalSpy spy(&v, SIGNAL(showLengthChangeRequested(quint32)));
+    QWidget *vp = v.viewport();
+    const int scrollBefore = v.horizontalScrollBar()->value();
+    const qreal sceneWBefore = v.sceneRect().width();
+
+    const int hx = int(v.getPositionFromTime(20000));
+    const QPoint p(hx, HEADER_HEIGHT + MARKER_LANE_HEIGHT / 2);
+    sendMouse(vp, QEvent::MouseButtonPress, p, Qt::LeftButton);
+    // Drag to (and hold at) the right edge of the viewport.
+    const QPoint edge(vp->width() - 5, p.y());
+    sendMouse(vp, QEvent::MouseMove, edge, Qt::LeftButton);
+
+    // Let the auto-scroll timer (30 ms) tick several times.
+    QElapsedTimer clock; clock.start();
+    while (clock.elapsed() < 400)
+        QApplication::processEvents(QEventLoop::AllEvents, 20);
+
+    const int scrollAfter = v.horizontalScrollBar()->value();
+    const qreal sceneWAfter = v.sceneRect().width();
+
+    sendMouse(vp, QEvent::MouseButtonRelease, edge, Qt::LeftButton);
+
+    QVERIFY2(scrollAfter > scrollBefore,
+             qPrintable(QString("no auto-scroll: %1 -> %2").arg(scrollBefore).arg(scrollAfter)));
+    QVERIFY2(sceneWAfter > sceneWBefore,
+             qPrintable(QString("scene did not grow: %1 -> %2").arg(sceneWBefore).arg(sceneWAfter)));
+    QCOMPARE(spy.count(), 1);
+    QVERIFY2(spy.takeFirst().at(0).toUInt() > 20000, "auto-scroll should have extended the show");
+}
+
 QTEST_MAIN(EndHandle_Test)

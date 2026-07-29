@@ -134,6 +134,10 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
     m_endDragEdge = false;
     m_endDragAnchorMs = 0;
     m_endDragAnchorX = 0;
+    m_dragScrollDir = 0;
+    m_dragScrollTimer = new QTimer(this);
+    m_dragScrollTimer->setInterval(30);   // gentle auto-scroll while extending
+    connect(m_dragScrollTimer, &QTimer::timeout, this, &MultiTrackView::slotDragAutoScroll);
     // draw horizontal and vertical lines for tracks
     updateTracksDividers();
 
@@ -839,6 +843,85 @@ quint32 MultiTrackView::snapTimeMs(quint32 timeMs) const
     return best;
 }
 
+quint32 MultiTrackView::computeEndDragValue(const QPointF &sp) const
+{
+    quint32 t;
+    if (m_endDragEdge)
+    {
+        // Off-screen chip: adjust RELATIVE to the drag distance so the pinned
+        // chip doesn't snap the end to the viewport edge.
+        const qint64 deltaMs = qint64(getTimeFromPosition(sp.x()))
+                             - qint64(getTimeFromPosition(m_endDragAnchorX));
+        const qint64 nt = qint64(m_endDragAnchorMs) + deltaMs;
+        t = (nt < 0) ? 0 : quint32(nt);
+    }
+    else
+    {
+        t = (sp.x() > TRACK_WIDTH) ? getTimeFromPosition(sp.x()) : 0;
+    }
+    t = snapTimeMs(t);
+    if (t < 250)
+        t = 250;   // keep a sane minimum show length
+    return t;
+}
+
+void MultiTrackView::ensureSceneWidthForDrag(quint32 ms)
+{
+    const qreal needed = getPositionFromTime(ms) + 1000;
+    if (needed > m_scene->width())
+        setViewSize(int(needed), int(m_scene->height()));
+}
+
+void MultiTrackView::updateDragAutoScroll(const QPoint &vpPos)
+{
+    const int margin = 40;
+    const int w = viewport()->width();
+    int dir = 0;
+    if (vpPos.x() >= w - margin)
+        dir = +1;                                    // near right edge → extend
+    else if (vpPos.x() <= TRACK_WIDTH + margin && horizontalScrollBar()->value() > 0)
+        dir = -1;                                    // near left edge → back off
+    m_dragScrollDir = dir;
+    m_dragScrollPos = vpPos;
+    if (dir != 0)
+    {
+        if (m_dragScrollTimer->isActive() == false)
+            m_dragScrollTimer->start();
+    }
+    else
+    {
+        m_dragScrollTimer->stop();
+    }
+}
+
+void MultiTrackView::slotDragAutoScroll()
+{
+    if (m_endDrag == false || m_dragScrollDir == 0)
+    {
+        m_dragScrollTimer->stop();
+        return;
+    }
+
+    QScrollBar *h = horizontalScrollBar();
+    const int step = 14 * m_dragScrollDir;
+
+    // Extending right: make sure the scene can scroll further before we ask.
+    if (m_dragScrollDir > 0)
+    {
+        const qreal rightScene = mapToScene(viewport()->width() - 1, 0).x();
+        if (rightScene + 2 * step + 400 > m_scene->width())
+            setViewSize(int(rightScene + 2 * step + 1200), int(m_scene->height()));
+    }
+
+    h->setValue(h->value() + step);
+
+    // Recompute the handle value from the (held) mouse point over the now-
+    // scrolled scene, and grow the canvas to keep the handle reachable.
+    m_endDragValue = computeEndDragValue(mapToScene(m_dragScrollPos));
+    ensureSceneWidthForDrag(m_endDragValue);
+    viewport()->update();
+}
+
 quint32 MultiTrackView::getPositionFromTime(quint32 time) const
 {
     if (time == 0)
@@ -1465,25 +1548,11 @@ void MultiTrackView::mouseMoveEvent(QMouseEvent *e)
 
     if (m_endDrag)
     {
-        QPointF sp = mapToScene(e->pos());
-        quint32 t;
-        if (m_endDragEdge)
-        {
-            // Off-screen chip drag: adjust length RELATIVE to the drag distance,
-            // so the pinned chip doesn't snap the end to the viewport edge.
-            const qint64 deltaMs = qint64(getTimeFromPosition(sp.x()))
-                                 - qint64(getTimeFromPosition(m_endDragAnchorX));
-            const qint64 nt = qint64(m_endDragAnchorMs) + deltaMs;
-            t = (nt < 0) ? 0 : quint32(nt);
-        }
-        else
-        {
-            t = (sp.x() > TRACK_WIDTH) ? getTimeFromPosition(sp.x()) : 0;
-        }
-        t = snapTimeMs(t);
-        if (t < 250)
-            t = 250;   // keep a sane minimum show length
-        m_endDragValue = t;
+        m_endDragValue = computeEndDragValue(mapToScene(e->pos()));
+        ensureSceneWidthForDrag(m_endDragValue);
+        // Auto-scroll while held near a horizontal edge, so the show can be
+        // extended past the right of the viewport without repeated scrolling.
+        updateDragAutoScroll(e->pos());
         viewport()->update();
         e->accept();
         return;
@@ -1581,6 +1650,8 @@ void MultiTrackView::mouseReleaseEvent(QMouseEvent * e)
         const bool wasEdge = m_endDragEdge;
         m_endDrag = false;
         m_endDragEdge = false;
+        m_dragScrollDir = 0;
+        m_dragScrollTimer->stop();
         setCursor(Qt::ArrowCursor);
         // An off-screen-chip press that didn't actually move is a CLICK: scroll
         // the (off-screen) handle into view instead of committing a length that
