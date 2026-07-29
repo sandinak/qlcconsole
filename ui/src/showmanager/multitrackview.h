@@ -244,6 +244,12 @@ private:
     quint32 m_configuredLength;
     bool    m_endDrag;
     quint32 m_endDragValue;
+    /** When the end handle is grabbed via its OFF-SCREEN edge chip we drag it
+     *  RELATIVE to where it was (the chip is pinned to the viewport edge, so an
+     *  absolute position→time map would jump the length). Anchors for that. */
+    bool    m_endDragEdge;
+    quint32 m_endDragAnchorMs;
+    qreal   m_endDragAnchorX;
 
     /** Smooth playhead animator (main-thread, decoupled from engine updates) */
     QTimer *m_playheadTimer;

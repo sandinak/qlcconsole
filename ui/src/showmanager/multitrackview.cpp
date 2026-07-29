@@ -131,6 +131,9 @@ MultiTrackView::MultiTrackView(QWidget *parent) :
     m_configuredLength = 0;
     m_endDrag = false;
     m_endDragValue = 0;
+    m_endDragEdge = false;
+    m_endDragAnchorMs = 0;
+    m_endDragAnchorX = 0;
     // draw horizontal and vertical lines for tracks
     updateTracksDividers();
 
@@ -1345,6 +1348,35 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
 {
     QPointF sp = mapToScene(e->pos());
 
+    // Grab the off-screen END edge indicator (in the marker lane). Checked
+    // BEFORE marker drag: the chip is drawn on top of the marker lane, so a
+    // press on it must act on the handle even if a marker underlies it. The
+    // handle itself is off-screen, so the chip is the only way to reach it:
+    // DRAG the chip to change the show length (relative to its current value —
+    // the chip is pinned to the viewport edge, so mapping its absolute x to a
+    // time would jump the length), or a plain CLICK (release without dragging)
+    // scrolls the view to the handle so it can be grabbed directly.
+    if (e->button() == Qt::LeftButton && m_editable &&
+        sp.y() >= HEADER_HEIGHT && sp.y() < TRACKS_TOP)
+    {
+        const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
+        const qreal exAbs = getPositionFromTime(effectiveEndMs());
+        const qreal clampL = mapToScene(0, 0).x() + TRACK_WIDTH;
+        if ((exAbs > vis.right() - 1 && sp.x() >= vis.right() - 96) ||
+            (exAbs < clampL + 1 && sp.x() <= clampL + 96))
+        {
+            m_endDrag = true;
+            m_endDragEdge = true;
+            m_endDragValue = effectiveEndMs();
+            m_endDragAnchorMs = effectiveEndMs();
+            m_endDragAnchorX = sp.x();
+            setCursor(Qt::SizeHorCursor);
+            viewport()->update();
+            e->accept();
+            return;
+        }
+    }
+
     // Start a marker move/resize when pressing in the marker lane on a region.
     if (e->button() == Qt::LeftButton && m_editable &&
         sp.x() >= TRACK_WIDTH && sp.y() >= HEADER_HEIGHT && sp.y() < TRACKS_TOP)
@@ -1378,24 +1410,6 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
         }
     }
 
-    // Click the off-screen END edge indicator (in the marker lane) → scroll the
-    // view to the handle so it can be grabbed. Essential for long shows where the
-    // end is far off-screen.
-    if (e->button() == Qt::LeftButton && sp.y() >= HEADER_HEIGHT && sp.y() < TRACKS_TOP)
-    {
-        const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
-        const qreal exAbs = getPositionFromTime(effectiveEndMs());
-        const qreal clampL = mapToScene(0, 0).x() + TRACK_WIDTH;
-        if ((exAbs > vis.right() - 1 && sp.x() >= vis.right() - 96) ||
-            (exAbs < clampL + 1 && sp.x() <= clampL + 96))
-        {
-            centerOn(exAbs, sp.y());
-            viewport()->update();
-            e->accept();
-            return;
-        }
-    }
-
     // Grab the show END handle (drag to set the show length). Grabbable in the
     // TOP ruler/lane strip (where the grip flag lives, clear of clips) — or along
     // its line in an EMPTY tracks area. The auto handle sits at the last clip's
@@ -1408,6 +1422,7 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
             (sp.y() < TRACKS_TOP || dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL))
         {
             m_endDrag = true;
+            m_endDragEdge = false;
             m_endDragValue = effectiveEndMs();
             setCursor(Qt::SizeHorCursor);
             viewport()->update();
@@ -1450,7 +1465,20 @@ void MultiTrackView::mouseMoveEvent(QMouseEvent *e)
     if (m_endDrag)
     {
         QPointF sp = mapToScene(e->pos());
-        quint32 t = (sp.x() > TRACK_WIDTH) ? getTimeFromPosition(sp.x()) : 0;
+        quint32 t;
+        if (m_endDragEdge)
+        {
+            // Off-screen chip drag: adjust length RELATIVE to the drag distance,
+            // so the pinned chip doesn't snap the end to the viewport edge.
+            const qint64 deltaMs = qint64(getTimeFromPosition(sp.x()))
+                                 - qint64(getTimeFromPosition(m_endDragAnchorX));
+            const qint64 nt = qint64(m_endDragAnchorMs) + deltaMs;
+            t = (nt < 0) ? 0 : quint32(nt);
+        }
+        else
+        {
+            t = (sp.x() > TRACK_WIDTH) ? getTimeFromPosition(sp.x()) : 0;
+        }
         t = snapTimeMs(t);
         if (t < 250)
             t = 250;   // keep a sane minimum show length
@@ -1493,16 +1521,25 @@ void MultiTrackView::mouseMoveEvent(QMouseEvent *e)
         return;
     }
 
-    // Hover feedback over the end handle so it's discoverable as draggable.
+    // Hover feedback over the end handle so it's discoverable as draggable —
+    // both the on-screen handle line AND the off-screen edge chip.
     if (m_editable && m_markerDragMode == 0 && m_rubberActive == false && m_endDrag == false)
     {
         const QPointF sp = mapToScene(e->pos());
         const qreal ex = getPositionFromTime(effectiveEndMs());
-        if (qAbs(sp.x() - ex) <= 21.0 &&
-            (sp.y() < TRACKS_TOP || dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL))
+        const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
+        const qreal clampL = mapToScene(0, 0).x() + TRACK_WIDTH;
+        const bool onLine = qAbs(sp.x() - ex) <= 21.0 &&
+            (sp.y() < TRACKS_TOP || dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL);
+        const bool onEdgeChip = sp.y() >= HEADER_HEIGHT && sp.y() < TRACKS_TOP &&
+            ((ex > vis.right() - 1 && sp.x() >= vis.right() - 96) ||
+             (ex < clampL + 1 && sp.x() <= clampL + 96));
+        if (onLine || onEdgeChip)
         {
             viewport()->setCursor(Qt::SizeHorCursor);
-            setToolTip(tr("Show end — drag to set the length (right-click: fit / set…)"));
+            setToolTip(onEdgeChip
+                ? tr("Show end is off-screen — drag to set the length, or click to jump to it")
+                : tr("Show end — drag to set the length (right-click: fit / set…)"));
         }
         else if (viewport()->cursor().shape() == Qt::SizeHorCursor)
         {
@@ -1540,8 +1577,20 @@ void MultiTrackView::mouseReleaseEvent(QMouseEvent * e)
     // Commit an end-handle drag → set the show's configured length.
     if (m_endDrag)
     {
+        const bool wasEdge = m_endDragEdge;
         m_endDrag = false;
+        m_endDragEdge = false;
         setCursor(Qt::ArrowCursor);
+        // An off-screen-chip press that didn't actually move is a CLICK: scroll
+        // the (off-screen) handle into view instead of committing a length that
+        // equals the current one.
+        if (wasEdge && m_endDragValue == m_endDragAnchorMs)
+        {
+            centerOn(getPositionFromTime(effectiveEndMs()), mapToScene(e->pos()).y());
+            viewport()->update();
+            e->accept();
+            return;
+        }
         emit showLengthChangeRequested(m_endDragValue);
         e->accept();
         return;
