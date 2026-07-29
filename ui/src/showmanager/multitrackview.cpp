@@ -1262,38 +1262,53 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
                               QColor(0, 0, 0, 38));
         }
 
-        // The end line + grip flag + length label.
-        if (ex >= clampLeft && ex >= rect.left() && ex <= rect.right() + 20)
+        const QColor endCol = autoLen ? QColor(90, 190, 235) : QColor(235, 70, 70);
+        const quint32 sec = endMs / 1000;
+        const QString etxt = QString("END %1:%2")
+                .arg(sec / 60, 2, 10, QChar('0')).arg(sec % 60, 2, 10, QChar('0'));
+
+        // The end line + grip flag + length label. The FULL-HEIGHT line is the
+        // element that is always visible — it lives in the track area, which is
+        // exposed on every repaint (the header rows can be scrolled off / clipped
+        // by partial updates). Draw it thick and saturated so it never reads as
+        // just another grid line. The flag + label ride on top for the grab area.
+        // The label/flag straddle the line, so allow the block to draw whenever
+        // the line's column is anywhere near the exposed strip.
+        if (ex >= clampLeft && ex + 120 >= rect.left() && ex <= rect.right() + 120)
         {
-            const QColor endCol = autoLen ? QColor(90, 190, 235) : QColor(230, 90, 90);
-            painter->setPen(QPen(endCol, m_endDrag ? 2 : 1));
+            // Bold full-height end line.
+            painter->setPen(QPen(endCol, m_endDrag ? 3 : 2));
             painter->setBrush(Qt::NoBrush);
             painter->drawLine(QPointF(ex, HEADER_HEIGHT), QPointF(ex, bottom));
-            // A wide grip TAB straddling the line at the top ruler, with three
-            // grab lines so it reads as draggable. Wide enough to hit at any zoom.
+
+            // A downward triangle nub pinned at the TOP of the tracks, so the end
+            // line is unmistakably anchored even when the marker lane is not in
+            // view (it sits in the always-exposed track band).
             painter->setPen(Qt::NoPen);
             painter->setBrush(endCol);
-            painter->drawRect(QRectF(ex - 21, HEADER_HEIGHT, 42, MARKER_LANE_HEIGHT));
-            painter->setPen(QPen(QColor(0, 0, 0, 130), 1));
-            painter->drawLine(QPointF(ex - 4, HEADER_HEIGHT + 4), QPointF(ex - 4, HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
-            painter->drawLine(QPointF(ex,     HEADER_HEIGHT + 4), QPointF(ex,     HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
-            painter->drawLine(QPointF(ex + 4, HEADER_HEIGHT + 4), QPointF(ex + 4, HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
+            QPolygonF nub;
+            nub << QPointF(ex - 6, TRACKS_TOP) << QPointF(ex + 6, TRACKS_TOP)
+                << QPointF(ex, TRACKS_TOP + 7);
+            painter->drawPolygon(nub);
 
-            // The length label sits in the ruler strip ABOVE the marker lane,
-            // not in the lane itself — in the lane it collided with a section
-            // marker's label whenever a marker band reached the end handle. A
-            // small filled chip in the handle colour keeps it legible over the
-            // ruler ticks and reads as belonging to the handle.
-            const quint32 sec = endMs / 1000;
-            QString elbl = QString("END %1:%2")
-                    .arg(sec / 60, 2, 10, QChar('0')).arg(sec % 60, 2, 10, QChar('0'));
+            // A wide grip FLAG straddling the line in the marker lane, with grab
+            // ridges so it reads as draggable. Wide enough to hit at any zoom.
+            painter->drawRect(QRectF(ex - 22, HEADER_HEIGHT, 44, MARKER_LANE_HEIGHT));
+            painter->setPen(QPen(QColor(0, 0, 0, 140), 1));
+            for (int gx = -5; gx <= 5; gx += 5)
+                painter->drawLine(QPointF(ex + gx, HEADER_HEIGHT + 4),
+                                  QPointF(ex + gx, HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
+
+            // Length label as a filled chip in the ruler strip ABOVE the marker
+            // lane (in the lane it collided with a section marker's own label).
+            QString elbl = etxt;
             if (autoLen)
                 elbl += tr(" (auto)");
             const QFontMetrics fm(painter->font());
             const int tw = fm.horizontalAdvance(elbl) + 10;
             QRectF chip(ex - 1 - tw, HEADER_HEIGHT - 15, tw, 14);
             painter->setPen(Qt::NoPen);
-            QColor chipBg = endCol; chipBg.setAlpha(220);
+            QColor chipBg = endCol; chipBg.setAlpha(230);
             painter->setBrush(chipBg);
             painter->drawRect(chip);
             painter->setPen(QPen(endCol.lightnessF() > 0.6 ? Qt::black : Qt::white, 1));
@@ -1301,35 +1316,28 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
                               Qt::AlignVCenter | Qt::AlignRight, elbl);
         }
 
-        // Off-screen: pin a labeled END indicator to the viewport edge so the
-        // show end is never invisible on a long show (click it to jump there).
+        // Off-screen: pin a bold labeled END indicator to the viewport edge so
+        // the show end is never invisible on a long (or empty) show. Click it to
+        // jump there. Drawn in the marker lane AND with a track-area arrow so it
+        // survives partial repaints of either band.
         const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
-        const QColor edgeCol = autoLen ? QColor(90, 190, 235) : QColor(230, 90, 90);
-        const quint32 esec = endMs / 1000;
-        const QString etxt = QString("END %1:%2")
-                .arg(esec / 60, 2, 10, QChar('0')).arg(esec % 60, 2, 10, QChar('0'));
+        auto drawEdge = [&](qreal x, bool pointsRight) {
+            const QString t = pointsRight ? (etxt + QString::fromUtf8("  \xE2\x96\xB6"))
+                                          : (QString::fromUtf8("\xE2\x97\x80  ") + etxt);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(endCol);
+            painter->drawRect(QRectF(x, HEADER_HEIGHT, 96, MARKER_LANE_HEIGHT));
+            // a matching tick down into the track band so it is caught even when
+            // the marker lane row is not part of the exposed region.
+            painter->drawRect(QRectF(pointsRight ? x + 90 : x, TRACKS_TOP, 6, 10));
+            painter->setPen(QPen(endCol.lightnessF() > 0.6 ? Qt::black : Qt::white, 1));
+            painter->drawText(QRectF(x + 4, HEADER_HEIGHT, 88, MARKER_LANE_HEIGHT),
+                              Qt::AlignVCenter | Qt::AlignLeft, t);
+        };
         if (ex > vis.right() - 1)
-        {
-            const qreal x = vis.right() - 90;
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(edgeCol);
-            painter->drawRect(QRectF(x, HEADER_HEIGHT, 90, MARKER_LANE_HEIGHT));
-            painter->setPen(QPen(Qt::black, 1));
-            painter->drawText(QRectF(x + 3, HEADER_HEIGHT, 86, MARKER_LANE_HEIGHT),
-                              Qt::AlignVCenter | Qt::AlignLeft,
-                              etxt + QString::fromUtf8("  \xE2\x96\xB6"));
-        }
+            drawEdge(vis.right() - 96, true);
         else if (ex < clampLeft + 1)
-        {
-            const qreal x = clampLeft;
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(edgeCol);
-            painter->drawRect(QRectF(x, HEADER_HEIGHT, 90, MARKER_LANE_HEIGHT));
-            painter->setPen(QPen(Qt::black, 1));
-            painter->drawText(QRectF(x + 3, HEADER_HEIGHT, 86, MARKER_LANE_HEIGHT),
-                              Qt::AlignVCenter | Qt::AlignLeft,
-                              QString::fromUtf8("\xE2\x97\x80  ") + etxt);
-        }
+            drawEdge(clampLeft, false);
     }
 }
 
@@ -1378,8 +1386,8 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
         const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
         const qreal exAbs = getPositionFromTime(effectiveEndMs());
         const qreal clampL = mapToScene(0, 0).x() + TRACK_WIDTH;
-        if ((exAbs > vis.right() - 1 && sp.x() >= vis.right() - 90) ||
-            (exAbs < clampL + 1 && sp.x() <= clampL + 90))
+        if ((exAbs > vis.right() - 1 && sp.x() >= vis.right() - 96) ||
+            (exAbs < clampL + 1 && sp.x() <= clampL + 96))
         {
             centerOn(exAbs, sp.y());
             viewport()->update();

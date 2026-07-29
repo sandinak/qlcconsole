@@ -2894,6 +2894,7 @@ void App::captureScenarioIfRequested()
             if (QGraphicsView *tv = pm->findChild<QGraphicsView *>())
             {
                 tv->horizontalScrollBar()->setValue(0);
+                tv->verticalScrollBar()->setValue(0);
                 qApp->processEvents();
                 save(tv, "timeline");
             }
