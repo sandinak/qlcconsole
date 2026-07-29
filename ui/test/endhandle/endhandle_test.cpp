@@ -12,6 +12,7 @@
 #include "multitrackview.h"
 #include "headeritems.h"   // HEADER_HEIGHT, MARKER_LANE_HEIGHT, TRACKS_TOP
 #include "trackitem.h"     // TRACK_WIDTH
+#include "show.h"          // ShowMarker
 
 // Deliver a synthetic mouse event straight to the view's viewport, mirroring
 // what the windowing system would post (offscreen has no real cursor). The
@@ -118,6 +119,39 @@ void EndHandle_Test::onscreenHandleStillDraggable()
 
     QCOMPARE(spy.count(), 1);
     QVERIFY2(spy.takeFirst().at(0).toUInt() > 20000, "drag right should lengthen");
+}
+
+void EndHandle_Test::onscreenHandleWinsOverMarkerBehind()
+{
+    // A full-width section marker sits behind the on-screen end handle. Pressing
+    // the handle flag must grab the HANDLE (set length), not move the marker.
+    MultiTrackView v;
+    v.setEditable(true);
+    v.resize(1000, 400);
+    v.setConfiguredLength(20000);
+    QMap<quint32, ShowMarker> markers;
+    markers.insert(0, ShowMarker(40000, "Full Show"));  // spans across the handle
+    v.setMarkers(markers);
+    v.show();
+    QApplication::processEvents();
+    v.horizontalScrollBar()->setValue(0);
+    v.verticalScrollBar()->setValue(0);
+    QApplication::processEvents();
+
+    QSignalSpy lenSpy(&v, SIGNAL(showLengthChangeRequested(quint32)));
+    QSignalSpy markSpy(&v, SIGNAL(markerMovedRequested(quint32,quint32,quint32,QString,QColor)));
+    QWidget *vp = v.viewport();
+    // Press right on the handle flag, in the marker lane (where the marker is).
+    const int hx = int(v.getPositionFromTime(20000));
+    const QPoint p(hx, HEADER_HEIGHT + MARKER_LANE_HEIGHT / 2);
+
+    sendMouse(vp, QEvent::MouseButtonPress, p, Qt::LeftButton);
+    sendMouse(vp, QEvent::MouseMove, p + QPoint(100, 0), Qt::LeftButton);
+    sendMouse(vp, QEvent::MouseButtonRelease, p + QPoint(100, 0), Qt::LeftButton);
+
+    QCOMPARE(lenSpy.count(), 1);          // handle grabbed → length set
+    QCOMPARE(markSpy.count(), 0);         // marker NOT moved
+    QVERIFY2(lenSpy.takeFirst().at(0).toUInt() > 20000, "drag right should lengthen");
 }
 
 QTEST_MAIN(EndHandle_Test)

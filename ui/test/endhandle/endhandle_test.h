@@ -20,6 +20,7 @@ private slots:
     void offscreenEdgeDragChangesLength();
     void offscreenEdgeClickJumpsNoLengthChange();
     void onscreenHandleStillDraggable();
+    void onscreenHandleWinsOverMarkerBehind();
 };
 
 #endif

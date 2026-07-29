@@ -1377,6 +1377,28 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
         }
     }
 
+    // Grab the ON-SCREEN show END handle (drag to set the show length). Checked
+    // BEFORE marker drag: the handle line + grip flag are drawn on TOP of the
+    // marker lane, so a press within the flag must grab the handle, not a marker
+    // sitting behind it (e.g. a full-width "Full Show" section). Grabbable in the
+    // top ruler/lane strip (where the flag lives) or along its line in an EMPTY
+    // tracks area.
+    if (e->button() == Qt::LeftButton && m_editable)
+    {
+        const qreal ex = getPositionFromTime(effectiveEndMs());
+        if (qAbs(sp.x() - ex) <= 21.0 &&
+            (sp.y() < TRACKS_TOP || dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL))
+        {
+            m_endDrag = true;
+            m_endDragEdge = false;
+            m_endDragValue = effectiveEndMs();
+            setCursor(Qt::SizeHorCursor);
+            viewport()->update();
+            e->accept();
+            return;
+        }
+    }
+
     // Start a marker move/resize when pressing in the marker lane on a region.
     if (e->button() == Qt::LeftButton && m_editable &&
         sp.x() >= TRACK_WIDTH && sp.y() >= HEADER_HEIGHT && sp.y() < TRACKS_TOP)
@@ -1404,27 +1426,6 @@ void MultiTrackView::mousePressEvent(QMouseEvent *e)
             m_dragLabel = m.label;
             m_dragColor = m.color;
             m_markerGrabDx = sp.x() - sx;
-            viewport()->update();
-            e->accept();
-            return;
-        }
-    }
-
-    // Grab the show END handle (drag to set the show length). Grabbable in the
-    // TOP ruler/lane strip (where the grip flag lives, clear of clips) — or along
-    // its line in an EMPTY tracks area. The auto handle sits at the last clip's
-    // right edge, so a clips-excluded grab would be unreachable there; the top
-    // strip avoids that conflict.
-    if (e->button() == Qt::LeftButton && m_editable)
-    {
-        const qreal ex = getPositionFromTime(effectiveEndMs());
-        if (qAbs(sp.x() - ex) <= 21.0 &&
-            (sp.y() < TRACKS_TOP || dynamic_cast<ShowItem *>(itemAt(e->pos())) == NULL))
-        {
-            m_endDrag = true;
-            m_endDragEdge = false;
-            m_endDragValue = effectiveEndMs();
-            setCursor(Qt::SizeHorCursor);
             viewport()->update();
             e->accept();
             return;
