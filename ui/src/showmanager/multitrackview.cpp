@@ -1279,13 +1279,25 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
             painter->drawLine(QPointF(ex,     HEADER_HEIGHT + 4), QPointF(ex,     HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
             painter->drawLine(QPointF(ex + 4, HEADER_HEIGHT + 4), QPointF(ex + 4, HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
 
+            // The length label sits in the ruler strip ABOVE the marker lane,
+            // not in the lane itself — in the lane it collided with a section
+            // marker's label whenever a marker band reached the end handle. A
+            // small filled chip in the handle colour keeps it legible over the
+            // ruler ticks and reads as belonging to the handle.
             const quint32 sec = endMs / 1000;
             QString elbl = QString("END %1:%2")
                     .arg(sec / 60, 2, 10, QChar('0')).arg(sec % 60, 2, 10, QChar('0'));
             if (autoLen)
                 elbl += tr(" (auto)");
-            painter->setPen(QPen(endCol.lighter(150), 1));
-            painter->drawText(QRectF(ex - 100, HEADER_HEIGHT + 1, 94, MARKER_LANE_HEIGHT),
+            const QFontMetrics fm(painter->font());
+            const int tw = fm.horizontalAdvance(elbl) + 10;
+            QRectF chip(ex - 1 - tw, HEADER_HEIGHT - 15, tw, 14);
+            painter->setPen(Qt::NoPen);
+            QColor chipBg = endCol; chipBg.setAlpha(220);
+            painter->setBrush(chipBg);
+            painter->drawRect(chip);
+            painter->setPen(QPen(endCol.lightnessF() > 0.6 ? Qt::black : Qt::white, 1));
+            painter->drawText(chip.adjusted(5, 0, -4, 0),
                               Qt::AlignVCenter | Qt::AlignRight, elbl);
         }
 
