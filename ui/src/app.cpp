@@ -2988,7 +2988,10 @@ void App::slotTimecodeStatusChanged()
                 it.next();
                 if (posMs >= it.key() && posMs < it.value().end)
                 {
-                    ctx = QString("  ·  %1").arg(it.value().label);
+                    // Prefix the section with a glyph so it reads as show
+                    // content (where we are in the set), not as text arriving
+                    // from the MTC stream itself.
+                    ctx = QString("  ·  ▸ %1").arg(it.value().label);
                     Chaser *mc = qobject_cast<Chaser*>(
                         m_doc->function(it.value().cueListId));
                     if (mc != NULL)
