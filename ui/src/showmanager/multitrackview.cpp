@@ -1330,6 +1330,11 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
         const qreal ex = getPositionFromTime(endMs);
         const qreal clampLeft = leftX + TRACK_WIDTH;
         const QColor endCol = autoLen ? QColor(90, 190, 235) : QColor(235, 70, 70);
+        // Visible viewport in scene coords: the on-screen handle and the two
+        // off-screen edge chips partition the x-axis at [clampLeft, vis.right()],
+        // so exactly ONE of them draws (no double "END m:ss" while dragging).
+        const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
+        const bool endOnScreen = (ex >= clampLeft + 1) && (ex <= vis.right() - 1);
 
         // Content authored PAST the end (clamped, not played): red warning hatch.
         if (contentMs > endMs)
@@ -1366,7 +1371,7 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
         // just another grid line. The flag + label ride on top for the grab area.
         // The label/flag straddle the line, so allow the block to draw whenever
         // the line's column is anywhere near the exposed strip.
-        if (ex >= clampLeft && ex + 120 >= rect.left() && ex <= rect.right() + 120)
+        if (endOnScreen && ex + 120 >= rect.left() && ex <= rect.right() + 120)
         {
             // Bold full-height boundary line, drawn on the CONTENT side so the
             // dead-zone hatch butts right up against it like a wall.
@@ -1420,8 +1425,8 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
         // Off-screen: pin a bold labeled END indicator to the viewport edge so
         // the show end is never invisible on a long (or empty) show. Click it to
         // jump there. Drawn in the marker lane AND with a track-area arrow so it
-        // survives partial repaints of either band.
-        const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
+        // survives partial repaints of either band. Exclusive with the on-screen
+        // handle above (partitioned at clampLeft / vis.right()).
         auto drawEdge = [&](qreal x, bool pointsRight) {
             const QString t = pointsRight ? (etxt + QString::fromUtf8("  \xE2\x96\xB6"))
                                           : (QString::fromUtf8("\xE2\x97\x80  ") + etxt);
