@@ -4,23 +4,14 @@
  <Creator>
   <Name>Q Light Controller Plus</Name>
   <Version>4.14.4 GIT</Version>
-  <Author>Branson Matheson</Author>
+  <Author>branson</Author>
  </Creator>
  <Engine>
   <InputOutputMap>
    <BeatGenerator BeatType="Disabled" BPM="0"/>
-   <Universe Name="Universe 1" ID="0">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1"/>
-   </Universe>
-   <Universe Name="Universe 2" ID="1">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1"/>
-    <Feedback Plugin="MIDI" UID="Launchkey MK4 49" Line="0">
-     <PluginParameters midichannel="16"/>
-    </Feedback>
-   </Universe>
-   <Universe Name="Universe 3" ID="2">
-    <Input Plugin="HID" UID="Microsoft Controller (304D565830303133303136353532)" Line="0" HIDProfile="Microsoft Xbox Controller"/>
-   </Universe>
+   <Universe Name="Universe 1" ID="0"/>
+   <Universe Name="Universe 2" ID="1"/>
+   <Universe Name="Universe 3" ID="2"/>
    <Universe Name="Universe 4" ID="3"/>
   </InputOutputMap>
   <Fixture>
@@ -410,11 +401,12 @@
   <Palette ID="18" Type="Dimmer" Name="Candle Intensity" Path="Palettes/Dimmer/" Value="180"/>
   <Palette ID="19" Type="Effect" Name="Candlelight" Path="Palettes/Effect/Other/Candle Flicker/">
    <EffectScript>candle-flicker</EffectScript>
-   <EffectParam name="rate" value="1.4"/>
    <EffectParam name="depth" value="0.55"/>
    <EffectParam name="level" value="1"/>
+   <EffectParam name="rate" value="1.4"/>
   </Palette>
-  <Function ID="0" Type="Scene" Name="RGBMatrix" Path="Washes">
+  <Palette ID="20" Type="Color" Name="New Color" Path="Palettes/Color" Value="#ffffff"/>
+  <Function ID="0" Type="Scene" Name="Show" Path="Washes">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureVal ID="1">2,0,3,0,4,4,5,16</FixtureVal>
    <FixtureVal ID="2">2,0,3,0,4,4,5,16</FixtureVal>
@@ -515,9 +507,9 @@
    <FixtureVal ID="2"/>
    <FixtureVal ID="1"/>
    <FixtureVal ID="9"/>
-   <Palette ID="2"/>
-   <Palette ID="3"/>
-   <Palette ID="0"/>
+   <Palette ID="2" FadeIn="2000"/>
+   <Palette ID="3" FadeIn="0" FadeOut="4000"/>
+   <Palette ID="0" FadeIn="3000"/>
    <Palette ID="14"/>
    <Palette ID="4"/>
   </Function>
@@ -568,8 +560,13 @@
    <Palette ID="19"/>
    <Palette ID="3"/>
   </Function>
+  <Function ID="21" Type="Show" Name="New Show 21">
+   <TimeDivision Type="Time" BPM="120"/>
+   <Marker Start="49080" End="64080" Color="#e0a820">Intro</Marker>
+   <Track ID="0" Name="Act 1" isMute="0"/>
+  </Function>
   <PowerDistribution>
-   <Source Voltage="120" VARating="2200" RuntimeMin="8" RuntimeWatts="2000" PosX="9.525" PosY="4.81584">
+   <Source Type="3" Voltage="120" VARating="2200" RuntimeMin="8" RuntimeWatts="2000" PosX="9.525" PosY="4.81584">
     <Name>Cyberpower</Name>
     <Circuit RatedAmps="20" Derate="80">
      <Name>Circuit 1</Name>
@@ -587,7 +584,7 @@
    </Source>
   </PowerDistribution>
   <Monitor DisplayMode="1" ShowLabels="0" LayoutLocked="1" AimSubjectHeight="1.39903">
-   <Font>Arial,12,-1,5,50,0,0,0,0,0</Font>
+   <Font>Arial,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0</Font>
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
    <Grid Width="39" Height="3" Depth="24" Units="1" Subdivisions="3"/>

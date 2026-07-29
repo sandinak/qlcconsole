@@ -851,6 +851,7 @@ void SceneGroupLooks::slotLookContextMenu(const QPoint &pos)
         m_scene->setPaletteFade(pid, inMs, outMs);
     }
     m_lookList->blockSignals(false);
+    slotLookSelectionChanged();  // refresh bottom look editor fade spinboxes
 
     m_doc->setModified();
     emit sceneModified();

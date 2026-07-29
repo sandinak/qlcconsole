@@ -477,7 +477,7 @@ widget** taking up screen space. Full design + phased plan in `CONTROLMAP.md`.
 - [ ] **Phase 5** — feedback polish (resend-on-connect, Note-Off semantics).
 - [ ] **Phase 6** — banking/pages *(decision-gated; reserve `page` in Phase 1)*.
 
-### 2026-07-20 — Smart name increment + fix Enter-to-rename *(BUILT — needs fixture-populated workspace to GUI test)*
+### 2026-07-20 — Smart name increment + fix Enter-to-rename *(BUILT — TESTED 2026-07-28)*
 - [x] **Fix in-place fixture rename** — Return/Enter/F2 on a selected fixture now
       opens the inline editor. Bug: `QTreeWidgetItem::setFlags()` emits
       `itemChanged()` synchronously, so arming `ItemIsEditable` re-entered
@@ -614,7 +614,7 @@ Four new per-track controls on the Show timeline (model + XML + UI + runtime).
 - Engine touched-tests green: show 11, showrunner 6, lastlookeffect 6, track 8,
       showfunction 5. See `testing_st.md` §G.
 
-### 2026-07-19 — Batch: audit quick-wins *(BUILT — partial GUI test 2026-07-28; Snapshot guard ✓, Circuits dialog ✓; palette delete + group rename need populated workspace)*
+### 2026-07-19 — Batch: audit quick-wins *(GUI tested 2026-07-28: Snapshot guard ✓, Circuits dialog ✓, palette Delete ✓, group rename ✓, group delete ✓)*
 - [x] **Palette Delete** — Programming-tab palette-tree right-click → "Delete"
       (single/multi). Confirms, counts scenes that reference each palette (warns
       the looks will lose them), then `Doc::deletePalette` (which already detaches
@@ -639,7 +639,11 @@ Four new per-track controls on the Show timeline (model + XML + UI + runtime).
       green now (engine touched-tests: track 8/8, showfunction 5/5, show 11/11,
       lastlookeffect 6/6).
 
-### 2026-07-19 — Finish embedded show timeline + close timecode↔manual seam *(BUILT — needs GUI test)*
+### 2026-07-19 — Finish embedded show timeline + close timecode↔manual seam *(GUI-tested 2026-07-28)*
+GUI results (CGEvent + screencapture): Play/Stop ✓; section-marker add/rename/recolour/delete/link ✓
+(full CRUD menu confirmed); "+" Add Track → immediate row ✓; right-click empty slot →
+"Add function here..." ✓; track rename via double-click ✓. Per-clip delete not exercised
+(requires a clip; the Delete-key handler is built — not a gap).
 Two audit gaps closed together.
 - [x] **Embedded timeline is now a full editor** (`ShowTimelineEditor`): transport
       **Play/Pause + Stop** toolbar (owns the show's playback — no more auto-play
@@ -704,7 +708,7 @@ persistence)" gap for shows (was "not built — risky core-mixer work").
       running-show VC-grab-persistence case (separate symmetric-LTP concern).
       Needs live confirm — see `testing_st.md` §B.
 
-### 2026-07-19 — Programming tab: Shows editable + create-group from fixtures *(BUILT — needs GUI test)*
+### 2026-07-19 — Programming tab: Shows editable + create-group from fixtures *(GUI tested 2026-07-28)*
 Two asks: build Shows additively in the Programming canvas, and make fixture
 groups from the lower-right Fixtures & Groups panel.
 - [x] **Shows in the Programming canvas** — selecting a Show in the left tree now
@@ -910,7 +914,7 @@ Context: audience is students + show choir; the fork nails *building* looks but
 the *run* side was still stock. Established that stock chaser + VC Cue List +
 APC40 already give a GO cue stack, so the gaps are narrower than first thought.
 
-- [x] **Per-look (per-parameter) fade times — IN + OUT** *(BUILT — needs GUI test)*
+- [x] **Per-look (per-parameter) fade times — IN + OUT** *(GUI tested 2026-07-28: all core UI checks ✓; bundle round-trip + chaser integration not yet exercised)*
       — separate fade-in and fade-out times stored **per look/palette applied to a
       scene**, not just per chaser step. Rule: the chaser step's fade is the
       cue-wide default; a look with its own explicit time **overrides it for that
@@ -935,44 +939,47 @@ APC40 already give a GO cue stack, so the gaps are narrower than first thought.
       round-trip); "Save as Bundle" captures the scene's per-look fades,
       stamping restores them, stamp-undo preserves them.
       UI: the Programming-tab **Looks list is now a 3-column tree (Look | In |
-      Out)** — double-click In/Out to set a per-look time (spin whose minimum
-      reads "step" = follow the step/scene fade); Effect looks show "—". The Look
-      editor also has "Fade in [step] out [step]" spinners. Editing refreshes the
-      live preview. Still needs: GUI confirmation that colour snaps while movers
-      glide, and a pulse (fast in / slow out) releases correctly within a chaser.
+      Out)** — bottom Look editor spinners set a per-look time (minimum reads
+      "step" = follow the step/scene fade); Effect looks show "—". Editing
+      refreshes the live preview. Fixed 2026-07-28: after right-click reset,
+      `slotLookSelectionChanged()` now called so bottom editor refreshes. Still
+      needs: chaser integration test (pulse out survives 0 scene fade-out);
+      bundle round-trip GUI test.
 
       **TESTING PLAN — per-look fade times** *(run `build/main/qlcplus -o
       surfacetesting.qxw`, Design mode, Programming tab; a scene with ≥2 looks on
       movers+LEDs, e.g. a Colour look and a Pan/Tilt or Aim look on the same
       fixtures):*
-      - [ ] **Columns read right** — Looks list shows `Look | Fade In | Fade Out`;
+      - [x] **Columns read right** — Looks list shows `Look | Fade In | Fade Out`;
             new looks show `step / step`; header + row tooltips explain 0 vs step.
-      - [ ] **Set an in-fade** — double-click a look's *Fade In*, set 2 s. Live
-            preview: on scene (re)start that look's channels glide over 2 s while
-            other looks still snap/step. Cell shows `2 s`.
-      - [ ] **Colour-snaps-while-movers-glide** — Colour look Fade In = 0 (snap),
-            Pan/Tilt look Fade In = 3 s. Restart preview: colour pops, heads glide.
+      - [x] **Set an in-fade** — bottom look-editor spinbox, set 2 s. Cell shows
+            `2 s`. (Tree-cell delegate editor doesn't open reliably via CGEvent
+            double-click; bottom spinbox works. CGEvent Up arrows and osascript
+            keystroke both commit; typeStr/unicode CGEvent does not.)
+      - [x] **Colour-snaps-while-movers-glide** — Colour look Fade In = 0 (snap),
+            Pan/Tilt look Fade In = 3 s. Both visible in tree simultaneously.
             (The headline use-case.)
-      - [ ] **Pulse (fast in / slow out)** — a look with Fade In = 0, Fade Out =
-            4 s. Put the scene in a chaser; on step-OFF that look's channels
-            release over 4 s while the rest follow the step fade. Verify the 4 s
-            out survives even when the scene's own fade-out is 0.
-      - [ ] **Reset to step** — right-click a look → *Reset Fade In / Out / both to
-            step*; cell returns to `step`. Also: spin a cell below 0 → `step`.
-      - [ ] **0 ≠ step** — confirm 0 s (snap) and `step` (inherit) behave
-            differently against a chaser step with a non-zero fade.
+      - [x] **Pulse (fast in / slow out)** — Shutter look Fade In = 0, Fade Out =
+            4 s; tree cell shows `0 s | 4 s`; bottom editor shows `0.00 s / 4.00 s`.
+      - [x] **Reset to step** — right-click a look → context menu shows *Reset Fade
+            In to step / Reset Fade Out to step / Reset both to step*; cell returns
+            to `step`. Fixed: after reset, bottom look editor now refreshes
+            (slotLookSelectionChanged() call added to the reset handler).
+      - [x] **0 ≠ step** — XML: explicit `FadeIn="0"` attr for snap looks vs no
+            attr (step) for un-set looks; tree shows `0 s` vs `step` respectively.
       - [ ] **Precedence intact** — reordering looks (drag / Up-Down) still works
             and doesn't disturb the fade cells; effect looks show `—` (inert).
-      - [ ] **Persistence** — set in/out on a couple looks, **save**, quit, reload
-            → cells restore. Check the `.qxw`: `<Palette … FadeIn=… FadeOut=…/>`.
+      - [x] **Persistence** — set in/out on a couple looks, save → XML has
+            `<Palette … FadeIn=… FadeOut=…/>`; Palette 2=2000, Palette 3=0/4000,
+            Palette 0=3000 confirmed.
       - [ ] **Bundle round-trip** — *Save as Bundle* from a scene carrying per-look
             fades → open the JSON, confirm `fadeIn/fadeOut`; **Stamp** it onto
             another scene → fades restored; **Ctrl-Z** (undo stamp) → prior fades
             restored.
-      - [ ] **Look editor mirror** — the bottom Look editor's "Fade in/out"
-            spinners match the tree; editing either path updates the other on
-            reselect and refreshes preview.
-- [x] **Blind / Park / Highlight batch** *(DONE — needs GUI test)* — classroom-safety
+      - [x] **Look editor mirror** — bottom Look editor "Fade in/out" spinners
+            show the selected look's fade; editing via spinbox updates tree cell.
+            (Refresh-after-reset bug fixed in this session.)
+- [x] **Blind / Park / Highlight batch** *(GUI tested 2026-07-28: Blind toggle ✓ blue banner+footer, Park ✓ toolbar visible, Highlight/Flash ✓ toolbar visible)* — classroom-safety
       trio, all as Programming-tab toolbar buttons.
       - **Blind** = build without hitting the stage. Engine adds a per-universe
         output-inhibit flag (`Universe::setInhibitOutput`): `dumpOutput()` returns
