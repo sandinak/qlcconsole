@@ -1329,6 +1329,7 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
         const quint32 contentMs = contentEndMs();
         const qreal ex = getPositionFromTime(endMs);
         const qreal clampLeft = leftX + TRACK_WIDTH;
+        const QColor endCol = autoLen ? QColor(90, 190, 235) : QColor(235, 70, 70);
 
         // Content authored PAST the end (clamped, not played): red warning hatch.
         if (contentMs > endMs)
@@ -1340,15 +1341,20 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
                                   QColor(200, 60, 60, 45));
         }
 
-        // Past-end shading from the handle to the right edge of the exposed area.
+        // Past-end DEAD ZONE from the handle to the right edge: darken it AND lay
+        // diagonal hatch stripes over it (film-leader style). The stripes are the
+        // key "this is the end of the track" cue — a plain line reads as a
+        // playhead (track on both sides); a hatched void past it does not.
         if (rect.right() > ex)
         {
             const qreal a = qMax<qreal>(ex, clampLeft);
-            painter->fillRect(QRectF(a, TRACKS_TOP, rect.right() - a, bottom - TRACKS_TOP),
-                              QColor(0, 0, 0, 38));
+            const QRectF dead(a, TRACKS_TOP, rect.right() - a, bottom - TRACKS_TOP);
+            painter->fillRect(dead, QColor(0, 0, 0, 55));
+            QColor hatch = endCol;
+            hatch.setAlpha(40);
+            painter->fillRect(dead, QBrush(hatch, Qt::FDiagPattern));
         }
 
-        const QColor endCol = autoLen ? QColor(90, 190, 235) : QColor(235, 70, 70);
         const quint32 sec = endMs / 1000;
         const QString etxt = QString("END %1:%2")
                 .arg(sec / 60, 2, 10, QChar('0')).arg(sec % 60, 2, 10, QChar('0'));
@@ -1362,28 +1368,37 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
         // the line's column is anywhere near the exposed strip.
         if (ex >= clampLeft && ex + 120 >= rect.left() && ex <= rect.right() + 120)
         {
-            // Bold full-height end line.
+            // Bold full-height boundary line, drawn on the CONTENT side so the
+            // dead-zone hatch butts right up against it like a wall.
             painter->setPen(QPen(endCol, m_endDrag ? 3 : 2));
             painter->setBrush(Qt::NoBrush);
             painter->drawLine(QPointF(ex, HEADER_HEIGHT), QPointF(ex, bottom));
 
-            // A downward triangle nub pinned at the TOP of the tracks, so the end
-            // line is unmistakably anchored even when the marker lane is not in
-            // view (it sits in the always-exposed track band).
+            // End-cap PENNANT in the marker lane, pointing back into the content
+            // (left) — an end bookend, not a symmetric cursor flag. Grab ridges
+            // read as draggable; it's wide enough to hit at any zoom.
             painter->setPen(Qt::NoPen);
             painter->setBrush(endCol);
-            QPolygonF nub;
-            nub << QPointF(ex - 6, TRACKS_TOP) << QPointF(ex + 6, TRACKS_TOP)
-                << QPointF(ex, TRACKS_TOP + 7);
-            painter->drawPolygon(nub);
+            const qreal ft = HEADER_HEIGHT;
+            const qreal fb = HEADER_HEIGHT + MARKER_LANE_HEIGHT;
+            const qreal fmid = HEADER_HEIGHT + MARKER_LANE_HEIGHT / 2.0;
+            QPolygonF flag;
+            flag << QPointF(ex, ft) << QPointF(ex, fb)
+                 << QPointF(ex - 30, fb) << QPointF(ex - 42, fmid) << QPointF(ex - 30, ft);
+            painter->drawPolygon(flag);
+            painter->setPen(QPen(QColor(0, 0, 0, 150), 1));
+            for (int gx = -20; gx <= -8; gx += 6)
+                painter->drawLine(QPointF(ex + gx, ft + 4), QPointF(ex + gx, fb - 4));
 
-            // A wide grip FLAG straddling the line in the marker lane, with grab
-            // ridges so it reads as draggable. Wide enough to hit at any zoom.
-            painter->drawRect(QRectF(ex - 22, HEADER_HEIGHT, 44, MARKER_LANE_HEIGHT));
-            painter->setPen(QPen(QColor(0, 0, 0, 140), 1));
-            for (int gx = -5; gx <= 5; gx += 5)
-                painter->drawLine(QPointF(ex + gx, HEADER_HEIGHT + 4),
-                                  QPointF(ex + gx, HEADER_HEIGHT + MARKER_LANE_HEIGHT - 4));
+            // A small left-pointing tab at the top of the track band (content is
+            // to the LEFT) — anchors the boundary even when the lane is scrolled
+            // off, and points away from a playhead-style downward nub.
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(endCol);
+            QPolygonF tab;
+            tab << QPointF(ex, TRACKS_TOP) << QPointF(ex - 9, TRACKS_TOP)
+                << QPointF(ex, TRACKS_TOP + 9);
+            painter->drawPolygon(tab);
 
             // Length label as a filled chip in the ruler strip ABOVE the marker
             // lane (in the lane it collided with a section marker's own label).
