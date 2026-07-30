@@ -105,6 +105,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "app.h"
 #include "apputil.h"
 #include "doc.h"
 
@@ -269,6 +270,24 @@ void Monitor::showDMXView()
         else
             m_doc->inputOutputMap()->setUniverseMonitor(i, false);
     }
+
+    // Cmd/Ctrl+Q while this detached window has focus should quit the app with
+    // the SAME "save the workspace?" gutcheck as the main window — route to
+    // App::close() (→ App::closeEvent → saveModifiedDoc), not just close us.
+    QAction *quitAct = new QAction(this);
+    quitAct->setShortcut(QKeySequence::Quit);
+    quitAct->setShortcutContext(Qt::WindowShortcut);
+    addAction(quitAct);
+    connect(quitAct, &QAction::triggered, this, []() {
+        foreach (QWidget *w, QApplication::topLevelWidgets())
+        {
+            if (App *app = qobject_cast<App *>(w))
+            {
+                app->close();   // runs the save-before-quit gutcheck
+                return;
+            }
+        }
+    });
 }
 
 void Monitor::initGraphicsView()
@@ -2548,6 +2567,14 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     QAction *ungroupAct = menu.addAction(QIcon(":/ungroup.png"), tr("Ungroup (Ctrl+Shift+G)"),
                                          this, SLOT(slotUngroupItems()));
     ungroupAct->setEnabled(m_graphicsView != NULL && m_graphicsView->selectionHasGroup());
+
+    // Fixture Studio component library — browse/stamp saved components. Stamps
+    // onto the current fixture selection (the browser disables stamp if none).
+    menu.addSeparator();
+    menu.addAction(tr("Browse Studio Components…"), this, [this]() {
+        if (m_graphicsView != NULL)
+            m_graphicsView->browseStudioComponents();
+    });
 
     // Align / distribute selected fixtures (Top view) — clean up a hand-placed
     // row/column so their X/Y match exactly.
