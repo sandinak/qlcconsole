@@ -687,9 +687,17 @@ void MonitorLayersPanel::slotItemDoubleClicked(QTreeWidgetItem *item, int)
             m_view->requestEditItem(item->data(0, NodeKindRole).toString(),
                                     item->data(0, NodeIdRole).toUInt());
     }
+    else if (type == NodeGroup && m_view)
+    {
+        // A group's primary action is Edit… → open the Fixture Studio for it
+        // (matches the right-click "Edit…"; plain groups are promoted in place).
+        // Rename stays on the right-click "Rename group…" / F2.
+        m_view->openStudioGroupForGroup(item->data(0, NodeIdRole).toUInt());
+        reload();
+    }
     else if (m_editable)
     {
-        // Layer / group: double-click starts inline rename.
+        // Layer: double-click starts inline rename.
         m_tree->editItem(item, 0);
     }
 }

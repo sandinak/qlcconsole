@@ -64,6 +64,7 @@ private slots:
     void adoptFromFixtureGroup();  ///< pull bound FG members in at their current pos
     void distributeEvenly();       ///< distribute the list selection on the current face
     void putSelectedOnFace();      ///< move the list selection onto the current face
+    void addFixtures();            ///< pick patched fixtures and pull them into the group
     void putGroupOnFace();         ///< assign a whole FixtureGroup to the current face
     void syncHighlight();          ///< push the list selection to the canvas
 

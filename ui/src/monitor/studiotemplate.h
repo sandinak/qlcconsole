@@ -22,6 +22,7 @@
 
 #include <QString>
 #include <QList>
+#include <QVector3D>
 
 class Doc;
 
@@ -53,6 +54,43 @@ namespace StudioTemplate
      *  @return the new studio group id, or 0 on failure. */
     quint32 stamp(Doc *doc, const QString &filePath, const QList<quint32> &fixtureIds,
                   QString *error = nullptr);
+
+    // --- Browsable library ---------------------------------------------------
+    // Components saved with a name live in a shared library folder under the
+    // user's QLC+ data dir, so they can be browsed/stamped without hunting for a
+    // path. File-based save/stamp above still works for one-off import/export.
+
+    /** Parsed header + role offsets of a template file, for the browser (name,
+     *  role count, anchor kind, and each role's group-local offset for a preview). */
+    struct Info
+    {
+        QString          path;         ///< absolute file path ("" = invalid)
+        QString          name;         ///< display name
+        QString          anchorKind;   ///< "" / "platform" / "truss"
+        QList<QVector3D> locals;       ///< per-role group-local offset (metres)
+        bool isValid() const { return !path.isEmpty(); }
+        int  roleCount() const { return locals.size(); }
+    };
+
+    /** The library directory (created on first use). */
+    QString libraryPath();
+
+    /** Every valid template in the library, sorted by name. */
+    QList<Info> library();
+
+    /** Parse one template file into an Info (invalid Info on failure). */
+    Info info(const QString &filePath);
+
+    /** Save studio group @p groupId into the library under display name @p name
+     *  (filename sanitised from the name). @return the saved path, or "" on error. */
+    QString saveToLibrary(Doc *doc, quint32 groupId, const QString &name, QString *error = nullptr);
+
+    /** Delete a library file. */
+    bool removeFile(const QString &filePath);
+
+    /** Rename a library component (rewrites its "name" field and file). @return the
+     *  new path, or "" on error. */
+    QString renameInLibrary(const QString &filePath, const QString &newName, QString *error = nullptr);
 }
 
 #endif // STUDIOTEMPLATE_H

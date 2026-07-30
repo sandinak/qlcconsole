@@ -40,6 +40,7 @@
 #include "trussitem.h"
 #include "studiogroupeditor.h"
 #include "studiotemplate.h"
+#include "studiocomponentbrowser.h"
 #include "platformitem.h"
 #include "powersourceitem.h"
 #include "powerdistribution.h"
@@ -982,6 +983,31 @@ void MonitorGraphicsView::stampStudioTemplate()
         updateFixture(fid);
     emit mapStructureChanged();
     openStudioGroupEditor(gid);
+}
+
+void MonitorGraphicsView::browseStudioComponents()
+{
+    // Gather the current fixture selection (a stamp binds a component's roles to
+    // these, in order). An empty selection is fine — the browser opens read-only
+    // for browsing / managing the library.
+    QList<quint32> fids;
+    foreach (MonitorFixtureItem *mfi, selectedFixtureItems())
+    {
+        const quint32 fid = mfi->fixtureID();
+        if (fid != Fixture::invalidId())
+            fids << fid;
+    }
+
+    StudioComponentBrowser dlg(m_doc, fids, this);
+    connect(&dlg, &StudioComponentBrowser::stamped, this, [this](quint32 gid) {
+        MonitorProperties *props = m_doc->monitorProperties();
+        foreach (quint32 fid, props->fixtureItemsID())
+            if (props->fixtureFrameGroup(fid) == gid)
+                updateFixture(fid);
+        emit mapStructureChanged();
+        openStudioGroupEditor(gid);
+    });
+    dlg.exec();
 }
 
 void MonitorGraphicsView::openStudioGroupForGroup(quint32 groupId)
@@ -3297,7 +3323,7 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
             makeStudioAct = menu.addAction(tr("Create Studio Group from Selection"));
         QAction *stampTplAct = nullptr;
         if (selectedFixtureCount() >= 1)
-            stampTplAct = menu.addAction(tr("Stamp Studio Template…"));
+            stampTplAct = menu.addAction(tr("Stamp Studio Component…"));
 
         menu.addSeparator();
         QAction *removeAct = menu.addAction(tr("Remove from View"));
@@ -3316,7 +3342,7 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
         else if (editStudioAct && chosen == editStudioAct)
             openStudioGroupEditor(frameGid);
         else if (stampTplAct && chosen == stampTplAct)
-            stampStudioTemplate();
+            browseStudioComponents();
         else if (chosen == removeAct)
         {
             removeFixture(fid);

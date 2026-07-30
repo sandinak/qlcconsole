@@ -153,6 +153,11 @@ public:
      *  order, and drop a placed studio group. */
     void stampStudioTemplate();
 
+    /** Open the browsable Studio Components library. Any component can be stamped
+     *  onto the current fixture selection (bound to roles in order); also the place
+     *  to rename/delete/import components. Works with no selection (browse only). */
+    void browseStudioComponents();
+
     /** Return the MonitorFixtureItem for the given fixture ID, or nullptr if not in the view. */
     MonitorFixtureItem *fixtureItemForId(quint32 fxId) const;
 

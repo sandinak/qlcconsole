@@ -140,10 +140,40 @@ and compile but have not been exercised in the running app.
 - [x] **P4** — component templates: `StudioTemplate::saveGroup()`/`stamp()` (JSON,
       role/order arrangement); “Save as Template…” in the editor, “Stamp Studio
       Template…” on a map selection. *(eyeball)*
-- [ ] **Deferred — graphical 3-plane (Top/Front/Side) canvas editor.** The form
-      editor already edits local X/Y/Z (3D-capable); the graphical canvas is the
-      richer authoring surface (needed to place a step's front-face vs top-deck
-      visually). Biggest single remaining chunk.
+- [x] **Graphical 3-plane (Top/Front/Side) canvas editor** — BUILT and now
+      eyeballed. `StudioPlaneView` (ui/src/monitor/studioplaneview.*) draws the
+      group's members as draggable LED bars in Top/Front/Side orthographic
+      projections of the local frame; grid, pan (drag empty), wheel-zoom, per-face
+      Distribute/Put-on-face, and the anchor feature (platform footprint/face, or
+      truss line) drawn as reference geometry transformed into the frame. Embedded
+      in `StudioGroupEditor` (view combo + selection strip stay in sync). Verified
+      2026-07-29 via the offscreen harness (`QLC_SHOT_STUDIO=<id|name>`): all three
+      planes render correctly for both a platform-anchored group (US-1) and a
+      truss-anchored group (T-2) — no crash, reference geometry projects right.
+- [x] **Browsable component library** (2026-07-29) — components are now saved to a
+      shared library folder (`~/Library/Application Support/QLC+/StudioComponents/`,
+      via `QLCFile::userDirectory` off USERQLCPLUSDIR) and browsed in a new
+      `StudioComponentBrowser` dialog (ui/src/monitor/studiocomponentbrowser.*):
+      list + plan-view thumbnail + details, Stamp-onto-selection (double-click too),
+      Rename, Delete, Import a one-off .json. `StudioTemplate` grew library helpers
+      (`libraryPath/library/info/saveToLibrary/removeFile/renameInLibrary` + an
+      `Info` struct with per-role locals for the preview). Entry points: 2D-map
+      fixture right-click "Stamp Studio Component…", empty-canvas "Browse Studio
+      Components…", and `StudioGroupEditor` "Save as Component…" (name → library,
+      replacing the old raw file-dialog "Save as Template…"). Verified via the
+      offscreen harness (`QLC_SHOT_COMPONENTS=1`, seeds→grabs→cleans up).
+- [x] **Add fixtures inside the Studio editor** (2026-07-29) — `StudioGroupEditor`
+      now has an "Add fixtures…" button (left column) that pops a multi-select
+      picker of every patched map fixture not already in the group; chosen ones are
+      adopted in at their current position. Previously the only ways in were
+      Create-from-Selection (2D map) or a FixtureGroup Seed/Adopt/Put-on-face.
+      Revert-safe (reuses rememberFixture snapshot).
+- [x] **Double-click a group → opens the Studio** (2026-07-29) — in the Layers
+      panel, double-clicking a group node now opens the Fixture Studio editor
+      (mirrors the right-click "Edit…", promoting a plain group in place); rename
+      moved fully to the right-click "Rename group…" / F2. (Layer nodes still rename
+      on double-click.) Was: double-click only started an inline rename, so there
+      was no double-click path to the studio at all.
 - [ ] **Deferred by decision — live composition.** Snapshot chosen; provenance +
       the single `rebuildCompositeGroup` entry point leave the door open. Enable
       by re-running it on `FixtureGroup::changed(id)` when wanted.

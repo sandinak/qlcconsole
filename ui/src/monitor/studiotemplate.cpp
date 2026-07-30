@@ -22,11 +22,14 @@
 #include <QJsonArray>
 #include <QFileInfo>
 #include <QFile>
+#include <QDir>
 #include <QObject>
 
 #include <algorithm>
 
 #include "studiotemplate.h"
+#include "qlcfile.h"
+#include "qlcconfig.h"
 #include "doc.h"
 #include "fixture.h"
 #include "monitorproperties.h"
@@ -34,6 +37,16 @@
 namespace {
 
 const char *kMagic = "fixturestudio_template";
+
+// Turn a display name into a safe, stable filename stem.
+QString sanitize(const QString &name)
+{
+    QString s;
+    foreach (QChar c, name.trimmed())
+        s += (c.isLetterOrNumber() || c == '-' || c == '_' || c == ' ') ? c : QChar('_');
+    s = s.simplified().replace(' ', '_');
+    return s.isEmpty() ? QStringLiteral("component") : s;
+}
 
 // Members of a studio frame group, ordered by fixture id for a stable role order.
 QList<quint32> frameMembers(MonitorProperties *props, quint32 groupId)
@@ -178,4 +191,116 @@ quint32 StudioTemplate::stamp(Doc *doc, const QString &filePath,
     Q_UNUSED(anchorKind);
     doc->setModified();
     return gid;
+}
+
+// --- Browsable library -------------------------------------------------------
+
+QString StudioTemplate::libraryPath()
+{
+    // Under the user's QLC+ data dir (USERQLCPLUSDIR is platform-correct), in a
+    // dedicated StudioComponents subfolder. userDirectory() creates it for us.
+    const QString sub = QString(USERQLCPLUSDIR) + "/StudioComponents";
+    QDir dir = QLCFile::userDirectory(sub, sub, QStringList() << "*.json");
+    return dir.absolutePath();
+}
+
+StudioTemplate::Info StudioTemplate::info(const QString &filePath)
+{
+    Info out;
+    const QJsonObject root = loadRoot(filePath);
+    if (root.isEmpty())
+        return out;
+    out.path = filePath;
+    out.name = root.value("name").toString(QFileInfo(filePath).completeBaseName());
+    out.anchorKind = root.value("anchorKind").toString();
+    foreach (const QJsonValue &v, root.value("roles").toArray())
+    {
+        const QJsonObject r = v.toObject();
+        out.locals << QVector3D(float(r.value("x").toDouble()),
+                                float(r.value("y").toDouble()),
+                                float(r.value("z").toDouble()));
+    }
+    return out;
+}
+
+QList<StudioTemplate::Info> StudioTemplate::library()
+{
+    QList<Info> out;
+    QDir dir(libraryPath());
+    foreach (const QString &f, dir.entryList(QStringList() << "*.json", QDir::Files, QDir::Name))
+    {
+        const Info i = info(dir.absoluteFilePath(f));
+        if (i.isValid())
+            out << i;
+    }
+    std::sort(out.begin(), out.end(), [](const Info &a, const Info &b) {
+        return a.name.localeAwareCompare(b.name) < 0;
+    });
+    return out;
+}
+
+QString StudioTemplate::saveToLibrary(Doc *doc, quint32 groupId, const QString &name, QString *error)
+{
+    const QString stem = sanitize(name);
+    QDir dir(libraryPath());
+    // Avoid clobbering a different component that sanitises to the same stem.
+    QString path = dir.absoluteFilePath(stem + ".json");
+    int n = 2;
+    while (QFile::exists(path))
+    {
+        const Info existing = info(path);
+        if (existing.name.compare(name.trimmed(), Qt::CaseInsensitive) == 0)
+            break;   // same component — overwrite it
+        path = dir.absoluteFilePath(QString("%1_%2.json").arg(stem).arg(n++));
+    }
+    if (!saveGroup(doc, groupId, path, error))
+        return QString();
+    // saveGroup writes the group's current name; force the requested display name.
+    QJsonObject root = loadRoot(path);
+    if (!root.isEmpty())
+    {
+        root["name"] = name.trimmed().isEmpty() ? stem : name.trimmed();
+        QFile f(path);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        {
+            f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+            f.close();
+        }
+    }
+    return path;
+}
+
+bool StudioTemplate::removeFile(const QString &filePath)
+{
+    return QFile::remove(filePath);
+}
+
+QString StudioTemplate::renameInLibrary(const QString &filePath, const QString &newName, QString *error)
+{
+    QJsonObject root = loadRoot(filePath);
+    if (root.isEmpty())
+    {
+        if (error) *error = QObject::tr("Not a Fixture Studio component.");
+        return QString();
+    }
+    root["name"] = newName.trimmed();
+
+    QDir dir = QFileInfo(filePath).absoluteDir();
+    QString stem = sanitize(newName);
+    QString newPath = dir.absoluteFilePath(stem + ".json");
+    int n = 2;
+    while (QFile::exists(newPath) && newPath != filePath)
+        newPath = dir.absoluteFilePath(QString("%1_%2.json").arg(stem).arg(n++));
+
+    QFile f(newPath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+        if (error) *error = f.errorString();
+        return QString();
+    }
+    f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    f.close();
+    if (newPath != filePath)
+        QFile::remove(filePath);
+    return newPath;
 }

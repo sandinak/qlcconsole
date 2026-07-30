@@ -32,6 +32,7 @@
 #include <QLabel>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QInputDialog>
 
 #include <climits>
 #include <QSet>
@@ -68,9 +69,14 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
     m_list->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_list->setMinimumWidth(190);
     leftCol->addWidget(m_list, 1);
+    QPushButton *addFxBtn = new QPushButton(tr("Add fixtures…"), this);
+    addFxBtn->setToolTip(tr("Pull patched fixtures into this studio group "
+                            "(they keep their current position)"));
+    leftCol->addWidget(addFxBtn);
     outer->addLayout(leftCol);
     connect(m_list, &QListWidget::itemSelectionChanged,
             this, &StudioGroupEditor::syncHighlight);
+    connect(addFxBtn, &QPushButton::clicked, this, &StudioGroupEditor::addFixtures);
 
     QVBoxLayout *root = new QVBoxLayout;
     outer->addLayout(root, 1);
@@ -229,20 +235,30 @@ StudioGroupEditor::StudioGroupEditor(Doc *doc, quint32 groupId, QWidget *parent)
 
     QDialogButtonBox *bb = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    QPushButton *saveTplBtn = bb->addButton(tr("Save as Template…"),
+    QPushButton *saveTplBtn = bb->addButton(tr("Save as Component…"),
                                             QDialogButtonBox::ActionRole);
+    saveTplBtn->setToolTip(tr("Save this layout to the browsable component library"));
     root->addWidget(bb);
 
     connect(saveTplBtn, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getSaveFileName(this,
-            tr("Save Studio Template"), QString(),
-            tr("Fixture Studio Template (*.json)"));
-        if (path.isEmpty())
+        // Save into the shared library under a display name, so it shows up in the
+        // component browser (no path hunting). Default the name to the group name.
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, tr("Save as Component"),
+            tr("Component name:"), QLineEdit::Normal,
+            m_name ? m_name->text() : QString(), &ok);
+        if (!ok || name.trimmed().isEmpty())
             return;
         QString err;
-        if (!StudioTemplate::saveGroup(m_doc, m_groupId, path, &err))
-            QMessageBox::warning(this, tr("Save Template"),
-                                 tr("Could not save template: %1").arg(err));
+        const QString path = StudioTemplate::saveToLibrary(m_doc, m_groupId, name, &err);
+        if (path.isEmpty())
+        {
+            QMessageBox::warning(this, tr("Save as Component"),
+                                 tr("Could not save component: %1").arg(err));
+            return;
+        }
+        QMessageBox::information(this, tr("Save as Component"),
+            tr("Saved \"%1\" to the component library.").arg(name.trimmed()));
     });
 
     rebuildList();
@@ -526,6 +542,80 @@ void StudioGroupEditor::putSelectedOnFace()
 {
     if (m_plane != nullptr)
         m_plane->assignToFace(selectedFixtureIds());
+}
+
+void StudioGroupEditor::addFixtures()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // Candidates: every fixture on the 2D map that is not already a member here.
+    QList<quint32> cand;
+    foreach (quint32 fid, props->fixtureItemsID())
+        if (props->fixtureFrameGroup(fid) != m_groupId)
+            cand << fid;
+    std::sort(cand.begin(), cand.end(), [this](quint32 a, quint32 b) {
+        Fixture *fa = m_doc->fixture(a), *fb = m_doc->fixture(b);
+        return (fa ? fa->name() : QString()) < (fb ? fb->name() : QString());
+    });
+    if (cand.isEmpty())
+    {
+        QMessageBox::information(this, tr("Add fixtures"),
+            tr("Every patched fixture on the map is already in this studio group."));
+        return;
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Add fixtures to studio group"));
+    dlg.resize(360, 420);
+    QVBoxLayout *lay = new QVBoxLayout(&dlg);
+    lay->addWidget(new QLabel(tr("Selected fixtures are pulled in at their current "
+                                 "position (adopted into the frame)."), &dlg));
+    QListWidget *pick = new QListWidget(&dlg);
+    pick->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    foreach (quint32 fid, cand)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        QString label = fx ? fx->name() : tr("Fixture %1").arg(fid);
+        // Flag a fixture that currently lives in ANOTHER studio group.
+        const quint32 other = props->fixtureFrameGroup(fid);
+        if (other != 0 && other != m_groupId)
+            label += tr("  ·  in %1").arg(props->group(other).name);
+        QListWidgetItem *li = new QListWidgetItem(label, pick);
+        li->setData(Qt::UserRole, fid);
+    }
+    lay->addWidget(pick, 1);
+    QDialogButtonBox *bb = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    lay->addWidget(bb);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    QList<quint32> chosen;
+    foreach (QListWidgetItem *it, pick->selectedItems())
+        chosen << it->data(Qt::UserRole).toUInt();
+    if (chosen.isEmpty())
+        return;
+
+    // This IS a studio group now (a plain group opened via promote already has a
+    // frame, but be defensive so "add" also works as a bootstrap).
+    props->setGroupHasFrame(m_groupId, true);
+    foreach (quint32 fid, chosen)
+    {
+        // Read the world position BEFORE it joins the frame, then convert to a
+        // group-local offset so it does not visually jump (same as adopt).
+        const QVector3D world = props->fixtureRigPosition(fid);
+        rememberFixture(fid);
+        props->setFixtureGroup(fid, m_groupId);
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.groupLocal = props->worldToGroupLocal(m_groupId, world);
+        props->setFixtureRigProps(fid, rp);
+    }
+    rebuildList();
+    if (m_plane) m_plane->reload();
+    m_doc->setModified();
+    emit changed();
 }
 
 void StudioGroupEditor::putGroupOnFace()
