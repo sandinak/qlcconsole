@@ -10,10 +10,6 @@ to DONE.md when it ships. See also the session memory under
 
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
-- **3-plane (Top/Front/Side) studio editor** — the graphical authoring surface for
-  Fixture Studio; the form editor already edits local X/Y/Z, this is the richer
-  canvas (place a step's front-face vs top-deck visually). Biggest single chunk —
-  the next major block. *(from the Fixture Studio entry in DONE.md)*
 - **Timecode slice 3 — auto-fill internal latency** — the packet→DMX figure needs
   plugin-side timestamping; once measured it folds into the offset. *(from Timecode
   calibration in DONE.md)*
@@ -31,6 +27,32 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## Now — more stage-feature objects *(active; design-first)*
+
+Extend the discrete map-object model (truss / platform / target / power source /
+image / studio group) with the common rigging structures below. Shared needs:
+placeable, movable, lockable, layerable/groupable, XML round-trip, a fixture-host
+role (fixtures mount to them like they do to a truss), and a 2D + derived-3D
+representation. Likely a small **StageStructure** base + parametric shapes, reusing
+the truss geometry funnel (`fixtureRigPosition`) and the bar-on-truss / studio-group
+patterns. Write a short design doc first (à la FIXTURESTUDIO_DESIGN.md).
+
+- **Boom as a discrete object** — a vertical pipe that hosts fixtures at heights
+  along it (like a truss but vertical + a single run). Reusable/attachable.
+- **Stands with booms** — a base stand (tripod/round base) + a boom pipe on it.
+- **Trusses with booms** — a boom attached to a truss (drop-arm); the boom is the
+  same discrete boom object, parented to the truss (cf. bar-on-truss local params).
+- **House electric bars** — fixed lighting bars/electrics, both **horizontal**
+  (overhead pipe) and **vertical** (wall/side bar). Truss-like host, simpler shape.
+- **Towers** — large truss-like structures (~16" × 16" section, 8' high — CONFIRM
+  dims) with **shelves** at heights that host fixtures/props. Shelf = a horizontal
+  mounting plane (cf. platform deck) attached at a tower height.
+
+Also still open from the original note: flats, drapes/legs, set pieces (lower
+priority — non-fixture-hosting scenery).
+
+---
+
 ## Backlog — not started
 
 ### "Look" as the assembly unit (Scene/Collection rethink) *(Branson shower-thought; design-doc-first)*
@@ -41,14 +63,6 @@ BASE that effects/RGBScripts consume** (parameterise effects by the Look's state
 vs discrete per-fixture config; old way still works). Continuous with palette-fed
 looks + dimmer-as-multiplier scene-base already built. Write a design doc first
 (à la FIXTURESTUDIO_DESIGN.md) before code.
-
-### More stage-feature objects *(Branson shower-thought)*
-Trusses and platforms should be fully discrete, reusable objects; consider adding
-other common stage features as first-class placeable map items: **flats**, **stands
-with a cross-bar** (T-bar/tripod), booms, drapes/legs, set pieces. Same scaffolding
-as truss/platform/power-source items (placeable, lockable, layerable, XML). Could
-share a small "stage feature" base + a library of parametric shapes. Ties into the
-Fixture-Studio "component template" idea (a stand-with-crossbar is a fixture host).
 
 ### Tiny: mark the MTC-chip section label as show-sourced *(Branson shower-thought)*
 The MTC footer chip appends the current show SECTION under the playhead
