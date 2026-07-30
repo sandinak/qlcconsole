@@ -33,6 +33,34 @@
 #include "qlcchannel.h"
 #include "fixture.h"
 #include "doc.h"
+#include "inputoutputmap.h"
+#include "outputpatch.h"
+
+// Short output-destination description for a universe (by ID), e.g.
+// "ArtNet: 172.18.2.221 U:0", or the plugin name for non-network outputs.
+static QString universeDestination(Doc *doc, quint32 uniID)
+{
+    InputOutputMap *io = doc->inputOutputMap();
+    for (quint32 i = 0; i < io->universesCount(); i++)
+    {
+        if (io->getUniverseID(i) != uniID)
+            continue;
+        OutputPatch *op = io->outputPatch(i);
+        if (op == NULL || op->pluginName().isEmpty())
+            return QString();
+        const QMap<QString, QVariant> p = op->getPluginParameters();
+        if (p.contains("outputIP"))
+        {
+            QString s = QString("%1: %2").arg(op->pluginName()).arg(p.value("outputIP").toString());
+            if (p.contains("outputUni"))
+                s += QString(" U:%1").arg(p.value("outputUni").toInt());
+            return s;
+        }
+        return op->pluginName();   // MIDI / USB / etc — no network address
+    }
+    return QString();
+}
+#include "doc.h"
 
 #define KColumnName 0
 
@@ -730,7 +758,11 @@ void FixtureTreeWidget::updateTree()
         if (topItem == NULL)
         {
             topItem = new QTreeWidgetItem(uniParent);
-            topItem->setText(KColumnName, m_doc->inputOutputMap()->getUniverseNameByID(uni));
+            QString uniLabel = m_doc->inputOutputMap()->getUniverseNameByID(uni);
+            const QString dest = universeDestination(m_doc, uni);
+            if (!dest.isEmpty())
+                uniLabel += QString("   —   %1").arg(dest);
+            topItem->setText(KColumnName, uniLabel);
             topItem->setIcon(KColumnName, QIcon(m_showGroups ? ":/folder.png" : ":/group.png"));
             topItem->setData(KColumnName, PROP_UNIVERSE, uni);
             topItem->setExpanded(true);
