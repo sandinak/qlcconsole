@@ -1,4 +1,5 @@
 /*
+
   Q Light Controller Plus
   app.cpp
 
@@ -20,6 +21,7 @@
 */
 
 #include <QToolButton>
+#include <QTableWidget>
 #include <QtWidgets>
 #include <cstdio>
 #include <unistd.h>
@@ -54,6 +56,11 @@
 #include "livecapturedialog.h"
 #include "aboutbox.h"
 #include "monitor.h"
+#include "studiogroupeditor.h"
+#include "studioplaneview.h"
+#include "studiocomponentbrowser.h"
+#include "studiotemplate.h"
+#include "monitorproperties.h"
 #include "vcframe.h"
 #include "app.h"
 #include "doc.h"
@@ -2898,6 +2905,115 @@ void App::captureScenarioIfRequested()
                 qApp->processEvents();
                 save(tv, "timeline");
             }
+
+        // Optionally check every collapsible-group toggle in the I/O grid and
+        // grab it (QLC_SHOT_IOGROUPS=1), to verify the hidden column groups.
+        if (qgetenv("QLC_SHOT_IOGROUPS") == QByteArray("1"))
+        {
+            foreach (QToolButton *tb, findChildren<QToolButton *>())
+            {
+                const QString t = tb->text();
+                if (t == "Feedback" || t == "Passthrough" || t == "Input")
+                    if (tb->defaultAction() && tb->defaultAction()->isCheckable()
+                            && !tb->defaultAction()->isChecked())
+                        tb->defaultAction()->trigger();
+            }
+            qApp->processEvents();
+            save(this, "io_groups");
+        }
+
+        // Optionally scroll the Inputs/Outputs Overview grid to a given row and
+        // grab it (QLC_SHOT_IOROW=<row>), to verify deep rows render.
+        const QByteArray ioRowEnv = qgetenv("QLC_SHOT_IOROW");
+        if (ioRowEnv.isEmpty() == false)
+        {
+            foreach (QTableWidget *tw, findChildren<QTableWidget *>())
+            {
+                if (tw->columnCount() >= 8 && tw->rowCount() > 10)
+                {
+                    tw->scrollToItem(tw->item(ioRowEnv.toInt(), 0),
+                                     QAbstractItemView::PositionAtTop);
+                    qApp->processEvents();
+                    save(this, "io_scrolled");
+                    break;
+                }
+            }
+        }
+
+        // Optionally pop + grab the Fixture Studio group editor (its 3-plane
+        // canvas), one PNG per plane. QLC_SHOT_STUDIO = a group id number, or a
+        // name substring, or "1"/empty to pick the first studio (hasFrame) group.
+        const QByteArray studioEnv = qgetenv("QLC_SHOT_STUDIO");
+        if (studioEnv.isEmpty() == false && m_doc != NULL)
+        {
+            MonitorProperties *mp = m_doc->monitorProperties();
+            quint32 gid = 0;
+            bool byNum = false;
+            const quint32 asNum = QString::fromLatin1(studioEnv).toUInt(&byNum);
+            foreach (const MonitorProperties::MonitorGroup &g, mp->groups())
+            {
+                if (g.hasFrame == false)
+                    continue;
+                if (byNum && asNum > 1)          // explicit id
+                {
+                    if (g.id == asNum) { gid = g.id; break; }
+                }
+                else if (studioEnv != QByteArray("1") && studioEnv.isEmpty() == false
+                         && byNum == false)      // name substring
+                {
+                    if (g.name.contains(QString::fromLocal8Bit(studioEnv),
+                                        Qt::CaseInsensitive)) { gid = g.id; break; }
+                }
+                if (gid == 0)                    // first studio group as fallback
+                    gid = g.id;
+            }
+            if (gid != 0)
+            {
+                StudioGroupEditor *dlg = new StudioGroupEditor(m_doc, gid, this);
+                dlg->resize(900, 640);
+                dlg->show();
+                qApp->processEvents();
+                // Grab each plane: drive the plane view directly so we don't
+                // depend on which combo is first in the child list.
+                static const char *planeName[3] = { "top", "front", "side" };
+                if (StudioPlaneView *pv = dlg->findChild<StudioPlaneView *>())
+                {
+                    for (int pl = 0; pl < 3; ++pl)
+                    {
+                        pv->setPlane(StudioPlaneView::Plane(pl));
+                        qApp->processEvents();
+                        save(dlg, QString("studio_%1").arg(planeName[pl]));
+                    }
+                }
+                else
+                {
+                    save(dlg, "studio_top");
+                }
+            }
+        }
+
+        // Optionally seed a component + grab the Studio Components browser. Saves
+        // the first studio group to the library, grabs the browser, then removes
+        // the seeded file so the real library is left untouched.
+        if (qgetenv("QLC_SHOT_COMPONENTS") == QByteArray("1") && m_doc != NULL)
+        {
+            MonitorProperties *mp = m_doc->monitorProperties();
+            quint32 gid = 0;
+            foreach (const MonitorProperties::MonitorGroup &g, mp->groups())
+                if (g.hasFrame) { gid = g.id; break; }
+            QString seeded;
+            if (gid != 0)
+                seeded = StudioTemplate::saveToLibrary(m_doc, gid,
+                             QStringLiteral("Preview Component"), NULL);
+            StudioComponentBrowser *br = new StudioComponentBrowser(
+                m_doc, QList<quint32>(), this);
+            br->resize(640, 440);
+            br->show();
+            qApp->processEvents();
+            save(br, "components");
+            if (!seeded.isEmpty())
+                StudioTemplate::removeFile(seeded);
+        }
 
         // Optionally pop + grab the timecode calibration dialog.
         if (qgetenv("QLC_SHOT_CALIBRATE") == QByteArray("1"))
