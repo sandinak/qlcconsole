@@ -102,6 +102,8 @@ protected:
 
 private:
     Doc *m_doc;
+    class QTabWidget *m_ioTabs;
+    class UniversePatchGrid *m_patchGrid;
     QSplitter* m_splitter;
     QToolBar *m_toolbar;
     QAction* m_addUniverseAction;

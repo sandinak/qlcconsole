@@ -26,6 +26,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSplitter>
+#include <QTabWidget>
 #include <QLineEdit>
 #include <QCheckBox>
 #include <QToolBar>
@@ -36,6 +37,7 @@
 #include <QIcon>
 
 #include "inputoutputpatcheditor.h"
+#include "universepatchgrid.h"
 #include "universeitemwidget.h"
 #include "inputoutputmanager.h"
 #include "inputoutputmap.h"
@@ -66,6 +68,8 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     , m_rescanAction(NULL)
     , m_uniNameEdit(NULL)
     , m_uniPassthroughCheck(NULL)
+    , m_ioTabs(NULL)
+    , m_patchGrid(NULL)
     , m_editor(NULL)
     , m_editorUniverse(UINT_MAX)
 {
@@ -81,8 +85,20 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     layout()->setContentsMargins(0, 0, 0, 0);
     layout()->setSpacing(0);
 
-    m_splitter = new QSplitter(Qt::Horizontal, this);
-    layout()->addWidget(m_splitter);
+    // Two views: a spreadsheet "Overview" of the whole patch (inline-editable),
+    // and the classic per-universe "Detailed" editor (list + patch editor).
+    m_ioTabs = new QTabWidget(this);
+    layout()->addWidget(m_ioTabs);
+
+    m_patchGrid = new UniversePatchGrid(m_doc, this);
+    m_ioTabs->addTab(m_patchGrid, tr("Overview"));
+
+    QWidget *detailed = new QWidget(this);
+    QVBoxLayout *detailedLay = new QVBoxLayout(detailed);
+    detailedLay->setContentsMargins(0, 0, 0, 0);
+    m_splitter = new QSplitter(Qt::Horizontal, detailed);
+    detailedLay->addWidget(m_splitter);
+    m_ioTabs->addTab(detailed, tr("Detailed"));
 
     m_addUniverseAction = new QAction(QIcon(":/edit_add.png"),
                                    tr("Add U&niverse"), this);
@@ -201,6 +217,9 @@ InputOutputManager* InputOutputManager::instance()
 
 void InputOutputManager::updateList()
 {
+    if (m_patchGrid != NULL)
+        m_patchGrid->reload();
+
     m_list->blockSignals(true);
     m_list->clear();
     for (quint32 uni = 0; uni < m_ioMap->universesCount(); uni++)
