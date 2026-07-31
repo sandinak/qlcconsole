@@ -1,6 +1,6 @@
 /*
   Q Light Controller Plus
-  monitorboomitem.cpp
+  pipeitem.cpp
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -18,18 +18,18 @@
 #include <QMenu>
 #include <QtMath>
 
-#include "monitorboomitem.h"
-#include "boom.h"
+#include "pipeitem.h"
+#include "pipe.h"
 #include "monitorproperties.h"
 #include "doc.h"
 
-MonitorBoomItem::MonitorBoomItem(Boom *boom, Doc *doc,
+PipeItem::PipeItem(Pipe *pipe, Doc *doc,
                                  float pxX, float pxY, float pxBaseR, float pxPipe,
                                  bool elevation, float pxHeight,
                                  QGraphicsItem *parent)
     : QObject(nullptr)
     , QGraphicsItem(parent)
-    , m_boom(boom)
+    , m_pipe(pipe)
     , m_doc(doc)
     , m_pxBaseR(qMax(pxBaseR, 0.0f))
     , m_pxPipe(qBound(4.0f, pxPipe, 40.0f))
@@ -40,16 +40,16 @@ MonitorBoomItem::MonitorBoomItem(Boom *boom, Doc *doc,
     setFlags(ItemIsSelectable | ItemSendsGeometryChanges);
     setZValue(-0.5);   // above the floor/platforms, below fixtures
     // Elevation views are display-only (no dragging); top view drags to reposition.
-    setFlag(ItemIsMovable, !elevation && !boom->locked());
-    setCursor((elevation || boom->locked()) ? Qt::ArrowCursor : Qt::SizeAllCursor);
+    setFlag(ItemIsMovable, !elevation && !pipe->locked());
+    setCursor((elevation || pipe->locked()) ? Qt::ArrowCursor : Qt::SizeAllCursor);
     setPos(pxX, pxY);
 
     const bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
     const double conv = isFeet ? 3.28084 : 1.0;
     const QString unitStr = isFeet ? "ft" : "m";
     m_label = new QGraphicsTextItem(
-        QString("%1 (%2 %3)").arg(boom->name())
-            .arg(double(boom->height()) * conv, 0, 'f', 1).arg(unitStr),
+        QString("%1 (%2 %3)").arg(pipe->name())
+            .arg(double(pipe->height()) * conv, 0, 'f', 1).arg(unitStr),
         this);
     m_label->setDefaultTextColor(QColor(235, 235, 240, 220));
     m_label->setFont(QFont("Arial", 9, QFont::Bold));
@@ -63,25 +63,42 @@ MonitorBoomItem::MonitorBoomItem(Boom *boom, Doc *doc,
     }
 }
 
-quint32 MonitorBoomItem::boomId() const
+quint32 PipeItem::pipeId() const
 {
-    return m_boom->id();
+    return m_pipe->id();
 }
 
-void MonitorBoomItem::setMovable(bool movable)
+void PipeItem::setMovable(bool movable)
 {
     setFlag(ItemIsMovable, movable);
     setCursor(movable ? Qt::SizeAllCursor : Qt::ArrowCursor);
 }
 
-void MonitorBoomItem::showLabel(bool visible)
+void PipeItem::showLabel(bool visible)
 {
     if (m_label != nullptr)
         m_label->setVisible(visible);
 }
 
-QRectF MonitorBoomItem::boundingRect() const
+void PipeItem::setLine(const QPointF &pxEnd)
 {
+    prepareGeometryChange();
+    m_horizontal = true;
+    m_pxEnd = pxEnd;
+    if (m_label != nullptr)
+        m_label->setPos(pxEnd.x() / 2.0 + 4.0,
+                        pxEnd.y() / 2.0 - m_label->boundingRect().height());
+    update();
+}
+
+QRectF PipeItem::boundingRect() const
+{
+    if (m_horizontal)
+    {
+        const qreal pad = qMax(4.0f, m_pxPipe);
+        return QRectF(qMin(0.0, m_pxEnd.x()) - pad, qMin(0.0, m_pxEnd.y()) - pad,
+                      qAbs(m_pxEnd.x()) + 2 * pad, qAbs(m_pxEnd.y()) + 2 * pad);
+    }
     if (m_elevation)
     {
         const qreal w = qMax(3.0f, m_pxPipe) / 2.0 + 2.0;
@@ -91,18 +108,35 @@ QRectF MonitorBoomItem::boundingRect() const
     return QRectF(-r, -r, 2 * r, 2 * r);
 }
 
-void MonitorBoomItem::paint(QPainter *painter,
+void PipeItem::paint(QPainter *painter,
                             const QStyleOptionGraphicsItem *option,
                             QWidget * /*widget*/)
 {
     painter->setRenderHint(QPainter::Antialiasing, true);
     const bool selected = option->state & QStyle::State_Selected;
 
-    QColor base = m_boom->color();
+    QColor base = m_pipe->color();
     if (!base.isValid())
         base = QColor(150, 150, 160);
-    QColor border = m_boom->locked() ? QColor(200, 60, 60)
+    QColor border = m_pipe->locked() ? QColor(200, 60, 60)
                                      : base.darker(selected ? 160 : 130);
+
+    // Horizontal run (electric / free bar): a thick line from (0,0) to the end,
+    // with small end caps. Same in top and elevation (both are projected lines).
+    if (m_horizontal)
+    {
+        QColor pipe = base; pipe.setAlpha(selected ? 235 : 200);
+        QPen p(pipe, qMax(3.0f, m_pxPipe)); p.setCapStyle(Qt::RoundCap);
+        painter->setPen(p);
+        painter->drawLine(QPointF(0, 0), m_pxEnd);
+        QPen cap(border, selected ? 2.0 : 1.2);
+        painter->setPen(cap);
+        painter->setBrush(Qt::NoBrush);
+        const qreal cs = qMax(3.0f, m_pxPipe) * 0.7;
+        painter->drawEllipse(QPointF(0, 0), cs, cs);
+        painter->drawEllipse(m_pxEnd, cs, cs);
+        return;
+    }
 
     // Elevation: a vertical pipe from the base (0,0) up to (0, -height), with a
     // small foot if it stands on a base.
@@ -113,13 +147,13 @@ void MonitorBoomItem::paint(QPainter *painter,
         painter->setPen(QPen(border, selected ? 2.0 : 1.2));
         painter->setBrush(pipe);
         painter->drawRect(QRectF(-w / 2.0, -m_pxHeight, w, m_pxHeight));
-        if (m_boom->hasStand())   // stand foot
+        if (m_pipe->hasStand())   // stand foot
             painter->drawLine(QPointF(-w * 2.0, 0), QPointF(w * 2.0, 0));
         return;
     }
 
     // Stand base disc (with three little tripod legs) — only when it has a stand.
-    if (m_boom->hasStand() && m_pxBaseR > 1.0f)
+    if (m_pipe->hasStand() && m_pxBaseR > 1.0f)
     {
         QColor plate = base;
         plate.setAlpha(selected ? 120 : 70);
@@ -144,22 +178,22 @@ void MonitorBoomItem::paint(QPainter *painter,
     painter->drawEllipse(QPointF(0, 0), pr, pr);
 }
 
-void MonitorBoomItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+void PipeItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
     emit itemDropped(this);
 }
 
-void MonitorBoomItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+void PipeItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
     QMenu menu;
     QAction *lockAct = menu.addAction(
-        m_boom->locked() ? tr("Unlock Boom") : tr("Lock Boom"));
+        m_pipe->locked() ? tr("Unlock Pipe") : tr("Lock Pipe"));
 
     if (menu.exec(event->screenPos()) == lockAct)
     {
-        m_boom->setLocked(!m_boom->locked());
-        const bool canMove = !m_boom->locked();
+        m_pipe->setLocked(!m_pipe->locked());
+        const bool canMove = !m_pipe->locked();
         setFlag(ItemIsMovable, canMove);
         setCursor(canMove ? Qt::SizeAllCursor : Qt::ArrowCursor);
         update();

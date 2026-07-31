@@ -1,6 +1,6 @@
 /*
   Q Light Controller Plus
-  boom.cpp
+  pipe.cpp
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -12,86 +12,95 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
-#include "boom.h"
+#include "pipe.h"
 
-#define KXMLBoom            QStringLiteral("Boom")
-#define KXMLBoomID          QStringLiteral("ID")
-#define KXMLBoomName        QStringLiteral("Name")
-#define KXMLBoomOriginX     QStringLiteral("OriginX")
-#define KXMLBoomOriginY     QStringLiteral("OriginY")
-#define KXMLBoomBaseZ       QStringLiteral("BaseZ")
-#define KXMLBoomHeight      QStringLiteral("Height")
-#define KXMLBoomDiameter    QStringLiteral("Diameter")
-#define KXMLBoomBaseRadius  QStringLiteral("BaseRadius")
-#define KXMLBoomParentTruss QStringLiteral("ParentTruss")
-#define KXMLBoomTrussOffset QStringLiteral("TrussOffset")
-#define KXMLBoomColor       QStringLiteral("Color")
-#define KXMLBoomLocked      QStringLiteral("Locked")
-#define KXMLBoomLayerId     QStringLiteral("LayerId")
-#define KXMLBoomGroupId     QStringLiteral("GroupId")
+#define KXMLPipe            QStringLiteral("Pipe")
+#define KXMLPipeLegacyBoom  QStringLiteral("Boom")   // pre-unify name
+#define KXMLPipeID          QStringLiteral("ID")
+#define KXMLPipeName        QStringLiteral("Name")
+#define KXMLPipeOrient      QStringLiteral("Orientation")
+#define KXMLPipeOriginX     QStringLiteral("OriginX")
+#define KXMLPipeOriginY     QStringLiteral("OriginY")
+#define KXMLPipeBaseZ       QStringLiteral("BaseZ")
+#define KXMLPipeLength      QStringLiteral("Length")
+#define KXMLPipeLegacyHt    QStringLiteral("Height")  // boom stored "Height"
+#define KXMLPipeRunAngle    QStringLiteral("RunAngle")
+#define KXMLPipeDiameter    QStringLiteral("Diameter")
+#define KXMLPipeBaseRadius  QStringLiteral("BaseRadius")
+#define KXMLPipeParentTruss QStringLiteral("ParentTruss")
+#define KXMLPipeTrussOffset QStringLiteral("TrussOffset")
+#define KXMLPipeStand       QStringLiteral("Stand")
+#define KXMLPipeColor       QStringLiteral("Color")
+#define KXMLPipeLocked      QStringLiteral("Locked")
+#define KXMLPipeLayerId     QStringLiteral("LayerId")
+#define KXMLPipeGroupId     QStringLiteral("GroupId")
 
-Boom::Boom(quint32 id, QObject *parent)
+Pipe::Pipe(quint32 id, QObject *parent)
     : QObject(parent)
     , m_id(id)
     , m_color(QColor(150, 150, 160, 220))
 {
 }
 
-QVector3D Boom::positionAt(float offset) const
+bool Pipe::loadXML(QXmlStreamReader &root)
 {
-    return QVector3D(m_originX, m_originY, m_baseZ + offset);
-}
-
-bool Boom::loadXML(QXmlStreamReader &root)
-{
-    if (root.name() != KXMLBoom)
+    if (root.name() != KXMLPipe && root.name() != KXMLPipeLegacyBoom)
         return false;
 
     QXmlStreamAttributes a = root.attributes();
-    if (a.hasAttribute(KXMLBoomID))         m_id      = a.value(KXMLBoomID).toUInt();
-    if (a.hasAttribute(KXMLBoomName))       m_name    = a.value(KXMLBoomName).toString();
-    if (a.hasAttribute(KXMLBoomOriginX))    m_originX = a.value(KXMLBoomOriginX).toFloat();
-    if (a.hasAttribute(KXMLBoomOriginY))    m_originY = a.value(KXMLBoomOriginY).toFloat();
-    if (a.hasAttribute(KXMLBoomBaseZ))      setBaseZ(a.value(KXMLBoomBaseZ).toFloat());
-    if (a.hasAttribute(KXMLBoomHeight))     setHeight(a.value(KXMLBoomHeight).toFloat());
-    if (a.hasAttribute(KXMLBoomDiameter))   setDiameter(a.value(KXMLBoomDiameter).toFloat());
-    if (a.hasAttribute(KXMLBoomBaseRadius)) setBaseRadius(a.value(KXMLBoomBaseRadius).toFloat());
-    if (a.hasAttribute(KXMLBoomParentTruss)) m_parentTrussId = a.value(KXMLBoomParentTruss).toUInt();
-    if (a.hasAttribute(KXMLBoomTrussOffset)) m_trussOffset   = a.value(KXMLBoomTrussOffset).toFloat();
-    if (a.hasAttribute(KXMLBoomColor))      m_color   = QColor(a.value(KXMLBoomColor).toString());
-    if (a.hasAttribute(KXMLBoomLocked))     m_locked  = (a.value(KXMLBoomLocked).toString() == "true");
-    if (a.hasAttribute(KXMLBoomLayerId))    m_layerId = a.value(KXMLBoomLayerId).toUInt();
-    if (a.hasAttribute(KXMLBoomGroupId))    m_groupId = a.value(KXMLBoomGroupId).toUInt();
+    if (a.hasAttribute(KXMLPipeID))         m_id      = a.value(KXMLPipeID).toUInt();
+    if (a.hasAttribute(KXMLPipeName))       m_name    = a.value(KXMLPipeName).toString();
+    if (a.hasAttribute(KXMLPipeOrient))     m_orientation = Orientation(a.value(KXMLPipeOrient).toInt());
+    if (a.hasAttribute(KXMLPipeOriginX))    m_originX = a.value(KXMLPipeOriginX).toFloat();
+    if (a.hasAttribute(KXMLPipeOriginY))    m_originY = a.value(KXMLPipeOriginY).toFloat();
+    if (a.hasAttribute(KXMLPipeBaseZ))      setBaseZ(a.value(KXMLPipeBaseZ).toFloat());
+    if (a.hasAttribute(KXMLPipeLength))     setLength(a.value(KXMLPipeLength).toFloat());
+    else if (a.hasAttribute(KXMLPipeLegacyHt)) setLength(a.value(KXMLPipeLegacyHt).toFloat());
+    if (a.hasAttribute(KXMLPipeRunAngle))   m_runAngle = a.value(KXMLPipeRunAngle).toFloat();
+    if (a.hasAttribute(KXMLPipeDiameter))   setDiameter(a.value(KXMLPipeDiameter).toFloat());
+    if (a.hasAttribute(KXMLPipeBaseRadius)) setBaseRadius(a.value(KXMLPipeBaseRadius).toFloat());
+    if (a.hasAttribute(KXMLPipeParentTruss)) m_parentTrussId = a.value(KXMLPipeParentTruss).toUInt();
+    if (a.hasAttribute(KXMLPipeTrussOffset)) m_trussOffset   = a.value(KXMLPipeTrussOffset).toFloat();
+    if (a.hasAttribute(KXMLPipeStand))      m_standId = a.value(KXMLPipeStand).toUInt();
+    if (a.hasAttribute(KXMLPipeColor))      m_color   = QColor(a.value(KXMLPipeColor).toString());
+    if (a.hasAttribute(KXMLPipeLocked))     m_locked  = (a.value(KXMLPipeLocked).toString() == "true");
+    if (a.hasAttribute(KXMLPipeLayerId))    m_layerId = a.value(KXMLPipeLayerId).toUInt();
+    if (a.hasAttribute(KXMLPipeGroupId))    m_groupId = a.value(KXMLPipeGroupId).toUInt();
 
     root.skipCurrentElement();
     return true;
 }
 
-bool Boom::saveXML(QXmlStreamWriter *doc) const
+bool Pipe::saveXML(QXmlStreamWriter *doc) const
 {
-    doc->writeStartElement(KXMLBoom);
-    doc->writeAttribute(KXMLBoomID,         QString::number(m_id));
-    doc->writeAttribute(KXMLBoomName,       m_name);
-    doc->writeAttribute(KXMLBoomOriginX,    QString::number(double(m_originX),    'f', 3));
-    doc->writeAttribute(KXMLBoomOriginY,    QString::number(double(m_originY),    'f', 3));
+    doc->writeStartElement(KXMLPipe);
+    doc->writeAttribute(KXMLPipeID,         QString::number(m_id));
+    doc->writeAttribute(KXMLPipeName,       m_name);
+    doc->writeAttribute(KXMLPipeOrient,     QString::number(int(m_orientation)));
+    doc->writeAttribute(KXMLPipeOriginX,    QString::number(double(m_originX),    'f', 3));
+    doc->writeAttribute(KXMLPipeOriginY,    QString::number(double(m_originY),    'f', 3));
     if (m_baseZ != 0.0f)
-        doc->writeAttribute(KXMLBoomBaseZ,  QString::number(double(m_baseZ),      'f', 3));
-    doc->writeAttribute(KXMLBoomHeight,     QString::number(double(m_height),     'f', 3));
-    doc->writeAttribute(KXMLBoomDiameter,   QString::number(double(m_diameter),   'f', 3));
-    doc->writeAttribute(KXMLBoomBaseRadius, QString::number(double(m_baseRadius), 'f', 3));
+        doc->writeAttribute(KXMLPipeBaseZ,  QString::number(double(m_baseZ),      'f', 3));
+    doc->writeAttribute(KXMLPipeLength,     QString::number(double(m_length),     'f', 3));
+    if (m_orientation == Horizontal)
+        doc->writeAttribute(KXMLPipeRunAngle, QString::number(double(m_runAngle), 'f', 1));
+    doc->writeAttribute(KXMLPipeDiameter,   QString::number(double(m_diameter),   'f', 3));
+    doc->writeAttribute(KXMLPipeBaseRadius, QString::number(double(m_baseRadius), 'f', 3));
     if (m_parentTrussId != UINT_MAX)
     {
-        doc->writeAttribute(KXMLBoomParentTruss, QString::number(m_parentTrussId));
-        doc->writeAttribute(KXMLBoomTrussOffset, QString::number(double(m_trussOffset), 'f', 3));
+        doc->writeAttribute(KXMLPipeParentTruss, QString::number(m_parentTrussId));
+        doc->writeAttribute(KXMLPipeTrussOffset, QString::number(double(m_trussOffset), 'f', 3));
     }
+    if (m_standId != UINT_MAX)
+        doc->writeAttribute(KXMLPipeStand, QString::number(m_standId));
     if (m_color.isValid())
-        doc->writeAttribute(KXMLBoomColor, m_color.name());
+        doc->writeAttribute(KXMLPipeColor, m_color.name());
     if (m_locked)
-        doc->writeAttribute(KXMLBoomLocked, "true");
+        doc->writeAttribute(KXMLPipeLocked, "true");
     if (m_layerId != 0)
-        doc->writeAttribute(KXMLBoomLayerId, QString::number(m_layerId));
+        doc->writeAttribute(KXMLPipeLayerId, QString::number(m_layerId));
     if (m_groupId != 0)
-        doc->writeAttribute(KXMLBoomGroupId, QString::number(m_groupId));
+        doc->writeAttribute(KXMLPipeGroupId, QString::number(m_groupId));
     doc->writeEndElement();
     return true;
 }

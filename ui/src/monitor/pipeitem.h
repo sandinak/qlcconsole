@@ -1,10 +1,10 @@
 /*
   Q Light Controller Plus
-  monitorboomitem.h
+  pipeitem.h
 
-  Interactive 2-D representation of a Boom (vertical fixture pipe on a stand)
+  Interactive 2-D representation of a Pipe (vertical fixture pipe on a stand)
   in the Monitor canvas. In the top view it draws the stand footprint (a base
-  disc) with the pipe as a dot at its centre, labelled with the boom name and
+  disc) with the pipe as a dot at its centre, labelled with the pipe name and
   height. Movable when the layout is not locked.
 
   Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,21 +23,21 @@
 class QGraphicsTextItem;
 class QGraphicsSceneMouseEvent;
 class QGraphicsSceneContextMenuEvent;
-class Boom;
+class Pipe;
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
  * @{
  */
 
-class MonitorBoomItem : public QObject, public QGraphicsItem
+class PipeItem : public QObject, public QGraphicsItem
 {
     Q_OBJECT
     Q_INTERFACES(QGraphicsItem)
 
 public:
     /**
-     * @param boom       Engine Boom this item represents (not owned).
+     * @param pipe       Engine Pipe this item represents (not owned).
      * @param pxX,pxY    Top view: the base CENTRE. Elevation: the base BOTTOM.
      * @param pxBaseR    Stand base radius in scene pixels (0 = hung / elevation).
      * @param pxPipe     Pipe diameter in scene pixels.
@@ -45,13 +45,17 @@ public:
      *                   of the plan disc.
      * @param pxHeight   Elevation only: pipe height in scene pixels.
      */
-    MonitorBoomItem(Boom *boom, Doc *doc,
+    PipeItem(Pipe *pipe, Doc *doc,
                     float pxX, float pxY, float pxBaseR, float pxPipe,
                     bool elevation = false, float pxHeight = 0.0f,
                     QGraphicsItem *parent = nullptr);
 
-    quint32 boomId() const;
-    Boom   *boom()   const { return m_boom; }
+    quint32 pipeId() const;
+    Pipe   *pipe()   const { return m_pipe; }
+
+    /** Draw as a horizontal run: a line from the origin to @p pxEnd (relative to
+     *  the item position). Used for horizontal pipes (electrics) in any view. */
+    void setLine(const QPointF &pxEnd);
 
     void setMovable(bool movable);
     void showLabel(bool visible);
@@ -67,15 +71,17 @@ protected:
 
 signals:
     /** Emitted when the user finishes a drag so the view can persist the move. */
-    void itemDropped(MonitorBoomItem *item);
+    void itemDropped(PipeItem *item);
 
 private:
-    Boom              *m_boom;
+    Pipe              *m_pipe;
     Doc               *m_doc;
     float              m_pxBaseR;
     float              m_pxPipe;
     bool               m_elevation;
     float              m_pxHeight;
+    bool               m_horizontal = false;   ///< draw as a line to m_pxEnd
+    QPointF            m_pxEnd;
     QGraphicsTextItem *m_label;
 };
 
