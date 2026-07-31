@@ -2079,6 +2079,11 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
     bar->addWidget(planeCombo);
     bar->addStretch();
+    QPushButton *addFixBtn = new QPushButton(tr("Add Fixture…"), pane);
+    bar->addWidget(addFixBtn);
+    QPushButton *addBarBtn = new QPushButton(tr("Add Bar"), pane);
+    addBarBtn->setVisible(kind != 1 /*no bars on a tower — use Add shelf*/);
+    bar->addWidget(addBarBtn);
     pv->addLayout(bar);
 
     StructureStudioView *view = new StructureStudioView(
@@ -2096,9 +2101,150 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });
     connect(view, &StructureStudioView::fixtureActivated, pane,
             [this](quint32 fid){ slotFixtureDoubleClicked(fid); });
+    connect(addFixBtn, &QPushButton::clicked, pane,
+            [this, kind, id, view]() { studioAddFixture(kind, id, view); });
+    connect(addBarBtn, &QPushButton::clicked, pane,
+            [this, kind, id, view]() { studioAddBar(kind, id, view); });
 
     if (outView) *outView = view;
     return pane;
+}
+
+void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
+{
+    // A stand needs a boom/bar to hang fixtures on; find one first.
+    quint32 boomId = Pipe::invalidId();
+    if (kind == 0)
+    {
+        foreach (Pipe *p, m_props->pipes())
+            if (p->standId() == id) { boomId = p->id(); break; }
+        if (boomId == Pipe::invalidId())
+        {
+            QMessageBox::information(this, tr("Add Fixture"),
+                tr("Add a bar to this stand first (Add Bar), then hang fixtures on it."));
+            return;
+        }
+    }
+
+    // Which fixtures are already on this structure — offer only the rest.
+    QDialog pick(this);
+    pick.setWindowTitle(tr("Add Fixtures to Structure"));
+    pick.setMinimumWidth(320);
+    QVBoxLayout *pv = new QVBoxLayout(&pick);
+    pv->addWidget(new QLabel(tr("Choose fixtures to mount here:"), &pick));
+    QListWidget *list = new QListWidget(&pick);
+    list->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == nullptr) continue;
+        const FixtureRigProps &rp = m_props->fixtureRigProps(fx->id());
+        bool here = (kind == 1 && rp.towerId == id)
+                 || (kind == 2 && rp.trussId == id)
+                 || (kind == 0 && rp.pipeId != Pipe::invalidId()
+                        && m_props->pipe(rp.pipeId) && m_props->pipe(rp.pipeId)->standId() == id);
+        if (here) continue;
+        QListWidgetItem *it = new QListWidgetItem(fx->name(), list);
+        it->setData(Qt::UserRole, fx->id());
+    }
+    pv->addWidget(list);
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &pick);
+    connect(bb, &QDialogButtonBox::accepted, &pick, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &pick, &QDialog::reject);
+    pv->addWidget(bb);
+    if (pick.exec() != QDialog::Accepted)
+        return;
+
+    Truss *tr_ = (kind == 2) ? m_props->truss(id) : nullptr;
+    Tower *tw = (kind == 1) ? m_props->tower(id) : nullptr;
+    foreach (QListWidgetItem *it, list->selectedItems())
+    {
+        const quint32 fid = it->data(Qt::UserRole).toUInt();
+        if (kind == 0)
+        {
+            m_graphicsView->attachFixtureToPipe(fid, boomId);   // clears other mounts
+        }
+        else
+        {
+            FixtureRigProps rp = m_props->fixtureRigProps(fid);
+            rp.trussId = Truss::invalidId();
+            rp.pipeId  = Pipe::invalidId();
+            rp.towerId = Tower::invalidId();
+            rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+            rp.deckPlatformId  = FixtureRigProps::invalidPlatformId();
+            if (kind == 1 && tw)
+            {
+                rp.towerId = id; rp.towerShelf = 0;
+                rp.towerU = tw->width() * 0.5f; rp.towerV = tw->depth() * 0.5f;
+            }
+            else if (kind == 2 && tr_)
+            {
+                rp.trussId = id; rp.trussOffset = tr_->length() * 0.5f;
+            }
+            m_props->setFixtureRigProps(fid, rp);
+            m_graphicsView->updateFixture(fid);
+        }
+    }
+    if (view) view->reload();
+    m_doc->setModified();
+}
+
+void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
+{
+    if (kind == 1)   // tower
+    {
+        QMessageBox::information(this, tr("Add Bar"),
+            tr("Towers use shelves — use 'Add shelf' in the tower fields."));
+        return;
+    }
+
+    if (kind == 2)   // truss → a child bar at mid-span
+    {
+        const quint32 barId = createBarOnTruss(id, -1.0f);
+        if (barId != Truss::invalidId())
+        {
+            m_graphicsView->updateTrusses();
+            if (m_layersPanel) m_layersPanel->reload();
+            m_doc->setModified();
+            if (view) view->reload();
+        }
+        return;
+    }
+
+    // kind 0 → stand. A vertical boom if it has none yet, else a crossbar on it.
+    Stand *s = m_props->stand(id);
+    if (s == nullptr) return;
+    quint32 boomId = Pipe::invalidId();
+    foreach (Pipe *p, m_props->pipes())
+        if (p->standId() == id && p->isVertical()) { boomId = p->id(); break; }
+
+    Pipe *bar = m_props->addPipe();
+    bar->setLayerId(s->layerId());
+    if (boomId == Pipe::invalidId())
+    {
+        // First bar → a vertical boom standing on the stand.
+        bar->setName(tr("%1 Boom").arg(s->name()));
+        bar->setOrientation(Pipe::Vertical);
+        bar->setStandId(id);
+        bar->setLength(1.5f);
+        bar->setBaseRadius(0.0f);
+    }
+    else
+    {
+        // Otherwise a horizontal crossbar on the existing boom, at its top.
+        Pipe *boom = m_props->pipe(boomId);
+        bar->setName(tr("%1 Crossbar").arg(s->name()));
+        bar->setOrientation(Pipe::Horizontal);
+        bar->setParentPipeId(boomId);
+        bar->setParentPipeOffset(boom ? boom->length() : 1.5f);
+        bar->setLength(1.0f);
+        bar->setRunAngle(0.0f);
+        bar->setBaseRadius(0.0f);
+    }
+    m_props->recomputeChildTrusses();
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    if (view) view->reload();
 }
 
 void Monitor::slotTrussRemoveRequested(quint32 tid)

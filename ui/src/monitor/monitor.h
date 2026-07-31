@@ -318,6 +318,11 @@ protected slots:
     class QWidget *makeStudioPane(class QDialog *dlg, int kind, quint32 id,
                                   class StructureStudioView **outView);
 
+    /** Structure-studio actions (S2): mount existing fixtures onto the structure,
+     *  or add a bar to it. kind: 0=Stand,1=Tower,2=Truss. Reloads @p view. */
+    void studioAddFixture(int kind, quint32 id, class StructureStudioView *view);
+    void studioAddBar(int kind, quint32 id, class StructureStudioView *view);
+
     /** Open the platform edit dialog for the given platform ID. */
     void slotEditPlatform(quint32 pid);
     void slotEditPipe(quint32 bid);
