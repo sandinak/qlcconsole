@@ -76,7 +76,8 @@ QRectF TowerItem::boundingRect() const
     const qreal pad = 3.0;
     if (m_elevation)
         return QRectF(-pad, -m_pxH - pad, m_pxW + 2 * pad, m_pxH + 2 * pad);
-    return QRectF(-pad, -pad, m_pxW + 2 * pad, m_pxH + 2 * pad);
+    const qreal ex = qMax(m_pxW, m_pxH) * 0.35 + pad;   // base-plate margin
+    return QRectF(-ex, -ex, m_pxW + 2 * ex, m_pxH + 2 * ex);
 }
 
 void TowerItem::paint(QPainter *painter,
@@ -110,6 +111,12 @@ void TowerItem::paint(QPainter *painter,
         }
         return;
     }
+
+    // Base plate on the ground: a larger footprint the tower stands on.
+    const qreal ex = qMax(m_pxW, m_pxH) * 0.35 + 3.0;
+    painter->setPen(QPen(QColor(120, 124, 135, 180), 1.0, Qt::DashLine));
+    painter->setBrush(QColor(70, 72, 82, selected ? 150 : 90));
+    painter->drawRect(QRectF(-ex, -ex, m_pxW + 2 * ex, m_pxH + 2 * ex));
 
     // Top: footprint square + diagonal cross (box-truss) + shelf-count badge.
     painter->setPen(QPen(border, selected ? 2.0 : 1.5));

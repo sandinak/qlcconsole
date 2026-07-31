@@ -114,8 +114,9 @@ QRectF TrussItem::boundingRect() const
     const qreal pad = 2.0;
     if (m_truss->type() == Truss::Vertical && !m_elevation)
     {
-        qreal r = m_pxWid / 2.0;
-        return QRectF(-r - pad, -r - pad, m_pxWid + 2*pad, m_pxWid + 2*pad);
+        // Cover the base plate too (drawn at up to 2× the cross-section half-size).
+        const qreal ph = qMax(qreal(m_pxWid), m_pxWid / 2.0 + 7.0) + pad;
+        return QRectF(-ph, -ph, 2 * ph, 2 * ph);
     }
     return QRectF(-pad, -m_pxWid / 2.0 - pad, m_pxLen + 2*pad, m_pxWid + 2*pad);
 }
@@ -149,6 +150,14 @@ void TrussItem::paint(QPainter *painter,
         // Tower footprint: a SQUARE box-truss cross-section (top-down) with
         // crosshairs — box truss reads as a square, not a circle.
         qreal r = m_pxWid / 2.0;
+
+        // Base plate on the ground: the (larger) steel plate the tower stands on,
+        // so its floor footprint reads at a glance (like a stand's base disc).
+        const qreal ph = qMax(r * 2.0, r + 7.0);
+        painter->setPen(QPen(QColor(120, 124, 135, 180), 1.0, Qt::DashLine));
+        painter->setBrush(QColor(70, 72, 82, m_highlighted ? 150 : 90));
+        painter->drawRect(QRectF(-ph, -ph, 2 * ph, 2 * ph));
+
         QBrush boxFill = m_highlighted ? QBrush(QColor(0, 120, 255, 80)) : QBrush(chordFill);
         QPen   boxPen  = m_highlighted ? QPen(QColor(0, 160, 255, 200), 3.0) : outerPen;
         painter->setPen(boxPen);
