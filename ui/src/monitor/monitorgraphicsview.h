@@ -358,6 +358,7 @@ public:
      *  fixture context menu and the Layers-tree drag-onto-truss (2D drop-to-bind
      *  was removed so assignment is now always explicit). */
     void attachFixtureToTruss(quint32 fid, quint32 trussId);
+    void attachFixtureToBoom(quint32 fid, quint32 boomId);
 
     /** Unbind fixture @p fid from its truss (leaves it where it sits). */
     void detachFixtureFromTruss(quint32 fid);

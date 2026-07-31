@@ -256,9 +256,17 @@ struct FixtureRigProps
     int              studioMount = 1;              ///< default: front face
     float            studioAngle = 0.0f;
 
+    /** Boom mount. When boomId is valid the fixture rides a boom's pipe at
+     *  boomOffset metres up from the base, facing boomAngle degrees around it.
+     *  Its world position is DERIVED from the boom so it follows it. */
+    quint32          boomId     = UINT_MAX;        ///< invalid = not boom-mounted
+    float            boomOffset = 0.0f;            ///< metres up the pipe from the base
+    float            boomAngle  = 0.0f;            ///< facing degrees around the pipe
+
     static quint32 invalidPlatformId() { return UINT_MAX; }
     bool onRiser() const { return riserPlatformId != UINT_MAX; }
     bool onDeck()  const { return deckPlatformId  != UINT_MAX; }
+    bool onBoom()  const { return boomId != UINT_MAX; }
     enum RiserFace { RiserFront = 0, RiserTop = 1 };
 };
 

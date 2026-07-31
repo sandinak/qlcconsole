@@ -1712,7 +1712,9 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     // view (top too — they sit on the riser's edge/face). Free/truss fixtures
     // keep their stored XY in top view and use the 3-D rig pos in elevation.
     const FixtureRigProps frp = m_doc->monitorProperties()->fixtureRigProps(id);
-    const bool riser = frp.onRiser();
+    // Riser- and boom-mounted fixtures derive their position from the structure
+    // in EVERY view (they follow it), so centre the icon on the derived point.
+    const bool riser = frp.onRiser() || frp.onBoom();
     // A truss-bound fixture's stored position is the point ON the truss line, so
     // centre the icon on it (like risers) instead of pinning its top-left corner.
     const bool onTruss = (frp.trussId != Truss::invalidId());
@@ -3343,6 +3345,38 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
             detachFixtureFromTruss(fid);
         });
 
+        // Mount on a boom ▶ (rides the pipe; height is set in the boom editor).
+        QMenu *boomMenu = menu.addMenu(tr("Mount on Boom"));
+        const QList<Boom *> booms = props->booms();
+        if (booms.isEmpty())
+            boomMenu->setEnabled(false);
+        for (Boom *b : booms)
+        {
+            if (b == nullptr)
+                continue;
+            const quint32 bid = b->id();
+            QAction *a = boomMenu->addAction(b->name().isEmpty()
+                                             ? tr("Boom %1").arg(bid) : b->name());
+            a->setCheckable(true);
+            a->setChecked(rp.boomId == bid);
+            connect(a, &QAction::triggered, this, [this, fid, bid]() {
+                attachFixtureToBoom(fid, bid);
+            });
+        }
+        if (rp.boomId != Boom::invalidId())
+        {
+            QAction *detachBoom = menu.addAction(tr("Remove from Boom"));
+            connect(detachBoom, &QAction::triggered, this, [this, fid]() {
+                MonitorProperties *p = m_doc->monitorProperties();
+                FixtureRigProps r = p->fixtureRigProps(fid);
+                r.boomId = Boom::invalidId();
+                p->setFixtureRigProps(fid, r);
+                updateFixture(fid);
+                m_doc->setModified();
+                emit mapStructureChanged();
+            });
+        }
+
         // Group position lock (when this fixture belongs to a group).
         const quint32 gid = itemGroupId(fi);
         QAction *grpLockAct = nullptr;
@@ -3488,6 +3522,28 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
 
     // Empty canvas (or any other item) → the generic add/paste menu.
     emit contextMenuRequested(sp);
+}
+
+void MonitorGraphicsView::attachFixtureToBoom(quint32 fid, quint32 boomId)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    Boom *b = props->boom(boomId);
+    if (b == nullptr)
+        return;
+
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    // Boom mount is mutually exclusive with the other structural mounts.
+    rp.trussId = Truss::invalidId();
+    rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+    rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
+    rp.boomId = boomId;
+    if (rp.boomOffset <= 0.0f)            // first mount → sit near the top
+        rp.boomOffset = b->height() * 0.85f;
+    props->setFixtureRigProps(fid, rp);
+
+    updateFixture(fid);
+    m_doc->setModified();
+    emit mapStructureChanged();
 }
 
 void MonitorGraphicsView::attachFixtureToTruss(quint32 fid, quint32 trussId)

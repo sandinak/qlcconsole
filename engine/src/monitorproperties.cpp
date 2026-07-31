@@ -1078,6 +1078,11 @@ Boom *MonitorProperties::addBoom()
 
 void MonitorProperties::removeBoom(quint32 id)
 {
+    // Un-mount any fixtures that were rigged on this boom.
+    for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
+        if (it->boomId == id)
+            it->boomId = UINT_MAX;
+
     delete m_booms.take(id);
 }
 
@@ -1202,6 +1207,19 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         else if (rp.trussMountSide == FixtureRigProps::UnderHung)
             p.setZ(p.z() - half);
         // Centered: leave on the chord.
+        return p;
+    }
+
+    // Boom mount: rides a boom pipe at boomOffset up from the base, nudged to the
+    // pipe surface in the facing direction. Derived so it follows the boom.
+    const Boom *bm = (rp.boomId != Boom::invalidId()) ? m_booms.value(rp.boomId, nullptr) : nullptr;
+    if (bm != nullptr)
+    {
+        QVector3D p = bm->positionAt(rp.boomOffset);   // pipe centre at that height
+        const double th = qDegreesToRadians(double(rp.boomAngle));
+        const float r = bm->diameter() * 0.5f;
+        p.setX(p.x() + r * float(qSin(th)));   // 0° = downstage (-Y)
+        p.setY(p.y() - r * float(qCos(th)));
         return p;
     }
 
@@ -1645,6 +1663,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                                           a.value("GLZ").toFloat());
             if (a.hasAttribute("SM")) rp.studioMount = a.value("SM").toInt();
             if (a.hasAttribute("SA")) rp.studioAngle = a.value("SA").toFloat();
+            if (a.hasAttribute("Boom"))
+            {
+                rp.boomId     = a.value("Boom").toUInt();
+                rp.boomOffset = a.value("BoomOfs").toFloat();
+                rp.boomAngle  = a.value("BoomAng").toFloat();
+            }
             m_rigProps[fid] = rp;
             root.skipCurrentElement();
         }
@@ -2033,6 +2057,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));
             doc->writeAttribute(QStringLiteral("DeckH"), QString::number(double(rp.deckHeightOffset), 'f', 3));
+        }
+        if (rp.onBoom())
+        {
+            doc->writeAttribute(QStringLiteral("Boom"),    QString::number(rp.boomId));
+            doc->writeAttribute(QStringLiteral("BoomOfs"), QString::number(double(rp.boomOffset), 'f', 3));
+            doc->writeAttribute(QStringLiteral("BoomAng"), QString::number(double(rp.boomAngle), 'f', 1));
         }
         if (!rp.groupLocal.isNull())
         {
