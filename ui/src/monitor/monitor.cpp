@@ -933,7 +933,7 @@ void Monitor::createAndShow(QWidget* parent, Doc* doc)
         /* Set some common properties for the window and show it */
         window->setAttribute(Qt::WA_DeleteOnClose);
         window->setWindowIcon(QIcon(":/monitor.png"));
-        window->setWindowTitle(tr("Fixture Monitor"));
+        window->setWindowTitle(tr("Lighting Studio"));
         window->setContextMenuPolicy(Qt::CustomContextMenu);
 
         QSettings settings;

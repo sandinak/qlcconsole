@@ -851,8 +851,9 @@ void App::initActions()
     m_modeToggleAction->setShortcut(QKeySequence("CTRL+F12"));
     connect(m_modeToggleAction, SIGNAL(triggered(bool)), this, SLOT(slotModeToggle()));
 
-    m_controlMonitorAction = new QAction(QIcon(":/monitor.png"), tr("&Monitor"), this);
+    m_controlMonitorAction = new QAction(QIcon(":/monitor.png"), tr("&Lighting Studio"), this);
     m_controlMonitorAction->setShortcut(QKeySequence("CTRL+M"));
+    m_controlMonitorAction->setToolTip(tr("Lighting Studio — 2D plot, rigging & fixture layout"));
     connect(m_controlMonitorAction, SIGNAL(triggered(bool)), this, SLOT(slotControlMonitor()));
 
     m_addressToolAction = new QAction(QIcon(":/diptool.png"), tr("Address Tool"), this);
