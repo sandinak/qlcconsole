@@ -2101,6 +2101,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });
     connect(view, &StructureStudioView::fixtureActivated, pane,
             [this](quint32 fid){ slotFixtureDoubleClicked(fid); });
+    connect(view, &StructureStudioView::fixtureMoved, pane,
+            [this](quint32 fid){ m_graphicsView->updateFixture(fid); });
     connect(addFixBtn, &QPushButton::clicked, pane,
             [this, kind, id, view]() { studioAddFixture(kind, id, view); });
     connect(addBarBtn, &QPushButton::clicked, pane,

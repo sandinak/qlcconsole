@@ -54,6 +54,8 @@ public:
 signals:
     /** A fixture on the structure was double-clicked (id passed through). */
     void fixtureActivated(quint32 fid);
+    /** A fixture was dragged to a new spot on the structure (rig prop changed). */
+    void fixtureMoved(quint32 fid);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -67,6 +69,10 @@ protected:
 private:
     QPointF project(const QVector3D &w) const;      ///< world → in-plane (a,b) metres
     QPointF w2s(const QVector3D &w) const;           ///< world → screen pixels
+    QPointF screenToPlane(const QPointF &px) const;  ///< screen pixels → in-plane (a,b) metres
+    /** Remap a dragged fixture's mount param from a screen point (edits pipe
+     *  offset / tower U-V-shelf / truss offset in place). Returns true if moved. */
+    bool dragFixtureTo(quint32 fid, const QPointF &px);
     void refit();                                    ///< scale/centre to fit everything
     void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame
 
@@ -89,6 +95,8 @@ private:
     QPointF  m_originPx;        ///< where world (a=0,b=0) lands on screen
     bool     m_panning = false;
     QPointF  m_panLast;
+    quint32  m_dragFid = 0;    ///< fixture being dragged (0 = none)
+    bool     m_dragged = false;
 };
 
 /** @} */

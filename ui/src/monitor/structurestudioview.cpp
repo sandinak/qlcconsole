@@ -75,6 +75,85 @@ QPointF StructureStudioView::w2s(const QVector3D &w) const
                    m_originPx.y() + vSign * ab.y() * m_scale);
 }
 
+QPointF StructureStudioView::screenToPlane(const QPointF &px) const
+{
+    const double vSign = (m_plane == Top) ? 1.0 : -1.0;
+    return QPointF((px.x() - m_originPx.x()) / m_scale,
+                   (px.y() - m_originPx.y()) / (vSign * m_scale));
+}
+
+bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+
+    // On a pipe (stand boom/bar): slide along the pipe axis → pipeOffset.
+    if (rp.pipeId != Pipe::invalidId())
+    {
+        Pipe *b = props->pipe(rp.pipeId);
+        if (b == nullptr) return false;
+        const QPointF A = w2s(b->positionAt(0.0f));
+        const QPointF B = w2s(b->positionAt(b->length()));
+        const QPointF d = B - A;
+        const double l2 = d.x() * d.x() + d.y() * d.y();
+        if (l2 < 1e-6) return false;
+        double u = ((px.x() - A.x()) * d.x() + (px.y() - A.y()) * d.y()) / l2;
+        u = qBound(0.0, u, 1.0);
+        rp.pipeOffset = float(u * b->length());
+        props->setFixtureRigProps(fid, rp);
+        return true;
+    }
+
+    // On a tower: Top drags U/V across the footprint; elevations pick the nearest
+    // shelf (by height) and the in-plane horizontal.
+    if (rp.towerId != Tower::invalidId())
+    {
+        Tower *t = props->tower(rp.towerId);
+        if (t == nullptr) return false;
+        const QPointF ab = screenToPlane(px);
+        if (m_plane == Top)
+        {
+            rp.towerU = qBound(0.0f, float(ab.x() - t->originX()), t->width());
+            rp.towerV = qBound(0.0f, float(ab.y() - t->originY()), t->depth());
+        }
+        else
+        {
+            if (m_plane == Front)
+                rp.towerU = qBound(0.0f, float(ab.x() - t->originX()), t->width());
+            else
+                rp.towerV = qBound(0.0f, float(ab.x() - t->originY()), t->depth());
+            // Snap to the nearest shelf by height (ab.y == Z).
+            int best = rp.towerShelf; double bestd = 1e9;
+            for (int i = 0; i < t->shelfCount(); ++i)
+            {
+                const double dd = qAbs(double(t->shelfHeight(i)) - ab.y());
+                if (dd < bestd) { bestd = dd; best = i; }
+            }
+            rp.towerShelf = best;
+        }
+        props->setFixtureRigProps(fid, rp);
+        return true;
+    }
+
+    // On a truss: slide along the truss axis → trussOffset.
+    if (rp.trussId != Truss::invalidId())
+    {
+        Truss *t = props->truss(rp.trussId);
+        if (t == nullptr) return false;
+        const QPointF A = w2s(t->origin());
+        const QPointF B = w2s(t->positionAt(t->length()));
+        const QPointF d = B - A;
+        const double l2 = d.x() * d.x() + d.y() * d.y();
+        if (l2 < 1e-6) return false;   // truss runs into the screen; can't slide here
+        double u = ((px.x() - A.x()) * d.x() + (px.y() - A.y()) * d.y()) / l2;
+        u = qBound(0.0, u, 1.0);
+        rp.trussOffset = float(u * t->length());
+        props->setFixtureRigProps(fid, rp);
+        return true;
+    }
+    return false;
+}
+
 /*********************************************************************
  * Structure gathering
  *********************************************************************/
@@ -409,6 +488,14 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
     {
         m_panning = true;
         m_panLast = e->pos();
+        return;
+    }
+    if (e->button() == Qt::LeftButton)
+    {
+        m_dragFid = hitTestFixture(e->pos());   // 0 if empty space
+        m_dragged = false;
+        if (m_dragFid != 0)
+            setCursor(Qt::ClosedHandCursor);
     }
 }
 
@@ -419,12 +506,32 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
         m_originPx += e->pos() - m_panLast;
         m_panLast = e->pos();
         update();
+        return;
+    }
+    if (m_dragFid != 0)
+    {
+        if (dragFixtureTo(m_dragFid, e->pos()))
+        {
+            m_dragged = true;
+            update();
+        }
     }
 }
 
 void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
 {
     m_panning = false;
+    if (m_dragFid != 0)
+    {
+        setCursor(Qt::ArrowCursor);
+        if (m_dragged)
+        {
+            m_doc->setModified();
+            emit fixtureMoved(m_dragFid);
+        }
+        m_dragFid = 0;
+        m_dragged = false;
+    }
 }
 
 quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
