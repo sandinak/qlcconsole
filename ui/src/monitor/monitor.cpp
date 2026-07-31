@@ -97,6 +97,7 @@
 #include "truss.h"
 #include "pipe.h"
 #include "stand.h"
+#include "tower.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "qlcpalette.h"
@@ -364,6 +365,8 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotEditPipe);
     connect(m_graphicsView, &MonitorGraphicsView::standDoubleClicked,
             this, &Monitor::slotEditStand);
+    connect(m_graphicsView, &MonitorGraphicsView::towerDoubleClicked,
+            this, &Monitor::slotEditTower);
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
@@ -2496,6 +2499,111 @@ void Monitor::slotEditStand(quint32 sid)
     m_doc->setModified();
 }
 
+void Monitor::slotAddTower()
+{
+    Tower *t = m_props->addTower();
+    t->setName(tr("Tower %1").arg(t->id() + 1));
+    t->addShelf(0.6f);   // a couple of default shelves
+    t->addShelf(1.5f);
+    QPointF mm = m_graphicsView->pixelsToRealPosition(
+        m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    t->setOriginX(float(mm.x() / 1000.0));
+    t->setOriginY(float(mm.y() / 1000.0));
+    t->setLayerId(m_props->activeLayerId());
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    slotEditTower(t->id());
+}
+
+void Monitor::slotEditTower(quint32 tid)
+{
+    Tower *t = m_props->tower(tid);
+    if (!t) return;
+
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+    const double posR = isFeet ? 164.0 : 50.0;
+    const double hMax = isFeet ? 40.0 : 12.0;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Edit Tower — %1").arg(t->name()));
+    dlg.setMinimumWidth(380);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    QFormLayout *form = new QFormLayout;
+
+    QLineEdit *nameEdit = new QLineEdit(t->name(), &dlg);
+    form->addRow(tr("Name:"), nameEdit);
+    auto mkSpin = [&](double val, double lo, double hi) {
+        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
+        sp->setRange(lo, hi); sp->setDecimals(2); sp->setSuffix(sfx);
+        sp->setValue(val * toDisp); return sp;
+    };
+    QDoubleSpinBox *oxSpin = mkSpin(t->originX(), -posR, posR);
+    QDoubleSpinBox *oySpin = mkSpin(t->originY(), -posR, posR);
+    QDoubleSpinBox *wSpin  = mkSpin(t->width(), 0.05, isFeet ? 33.0 : 10.0);
+    QDoubleSpinBox *dSpin  = mkSpin(t->depth(), 0.05, isFeet ? 33.0 : 10.0);
+    QDoubleSpinBox *hSpin  = mkSpin(t->height(), 0.1, hMax);
+    form->addRow(tr("Position X:"), oxSpin);
+    form->addRow(tr("Position Y:"), oySpin);
+    form->addRow(tr("Width:"), wSpin);
+    form->addRow(tr("Depth:"), dSpin);
+    form->addRow(tr("Height:"), hSpin);
+    vl->addLayout(form);
+
+    // Shelves — a list of heights the user can add / remove.
+    vl->addWidget(new QLabel(tr("Shelves (height above floor):"), &dlg));
+    QListWidget *shelfList = new QListWidget(&dlg);
+    auto reloadShelves = [&]() {
+        shelfList->clear();
+        for (int i = 0; i < t->shelfCount(); ++i)
+            shelfList->addItem(tr("Shelf %1  —  %2%3").arg(i + 1)
+                .arg(double(t->shelfHeight(i)) * toDisp, 0, 'f', 2).arg(sfx));
+    };
+    reloadShelves();
+    vl->addWidget(shelfList);
+
+    QHBoxLayout *shelfBtns = new QHBoxLayout;
+    QDoubleSpinBox *newShelf = new QDoubleSpinBox(&dlg);
+    newShelf->setRange(0.0, hMax); newShelf->setDecimals(2); newShelf->setSuffix(sfx);
+    newShelf->setValue(1.0 * toDisp);
+    QPushButton *addShelfBtn = new QPushButton(tr("Add shelf"), &dlg);
+    QPushButton *delShelfBtn = new QPushButton(tr("Remove selected"), &dlg);
+    shelfBtns->addWidget(newShelf);
+    shelfBtns->addWidget(addShelfBtn);
+    shelfBtns->addWidget(delShelfBtn);
+    shelfBtns->addStretch(1);
+    vl->addLayout(shelfBtns);
+    connect(addShelfBtn, &QPushButton::clicked, &dlg, [&]() {
+        t->addShelf(float(newShelf->value() * fromDisp)); reloadShelves();
+    });
+    connect(delShelfBtn, &QPushButton::clicked, &dlg, [&]() {
+        if (shelfList->currentRow() >= 0) { t->removeShelf(shelfList->currentRow()); reloadShelves(); }
+    });
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    vl->addWidget(bb);
+    dlg.exec();   // shelves already applied live; apply the geometry fields below
+
+    t->setName(nameEdit->text());
+    t->setOriginX(float(oxSpin->value() * fromDisp));
+    t->setOriginY(float(oySpin->value() * fromDisp));
+    t->setWidth(float(wSpin->value() * fromDisp));
+    t->setDepth(float(dSpin->value() * fromDisp));
+    t->setHeight(float(hSpin->value() * fromDisp));
+
+    m_graphicsView->updatePlatforms();
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (m_props->fixtureRigProps(fx->id()).towerId == tid)
+            m_graphicsView->updateFixture(fx->id());
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
 void Monitor::slotAddElectric()
 {
     Pipe *b = m_props->addPipe();
@@ -2839,6 +2947,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
                    this, SLOT(slotAddElectric()));
     menu.addAction(tr("Add Stand here"),
                    this, SLOT(slotAddStand()));
+    menu.addAction(tr("Add Tower here"),
+                   this, SLOT(slotAddTower()));
     menu.addAction(QIcon(":/image.png"), tr("Add Image here"),
                    this, SLOT(slotAddImage()));
     menu.addSeparator();

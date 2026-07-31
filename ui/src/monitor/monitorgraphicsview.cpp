@@ -44,6 +44,8 @@
 #include "platformitem.h"
 #include "pipeitem.h"
 #include "standitem.h"
+#include "toweritem.h"
+#include "tower.h"
 #include "stand.h"
 #include "pipe.h"
 #include "powersourceitem.h"
@@ -1716,7 +1718,7 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     const FixtureRigProps frp = m_doc->monitorProperties()->fixtureRigProps(id);
     // Riser- and pipe-mounted fixtures derive their position from the structure
     // in EVERY view (they follow it), so centre the icon on the derived point.
-    const bool riser = frp.onRiser() || frp.onPipe();
+    const bool riser = frp.onRiser() || frp.onPipe() || frp.onTower();
     // A truss-bound fixture's stored position is the point ON the truss line, so
     // centre the icon on it (like risers) instead of pinning its top-left corner.
     const bool onTruss = (frp.trussId != Truss::invalidId());
@@ -2258,6 +2260,12 @@ void MonitorGraphicsView::updatePlatforms()
         delete si;
     }
     m_standItems.clear();
+    foreach (TowerItem *twi, m_towerItems)
+    {
+        m_scene->removeItem(twi);
+        delete twi;
+    }
+    m_towerItems.clear();
 
     MonitorProperties *props = m_doc->monitorProperties();
     if (props == nullptr || m_cellPixels == 0)
@@ -2366,7 +2374,52 @@ void MonitorGraphicsView::updatePlatforms()
         connect(si, &StandItem::itemDropped, this, &MonitorGraphicsView::slotStandMoved);
     }
 
+    // Towers: footprint square in Top; box + shelf lines in the elevations.
+    foreach (Tower *tw, props->towers())
+    {
+        TowerItem *twi = nullptr;
+        if (m_pov == PovTop)
+        {
+            const float pxX = float(m_xOffset + (tw->originX() * 1000.0 * m_cellPixels) / m_unitValue);
+            const float pxY = float(m_yOffset + (tw->originY() * 1000.0 * m_cellPixels) / m_unitValue);
+            const float pxW = float((tw->width() * 1000.0 * m_cellPixels) / m_unitValue);
+            const float pxD = float((tw->depth() * 1000.0 * m_cellPixels) / m_unitValue);
+            twi = new TowerItem(tw, m_doc, pxX, pxY, pxW, pxD);
+        }
+        else
+        {
+            const QPointF base = projectMm(tw->originX() * 1000.0, tw->originY() * 1000.0, 0.0);
+            const QPointF top  = projectMm(tw->originX() * 1000.0, tw->originY() * 1000.0, tw->height() * 1000.0);
+            const float pxW = float(((m_pov == PovFront) ? tw->width() : tw->depth()) * 1000.0f * m_cellPixels / m_unitValue);
+            const float pxH = float(qAbs(top.y() - base.y()));
+            twi = new TowerItem(tw, m_doc, float(base.x()), float(base.y()), pxW, pxH, true);
+        }
+        twi->setMovable(!m_layoutLocked);
+        twi->showLabel(m_doc->monitorProperties()->layer(tw->layerId()).labels);
+        m_scene->addItem(twi);
+        m_towerItems.insert(tw->id(), twi);
+        connect(twi, &TowerItem::itemDropped, this, &MonitorGraphicsView::slotTowerMoved);
+    }
+
     refreshItemLayerState();
+}
+
+void MonitorGraphicsView::slotTowerMoved(TowerItem *item)
+{
+    if (item == nullptr || m_cellPixels == 0)
+        return;
+    Tower *tw = item->tower();
+    if (tw == nullptr)
+        return;
+    const QPointF c = item->pos();
+    tw->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+    tw->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+    // Fixtures on its shelves follow (derived).
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (m_doc->monitorProperties()->fixtureRigProps(fx->id()).towerId == tw->id())
+            updateFixture(fx->id());
+    m_doc->setModified();
+    emit mapStructureChanged();
 }
 
 void MonitorGraphicsView::slotStandMoved(StandItem *item)
@@ -3360,6 +3413,11 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         emit standDoubleClicked(si->standId());
         return;
     }
+    if (auto *twi = dynamic_cast<TowerItem *>(it))
+    {
+        emit towerDoubleClicked(twi->towerId());
+        return;
+    }
     if (auto *tgi = dynamic_cast<TargetItem *>(it))
     {
         emit targetDoubleClicked(tgi->targetId());
@@ -3453,6 +3511,59 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
                 MonitorProperties *p = m_doc->monitorProperties();
                 FixtureRigProps r = p->fixtureRigProps(fid);
                 r.pipeId = Pipe::invalidId();
+                p->setFixtureRigProps(fid, r);
+                updateFixture(fid);
+                m_doc->setModified();
+                emit mapStructureChanged();
+            });
+        }
+
+        // Mount on a tower shelf ▶ (tower → shelf N; sits at the shelf centre).
+        QMenu *towerMenu = menu.addMenu(tr("Mount on Tower"));
+        const QList<Tower *> towers = props->towers();
+        if (towers.isEmpty())
+            towerMenu->setEnabled(false);
+        for (Tower *tw : towers)
+        {
+            if (tw == nullptr)
+                continue;
+            QMenu *shelves = towerMenu->addMenu(tw->name().isEmpty()
+                                                ? tr("Tower %1").arg(tw->id()) : tw->name());
+            if (tw->shelfCount() == 0)
+                shelves->addAction(tr("(no shelves — add in the editor)"))->setEnabled(false);
+            const quint32 twid = tw->id();
+            for (int si = 0; si < tw->shelfCount(); ++si)
+            {
+                QAction *a = shelves->addAction(tr("Shelf %1").arg(si + 1));
+                a->setCheckable(true);
+                a->setChecked(rp.towerId == twid && rp.towerShelf == si);
+                connect(a, &QAction::triggered, this, [this, fid, twid, si]() {
+                    MonitorProperties *p = m_doc->monitorProperties();
+                    Tower *t = p->tower(twid);
+                    if (t == nullptr) return;
+                    FixtureRigProps r = p->fixtureRigProps(fid);
+                    r.trussId = Truss::invalidId();
+                    r.riserPlatformId = FixtureRigProps::invalidPlatformId();
+                    r.deckPlatformId = FixtureRigProps::invalidPlatformId();
+                    r.pipeId = Pipe::invalidId();
+                    r.towerId = twid;
+                    r.towerShelf = si;
+                    r.towerU = t->width() * 0.5f;   // shelf centre
+                    r.towerV = t->depth() * 0.5f;
+                    p->setFixtureRigProps(fid, r);
+                    updateFixture(fid);
+                    m_doc->setModified();
+                    emit mapStructureChanged();
+                });
+            }
+        }
+        if (rp.towerId != Tower::invalidId())
+        {
+            QAction *detachTower = menu.addAction(tr("Remove from Tower"));
+            connect(detachTower, &QAction::triggered, this, [this, fid]() {
+                MonitorProperties *p = m_doc->monitorProperties();
+                FixtureRigProps r = p->fixtureRigProps(fid);
+                r.towerId = Tower::invalidId();
                 p->setFixtureRigProps(fid, r);
                 updateFixture(fid);
                 m_doc->setModified();

@@ -307,6 +307,8 @@ protected slots:
     void slotAddElectric();
     void slotAddStand();
     void slotEditStand(quint32 sid);
+    void slotAddTower();
+    void slotEditTower(quint32 tid);
 
     /** Open the platform edit dialog for the given platform ID. */
     void slotEditPlatform(quint32 pid);

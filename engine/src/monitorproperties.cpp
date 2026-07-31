@@ -148,6 +148,8 @@ void MonitorProperties::reset()
     m_pipes.clear();
     qDeleteAll(m_stands);
     m_stands.clear();
+    qDeleteAll(m_towers);
+    m_towers.clear();
     qDeleteAll(m_stageTargets);
     m_stageTargets.clear();
     m_rigProps.clear();
@@ -1151,6 +1153,30 @@ void MonitorProperties::recomputeStandMounts()
     }
 }
 
+quint32 MonitorProperties::nextTowerId() const
+{
+    quint32 id = 0;
+    while (m_towers.contains(id))
+        ++id;
+    return id;
+}
+
+Tower *MonitorProperties::addTower()
+{
+    quint32 id = nextTowerId();
+    Tower *t = new Tower(id, this);
+    m_towers.insert(id, t);
+    return t;
+}
+
+void MonitorProperties::removeTower(quint32 id)
+{
+    for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
+        if (it->towerId == id)
+            it->towerId = UINT_MAX;
+    delete m_towers.take(id);
+}
+
 float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
 {
     float h = 0.0f;
@@ -1287,6 +1313,12 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         p.setY(p.y() - r * float(qCos(th)));
         return p;
     }
+
+    // Tower-shelf mount: sits on a tower shelf at (towerU, towerV) in the
+    // footprint, at the shelf height. Derived so it follows the tower.
+    const Tower *tw = (rp.towerId != Tower::invalidId()) ? m_towers.value(rp.towerId, nullptr) : nullptr;
+    if (tw != nullptr)
+        return tw->shelfPos(rp.towerShelf, rp.towerU, rp.towerV);
 
     // Deck mount: standing on top of a platform. Keep the free XY, derive Z from
     // the platform's top height (+ offset) so it follows the platform.
@@ -1690,6 +1722,19 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 delete s;
             }
         }
+        else if (root.name() == QStringLiteral("Tower"))
+        {
+            Tower *t = new Tower(nextTowerId(), this);
+            if (t->loadXML(root) && !m_towers.contains(t->id()))
+            {
+                m_towers.insert(t->id(), t);
+            }
+            else
+            {
+                qWarning() << "Discarding tower with missing or duplicate id" << t->id();
+                delete t;
+            }
+        }
         else if (root.name() == QStringLiteral("StageTarget"))
         {
             StageTarget *t = new StageTarget(nextStageTargetId(), this);
@@ -1746,6 +1791,13 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.pipeId     = a.value("Boom").toUInt();
                 rp.pipeOffset = a.value("BoomOfs").toFloat();
                 rp.pipeAngle  = a.value("BoomAng").toFloat();
+            }
+            if (a.hasAttribute("Tower"))
+            {
+                rp.towerId    = a.value("Tower").toUInt();
+                rp.towerShelf = a.value("TShelf").toInt();
+                rp.towerU     = a.value("TU").toFloat();
+                rp.towerV     = a.value("TV").toFloat();
             }
             m_rigProps[fid] = rp;
             root.skipCurrentElement();
@@ -2104,6 +2156,10 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     foreach (const Stand *s, m_stands)
         s->saveXML(doc);
 
+    // Towers
+    foreach (const Tower *t, m_towers)
+        t->saveXML(doc);
+
     // Stage targets
     foreach (const StageTarget *t, m_stageTargets)
         t->saveXML(doc);
@@ -2145,6 +2201,13 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("Boom"),    QString::number(rp.pipeId));
             doc->writeAttribute(QStringLiteral("BoomOfs"), QString::number(double(rp.pipeOffset), 'f', 3));
             doc->writeAttribute(QStringLiteral("BoomAng"), QString::number(double(rp.pipeAngle), 'f', 1));
+        }
+        if (rp.onTower())
+        {
+            doc->writeAttribute(QStringLiteral("Tower"),  QString::number(rp.towerId));
+            doc->writeAttribute(QStringLiteral("TShelf"), QString::number(rp.towerShelf));
+            doc->writeAttribute(QStringLiteral("TU"),     QString::number(double(rp.towerU), 'f', 3));
+            doc->writeAttribute(QStringLiteral("TV"),     QString::number(double(rp.towerV), 'f', 3));
         }
         if (!rp.groupLocal.isNull())
         {

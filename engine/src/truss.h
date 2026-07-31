@@ -42,7 +42,7 @@ public:
     enum TrussType
     {
         Horizontal = 0, ///< Fixed Z (and one of X/Y); free along direction vector
-        Vertical,       ///< Fixed X, Y; free in Z (tower / boom)
+        Vertical,       ///< Fixed X, Y; free in Z (tower / pipe)
         Ground          ///< Z = 0; free X, Y (floor fixtures)
     };
 
@@ -127,7 +127,7 @@ public:
      *    - parentOffset : ALONG the parent (metres from the parent's origin).
      *    - barFace      : which face of the truss it rides (stage-relative).
      *    - barStandoff  : distance off that face (0 = on the face).
-     *    - barRun       : Along (parallel) / Across (perpendicular boom) / Drop.
+     *    - barRun       : Along (parallel) / Across (perpendicular pipe) / Drop.
      *  invalidId() parent = a free, independently-placed truss. */
     enum BarFace { FaceBottom = 0, FaceTop = 1, FaceDownstage = 2,
                    FaceUpstage = 3, FaceStageRight = 4, FaceStageLeft = 5 };
@@ -256,17 +256,26 @@ struct FixtureRigProps
     int              studioMount = 1;              ///< default: front face
     float            studioAngle = 0.0f;
 
-    /** Boom mount. When boomId is valid the fixture rides a boom's pipe at
-     *  boomOffset metres up from the base, facing boomAngle degrees around it.
-     *  Its world position is DERIVED from the boom so it follows it. */
-    quint32          boomId     = UINT_MAX;        ///< invalid = not boom-mounted
-    float            boomOffset = 0.0f;            ///< metres up the pipe from the base
-    float            boomAngle  = 0.0f;            ///< facing degrees around the pipe
+    /** Boom mount. When pipeId is valid the fixture rides a pipe's pipe at
+     *  pipeOffset metres up from the base, facing pipeAngle degrees around it.
+     *  Its world position is DERIVED from the pipe so it follows it. */
+    quint32          pipeId     = UINT_MAX;        ///< invalid = not pipe-mounted
+    float            pipeOffset = 0.0f;            ///< metres up the pipe from the base
+    float            pipeAngle  = 0.0f;            ///< facing degrees around the pipe
+
+    /** Tower-shelf mount. When towerId is valid the fixture sits on a tower's
+     *  shelf at (towerU, towerV) metres into the footprint. Derived from the
+     *  tower geometry so it follows. */
+    quint32          towerId    = UINT_MAX;        ///< invalid = not tower-mounted
+    int              towerShelf = 0;               ///< shelf index
+    float            towerU     = 0.0f;            ///< metres across the footprint (X)
+    float            towerV     = 0.0f;            ///< metres into the footprint (Y)
 
     static quint32 invalidPlatformId() { return UINT_MAX; }
     bool onRiser() const { return riserPlatformId != UINT_MAX; }
     bool onDeck()  const { return deckPlatformId  != UINT_MAX; }
-    bool onBoom()  const { return boomId != UINT_MAX; }
+    bool onPipe()  const { return pipeId != UINT_MAX; }
+    bool onTower() const { return towerId != UINT_MAX; }
     enum RiserFace { RiserFront = 0, RiserTop = 1 };
 };
 

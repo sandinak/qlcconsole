@@ -44,6 +44,7 @@ add_library(${module_name} SHARED
     stageplatform.cpp stageplatform.h
     pipe.cpp pipe.h
     stand.cpp stand.h
+    tower.cpp tower.h
     stagetarget.cpp stagetarget.h
     truss.cpp truss.h
     outputpatch.cpp outputpatch.h

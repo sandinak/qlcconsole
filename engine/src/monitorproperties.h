@@ -32,6 +32,7 @@
 #include "stageplatform.h"
 #include "pipe.h"
 #include "stand.h"
+#include "tower.h"
 #include "stagetarget.h"
 
 class QXmlStreamReader;
@@ -558,10 +559,21 @@ public:
     /** Re-derive the base of every stand-mounted pipe from its stand top. */
     void recomputeStandMounts();
 
+    /********************************************************************
+     * Towers (large box-truss + shelves)
+     ********************************************************************/
+public:
+    QList<Tower*> towers() const { return m_towers.values(); }
+    Tower *tower(quint32 id) const { return m_towers.value(id, nullptr); }
+    Tower *addTower();
+    void removeTower(quint32 id);
+    quint32 nextTowerId() const;
+
 private:
     QMap<quint32, StagePlatform*> m_platforms;
     QMap<quint32, Pipe*> m_pipes;
     QMap<quint32, Stand*> m_stands;
+    QMap<quint32, Tower*> m_towers;
 
     /********************************************************************
      * Background / scenic images (placeable objects)

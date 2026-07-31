@@ -35,6 +35,7 @@ class TrussItem;
 class PlatformItem;
 class PipeItem;
 class StandItem;
+class TowerItem;
 class PowerSourceItem;
 class TargetItem;
 class MonitorImageItem;
@@ -478,6 +479,7 @@ protected slots:
     void slotPlatformMoved(PlatformItem *item);
     void slotPipeMoved(PipeItem *item);
     void slotStandMoved(StandItem *item);
+    void slotTowerMoved(TowerItem *item);
 
     /** Slot called when a PowerSourceItem is dropped after a drag */
     void slotPowerSourceMoved(PowerSourceItem *item);
@@ -578,6 +580,7 @@ signals:
     void platformDoubleClicked(quint32 pid);
     void pipeDoubleClicked(quint32 pipeId);
     void standDoubleClicked(quint32 standId);
+    void towerDoubleClicked(quint32 towerId);
 
     /** Signal emitted when the user right-clicks empty canvas space */
     void contextMenuRequested(QPointF scenePos);
@@ -656,6 +659,7 @@ private:
     QHash <quint32, PlatformItem*> m_platformItems;
     QHash <quint32, PipeItem*> m_pipeItems;
     QHash <quint32, StandItem*> m_standItems;
+    QHash <quint32, TowerItem*> m_towerItems;
 
     /** Power-source markers, indexed positionally to PowerDistribution::sources(). */
     QList <PowerSourceItem*> m_powerSourceItems;
