@@ -97,6 +97,7 @@ add_library(${module_name}
     monitor/studiotemplate.cpp monitor/studiotemplate.h
     monitor/studiocomponentbrowser.cpp monitor/studiocomponentbrowser.h
     monitor/studioplaneview.cpp monitor/studioplaneview.h
+    monitor/structurestudioview.cpp monitor/structurestudioview.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h

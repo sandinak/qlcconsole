@@ -59,6 +59,7 @@
 #include "monitorgraphicsview.h"
 #include "studiogroupeditor.h"
 #include "studioplaneview.h"
+#include "structurestudioview.h"
 #include "studiocomponentbrowser.h"
 #include "studiotemplate.h"
 #include "monitorproperties.h"
@@ -3011,6 +3012,29 @@ void App::captureScenarioIfRequested()
                 {
                     save(dlg, "studio_top");
                 }
+            }
+        }
+
+        // Optionally grab the structure Studio canvas (stand/tower/truss).
+        // QLC_SHOT_STRUCTURE = "kind:id" (kind 0=Stand,1=Tower,2=Truss), one PNG
+        // per plane.
+        const QByteArray structEnv = qgetenv("QLC_SHOT_STRUCTURE");
+        if (structEnv.isEmpty() == false && m_doc != NULL)
+        {
+            const QList<QByteArray> parts = structEnv.split(':');
+            const int kind = parts.value(0).toInt();
+            const quint32 sid = parts.value(1).toUInt();
+            StructureStudioView *sv = new StructureStudioView(
+                m_doc, StructureStudioView::Kind(kind), sid, this);
+            sv->resize(720, 560);
+            sv->show();
+            qApp->processEvents();
+            static const char *pn[3] = { "top", "front", "side" };
+            for (int pl = 0; pl < 3; ++pl)
+            {
+                sv->setPlane(StructureStudioView::Plane(pl));
+                qApp->processEvents();
+                save(sv, QString("structure_%1").arg(pn[pl]));
             }
         }
 

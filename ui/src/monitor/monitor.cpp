@@ -98,6 +98,7 @@
 #include "pipe.h"
 #include "stand.h"
 #include "tower.h"
+#include "structurestudioview.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "qlcpalette.h"
@@ -366,9 +367,9 @@ void Monitor::initGraphicsView()
     connect(m_graphicsView, &MonitorGraphicsView::pipeDoubleClicked,
             this, &Monitor::slotEditPipe);
     connect(m_graphicsView, &MonitorGraphicsView::standDoubleClicked,
-            this, &Monitor::slotEditStand);
+            this, &Monitor::slotStudioForStand);
     connect(m_graphicsView, &MonitorGraphicsView::towerDoubleClicked,
-            this, &Monitor::slotEditTower);
+            this, &Monitor::slotStudioForTower);
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
@@ -2059,7 +2060,70 @@ void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
 
 void Monitor::slotTrussDoubleClicked(quint32 tid)
 {
-    slotEditTruss(tid);
+    slotStudioForTruss(tid);
+}
+
+void Monitor::slotStudioForStand(quint32 sid) { openStructureStudio(0, sid); }
+void Monitor::slotStudioForTower(quint32 tid) { openStructureStudio(1, tid); }
+void Monitor::slotStudioForTruss(quint32 tid) { openStructureStudio(2, tid); }
+
+void Monitor::openStructureStudio(int kind, quint32 id)
+{
+    QString title, geomLabel;
+    switch (kind)
+    {
+    case 0: { Stand *s = m_props->stand(id); if (!s) return;
+              title = tr("Lighting Studio — %1").arg(s->name()); geomLabel = tr("Edit Stand…"); break; }
+    case 1: { Tower *t = m_props->tower(id); if (!t) return;
+              title = tr("Lighting Studio — %1").arg(t->name()); geomLabel = tr("Edit Tower…"); break; }
+    default:{ Truss *t = m_props->truss(id); if (!t) return;
+              title = tr("Lighting Studio — %1").arg(t->name()); geomLabel = tr("Edit Truss…"); break; }
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(title);
+    dlg.setMinimumSize(560, 480);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+
+    // Plane toolbar.
+    QHBoxLayout *bar = new QHBoxLayout;
+    bar->addWidget(new QLabel(tr("View:"), &dlg));
+    QComboBox *planeCombo = new QComboBox(&dlg);
+    planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
+    bar->addWidget(planeCombo);
+    bar->addStretch();
+    QPushButton *geomBtn = new QPushButton(geomLabel, &dlg);
+    bar->addWidget(geomBtn);
+    vl->addLayout(bar);
+
+    StructureStudioView *view = new StructureStudioView(
+        m_doc, StructureStudioView::Kind(kind), id, &dlg);
+    planeCombo->setCurrentIndex(int(view->plane()));
+    vl->addWidget(view, 1);
+
+    QLabel *hint = new QLabel(
+        tr("Shift-drag or middle-drag to pan · wheel to zoom · double-click a "
+           "fixture to edit it."), &dlg);
+    hint->setStyleSheet("color:#8a8e99;");
+    vl->addWidget(hint);
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+    vl->addWidget(bb);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+
+    connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });
+    connect(view, &StructureStudioView::fixtureActivated, &dlg,
+            [this](quint32 fid){ slotFixtureDoubleClicked(fid); });
+    connect(geomBtn, &QPushButton::clicked, &dlg, [this, kind, id, view]() {
+        if (kind == 0)      slotEditStand(id);
+        else if (kind == 1) slotEditTower(id);
+        else                slotEditTruss(id);
+        view->reload();   // geometry may have changed
+    });
+
+    dlg.exec();
 }
 
 void Monitor::slotTrussRemoveRequested(quint32 tid)

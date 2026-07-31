@@ -1,0 +1,96 @@
+/*
+  Q Light Controller Plus
+  structurestudioview.h
+
+  Lighting Studio — structure canvas. An orthographic Top/Front/Side view of a
+  single rigging STRUCTURE (a Stand + its booms/bars, a Tower + its shelves, or a
+  Truss + its base plate) with the fixtures mounted on it drawn in place. Unlike
+  StudioPlaneView (which works in a studio group's LOCAL frame), this projects
+  WORLD coordinates, so it can show any placeable structure and everything on it.
+
+  Projection (metres → in-plane a,b):
+    - Top   : a = X (stage right +),  b = Y (upstage +, screen-down)
+    - Front : a = X,                  b = Z (height, screen-up)
+    - Side  : a = Y,                  b = Z (height, screen-up)
+
+  Slice 1 is a read-only reference drawing; dragging/adding land in later slices.
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+*/
+
+#ifndef STRUCTURESTUDIOVIEW_H
+#define STRUCTURESTUDIOVIEW_H
+
+#include <QWidget>
+#include <QVector3D>
+#include <QList>
+
+class Doc;
+
+/** \addtogroup ui_mon DMX Monitor
+ * @{
+ */
+
+class StructureStudioView : public QWidget
+{
+    Q_OBJECT
+
+public:
+    enum Kind  { StandKind = 0, TowerKind = 1, TrussKind = 2 };
+    enum Plane { Top = 0, Front = 1, Side = 2 };
+
+    StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent = nullptr);
+
+    void setPlane(Plane p);
+    Plane plane() const { return m_plane; }
+
+    /** Re-gather the structure + its fixtures and repaint (after external edits). */
+    void reload();
+
+signals:
+    /** A fixture on the structure was double-clicked (id passed through). */
+    void fixtureActivated(quint32 fid);
+
+protected:
+    void paintEvent(QPaintEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
+    void wheelEvent(QWheelEvent *) override;
+    void mousePressEvent(QMouseEvent *) override;
+    void mouseMoveEvent(QMouseEvent *) override;
+    void mouseReleaseEvent(QMouseEvent *) override;
+    void mouseDoubleClickEvent(QMouseEvent *) override;
+
+private:
+    QPointF project(const QVector3D &w) const;      ///< world → in-plane (a,b) metres
+    QPointF w2s(const QVector3D &w) const;           ///< world → screen pixels
+    void refit();                                    ///< scale/centre to fit everything
+    void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame
+
+    void drawGrid(QPainter &p) const;
+    void drawStructure(QPainter &p) const;
+    void drawPipe(QPainter &p, const class Pipe *pipe) const;
+    void drawFixtures(QPainter &p) const;
+    quint32 hitTestFixture(const QPointF &px) const;
+
+    QList<quint32> mountedFixtures() const;          ///< fixtures on this structure
+    QList<const class Pipe *> standPipes() const;    ///< pipes on this stand (Kind==Stand)
+
+private:
+    Doc     *m_doc;
+    Kind     m_kind;
+    quint32  m_id;
+    Plane    m_plane = Front;
+
+    double   m_scale = 60.0;    ///< pixels per metre
+    QPointF  m_originPx;        ///< where world (a=0,b=0) lands on screen
+    bool     m_panning = false;
+    QPointF  m_panLast;
+};
+
+/** @} */
+
+#endif // STRUCTURESTUDIOVIEW_H
