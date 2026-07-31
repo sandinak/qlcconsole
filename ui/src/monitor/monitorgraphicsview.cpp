@@ -1471,6 +1471,32 @@ void MonitorGraphicsView::refreshItemLayerState()
         applySelectable(it.value(), !lyr.locked);
     }
 
+    // Pipes (booms/electrics), Stands and Towers — same rule as platforms.
+    foreach (PipeItem *bi, m_pipeItems)
+    {
+        Pipe *p = bi->pipe();
+        const MonitorProperties::MonitorLayer lyr = props->layer(p ? p->layerId() : 0);
+        bi->setVisible(lyr.visible);
+        bi->setMovable(!m_layoutLocked && !(p && p->locked()) && !lyr.locked);
+        applySelectable(bi, !lyr.locked);
+    }
+    foreach (StandItem *si, m_standItems)
+    {
+        Stand *s = si->stand();
+        const MonitorProperties::MonitorLayer lyr = props->layer(s ? s->layerId() : 0);
+        si->setVisible(lyr.visible);
+        si->setMovable(!m_layoutLocked && !(s && s->locked()) && !lyr.locked);
+        applySelectable(si, !lyr.locked);
+    }
+    foreach (TowerItem *twi, m_towerItems)
+    {
+        Tower *tw = twi->tower();
+        const MonitorProperties::MonitorLayer lyr = props->layer(tw ? tw->layerId() : 0);
+        twi->setVisible(lyr.visible);
+        twi->setMovable(!m_layoutLocked && !(tw && tw->locked()) && !lyr.locked);
+        applySelectable(twi, !lyr.locked);
+    }
+
     // Elevation (Front/Side) views are read-only — EXCEPT bars we allow to be
     // dragged there for WYSIWYG placement (tower crossbars in Front).
     if (isElevation())
@@ -1481,6 +1507,9 @@ void MonitorGraphicsView::refreshItemLayerState()
         foreach (PlatformItem *i, m_platformItems)       i->setMovable(false);
         foreach (PowerSourceItem *i, m_powerSourceItems) i->setMovable(false);
         foreach (TargetItem *i, m_targetItems)           i->setMovable(false);
+        foreach (PipeItem *i, m_pipeItems)               i->setMovable(false);
+        foreach (StandItem *i, m_standItems)             i->setMovable(false);
+        foreach (TowerItem *i, m_towerItems)             i->setMovable(false);
     }
 }
 
@@ -1716,9 +1745,12 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     // view (top too — they sit on the riser's edge/face). Free/truss fixtures
     // keep their stored XY in top view and use the 3-D rig pos in elevation.
     const FixtureRigProps frp = m_doc->monitorProperties()->fixtureRigProps(id);
-    // Riser- and pipe-mounted fixtures derive their position from the structure
-    // in EVERY view (they follow it), so centre the icon on the derived point.
-    const bool riser = frp.onRiser() || frp.onPipe() || frp.onTower();
+    // Riser-, pipe-, tower- and STUDIO-FRAME fixtures derive their position from
+    // the structure/frame in EVERY view (they follow it), so centre the icon on
+    // the derived point — otherwise the top view shows the stale stored XY (e.g.
+    // a studio group distributed on a step looked un-distributed in 2D).
+    const bool riser = frp.onRiser() || frp.onPipe() || frp.onTower()
+                       || m_doc->monitorProperties()->fixtureFrameGroup(id) != 0;
     // A truss-bound fixture's stored position is the point ON the truss line, so
     // centre the icon on it (like risers) instead of pinning its top-left corner.
     const bool onTruss = (frp.trussId != Truss::invalidId());
