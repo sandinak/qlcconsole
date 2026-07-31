@@ -81,6 +81,17 @@ public:
     void  setBaseRadius(float r) { m_baseRadius = (r >= 0.0f) ? r : 0.0f; }
     bool  hasStand() const { return m_baseRadius > 0.0f; }
 
+    /** Parent truss for a truss-hung boom (drop-arm). When set, the boom's base
+     *  position is DERIVED from the truss at trussOffset metres along it — the
+     *  pipe rises to that point and hangs below it (no stand). invalid = a
+     *  free-standing boom placed by its own origin. Derived in
+     *  MonitorProperties::recomputeBoomAnchors(). */
+    quint32 parentTrussId() const { return m_parentTrussId; }
+    void    setParentTrussId(quint32 id) { m_parentTrussId = id; }
+    float   trussOffset() const { return m_trussOffset; }
+    void    setTrussOffset(float m) { m_trussOffset = m; }
+    bool    isTrussHung() const { return m_parentTrussId != invalidId(); }
+
     /** World position at @p offset metres up the pipe from the base. */
     QVector3D positionAt(float offset) const;
 
@@ -114,6 +125,8 @@ private:
     float   m_height     = 3.0f;    ///< ~10 ft pipe
     float   m_diameter   = 0.048f;  ///< ~1.9" pipe
     float   m_baseRadius = 0.40f;   ///< tripod/round base footprint
+    quint32 m_parentTrussId = UINT_MAX;  ///< truss this boom hangs from (invalid = free)
+    float   m_trussOffset   = 0.0f;      ///< metres along the parent truss
     QColor  m_color;
     bool    m_locked     = false;
     quint32 m_layerId    = 0;

@@ -23,6 +23,8 @@
 #define KXMLBoomHeight      QStringLiteral("Height")
 #define KXMLBoomDiameter    QStringLiteral("Diameter")
 #define KXMLBoomBaseRadius  QStringLiteral("BaseRadius")
+#define KXMLBoomParentTruss QStringLiteral("ParentTruss")
+#define KXMLBoomTrussOffset QStringLiteral("TrussOffset")
 #define KXMLBoomColor       QStringLiteral("Color")
 #define KXMLBoomLocked      QStringLiteral("Locked")
 #define KXMLBoomLayerId     QStringLiteral("LayerId")
@@ -54,6 +56,8 @@ bool Boom::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLBoomHeight))     setHeight(a.value(KXMLBoomHeight).toFloat());
     if (a.hasAttribute(KXMLBoomDiameter))   setDiameter(a.value(KXMLBoomDiameter).toFloat());
     if (a.hasAttribute(KXMLBoomBaseRadius)) setBaseRadius(a.value(KXMLBoomBaseRadius).toFloat());
+    if (a.hasAttribute(KXMLBoomParentTruss)) m_parentTrussId = a.value(KXMLBoomParentTruss).toUInt();
+    if (a.hasAttribute(KXMLBoomTrussOffset)) m_trussOffset   = a.value(KXMLBoomTrussOffset).toFloat();
     if (a.hasAttribute(KXMLBoomColor))      m_color   = QColor(a.value(KXMLBoomColor).toString());
     if (a.hasAttribute(KXMLBoomLocked))     m_locked  = (a.value(KXMLBoomLocked).toString() == "true");
     if (a.hasAttribute(KXMLBoomLayerId))    m_layerId = a.value(KXMLBoomLayerId).toUInt();
@@ -75,6 +79,11 @@ bool Boom::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLBoomHeight,     QString::number(double(m_height),     'f', 3));
     doc->writeAttribute(KXMLBoomDiameter,   QString::number(double(m_diameter),   'f', 3));
     doc->writeAttribute(KXMLBoomBaseRadius, QString::number(double(m_baseRadius), 'f', 3));
+    if (m_parentTrussId != UINT_MAX)
+    {
+        doc->writeAttribute(KXMLBoomParentTruss, QString::number(m_parentTrussId));
+        doc->writeAttribute(KXMLBoomTrussOffset, QString::number(double(m_trussOffset), 'f', 3));
+    }
     if (m_color.isValid())
         doc->writeAttribute(KXMLBoomColor, m_color.name());
     if (m_locked)

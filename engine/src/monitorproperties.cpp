@@ -985,6 +985,26 @@ void MonitorProperties::recomputeChildTrusses()
         if (!changed)
             break;
     }
+    recomputeBoomAnchors();
+}
+
+void MonitorProperties::recomputeBoomAnchors()
+{
+    foreach (Boom *b, m_booms)
+    {
+        if (!b->isTrussHung())
+            continue;
+        Truss *t = m_trusses.value(b->parentTrussId(), nullptr);
+        if (t == nullptr)
+            continue;
+        // Pipe TOP sits at the truss point; the base (bottom) hangs below it by
+        // the pipe height. A truss-hung boom has no stand.
+        const QVector3D p = t->positionAt(b->trussOffset());
+        b->setOriginX(p.x());
+        b->setOriginY(p.y());
+        b->setBaseZ(qMax(0.0f, p.z() - b->height()));
+        b->setBaseRadius(0.0f);
+    }
 }
 
 void MonitorProperties::removeTruss(quint32 id)

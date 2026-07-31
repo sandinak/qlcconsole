@@ -484,6 +484,10 @@ public:
      *  once after load. Iterates a few passes so a bar-on-a-bar also settles. */
     void recomputeChildTrusses();
 
+    /** Re-derive the base position of every truss-hung boom from its parent
+     *  truss (pipe top at the truss point, hanging below). */
+    void recomputeBoomAnchors();
+
     /** Re-slave every platform-anchored studio group's local frame to its
      *  platform (origin = the platform's reference corner, no rotation), so
      *  members follow the platform when it moves. Call after any platform

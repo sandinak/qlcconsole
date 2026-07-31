@@ -2483,6 +2483,22 @@ void Monitor::slotEditBoom(quint32 bid)
     connect(standChk, &QCheckBox::toggled, brSpin, &QWidget::setEnabled);
     form->addRow(QString(), standChk);
     form->addRow(tr("Base radius:"), brSpin);
+
+    // Hang from a truss (drop-arm): base is derived from the truss, pipe hangs
+    // below the attach point; overrides position/stand.
+    QComboBox *trussCombo = new QComboBox(&dlg);
+    trussCombo->addItem(tr("(free-standing)"), quint32(Truss::invalidId()));
+    foreach (Truss *t, m_props->trusses())
+    {
+        if (t == NULL || t->isChildBar())
+            continue;
+        trussCombo->addItem(t->name().isEmpty() ? tr("Truss %1").arg(t->id()) : t->name(), t->id());
+        if (t->id() == b->parentTrussId())
+            trussCombo->setCurrentIndex(trussCombo->count() - 1);
+    }
+    form->addRow(tr("Hang from truss:"), trussCombo);
+    QDoubleSpinBox *trussOffSpin = mkSpin(b->trussOffset(), 0.0, isFeet ? 200.0 : 60.0);
+    form->addRow(tr("Along truss:"), trussOffSpin);
     vl->addLayout(form);
 
     // Fixtures mounted on this boom — per-fixture height up the pipe + facing angle.
@@ -2532,6 +2548,18 @@ void Monitor::slotEditBoom(quint32 bid)
     b->setHeight(float(hSpin->value() * fromDisp));
     b->setBaseZ(float(bzSpin->value() * fromDisp));
     b->setBaseRadius(standChk->isChecked() ? float(brSpin->value() * fromDisp) : 0.0f);
+
+    const quint32 tid = trussCombo->currentData().toUInt();
+    if (tid != Truss::invalidId())
+    {
+        b->setParentTrussId(tid);
+        b->setTrussOffset(float(trussOffSpin->value() * fromDisp));
+    }
+    else
+    {
+        b->setParentTrussId(Truss::invalidId());
+    }
+    m_props->recomputeBoomAnchors();   // derive base from the truss if hung
 
     for (int i = 0; i < mounted.size(); ++i)
     {
