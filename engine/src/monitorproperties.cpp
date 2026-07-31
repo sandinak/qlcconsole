@@ -989,8 +989,11 @@ void MonitorProperties::recomputeChildTrusses()
         if (!changed)
             break;
     }
-    recomputePipeAnchors();
+    // Stands first (they set a stand-mounted boom's base), then pipe anchors
+    // (truss-hung + bars-on-pipes, which derive from a parent whose base the
+    // above passes have already resolved).
     recomputeStandMounts();
+    recomputePipeAnchors();
 }
 
 void MonitorProperties::recomputePipeAnchors()
@@ -1009,6 +1012,23 @@ void MonitorProperties::recomputePipeAnchors()
         b->setOriginY(p.y());
         b->setBaseZ(qMax(0.0f, p.z() - b->height()));
         b->setBaseRadius(0.0f);
+    }
+
+    // Bars/crossbars hung on another pipe (e.g. a horizontal crossbar on a
+    // vertical boom). Separate pass so the parent's base — possibly itself
+    // stand-mounted or truss-hung above — is already resolved.
+    foreach (Pipe *b, m_pipes)
+    {
+        if (!b->isBarOnPipe())
+            continue;
+        Pipe *parent = m_pipes.value(b->parentPipeId(), nullptr);
+        if (parent == nullptr || parent == b)
+            continue;
+        const QVector3D p = parent->positionAt(b->parentPipeOffset());
+        b->setOriginX(p.x());
+        b->setOriginY(p.y());
+        b->setBaseZ(p.z());
+        b->setBaseRadius(0.0f);   // the parent pipe carries it
     }
 }
 
@@ -1107,6 +1127,11 @@ void MonitorProperties::removePipe(quint32 id)
     for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
         if (it->pipeId == id)
             it->pipeId = UINT_MAX;
+
+    // Detach any crossbars hung on this pipe — they stay put as free bars.
+    foreach (Pipe *p, m_pipes)
+        if (p->parentPipeId() == id)
+            p->setParentPipeId(Pipe::invalidId());
 
     delete m_pipes.take(id);
 }

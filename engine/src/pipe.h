@@ -114,6 +114,15 @@ public:
     void    setStandId(quint32 id) { m_standId = id; }
     bool    isStandMounted() const { return m_standId != invalidId(); }
 
+    /** Parent PIPE for a bar/crossbar hung on another pipe (e.g. a horizontal
+     *  crossbar on a vertical boom). Base derived from the parent at
+     *  parentPipeOffset metres along it. invalid = not a bar-on-pipe. */
+    quint32 parentPipeId() const { return m_parentPipeId; }
+    void    setParentPipeId(quint32 id) { m_parentPipeId = id; }
+    float   parentPipeOffset() const { return m_parentPipeOffset; }
+    void    setParentPipeOffset(float m) { m_parentPipeOffset = m; }
+    bool    isBarOnPipe() const { return m_parentPipeId != invalidId(); }
+
     /** World position at @p offset metres from the pipe start. */
     QVector3D positionAt(float offset) const
     {
@@ -156,6 +165,8 @@ private:
     quint32     m_parentTrussId = UINT_MAX;
     float       m_trussOffset   = 0.0f;
     quint32     m_standId     = UINT_MAX;
+    quint32     m_parentPipeId = UINT_MAX;
+    float       m_parentPipeOffset = 0.0f;
     QColor      m_color;
     bool        m_locked     = false;
     quint32     m_layerId    = 0;

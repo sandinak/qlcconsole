@@ -568,6 +568,9 @@ signals:
      *  truss. @p offset < 0 means "use a sensible default (mid-span)". */
     void addBarToTrussRequested(quint32 parentTrussId, float offset);
 
+    /** Emitted from a vertical boom's context menu — hang a crossbar on it. */
+    void addBarToPipeRequested(quint32 parentPipeId);
+
     /** Emitted from the platform context menu — Monitor confirms + removes it. */
     void platformRemoveRequested(quint32 pid);
 

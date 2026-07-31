@@ -353,6 +353,8 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotTrussRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::addBarToTrussRequested,
             this, &Monitor::slotAddBarToTruss);
+    connect(m_graphicsView, &MonitorGraphicsView::addBarToPipeRequested,
+            this, &Monitor::slotAddBarToPipe);
     connect(m_graphicsView, &MonitorGraphicsView::platformRemoveRequested,
             this, &Monitor::slotPlatformRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::imageDoubleClicked,
@@ -2124,6 +2126,31 @@ void Monitor::slotAddBarToTruss(quint32 parentId, float offset)
     slotEditTruss(barId);   // open the editor so the run/drop can be tweaked
 }
 
+void Monitor::slotAddBarToPipe(quint32 parentPipeId)
+{
+    Pipe *parent = m_props->pipe(parentPipeId);
+    if (parent == NULL || !parent->isVertical())
+        return;
+
+    Pipe *bar = m_props->addPipe();
+    bar->setName(tr("%1 Crossbar").arg(parent->name()));
+    bar->setOrientation(Pipe::Horizontal);
+    bar->setParentPipeId(parentPipeId);
+    bar->setParentPipeOffset(parent->length());   // hang at the top of the boom
+    bar->setLength(qMin(1.0f, parent->length()));  // a short T-bar by default
+    bar->setRunAngle(0.0f);                        // runs stage-right
+    bar->setBaseRadius(0.0f);
+    bar->setColor(parent->color());
+    bar->setLayerId(parent->layerId());
+
+    m_props->recomputeChildTrusses();   // derive the bar's base from the boom
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+
+    slotEditPipe(bar->id());   // let the user set run length / offset up the boom
+}
+
 void Monitor::slotPlatformRemoveRequested(quint32 pid)
 {
     StagePlatform *p = m_props->platform(pid);
@@ -2689,6 +2716,18 @@ void Monitor::slotEditPipe(quint32 bid)
     runSpin->setValue(double(b->runAngle()));
     if (horiz)
         form->addRow(tr("Run angle:"), runSpin);
+
+    // Crossbar on a boom: how far up the parent boom it attaches. When set, the
+    // base position/stand/truss controls below are derived and don't apply.
+    const bool barOnPipe = b->isBarOnPipe();
+    QDoubleSpinBox *upBoomSpin = nullptr;
+    if (barOnPipe)
+    {
+        Pipe *pp = m_props->pipe(b->parentPipeId());
+        const double maxUp = pp ? double(pp->length()) : hMax * fromDisp;
+        upBoomSpin = mkSpin(b->parentPipeOffset(), 0.0, maxUp * toDisp);
+        form->addRow(tr("Height up boom:"), upBoomSpin);
+    }
     form->addRow(tr("Base height (Z):"), bzSpin);
 
     QCheckBox *standChk = new QCheckBox(tr("On a stand (base)"), &dlg);
@@ -2787,8 +2826,10 @@ void Monitor::slotEditPipe(quint32 bid)
         b->setParentTrussId(Truss::invalidId());
     }
     b->setStandId(standCombo->currentData().toUInt());   // invalid = free
-    m_props->recomputePipeAnchors();   // derive base from the truss if hung
-    m_props->recomputeStandMounts();   // …or from the stand if stand-mounted
+    if (barOnPipe && upBoomSpin != nullptr)
+        b->setParentPipeOffset(float(upBoomSpin->value() * fromDisp));
+    // Stands first, then truss-hung + bars-on-pipes derive from their parents.
+    m_props->recomputeChildTrusses();
 
     for (int i = 0; i < mounted.size(); ++i)
     {

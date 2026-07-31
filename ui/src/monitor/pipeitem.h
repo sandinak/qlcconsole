@@ -73,6 +73,9 @@ signals:
     /** Emitted when the user finishes a drag so the view can persist the move. */
     void itemDropped(PipeItem *item);
 
+    /** Emitted from the context menu on a vertical boom: hang a crossbar on it. */
+    void addBarRequested(quint32 pipeId);
+
 private:
     Pipe              *m_pipe;
     Doc               *m_doc;

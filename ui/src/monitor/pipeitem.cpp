@@ -187,10 +187,26 @@ void PipeItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 void PipeItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
     QMenu menu;
+    // Only a vertical boom can host a crossbar (a horizontal pipe hung on it).
+    QAction *addBarAct = nullptr;
+    if (m_pipe->isVertical())
+    {
+        addBarAct = menu.addAction(tr("Add Crossbar…"));
+        addBarAct->setToolTip(tr("Hang a horizontal crossbar on this boom; "
+                                 "it rides the boom when it moves."));
+        menu.addSeparator();
+    }
     QAction *lockAct = menu.addAction(
         m_pipe->locked() ? tr("Unlock Pipe") : tr("Lock Pipe"));
 
-    if (menu.exec(event->screenPos()) == lockAct)
+    QAction *chosen = menu.exec(event->screenPos());
+    if (chosen == nullptr)
+        return;
+    if (chosen == addBarAct)
+    {
+        emit addBarRequested(m_pipe->id());
+    }
+    else if (chosen == lockAct)
     {
         m_pipe->setLocked(!m_pipe->locked());
         const bool canMove = !m_pipe->locked();

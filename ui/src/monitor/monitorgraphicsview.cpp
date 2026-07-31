@@ -2379,6 +2379,8 @@ void MonitorGraphicsView::updatePlatforms()
         m_pipeItems.insert(b->id(), bi);
         connect(bi, &PipeItem::itemDropped,
                 this, &MonitorGraphicsView::slotPipeMoved);
+        connect(bi, &PipeItem::addBarRequested,
+                this, &MonitorGraphicsView::addBarToPipeRequested);
     }
 
     // Stands: base disc + post in Top; a vertical post in the elevations.

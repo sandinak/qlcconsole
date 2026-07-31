@@ -290,6 +290,7 @@ protected slots:
     void slotTrussDoubleClicked(quint32 tid);
     void slotTrussRemoveRequested(quint32 tid);
     void slotAddBarToTruss(quint32 parentId, float offset);
+    void slotAddBarToPipe(quint32 parentPipeId);
     void slotPlatformRemoveRequested(quint32 pid);
     void slotAddImage();
     void slotEditImage(quint32 id);
