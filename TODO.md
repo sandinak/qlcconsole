@@ -37,19 +37,24 @@ representation. Likely a small **StageStructure** base + parametric shapes, reus
 the truss geometry funnel (`fixtureRigPosition`) and the bar-on-truss / studio-group
 patterns. Write a short design doc first (à la FIXTURESTUDIO_DESIGN.md).
 
-- **Boom as a discrete object** — a vertical pipe that hosts fixtures at heights
-  along it (like a truss but vertical + a single run). Reusable/attachable.
-- **Stands with booms** — a base stand (tripod/round base) + a boom pipe on it.
-- **Trusses with booms** — a boom attached to a truss (drop-arm); the boom is the
-  same discrete boom object, parented to the truss (cf. bar-on-truss local params).
-- **House electric bars** — fixed lighting bars/electrics, both **horizontal**
-  (overhead pipe) and **vertical** (wall/side bar). Truss-like host, simpler shape.
-- **Towers** — large truss-like structures (~16" × 16" section, 8' high — CONFIRM
-  dims) with **shelves** at heights that host fixtures/props. Shelf = a horizontal
-  mounting plane (cf. platform deck) attached at a tower height.
+SHIPPED (2026-07-31, see DONE.md) — the unified **Pipe** + **Stand** + **Tower**
+object set, all fixture-hosting, 2D + elevation, editors, XML:
+- [x] **Boom** = a vertical **Pipe** (on a stand, hung from a truss, or free);
+  fixtures mount up the pipe at height + facing angle.
+- [x] **House electric** = a horizontal **Pipe** (same object, orientation flag +
+  run angle). Booms/electrics are ONE object now (resolved the bar/boom/pipe
+  overlap).
+- [x] **Stand** = a distinct placeable base; a pipe stands on it (base derived,
+  follows the stand). (Trusses/towers on stands = future.)
+- [x] **Trusses with booms** — a pipe parented to a truss (drop-arm), base derived.
+- [x] **Tower** (16" sq × 8') with **shelves** at heights; fixtures mount on a
+  shelf (towerU/V), derived from the tower.
+- Demo: `stage-structures-demo.qxw` (one of each + a fixture on the tower).
 
-Also still open from the original note: flats, drapes/legs, set pieces (lower
-priority — non-fixture-hosting scenery).
+Still open (lower priority — non-fixture-hosting scenery): flats, drapes/legs,
+set pieces. And: a Stand should also support a truss/tower (only pipes today);
+a Tower editor "Cancel" still applies (live-edit); horizontal-pipe fixtures at
+per-fixture offsets along the run.
 
 ---
 
