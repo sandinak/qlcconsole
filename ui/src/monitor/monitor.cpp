@@ -4842,6 +4842,17 @@ void Monitor::showFixtureItemEditor()
                                "(shown in Front/Side elevation views)"));
     rigForm->addRow(tr("Truss side:"), trussSideCb);
 
+    // Horizontal position across the truss: Left / Centered / Right chord. Stays
+    // attached to the truss — only slides sideways across its width.
+    QComboBox *trussCrossCb = new QComboBox;
+    trussCrossCb->addItem(tr("Left"),     -1);
+    trussCrossCb->addItem(tr("Centered"),  0);
+    trussCrossCb->addItem(tr("Right"),    +1);
+    trussCrossCb->setToolTip(tr("Horizontal position across the truss width, "
+                                "perpendicular to its run — Left/Right chord or "
+                                "centred. The fixture stays attached to the truss."));
+    rigForm->addRow(tr("Across truss:"), trussCrossCb);
+
     QComboBox *mountCb = new QComboBox;
     mountCb->addItem(tr("Top-hung"),      QVariant(int(Truss::TopHung)));
     mountCb->addItem(tr("Floor mounted"), QVariant(int(Truss::FloorMounted)));
@@ -4956,6 +4967,8 @@ void Monitor::showFixtureItemEditor()
     offsetSpin->setValue(double(rp.trussOffset) * toDisp_fx);
     mountCb->setCurrentIndex(static_cast<int>(rp.mountingType));
     trussSideCb->setCurrentIndex(trussSideCb->findData(int(rp.trussMountSide)));
+    trussCrossCb->setCurrentIndex(trussCrossCb->findData(
+        rp.trussCross < 0.0f ? -1 : (rp.trussCross > 0.0f ? +1 : 0)));
     for (int i = 0; i < deckCb->count(); ++i)
         if (deckCb->itemData(i).toUInt() == rp.deckPlatformId)
         { deckCb->setCurrentIndex(i); break; }
@@ -5351,6 +5364,15 @@ void Monitor::showFixtureItemEditor()
     newRp.trussOffset   = float(offsetSpin->value() * fromDisp_fx);
     newRp.mountingType  = static_cast<Truss::MountingType>(mountCb->currentData().toInt());
     newRp.trussMountSide = trussSideCb->currentData().toInt();
+    // Across-truss position: Left/Right map to ± half the selected truss width
+    // (onto a chord); Centered = 0.
+    {
+        const int crossSel = trussCrossCb->currentData().toInt();
+        float halfW = 0.15f;   // fallback ≈ half a 12" truss
+        if (Truss *ct = m_props->truss(newRp.trussId))
+            halfW = ct->width() * 0.5f;
+        newRp.trussCross = float(crossSel) * halfW;
+    }
     newRp.deckPlatformId = deckCb->currentData().toUInt();
     newRp.deckHeightOffset = float(deckHeightSpin->value() * fromDisp_fx);
     newRp.panZeroDir    = float(panZeroSpin->value());

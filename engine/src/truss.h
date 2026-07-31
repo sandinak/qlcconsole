@@ -238,6 +238,12 @@ struct FixtureRigProps
     enum TrussMountSide { UnderHung = 0, TopMounted = 1, Centered = 2 };
     int              trussMountSide = UnderHung;
 
+    /** Horizontal position ACROSS the truss (metres, perpendicular to the run in
+     *  the horizontal plane). 0 = on the truss centreline; negative = stage-left
+     *  side of the run, positive = stage-right side. Lets a fixture clamp to the
+     *  near/far chord (Left/Right) instead of dead-centre while staying attached. */
+    float            trussCross = 0.0f;
+
     /** Deck mount: a fixture standing ON TOP of a stage platform ("floor
      *  mounted"). Unlike a riser FACE mount it keeps its free XY position; only
      *  its Z is derived — the platform's top height plus @c deckHeightOffset
