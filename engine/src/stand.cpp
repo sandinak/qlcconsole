@@ -21,6 +21,7 @@
 #define KXMLStandOriginY    QStringLiteral("OriginY")
 #define KXMLStandHeight     QStringLiteral("Height")
 #define KXMLStandBaseRadius QStringLiteral("BaseRadius")
+#define KXMLStandRotation   QStringLiteral("Rotation")
 #define KXMLStandColor      QStringLiteral("Color")
 #define KXMLStandLocked     QStringLiteral("Locked")
 #define KXMLStandLayerId    QStringLiteral("LayerId")
@@ -45,6 +46,7 @@ bool Stand::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLStandOriginY))    m_originY = a.value(KXMLStandOriginY).toFloat();
     if (a.hasAttribute(KXMLStandHeight))     setHeight(a.value(KXMLStandHeight).toFloat());
     if (a.hasAttribute(KXMLStandBaseRadius)) setBaseRadius(a.value(KXMLStandBaseRadius).toFloat());
+    if (a.hasAttribute(KXMLStandRotation))   m_rotation = a.value(KXMLStandRotation).toFloat();
     if (a.hasAttribute(KXMLStandColor))      m_color   = QColor(a.value(KXMLStandColor).toString());
     if (a.hasAttribute(KXMLStandLocked))     m_locked  = (a.value(KXMLStandLocked).toString() == "true");
     if (a.hasAttribute(KXMLStandLayerId))    m_layerId = a.value(KXMLStandLayerId).toUInt();
@@ -63,6 +65,8 @@ bool Stand::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLStandOriginY,    QString::number(double(m_originY),    'f', 3));
     doc->writeAttribute(KXMLStandHeight,     QString::number(double(m_height),     'f', 3));
     doc->writeAttribute(KXMLStandBaseRadius, QString::number(double(m_baseRadius), 'f', 3));
+    if (m_rotation != 0.0f)
+        doc->writeAttribute(KXMLStandRotation, QString::number(double(m_rotation), 'f', 1));
     if (m_color.isValid())
         doc->writeAttribute(KXMLStandColor, m_color.name());
     if (m_locked)

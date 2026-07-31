@@ -2498,10 +2498,16 @@ void Monitor::slotEditStand(quint32 sid)
     QDoubleSpinBox *oySpin = mkSpin(s->originY(), -posR, posR);
     QDoubleSpinBox *hSpin  = mkSpin(s->height(), 0.1, hMax);
     QDoubleSpinBox *brSpin = mkSpin(s->baseRadius(), 0.05, isFeet ? 6.6 : 2.0);
+    QDoubleSpinBox *rotSpin = new QDoubleSpinBox(&dlg);
+    rotSpin->setRange(-180, 180); rotSpin->setDecimals(0); rotSpin->setSuffix(QStringLiteral("°"));
+    rotSpin->setValue(double(s->rotation()));
+    rotSpin->setToolTip(tr("Orientation of the legs on the floor — spin so they "
+                           "tuck under a riser. Doesn't re-aim what's mounted."));
     form->addRow(tr("Position X:"), oxSpin);
     form->addRow(tr("Position Y:"), oySpin);
     form->addRow(tr("Top height:"), hSpin);
     form->addRow(tr("Base radius:"), brSpin);
+    form->addRow(tr("Leg rotation:"), rotSpin);
     vl->addLayout(form);
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -2516,9 +2522,11 @@ void Monitor::slotEditStand(quint32 sid)
     s->setOriginY(float(oySpin->value() * fromDisp));
     s->setHeight(float(hSpin->value() * fromDisp));
     s->setBaseRadius(float(brSpin->value() * fromDisp));
+    s->setRotation(float(rotSpin->value()));
 
-    m_props->recomputeStandMounts();     // pipes on this stand follow
+    m_props->recomputeStandMounts();     // pipes/trusses on this stand follow
     m_graphicsView->updatePlatforms();
+    m_graphicsView->updateTrusses();     // a truss standing on it moved
     foreach (Fixture *fx, m_doc->fixtures())
         if (m_props->fixtureRigProps(fx->id()).onPipe())
             m_graphicsView->updateFixture(fx->id());
@@ -2764,6 +2772,17 @@ void Monitor::slotEditPipe(quint32 bid)
             standCombo->setCurrentIndex(standCombo->count() - 1);
     }
     form->addRow(tr("On stand:"), standCombo);
+
+    // Where up the stand the pipe/bar clamps. Off = at the stand top; on = at an
+    // explicit height along the post (a bar clamped part-way up a stand).
+    QCheckBox *standHtChk = new QCheckBox(tr("Clamp part-way up the stand"), &dlg);
+    standHtChk->setChecked(b->hasStandOffset());
+    QDoubleSpinBox *standHtSpin = mkSpin(b->hasStandOffset() ? b->standOffset() : b->baseZ(),
+                                         0.0, hMax);
+    standHtSpin->setEnabled(b->hasStandOffset());
+    connect(standHtChk, &QCheckBox::toggled, standHtSpin, &QWidget::setEnabled);
+    form->addRow(QString(), standHtChk);
+    form->addRow(tr("Height up stand:"), standHtSpin);
     vl->addLayout(form);
 
     // Fixtures mounted on this pipe — per-fixture height up the pipe + facing angle.
@@ -2826,6 +2845,9 @@ void Monitor::slotEditPipe(quint32 bid)
         b->setParentTrussId(Truss::invalidId());
     }
     b->setStandId(standCombo->currentData().toUInt());   // invalid = free
+    // <0 sentinel = mount at the stand top; else an explicit height up the post.
+    b->setStandOffset(standHtChk->isChecked()
+                          ? float(standHtSpin->value() * fromDisp) : -1.0f);
     if (barOnPipe && upBoomSpin != nullptr)
         b->setParentPipeOffset(float(upBoomSpin->value() * fromDisp));
     // Stands first, then truss-hung + bars-on-pipes derive from their parents.
@@ -3876,6 +3898,19 @@ void Monitor::slotEditTruss(quint32 tid)
     widthSpin->setValue(t->width() * toDisp_e);
     form->addRow(tr("Width:"), widthSpin);
 
+    // --- Stand on a Stand: origin rides the stand top (Origin X/Y/Z ignored) ---
+    QComboBox *standCb = new QComboBox(&editDlg);
+    standCb->addItem(tr("(free — on the floor)"), quint32(Stand::invalidId()));
+    for (Stand *st : m_props->stands())
+    {
+        standCb->addItem(st->name().isEmpty() ? tr("Stand %1").arg(st->id()) : st->name(), st->id());
+        if (st->id() == t->standId())
+            standCb->setCurrentIndex(standCb->count() - 1);
+    }
+    standCb->setToolTip(tr("Stand this truss ON a stand — its origin then rides "
+                           "the stand top and follows it."));
+    form->addRow(tr("On stand:"), standCb);
+
     // --- Bar attachment: make this truss a "bar" hung on a parent truss ---
     QComboBox *parentCb = new QComboBox(&editDlg);
     parentCb->addItem(tr("(free — not a bar)"), Truss::invalidId());
@@ -4129,6 +4164,9 @@ void Monitor::slotEditTruss(quint32 tid)
                                originZ->value() * fromDisp_e));
         const float radians = float(qDegreesToRadians(dirAngle->value()));
         t->setDirection(QPointF(qCos(radians), qSin(radians)));
+        // Stand this truss on a Stand (its origin then rides the stand top).
+        t->setStandId(standCb->currentData().toUInt());
+        m_props->recomputeStandMounts();
     }
 
     // Apply placement changes from the strip.

@@ -114,6 +114,13 @@ public:
     void    setStandId(quint32 id) { m_standId = id; }
     bool    isStandMounted() const { return m_standId != invalidId(); }
 
+    /** Height up the stand this pipe attaches at (metres). A NEGATIVE value
+     *  (the default) means "at the stand top". Lets a bar clamp ANYWHERE along
+     *  the stand's post, not only the top. Ignored unless stand-mounted. */
+    float   standOffset() const { return m_standOffset; }
+    void    setStandOffset(float m) { m_standOffset = m; }
+    bool    hasStandOffset() const { return m_standOffset >= 0.0f; }
+
     /** Parent PIPE for a bar/crossbar hung on another pipe (e.g. a horizontal
      *  crossbar on a vertical boom). Base derived from the parent at
      *  parentPipeOffset metres along it. invalid = not a bar-on-pipe. */
@@ -165,6 +172,7 @@ private:
     quint32     m_parentTrussId = UINT_MAX;
     float       m_trussOffset   = 0.0f;
     quint32     m_standId     = UINT_MAX;
+    float       m_standOffset = -1.0f;   // <0 = mount at stand top
     quint32     m_parentPipeId = UINT_MAX;
     float       m_parentPipeOffset = 0.0f;
     QColor      m_color;

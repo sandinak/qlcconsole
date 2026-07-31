@@ -63,6 +63,13 @@ public:
     float baseRadius() const { return m_baseRadius; }
     void  setBaseRadius(float r) { m_baseRadius = (r > 0.0f) ? r : 0.05f; }
 
+    /** Orientation of the LEGS/footprint on the floor (degrees, 0 = default).
+     *  Independent of what the stand carries — used to tuck the tripod legs
+     *  under a riser platform etc. Anything mounted keeps its own stage-relative
+     *  aim; only the base glyph rotates. */
+    float rotation() const { return m_rotation; }
+    void  setRotation(float deg) { m_rotation = deg; }
+
     /** World position of the stand top (mount point). */
     QVector3D topPos() const { return QVector3D(m_originX, m_originY, m_height); }
 
@@ -85,6 +92,7 @@ private:
     float   m_originY    = 0.0f;
     float   m_height     = 2.4f;    ///< ~8 ft top
     float   m_baseRadius = 0.45f;
+    float   m_rotation   = 0.0f;    ///< leg/footprint orientation (deg)
     QColor  m_color;
     bool    m_locked     = false;
     quint32 m_layerId    = 0;

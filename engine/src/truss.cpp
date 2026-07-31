@@ -175,6 +175,8 @@ bool Truss::loadXML(QXmlStreamReader &root)
             m_barRun      = (m_type == Vertical) ? RunDrop : RunAlong;
         }
     }
+    if (attrs.hasAttribute(QStringLiteral("Stand")))
+        m_standId = attrs.value(QStringLiteral("Stand")).toUInt();
 
     root.skipCurrentElement();
     return true;
@@ -210,6 +212,8 @@ bool Truss::saveXML(QXmlStreamWriter *doc) const
         if (m_barCrossShift != 0.0f)
             doc->writeAttribute(QStringLiteral("BarCross"), QString::number(double(m_barCrossShift), 'f', 3));
     }
+    if (isStandMounted())
+        doc->writeAttribute(QStringLiteral("Stand"), QString::number(m_standId));
     doc->writeEndElement();
     return true;
 }

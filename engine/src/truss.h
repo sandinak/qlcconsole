@@ -150,6 +150,13 @@ public:
     void setBarCrossShift(float m) { m_barCrossShift = m; }
     bool isChildBar() const { return m_parentTrussId != invalidId(); }
 
+    /** Stand this truss stands ON (its origin is derived from the stand top in
+     *  recomputeChildTrusses). invalid = not stand-mounted. A truss can't be
+     *  both a child bar and stand-mounted. */
+    quint32 standId() const { return m_standId; }
+    void setStandId(quint32 id) { m_standId = id; }
+    bool isStandMounted() const { return m_standId != invalidId(); }
+
     /** Compute the world-space position of a fixture whose truss-offset
      *  (metres from origin along the truss direction) is @p offset. */
     QVector3D positionAt(float offset) const;
@@ -188,6 +195,7 @@ private:
     float     m_barStandoff = 0.0f;           ///< metres off that face
     int       m_barRun = RunAlong;            ///< Along / Across / Drop
     float     m_barCrossShift = 0.0f;         ///< shift along the run (0 = centred)
+    quint32   m_standId = invalidId();        ///< stand this truss stands on
 };
 
 /** Per-fixture rig assignment.  Stored alongside MonitorProperties visual

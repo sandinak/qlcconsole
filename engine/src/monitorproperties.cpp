@@ -1158,6 +1158,10 @@ void MonitorProperties::removeStand(quint32 id)
     foreach (Pipe *p, m_pipes)
         if (p->standId() == id)
             p->setStandId(Stand::invalidId());
+    // …and any trusses that stood on it (they stay put at their last origin).
+    foreach (Truss *t, m_trusses)
+        if (t->standId() == id)
+            t->setStandId(Stand::invalidId());
     delete m_stands.take(id);
 }
 
@@ -1173,8 +1177,26 @@ void MonitorProperties::recomputeStandMounts()
         const QVector3D top = s->topPos();
         p->setOriginX(top.x());
         p->setOriginY(top.y());
-        p->setBaseZ(top.z());
+        // Mount at the stand top by default, or anywhere up the post if the
+        // pipe carries an explicit stand offset (a bar clamped along the height).
+        const float z = p->hasStandOffset()
+                            ? qBound(0.0f, p->standOffset(), s->height())
+                            : top.z();
+        p->setBaseZ(z);
         p->setBaseRadius(0.0f);   // the stand provides the base
+    }
+
+    // Trusses standing ON a stand: origin rides the stand top. The truss keeps
+    // its own type/direction/length (a vertical truss rises from there; a
+    // horizontal one lies at that height).
+    foreach (Truss *t, m_trusses)
+    {
+        if (!t->isStandMounted())
+            continue;
+        Stand *s = m_stands.value(t->standId(), nullptr);
+        if (s == nullptr)
+            continue;
+        t->setOrigin(s->topPos());
     }
 }
 

@@ -39,9 +39,14 @@ PipeItem::PipeItem(Pipe *pipe, Doc *doc,
 {
     setFlags(ItemIsSelectable | ItemSendsGeometryChanges);
     setZValue(-0.5);   // above the floor/platforms, below fixtures
+    // A pipe whose base is DERIVED from something else (a stand it's on, a truss
+    // it hangs from, or a boom it crossbars) is not independently draggable — you
+    // move its host instead, and it rides along. Only a free pipe drags.
+    const bool derived = m_pipe->isStandMounted() || m_pipe->isTrussHung()
+                         || m_pipe->isBarOnPipe();
     // Elevation views are display-only (no dragging); top view drags to reposition.
-    setFlag(ItemIsMovable, !elevation && !pipe->locked());
-    setCursor((elevation || pipe->locked()) ? Qt::ArrowCursor : Qt::SizeAllCursor);
+    setFlag(ItemIsMovable, !elevation && !pipe->locked() && !derived);
+    setCursor((elevation || pipe->locked() || derived) ? Qt::ArrowCursor : Qt::SizeAllCursor);
     setPos(pxX, pxY);
 
     const bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
@@ -70,8 +75,13 @@ quint32 PipeItem::pipeId() const
 
 void PipeItem::setMovable(bool movable)
 {
-    setFlag(ItemIsMovable, movable);
-    setCursor(movable ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    // A derived-position pipe (on a stand / hung from a truss / a crossbar) is
+    // never independently movable — it stays attached to its host.
+    const bool derived = m_pipe->isStandMounted() || m_pipe->isTrussHung()
+                         || m_pipe->isBarOnPipe();
+    const bool canMove = movable && !derived;
+    setFlag(ItemIsMovable, canMove);
+    setCursor(canMove ? Qt::SizeAllCursor : Qt::ArrowCursor);
 }
 
 void PipeItem::showLabel(bool visible)

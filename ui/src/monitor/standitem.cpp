@@ -110,12 +110,19 @@ void StandItem::paint(QPainter *painter,
     painter->setBrush(plate);
     painter->drawEllipse(QPointF(0, 0), m_pxBaseR, m_pxBaseR);
     painter->setBrush(Qt::NoBrush);
+    // Legs rotate with the stand's leg orientation so the user can tuck them
+    // under a riser. One leg is drawn bolder as a "front" reference.
+    const double rot = qDegreesToRadians(double(m_stand->rotation()));
     for (int i = 0; i < 3; ++i)   // tripod legs
     {
-        const double a = M_PI / 2.0 + i * (2.0 * M_PI / 3.0);
-        painter->drawLine(QPointF(0, 0),
-                          QPointF(qCos(a) * m_pxBaseR, qSin(a) * m_pxBaseR));
+        const double a = M_PI / 2.0 + rot + i * (2.0 * M_PI / 3.0);
+        const QPointF foot(qCos(a) * m_pxBaseR, qSin(a) * m_pxBaseR);
+        painter->setPen(QPen(i == 0 ? border.lighter(150) : border,
+                             (i == 0 ? 2.2 : 1.2)));
+        painter->drawLine(QPointF(0, 0), foot);
+        painter->drawEllipse(foot, 2.0, 2.0);   // foot pad
     }
+    painter->setPen(QPen(border, 1.2));
     painter->setBrush(border);
     painter->drawEllipse(QPointF(0, 0), 3.0, 3.0);
 }

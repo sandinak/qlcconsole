@@ -30,6 +30,7 @@
 #define KXMLPipeParentTruss QStringLiteral("ParentTruss")
 #define KXMLPipeTrussOffset QStringLiteral("TrussOffset")
 #define KXMLPipeStand       QStringLiteral("Stand")
+#define KXMLPipeStandOffset QStringLiteral("StandOffset")
 #define KXMLPipeParentPipe  QStringLiteral("ParentPipe")
 #define KXMLPipeParentPipeOfs QStringLiteral("ParentPipeOffset")
 #define KXMLPipeColor       QStringLiteral("Color")
@@ -64,6 +65,7 @@ bool Pipe::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLPipeParentTruss)) m_parentTrussId = a.value(KXMLPipeParentTruss).toUInt();
     if (a.hasAttribute(KXMLPipeTrussOffset)) m_trussOffset   = a.value(KXMLPipeTrussOffset).toFloat();
     if (a.hasAttribute(KXMLPipeStand))      m_standId = a.value(KXMLPipeStand).toUInt();
+    if (a.hasAttribute(KXMLPipeStandOffset)) m_standOffset = a.value(KXMLPipeStandOffset).toFloat();
     if (a.hasAttribute(KXMLPipeParentPipe)) m_parentPipeId = a.value(KXMLPipeParentPipe).toUInt();
     if (a.hasAttribute(KXMLPipeParentPipeOfs)) m_parentPipeOffset = a.value(KXMLPipeParentPipeOfs).toFloat();
     if (a.hasAttribute(KXMLPipeColor))      m_color   = QColor(a.value(KXMLPipeColor).toString());
@@ -96,7 +98,11 @@ bool Pipe::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLPipeTrussOffset, QString::number(double(m_trussOffset), 'f', 3));
     }
     if (m_standId != UINT_MAX)
+    {
         doc->writeAttribute(KXMLPipeStand, QString::number(m_standId));
+        if (m_standOffset >= 0.0f)
+            doc->writeAttribute(KXMLPipeStandOffset, QString::number(double(m_standOffset), 'f', 3));
+    }
     if (m_parentPipeId != UINT_MAX)
     {
         doc->writeAttribute(KXMLPipeParentPipe, QString::number(m_parentPipeId));

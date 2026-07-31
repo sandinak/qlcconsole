@@ -83,7 +83,7 @@ TrussItem::TrussItem(Truss *truss, Doc *doc, float pxLen, float pxWid,
     else
         m_label->setPos(2, -(m_pxWid / 2.0 + m_label->boundingRect().height()));
 
-    if (m_truss->locked())
+    if (m_truss->locked() || m_truss->isChildBar() || m_truss->isStandMounted())
         setFlag(ItemIsMovable, false);
 }
 
@@ -94,8 +94,11 @@ quint32 TrussItem::trussId() const
 
 void TrussItem::setMovable(bool movable)
 {
-    // Respect per-truss lock even when global lock is released.
-    bool canMove = movable && !m_truss->locked();
+    // Respect per-truss lock even when global lock is released. A truss whose
+    // origin is DERIVED (a child bar on a parent, or one standing on a stand) is
+    // never independently movable — it rides its host.
+    const bool derived = m_truss->isChildBar() || m_truss->isStandMounted();
+    bool canMove = movable && !m_truss->locked() && !derived;
     setFlag(ItemIsMovable, canMove);
     setCursor(canMove ? smallOpenHandCursor() : Qt::ArrowCursor);
 }
