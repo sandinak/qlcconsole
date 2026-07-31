@@ -30,6 +30,7 @@
 
 #include "truss.h"
 #include "stageplatform.h"
+#include "boom.h"
 #include "stagetarget.h"
 
 class QXmlStreamReader;
@@ -520,8 +521,28 @@ public:
      *  fixture dropped over a platform. */
     quint32 platformIdAt(float xMetres, float yMetres) const;
 
+    /********************************************************************
+     * Booms (vertical fixture pipes on a stand)
+     ********************************************************************/
+public:
+    /** Return all defined booms (owned by this object). */
+    QList<Boom*> booms() const { return m_booms.values(); }
+
+    /** Look up a boom by ID; returns nullptr if not found. */
+    Boom *boom(quint32 id) const { return m_booms.value(id, nullptr); }
+
+    /** Add a new boom with a unique ID. Takes ownership. */
+    Boom *addBoom();
+
+    /** Remove and delete the boom with the given ID. */
+    void removeBoom(quint32 id);
+
+    /** Next unused boom ID. */
+    quint32 nextBoomId() const;
+
 private:
     QMap<quint32, StagePlatform*> m_platforms;
+    QMap<quint32, Boom*> m_booms;
 
     /********************************************************************
      * Background / scenic images (placeable objects)

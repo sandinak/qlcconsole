@@ -33,6 +33,7 @@ class MonitorProperties;
 class MonitorFixtureItem;
 class TrussItem;
 class PlatformItem;
+class MonitorBoomItem;
 class PowerSourceItem;
 class TargetItem;
 class MonitorImageItem;
@@ -473,6 +474,7 @@ protected slots:
 
     /** Slot called when a PlatformItem is dropped after a drag */
     void slotPlatformMoved(PlatformItem *item);
+    void slotBoomMoved(MonitorBoomItem *item);
 
     /** Slot called when a PowerSourceItem is dropped after a drag */
     void slotPowerSourceMoved(PowerSourceItem *item);
@@ -647,6 +649,7 @@ private:
 
     /** Interactive platform items keyed by platform ID. */
     QHash <quint32, PlatformItem*> m_platformItems;
+    QHash <quint32, MonitorBoomItem*> m_boomItems;
 
     /** Power-source markers, indexed positionally to PowerDistribution::sources(). */
     QList <PowerSourceItem*> m_powerSourceItems;

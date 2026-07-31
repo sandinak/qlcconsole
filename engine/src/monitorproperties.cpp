@@ -144,6 +144,8 @@ void MonitorProperties::reset()
     m_trusses.clear();
     qDeleteAll(m_platforms);
     m_platforms.clear();
+    qDeleteAll(m_booms);
+    m_booms.clear();
     qDeleteAll(m_stageTargets);
     m_stageTargets.clear();
     m_rigProps.clear();
@@ -1058,6 +1060,27 @@ void MonitorProperties::removePlatform(quint32 id)
     delete m_platforms.take(id);
 }
 
+quint32 MonitorProperties::nextBoomId() const
+{
+    quint32 id = 0;
+    while (m_booms.contains(id))
+        ++id;
+    return id;
+}
+
+Boom *MonitorProperties::addBoom()
+{
+    quint32 id = nextBoomId();
+    Boom *b = new Boom(id, this);
+    m_booms.insert(id, b);
+    return b;
+}
+
+void MonitorProperties::removeBoom(quint32 id)
+{
+    delete m_booms.take(id);
+}
+
 float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
 {
     float h = 0.0f;
@@ -1558,6 +1581,19 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 delete p;
             }
         }
+        else if (root.name() == QStringLiteral("Boom"))
+        {
+            Boom *b = new Boom(nextBoomId(), this);
+            if (b->loadXML(root) && !m_booms.contains(b->id()))
+            {
+                m_booms.insert(b->id(), b);
+            }
+            else
+            {
+                qWarning() << "Discarding boom with missing or duplicate id" << b->id();
+                delete b;
+            }
+        }
         else if (root.name() == QStringLiteral("StageTarget"))
         {
             StageTarget *t = new StageTarget(nextStageTargetId(), this);
@@ -1957,6 +1993,10 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     // Stage platforms
     foreach (const StagePlatform *p, m_platforms)
         p->saveXML(doc);
+
+    // Booms
+    foreach (const Boom *b, m_booms)
+        b->saveXML(doc);
 
     // Stage targets
     foreach (const StageTarget *t, m_stageTargets)

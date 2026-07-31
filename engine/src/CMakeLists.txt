@@ -42,6 +42,7 @@ add_library(${module_name} SHARED
     venue.cpp venue.h
     aimsolver.cpp aimsolver.h
     stageplatform.cpp stageplatform.h
+    boom.cpp boom.h
     stagetarget.cpp stagetarget.h
     truss.cpp truss.h
     outputpatch.cpp outputpatch.h

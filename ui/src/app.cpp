@@ -2906,6 +2906,19 @@ void App::captureScenarioIfRequested()
                 save(tv, "timeline");
             }
 
+        // Optionally open + grab the 2D monitor window (QLC_SHOT_MONITOR=1).
+        if (qgetenv("QLC_SHOT_MONITOR") == QByteArray("1"))
+        {
+            Monitor::createAndShow(this, m_doc);
+            qApp->processEvents();
+            if (Monitor *mon = Monitor::instance())
+            {
+                mon->resize(1150, 780);
+                qApp->processEvents();
+                save(mon, "monitor");
+            }
+        }
+
         // Optionally check every collapsible-group toggle in the I/O grid and
         // grab it (QLC_SHOT_IOGROUPS=1), to verify the hidden column groups.
         if (qgetenv("QLC_SHOT_IOGROUPS") == QByteArray("1"))

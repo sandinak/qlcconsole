@@ -42,6 +42,8 @@
 #include "studiotemplate.h"
 #include "studiocomponentbrowser.h"
 #include "platformitem.h"
+#include "monitorboomitem.h"
+#include "boom.h"
 #include "powersourceitem.h"
 #include "powerdistribution.h"
 #include "targetitem.h"
@@ -2240,6 +2242,12 @@ void MonitorGraphicsView::updatePlatforms()
         delete pi;
     }
     m_platformItems.clear();
+    foreach (MonitorBoomItem *bi, m_boomItems)
+    {
+        m_scene->removeItem(bi);
+        delete bi;
+    }
+    m_boomItems.clear();
 
     MonitorProperties *props = m_doc->monitorProperties();
     if (props == nullptr || m_cellPixels == 0)
@@ -2278,7 +2286,41 @@ void MonitorGraphicsView::updatePlatforms()
                 this, &MonitorGraphicsView::slotPlatformMoved);
     }
 
+    // Booms (top view only for now — a vertical pipe is a point in plan; an
+    // elevation representation is a later slice).
+    if (m_pov == PovTop)
+    {
+        foreach (Boom *b, props->booms())
+        {
+            const float pxCX = float(m_xOffset + (b->originX() * 1000.0 * m_cellPixels) / m_unitValue);
+            const float pxCY = float(m_yOffset + (b->originY() * 1000.0 * m_cellPixels) / m_unitValue);
+            const float pxBaseR = float((b->baseRadius() * 1000.0 * m_cellPixels) / m_unitValue);
+            const float pxPipe  = float((b->diameter()  * 1000.0 * m_cellPixels) / m_unitValue);
+            MonitorBoomItem *bi = new MonitorBoomItem(b, m_doc, pxCX, pxCY, pxBaseR, pxPipe);
+            bi->setMovable(!m_layoutLocked);
+            bi->showLabel(m_doc->monitorProperties()->layer(b->layerId()).labels);
+            m_scene->addItem(bi);
+            m_boomItems.insert(b->id(), bi);
+            connect(bi, &MonitorBoomItem::itemDropped,
+                    this, &MonitorGraphicsView::slotBoomMoved);
+        }
+    }
+
     refreshItemLayerState();
+}
+
+void MonitorGraphicsView::slotBoomMoved(MonitorBoomItem *item)
+{
+    if (item == nullptr || m_cellPixels == 0)
+        return;
+    Boom *b = item->boom();
+    if (b == nullptr)
+        return;
+    const QPointF c = item->pos();   // base centre in scene pixels
+    b->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+    b->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+    m_doc->setModified();
+    emit mapStructureChanged();
 }
 
 void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)

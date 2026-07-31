@@ -93,6 +93,7 @@
 #include "feetinchesspinbox.h"
 #include "targetitem.h"
 #include "truss.h"
+#include "boom.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "qlcpalette.h"
@@ -2398,6 +2399,22 @@ void Monitor::slotEditTarget(quint32 tid)
     m_doc->setModified();
 }
 
+void Monitor::slotAddBoom()
+{
+    Boom *b = m_props->addBoom();
+    b->setName(tr("Boom %1").arg(b->id() + 1));
+
+    QPointF mm = m_graphicsView->pixelsToRealPosition(
+        m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    b->setOriginX(float(mm.x() / 1000.0));
+    b->setOriginY(float(mm.y() / 1000.0));
+    b->setLayerId(m_props->activeLayerId());
+
+    m_graphicsView->updatePlatforms();   // rebuilds platforms + booms
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
 void Monitor::slotAddPlatform()
 {
     StagePlatform *p = m_props->addPlatform();
@@ -2554,6 +2571,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
                    this, SLOT(slotAddTruss()));
     menu.addAction(tr("Add Platform/Riser here"),
                    this, SLOT(slotAddPlatform()));
+    menu.addAction(tr("Add Boom here"),
+                   this, SLOT(slotAddBoom()));
     menu.addAction(QIcon(":/image.png"), tr("Add Image here"),
                    this, SLOT(slotAddImage()));
     menu.addSeparator();

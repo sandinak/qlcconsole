@@ -88,6 +88,7 @@ add_library(${module_name}
     monitor/monitorlayout.cpp monitor/monitorlayout.h
     monitor/trussitem.cpp monitor/trussitem.h
     monitor/platformitem.cpp monitor/platformitem.h
+    monitor/monitorboomitem.cpp monitor/monitorboomitem.h
     monitor/powersourceitem.cpp monitor/powersourceitem.h
     monitor/riserfaceeditor.cpp monitor/riserfaceeditor.h
     monitor/studiogroupeditor.cpp monitor/studiogroupeditor.h
