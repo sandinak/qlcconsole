@@ -2082,7 +2082,9 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     QPushButton *addFixBtn = new QPushButton(tr("Add Fixture…"), pane);
     bar->addWidget(addFixBtn);
     QPushButton *addBarBtn = new QPushButton(tr("Add Bar"), pane);
-    addBarBtn->setVisible(kind != 1 /*no bars on a tower — use Add shelf*/);
+    // Bars make sense on a stand / truss / boom; not a tower (shelves) or a
+    // platform (a solid riser).
+    addBarBtn->setVisible(kind == 0 || kind == 2 || kind == 4);
     bar->addWidget(addBarBtn);
     pv->addLayout(bar);
 
@@ -2114,7 +2116,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
 
 void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
 {
-    // A stand needs a boom/bar to hang fixtures on; find one first.
+    // A stand needs a boom/bar to hang fixtures on; a pipe IS the boom.
     quint32 boomId = Pipe::invalidId();
     if (kind == 0)
     {
@@ -2126,6 +2128,10 @@ void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
                 tr("Add a bar to this stand first (Add Bar), then hang fixtures on it."));
             return;
         }
+    }
+    else if (kind == 4)
+    {
+        boomId = id;
     }
 
     // Which fixtures are already on this structure — offer only the rest.
@@ -2142,6 +2148,8 @@ void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
         const FixtureRigProps &rp = m_props->fixtureRigProps(fx->id());
         bool here = (kind == 1 && rp.towerId == id)
                  || (kind == 2 && rp.trussId == id)
+                 || (kind == 3 && (rp.riserPlatformId == id || rp.deckPlatformId == id))
+                 || (kind == 4 && rp.pipeId == id)
                  || (kind == 0 && rp.pipeId != Pipe::invalidId()
                         && m_props->pipe(rp.pipeId) && m_props->pipe(rp.pipeId)->standId() == id);
         if (here) continue;
@@ -2158,10 +2166,11 @@ void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
 
     Truss *tr_ = (kind == 2) ? m_props->truss(id) : nullptr;
     Tower *tw = (kind == 1) ? m_props->tower(id) : nullptr;
+    StagePlatform *plat = (kind == 3) ? m_props->platform(id) : nullptr;
     foreach (QListWidgetItem *it, list->selectedItems())
     {
         const quint32 fid = it->data(Qt::UserRole).toUInt();
-        if (kind == 0)
+        if (kind == 0 || kind == 4)
         {
             m_graphicsView->attachFixtureToPipe(fid, boomId);   // clears other mounts
         }
@@ -2182,6 +2191,13 @@ void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
             {
                 rp.trussId = id; rp.trussOffset = tr_->length() * 0.5f;
             }
+            else if (kind == 3 && plat)
+            {
+                // Default to the top surface, centred.
+                rp.riserPlatformId = id;
+                rp.riserFace = FixtureRigProps::RiserTop;
+                rp.riserU = plat->width() * 0.5f; rp.riserV = plat->depth() * 0.5f;
+            }
             m_props->setFixtureRigProps(fid, rp);
             m_graphicsView->updateFixture(fid);
         }
@@ -2196,6 +2212,33 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
     {
         QMessageBox::information(this, tr("Add Bar"),
             tr("Towers use shelves — use 'Add shelf' in the tower fields."));
+        return;
+    }
+
+    if (kind == 4)   // a pipe → a crossbar hung on it (vertical booms only)
+    {
+        Pipe *pipe = m_props->pipe(id);
+        if (pipe == nullptr) return;
+        if (!pipe->isVertical())
+        {
+            QMessageBox::information(this, tr("Add Bar"),
+                tr("A crossbar hangs on a vertical boom. This pipe is horizontal."));
+            return;
+        }
+        Pipe *bar = m_props->addPipe();
+        bar->setName(tr("%1 Crossbar").arg(pipe->name()));
+        bar->setOrientation(Pipe::Horizontal);
+        bar->setParentPipeId(id);
+        bar->setParentPipeOffset(pipe->length());
+        bar->setLength(1.0f);
+        bar->setRunAngle(0.0f);
+        bar->setBaseRadius(0.0f);
+        bar->setLayerId(pipe->layerId());
+        m_props->recomputeChildTrusses();
+        m_graphicsView->updatePlatforms();
+        if (m_layersPanel) m_layersPanel->reload();
+        m_doc->setModified();
+        if (view) view->reload();
         return;
     }
 
@@ -2953,12 +2996,16 @@ void Monitor::slotEditPipe(quint32 bid)
     const double posR = isFeet ? 164.0 : 50.0;
     const double hMax = isFeet ? 66.0 : 20.0;
 
+    // Snapshot core geometry for live-preview revert on Cancel.
+    const float snapOX = b->originX(), snapOY = b->originY();
+    const float snapLen = b->length(), snapBZ = b->baseZ(), snapRun = b->runAngle();
+
     QDialog dlg(this);
     const bool horiz = (b->orientation() == Pipe::Horizontal);
-    dlg.setWindowTitle(tr("Edit %1 — %2")
-        .arg(horiz ? tr("Electric") : tr("Boom")).arg(b->name()));
-    dlg.setMinimumWidth(420);
-    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    dlg.setWindowTitle(tr("Lighting Studio — %1").arg(b->name()));
+    QHBoxLayout *split = new QHBoxLayout(&dlg);
+    QVBoxLayout *vl = new QVBoxLayout;
+    split->addLayout(vl);
     QFormLayout *form = new QFormLayout;
 
     QLineEdit *nameEdit = new QLineEdit(b->name(), &dlg);
@@ -3077,13 +3124,39 @@ void Monitor::slotEditPipe(quint32 bid)
         vl->addWidget(tbl);
     }
 
+    vl->addStretch();
+
+    // Embedded graphical canvas (right) + live core-geometry preview.
+    StructureStudioView *view = nullptr;
+    split->addWidget(makeStudioPane(&dlg, 4 /*Pipe*/, bid, &view), 1);
+    auto applyLive = [&]() {
+        b->setName(nameEdit->text());
+        b->setOriginX(float(oxSpin->value() * fromDisp));
+        b->setOriginY(float(oySpin->value() * fromDisp));
+        b->setHeight(float(hSpin->value() * fromDisp));
+        b->setBaseZ(float(bzSpin->value() * fromDisp));
+        b->setRunAngle(float(runSpin->value()));
+        m_props->recomputeChildTrusses();
+        if (view) view->reload();
+    };
+    for (QDoubleSpinBox *sp : { oxSpin, oySpin, hSpin, bzSpin, runSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [applyLive](double){ applyLive(); });
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
+
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     vl->addWidget(bb);
 
     if (dlg.exec() != QDialog::Accepted)
+    {
+        b->setOriginX(snapOX); b->setOriginY(snapOY); b->setHeight(snapLen);
+        b->setBaseZ(snapBZ); b->setRunAngle(snapRun);
+        m_props->recomputeChildTrusses();
+        m_graphicsView->updatePlatforms();
         return;
+    }
 
     b->setName(nameEdit->text());
     b->setOriginX(float(oxSpin->value() * fromDisp));
@@ -3132,11 +3205,18 @@ void Monitor::slotEditPlatform(quint32 pid)
     StagePlatform *p = m_props->platform(pid);
     if (!p) return;
 
-    QDialog dlg(this);
-    dlg.setWindowTitle(tr("Edit Platform — %1").arg(p->name()));
-    dlg.setMinimumWidth(360);
+    // Snapshot for live-preview revert on Cancel.
+    const QString snapName = p->name();
+    const float snapOX = p->originX(), snapOY = p->originY();
+    const float snapW = p->width(), snapD = p->depth(), snapH = p->height();
+    const QColor snapColor = p->color();
 
-    QVBoxLayout *vl   = new QVBoxLayout(&dlg);
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Lighting Studio — %1").arg(p->name()));
+
+    QHBoxLayout *split = new QHBoxLayout(&dlg);
+    QVBoxLayout *vl   = new QVBoxLayout;
+    split->addLayout(vl);
     QFormLayout *form = new QFormLayout;
 
     QLineEdit *nameEdit = new QLineEdit(p->name(), &dlg);
@@ -3229,6 +3309,26 @@ void Monitor::slotEditPlatform(quint32 pid)
         m_doc->setModified();
     });
     vl->addWidget(faceBtn);
+    vl->addStretch();
+
+    // Embedded graphical canvas (right) + live geometry preview.
+    StructureStudioView *view = nullptr;
+    split->addWidget(makeStudioPane(&dlg, 3 /*Platform*/, pid, &view), 1);
+    auto applyLive = [&]() {
+        if (!nameEdit->text().trimmed().isEmpty()) p->setName(nameEdit->text().trimmed());
+        p->setOriginX(float(oxSpin->value() * fromDisp_p));
+        p->setOriginY(float(oySpin->value() * fromDisp_p));
+        p->setWidth(float(wSpin->value() * fromDisp_p));
+        p->setDepth(float(dSpin->value() * fromDisp_p));
+        p->setHeight(float(hSpin->value() * fromDisp_p));
+        m_props->recomputeAnchoredFrames();
+        if (view) view->reload();
+    };
+    for (QDoubleSpinBox *sp : { oxSpin, oySpin, (QDoubleSpinBox*)wSpin,
+                                (QDoubleSpinBox*)dSpin, (QDoubleSpinBox*)hSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [applyLive](double){ applyLive(); });
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     vl->addWidget(bb);
@@ -3236,7 +3336,14 @@ void Monitor::slotEditPlatform(quint32 pid)
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
     if (dlg.exec() != QDialog::Accepted)
+    {
+        p->setName(snapName); p->setOriginX(snapOX); p->setOriginY(snapOY);
+        p->setWidth(snapW); p->setDepth(snapD); p->setHeight(snapH); p->setColor(snapColor);
+        m_props->recomputeAnchoredFrames();
+        m_graphicsView->updatePlatforms();
+        m_graphicsView->refreshRiserFixtures();
         return;
+    }
 
     p->setName(nameEdit->text().trimmed().isEmpty() ? p->name() : nameEdit->text().trimmed());
     p->setOriginX(float(oxSpin->value() * fromDisp_p));

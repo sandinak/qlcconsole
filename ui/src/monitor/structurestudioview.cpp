@@ -20,6 +20,7 @@
 #include "stand.h"
 #include "tower.h"
 #include "truss.h"
+#include "stageplatform.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -32,8 +33,8 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     setMinimumSize(360, 320);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
-    // Top plane reads best for a tower footprint; a boom/truss reads best in a
-    // vertical elevation. Default Front (a side rig reads at a glance).
+    // Top plane reads best for a tower/platform footprint; a boom/truss reads
+    // best in a vertical elevation. Default Front for the rest.
     m_plane = (kind == TowerKind) ? Top : Front;
 }
 
@@ -135,6 +136,42 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         return true;
     }
 
+    // On a platform riser face: drag across the face (U) / up-or-into it (V).
+    if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
+    {
+        StagePlatform *pl = props->platform(rp.riserPlatformId);
+        if (pl == nullptr) return false;
+        const QPointF ab = screenToPlane(px);
+        if (rp.riserFace == FixtureRigProps::RiserTop)
+        {
+            // Top surface: U across width (X), V into depth (Y).
+            if (m_plane == Top)
+            {
+                rp.riserU = qBound(0.0f, float(ab.x() - pl->originX()), pl->width());
+                rp.riserV = qBound(0.0f, float(ab.y() - pl->originY()), pl->depth());
+            }
+            else if (m_plane == Front)
+                rp.riserU = qBound(0.0f, float(ab.x() - pl->originX()), pl->width());
+            else
+                rp.riserV = qBound(0.0f, float(ab.x() - pl->originY()), pl->depth());
+        }
+        else
+        {
+            // Front face: U across width (X), V up the face height (Z).
+            if (m_plane == Front)
+            {
+                rp.riserU = qBound(0.0f, float(ab.x() - pl->originX()), pl->width());
+                rp.riserV = qBound(0.0f, float(ab.y()), pl->height());
+            }
+            else if (m_plane == Side)
+                rp.riserV = qBound(0.0f, float(ab.y()), pl->height());
+            else   // Top
+                rp.riserU = qBound(0.0f, float(ab.x() - pl->originX()), pl->width());
+        }
+        props->setFixtureRigProps(fid, rp);
+        return true;
+    }
+
     // On a truss: slide along the truss axis → trussOffset.
     if (rp.trussId != Truss::invalidId())
     {
@@ -187,6 +224,13 @@ QList<quint32> StructureStudioView::mountedFixtures() const
     if (m_kind == StandKind)
         foreach (const Pipe *p, standPipes())
             pipeIds << p->id();
+    else if (m_kind == PipeKind)
+    {
+        pipeIds << m_id;   // this pipe + any crossbars hung on it
+        foreach (Pipe *p, props->pipes())
+            if (p->isBarOnPipe() && p->parentPipeId() == m_id)
+                pipeIds << p->id();
+    }
 
     foreach (Fixture *fx, m_doc->fixtures())
     {
@@ -194,12 +238,14 @@ QList<quint32> StructureStudioView::mountedFixtures() const
             continue;
         const FixtureRigProps &rp = props->fixtureRigProps(fx->id());
         bool on = false;
-        if (m_kind == StandKind)
+        if (m_kind == StandKind || m_kind == PipeKind)
             on = (rp.pipeId != Pipe::invalidId() && pipeIds.contains(rp.pipeId));
         else if (m_kind == TowerKind)
             on = (rp.towerId == m_id);
         else if (m_kind == TrussKind)
             on = (rp.trussId == m_id);
+        else if (m_kind == PlatformKind)
+            on = (rp.riserPlatformId == m_id || rp.deckPlatformId == m_id);
         if (on)
             out << fx->id();
     }
@@ -240,6 +286,24 @@ void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
         {
             pts << t->origin();
             pts << t->positionAt(t->length());
+        }
+    }
+    else if (m_kind == PlatformKind)
+    {
+        if (StagePlatform *pl = props->platform(m_id))
+            for (int i = 0; i < 8; ++i)
+                pts << QVector3D(pl->originX() + ((i & 1) ? pl->width() : 0.0f),
+                                 pl->originY() + ((i & 2) ? pl->depth() : 0.0f),
+                                 (i & 4) ? pl->height() : 0.0f);
+    }
+    else if (m_kind == PipeKind)
+    {
+        if (Pipe *p = props->pipe(m_id))
+        {
+            pts << p->positionAt(0.0f) << p->positionAt(p->length());
+            foreach (Pipe *cb, props->pipes())
+                if (cb->isBarOnPipe() && cb->parentPipeId() == m_id)
+                    pts << cb->positionAt(0.0f) << cb->positionAt(cb->length());
         }
     }
 
@@ -430,6 +494,45 @@ void StructureStudioView::drawStructure(QPainter &p) const
                 else            p.drawLine(p0 - off, p1 + off);
             }
         }
+    }
+    else if (m_kind == PlatformKind)
+    {
+        StagePlatform *pl = props->platform(m_id);
+        if (pl == nullptr) return;
+        const float x0 = pl->originX(), y0 = pl->originY();
+        const float x1 = x0 + pl->width(), y1 = y0 + pl->depth(), h = pl->height();
+        p.setPen(QPen(steel, 1.6));
+        p.setBrush(QColor(110, 120, 140, 70));
+        if (m_plane == Top)
+        {
+            p.drawRect(QRectF(w2s(QVector3D(x0, y0, 0)), w2s(QVector3D(x1, y1, 0))).normalized());
+        }
+        else
+        {
+            // A riser box silhouette: floor rectangle up to its top.
+            const QPointF a = w2s(QVector3D(x0, y0, 0));
+            const QPointF b = w2s(QVector3D(x1, y1, h));
+            p.drawRect(QRectF(a, b).normalized());
+            p.setPen(QPen(steel.lighter(140), 1.4));   // deck line
+            p.drawLine(w2s(QVector3D(x0, y0, h)), w2s(QVector3D(x1, y1, h)));
+        }
+    }
+    else if (m_kind == PipeKind)
+    {
+        Pipe *pipe = props->pipe(m_id);
+        if (pipe == nullptr) return;
+        // The stand post underneath, if this pipe stands on one.
+        if (pipe->isStandMounted())
+            if (Stand *s = props->stand(pipe->standId()))
+            {
+                drawFloorPlate(s->originX(), s->originY(), s->baseRadius());
+                p.setPen(QPen(steel, 2.0));
+                p.drawLine(w2s(QVector3D(s->originX(), s->originY(), 0)), w2s(s->topPos()));
+            }
+        drawPipe(p, pipe);
+        foreach (Pipe *cb, props->pipes())      // crossbars on this pipe
+            if (cb->isBarOnPipe() && cb->parentPipeId() == m_id)
+                drawPipe(p, cb);
     }
 }
 

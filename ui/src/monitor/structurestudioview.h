@@ -40,7 +40,8 @@ class StructureStudioView : public QWidget
     Q_OBJECT
 
 public:
-    enum Kind  { StandKind = 0, TowerKind = 1, TrussKind = 2 };
+    enum Kind  { StandKind = 0, TowerKind = 1, TrussKind = 2,
+                 PlatformKind = 3, PipeKind = 4 };
     enum Plane { Top = 0, Front = 1, Side = 2 };
 
     StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent = nullptr);
