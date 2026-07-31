@@ -2288,24 +2288,33 @@ void MonitorGraphicsView::updatePlatforms()
                 this, &MonitorGraphicsView::slotPlatformMoved);
     }
 
-    // Booms (top view only for now — a vertical pipe is a point in plan; an
-    // elevation representation is a later slice).
-    if (m_pov == PovTop)
+    // Booms: a plan disc + pipe dot in Top; a vertical pipe in the elevations.
+    foreach (Boom *b, props->booms())
     {
-        foreach (Boom *b, props->booms())
+        const float pxPipe = float((b->diameter() * 1000.0 * m_cellPixels) / m_unitValue);
+        MonitorBoomItem *bi = nullptr;
+        if (m_pov == PovTop)
         {
             const float pxCX = float(m_xOffset + (b->originX() * 1000.0 * m_cellPixels) / m_unitValue);
             const float pxCY = float(m_yOffset + (b->originY() * 1000.0 * m_cellPixels) / m_unitValue);
             const float pxBaseR = float((b->baseRadius() * 1000.0 * m_cellPixels) / m_unitValue);
-            const float pxPipe  = float((b->diameter()  * 1000.0 * m_cellPixels) / m_unitValue);
-            MonitorBoomItem *bi = new MonitorBoomItem(b, m_doc, pxCX, pxCY, pxBaseR, pxPipe);
-            bi->setMovable(!m_layoutLocked);
-            bi->showLabel(m_doc->monitorProperties()->layer(b->layerId()).labels);
-            m_scene->addItem(bi);
-            m_boomItems.insert(b->id(), bi);
-            connect(bi, &MonitorBoomItem::itemDropped,
-                    this, &MonitorGraphicsView::slotBoomMoved);
+            bi = new MonitorBoomItem(b, m_doc, pxCX, pxCY, pxBaseR, pxPipe);
         }
+        else
+        {
+            const QPointF base = projectMm(b->originX() * 1000.0, b->originY() * 1000.0, b->baseZ() * 1000.0);
+            const QPointF top  = projectMm(b->originX() * 1000.0, b->originY() * 1000.0,
+                                           (b->baseZ() + b->height()) * 1000.0);
+            const float pxHeight = float(qAbs(top.y() - base.y()));
+            bi = new MonitorBoomItem(b, m_doc, float(base.x()), float(base.y()),
+                                     0.0f, pxPipe, true, pxHeight);
+        }
+        bi->setMovable(!m_layoutLocked);
+        bi->showLabel(m_doc->monitorProperties()->layer(b->layerId()).labels);
+        m_scene->addItem(bi);
+        m_boomItems.insert(b->id(), bi);
+        connect(bi, &MonitorBoomItem::itemDropped,
+                this, &MonitorGraphicsView::slotBoomMoved);
     }
 
     refreshItemLayerState();
@@ -3275,6 +3284,11 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
     if (auto *pi = dynamic_cast<PlatformItem *>(it))
     {
         emit platformDoubleClicked(pi->platformId());
+        return;
+    }
+    if (auto *bi = dynamic_cast<MonitorBoomItem *>(it))
+    {
+        emit boomDoubleClicked(bi->boomId());
         return;
     }
     if (auto *tgi = dynamic_cast<TargetItem *>(it))

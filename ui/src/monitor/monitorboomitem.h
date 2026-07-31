@@ -37,14 +37,17 @@ class MonitorBoomItem : public QObject, public QGraphicsItem
 
 public:
     /**
-     * @param boom     Engine Boom this item represents (not owned).
-     * @param pxCX     Scene-pixel X of the boom base CENTRE.
-     * @param pxCY     Scene-pixel Y of the boom base CENTRE.
-     * @param pxBaseR  Stand base radius in scene pixels (0 = hung boom).
-     * @param pxPipe   Pipe diameter in scene pixels.
+     * @param boom       Engine Boom this item represents (not owned).
+     * @param pxX,pxY    Top view: the base CENTRE. Elevation: the base BOTTOM.
+     * @param pxBaseR    Stand base radius in scene pixels (0 = hung / elevation).
+     * @param pxPipe     Pipe diameter in scene pixels.
+     * @param elevation  True in Front/Side views — draw a vertical pipe instead
+     *                   of the plan disc.
+     * @param pxHeight   Elevation only: pipe height in scene pixels.
      */
     MonitorBoomItem(Boom *boom, Doc *doc,
-                    float pxCX, float pxCY, float pxBaseR, float pxPipe,
+                    float pxX, float pxY, float pxBaseR, float pxPipe,
+                    bool elevation = false, float pxHeight = 0.0f,
                     QGraphicsItem *parent = nullptr);
 
     quint32 boomId() const;
@@ -71,6 +74,8 @@ private:
     Doc               *m_doc;
     float              m_pxBaseR;
     float              m_pxPipe;
+    bool               m_elevation;
+    float              m_pxHeight;
     QGraphicsTextItem *m_label;
 };
 

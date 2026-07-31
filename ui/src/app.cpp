@@ -56,6 +56,7 @@
 #include "livecapturedialog.h"
 #include "aboutbox.h"
 #include "monitor.h"
+#include "monitorgraphicsview.h"
 #include "studiogroupeditor.h"
 #include "studioplaneview.h"
 #include "studiocomponentbrowser.h"
@@ -2914,6 +2915,13 @@ void App::captureScenarioIfRequested()
             if (Monitor *mon = Monitor::instance())
             {
                 mon->resize(1150, 780);
+                const QByteArray pov = qgetenv("QLC_SHOT_MONITOR_POV");
+                if (!pov.isEmpty())
+                    if (MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>())
+                    {
+                        if (pov == "front") gv->setViewPOV(MonitorGraphicsView::PovFront);
+                        else if (pov == "side") gv->setViewPOV(MonitorGraphicsView::PovSide);
+                    }
                 qApp->processEvents();
                 save(mon, "monitor");
             }

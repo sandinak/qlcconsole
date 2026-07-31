@@ -574,6 +574,7 @@ signals:
 
     /** Signal emitted when the user double-clicks a platform item */
     void platformDoubleClicked(quint32 pid);
+    void boomDoubleClicked(quint32 boomId);
 
     /** Signal emitted when the user right-clicks empty canvas space */
     void contextMenuRequested(QPointF scenePos);

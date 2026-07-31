@@ -307,6 +307,7 @@ protected slots:
 
     /** Open the platform edit dialog for the given platform ID. */
     void slotEditPlatform(quint32 pid);
+    void slotEditBoom(quint32 bid);
 
     /** Open platform edit on double-click. */
     void slotPlatformDoubleClicked(quint32 pid);

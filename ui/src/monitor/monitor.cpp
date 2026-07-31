@@ -56,6 +56,8 @@
 #include <QSpacerItem>
 #include <QByteArray>
 #include <QCheckBox>
+#include <QTableWidget>
+#include <QHeaderView>
 #include <QComboBox>
 #include <QSplitter>
 #include <QSettings>
@@ -357,6 +359,8 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotImageRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::platformDoubleClicked,
             this, &Monitor::slotPlatformDoubleClicked);
+    connect(m_graphicsView, &MonitorGraphicsView::boomDoubleClicked,
+            this, &Monitor::slotEditBoom);
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
@@ -2413,6 +2417,8 @@ void Monitor::slotAddBoom()
     m_graphicsView->updatePlatforms();   // rebuilds platforms + booms
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+
+    slotEditBoom(b->id());
 }
 
 void Monitor::slotAddPlatform()
@@ -2433,6 +2439,113 @@ void Monitor::slotAddPlatform()
     m_doc->setModified();
 
     slotEditPlatform(p->id());
+}
+
+void Monitor::slotEditBoom(quint32 bid)
+{
+    Boom *b = m_props->boom(bid);
+    if (!b) return;
+
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+    const double posR = isFeet ? 164.0 : 50.0;
+    const double hMax = isFeet ? 66.0 : 20.0;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Edit Boom — %1").arg(b->name()));
+    dlg.setMinimumWidth(420);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    QFormLayout *form = new QFormLayout;
+
+    QLineEdit *nameEdit = new QLineEdit(b->name(), &dlg);
+    form->addRow(tr("Name:"), nameEdit);
+
+    auto mkSpin = [&](double val, double lo, double hi) {
+        QDoubleSpinBox *s = new QDoubleSpinBox(&dlg);
+        s->setRange(lo, hi); s->setDecimals(2); s->setSuffix(sfx);
+        s->setValue(val * toDisp); return s;
+    };
+    QDoubleSpinBox *oxSpin = mkSpin(b->originX(), -posR, posR);
+    QDoubleSpinBox *oySpin = mkSpin(b->originY(), -posR, posR);
+    QDoubleSpinBox *hSpin  = mkSpin(b->height(), 0.1, hMax);
+    QDoubleSpinBox *bzSpin = mkSpin(b->baseZ(), 0.0, hMax);
+    form->addRow(tr("Position X:"), oxSpin);
+    form->addRow(tr("Position Y:"), oySpin);
+    form->addRow(tr("Pipe height:"), hSpin);
+    form->addRow(tr("Base height (Z):"), bzSpin);
+
+    QCheckBox *standChk = new QCheckBox(tr("On a stand (base)"), &dlg);
+    standChk->setChecked(b->hasStand());
+    QDoubleSpinBox *brSpin = mkSpin(b->hasStand() ? b->baseRadius() : 0.4f, 0.05, isFeet ? 6.6 : 2.0);
+    brSpin->setEnabled(b->hasStand());
+    connect(standChk, &QCheckBox::toggled, brSpin, &QWidget::setEnabled);
+    form->addRow(QString(), standChk);
+    form->addRow(tr("Base radius:"), brSpin);
+    vl->addLayout(form);
+
+    // Fixtures mounted on this boom — per-fixture height up the pipe + facing angle.
+    QList<quint32> mounted;
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (fx != NULL && m_props->fixtureRigProps(fx->id()).boomId == bid)
+            mounted << fx->id();
+
+    QList<QDoubleSpinBox *> offSpins, angSpins;
+    if (!mounted.isEmpty())
+    {
+        vl->addWidget(new QLabel(tr("Fixtures on this boom (height up the pipe · facing):"), &dlg));
+        QTableWidget *tbl = new QTableWidget(mounted.size(), 3, &dlg);
+        tbl->setHorizontalHeaderLabels(QStringList() << tr("Fixture") << tr("Height") << tr("Angle"));
+        tbl->verticalHeader()->setVisible(false);
+        tbl->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+        for (int i = 0; i < mounted.size(); ++i)
+        {
+            Fixture *fx = m_doc->fixture(mounted[i]);
+            FixtureRigProps rp = m_props->fixtureRigProps(mounted[i]);
+            QTableWidgetItem *ni = new QTableWidgetItem(fx ? fx->name() : QString::number(mounted[i]));
+            ni->setFlags(ni->flags() & ~Qt::ItemIsEditable);
+            tbl->setItem(i, 0, ni);
+            QDoubleSpinBox *os = new QDoubleSpinBox(tbl);
+            os->setRange(0.0, hMax); os->setDecimals(2); os->setSuffix(sfx);
+            os->setValue(double(rp.boomOffset) * toDisp);
+            tbl->setCellWidget(i, 1, os); offSpins << os;
+            QDoubleSpinBox *as = new QDoubleSpinBox(tbl);
+            as->setRange(-180, 180); as->setDecimals(0); as->setSuffix(QStringLiteral("°"));
+            as->setValue(double(rp.boomAngle));
+            tbl->setCellWidget(i, 2, as); angSpins << as;
+        }
+        vl->addWidget(tbl);
+    }
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    vl->addWidget(bb);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    b->setName(nameEdit->text());
+    b->setOriginX(float(oxSpin->value() * fromDisp));
+    b->setOriginY(float(oySpin->value() * fromDisp));
+    b->setHeight(float(hSpin->value() * fromDisp));
+    b->setBaseZ(float(bzSpin->value() * fromDisp));
+    b->setBaseRadius(standChk->isChecked() ? float(brSpin->value() * fromDisp) : 0.0f);
+
+    for (int i = 0; i < mounted.size(); ++i)
+    {
+        FixtureRigProps rp = m_props->fixtureRigProps(mounted[i]);
+        rp.boomOffset = float(offSpins[i]->value() * fromDisp);
+        rp.boomAngle  = float(angSpins[i]->value());
+        m_props->setFixtureRigProps(mounted[i], rp);
+    }
+
+    m_graphicsView->updatePlatforms();   // refresh the boom item
+    foreach (quint32 fid, mounted)
+        m_graphicsView->updateFixture(fid);
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
 }
 
 void Monitor::slotEditPlatform(quint32 pid)
