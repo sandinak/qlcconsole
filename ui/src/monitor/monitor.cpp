@@ -367,9 +367,9 @@ void Monitor::initGraphicsView()
     connect(m_graphicsView, &MonitorGraphicsView::pipeDoubleClicked,
             this, &Monitor::slotEditPipe);
     connect(m_graphicsView, &MonitorGraphicsView::standDoubleClicked,
-            this, &Monitor::slotStudioForStand);
+            this, &Monitor::slotEditStand);
     connect(m_graphicsView, &MonitorGraphicsView::towerDoubleClicked,
-            this, &Monitor::slotStudioForTower);
+            this, &Monitor::slotEditTower);
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
@@ -2060,70 +2060,45 @@ void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
 
 void Monitor::slotTrussDoubleClicked(quint32 tid)
 {
-    slotStudioForTruss(tid);
+    slotEditTruss(tid);
 }
 
-void Monitor::slotStudioForStand(quint32 sid) { openStructureStudio(0, sid); }
-void Monitor::slotStudioForTower(quint32 tid) { openStructureStudio(1, tid); }
-void Monitor::slotStudioForTruss(quint32 tid) { openStructureStudio(2, tid); }
-
-void Monitor::openStructureStudio(int kind, quint32 id)
+QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
+                                 StructureStudioView **outView)
 {
-    QString title, geomLabel;
-    switch (kind)
-    {
-    case 0: { Stand *s = m_props->stand(id); if (!s) return;
-              title = tr("Lighting Studio — %1").arg(s->name()); geomLabel = tr("Edit Stand…"); break; }
-    case 1: { Tower *t = m_props->tower(id); if (!t) return;
-              title = tr("Lighting Studio — %1").arg(t->name()); geomLabel = tr("Edit Tower…"); break; }
-    default:{ Truss *t = m_props->truss(id); if (!t) return;
-              title = tr("Lighting Studio — %1").arg(t->name()); geomLabel = tr("Edit Truss…"); break; }
-    }
+    // A reusable right-hand pane: plane switcher + the graphical structure
+    // canvas. Embedded into the object (stand/tower/truss) editors so one window
+    // shows the geometry fields AND the live picture, in the chosen units.
+    QWidget *pane = new QWidget(dlg);
+    QVBoxLayout *pv = new QVBoxLayout(pane);
+    pv->setContentsMargins(0, 0, 0, 0);
 
-    QDialog dlg(this);
-    dlg.setWindowTitle(title);
-    dlg.setMinimumSize(560, 480);
-    QVBoxLayout *vl = new QVBoxLayout(&dlg);
-
-    // Plane toolbar.
     QHBoxLayout *bar = new QHBoxLayout;
-    bar->addWidget(new QLabel(tr("View:"), &dlg));
-    QComboBox *planeCombo = new QComboBox(&dlg);
+    bar->addWidget(new QLabel(tr("View:"), pane));
+    QComboBox *planeCombo = new QComboBox(pane);
     planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
     bar->addWidget(planeCombo);
     bar->addStretch();
-    QPushButton *geomBtn = new QPushButton(geomLabel, &dlg);
-    bar->addWidget(geomBtn);
-    vl->addLayout(bar);
+    pv->addLayout(bar);
 
     StructureStudioView *view = new StructureStudioView(
-        m_doc, StructureStudioView::Kind(kind), id, &dlg);
+        m_doc, StructureStudioView::Kind(kind), id, pane);
+    view->setMinimumSize(320, 300);
     planeCombo->setCurrentIndex(int(view->plane()));
-    vl->addWidget(view, 1);
+    pv->addWidget(view, 1);
 
-    QLabel *hint = new QLabel(
-        tr("Shift-drag or middle-drag to pan · wheel to zoom · double-click a "
-           "fixture to edit it."), &dlg);
+    QLabel *hint = new QLabel(tr("wheel = zoom · shift/middle-drag = pan · "
+                                 "double-click a fixture to edit"), pane);
     hint->setStyleSheet("color:#8a8e99;");
-    vl->addWidget(hint);
+    pv->addWidget(hint);
 
-    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
-    vl->addWidget(bb);
-    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
-    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-
-    connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+    connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), pane,
             [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });
-    connect(view, &StructureStudioView::fixtureActivated, &dlg,
+    connect(view, &StructureStudioView::fixtureActivated, pane,
             [this](quint32 fid){ slotFixtureDoubleClicked(fid); });
-    connect(geomBtn, &QPushButton::clicked, &dlg, [this, kind, id, view]() {
-        if (kind == 0)      slotEditStand(id);
-        else if (kind == 1) slotEditTower(id);
-        else                slotEditTruss(id);
-        view->reload();   // geometry may have changed
-    });
 
-    dlg.exec();
+    if (outView) *outView = view;
+    return pane;
 }
 
 void Monitor::slotTrussRemoveRequested(quint32 tid)
@@ -2545,10 +2520,16 @@ void Monitor::slotEditStand(quint32 sid)
     const double posR = isFeet ? 164.0 : 50.0;
     const double hMax = isFeet ? 33.0 : 10.0;
 
+    // Snapshot for live-preview revert on Cancel.
+    const float snapOX = s->originX(), snapOY = s->originY(), snapH = s->height();
+    const float snapBR = s->baseRadius(), snapRot = s->rotation();
+    const QString snapName = s->name();
+
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Edit Stand — %1").arg(s->name()));
-    dlg.setMinimumWidth(360);
-    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    dlg.setWindowTitle(tr("Lighting Studio — %1").arg(s->name()));
+    QHBoxLayout *split = new QHBoxLayout(&dlg);
+    QVBoxLayout *vl = new QVBoxLayout;
+    split->addLayout(vl);
     QFormLayout *form = new QFormLayout;
 
     QLineEdit *nameEdit = new QLineEdit(s->name(), &dlg);
@@ -2573,13 +2554,40 @@ void Monitor::slotEditStand(quint32 sid)
     form->addRow(tr("Base radius:"), brSpin);
     form->addRow(tr("Leg rotation:"), rotSpin);
     vl->addLayout(form);
+    vl->addStretch();
+
+    // Embedded graphical canvas (right) + live preview as fields change.
+    StructureStudioView *view = nullptr;
+    split->addWidget(makeStudioPane(&dlg, 0 /*Stand*/, sid, &view), 1);
+    auto applyLive = [&]() {
+        s->setName(nameEdit->text());
+        s->setOriginX(float(oxSpin->value() * fromDisp));
+        s->setOriginY(float(oySpin->value() * fromDisp));
+        s->setHeight(float(hSpin->value() * fromDisp));
+        s->setBaseRadius(float(brSpin->value() * fromDisp));
+        s->setRotation(float(rotSpin->value()));
+        m_props->recomputeStandMounts();
+        if (view) view->reload();
+    };
+    for (QDoubleSpinBox *sp : { oxSpin, oySpin, hSpin, brSpin, rotSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [applyLive](double){ applyLive(); });
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     vl->addWidget(bb);
     if (dlg.exec() != QDialog::Accepted)
+    {
+        // Revert the live preview.
+        s->setName(snapName); s->setOriginX(snapOX); s->setOriginY(snapOY);
+        s->setHeight(snapH); s->setBaseRadius(snapBR); s->setRotation(snapRot);
+        m_props->recomputeStandMounts();
+        m_graphicsView->updatePlatforms();
+        m_graphicsView->updateTrusses();
         return;
+    }
 
     s->setName(nameEdit->text());
     s->setOriginX(float(oxSpin->value() * fromDisp));
@@ -2627,10 +2635,18 @@ void Monitor::slotEditTower(quint32 tid)
     const double posR = isFeet ? 164.0 : 50.0;
     const double hMax = isFeet ? 40.0 : 12.0;
 
+    // Snapshot for revert on Cancel (geometry + shelves).
+    const QString snapName = t->name();
+    const float snapOX = t->originX(), snapOY = t->originY();
+    const float snapW = t->width(), snapD = t->depth(), snapH = t->height();
+    QList<float> snapShelves;
+    for (int i = 0; i < t->shelfCount(); ++i) snapShelves << t->shelfHeight(i);
+
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Edit Tower — %1").arg(t->name()));
-    dlg.setMinimumWidth(380);
-    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    dlg.setWindowTitle(tr("Lighting Studio — %1").arg(t->name()));
+    QHBoxLayout *split = new QHBoxLayout(&dlg);
+    QVBoxLayout *vl = new QVBoxLayout;
+    split->addLayout(vl);
     QFormLayout *form = new QFormLayout;
 
     QLineEdit *nameEdit = new QLineEdit(t->name(), &dlg);
@@ -2682,11 +2698,42 @@ void Monitor::slotEditTower(quint32 tid)
         if (shelfList->currentRow() >= 0) { t->removeShelf(shelfList->currentRow()); reloadShelves(); }
     });
 
+    vl->addStretch();
+
+    // Embedded graphical canvas (right) + live geometry preview.
+    StructureStudioView *view = nullptr;
+    split->addWidget(makeStudioPane(&dlg, 1 /*Tower*/, tid, &view), 1);
+    auto applyLive = [&]() {
+        t->setName(nameEdit->text());
+        t->setOriginX(float(oxSpin->value() * fromDisp));
+        t->setOriginY(float(oySpin->value() * fromDisp));
+        t->setWidth(float(wSpin->value() * fromDisp));
+        t->setDepth(float(dSpin->value() * fromDisp));
+        t->setHeight(float(hSpin->value() * fromDisp));
+        if (view) view->reload();
+    };
+    for (QDoubleSpinBox *sp : { oxSpin, oySpin, wSpin, dSpin, hSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [applyLive](double){ applyLive(); });
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
+    // Shelf add/remove already mutate the tower live — also refresh the canvas.
+    connect(addShelfBtn, &QPushButton::clicked, &dlg, [view]() { if (view) view->reload(); });
+    connect(delShelfBtn, &QPushButton::clicked, &dlg, [view]() { if (view) view->reload(); });
+
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     vl->addWidget(bb);
-    dlg.exec();   // shelves already applied live; apply the geometry fields below
+    if (dlg.exec() != QDialog::Accepted)
+    {
+        // Revert geometry AND shelves (Cancel now truly cancels).
+        t->setName(snapName); t->setOriginX(snapOX); t->setOriginY(snapOY);
+        t->setWidth(snapW); t->setDepth(snapD); t->setHeight(snapH);
+        while (t->shelfCount()) t->removeShelf(0);
+        for (float z : snapShelves) t->addShelf(z);
+        m_graphicsView->updatePlatforms();
+        return;
+    }
 
     t->setName(nameEdit->text());
     t->setOriginX(float(oxSpin->value() * fromDisp));
@@ -3895,9 +3942,14 @@ void Monitor::slotEditTruss(quint32 tid)
     const int    origRun      = t->barRun();
     const float  origLen      = t->length();
     const bool   origIsBar    = t->isChildBar();
+    // Geometry snapshot for the live canvas preview of a FREE truss.
+    const QVector3D origOrigin = t->origin();
+    const QPointF   origDir    = t->direction();
+    const Truss::TrussType origType = t->type();
+    const float     origWidth  = t->width();
 
     QDialog editDlg(this);
-    editDlg.setWindowTitle(tr("Edit Truss — %1").arg(t->name()));
+    editDlg.setWindowTitle(tr("Lighting Studio — %1").arg(t->name()));
     editDlg.setMinimumWidth(420);
 
     QVBoxLayout *vl   = new QVBoxLayout(&editDlg);
@@ -4141,6 +4193,32 @@ void Monitor::slotEditTruss(quint32 tid)
                                        "right-click to add a bar)"), &editDlg);
     QFont sf = stripLabel->font(); sf.setBold(true); stripLabel->setFont(sf);
 
+    // Embedded graphical structure canvas (right of everything) + live preview.
+    StructureStudioView *studioView = nullptr;
+    QWidget *studioPane = makeStudioPane(&editDlg, 2 /*Truss*/, tid, &studioView);
+    auto reloadStudio = [studioView]() { if (studioView) studioView->reload(); };
+    // Free-truss geometry applies live so the canvas tracks the fields.
+    auto applyGeomLive = [=]() {
+        if (t->isChildBar()) { reloadStudio(); return; }
+        t->setType(static_cast<Truss::TrussType>(typeCb->currentIndex()));
+        t->setOrigin(QVector3D(originX->value() * fromDisp_e,
+                               originY->value() * fromDisp_e,
+                               originZ->value() * fromDisp_e));
+        const float rad = float(qDegreesToRadians(dirAngle->value()));
+        t->setDirection(QPointF(qCos(rad), qSin(rad)));
+        t->setLength(lenSpin->value() * fromDisp_e);
+        t->setWidth(widthSpin->value() * fromDisp_e);
+        reloadStudio();
+    };
+    for (QDoubleSpinBox *sp : { originX, originY, originZ, dirAngle, lenSpin, widthSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg,
+                [applyGeomLive](double){ applyGeomLive(); });
+    connect(typeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg,
+            [applyGeomLive](int){ applyGeomLive(); });
+    // The bar-preview hooks already recompute a child bar — mirror onto the canvas.
+    connect(alongSpin,    QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [reloadStudio](double){ reloadStudio(); });
+    connect(standoffSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [reloadStudio](double){ reloadStudio(); });
+
     if (isVertical)
     {
         editDlg.setMinimumHeight(460);   // room for the taller elevation strip
@@ -4160,17 +4238,24 @@ void Monitor::slotEditTruss(quint32 tid)
         stripCol->addWidget(stripLabel);
         stripCol->addWidget(strip, 1);
         contentRow->addLayout(stripCol);
+        contentRow->addWidget(studioPane, 1);
         vl->addLayout(contentRow);
     }
     else
     {
-        vl->addLayout(form);
+        QHBoxLayout *contentRow = new QHBoxLayout;
+        QVBoxLayout *leftCol = new QVBoxLayout;
+        leftCol->addLayout(form);
         QFrame *sep = new QFrame(&editDlg);
         sep->setFrameShape(QFrame::HLine);
         sep->setFrameShadow(QFrame::Sunken);
-        vl->addWidget(sep);
-        vl->addWidget(stripLabel);
-        vl->addWidget(strip);
+        leftCol->addWidget(sep);
+        leftCol->addWidget(stripLabel);
+        leftCol->addWidget(strip);
+        leftCol->addStretch();
+        contentRow->addLayout(leftCol);
+        contentRow->addWidget(studioPane, 1);
+        vl->addLayout(contentRow);
     }
 
     QDialogButtonBox *btns = new QDialogButtonBox(
@@ -4192,6 +4277,16 @@ void Monitor::slotEditTruss(quint32 tid)
             t->setLength(origLen);
             m_props->recomputeChildTrusses();
         }
+        else
+        {
+            // Undo the live free-truss geometry preview.
+            t->setType(origType);
+            t->setOrigin(origOrigin);
+            t->setDirection(origDir);
+            t->setLength(origLen);
+            t->setWidth(origWidth);
+        }
+        m_graphicsView->updateTrusses();
         for (quint32 barId : barsCreatedHere)
             m_props->removeTruss(barId);
         m_graphicsView->followParentTrusses();

@@ -311,12 +311,12 @@ protected slots:
     void slotAddTower();
     void slotEditTower(quint32 tid);
 
-    /** Double-click a stand/tower/truss → open the graphical structure studio.
-     *  kind: 0 = Stand, 1 = Tower, 2 = Truss. */
-    void slotStudioForStand(quint32 sid);
-    void slotStudioForTower(quint32 tid);
-    void slotStudioForTruss(quint32 tid);
-    void openStructureStudio(int kind, quint32 id);
+    /** Build the embedded graphical structure canvas pane (plane switcher + the
+     *  StructureStudioView) for the object editors. kind: 0=Stand,1=Tower,2=Truss.
+     *  If @p outView is non-null it receives the view so the caller can reload()
+     *  it after a live geometry edit. */
+    class QWidget *makeStudioPane(class QDialog *dlg, int kind, quint32 id,
+                                  class StructureStudioView **outView);
 
     /** Open the platform edit dialog for the given platform ID. */
     void slotEditPlatform(quint32 pid);

@@ -310,13 +310,47 @@ void StructureStudioView::drawStructure(QPainter &p) const
     {
         Truss *t = props->truss(m_id);
         if (t == nullptr) return;
-        const QPointF a = w2s(t->origin());
-        const QPointF b = w2s(t->positionAt(t->length()));
-        p.setPen(QPen(steel, 3.0, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(a, b);
-        // Base plate: a vertical truss standing on the floor gets a plate.
+        // Base plate FIRST (under the truss) so a floor-standing vertical truss
+        // reads clearly; the truss body draws on top.
         if (t->type() == Truss::Vertical && t->origin().z() <= 0.05f)
             drawFloorPlate(t->origin().x(), t->origin().y(), qMax(t->width(), 0.3f));
+
+        const QPointF a = w2s(t->origin());
+        const QPointF b = w2s(t->positionAt(t->length()));
+        const double wpx = qMax(6.0, double(t->width()) * m_scale);
+        const QLineF axis(a, b);
+
+        if (axis.length() < 4.0)
+        {
+            // The run points INTO the screen (a vertical truss seen from Top):
+            // draw the box-truss cross-section — a square with an X.
+            const double h = wpx / 2.0;
+            p.setPen(QPen(steel, 1.6));
+            p.setBrush(QColor(150, 154, 165, 45));
+            p.drawRect(QRectF(a.x() - h, a.y() - h, wpx, wpx));
+            p.drawLine(a.x() - h, a.y() - h, a.x() + h, a.y() + h);
+            p.drawLine(a.x() + h, a.y() - h, a.x() - h, a.y() + h);
+        }
+        else
+        {
+            // A real truss: two chords + diagonal webbing between them.
+            const QPointF dir = (b - a) / axis.length();
+            const QPointF perp(-dir.y(), dir.x());
+            const QPointF off = perp * (wpx / 2.0);
+            const QPointF a1 = a + off, a2 = a - off, b1 = b + off, b2 = b - off;
+            p.setPen(QPen(steel, 1.6));
+            p.setBrush(QColor(150, 154, 165, 30));
+            QPolygonF poly; poly << a1 << b1 << b2 << a2; p.drawPolygon(poly);
+            p.setPen(QPen(steel.darker(110), 1.0));   // Warren webbing
+            const int n = qMax(1, int(axis.length() / qMax(10.0, wpx)));
+            for (int i = 0; i < n; ++i)
+            {
+                const QPointF p0 = a + (b - a) * (double(i) / n);
+                const QPointF p1 = a + (b - a) * (double(i + 1) / n);
+                if (i % 2 == 0) p.drawLine(p0 + off, p1 - off);
+                else            p.drawLine(p0 - off, p1 + off);
+            }
+        }
     }
 }
 
