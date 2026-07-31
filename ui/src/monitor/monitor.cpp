@@ -95,7 +95,8 @@
 #include "feetinchesspinbox.h"
 #include "targetitem.h"
 #include "truss.h"
-#include "boom.h"
+#include "pipe.h"
+#include "stand.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "qlcpalette.h"
@@ -359,8 +360,10 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotImageRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::platformDoubleClicked,
             this, &Monitor::slotPlatformDoubleClicked);
-    connect(m_graphicsView, &MonitorGraphicsView::boomDoubleClicked,
-            this, &Monitor::slotEditBoom);
+    connect(m_graphicsView, &MonitorGraphicsView::pipeDoubleClicked,
+            this, &Monitor::slotEditPipe);
+    connect(m_graphicsView, &MonitorGraphicsView::standDoubleClicked,
+            this, &Monitor::slotEditStand);
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
@@ -2403,9 +2406,9 @@ void Monitor::slotEditTarget(quint32 tid)
     m_doc->setModified();
 }
 
-void Monitor::slotAddBoom()
+void Monitor::slotAddPipe()
 {
-    Boom *b = m_props->addBoom();
+    Pipe *b = m_props->addPipe();
     b->setName(tr("Boom %1").arg(b->id() + 1));
 
     QPointF mm = m_graphicsView->pixelsToRealPosition(
@@ -2414,11 +2417,106 @@ void Monitor::slotAddBoom()
     b->setOriginY(float(mm.y() / 1000.0));
     b->setLayerId(m_props->activeLayerId());
 
-    m_graphicsView->updatePlatforms();   // rebuilds platforms + booms
+    m_graphicsView->updatePlatforms();   // rebuilds platforms + pipes
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 
-    slotEditBoom(b->id());
+    slotEditPipe(b->id());
+}
+
+void Monitor::slotAddStand()
+{
+    Stand *s = m_props->addStand();
+    s->setName(tr("Stand %1").arg(s->id() + 1));
+    QPointF mm = m_graphicsView->pixelsToRealPosition(
+        m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    s->setOriginX(float(mm.x() / 1000.0));
+    s->setOriginY(float(mm.y() / 1000.0));
+    s->setLayerId(m_props->activeLayerId());
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    slotEditStand(s->id());
+}
+
+void Monitor::slotEditStand(quint32 sid)
+{
+    Stand *s = m_props->stand(sid);
+    if (!s) return;
+
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+    const double posR = isFeet ? 164.0 : 50.0;
+    const double hMax = isFeet ? 33.0 : 10.0;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Edit Stand — %1").arg(s->name()));
+    dlg.setMinimumWidth(360);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    QFormLayout *form = new QFormLayout;
+
+    QLineEdit *nameEdit = new QLineEdit(s->name(), &dlg);
+    form->addRow(tr("Name:"), nameEdit);
+    auto mkSpin = [&](double val, double lo, double hi) {
+        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
+        sp->setRange(lo, hi); sp->setDecimals(2); sp->setSuffix(sfx);
+        sp->setValue(val * toDisp); return sp;
+    };
+    QDoubleSpinBox *oxSpin = mkSpin(s->originX(), -posR, posR);
+    QDoubleSpinBox *oySpin = mkSpin(s->originY(), -posR, posR);
+    QDoubleSpinBox *hSpin  = mkSpin(s->height(), 0.1, hMax);
+    QDoubleSpinBox *brSpin = mkSpin(s->baseRadius(), 0.05, isFeet ? 6.6 : 2.0);
+    form->addRow(tr("Position X:"), oxSpin);
+    form->addRow(tr("Position Y:"), oySpin);
+    form->addRow(tr("Top height:"), hSpin);
+    form->addRow(tr("Base radius:"), brSpin);
+    vl->addLayout(form);
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    vl->addWidget(bb);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    s->setName(nameEdit->text());
+    s->setOriginX(float(oxSpin->value() * fromDisp));
+    s->setOriginY(float(oySpin->value() * fromDisp));
+    s->setHeight(float(hSpin->value() * fromDisp));
+    s->setBaseRadius(float(brSpin->value() * fromDisp));
+
+    m_props->recomputeStandMounts();     // pipes on this stand follow
+    m_graphicsView->updatePlatforms();
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (m_props->fixtureRigProps(fx->id()).onPipe())
+            m_graphicsView->updateFixture(fx->id());
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotAddElectric()
+{
+    Pipe *b = m_props->addPipe();
+    b->setName(tr("Electric %1").arg(b->id() + 1));
+    b->setOrientation(Pipe::Horizontal);
+    b->setLength(2.0f);       // ~6-7 ft run
+    b->setBaseZ(3.0f);        // overhead hang height
+    b->setRunAngle(0.0f);     // runs stage left-right
+    b->setBaseRadius(0.0f);   // no stand
+
+    QPointF mm = m_graphicsView->pixelsToRealPosition(
+        m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    b->setOriginX(float(mm.x() / 1000.0));
+    b->setOriginY(float(mm.y() / 1000.0));
+    b->setLayerId(m_props->activeLayerId());
+
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+
+    slotEditPipe(b->id());
 }
 
 void Monitor::slotAddPlatform()
@@ -2441,9 +2539,9 @@ void Monitor::slotAddPlatform()
     slotEditPlatform(p->id());
 }
 
-void Monitor::slotEditBoom(quint32 bid)
+void Monitor::slotEditPipe(quint32 bid)
 {
-    Boom *b = m_props->boom(bid);
+    Pipe *b = m_props->pipe(bid);
     if (!b) return;
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
@@ -2454,7 +2552,9 @@ void Monitor::slotEditBoom(quint32 bid)
     const double hMax = isFeet ? 66.0 : 20.0;
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Edit Boom — %1").arg(b->name()));
+    const bool horiz = (b->orientation() == Pipe::Horizontal);
+    dlg.setWindowTitle(tr("Edit %1 — %2")
+        .arg(horiz ? tr("Electric") : tr("Boom")).arg(b->name()));
     dlg.setMinimumWidth(420);
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
     QFormLayout *form = new QFormLayout;
@@ -2473,7 +2573,14 @@ void Monitor::slotEditBoom(quint32 bid)
     QDoubleSpinBox *bzSpin = mkSpin(b->baseZ(), 0.0, hMax);
     form->addRow(tr("Position X:"), oxSpin);
     form->addRow(tr("Position Y:"), oySpin);
-    form->addRow(tr("Pipe height:"), hSpin);
+    form->addRow(horiz ? tr("Run length:") : tr("Pipe height:"), hSpin);
+
+    // Horizontal run direction (electric) — degrees, 0 = stage left-right.
+    QDoubleSpinBox *runSpin = new QDoubleSpinBox(&dlg);
+    runSpin->setRange(-180, 180); runSpin->setDecimals(0); runSpin->setSuffix(QStringLiteral("°"));
+    runSpin->setValue(double(b->runAngle()));
+    if (horiz)
+        form->addRow(tr("Run angle:"), runSpin);
     form->addRow(tr("Base height (Z):"), bzSpin);
 
     QCheckBox *standChk = new QCheckBox(tr("On a stand (base)"), &dlg);
@@ -2499,18 +2606,29 @@ void Monitor::slotEditBoom(quint32 bid)
     form->addRow(tr("Hang from truss:"), trussCombo);
     QDoubleSpinBox *trussOffSpin = mkSpin(b->trussOffset(), 0.0, isFeet ? 200.0 : 60.0);
     form->addRow(tr("Along truss:"), trussOffSpin);
+
+    // Stand on a Stand object (base derived from the stand top).
+    QComboBox *standCombo = new QComboBox(&dlg);
+    standCombo->addItem(tr("(free / own base)"), quint32(Stand::invalidId()));
+    foreach (Stand *st, m_props->stands())
+    {
+        standCombo->addItem(st->name().isEmpty() ? tr("Stand %1").arg(st->id()) : st->name(), st->id());
+        if (st->id() == b->standId())
+            standCombo->setCurrentIndex(standCombo->count() - 1);
+    }
+    form->addRow(tr("On stand:"), standCombo);
     vl->addLayout(form);
 
-    // Fixtures mounted on this boom — per-fixture height up the pipe + facing angle.
+    // Fixtures mounted on this pipe — per-fixture height up the pipe + facing angle.
     QList<quint32> mounted;
     foreach (Fixture *fx, m_doc->fixtures())
-        if (fx != NULL && m_props->fixtureRigProps(fx->id()).boomId == bid)
+        if (fx != NULL && m_props->fixtureRigProps(fx->id()).pipeId == bid)
             mounted << fx->id();
 
     QList<QDoubleSpinBox *> offSpins, angSpins;
     if (!mounted.isEmpty())
     {
-        vl->addWidget(new QLabel(tr("Fixtures on this boom (height up the pipe · facing):"), &dlg));
+        vl->addWidget(new QLabel(tr("Fixtures on this pipe (height up the pipe · facing):"), &dlg));
         QTableWidget *tbl = new QTableWidget(mounted.size(), 3, &dlg);
         tbl->setHorizontalHeaderLabels(QStringList() << tr("Fixture") << tr("Height") << tr("Angle"));
         tbl->verticalHeader()->setVisible(false);
@@ -2524,11 +2642,11 @@ void Monitor::slotEditBoom(quint32 bid)
             tbl->setItem(i, 0, ni);
             QDoubleSpinBox *os = new QDoubleSpinBox(tbl);
             os->setRange(0.0, hMax); os->setDecimals(2); os->setSuffix(sfx);
-            os->setValue(double(rp.boomOffset) * toDisp);
+            os->setValue(double(rp.pipeOffset) * toDisp);
             tbl->setCellWidget(i, 1, os); offSpins << os;
             QDoubleSpinBox *as = new QDoubleSpinBox(tbl);
             as->setRange(-180, 180); as->setDecimals(0); as->setSuffix(QStringLiteral("°"));
-            as->setValue(double(rp.boomAngle));
+            as->setValue(double(rp.pipeAngle));
             tbl->setCellWidget(i, 2, as); angSpins << as;
         }
         vl->addWidget(tbl);
@@ -2548,6 +2666,7 @@ void Monitor::slotEditBoom(quint32 bid)
     b->setHeight(float(hSpin->value() * fromDisp));
     b->setBaseZ(float(bzSpin->value() * fromDisp));
     b->setBaseRadius(standChk->isChecked() ? float(brSpin->value() * fromDisp) : 0.0f);
+    b->setRunAngle(float(runSpin->value()));
 
     const quint32 tid = trussCombo->currentData().toUInt();
     if (tid != Truss::invalidId())
@@ -2559,17 +2678,19 @@ void Monitor::slotEditBoom(quint32 bid)
     {
         b->setParentTrussId(Truss::invalidId());
     }
-    m_props->recomputeBoomAnchors();   // derive base from the truss if hung
+    b->setStandId(standCombo->currentData().toUInt());   // invalid = free
+    m_props->recomputePipeAnchors();   // derive base from the truss if hung
+    m_props->recomputeStandMounts();   // …or from the stand if stand-mounted
 
     for (int i = 0; i < mounted.size(); ++i)
     {
         FixtureRigProps rp = m_props->fixtureRigProps(mounted[i]);
-        rp.boomOffset = float(offSpins[i]->value() * fromDisp);
-        rp.boomAngle  = float(angSpins[i]->value());
+        rp.pipeOffset = float(offSpins[i]->value() * fromDisp);
+        rp.pipeAngle  = float(angSpins[i]->value());
         m_props->setFixtureRigProps(mounted[i], rp);
     }
 
-    m_graphicsView->updatePlatforms();   // refresh the boom item
+    m_graphicsView->updatePlatforms();   // refresh the pipe item
     foreach (quint32 fid, mounted)
         m_graphicsView->updateFixture(fid);
     if (m_layersPanel) m_layersPanel->reload();
@@ -2713,7 +2834,11 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     menu.addAction(tr("Add Platform/Riser here"),
                    this, SLOT(slotAddPlatform()));
     menu.addAction(tr("Add Boom here"),
-                   this, SLOT(slotAddBoom()));
+                   this, SLOT(slotAddPipe()));
+    menu.addAction(tr("Add Electric here"),
+                   this, SLOT(slotAddElectric()));
+    menu.addAction(tr("Add Stand here"),
+                   this, SLOT(slotAddStand()));
     menu.addAction(QIcon(":/image.png"), tr("Add Image here"),
                    this, SLOT(slotAddImage()));
     menu.addSeparator();
@@ -3059,7 +3184,7 @@ public:
         float   barCross   = 0.0f;   ///< bar cross-shift (metres, 0 = centred)
     };
 
-    // isVertical: true for tower/boom trusses — draws a vertical elevation bar
+    // isVertical: true for tower/pipe trusses — draws a vertical elevation bar
     // (offset=0 at bottom, offset=length at top) instead of a horizontal strip.
     // displayFactor/unitStr: multiply metre values by factor for label display.
     TrussStripWidget(float trussLength, const QList<Slot> &slotList,
@@ -3642,10 +3767,10 @@ void Monitor::slotEditTruss(quint32 tid)
     // The bar's run.
     QComboBox *runCb = new QComboBox(&editDlg);
     runCb->addItem(tr("Along (parallel to truss)"),   Truss::RunAlong);
-    runCb->addItem(tr("Across (boom / cross-bar)"),   Truss::RunAcross);
+    runCb->addItem(tr("Across (pipe / cross-bar)"),   Truss::RunAcross);
     runCb->addItem(tr("Drop (hangs straight down)"),  Truss::RunDrop);
     runCb->setCurrentIndex(runCb->findData(t->barRun()));
-    runCb->setToolTip(tr("How the bar runs: along the truss, out as a boom, or "
+    runCb->setToolTip(tr("How the bar runs: along the truss, out as a pipe, or "
                          "hanging straight down."));
     QLabel *runLbl = new QLabel(tr("Run:")); form->addRow(runLbl, runCb);
 
@@ -3749,7 +3874,7 @@ void Monitor::slotEditTruss(quint32 tid)
         barsCreatedHere.append(barId);
         Truss *bar = m_props->truss(barId);
         // Extent along the PARENT'S strip axis (same rule as the pre-existing
-        // bars): a horizontal boom on a vertical tower is a point, not a pipe.
+        // bars): a horizontal pipe on a vertical tower is a point, not a pipe.
         float ext = 0.0f;
         if (bar != nullptr)
         {

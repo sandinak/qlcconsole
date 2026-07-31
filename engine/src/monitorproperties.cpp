@@ -144,8 +144,10 @@ void MonitorProperties::reset()
     m_trusses.clear();
     qDeleteAll(m_platforms);
     m_platforms.clear();
-    qDeleteAll(m_booms);
-    m_booms.clear();
+    qDeleteAll(m_pipes);
+    m_pipes.clear();
+    qDeleteAll(m_stands);
+    m_stands.clear();
     qDeleteAll(m_stageTargets);
     m_stageTargets.clear();
     m_rigProps.clear();
@@ -985,12 +987,13 @@ void MonitorProperties::recomputeChildTrusses()
         if (!changed)
             break;
     }
-    recomputeBoomAnchors();
+    recomputePipeAnchors();
+    recomputeStandMounts();
 }
 
-void MonitorProperties::recomputeBoomAnchors()
+void MonitorProperties::recomputePipeAnchors()
 {
-    foreach (Boom *b, m_booms)
+    foreach (Pipe *b, m_pipes)
     {
         if (!b->isTrussHung())
             continue;
@@ -998,7 +1001,7 @@ void MonitorProperties::recomputeBoomAnchors()
         if (t == nullptr)
             continue;
         // Pipe TOP sits at the truss point; the base (bottom) hangs below it by
-        // the pipe height. A truss-hung boom has no stand.
+        // the pipe height. A truss-hung pipe has no stand.
         const QVector3D p = t->positionAt(b->trussOffset());
         b->setOriginX(p.x());
         b->setOriginY(p.y());
@@ -1080,30 +1083,72 @@ void MonitorProperties::removePlatform(quint32 id)
     delete m_platforms.take(id);
 }
 
-quint32 MonitorProperties::nextBoomId() const
+quint32 MonitorProperties::nextPipeId() const
 {
     quint32 id = 0;
-    while (m_booms.contains(id))
+    while (m_pipes.contains(id))
         ++id;
     return id;
 }
 
-Boom *MonitorProperties::addBoom()
+Pipe *MonitorProperties::addPipe()
 {
-    quint32 id = nextBoomId();
-    Boom *b = new Boom(id, this);
-    m_booms.insert(id, b);
+    quint32 id = nextPipeId();
+    Pipe *b = new Pipe(id, this);
+    m_pipes.insert(id, b);
     return b;
 }
 
-void MonitorProperties::removeBoom(quint32 id)
+void MonitorProperties::removePipe(quint32 id)
 {
-    // Un-mount any fixtures that were rigged on this boom.
+    // Un-mount any fixtures that were rigged on this pipe.
     for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
-        if (it->boomId == id)
-            it->boomId = UINT_MAX;
+        if (it->pipeId == id)
+            it->pipeId = UINT_MAX;
 
-    delete m_booms.take(id);
+    delete m_pipes.take(id);
+}
+
+quint32 MonitorProperties::nextStandId() const
+{
+    quint32 id = 0;
+    while (m_stands.contains(id))
+        ++id;
+    return id;
+}
+
+Stand *MonitorProperties::addStand()
+{
+    quint32 id = nextStandId();
+    Stand *s = new Stand(id, this);
+    m_stands.insert(id, s);
+    return s;
+}
+
+void MonitorProperties::removeStand(quint32 id)
+{
+    // Detach any pipes that stood on it (they revert to their own base).
+    foreach (Pipe *p, m_pipes)
+        if (p->standId() == id)
+            p->setStandId(Stand::invalidId());
+    delete m_stands.take(id);
+}
+
+void MonitorProperties::recomputeStandMounts()
+{
+    foreach (Pipe *p, m_pipes)
+    {
+        if (!p->isStandMounted())
+            continue;
+        Stand *s = m_stands.value(p->standId(), nullptr);
+        if (s == nullptr)
+            continue;
+        const QVector3D top = s->topPos();
+        p->setOriginX(top.x());
+        p->setOriginY(top.y());
+        p->setBaseZ(top.z());
+        p->setBaseRadius(0.0f);   // the stand provides the base
+    }
 }
 
 float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
@@ -1230,13 +1275,13 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         return p;
     }
 
-    // Boom mount: rides a boom pipe at boomOffset up from the base, nudged to the
-    // pipe surface in the facing direction. Derived so it follows the boom.
-    const Boom *bm = (rp.boomId != Boom::invalidId()) ? m_booms.value(rp.boomId, nullptr) : nullptr;
+    // Boom mount: rides a pipe pipe at pipeOffset up from the base, nudged to the
+    // pipe surface in the facing direction. Derived so it follows the pipe.
+    const Pipe *bm = (rp.pipeId != Pipe::invalidId()) ? m_pipes.value(rp.pipeId, nullptr) : nullptr;
     if (bm != nullptr)
     {
-        QVector3D p = bm->positionAt(rp.boomOffset);   // pipe centre at that height
-        const double th = qDegreesToRadians(double(rp.boomAngle));
+        QVector3D p = bm->positionAt(rp.pipeOffset);   // pipe centre at that height
+        const double th = qDegreesToRadians(double(rp.pipeAngle));
         const float r = bm->diameter() * 0.5f;
         p.setX(p.x() + r * float(qSin(th)));   // 0° = downstage (-Y)
         p.setY(p.y() - r * float(qCos(th)));
@@ -1619,17 +1664,30 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 delete p;
             }
         }
-        else if (root.name() == QStringLiteral("Boom"))
+        else if (root.name() == QStringLiteral("Pipe") || root.name() == QStringLiteral("Boom"))
         {
-            Boom *b = new Boom(nextBoomId(), this);
-            if (b->loadXML(root) && !m_booms.contains(b->id()))
+            Pipe *b = new Pipe(nextPipeId(), this);
+            if (b->loadXML(root) && !m_pipes.contains(b->id()))
             {
-                m_booms.insert(b->id(), b);
+                m_pipes.insert(b->id(), b);
             }
             else
             {
-                qWarning() << "Discarding boom with missing or duplicate id" << b->id();
+                qWarning() << "Discarding pipe with missing or duplicate id" << b->id();
                 delete b;
+            }
+        }
+        else if (root.name() == QStringLiteral("Stand"))
+        {
+            Stand *s = new Stand(nextStandId(), this);
+            if (s->loadXML(root) && !m_stands.contains(s->id()))
+            {
+                m_stands.insert(s->id(), s);
+            }
+            else
+            {
+                qWarning() << "Discarding stand with missing or duplicate id" << s->id();
+                delete s;
             }
         }
         else if (root.name() == QStringLiteral("StageTarget"))
@@ -1685,9 +1743,9 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (a.hasAttribute("SA")) rp.studioAngle = a.value("SA").toFloat();
             if (a.hasAttribute("Boom"))
             {
-                rp.boomId     = a.value("Boom").toUInt();
-                rp.boomOffset = a.value("BoomOfs").toFloat();
-                rp.boomAngle  = a.value("BoomAng").toFloat();
+                rp.pipeId     = a.value("Boom").toUInt();
+                rp.pipeOffset = a.value("BoomOfs").toFloat();
+                rp.pipeAngle  = a.value("BoomAng").toFloat();
             }
             m_rigProps[fid] = rp;
             root.skipCurrentElement();
@@ -2039,8 +2097,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         p->saveXML(doc);
 
     // Booms
-    foreach (const Boom *b, m_booms)
+    foreach (const Pipe *b, m_pipes)
         b->saveXML(doc);
+
+    // Stands
+    foreach (const Stand *s, m_stands)
+        s->saveXML(doc);
 
     // Stage targets
     foreach (const StageTarget *t, m_stageTargets)
@@ -2078,11 +2140,11 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));
             doc->writeAttribute(QStringLiteral("DeckH"), QString::number(double(rp.deckHeightOffset), 'f', 3));
         }
-        if (rp.onBoom())
+        if (rp.onPipe())
         {
-            doc->writeAttribute(QStringLiteral("Boom"),    QString::number(rp.boomId));
-            doc->writeAttribute(QStringLiteral("BoomOfs"), QString::number(double(rp.boomOffset), 'f', 3));
-            doc->writeAttribute(QStringLiteral("BoomAng"), QString::number(double(rp.boomAngle), 'f', 1));
+            doc->writeAttribute(QStringLiteral("Boom"),    QString::number(rp.pipeId));
+            doc->writeAttribute(QStringLiteral("BoomOfs"), QString::number(double(rp.pipeOffset), 'f', 3));
+            doc->writeAttribute(QStringLiteral("BoomAng"), QString::number(double(rp.pipeAngle), 'f', 1));
         }
         if (!rp.groupLocal.isNull())
         {

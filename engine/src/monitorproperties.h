@@ -30,7 +30,8 @@
 
 #include "truss.h"
 #include "stageplatform.h"
-#include "boom.h"
+#include "pipe.h"
+#include "stand.h"
 #include "stagetarget.h"
 
 class QXmlStreamReader;
@@ -484,9 +485,9 @@ public:
      *  once after load. Iterates a few passes so a bar-on-a-bar also settles. */
     void recomputeChildTrusses();
 
-    /** Re-derive the base position of every truss-hung boom from its parent
+    /** Re-derive the base position of every truss-hung pipe from its parent
      *  truss (pipe top at the truss point, hanging below). */
-    void recomputeBoomAnchors();
+    void recomputePipeAnchors();
 
     /** Re-slave every platform-anchored studio group's local frame to its
      *  platform (origin = the platform's reference corner, no rotation), so
@@ -529,24 +530,38 @@ public:
      * Booms (vertical fixture pipes on a stand)
      ********************************************************************/
 public:
-    /** Return all defined booms (owned by this object). */
-    QList<Boom*> booms() const { return m_booms.values(); }
+    /** Return all defined pipes (owned by this object). */
+    QList<Pipe*> pipes() const { return m_pipes.values(); }
 
-    /** Look up a boom by ID; returns nullptr if not found. */
-    Boom *boom(quint32 id) const { return m_booms.value(id, nullptr); }
+    /** Look up a pipe by ID; returns nullptr if not found. */
+    Pipe *pipe(quint32 id) const { return m_pipes.value(id, nullptr); }
 
-    /** Add a new boom with a unique ID. Takes ownership. */
-    Boom *addBoom();
+    /** Add a new pipe with a unique ID. Takes ownership. */
+    Pipe *addPipe();
 
-    /** Remove and delete the boom with the given ID. */
-    void removeBoom(quint32 id);
+    /** Remove and delete the pipe with the given ID. */
+    void removePipe(quint32 id);
 
-    /** Next unused boom ID. */
-    quint32 nextBoomId() const;
+    /** Next unused pipe ID. */
+    quint32 nextPipeId() const;
+
+    /********************************************************************
+     * Stands (placeable support bases)
+     ********************************************************************/
+public:
+    QList<Stand*> stands() const { return m_stands.values(); }
+    Stand *stand(quint32 id) const { return m_stands.value(id, nullptr); }
+    Stand *addStand();
+    void removeStand(quint32 id);
+    quint32 nextStandId() const;
+
+    /** Re-derive the base of every stand-mounted pipe from its stand top. */
+    void recomputeStandMounts();
 
 private:
     QMap<quint32, StagePlatform*> m_platforms;
-    QMap<quint32, Boom*> m_booms;
+    QMap<quint32, Pipe*> m_pipes;
+    QMap<quint32, Stand*> m_stands;
 
     /********************************************************************
      * Background / scenic images (placeable objects)

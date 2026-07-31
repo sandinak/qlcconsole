@@ -303,11 +303,14 @@ protected slots:
 
     /** Add a new platform and open its editor. */
     void slotAddPlatform();
-    void slotAddBoom();
+    void slotAddPipe();
+    void slotAddElectric();
+    void slotAddStand();
+    void slotEditStand(quint32 sid);
 
     /** Open the platform edit dialog for the given platform ID. */
     void slotEditPlatform(quint32 pid);
-    void slotEditBoom(quint32 bid);
+    void slotEditPipe(quint32 bid);
 
     /** Open platform edit on double-click. */
     void slotPlatformDoubleClicked(quint32 pid);

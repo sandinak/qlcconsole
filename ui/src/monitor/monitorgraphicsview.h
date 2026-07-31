@@ -33,7 +33,8 @@ class MonitorProperties;
 class MonitorFixtureItem;
 class TrussItem;
 class PlatformItem;
-class MonitorBoomItem;
+class PipeItem;
+class StandItem;
 class PowerSourceItem;
 class TargetItem;
 class MonitorImageItem;
@@ -358,7 +359,7 @@ public:
      *  fixture context menu and the Layers-tree drag-onto-truss (2D drop-to-bind
      *  was removed so assignment is now always explicit). */
     void attachFixtureToTruss(quint32 fid, quint32 trussId);
-    void attachFixtureToBoom(quint32 fid, quint32 boomId);
+    void attachFixtureToPipe(quint32 fid, quint32 pipeId);
 
     /** Unbind fixture @p fid from its truss (leaves it where it sits). */
     void detachFixtureFromTruss(quint32 fid);
@@ -475,7 +476,8 @@ protected slots:
 
     /** Slot called when a PlatformItem is dropped after a drag */
     void slotPlatformMoved(PlatformItem *item);
-    void slotBoomMoved(MonitorBoomItem *item);
+    void slotPipeMoved(PipeItem *item);
+    void slotStandMoved(StandItem *item);
 
     /** Slot called when a PowerSourceItem is dropped after a drag */
     void slotPowerSourceMoved(PowerSourceItem *item);
@@ -574,7 +576,8 @@ signals:
 
     /** Signal emitted when the user double-clicks a platform item */
     void platformDoubleClicked(quint32 pid);
-    void boomDoubleClicked(quint32 boomId);
+    void pipeDoubleClicked(quint32 pipeId);
+    void standDoubleClicked(quint32 standId);
 
     /** Signal emitted when the user right-clicks empty canvas space */
     void contextMenuRequested(QPointF scenePos);
@@ -651,7 +654,8 @@ private:
 
     /** Interactive platform items keyed by platform ID. */
     QHash <quint32, PlatformItem*> m_platformItems;
-    QHash <quint32, MonitorBoomItem*> m_boomItems;
+    QHash <quint32, PipeItem*> m_pipeItems;
+    QHash <quint32, StandItem*> m_standItems;
 
     /** Power-source markers, indexed positionally to PowerDistribution::sources(). */
     QList <PowerSourceItem*> m_powerSourceItems;

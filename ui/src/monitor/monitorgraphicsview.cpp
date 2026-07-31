@@ -42,8 +42,10 @@
 #include "studiotemplate.h"
 #include "studiocomponentbrowser.h"
 #include "platformitem.h"
-#include "monitorboomitem.h"
-#include "boom.h"
+#include "pipeitem.h"
+#include "standitem.h"
+#include "stand.h"
+#include "pipe.h"
 #include "powersourceitem.h"
 #include "powerdistribution.h"
 #include "targetitem.h"
@@ -1712,9 +1714,9 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     // view (top too — they sit on the riser's edge/face). Free/truss fixtures
     // keep their stored XY in top view and use the 3-D rig pos in elevation.
     const FixtureRigProps frp = m_doc->monitorProperties()->fixtureRigProps(id);
-    // Riser- and boom-mounted fixtures derive their position from the structure
+    // Riser- and pipe-mounted fixtures derive their position from the structure
     // in EVERY view (they follow it), so centre the icon on the derived point.
-    const bool riser = frp.onRiser() || frp.onBoom();
+    const bool riser = frp.onRiser() || frp.onPipe();
     // A truss-bound fixture's stored position is the point ON the truss line, so
     // centre the icon on it (like risers) instead of pinning its top-left corner.
     const bool onTruss = (frp.trussId != Truss::invalidId());
@@ -2244,12 +2246,18 @@ void MonitorGraphicsView::updatePlatforms()
         delete pi;
     }
     m_platformItems.clear();
-    foreach (MonitorBoomItem *bi, m_boomItems)
+    foreach (PipeItem *bi, m_pipeItems)
     {
         m_scene->removeItem(bi);
         delete bi;
     }
-    m_boomItems.clear();
+    m_pipeItems.clear();
+    foreach (StandItem *si, m_standItems)
+    {
+        m_scene->removeItem(si);
+        delete si;
+    }
+    m_standItems.clear();
 
     MonitorProperties *props = m_doc->monitorProperties();
     if (props == nullptr || m_cellPixels == 0)
@@ -2288,17 +2296,33 @@ void MonitorGraphicsView::updatePlatforms()
                 this, &MonitorGraphicsView::slotPlatformMoved);
     }
 
-    // Booms: a plan disc + pipe dot in Top; a vertical pipe in the elevations.
-    foreach (Boom *b, props->booms())
+    // Pipes: vertical (boom) = plan disc + dot in Top, vertical pipe in elevation;
+    // horizontal (electric) = a line from start to end, projected per POV.
+    auto toTopPx = [&](const QVector3D &w) {
+        return QPointF(m_xOffset + (w.x() * 1000.0 * m_cellPixels) / m_unitValue,
+                       m_yOffset + (w.y() * 1000.0 * m_cellPixels) / m_unitValue);
+    };
+    foreach (Pipe *b, props->pipes())
     {
         const float pxPipe = float((b->diameter() * 1000.0 * m_cellPixels) / m_unitValue);
-        MonitorBoomItem *bi = nullptr;
-        if (m_pov == PovTop)
+        PipeItem *bi = nullptr;
+        if (b->orientation() == Pipe::Horizontal)
+        {
+            const QVector3D s = b->positionAt(0.0f);
+            const QVector3D e = b->positionAt(b->length());
+            const QPointF ps = (m_pov == PovTop) ? toTopPx(s)
+                             : projectMm(s.x() * 1000.0, s.y() * 1000.0, s.z() * 1000.0);
+            const QPointF pe = (m_pov == PovTop) ? toTopPx(e)
+                             : projectMm(e.x() * 1000.0, e.y() * 1000.0, e.z() * 1000.0);
+            bi = new PipeItem(b, m_doc, float(ps.x()), float(ps.y()), 0.0f, pxPipe);
+            bi->setLine(pe - ps);
+        }
+        else if (m_pov == PovTop)
         {
             const float pxCX = float(m_xOffset + (b->originX() * 1000.0 * m_cellPixels) / m_unitValue);
             const float pxCY = float(m_yOffset + (b->originY() * 1000.0 * m_cellPixels) / m_unitValue);
             const float pxBaseR = float((b->baseRadius() * 1000.0 * m_cellPixels) / m_unitValue);
-            bi = new MonitorBoomItem(b, m_doc, pxCX, pxCY, pxBaseR, pxPipe);
+            bi = new PipeItem(b, m_doc, pxCX, pxCY, pxBaseR, pxPipe);
         }
         else
         {
@@ -2306,25 +2330,65 @@ void MonitorGraphicsView::updatePlatforms()
             const QPointF top  = projectMm(b->originX() * 1000.0, b->originY() * 1000.0,
                                            (b->baseZ() + b->height()) * 1000.0);
             const float pxHeight = float(qAbs(top.y() - base.y()));
-            bi = new MonitorBoomItem(b, m_doc, float(base.x()), float(base.y()),
+            bi = new PipeItem(b, m_doc, float(base.x()), float(base.y()),
                                      0.0f, pxPipe, true, pxHeight);
         }
         bi->setMovable(!m_layoutLocked);
         bi->showLabel(m_doc->monitorProperties()->layer(b->layerId()).labels);
         m_scene->addItem(bi);
-        m_boomItems.insert(b->id(), bi);
-        connect(bi, &MonitorBoomItem::itemDropped,
-                this, &MonitorGraphicsView::slotBoomMoved);
+        m_pipeItems.insert(b->id(), bi);
+        connect(bi, &PipeItem::itemDropped,
+                this, &MonitorGraphicsView::slotPipeMoved);
+    }
+
+    // Stands: base disc + post in Top; a vertical post in the elevations.
+    foreach (Stand *s, props->stands())
+    {
+        const float pxBaseR = float((s->baseRadius() * 1000.0 * m_cellPixels) / m_unitValue);
+        StandItem *si = nullptr;
+        if (m_pov == PovTop)
+        {
+            const float pxCX = float(m_xOffset + (s->originX() * 1000.0 * m_cellPixels) / m_unitValue);
+            const float pxCY = float(m_yOffset + (s->originY() * 1000.0 * m_cellPixels) / m_unitValue);
+            si = new StandItem(s, m_doc, pxCX, pxCY, pxBaseR);
+        }
+        else
+        {
+            const QPointF base = projectMm(s->originX() * 1000.0, s->originY() * 1000.0, 0.0);
+            const QPointF top  = projectMm(s->originX() * 1000.0, s->originY() * 1000.0, s->height() * 1000.0);
+            si = new StandItem(s, m_doc, float(base.x()), float(base.y()),
+                               pxBaseR, true, float(qAbs(top.y() - base.y())));
+        }
+        si->setMovable(!m_layoutLocked);
+        si->showLabel(m_doc->monitorProperties()->layer(s->layerId()).labels);
+        m_scene->addItem(si);
+        m_standItems.insert(s->id(), si);
+        connect(si, &StandItem::itemDropped, this, &MonitorGraphicsView::slotStandMoved);
     }
 
     refreshItemLayerState();
 }
 
-void MonitorGraphicsView::slotBoomMoved(MonitorBoomItem *item)
+void MonitorGraphicsView::slotStandMoved(StandItem *item)
 {
     if (item == nullptr || m_cellPixels == 0)
         return;
-    Boom *b = item->boom();
+    Stand *s = item->stand();
+    if (s == nullptr)
+        return;
+    const QPointF c = item->pos();
+    s->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+    s->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+    m_doc->monitorProperties()->recomputeStandMounts();   // pipes on it follow
+    m_doc->setModified();
+    emit mapStructureChanged();
+}
+
+void MonitorGraphicsView::slotPipeMoved(PipeItem *item)
+{
+    if (item == nullptr || m_cellPixels == 0)
+        return;
+    Pipe *b = item->pipe();
     if (b == nullptr)
         return;
     const QPointF c = item->pos();   // base centre in scene pixels
@@ -3286,9 +3350,14 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         emit platformDoubleClicked(pi->platformId());
         return;
     }
-    if (auto *bi = dynamic_cast<MonitorBoomItem *>(it))
+    if (auto *bi = dynamic_cast<PipeItem *>(it))
     {
-        emit boomDoubleClicked(bi->boomId());
+        emit pipeDoubleClicked(bi->pipeId());
+        return;
+    }
+    if (auto *si = dynamic_cast<StandItem *>(it))
+    {
+        emit standDoubleClicked(si->standId());
         return;
     }
     if (auto *tgi = dynamic_cast<TargetItem *>(it))
@@ -3359,12 +3428,12 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
             detachFixtureFromTruss(fid);
         });
 
-        // Mount on a boom ▶ (rides the pipe; height is set in the boom editor).
+        // Mount on a pipe ▶ (rides the pipe; height is set in the pipe editor).
         QMenu *boomMenu = menu.addMenu(tr("Mount on Boom"));
-        const QList<Boom *> booms = props->booms();
-        if (booms.isEmpty())
+        const QList<Pipe *> pipes = props->pipes();
+        if (pipes.isEmpty())
             boomMenu->setEnabled(false);
-        for (Boom *b : booms)
+        for (Pipe *b : pipes)
         {
             if (b == nullptr)
                 continue;
@@ -3372,18 +3441,18 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
             QAction *a = boomMenu->addAction(b->name().isEmpty()
                                              ? tr("Boom %1").arg(bid) : b->name());
             a->setCheckable(true);
-            a->setChecked(rp.boomId == bid);
+            a->setChecked(rp.pipeId == bid);
             connect(a, &QAction::triggered, this, [this, fid, bid]() {
-                attachFixtureToBoom(fid, bid);
+                attachFixtureToPipe(fid, bid);
             });
         }
-        if (rp.boomId != Boom::invalidId())
+        if (rp.pipeId != Pipe::invalidId())
         {
             QAction *detachBoom = menu.addAction(tr("Remove from Boom"));
             connect(detachBoom, &QAction::triggered, this, [this, fid]() {
                 MonitorProperties *p = m_doc->monitorProperties();
                 FixtureRigProps r = p->fixtureRigProps(fid);
-                r.boomId = Boom::invalidId();
+                r.pipeId = Pipe::invalidId();
                 p->setFixtureRigProps(fid, r);
                 updateFixture(fid);
                 m_doc->setModified();
@@ -3538,10 +3607,10 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
     emit contextMenuRequested(sp);
 }
 
-void MonitorGraphicsView::attachFixtureToBoom(quint32 fid, quint32 boomId)
+void MonitorGraphicsView::attachFixtureToPipe(quint32 fid, quint32 pipeId)
 {
     MonitorProperties *props = m_doc->monitorProperties();
-    Boom *b = props->boom(boomId);
+    Pipe *b = props->pipe(pipeId);
     if (b == nullptr)
         return;
 
@@ -3550,9 +3619,9 @@ void MonitorGraphicsView::attachFixtureToBoom(quint32 fid, quint32 boomId)
     rp.trussId = Truss::invalidId();
     rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
     rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
-    rp.boomId = boomId;
-    if (rp.boomOffset <= 0.0f)            // first mount → sit near the top
-        rp.boomOffset = b->height() * 0.85f;
+    rp.pipeId = pipeId;
+    if (rp.pipeOffset <= 0.0f)            // first mount → sit near the top
+        rp.pipeOffset = b->height() * 0.85f;
     props->setFixtureRigProps(fid, rp);
 
     updateFixture(fid);
