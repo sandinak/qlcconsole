@@ -2748,7 +2748,10 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         anyA->setCheckable(true);
         anyA->setActionGroup(grp);
         anyA->setChecked(cur < 0);
-        connect(anyA, &QAction::triggered, this, [tc]() { if (tc) tc->setSourceUniverse(-1); });
+        connect(anyA, &QAction::triggered, this, [this, tc]() {
+            if (tc) tc->setSourceUniverse(-1);
+            slotTimecodeStatusChanged();
+        });
 
         int patchedInputs = 0;
         for (quint32 i = 0; i < m_doc->inputOutputMap()->universesCount(); i++)
@@ -2773,8 +2776,9 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             a->setCheckable(true);
             a->setActionGroup(grp);
             a->setChecked(qint32(uniID) == cur);
-            connect(a, &QAction::triggered, this, [tc, uniID]() {
+            connect(a, &QAction::triggered, this, [this, tc, uniID]() {
                 if (tc) tc->setSourceUniverse(qint32(uniID));
+                slotTimecodeStatusChanged();   // reflect the selection immediately
             });
         }
 
@@ -3101,8 +3105,29 @@ void App::slotTimecodeStatusChanged()
     if (tc->lastUniverse() < 0)
     {
         if (m_tcDisplayTimer != nullptr) m_tcDisplayTimer->stop();
-        m_statusTimecodeLabel->setText(tr("MTC: no source"));
-        applyStyle(grey);
+        // A specific source SELECTED but no timecode received yet → show it as
+        // armed/waiting (amber), not a bare grey "no source".
+        if (tc->sourceUniverse() >= 0 && m_doc != NULL)
+        {
+            QString uname;
+            InputOutputMap *iom = m_doc->inputOutputMap();
+            for (quint32 i = 0; i < iom->universesCount(); i++)
+                if (qint32(iom->getUniverseID(i)) == tc->sourceUniverse())
+                {
+                    uname = iom->getUniverseNameByIndex(i);
+                    if (uname.isEmpty()) uname = tr("Universe %1").arg(i + 1);
+                    break;
+                }
+            m_statusTimecodeLabel->setText(uname.isEmpty()
+                ? tr("MTC ◌ armed — waiting")
+                : tr("MTC ◌ %1 — waiting").arg(uname));
+            applyStyle(amber);
+        }
+        else
+        {
+            m_statusTimecodeLabel->setText(tr("MTC: no source"));
+            applyStyle(grey);
+        }
         return;
     }
 
