@@ -285,6 +285,8 @@ protected slots:
 
     /** Show the fixture properties editor on double-click. */
     void slotFixtureDoubleClicked(quint32 fid);
+    /** Edit ONE fixture's properties (studio single-fixture path). */
+    void editFixtureProperties(quint32 fid);
 
     /** Open truss edit dialog on double-click. */
     void slotTrussDoubleClicked(quint32 tid);

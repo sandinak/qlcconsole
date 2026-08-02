@@ -2063,17 +2063,20 @@ void Monitor::slotPasteFeatures()
     pasteClipboard(step, step);
 }
 
-void Monitor::slotFixtureDoubleClicked(quint32 fid)
+void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
 {
-    // If the target isn't already part of the current selection (e.g. the studio
-    // inspector's "Full properties…" asking for ONE fixture), select just it so
-    // the DETAILED single-fixture editor opens — not whatever the map had selected.
-    if (fid != 0)
-    {
-        MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fid);
-        if (it == nullptr || !it->isSelected())
-            m_graphicsView->selectFixtureExclusive(fid);
-    }
+    // Map double-click: edit whatever is selected (single OR the multi-selection
+    // the map restored) — keeps multi-edit on the 2D plot.
+    showFixtureItemEditor();
+}
+
+void Monitor::editFixtureProperties(quint32 fid)
+{
+    // The studio's single-fixture path (inspector 'Full properties…', canvas
+    // double-click, tree double-click): ALWAYS edit just this one fixture, even
+    // if the map still has a multi-selection.
+    if (fid == 0) return;
+    m_graphicsView->selectFixtureExclusive(fid);
     showFixtureItemEditor();
 }
 
@@ -2278,7 +2281,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         if (view) view->reload();
     });
     connect(fullBtn, &QPushButton::clicked, insp,
-            [this, curFid]() { if (*curFid) slotFixtureDoubleClicked(*curFid); });
+            [this, curFid]() { if (*curFid) editFixtureProperties(*curFid); });
 
     body->addWidget(left);
     body->addWidget(center);
@@ -2367,7 +2370,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     // Double-click a tree fixture → edit it; a GROUP folder → its head-layout grid.
     connect(tree, &QTreeWidget::itemDoubleClicked, tree, [this](QTreeWidgetItem *it, int) {
         const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-        if (fid != 0) { slotFixtureDoubleClicked(fid); return; }
+        if (fid != 0) { editFixtureProperties(fid); return; }
         const quint32 gid = it->data(0, Qt::UserRole + 1).toUInt();
         if (gid != 0) openGroupLayout(gid);
     });
@@ -2455,7 +2458,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         lockBtn->setText(on ? tr("🔒 Locked") : tr("🔓 Unlocked"));
     });
     connect(view, &StructureStudioView::fixtureActivated, body,
-            [this](quint32 fid){ slotFixtureDoubleClicked(fid); });
+            [this](quint32 fid){ editFixtureProperties(fid); });
     connect(view, &StructureStudioView::fixtureMoved, body,
             [this](quint32 fid){ m_graphicsView->updateFixture(fid); });
     connect(addBarBtn, &QPushButton::clicked, body,
@@ -2497,7 +2500,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             QAction *aEdit = m.addAction(tr("Edit fixture…"));
             QAction *aRem  = m.addAction(tr("Remove from object"));
             QAction *ch = m.exec(globalPos);
-            if (ch == aEdit) slotFixtureDoubleClicked(fidUnder);
+            if (ch == aEdit) editFixtureProperties(fidUnder);
             else if (ch == aRem)
             {
                 pushUndo();
