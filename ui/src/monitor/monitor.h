@@ -315,13 +315,22 @@ protected slots:
      *  StructureStudioView) for the object editors. kind: 0=Stand,1=Tower,2=Truss.
      *  If @p outView is non-null it receives the view so the caller can reload()
      *  it after a live geometry edit. */
+    /** The canvas-centric object-editor body: a splitter of
+     *  [ Geometry (collapsible) + fixtures-by-group tree | canvas | inspector ].
+     *  @p geometryForm is the per-kind geometry widget (may be null). */
     class QWidget *makeStudioPane(class QDialog *dlg, int kind, quint32 id,
+                                  class QWidget *geometryForm,
                                   class StructureStudioView **outView);
 
-    /** Structure-studio actions (S2): mount existing fixtures onto the structure,
-     *  or add a bar to it. kind: 0=Stand,1=Tower,2=Truss. Reloads @p view. */
+    /** Structure-studio actions: mount fixtures / a whole fixture group onto the
+     *  structure, or add a bar. kind: 0=Stand,1=Tower,2=Truss,3=Platform,4=Pipe. */
     void studioAddFixture(int kind, quint32 id, class StructureStudioView *view);
+    void studioAddGroup(int kind, quint32 id, class StructureStudioView *view);
     void studioAddBar(int kind, quint32 id, class StructureStudioView *view);
+    /** Mount one fixture on the structure (clears its other mounts). */
+    void mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32 boomId);
+    /** The pipe id to hang fixtures on for a stand/pipe kind (invalid if none). */
+    quint32 structureBoomId(int kind, quint32 id) const;
 
     /** Open the platform edit dialog for the given platform ID. */
     void slotEditPlatform(quint32 pid);

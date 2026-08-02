@@ -53,6 +53,12 @@ void StructureStudioView::reload()
     update();
 }
 
+void StructureStudioView::setHighlight(const QList<quint32> &ids)
+{
+    m_highlight = QSet<quint32>(ids.begin(), ids.end());
+    update();
+}
+
 /*********************************************************************
  * Projection
  *********************************************************************/
@@ -547,6 +553,12 @@ void StructureStudioView::drawFixtures(QPainter &p) const
         QColor gel = props->fixtureGelColor(fid, 0, 0);
         if (!gel.isValid() || gel == QColor(Qt::black))
             gel = QColor(230, 210, 120);
+        if (m_highlight.contains(fid))   // selection ring
+        {
+            p.setPen(QPen(QColor(0, 170, 255), 2.5));
+            p.setBrush(Qt::NoBrush);
+            p.drawEllipse(c, 9.5, 9.5);
+        }
         p.setPen(QPen(gel.darker(160), 1.2));
         p.setBrush(gel);
         p.drawEllipse(c, 6.0, 6.0);
@@ -598,7 +610,11 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         m_dragFid = hitTestFixture(e->pos());   // 0 if empty space
         m_dragged = false;
         if (m_dragFid != 0)
+        {
             setCursor(Qt::ClosedHandCursor);
+            setHighlight({ m_dragFid });
+            emit fixtureSelected(m_dragFid);
+        }
     }
 }
 

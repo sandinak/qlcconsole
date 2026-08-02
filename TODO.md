@@ -27,6 +27,29 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## Now — rebrand the fork to "qlcconsole" *(app-wide; not started)*
+
+The fork is now firmly a **desktop console** (mouse+keyboard, MIDI, multi-window),
+well past the tablet/Android QML flavour — rebrand from QLC+ to **qlcconsole**.
+Distinct from the *Lighting Studio* rename (that was just the 2D tool; shipped).
+Scope: app/window title, About box, launcher, macOS bundle/package names
+(platforms/macos), and decide whether the `qlcplus` CLI binary name changes too.
+Keep upstream attribution/license — this is a fork identity, not a takeover.
+
+---
+
+## Now — unify the object editor's fixture management *(design-first; options pending)*
+
+Follow-on to the embedded object-editor canvas (Lighting Studio). Combine the
+fixture-properties "edit" dialog (double-click a fixture) and the "Edit Fixtures in
+Studio" layout window into ONE object editor. Wants: a left tree of fixtures BY
+FIXTURE GROUP as assigned to this object; right-click to add fixtures/groups;
+multi-select → create a fixture group (opens the Fixtures-tab head-layout mapping);
+drag-drop tree→face to add; distribute/put-on-face via popup or right-click.
+**Design options being drafted — pick a direction before building.**
+
+---
+
 ## Now — more stage-feature objects *(active; design-first)*
 
 Extend the discrete map-object model (truss / platform / target / power source /

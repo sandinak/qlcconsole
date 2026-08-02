@@ -48,6 +48,8 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
@@ -2064,74 +2066,241 @@ void Monitor::slotTrussDoubleClicked(quint32 tid)
 }
 
 QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
-                                 StructureStudioView **outView)
+                                 QWidget *geometryForm, StructureStudioView **outView)
 {
-    // A reusable right-hand pane: plane switcher + the graphical structure
-    // canvas. Embedded into the object (stand/tower/truss) editors so one window
-    // shows the geometry fields AND the live picture, in the chosen units.
-    QWidget *pane = new QWidget(dlg);
-    QVBoxLayout *pv = new QVBoxLayout(pane);
-    pv->setContentsMargins(0, 0, 0, 0);
+    // The canvas-centric object editor: a splitter of
+    //   [ Geometry (collapsible) + fixtures-by-group tree | canvas | inspector ].
+    QSplitter *body = new QSplitter(Qt::Horizontal, dlg);
 
+    // ---- LEFT: geometry (collapsible) + the fixture tree -------------------
+    QWidget *left = new QWidget(body);
+    QVBoxLayout *lv = new QVBoxLayout(left);
+    lv->setContentsMargins(0, 0, 0, 0);
+    if (geometryForm != nullptr)
+    {
+        QGroupBox *geoBox = new QGroupBox(tr("Geometry"), left);
+        geoBox->setCheckable(true);
+        geoBox->setChecked(true);
+        QVBoxLayout *gv = new QVBoxLayout(geoBox);
+        gv->setContentsMargins(6, 4, 6, 6);
+        gv->addWidget(geometryForm);
+        connect(geoBox, &QGroupBox::toggled, geometryForm, &QWidget::setVisible);
+        lv->addWidget(geoBox);
+    }
+    lv->addWidget(new QLabel(tr("Fixtures on this object:"), left));
+    QTreeWidget *tree = new QTreeWidget(left);
+    tree->setHeaderHidden(true);
+    tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    lv->addWidget(tree, 1);
+    left->setMinimumWidth(220);
+
+    // ---- CENTER: toolbar + graphical canvas --------------------------------
+    QWidget *center = new QWidget(body);
+    QVBoxLayout *cv = new QVBoxLayout(center);
+    cv->setContentsMargins(0, 0, 0, 0);
     QHBoxLayout *bar = new QHBoxLayout;
-    bar->addWidget(new QLabel(tr("View:"), pane));
-    QComboBox *planeCombo = new QComboBox(pane);
+    bar->addWidget(new QLabel(tr("View:"), center));
+    QComboBox *planeCombo = new QComboBox(center);
     planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
     bar->addWidget(planeCombo);
     bar->addStretch();
-    QPushButton *addFixBtn = new QPushButton(tr("Add Fixture…"), pane);
-    bar->addWidget(addFixBtn);
-    QPushButton *addBarBtn = new QPushButton(tr("Add Bar"), pane);
-    // Bars make sense on a stand / truss / boom; not a tower (shelves) or a
-    // platform (a solid riser).
+    QPushButton *addBarBtn = new QPushButton(tr("Add Bar"), center);
     addBarBtn->setVisible(kind == 0 || kind == 2 || kind == 4);
     bar->addWidget(addBarBtn);
-    pv->addLayout(bar);
+    cv->addLayout(bar);
 
     StructureStudioView *view = new StructureStudioView(
-        m_doc, StructureStudioView::Kind(kind), id, pane);
+        m_doc, StructureStudioView::Kind(kind), id, center);
     view->setMinimumSize(320, 300);
     planeCombo->setCurrentIndex(int(view->plane()));
-    pv->addWidget(view, 1);
-
-    QLabel *hint = new QLabel(tr("wheel = zoom · shift/middle-drag = pan · "
-                                 "double-click a fixture to edit"), pane);
+    cv->addWidget(view, 1);
+    QLabel *hint = new QLabel(tr("click a fixture to select · double-click to edit · "
+                                 "drag to reposition · wheel zoom · shift-drag pan"), center);
     hint->setStyleSheet("color:#8a8e99;");
-    pv->addWidget(hint);
+    cv->addWidget(hint);
 
-    connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), pane,
+    // ---- RIGHT: inspector (filled in a later slice) ------------------------
+    QWidget *insp = new QWidget(body);
+    insp->setObjectName("studioInspector");
+    QVBoxLayout *iv = new QVBoxLayout(insp);
+    QLabel *inspHint = new QLabel(tr("Select a fixture to edit its\nmount, calibration and colour."), insp);
+    inspHint->setWordWrap(true);
+    inspHint->setStyleSheet("color:#8a8e99;");
+    iv->addWidget(inspHint);
+    iv->addStretch();
+    insp->setMinimumWidth(170);
+
+    body->addWidget(left);
+    body->addWidget(center);
+    body->addWidget(insp);
+    body->setStretchFactor(0, 0);
+    body->setStretchFactor(1, 1);
+    body->setStretchFactor(2, 0);
+
+    // ---- Fixture tree: group folders → fixtures, with selection sync -------
+    auto rebuildTree = [this, tree, view]() {
+        tree->blockSignals(true);
+        tree->clear();
+        QMap<quint32, QTreeWidgetItem *> groupNodes;   // fixtureGroup id → node
+        QTreeWidgetItem *ungrouped = nullptr;
+        foreach (quint32 fid, view->mountedFixtures())
+        {
+            // Find the first fixture group this fixture belongs to.
+            quint32 gid = 0; QString gname;
+            foreach (FixtureGroup *g, m_doc->fixtureGroups())
+                if (g && g->fixtureList().contains(fid)) { gid = g->id(); gname = g->name(); break; }
+            QTreeWidgetItem *parent;
+            if (gid == 0)
+            {
+                if (!ungrouped)
+                {
+                    ungrouped = new QTreeWidgetItem(tree, QStringList(tr("Ungrouped")));
+                    ungrouped->setExpanded(true);
+                }
+                parent = ungrouped;
+            }
+            else
+            {
+                if (!groupNodes.contains(gid))
+                {
+                    QTreeWidgetItem *gn = new QTreeWidgetItem(tree, QStringList(gname));
+                    gn->setExpanded(true);
+                    groupNodes.insert(gid, gn);
+                }
+                parent = groupNodes.value(gid);
+            }
+            Fixture *fx = m_doc->fixture(fid);
+            QTreeWidgetItem *it = new QTreeWidgetItem(parent, QStringList(fx ? fx->name() : QString::number(fid)));
+            it->setData(0, Qt::UserRole, fid);
+        }
+        tree->blockSignals(false);
+    };
+    rebuildTree();
+
+    // Tree selection → highlight on the canvas.
+    connect(tree, &QTreeWidget::itemSelectionChanged, tree, [tree, view]() {
+        QList<quint32> ids;
+        foreach (QTreeWidgetItem *it, tree->selectedItems())
+        {
+            const quint32 fid = it->data(0, Qt::UserRole).toUInt();
+            if (fid != 0) ids << fid;
+        }
+        view->setHighlight(ids);
+    });
+    // Canvas click → select the matching tree row.
+    connect(view, &StructureStudioView::fixtureSelected, tree, [tree](quint32 fid) {
+        tree->blockSignals(true);
+        tree->clearSelection();
+        QTreeWidgetItemIterator it(tree);
+        while (*it) { if ((*it)->data(0, Qt::UserRole).toUInt() == fid) { (*it)->setSelected(true); } ++it; }
+        tree->blockSignals(false);
+    });
+    // Double-click a tree fixture → edit it.
+    connect(tree, &QTreeWidget::itemDoubleClicked, tree, [this](QTreeWidgetItem *it, int) {
+        const quint32 fid = it->data(0, Qt::UserRole).toUInt();
+        if (fid != 0) slotFixtureDoubleClicked(fid);
+    });
+    // Right-click the tree → add fixtures / a fixture group.
+    connect(tree, &QTreeWidget::customContextMenuRequested, tree,
+            [this, tree, kind, id, view, rebuildTree](const QPoint &pos) {
+        QMenu m;
+        QAction *aFix = m.addAction(tr("Add Fixtures…"));
+        QAction *aGrp = m.addAction(tr("Add Fixture Group…"));
+        QAction *chosen = m.exec(tree->viewport()->mapToGlobal(pos));
+        if (chosen == aFix) { studioAddFixture(kind, id, view); rebuildTree(); }
+        else if (chosen == aGrp) { studioAddGroup(kind, id, view); rebuildTree(); }
+    });
+
+    connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), body,
             [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });
-    connect(view, &StructureStudioView::fixtureActivated, pane,
+    connect(view, &StructureStudioView::fixtureActivated, body,
             [this](quint32 fid){ slotFixtureDoubleClicked(fid); });
-    connect(view, &StructureStudioView::fixtureMoved, pane,
+    connect(view, &StructureStudioView::fixtureMoved, body,
             [this](quint32 fid){ m_graphicsView->updateFixture(fid); });
-    connect(addFixBtn, &QPushButton::clicked, pane,
-            [this, kind, id, view]() { studioAddFixture(kind, id, view); });
-    connect(addBarBtn, &QPushButton::clicked, pane,
+    connect(addBarBtn, &QPushButton::clicked, body,
             [this, kind, id, view]() { studioAddBar(kind, id, view); });
+    // Keep the tree in sync after canvas-side edits.
+    connect(view, &StructureStudioView::fixtureMoved, body, [rebuildTree](quint32){ rebuildTree(); });
 
     if (outView) *outView = view;
-    return pane;
+    return body;
+}
+
+quint32 Monitor::structureBoomId(int kind, quint32 id) const
+{
+    if (kind == 4) return id;
+    if (kind == 0)
+        foreach (Pipe *p, m_props->pipes())
+            if (p->standId() == id) return p->id();
+    return Pipe::invalidId();
+}
+
+void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32 boomId)
+{
+    if (kind == 0 || kind == 4)
+    {
+        m_graphicsView->attachFixtureToPipe(fid, boomId);   // clears other mounts
+        return;
+    }
+    FixtureRigProps rp = m_props->fixtureRigProps(fid);
+    rp.trussId = Truss::invalidId();
+    rp.pipeId  = Pipe::invalidId();
+    rp.towerId = Tower::invalidId();
+    rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+    rp.deckPlatformId  = FixtureRigProps::invalidPlatformId();
+    if (kind == 1) { if (Tower *tw = m_props->tower(id)) {
+        rp.towerId = id; rp.towerShelf = 0;
+        rp.towerU = tw->width() * 0.5f; rp.towerV = tw->depth() * 0.5f; } }
+    else if (kind == 2) { if (Truss *t = m_props->truss(id)) {
+        rp.trussId = id; rp.trussOffset = t->length() * 0.5f; } }
+    else if (kind == 3) { if (StagePlatform *pl = m_props->platform(id)) {
+        rp.riserPlatformId = id; rp.riserFace = FixtureRigProps::RiserTop;
+        rp.riserU = pl->width() * 0.5f; rp.riserV = pl->depth() * 0.5f; } }
+    m_props->setFixtureRigProps(fid, rp);
+    m_graphicsView->updateFixture(fid);
+}
+
+void Monitor::studioAddGroup(int kind, quint32 id, StructureStudioView *view)
+{
+    const quint32 boomId = structureBoomId(kind, id);
+    if ((kind == 0) && boomId == Pipe::invalidId())
+    {
+        QMessageBox::information(this, tr("Add Fixture Group"),
+            tr("Add a bar to this stand first, then add a group to it."));
+        return;
+    }
+    // Pick a fixture group.
+    QStringList names; QList<quint32> ids;
+    foreach (FixtureGroup *g, m_doc->fixtureGroups())
+        if (g) { names << g->name(); ids << g->id(); }
+    if (names.isEmpty())
+    {
+        QMessageBox::information(this, tr("Add Fixture Group"),
+            tr("There are no fixture groups yet. Create one from the Fixtures tab."));
+        return;
+    }
+    bool ok = false;
+    const QString pick = QInputDialog::getItem(this, tr("Add Fixture Group"),
+        tr("Group:"), names, 0, false, &ok);
+    if (!ok) return;
+    FixtureGroup *g = m_doc->fixtureGroup(ids.value(names.indexOf(pick)));
+    if (g == nullptr) return;
+    foreach (quint32 fid, g->fixtureList())
+        mountFixtureOnStructure(fid, kind, id, boomId);
+    if (view) view->reload();
+    m_doc->setModified();
 }
 
 void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
 {
     // A stand needs a boom/bar to hang fixtures on; a pipe IS the boom.
-    quint32 boomId = Pipe::invalidId();
-    if (kind == 0)
+    const quint32 boomId = structureBoomId(kind, id);
+    if (kind == 0 && boomId == Pipe::invalidId())
     {
-        foreach (Pipe *p, m_props->pipes())
-            if (p->standId() == id) { boomId = p->id(); break; }
-        if (boomId == Pipe::invalidId())
-        {
-            QMessageBox::information(this, tr("Add Fixture"),
-                tr("Add a bar to this stand first (Add Bar), then hang fixtures on it."));
-            return;
-        }
-    }
-    else if (kind == 4)
-    {
-        boomId = id;
+        QMessageBox::information(this, tr("Add Fixture"),
+            tr("Add a bar to this stand first (Add Bar), then hang fixtures on it."));
+        return;
     }
 
     // Which fixtures are already on this structure — offer only the rest.
@@ -2164,44 +2333,8 @@ void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
     if (pick.exec() != QDialog::Accepted)
         return;
 
-    Truss *tr_ = (kind == 2) ? m_props->truss(id) : nullptr;
-    Tower *tw = (kind == 1) ? m_props->tower(id) : nullptr;
-    StagePlatform *plat = (kind == 3) ? m_props->platform(id) : nullptr;
     foreach (QListWidgetItem *it, list->selectedItems())
-    {
-        const quint32 fid = it->data(Qt::UserRole).toUInt();
-        if (kind == 0 || kind == 4)
-        {
-            m_graphicsView->attachFixtureToPipe(fid, boomId);   // clears other mounts
-        }
-        else
-        {
-            FixtureRigProps rp = m_props->fixtureRigProps(fid);
-            rp.trussId = Truss::invalidId();
-            rp.pipeId  = Pipe::invalidId();
-            rp.towerId = Tower::invalidId();
-            rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
-            rp.deckPlatformId  = FixtureRigProps::invalidPlatformId();
-            if (kind == 1 && tw)
-            {
-                rp.towerId = id; rp.towerShelf = 0;
-                rp.towerU = tw->width() * 0.5f; rp.towerV = tw->depth() * 0.5f;
-            }
-            else if (kind == 2 && tr_)
-            {
-                rp.trussId = id; rp.trussOffset = tr_->length() * 0.5f;
-            }
-            else if (kind == 3 && plat)
-            {
-                // Default to the top surface, centred.
-                rp.riserPlatformId = id;
-                rp.riserFace = FixtureRigProps::RiserTop;
-                rp.riserU = plat->width() * 0.5f; rp.riserV = plat->depth() * 0.5f;
-            }
-            m_props->setFixtureRigProps(fid, rp);
-            m_graphicsView->updateFixture(fid);
-        }
-    }
+        mountFixtureOnStructure(it->data(Qt::UserRole).toUInt(), kind, id, boomId);
     if (view) view->reload();
     m_doc->setModified();
 }
@@ -2718,9 +2851,8 @@ void Monitor::slotEditStand(quint32 sid)
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Lighting Studio — %1").arg(s->name()));
-    QHBoxLayout *split = new QHBoxLayout(&dlg);
-    QVBoxLayout *vl = new QVBoxLayout;
-    split->addLayout(vl);
+    QWidget *geomW = new QWidget(&dlg);
+    QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
 
     QLineEdit *nameEdit = new QLineEdit(s->name(), &dlg);
@@ -2747,9 +2879,10 @@ void Monitor::slotEditStand(quint32 sid)
     vl->addLayout(form);
     vl->addStretch();
 
-    // Embedded graphical canvas (right) + live preview as fields change.
+    // Canvas-centric object editor body (tree + canvas + inspector) with the
+    // geometry form as its collapsible left section; live preview as fields change.
     StructureStudioView *view = nullptr;
-    split->addWidget(makeStudioPane(&dlg, 0 /*Stand*/, sid, &view), 1);
+    QWidget *bodyPane = makeStudioPane(&dlg, 0 /*Stand*/, sid, geomW, &view);
     auto applyLive = [&]() {
         s->setName(nameEdit->text());
         s->setOriginX(float(oxSpin->value() * fromDisp));
@@ -2768,7 +2901,10 @@ void Monitor::slotEditStand(quint32 sid)
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    vl->addWidget(bb);
+    QVBoxLayout *dlgL = new QVBoxLayout(&dlg);
+    dlgL->addWidget(bodyPane, 1);
+    dlgL->addWidget(bb);
+    dlg.resize(940, 560);
     if (dlg.exec() != QDialog::Accepted)
     {
         // Revert the live preview.
@@ -2835,9 +2971,8 @@ void Monitor::slotEditTower(quint32 tid)
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Lighting Studio — %1").arg(t->name()));
-    QHBoxLayout *split = new QHBoxLayout(&dlg);
-    QVBoxLayout *vl = new QVBoxLayout;
-    split->addLayout(vl);
+    QWidget *geomW = new QWidget(&dlg);
+    QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
 
     QLineEdit *nameEdit = new QLineEdit(t->name(), &dlg);
@@ -2891,9 +3026,9 @@ void Monitor::slotEditTower(quint32 tid)
 
     vl->addStretch();
 
-    // Embedded graphical canvas (right) + live geometry preview.
+    // Canvas-centric object editor body; geometry form is its collapsible left.
     StructureStudioView *view = nullptr;
-    split->addWidget(makeStudioPane(&dlg, 1 /*Tower*/, tid, &view), 1);
+    QWidget *bodyPane = makeStudioPane(&dlg, 1 /*Tower*/, tid, geomW, &view);
     auto applyLive = [&]() {
         t->setName(nameEdit->text());
         t->setOriginX(float(oxSpin->value() * fromDisp));
@@ -2914,7 +3049,10 @@ void Monitor::slotEditTower(quint32 tid)
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    vl->addWidget(bb);
+    QVBoxLayout *dlgL = new QVBoxLayout(&dlg);
+    dlgL->addWidget(bodyPane, 1);
+    dlgL->addWidget(bb);
+    dlg.resize(940, 560);
     if (dlg.exec() != QDialog::Accepted)
     {
         // Revert geometry AND shelves (Cancel now truly cancels).
@@ -3003,9 +3141,8 @@ void Monitor::slotEditPipe(quint32 bid)
     QDialog dlg(this);
     const bool horiz = (b->orientation() == Pipe::Horizontal);
     dlg.setWindowTitle(tr("Lighting Studio — %1").arg(b->name()));
-    QHBoxLayout *split = new QHBoxLayout(&dlg);
-    QVBoxLayout *vl = new QVBoxLayout;
-    split->addLayout(vl);
+    QWidget *geomW = new QWidget(&dlg);
+    QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
 
     QLineEdit *nameEdit = new QLineEdit(b->name(), &dlg);
@@ -3126,9 +3263,9 @@ void Monitor::slotEditPipe(quint32 bid)
 
     vl->addStretch();
 
-    // Embedded graphical canvas (right) + live core-geometry preview.
+    // Canvas-centric object editor body; geometry form is its collapsible left.
     StructureStudioView *view = nullptr;
-    split->addWidget(makeStudioPane(&dlg, 4 /*Pipe*/, bid, &view), 1);
+    QWidget *bodyPane = makeStudioPane(&dlg, 4 /*Pipe*/, bid, geomW, &view);
     auto applyLive = [&]() {
         b->setName(nameEdit->text());
         b->setOriginX(float(oxSpin->value() * fromDisp));
@@ -3147,7 +3284,10 @@ void Monitor::slotEditPipe(quint32 bid)
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    vl->addWidget(bb);
+    QVBoxLayout *dlgL = new QVBoxLayout(&dlg);
+    dlgL->addWidget(bodyPane, 1);
+    dlgL->addWidget(bb);
+    dlg.resize(940, 560);
 
     if (dlg.exec() != QDialog::Accepted)
     {
@@ -3214,9 +3354,8 @@ void Monitor::slotEditPlatform(quint32 pid)
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Lighting Studio — %1").arg(p->name()));
 
-    QHBoxLayout *split = new QHBoxLayout(&dlg);
-    QVBoxLayout *vl   = new QVBoxLayout;
-    split->addLayout(vl);
+    QWidget *geomW = new QWidget(&dlg);
+    QVBoxLayout *vl   = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
 
     QLineEdit *nameEdit = new QLineEdit(p->name(), &dlg);
@@ -3311,9 +3450,9 @@ void Monitor::slotEditPlatform(quint32 pid)
     vl->addWidget(faceBtn);
     vl->addStretch();
 
-    // Embedded graphical canvas (right) + live geometry preview.
+    // Canvas-centric object editor body; geometry form is its collapsible left.
     StructureStudioView *view = nullptr;
-    split->addWidget(makeStudioPane(&dlg, 3 /*Platform*/, pid, &view), 1);
+    QWidget *bodyPane = makeStudioPane(&dlg, 3 /*Platform*/, pid, geomW, &view);
     auto applyLive = [&]() {
         if (!nameEdit->text().trimmed().isEmpty()) p->setName(nameEdit->text().trimmed());
         p->setOriginX(float(oxSpin->value() * fromDisp_p));
@@ -3331,9 +3470,12 @@ void Monitor::slotEditPlatform(quint32 pid)
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
-    vl->addWidget(bb);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QVBoxLayout *dlgL = new QVBoxLayout(&dlg);
+    dlgL->addWidget(bodyPane, 1);
+    dlgL->addWidget(bb);
+    dlg.resize(940, 560);
 
     if (dlg.exec() != QDialog::Accepted)
     {
@@ -4448,9 +4590,16 @@ void Monitor::slotEditTruss(quint32 tid)
                                        "right-click to add a bar)"), &editDlg);
     QFont sf = stripLabel->font(); sf.setBold(true); stripLabel->setFont(sf);
 
-    // Embedded graphical structure canvas (right of everything) + live preview.
+    // Truss geometry pane = the form + the fixture-placement strip; the graphical
+    // canvas (with the fixture tree + inspector) comes from makeStudioPane.
     StructureStudioView *studioView = nullptr;
-    QWidget *studioPane = makeStudioPane(&editDlg, 2 /*Truss*/, tid, &studioView);
+    QWidget *geomW = new QWidget(&editDlg);
+    QVBoxLayout *gvl = new QVBoxLayout(geomW);
+    gvl->setContentsMargins(0, 0, 0, 0);
+    gvl->addLayout(form);
+    gvl->addWidget(stripLabel);
+    gvl->addWidget(strip, 1);
+    QWidget *bodyPane = makeStudioPane(&editDlg, 2 /*Truss*/, tid, geomW, &studioView);
     auto reloadStudio = [studioView]() { if (studioView) studioView->reload(); };
     // Free-truss geometry applies live so the canvas tracks the fields.
     auto applyGeomLive = [=]() {
@@ -4474,44 +4623,9 @@ void Monitor::slotEditTruss(quint32 tid)
     connect(alongSpin,    QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [reloadStudio](double){ reloadStudio(); });
     connect(standoffSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [reloadStudio](double){ reloadStudio(); });
 
-    if (isVertical)
-    {
-        editDlg.setMinimumHeight(460);   // room for the taller elevation strip
-        // For vertical trusses put the elevation strip to the right of the form.
-        QHBoxLayout *contentRow = new QHBoxLayout;
-        QVBoxLayout *formCol    = new QVBoxLayout;
-        formCol->addLayout(form);
-        formCol->addStretch();
-        contentRow->addLayout(formCol);
-
-        QFrame *vsep = new QFrame(&editDlg);
-        vsep->setFrameShape(QFrame::VLine);
-        vsep->setFrameShadow(QFrame::Sunken);
-        contentRow->addWidget(vsep);
-
-        QVBoxLayout *stripCol = new QVBoxLayout;
-        stripCol->addWidget(stripLabel);
-        stripCol->addWidget(strip, 1);
-        contentRow->addLayout(stripCol);
-        contentRow->addWidget(studioPane, 1);
-        vl->addLayout(contentRow);
-    }
-    else
-    {
-        QHBoxLayout *contentRow = new QHBoxLayout;
-        QVBoxLayout *leftCol = new QVBoxLayout;
-        leftCol->addLayout(form);
-        QFrame *sep = new QFrame(&editDlg);
-        sep->setFrameShape(QFrame::HLine);
-        sep->setFrameShadow(QFrame::Sunken);
-        leftCol->addWidget(sep);
-        leftCol->addWidget(stripLabel);
-        leftCol->addWidget(strip);
-        leftCol->addStretch();
-        contentRow->addLayout(leftCol);
-        contentRow->addWidget(studioPane, 1);
-        vl->addLayout(contentRow);
-    }
+    Q_UNUSED(isVertical)
+    vl->addWidget(bodyPane, 1);
+    editDlg.resize(960, 580);
 
     QDialogButtonBox *btns = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &editDlg);

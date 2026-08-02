@@ -28,6 +28,7 @@
 #include <QWidget>
 #include <QVector3D>
 #include <QList>
+#include <QSet>
 
 class Doc;
 
@@ -52,9 +53,17 @@ public:
     /** Re-gather the structure + its fixtures and repaint (after external edits). */
     void reload();
 
+    /** Fixtures currently mounted on this structure (for the side tree). */
+    QList<quint32> mountedFixtures() const;
+
+    /** Ring-highlight a set of fixtures (driven by the tree selection). */
+    void setHighlight(const QList<quint32> &ids);
+
 signals:
     /** A fixture on the structure was double-clicked (id passed through). */
     void fixtureActivated(quint32 fid);
+    /** A fixture on the structure was single-clicked (selection). */
+    void fixtureSelected(quint32 fid);
     /** A fixture was dragged to a new spot on the structure (rig prop changed). */
     void fixtureMoved(quint32 fid);
 
@@ -83,7 +92,6 @@ private:
     void drawFixtures(QPainter &p) const;
     quint32 hitTestFixture(const QPointF &px) const;
 
-    QList<quint32> mountedFixtures() const;          ///< fixtures on this structure
     QList<const class Pipe *> standPipes() const;    ///< pipes on this stand (Kind==Stand)
 
 private:
@@ -98,6 +106,7 @@ private:
     QPointF  m_panLast;
     quint32  m_dragFid = 0;    ///< fixture being dragged (0 = none)
     bool     m_dragged = false;
+    QSet<quint32> m_highlight;  ///< ring-highlighted fixtures (tree selection)
 };
 
 /** @} */
