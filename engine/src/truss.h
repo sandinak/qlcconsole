@@ -244,6 +244,11 @@ struct FixtureRigProps
      *  near/far chord (Left/Right) instead of dead-centre while staying attached. */
     float            trussCross = 0.0f;
 
+    /** Fine height nudge (metres, +up) applied on TOP of a structural mount
+     *  (truss / pipe / tower) — e.g. to raise a followspot above the truss it
+     *  sits on. 0 = flush with the mount. */
+    float            mountZOffset = 0.0f;
+
     /** Deck mount: a fixture standing ON TOP of a stage platform ("floor
      *  mounted"). Unlike a riser FACE mount it keeps its free XY position; only
      *  its Z is derived — the platform's top height plus @c deckHeightOffset

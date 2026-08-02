@@ -1366,6 +1366,7 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
                 }
             }
         }
+        p.setZ(p.z() + rp.mountZOffset);   // fine height nudge (e.g. followspot on top)
         return p;
     }
 
@@ -1379,6 +1380,7 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         const float r = bm->diameter() * 0.5f;
         p.setX(p.x() + r * float(qSin(th)));   // 0° = downstage (-Y)
         p.setY(p.y() - r * float(qCos(th)));
+        p.setZ(p.z() + rp.mountZOffset);
         return p;
     }
 
@@ -1388,6 +1390,7 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     if (tw != nullptr)
     {
         QVector3D p = tw->shelfPos(rp.towerShelf, rp.towerU, rp.towerV);
+        p.setZ(p.z() + rp.mountZOffset);
         // Hung (base on top) = hangs UNDER the shelf; drop it a little below.
         if (rp.mountingType == Truss::TopHung)
             p.setZ(qMax(0.0f, p.z() - 0.15f));
@@ -1851,6 +1854,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.trussMountSide = a.value("TrussSide").toInt();
             if (a.hasAttribute("TrussCross"))
                 rp.trussCross = a.value("TrussCross").toFloat();
+            if (a.hasAttribute("MountZ"))
+                rp.mountZOffset = a.value("MountZ").toFloat();
             if (a.hasAttribute("Deck"))
             {
                 rp.deckPlatformId   = a.value("Deck").toUInt();
@@ -2269,6 +2274,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("TrussSide"), QString::number(rp.trussMountSide));
         if (rp.trussCross != 0.0f)
             doc->writeAttribute(QStringLiteral("TrussCross"), QString::number(double(rp.trussCross), 'f', 3));
+        if (rp.mountZOffset != 0.0f)
+            doc->writeAttribute(QStringLiteral("MountZ"), QString::number(double(rp.mountZOffset), 'f', 3));
         if (rp.onDeck())
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));

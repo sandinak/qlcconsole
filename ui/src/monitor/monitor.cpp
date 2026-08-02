@@ -5739,7 +5739,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         panZeroSpin->setRange(0, 359);
         panZeroSpin->setSuffix(QString::fromUtf8("°"));
         panZeroSpin->setDecimals(1);
-        rigForm->addRow(tr("Pan-zero — Front of device:"), panZeroSpin);
+        rigForm->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
         vl->addWidget(rigBox);
 
         QGroupBox *transformBox = new QGroupBox(tr("Transform"), &dlg);
@@ -5962,6 +5962,14 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
                            "head, Hung vs Upright inverts pan/tilt."));
     rigForm->addRow(tr("Orientation:"), mountCb);
 
+    // Fine height nudge above/below a structural mount (truss/bar/tower).
+    QDoubleSpinBox *heightOffSpin = new QDoubleSpinBox;
+    heightOffSpin->setRange(-10 * toDisp_fx, 10 * toDisp_fx);
+    heightOffSpin->setSuffix(unitSfx_fx); heightOffSpin->setDecimals(2);
+    heightOffSpin->setToolTip(tr("Raise (+) or lower (−) the fixture relative to its "
+                                 "mount — e.g. lift a followspot above the truss."));
+    rigForm->addRow(tr("Height offset:"), heightOffSpin);
+
     // Deck mount: a fixture standing on top of a platform ("floor mounted").
     QComboBox *deckCb = new QComboBox;
     deckCb->addItem(tr("(none)"), QVariant(FixtureRigProps::invalidPlatformId()));
@@ -5993,7 +6001,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     panZeroSpin->setRange(0, 359);
     panZeroSpin->setSuffix(QString::fromUtf8("°"));
     panZeroSpin->setDecimals(1);
-    rigForm->addRow(tr("Pan-zero — Front of device:"), panZeroSpin);
+    rigForm->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
 
     QDoubleSpinBox *panOffsetSpin = new QDoubleSpinBox;
     panOffsetSpin->setRange(-720, 720);   // 540° pan fixtures need up to ±270°; 720 gives headroom
@@ -6076,6 +6084,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         if (deckCb->itemData(i).toUInt() == rp.deckPlatformId)
         { deckCb->setCurrentIndex(i); break; }
     deckHeightSpin->setValue(double(rp.deckHeightOffset) * toDisp_fx);
+    heightOffSpin->setValue(double(rp.mountZOffset) * toDisp_fx);
     panZeroSpin->setValue(double(rp.panZeroDir));
     panOffsetSpin->setValue(double(rp.panOffsetDeg));
     tiltOffsetSpin->setValue(double(rp.tiltOffsetDeg));
@@ -6121,8 +6130,15 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     hideRow(deckCb); hideRow(deckHeightSpin);
     fillOrientationCombo(mountCb, rp);             // constrain options to the mount
     if (isStrip) hideRow(mountCb);                 // a strip has no base orientation
+    // Height offset only makes sense on a truss / bar / tower mount.
+    const bool structMount = rp.trussId != Truss::invalidId()
+        || rp.pipeId != Pipe::invalidId() || rp.towerId != Tower::invalidId();
+    if (!structMount) hideRow(heightOffSpin);
+    // Aim (pan-zero / front of device) applies to movers AND fixed beams (their
+    // facing); a strip uses Face+Angle instead. Pan/tilt CAL + Test are movers-only.
+    if (isStrip) hideRow(panZeroSpin);
     if (!isMover)
-    { hideRow(panZeroSpin); hideRow(panOffsetSpin); hideRow(tiltOffsetSpin);
+    { hideRow(panOffsetSpin); hideRow(tiltOffsetSpin);
       hideRow(invertRow); hideRow(testRowWidget); }
 
     vl->addWidget(rigBox);
@@ -6560,6 +6576,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     }
     newRp.deckPlatformId = deckCb->currentData().toUInt();
     newRp.deckHeightOffset = float(deckHeightSpin->value() * fromDisp_fx);
+    newRp.mountZOffset = float(heightOffSpin->value() * fromDisp_fx);
     newRp.panZeroDir    = float(panZeroSpin->value());
     newRp.panOffsetDeg  = float(panOffsetSpin->value());
     newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());
