@@ -1052,10 +1052,12 @@ void StructureStudioView::drawRulers(QPainter &p) const
         if (topZ > 0.01)
         {
             const double sy = w2s(QVector3D(0, 0, float(topZ))).y();
-            p.setPen(QPen(QColor(0, 190, 255), 1.4)); p.setBrush(QColor(0, 190, 255));
+            const QColor mk(80, 170, 255);   // same blue as the main-window ruler cursor
+            p.setPen(QPen(mk, 1.0));          // full-width guide line at the max height
+            p.drawLine(QPointF(GW, sy), QPointF(width(), sy));
+            p.setBrush(mk);
             QPolygonF tri; tri << QPointF(GW + 1, sy) << QPointF(GW + 8, sy - 4) << QPointF(GW + 8, sy + 4);
             p.drawPolygon(tri);
-            p.setPen(QColor(0, 190, 255));
             p.drawText(QPointF(GW + 11, sy - 3), QString("max %1 %2").arg(topZ * conv, 0, 'f', 1).arg(sfx));
         }
     }
@@ -1166,8 +1168,8 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
     }
     if (e->button() == Qt::LeftButton)
     {
-        // A boom's top handle (stand view): drag it to resize the hangable length.
-        if (m_kind == StandKind)
+        // A boom's top handle (stand view): drag it to resize — only when unlocked.
+        if (!m_locked && m_kind == StandKind)
         {
             foreach (const Pipe *pipe, standPipes())
             {
@@ -1185,9 +1187,9 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         m_dragged = false;
         if (m_dragFid != 0)
         {
-            setCursor(Qt::ClosedHandCursor);
+            setCursor(m_locked ? Qt::ArrowCursor : Qt::ClosedHandCursor);
             setHighlight({ m_dragFid });
-            emit fixtureSelected(m_dragFid);
+            emit fixtureSelected(m_dragFid);   // selection always works
         }
     }
 }
@@ -1213,7 +1215,7 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
         update();
         return;
     }
-    if (m_dragFid != 0)
+    if (m_dragFid != 0 && !m_locked)   // move only when unlocked
     {
         if (!m_dragged)
             emit editAboutToStart();   // snapshot for undo before the first change
@@ -1256,14 +1258,21 @@ void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
 
 quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
 {
-    MonitorProperties *props = m_doc->monitorProperties();
+    // Hit anywhere along the LED bar (nearest within a threshold), not just its
+    // centre dot — so clicking the bar selects the fixture.
+    quint32 best = 0; double bestD = 9.0;
     foreach (quint32 fid, mountedFixtures())
     {
-        const QPointF c = w2s(props->fixtureRigPosition(fid));
-        if (QLineF(c, px).length() <= 8.0)
-            return fid;
+        const QPointF a = w2s(fixtureEndA(fid));
+        const QPointF b = w2s(fixtureEndB(fid));
+        const QPointF ab = b - a;
+        const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+        double t = (len2 > 1e-6) ? ((px.x() - a.x()) * ab.x() + (px.y() - a.y()) * ab.y()) / len2 : 0.0;
+        t = qBound(0.0, t, 1.0);
+        const double d = QLineF(a + ab * t, px).length();
+        if (d < bestD) { bestD = d; best = fid; }
     }
-    return 0;
+    return best;
 }
 
 void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)

@@ -50,6 +50,11 @@ public:
     void setPlane(Plane p);
     Plane plane() const { return m_plane; }
 
+    /** Locked = fixtures can be selected but not dragged (like the main plot lock);
+     *  unlocked = drag a selected fixture / a boom top to move it. */
+    void setLocked(bool on) { m_locked = on; setCursor(Qt::ArrowCursor); }
+    bool locked() const { return m_locked; }
+
     /** Re-gather the structure + its fixtures and repaint (after external edits). */
     void reload();
 
@@ -151,6 +156,7 @@ private:
     quint32  m_resizeBoom = 0; ///< +1 boom id whose top is being dragged (0 = none)
     QPointF  m_cursorPx;       ///< last pointer position (for the ruler readout)
     bool     m_hasCursor = false;
+    bool     m_locked = true;   ///< movement prevented until unlocked
     QSet<quint32> m_highlight;  ///< ring-highlighted fixtures (tree selection)
 };
 

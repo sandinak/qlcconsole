@@ -2063,8 +2063,17 @@ void Monitor::slotPasteFeatures()
     pasteClipboard(step, step);
 }
 
-void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
+void Monitor::slotFixtureDoubleClicked(quint32 fid)
 {
+    // If the target isn't already part of the current selection (e.g. the studio
+    // inspector's "Full properties…" asking for ONE fixture), select just it so
+    // the DETAILED single-fixture editor opens — not whatever the map had selected.
+    if (fid != 0)
+    {
+        MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fid);
+        if (it == nullptr || !it->isSelected())
+            m_graphicsView->selectFixtureExclusive(fid);
+    }
     showFixtureItemEditor();
 }
 
@@ -2143,6 +2152,10 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     QComboBox *planeCombo = new QComboBox(center);
     planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
     bar->addWidget(planeCombo);
+    QPushButton *lockBtn = new QPushButton(tr("🔒 Locked"), center);
+    lockBtn->setCheckable(true); lockBtn->setChecked(true);
+    lockBtn->setToolTip(tr("Locked: click to select fixtures. Unlock to drag them."));
+    bar->addWidget(lockBtn);
     bar->addStretch();
     QPushButton *faceBtn = new QPushButton(tr("Put on Face"), center);
     faceBtn->setToolTip(tr("Pin the selected fixtures (or all) to the current "
@@ -2436,6 +2449,11 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
 
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), body,
             [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });
+    view->setLocked(true);
+    connect(lockBtn, &QPushButton::toggled, view, [view, lockBtn](bool on) {
+        view->setLocked(on);
+        lockBtn->setText(on ? tr("🔒 Locked") : tr("🔓 Unlocked"));
+    });
     connect(view, &StructureStudioView::fixtureActivated, body,
             [this](quint32 fid){ slotFixtureDoubleClicked(fid); });
     connect(view, &StructureStudioView::fixtureMoved, body,
@@ -2558,9 +2576,30 @@ void Monitor::studioCreateGroup(const QList<quint32> &fids, StructureStudioView 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("New Fixture Group"));
     QFormLayout *f = new QFormLayout(&dlg);
+    // Suggest a matrix from the fixtures' SPATIAL layout + head counts: cluster
+    // by the view's vertical axis to get rows, then cols = total heads / rows.
+    int sugRows = 1, totalHeads = 0;
+    {
+        QList<double> vv;
+        foreach (quint32 fid, fids)
+        {
+            Fixture *fx = m_doc->fixture(fid);
+            totalHeads += fx ? qMax(1, fx->heads()) : 1;
+            const QVector3D w = m_props->fixtureRigPosition(fid);
+            vv << ((view && view->plane() == StructureStudioView::Top) ? double(w.y()) : double(w.z()));
+        }
+        std::sort(vv.begin(), vv.end());
+        if (!vv.isEmpty())
+        {
+            double last = vv.first();
+            for (double v : vv) if (v - last > 0.15) { ++sugRows; last = v; }
+        }
+    }
+    const int sugCols = qMax(1, int(qCeil(qMax(1, totalHeads) / double(sugRows))));
+
     QLineEdit *nameE = new QLineEdit(tr("Group %1").arg(m_doc->fixtureGroups().count() + 1), &dlg);
-    QSpinBox *colS = new QSpinBox(&dlg); colS->setRange(1, 512); colS->setValue(fids.size());
-    QSpinBox *rowS = new QSpinBox(&dlg); rowS->setRange(1, 512); rowS->setValue(1);
+    QSpinBox *colS = new QSpinBox(&dlg); colS->setRange(1, 512); colS->setValue(sugCols);
+    QSpinBox *rowS = new QSpinBox(&dlg); rowS->setRange(1, 512); rowS->setValue(sugRows);
     colS->setToolTip(tr("Matrix width — heads are filled left→right, top→bottom."));
     f->addRow(tr("Name:"), nameE);
     f->addRow(tr("Columns (X):"), colS);

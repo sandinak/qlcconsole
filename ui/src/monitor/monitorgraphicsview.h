@@ -164,6 +164,9 @@ public:
     /** Return the MonitorFixtureItem for the given fixture ID, or nullptr if not in the view. */
     MonitorFixtureItem *fixtureItemForId(quint32 fxId) const;
 
+    /** Clear the scene selection and select just this fixture. */
+    void selectFixtureExclusive(quint32 fxId);
+
     /** Set the gel color of the fixture with the given ID */
     void setFixtureGelColor(quint32 id, QColor col);
 

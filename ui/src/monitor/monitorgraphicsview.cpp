@@ -1835,6 +1835,14 @@ MonitorFixtureItem *MonitorGraphicsView::fixtureItemForId(quint32 fxId) const
     return m_fixtures.value(fxId, nullptr);
 }
 
+void MonitorGraphicsView::selectFixtureExclusive(quint32 fxId)
+{
+    if (m_scene != nullptr)
+        m_scene->clearSelection();
+    if (MonitorFixtureItem *it = fixtureItemForId(fxId))
+        it->setSelected(true);
+}
+
 QList<MonitorFixtureItem *> MonitorGraphicsView::selectedFixtureItems() const
 {
     QList<MonitorFixtureItem *> result;
