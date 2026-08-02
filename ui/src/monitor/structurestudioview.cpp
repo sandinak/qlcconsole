@@ -998,60 +998,73 @@ void StructureStudioView::drawRulers(QPainter &p) const
     const bool feet = props->gridUnits() == MonitorProperties::Feet;
     const double conv = feet ? 3.28084 : 1.0;
     const QString sfx = feet ? QStringLiteral("ft") : QStringLiteral("m");
-    const double stepM = 1.0 / conv;   // 1 display unit in metres
-    p.setFont(QFont("Arial", 7));
+    const double stepM = 1.0 / conv;
+    const QColor gutter(30, 33, 41), edge(70, 74, 86);
+    const QColor tickMinor(115, 121, 135), tickMajor(180, 186, 200);
+    const double GW = 32.0, GH = 20.0;   // gutter width / height (like the main ruler bars)
+    p.setFont(QFont("Arial", 8));
 
-    // Height ruler (0 = floor), left edge — only in the elevations.
-    if (m_plane != Top)
+    // Height ruler (0 = floor) — left gutter, elevations only.
+    const bool vert = (m_plane != Top);
+    if (vert)
     {
-        const double x = 8.0;
-        p.setPen(QPen(QColor(80, 86, 100), 1.0));
-        p.drawLine(QPointF(x, 0), QPointF(x, height()));
+        p.fillRect(QRectF(0, 0, GW, height()), gutter);
+        p.setPen(QPen(edge, 1.0));
+        p.drawLine(QPointF(GW, 0), QPointF(GW, height()));
+        p.setPen(QColor(150, 156, 170));
+        p.drawText(QRectF(0, 1, GW - 3, 12), Qt::AlignRight | Qt::AlignTop, sfx);
         for (int k = 0; k < 400; ++k)
         {
-            const QPointF s = w2s(QVector3D(0, 0, float(k * stepM)));
-            if (s.y() < -20) break;
-            if (s.y() > height() + 2) continue;
+            const double sy = w2s(QVector3D(0, 0, float(k * stepM))).y();
+            if (sy < 12) break;
+            if (sy > height()) continue;
             const bool major = (k % 5 == 0);
-            p.setPen(QPen(QColor(major ? 150 : 100, major ? 156 : 106, major ? 172 : 122), major ? 1.2 : 0.8));
-            p.drawLine(QPointF(x, s.y()), QPointF(x + (major ? 8 : 4), s.y()));
-            if (major) p.drawText(QPointF(x + 10, s.y() + 3), QString("%1%2").arg(k).arg(sfx));
+            p.setPen(QPen(major ? tickMajor : tickMinor, major ? 1.2 : 0.8));
+            p.drawLine(QPointF(GW - (major ? 9 : 5), sy), QPointF(GW, sy));
+            if (major) p.drawText(QRectF(0, sy - 7, GW - 11, 14),
+                                  Qt::AlignRight | Qt::AlignVCenter, QString::number(k));
         }
-        // Max-height marker: a bright arrow + label at the top of the structure.
         const double topZ = structureTopZ();
         if (topZ > 0.01)
         {
-            const double y = w2s(QVector3D(0, 0, float(topZ))).y();
-            p.setPen(QPen(QColor(0, 190, 255), 1.4));
-            p.setBrush(QColor(0, 190, 255));
-            QPolygonF tri; tri << QPointF(x - 1, y) << QPointF(x - 8, y - 4) << QPointF(x - 8, y + 4);
+            const double sy = w2s(QVector3D(0, 0, float(topZ))).y();
+            p.setPen(QPen(QColor(0, 190, 255), 1.4)); p.setBrush(QColor(0, 190, 255));
+            QPolygonF tri; tri << QPointF(GW + 1, sy) << QPointF(GW + 8, sy - 4) << QPointF(GW + 8, sy + 4);
             p.drawPolygon(tri);
-            p.drawText(QPointF(x + 10, y - 3),
-                       QString("max %1%2").arg(topZ * conv, 0, 'f', 1).arg(sfx));
+            p.setPen(QColor(0, 190, 255));
+            p.drawText(QPointF(GW + 11, sy - 3), QString("max %1%2").arg(topZ * conv, 0, 'f', 1).arg(sfx));
         }
     }
 
-    // Width ruler (0 = structure centre), bottom edge.
+    // Width ruler (0 = structure centre) — bottom gutter.
+    const double centreA = structureCentreA();
+    const double by = height() - GH;
+    p.fillRect(QRectF(0, by, width(), GH), gutter);
+    p.setPen(QPen(edge, 1.0));
+    p.drawLine(QPointF(0, by), QPointF(width(), by));
+    for (int k = -200; k <= 200; ++k)
     {
-        const double centreA = structureCentreA();
-        const double y = height() - 10.0;
-        p.setPen(QPen(QColor(80, 86, 100), 1.0));
-        p.drawLine(QPointF(0, y), QPointF(width(), y));
-        for (int k = -200; k <= 200; ++k)
-        {
-            const double aVal = centreA + k * stepM;
-            const QVector3D w = (m_plane == Side) ? QVector3D(0, float(aVal), 0)
-                                                  : QVector3D(float(aVal), 0, 0);
-            const QPointF s = w2s(w);
-            if (s.x() < -20 || s.x() > width() + 20) continue;
-            const bool major = (k % 5 == 0);
-            p.setPen(QPen((k == 0) ? QColor(180, 186, 200)
-                          : QColor(major ? 150 : 100, major ? 156 : 106, major ? 172 : 122),
-                          (k == 0 || major) ? 1.2 : 0.8));
-            p.drawLine(QPointF(s.x(), y - ((k == 0 || major) ? 8 : 4)), QPointF(s.x(), y));
-            if (k == 0) p.drawText(QPointF(s.x() - 3, y - 10), QStringLiteral("0"));
-            else if (major) p.drawText(QPointF(s.x() - 6, y - 10), QString::number(qAbs(k)));
-        }
+        const double aVal = centreA + k * stepM;
+        const QVector3D w = (m_plane == Side) ? QVector3D(0, float(aVal), 0) : QVector3D(float(aVal), 0, 0);
+        const double sx = w2s(w).x();
+        if (sx < GW || sx > width() + 20) continue;
+        const bool major = (k % 5 == 0);
+        p.setPen(QPen((k == 0) ? QColor(0, 190, 255) : (major ? tickMajor : tickMinor), (k == 0 || major) ? 1.2 : 0.8));
+        p.drawLine(QPointF(sx, by), QPointF(sx, by + ((k == 0 || major) ? 9 : 5)));
+        if (k == 0)        p.drawText(QRectF(sx - 12, by + 8, 24, 12), Qt::AlignCenter, QStringLiteral("0"));
+        else if (major)    p.drawText(QRectF(sx - 14, by + 8, 28, 12), Qt::AlignCenter, QString::number(qAbs(k)));
+    }
+
+    // Selected-fixture cursors on both rulers (like the main window).
+    if (!m_highlight.isEmpty())
+    {
+        const QPointF s = w2s(props->fixtureRigPosition(*m_highlight.begin()));
+        p.setPen(QPen(QColor(120, 220, 140), 1.2, Qt::DashLine));
+        if (vert) p.drawLine(QPointF(GW, s.y()), QPointF(width(), s.y()));
+        p.drawLine(QPointF(s.x(), 0), QPointF(s.x(), by));
+        p.setPen(QPen(QColor(120, 220, 140), 1.0)); p.setBrush(QColor(120, 220, 140));
+        if (vert) { QPolygonF t; t << QPointF(GW + 1, s.y()) << QPointF(GW + 7, s.y() - 4) << QPointF(GW + 7, s.y() + 4); p.drawPolygon(t); }
+        QPolygonF t2; t2 << QPointF(s.x(), by) << QPointF(s.x() - 4, by + 7) << QPointF(s.x() + 4, by + 7); p.drawPolygon(t2);
     }
 }
 

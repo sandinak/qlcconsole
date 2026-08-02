@@ -3405,7 +3405,9 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         //
         // A SECOND double-click on the already-drilled-in fixture opens its
         // editor (drill-in then act — no need to reach for the right-click menu).
-        if ((itemGroupId(fi) != 0 || fi->isBoundToTruss()) && !fi->isIsolated())
+        // When the plot is LOCKED, drilling-in (to slide/detach) is meaningless,
+        // so a double-click always opens the editor straight away.
+        if (!m_layoutLocked && (itemGroupId(fi) != 0 || fi->isBoundToTruss()) && !fi->isIsolated())
         {
             m_extendingSelection = true;   // suppress select-together
             m_scene->clearSelection();

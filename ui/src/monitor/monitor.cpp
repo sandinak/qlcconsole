@@ -2096,6 +2096,10 @@ protected:
 QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                                  QWidget *geometryForm, StructureStudioView **outView)
 {
+    // Cmd-W / Ctrl-W closes the editor window (standard, was missing).
+    QShortcut *closeSc = new QShortcut(QKeySequence::Close, dlg);
+    connect(closeSc, &QShortcut::activated, dlg, &QDialog::reject);
+
     // The canvas-centric object editor: a splitter of
     //   [ Geometry (collapsible) + fixtures-by-group tree | canvas | inspector ].
     QSplitter *body = new QSplitter(Qt::Horizontal, dlg);
@@ -3217,7 +3221,7 @@ void Monitor::slotEditStand(quint32 sid)
     const QString snapName = s->name();
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio — %1").arg(s->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(s->name()));
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
@@ -3337,7 +3341,7 @@ void Monitor::slotEditTower(quint32 tid)
     for (int i = 0; i < t->shelfCount(); ++i) snapShelves << t->shelfHeight(i);
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio — %1").arg(t->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(t->name()));
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
@@ -3507,7 +3511,7 @@ void Monitor::slotEditPipe(quint32 bid)
 
     QDialog dlg(this);
     const bool horiz = (b->orientation() == Pipe::Horizontal);
-    dlg.setWindowTitle(tr("Lighting Studio — %1").arg(b->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(b->name()));
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
@@ -3719,7 +3723,7 @@ void Monitor::slotEditPlatform(quint32 pid)
     const QColor snapColor = p->color();
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio — %1").arg(p->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(p->name()));
 
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl   = new QVBoxLayout(geomW);
@@ -4677,7 +4681,7 @@ void Monitor::slotEditTruss(quint32 tid)
     const float     origWidth  = t->width();
 
     QDialog editDlg(this);
-    editDlg.setWindowTitle(tr("Lighting Studio — %1").arg(t->name()));
+    editDlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(t->name()));
     editDlg.setMinimumWidth(420);
 
     QVBoxLayout *vl   = new QVBoxLayout(&editDlg);
