@@ -88,6 +88,9 @@ signals:
     void fixturesDropped(const QList<quint32> &fids, const QPointF &pos);
     /** Right-click on the canvas. @p fidUnder = fixture under the cursor (0 = empty). */
     void canvasContextMenu(const QPoint &globalPos, quint32 fidUnder);
+    /** Structure geometry changed on the canvas (e.g. a boom resized) — the host
+     *  should refresh the 2D map. */
+    void structureChanged();
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -100,6 +103,7 @@ protected:
     void dragEnterEvent(QDragEnterEvent *) override;
     void dropEvent(QDropEvent *) override;
     void contextMenuEvent(QContextMenuEvent *) override;
+    void leaveEvent(QEvent *) override;
 
 private:
     QPointF project(const QVector3D &w) const;      ///< world → in-plane (a,b) metres
@@ -116,6 +120,9 @@ private:
     void drawPipe(QPainter &p, const class Pipe *pipe) const;
     void drawFixtures(QPainter &p) const;
     void drawDimensions(QPainter &p) const;   ///< feature width/height labels (ft/m)
+    void drawRulers(QPainter &p) const;        ///< height (0=floor) + width (0=centre) rulers
+    void drawCursorReadout(QPainter &p) const; ///< crosshair + live height/offset at the pointer
+    double structureCentreA() const;           ///< plane-horizontal centre of the structure (metres)
     quint32 hitTestFixture(const QPointF &px) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
@@ -140,6 +147,9 @@ private:
     QPointF  m_panLast;
     quint32  m_dragFid = 0;    ///< fixture being dragged (0 = none)
     bool     m_dragged = false;
+    quint32  m_resizeBoom = 0; ///< +1 boom id whose top is being dragged (0 = none)
+    QPointF  m_cursorPx;       ///< last pointer position (for the ruler readout)
+    bool     m_hasCursor = false;
     QSet<quint32> m_highlight;  ///< ring-highlighted fixtures (tree selection)
 };
 

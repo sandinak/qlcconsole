@@ -466,12 +466,41 @@ void StructureStudioView::drawStructure(QPainter &p) const
         Stand *s = props->stand(m_id);
         if (s == nullptr) return;
         drawFloorPlate(s->originX(), s->originY(), s->baseRadius());
+        const float br = s->baseRadius();
+        // Tripod LEGS so the stand reads as a stand. In an elevation two legs
+        // splay from a collar (~⅓ up) to the floor edges; in Top the three feet.
+        p.setPen(QPen(steel.darker(110), 1.6));
+        if (m_plane == Top)
+        {
+            const QPointF c = w2s(QVector3D(s->originX(), s->originY(), 0));
+            for (int i = 0; i < 3; ++i)
+            {
+                const double a = M_PI / 2.0 + i * (2.0 * M_PI / 3.0);
+                p.drawLine(c, c + QPointF(qCos(a) * br * m_scale, qSin(a) * br * m_scale));
+            }
+        }
+        else
+        {
+            const QVector3D collar(s->originX(), s->originY(), s->height() * 0.35f);
+            p.drawLine(w2s(collar), w2s(QVector3D(s->originX() - br, s->originY() - br, 0)));
+            p.drawLine(w2s(collar), w2s(QVector3D(s->originX() + br, s->originY() + br, 0)));
+        }
         // The post from floor to top.
         p.setPen(QPen(steel, 2.5));
         p.drawLine(w2s(QVector3D(s->originX(), s->originY(), 0)), w2s(s->topPos()));
-        // Booms/bars on it.
+        // Booms/bars on it — draw a grab handle at each boom TOP (drag = resize
+        // the hangable length).
         foreach (const Pipe *pipe, standPipes())
+        {
             drawPipe(p, pipe);
+            if (pipe->isVertical())
+            {
+                const QPointF top = w2s(pipe->positionAt(pipe->length()));
+                p.setPen(QPen(QColor(0, 190, 255), 1.4));
+                p.setBrush(QColor(0, 190, 255, 160));
+                p.drawEllipse(top, 4.0, 4.0);
+            }
+        }
     }
     else if (m_kind == TowerKind)
     {
@@ -907,14 +936,115 @@ void StructureStudioView::drawDimensions(QPainter &p) const
     }
 }
 
+double StructureStudioView::structureCentreA() const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<QVector3D> c;
+    if (m_kind == PlatformKind)
+    { if (StagePlatform *pl = props->platform(m_id)) { c << QVector3D(pl->originX(), pl->originY(), 0)
+        << QVector3D(pl->originX() + pl->width(), pl->originY() + pl->depth(), pl->height()); } }
+    else if (m_kind == TowerKind)
+    { if (Tower *t = props->tower(m_id)) { c << QVector3D(t->originX(), t->originY(), 0)
+        << QVector3D(t->originX() + t->width(), t->originY() + t->depth(), t->height()); } }
+    else if (m_kind == StandKind)
+    { if (Stand *s = props->stand(m_id)) c << QVector3D(s->originX(), s->originY(), 0) << s->topPos(); }
+    else if (m_kind == TrussKind)
+    { if (Truss *t = props->truss(m_id)) c << t->origin() << t->positionAt(t->length()); }
+    else if (m_kind == PipeKind)
+    { if (Pipe *pp = props->pipe(m_id)) c << pp->positionAt(0) << pp->positionAt(pp->length()); }
+    if (c.isEmpty()) return 0.0;
+    double minA = project(c.first()).x(), maxA = minA;
+    foreach (const QVector3D &w, c) { const double a = project(w).x(); minA = qMin(minA, a); maxA = qMax(maxA, a); }
+    return (minA + maxA) / 2.0;
+}
+
+void StructureStudioView::drawRulers(QPainter &p) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const bool feet = props->gridUnits() == MonitorProperties::Feet;
+    const double conv = feet ? 3.28084 : 1.0;
+    const QString sfx = feet ? QStringLiteral("ft") : QStringLiteral("m");
+    const double stepM = 1.0 / conv;   // 1 display unit in metres
+    p.setFont(QFont("Arial", 7));
+
+    // Height ruler (0 = floor), left edge — only in the elevations.
+    if (m_plane != Top)
+    {
+        const double x = 8.0;
+        p.setPen(QPen(QColor(80, 86, 100), 1.0));
+        p.drawLine(QPointF(x, 0), QPointF(x, height()));
+        for (int k = 0; k < 400; ++k)
+        {
+            const QPointF s = w2s(QVector3D(0, 0, float(k * stepM)));
+            if (s.y() < -20) break;
+            if (s.y() > height() + 2) continue;
+            const bool major = (k % 5 == 0);
+            p.setPen(QPen(QColor(major ? 150 : 100, major ? 156 : 106, major ? 172 : 122), major ? 1.2 : 0.8));
+            p.drawLine(QPointF(x, s.y()), QPointF(x + (major ? 8 : 4), s.y()));
+            if (major) p.drawText(QPointF(x + 10, s.y() + 3), QString("%1%2").arg(k).arg(sfx));
+        }
+    }
+
+    // Width ruler (0 = structure centre), bottom edge.
+    {
+        const double centreA = structureCentreA();
+        const double y = height() - 10.0;
+        p.setPen(QPen(QColor(80, 86, 100), 1.0));
+        p.drawLine(QPointF(0, y), QPointF(width(), y));
+        for (int k = -200; k <= 200; ++k)
+        {
+            const double aVal = centreA + k * stepM;
+            const QVector3D w = (m_plane == Side) ? QVector3D(0, float(aVal), 0)
+                                                  : QVector3D(float(aVal), 0, 0);
+            const QPointF s = w2s(w);
+            if (s.x() < -20 || s.x() > width() + 20) continue;
+            const bool major = (k % 5 == 0);
+            p.setPen(QPen((k == 0) ? QColor(180, 186, 200)
+                          : QColor(major ? 150 : 100, major ? 156 : 106, major ? 172 : 122),
+                          (k == 0 || major) ? 1.2 : 0.8));
+            p.drawLine(QPointF(s.x(), y - ((k == 0 || major) ? 8 : 4)), QPointF(s.x(), y));
+            if (k == 0) p.drawText(QPointF(s.x() - 3, y - 10), QStringLiteral("0"));
+            else if (major) p.drawText(QPointF(s.x() - 6, y - 10), QString::number(qAbs(k)));
+        }
+    }
+}
+
+void StructureStudioView::drawCursorReadout(QPainter &p) const
+{
+    if (!m_hasCursor) return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    const bool feet = props->gridUnits() == MonitorProperties::Feet;
+    const double conv = feet ? 3.28084 : 1.0;
+    const QString sfx = feet ? QStringLiteral("ft") : QStringLiteral("m");
+    const QPointF ab = screenToPlane(m_cursorPx);
+    const double hM = ab.y();                          // height above floor (elevations)
+    const double offM = ab.x() - structureCentreA();   // horizontal offset from centre
+
+    p.setPen(QPen(QColor(0, 190, 255, 110), 0.8, Qt::DashLine));
+    p.drawLine(QPointF(0, m_cursorPx.y()), QPointF(width(), m_cursorPx.y()));
+    p.drawLine(QPointF(m_cursorPx.x(), 0), QPointF(m_cursorPx.x(), height()));
+
+    const QString t = (m_plane == Top)
+        ? QString("X %1  Y %2 %3").arg(offM * conv, 0, 'f', 2).arg(hM * conv, 0, 'f', 2).arg(sfx)
+        : QString("H %1  ↔ %2 %3").arg(hM * conv, 0, 'f', 2).arg(offM * conv, 0, 'f', 2).arg(sfx);
+    p.setFont(QFont("Arial", 8));
+    QRectF r(m_cursorPx.x() + 12, m_cursorPx.y() + 10, 140, 18);
+    if (r.right() > width()) r.moveLeft(m_cursorPx.x() - 152);
+    p.fillRect(r, QColor(20, 22, 28, 225));
+    p.setPen(QColor(200, 220, 240));
+    p.drawText(r, Qt::AlignVCenter | Qt::AlignHCenter, t);
+}
+
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     drawGrid(p);
+    drawRulers(p);
     drawStructure(p);
     drawDimensions(p);
     drawFixtures(p);
+    drawCursorReadout(p);
 
     // Plane badge.
     p.setPen(QColor(160, 164, 175));
@@ -948,6 +1078,21 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
     }
     if (e->button() == Qt::LeftButton)
     {
+        // A boom's top handle (stand view): drag it to resize the hangable length.
+        if (m_kind == StandKind)
+        {
+            foreach (const Pipe *pipe, standPipes())
+            {
+                if (!pipe->isVertical()) continue;
+                if (QLineF(w2s(pipe->positionAt(pipe->length())), e->pos()).length() <= 7.0)
+                {
+                    m_resizeBoom = pipe->id() + 1;
+                    emit editAboutToStart();
+                    setCursor(Qt::SizeVerCursor);
+                    return;
+                }
+            }
+        }
         m_dragFid = hitTestFixture(e->pos());   // 0 if empty space
         m_dragged = false;
         if (m_dragFid != 0)
@@ -961,10 +1106,22 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
 
 void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
 {
+    m_cursorPx = e->pos();   // live ruler readout
+    m_hasCursor = true;
     if (m_panning)
     {
         m_originPx += e->pos() - m_panLast;
         m_panLast = e->pos();
+        update();
+        return;
+    }
+    if (m_resizeBoom != 0)
+    {
+        if (Pipe *b = m_doc->monitorProperties()->pipe(m_resizeBoom - 1))
+        {
+            const QPointF ab = screenToPlane(e->pos());
+            b->setLength(float(qMax(0.1, ab.y() - double(b->baseZ()))));  // top follows cursor height
+        }
         update();
         return;
     }
@@ -973,16 +1130,29 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
         if (!m_dragged)
             emit editAboutToStart();   // snapshot for undo before the first change
         if (dragFixtureTo(m_dragFid, e->pos()))
-        {
             m_dragged = true;
-            update();
-        }
     }
+    update();   // keep the ruler crosshair/readout live on hover
+}
+
+void StructureStudioView::leaveEvent(QEvent *)
+{
+    m_hasCursor = false;
+    update();
 }
 
 void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
 {
     m_panning = false;
+    if (m_resizeBoom != 0)
+    {
+        m_resizeBoom = 0;
+        setCursor(Qt::ArrowCursor);
+        m_doc->setModified();
+        emit structureChanged();   // refresh the 2D map's boom + fixtures
+        reload();
+        return;
+    }
     if (m_dragFid != 0)
     {
         setCursor(Qt::ArrowCursor);

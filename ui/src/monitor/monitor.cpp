@@ -2409,6 +2409,9 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             [this, kind, id, view, rebuildSource]() { studioAddBar(kind, id, view); rebuildSource(); });
     // Keep the trees in sync after canvas-side edits.
     connect(view, &StructureStudioView::fixtureMoved, body, [rebuildTree](quint32){ rebuildTree(); });
+    // A boom resized on the canvas → redraw it (and its fixtures) on the 2D map.
+    connect(view, &StructureStudioView::structureChanged, body,
+            [this, refreshMap]() { m_graphicsView->updatePlatforms(); refreshMap(); });
 
     // Drop a fixture from the source tree onto a face → mount + land it there.
     connect(view, &StructureStudioView::fixturesDropped, body,
