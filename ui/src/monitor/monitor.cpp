@@ -2073,11 +2073,10 @@ void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
 void Monitor::editFixtureProperties(quint32 fid)
 {
     // The studio's single-fixture path (inspector 'Full properties…', canvas
-    // double-click, tree double-click): ALWAYS edit just this one fixture, even
-    // if the map still has a multi-selection.
-    if (fid == 0) return;
-    m_graphicsView->selectFixtureExclusive(fid);
-    showFixtureItemEditor();
+    // double-click, tree double-click): ALWAYS edit just this one fixture,
+    // bypassing the map selection (and its group select-together).
+    if (fid != 0)
+        showFixtureItemEditor(fid);
 }
 
 void Monitor::slotTrussDoubleClicked(quint32 tid)
@@ -5612,9 +5611,21 @@ private:
     float m_panMax   = 360.0f;
 };
 
-void Monitor::showFixtureItemEditor()
+void Monitor::showFixtureItemEditor(quint32 onlyFid)
 {
-    QList<MonitorFixtureItem *> items = m_graphicsView->selectedFixtureItems();
+    // A specific fixture (studio single-fixture path) bypasses the map selection
+    // — the group "select-together" would otherwise re-select all members and
+    // force the multi editor.
+    QList<MonitorFixtureItem *> items;
+    if (onlyFid != 0)
+    {
+        if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(onlyFid))
+            items << it;
+    }
+    else
+    {
+        items = m_graphicsView->selectedFixtureItems();
+    }
     if (items.isEmpty())
         return;
 

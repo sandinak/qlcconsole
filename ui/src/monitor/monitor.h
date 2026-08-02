@@ -210,7 +210,10 @@ protected:
     void hideFixtureItemEditor();
 
     /** Open a modal fixture properties dialog for the current selection. */
-    void showFixtureItemEditor();
+    /** @param onlyFid if non-zero, edit JUST that fixture (studio single path,
+     *  bypassing the map selection / group select-together); else edit the
+     *  current map selection. */
+    void showFixtureItemEditor(quint32 onlyFid = 0);
 
 protected slots:
     /** Slot called when the grid width changes */
