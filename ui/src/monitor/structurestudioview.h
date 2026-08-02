@@ -63,6 +63,11 @@ public:
      *  studioMount and pin them to that face surface. Empty = all mounted. */
     void putOnFace(const QList<quint32> &ids);
 
+    /** Lay @p ids out evenly on the current face (name order). Auto-orients: if
+     *  they don't fit side-by-side across the width they STACK vertically,
+     *  centred, top→bottom. Empty = all mounted. */
+    void distributeOnFace(const QList<quint32> &ids);
+
 signals:
     /** A fixture on the structure was double-clicked (id passed through). */
     void fixtureActivated(quint32 fid);

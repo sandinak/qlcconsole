@@ -547,8 +547,11 @@ void StructureStudioView::drawStructure(QPainter &p) const
         if (pl == nullptr) return;
         const float x0 = pl->originX(), y0 = pl->originY();
         const float x1 = x0 + pl->width(), y1 = y0 + pl->depth(), h = pl->height();
-        p.setPen(QPen(steel, 1.6));
-        p.setBrush(QColor(110, 120, 140, 70));
+        // Use the platform's own colour (its colour-picker value), like the 2D map.
+        QColor pc = pl->color().isValid() ? pl->color() : QColor(110, 120, 140);
+        QColor fill = pc; fill.setAlpha(70);
+        p.setPen(QPen(pc.darker(140), 1.6));
+        p.setBrush(fill);
         if (m_plane == Top)
         {
             p.drawRect(QRectF(w2s(QVector3D(x0, y0, 0)), w2s(QVector3D(x1, y1, 0))).normalized());
@@ -686,6 +689,98 @@ void StructureStudioView::drawFixtures(QPainter &p) const
             p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
         }
     }
+}
+
+static qlonglong ssvTrailingNum(const QString &s)
+{
+    int i = s.size();
+    while (i > 0 && s[i - 1].isDigit()) --i;
+    if (i == s.size()) return -1;
+    return s.mid(i).toLongLong();
+}
+
+void StructureStudioView::distributeOnFace(const QList<quint32> &sel)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    // Frame-group fixtures lay out on a face; others fall back to a param spread.
+    QList<quint32> ids, other;
+    foreach (quint32 fid, sel.isEmpty() ? mountedFixtures() : sel)
+        (props->fixtureFrameGroup(fid) != 0 ? ids : other) << fid;
+
+    // Name order (trailing #N, else natural).
+    auto byName = [this](quint32 a, quint32 b) {
+        Fixture *fa = m_doc->fixture(a), *fb = m_doc->fixture(b);
+        const QString na = fa ? fa->name() : QString::number(a);
+        const QString nb = fb ? fb->name() : QString::number(b);
+        const qlonglong ta = ssvTrailingNum(na), tb = ssvTrailingNum(nb);
+        if (ta >= 0 && tb >= 0 && ta != tb) return ta < tb;
+        return na < nb;
+    };
+    std::sort(ids.begin(), ids.end(), byName);
+
+    const int n = ids.size();
+    if (n > 0)
+    {
+        StagePlatform *pl = (m_kind == PlatformKind) ? props->platform(m_id) : nullptr;
+        double W = 1.0, H = 1.0;
+        if (pl != nullptr)
+        {
+            if (m_plane == Front)     { W = pl->width(); H = pl->height(); }
+            else if (m_plane == Side) { W = pl->depth(); H = pl->height(); }
+            else                      { W = pl->width(); H = pl->depth();  }
+        }
+        const int mount = int(m_plane);
+        int pinComp; double pinVal; facePin(mount, pinComp, pinVal);
+        double L = 0.0;
+        foreach (quint32 fid, ids) L = qMax(L, fixtureLenM(fid));
+        const bool stackVertical = (double(n) * L > W + 1e-6);
+        const bool topIsMaxB = (m_plane != Top);   // Z↑ in elevations; Y↓ in Top
+
+        for (int i = 0; i < n; ++i)
+        {
+            double a, b;
+            if (stackVertical)
+            {
+                a = W * 0.5;                                        // centred across width
+                const double frac = topIsMaxB ? (n - i - 0.5) / n : (i + 0.5) / n;
+                b = H * frac;                                       // item 0 at the top
+            }
+            else
+            {
+                a = W * (i + 0.5) / n;                              // left → right
+                b = H * 0.5;                                        // centred vertically
+            }
+            FixtureRigProps rp = props->fixtureRigProps(ids[i]);
+            rp.studioMount = mount;
+            QVector3D lp;
+            if (m_plane == Front)     lp = QVector3D(float(a), 0.0f, float(b));
+            else if (m_plane == Side) lp = QVector3D(0.0f, float(a), float(b));
+            else                      lp = QVector3D(float(a), float(b), 0.0f);
+            if (pinComp == 0)      lp.setX(float(pinVal));
+            else if (pinComp == 1) lp.setY(float(pinVal));
+            else                   lp.setZ(float(pinVal));
+            rp.groupLocal = lp;
+            props->setFixtureRigProps(ids[i], rp);
+        }
+    }
+
+    // Non-frame fixtures (riser/pipe/truss): even spread along their own param.
+    std::sort(other.begin(), other.end(), byName);
+    for (int i = 0; i < other.size(); ++i)
+    {
+        const float t = (i + 0.5f) / float(other.size());
+        FixtureRigProps rp = props->fixtureRigProps(other[i]);
+        if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
+        { if (StagePlatform *pl = props->platform(rp.riserPlatformId)) rp.riserU = t * pl->width(); }
+        else if (rp.pipeId != Pipe::invalidId())
+        { if (Pipe *p = props->pipe(rp.pipeId)) rp.pipeOffset = t * p->length(); }
+        else if (rp.trussId != Truss::invalidId())
+        { if (Truss *tt = props->truss(rp.trussId)) rp.trussOffset = t * tt->length(); }
+        props->setFixtureRigProps(other[i], rp);
+    }
+
+    m_doc->setModified();
+    reload();
 }
 
 void StructureStudioView::putOnFace(const QList<quint32> &ids)

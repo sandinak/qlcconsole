@@ -2262,12 +2262,18 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         else if (chosen == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); }
         else if (aNew && chosen == aNew) { studioCreateGroup(selNow, view); rebuildTree(); }
     });
+    auto refreshMap = [this]() {
+        foreach (Fixture *fx, m_doc->fixtures())
+            if (fx) m_graphicsView->updateFixture(fx->id());
+    };
     connect(distBtn, &QPushButton::clicked, tree,
-            [this, kind, id, view, selectedFids, pushUndo]() {
-        pushUndo(); studioDistribute(kind, id, view, selectedFids());
+            [view, selectedFids, pushUndo, refreshMap]() {
+        pushUndo(); view->distributeOnFace(selectedFids()); refreshMap();
     });
     connect(faceBtn, &QPushButton::clicked, tree,
-            [view, selectedFids, pushUndo]() { pushUndo(); view->putOnFace(selectedFids()); });
+            [view, selectedFids, pushUndo, refreshMap]() {
+        pushUndo(); view->putOnFace(selectedFids()); refreshMap();
+    });
     connect(view, &StructureStudioView::editAboutToStart, tree, [pushUndo]() { pushUndo(); });
 
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), body,
@@ -2327,18 +2333,32 @@ void Monitor::studioCreateGroup(const QList<quint32> &fids, StructureStudioView 
             tr("Select one or more fixtures in the tree first."));
         return;
     }
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, tr("New Fixture Group"),
-        tr("Group name:"), QLineEdit::Normal, tr("Group %1").arg(m_doc->fixtureGroups().count() + 1), &ok);
-    if (!ok || name.trimmed().isEmpty())
+    // Name + matrix size (columns × rows), like a fixture group in the Fixtures tab.
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("New Fixture Group"));
+    QFormLayout *f = new QFormLayout(&dlg);
+    QLineEdit *nameE = new QLineEdit(tr("Group %1").arg(m_doc->fixtureGroups().count() + 1), &dlg);
+    QSpinBox *colS = new QSpinBox(&dlg); colS->setRange(1, 512); colS->setValue(fids.size());
+    QSpinBox *rowS = new QSpinBox(&dlg); rowS->setRange(1, 512); rowS->setValue(1);
+    colS->setToolTip(tr("Matrix width — heads are filled left→right, top→bottom."));
+    f->addRow(tr("Name:"), nameE);
+    f->addRow(tr("Columns (X):"), colS);
+    f->addRow(tr("Rows (Y):"), rowS);
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    f->addRow(bb);
+    if (dlg.exec() != QDialog::Accepted || nameE->text().trimmed().isEmpty())
         return;
+
     FixtureGroup *grp = new FixtureGroup(m_doc);
-    grp->setName(name.trimmed());
+    grp->setName(nameE->text().trimmed());
+    grp->setSize(QSize(colS->value(), rowS->value()));
     m_doc->addFixtureGroup(grp);
     foreach (quint32 fid, fids)
-        grp->assignFixture(fid);
+        grp->assignFixture(fid);         // fills the grid left→right, top→bottom
     m_doc->setModified();
-    if (view) view->reload();   // the tree regroups under the new folder
+    if (view) view->reload();            // the tree regroups under the new folder
 }
 
 void Monitor::studioDistribute(int kind, quint32 id, StructureStudioView *view,
