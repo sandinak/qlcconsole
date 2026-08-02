@@ -2174,7 +2174,12 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     faceCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
     QDoubleSpinBox *angleSpin = new QDoubleSpinBox(insp);
     angleSpin->setRange(-180, 180); angleSpin->setDecimals(0); angleSpin->setSuffix(QStringLiteral("°"));
+    QComboBox *mountCombo = new QComboBox(insp);   // logical orientation — any fixture
+    mountCombo->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
+    mountCombo->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
+    mountCombo->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
     inspForm->addRow(tr("Colour:"), gelBtn);
+    inspForm->addRow(tr("Orientation:"), mountCombo);
     inspForm->addRow(tr("Face:"), faceCombo);
     inspForm->addRow(tr("Angle:"), angleSpin);
     iv->addLayout(inspForm);
@@ -2184,13 +2189,13 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     insp->setMinimumWidth(190);
 
     auto curFid = QSharedPointer<quint32>::create(0u);
-    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, angleSpin, fullBtn]() {
+    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, angleSpin, mountCombo, fullBtn]() {
         const quint32 fid = *curFid;
         Fixture *fx = fid ? m_doc->fixture(fid) : nullptr;
         const bool have = (fx != nullptr);
         const bool frame = have && (m_props->fixtureFrameGroup(fid) != 0);
         inspTitle->setText(have ? fx->name() : tr("(no fixture selected)"));
-        gelBtn->setEnabled(have); fullBtn->setEnabled(have);
+        gelBtn->setEnabled(have); fullBtn->setEnabled(have); mountCombo->setEnabled(have);
         faceCombo->setEnabled(frame); angleSpin->setEnabled(frame);
         if (!have) { gelBtn->setStyleSheet(QString()); return; }
         const FixtureRigProps rp = m_props->fixtureRigProps(fid);
@@ -2201,6 +2206,9 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                 .arg(gel.lightness() > 128 ? "#000" : "#fff") : QString());
         faceCombo->blockSignals(true); faceCombo->setCurrentIndex(qBound(0, rp.studioMount, 2)); faceCombo->blockSignals(false);
         angleSpin->blockSignals(true); angleSpin->setValue(double(rp.studioAngle)); angleSpin->blockSignals(false);
+        mountCombo->blockSignals(true);
+        mountCombo->setCurrentIndex(qMax(0, mountCombo->findData(int(rp.mountingType))));
+        mountCombo->blockSignals(false);
     };
     populate();
 
@@ -2228,6 +2236,15 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         if (*curFid == 0) return;
         if (view) view->setFixtureAngle(*curFid, float(v));
         m_graphicsView->updateFixture(*curFid);
+    });
+    connect(mountCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
+            [this, curFid, view, mountCombo](int) {
+        if (*curFid == 0) return;
+        FixtureRigProps rp = m_props->fixtureRigProps(*curFid);
+        rp.mountingType = static_cast<Truss::MountingType>(mountCombo->currentData().toInt());
+        m_props->setFixtureRigProps(*curFid, rp);
+        m_graphicsView->updateFixture(*curFid);
+        if (view) view->reload();
     });
     connect(fullBtn, &QPushButton::clicked, insp,
             [this, curFid]() { if (*curFid) slotFixtureDoubleClicked(*curFid); });
@@ -5462,10 +5479,11 @@ void Monitor::showFixtureItemEditor()
         QFormLayout *rigForm = new QFormLayout(rigBox);
 
         QComboBox *mountCb = new QComboBox;
-        mountCb->addItem(tr("Top-hung"),      QVariant(int(Truss::TopHung)));
-        mountCb->addItem(tr("Floor mounted"), QVariant(int(Truss::FloorMounted)));
-        mountCb->addItem(tr("Side arm"),      QVariant(int(Truss::SideArm)));
-        rigForm->addRow(tr("Mounting:"), mountCb);
+        // Logical orientation of the device (base direction), not a rig context.
+        mountCb->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
+        mountCb->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
+        mountCb->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
+        rigForm->addRow(tr("Orientation:"), mountCb);
 
         QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox;
         panZeroSpin->setRange(0, 359);
@@ -5685,10 +5703,11 @@ void Monitor::showFixtureItemEditor()
     rigForm->addRow(tr("Across truss:"), trussCrossCb);
 
     QComboBox *mountCb = new QComboBox;
-    mountCb->addItem(tr("Top-hung"),      QVariant(int(Truss::TopHung)));
-    mountCb->addItem(tr("Floor mounted"), QVariant(int(Truss::FloorMounted)));
-    mountCb->addItem(tr("Side arm"),      QVariant(int(Truss::SideArm)));
-    rigForm->addRow(tr("Mounting:"), mountCb);
+    // Logical orientation of the device (base direction), not a rig context.
+    mountCb->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
+    mountCb->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
+    mountCb->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
+    rigForm->addRow(tr("Orientation:"), mountCb);
 
     // Deck mount: a fixture standing on top of a platform ("floor mounted").
     QComboBox *deckCb = new QComboBox;

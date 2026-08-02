@@ -281,6 +281,8 @@ QList<quint32> StructureStudioView::mountedFixtures() const
             on = (rp.towerId == m_id);
         else if (m_kind == TrussKind)
             on = (rp.trussId == m_id);
+        else if (m_kind == GroupKind)
+            on = (props->fixtureFrameGroup(fx->id()) == m_id);
         else if (m_kind == PlatformKind)
         {
             on = (rp.riserPlatformId == m_id || rp.deckPlatformId == m_id);
@@ -676,10 +678,26 @@ QVector3D StructureStudioView::fixtureEndB(quint32 fid) const
 
 void StructureStudioView::facePin(int mount, int &pinComp, double &pinVal) const
 {
-    StagePlatform *pl = (m_kind == PlatformKind) ? m_doc->monitorProperties()->platform(m_id) : nullptr;
-    if (mount == 1)      { pinComp = 1; pinVal = pl ? pl->depth()  : 0.0; }  // Front → pin Y
-    else if (mount == 2) { pinComp = 0; pinVal = 0.0; }                       // Side  → pin X
-    else                 { pinComp = 2; pinVal = pl ? pl->height() : 0.0; }  // Top   → pin Z
+    if (mount == 1)      pinComp = 1;    // Front → pin Y (depth)
+    else if (mount == 2) pinComp = 0;    // Side  → pin X
+    else                 pinComp = 2;    // Top   → pin Z (height)
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    StagePlatform *pl = (m_kind == PlatformKind) ? props->platform(m_id) : nullptr;
+    if (pl != nullptr)
+    {
+        pinVal = (pinComp == 1) ? pl->depth() : (pinComp == 2) ? pl->height() : 0.0;
+        return;
+    }
+    // A bare group (no platform): pin to the members' AVERAGE on that component.
+    double sum = 0.0; int n = 0;
+    foreach (quint32 fid, mountedFixtures())
+    {
+        const QVector3D lp = props->fixtureRigProps(fid).groupLocal;
+        sum += (pinComp == 0) ? lp.x() : (pinComp == 1) ? lp.y() : lp.z();
+        ++n;
+    }
+    pinVal = n ? sum / n : 0.0;
 }
 
 void StructureStudioView::drawFixtures(QPainter &p) const
@@ -958,6 +976,22 @@ double StructureStudioView::structureCentreA() const
     return (minA + maxA) / 2.0;
 }
 
+double StructureStudioView::structureTopZ() const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    double z = 0.0;
+    if (m_kind == StandKind)
+    { if (Stand *s = props->stand(m_id)) { z = s->height();
+        foreach (const Pipe *pp, standPipes()) z = qMax(z, double(pp->positionAt(pp->length()).z())); } }
+    else if (m_kind == TowerKind)   { if (Tower *t = props->tower(m_id)) z = t->height(); }
+    else if (m_kind == PlatformKind){ if (StagePlatform *pl = props->platform(m_id)) z = pl->height(); }
+    else if (m_kind == TrussKind)   { if (Truss *t = props->truss(m_id))
+        z = qMax(double(t->origin().z()), double(t->positionAt(t->length()).z())); }
+    else if (m_kind == PipeKind)    { if (Pipe *pp = props->pipe(m_id))
+        z = qMax(double(pp->positionAt(0).z()), double(pp->positionAt(pp->length()).z())); }
+    return z;
+}
+
 void StructureStudioView::drawRulers(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
@@ -982,6 +1016,18 @@ void StructureStudioView::drawRulers(QPainter &p) const
             p.setPen(QPen(QColor(major ? 150 : 100, major ? 156 : 106, major ? 172 : 122), major ? 1.2 : 0.8));
             p.drawLine(QPointF(x, s.y()), QPointF(x + (major ? 8 : 4), s.y()));
             if (major) p.drawText(QPointF(x + 10, s.y() + 3), QString("%1%2").arg(k).arg(sfx));
+        }
+        // Max-height marker: a bright arrow + label at the top of the structure.
+        const double topZ = structureTopZ();
+        if (topZ > 0.01)
+        {
+            const double y = w2s(QVector3D(0, 0, float(topZ))).y();
+            p.setPen(QPen(QColor(0, 190, 255), 1.4));
+            p.setBrush(QColor(0, 190, 255));
+            QPolygonF tri; tri << QPointF(x - 1, y) << QPointF(x - 8, y - 4) << QPointF(x - 8, y + 4);
+            p.drawPolygon(tri);
+            p.drawText(QPointF(x + 10, y - 3),
+                       QString("max %1%2").arg(topZ * conv, 0, 'f', 1).arg(sfx));
         }
     }
 
@@ -1042,7 +1088,6 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     drawGrid(p);
     drawRulers(p);
     drawStructure(p);
-    drawDimensions(p);
     drawFixtures(p);
     drawCursorReadout(p);
 

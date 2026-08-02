@@ -42,7 +42,7 @@ class StructureStudioView : public QWidget
 
 public:
     enum Kind  { StandKind = 0, TowerKind = 1, TrussKind = 2,
-                 PlatformKind = 3, PipeKind = 4 };
+                 PlatformKind = 3, PipeKind = 4, GroupKind = 5 };
     enum Plane { Top = 0, Front = 1, Side = 2 };
 
     StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent = nullptr);
@@ -123,6 +123,7 @@ private:
     void drawRulers(QPainter &p) const;        ///< height (0=floor) + width (0=centre) rulers
     void drawCursorReadout(QPainter &p) const; ///< crosshair + live height/offset at the pointer
     double structureCentreA() const;           ///< plane-horizontal centre of the structure (metres)
+    double structureTopZ() const;              ///< highest point of the structure (metres, for the max marker)
     quint32 hitTestFixture(const QPointF &px) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
