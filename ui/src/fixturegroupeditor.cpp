@@ -93,6 +93,10 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
 
     // Add a whole fixture group as a block (preserving its layout).
     QPushButton *addGroupBtn = new QPushButton(tr("Add group as block…"), this);
+    // Don't let Enter in the name field trigger this — it should just commit the
+    // name (which updates live as you type).
+    addGroupBtn->setAutoDefault(false);
+    addGroupBtn->setDefault(false);
     horizontalLayout->addWidget(addGroupBtn);
     connect(addGroupBtn, SIGNAL(clicked()), this, SLOT(slotAddGroupBlock()));
 
