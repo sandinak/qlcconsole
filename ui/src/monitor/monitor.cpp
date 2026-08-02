@@ -2228,9 +2228,12 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             w->setVisible(vis);
             if (QWidget *l = inspForm->labelForField(w)) l->setVisible(vis);
         };
-        row(mountCombo, have && !linear);
-        row(faceCombo,  have && (linear || frame));
-        row(angleSpin,  have && (linear || frame));
+        // A tower-shelf fixture is oriented ON the shelf (upright) or UNDER it
+        // (hung) — Orientation, not Face/Angle, regardless of head count.
+        const bool onTower = have && (m_props->fixtureRigProps(fid).towerId != Tower::invalidId());
+        row(mountCombo, have && (!linear || onTower));
+        row(faceCombo,  have && (linear || frame) && !onTower);
+        row(angleSpin,  have && (linear || frame) && !onTower);
         mountCombo->setEnabled(have); faceCombo->setEnabled(have); angleSpin->setEnabled(have);
         if (!have) { gelBtn->setStyleSheet(QString()); return; }
         const FixtureRigProps rp = m_props->fixtureRigProps(fid);

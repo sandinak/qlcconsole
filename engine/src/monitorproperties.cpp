@@ -1386,7 +1386,13 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     // footprint, at the shelf height. Derived so it follows the tower.
     const Tower *tw = (rp.towerId != Tower::invalidId()) ? m_towers.value(rp.towerId, nullptr) : nullptr;
     if (tw != nullptr)
-        return tw->shelfPos(rp.towerShelf, rp.towerU, rp.towerV);
+    {
+        QVector3D p = tw->shelfPos(rp.towerShelf, rp.towerU, rp.towerV);
+        // Hung (base on top) = hangs UNDER the shelf; drop it a little below.
+        if (rp.mountingType == Truss::TopHung)
+            p.setZ(qMax(0.0f, p.z() - 0.15f));
+        return p;
+    }
 
     // Deck mount: standing on top of a platform. Keep the free XY, derive Z from
     // the platform's top height (+ offset) so it follows the platform.
