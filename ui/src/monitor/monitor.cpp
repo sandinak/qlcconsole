@@ -2070,6 +2070,41 @@ void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
     showFixtureItemEditor();
 }
 
+void Monitor::fillOrientationCombo(QComboBox *cb, const FixtureRigProps &rp) const
+{
+    cb->blockSignals(true);
+    cb->clear();
+    auto addOpt = [cb](const QString &lbl, int mt, int side) {
+        cb->addItem(lbl);
+        const int i = cb->count() - 1;
+        cb->setItemData(i, mt, Qt::UserRole);
+        cb->setItemData(i, side, Qt::UserRole + 1);
+    };
+    Pipe  *mp = (rp.pipeId  != Pipe::invalidId())  ? m_props->pipe(rp.pipeId)   : nullptr;
+    Truss *mt = (rp.trussId != Truss::invalidId()) ? m_props->truss(rp.trussId) : nullptr;
+    const bool onTower    = (rp.towerId != Tower::invalidId());
+    const bool vertical   = (mp && mp->isVertical()) || (mt && mt->type() == Truss::Vertical);
+    const bool horizontal = (mp && !mp->isVertical()) || (mt && mt->type() != Truss::Vertical);
+    if (onTower)
+    { addOpt(tr("On shelf (upright)"), Truss::FloorMounted, -1);
+      addOpt(tr("Under shelf (hung)"), Truss::TopHung, -1); }
+    else if (vertical)
+    { addOpt(tr("Sideways (clamped)"), Truss::SideArm, FixtureRigProps::Centered); }
+    else if (horizontal)
+    { addOpt(tr("On top"),    Truss::FloorMounted, FixtureRigProps::TopMounted);
+      addOpt(tr("Underhung"), Truss::TopHung,      FixtureRigProps::UnderHung);
+      addOpt(tr("Side arm"),  Truss::SideArm,      FixtureRigProps::Centered); }
+    else
+    { addOpt(tr("Upright (base down)"),     Truss::FloorMounted, -1);
+      addOpt(tr("Sideways (base on side)"), Truss::SideArm,      -1);
+      addOpt(tr("Hung (base on top)"),      Truss::TopHung,      -1); }
+    int sel = 0;
+    for (int i = 0; i < cb->count(); ++i)
+        if (cb->itemData(i, Qt::UserRole).toInt() == int(rp.mountingType)) { sel = i; break; }
+    cb->setCurrentIndex(sel);
+    cb->blockSignals(false);
+}
+
 bool Monitor::fixtureIsMounted(quint32 fid) const
 {
     const FixtureRigProps &rp = m_props->fixtureRigProps(fid);
@@ -2267,40 +2302,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                 .arg(gel.lightness() > 128 ? "#000" : "#fff") : QString());
         faceCombo->blockSignals(true); faceCombo->setCurrentIndex(qBound(0, rp.studioMount, 2)); faceCombo->blockSignals(false);
         angleSpin->blockSignals(true); angleSpin->setValue(double(rp.studioAngle)); angleSpin->blockSignals(false);
-        // Orientation options CONSTRAINED by the mount (what's physically possible):
-        // vertical bar/truss → sideways only; horizontal → on-top/under/side;
-        // tower → on/under shelf; deck/riser/free → upright/sideways/hung. Each item
-        // carries mountingType (UserRole) + trussMountSide (UserRole+1, -1 = n/a).
-        mountCombo->blockSignals(true);
-        mountCombo->clear();
-        auto addOpt = [mountCombo](const QString &lbl, int mt, int side) {
-            mountCombo->addItem(lbl);
-            const int i = mountCombo->count() - 1;
-            mountCombo->setItemData(i, mt, Qt::UserRole);
-            mountCombo->setItemData(i, side, Qt::UserRole + 1);
-        };
-        Pipe  *mp = (rp.pipeId  != Pipe::invalidId())  ? m_props->pipe(rp.pipeId)   : nullptr;
-        Truss *mt = (rp.trussId != Truss::invalidId()) ? m_props->truss(rp.trussId) : nullptr;
-        const bool vertical   = (mp && mp->isVertical()) || (mt && mt->type() == Truss::Vertical);
-        const bool horizontal = (mp && !mp->isVertical()) || (mt && mt->type() != Truss::Vertical);
-        if (onTower)
-        { addOpt(tr("On shelf (upright)"), Truss::FloorMounted, -1);
-          addOpt(tr("Under shelf (hung)"), Truss::TopHung, -1); }
-        else if (vertical)
-        { addOpt(tr("Sideways (clamped)"), Truss::SideArm, FixtureRigProps::Centered); }
-        else if (horizontal)
-        { addOpt(tr("On top"),    Truss::FloorMounted, FixtureRigProps::TopMounted);
-          addOpt(tr("Underhung"), Truss::TopHung,      FixtureRigProps::UnderHung);
-          addOpt(tr("Side arm"),  Truss::SideArm,      FixtureRigProps::Centered); }
-        else
-        { addOpt(tr("Upright (base down)"),     Truss::FloorMounted, -1);
-          addOpt(tr("Sideways (base on side)"), Truss::SideArm,      -1);
-          addOpt(tr("Hung (base on top)"),      Truss::TopHung,      -1); }
-        int sel = 0;
-        for (int i = 0; i < mountCombo->count(); ++i)
-            if (mountCombo->itemData(i, Qt::UserRole).toInt() == int(rp.mountingType)) { sel = i; break; }
-        mountCombo->setCurrentIndex(sel);
-        mountCombo->blockSignals(false);
+        // Orientation options are constrained by the mount (shared helper).
+        fillOrientationCombo(mountCombo, rp);
     };
     populate();
 
@@ -6116,6 +6119,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
 
     hideRow(trussRow); hideRow(offsetSpin); hideRow(trussSideCb); hideRow(trussCrossCb);
     hideRow(deckCb); hideRow(deckHeightSpin);
+    fillOrientationCombo(mountCb, rp);             // constrain options to the mount
     if (isStrip) hideRow(mountCb);                 // a strip has no base orientation
     if (!isMover)
     { hideRow(panZeroSpin); hideRow(panOffsetSpin); hideRow(tiltOffsetSpin);
@@ -6540,8 +6544,11 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     FixtureRigProps newRp = m_props->fixtureRigProps(fxItem->fixtureID());
     newRp.trussId       = trussCb->currentData().toUInt();
     newRp.trussOffset   = float(offsetSpin->value() * fromDisp_fx);
-    newRp.mountingType  = static_cast<Truss::MountingType>(mountCb->currentData().toInt());
+    newRp.mountingType  = static_cast<Truss::MountingType>(mountCb->currentData(Qt::UserRole).toInt());
     newRp.trussMountSide = trussSideCb->currentData().toInt();
+    // The mount-constrained Orientation also sets the bar side (on-top/under/side).
+    { const int side = mountCb->currentData(Qt::UserRole + 1).toInt();
+      if (side >= 0) newRp.trussMountSide = side; }
     // Across-truss position: Left/Right map to ± half the selected truss width
     // (onto a chord); Centered = 0.
     {

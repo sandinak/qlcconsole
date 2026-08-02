@@ -296,6 +296,11 @@ protected slots:
     /** True if the fixture is already mounted on some feature (truss/pipe/tower/
      *  riser/deck/studio-group). */
     bool fixtureIsMounted(quint32 fid) const;
+    /** Fill an Orientation combo with the options valid for a fixture's MOUNT
+     *  (vertical→sideways only; horizontal→on-top/under/side; tower→on/under shelf;
+     *  else upright/sideways/hung). Each item carries mountingType (UserRole) +
+     *  trussMountSide (UserRole+1, -1 = leave as-is). Selects the current value. */
+    void fillOrientationCombo(class QComboBox *cb, const struct FixtureRigProps &rp) const;
 
     /** Open truss edit dialog on double-click. */
     void slotTrussDoubleClicked(quint32 tid);
