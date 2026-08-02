@@ -2201,6 +2201,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     mountCombo->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
     mountCombo->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
     mountCombo->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
+    mountCombo->setToolTip(tr("Base direction relative to the stage floor (gravity), "
+                              "not the mounting face."));
     inspForm->addRow(tr("Colour:"), gelBtn);
     inspForm->addRow(tr("Orientation:"), mountCombo);
     inspForm->addRow(tr("Face:"), faceCombo);
@@ -5806,8 +5808,8 @@ void Monitor::showFixtureItemEditor()
         trussCb->addItem(t->name(), t->id());
     QPushButton *detachTrussBtn = new QPushButton(tr("Remove from Truss"));
     detachTrussBtn->setToolTip(tr("Detach this fixture from its truss"));
+    QWidget *trussRow = new QWidget;
     {
-        QWidget *trussRow = new QWidget;
         QHBoxLayout *trussRowL = new QHBoxLayout(trussRow);
         trussRowL->setContentsMargins(0, 0, 0, 0);
         trussRowL->addWidget(trussCb, 1);
@@ -5858,6 +5860,9 @@ void Monitor::showFixtureItemEditor()
     mountCb->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
     mountCb->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
     mountCb->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
+    mountCb->setToolTip(tr("Base direction relative to the STAGE floor (gravity), "
+                           "independent of which face it's mounted on. On a moving "
+                           "head, Hung vs Upright inverts pan/tilt."));
     rigForm->addRow(tr("Orientation:"), mountCb);
 
     // Deck mount: a fixture standing on top of a platform ("floor mounted").
@@ -5979,6 +5984,49 @@ void Monitor::showFixtureItemEditor()
     tiltOffsetSpin->setValue(double(rp.tiltOffsetDeg));
     panInvertCb->setChecked(rp.panInvert);
     tiltInvertCb->setChecked(rp.tiltInvert);
+
+    // ---- Per-type: show only fields that make sense for THIS fixture ----------
+    // Placement is done in the Lighting Studio (drag/drop onto a truss/platform/
+    // bar), so the manual mount selectors here are redundant → show the mount
+    // read-only. Orientation is base-vs-STAGE (gravity), only for a body with a
+    // base (movers/PARs). Pan/tilt cal + test only for movers.
+    const bool hasPanCh  = fxi && fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB, 0) != QLCChannel::invalid();
+    const bool hasTiltCh = fxi && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) != QLCChannel::invalid();
+    const bool isMover = (hasPanCh || hasTiltCh);
+    const bool isStrip = fxi && fxi->heads() > 1;
+
+    auto hideRow = [rigForm](QWidget *w) {
+        if (!w) return;
+        w->setVisible(false);
+        if (QWidget *l = rigForm->labelForField(w)) l->setVisible(false);
+    };
+
+    QString mountStr = tr("free / on the floor");
+    if (rp.trussId != Truss::invalidId())
+    { Truss *t = m_props->truss(rp.trussId);
+      mountStr = tr("Truss %1 · %2%3 along").arg(t ? t->name() : QString())
+                 .arg(double(rp.trussOffset) * toDisp_fx, 0, 'f', 1).arg(unitSfx_fx); }
+    else if (rp.pipeId != Pipe::invalidId())
+    { Pipe *p = m_props->pipe(rp.pipeId); mountStr = tr("Bar %1").arg(p ? p->name() : QString()); }
+    else if (rp.towerId != Tower::invalidId())
+    { Tower *t = m_props->tower(rp.towerId); mountStr = tr("Tower %1 · shelf %2").arg(t ? t->name() : QString()).arg(rp.towerShelf + 1); }
+    else if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
+    { StagePlatform *pl = m_props->platform(rp.riserPlatformId); mountStr = tr("Riser %1").arg(pl ? pl->name() : QString()); }
+    else if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())
+    { StagePlatform *pl = m_props->platform(rp.deckPlatformId); mountStr = tr("On deck %1").arg(pl ? pl->name() : QString()); }
+    else if (m_props->fixtureFrameGroup(fxItem->fixtureID()) != 0)
+        mountStr = tr("Studio group");
+    QLabel *mountLbl = new QLabel(mountStr);
+    mountLbl->setStyleSheet("color:#b0b4c0;");
+    rigForm->insertRow(0, tr("Mounted on:"), mountLbl);
+
+    hideRow(trussRow); hideRow(offsetSpin); hideRow(trussSideCb); hideRow(trussCrossCb);
+    hideRow(deckCb); hideRow(deckHeightSpin);
+    if (isStrip) hideRow(mountCb);                 // a strip has no base orientation
+    if (!isMover)
+    { hideRow(panZeroSpin); hideRow(panOffsetSpin); hideRow(tiltOffsetSpin);
+      hideRow(invertRow); hideRow(testRowWidget); }
+
     vl->addWidget(rigBox);
 
     // --- Test orientation DMX source (owned by shared_ptr; cleaned up when dialog closes) ---
