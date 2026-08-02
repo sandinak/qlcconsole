@@ -3788,6 +3788,10 @@ void MonitorGraphicsView::attachFixtureToPipe(quint32 fid, quint32 pipeId)
     rp.pipeId = pipeId;
     if (rp.pipeOffset <= 0.0f)            // first mount → sit near the top
         rp.pipeOffset = b->height() * 0.85f;
+    // On a VERTICAL boom a fixture can only clamp to the side, so default its
+    // orientation to Sideways (base on side), not the generic default.
+    if (b->isVertical())
+        rp.mountingType = Truss::SideArm;
     props->setFixtureRigProps(fid, rp);
 
     updateFixture(fid);

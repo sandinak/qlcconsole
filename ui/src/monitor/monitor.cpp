@@ -2070,6 +2070,16 @@ void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
     showFixtureItemEditor();
 }
 
+bool Monitor::fixtureIsMounted(quint32 fid) const
+{
+    const FixtureRigProps &rp = m_props->fixtureRigProps(fid);
+    return rp.trussId != Truss::invalidId() || rp.pipeId != Pipe::invalidId()
+        || rp.towerId != Tower::invalidId()
+        || rp.riserPlatformId != FixtureRigProps::invalidPlatformId()
+        || rp.deckPlatformId != FixtureRigProps::invalidPlatformId()
+        || m_props->fixtureFrameGroup(fid) != 0;
+}
+
 bool Monitor::isLinearFixture(Fixture *fx) const
 {
     if (fx == nullptr) return false;
@@ -2597,7 +2607,9 @@ void Monitor::studioCreateGroup(const QList<quint32> &fids, StructureStudioView 
     dlg.setWindowTitle(tr("New Fixture Group"));
     QFormLayout *f = new QFormLayout(&dlg);
     // Suggest a matrix from the fixtures' SPATIAL layout + head counts: cluster
-    // by the view's vertical axis to get rows, then cols = total heads / rows.
+    // distinct vertical bands (rows), then cols = total heads / rows. The cluster
+    // tolerance is ADAPTIVE (fraction of the vertical spread ÷ N) so tightly-
+    // stacked rows — e.g. 8 strips on a 0.7 ft step face — still separate.
     int sugRows = 1, totalHeads = 0;
     {
         QList<double> vv;
@@ -2609,10 +2621,12 @@ void Monitor::studioCreateGroup(const QList<quint32> &fids, StructureStudioView 
             vv << ((view && view->plane() == StructureStudioView::Top) ? double(w.y()) : double(w.z()));
         }
         std::sort(vv.begin(), vv.end());
-        if (!vv.isEmpty())
+        if (vv.size() > 1)
         {
+            const double spread = vv.last() - vv.first();
+            const double tol = qMax(1e-4, spread / (2.0 * vv.size()));   // adaptive
             double last = vv.first();
-            for (double v : vv) if (v - last > 0.15) { ++sugRows; last = v; }
+            for (double v : vv) if (v - last > tol) { ++sugRows; last = v; }
         }
     }
     const int sugCols = qMax(1, int(qCeil(qMax(1, totalHeads) / double(sugRows))));
@@ -2866,8 +2880,22 @@ void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
     if (pick.exec() != QDialog::Accepted)
         return;
 
+    QList<quint32> chosen;
     foreach (QListWidgetItem *it, list->selectedItems())
-        mountFixtureOnStructure(it->data(Qt::UserRole).toUInt(), kind, id, boomId);
+        chosen << it->data(Qt::UserRole).toUInt();
+
+    // Some may already be on ANOTHER feature — moving them detaches them there.
+    int mountedElsewhere = 0;
+    foreach (quint32 fid, chosen) if (fixtureIsMounted(fid)) ++mountedElsewhere;
+    if (mountedElsewhere > 0 &&
+        QMessageBox::question(this, tr("Move Fixtures"),
+            tr("%1 of the chosen fixtures are already on another feature. "
+               "Move them here (detach them from where they are)?").arg(mountedElsewhere),
+            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    foreach (quint32 fid, chosen)
+        mountFixtureOnStructure(fid, kind, id, boomId);
     if (view) view->reload();
     m_doc->setModified();
 }

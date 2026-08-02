@@ -293,6 +293,9 @@ protected slots:
     /** True for a LINEAR fixture (strip/bar/tape): multi-head OR physically much
      *  wider than it is deep/tall. Drives the Face+Angle quick-settings. */
     bool isLinearFixture(class Fixture *fx) const;
+    /** True if the fixture is already mounted on some feature (truss/pipe/tower/
+     *  riser/deck/studio-group). */
+    bool fixtureIsMounted(quint32 fid) const;
 
     /** Open truss edit dialog on double-click. */
     void slotTrussDoubleClicked(quint32 tid);
