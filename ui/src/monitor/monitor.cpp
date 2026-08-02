@@ -2440,6 +2440,45 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         view->reload(); rebuildTree(); rebuildSource(); refreshMap();
     });
 
+    // Right-click the canvas → the SAME add options as the tree (the preferred
+    // multi-select workflow), or edit/remove the fixture under the cursor.
+    connect(view, &StructureStudioView::canvasContextMenu, body,
+            [this, kind, id, view, tree, selectedFids, rebuildTree, rebuildSource, pushUndo, refreshMap]
+            (const QPoint &globalPos, quint32 fidUnder) {
+        QMenu m;
+        if (fidUnder != 0)
+        {
+            QAction *aEdit = m.addAction(tr("Edit fixture…"));
+            QAction *aRem  = m.addAction(tr("Remove from object"));
+            QAction *ch = m.exec(globalPos);
+            if (ch == aEdit) slotFixtureDoubleClicked(fidUnder);
+            else if (ch == aRem)
+            {
+                pushUndo();
+                FixtureRigProps rp = m_props->fixtureRigProps(fidUnder);
+                if (kind == 0 || kind == 4) rp.pipeId = Pipe::invalidId();
+                else if (kind == 1) rp.towerId = Tower::invalidId();
+                else if (kind == 2) rp.trussId = Truss::invalidId();
+                else if (kind == 3) { rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+                                      rp.deckPlatformId  = FixtureRigProps::invalidPlatformId(); }
+                m_props->setFixtureRigProps(fidUnder, rp);
+                m_graphicsView->updateFixture(fidUnder);
+                view->reload(); rebuildTree(); rebuildSource(); refreshMap();
+            }
+            return;
+        }
+        QAction *aFix = m.addAction(tr("Add Fixtures…"));
+        QAction *aGrp = m.addAction(tr("Add Existing Fixture Group…"));
+        const QList<quint32> selNow = selectedFids();
+        QAction *aNew = selNow.isEmpty() ? nullptr
+            : (m.addSeparator(), m.addAction(tr("New Fixture Group from Selection…")));
+        QAction *ch = m.exec(globalPos);
+        if (ch == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); rebuildSource(); }
+        else if (ch == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); rebuildSource(); }
+        else if (aNew && ch == aNew) { studioCreateGroup(selNow, view); rebuildTree(); rebuildSource(); }
+        Q_UNUSED(tree)
+    });
+
     if (outView) *outView = view;
     return body;
 }
@@ -2696,11 +2735,13 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
     bar->setLayerId(s->layerId());
     if (boomId == Pipe::invalidId())
     {
-        // First bar → a vertical boom standing on the stand.
+        // First bar → a vertical boom standing on the stand. Default its hangable
+        // length to (most of) the stand height so there's real room to rig;
+        // fully adjustable afterwards in the boom editor.
         bar->setName(tr("%1 Boom").arg(s->name()));
         bar->setOrientation(Pipe::Vertical);
         bar->setStandId(id);
-        bar->setLength(1.5f);
+        bar->setLength(qMax(s->height(), 1.5f));
         bar->setBaseRadius(0.0f);
     }
     else
@@ -4851,15 +4892,17 @@ void Monitor::slotEditTruss(quint32 tid)
                                        "right-click to add a bar)"), &editDlg);
     QFont sf = stripLabel->font(); sf.setBold(true); stripLabel->setFont(sf);
 
-    // Truss geometry pane = the form + the fixture-placement strip; the graphical
-    // canvas (with the fixture tree + inspector) comes from makeStudioPane.
+    // Truss geometry pane = just the form; fixtures are placed directly in the
+    // full graphical canvas (drag along the truss), like every other object — no
+    // separate placement strip. The strip object stays alive only so any child-
+    // bar writes on OK keep working; it is NOT shown.
+    stripLabel->setVisible(false);
+    strip->setVisible(false);
     StructureStudioView *studioView = nullptr;
     QWidget *geomW = new QWidget(&editDlg);
     QVBoxLayout *gvl = new QVBoxLayout(geomW);
     gvl->setContentsMargins(0, 0, 0, 0);
     gvl->addLayout(form);
-    gvl->addWidget(stripLabel);
-    gvl->addWidget(strip, 1);
     QWidget *bodyPane = makeStudioPane(&editDlg, 2 /*Truss*/, tid, geomW, &studioView);
     auto reloadStudio = [studioView]() { if (studioView) studioView->reload(); };
     // Free-truss geometry applies live so the canvas tracks the fields.
@@ -4958,32 +5001,19 @@ void Monitor::slotEditTruss(quint32 tid)
         m_props->recomputeStandMounts();
     }
 
-    // Apply placement changes from the strip.
+    // Child-bar positions (from any bars added via the canvas) still round-trip
+    // through the strip's slots; fixtures are placed in the canvas now, so we no
+    // longer write fixture offsets here (that would clobber a canvas drag).
     for (const TrussStripWidget::Slot &s : strip->placements())
     {
-        // A bar slot writes its dragged position (Along + cross-shift) back.
         if (s.barTrussId != Truss::invalidId())
-        {
             if (Truss *bar = m_props->truss(s.barTrussId))
             {
                 bar->setParentOffset(s.offset);
                 bar->setBarCrossShift(s.barCross);
             }
-            continue;
-        }
-
-        FixtureRigProps rp = m_props->fixtureRigProps(s.fid);
-        rp.trussOffset = s.offset;
-        m_props->setFixtureRigProps(s.fid, rp);
-
-        // Recompute mm position from the (possibly updated) truss geometry.
-        QVector3D pos3d = t->positionAt(s.offset);  // metres
-        QPointF mmPos(double(pos3d.x()) * 1000.0, double(pos3d.y()) * 1000.0);
-        m_props->setFixturePosition(s.fid, 0, 0,
-                                    QVector3D(mmPos.x(), mmPos.y(), double(pos3d.z()) * 1000.0));
-        m_graphicsView->moveFixtureTo(s.fid, mmPos);
     }
-    m_props->recomputeChildTrusses();   // bars moved on the strip re-derive origin
+    m_props->recomputeChildTrusses();   // bars re-derive origin
 
     // followParentTrusses() redraws trusses AND re-derives/repositions any child
     // bars (and their fixtures) — needed when the edited truss is a bar's parent.

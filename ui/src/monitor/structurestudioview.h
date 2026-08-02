@@ -86,6 +86,8 @@ signals:
     void fixtureMoved(quint32 fid);
     /** Fixtures were dragged in from the source tree and dropped at @p pos. */
     void fixturesDropped(const QList<quint32> &fids, const QPointF &pos);
+    /** Right-click on the canvas. @p fidUnder = fixture under the cursor (0 = empty). */
+    void canvasContextMenu(const QPoint &globalPos, quint32 fidUnder);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -97,6 +99,7 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *) override;
     void dragEnterEvent(QDragEnterEvent *) override;
     void dropEvent(QDropEvent *) override;
+    void contextMenuEvent(QContextMenuEvent *) override;
 
 private:
     QPointF project(const QVector3D &w) const;      ///< world → in-plane (a,b) metres

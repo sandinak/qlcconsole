@@ -14,6 +14,7 @@
 #include <QWheelEvent>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QContextMenuEvent>
 #include <QMimeData>
 #include <QDataStream>
 #include <QtMath>
@@ -944,6 +945,11 @@ void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)
     const quint32 fid = hitTestFixture(e->pos());
     if (fid != 0)
         emit fixtureActivated(fid);
+}
+
+void StructureStudioView::contextMenuEvent(QContextMenuEvent *e)
+{
+    emit canvasContextMenu(e->globalPos(), hitTestFixture(e->pos()));
 }
 
 void StructureStudioView::dragEnterEvent(QDragEnterEvent *e)
