@@ -50,6 +50,8 @@
 #include <QListWidget>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
+#include <QShortcut>
+#include <QSharedPointer>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
@@ -2105,6 +2107,10 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
     bar->addWidget(planeCombo);
     bar->addStretch();
+    QPushButton *faceBtn = new QPushButton(tr("Put on Face"), center);
+    faceBtn->setToolTip(tr("Pin the selected fixtures (or all) to the current "
+                           "view's face (Top / Front / Side)."));
+    bar->addWidget(faceBtn);
     QPushButton *distBtn = new QPushButton(tr("Distribute"), center);
     distBtn->setToolTip(tr("Space the selected fixtures (or all on this object) "
                            "evenly along the current face."));
@@ -2216,9 +2222,31 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         return ids;
     };
 
+    // Undo stack: snapshots of the fixture rig-props map. Ctrl+Z restores the
+    // last snapshot. pushUndo() is called before each layout-mutating action.
+    auto undoStack = QSharedPointer<QList<QMap<quint32, FixtureRigProps>>>::create();
+    auto pushUndo = [this, undoStack]() {
+        undoStack->append(m_props->fixtureRigPropsMap());
+        while (undoStack->size() > 50) undoStack->removeFirst();
+    };
+    auto doUndo = [this, undoStack, view, rebuildTree]() {
+        if (undoStack->isEmpty()) return;
+        const QMap<quint32, FixtureRigProps> snap = undoStack->takeLast();
+        for (auto it = snap.constBegin(); it != snap.constEnd(); ++it)
+            m_props->setFixtureRigProps(it.key(), it.value());
+        foreach (Fixture *fx, m_doc->fixtures())
+            if (fx) m_graphicsView->updateFixture(fx->id());
+        m_graphicsView->updatePlatforms();
+        m_doc->setModified();
+        if (view) view->reload();
+        rebuildTree();
+    };
+    QShortcut *undoSc = new QShortcut(QKeySequence::Undo, dlg);
+    connect(undoSc, &QShortcut::activated, dlg, [doUndo]() { doUndo(); });
+
     // Right-click the tree → add fixtures / a group, or make a group from selection.
     connect(tree, &QTreeWidget::customContextMenuRequested, tree,
-            [this, tree, kind, id, view, rebuildTree, selectedFids](const QPoint &pos) {
+            [this, tree, kind, id, view, rebuildTree, selectedFids, pushUndo](const QPoint &pos) {
         QMenu m;
         QAction *aFix = m.addAction(tr("Add Fixtures…"));
         QAction *aGrp = m.addAction(tr("Add Existing Fixture Group…"));
@@ -2230,12 +2258,17 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             aNew = m.addAction(tr("New Fixture Group from Selection…"));
         }
         QAction *chosen = m.exec(tree->viewport()->mapToGlobal(pos));
-        if (chosen == aFix) { studioAddFixture(kind, id, view); rebuildTree(); }
-        else if (chosen == aGrp) { studioAddGroup(kind, id, view); rebuildTree(); }
+        if (chosen == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); }
+        else if (chosen == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); }
         else if (aNew && chosen == aNew) { studioCreateGroup(selNow, view); rebuildTree(); }
     });
     connect(distBtn, &QPushButton::clicked, tree,
-            [this, kind, id, view, selectedFids]() { studioDistribute(kind, id, view, selectedFids()); });
+            [this, kind, id, view, selectedFids, pushUndo]() {
+        pushUndo(); studioDistribute(kind, id, view, selectedFids());
+    });
+    connect(faceBtn, &QPushButton::clicked, tree,
+            [view, selectedFids, pushUndo]() { pushUndo(); view->putOnFace(selectedFids()); });
+    connect(view, &StructureStudioView::editAboutToStart, tree, [pushUndo]() { pushUndo(); });
 
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), body,
             [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });

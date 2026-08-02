@@ -22,6 +22,8 @@
 #include "truss.h"
 #include "stageplatform.h"
 #include "fixture.h"
+#include "qlcfixturemode.h"
+#include "qlcphysical.h"
 #include "doc.h"
 
 StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent)
@@ -106,7 +108,13 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         if (m_plane == Top)        { w.setX(float(ab.x())); w.setY(float(ab.y())); }
         else if (m_plane == Front) { w.setX(float(ab.x())); w.setZ(float(ab.y())); }
         else                       { w.setY(float(ab.x())); w.setZ(float(ab.y())); }
-        rp.groupLocal = props->worldToGroupLocal(fg, w);
+        QVector3D lp = props->worldToGroupLocal(fg, w);
+        // Keep it snapped to its assigned face: re-pin the out-of-plane component.
+        int pinComp; double pinVal; facePin(rp.studioMount, pinComp, pinVal);
+        if (pinComp == 0)      lp.setX(float(pinVal));
+        else if (pinComp == 1) lp.setY(float(pinVal));
+        else                   lp.setZ(float(pinVal));
+        rp.groupLocal = lp;
         props->setFixtureRigProps(fid, rp);
         return true;
     }
@@ -574,6 +582,68 @@ void StructureStudioView::drawStructure(QPainter &p) const
     }
 }
 
+double StructureStudioView::fixtureLenM(quint32 fid) const
+{
+    // Real physical length (metres): declared physical width, else 0.3 m — NOT a
+    // per-head guess (a 64-cell tape isn't 3 m long). Matches the old Face editor.
+    Fixture *fx = m_doc->fixture(fid);
+    if (fx != nullptr)
+    {
+        const QLCFixtureMode *mode = fx->fixtureMode();
+        if (mode != nullptr && mode->physical().width() > 0)
+            return mode->physical().width() / 1000.0;
+    }
+    return 0.3;
+}
+
+QVector3D StructureStudioView::fixtureAxisLocal(const FixtureRigProps &rp) const
+{
+    const double th = qDegreesToRadians(double(rp.studioAngle));
+    const double c = qCos(th), s = qSin(th);
+    switch (rp.studioMount)
+    {
+    case 0:  return QVector3D(float(c), float(s), 0.0f);   // Top/deck: X-Y plane
+    case 2:  return QVector3D(0.0f, float(c), float(s));   // Side: Y-Z plane
+    case 1:
+    default: return QVector3D(float(c), 0.0f, float(s));   // Front/face: X-Z plane
+    }
+}
+
+QVector3D StructureStudioView::fixtureEndA(quint32 fid) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const double half = qMax(0.05, fixtureLenM(fid) / 2.0);
+    const quint32 fg = props->fixtureFrameGroup(fid);
+    if (fg != 0)
+        return props->groupLocalToWorld(fg, rp.groupLocal - fixtureAxisLocal(rp) * float(half));
+    // Non-frame fixture: a horizontal bar in the current plane.
+    QVector3D c = props->fixtureRigPosition(fid);
+    if (m_plane == Side) c.setY(c.y() - float(half)); else c.setX(c.x() - float(half));
+    return c;
+}
+
+QVector3D StructureStudioView::fixtureEndB(quint32 fid) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const double half = qMax(0.05, fixtureLenM(fid) / 2.0);
+    const quint32 fg = props->fixtureFrameGroup(fid);
+    if (fg != 0)
+        return props->groupLocalToWorld(fg, rp.groupLocal + fixtureAxisLocal(rp) * float(half));
+    QVector3D c = props->fixtureRigPosition(fid);
+    if (m_plane == Side) c.setY(c.y() + float(half)); else c.setX(c.x() + float(half));
+    return c;
+}
+
+void StructureStudioView::facePin(int mount, int &pinComp, double &pinVal) const
+{
+    StagePlatform *pl = (m_kind == PlatformKind) ? m_doc->monitorProperties()->platform(m_id) : nullptr;
+    if (mount == 1)      { pinComp = 1; pinVal = pl ? pl->depth()  : 0.0; }  // Front → pin Y
+    else if (mount == 2) { pinComp = 0; pinVal = 0.0; }                       // Side  → pin X
+    else                 { pinComp = 2; pinVal = pl ? pl->height() : 0.0; }  // Top   → pin Z
+}
+
 void StructureStudioView::drawFixtures(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
@@ -581,22 +651,65 @@ void StructureStudioView::drawFixtures(QPainter &p) const
     foreach (quint32 fid, mountedFixtures())
     {
         Fixture *fx = m_doc->fixture(fid);
+        const int heads = (fx != nullptr) ? qMax(1, fx->heads()) : 1;
+        const QPointF a = w2s(fixtureEndA(fid));
+        const QPointF b = w2s(fixtureEndB(fid));
         const QPointF c = w2s(props->fixtureRigPosition(fid));
-        QColor gel = props->fixtureGelColor(fid, 0, 0);
-        if (!gel.isValid() || gel == QColor(Qt::black))
-            gel = QColor(230, 210, 120);
-        if (m_highlight.contains(fid))   // selection ring
+        const bool hi = m_highlight.contains(fid);
+        const bool drag = (fid == m_dragFid);
+
+        QColor col = props->fixtureGelColor(fid, 0, 0);
+        if (!col.isValid() || col == QColor(Qt::black))
+            col = QColor(90, 160, 235);
+        if (drag)     col = QColor(255, 196, 64);
+        else if (hi)  col = QColor(120, 220, 140);
+
+        if (hi)   // selection halo behind the bar
         {
-            p.setPen(QPen(QColor(0, 170, 255), 2.5));
-            p.setBrush(Qt::NoBrush);
-            p.drawEllipse(c, 9.5, 9.5);
+            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
+            p.setPen(halo);
+            p.drawLine(a, b);
         }
-        p.setPen(QPen(gel.darker(160), 1.2));
-        p.setBrush(gel);
-        p.drawEllipse(c, 6.0, 6.0);
-        p.setPen(QColor(220, 224, 235));
-        p.drawText(QPointF(c.x() + 9, c.y() + 4), fx ? fx->name() : QString::number(fid));
+        QPen body(col.darker(140)); body.setWidth((drag || hi) ? 4 : 3); body.setCapStyle(Qt::RoundCap);
+        p.setPen(body);
+        p.drawLine(a, b);
+        p.setPen(Qt::NoPen);
+        p.setBrush(col);
+        for (int i = 0; i < heads; ++i)   // heads as ticks along the bar
+        {
+            const double t = (heads > 1) ? double(i) / (heads - 1) : 0.5;
+            p.drawEllipse(a + (b - a) * t, 2.6, 2.6);
+        }
+        if (fx != nullptr)
+        {
+            p.setPen(QColor(210, 214, 220));
+            p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
+        }
     }
+}
+
+void StructureStudioView::putOnFace(const QList<quint32> &ids)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<quint32> fids = ids.isEmpty() ? mountedFixtures() : ids;
+    const int mount = int(m_plane);            // Top/Front/Side ↔ studioMount 0/1/2
+    int pinComp; double pinVal; facePin(mount, pinComp, pinVal);
+    bool any = false;
+    foreach (quint32 fid, fids)
+    {
+        const quint32 fg = props->fixtureFrameGroup(fid);
+        if (fg == 0) continue;                 // only frame-group fixtures have a face
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.studioMount = mount;
+        QVector3D lp = rp.groupLocal;
+        if (pinComp == 0)      lp.setX(float(pinVal));
+        else if (pinComp == 1) lp.setY(float(pinVal));
+        else                   lp.setZ(float(pinVal));
+        rp.groupLocal = lp;
+        props->setFixtureRigProps(fid, rp);
+        any = true;
+    }
+    if (any) { m_doc->setModified(); reload(); }
 }
 
 void StructureStudioView::paintEvent(QPaintEvent *)
@@ -661,6 +774,8 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
     }
     if (m_dragFid != 0)
     {
+        if (!m_dragged)
+            emit editAboutToStart();   // snapshot for undo before the first change
         if (dragFixtureTo(m_dragFid, e->pos()))
         {
             m_dragged = true;

@@ -59,11 +59,17 @@ public:
     /** Ring-highlight a set of fixtures (driven by the tree selection). */
     void setHighlight(const QList<quint32> &ids);
 
+    /** Assign @p ids to the CURRENT view's face (Top/Front/Side): set their
+     *  studioMount and pin them to that face surface. Empty = all mounted. */
+    void putOnFace(const QList<quint32> &ids);
+
 signals:
     /** A fixture on the structure was double-clicked (id passed through). */
     void fixtureActivated(quint32 fid);
     /** A fixture on the structure was single-clicked (selection). */
     void fixtureSelected(quint32 fid);
+    /** A drag of a fixture is about to change the doc (for undo snapshotting). */
+    void editAboutToStart();
     /** A fixture was dragged to a new spot on the structure (rig prop changed). */
     void fixtureMoved(quint32 fid);
 
@@ -91,6 +97,14 @@ private:
     void drawPipe(QPainter &p, const class Pipe *pipe) const;
     void drawFixtures(QPainter &p) const;
     quint32 hitTestFixture(const QPointF &px) const;
+
+    double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
+    QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame
+    QVector3D fixtureEndA(quint32 fid) const;          ///< world end A of the bar
+    QVector3D fixtureEndB(quint32 fid) const;          ///< world end B of the bar
+    /** For the anchor platform: which local component the given face pins, and to
+     *  what value. mount 0=Top(pin Z),1=Front(pin Y),2=Side(pin X). */
+    void facePin(int mount, int &pinComp, double &pinVal) const;
 
     QList<const class Pipe *> standPipes() const;    ///< pipes on this stand (Kind==Stand)
 
