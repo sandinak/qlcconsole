@@ -783,6 +783,33 @@ void StructureStudioView::distributeOnFace(const QList<quint32> &sel)
     reload();
 }
 
+void StructureStudioView::setFixtureFace(quint32 fid, int face)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props->fixtureFrameGroup(fid) == 0) return;   // only frame fixtures have a face
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.studioMount = face;
+    int pinComp; double pinVal; facePin(face, pinComp, pinVal);
+    QVector3D lp = rp.groupLocal;
+    if (pinComp == 0)      lp.setX(float(pinVal));
+    else if (pinComp == 1) lp.setY(float(pinVal));
+    else                   lp.setZ(float(pinVal));
+    rp.groupLocal = lp;
+    props->setFixtureRigProps(fid, rp);
+    m_doc->setModified();
+    reload();
+}
+
+void StructureStudioView::setFixtureAngle(quint32 fid, float deg)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.studioAngle = deg;
+    props->setFixtureRigProps(fid, rp);
+    m_doc->setModified();
+    reload();
+}
+
 void StructureStudioView::putOnFace(const QList<quint32> &ids)
 {
     MonitorProperties *props = m_doc->monitorProperties();

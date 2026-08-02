@@ -2130,16 +2130,77 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     hint->setStyleSheet("color:#8a8e99;");
     cv->addWidget(hint);
 
-    // ---- RIGHT: inspector (filled in a later slice) ------------------------
+    // ---- RIGHT: inline fixture inspector -----------------------------------
     QWidget *insp = new QWidget(body);
     insp->setObjectName("studioInspector");
     QVBoxLayout *iv = new QVBoxLayout(insp);
-    QLabel *inspHint = new QLabel(tr("Select a fixture to edit its\nmount, calibration and colour."), insp);
-    inspHint->setWordWrap(true);
-    inspHint->setStyleSheet("color:#8a8e99;");
-    iv->addWidget(inspHint);
+    QLabel *inspTitle = new QLabel(tr("(no fixture selected)"), insp);
+    { QFont tf = inspTitle->font(); tf.setBold(true); inspTitle->setFont(tf); }
+    inspTitle->setWordWrap(true);
+    iv->addWidget(inspTitle);
+    QFormLayout *inspForm = new QFormLayout;
+    QPushButton *gelBtn = new QPushButton(insp);
+    QComboBox *faceCombo = new QComboBox(insp);
+    faceCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
+    QDoubleSpinBox *angleSpin = new QDoubleSpinBox(insp);
+    angleSpin->setRange(-180, 180); angleSpin->setDecimals(0); angleSpin->setSuffix(QStringLiteral("°"));
+    inspForm->addRow(tr("Colour:"), gelBtn);
+    inspForm->addRow(tr("Face:"), faceCombo);
+    inspForm->addRow(tr("Angle:"), angleSpin);
+    iv->addLayout(inspForm);
+    QPushButton *fullBtn = new QPushButton(tr("Full properties…"), insp);
+    iv->addWidget(fullBtn);
     iv->addStretch();
-    insp->setMinimumWidth(170);
+    insp->setMinimumWidth(190);
+
+    auto curFid = QSharedPointer<quint32>::create(0u);
+    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, angleSpin, fullBtn]() {
+        const quint32 fid = *curFid;
+        Fixture *fx = fid ? m_doc->fixture(fid) : nullptr;
+        const bool have = (fx != nullptr);
+        const bool frame = have && (m_props->fixtureFrameGroup(fid) != 0);
+        inspTitle->setText(have ? fx->name() : tr("(no fixture selected)"));
+        gelBtn->setEnabled(have); fullBtn->setEnabled(have);
+        faceCombo->setEnabled(frame); angleSpin->setEnabled(frame);
+        if (!have) { gelBtn->setStyleSheet(QString()); return; }
+        const FixtureRigProps rp = m_props->fixtureRigProps(fid);
+        const QColor gel = m_props->fixtureGelColor(fid, 0, 0);
+        gelBtn->setText(gel.isValid() ? gel.name() : tr("set…"));
+        gelBtn->setStyleSheet(gel.isValid()
+            ? QString("background:%1; color:%2").arg(gel.name())
+                .arg(gel.lightness() > 128 ? "#000" : "#fff") : QString());
+        faceCombo->blockSignals(true); faceCombo->setCurrentIndex(qBound(0, rp.studioMount, 2)); faceCombo->blockSignals(false);
+        angleSpin->blockSignals(true); angleSpin->setValue(double(rp.studioAngle)); angleSpin->blockSignals(false);
+    };
+    populate();
+
+    connect(view, &StructureStudioView::fixtureSelected, insp,
+            [curFid, populate](quint32 fid){ *curFid = fid; populate(); });
+    connect(gelBtn, &QPushButton::clicked, insp, [this, curFid, view, populate]() {
+        if (*curFid == 0) return;
+        const QColor c = QColorDialog::getColor(m_props->fixtureGelColor(*curFid, 0, 0),
+                                                this, tr("Fixture Colour"));
+        if (!c.isValid()) return;
+        m_props->setFixtureGelColor(*curFid, 0, 0, c);
+        m_graphicsView->updateFixture(*curFid);
+        if (view) view->reload();
+        populate();
+    });
+    connect(faceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
+            [this, curFid, view, populate](int i) {
+        if (*curFid == 0) return;
+        if (view) view->setFixtureFace(*curFid, i);
+        m_graphicsView->updateFixture(*curFid);
+        populate();
+    });
+    connect(angleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
+            [this, curFid, view](double v) {
+        if (*curFid == 0) return;
+        if (view) view->setFixtureAngle(*curFid, float(v));
+        m_graphicsView->updateFixture(*curFid);
+    });
+    connect(fullBtn, &QPushButton::clicked, insp,
+            [this, curFid]() { if (*curFid) slotFixtureDoubleClicked(*curFid); });
 
     body->addWidget(left);
     body->addWidget(center);
@@ -2188,8 +2249,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     };
     rebuildTree();
 
-    // Tree selection → highlight on the canvas.
-    connect(tree, &QTreeWidget::itemSelectionChanged, tree, [tree, view]() {
+    // Tree selection → highlight on the canvas + populate the inspector.
+    connect(tree, &QTreeWidget::itemSelectionChanged, tree, [tree, view, curFid, populate]() {
         QList<quint32> ids;
         foreach (QTreeWidgetItem *it, tree->selectedItems())
         {
@@ -2197,6 +2258,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             if (fid != 0) ids << fid;
         }
         view->setHighlight(ids);
+        *curFid = ids.isEmpty() ? 0u : ids.first();
+        populate();
     });
     // Canvas click → select the matching tree row.
     connect(view, &StructureStudioView::fixtureSelected, tree, [tree](quint32 fid) {

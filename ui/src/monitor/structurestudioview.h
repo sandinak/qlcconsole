@@ -68,6 +68,10 @@ public:
      *  centred, top→bottom. Empty = all mounted. */
     void distributeOnFace(const QList<quint32> &ids);
 
+    /** Inspector edits for one fixture (frame-group only). */
+    void setFixtureFace(quint32 fid, int face);     ///< studioMount + re-pin
+    void setFixtureAngle(quint32 fid, float deg);   ///< studioAngle (bar rotation)
+
 signals:
     /** A fixture on the structure was double-clicked (id passed through). */
     void fixtureActivated(quint32 fid);
