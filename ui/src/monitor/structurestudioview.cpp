@@ -657,10 +657,9 @@ QVector3D StructureStudioView::fixtureEndA(quint32 fid) const
     const quint32 fg = props->fixtureFrameGroup(fid);
     if (fg != 0)
         return props->groupLocalToWorld(fg, rp.groupLocal - fixtureAxisLocal(rp) * float(half));
-    // Non-frame fixture: a horizontal bar in the current plane.
-    QVector3D c = props->fixtureRigPosition(fid);
-    if (m_plane == Side) c.setY(c.y() - float(half)); else c.setX(c.x() - float(half));
-    return c;
+    // Non-frame fixture: orient the bar by its studioMount/angle in world too, so
+    // Face + Angle work for a truss/riser strip ("which way it runs").
+    return props->fixtureRigPosition(fid) - fixtureAxisLocal(rp) * float(half);
 }
 
 QVector3D StructureStudioView::fixtureEndB(quint32 fid) const
@@ -671,9 +670,7 @@ QVector3D StructureStudioView::fixtureEndB(quint32 fid) const
     const quint32 fg = props->fixtureFrameGroup(fid);
     if (fg != 0)
         return props->groupLocalToWorld(fg, rp.groupLocal + fixtureAxisLocal(rp) * float(half));
-    QVector3D c = props->fixtureRigPosition(fid);
-    if (m_plane == Side) c.setY(c.y() + float(half)); else c.setX(c.x() + float(half));
-    return c;
+    return props->fixtureRigPosition(fid) + fixtureAxisLocal(rp) * float(half);
 }
 
 void StructureStudioView::facePin(int mount, int &pinComp, double &pinVal) const
@@ -839,15 +836,19 @@ void StructureStudioView::distributeOnFace(const QList<quint32> &sel)
 void StructureStudioView::setFixtureFace(quint32 fid, int face)
 {
     MonitorProperties *props = m_doc->monitorProperties();
-    if (props->fixtureFrameGroup(fid) == 0) return;   // only frame fixtures have a face
     FixtureRigProps rp = props->fixtureRigProps(fid);
     rp.studioMount = face;
-    int pinComp; double pinVal; facePin(face, pinComp, pinVal);
-    QVector3D lp = rp.groupLocal;
-    if (pinComp == 0)      lp.setX(float(pinVal));
-    else if (pinComp == 1) lp.setY(float(pinVal));
-    else                   lp.setZ(float(pinVal));
-    rp.groupLocal = lp;
+    // A frame-group fixture also re-pins to the face surface; a plain (truss/
+    // riser) strip just changes which plane its bar lies in.
+    if (props->fixtureFrameGroup(fid) != 0)
+    {
+        int pinComp; double pinVal; facePin(face, pinComp, pinVal);
+        QVector3D lp = rp.groupLocal;
+        if (pinComp == 0)      lp.setX(float(pinVal));
+        else if (pinComp == 1) lp.setY(float(pinVal));
+        else                   lp.setZ(float(pinVal));
+        rp.groupLocal = lp;
+    }
     props->setFixtureRigProps(fid, rp);
     m_doc->setModified();
     reload();

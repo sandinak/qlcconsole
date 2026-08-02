@@ -2193,14 +2193,25 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     insp->setMinimumWidth(190);
 
     auto curFid = QSharedPointer<quint32>::create(0u);
-    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, angleSpin, mountCombo, fullBtn]() {
+    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, angleSpin, mountCombo, fullBtn, inspForm]() {
         const quint32 fid = *curFid;
         Fixture *fx = fid ? m_doc->fixture(fid) : nullptr;
         const bool have = (fx != nullptr);
         const bool frame = have && (m_props->fixtureFrameGroup(fid) != 0);
+        const bool linear = have && fx->heads() > 1;   // strip / bar / tape
         inspTitle->setText(have ? fx->name() : tr("(no fixture selected)"));
-        gelBtn->setEnabled(have); fullBtn->setEnabled(have); mountCombo->setEnabled(have);
-        faceCombo->setEnabled(frame); angleSpin->setEnabled(frame);
+        gelBtn->setEnabled(have); fullBtn->setEnabled(have);
+        // Show the RELEVANT controls per fixture type: Orientation for a body with
+        // a base (movers, pars); Face + Angle ("which way it runs") for a linear
+        // strip/bar, and for any frame-group member.
+        auto row = [inspForm](QWidget *w, bool vis) {
+            w->setVisible(vis);
+            if (QWidget *l = inspForm->labelForField(w)) l->setVisible(vis);
+        };
+        row(mountCombo, have && !linear);
+        row(faceCombo,  have && (linear || frame));
+        row(angleSpin,  have && (linear || frame));
+        mountCombo->setEnabled(have); faceCombo->setEnabled(have); angleSpin->setEnabled(have);
         if (!have) { gelBtn->setStyleSheet(QString()); return; }
         const FixtureRigProps rp = m_props->fixtureRigProps(fid);
         const QColor gel = m_props->fixtureGelColor(fid, 0, 0);
