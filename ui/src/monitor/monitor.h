@@ -335,6 +335,9 @@ protected slots:
     void studioCreateGroup(const QList<quint32> &fids, class StructureStudioView *view);
     /** Open the Fixtures-tab head-layout grid editor for a fixture group. */
     void openGroupLayout(quint32 groupId);
+    /** Open the unified studio editor for a studio (frame) group — replaces the
+     *  old standalone Studio Group window. */
+    void openGroupStudio(quint32 groupId);
     /** Evenly space @p fids (or all on-object fixtures) along the current face. */
     void studioDistribute(int kind, quint32 id, class StructureStudioView *view,
                           const QList<quint32> &fids);

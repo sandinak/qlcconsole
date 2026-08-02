@@ -1099,15 +1099,10 @@ void MonitorGraphicsView::openStudioGroupEditor(quint32 groupId)
 {
     if (groupId == 0 || !m_doc->monitorProperties()->hasGroup(groupId))
         return;
-    StudioGroupEditor dlg(m_doc, groupId, this);
-    connect(&dlg, &StudioGroupEditor::changed, this, [this, groupId]() {
-        MonitorProperties *props = m_doc->monitorProperties();
-        foreach (quint32 fid, props->fixtureItemsID())
-            if (props->fixtureFrameGroup(fid) == groupId)
-                updateFixture(fid);
-        emit mapStructureChanged();
-    });
-    dlg.exec();
+    // The unified object editor (Monitor::openGroupStudio) now owns studio-group
+    // editing; the old StudioGroupEditor lives on behind its "Group settings…"
+    // button. Route the request up to the host.
+    emit studioGroupEditRequested(groupId);
 }
 
 int MonitorGraphicsView::ungroupSelectedItems()

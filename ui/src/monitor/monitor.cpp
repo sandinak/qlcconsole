@@ -106,6 +106,7 @@
 #include "tower.h"
 #include "structurestudioview.h"
 #include "fixturegroupeditor.h"
+#include "studiogroupeditor.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "qlcpalette.h"
@@ -377,6 +378,8 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotEditStand);
     connect(m_graphicsView, &MonitorGraphicsView::towerDoubleClicked,
             this, &Monitor::slotEditTower);
+    connect(m_graphicsView, &MonitorGraphicsView::studioGroupEditRequested,
+            this, &Monitor::openGroupStudio);
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
@@ -2519,6 +2522,7 @@ quint32 Monitor::structureBoomId(int kind, quint32 id) const
 
 void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32 boomId)
 {
+    if (kind == 5) return;   // studio groups add via 'Group settings…' (not a rig mount)
     if (kind == 0 || kind == 4)
     {
         m_graphicsView->attachFixtureToPipe(fid, boomId);   // clears other mounts
@@ -2622,6 +2626,90 @@ void Monitor::studioDistribute(int kind, quint32 id, StructureStudioView *view,
     m_doc->setModified();
 }
 
+void Monitor::openGroupStudio(quint32 gid)
+{
+    if (!m_props->hasGroup(gid)) return;
+    MonitorProperties::MonitorGroup g = m_props->group(gid);
+    const QVector3D snapOrigin = g.origin;
+    const float snapRot = g.rotation;
+    const QString snapName = g.name;
+
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(g.name));
+
+    QWidget *geomW = new QWidget(&dlg);
+    QVBoxLayout *vl = new QVBoxLayout(geomW);
+    QFormLayout *form = new QFormLayout;
+    QLineEdit *nameEdit = new QLineEdit(g.name, geomW);
+    form->addRow(tr("Name:"), nameEdit);
+    auto mk = [&](double v) { QDoubleSpinBox *s = new QDoubleSpinBox(geomW);
+        s->setRange(-200, 200); s->setDecimals(2); s->setSuffix(sfx); s->setValue(v * toDisp); return s; };
+    QDoubleSpinBox *ox = mk(g.origin.x()), *oy = mk(g.origin.y()), *oz = mk(g.origin.z());
+    QDoubleSpinBox *rot = new QDoubleSpinBox(geomW);
+    rot->setRange(-180, 180); rot->setDecimals(0); rot->setSuffix(QStringLiteral("°")); rot->setValue(double(g.rotation));
+    form->addRow(tr("Frame origin X:"), ox);
+    form->addRow(tr("Frame origin Y:"), oy);
+    form->addRow(tr("Frame origin Z:"), oz);
+    form->addRow(tr("Rotation:"), rot);
+    vl->addLayout(form);
+    QPushButton *setBtn = new QPushButton(tr("Group settings… (bind · seed · component)"), geomW);
+    vl->addWidget(setBtn);
+    vl->addStretch();
+
+    StructureStudioView *view = nullptr;
+    QWidget *bodyPane = makeStudioPane(&dlg, 5 /*Group*/, gid, geomW, &view);
+
+    auto refreshMembers = [this, gid]() {
+        foreach (Fixture *fx, m_doc->fixtures())
+            if (fx && m_props->fixtureFrameGroup(fx->id()) == gid) m_graphicsView->updateFixture(fx->id());
+    };
+    auto applyLive = [=]() {
+        m_props->setGroupName(gid, nameEdit->text());
+        m_props->setGroupOrigin(gid, QVector3D(float(ox->value() * fromDisp),
+                                               float(oy->value() * fromDisp),
+                                               float(oz->value() * fromDisp)));
+        m_props->setGroupRotation(gid, float(rot->value()));
+        m_props->recomputeAnchoredFrames();
+        if (view) view->reload();
+        refreshMembers();
+    };
+    for (QDoubleSpinBox *s : { ox, oy, oz, rot })
+        connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [applyLive](double){ applyLive(); });
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
+    connect(setBtn, &QPushButton::clicked, &dlg, [this, gid, view, refreshMembers]() {
+        // The old Studio Group window, tucked behind this button — bind/seed/
+        // adopt/cell-pitch/save-as-component all still live there.
+        StudioGroupEditor sg(m_doc, gid, this);
+        connect(&sg, &StudioGroupEditor::changed, this, [refreshMembers]() { refreshMembers(); });
+        sg.exec();
+        if (view) view->reload();
+        refreshMembers();
+    });
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QVBoxLayout *dlgL = new QVBoxLayout(&dlg);
+    dlgL->addWidget(bodyPane, 1);
+    dlgL->addWidget(bb);
+    dlg.resize(940, 560);
+    if (dlg.exec() != QDialog::Accepted)
+    {
+        m_props->setGroupName(gid, snapName);
+        m_props->setGroupOrigin(gid, snapOrigin);
+        m_props->setGroupRotation(gid, snapRot);
+        m_props->recomputeAnchoredFrames();
+    }
+    m_graphicsView->updatePlatforms();
+    refreshMembers();
+    m_doc->setModified();
+}
+
 void Monitor::openGroupLayout(quint32 groupId)
 {
     FixtureGroup *g = m_doc->fixtureGroup(groupId);
@@ -2674,6 +2762,12 @@ void Monitor::studioAddGroup(int kind, quint32 id, StructureStudioView *view)
 
 void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
 {
+    if (kind == 5)   // studio group
+    {
+        QMessageBox::information(this, tr("Add Fixtures"),
+            tr("Add fixtures to a studio group with 'Group settings… → Add fixtures'."));
+        return;
+    }
     // A stand needs a boom/bar to hang fixtures on; a pipe IS the boom.
     const quint32 boomId = structureBoomId(kind, id);
     if (kind == 0 && boomId == Pipe::invalidId())

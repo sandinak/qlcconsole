@@ -360,6 +360,10 @@ void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
                     pts << cb->positionAt(0.0f) << cb->positionAt(cb->length());
         }
     }
+    else if (m_kind == GroupKind)
+    {
+        pts << props->group(m_id).origin;   // members added below
+    }
 
     foreach (quint32 fid, mountedFixtures())
         pts << props->fixtureRigPosition(fid);
@@ -619,6 +623,14 @@ void StructureStudioView::drawStructure(QPainter &p) const
         foreach (Pipe *cb, props->pipes())      // crossbars on this pipe
             if (cb->isBarOnPipe() && cb->parentPipeId() == m_id)
                 drawPipe(p, cb);
+    }
+    else if (m_kind == GroupKind)
+    {
+        // A studio frame group: mark its local-frame origin (fixtures draw on top).
+        const QPointF o = w2s(props->group(m_id).origin);
+        p.setPen(QPen(QColor(120, 160, 200, 160), 1.0, Qt::DashLine));
+        p.drawLine(o - QPointF(9, 0), o + QPointF(9, 0));
+        p.drawLine(o - QPointF(0, 9), o + QPointF(0, 9));
     }
 }
 
@@ -971,6 +983,9 @@ double StructureStudioView::structureCentreA() const
     { if (Truss *t = props->truss(m_id)) c << t->origin() << t->positionAt(t->length()); }
     else if (m_kind == PipeKind)
     { if (Pipe *pp = props->pipe(m_id)) c << pp->positionAt(0) << pp->positionAt(pp->length()); }
+    else if (m_kind == GroupKind)
+    { foreach (quint32 fid, mountedFixtures()) c << props->fixtureRigPosition(fid);
+      if (c.isEmpty()) c << props->group(m_id).origin; }
     if (c.isEmpty()) return 0.0;
     double minA = project(c.first()).x(), maxA = minA;
     foreach (const QVector3D &w, c) { const double a = project(w).x(); minA = qMin(minA, a); maxA = qMax(maxA, a); }
@@ -990,6 +1005,8 @@ double StructureStudioView::structureTopZ() const
         z = qMax(double(t->origin().z()), double(t->positionAt(t->length()).z())); }
     else if (m_kind == PipeKind)    { if (Pipe *pp = props->pipe(m_id))
         z = qMax(double(pp->positionAt(0).z()), double(pp->positionAt(pp->length()).z())); }
+    else if (m_kind == GroupKind)
+    { foreach (quint32 fid, mountedFixtures()) z = qMax(z, double(props->fixtureRigPosition(fid).z())); }
     return z;
 }
 

@@ -584,6 +584,8 @@ signals:
     void pipeDoubleClicked(quint32 pipeId);
     void standDoubleClicked(quint32 standId);
     void towerDoubleClicked(quint32 towerId);
+    /** Open the unified studio editor for a studio (frame) group. */
+    void studioGroupEditRequested(quint32 groupId);
 
     /** Signal emitted when the user right-clicks empty canvas space */
     void contextMenuRequested(QPointF scenePos);
