@@ -94,6 +94,23 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
     MonitorProperties *props = m_doc->monitorProperties();
     FixtureRigProps rp = props->fixtureRigProps(fid);
 
+    // In a studio FRAME group (the old studio layout model): move it freely in
+    // the current plane. Set the two in-plane WORLD components from the mouse,
+    // keep the third, then store back as the group-local offset.
+    const quint32 fg = props->fixtureFrameGroup(fid);
+    if (fg != 0)
+    {
+        const QVector3D cur = props->fixtureRigPosition(fid);
+        const QPointF ab = screenToPlane(px);
+        QVector3D w = cur;
+        if (m_plane == Top)        { w.setX(float(ab.x())); w.setY(float(ab.y())); }
+        else if (m_plane == Front) { w.setX(float(ab.x())); w.setZ(float(ab.y())); }
+        else                       { w.setY(float(ab.x())); w.setZ(float(ab.y())); }
+        rp.groupLocal = props->worldToGroupLocal(fg, w);
+        props->setFixtureRigProps(fid, rp);
+        return true;
+    }
+
     // On a pipe (stand boom/bar): slide along the pipe axis → pipeOffset.
     if (rp.pipeId != Pipe::invalidId())
     {
@@ -251,7 +268,22 @@ QList<quint32> StructureStudioView::mountedFixtures() const
         else if (m_kind == TrussKind)
             on = (rp.trussId == m_id);
         else if (m_kind == PlatformKind)
+        {
             on = (rp.riserPlatformId == m_id || rp.deckPlatformId == m_id);
+            if (!on)
+            {
+                // Also include fixtures laid out via a studio FRAME group that is
+                // anchored to this platform (the old "Studio Group" window's set),
+                // so both views show the same fixtures.
+                const quint32 fg = props->fixtureFrameGroup(fx->id());
+                if (fg != 0)
+                {
+                    const MonitorProperties::MonitorGroup g = props->group(fg);
+                    if (g.anchorKind == QStringLiteral("platform") && g.anchorId == m_id)
+                        on = true;
+                }
+            }
+        }
         if (on)
             out << fx->id();
     }

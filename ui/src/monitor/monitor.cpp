@@ -2105,6 +2105,10 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
     bar->addWidget(planeCombo);
     bar->addStretch();
+    QPushButton *distBtn = new QPushButton(tr("Distribute"), center);
+    distBtn->setToolTip(tr("Space the selected fixtures (or all on this object) "
+                           "evenly along the current face."));
+    bar->addWidget(distBtn);
     QPushButton *addBarBtn = new QPushButton(tr("Add Bar"), center);
     addBarBtn->setVisible(kind == 0 || kind == 2 || kind == 4);
     bar->addWidget(addBarBtn);
@@ -2201,16 +2205,37 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         const quint32 fid = it->data(0, Qt::UserRole).toUInt();
         if (fid != 0) slotFixtureDoubleClicked(fid);
     });
-    // Right-click the tree → add fixtures / a fixture group.
+    // Gather the fixture ids currently selected in the tree.
+    auto selectedFids = [tree]() {
+        QList<quint32> ids;
+        foreach (QTreeWidgetItem *it, tree->selectedItems())
+        {
+            const quint32 fid = it->data(0, Qt::UserRole).toUInt();
+            if (fid != 0) ids << fid;
+        }
+        return ids;
+    };
+
+    // Right-click the tree → add fixtures / a group, or make a group from selection.
     connect(tree, &QTreeWidget::customContextMenuRequested, tree,
-            [this, tree, kind, id, view, rebuildTree](const QPoint &pos) {
+            [this, tree, kind, id, view, rebuildTree, selectedFids](const QPoint &pos) {
         QMenu m;
         QAction *aFix = m.addAction(tr("Add Fixtures…"));
-        QAction *aGrp = m.addAction(tr("Add Fixture Group…"));
+        QAction *aGrp = m.addAction(tr("Add Existing Fixture Group…"));
+        const QList<quint32> selNow = selectedFids();
+        QAction *aNew = nullptr;
+        if (!selNow.isEmpty())
+        {
+            m.addSeparator();
+            aNew = m.addAction(tr("New Fixture Group from Selection…"));
+        }
         QAction *chosen = m.exec(tree->viewport()->mapToGlobal(pos));
         if (chosen == aFix) { studioAddFixture(kind, id, view); rebuildTree(); }
         else if (chosen == aGrp) { studioAddGroup(kind, id, view); rebuildTree(); }
+        else if (aNew && chosen == aNew) { studioCreateGroup(selNow, view); rebuildTree(); }
     });
+    connect(distBtn, &QPushButton::clicked, tree,
+            [this, kind, id, view, selectedFids]() { studioDistribute(kind, id, view, selectedFids()); });
 
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), body,
             [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });
@@ -2259,6 +2284,72 @@ void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32
         rp.riserU = pl->width() * 0.5f; rp.riserV = pl->depth() * 0.5f; } }
     m_props->setFixtureRigProps(fid, rp);
     m_graphicsView->updateFixture(fid);
+}
+
+void Monitor::studioCreateGroup(const QList<quint32> &fids, StructureStudioView *view)
+{
+    if (fids.isEmpty())
+    {
+        QMessageBox::information(this, tr("New Fixture Group"),
+            tr("Select one or more fixtures in the tree first."));
+        return;
+    }
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("New Fixture Group"),
+        tr("Group name:"), QLineEdit::Normal, tr("Group %1").arg(m_doc->fixtureGroups().count() + 1), &ok);
+    if (!ok || name.trimmed().isEmpty())
+        return;
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName(name.trimmed());
+    m_doc->addFixtureGroup(grp);
+    foreach (quint32 fid, fids)
+        grp->assignFixture(fid);
+    m_doc->setModified();
+    if (view) view->reload();   // the tree regroups under the new folder
+}
+
+void Monitor::studioDistribute(int kind, quint32 id, StructureStudioView *view,
+                               const QList<quint32> &sel)
+{
+    QList<quint32> fids = sel.isEmpty() ? view->mountedFixtures() : sel;
+    const int n = fids.size();
+    if (n == 0) return;
+    for (int i = 0; i < n; ++i)
+    {
+        const float t = (i + 0.5f) / float(n);   // even fractional position
+        const quint32 fid = fids[i];
+        FixtureRigProps rp = m_props->fixtureRigProps(fid);
+        const quint32 fg = m_props->fixtureFrameGroup(fid);
+        if (fg != 0 && kind == 3)
+        {
+            // Frame-group fixture on a platform → space along the width (X).
+            StagePlatform *pl = m_props->platform(id);
+            const QVector3D cur = m_props->fixtureRigPosition(fid);
+            const float x = pl ? pl->originX() + t * pl->width() : cur.x();
+            rp.groupLocal = m_props->worldToGroupLocal(fg, QVector3D(x, cur.y(), cur.z()));
+        }
+        else if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
+        {
+            if (StagePlatform *pl = m_props->platform(rp.riserPlatformId))
+                rp.riserU = t * pl->width();
+        }
+        else if (rp.pipeId != Pipe::invalidId())
+        {
+            if (Pipe *p = m_props->pipe(rp.pipeId)) rp.pipeOffset = t * p->length();
+        }
+        else if (rp.trussId != Truss::invalidId())
+        {
+            if (Truss *tt = m_props->truss(rp.trussId)) rp.trussOffset = t * tt->length();
+        }
+        else if (rp.towerId != Tower::invalidId())
+        {
+            if (Tower *tw = m_props->tower(rp.towerId)) rp.towerU = t * tw->width();
+        }
+        m_props->setFixtureRigProps(fid, rp);
+        m_graphicsView->updateFixture(fid);
+    }
+    if (view) view->reload();
+    m_doc->setModified();
 }
 
 void Monitor::studioAddGroup(int kind, quint32 id, StructureStudioView *view)
@@ -3410,45 +3501,9 @@ void Monitor::slotEditPlatform(quint32 pid)
     form->addRow(tr("Color:"), colorBtn);
 
     vl->addLayout(form);
-
-    // Fixtures on this riser. The Studio editor is the single placement surface
-    // (its Front plane IS the riser face); the Face editor is used only to
-    // ASSIGN fixtures to the riser when none are on it yet, then we hand off to
-    // the Studio editor for spatial layout.
-    QPushButton *faceBtn = new QPushButton(tr("Edit fixtures in Studio…"), &dlg);
-    faceBtn->setToolTip(tr("Place this riser's fixtures in the Fixture Studio "
-                           "(Top/Front/Side); the Front plane is the riser face"));
-    connect(faceBtn, &QPushButton::clicked, [&]() {
-        // Already have fixtures grouped on this riser → straight to the Studio.
-        m_graphicsView->ensurePlatformGroup(p->id());
-        quint32 gid = p->groupId();
-        if (gid == 0 || !m_props->hasGroup(gid))
-        {
-            // No fixtures on this riser yet — assign them with the Face editor.
-            RiserFaceEditor ed(m_doc, p, &dlg);
-            if (ed.exec() != QDialog::Accepted)
-                return;
-            ed.applyToRig();
-            foreach (Fixture *fx, m_doc->fixtures())
-            {
-                if (fx == NULL) continue;
-                if (m_props->fixtureRigProps(fx->id()).riserPlatformId == p->id()
-                        && m_graphicsView->fixtureItemForId(fx->id()) == NULL)
-                    m_graphicsView->addFixture(fx->id());
-            }
-            m_graphicsView->ensurePlatformGroup(p->id());
-            gid = p->groupId();
-        }
-        // Slave the group's frame to the platform, migrate riser mounts, and
-        // open the Studio editor for spatial fine-tuning.
-        if (gid != 0 && m_props->hasGroup(gid))
-            m_graphicsView->openStudioGroupForGroup(gid);
-        m_graphicsView->refreshRiserFixtures();
-        if (m_layersPanel) m_layersPanel->reload();
-        m_doc->setModified();
-    });
-    vl->addWidget(faceBtn);
     vl->addStretch();
+    // (The old "Edit fixtures in Studio…" button is gone — this editor IS the
+    //  studio now: the fixture tree + canvas below handle layout in one window.)
 
     // Canvas-centric object editor body; geometry form is its collapsible left.
     StructureStudioView *view = nullptr;

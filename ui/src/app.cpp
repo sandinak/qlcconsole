@@ -853,7 +853,8 @@ void App::initActions()
     connect(m_modeToggleAction, SIGNAL(triggered(bool)), this, SLOT(slotModeToggle()));
 
     m_controlMonitorAction = new QAction(QIcon(":/monitor.png"), tr("&Lighting Studio"), this);
-    m_controlMonitorAction->setShortcut(QKeySequence("CTRL+M"));
+    // NOT Cmd+M — macOS reserves that for Minimize, which swallowed it.
+    m_controlMonitorAction->setShortcut(QKeySequence("CTRL+SHIFT+M"));
     m_controlMonitorAction->setToolTip(tr("Lighting Studio — 2D plot, rigging & fixture layout"));
     connect(m_controlMonitorAction, SIGNAL(triggered(bool)), this, SLOT(slotControlMonitor()));
 

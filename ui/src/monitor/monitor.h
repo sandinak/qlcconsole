@@ -331,6 +331,11 @@ protected slots:
     void mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32 boomId);
     /** The pipe id to hang fixtures on for a stand/pipe kind (invalid if none). */
     quint32 structureBoomId(int kind, quint32 id) const;
+    /** Create a NEW fixture group from the given fixtures (prompts for a name). */
+    void studioCreateGroup(const QList<quint32> &fids, class StructureStudioView *view);
+    /** Evenly space @p fids (or all on-object fixtures) along the current face. */
+    void studioDistribute(int kind, quint32 id, class StructureStudioView *view,
+                          const QList<quint32> &fids);
 
     /** Open the platform edit dialog for the given platform ID. */
     void slotEditPlatform(quint32 pid);
