@@ -297,6 +297,11 @@ private:
      *  shown and Alt-drag rotation / facing menu are enabled. Mirrors the
      *  ItemIsMovable flag set by MonitorGraphicsView::setLayoutLocked(). */
     bool m_editable      = true;
+
+    /** Set once the pointer actually moves during a press, so a plain click
+     *  (select / double-click) does not emit a spurious drop that re-snaps the
+     *  fixture's position. Reset on each press. */
+    bool m_dragMoved     = false;
 };
 
 /** @} */

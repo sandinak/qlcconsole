@@ -920,6 +920,7 @@ void MonitorFixtureItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     // Alt-drag on a moving head rotates its facing (panZeroDir) instead of
     // moving the item. Swallow the press so the base class doesn't start a move.
     // Disabled when the layout is locked (rig frozen).
+    m_dragMoved = false;   // a drag only counts once the pointer actually moves
     if (m_hasPan && m_editable && (event->modifiers() & Qt::AltModifier))
     {
         m_rotating = true;
@@ -953,6 +954,7 @@ void MonitorFixtureItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         event->accept();
         return;
     }
+    m_dragMoved = true;   // real movement (only reaches here for a movable item)
     QGraphicsItem::mouseMoveEvent(event);
 }
 
@@ -967,9 +969,13 @@ void MonitorFixtureItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         return;
     }
     QGraphicsItem::mouseReleaseEvent(event);
-    qDebug() << Q_FUNC_INFO << "mouse RELEASE event - <" << event->pos().toPoint().x() << "> - <" << event->pos().toPoint().y() << ">";
-    setCursor(smallOpenHandCursor());
-    emit itemDropped(this);
+    setCursor(m_editable ? smallOpenHandCursor() : Qt::ArrowCursor);
+    // Only commit (and re-snap) a fixture that was actually DRAGGED while editable.
+    // A plain click (select / double-click), or any interaction while the layout
+    // is locked, must not move the fixture.
+    if (m_editable && m_dragMoved)
+        emit itemDropped(this);
+    m_dragMoved = false;
 }
 
 void MonitorFixtureItem::commitFacing()
