@@ -994,36 +994,42 @@ double StructureStudioView::structureTopZ() const
 
 void StructureStudioView::drawRulers(QPainter &p) const
 {
+    // Match the main-window ruler bars: dark band, 9px font, a number at every
+    // sensibly-spaced unit, blue axis label, blue cursor.
     MonitorProperties *props = m_doc->monitorProperties();
     const bool feet = props->gridUnits() == MonitorProperties::Feet;
     const double conv = feet ? 3.28084 : 1.0;
     const QString sfx = feet ? QStringLiteral("ft") : QStringLiteral("m");
-    const double stepM = 1.0 / conv;
-    const QColor gutter(30, 33, 41), edge(70, 74, 86);
-    const QColor tickMinor(115, 121, 135), tickMajor(180, 186, 200);
-    const double GW = 32.0, GH = 20.0;   // gutter width / height (like the main ruler bars)
-    p.setFont(QFont("Arial", 8));
+    const double stepM = 1.0 / conv;                 // one display unit, in metres
+    const double pxPerUnit = stepM * m_scale;        // its width in pixels
+    // Choose a label interval that keeps ~34 px between numbers.
+    int lblEvery = 1;
+    for (int cand : { 1, 2, 5, 10, 20, 50, 100 })
+        { lblEvery = cand; if (cand * pxPerUnit >= 34.0) break; }
 
-    // Height ruler (0 = floor) — left gutter, elevations only.
+    const QColor band(26, 26, 26), edge(60, 60, 60);
+    const QColor tickCol(150, 150, 150), textCol(190, 190, 190), axisCol(120, 160, 220);
+    const double GW = 34.0, GH = 22.0;
+    QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
+
     const bool vert = (m_plane != Top);
     if (vert)
     {
-        p.fillRect(QRectF(0, 0, GW, height()), gutter);
-        p.setPen(QPen(edge, 1.0));
-        p.drawLine(QPointF(GW, 0), QPointF(GW, height()));
-        p.setPen(QColor(150, 156, 170));
-        p.drawText(QRectF(0, 1, GW - 3, 12), Qt::AlignRight | Qt::AlignTop, sfx);
+        p.fillRect(QRectF(0, 0, GW, height()), band);
+        p.setPen(edge); p.drawLine(QPointF(GW - 1, 0), QPointF(GW - 1, height()));
         for (int k = 0; k < 400; ++k)
         {
             const double sy = w2s(QVector3D(0, 0, float(k * stepM))).y();
             if (sy < 12) break;
             if (sy > height()) continue;
-            const bool major = (k % 5 == 0);
-            p.setPen(QPen(major ? tickMajor : tickMinor, major ? 1.2 : 0.8));
-            p.drawLine(QPointF(GW - (major ? 9 : 5), sy), QPointF(GW, sy));
-            if (major) p.drawText(QRectF(0, sy - 7, GW - 11, 14),
-                                  Qt::AlignRight | Qt::AlignVCenter, QString::number(k));
+            p.setPen(tickCol); p.drawLine(QPointF(GW - 6, sy), QPointF(GW - 1, sy));
+            if (k % lblEvery == 0)
+            {
+                p.setPen(textCol);
+                p.drawText(QRectF(0, sy - 8, GW - 8, 16), Qt::AlignRight | Qt::AlignVCenter, QString::number(k));
+            }
         }
+        p.setPen(axisCol); p.drawText(QRectF(2, 1, GW - 2, 12), Qt::AlignLeft | Qt::AlignTop, sfx);
         const double topZ = structureTopZ();
         if (topZ > 0.01)
         {
@@ -1032,36 +1038,42 @@ void StructureStudioView::drawRulers(QPainter &p) const
             QPolygonF tri; tri << QPointF(GW + 1, sy) << QPointF(GW + 8, sy - 4) << QPointF(GW + 8, sy + 4);
             p.drawPolygon(tri);
             p.setPen(QColor(0, 190, 255));
-            p.drawText(QPointF(GW + 11, sy - 3), QString("max %1%2").arg(topZ * conv, 0, 'f', 1).arg(sfx));
+            p.drawText(QPointF(GW + 11, sy - 3), QString("max %1 %2").arg(topZ * conv, 0, 'f', 1).arg(sfx));
         }
     }
 
-    // Width ruler (0 = structure centre) — bottom gutter.
+    // Width ruler (0 = structure centre) — bottom band.
     const double centreA = structureCentreA();
     const double by = height() - GH;
-    p.fillRect(QRectF(0, by, width(), GH), gutter);
-    p.setPen(QPen(edge, 1.0));
-    p.drawLine(QPointF(0, by), QPointF(width(), by));
+    p.fillRect(QRectF(0, by, width(), GH), band);
+    p.setPen(edge); p.drawLine(QPointF(0, by), QPointF(width(), by));
     for (int k = -200; k <= 200; ++k)
     {
         const double aVal = centreA + k * stepM;
         const QVector3D w = (m_plane == Side) ? QVector3D(0, float(aVal), 0) : QVector3D(float(aVal), 0, 0);
         const double sx = w2s(w).x();
         if (sx < GW || sx > width() + 20) continue;
-        const bool major = (k % 5 == 0);
-        p.setPen(QPen((k == 0) ? QColor(0, 190, 255) : (major ? tickMajor : tickMinor), (k == 0 || major) ? 1.2 : 0.8));
-        p.drawLine(QPointF(sx, by), QPointF(sx, by + ((k == 0 || major) ? 9 : 5)));
-        if (k == 0)        p.drawText(QRectF(sx - 12, by + 8, 24, 12), Qt::AlignCenter, QStringLiteral("0"));
-        else if (major)    p.drawText(QRectF(sx - 14, by + 8, 28, 12), Qt::AlignCenter, QString::number(qAbs(k)));
+        p.setPen((k == 0) ? QPen(QColor(0, 190, 255), 1.2) : QPen(tickCol, 1.0));
+        p.drawLine(QPointF(sx, by), QPointF(sx, by + 6));
+        if (k % lblEvery == 0)
+        {
+            p.setPen((k == 0) ? QColor(0, 190, 255) : textCol);
+            p.drawText(QRectF(sx - 16, by + 6, 32, 14), Qt::AlignHCenter | Qt::AlignVCenter, QString::number(qAbs(k)));
+        }
     }
+    p.setPen(axisCol); p.drawText(QRectF(GW + 3, by + 4, 40, 14), Qt::AlignLeft | Qt::AlignVCenter,
+                                  QString("↔ %1").arg(sfx));
 
-    // Selected-fixture cursors on both rulers (like the main window).
+    // Cursor marker (blue, like the main window) + selected-fixture marker (green).
+    if (m_hasCursor)
+    {
+        p.setPen(QPen(QColor(80, 170, 255), 1.0));
+        if (vert) p.drawLine(QPointF(0, m_cursorPx.y()), QPointF(GW, m_cursorPx.y()));
+        p.drawLine(QPointF(m_cursorPx.x(), by), QPointF(m_cursorPx.x(), height()));
+    }
     if (!m_highlight.isEmpty())
     {
         const QPointF s = w2s(props->fixtureRigPosition(*m_highlight.begin()));
-        p.setPen(QPen(QColor(120, 220, 140), 1.2, Qt::DashLine));
-        if (vert) p.drawLine(QPointF(GW, s.y()), QPointF(width(), s.y()));
-        p.drawLine(QPointF(s.x(), 0), QPointF(s.x(), by));
         p.setPen(QPen(QColor(120, 220, 140), 1.0)); p.setBrush(QColor(120, 220, 140));
         if (vert) { QPolygonF t; t << QPointF(GW + 1, s.y()) << QPointF(GW + 7, s.y() - 4) << QPointF(GW + 7, s.y() + 4); p.drawPolygon(t); }
         QPolygonF t2; t2 << QPointF(s.x(), by) << QPointF(s.x() - 4, by + 7) << QPointF(s.x() + 4, by + 7); p.drawPolygon(t2);

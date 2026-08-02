@@ -3398,6 +3398,22 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
 
     if (auto *fi = dynamic_cast<MonitorFixtureItem *>(it))
     {
+        // A fixture mounted ON a feature → open that FEATURE's editor (the fixture
+        // sits in its tree/inspector). This is the common "double-click the riser"
+        // case, where the feature is covered by its own fixtures.
+        MonitorProperties *mp = m_doc->monitorProperties();
+        const FixtureRigProps rp = mp->fixtureRigProps(fi->fixtureID());
+        if (rp.trussId != Truss::invalidId())            { emit trussDoubleClicked(rp.trussId); return; }
+        if (rp.pipeId != Pipe::invalidId())              { emit pipeDoubleClicked(rp.pipeId); return; }
+        if (rp.towerId != Tower::invalidId())            { emit towerDoubleClicked(rp.towerId); return; }
+        if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId()) { emit platformDoubleClicked(rp.riserPlatformId); return; }
+        if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())  { emit platformDoubleClicked(rp.deckPlatformId); return; }
+        if (const quint32 fg = mp->fixtureFrameGroup(fi->fixtureID()))
+        {
+            const MonitorProperties::MonitorGroup g = mp->group(fg);
+            if (g.anchorKind == QStringLiteral("platform")) { emit platformDoubleClicked(g.anchorId); return; }
+        }
+
         // Grouped OR truss-bound fixture: the FIRST double-click DRILLS IN —
         // selects just this fixture (distinct cyan-dashed highlight) so it can
         // be slid along its truss or dragged clear to detach. Single-click still
