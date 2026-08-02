@@ -2070,6 +2070,19 @@ void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
     showFixtureItemEditor();
 }
 
+bool Monitor::isLinearFixture(Fixture *fx) const
+{
+    if (fx == nullptr) return false;
+    if (fx->heads() > 1) return true;                 // LED tape / multi-cell bar
+    if (const QLCFixtureMode *m = fx->fixtureMode())  // a wide single-head bar/wash
+    {
+        const qreal w = m->physical().width();
+        const qreal d = qMax(m->physical().height(), m->physical().depth());
+        if (w > 0 && d > 0 && w > 1.8 * d) return true;
+    }
+    return false;
+}
+
 void Monitor::editFixtureProperties(quint32 fid)
 {
     // The studio's single-fixture path (inspector 'Full properties…', canvas
@@ -2218,7 +2231,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         Fixture *fx = fid ? m_doc->fixture(fid) : nullptr;
         const bool have = (fx != nullptr);
         const bool frame = have && (m_props->fixtureFrameGroup(fid) != 0);
-        const bool linear = have && fx->heads() > 1;   // strip / bar / tape
+        const bool linear = have && isLinearFixture(fx);   // strip / bar / tape
         inspTitle->setText(have ? fx->name() : tr("(no fixture selected)"));
         gelBtn->setEnabled(have); fullBtn->setEnabled(have);
         // Show the RELEVANT controls per fixture type: Orientation for a body with
@@ -6007,7 +6020,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     const bool hasPanCh  = fxi && fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB, 0) != QLCChannel::invalid();
     const bool hasTiltCh = fxi && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) != QLCChannel::invalid();
     const bool isMover = (hasPanCh || hasTiltCh);
-    const bool isStrip = fxi && fxi->heads() > 1;
+    const bool isStrip = isLinearFixture(fxi);
 
     auto hideRow = [rigForm](QWidget *w) {
         if (!w) return;

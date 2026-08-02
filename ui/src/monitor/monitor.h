@@ -290,6 +290,9 @@ protected slots:
     void slotFixtureDoubleClicked(quint32 fid);
     /** Edit ONE fixture's properties (studio single-fixture path). */
     void editFixtureProperties(quint32 fid);
+    /** True for a LINEAR fixture (strip/bar/tape): multi-head OR physically much
+     *  wider than it is deep/tall. Drives the Face+Angle quick-settings. */
+    bool isLinearFixture(class Fixture *fx) const;
 
     /** Open truss edit dialog on double-click. */
     void slotTrussDoubleClicked(quint32 tid);
