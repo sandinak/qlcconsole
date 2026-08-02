@@ -522,6 +522,11 @@ public:
      *  Returns 0 if the point is not on any platform. */
     float platformHeightAt(float xMetres, float yMetres) const;
 
+    /** Base (bottom) height of a platform: the deck height of the tallest LOWER
+     *  platform whose footprint it sits within (0 = on the floor). Lets steps
+     *  stack — a platform on top of another rises from that one's deck. */
+    float platformBaseZ(quint32 id) const;
+
     /** Id of the TOPMOST platform whose footprint contains (xMetres, yMetres),
      *  or FixtureRigProps::invalidPlatformId() if none. Used to auto deck-mount a
      *  fixture dropped over a platform. */

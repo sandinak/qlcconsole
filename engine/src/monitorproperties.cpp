@@ -1235,6 +1235,24 @@ float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
     return h;
 }
 
+float MonitorProperties::platformBaseZ(quint32 id) const
+{
+    const StagePlatform *b = m_platforms.value(id, nullptr);
+    if (b == nullptr)
+        return 0.0f;
+    const float cx = b->originX() + b->width() * 0.5f;
+    const float cy = b->originY() + b->depth() * 0.5f;
+    float base = 0.0f;
+    foreach (const StagePlatform *a, m_platforms)
+    {
+        if (a == b || a->height() >= b->height())   // must be a LOWER platform
+            continue;
+        if (a->containsPoint(cx, cy))               // this one sits within it
+            base = qMax(base, a->height());
+    }
+    return base;
+}
+
 quint32 MonitorProperties::nextImageId() const
 {
     quint32 id = 0;
@@ -1422,9 +1440,11 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
                                  pl->originY() + rp.riserV, pl->height());
             // Front (downstage) face: Y = the DOWNSTAGE edge (originY + depth —
             // originY is the upstage edge in this plan view), X across the
-            // width, Z = height up the face.
+            // width, Z = up the face FROM the platform base (which may sit on a
+            // lower platform, not the floor).
             return QVector3D(pl->originX() + rp.riserU,
-                             pl->originY() + pl->depth(), rp.riserV);
+                             pl->originY() + pl->depth(),
+                             platformBaseZ(pl->id()) + rp.riserV);
         }
     }
 

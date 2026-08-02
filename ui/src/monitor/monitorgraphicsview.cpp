@@ -2319,14 +2319,15 @@ void MonitorGraphicsView::updatePlatforms()
         }
         else
         {
-            // Elevation: a riser is a box from the floor up to its height. Draw
-            // its front (X extent) or side (Y extent) face.
-            const float h = p->height();
+            // Elevation: a riser is a box from its BASE (which may be the deck of
+            // a platform it sits on, not the floor) up to its height.
+            const float h  = p->height();
+            const float b0 = props->platformBaseZ(p->id());
             const QPointF tl = projectMm(p->originX() * 1000.0, p->originY() * 1000.0, h * 1000.0);
             pxX = float(tl.x());
             pxY = float(tl.y());
             pxW = float(((m_pov == PovFront) ? p->width() : p->depth()) * 1000.0f * scale);
-            pxD = qMax(2.0f, float(h * 1000.0f * scale));
+            pxD = qMax(2.0f, float((h - b0) * 1000.0f * scale));
         }
 
         PlatformItem *pi = new PlatformItem(p, m_doc, pxX, pxY, pxW, pxD);

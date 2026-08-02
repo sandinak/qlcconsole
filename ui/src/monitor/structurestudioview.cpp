@@ -599,8 +599,10 @@ void StructureStudioView::drawStructure(QPainter &p) const
         }
         else
         {
-            // A riser box silhouette: floor rectangle up to its top.
-            const QPointF a = w2s(QVector3D(x0, y0, 0));
+            // Riser box silhouette from its BASE (which may sit on a lower
+            // platform, not the floor) up to its deck.
+            const float b0 = props->platformBaseZ(m_id);
+            const QPointF a = w2s(QVector3D(x0, y0, b0));
             const QPointF b = w2s(QVector3D(x1, y1, h));
             p.drawRect(QRectF(a, b).normalized());
             p.setPen(QPen(steel.lighter(140), 1.4));   // deck line
