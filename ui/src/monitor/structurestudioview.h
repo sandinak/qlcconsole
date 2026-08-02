@@ -72,6 +72,9 @@ public:
     void setFixtureFace(quint32 fid, int face);     ///< studioMount + re-pin
     void setFixtureAngle(quint32 fid, float deg);   ///< studioAngle (bar rotation)
 
+    /** Position an already-mounted fixture at a screen point (drop landing). */
+    bool placeFixtureAt(quint32 fid, const QPointF &px) { return dragFixtureTo(fid, px); }
+
 signals:
     /** A fixture on the structure was double-clicked (id passed through). */
     void fixtureActivated(quint32 fid);
@@ -81,6 +84,8 @@ signals:
     void editAboutToStart();
     /** A fixture was dragged to a new spot on the structure (rig prop changed). */
     void fixtureMoved(quint32 fid);
+    /** Fixtures were dragged in from the source tree and dropped at @p pos. */
+    void fixturesDropped(const QList<quint32> &fids, const QPointF &pos);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -90,6 +95,8 @@ protected:
     void mouseMoveEvent(QMouseEvent *) override;
     void mouseReleaseEvent(QMouseEvent *) override;
     void mouseDoubleClickEvent(QMouseEvent *) override;
+    void dragEnterEvent(QDragEnterEvent *) override;
+    void dropEvent(QDropEvent *) override;
 
 private:
     QPointF project(const QVector3D &w) const;      ///< world → in-plane (a,b) metres

@@ -52,6 +52,8 @@
 #include <QTreeWidgetItemIterator>
 #include <QShortcut>
 #include <QSharedPointer>
+#include <QMimeData>
+#include <QDataStream>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
@@ -2067,6 +2069,29 @@ void Monitor::slotTrussDoubleClicked(quint32 tid)
     slotEditTruss(tid);
 }
 
+// A QTreeWidget that hands out fixture ids on drag (for the studio source tree →
+// canvas drop). Qt5 uses the by-value mimeData() override.
+namespace {
+class FixtureSourceTree : public QTreeWidget
+{
+public:
+    explicit FixtureSourceTree(QWidget *parent = nullptr) : QTreeWidget(parent) {}
+protected:
+    QMimeData *mimeData(const QList<QTreeWidgetItem *> items) const override
+    {
+        QMimeData *m = new QMimeData;
+        QByteArray b; QDataStream s(&b, QIODevice::WriteOnly);
+        foreach (QTreeWidgetItem *it, items)
+        {
+            const quint32 fid = it->data(0, Qt::UserRole).toUInt();
+            if (fid) s << fid;
+        }
+        m->setData(QStringLiteral("application/x-qlc-fid"), b);
+        return m;
+    }
+};
+} // namespace
+
 QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                                  QWidget *geometryForm, StructureStudioView **outView)
 {
@@ -2095,6 +2120,23 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     tree->setContextMenuPolicy(Qt::CustomContextMenu);
     lv->addWidget(tree, 1);
+
+    // A collapsible SOURCE tree of the rest of the patched fixtures — drag one
+    // (or a group folder's children) onto a face to add it there.
+    QGroupBox *srcBox = new QGroupBox(tr("Add fixtures (drag onto a face)"), left);
+    srcBox->setCheckable(true);
+    srcBox->setChecked(false);
+    QVBoxLayout *sbv = new QVBoxLayout(srcBox);
+    sbv->setContentsMargins(4, 2, 4, 4);
+    FixtureSourceTree *srcTree = new FixtureSourceTree(srcBox);
+    srcTree->setHeaderHidden(true);
+    srcTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    srcTree->setDragEnabled(true);
+    srcTree->setDragDropMode(QAbstractItemView::DragOnly);
+    srcTree->setVisible(false);
+    connect(srcBox, &QGroupBox::toggled, srcTree, &QWidget::setVisible);
+    sbv->addWidget(srcTree);
+    lv->addWidget(srcBox, 1);
     left->setMinimumWidth(220);
 
     // ---- CENTER: toolbar + graphical canvas --------------------------------
@@ -2249,6 +2291,34 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     };
     rebuildTree();
 
+    // Source tree: patched fixtures NOT already on this object, by group.
+    auto rebuildSource = [this, srcTree, view]() {
+        srcTree->clear();
+        const QList<quint32> here = view->mountedFixtures();
+        QMap<quint32, QTreeWidgetItem *> gnodes; QTreeWidgetItem *ungr = nullptr;
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            if (fx == nullptr || here.contains(fx->id())) continue;
+            quint32 gid = 0; QString gname;
+            foreach (FixtureGroup *g, m_doc->fixtureGroups())
+                if (g && g->fixtureList().contains(fx->id())) { gid = g->id(); gname = g->name(); break; }
+            QTreeWidgetItem *parent;
+            if (gid == 0)
+            {
+                if (!ungr) { ungr = new QTreeWidgetItem(srcTree, QStringList(tr("Ungrouped"))); ungr->setExpanded(true); }
+                parent = ungr;
+            }
+            else
+            {
+                if (!gnodes.contains(gid)) { QTreeWidgetItem *n = new QTreeWidgetItem(srcTree, QStringList(gname)); n->setExpanded(true); gnodes.insert(gid, n); }
+                parent = gnodes.value(gid);
+            }
+            QTreeWidgetItem *it = new QTreeWidgetItem(parent, QStringList(fx->name()));
+            it->setData(0, Qt::UserRole, fx->id());
+        }
+    };
+    rebuildSource();
+
     // Tree selection → highlight on the canvas + populate the inspector.
     connect(tree, &QTreeWidget::itemSelectionChanged, tree, [tree, view, curFid, populate]() {
         QList<quint32> ids;
@@ -2309,7 +2379,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
 
     // Right-click the tree → add fixtures / a group, or make a group from selection.
     connect(tree, &QTreeWidget::customContextMenuRequested, tree,
-            [this, tree, kind, id, view, rebuildTree, selectedFids, pushUndo](const QPoint &pos) {
+            [this, tree, kind, id, view, rebuildTree, rebuildSource, selectedFids, pushUndo](const QPoint &pos) {
         QMenu m;
         QAction *aFix = m.addAction(tr("Add Fixtures…"));
         QAction *aGrp = m.addAction(tr("Add Existing Fixture Group…"));
@@ -2321,9 +2391,9 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             aNew = m.addAction(tr("New Fixture Group from Selection…"));
         }
         QAction *chosen = m.exec(tree->viewport()->mapToGlobal(pos));
-        if (chosen == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); }
-        else if (chosen == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); }
-        else if (aNew && chosen == aNew) { studioCreateGroup(selNow, view); rebuildTree(); }
+        if (chosen == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); rebuildSource(); }
+        else if (chosen == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); rebuildSource(); }
+        else if (aNew && chosen == aNew) { studioCreateGroup(selNow, view); rebuildTree(); rebuildSource(); }
     });
     auto refreshMap = [this]() {
         foreach (Fixture *fx, m_doc->fixtures())
@@ -2346,9 +2416,29 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     connect(view, &StructureStudioView::fixtureMoved, body,
             [this](quint32 fid){ m_graphicsView->updateFixture(fid); });
     connect(addBarBtn, &QPushButton::clicked, body,
-            [this, kind, id, view]() { studioAddBar(kind, id, view); });
-    // Keep the tree in sync after canvas-side edits.
+            [this, kind, id, view, rebuildSource]() { studioAddBar(kind, id, view); rebuildSource(); });
+    // Keep the trees in sync after canvas-side edits.
     connect(view, &StructureStudioView::fixtureMoved, body, [rebuildTree](quint32){ rebuildTree(); });
+
+    // Drop a fixture from the source tree onto a face → mount + land it there.
+    connect(view, &StructureStudioView::fixturesDropped, body,
+            [this, kind, id, view, rebuildTree, rebuildSource, pushUndo, refreshMap]
+            (const QList<quint32> &fids, const QPointF &pos) {
+        const quint32 boomId = structureBoomId(kind, id);
+        if (kind == 0 && boomId == Pipe::invalidId())
+        {
+            QMessageBox::information(this, tr("Add Fixture"),
+                tr("Add a bar to this stand first, then drop fixtures on it."));
+            return;
+        }
+        pushUndo();
+        foreach (quint32 fid, fids)
+        {
+            mountFixtureOnStructure(fid, kind, id, boomId);
+            view->placeFixtureAt(fid, pos);   // land at the drop point
+        }
+        view->reload(); rebuildTree(); rebuildSource(); refreshMap();
+    });
 
     if (outView) *outView = view;
     return body;

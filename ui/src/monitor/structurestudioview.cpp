@@ -12,6 +12,10 @@
 #include <QPainter>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QDataStream>
 #include <QtMath>
 
 #include "structurestudioview.h"
@@ -35,6 +39,7 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     setMinimumSize(360, 320);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
+    setAcceptDrops(true);   // fixtures dragged in from the source tree
     // Top plane reads best for a tower/platform footprint; a boom/truss reads
     // best in a vertical elevation. Default Front for the rest.
     m_plane = (kind == TowerKind) ? Top : Front;
@@ -939,4 +944,22 @@ void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)
     const quint32 fid = hitTestFixture(e->pos());
     if (fid != 0)
         emit fixtureActivated(fid);
+}
+
+void StructureStudioView::dragEnterEvent(QDragEnterEvent *e)
+{
+    if (e->mimeData()->hasFormat(QStringLiteral("application/x-qlc-fid")))
+        e->acceptProposedAction();
+}
+
+void StructureStudioView::dropEvent(QDropEvent *e)
+{
+    const QByteArray b = e->mimeData()->data(QStringLiteral("application/x-qlc-fid"));
+    if (b.isEmpty()) return;
+    QDataStream s(b);
+    QList<quint32> fids;
+    while (!s.atEnd()) { quint32 fid; s >> fid; if (fid) fids << fid; }
+    if (fids.isEmpty()) return;
+    e->acceptProposedAction();
+    emit fixturesDropped(fids, e->posF());
 }
