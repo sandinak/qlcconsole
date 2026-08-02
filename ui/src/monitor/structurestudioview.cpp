@@ -840,12 +840,80 @@ void StructureStudioView::putOnFace(const QList<quint32> &ids)
     if (any) { m_doc->setModified(); reload(); }
 }
 
+void StructureStudioView::drawDimensions(QPainter &p) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<QVector3D> c;   // structure-only corners (no fixtures)
+    if (m_kind == PlatformKind)
+    { if (StagePlatform *pl = props->platform(m_id)) for (int i = 0; i < 8; ++i)
+        c << QVector3D(pl->originX() + ((i & 1) ? pl->width() : 0.0f),
+                       pl->originY() + ((i & 2) ? pl->depth() : 0.0f), (i & 4) ? pl->height() : 0.0f); }
+    else if (m_kind == TowerKind)
+    { if (Tower *t = props->tower(m_id)) c << QVector3D(t->originX(), t->originY(), 0)
+                                           << QVector3D(t->originX() + t->width(), t->originY() + t->depth(), t->height()); }
+    else if (m_kind == StandKind)
+    { if (Stand *s = props->stand(m_id)) { c << QVector3D(s->originX(), s->originY(), 0) << s->topPos();
+        foreach (const Pipe *pp, standPipes()) c << pp->positionAt(0) << pp->positionAt(pp->length()); } }
+    else if (m_kind == TrussKind)
+    { if (Truss *t = props->truss(m_id)) c << t->origin() << t->positionAt(t->length()); }
+    else if (m_kind == PipeKind)
+    { if (Pipe *pp = props->pipe(m_id)) c << pp->positionAt(0) << pp->positionAt(pp->length()); }
+    if (c.size() < 2) return;
+
+    double minA = 0, maxA = 0, minB = 0, maxB = 0;   // plane-metric extents
+    double sMinX = 0, sMaxX = 0, sMinY = 0, sMaxY = 0;   // screen bbox
+    bool first = true;
+    foreach (const QVector3D &w, c)
+    {
+        const QPointF ab = project(w);
+        const QPointF s = w2s(w);
+        if (first) { minA = maxA = ab.x(); minB = maxB = ab.y();
+                     sMinX = sMaxX = s.x(); sMinY = sMaxY = s.y(); first = false; }
+        minA = qMin(minA, ab.x()); maxA = qMax(maxA, ab.x());
+        minB = qMin(minB, ab.y()); maxB = qMax(maxB, ab.y());
+        sMinX = qMin(sMinX, s.x()); sMaxX = qMax(sMaxX, s.x());
+        sMinY = qMin(sMinY, s.y()); sMaxY = qMax(sMaxY, s.y());
+    }
+    const bool feet = props->gridUnits() == MonitorProperties::Feet;
+    const double conv = feet ? 3.28084 : 1.0;
+    const QString sfx = feet ? QStringLiteral(" ft") : QStringLiteral(" m");
+    const double wSpan = (maxA - minA) * conv, hSpan = (maxB - minB) * conv;
+
+    p.setPen(QPen(QColor(150, 160, 180, 200), 1.0));
+    p.setFont(QFont("Arial", 8));
+    // Horizontal dimension, just below the structure.
+    if (wSpan > 0.01)
+    {
+        const double y = sMaxY + 18.0;
+        p.drawLine(QPointF(sMinX, y), QPointF(sMaxX, y));
+        p.drawLine(QPointF(sMinX, y - 4), QPointF(sMinX, y + 4));
+        p.drawLine(QPointF(sMaxX, y - 4), QPointF(sMaxX, y + 4));
+        p.drawText(QRectF(sMinX, y + 2, sMaxX - sMinX, 14), Qt::AlignCenter,
+                   QString("%1%2").arg(wSpan, 0, 'f', 1).arg(sfx));
+    }
+    // Vertical dimension, just left of the structure.
+    if (hSpan > 0.01)
+    {
+        const double x = sMinX - 20.0;
+        p.drawLine(QPointF(x, sMinY), QPointF(x, sMaxY));
+        p.drawLine(QPointF(x - 4, sMinY), QPointF(x + 4, sMinY));
+        p.drawLine(QPointF(x - 4, sMaxY), QPointF(x + 4, sMaxY));
+        p.save();
+        p.translate(x - 4, (sMinY + sMaxY) / 2.0);
+        p.rotate(-90);
+        p.drawText(QRectF(-40, -12, 80, 12), Qt::AlignCenter,
+                   QString("%1%2").arg(hSpan, 0, 'f', 1).arg(sfx));
+        p.restore();
+    }
+}
+
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     drawGrid(p);
     drawStructure(p);
+    drawDimensions(p);
     drawFixtures(p);
 
     // Plane badge.

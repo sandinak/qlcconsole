@@ -115,6 +115,7 @@ private:
     void drawStructure(QPainter &p) const;
     void drawPipe(QPainter &p, const class Pipe *pipe) const;
     void drawFixtures(QPainter &p) const;
+    void drawDimensions(QPainter &p) const;   ///< feature width/height labels (ft/m)
     quint32 hitTestFixture(const QPointF &px) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)

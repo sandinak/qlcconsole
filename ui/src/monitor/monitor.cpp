@@ -105,6 +105,7 @@
 #include "stand.h"
 #include "tower.h"
 #include "structurestudioview.h"
+#include "fixturegroupeditor.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "qlcpalette.h"
@@ -2120,24 +2121,9 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     tree->setContextMenuPolicy(Qt::CustomContextMenu);
     lv->addWidget(tree, 1);
-
-    // A collapsible SOURCE tree of the rest of the patched fixtures — drag one
-    // (or a group folder's children) onto a face to add it there.
-    QGroupBox *srcBox = new QGroupBox(tr("Add fixtures (drag onto a face)"), left);
-    srcBox->setCheckable(true);
-    srcBox->setChecked(false);
-    QVBoxLayout *sbv = new QVBoxLayout(srcBox);
-    sbv->setContentsMargins(4, 2, 4, 4);
-    FixtureSourceTree *srcTree = new FixtureSourceTree(srcBox);
-    srcTree->setHeaderHidden(true);
-    srcTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    srcTree->setDragEnabled(true);
-    srcTree->setDragDropMode(QAbstractItemView::DragOnly);
-    srcTree->setVisible(false);
-    connect(srcBox, &QGroupBox::toggled, srcTree, &QWidget::setVisible);
-    sbv->addWidget(srcTree);
-    lv->addWidget(srcBox, 1);
     left->setMinimumWidth(220);
+    // (The drag-source panel was retired — adding fixtures is a right-click on the
+    //  tree OR the canvas: "Add Fixtures…" opens a multi-select picker.)
 
     // ---- CENTER: toolbar + graphical canvas --------------------------------
     QWidget *center = new QWidget(body);
@@ -2279,6 +2265,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                 {
                     QTreeWidgetItem *gn = new QTreeWidgetItem(tree, QStringList(gname));
                     gn->setExpanded(true);
+                    gn->setData(0, Qt::UserRole + 1, gid);   // folder → fixture-group id
                     groupNodes.insert(gid, gn);
                 }
                 parent = groupNodes.value(gid);
@@ -2291,33 +2278,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     };
     rebuildTree();
 
-    // Source tree: patched fixtures NOT already on this object, by group.
-    auto rebuildSource = [this, srcTree, view]() {
-        srcTree->clear();
-        const QList<quint32> here = view->mountedFixtures();
-        QMap<quint32, QTreeWidgetItem *> gnodes; QTreeWidgetItem *ungr = nullptr;
-        foreach (Fixture *fx, m_doc->fixtures())
-        {
-            if (fx == nullptr || here.contains(fx->id())) continue;
-            quint32 gid = 0; QString gname;
-            foreach (FixtureGroup *g, m_doc->fixtureGroups())
-                if (g && g->fixtureList().contains(fx->id())) { gid = g->id(); gname = g->name(); break; }
-            QTreeWidgetItem *parent;
-            if (gid == 0)
-            {
-                if (!ungr) { ungr = new QTreeWidgetItem(srcTree, QStringList(tr("Ungrouped"))); ungr->setExpanded(true); }
-                parent = ungr;
-            }
-            else
-            {
-                if (!gnodes.contains(gid)) { QTreeWidgetItem *n = new QTreeWidgetItem(srcTree, QStringList(gname)); n->setExpanded(true); gnodes.insert(gid, n); }
-                parent = gnodes.value(gid);
-            }
-            QTreeWidgetItem *it = new QTreeWidgetItem(parent, QStringList(fx->name()));
-            it->setData(0, Qt::UserRole, fx->id());
-        }
-    };
-    rebuildSource();
+    auto rebuildSource = []() {};   // drag-source panel retired (right-click adds)
 
     // Tree selection → highlight on the canvas + populate the inspector.
     connect(tree, &QTreeWidget::itemSelectionChanged, tree, [tree, view, curFid, populate]() {
@@ -2339,10 +2300,12 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         while (*it) { if ((*it)->data(0, Qt::UserRole).toUInt() == fid) { (*it)->setSelected(true); } ++it; }
         tree->blockSignals(false);
     });
-    // Double-click a tree fixture → edit it.
+    // Double-click a tree fixture → edit it; a GROUP folder → its head-layout grid.
     connect(tree, &QTreeWidget::itemDoubleClicked, tree, [this](QTreeWidgetItem *it, int) {
         const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-        if (fid != 0) slotFixtureDoubleClicked(fid);
+        if (fid != 0) { slotFixtureDoubleClicked(fid); return; }
+        const quint32 gid = it->data(0, Qt::UserRole + 1).toUInt();
+        if (gid != 0) openGroupLayout(gid);
     });
     // Gather the fixture ids currently selected in the tree.
     auto selectedFids = [tree]() {
@@ -2594,6 +2557,25 @@ void Monitor::studioDistribute(int kind, quint32 id, StructureStudioView *view,
         m_graphicsView->updateFixture(fid);
     }
     if (view) view->reload();
+    m_doc->setModified();
+}
+
+void Monitor::openGroupLayout(quint32 groupId)
+{
+    FixtureGroup *g = m_doc->fixtureGroup(groupId);
+    if (g == nullptr) return;
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Head Layout — %1").arg(g->name()));
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    // The same grid editor the Fixtures tab uses — it edits the group live.
+    FixtureGroupEditor *ed = new FixtureGroupEditor(g, m_doc, &dlg);
+    vl->addWidget(ed, 1);
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
+    vl->addWidget(bb);
+    dlg.resize(720, 520);
+    dlg.exec();
     m_doc->setModified();
 }
 

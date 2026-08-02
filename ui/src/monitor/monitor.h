@@ -333,6 +333,8 @@ protected slots:
     quint32 structureBoomId(int kind, quint32 id) const;
     /** Create a NEW fixture group from the given fixtures (prompts for a name). */
     void studioCreateGroup(const QList<quint32> &fids, class StructureStudioView *view);
+    /** Open the Fixtures-tab head-layout grid editor for a fixture group. */
+    void openGroupLayout(quint32 groupId);
     /** Evenly space @p fids (or all on-object fixtures) along the current face. */
     void studioDistribute(int kind, quint32 id, class StructureStudioView *view,
                           const QList<quint32> &fids);
