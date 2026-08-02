@@ -6227,6 +6227,26 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     rotSpin->setValue(int(fxItem->rotation()));
     posForm->addRow(tr("Icon rotation (visual):"), rotSpin);
 
+    // A linear fixture (strip / bar / tape) is oriented by its FACE (which surface
+    // it lies on) and run ANGLE — not an icon rotation. Show those instead.
+    QComboBox *faceCbDetail = nullptr;
+    QSpinBox  *angleSpinDetail = nullptr;
+    if (isStrip)
+    {
+        rotSpin->setVisible(false);
+        if (QWidget *l = posForm->labelForField(rotSpin)) l->setVisible(false);
+        faceCbDetail = new QComboBox;
+        faceCbDetail->addItems({ tr("Top surface"), tr("Front / downstage"), tr("Side") });
+        faceCbDetail->setCurrentIndex(qBound(0, rp.studioMount, 2));
+        posForm->addRow(tr("Face:"), faceCbDetail);
+        angleSpinDetail = new QSpinBox;
+        angleSpinDetail->setRange(-180, 180); angleSpinDetail->setSuffix(QString::fromUtf8("°"));
+        angleSpinDetail->setValue(int(rp.studioAngle));
+        angleSpinDetail->setToolTip(tr("Run direction ON that face: 0° = along the "
+                                       "face's horizontal axis (flat/level); 90° = vertical."));
+        posForm->addRow(tr("Angle (run):"), angleSpinDetail);
+    }
+
     // Live facing preview: how this fixture's orientation reads on the 2D stage
     // once saved. Reflects the Rig-Assignment pan-zero direction below (and the
     // icon Rotation) as they change.
@@ -6257,7 +6277,13 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     vl->insertWidget(rigIdx >= 0 ? rigIdx : vl->count(), posBox);
 
     // Gel color
-    QGroupBox *gelBox = new QGroupBox(tr("Gel Color"), &dlg);
+    // For an RGB fixture, "gel" is meaningless (it makes its own colour); this
+    // swatch is only its UNLIT map colour — label it so.
+    const bool hasRGB = fxi && fxi->channelNumber(QLCChannel::Red, QLCChannel::MSB, 0) != QLCChannel::invalid();
+    QGroupBox *gelBox = new QGroupBox(hasRGB ? tr("Map colour (2D display)") : tr("Gel Color"), &dlg);
+    if (hasRGB)
+        gelBox->setToolTip(tr("Only how this RGB fixture is drawn on the 2D map when "
+                              "unlit — it makes its own colour from DMX."));
     QHBoxLayout *gelHl = new QHBoxLayout(gelBox);
     QToolButton *gelBtn = new QToolButton;
     gelBtn->setIconSize(QSize(28, 28));
@@ -6418,8 +6444,10 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     // Stop the test source before committing (ensure clean DMX handoff)
     testSrc.reset();
 
-    // Commit rig props
-    FixtureRigProps newRp;
+    // Commit rig props — START from the EXISTING rig so studio-managed mounts
+    // (pipe / tower / riser / studio-frame + studioMount/Angle/groupLocal) are
+    // PRESERVED; this editor only overwrites the truss/deck + calibration fields.
+    FixtureRigProps newRp = m_props->fixtureRigProps(fxItem->fixtureID());
     newRp.trussId       = trussCb->currentData().toUInt();
     newRp.trussOffset   = float(offsetSpin->value() * fromDisp_fx);
     newRp.mountingType  = static_cast<Truss::MountingType>(mountCb->currentData().toInt());
@@ -6440,6 +6468,8 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());
     newRp.panInvert     = panInvertCb->isChecked();
     newRp.tiltInvert    = tiltInvertCb->isChecked();
+    if (faceCbDetail)    newRp.studioMount = faceCbDetail->currentIndex();
+    if (angleSpinDetail) newRp.studioAngle = float(angleSpinDetail->value());
     // Deck-mounting: default the fixture's Z to the platform top on first
     // assignment so it "sits on" the deck (the editor height is an offset above).
     m_props->setFixtureRigProps(fxItem->fixtureID(), newRp);
