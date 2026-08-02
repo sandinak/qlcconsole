@@ -148,6 +148,13 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     connect(m_doc, SIGNAL(fixtureGroupChanged(quint32)),
             this, SLOT(slotFixtureGroupChanged(quint32)));
 
+    // A group ADDED elsewhere (e.g. created in the Lighting Studio) must appear
+    // here too — the tree previously only refreshed on remove/change.
+    connect(m_doc, &Doc::fixtureGroupAdded, this, [this](quint32) {
+        m_fixtures_tree->updateTree();
+        updateGroupMenu();
+    });
+
     connect(m_doc, SIGNAL(loaded()),
             this, SLOT(slotDocLoaded()));
 
