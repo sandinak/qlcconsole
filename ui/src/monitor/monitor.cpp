@@ -2120,6 +2120,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     tree->setHeaderHidden(true);
     tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    // F2 renames a group folder (double-click is taken by open-head-layout).
+    tree->setEditTriggers(QAbstractItemView::EditKeyPressed);
     lv->addWidget(tree, 1);
     left->setMinimumWidth(220);
     // (The drag-source panel was retired — adding fixtures is a right-click on the
@@ -2266,6 +2268,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                     QTreeWidgetItem *gn = new QTreeWidgetItem(tree, QStringList(gname));
                     gn->setExpanded(true);
                     gn->setData(0, Qt::UserRole + 1, gid);   // folder → fixture-group id
+                    gn->setFlags(gn->flags() | Qt::ItemIsEditable);   // F2 / Rename
                     groupNodes.insert(gid, gn);
                 }
                 parent = groupNodes.value(gid);
@@ -2299,6 +2302,19 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         QTreeWidgetItemIterator it(tree);
         while (*it) { if ((*it)->data(0, Qt::UserRole).toUInt() == fid) { (*it)->setSelected(true); } ++it; }
         tree->blockSignals(false);
+    });
+    // Rename a group folder (F2 or right-click Rename) → update the fixture group.
+    connect(tree, &QTreeWidget::itemChanged, tree, [this](QTreeWidgetItem *it, int col) {
+        if (col != 0) return;
+        const quint32 gid = it->data(0, Qt::UserRole + 1).toUInt();
+        if (gid == 0) return;
+        FixtureGroup *g = m_doc->fixtureGroup(gid);
+        const QString nm = it->text(0).trimmed();
+        if (g != nullptr && !nm.isEmpty() && g->name() != nm)
+        {
+            g->setName(nm);
+            m_doc->setModified();
+        }
     });
     // Double-click a tree fixture → edit it; a GROUP folder → its head-layout grid.
     connect(tree, &QTreeWidget::itemDoubleClicked, tree, [this](QTreeWidgetItem *it, int) {
@@ -2353,10 +2369,21 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             m.addSeparator();
             aNew = m.addAction(tr("New Fixture Group from Selection…"));
         }
+        // Rename when a group folder is under the cursor.
+        QTreeWidgetItem *hit = tree->itemAt(pos);
+        QAction *aRen = nullptr, *aLay = nullptr;
+        if (hit != nullptr && hit->data(0, Qt::UserRole + 1).toUInt() != 0)
+        {
+            m.addSeparator();
+            aRen = m.addAction(tr("Rename Group"));
+            aLay = m.addAction(tr("Head Layout…"));
+        }
         QAction *chosen = m.exec(tree->viewport()->mapToGlobal(pos));
         if (chosen == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); rebuildSource(); }
         else if (chosen == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); rebuildSource(); }
         else if (aNew && chosen == aNew) { studioCreateGroup(selNow, view); rebuildTree(); rebuildSource(); }
+        else if (aRen && chosen == aRen) { tree->editItem(hit, 0); }
+        else if (aLay && chosen == aLay) { openGroupLayout(hit->data(0, Qt::UserRole + 1).toUInt()); }
     });
     auto refreshMap = [this]() {
         foreach (Fixture *fx, m_doc->fixtures())

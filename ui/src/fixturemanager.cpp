@@ -1227,6 +1227,17 @@ void FixtureManager::initToolBar()
     toolbar->addAction(m_exportAction);
     toolbar->addAction(m_remapAction);
 
+    // Discrete expand/collapse-all for the group tree.
+    toolbar->addSeparator();
+    QAction *expandAllAction = new QAction(QIcon(":/edit_add.png"), tr("Expand all groups"), this);
+    QAction *collapseAllAction = new QAction(QIcon(":/edit_remove.png"), tr("Collapse all groups"), this);
+    connect(expandAllAction, &QAction::triggered, this,
+            [this]() { if (m_fixtures_tree) m_fixtures_tree->expandAll(); });
+    connect(collapseAllAction, &QAction::triggered, this,
+            [this]() { if (m_fixtures_tree) m_fixtures_tree->collapseAll(); });
+    toolbar->addAction(expandAllAction);
+    toolbar->addAction(collapseAllAction);
+
     QToolButton* btn = qobject_cast<QToolButton*> (toolbar->widgetForAction(m_groupAction));
     Q_ASSERT(btn != NULL);
     btn->setPopupMode(QToolButton::InstantPopup);
