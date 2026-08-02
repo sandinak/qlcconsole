@@ -5542,6 +5542,7 @@ public:
     void setFacing(double deg)  { m_facing = float(deg); update(); }
     void setIconRotation(double deg) { m_rotation = float(deg); update(); }
     void setPanMax(double deg)  { m_panMax = deg > 0 ? float(deg) : 360.0f; update(); }
+    void setFace(int f)         { m_face = f; update(); }   ///< studioMount (0=Top,1=Front,2=Side)
 
 protected:
     void paintEvent(QPaintEvent *) override
@@ -5564,34 +5565,9 @@ protected:
         p.drawText(QRectF(r.right() - 16, r.top(), 15, r.height()), Qt::AlignVCenter | Qt::AlignRight, tr("SR"));
         p.drawText(QRectF(r.left() + 1,   r.top(), 15, r.height()), Qt::AlignVCenter | Qt::AlignLeft,  tr("SL"));
 
-        if (!m_hasPan)
-        {
-            p.setPen(QColor(150, 150, 150));
-            p.drawText(r, Qt::AlignCenter, tr("(no pan)"));
-            return;
-        }
-
         p.save();
         p.translate(c);
-
         const qreal bodyHalf = 12.0;
-
-        // Pan-range wedge — centred on the FACING (Front of device).  Independent
-        // of the icon rotation: the visual icon spin must never move the aim.
-        const qreal wedgeReach = bodyHalf + 30.0;
-        QRectF arcR(-wedgeReach, -wedgeReach, 2 * wedgeReach, 2 * wedgeReach);
-        const int startQt = qRound((270.0 + double(m_facing) - double(m_panMax) / 2.0) * 16.0);
-        const int spanQt  = qRound(double(m_panMax) * 16.0);
-        p.setPen(QPen(QColor(120, 90, 160, 130), 2));
-        p.drawArc(arcR, startQt, spanQt);
-
-        // Body — rotated by the VISUAL icon rotation ONLY (cosmetic layout).
-        p.save();
-        p.rotate(m_rotation);
-        p.setPen(QPen(QColor(150, 150, 150), 1));
-        p.setBrush(QColor(33, 33, 33));
-        p.drawRect(QRectF(-bodyHalf, -bodyHalf, 2 * bodyHalf, 2 * bodyHalf));
-        p.restore();
 
         // Helper: draw an arrow from centre toward (sin a, cos a) — the same
         // mapping the 2D fixture item uses (0°=DS, 90°=SR, 180°=US, 270°=SL).
@@ -5608,20 +5584,50 @@ protected:
             QPolygonF head; head << tip << (base + perp * halfHead) << (base - perp * halfHead);
             p.drawPolygon(head);
         };
+        auto drawBody = [&](float rotDeg) {
+            p.save(); p.rotate(rotDeg);
+            p.setPen(QPen(QColor(150, 150, 150), 1)); p.setBrush(QColor(33, 33, 33));
+            p.drawRect(QRectF(-bodyHalf, -bodyHalf, 2 * bodyHalf, 2 * bodyHalf));
+            p.restore();
+        };
 
-        // BLUE arrow = icon (visual) rotation.  Shown only in this preview — never
-        // in the 2D stage view.  Drawn shorter/under the green arrow.
-        drawArrow(m_rotation, 20.0, 4.5, QColor(90, 150, 230));
+        // No pan: a FIXED fixture still faces a direction, from its mounting face —
+        // Front→DS (out to the audience), Side→SR, Top→straight down (a target).
+        if (!m_hasPan)
+        {
+            drawBody(0);
+            if (m_face == 0)   // top face: beam perpendicular to this plan view
+            {
+                p.setPen(QPen(QColor(80, 200, 120), 1.6)); p.setBrush(QColor(80, 200, 120));
+                p.drawEllipse(QPointF(0, 0), 4.5, 4.5);
+                p.setBrush(Qt::NoBrush); p.drawEllipse(QPointF(0, 0), 9, 9);
+            }
+            else               // front→DS (0°), side→SR (90°)
+            {
+                drawArrow((m_face == 2) ? 90.0f : 0.0f, 28.0, 5.0, QColor(80, 200, 120));
+            }
+            p.restore();
+            return;
+        }
 
-        // GREEN arrow = facing / Front of device.  This drives the aim and is the
-        // arrow shown in the 2D view.  Independent of the icon rotation above.
-        drawArrow(m_facing, 28.0, 5.0, QColor(80, 200, 120));
+        // Pan-range wedge — centred on the FACING (Front of device).
+        const qreal wedgeReach = bodyHalf + 30.0;
+        QRectF arcR(-wedgeReach, -wedgeReach, 2 * wedgeReach, 2 * wedgeReach);
+        const int startQt = qRound((270.0 + double(m_facing) - double(m_panMax) / 2.0) * 16.0);
+        const int spanQt  = qRound(double(m_panMax) * 16.0);
+        p.setPen(QPen(QColor(120, 90, 160, 130), 2));
+        p.drawArc(arcR, startQt, spanQt);
+
+        drawBody(m_rotation);                                  // body: icon rotation only
+        drawArrow(m_rotation, 20.0, 4.5, QColor(90, 150, 230)); // BLUE = icon rotation
+        drawArrow(m_facing, 28.0, 5.0, QColor(80, 200, 120));   // GREEN = facing (drives aim)
 
         p.restore();
     }
 
 private:
     bool  m_hasPan   = true;
+    int   m_face     = 1;      ///< studioMount for a fixed fixture's facing
     float m_facing   = 0.0f;
     float m_rotation = 0.0f;
     float m_panMax   = 360.0f;
@@ -6276,8 +6282,15 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         FacingPreviewWidget *preview = new FacingPreviewWidget(posBox);
         preview->setHasPan(hasPanFx);
         preview->setPanMax(panMaxFx);
+        preview->setFace(rp.studioMount);   // fixed fixtures face by their mount face
         preview->setFacing(panZeroSpin->value());
         preview->setIconRotation(rotSpin->value());
+        if (angleSpinDetail)
+            connect(angleSpinDetail, QOverload<int>::of(&QSpinBox::valueChanged),
+                    [preview](int) { preview->update(); });
+        if (faceCbDetail)
+            connect(faceCbDetail, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                    [preview](int f) { preview->setFace(f); });
         posRow->addWidget(preview, 0, Qt::AlignTop);
 
         // The pan-zero control lives in the Rig Assignment block below; keep the
