@@ -3577,6 +3577,11 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         emit imageDoubleClicked(ii->imageId());
         return;
     }
+    if (auto *ps = dynamic_cast<PowerSourceItem *>(it))
+    {
+        emit powerDoubleClicked(quint32(ps->sourceIndex()));
+        return;
+    }
 
     QGraphicsView::mouseDoubleClickEvent(event);
 }
