@@ -2413,14 +2413,27 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     auto rebuildTree = [this, tree, view]() {
         tree->blockSignals(true);
         tree->clear();
+        // The fixtures on THIS object — a fixture group counts as "local" only if
+        // every one of its members is among them (not a cross-assembly / global
+        // group). This matches the Layers tree so the two listings agree.
+        const QList<quint32> mounted = view->mountedFixtures();
+        const QSet<quint32> mountedSet(mounted.begin(), mounted.end());
         QMap<quint32, QTreeWidgetItem *> groupNodes;   // fixtureGroup id → node
         QTreeWidgetItem *ungrouped = nullptr;
-        foreach (quint32 fid, view->mountedFixtures())
+        foreach (quint32 fid, mounted)
         {
-            // Find the first fixture group this fixture belongs to.
+            // Find the first LOCAL fixture group this fixture belongs to (all its
+            // members are on this object); global groups don't organise the tree.
             quint32 gid = 0; QString gname;
             foreach (FixtureGroup *g, m_doc->fixtureGroups())
-                if (g && g->fixtureList().contains(fid)) { gid = g->id(); gname = g->name(); break; }
+            {
+                if (g == nullptr || !g->fixtureList().contains(fid))
+                    continue;
+                bool local = true;
+                foreach (quint32 m, g->fixtureList())
+                    if (!mountedSet.contains(m)) { local = false; break; }
+                if (local) { gid = g->id(); gname = g->name(); break; }
+            }
             QTreeWidgetItem *parent;
             if (gid == 0)
             {
