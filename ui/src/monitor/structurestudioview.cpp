@@ -591,11 +591,22 @@ void StructureStudioView::drawStructure(QPainter &p) const
         // Use the platform's own colour (its colour-picker value), like the 2D map.
         QColor pc = pl->color().isValid() ? pl->color() : QColor(110, 120, 140);
         QColor fill = pc; fill.setAlpha(70);
-        p.setPen(QPen(pc.darker(140), 1.6));
-        p.setBrush(fill);
+        // Crisp edge: a dark halo under a bright outline so the outline reads on
+        // the dark canvas AND where platforms overlap (stacked steps).
+        const QColor halo = pc.darker(230);
+        const QColor edge = pc.lighter(165);
+        // Two-pass outline helper (halo first, bright edge on top).
+        auto outline = [&](const QRectF &r) {
+            p.setBrush(fill);
+            p.setPen(QPen(halo, 3.2));
+            p.drawRect(r);
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QPen(edge, 1.6));
+            p.drawRect(r);
+        };
         if (m_plane == Top)
         {
-            p.drawRect(QRectF(w2s(QVector3D(x0, y0, 0)), w2s(QVector3D(x1, y1, 0))).normalized());
+            outline(QRectF(w2s(QVector3D(x0, y0, 0)), w2s(QVector3D(x1, y1, 0))).normalized());
         }
         else
         {
@@ -605,8 +616,8 @@ void StructureStudioView::drawStructure(QPainter &p) const
             const float top = b0 + h;
             const QPointF a = w2s(QVector3D(x0, y0, b0));
             const QPointF b = w2s(QVector3D(x1, y1, top));
-            p.drawRect(QRectF(a, b).normalized());
-            p.setPen(QPen(steel.lighter(140), 1.4));   // deck line
+            outline(QRectF(a, b).normalized());
+            p.setPen(QPen(edge.lighter(115), 1.8));   // deck line (bright, on top)
             p.drawLine(w2s(QVector3D(x0, y0, top)), w2s(QVector3D(x1, y1, top)));
         }
     }
