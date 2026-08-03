@@ -107,7 +107,24 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     QFont tf = title->font();
     tf.setBold(true);
     title->setFont(tf);
-    titleRow->addWidget(title, 1);
+    titleRow->addWidget(title);
+
+    // Expand-all / collapse-all, right of the "Layers" label.
+    QToolButton *expandBtn = new QToolButton(this);
+    expandBtn->setText("\xE2\x8A\x9E");   // ⊞
+    expandBtn->setAutoRaise(true);
+    expandBtn->setToolTip(tr("Expand all"));
+    connect(expandBtn, &QToolButton::clicked, this, [this]() { m_tree->expandAll(); });
+    titleRow->addWidget(expandBtn);
+
+    QToolButton *collapseBtn = new QToolButton(this);
+    collapseBtn->setText("\xE2\x8A\x9F");   // ⊟
+    collapseBtn->setAutoRaise(true);
+    collapseBtn->setToolTip(tr("Collapse all"));
+    connect(collapseBtn, &QToolButton::clicked, this, [this]() { m_tree->collapseAll(); });
+    titleRow->addWidget(collapseBtn);
+
+    titleRow->addStretch(1);
     m_hideBtn = new QToolButton(this);
     m_hideBtn->setText("\xC3\x97"); // ×
     m_hideBtn->setAutoRaise(true);
@@ -339,24 +356,20 @@ void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
         node->setFlags(node->flags() | Qt::ItemIsEditable);
     else
         node->setFlags(node->flags() & ~Qt::ItemIsEditable);
-    if (d.kind == QStringLiteral("fixture"))
-        node->setIcon(0, QIcon(":/fixture.png"));
-    else if (d.kind == QStringLiteral("truss"))
-        node->setIcon(0, QIcon(":/group.png"));
-    else if (d.kind == QStringLiteral("platform"))
-        node->setIcon(0, swatchIcon(d.color));                 // colour-coded riser
-    else if (d.kind == QStringLiteral("pipe"))
-        node->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x8E\xA4"), QColor(150, 200, 235))); // 🎤 boom
-    else if (d.kind == QStringLiteral("stand"))
-        node->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x93\x8D"), QColor(150, 200, 235))); // 📍 stand
-    else if (d.kind == QStringLiteral("tower"))
-        node->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x8F\xAF"), QColor(150, 200, 235))); // 🏯 tower
-    else if (d.kind == QStringLiteral("power"))
-        node->setIcon(0, glyphIcon(QStringLiteral("\xE2\x9A\xA1"), QColor(235, 185, 0))); // ⚡
-    else if (d.kind == QStringLiteral("image"))
-        node->setIcon(0, QIcon(":/image.png"));
-    else
-        node->setIcon(0, style()->standardIcon(QStyle::SP_FileIcon));
+    node->setIcon(0, kindIcon(d.kind, d.color));
+}
+
+QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) const
+{
+    if (kind == QStringLiteral("fixture"))  return QIcon(":/fixture.png");
+    if (kind == QStringLiteral("truss"))    return QIcon(":/group.png");
+    if (kind == QStringLiteral("platform")) return swatchIcon(color);           // colour-coded riser
+    if (kind == QStringLiteral("pipe"))     return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xA4"), QColor(150, 200, 235)); // 🎤 boom
+    if (kind == QStringLiteral("stand"))    return glyphIcon(QStringLiteral("\xF0\x9F\x93\x8D"), QColor(150, 200, 235)); // 📍 stand
+    if (kind == QStringLiteral("tower"))    return glyphIcon(QStringLiteral("\xF0\x9F\x8F\xAF"), QColor(150, 200, 235)); // 🏯 tower
+    if (kind == QStringLiteral("power"))    return glyphIcon(QStringLiteral("\xE2\x9A\xA1"), QColor(235, 185, 0));       // ⚡
+    if (kind == QStringLiteral("image"))    return QIcon(":/image.png");
+    return style()->standardIcon(QStyle::SP_FileIcon);
 }
 
 void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId,
@@ -394,7 +407,24 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
     else
     {
         node->setText(0, g.name);
-        node->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
+        // A manual group whose direct members are all ONE kind wears that kind's
+        // icon (a group of trusses reads as trusses, not a bare folder); mixed or
+        // empty groups keep the folder.
+        QString commonKind;
+        QColor  commonColor;
+        bool uniform = true, any = false;
+        foreach (const ItemDesc &d, items)
+        {
+            if (d.groupId != groupId)
+                continue;
+            any = true;
+            if (commonKind.isEmpty()) { commonKind = d.kind; commonColor = d.color; }
+            else if (commonKind != d.kind) { uniform = false; break; }
+        }
+        if (any && uniform && !commonKind.isEmpty())
+            node->setIcon(0, kindIcon(commonKind, commonColor));
+        else
+            node->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
     }
     node->setToolTip(0, node->text(0));
     node->setFirstColumnSpanned(true);   // full-width name (no eye/lock column)

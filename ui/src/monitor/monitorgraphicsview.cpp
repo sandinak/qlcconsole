@@ -675,6 +675,12 @@ quint32 MonitorGraphicsView::itemLayerId(QGraphicsItem *gi) const
         return pi->platform() ? pi->platform()->layerId() : 0;
     if (auto *tg = dynamic_cast<TargetItem *>(gi))
         return tg->target() ? tg->target()->layerId() : 0;
+    if (auto *bi = dynamic_cast<PipeItem *>(gi))
+        return bi->pipe() ? bi->pipe()->layerId() : 0;
+    if (auto *si = dynamic_cast<StandItem *>(gi))
+        return si->stand() ? si->stand()->layerId() : 0;
+    if (auto *twi = dynamic_cast<TowerItem *>(gi))
+        return twi->tower() ? twi->tower()->layerId() : 0;
     if (auto *ps = dynamic_cast<PowerSourceItem *>(gi))
     {
         PowerDistribution *pd = m_doc->powerDistribution();

@@ -143,6 +143,9 @@ private:
     void buildGroupNode(QTreeWidgetItem *parent, quint32 groupId,
                         const QList<ItemDesc> &items);
     void addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d);
+    /** The tree icon for an item KIND (fixture/truss/platform/pipe/stand/tower/
+     *  image/power). @p color tints the platform swatch. */
+    QIcon kindIcon(const QString &kind, const QColor &color) const;
 
     /** Remove the given (kind,id) leaves from their current group. A fixture
      *  mounted on the group's anchor structure is also detached from that mount
