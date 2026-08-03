@@ -21,6 +21,8 @@
 #include <QTreeWidgetItem>
 #include <QHeaderView>
 #include <QToolButton>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QToolBar>
 #include <QLabel>
 #include <QMenu>
@@ -1084,9 +1086,29 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
     const QList<QPair<QString, quint32> > objs = selectedObjects();
     if (m_editable && objs.size() >= 2)
     {
-        menu.addAction(tr("Group selected"), this, [this, objs]() {
-            m_view->selectMapItems(objs);
-            m_view->groupSelectedItems();
+        menu.addAction(tr("Group selected…"), this, [this, objs, item]() {
+            // Target layer = the one the (clicked) selection lives under, so the
+            // group and its members stay on their current layer.
+            quint32 layer = m_props->activeLayerId();
+            for (QTreeWidgetItem *up = item; up != nullptr; up = up->parent())
+                if (up->data(0, NodeTypeRole).toInt() == NodeLayer)
+                { layer = up->data(0, NodeIdRole).toUInt(); break; }
+
+            bool ok = false;
+            const quint32 gid = m_props->nextGroupId();
+            const QString name = QInputDialog::getText(this, tr("Group Selected"),
+                tr("Name for the new group:"), QLineEdit::Normal,
+                tr("Group %1").arg(gid), &ok).trimmed();
+            if (!ok || name.isEmpty())
+                return;
+            // Create the group and move the selected objects into it directly
+            // (robust regardless of canvas selectability / layer locks).
+            m_props->createGroup(gid, name, layer, 0);
+            if (m_view)
+                m_view->reparentToGroup(objs, gid);
+            m_doc->setModified();
+            m_focusLayerAfterReload = int(layer);
+            reload();
         });
     }
     if (m_editable && !objs.isEmpty())
