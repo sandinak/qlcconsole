@@ -608,6 +608,16 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->addWidget(rulerBtn);
     connect(rulerBtn, &QToolButton::toggled, this, [this](bool on) { setRulersVisible(on); });
 
+    // Fixture labels show/hide toggle (moved here from the "More" menu, beside
+    // Snap / Rulers).
+    QToolButton *labelsBtn = new QToolButton(footer);
+    labelsBtn->setText(tr("Labels"));
+    labelsBtn->setCheckable(true);
+    labelsBtn->setChecked(m_props->labelsVisible());
+    labelsBtn->setToolTip(tr("Show or hide fixture labels"));
+    fl->addWidget(labelsBtn);
+    connect(labelsBtn, &QToolButton::toggled, this, [this](bool on) { slotShowLabels(on); });
+
     // Origin / centering control: click-to-place or a preset. The ⌖ glyph
     // marks it as the "set the 0,0 origin / centre" control.
     QToolButton *originBtn = new QToolButton(footer);
@@ -1239,13 +1249,7 @@ void Monitor::initGraphicsToolbar()
     moreMenu->addAction(m_pasteAction);
     addAction(m_pasteAction);
 
-    moreMenu->addSeparator();
-
-    m_labelsAction = new QAction(QIcon(":/label.png"), tr("Show/hide labels"), this);
-    m_labelsAction->setCheckable(true);
-    m_labelsAction->setChecked(m_props->labelsVisible());
-    connect(m_labelsAction, SIGNAL(triggered(bool)), this, SLOT(slotShowLabels(bool)));
-    moreMenu->addAction(m_labelsAction);
+    // (Show/hide labels moved to a footer button, beside Snap / Rulers.)
 
     // Background image is now a placeable object (Add ▸ Add Image) that lives in
     // a layer; flat background colour stays here.
