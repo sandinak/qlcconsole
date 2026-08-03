@@ -194,8 +194,8 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     });
     vbox->addWidget(m_tree, 1);
 
-    QLabel *hint = new QLabel(tr("Enter/F2 renames a layer or group. Multi-select "
-                                 "items, then right-click to group or move."), this);
+    QLabel *hint = new QLabel(tr("Enter/F2 renames a layer or folder. Multi-select "
+                                 "items, then right-click to make a folder or move."), this);
     hint->setWordWrap(true);
     QFont hf = hint->font();
     hf.setPointSizeF(hf.pointSizeF() - 1.0);
@@ -1115,7 +1115,7 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
     const QList<QPair<QString, quint32> > objs = selectedObjects();
     if (m_editable && objs.size() >= 2)
     {
-        menu.addAction(tr("Group selected…"), this, [this, objs, item]() {
+        menu.addAction(tr("New Folder from selection…"), this, [this, objs, item]() {
             // If every selected leaf already sits under the SAME group, the new
             // group nests INSIDE it (a sub-group) rather than becoming a top-level
             // sibling. Otherwise it's a top-level group on the selection's layer.
@@ -1144,9 +1144,9 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
 
             bool ok = false;
             const quint32 gid = m_props->nextGroupId();
-            const QString name = QInputDialog::getText(this, tr("Group Selected"),
-                tr("Name for the new group:"), QLineEdit::Normal,
-                tr("Group %1").arg(gid), &ok).trimmed();
+            const QString name = QInputDialog::getText(this, tr("New Folder"),
+                tr("Folder name:"), QLineEdit::Normal,
+                tr("Folder %1").arg(gid), &ok).trimmed();
             if (!ok || name.isEmpty())
                 return;
             // Create the group (nested under parentGroup when the selection shares
@@ -1226,10 +1226,15 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
                     reload();
                 });
             }
-            menu.addAction(tr("Rename group…"), this, [this, item]() {
+            // A plain group is a Folder; an anchored/framed one is an Assembly
+            // (fixtures mounted on an object) — label accordingly.
+            const bool isAssembly = g.hasFrame || !g.anchorKind.isEmpty();
+            menu.addAction(isAssembly ? tr("Rename…") : tr("Rename folder…"),
+                           this, [this, item]() {
                 m_tree->editItem(item, 0);
             });
-            menu.addAction(tr("Ungroup"), this, [this, id]() {
+            menu.addAction(isAssembly ? tr("Ungroup") : tr("Dissolve folder"),
+                           this, [this, id]() {
                 if (m_view) m_view->ungroupById(id);
             });
         }
@@ -1281,8 +1286,8 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
             if (!targets.isEmpty())
             {
                 const QString label = targets.size() > 1
-                    ? tr("Remove %1 items from group").arg(targets.size())
-                    : tr("Remove from group");
+                    ? tr("Remove %1 items from folder").arg(targets.size())
+                    : tr("Remove from folder");
                 menu.addAction(label, this, [this, targets]() {
                     removeLeavesFromGroup(targets);
                 });
