@@ -899,11 +899,12 @@ static QVector3D barFaceVector(int face)
 void MonitorProperties::recomputeAnchoredFrames()
 {
     // A studio group anchored to a platform is SLAVED to it: its local frame
-    // origin tracks the platform's reference corner (upstage-left, at floor
-    // level) with no rotation (platforms are axis-aligned). Members stored in
-    // group-local metres therefore follow the platform when it moves/resizes —
-    // and the group's Front plane IS the riser face. Call after any platform
-    // move and once after load.
+    // origin tracks the platform's reference corner (upstage-left) with no
+    // rotation (platforms are axis-aligned). The origin Z is the platform's BASE
+    // — the floor, or the deck of a platform it's stacked on — so members stored
+    // in group-local metres follow the platform in height as well as plan when it
+    // moves/resizes/stacks, and the group's Front plane IS the riser face. Call
+    // after any platform move and once after load.
     for (auto it = m_groups.begin(); it != m_groups.end(); ++it)
     {
         MonitorGroup &g = it.value();
@@ -912,7 +913,7 @@ void MonitorProperties::recomputeAnchoredFrames()
         const StagePlatform *pl = m_platforms.value(g.anchorId, nullptr);
         if (pl == nullptr)
             continue;
-        g.origin   = QVector3D(pl->originX(), pl->originY(), 0.0f);
+        g.origin   = QVector3D(pl->originX(), pl->originY(), platformBaseZ(pl->id()));
         g.rotation = 0.0f;
     }
 }
