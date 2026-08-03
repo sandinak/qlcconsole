@@ -343,6 +343,15 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
     return out;
 }
 
+void MonitorLayersPanel::setSubtreeExpanded(QTreeWidgetItem *node, bool expanded)
+{
+    if (node == nullptr)
+        return;
+    node->setExpanded(expanded);
+    for (int i = 0; i < node->childCount(); ++i)
+        setSubtreeExpanded(node->child(i), expanded);
+}
+
 void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
 {
     QTreeWidgetItem *node = new QTreeWidgetItem(parent);
@@ -511,6 +520,26 @@ void MonitorLayersPanel::reload()
                 "QToolButton:disabled{background:rgba(90,90,94,0.25);}")
                 .arg(QLatin1String(on ? onBg : offBg)));
         };
+
+        // Collapse / expand just this layer's subtree (neutral, not a state
+        // toggle) — leftmost so it reads as the row's disclosure control.
+        QToolButton *coll = new QToolButton(row);
+        coll->setFixedSize(20, 20);
+        coll->setToolTip(tr("Collapse / expand this layer"));
+        {
+            QFont f = coll->font(); f.setBold(true); coll->setFont(f);
+            coll->setStyleSheet(
+                "QToolButton{border:none;border-radius:4px;background:rgba(90,90,94,0.35);}"
+                "QToolButton:hover{border:1px solid rgba(255,255,255,0.4);}");
+        }
+        coll->setText(QStringLiteral("\xE2\x8A\x9F"));   // ⊟ (layers build expanded)
+        h->addWidget(coll);
+        connect(coll, &QToolButton::clicked, this, [layerNode, coll]() {
+            const bool nowExpanded = !layerNode->isExpanded();
+            setSubtreeExpanded(layerNode, nowExpanded);
+            coll->setText(nowExpanded ? QStringLiteral("\xE2\x8A\x9F")
+                                      : QStringLiteral("\xE2\x8A\x9E"));
+        });
 
         QToolButton *eye = new QToolButton(row);
         eye->setCheckable(true);
