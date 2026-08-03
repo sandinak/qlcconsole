@@ -75,6 +75,7 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "tower.h"
 #include "fixturegroup.h"
 #include "createfixturegroup.h"
+#include <QLineEdit>
 #include <QtMath>
 #include "stagetarget.h"
 #include "truss.h"
@@ -170,6 +171,13 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     tb->addWidget(m_moveHereBtn);
 
     vbox->addWidget(tb);
+
+    // Search / filter box — find things in a deep tree by name.
+    m_search = new QLineEdit(this);
+    m_search->setPlaceholderText(tr("Search the tree…"));
+    m_search->setClearButtonEnabled(true);
+    connect(m_search, &QLineEdit::textChanged, this, &MonitorLayersPanel::filterTree);
+    vbox->addWidget(m_search);
 
     m_tree = new LayersTreeWidget(this);
     m_tree->setHeaderHidden(true);
@@ -353,6 +361,28 @@ void MonitorLayersPanel::setSubtreeExpanded(QTreeWidgetItem *node, bool expanded
     node->setExpanded(expanded);
     for (int i = 0; i < node->childCount(); ++i)
         setSubtreeExpanded(node->child(i), expanded);
+}
+
+static bool applyTreeFilter(QTreeWidgetItem *node, const QString &t)
+{
+    bool childVisible = false;
+    for (int i = 0; i < node->childCount(); ++i)
+        childVisible = applyTreeFilter(node->child(i), t) || childVisible;
+    const bool selfMatch = t.isEmpty() || node->text(0).contains(t, Qt::CaseInsensitive);
+    const bool visible = selfMatch || childVisible;
+    node->setHidden(!visible);
+    if (!t.isEmpty() && visible)
+        node->setExpanded(true);   // reveal matches inside collapsed branches
+    return visible;
+}
+
+void MonitorLayersPanel::filterTree(const QString &text)
+{
+    if (m_tree == nullptr)
+        return;
+    const QString t = text.trimmed();
+    for (int i = 0; i < m_tree->topLevelItemCount(); ++i)
+        applyTreeFilter(m_tree->topLevelItem(i), t);
 }
 
 void MonitorLayersPanel::createFixtureGroupFrom(const QList<quint32> &fixtureIds)
@@ -711,6 +741,10 @@ void MonitorLayersPanel::reload()
     }
 
     updateButtons();
+
+    // Re-apply the active search filter to the freshly-rebuilt rows.
+    if (m_search != nullptr && !m_search->text().trimmed().isEmpty())
+        filterTree(m_search->text());
 }
 
 bool MonitorLayersPanel::eventFilter(QObject *obj, QEvent *event)
@@ -1431,6 +1465,43 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
                     : tr("Remove from folder");
                 menu.addAction(label, this, [this, targets]() {
                     removeLeavesFromGroup(targets);
+                });
+            }
+        }
+
+        // Remove from Fixture Group — for selected fixtures nested under a 💡 node,
+        // resign them from THAT lighting group (works on the whole selection).
+        if (m_editable && kind == QStringLiteral("fixture"))
+        {
+            QList<QPair<quint32, quint32> > fgRemovals;   // (fixtureGroupId, fixtureId)
+            QSet<QString> seenFg;
+            auto addFix = [&](QTreeWidgetItem *leaf) {
+                if (leaf == nullptr || leaf->data(0, NodeTypeRole).toInt() != NodeItem
+                    || leaf->data(0, NodeKindRole).toString() != QStringLiteral("fixture"))
+                    return;
+                QTreeWidgetItem *pp = leaf->parent();
+                if (pp == nullptr || pp->data(0, NodeTypeRole).toInt() != NodeFixtureGroup)
+                    return;
+                const quint32 fgId = pp->data(0, NodeIdRole).toUInt();
+                const quint32 fid  = leaf->data(0, NodeIdRole).toUInt();
+                const QString key  = QString::number(fgId) + ':' + QString::number(fid);
+                if (!seenFg.contains(key)) { seenFg.insert(key); fgRemovals << qMakePair(fgId, fid); }
+            };
+            addFix(item);
+            foreach (QTreeWidgetItem *sel, m_tree->selectedItems())
+                addFix(sel);
+
+            if (!fgRemovals.isEmpty())
+            {
+                const QString label = fgRemovals.size() > 1
+                    ? tr("Remove %1 fixtures from Fixture Group").arg(fgRemovals.size())
+                    : tr("Remove from Fixture Group");
+                menu.addAction(label, this, [this, fgRemovals]() {
+                    foreach (const auto &pr, fgRemovals)
+                        if (FixtureGroup *fg = m_doc->fixtureGroup(pr.first))
+                            fg->resignFixture(pr.second);
+                    m_doc->setModified();
+                    reload();
                 });
             }
         }

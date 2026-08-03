@@ -147,6 +147,9 @@ private:
                         const QList<ItemDesc> &items);
     /** Expand or collapse a node and all of its descendants. */
     static void setSubtreeExpanded(QTreeWidgetItem *node, bool expanded);
+    /** Hide tree rows that don't match @p text (matches keep their ancestors +
+     *  descendants visible); empty shows everything. */
+    void filterTree(const QString &text);
     /** Create a lighting Fixture Group (prompted name) from the given fixtures —
      *  the explicit "make a control group" action (distinct from map Folders). */
     void createFixtureGroupFrom(const QList<quint32> &fixtureIds);
@@ -196,6 +199,7 @@ private:
     MonitorGraphicsView *m_view;
 
     LayersTreeWidget *m_tree;
+    class QLineEdit *m_search = nullptr;   //!< filter box above the tree
     QToolButton *m_addBtn;
     QToolButton *m_removeBtn;
     QToolButton *m_upBtn;
