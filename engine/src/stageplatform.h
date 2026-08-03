@@ -88,6 +88,16 @@ public:
     bool locked() const { return m_locked; }
     void setLocked(bool l) { m_locked = l; }
 
+    /** Solid = occupies stage space: two solid platforms can't be dragged to
+     *  overlap (blocked at contact). Platforms default solid. */
+    bool solid() const { return m_solid; }
+    void setSolid(bool s) { m_solid = s; }
+
+    /** Stackable = may sit ON TOP of solid platforms (a step / riser on a deck),
+     *  so it's exempt from the no-overlap rule. Off by default. */
+    bool stackable() const { return m_stackable; }
+    void setStackable(bool s) { m_stackable = s; }
+
     /** Organizational layer this item belongs to on the 2D map (0 = Default). */
     quint32 layerId() const { return m_layerId; }
     void setLayerId(quint32 id) { m_layerId = id; }
@@ -113,6 +123,8 @@ private:
     float   m_height  = 0.5f;
     QColor  m_color;
     bool    m_locked  = false;
+    bool    m_solid     = true;    ///< occupies space: no-overlap with other solids
+    bool    m_stackable = false;   ///< may sit on top of solids (step/riser)
     quint32 m_layerId = 0;   ///< 2D-map organizational layer (0 = Default)
     quint32 m_groupId = 0;   ///< 2D-map group (0 = ungrouped)
 };

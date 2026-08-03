@@ -24,6 +24,8 @@
 #define KXMLPlatformHeight  QStringLiteral("Height")
 #define KXMLPlatformColor   QStringLiteral("Color")
 #define KXMLPlatformLocked  QStringLiteral("Locked")
+#define KXMLPlatformSolid     QStringLiteral("Solid")
+#define KXMLPlatformStackable QStringLiteral("Stackable")
 #define KXMLPlatformLayerId QStringLiteral("LayerId")
 #define KXMLPlatformGroupId QStringLiteral("GroupId")
 
@@ -57,6 +59,9 @@ bool StagePlatform::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLPlatformHeight))  setHeight(a.value(KXMLPlatformHeight).toFloat());
     if (a.hasAttribute(KXMLPlatformColor))   m_color = QColor(a.value(KXMLPlatformColor).toString());
     if (a.hasAttribute(KXMLPlatformLocked))  m_locked = (a.value(KXMLPlatformLocked).toString() == "true");
+    // Solid defaults ON (legacy platforms without the attribute are solid).
+    if (a.hasAttribute(KXMLPlatformSolid))     m_solid = (a.value(KXMLPlatformSolid).toString() == "true");
+    if (a.hasAttribute(KXMLPlatformStackable)) m_stackable = (a.value(KXMLPlatformStackable).toString() == "true");
     if (a.hasAttribute(KXMLPlatformLayerId)) m_layerId = a.value(KXMLPlatformLayerId).toUInt();
     if (a.hasAttribute(KXMLPlatformGroupId)) m_groupId = a.value(KXMLPlatformGroupId).toUInt();
 
@@ -78,6 +83,10 @@ bool StagePlatform::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLPlatformColor, m_color.name());
     if (m_locked)
         doc->writeAttribute(KXMLPlatformLocked, "true");
+    if (!m_solid)                                    // solid is the default
+        doc->writeAttribute(KXMLPlatformSolid, "false");
+    if (m_stackable)
+        doc->writeAttribute(KXMLPlatformStackable, "true");
     if (m_layerId != 0)
         doc->writeAttribute(KXMLPlatformLayerId, QString::number(m_layerId));
     if (m_groupId != 0)

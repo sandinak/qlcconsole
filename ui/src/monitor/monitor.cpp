@@ -4190,6 +4190,23 @@ void Monitor::slotEditPlatform(quint32 pid)
     });
     form->addRow(tr("Color:"), colorBtn);
 
+    // No-overlap collision properties.
+    QCheckBox *solidChk = new QCheckBox(tr("Solid — can't overlap other solid platforms"), &dlg);
+    solidChk->setChecked(p->solid());
+    form->addRow(tr("Collision:"), solidChk);
+    QCheckBox *stackChk = new QCheckBox(tr("Stackable — may sit on top (step / riser)"), &dlg);
+    stackChk->setChecked(p->stackable());
+    stackChk->setToolTip(tr("A stackable platform is exempt from the no-overlap rule, "
+                            "so it can be placed on top of a solid deck."));
+    form->addRow(QString(), stackChk);
+    const bool snapSolid = p->solid(), snapStack = p->stackable();
+    connect(solidChk, &QCheckBox::toggled, &dlg, [p, this](bool on) {
+        p->setSolid(on); m_doc->setModified();
+    });
+    connect(stackChk, &QCheckBox::toggled, &dlg, [p, this](bool on) {
+        p->setStackable(on); m_doc->setModified();
+    });
+
     vl->addLayout(form);
     vl->addStretch();
     // (The old "Edit fixtures in Studio…" button is gone — this editor IS the
@@ -4226,6 +4243,7 @@ void Monitor::slotEditPlatform(quint32 pid)
     {
         p->setName(snapName); p->setOriginX(snapOX); p->setOriginY(snapOY);
         p->setWidth(snapW); p->setDepth(snapD); p->setHeight(snapH); p->setColor(snapColor);
+        p->setSolid(snapSolid); p->setStackable(snapStack);
         m_props->recomputeAnchoredFrames();
         m_graphicsView->updatePlatforms();
         m_graphicsView->refreshRiserFixtures();

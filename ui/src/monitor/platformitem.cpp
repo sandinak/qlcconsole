@@ -9,6 +9,7 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <QGraphicsScene>
 #include <QGraphicsSceneContextMenuEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsTextItem>
@@ -124,7 +125,46 @@ void PlatformItem::paint(QPainter *painter,
 
 QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &value)
 {
-    Q_UNUSED(change)
+    // No-overlap collision: a SOLID, non-stackable platform can't be dragged to
+    // overlap another solid, non-stackable platform — it slides up to the edge and
+    // stops ("block at contact"). A stackable platform (a step/riser) is exempt, so
+    // it may sit on top. Two items collide only when BOTH are solid and NEITHER is
+    // stackable.
+    if (change == ItemPositionChange && scene() != nullptr && m_platform != nullptr
+        && m_platform->solid() && !m_platform->stackable())
+    {
+        const QSizeF sz(m_pxW, m_pxD);
+        const QPointF cur = pos();
+        const QPointF np  = value.toPointF();
+
+        auto obstacleFor = [&](const QRectF &r) -> QRectF {
+            foreach (QGraphicsItem *gi, scene()->items())
+            {
+                PlatformItem *o = dynamic_cast<PlatformItem *>(gi);
+                if (o == nullptr || o == this || o->m_platform == nullptr)
+                    continue;
+                if (!o->m_platform->solid() || o->m_platform->stackable())
+                    continue;                     // that one permits overlap
+                if (o->isSelected())
+                    continue;                     // moving together (group drag)
+                const QRectF orect(o->pos(), QSizeF(o->m_pxW, o->m_pxD));
+                if (r.intersects(orect))
+                    return orect;
+            }
+            return QRectF();
+        };
+
+        // Resolve X then Y so the platform slides along a contacted edge.
+        QPointF resolved(np.x(), cur.y());
+        QRectF ob = obstacleFor(QRectF(resolved, sz));
+        if (!ob.isNull())
+            resolved.setX(np.x() > cur.x() ? ob.left() - sz.width() : ob.right());
+        resolved.setY(np.y());
+        ob = obstacleFor(QRectF(resolved, sz));
+        if (!ob.isNull())
+            resolved.setY(np.y() > cur.y() ? ob.top() - sz.height() : ob.bottom());
+        return resolved;
+    }
     return QGraphicsItem::itemChange(change, value);
 }
 
