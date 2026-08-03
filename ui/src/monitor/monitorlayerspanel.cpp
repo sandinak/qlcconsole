@@ -74,6 +74,7 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "stand.h"
 #include "tower.h"
 #include "fixturegroup.h"
+#include "createfixturegroup.h"
 #include <QtMath>
 #include "stagetarget.h"
 #include "truss.h"
@@ -358,28 +359,33 @@ void MonitorLayersPanel::createFixtureGroupFrom(const QList<quint32> &fixtureIds
 {
     if (fixtureIds.isEmpty())
         return;
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, tr("New Fixture Group"),
-        tr("Fixture group name:"), QLineEdit::Normal, tr("Fixture Group"), &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return;
 
-    // Roughly-square head grid (mirrors FixtureGroupSource / FixtureManager).
-    int headTotal = 0;
+    // Seed a layout that reflects the fixtures' head structure, then let the user
+    // adjust name + grid in the same dialog the Fixture Manager / Programming use:
+    //   • multi-head fixtures (bars/strips) → heads ACROSS, one fixture per ROW
+    //     (maxHeads × fixtureCount) so each bar's pixels line up;
+    //   • single-head fixtures → a single row (count × 1).
+    const int nFix = fixtureIds.size();
+    int maxHeads = 1;
     foreach (quint32 fid, fixtureIds)
         if (Fixture *fx = m_doc->fixture(fid))
-            headTotal += fx->heads();
-    const int side = qMax(1, int(qCeil(qSqrt(double(qMax(1, headTotal))))));
+            maxHeads = qMax(maxHeads, int(fx->heads()));
+    const QSize seed = (maxHeads > 1) ? QSize(maxHeads, nFix) : QSize(qMax(1, nFix), 1);
+
+    CreateFixtureGroup cfg(this);
+    cfg.setSize(seed);
+    if (cfg.exec() != QDialog::Accepted)
+        return;
 
     FixtureGroup *grp = new FixtureGroup(m_doc);
-    grp->setName(name);
-    grp->setSize(QSize(side, side));
+    grp->setName(cfg.name());
+    grp->setSize(cfg.size());
     m_doc->addFixtureGroup(grp);   // emits fixtureGroupAdded
     foreach (quint32 fid, fixtureIds)
         grp->assignFixture(fid);    // lays each fixture's heads into the grid
 
     m_doc->setModified();
-    reload();   // fixtures now wear the 💡 badge
+    reload();
 }
 
 void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
@@ -515,7 +521,7 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
 
             QTreeWidgetItem *fgNode = new QTreeWidgetItem(node);
             fgNode->setText(0, fg->name());
-            fgNode->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x92\xA1"), QColor(235, 205, 80))); // 💡
+            fgNode->setIcon(0, QIcon(":/group.png"));   // the app's Fixture Group icon
             fgNode->setFirstColumnSpanned(true);
             fgNode->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
             fgNode->setData(0, NodeTypeRole, int(NodeFixtureGroup));
