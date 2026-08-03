@@ -1230,7 +1230,7 @@ float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
     foreach (const StagePlatform *p, m_platforms)
     {
         if (p->containsPoint(xMetres, yMetres))
-            h = qMax(h, p->height());
+            h = qMax(h, platformBaseZ(p->id()) + p->height());   // absolute deck top
     }
     return h;
 }
@@ -1437,7 +1437,7 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         {
             const QVector3D p = m_fixtureItems[fid].m_baseItem.m_position;   // mm
             return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f,
-                             pl->height() + rp.deckHeightOffset);
+                             platformBaseZ(pl->id()) + pl->height() + rp.deckHeightOffset);
         }
     }
 
@@ -1450,7 +1450,8 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         {
             if (rp.riserFace == FixtureRigProps::RiserTop)
                 return QVector3D(pl->originX() + rp.riserU,
-                                 pl->originY() + rp.riserV, pl->height());
+                                 pl->originY() + rp.riserV,
+                                 platformBaseZ(pl->id()) + pl->height());
             // Front (downstage) face: Y = the DOWNSTAGE edge (originY + depth —
             // originY is the upstage edge in this plan view), X across the
             // width, Z = up the face FROM the platform base (which may sit on a

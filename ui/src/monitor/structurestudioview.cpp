@@ -600,13 +600,14 @@ void StructureStudioView::drawStructure(QPainter &p) const
         else
         {
             // Riser box silhouette from its BASE (which may sit on a lower
-            // platform, not the floor) up to its deck.
-            const float b0 = props->platformBaseZ(m_id);
+            // platform, not the floor) up to its deck top (base + own thickness).
+            const float b0  = props->platformBaseZ(m_id);
+            const float top = b0 + h;
             const QPointF a = w2s(QVector3D(x0, y0, b0));
-            const QPointF b = w2s(QVector3D(x1, y1, h));
+            const QPointF b = w2s(QVector3D(x1, y1, top));
             p.drawRect(QRectF(a, b).normalized());
             p.setPen(QPen(steel.lighter(140), 1.4));   // deck line
-            p.drawLine(w2s(QVector3D(x0, y0, h)), w2s(QVector3D(x1, y1, h)));
+            p.drawLine(w2s(QVector3D(x0, y0, top)), w2s(QVector3D(x1, y1, top)));
         }
     }
     else if (m_kind == PipeKind)
