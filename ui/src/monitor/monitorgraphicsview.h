@@ -587,6 +587,8 @@ signals:
     void pipeDoubleClicked(quint32 pipeId);
     void standDoubleClicked(quint32 standId);
     void towerDoubleClicked(quint32 towerId);
+    /** A power source was double-clicked (host opens the Power Distribution editor). */
+    void powerDoubleClicked(quint32 sourceIndex);
     /** Delete requests for the structural features that lacked a right-click
      *  Delete (truss/platform/image already have theirs above). */
     void pipeRemoveRequested(quint32 pipeId);

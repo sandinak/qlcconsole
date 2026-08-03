@@ -109,6 +109,7 @@
 #include "stand.h"
 #include "tower.h"
 #include "structurestudioview.h"
+#include "powerdistributiondialog.h"
 #include "fixturegroupeditor.h"
 #include "studiogroupeditor.h"
 #include "stageplatform.h"
@@ -393,6 +394,13 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotEditTower);
     connect(m_graphicsView, &MonitorGraphicsView::studioGroupEditRequested,
             this, &Monitor::openGroupStudio);
+    connect(m_graphicsView, &MonitorGraphicsView::powerDoubleClicked,
+            this, [this](quint32) {
+        PowerDistributionDialog dlg(m_doc, this);
+        dlg.exec();
+        m_graphicsView->updatePowerSources();
+        if (m_layersPanel) m_layersPanel->reload();
+    });
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,

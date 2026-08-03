@@ -1251,6 +1251,7 @@ void MonitorGraphicsView::requestEditItem(const QString &kind, quint32 id)
     else if (kind == QStringLiteral("stand"))    emit standDoubleClicked(id);
     else if (kind == QStringLiteral("tower"))    emit towerDoubleClicked(id);
     else if (kind == QStringLiteral("image"))    emit imageDoubleClicked(id);
+    else if (kind == QStringLiteral("power"))    emit powerDoubleClicked(id);
 }
 
 void MonitorGraphicsView::selectMapItems(const QList<QPair<QString, quint32> > &items)
