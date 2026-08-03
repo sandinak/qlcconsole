@@ -255,13 +255,6 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
     if (m_props == nullptr)
         return out;
 
-    // Reverse map fixture id → its Fixture Group (lighting) name, for the 💡 badge.
-    QHash<quint32, QString> fixtureFG;
-    foreach (FixtureGroup *fg, m_doc->fixtureGroups())
-        if (fg != nullptr)
-            foreach (quint32 fid, fg->fixtureList())
-                fixtureFG.insert(fid, fg->name());
-
     foreach (quint32 fid, m_props->fixtureItemsID())
     {
         Fixture *f = m_doc->fixture(fid);
@@ -271,7 +264,6 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
         d.name    = (f != nullptr) ? f->name() : tr("Fixture %1").arg(fid);
         d.layerId = m_props->fixtureLayer(fid);
         d.groupId = m_props->fixtureGroup(fid);
-        d.fgName  = fixtureFG.value(fid);
         out << d;
     }
     foreach (Truss *t, m_props->trusses())
@@ -393,18 +385,8 @@ void MonitorLayersPanel::createFixtureGroupFrom(const QList<quint32> &fixtureIds
 void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
 {
     QTreeWidgetItem *node = new QTreeWidgetItem(parent);
-    // A fixture in a lighting Fixture Group wears a 💡 badge + the group name, so
-    // its lighting membership reads at a glance without leaving the map view.
-    if (!d.fgName.isEmpty())
-    {
-        node->setText(0, QStringLiteral("%1   \xF0\x9F\x92\xA1 %2").arg(d.name, d.fgName));
-        node->setToolTip(0, tr("%1 — in Fixture Group “%2”").arg(d.name, d.fgName));
-    }
-    else
-    {
-        node->setText(0, d.name);
-        node->setToolTip(0, d.name);
-    }
+    node->setText(0, d.name);
+    node->setToolTip(0, d.name);
     node->setFirstColumnSpanned(true);   // full-width name (no eye/lock column)
     node->setData(0, NodeTypeRole, int(NodeItem));
     node->setData(0, NodeIdRole, d.id);
@@ -496,13 +478,64 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
 
     foreach (const MonitorProperties::MonitorGroup &c, m_props->childGroups(groupId))
         buildGroupNode(node, c.id, items);
+
+    // This group's direct members, and the set of fixture ids among them.
+    QList<ItemDesc> myItems;
+    QSet<quint32>   myFixtures;
     foreach (const ItemDesc &d, items)
     {
         if (d.groupId != groupId)
             continue;
         if (d.kind == anchorKind && d.id == anchorId)
             continue;   // the node itself represents this anchor item
-        addItemLeaf(node, d);
+        myItems << d;
+        if (d.kind == QStringLiteral("fixture"))
+            myFixtures.insert(d.id);
+    }
+
+    // LOCAL Fixture Groups: lighting groups whose members are ALL within this
+    // group's fixtures (a group local to this assembly — not one that spans several
+    // assemblies). Show each as a 💡 node; its fixtures nest under it so you can see
+    // which fixtures are in which group. Double-click opens the mapping editor.
+    QHash<quint32, QTreeWidgetItem *> fixtureFGNode;   // fid → the FG node it lives under
+    if (!myFixtures.isEmpty())
+    {
+        foreach (FixtureGroup *fg, m_doc->fixtureGroups())
+        {
+            if (fg == nullptr)
+                continue;
+            const QList<quint32> members = fg->fixtureList();
+            if (members.isEmpty())
+                continue;
+            bool allInside = true;
+            foreach (quint32 fid, members)
+                if (!myFixtures.contains(fid)) { allInside = false; break; }
+            if (!allInside)
+                continue;   // spans other assemblies → not shown here
+
+            QTreeWidgetItem *fgNode = new QTreeWidgetItem(node);
+            fgNode->setText(0, fg->name());
+            fgNode->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x92\xA1"), QColor(235, 205, 80))); // 💡
+            fgNode->setFirstColumnSpanned(true);
+            fgNode->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+            fgNode->setData(0, NodeTypeRole, int(NodeFixtureGroup));
+            fgNode->setData(0, NodeIdRole, fg->id());
+            fgNode->setToolTip(0, tr("Fixture Group “%1” — double-click to edit the head "
+                                     "layout; drop fixtures here to add them").arg(fg->name()));
+            foreach (quint32 fid, members)
+                if (!fixtureFGNode.contains(fid))
+                    fixtureFGNode.insert(fid, fgNode);
+        }
+    }
+
+    // Members: a fixture that belongs to a local FG nests under it; everything else
+    // (loose fixtures, non-fixture objects) stays directly under this group.
+    foreach (const ItemDesc &d, myItems)
+    {
+        QTreeWidgetItem *host = node;
+        if (d.kind == QStringLiteral("fixture") && fixtureFGNode.contains(d.id))
+            host = fixtureFGNode.value(d.id);
+        addItemLeaf(host, d);
     }
 
     node->setExpanded(true);
@@ -715,6 +748,35 @@ void MonitorLayersPanel::handleTreeDrop(const QList<QTreeWidgetItem *> &dragged,
         return;
     }
 
+    // Dropping fixtures ONTO a Fixture Group node adds them to that lighting group
+    // (the direct way to put US #1/#2 back into "US1").
+    {
+        QTreeWidgetItem *fgTarget = target;
+        while (fgTarget != nullptr && fgTarget->data(0, NodeTypeRole).toInt() != NodeFixtureGroup)
+            fgTarget = fgTarget->parent();
+        if (fgTarget != nullptr)
+        {
+            const quint32 fgId = fgTarget->data(0, NodeIdRole).toUInt();
+            QList<quint32> fids;
+            foreach (QTreeWidgetItem *d, dragged)
+                if (d->data(0, NodeTypeRole).toInt() == NodeItem
+                    && d->data(0, NodeKindRole).toString() == QStringLiteral("fixture"))
+                    fids << d->data(0, NodeIdRole).toUInt();
+            // Defer: assignFixture reloads the tree, deleting the rows Qt's drag
+            // machinery is still unwinding.
+            QTimer::singleShot(0, this, [this, fgId, fids]() {
+                FixtureGroup *fg = m_doc->fixtureGroup(fgId);
+                if (fg == nullptr || fids.isEmpty())
+                    return;
+                foreach (quint32 fid, fids)
+                    fg->assignFixture(fid);
+                m_doc->setModified();
+                reload();
+            });
+            return;
+        }
+    }
+
     // Resolve the drop CONTAINER (a group, or a bare layer).
     bool intoGroup = false;
     quint32 containerId = 0;
@@ -828,7 +890,13 @@ void MonitorLayersPanel::slotItemDoubleClicked(QTreeWidgetItem *item, int)
     if (item == nullptr)
         return;
     const int type = item->data(0, NodeTypeRole).toInt();
-    if (type == NodeItem)
+    if (type == NodeFixtureGroup)
+    {
+        // Open the head-layout mapping editor (host wires this to the same dialog
+        // the Programming tab uses).
+        emit editFixtureGroupRequested(item->data(0, NodeIdRole).toUInt());
+    }
+    else if (type == NodeItem)
     {
         // Open the item's editor on the canvas.
         if (m_view)

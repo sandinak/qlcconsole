@@ -353,6 +353,9 @@ void Monitor::initGraphicsView()
         if (m_layersAction != NULL)
             m_layersAction->setChecked(false);
     });
+    // Double-clicking a Fixture Group node in the panel opens its head-layout editor.
+    connect(m_layersPanel, &MonitorLayersPanel::editFixtureGroupRequested,
+            this, [this](quint32 fgId) { openGroupLayout(fgId); if (m_layersPanel) m_layersPanel->reload(); });
 
     connect(m_graphicsView, SIGNAL(fixtureMoved(quint32,QPointF)),
             this, SLOT(slotFixtureMoved(quint32,QPointF)));

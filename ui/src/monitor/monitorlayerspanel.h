@@ -107,6 +107,9 @@ public:
 signals:
     /** Emitted when the in-panel close/hide button is clicked. */
     void closeRequested();
+    /** Double-clicking a Fixture Group node asks the host to open its head-layout
+     *  mapping editor (same dialog as the Programming tab). */
+    void editFixtureGroupRequested(quint32 fixtureGroupId);
 
 protected:
     /** Intercepts Enter/Return on the tree to start inline rename. */
@@ -126,7 +129,7 @@ private slots:
 
 private:
     /** Node kinds stashed in a tree item's data. */
-    enum NodeType { NodeLayer = 0, NodeGroup = 1, NodeItem = 2 };
+    enum NodeType { NodeLayer = 0, NodeGroup = 1, NodeItem = 2, NodeFixtureGroup = 3 };
 
     /** One placeable map item, gathered once per reload. */
     struct ItemDesc
@@ -137,7 +140,6 @@ private:
         quint32 layerId;
         quint32 groupId;    ///< immediate group (0 = loose)
         QColor  color;      ///< platform colour (for the tree swatch); else invalid
-        QString fgName;     ///< Fixture Group (lighting) this fixture belongs to; else empty
     };
 
     QList<ItemDesc> gatherItems() const;
