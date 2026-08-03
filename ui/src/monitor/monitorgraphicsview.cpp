@@ -2560,6 +2560,7 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
                 pi->setPos(pi->pos() + delta);
     }
 
+    MonitorProperties *mprops = m_doc->monitorProperties();
     UndoEntry e; e.type = UndoEntry::PlatformMove;
     foreach (PlatformItem *pi, moved)
     {
@@ -2574,6 +2575,20 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
             e.platformOrigins.insert(p->id(), oldOrigin);
             p->setOriginX(float(newOrigin.x()));
             p->setOriginY(float(newOrigin.y()));
+            // Deck-mounted fixtures store an ABSOLUTE XY (only their Z tracks the
+            // deck), so unlike riser/frame fixtures they don't auto-follow. Carry
+            // them along by the platform's delta so they ride the deck.
+            const float dxMm = float((newOrigin.x() - oldOrigin.x()) * 1000.0);
+            const float dyMm = float((newOrigin.y() - oldOrigin.y()) * 1000.0);
+            for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+            {
+                if (mprops->fixtureRigProps(it.key()).deckPlatformId != p->id())
+                    continue;
+                QVector3D fp = mprops->fixturePosition(it.key(), 0, 0);   // mm
+                fp.setX(fp.x() + dxMm);
+                fp.setY(fp.y() + dyMm);
+                mprops->setFixturePosition(it.key(), 0, 0, fp);
+            }
             emit platformMoved(pi->platformId(),
                                QPointF(double(p->originX()), double(p->originY())));
         }
