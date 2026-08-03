@@ -98,6 +98,10 @@
 #include "riserfaceeditor.h"
 #include "trussitem.h"
 #include "platformitem.h"
+#include "pipeitem.h"
+#include "standitem.h"
+#include "toweritem.h"
+#include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
 #include "targetitem.h"
 #include "truss.h"
@@ -1874,59 +1878,87 @@ void Monitor::slotRemoveSelected()
 {
     Q_ASSERT(m_graphicsView != NULL);
 
-    // Check if a truss or platform item is selected in the scene
+    // Gather EVERY selected structural feature, by type (was: truss/platform/
+    // target only — booms, stands and towers fell through and silently no-op'd).
+    QList<quint32> trussIds, platIds, pipeIds, standIds, towerIds, targetIds, imageIds;
     foreach (QGraphicsItem *gi, m_graphicsView->scene()->selectedItems())
     {
-        TrussItem *ti = dynamic_cast<TrussItem *>(gi);
-        if (ti)
+        if (auto *ti  = dynamic_cast<TrussItem *>(gi))        trussIds  << ti->trussId();
+        else if (auto *pi  = dynamic_cast<PlatformItem *>(gi)) platIds  << pi->platformId();
+        else if (auto *bi  = dynamic_cast<PipeItem *>(gi))     pipeIds  << bi->pipeId();
+        else if (auto *si  = dynamic_cast<StandItem *>(gi))    standIds << si->standId();
+        else if (auto *twi = dynamic_cast<TowerItem *>(gi))    towerIds << twi->towerId();
+        else if (auto *tgi = dynamic_cast<TargetItem *>(gi))   targetIds << tgi->targetId();
+        else if (auto *ii  = dynamic_cast<MonitorImageItem *>(gi)) imageIds << ii->imageId();
+    }
+    const int nFeat = trussIds.size() + platIds.size() + pipeIds.size()
+                    + standIds.size() + towerIds.size() + targetIds.size() + imageIds.size();
+
+    // Nothing structural selected → fall back to fixture remove (unchanged).
+    if (nFeat == 0)
+    {
+        hideFixtureItemEditor();
+        if (m_graphicsView->removeFixture())
+            m_doc->setModified();
+        return;
+    }
+
+    // Exactly one feature → reuse the graceful per-feature slot (name + attached-
+    // fixture handling). Targets/images have no attached fixtures.
+    if (nFeat == 1)
+    {
+        if (!trussIds.isEmpty())       slotTrussRemoveRequested(trussIds.first());
+        else if (!platIds.isEmpty())   slotPlatformRemoveRequested(platIds.first());
+        else if (!pipeIds.isEmpty())   slotPipeRemoveRequested(pipeIds.first());
+        else if (!standIds.isEmpty())  slotStandRemoveRequested(standIds.first());
+        else if (!towerIds.isEmpty())  slotTowerRemoveRequested(towerIds.first());
+        else if (!imageIds.isEmpty())  slotImageRemoveRequested(imageIds.first());
+        else if (!targetIds.isEmpty())
         {
-            if (QMessageBox::question(this, tr("Remove Truss"),
-                    tr("Remove truss '%1'?").arg(ti->truss()->name()),
-                    QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes)
+            const quint32 tid = targetIds.first();
+            StageTarget *tg = m_props->stageTarget(tid);
+            if (confirmFeatureDelete(tr("Target"), tg ? tg->name() : QString(),
+                                     QList<quint32>()) != DeleteCancel)
             {
-                quint32 tid = ti->trussId();
-                m_props->removeTruss(tid);
-                m_graphicsView->updateTrusses();
-                m_graphicsView->refreshFixtureBindings();
-                if (m_layersPanel) m_layersPanel->reload();
-                m_doc->setModified();
-            }
-            return;
-        }
-        PlatformItem *pi = dynamic_cast<PlatformItem *>(gi);
-        if (pi)
-        {
-            if (QMessageBox::question(this, tr("Remove Platform"),
-                    tr("Remove platform '%1'?").arg(pi->platform()->name()),
-                    QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes)
-            {
-                quint32 pid = pi->platformId();
-                m_props->removePlatform(pid);
-                m_graphicsView->updatePlatforms();
-                m_doc->setModified();
-            }
-            return;
-        }
-        TargetItem *tgi = dynamic_cast<TargetItem *>(gi);
-        if (tgi)
-        {
-            if (QMessageBox::question(this, tr("Remove Target"),
-                    tr("Remove target '%1'?").arg(tgi->target()->name()),
-                    QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes)
-            {
-                quint32 tid = tgi->targetId();
                 m_props->removeStageTarget(tid);
                 m_graphicsView->updateTargets();
                 m_doc->setModified();
             }
-            return;
         }
+        return;
     }
 
-    // Fall back to fixture remove
-    hideFixtureItemEditor();
-    if (m_graphicsView->removeFixture())
-        m_doc->setModified();
+    // Multiple features → one combined confirm summarising the attached fixtures.
+    QList<quint32> fids;
+    foreach (quint32 id, trussIds) fids += fixturesOnFeature(TrussFeature, id);
+    foreach (quint32 id, pipeIds)  fids += fixturesOnFeature(PipeFeature, id);
+    foreach (quint32 id, towerIds) fids += fixturesOnFeature(TowerFeature, id);
+    foreach (quint32 id, platIds)  fids += fixturesOnFeature(PlatformFeature, id);
+    fids = QSet<quint32>(fids.begin(), fids.end()).values();   // de-dup
+
+    const FeatureDeleteChoice choice = confirmFeatureDelete(
+        tr("%n selected feature(s)", "", nFeat), QString(), fids);
+    if (choice == DeleteCancel)
+        return;
+    if (choice == DeleteWithFixtures)
+        foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
+
+    foreach (quint32 id, trussIds)  m_props->removeTruss(id);
+    foreach (quint32 id, platIds)   m_props->removePlatform(id);
+    foreach (quint32 id, pipeIds)   m_props->removePipe(id);
+    foreach (quint32 id, standIds)  m_props->removeStand(id);
+    foreach (quint32 id, towerIds)  m_props->removeTower(id);
+    foreach (quint32 id, targetIds) m_props->removeStageTarget(id);
+    foreach (quint32 id, imageIds)  m_props->removeImage(id);
+
+    m_props->recomputeStandMounts();
+    m_graphicsView->updateTrusses();
+    m_graphicsView->updatePlatforms();
+    m_graphicsView->updateImages();
+    m_graphicsView->updateTargets();
+    m_graphicsView->refreshFixtureBindings();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
 }
 
 bool Monitor::clipboardHasFeatures() const
@@ -3071,8 +3103,11 @@ Monitor::FeatureDeleteChoice Monitor::confirmFeatureDelete(
 {
     QMessageBox box(this);
     box.setIcon(QMessageBox::Question);
-    box.setWindowTitle(tr("Delete %1").arg(kind));
-    QString msg = tr("Delete %1 “%2”?").arg(kind.toLower(), name);
+    box.setWindowTitle(tr("Delete"));
+    // With a name it reads "Delete stand “SL Stand”?"; without one (a multi-select
+    // summary) the kind already carries the count: "Delete 3 selected features?".
+    QString msg = name.isEmpty() ? tr("Delete %1?").arg(kind)
+                                 : tr("Delete %1 “%2”?").arg(kind.toLower(), name);
 
     QPushButton *goBtn   = nullptr;   // detach & keep, or plain delete
     QPushButton *withBtn = nullptr;   // also remove the fixtures from the plot
@@ -4262,6 +4297,14 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     }
 
     menu.addSeparator();
+    // Delete whatever is selected (truss / platform / boom / stand / tower /
+    // target / image / fixtures) — a reliable path when a right-click just misses
+    // a small feature's hit-area. Detaches or removes attached fixtures gracefully.
+    if (!m_graphicsView->scene()->selectedItems().isEmpty())
+    {
+        menu.addAction(QIcon(":/delete.png"), tr("Delete selected"),
+                       this, SLOT(slotRemoveSelected()));
+    }
     // Duplicate = copy the current selection and paste it offset by ~0.5 m, in
     // one step. Works for trusses / platforms / targets.
     if (!m_graphicsView->scene()->selectedItems().isEmpty())
