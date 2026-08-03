@@ -10,6 +10,7 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QKeyEvent>
 #include <QHeaderView>
 #include <QMenu>
 #include <QMessageBox>
@@ -266,17 +267,7 @@ void FixtureGroupSource::slotContextMenu(const QPoint &pos)
     }
     if (chosen == rename)
     {
-        FixtureGroup *g = m_doc->fixtureGroup(groupIds.first());
-        if (g == NULL)
-            return;
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, tr("Rename group"),
-                                 tr("Group name:"), QLineEdit::Normal, g->name(), &ok);
-        if (ok && name.trimmed().isEmpty() == false)
-        {
-            g->setName(name.trimmed()); // emits changed() -> reload()
-            m_doc->setModified();
-        }
+        renameGroupPrompt(groupIds.first());
         return;
     }
     if (chosen == del)
@@ -322,6 +313,39 @@ void FixtureGroupSource::slotItemDoubleClicked(QTreeWidgetItem *item, int column
     if (item == NULL || item->data(0, KindRole).toInt() != GroupNode)
         return;
     emit groupDoubleClicked(item->data(0, IdRole).toUInt());
+}
+
+void FixtureGroupSource::renameGroupPrompt(quint32 groupId)
+{
+    FixtureGroup *g = m_doc->fixtureGroup(groupId);
+    if (g == NULL)
+        return;
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("Rename group"),
+                             tr("Group name:"), QLineEdit::Normal, g->name(), &ok);
+    if (ok && name.trimmed().isEmpty() == false)
+    {
+        g->setName(name.trimmed()); // emits changed() -> reload()
+        m_doc->setModified();
+    }
+}
+
+void FixtureGroupSource::keyPressEvent(QKeyEvent *event)
+{
+    // Enter/Return on a single selected group row → rename it (matches the
+    // right-click "Rename group…"). Anything else keeps the default behaviour.
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+    {
+        QTreeWidgetItem *item = currentItem();
+        if (item != NULL && item->data(0, KindRole).toInt() == GroupNode
+            && selectedItems().size() <= 1)
+        {
+            renameGroupPrompt(item->data(0, IdRole).toUInt());
+            event->accept();
+            return;
+        }
+    }
+    QTreeWidget::keyPressEvent(event);
 }
 
 void FixtureGroupSource::createGroupFromFixtures(const QList<quint32> &fixtureIds)

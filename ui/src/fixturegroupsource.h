@@ -57,8 +57,13 @@ protected:
         { return buildMimeData(items); }
     QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const
         { return buildMimeData(items); }
+    /** Enter/Return on a selected group row opens the rename prompt. */
+    void keyPressEvent(QKeyEvent *event) override;
 private:
     QMimeData* buildMimeData(const QList<QTreeWidgetItem*> &items) const;
+
+    /** Prompt to rename group @p groupId (shared by the context menu + Enter). */
+    void renameGroupPrompt(quint32 groupId);
 
     /** Accept group drops onto folders (re-file groups); ignore otherwise. */
     void dragEnterEvent(QDragEnterEvent *event) override;
