@@ -153,6 +153,12 @@ private:
     /** Create a lighting Fixture Group (prompted name) from the given fixtures —
      *  the explicit "make a control group" action (distinct from map Folders). */
     void createFixtureGroupFrom(const QList<quint32> &fixtureIds);
+    /** Under @p host, add a 💡 node for every Fixture Group whose members are ALL
+     *  within @p fixtureSet (local to this context); records fid → node in @p map
+     *  so the caller can nest those fixtures. Works for a group's members OR a
+     *  layer's loose fixtures. */
+    void addLocalFixtureGroups(QTreeWidgetItem *host, const QSet<quint32> &fixtureSet,
+                               QHash<quint32, QTreeWidgetItem *> &map);
     void addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d);
     /** The tree icon for an item KIND (fixture/truss/platform/pipe/stand/tower/
      *  image/power). @p color tints the platform swatch. */

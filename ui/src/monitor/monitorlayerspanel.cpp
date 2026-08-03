@@ -385,6 +385,39 @@ void MonitorLayersPanel::filterTree(const QString &text)
         applyTreeFilter(m_tree->topLevelItem(i), t);
 }
 
+void MonitorLayersPanel::addLocalFixtureGroups(QTreeWidgetItem *host,
+        const QSet<quint32> &fixtureSet, QHash<quint32, QTreeWidgetItem *> &map)
+{
+    if (host == nullptr || fixtureSet.isEmpty())
+        return;
+    foreach (FixtureGroup *fg, m_doc->fixtureGroups())
+    {
+        if (fg == nullptr)
+            continue;
+        const QList<quint32> members = fg->fixtureList();
+        if (members.isEmpty())
+            continue;
+        bool allInside = true;
+        foreach (quint32 fid, members)
+            if (!fixtureSet.contains(fid)) { allInside = false; break; }
+        if (!allInside)
+            continue;   // spans a wider scope → not local here
+
+        QTreeWidgetItem *fgNode = new QTreeWidgetItem(host);
+        fgNode->setText(0, fg->name());
+        fgNode->setIcon(0, QIcon(":/group.png"));   // the app's Fixture Group icon
+        fgNode->setFirstColumnSpanned(true);
+        fgNode->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+        fgNode->setData(0, NodeTypeRole, int(NodeFixtureGroup));
+        fgNode->setData(0, NodeIdRole, fg->id());
+        fgNode->setToolTip(0, tr("Fixture Group “%1” — double-click to edit the head "
+                                 "layout; drop fixtures here to add them").arg(fg->name()));
+        foreach (quint32 fid, members)
+            if (!map.contains(fid))
+                map.insert(fid, fgNode);
+    }
+}
+
 void MonitorLayersPanel::createFixtureGroupFrom(const QList<quint32> &fixtureIds)
 {
     if (fixtureIds.isEmpty())
@@ -529,40 +562,10 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
             myFixtures.insert(d.id);
     }
 
-    // LOCAL Fixture Groups: lighting groups whose members are ALL within this
-    // group's fixtures (a group local to this assembly — not one that spans several
-    // assemblies). Show each as a 💡 node; its fixtures nest under it so you can see
-    // which fixtures are in which group. Double-click opens the mapping editor.
+    // LOCAL Fixture Groups whose members are all within this group's fixtures show
+    // as 💡 nodes, with those fixtures nested under them.
     QHash<quint32, QTreeWidgetItem *> fixtureFGNode;   // fid → the FG node it lives under
-    if (!myFixtures.isEmpty())
-    {
-        foreach (FixtureGroup *fg, m_doc->fixtureGroups())
-        {
-            if (fg == nullptr)
-                continue;
-            const QList<quint32> members = fg->fixtureList();
-            if (members.isEmpty())
-                continue;
-            bool allInside = true;
-            foreach (quint32 fid, members)
-                if (!myFixtures.contains(fid)) { allInside = false; break; }
-            if (!allInside)
-                continue;   // spans other assemblies → not shown here
-
-            QTreeWidgetItem *fgNode = new QTreeWidgetItem(node);
-            fgNode->setText(0, fg->name());
-            fgNode->setIcon(0, QIcon(":/group.png"));   // the app's Fixture Group icon
-            fgNode->setFirstColumnSpanned(true);
-            fgNode->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
-            fgNode->setData(0, NodeTypeRole, int(NodeFixtureGroup));
-            fgNode->setData(0, NodeIdRole, fg->id());
-            fgNode->setToolTip(0, tr("Fixture Group “%1” — double-click to edit the head "
-                                     "layout; drop fixtures here to add them").arg(fg->name()));
-            foreach (quint32 fid, members)
-                if (!fixtureFGNode.contains(fid))
-                    fixtureFGNode.insert(fid, fgNode);
-        }
-    }
+    addLocalFixtureGroups(node, myFixtures, fixtureFGNode);
 
     // Members: a fixture that belongs to a local FG nests under it; everything else
     // (loose fixtures, non-fixture objects) stays directly under this group.
@@ -714,9 +717,24 @@ void MonitorLayersPanel::reload()
         foreach (const MonitorProperties::MonitorGroup &grp, m_props->groups())
             if (grp.parentGroupId == 0 && grp.layerId == lyr.id)
                 buildGroupNode(layerNode, grp.id, items);
+
+        // Loose (un-foldered) fixtures on this layer, and any Fixture Group local
+        // to them — so a group made from loose fixtures (e.g. UST-1..8) is visible.
+        QSet<quint32> looseFix;
+        foreach (const ItemDesc &d, items)
+            if (d.groupId == 0 && d.layerId == lyr.id && d.kind == QStringLiteral("fixture"))
+                looseFix.insert(d.id);
+        QHash<quint32, QTreeWidgetItem *> looseFGNode;
+        addLocalFixtureGroups(layerNode, looseFix, looseFGNode);
+
         foreach (const ItemDesc &d, items)
             if (d.groupId == 0 && d.layerId == lyr.id)
-                addItemLeaf(layerNode, d);
+            {
+                QTreeWidgetItem *host = layerNode;
+                if (d.kind == QStringLiteral("fixture") && looseFGNode.contains(d.id))
+                    host = looseFGNode.value(d.id);
+                addItemLeaf(host, d);
+            }
 
         layerNode->setExpanded(true);
         if (lyr.id == activeId)
