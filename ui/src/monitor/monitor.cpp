@@ -2087,7 +2087,11 @@ void Monitor::fillOrientationCombo(QComboBox *cb, const FixtureRigProps &rp) con
     { addOpt(tr("On shelf (upright)"), Truss::FloorMounted, -1);
       addOpt(tr("Under shelf (hung)"), Truss::TopHung, -1); }
     else if (vertical)
-    { addOpt(tr("Sideways (clamped)"), Truss::SideArm, FixtureRigProps::Centered); }
+    { addOpt(tr("Sideways (clamped)"), Truss::SideArm,      FixtureRigProps::Centered);
+      // Exception: a fixture can sit UPRIGHT on the top cap of a tower/vertical
+      // truss (a followspot, a base-down mover) — not everything on a vertical
+      // is side-clamped.
+      addOpt(tr("Upright (on top)"),   Truss::FloorMounted, FixtureRigProps::TopMounted); }
     else if (horizontal)
     { addOpt(tr("On top"),    Truss::FloorMounted, FixtureRigProps::TopMounted);
       addOpt(tr("Underhung"), Truss::TopHung,      FixtureRigProps::UnderHung);
