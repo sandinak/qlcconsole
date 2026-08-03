@@ -852,12 +852,12 @@ void Monitor::showGraphicsView()
     {
         m_graphicsView->setViewPOV(MonitorGraphicsView::PovTop);
         m_povCombo->blockSignals(true);
-        m_povCombo->setCurrentIndex(1);   // 2D — Top
+        m_povCombo->setCurrentIndex(0);   // 2D — Top
         m_povCombo->blockSignals(false);
         if (m_dmxViewCombo != NULL)
         {
             m_dmxViewCombo->blockSignals(true);
-            m_dmxViewCombo->setCurrentIndex(1);
+            m_dmxViewCombo->setCurrentIndex(0);
             m_dmxViewCombo->blockSignals(false);
         }
         if (m_lockAction != NULL) m_lockAction->setEnabled(true);
@@ -873,10 +873,11 @@ void Monitor::showGraphicsView()
 
 void Monitor::showCurrentView()
 {
-    if (m_props->displayMode() == MonitorProperties::DMX)
-        showDMXView();
-    else
-        showGraphicsView();
+    // The DMX channel-grid view is retired — it never fit the studio map and
+    // broke elevation/POV handling. The 2D studio map is now the only view.
+    if (m_props->displayMode() != MonitorProperties::Graphics)
+        m_props->setDisplayMode(MonitorProperties::Graphics);
+    showGraphicsView();
 }
 
 void Monitor::updateView()
@@ -1059,7 +1060,6 @@ void Monitor::initDMXToolbar()
     dmxViewLabel->setMargin(5);
     m_DMXToolBar->addWidget(dmxViewLabel);
     m_dmxViewCombo = new QComboBox(this);
-    m_dmxViewCombo->addItem(tr("DMX"),        -1);
     m_dmxViewCombo->addItem(tr("2D \342\200\224 Top"),   int(MonitorGraphicsView::PovTop));
     m_dmxViewCombo->addItem(tr("2D \342\200\224 Front"), int(MonitorGraphicsView::PovFront));
     m_dmxViewCombo->addItem(tr("2D \342\200\224 Side"),  int(MonitorGraphicsView::PovSide));
@@ -1127,14 +1127,12 @@ void Monitor::initGraphicsToolbar()
     // PLACED in the footer bar (initGraphicsFooter), alongside the Overlay/Size/
     // Grid/Snap controls, so all the view modifiers live on one row.
     m_povCombo = new QComboBox();
-    m_povCombo->addItem(tr("DMX"),        -1);
     m_povCombo->addItem(tr("2D \342\200\224 Top"),   int(MonitorGraphicsView::PovTop));
     m_povCombo->addItem(tr("2D \342\200\224 Front"), int(MonitorGraphicsView::PovFront));
     m_povCombo->addItem(tr("2D \342\200\224 Side"),  int(MonitorGraphicsView::PovSide));
-    m_povCombo->setCurrentIndex(1);   // 2D Top
-    m_povCombo->setToolTip(tr("Choose the view: DMX channel grid, or the 2D map "
-                              "from top / front / side. Front & Side are read-only "
-                              "elevation views that show height."));
+    m_povCombo->setCurrentIndex(0);   // 2D Top (DMX grid retired)
+    m_povCombo->setToolTip(tr("Choose the 2D map view: top / front / side. "
+                              "Front & Side are read-only elevation views that show height."));
     connect(m_povCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotPOVChanged(int)));
 
     // Grid Size / Units / Subdivisions / Snap have moved to the footer
