@@ -522,6 +522,13 @@ void MonitorGraphicsView::reassignLayerItems(quint32 fromLayerId, quint32 toLaye
     foreach (TargetItem *tgt, m_targetItems)
         if (StageTarget *t = tgt->target()) if (t->layerId() == fromLayerId) t->setLayerId(toLayerId);
 
+    foreach (PipeItem *bi, m_pipeItems)
+        if (Pipe *p = bi->pipe()) if (p->layerId() == fromLayerId) p->setLayerId(toLayerId);
+    foreach (StandItem *si, m_standItems)
+        if (Stand *s = si->stand()) if (s->layerId() == fromLayerId) s->setLayerId(toLayerId);
+    foreach (TowerItem *twi, m_towerItems)
+        if (Tower *t = twi->tower()) if (t->layerId() == fromLayerId) t->setLayerId(toLayerId);
+
     PowerDistribution *pd = m_doc->powerDistribution();
     for (int i = 0; i < pd->sources().size(); i++)
         if (pd->sources().at(i).layerId == fromLayerId)
@@ -548,6 +555,12 @@ quint32 MonitorGraphicsView::itemGroupId(QGraphicsItem *gi) const
         const int s = ps->sourceIndex();
         return (s >= 0 && s < pd->sources().size()) ? pd->sources().at(s).groupId : 0;
     }
+    if (auto *bi = dynamic_cast<PipeItem *>(gi))
+        return bi->pipe() ? bi->pipe()->groupId() : 0;
+    if (auto *si = dynamic_cast<StandItem *>(gi))
+        return si->stand() ? si->stand()->groupId() : 0;
+    if (auto *twi = dynamic_cast<TowerItem *>(gi))
+        return twi->tower() ? twi->tower()->groupId() : 0;
     if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
         return props->image(ii->imageId()).groupId;
     return 0;
@@ -577,6 +590,12 @@ void MonitorGraphicsView::setItemGroupId(QGraphicsItem *gi, quint32 gid)
         if (s >= 0 && s < pd->sources().size())
             pd->sources()[s].groupId = gid;
     }
+    else if (auto *bi = dynamic_cast<PipeItem *>(gi))
+    { if (Pipe *p = bi->pipe()) p->setGroupId(gid); }
+    else if (auto *si = dynamic_cast<StandItem *>(gi))
+    { if (Stand *s = si->stand()) s->setGroupId(gid); }
+    else if (auto *twi = dynamic_cast<TowerItem *>(gi))
+    { if (Tower *t = twi->tower()) t->setGroupId(gid); }
     else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
     {
         MonitorProperties::MonitorImage img = props->image(ii->imageId());
@@ -593,6 +612,9 @@ QList<QGraphicsItem *> MonitorGraphicsView::itemsInGroup(quint32 gid) const
     foreach (MonitorFixtureItem *i, m_fixtures)        if (itemGroupId(i) == gid) out << i;
     foreach (TrussItem *i, m_trussItems)               if (itemGroupId(i) == gid) out << i;
     foreach (PlatformItem *i, m_platformItems)         if (itemGroupId(i) == gid) out << i;
+    foreach (PipeItem *i, m_pipeItems)                 if (itemGroupId(i) == gid) out << i;
+    foreach (StandItem *i, m_standItems)               if (itemGroupId(i) == gid) out << i;
+    foreach (TowerItem *i, m_towerItems)               if (itemGroupId(i) == gid) out << i;
     foreach (TargetItem *i, m_targetItems)             if (itemGroupId(i) == gid) out << i;
     foreach (PowerSourceItem *i, m_powerSourceItems)   if (itemGroupId(i) == gid) out << i;
     foreach (MonitorImageItem *i, m_imageItems)        if (itemGroupId(i) == gid) out << i;
@@ -681,6 +703,12 @@ void MonitorGraphicsView::setItemLayer(QGraphicsItem *gi, quint32 layerId)
         const int s = ps->sourceIndex();
         if (s >= 0 && s < pd->sources().size()) pd->sources()[s].layerId = layerId;
     }
+    else if (auto *bi = dynamic_cast<PipeItem *>(gi))
+    { if (Pipe *p = bi->pipe()) p->setLayerId(layerId); }
+    else if (auto *si = dynamic_cast<StandItem *>(gi))
+    { if (Stand *s = si->stand()) s->setLayerId(layerId); }
+    else if (auto *twi = dynamic_cast<TowerItem *>(gi))
+    { if (Tower *t = twi->tower()) t->setLayerId(layerId); }
     else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
     {
         MonitorProperties::MonitorImage img = props->image(ii->imageId());
@@ -1180,6 +1208,12 @@ void MonitorGraphicsView::selectMapItem(const QString &kind, quint32 id)
         target = m_trussItems.value(id, nullptr);
     else if (kind == QStringLiteral("platform"))
         target = m_platformItems.value(id, nullptr);
+    else if (kind == QStringLiteral("pipe"))
+        target = m_pipeItems.value(id, nullptr);
+    else if (kind == QStringLiteral("stand"))
+        target = m_standItems.value(id, nullptr);
+    else if (kind == QStringLiteral("tower"))
+        target = m_towerItems.value(id, nullptr);
     else if (kind == QStringLiteral("target"))
         target = m_targetItems.value(id, nullptr);
     else if (kind == QStringLiteral("power"))
@@ -1207,6 +1241,9 @@ void MonitorGraphicsView::requestEditItem(const QString &kind, quint32 id)
     if (kind == QStringLiteral("fixture"))       emit fixtureDoubleClicked(id);
     else if (kind == QStringLiteral("truss"))    emit trussDoubleClicked(id);
     else if (kind == QStringLiteral("platform")) emit platformDoubleClicked(id);
+    else if (kind == QStringLiteral("pipe"))     emit pipeDoubleClicked(id);
+    else if (kind == QStringLiteral("stand"))    emit standDoubleClicked(id);
+    else if (kind == QStringLiteral("tower"))    emit towerDoubleClicked(id);
     else if (kind == QStringLiteral("image"))    emit imageDoubleClicked(id);
 }
 
@@ -1222,6 +1259,9 @@ void MonitorGraphicsView::selectMapItems(const QList<QPair<QString, quint32> > &
         if (kind == QStringLiteral("fixture"))       target = m_fixtures.value(id, nullptr);
         else if (kind == QStringLiteral("truss"))    target = m_trussItems.value(id, nullptr);
         else if (kind == QStringLiteral("platform")) target = m_platformItems.value(id, nullptr);
+        else if (kind == QStringLiteral("pipe"))     target = m_pipeItems.value(id, nullptr);
+        else if (kind == QStringLiteral("stand"))    target = m_standItems.value(id, nullptr);
+        else if (kind == QStringLiteral("tower"))    target = m_towerItems.value(id, nullptr);
         else if (kind == QStringLiteral("target"))   target = m_targetItems.value(id, nullptr);
         else if (kind == QStringLiteral("power"))
             target = (int(id) < m_powerSourceItems.size()) ? m_powerSourceItems.at(int(id)) : nullptr;
@@ -1239,6 +1279,9 @@ QGraphicsItem *MonitorGraphicsView::itemFor(const QString &kind, quint32 id) con
     if (kind == QStringLiteral("fixture"))  return m_fixtures.value(id, nullptr);
     if (kind == QStringLiteral("truss"))    return m_trussItems.value(id, nullptr);
     if (kind == QStringLiteral("platform")) return m_platformItems.value(id, nullptr);
+    if (kind == QStringLiteral("pipe"))     return m_pipeItems.value(id, nullptr);
+    if (kind == QStringLiteral("stand"))    return m_standItems.value(id, nullptr);
+    if (kind == QStringLiteral("tower"))    return m_towerItems.value(id, nullptr);
     if (kind == QStringLiteral("target"))   return m_targetItems.value(id, nullptr);
     if (kind == QStringLiteral("power"))
         return (int(id) < m_powerSourceItems.size()) ? m_powerSourceItems.at(int(id)) : nullptr;

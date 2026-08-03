@@ -68,6 +68,9 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "doc.h"
 #include "powerdistribution.h"
 #include "stageplatform.h"
+#include "pipe.h"
+#include "stand.h"
+#include "tower.h"
 #include "stagetarget.h"
 #include "truss.h"
 #include "fixture.h"
@@ -263,6 +266,36 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
         d.color   = p->color();
         out << d;
     }
+    foreach (Pipe *b, m_props->pipes())
+    {
+        ItemDesc d;
+        d.kind    = QStringLiteral("pipe");
+        d.id      = b->id();
+        d.name    = b->name().isEmpty() ? tr("Boom %1").arg(b->id()) : b->name();
+        d.layerId = b->layerId();
+        d.groupId = b->groupId();
+        out << d;
+    }
+    foreach (Stand *s, m_props->stands())
+    {
+        ItemDesc d;
+        d.kind    = QStringLiteral("stand");
+        d.id      = s->id();
+        d.name    = s->name().isEmpty() ? tr("Stand %1").arg(s->id()) : s->name();
+        d.layerId = s->layerId();
+        d.groupId = s->groupId();
+        out << d;
+    }
+    foreach (Tower *t, m_props->towers())
+    {
+        ItemDesc d;
+        d.kind    = QStringLiteral("tower");
+        d.id      = t->id();
+        d.name    = t->name().isEmpty() ? tr("Tower %1").arg(t->id()) : t->name();
+        d.layerId = t->layerId();
+        d.groupId = t->groupId();
+        out << d;
+    }
     // Stage targets are intentionally omitted: they're dynamic aim points that
     // move across levels during a show, so organising them into fixed layers /
     // groups doesn't fit. They live on the canvas (for the active scene) only.
@@ -312,6 +345,12 @@ void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
         node->setIcon(0, QIcon(":/group.png"));
     else if (d.kind == QStringLiteral("platform"))
         node->setIcon(0, swatchIcon(d.color));                 // colour-coded riser
+    else if (d.kind == QStringLiteral("pipe"))
+        node->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x8E\xA4"), QColor(150, 200, 235))); // 🎤 boom
+    else if (d.kind == QStringLiteral("stand"))
+        node->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x93\x8D"), QColor(150, 200, 235))); // 📍 stand
+    else if (d.kind == QStringLiteral("tower"))
+        node->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x8F\xAF"), QColor(150, 200, 235))); // 🏯 tower
     else if (d.kind == QStringLiteral("power"))
         node->setIcon(0, glyphIcon(QStringLiteral("\xE2\x9A\xA1"), QColor(235, 185, 0))); // ⚡
     else if (d.kind == QStringLiteral("image"))
@@ -734,7 +773,9 @@ void MonitorLayersPanel::slotItemChanged(QTreeWidgetItem *item, int column)
 bool MonitorLayersPanel::kindLockable(const QString &kind) const
 {
     return kind == QStringLiteral("truss") || kind == QStringLiteral("platform")
-        || kind == QStringLiteral("image") || kind == QStringLiteral("power");
+        || kind == QStringLiteral("image") || kind == QStringLiteral("power")
+        || kind == QStringLiteral("pipe")  || kind == QStringLiteral("stand")
+        || kind == QStringLiteral("tower");
 }
 
 bool MonitorLayersPanel::objectLocked(const QString &kind, quint32 id) const
@@ -745,6 +786,12 @@ bool MonitorLayersPanel::objectLocked(const QString &kind, quint32 id) const
         { StagePlatform *p = m_props->platform(id); return p && p->locked(); }
     if (kind == QStringLiteral("image"))
         return m_props->image(id).locked;
+    if (kind == QStringLiteral("pipe"))
+        { Pipe *b = m_props->pipe(id); return b && b->locked(); }
+    if (kind == QStringLiteral("stand"))
+        { Stand *s = m_props->stand(id); return s && s->locked(); }
+    if (kind == QStringLiteral("tower"))
+        { Tower *t = m_props->tower(id); return t && t->locked(); }
     if (kind == QStringLiteral("power"))
     {
         PowerDistribution *pd = m_doc->powerDistribution();
@@ -765,6 +812,12 @@ void MonitorLayersPanel::setObjectLocked(const QString &kind, quint32 id, bool l
         img.locked = locked;
         m_props->setImage(img);
     }
+    else if (kind == QStringLiteral("pipe"))
+        { if (Pipe *b = m_props->pipe(id)) b->setLocked(locked); }
+    else if (kind == QStringLiteral("stand"))
+        { if (Stand *s = m_props->stand(id)) s->setLocked(locked); }
+    else if (kind == QStringLiteral("tower"))
+        { if (Tower *t = m_props->tower(id)) t->setLocked(locked); }
     else if (kind == QStringLiteral("power"))
     {
         PowerDistribution *pd = m_doc->powerDistribution();
@@ -809,6 +862,21 @@ void MonitorLayersPanel::renameMapItem(const QString &kind, quint32 id, const QS
             m_props->setImage(img);
         }
         if (m_view) m_view->updateImages();
+    }
+    else if (kind == QStringLiteral("pipe"))
+    {
+        if (Pipe *b = m_props->pipe(id)) b->setName(name);
+        if (m_view) m_view->updatePlatforms();   // pipes/stands/towers redraw here
+    }
+    else if (kind == QStringLiteral("stand"))
+    {
+        if (Stand *s = m_props->stand(id)) s->setName(name);
+        if (m_view) m_view->updatePlatforms();
+    }
+    else if (kind == QStringLiteral("tower"))
+    {
+        if (Tower *t = m_props->tower(id)) t->setName(name);
+        if (m_view) m_view->updatePlatforms();
     }
 }
 
