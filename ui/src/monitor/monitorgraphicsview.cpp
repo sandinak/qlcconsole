@@ -3465,6 +3465,23 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
     while (it && it->parentItem())
         it = it->parentItem();
 
+    // Group drill-in for STRUCTURAL items: single-click selects the whole group
+    // (select-together); the FIRST double-click drills IN — selects just this
+    // member so it can be dragged alone. Only this item selected → the next
+    // double-click opens its editor (drill-in then act). Ungrouped items open
+    // the editor straight away.
+    auto drilledIntoGroup = [&](QGraphicsItem *item) -> bool {
+        if (m_layoutLocked || item == nullptr)         return false;
+        if (itemGroupId(item) == 0)                    return false;   // not grouped
+        if (m_scene->selectedItems().size() <= 1)      return false;   // already isolated
+        m_extendingSelection = true;                   // suppress select-together
+        m_scene->clearSelection();
+        item->setSelected(true);
+        m_extendingSelection = false;
+        emit mapSelectionChanged();
+        return true;
+    };
+
     if (auto *fi = dynamic_cast<MonitorFixtureItem *>(it))
     {
         // A fixture mounted ON a feature → open that FEATURE's editor (the fixture
@@ -3516,26 +3533,31 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
     }
     if (auto *ti = dynamic_cast<TrussItem *>(it))
     {
+        if (drilledIntoGroup(ti)) return;
         emit trussDoubleClicked(ti->trussId());
         return;
     }
     if (auto *pi = dynamic_cast<PlatformItem *>(it))
     {
+        if (drilledIntoGroup(pi)) return;
         emit platformDoubleClicked(pi->platformId());
         return;
     }
     if (auto *bi = dynamic_cast<PipeItem *>(it))
     {
+        if (drilledIntoGroup(bi)) return;
         emit pipeDoubleClicked(bi->pipeId());
         return;
     }
     if (auto *si = dynamic_cast<StandItem *>(it))
     {
+        if (drilledIntoGroup(si)) return;
         emit standDoubleClicked(si->standId());
         return;
     }
     if (auto *twi = dynamic_cast<TowerItem *>(it))
     {
+        if (drilledIntoGroup(twi)) return;
         emit towerDoubleClicked(twi->towerId());
         return;
     }
