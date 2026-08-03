@@ -165,10 +165,25 @@ void TrussItem::paint(QPainter *painter,
         QPen   boxPen  = m_highlighted ? QPen(QColor(0, 160, 255, 200), 3.0) : outerPen;
         painter->setPen(boxPen);
         painter->setBrush(boxFill);
-        painter->drawRect(QRectF(-r, -r, m_pxWid, m_pxWid));
-        painter->setPen(innerPen);
-        painter->drawLine(QPointF(-r * 0.8, 0), QPointF(r * 0.8, 0));
-        painter->drawLine(QPointF(0, -r * 0.8), QPointF(0, r * 0.8));
+        if (m_truss->profile() == Truss::TriangleTruss)
+        {
+            // Tri-truss tower: a triangular cross-section (apex upstage) instead
+            // of a square box, so the profile reads at a glance.
+            QPolygonF tri;
+            tri << QPointF(0, -r) << QPointF(r * 0.87, r * 0.5) << QPointF(-r * 0.87, r * 0.5);
+            painter->drawPolygon(tri);
+            painter->setPen(innerPen);
+            painter->drawLine(QPointF(0, 0), QPointF(0, -r));            // apex spoke
+            painter->drawLine(QPointF(0, 0), QPointF(r * 0.87, r * 0.5));
+            painter->drawLine(QPointF(0, 0), QPointF(-r * 0.87, r * 0.5));
+        }
+        else
+        {
+            painter->drawRect(QRectF(-r, -r, m_pxWid, m_pxWid));        // square box truss
+            painter->setPen(innerPen);
+            painter->drawLine(QPointF(-r * 0.8, 0), QPointF(r * 0.8, 0));
+            painter->drawLine(QPointF(0, -r * 0.8), QPointF(0, r * 0.8));
+        }
         return;
     }
 
@@ -211,6 +226,15 @@ void TrussItem::paint(QPainter *painter,
     {
         double x = i * webSpacing;
         painter->drawLine(QPointF(x, top), QPointF(x, bot));
+    }
+
+    // Triangle truss: an apex ridge line down the centre — reads as a 3-chord
+    // (triangular) truss vs the box truss's flat two-chord Warren pattern.
+    if (m_truss->profile() == Truss::TriangleTruss)
+    {
+        QPen apex(chordLine.lighter(130), 1.2);
+        painter->setPen(apex);
+        painter->drawLine(QPointF(0, 0), QPointF(L, 0));
     }
 
     // Chord lines on top

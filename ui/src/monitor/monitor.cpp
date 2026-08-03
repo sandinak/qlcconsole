@@ -5182,6 +5182,14 @@ void Monitor::slotEditTruss(quint32 tid)
     widthSpin->setValue(t->width() * toDisp_e);
     form->addRow(tr("Width:"), widthSpin);
 
+    QComboBox *profileCb = new QComboBox(&editDlg);
+    profileCb->addItem(tr("Square (box)"), int(Truss::SquareTruss));
+    profileCb->addItem(tr("Triangle"),     int(Truss::TriangleTruss));
+    profileCb->setCurrentIndex(profileCb->findData(int(t->profile())));
+    profileCb->setToolTip(tr("Cross-section shape — drawn distinctly on the map."));
+    form->addRow(tr("Profile:"), profileCb);
+    const Truss::Profile origProfile = t->profile();
+
     // --- Stand on a Stand: origin rides the stand top (Origin X/Y/Z ignored) ---
     QComboBox *standCb = new QComboBox(&editDlg);
     standCb->addItem(tr("(free — on the floor)"), quint32(Stand::invalidId()));
@@ -5385,12 +5393,15 @@ void Monitor::slotEditTruss(quint32 tid)
         t->setDirection(QPointF(qCos(rad), qSin(rad)));
         t->setLength(lenSpin->value() * fromDisp_e);
         t->setWidth(widthSpin->value() * fromDisp_e);
+        t->setProfile(static_cast<Truss::Profile>(profileCb->currentData().toInt()));
         reloadStudio();
     };
     for (QDoubleSpinBox *sp : { originX, originY, originZ, dirAngle, lenSpin, widthSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg,
                 [applyGeomLive](double){ applyGeomLive(); });
     connect(typeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg,
+            [applyGeomLive](int){ applyGeomLive(); });
+    connect(profileCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg,
             [applyGeomLive](int){ applyGeomLive(); });
     // The bar-preview hooks already recompute a child bar — mirror onto the canvas.
     connect(alongSpin,    QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [reloadStudio](double){ reloadStudio(); });
@@ -5428,6 +5439,7 @@ void Monitor::slotEditTruss(quint32 tid)
             t->setLength(origLen);
             t->setWidth(origWidth);
         }
+        t->setProfile(origProfile);
         m_graphicsView->updateTrusses();
         for (quint32 barId : barsCreatedHere)
             m_props->removeTruss(barId);
@@ -5439,6 +5451,7 @@ void Monitor::slotEditTruss(quint32 tid)
     t->setName(nameEdit->text());
     t->setLength(lenSpin->value() * fromDisp_e);
     t->setWidth(widthSpin->value() * fromDisp_e);
+    t->setProfile(static_cast<Truss::Profile>(profileCb->currentData().toInt()));
 
     const quint32 parentId = parentCb->currentData().toUInt();
     t->setParentTrussId(parentId);
