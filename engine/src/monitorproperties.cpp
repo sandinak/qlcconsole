@@ -1240,15 +1240,28 @@ float MonitorProperties::platformBaseZ(quint32 id) const
     const StagePlatform *b = m_platforms.value(id, nullptr);
     if (b == nullptr)
         return 0.0f;
-    const float cx = b->originX() + b->width() * 0.5f;
-    const float cy = b->originY() + b->depth() * 0.5f;
+    // A platform sits ON the deck of another when its CENTRE falls inside that
+    // other footprint — a small step block on a big deck rides the deck even
+    // though the block is shorter. Height does NOT decide the relationship:
+    // abutting tiers (a US deck behind a CS deck, neither centre inside the
+    // other) each stay solid from the floor. Pick the tallest such deck; 0 =
+    // floor.
+    const float bcx = b->originX() + b->width() * 0.5f;
+    const float bcy = b->originY() + b->depth() * 0.5f;
     float base = 0.0f;
     foreach (const StagePlatform *a, m_platforms)
     {
-        if (a == b || a->height() >= b->height())   // must be a LOWER platform
+        if (a == b)
             continue;
-        if (a->containsPoint(cx, cy))               // this one sits within it
-            base = qMax(base, a->height());
+        const float acx = a->originX() + a->width() * 0.5f;
+        const float acy = a->originY() + a->depth() * 0.5f;
+        if (!a->containsPoint(bcx, bcy))
+            continue;                                   // b is not over a
+        // Near-coincident footprints (each centre inside the other): the taller
+        // one is on top, so only ride a if a is the LOWER of the two.
+        if (b->containsPoint(acx, acy) && a->height() >= b->height())
+            continue;
+        base = qMax(base, a->height());
     }
     return base;
 }
