@@ -1134,7 +1134,10 @@ void PowerDistributionWidget::rebuildFixtures()
             it->setText(1, tr("(unassigned)"));
             it->setForeground(1, QBrush(Qt::gray));
         }
-        it->setText(2, QString::number(m_fixtureWatts.value(fx->id(), 0.0), 'f', 0));
+        // Show the fixture's RATED full watts (what the load calc uses), not the
+        // pre-GM current-draw estimate — the latter reads ~standby (e.g. 2 W) when
+        // nothing is running, which looked wrong next to the calc sheet's 100 W.
+        it->setText(2, QString::number(m_fixtureFullWatts.value(fx->id(), 0.0), 'f', 0));
     }
     m_fixtureList->resizeColumnToContents(0);
 }
