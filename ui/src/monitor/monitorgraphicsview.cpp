@@ -1373,6 +1373,11 @@ void MonitorGraphicsView::extendSelectionToGroups()
     // mid-rebuild (dynamic_cast on those crashed).
     if (m_extendingSelection || m_itemsRebuilding)
         return;
+    // When the plot is LOCKED nothing moves, so select-together (whose whole point
+    // is dragging a group as one) just gets in the way of picking a single item to
+    // inspect. Locked → single-click selects the individual; leave it un-extended.
+    if (m_layoutLocked)
+        return;
     m_extendingSelection = true;
 
     // Selecting any grouped item selects its whole OUTERMOST group subtree.

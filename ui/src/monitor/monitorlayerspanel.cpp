@@ -1116,12 +1116,31 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
     if (m_editable && objs.size() >= 2)
     {
         menu.addAction(tr("Group selected…"), this, [this, objs, item]() {
-            // Target layer = the one the (clicked) selection lives under, so the
-            // group and its members stay on their current layer.
+            // If every selected leaf already sits under the SAME group, the new
+            // group nests INSIDE it (a sub-group) rather than becoming a top-level
+            // sibling. Otherwise it's a top-level group on the selection's layer.
+            quint32 parentGroup = 0;
+            bool commonParent = true, first = true;
+            foreach (QTreeWidgetItem *sel, m_tree->selectedItems())
+            {
+                if (sel->data(0, NodeTypeRole).toInt() != NodeItem)
+                    continue;
+                QTreeWidgetItem *p = sel->parent();
+                const quint32 pg = (p && p->data(0, NodeTypeRole).toInt() == NodeGroup)
+                                       ? p->data(0, NodeIdRole).toUInt() : 0;
+                if (first) { parentGroup = pg; first = false; }
+                else if (pg != parentGroup) { commonParent = false; break; }
+            }
+            if (!commonParent)
+                parentGroup = 0;
+
             quint32 layer = m_props->activeLayerId();
-            for (QTreeWidgetItem *up = item; up != nullptr; up = up->parent())
-                if (up->data(0, NodeTypeRole).toInt() == NodeLayer)
-                { layer = up->data(0, NodeIdRole).toUInt(); break; }
+            if (parentGroup != 0)
+                layer = m_props->group(parentGroup).layerId;   // sub-group rides parent's layer
+            else
+                for (QTreeWidgetItem *up = item; up != nullptr; up = up->parent())
+                    if (up->data(0, NodeTypeRole).toInt() == NodeLayer)
+                    { layer = up->data(0, NodeIdRole).toUInt(); break; }
 
             bool ok = false;
             const quint32 gid = m_props->nextGroupId();
@@ -1130,9 +1149,9 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
                 tr("Group %1").arg(gid), &ok).trimmed();
             if (!ok || name.isEmpty())
                 return;
-            // Create the group and move the selected objects into it directly
-            // (robust regardless of canvas selectability / layer locks).
-            m_props->createGroup(gid, name, layer, 0);
+            // Create the group (nested under parentGroup when the selection shares
+            // one) and move the selected objects into it directly.
+            m_props->createGroup(gid, name, layer, parentGroup);
             if (m_view)
                 m_view->reparentToGroup(objs, gid);
             m_doc->setModified();
