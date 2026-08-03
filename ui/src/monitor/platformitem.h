@@ -62,6 +62,8 @@ public:
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
 
 protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
 
@@ -75,6 +77,7 @@ private:
     float              m_pxW;
     float              m_pxD;
     QGraphicsTextItem *m_label;   ///< child item
+    bool               m_dragMoved = false;   ///< a click only counts as a move once the pointer moves
 };
 
 /** @} */

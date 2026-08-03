@@ -58,6 +58,8 @@ public:
                  QWidget *widget) override;
 
 protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
 
@@ -71,6 +73,7 @@ private:
     bool               m_elevation;
     float              m_pxHeight;
     QGraphicsTextItem *m_label;
+    bool               m_dragMoved = false;
 };
 
 /** @} */

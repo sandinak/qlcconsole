@@ -133,6 +133,16 @@ QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &val
     if (change == ItemPositionChange && scene() != nullptr && m_platform != nullptr
         && m_platform->solid() && !m_platform->stackable())
     {
+        // Skip collision during a GROUP drag (>1 platform selected): the group
+        // moves rigidly, and clamping each member independently would scramble its
+        // layout. Only single-item drags block at contact.
+        int selPlatforms = 0;
+        foreach (QGraphicsItem *gi, scene()->selectedItems())
+            if (dynamic_cast<PlatformItem *>(gi) != nullptr && ++selPlatforms > 1)
+                break;
+        if (selPlatforms > 1)
+            return QGraphicsItem::itemChange(change, value);
+
         const QSizeF sz(m_pxW, m_pxD);
         const QPointF cur = pos();
         const QPointF np  = value.toPointF();
@@ -168,10 +178,25 @@ QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &val
     return QGraphicsItem::itemChange(change, value);
 }
 
+void PlatformItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = false;   // a drag only counts once the pointer actually moves
+    QGraphicsItem::mousePressEvent(event);
+}
+
+void PlatformItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = true;
+    QGraphicsItem::mouseMoveEvent(event);
+}
+
 void PlatformItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
-    emit itemDropped(this);
+    // Only a real drag persists/snaps — a bare click (or double-click to drill in)
+    // must NOT nudge the platform to the grid.
+    if (m_dragMoved)
+        emit itemDropped(this);
 }
 
 void PlatformItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)

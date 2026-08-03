@@ -127,10 +127,23 @@ void StandItem::paint(QPainter *painter,
     painter->drawEllipse(QPointF(0, 0), 3.0, 3.0);
 }
 
+void StandItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = false;
+    QGraphicsItem::mousePressEvent(event);
+}
+
+void StandItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = true;
+    QGraphicsItem::mouseMoveEvent(event);
+}
+
 void StandItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
-    emit itemDropped(this);
+    if (m_dragMoved)   // a bare click (or double-click) must not nudge/snap the stand
+        emit itemDropped(this);
 }
 
 void StandItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)

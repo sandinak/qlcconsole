@@ -188,10 +188,23 @@ void PipeItem::paint(QPainter *painter,
     painter->drawEllipse(QPointF(0, 0), pr, pr);
 }
 
+void PipeItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = false;
+    QGraphicsItem::mousePressEvent(event);
+}
+
+void PipeItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = true;
+    QGraphicsItem::mouseMoveEvent(event);
+}
+
 void PipeItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
-    emit itemDropped(this);
+    if (m_dragMoved)   // a bare click (or double-click) must not nudge/snap the boom
+        emit itemDropped(this);
 }
 
 void PipeItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)

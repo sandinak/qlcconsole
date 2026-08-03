@@ -126,10 +126,23 @@ void TowerItem::paint(QPainter *painter,
     painter->drawLine(QPointF(m_pxW, 0), QPointF(0, m_pxH));
 }
 
+void TowerItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = false;
+    QGraphicsItem::mousePressEvent(event);
+}
+
+void TowerItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = true;
+    QGraphicsItem::mouseMoveEvent(event);
+}
+
 void TowerItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
-    emit itemDropped(this);
+    if (m_dragMoved)   // a bare click (or double-click) must not nudge/snap the tower
+        emit itemDropped(this);
 }
 
 void TowerItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)

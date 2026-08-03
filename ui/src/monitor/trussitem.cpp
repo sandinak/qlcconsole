@@ -273,10 +273,23 @@ QVariant TrussItem::itemChange(GraphicsItemChange change, const QVariant &value)
     return QGraphicsItem::itemChange(change, value);
 }
 
+void TrussItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = false;
+    QGraphicsItem::mousePressEvent(event);
+}
+
+void TrussItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_dragMoved = true;
+    QGraphicsItem::mouseMoveEvent(event);
+}
+
 void TrussItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsItem::mouseReleaseEvent(event);
-    emit itemDropped(this);
+    if (m_dragMoved)   // a bare click (or double-click) must not nudge/snap the truss
+        emit itemDropped(this);
 }
 
 void TrussItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)

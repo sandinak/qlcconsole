@@ -66,6 +66,8 @@ public:
                  QWidget *widget) override;
 
 protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
 
@@ -86,6 +88,7 @@ private:
     bool               m_horizontal = false;   ///< draw as a line to m_pxEnd
     QPointF            m_pxEnd;
     QGraphicsTextItem *m_label;
+    bool               m_dragMoved = false;
 };
 
 /** @} */

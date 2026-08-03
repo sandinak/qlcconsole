@@ -81,6 +81,8 @@ public:
                         const QVariant &value) override;
 
 protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
 
@@ -100,6 +102,7 @@ private:
     QGraphicsTextItem  *m_label;       ///< child item — moves & rotates with this item
     bool                m_highlighted = false;
     bool                m_elevation = false;   ///< draw vertical tower as a segment
+    bool                m_dragMoved = false;   ///< a click only counts as a move once the pointer moves
 };
 
 /** @} */
