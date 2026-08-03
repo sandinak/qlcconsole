@@ -366,6 +366,12 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotAddBarToPipe);
     connect(m_graphicsView, &MonitorGraphicsView::platformRemoveRequested,
             this, &Monitor::slotPlatformRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::pipeRemoveRequested,
+            this, &Monitor::slotPipeRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::standRemoveRequested,
+            this, &Monitor::slotStandRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::towerRemoveRequested,
+            this, &Monitor::slotTowerRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::imageDoubleClicked,
             this, &Monitor::slotEditImage);
     connect(m_graphicsView, &MonitorGraphicsView::imageRemoveRequested,
@@ -3026,15 +3032,83 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
     if (view) view->reload();
 }
 
+QList<quint32> Monitor::fixturesOnFeature(FeatureKind kind, quint32 id) const
+{
+    QList<quint32> out;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == NULL)
+            continue;
+        const quint32 fid = fx->id();
+        const FixtureRigProps &rp = m_props->fixtureRigProps(fid);
+        bool hit = false;
+        switch (kind)
+        {
+            case TrussFeature:  hit = (rp.trussId == id); break;
+            case PipeFeature:   hit = (rp.pipeId  == id); break;
+            case TowerFeature:  hit = (rp.towerId == id); break;
+            case PlatformFeature:
+                hit = (rp.riserPlatformId == id || rp.deckPlatformId == id);
+                if (!hit)   // a studio frame group anchored to this platform
+                {
+                    const quint32 gid = m_props->fixtureFrameGroup(fid);
+                    if (gid != 0)
+                    {
+                        const MonitorProperties::MonitorGroup g = m_props->group(gid);
+                        hit = (g.anchorKind == QStringLiteral("platform") && g.anchorId == id);
+                    }
+                }
+                break;
+        }
+        if (hit)
+            out << fid;
+    }
+    return out;
+}
+
+Monitor::FeatureDeleteChoice Monitor::confirmFeatureDelete(
+    const QString &kind, const QString &name, const QList<quint32> &fids)
+{
+    QMessageBox box(this);
+    box.setIcon(QMessageBox::Question);
+    box.setWindowTitle(tr("Delete %1").arg(kind));
+    QString msg = tr("Delete %1 “%2”?").arg(kind.toLower(), name);
+
+    QPushButton *goBtn   = nullptr;   // detach & keep, or plain delete
+    QPushButton *withBtn = nullptr;   // also remove the fixtures from the plot
+    if (!fids.isEmpty())
+    {
+        msg += QStringLiteral("\n\n");
+        msg += tr("%n fixture(s) mounted on it will be DETACHED and left in place. "
+                  "You can also remove them from the plot.", "", fids.count());
+        goBtn   = box.addButton(tr("Detach && Keep"),      QMessageBox::AcceptRole);
+        withBtn = box.addButton(tr("Remove Fixtures Too"), QMessageBox::DestructiveRole);
+    }
+    else
+    {
+        goBtn = box.addButton(tr("Delete"), QMessageBox::AcceptRole);
+    }
+    QPushButton *cancelBtn = box.addButton(QMessageBox::Cancel);
+    box.setText(msg);
+    box.setDefaultButton(goBtn);
+    box.exec();
+
+    if (box.clickedButton() == cancelBtn)          return DeleteCancel;
+    if (withBtn && box.clickedButton() == withBtn) return DeleteWithFixtures;
+    return DeleteDetach;
+}
+
 void Monitor::slotTrussRemoveRequested(quint32 tid)
 {
     Truss *t = m_props->truss(tid);
     if (t == NULL)
         return;
-    if (QMessageBox::question(this, tr("Remove Truss"),
-            tr("Remove truss '%1'?").arg(t->name()),
-            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+    const QList<quint32> fids = fixturesOnFeature(TrussFeature, tid);
+    const FeatureDeleteChoice choice = confirmFeatureDelete(tr("Truss"), t->name(), fids);
+    if (choice == DeleteCancel)
         return;
+    if (choice == DeleteWithFixtures)
+        foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
     m_props->removeTruss(tid);
     m_graphicsView->updateTrusses();
     m_graphicsView->refreshFixtureBindings();   // ex-fixtures are no longer bound
@@ -3120,13 +3194,71 @@ void Monitor::slotPlatformRemoveRequested(quint32 pid)
     StagePlatform *p = m_props->platform(pid);
     if (p == NULL)
         return;
-    if (QMessageBox::question(this, tr("Remove Platform"),
-            tr("Remove platform '%1'?").arg(p->name()),
-            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+    const QList<quint32> fids = fixturesOnFeature(PlatformFeature, pid);
+    const FeatureDeleteChoice choice = confirmFeatureDelete(tr("Platform"), p->name(), fids);
+    if (choice == DeleteCancel)
         return;
+    if (choice == DeleteWithFixtures)
+        foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
     m_props->removePlatform(pid);
     m_graphicsView->updatePlatforms();
     m_graphicsView->refreshRiserFixtures();
+    m_graphicsView->refreshFixtureBindings();   // frame-group members detached
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotPipeRemoveRequested(quint32 pid)
+{
+    Pipe *b = m_props->pipe(pid);
+    if (b == NULL)
+        return;
+    const QList<quint32> fids = fixturesOnFeature(PipeFeature, pid);
+    const FeatureDeleteChoice choice = confirmFeatureDelete(tr("Boom"), b->name(), fids);
+    if (choice == DeleteCancel)
+        return;
+    if (choice == DeleteWithFixtures)
+        foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
+    m_props->removePipe(pid);
+    m_graphicsView->updatePlatforms();          // pipes/stands/towers live here
+    m_graphicsView->refreshFixtureBindings();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotStandRemoveRequested(quint32 sid)
+{
+    Stand *s = m_props->stand(sid);
+    if (s == NULL)
+        return;
+    // A stand carries no fixtures directly — booms/trusses stand on it and are
+    // detached (left in place) by removeStand. No fixtures list to offer.
+    const FeatureDeleteChoice choice = confirmFeatureDelete(tr("Stand"), s->name(),
+                                                            QList<quint32>());
+    if (choice == DeleteCancel)
+        return;
+    m_props->removeStand(sid);
+    m_props->recomputeStandMounts();
+    m_graphicsView->updatePlatforms();
+    m_graphicsView->refreshFixtureBindings();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotTowerRemoveRequested(quint32 tid)
+{
+    Tower *tw = m_props->tower(tid);
+    if (tw == NULL)
+        return;
+    const QList<quint32> fids = fixturesOnFeature(TowerFeature, tid);
+    const FeatureDeleteChoice choice = confirmFeatureDelete(tr("Tower"), tw->name(), fids);
+    if (choice == DeleteCancel)
+        return;
+    if (choice == DeleteWithFixtures)
+        foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
+    m_props->removeTower(tid);
+    m_graphicsView->updatePlatforms();
+    m_graphicsView->refreshFixtureBindings();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 }

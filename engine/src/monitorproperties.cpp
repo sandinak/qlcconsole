@@ -1103,6 +1103,26 @@ void MonitorProperties::removePlatform(quint32 id)
             it->deckPlatformId = FixtureRigProps::invalidPlatformId();
     }
 
+    // A studio frame group anchored to this platform (e.g. a step block's LED
+    // strips) would be orphaned once the platform is gone — pull every member out
+    // and drop the group, so those fixtures detach cleanly in place (mirrors
+    // removeTruss).
+    for (auto git = m_groups.begin(); git != m_groups.end(); )
+    {
+        if (git->anchorKind == QStringLiteral("platform") && git->anchorId == id)
+        {
+            const quint32 gid = git.key();
+            for (auto it = m_fixtureItems.begin(); it != m_fixtureItems.end(); ++it)
+                if (it->m_baseItem.m_groupId == gid)
+                    it->m_baseItem.m_groupId = 0;
+            git = m_groups.erase(git);
+        }
+        else
+        {
+            ++git;
+        }
+    }
+
     delete m_platforms.take(id);
 }
 

@@ -296,6 +296,7 @@ protected slots:
     /** True if the fixture is already mounted on some feature (truss/pipe/tower/
      *  riser/deck/studio-group). */
     bool fixtureIsMounted(quint32 fid) const;
+
     /** Fill an Orientation combo with the options valid for a fixture's MOUNT
      *  (vertical→sideways only; horizontal→on-top/under/side; tower→on/under shelf;
      *  else upright/sideways/hung). Each item carries mountingType (UserRole) +
@@ -308,6 +309,9 @@ protected slots:
     void slotAddBarToTruss(quint32 parentId, float offset);
     void slotAddBarToPipe(quint32 parentPipeId);
     void slotPlatformRemoveRequested(quint32 pid);
+    void slotPipeRemoveRequested(quint32 pid);
+    void slotStandRemoveRequested(quint32 sid);
+    void slotTowerRemoveRequested(quint32 tid);
     void slotAddImage();
     void slotEditImage(quint32 id);
     void slotImageRemoveRequested(quint32 id);
@@ -444,6 +448,19 @@ protected:
     QAction *m_pasteAction;
 
 private:
+    /** Which structural feature a fixture lookup is scoped to. */
+    enum FeatureKind { TrussFeature, PipeFeature, TowerFeature, PlatformFeature };
+    /** Fixture ids currently mounted on the given feature (direct rig mount, or —
+     *  for a platform — a studio frame group anchored to it). */
+    QList<quint32> fixturesOnFeature(FeatureKind kind, quint32 id) const;
+    /** What to do with a feature's attached fixtures when it is deleted. */
+    enum FeatureDeleteChoice { DeleteCancel, DeleteDetach, DeleteWithFixtures };
+    /** Graceful delete confirmation: names the feature, reports how many fixtures
+     *  are attached, and offers Detach&Keep / Remove-fixtures-too / Cancel. With no
+     *  attached fixtures it's a plain Delete / Cancel. */
+    FeatureDeleteChoice confirmFeatureDelete(const QString &kind, const QString &name,
+                                             const QList<quint32> &fids);
+
     /** Value snapshots of stage features for the copy/paste clipboard. The
      *  engine models are owned by MonitorProperties and may be deleted, so we
      *  store geometry/appearance by value rather than holding pointers. */

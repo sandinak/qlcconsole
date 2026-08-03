@@ -587,6 +587,11 @@ signals:
     void pipeDoubleClicked(quint32 pipeId);
     void standDoubleClicked(quint32 standId);
     void towerDoubleClicked(quint32 towerId);
+    /** Delete requests for the structural features that lacked a right-click
+     *  Delete (truss/platform/image already have theirs above). */
+    void pipeRemoveRequested(quint32 pipeId);
+    void standRemoveRequested(quint32 standId);
+    void towerRemoveRequested(quint32 towerId);
     /** Open the unified studio editor for a studio (frame) group. */
     void studioGroupEditRequested(quint32 groupId);
 

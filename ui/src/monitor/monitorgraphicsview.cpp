@@ -3771,6 +3771,84 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
         return;
     }
 
+    if (auto *bi = dynamic_cast<PipeItem *>(it))
+    {
+        Pipe *b = bi->pipe();
+        const quint32 pid = bi->pipeId();
+        const bool locked = (b && b->locked());
+        QMenu menu(this);
+        QAction *editAct   = menu.addAction(tr("Edit Boom…"));
+        QAction *deleteAct = menu.addAction(tr("Delete Boom"));
+        menu.addSeparator();
+        QAction *lockAct = menu.addAction(locked ? tr("Unlock Position")
+                                                 : tr("Lock Position"));
+        QAction *chosen = menu.exec(event->globalPos());
+        if (chosen == editAct)
+            emit pipeDoubleClicked(pid);
+        else if (chosen == deleteAct)
+            emit pipeRemoveRequested(pid);
+        else if (chosen == lockAct && b)
+        {
+            b->setLocked(!b->locked());
+            m_doc->setModified();
+            refreshItemLayerState();
+            bi->update();
+        }
+        return;
+    }
+
+    if (auto *si = dynamic_cast<StandItem *>(it))
+    {
+        Stand *s = si->stand();
+        const quint32 sid = si->standId();
+        const bool locked = (s && s->locked());
+        QMenu menu(this);
+        QAction *editAct   = menu.addAction(tr("Edit Stand…"));
+        QAction *deleteAct = menu.addAction(tr("Delete Stand"));
+        menu.addSeparator();
+        QAction *lockAct = menu.addAction(locked ? tr("Unlock Position")
+                                                 : tr("Lock Position"));
+        QAction *chosen = menu.exec(event->globalPos());
+        if (chosen == editAct)
+            emit standDoubleClicked(sid);
+        else if (chosen == deleteAct)
+            emit standRemoveRequested(sid);
+        else if (chosen == lockAct && s)
+        {
+            s->setLocked(!s->locked());
+            m_doc->setModified();
+            refreshItemLayerState();
+            si->update();
+        }
+        return;
+    }
+
+    if (auto *twi = dynamic_cast<TowerItem *>(it))
+    {
+        Tower *tw = twi->tower();
+        const quint32 twid = twi->towerId();
+        const bool locked = (tw && tw->locked());
+        QMenu menu(this);
+        QAction *editAct   = menu.addAction(tr("Edit Tower…"));
+        QAction *deleteAct = menu.addAction(tr("Delete Tower"));
+        menu.addSeparator();
+        QAction *lockAct = menu.addAction(locked ? tr("Unlock Position")
+                                                 : tr("Lock Position"));
+        QAction *chosen = menu.exec(event->globalPos());
+        if (chosen == editAct)
+            emit towerDoubleClicked(twid);
+        else if (chosen == deleteAct)
+            emit towerRemoveRequested(twid);
+        else if (chosen == lockAct && tw)
+        {
+            tw->setLocked(!tw->locked());
+            m_doc->setModified();
+            refreshItemLayerState();
+            twi->update();
+        }
+        return;
+    }
+
     // Empty canvas (or any other item) → the generic add/paste menu.
     emit contextMenuRequested(sp);
 }
