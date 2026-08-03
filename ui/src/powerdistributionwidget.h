@@ -59,6 +59,9 @@ signals:
                                   const QList<quint32> &fixtureIds);
 
 protected:
+    /** Enter/Return/F2 starts an inline rename of the current row's name column
+     *  (consistent with the other trees). */
+    void keyPressEvent(QKeyEvent *event) override;
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dropEvent(QDropEvent *event) override;

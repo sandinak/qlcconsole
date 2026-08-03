@@ -24,6 +24,7 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QKeyEvent>
 #include <QDrag>
 
 #include "functionstreewidget.h"
@@ -881,6 +882,27 @@ QMimeData* FunctionsTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &ite
 
     // Fall back to default behavior
     return QTreeWidget::mimeData(items);
+}
+
+void FunctionsTreeWidget::keyPressEvent(QKeyEvent *event)
+{
+    // Enter/Return/F2 → inline rename of the current row (functions, palettes and
+    // folders are all ItemIsEditable; slotItemChanged persists the new name).
+    // Activation here is double-click only, so Enter is free to mean "rename".
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter
+         || event->key() == Qt::Key_F2)
+        && state() != QAbstractItemView::EditingState)
+    {
+        QTreeWidgetItem *it = currentItem();
+        if (it != NULL && (it->flags() & Qt::ItemIsEditable)
+            && selectedItems().size() <= 1)
+        {
+            editItem(it, COL_NAME);
+            event->accept();
+            return;
+        }
+    }
+    QTreeWidget::keyPressEvent(event);
 }
 
 void FunctionsTreeWidget::mousePressEvent(QMouseEvent *event)

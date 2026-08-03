@@ -2238,6 +2238,19 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     tree->setContextMenuPolicy(Qt::CustomContextMenu);
     // F2 renames a group folder (double-click is taken by open-head-layout).
     tree->setEditTriggers(QAbstractItemView::EditKeyPressed);
+    // Enter/Return also renames the current editable row (consistent with the
+    // other trees); scoped to the tree so it doesn't shadow dialog defaults.
+    for (int k : {int(Qt::Key_Return), int(Qt::Key_Enter)})
+    {
+        QShortcut *sc = new QShortcut(QKeySequence(k), tree);
+        sc->setContext(Qt::WidgetShortcut);
+        connect(sc, &QShortcut::activated, tree, [tree]() {
+            QTreeWidgetItem *it = tree->currentItem();
+            if (it != NULL && (it->flags() & Qt::ItemIsEditable)
+                && tree->selectedItems().size() <= 1)
+                tree->editItem(it, 0);
+        });
+    }
     lv->addWidget(tree, 1);
     left->setMinimumWidth(220);
     // (The drag-source panel was retired — adding fixtures is a right-click on the

@@ -11,6 +11,7 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QKeyEvent>
+#include <QTreeWidgetItemIterator>
 #include <QHeaderView>
 #include <QMenu>
 #include <QMessageBox>
@@ -52,6 +53,8 @@ FixtureGroupSource::FixtureGroupSource(Doc *doc, QWidget *parent)
             this, SLOT(slotContextMenu(QPoint)));
     connect(this, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
             this, SLOT(slotItemDoubleClicked(QTreeWidgetItem*,int)));
+    connect(this, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+            this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
 
     reload();
 
@@ -132,7 +135,8 @@ void FixtureGroupSource::reload()
         gi->setIcon(0, QIcon(":/group.png"));
         gi->setData(0, IdRole, g->id());
         gi->setData(0, KindRole, GroupNode);
-        gi->setFlags(leafFlags);
+        gi->setData(0, NameRole, g->name());   // plain name for inline rename
+        gi->setFlags(leafFlags);               // ItemIsEditable armed on demand
 
         QList<Fixture*> members2;
         foreach (quint32 fid, members)
@@ -267,7 +271,7 @@ void FixtureGroupSource::slotContextMenu(const QPoint &pos)
     }
     if (chosen == rename)
     {
-        renameGroupPrompt(groupIds.first());
+        beginRename(groupItemById(groupIds.first()));
         return;
     }
     if (chosen == del)
@@ -315,32 +319,72 @@ void FixtureGroupSource::slotItemDoubleClicked(QTreeWidgetItem *item, int column
     emit groupDoubleClicked(item->data(0, IdRole).toUInt());
 }
 
-void FixtureGroupSource::renameGroupPrompt(quint32 groupId)
+QTreeWidgetItem *FixtureGroupSource::groupItemById(quint32 id) const
 {
-    FixtureGroup *g = m_doc->fixtureGroup(groupId);
-    if (g == NULL)
+    QTreeWidgetItemIterator it(const_cast<FixtureGroupSource *>(this));
+    for (; *it != NULL; ++it)
+        if ((*it)->data(0, KindRole).toInt() == GroupNode
+            && (*it)->data(0, IdRole).toUInt() == id)
+            return *it;
+    return NULL;
+}
+
+void FixtureGroupSource::beginRename(QTreeWidgetItem *item)
+{
+    if (item == NULL || item->data(0, KindRole).toInt() != GroupNode)
         return;
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, tr("Rename group"),
-                             tr("Group name:"), QLineEdit::Normal, g->name(), &ok);
-    if (ok && name.trimmed().isEmpty() == false)
-    {
-        g->setName(name.trimmed()); // emits changed() -> reload()
-        m_doc->setModified();
-    }
+    // Arm the row editable and show the PLAIN name (drop the "(N fixtures)"
+    // suffix) for editing. blockSignals so arming/relabelling doesn't fire the
+    // itemChanged commit path (it only acts on an armed row — see slotItemChanged).
+    blockSignals(true);
+    item->setFlags(item->flags() | Qt::ItemIsEditable);
+    item->setText(0, item->data(0, NameRole).toString());
+    blockSignals(false);
+    editItem(item, 0);
+}
+
+void FixtureGroupSource::slotItemChanged(QTreeWidgetItem *item, int column)
+{
+    // Only a row ARMED by beginRename() is editable; the setText/setData storm
+    // during reload() targets non-editable rows and is ignored here.
+    if (column != 0 || item == NULL || !(item->flags() & Qt::ItemIsEditable))
+        return;
+    // Disarm first so the changes below can't re-enter this handler.
+    item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+
+    const quint32 gid = item->data(0, IdRole).toUInt();
+    const QString newName = item->text(0).trimmed();
+    // Defer: applying the name reloads the tree (which deletes this very item),
+    // so must not happen synchronously inside itemChanged.
+    QTimer::singleShot(0, this, [this, gid, newName]() {
+        FixtureGroup *g = m_doc->fixtureGroup(gid);
+        if (g == NULL)
+            return;
+        if (newName.isEmpty() == false && newName != g->name())
+        {
+            g->setName(newName);   // emits changed() -> reload() restores the suffix
+            m_doc->setModified();
+        }
+        else
+        {
+            reload();              // no-op/empty edit: restore the "Name (N)" display
+        }
+    });
 }
 
 void FixtureGroupSource::keyPressEvent(QKeyEvent *event)
 {
-    // Enter/Return on a single selected group row → rename it (matches the
-    // right-click "Rename group…"). Anything else keeps the default behaviour.
-    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+    // Enter/Return/F2 on a single selected group row → inline rename (matches the
+    // Fixture Manager / Layers trees). Anything else keeps the default behaviour.
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter
+         || event->key() == Qt::Key_F2)
+        && state() != QAbstractItemView::EditingState)
     {
         QTreeWidgetItem *item = currentItem();
         if (item != NULL && item->data(0, KindRole).toInt() == GroupNode
             && selectedItems().size() <= 1)
         {
-            renameGroupPrompt(item->data(0, IdRole).toUInt());
+            beginRename(item);
             event->accept();
             return;
         }

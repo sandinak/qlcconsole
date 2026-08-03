@@ -214,6 +214,9 @@ signals:
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
+    /** Enter/Return/F2 starts an inline rename of the current row (consistent
+     *  with the Fixtures/Groups and Layers trees). */
+    void keyPressEvent(QKeyEvent *event) override;
     /** In external-drag mode, use a small ghost anchored at the cursor (hotspot
      *  0,0) so dropped items land under the pointer — Qt's default full-row
      *  pixmap grabs at the press point and makes drops land offset to the right. */

@@ -40,6 +40,7 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QKeyEvent>
 #include <QStyledItemDelegate>
 #include <QComboBox>
 #include <algorithm>
@@ -270,6 +271,26 @@ QMimeData *PowerCircuitTree::mimeData(const QList<QTreeWidgetItem *> items) cons
     QMimeData *mime = new QMimeData();
     mime->setData(FIXTURE_DRAG_MIME_TYPE, fxData);
     return mime;
+}
+
+void PowerCircuitTree::keyPressEvent(QKeyEvent *event)
+{
+    // Enter/Return/F2 → inline rename of the current row's NAME column (sources
+    // and circuits are ItemIsEditable; slotTreeItemChanged persists it).
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter
+         || event->key() == Qt::Key_F2)
+        && state() != QAbstractItemView::EditingState)
+    {
+        QTreeWidgetItem *it = currentItem();
+        if (it != NULL && (it->flags() & Qt::ItemIsEditable)
+            && selectedItems().size() <= 1)
+        {
+            editItem(it, ColName);   // ColName == 0
+            event->accept();
+            return;
+        }
+    }
+    QTreeWidget::keyPressEvent(event);
 }
 
 void PowerCircuitTree::dragEnterEvent(QDragEnterEvent *event)
