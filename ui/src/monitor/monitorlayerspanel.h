@@ -137,6 +137,7 @@ private:
         quint32 layerId;
         quint32 groupId;    ///< immediate group (0 = loose)
         QColor  color;      ///< platform colour (for the tree swatch); else invalid
+        QString fgName;     ///< Fixture Group (lighting) this fixture belongs to; else empty
     };
 
     QList<ItemDesc> gatherItems() const;
@@ -144,6 +145,9 @@ private:
                         const QList<ItemDesc> &items);
     /** Expand or collapse a node and all of its descendants. */
     static void setSubtreeExpanded(QTreeWidgetItem *node, bool expanded);
+    /** Create a lighting Fixture Group (prompted name) from the given fixtures —
+     *  the explicit "make a control group" action (distinct from map Folders). */
+    void createFixtureGroupFrom(const QList<quint32> &fixtureIds);
     void addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d);
     /** The tree icon for an item KIND (fixture/truss/platform/pipe/stand/tower/
      *  image/power). @p color tints the platform swatch. */

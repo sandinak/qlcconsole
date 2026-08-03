@@ -73,6 +73,8 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "pipe.h"
 #include "stand.h"
 #include "tower.h"
+#include "fixturegroup.h"
+#include <QtMath>
 #include "stagetarget.h"
 #include "truss.h"
 #include "fixture.h"
@@ -253,6 +255,13 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
     if (m_props == nullptr)
         return out;
 
+    // Reverse map fixture id → its Fixture Group (lighting) name, for the 💡 badge.
+    QHash<quint32, QString> fixtureFG;
+    foreach (FixtureGroup *fg, m_doc->fixtureGroups())
+        if (fg != nullptr)
+            foreach (quint32 fid, fg->fixtureList())
+                fixtureFG.insert(fid, fg->name());
+
     foreach (quint32 fid, m_props->fixtureItemsID())
     {
         Fixture *f = m_doc->fixture(fid);
@@ -262,6 +271,7 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
         d.name    = (f != nullptr) ? f->name() : tr("Fixture %1").arg(fid);
         d.layerId = m_props->fixtureLayer(fid);
         d.groupId = m_props->fixtureGroup(fid);
+        d.fgName  = fixtureFG.value(fid);
         out << d;
     }
     foreach (Truss *t, m_props->trusses())
@@ -352,11 +362,49 @@ void MonitorLayersPanel::setSubtreeExpanded(QTreeWidgetItem *node, bool expanded
         setSubtreeExpanded(node->child(i), expanded);
 }
 
+void MonitorLayersPanel::createFixtureGroupFrom(const QList<quint32> &fixtureIds)
+{
+    if (fixtureIds.isEmpty())
+        return;
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("New Fixture Group"),
+        tr("Fixture group name:"), QLineEdit::Normal, tr("Fixture Group"), &ok).trimmed();
+    if (!ok || name.isEmpty())
+        return;
+
+    // Roughly-square head grid (mirrors FixtureGroupSource / FixtureManager).
+    int headTotal = 0;
+    foreach (quint32 fid, fixtureIds)
+        if (Fixture *fx = m_doc->fixture(fid))
+            headTotal += fx->heads();
+    const int side = qMax(1, int(qCeil(qSqrt(double(qMax(1, headTotal))))));
+
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName(name);
+    grp->setSize(QSize(side, side));
+    m_doc->addFixtureGroup(grp);   // emits fixtureGroupAdded
+    foreach (quint32 fid, fixtureIds)
+        grp->assignFixture(fid);    // lays each fixture's heads into the grid
+
+    m_doc->setModified();
+    reload();   // fixtures now wear the 💡 badge
+}
+
 void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
 {
     QTreeWidgetItem *node = new QTreeWidgetItem(parent);
-    node->setText(0, d.name);
-    node->setToolTip(0, d.name);
+    // A fixture in a lighting Fixture Group wears a 💡 badge + the group name, so
+    // its lighting membership reads at a glance without leaving the map view.
+    if (!d.fgName.isEmpty())
+    {
+        node->setText(0, QStringLiteral("%1   \xF0\x9F\x92\xA1 %2").arg(d.name, d.fgName));
+        node->setToolTip(0, tr("%1 — in Fixture Group “%2”").arg(d.name, d.fgName));
+    }
+    else
+    {
+        node->setText(0, d.name);
+        node->setToolTip(0, d.name);
+    }
     node->setFirstColumnSpanned(true);   // full-width name (no eye/lock column)
     node->setData(0, NodeTypeRole, int(NodeItem));
     node->setData(0, NodeIdRole, d.id);
@@ -808,7 +856,12 @@ void MonitorLayersPanel::slotItemChanged(QTreeWidgetItem *item, int column)
         return;
     const int type = item->data(0, NodeTypeRole).toInt();
     const quint32 id = item->data(0, NodeIdRole).toUInt();
-    const QString name = item->text(0).trimmed();
+    QString name = item->text(0).trimmed();
+    // A fixture row may carry a "  💡 <group>" lighting badge in its text — strip
+    // it so an inline rename doesn't bake the badge into the fixture's name.
+    const int bulb = name.indexOf(QStringLiteral("\xF0\x9F\x92\xA1"));
+    if (bulb >= 0)
+        name = name.left(bulb).trimmed();
     if (name.isEmpty())
         return;
 
@@ -1149,7 +1202,7 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
                 tr("Folder %1").arg(gid), &ok).trimmed();
             if (!ok || name.isEmpty())
                 return;
-            // Create the group (nested under parentGroup when the selection shares
+            // Create the folder (nested under parentGroup when the selection shares
             // one) and move the selected objects into it directly.
             m_props->createGroup(gid, name, layer, parentGroup);
             if (m_view)
@@ -1158,6 +1211,20 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
             m_focusLayerAfterReload = int(layer);
             reload();
         });
+    }
+    // All-fixture selection → offer the explicit lighting Fixture Group (distinct
+    // from a map Folder). Grouping stays a Folder; THIS makes a control group.
+    if (m_editable && !objs.isEmpty())
+    {
+        QList<quint32> fixIds; bool allFixtures = true;
+        for (const QPair<QString, quint32> &o : objs)
+        {
+            if (o.first != QStringLiteral("fixture")) { allFixtures = false; break; }
+            fixIds << o.second;
+        }
+        if (allFixtures && !fixIds.isEmpty())
+            menu.addAction(tr("Create Fixture Group from these…"), this,
+                           [this, fixIds]() { createFixtureGroupFrom(fixIds); });
     }
     if (m_editable && !objs.isEmpty())
     {
