@@ -130,8 +130,18 @@ QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &val
     // stops ("block at contact"). A stackable platform (a step/riser) is exempt, so
     // it may sit on top. Two items collide only when BOTH are solid and NEITHER is
     // stackable.
-    if (change == ItemPositionChange && scene() != nullptr && m_platform != nullptr
-        && m_platform->solid() && !m_platform->stackable())
+    MonitorProperties *mprops = m_doc ? m_doc->monitorProperties() : nullptr;
+    // A platform PERMITS overlap when it's non-solid, explicitly Stackable, OR
+    // AUTO-stackable — its base sits above the floor because it's on top of a
+    // taller platform (a step/riser). So steps never trip the no-overlap rule
+    // without the user marking anything.
+    auto permitsOverlap = [mprops](StagePlatform *p) -> bool {
+        if (p == nullptr) return true;
+        if (!p->solid() || p->stackable()) return true;
+        return mprops != nullptr && mprops->platformBaseZ(p->id()) > 0.001f;
+    };
+
+    if (change == ItemPositionChange && scene() != nullptr && !permitsOverlap(m_platform))
     {
         // Skip collision during a GROUP drag (>1 platform selected): the group
         // moves rigidly, and clamping each member independently would scramble its
@@ -146,7 +156,6 @@ QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &val
         const QSizeF sz(m_pxW, m_pxD);
         const QPointF cur = pos();
         const QPointF np  = value.toPointF();
-        const QRectF  curRect(cur, sz);
 
         auto obstacleFor = [&](const QRectF &r) -> QRectF {
             foreach (QGraphicsItem *gi, scene()->items())
@@ -154,15 +163,11 @@ QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &val
                 PlatformItem *o = dynamic_cast<PlatformItem *>(gi);
                 if (o == nullptr || o == this || o->m_platform == nullptr)
                     continue;
-                if (!o->m_platform->solid() || o->m_platform->stackable())
+                if (permitsOverlap(o->m_platform))
                     continue;                     // that one permits overlap
                 if (o->isSelected())
                     continue;                     // moving together (group drag)
                 const QRectF orect(o->pos(), QSizeF(o->m_pxW, o->m_pxD));
-                if (curRect.intersects(orect))
-                    continue;                     // ALREADY overlapping — grandfather it
-                                                  // (don't fling the platform out of a
-                                                  //  pre-existing overlap; only block NEW ones)
                 if (r.intersects(orect))
                     return orect;
             }
