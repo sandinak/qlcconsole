@@ -146,6 +146,7 @@ QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &val
         const QSizeF sz(m_pxW, m_pxD);
         const QPointF cur = pos();
         const QPointF np  = value.toPointF();
+        const QRectF  curRect(cur, sz);
 
         auto obstacleFor = [&](const QRectF &r) -> QRectF {
             foreach (QGraphicsItem *gi, scene()->items())
@@ -158,6 +159,10 @@ QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &val
                 if (o->isSelected())
                     continue;                     // moving together (group drag)
                 const QRectF orect(o->pos(), QSizeF(o->m_pxW, o->m_pxD));
+                if (curRect.intersects(orect))
+                    continue;                     // ALREADY overlapping — grandfather it
+                                                  // (don't fling the platform out of a
+                                                  //  pre-existing overlap; only block NEW ones)
                 if (r.intersects(orect))
                     return orect;
             }
