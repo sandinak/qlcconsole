@@ -159,6 +159,9 @@ private:
     /** Create a new palette of the given QLCPalette::PaletteType in the
      *  selected palette folder and open it in the look editor. */
     void createPalette(int paletteType);
+    /** Select and scroll the source palette tree to @p paletteId (e.g. after
+     *  creating a palette or auto-renaming an effect, so it's easy to find). */
+    void revealPalette(quint32 paletteId);
 
     /** Move Effect palettes still on the bare default folder into
      *  Palettes/Effect/<Category>/<Engine>/ so the tree mirrors the picker.

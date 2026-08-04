@@ -63,6 +63,9 @@ signals:
     /** The edited palette's value changed (may affect name/icon — triggers full
      *  tree + canvas update in ProgrammingManager). */
     void paletteChanged(quint32 paletteId);
+    /** Emitted when a palette is auto-renamed (e.g. an Effect renamed to its
+     *  effect's name), so the source tree can re-reveal it at its new spot. */
+    void paletteRenamed(quint32 paletteId);
 
     /** A live parameter value changed but the palette's name/icon are
      *  unaffected (e.g. effect script param slider). Only refreshes the DMX

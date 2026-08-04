@@ -508,6 +508,15 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // Refresh canvas palette tiles when a palette is renamed in the tree.
     connect(m_paletteTree, &FunctionsTreeWidget::paletteRenamed,
             this, [this](quint32) { if (m_canvas) m_canvas->reload(); });
+    // An auto-rename (e.g. Effect → its effect's name) re-sorts the tree; rebuild
+    // then re-reveal the item so it stays findable. Deferred so the rename's own
+    // tree refresh settles first.
+    connect(m_lookEditor, &LookEditor::paletteRenamed, this, [this](quint32 id) {
+        QTimer::singleShot(0, this, [this, id]() {
+            m_paletteTree->updateTree();
+            revealPalette(id);
+        });
+    });
 
     // Double-click a palette in the source tree to edit it inline too.
     connect(m_paletteTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
@@ -904,8 +913,24 @@ void ProgrammingManager::createPalette(int paletteType)
         return;
     }
     m_doc->setModified();
+    revealPalette(p->id());            // select + scroll to it in the source tree
     m_lookEditor->setPalette(p->id()); // edit it inline immediately
     showLookEditorPanel();
+}
+
+void ProgrammingManager::revealPalette(quint32 paletteId)
+{
+    QLCPalette *p = m_doc->palette(paletteId);
+    if (p == NULL)
+        return;
+    QTreeWidgetItem *item = m_paletteTree->paletteItem(p);
+    if (item == NULL)
+        return;
+    // Expand the folder chain so the item is visible, then select + centre it.
+    for (QTreeWidgetItem *a = item->parent(); a != NULL; a = a->parent())
+        a->setExpanded(true);
+    m_paletteTree->setCurrentItem(item);
+    m_paletteTree->scrollToItem(item, QAbstractItemView::PositionAtCenter);
 }
 
 void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)

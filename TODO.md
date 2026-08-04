@@ -16,6 +16,13 @@ to DONE.md when it ships. See also the session memory under
   is the LTP / last-look-persistence question (see memory: show LTP output
   model). Decide the show-time policy before it bites live. *(raised during the
   effect-fallback fix)*
+- **Effects should respect the look's master dimmer (discuss/build)** — an
+  effect (e.g. Confetti) currently fires at full even when the look has no /
+  a low Dimmer palette; the intensity envelope only tracks the scene fade-in.
+  Consider scaling effect output by the look's master Dimmer so an effect
+  modulates *within* the look's intensity rather than blasting full. Ties into
+  the dimmer-as-multiplier scene-base model (memory: effect output HTP). *(raised
+  testing Confetti)*
 - **MIDI controller mappings — revisit + PMJ version** — go back to the APC40
   mapping work (VC layout / programmer-mode LED feedback / expanded APC40 map)
   and build an equivalent mapping for the **PMJ** (OpenDeck PMJ_BLACK) controller

@@ -975,10 +975,12 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     }
 
     if (autoName.isEmpty()) return;
+    if (p->name() == autoName) return;      // no change → nothing to reveal
     p->setName(autoName);
     m_nameEdit->blockSignals(true);
     m_nameEdit->setText(autoName);
     m_nameEdit->blockSignals(false);
+    emit paletteRenamed(p->id());
 }
 
 bool LookEditor::isAutoEffectPath(const QString &path) const
