@@ -10,6 +10,12 @@ to DONE.md when it ships. See also the session memory under
 
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
+- **Empty/missed-cue policy — blackout vs hold-last (discuss)** — an Effect look
+  with no targets now drives nothing (safety fix + `effectinstance` test). But
+  mid-show, should a missed/empty cue *black out* or *hold the last look*? This
+  is the LTP / last-look-persistence question (see memory: show LTP output
+  model). Decide the show-time policy before it bites live. *(raised during the
+  effect-fallback fix)*
 - **MIDI controller mappings — revisit + PMJ version** — go back to the APC40
   mapping work (VC layout / programmer-mode LED feedback / expanded APC40 map)
   and build an equivalent mapping for the **PMJ** (OpenDeck PMJ_BLACK) controller
