@@ -38,6 +38,7 @@ class QScrollArea;
 class VCDockArea;
 class QKeyEvent;
 class QToolBar;
+class QToolButton;
 class VCWidget;
 class VCFrame;
 class QAction;
@@ -148,6 +149,7 @@ protected:
 
 protected:
     QToolBar* m_toolbar;
+    QToolButton* m_runButton; //!< always-visible Operate/Design toggle (top-right)
 
     QActionGroup* m_addActionGroup;
     QActionGroup* m_editActionGroup;

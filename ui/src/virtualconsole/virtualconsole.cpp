@@ -34,6 +34,7 @@
 #include <QKeyEvent>
 #include <QMenuBar>
 #include <QToolBar>
+#include <QToolButton>
 #include <QString>
 #include <QDebug>
 #include <QMenu>
@@ -76,6 +77,7 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
 
     , m_editAction(EditNone)
     , m_toolbar(NULL)
+    , m_runButton(NULL)
 
     , m_addActionGroup(NULL)
     , m_editActionGroup(NULL)
@@ -607,6 +609,30 @@ void VirtualConsole::initMenuBar()
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_functionWizardAction);
     m_toolbar->addAction(m_toolsSettingsAction);
+
+    /* Always-visible Run/Stop toggle in the top-right, so you can go live
+       straight from the Virtual Console. It sits in its own row above the edit
+       toolbar (which is hidden in Operate mode), so it stays reachable in both
+       modes. */
+    {
+        QWidget *runBar = new QWidget(this);
+        QHBoxLayout *runLay = new QHBoxLayout(runBar);
+        runLay->setContentsMargins(0, 0, 0, 0);
+        runLay->addStretch(1);
+        m_runButton = new QToolButton(runBar);
+        m_runButton->setCheckable(true);
+        m_runButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        m_runButton->setIcon(QIcon(":/operate.png"));
+        m_runButton->setText(tr("Run"));
+        m_runButton->setToolTip(tr("Go live (Operate mode). Click again to return to Design."));
+        runLay->addWidget(m_runButton);
+        m_contentsLayout->insertWidget(0, runBar);
+        connect(m_runButton, &QToolButton::toggled, this, [this](bool on)
+        {
+            if ((m_doc->mode() == Doc::Operate) != on)
+                m_doc->setMode(on ? Doc::Operate : Doc::Design);
+        });
+    }
 }
 
 void VirtualConsole::updateCustomMenu()
@@ -1828,6 +1854,16 @@ void VirtualConsole::disableEdit()
 
 void VirtualConsole::slotModeChanged(Doc::Mode mode)
 {
+    // Keep the always-visible Run/Stop toggle in sync with the actual mode.
+    if (m_runButton != NULL)
+    {
+        m_runButton->blockSignals(true);
+        m_runButton->setChecked(mode == Doc::Operate);
+        m_runButton->setText(mode == Doc::Operate ? tr("Stop") : tr("Run"));
+        m_runButton->setIcon(QIcon(mode == Doc::Operate ? ":/design.png" : ":/operate.png"));
+        m_runButton->blockSignals(false);
+    }
+
     if (mode == Doc::Operate)
     { // Switch from Design mode to Operate mode
         // Hide edit tools
