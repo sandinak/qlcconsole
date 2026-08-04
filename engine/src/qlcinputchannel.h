@@ -47,6 +47,7 @@ class QString;
 #define KXMLQLCInputChannelMovement     QStringLiteral("Movement")
 #define KXMLQLCInputChannelRelative     QStringLiteral("Relative")
 #define KXMLQLCInputChannelSensitivity  QStringLiteral("Sensitivity")
+#define KXMLQLCInputChannelEncoding     QStringLiteral("Encoding")
 #define KXMLQLCInputChannelExtraPress   QStringLiteral("ExtraPress")
 #define KXMLQLCInputChannelFeedback     QStringLiteral("Feedback")
 #define KXMLQLCInputChannelLowerValue   QStringLiteral("LowerValue")
@@ -169,6 +170,21 @@ public:
     int movementSensitivity() const;
     void setMovementSensitivity(int value);
 
+    /** Relative-encoder byte encoding (mirrors QLCInputSource::RelativeEncoding),
+     *  used by Encoder-type channels / relative movement. */
+    enum RelativeEncoding
+    {
+        TwosComplement = 0,
+        SignedBit      = 1,
+        BinaryOffset   = 2
+    };
+
+    RelativeEncoding relativeEncoding() const;
+    void setRelativeEncoding(RelativeEncoding enc);
+
+    static QString encodingToString(RelativeEncoding enc);
+    static RelativeEncoding stringToEncoding(const QString &str);
+
 signals:
     void movementTypeChanged();
     void movementSensitivityChanged();
@@ -176,6 +192,7 @@ signals:
 protected:
     MovementType m_movementType;
     int m_movementSensitivity;
+    RelativeEncoding m_relativeEncoding;
 
     /*********************************************************************
      * Button behaviour specific methods

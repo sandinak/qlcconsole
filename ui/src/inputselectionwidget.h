@@ -27,6 +27,9 @@
 #include "qlcinputsource.h"
 
 class Doc;
+class QComboBox;
+class QSpinBox;
+class QGroupBox;
 
 class InputSelectionWidget final : public QWidget, public Ui_InputSelectionWidget
 {
@@ -61,6 +64,9 @@ protected slots:
 
     void slotCustomFeedbackClicked();
 
+    /** Apply the "Encoder behaviour" combo/step to the current input source. */
+    void slotBehaviourChanged();
+
 signals:
     void autoDetectToggled(bool checked);
     void inputValueChanged(quint32 universe, quint32 channel);
@@ -77,6 +83,11 @@ private:
     bool m_emitOdd;
     bool m_supportMonitoring;
     quint32 m_signalsReceived;
+
+    // "Encoder behaviour" controls (relative-encoder mapping without a profile).
+    QGroupBox *m_relativeGroup;
+    QComboBox *m_behaviourCombo;
+    QSpinBox  *m_sensitivitySpin;
 };
 
 #endif // INPUTSELECTIONWIDGET_H

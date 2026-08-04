@@ -642,6 +642,8 @@ void VCWidget::setInputSource(QSharedPointer<QLCInputSource> const& source, quin
                     {
                         source->setWorkingMode(QLCInputSource::Relative);
                         source->setSensitivity(ich->movementSensitivity());
+                        source->setRelativeEncoding(
+                            QLCInputSource::RelativeEncoding(ich->relativeEncoding()));
                         connect(source.data(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
                                 this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
                     }
@@ -649,6 +651,8 @@ void VCWidget::setInputSource(QSharedPointer<QLCInputSource> const& source, quin
                     {
                         source->setWorkingMode(QLCInputSource::Encoder);
                         source->setSensitivity(ich->movementSensitivity());
+                        source->setRelativeEncoding(
+                            QLCInputSource::RelativeEncoding(ich->relativeEncoding()));
                         connect(source.data(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
                                 this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
                     }
@@ -938,6 +942,28 @@ QSharedPointer<QLCInputSource> VCWidget::getXMLInput(QXmlStreamReader &root)
     if (attrs.hasAttribute(KXMLQLCVCWidgetInputMonitorParams))
         newSrc->setFeedbackExtraParams(QLCInputFeedback::MonitorValue, attrs.value(KXMLQLCVCWidgetInputMonitorParams).toInt());
 
+    // Relative-encoder behaviour (per-widget, profile-independent).
+    if (attrs.hasAttribute(KXMLQLCVCWidgetInputSensitivity))
+        newSrc->setSensitivity(attrs.value(KXMLQLCVCWidgetInputSensitivity).toInt());
+    if (attrs.hasAttribute(KXMLQLCVCWidgetInputEncoding))
+    {
+        const QString enc = attrs.value(KXMLQLCVCWidgetInputEncoding).toString();
+        if (enc == QLatin1String("SignedBit"))
+            newSrc->setRelativeEncoding(QLCInputSource::SignedBit);
+        else if (enc == QLatin1String("BinaryOffset"))
+            newSrc->setRelativeEncoding(QLCInputSource::BinaryOffset);
+        else
+            newSrc->setRelativeEncoding(QLCInputSource::TwosComplement);
+    }
+    if (attrs.hasAttribute(KXMLQLCVCWidgetInputWorkingMode))
+    {
+        const QString wm = attrs.value(KXMLQLCVCWidgetInputWorkingMode).toString();
+        if (wm == QLatin1String("Encoder"))
+            newSrc->setWorkingMode(QLCInputSource::Encoder);
+        else if (wm == QLatin1String("Relative"))
+            newSrc->setWorkingMode(QLCInputSource::Relative);
+    }
+
     return newSrc;
 }
 
@@ -1117,6 +1143,22 @@ bool VCWidget::saveXMLInput(QXmlStreamWriter *doc,
 
         if (!extraParams.isEmpty())
             doc->writeAttribute(KXMLQLCVCWidgetInputMonitorParams, extraParams);
+
+        // Relative-encoder behaviour (only when set, to keep default XML clean).
+        if (src->workingMode() != QLCInputSource::Absolute)
+        {
+            doc->writeAttribute(KXMLQLCVCWidgetInputWorkingMode,
+                                src->workingMode() == QLCInputSource::Encoder
+                                    ? QStringLiteral("Encoder") : QStringLiteral("Relative"));
+            if (src->workingMode() == QLCInputSource::Encoder)
+            {
+                const char *enc = "TwosComplement";
+                if (src->relativeEncoding() == QLCInputSource::SignedBit)    enc = "SignedBit";
+                else if (src->relativeEncoding() == QLCInputSource::BinaryOffset) enc = "BinaryOffset";
+                doc->writeAttribute(KXMLQLCVCWidgetInputEncoding, QString::fromLatin1(enc));
+            }
+            doc->writeAttribute(KXMLQLCVCWidgetInputSensitivity, QString::number(src->sensitivity()));
+        }
 
         doc->writeEndElement();
     }

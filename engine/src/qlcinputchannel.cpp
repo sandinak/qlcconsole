@@ -33,6 +33,7 @@ QLCInputChannel::QLCInputChannel()
     : m_type(Button)
     , m_movementType(Absolute)
     , m_movementSensitivity(20)
+    , m_relativeEncoding(TwosComplement)
     , m_sendExtraPress(false)
     , m_lowerValue(0)
     , m_upperValue(UCHAR_MAX)
@@ -47,6 +48,7 @@ QLCInputChannel *QLCInputChannel::createCopy()
     copy->setType(this->type());
     copy->setMovementType(this->movementType());
     copy->setMovementSensitivity(this->movementSensitivity());
+    copy->setRelativeEncoding(this->relativeEncoding());
     copy->setSendExtraPress(this->sendExtraPress());
     copy->setLowerChannel(this->lowerChannel());
     copy->setRange(this->lowerValue(), this->upperValue());
@@ -220,6 +222,33 @@ void QLCInputChannel::setMovementSensitivity(int value)
     m_movementSensitivity = value;
 }
 
+QLCInputChannel::RelativeEncoding QLCInputChannel::relativeEncoding() const
+{
+    return m_relativeEncoding;
+}
+
+void QLCInputChannel::setRelativeEncoding(QLCInputChannel::RelativeEncoding enc)
+{
+    m_relativeEncoding = enc;
+}
+
+QString QLCInputChannel::encodingToString(QLCInputChannel::RelativeEncoding enc)
+{
+    switch (enc)
+    {
+    case SignedBit:    return QStringLiteral("SignedBit");
+    case BinaryOffset: return QStringLiteral("BinaryOffset");
+    default:           return QStringLiteral("TwosComplement");
+    }
+}
+
+QLCInputChannel::RelativeEncoding QLCInputChannel::stringToEncoding(const QString &str)
+{
+    if (str == QStringLiteral("SignedBit"))    return SignedBit;
+    if (str == QStringLiteral("BinaryOffset")) return BinaryOffset;
+    return TwosComplement;
+}
+
 /*********************************************************************
  * Button behaviour specific methods
  *********************************************************************/
@@ -317,6 +346,8 @@ bool QLCInputChannel::loadXML(QXmlStreamReader &root)
         {
             if (root.attributes().hasAttribute(KXMLQLCInputChannelSensitivity))
                 setMovementSensitivity(root.attributes().value(KXMLQLCInputChannelSensitivity).toString().toInt());
+            if (root.attributes().hasAttribute(KXMLQLCInputChannelEncoding))
+                setRelativeEncoding(stringToEncoding(root.attributes().value(KXMLQLCInputChannelEncoding).toString()));
 
             if (root.readElementText() == KXMLQLCInputChannelRelative)
                 setMovementType(Relative);
@@ -367,6 +398,7 @@ bool QLCInputChannel::saveXML(QXmlStreamWriter *doc, quint32 channelNumber) cons
     {
         doc->writeStartElement(KXMLQLCInputChannelMovement);
         doc->writeAttribute(KXMLQLCInputChannelSensitivity, QString::number(movementSensitivity()));
+        doc->writeAttribute(KXMLQLCInputChannelEncoding, encodingToString(m_relativeEncoding));
         doc->writeCharacters(KXMLQLCInputChannelRelative);
         doc->writeEndElement();
     }
@@ -374,6 +406,7 @@ bool QLCInputChannel::saveXML(QXmlStreamWriter *doc, quint32 channelNumber) cons
     {
         doc->writeStartElement(KXMLQLCInputChannelMovement);
         doc->writeAttribute(KXMLQLCInputChannelSensitivity, QString::number(movementSensitivity()));
+        doc->writeAttribute(KXMLQLCInputChannelEncoding, encodingToString(m_relativeEncoding));
         doc->writeEndElement();
     }
     else if (type() == Button && (lowerValue() != 0 || upperValue() != UCHAR_MAX))

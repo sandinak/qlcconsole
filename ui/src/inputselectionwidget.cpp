@@ -18,6 +18,12 @@
 */
 
 #include <QDebug>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QGroupBox>
+#include <QComboBox>
+#include <QSpinBox>
+#include <QLabel>
 
 #include "customfeedbackdialog.h"
 #include "inputselectionwidget.h"
@@ -52,6 +58,35 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
 
     connect(m_customFbButton, SIGNAL(clicked(bool)),
             this, SLOT(slotCustomFeedbackClicked()));
+
+    /* "Encoder behaviour" row — lets an endless/relative knob be mapped to this
+       control directly, without hand-editing an input profile. */
+    m_relativeGroup = new QGroupBox(tr("Encoder behaviour"), this);
+    QHBoxLayout *rl = new QHBoxLayout(m_relativeGroup);
+    rl->setContentsMargins(6, 4, 6, 4);
+    m_behaviourCombo = new QComboBox(m_relativeGroup);
+    m_behaviourCombo->addItem(tr("Absolute (fader / knob)"));
+    m_behaviourCombo->addItem(tr("Relative — two's complement"));
+    m_behaviourCombo->addItem(tr("Relative — sign / magnitude"));
+    m_behaviourCombo->addItem(tr("Relative — binary offset"));
+    m_behaviourCombo->setToolTip(tr("How this input drives the control. The 'Relative' "
+        "modes treat an endless/'free' knob's messages as increments; two's "
+        "complement suits most controllers (e.g. OpenDeck)."));
+    m_sensitivitySpin = new QSpinBox(m_relativeGroup);
+    m_sensitivitySpin->setRange(1, 127);
+    m_sensitivitySpin->setValue(4);
+    m_sensitivitySpin->setToolTip(tr("Amount the control moves per encoder detent"));
+    rl->addWidget(new QLabel(tr("Behaviour:"), m_relativeGroup));
+    rl->addWidget(m_behaviourCombo, 1);
+    rl->addWidget(new QLabel(tr("Step:"), m_relativeGroup));
+    rl->addWidget(m_sensitivitySpin);
+    if (QGridLayout *gl = qobject_cast<QGridLayout *>(layout()))
+        gl->addWidget(m_relativeGroup, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
+    else if (layout() != NULL)
+        layout()->addWidget(m_relativeGroup);
+
+    connect(m_behaviourCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotBehaviourChanged()));
+    connect(m_sensitivitySpin, SIGNAL(valueChanged(int)), this, SLOT(slotBehaviourChanged()));
 }
 
 InputSelectionWidget::~InputSelectionWidget()
@@ -232,4 +267,41 @@ void InputSelectionWidget::updateInputSource()
 
     m_inputUniverseEdit->setText(uniName);
     m_inputChannelEdit->setText(chName);
+
+    // Reflect the source's relative-encoder behaviour in the combo/step.
+    const bool valid = !m_inputSource.isNull() && m_inputSource->isValid();
+    m_relativeGroup->setEnabled(valid);
+    m_behaviourCombo->blockSignals(true);
+    m_sensitivitySpin->blockSignals(true);
+    int idx = 0;
+    if (valid && m_inputSource->workingMode() == QLCInputSource::Encoder)
+        idx = 1 + int(m_inputSource->relativeEncoding());   // TwosComplement=0 → index 1
+    else if (valid && m_inputSource->workingMode() == QLCInputSource::Relative)
+        idx = 1;                                            // legacy relative → show as two's complement
+    m_behaviourCombo->setCurrentIndex(idx);
+    if (valid)
+        m_sensitivitySpin->setValue(qBound(1, m_inputSource->sensitivity(), 127));
+    m_behaviourCombo->blockSignals(false);
+    m_sensitivitySpin->blockSignals(false);
+}
+
+void InputSelectionWidget::slotBehaviourChanged()
+{
+    if (m_inputSource.isNull())
+        return;
+
+    const int idx = m_behaviourCombo->currentIndex();
+    if (idx <= 0)
+    {
+        m_inputSource->setWorkingMode(QLCInputSource::Absolute);
+    }
+    else
+    {
+        m_inputSource->setWorkingMode(QLCInputSource::Encoder);
+        QLCInputSource::RelativeEncoding enc = QLCInputSource::TwosComplement;
+        if (idx == 2)      enc = QLCInputSource::SignedBit;
+        else if (idx == 3) enc = QLCInputSource::BinaryOffset;
+        m_inputSource->setRelativeEncoding(enc);
+    }
+    m_inputSource->setSensitivity(m_sensitivitySpin->value());
 }

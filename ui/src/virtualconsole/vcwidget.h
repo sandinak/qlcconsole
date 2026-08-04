@@ -69,6 +69,11 @@ class QFile;
 #define KXMLQLCVCWidgetInputLowerParams     QStringLiteral("LowerParams")
 #define KXMLQLCVCWidgetInputUpperParams     QStringLiteral("UpperParams")
 #define KXMLQLCVCWidgetInputMonitorParams   QStringLiteral("MonitorParams")
+// Per-widget relative-encoder settings (so a knob can be mapped as a relative
+// encoder straight on the control, without editing an input profile).
+#define KXMLQLCVCWidgetInputWorkingMode     QStringLiteral("WorkingMode")
+#define KXMLQLCVCWidgetInputEncoding        QStringLiteral("RelativeEncoding")
+#define KXMLQLCVCWidgetInputSensitivity     QStringLiteral("Sensitivity")
 
 #define KXMLQLCWindowState          QStringLiteral("WindowState")
 #define KXMLQLCWindowStateVisible   QStringLiteral("Visible")
