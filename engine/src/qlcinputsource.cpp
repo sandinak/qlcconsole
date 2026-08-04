@@ -37,6 +37,7 @@ QLCInputSource::QLCInputSource(QThread *parent)
     , m_channel(invalidChannel)
     , m_id(invalidID)
     , m_workingMode(Absolute)
+    , m_relativeEncoding(TwosComplement)
     , m_sensitivity(20)
     , m_emitExtraPressRelease(false)
     , m_inputValue(0)
@@ -56,6 +57,7 @@ QLCInputSource::QLCInputSource(quint32 universe, quint32 channel, QThread *paren
     , m_universe(universe)
     , m_channel(channel)
     , m_workingMode(Absolute)
+    , m_relativeEncoding(TwosComplement)
     , m_sensitivity(20)
     , m_emitExtraPressRelease(false)
     , m_inputValue(0)
@@ -219,6 +221,37 @@ void QLCInputSource::setWorkingMode(QLCInputSource::WorkingMode mode)
     }
 }
 
+QLCInputSource::RelativeEncoding QLCInputSource::relativeEncoding() const
+{
+    return m_relativeEncoding;
+}
+
+void QLCInputSource::setRelativeEncoding(QLCInputSource::RelativeEncoding enc)
+{
+    m_relativeEncoding = enc;
+}
+
+int QLCInputSource::decodeRelativeDelta(uchar value) const
+{
+    // The MIDI plugin has already scaled the 0-127 data byte to 0-255
+    // (MIDI2DMX = v<<1, with 127->255), so recover the original byte first.
+    const int v = value >> 1;   // 255>>1 == 127, 252>>1 == 126, 2>>1 == 1
+
+    switch (m_relativeEncoding)
+    {
+    default:
+    case TwosComplement:
+        // 1..63 = +1..+63, 65..127 = -63..-1 (64 = no movement)
+        return (v < 64) ? v : (v - 128);
+    case SignedBit:
+        // bit6 = direction, low 6 bits = magnitude (64 = no movement)
+        return (v & 0x40) ? (v & 0x3F) : -(v & 0x3F);
+    case BinaryOffset:
+        // centred on 64
+        return v - 64;
+    }
+}
+
 bool QLCInputSource::needsUpdate()
 {
     if (m_workingMode == Relative || m_workingMode == Encoder ||
@@ -253,13 +286,21 @@ void QLCInputSource::updateInputValue(uchar value)
     QMutexLocker locker(&m_mutex);
     if (m_workingMode == Encoder)
     {
-        if (value < m_inputValue)
-            m_sensitivity = -qAbs(m_sensitivity);
-        else if (value > m_inputValue)
-            m_sensitivity = qAbs(m_sensitivity);
-        m_inputValue = CLAMP(m_inputValue + (char)m_sensitivity, 0, UCHAR_MAX);
-        locker.unlock();
-        emit inputValueChanged(m_universe, m_channel, m_inputValue);
+        // Relative encoder: each message carries a signed detent count. Decode it
+        // per the selected encoding and step the current output value by
+        // delta * sensitivity (sensitivity = DMX units per detent). This makes a
+        // detent encoder that repeats the same code (e.g. OpenDeck sending 1,1,1)
+        // move every time, which the old last-value comparison did not.
+        const int delta = decodeRelativeDelta(value);
+        if (delta != 0)
+        {
+            const int step = qMax(1, qAbs(m_sensitivity));
+            const int nv   = CLAMP(int(m_outputValue) + delta * step, 0, UCHAR_MAX);
+            m_inputValue  = value;
+            m_outputValue = uchar(nv);
+            locker.unlock();
+            emit inputValueChanged(m_universe, m_channel, uchar(nv));
+        }
     }
     else if (m_emitExtraPressRelease == true)
     {

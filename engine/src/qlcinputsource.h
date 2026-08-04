@@ -105,8 +105,27 @@ public:
         Encoder = 2
     };
 
+    /** How a relative-encoder value byte encodes a signed step. All are
+     *  per-message (one detent = one message), the standard MIDI conventions:
+     *   - TwosComplement: 1..63 = +1..+63, 127..65 = -1..-63 (v<64 ? v : v-128)
+     *   - SignedBit (sign-magnitude): bit6 = direction, low 6 bits = magnitude
+     *   - BinaryOffset: centred on 64 (delta = v - 64) */
+    enum RelativeEncoding {
+        TwosComplement = 0,
+        SignedBit      = 1,
+        BinaryOffset   = 2
+    };
+
     WorkingMode workingMode() const;
     void setWorkingMode(WorkingMode mode);
+
+    RelativeEncoding relativeEncoding() const;
+    void setRelativeEncoding(RelativeEncoding enc);
+
+    /** Decode a raw (DMX-scaled) input byte into a signed detent count using the
+     *  current relativeEncoding(). 0 = no movement. Public so it can be unit
+     *  tested and reused by the dual-CC path. */
+    int decodeRelativeDelta(uchar value) const;
 
     bool needsUpdate();
 
@@ -126,6 +145,9 @@ private:
 protected:
     /** The input source mode: absolute or relative */
     WorkingMode m_workingMode;
+
+    /** Relative-encoder byte encoding (only meaningful in Encoder mode) */
+    RelativeEncoding m_relativeEncoding;
 
     /** When in relative mode, this defines the sensitivity
      *  of synthetic emitted values against the external input value */
