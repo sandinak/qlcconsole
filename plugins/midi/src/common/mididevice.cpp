@@ -19,6 +19,7 @@
 
 #include <QSettings>
 #include "mididevice.h"
+#include "midiprotocol.h"
 #include <QDebug>
 
 #define SETTINGS_MIDICHANNEL "midiplugin/%1/%2/midichannel"
@@ -193,7 +194,11 @@ void MidiDevice::loadSettings()
     if (value.isValid() == true)
         setMidiChannel(value.toInt());
     else
-        setMidiChannel(0);
+        // No saved preference: inputs default to OMNI (accept every MIDI
+        // channel) so a controller transmitting on any channel is heard out of
+        // the box — the old channel-1-only default silently dropped everything
+        // else. Outputs keep channel 1 (they must transmit on a concrete one).
+        setMidiChannel(deviceType() == Input ? MAX_MIDI_CHANNELS : 0);
 
     key = QString(SETTINGS_MODE).arg(devType, name());
     value = settings.value(key);
