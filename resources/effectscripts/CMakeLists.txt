@@ -9,6 +9,7 @@ set(SCRIPT_FILES
     color-gradient.js
     color-phaser.js
     color-spread.js
+    confetti.js
     dimmer-phaser.js
     drawn-path.js
     fan.js

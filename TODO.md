@@ -10,6 +10,13 @@ to DONE.md when it ships. See also the session memory under
 
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
+- **MIDI controller mappings — revisit + PMJ version** — go back to the APC40
+  mapping work (VC layout / programmer-mode LED feedback / expanded APC40 map)
+  and build an equivalent mapping for the **PMJ** (OpenDeck PMJ_BLACK) controller
+  we just tested with. The PMJ's free knobs are single-CC two's-complement
+  relative encoders — now supported (relative-encoder feature: encoding picker +
+  live preview + step + invert, profile-free per-widget mapping). Dual-CC not
+  needed (PMJ doesn't use it). *(from the relative-encoder work)*
 - **Timecode slice 3 — auto-fill internal latency** — the packet→DMX figure needs
   plugin-side timestamping; once measured it folds into the offset. *(from Timecode
   calibration in DONE.md)*
