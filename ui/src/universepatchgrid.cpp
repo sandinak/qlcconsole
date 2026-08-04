@@ -19,6 +19,7 @@
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QToolButton>
 #include <QLabel>
 #include <QTableWidget>
 #include <QHeaderView>
@@ -67,6 +68,15 @@ static const char *P_OUT_IP  = "outputIP";
 static const char *P_OUT_UNI = "outputUni";
 static const char *P_MODE    = "transmitMode";
 static const char *P_IN_UNI  = "inputUni";
+// MIDI device parameters (must match plugins/midi MIDI_MIDICHANNEL / MIDI_MODE).
+static const char *P_MIDI_CHANNEL = "midichannel";
+static const char *P_MIDI_MODE    = "mode";
+static const int   kMidiOmni      = 16;  // MAX_MIDI_CHANNELS → "accept all channels"
+// MIDI output mode labels — MUST match MidiDevice::stringToMode() exactly
+// (they are the stored parameter value, so they are intentionally not tr()'d).
+static const char *kMidiModeCC   = "Control Change";
+static const char *kMidiModeNote = "Note Velocity";
+static const char *kMidiModePC   = "Program Change";
 
 // A muted per-protocol tint so rows read at a glance. Low alpha so it blends
 // over the base row colour in both light and dark themes.
@@ -158,7 +168,7 @@ UniversePatchGrid::UniversePatchGrid(Doc *doc, QWidget *parent)
     m_table->setHorizontalHeaderLabels(QStringList()
         << tr("Uni") << tr("Name") << tr("Usage")
         << tr("Output") << tr("Out IP") << tr("Out U") << tr("Mode")
-        << tr("Input") << tr("In U") << tr("Profile")
+        << tr("Input") << tr("In") << tr("Profile")
         << tr("Feedback") << tr("FB IP") << tr("FB U")
         << tr("PT"));
 
@@ -200,7 +210,52 @@ UniversePatchGrid::UniversePatchGrid(Doc *doc, QWidget *parent)
     connect(m_ioMap, SIGNAL(universeAdded(quint32)), this, SLOT(reload()));
     connect(m_ioMap, SIGNAL(universeRemoved(quint32)), this, SLOT(reload()));
 
+    // Live input-activity indicator: flash the input field when data arrives
+    // (same signal the Detailed view uses). Highlighting the existing cell keeps
+    // the column widths fixed — an icon on the Uni cell resized it and shifted
+    // the whole grid.
+    m_activityTimer = new QTimer(this);
+    m_activityTimer->setSingleShot(true);
+    connect(m_activityTimer, &QTimer::timeout, this, &UniversePatchGrid::slotActivityTimeout);
+    connect(m_ioMap, SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+            this, SLOT(slotInputActivity(quint32,quint32,uchar)));
+
     reload();
+}
+
+void UniversePatchGrid::slotInputActivity(quint32 universe, quint32 channel, uchar value)
+{
+    // Cheap no-op when the overview isn't the visible tab.
+    if (isVisible() == false)
+        return;
+    if (int(universe) >= m_table->rowCount())
+        return;
+    QWidget *cw = m_table->cellWidget(int(universe), COL_IN);
+    QComboBox *combo = cw ? cw->findChild<QComboBox *>("inDev") : nullptr;
+    if (combo == nullptr)
+        return;
+
+    // Bright flash of the input field only — no widget is added or resized, so
+    // the column widths (and the rest of the grid) stay put.
+    combo->setStyleSheet(QString("QComboBox { background-color: rgba(%1,%2,%3,170); }")
+                         .arg(kInAccent.red()).arg(kInAccent.green()).arg(kInAccent.blue()));
+    combo->setToolTip(tr("Input active — channel %1 = %2").arg(channel).arg(value));
+
+    if (!m_activeRows.contains(int(universe)))
+        m_activeRows.append(int(universe));
+
+    m_activityTimer->start(300);
+}
+
+void UniversePatchGrid::slotActivityTimeout()
+{
+    for (int row : m_activeRows)
+    {
+        QWidget *cw = m_table->cellWidget(row, COL_IN);
+        if (QComboBox *combo = cw ? cw->findChild<QComboBox *>("inDev") : nullptr)
+            tintCombo(combo, kInAccent);   // restore the normal (faint) input tint
+    }
+    m_activeRows.clear();
 }
 
 bool UniversePatchGrid::isNetworkPlugin(const QString &p) const
@@ -417,6 +472,22 @@ void UniversePatchGrid::populateRow(int row, int uniIndex)
                 [this, row](const QString &m) { onModeChanged(row, m); });
         m_table->setCellWidget(row, COL_OUT_MODE, modeCombo);
     }
+    else if (op && isMidiPlugin(outPlugin))
+    {
+        // MIDI output/feedback: how outgoing values are sent. (Input decoding
+        // ignores mode, so this only appears where there IS a MIDI output.)
+        QComboBox *modeCombo = new QComboBox(m_table);
+        modeCombo->addItem(kMidiModeCC);
+        modeCombo->addItem(kMidiModeNote);
+        modeCombo->addItem(kMidiModePC);
+        modeCombo->setCurrentText(outParams.value(P_MIDI_MODE, kMidiModeCC).toString());
+        modeCombo->setToolTip(tr("MIDI output mode: send values as Control Change, "
+                                 "Note Velocity or Program Change"));
+        tintCombo(modeCombo, kOutAccent);
+        connect(modeCombo, &QComboBox::currentTextChanged, this,
+                [this, row](const QString &m) { onMidiModeChanged(row, m); });
+        m_table->setCellWidget(row, COL_OUT_MODE, modeCombo);
+    }
     else
     {
         m_table->setItem(row, COL_OUT_MODE, roItem(QString()));
@@ -427,15 +498,54 @@ void UniversePatchGrid::populateRow(int row, int uniIndex)
     const bool inNet = ip && isNetworkPlugin(inPlugin);
     const QMap<QString, QVariant> inParams = ip ? ip->getPluginParameters() : QMap<QString, QVariant>();
     {
+        QWidget *cell = new QWidget(m_table);
+        QHBoxLayout *hl = new QHBoxLayout(cell);
+        hl->setContentsMargins(0, 0, 0, 0);
+        hl->setSpacing(2);
+
         QComboBox *inDev = buildDeviceCombo(true, false, inPlugin, ip ? int(ip->input()) : -1);
+        inDev->setParent(cell);
+        inDev->setObjectName("inDev");   // found by the activity highlighter
         if (ip != NULL)
             tintCombo(inDev, kInAccent);
         connect(inDev, QOverload<int>::of(&QComboBox::currentIndexChanged),
                 this, [this, row](int) { onInputChanged(row); });
-        m_table->setCellWidget(row, COL_IN, inDev);
+        hl->addWidget(inDev, 1);
+
+        // Per-device "Edit…" button → opens THIS input plugin's own config
+        // (e.g. the MIDI channel table), reachable straight from the overview
+        // so the Detailed page isn't needed to get there. Context-correct: for
+        // a MIDI input it opens the MIDI config, not whatever output plugin
+        // happens to be selected elsewhere.
+        if (ip != NULL && !inPlugin.isEmpty() && m_ioMap->canConfigurePlugin(inPlugin))
+        {
+            QToolButton *cfg = new QToolButton(cell);
+            cfg->setText(tr("Edit…"));
+            cfg->setToolTip(tr("Configure the %1 input device (e.g. MIDI channel)").arg(inPlugin));
+            connect(cfg, &QToolButton::clicked, this, [this, inPlugin]() {
+                m_ioMap->configurePlugin(inPlugin);
+                scheduleReload();
+            });
+            hl->addWidget(cfg);
+        }
+        m_table->setCellWidget(row, COL_IN, cell);
     }
-    QTableWidgetItem *inUniIt = new QTableWidgetItem(inNet ? QString::number(inParams.value(P_IN_UNI, 0).toInt()) : QString());
-    if (!inNet) inUniIt->setFlags(inUniIt->flags() & ~Qt::ItemIsEditable);
+    // "In" column: for a network input it's the input universe; for a MIDI input
+    // it's the MIDI channel filter (editable in place — type 1-16 or "All").
+    const bool inMidi = ip && isMidiPlugin(inPlugin);
+    QString inText;
+    if (inNet)
+        inText = QString::number(inParams.value(P_IN_UNI, 0).toInt());
+    else if (inMidi)
+    {
+        const int v = inParams.contains(P_MIDI_CHANNEL) ? inParams.value(P_MIDI_CHANNEL).toInt() : 0;
+        inText = (v >= kMidiOmni) ? tr("All") : QString::number(v + 1);
+    }
+    QTableWidgetItem *inUniIt = new QTableWidgetItem(inText);
+    if (inMidi)
+        inUniIt->setToolTip(tr("MIDI channel filter: 1-16, or \"All\" to accept every channel"));
+    if (!inNet && !inMidi)
+        inUniIt->setFlags(inUniIt->flags() & ~Qt::ItemIsEditable);
     m_table->setItem(row, COL_IN_UNI, inUniIt);
     {
         QComboBox *profCombo = new QComboBox(m_table);
@@ -545,6 +655,32 @@ void UniversePatchGrid::onItemChanged(QTableWidgetItem *item)
     {
         if (InputPatch *ip = m_ioMap->inputPatch(row))
         {
+            if (isMidiPlugin(ip->pluginName()))
+            {
+                // MIDI channel filter: "All"/"*"/"0" → OMNI, else 1-16.
+                const QString t = item->text().trimmed();
+                int raw = -1;
+                if (t.isEmpty() || t == "*" || t == "0"
+                    || t.compare(tr("All"), Qt::CaseInsensitive) == 0
+                    || t.compare(QStringLiteral("all"), Qt::CaseInsensitive) == 0)
+                {
+                    raw = kMidiOmni;
+                }
+                else
+                {
+                    bool ok = false;
+                    const int ch = t.toInt(&ok);
+                    if (ok && ch >= 1 && ch <= 16)
+                        raw = ch - 1;
+                }
+                if (raw >= 0)
+                {
+                    ip->setPluginParameter(P_MIDI_CHANNEL, raw);
+                    m_doc->setModified();
+                }
+                scheduleReload();   // re-render (canonicalises the text, or reverts bad input)
+                return;
+            }
             ip->setPluginParameter(P_IN_UNI, item->text().toInt());
             m_doc->setModified();
             scheduleReload();
@@ -571,6 +707,17 @@ void UniversePatchGrid::onModeChanged(int row, const QString &mode)
     if (m_loading)
         return;
     applyToSelection(P_MODE, mode, false, row);
+}
+
+void UniversePatchGrid::onMidiModeChanged(int row, const QString &mode)
+{
+    if (m_loading)
+        return;
+    if (OutputPatch *op = m_ioMap->outputPatch(row))
+    {
+        op->setPluginParameter(P_MIDI_MODE, mode);   // applied to the live device
+        m_doc->setModified();
+    }
 }
 
 void UniversePatchGrid::applyToSelection(const QString &prop, const QVariant &value,

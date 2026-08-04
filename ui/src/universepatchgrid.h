@@ -24,11 +24,13 @@
 #include <QList>
 #include <QPair>
 #include <QStringList>
+#include <QIcon>
 
 class QTableWidget;
 class QTableWidgetItem;
 class QComboBox;
 class QAction;
+class QTimer;
 class InputOutputMap;
 class Doc;
 
@@ -57,6 +59,7 @@ public:
 private slots:
     void onItemChanged(QTableWidgetItem *item);
     void onModeChanged(int row, const QString &mode);
+    void onMidiModeChanged(int row, const QString &mode);
     void onOutputDeviceChanged(int row);
     void onOutputRoleChanged(int row);
     void onInputChanged(int row);
@@ -69,6 +72,12 @@ private slots:
     void toggleInputGroup(bool on);
     void toggleFeedbackGroup(bool on);
     void togglePassthroughGroup(bool on);
+
+    /** Flash the universe's row (COL_UNI dot + tooltip) when input data arrives,
+     *  so incoming traffic is visible per universe right in the overview. */
+    void slotInputActivity(quint32 universe, quint32 channel, uchar value);
+    /** Clear the activity dots after a short idle period. */
+    void slotActivityTimeout();
 
 private:
     void populateRow(int row, int uniIndex);
@@ -101,6 +110,10 @@ private:
     bool            m_loading = false;
     bool            m_reloadScheduled = false;
     bool            m_autoRevealDone = false;
+
+    // Live input-activity indicator: highlights the input field on data arrival.
+    QTimer         *m_activityTimer = nullptr;
+    QList<int>      m_activeRows;   //!< rows currently highlighted, to restore
 
     // Option lists, rebuilt each reload (plugin → its line names).
     QList<QPair<QString, QStringList> > m_outPlugins;

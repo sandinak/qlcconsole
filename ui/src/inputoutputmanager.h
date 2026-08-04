@@ -31,6 +31,7 @@ class QLineEdit;
 class QCheckBox;
 class QToolBar;
 class QTimer;
+class QLabel;
 class QIcon;
 
 class InputOutputMap;
@@ -112,6 +113,7 @@ private:
     QCheckBox *m_uniPassthroughCheck;
     QAction* m_rescanAction;
     QListWidget *m_list;
+    QLabel *m_inputActivityLabel; //!< live "last input: uni/channel = value" readout
     QIcon m_icon;
     QTimer* m_timer;
     InputOutputPatchEditor *m_editor;

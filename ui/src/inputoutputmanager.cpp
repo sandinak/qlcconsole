@@ -164,6 +164,23 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
         m_splitter->widget(0)->layout()->addWidget(rescanBtn);
     }
 
+    /* Live input-activity readout — shows the most recent input event
+       (universe, channel, value) so incoming traffic can be verified per
+       channel when troubleshooting a controller that isn't auto-detecting. */
+    m_inputActivityLabel = new QLabel(tr("Input monitor: waiting for input…"), this);
+    m_inputActivityLabel->setToolTip(
+        tr("The last input value received on any patched input universe. "
+           "For MIDI, 'channel' is the QLC input channel "
+           "(Notes 128-255, Control Changes 0-127)."));
+    m_inputActivityLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    {
+        QFont mfont = m_inputActivityLabel->font();
+        mfont.setStyleHint(QFont::Monospace);
+        m_inputActivityLabel->setFont(mfont);
+    }
+    m_inputActivityLabel->setStyleSheet("color: gray;");
+    m_splitter->widget(0)->layout()->addWidget(m_inputActivityLabel);
+
     QWidget* gcontainer = new QWidget(this);
     m_splitter->addWidget(gcontainer);
     gcontainer->setLayout(new QVBoxLayout);
@@ -288,9 +305,6 @@ void InputOutputManager::updateItem(QListWidgetItem* item, quint32 universe)
 
 void InputOutputManager::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)
 {
-    Q_UNUSED(channel);
-    Q_UNUSED(value);
-
     // If the manager is not visible, don't even waste CPU
     if (isVisible() == false)
         return;
@@ -301,6 +315,15 @@ void InputOutputManager::slotInputValueChanged(quint32 universe, quint32 channel
 
     /* Show an icon on a universe row that received input data */
     item->setData(Qt::DecorationRole, m_icon);
+
+    /* Live readout: which universe/channel/value just arrived. This confirms
+       traffic reaches QLC per channel (e.g. a MIDI controller on channel 9). */
+    const QString uniName = item->data(Qt::DisplayRole).toString();
+    m_inputActivityLabel->setStyleSheet("color: palette(text);");
+    m_inputActivityLabel->setText(tr("Input monitor — %1: channel %2 = %3")
+                                  .arg(uniName)
+                                  .arg(channel)
+                                  .arg(value));
 
     /* Restart the timer */
     m_timer->start(300);
@@ -313,6 +336,10 @@ void InputOutputManager::slotTimerTimeout()
         QListWidgetItem *item = m_list->item(i);
         item->setData(Qt::DecorationRole, QIcon());
     }
+
+    /* Grey the readout to show input has gone idle, but keep the last value
+       visible — it's the most useful thing when a controller stops sending. */
+    m_inputActivityLabel->setStyleSheet("color: gray;");
 }
 
 void InputOutputManager::slotCurrentItemChanged()
