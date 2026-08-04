@@ -19,11 +19,15 @@
 
 #include <QDebug>
 #include <QGridLayout>
+#include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
 #include <QComboBox>
 #include <QSpinBox>
 #include <QLabel>
+#include <QDial>
+
+#include "inputoutputmap.h"
 
 #include "customfeedbackdialog.h"
 #include "inputselectionwidget.h"
@@ -59,11 +63,15 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
     connect(m_customFbButton, SIGNAL(clicked(bool)),
             this, SLOT(slotCustomFeedbackClicked()));
 
-    /* "Encoder behaviour" row — lets an endless/relative knob be mapped to this
-       control directly, without hand-editing an input profile. */
+    /* "Encoder behaviour" group — lets an endless/relative knob be mapped to
+       this control directly, without hand-editing an input profile. A live
+       dial turns with the physical control so the correct encoding is obvious. */
+    m_previewAccum = 127;
     m_relativeGroup = new QGroupBox(tr("Encoder behaviour"), this);
-    QHBoxLayout *rl = new QHBoxLayout(m_relativeGroup);
-    rl->setContentsMargins(6, 4, 6, 4);
+    QVBoxLayout *rv = new QVBoxLayout(m_relativeGroup);
+    rv->setContentsMargins(6, 4, 6, 4);
+
+    QHBoxLayout *rl = new QHBoxLayout;
     m_behaviourCombo = new QComboBox(m_relativeGroup);
     m_behaviourCombo->addItem(tr("Absolute (fader / knob)"));
     m_behaviourCombo->addItem(tr("Relative — two's complement"));
@@ -80,6 +88,25 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
     rl->addWidget(m_behaviourCombo, 1);
     rl->addWidget(new QLabel(tr("Step:"), m_relativeGroup));
     rl->addWidget(m_sensitivitySpin);
+    rv->addLayout(rl);
+
+    // Live preview row: turn the physical control and watch this dial + readout.
+    QHBoxLayout *pl = new QHBoxLayout;
+    m_previewDial = new QDial(m_relativeGroup);
+    m_previewDial->setWrapping(true);
+    m_previewDial->setNotchesVisible(true);
+    m_previewDial->setRange(0, 255);
+    m_previewDial->setValue(m_previewAccum);
+    m_previewDial->setFixedSize(48, 48);
+    m_previewDial->setEnabled(false);   // display only — driven by live input
+    m_previewDial->setToolTip(tr("Live preview: turn your control and watch this dial. "
+        "Smooth motion in the direction you turn = correct encoding."));
+    m_previewLabel = new QLabel(tr("Turn the control to test…"), m_relativeGroup);
+    pl->addWidget(new QLabel(tr("Live:"), m_relativeGroup));
+    pl->addWidget(m_previewDial);
+    pl->addWidget(m_previewLabel, 1);
+    rv->addLayout(pl);
+
     if (QGridLayout *gl = qobject_cast<QGridLayout *>(layout()))
         gl->addWidget(m_relativeGroup, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
     else if (layout() != NULL)
@@ -87,6 +114,10 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
 
     connect(m_behaviourCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotBehaviourChanged()));
     connect(m_sensitivitySpin, SIGNAL(valueChanged(int)), this, SLOT(slotBehaviourChanged()));
+
+    // Persistent live-preview tap on raw input (independent of auto-detect).
+    connect(m_doc->inputOutputMap(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+            this, SLOT(slotPreviewInput(quint32,quint32,uchar)));
 }
 
 InputSelectionWidget::~InputSelectionWidget()
@@ -271,6 +302,14 @@ void InputSelectionWidget::updateInputSource()
     // Reflect the source's relative-encoder behaviour in the combo/step.
     const bool valid = !m_inputSource.isNull() && m_inputSource->isValid();
     m_relativeGroup->setEnabled(valid);
+
+    // Reset the live preview for the new source.
+    m_previewAccum = 127;
+    if (m_previewDial != NULL)
+        m_previewDial->setValue(m_previewAccum);
+    if (m_previewLabel != NULL)
+        m_previewLabel->setText(valid ? tr("Turn the control to test…")
+                                      : tr("Assign an input first"));
     m_behaviourCombo->blockSignals(true);
     m_sensitivitySpin->blockSignals(true);
     int idx = 0;
@@ -304,4 +343,37 @@ void InputSelectionWidget::slotBehaviourChanged()
         m_inputSource->setRelativeEncoding(enc);
     }
     m_inputSource->setSensitivity(m_sensitivitySpin->value());
+}
+
+void InputSelectionWidget::slotPreviewInput(quint32 universe, quint32 channel, uchar value)
+{
+    if (m_inputSource.isNull() || m_inputSource->isValid() == false)
+        return;
+    // Match this source (ignore the page bits packed into the channel).
+    if (m_inputSource->universe() != universe ||
+        (m_inputSource->channel() & 0xFFFF) != (channel & 0xFFFF))
+        return;
+
+    if (m_behaviourCombo->currentIndex() <= 0)
+    {
+        // Absolute: the dial simply follows the incoming value.
+        m_previewAccum = value;
+        m_previewDial->setValue(value);
+        m_previewLabel->setText(tr("value %1").arg(value));
+        return;
+    }
+
+    // Relative: decode the signed step under the selected encoding and move the
+    // dial by delta * step, wrapping so an endless knob keeps turning.
+    const int delta = m_inputSource->decodeRelativeDelta(value);
+    const int step  = qMax(1, m_sensitivitySpin->value());
+    int pos = m_previewAccum + delta * step;
+    while (pos < 0)   pos += 256;
+    while (pos > 255) pos -= 256;
+    m_previewAccum = pos;
+    m_previewDial->setValue(pos);
+    m_previewLabel->setText(tr("raw %1  →  step %2%3")
+                            .arg(value >> 1)
+                            .arg(delta >= 0 ? QStringLiteral("+") : QString())
+                            .arg(delta));
 }

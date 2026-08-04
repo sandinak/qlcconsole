@@ -30,6 +30,8 @@ class Doc;
 class QComboBox;
 class QSpinBox;
 class QGroupBox;
+class QDial;
+class QLabel;
 
 class InputSelectionWidget final : public QWidget, public Ui_InputSelectionWidget
 {
@@ -67,6 +69,10 @@ protected slots:
     /** Apply the "Encoder behaviour" combo/step to the current input source. */
     void slotBehaviourChanged();
 
+    /** Live preview: turn the on-screen dial and show raw value + decoded step
+     *  as the physical control is moved, so the right encoding is obvious. */
+    void slotPreviewInput(quint32 universe, quint32 channel, uchar value);
+
 signals:
     void autoDetectToggled(bool checked);
     void inputValueChanged(quint32 universe, quint32 channel);
@@ -88,6 +94,9 @@ private:
     QGroupBox *m_relativeGroup;
     QComboBox *m_behaviourCombo;
     QSpinBox  *m_sensitivitySpin;
+    QDial     *m_previewDial;    //!< live "knob" that turns with the physical control
+    QLabel    *m_previewLabel;   //!< raw value + decoded step readout
+    int        m_previewAccum;   //!< accumulated preview position (relative modes)
 };
 
 #endif // INPUTSELECTIONWIDGET_H
