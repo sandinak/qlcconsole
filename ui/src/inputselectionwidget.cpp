@@ -222,19 +222,31 @@ void InputSelectionWidget::slotAutoDetectInputToggled(bool checked)
 
 void InputSelectionWidget::slotInputValueChanged(quint32 universe, quint32 channel)
 {
+    const quint32 chWithPage = (m_widgetPage << 16) | channel;
+
     if (m_emitOdd == true && m_signalsReceived % 2)
     {
-        emit inputValueChanged(universe, (m_widgetPage << 16) | channel);
+        emit inputValueChanged(universe, chWithPage);
         m_signalsReceived++;
         return;
     }
 
-    m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(universe, (m_widgetPage << 16) | channel));
-    updateInputSource();
+    // Only (re)create the source when the detected input actually differs from
+    // the one already assigned. Recreating it on every incoming value — which
+    // happens continuously while auto-detect stays on and you turn the control
+    // to test it — would reset a fresh Absolute source and wipe the relative-
+    // encoder mode/step just chosen (and snap the live preview back to centre).
+    if (m_inputSource.isNull() ||
+        m_inputSource->universe() != universe ||
+        m_inputSource->channel() != chWithPage)
+    {
+        m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(universe, chWithPage));
+        updateInputSource();
+    }
     m_signalsReceived++;
 
     if (m_emitOdd == false)
-        emit inputValueChanged(universe, (m_widgetPage << 16) | channel);
+        emit inputValueChanged(universe, chWithPage);
 }
 
 void InputSelectionWidget::slotChooseInputClicked()
