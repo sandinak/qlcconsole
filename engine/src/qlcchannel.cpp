@@ -715,6 +715,16 @@ QPixmap QLCChannel::drawIntensity(QColor color, QString str) const
 
 QIcon QLCChannel::getIntensityIcon() const
 {
+    // This paints a fresh 32x32 pixmap per call, and callers such as the VC
+    // slider level tree request it once per intensity channel per fixture — on
+    // a large rig that is hundreds of QPainter passes. The result depends only
+    // on m_colour, so memoise it. GUI-thread only (QPixmap requires it), so a
+    // plain static is safe.
+    static QHash<int, QIcon> s_iconCache;
+    QHash<int, QIcon>::const_iterator cached = s_iconCache.constFind(int(m_colour));
+    if (cached != s_iconCache.constEnd())
+        return cached.value();
+
     QPixmap pm(32, 32);
 
     if (m_colour == QLCChannel::Red)
@@ -743,10 +753,14 @@ QIcon QLCChannel::getIntensityIcon() const
     {
         // None of the primary colours matched and since this is an
         // intensity channel, it must be controlling a plain dimmer OSLT.
-        return QIcon(":/intensity.png");
+        QIcon icon(":/intensity.png");
+        s_iconCache.insert(int(m_colour), icon);
+        return icon;
     }
 
-    return QIcon(pm);
+    QIcon icon(pm);
+    s_iconCache.insert(int(m_colour), icon);
+    return icon;
 }
 
 QString QLCChannel::getIntensityColorCode(bool svg) const

@@ -55,7 +55,11 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
     m_ovrResetSelWidget = NULL;
 
     setupUi(this);
-    m_levelList->sortByColumn(KColumnName, Qt::AscendingOrder);
+    // Sorting is enabled in the .ui. Inserting the full fixture/channel/capability
+    // tree (tens of thousands of nodes on a large rig) with live re-sort is O(n^2)
+    // and can hang the dialog for minutes. Build with sorting OFF, then sort once
+    // after the tree is populated (see below).
+    m_levelList->setSortingEnabled(false);
 
     QAction* action = new QAction(this);
     action->setShortcut(QKeySequence(QKeySequence::Close));
@@ -177,9 +181,15 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
     m_levelLowLimitSpin->setValue(m_slider->levelLowLimit());
     m_levelHighLimitSpin->setValue(m_slider->levelHighLimit());
 
-    /* Tree widget contents */
+    /* Tree widget contents. Populate with repaints + sorting suppressed, then
+       re-enable and sort exactly once — otherwise every insertion re-sorts the
+       whole tree (O(n^2)) and the dialog takes minutes to open on a large rig. */
+    m_levelList->setUpdatesEnabled(false);
     levelUpdateFixtures();
     levelUpdateChannelSelections();
+    m_levelList->setSortingEnabled(true);
+    m_levelList->sortByColumn(KColumnName, Qt::AscendingOrder);
+    m_levelList->setUpdatesEnabled(true);
 
     connect(m_levelList, SIGNAL(expanded(QModelIndex)),
             this, SLOT(slotItemExpanded()));
