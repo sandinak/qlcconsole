@@ -32,6 +32,8 @@ class QSpinBox;
 class QGroupBox;
 class QDial;
 class QLabel;
+class QCheckBox;
+class QSlider;
 
 class InputSelectionWidget final : public QWidget, public Ui_InputSelectionWidget
 {
@@ -94,7 +96,9 @@ private:
     QGroupBox *m_relativeGroup;
     QComboBox *m_behaviourCombo;
     QSpinBox  *m_sensitivitySpin;
+    QCheckBox *m_invertCheck;    //!< reverse turn direction
     QDial     *m_previewDial;    //!< live "knob" that turns with the physical control
+    QSlider   *m_previewSlider;  //!< live fader preview (shown for Absolute inputs)
     QLabel    *m_previewLabel;   //!< raw value + decoded step readout
     int        m_previewAccum;   //!< accumulated preview position (relative modes)
 };

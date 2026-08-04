@@ -74,6 +74,7 @@ class QFile;
 #define KXMLQLCVCWidgetInputWorkingMode     QStringLiteral("WorkingMode")
 #define KXMLQLCVCWidgetInputEncoding        QStringLiteral("RelativeEncoding")
 #define KXMLQLCVCWidgetInputSensitivity     QStringLiteral("Sensitivity")
+#define KXMLQLCVCWidgetInputInvert          QStringLiteral("RelativeInvert")
 
 #define KXMLQLCWindowState          QStringLiteral("WindowState")
 #define KXMLQLCWindowStateVisible   QStringLiteral("Visible")

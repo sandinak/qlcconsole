@@ -122,6 +122,11 @@ public:
     RelativeEncoding relativeEncoding() const;
     void setRelativeEncoding(RelativeEncoding enc);
 
+    /** When true, the decoded relative step is negated (turn direction feels
+     *  reversed on some controllers). */
+    bool relativeInvert() const;
+    void setRelativeInvert(bool invert);
+
     /** Decode a raw (DMX-scaled) input byte into a signed detent count using the
      *  current relativeEncoding(). 0 = no movement. Public so it can be unit
      *  tested and reused by the dual-CC path. */
@@ -148,6 +153,9 @@ protected:
 
     /** Relative-encoder byte encoding (only meaningful in Encoder mode) */
     RelativeEncoding m_relativeEncoding;
+
+    /** Negate the decoded relative step (reverse turn direction) */
+    bool m_relativeInvert;
 
     /** When in relative mode, this defines the sensitivity
      *  of synthetic emitted values against the external input value */

@@ -955,6 +955,8 @@ QSharedPointer<QLCInputSource> VCWidget::getXMLInput(QXmlStreamReader &root)
         else
             newSrc->setRelativeEncoding(QLCInputSource::TwosComplement);
     }
+    if (attrs.hasAttribute(KXMLQLCVCWidgetInputInvert))
+        newSrc->setRelativeInvert(true);
     if (attrs.hasAttribute(KXMLQLCVCWidgetInputWorkingMode))
     {
         const QString wm = attrs.value(KXMLQLCVCWidgetInputWorkingMode).toString();
@@ -1156,6 +1158,8 @@ bool VCWidget::saveXMLInput(QXmlStreamWriter *doc,
                 if (src->relativeEncoding() == QLCInputSource::SignedBit)    enc = "SignedBit";
                 else if (src->relativeEncoding() == QLCInputSource::BinaryOffset) enc = "BinaryOffset";
                 doc->writeAttribute(KXMLQLCVCWidgetInputEncoding, QString::fromLatin1(enc));
+                if (src->relativeInvert())
+                    doc->writeAttribute(KXMLQLCVCWidgetInputInvert, QStringLiteral("True"));
             }
             doc->writeAttribute(KXMLQLCVCWidgetInputSensitivity, QString::number(src->sensitivity()));
         }

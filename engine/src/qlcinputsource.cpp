@@ -38,6 +38,7 @@ QLCInputSource::QLCInputSource(QThread *parent)
     , m_id(invalidID)
     , m_workingMode(Absolute)
     , m_relativeEncoding(TwosComplement)
+    , m_relativeInvert(false)
     , m_sensitivity(20)
     , m_emitExtraPressRelease(false)
     , m_inputValue(0)
@@ -58,6 +59,7 @@ QLCInputSource::QLCInputSource(quint32 universe, quint32 channel, QThread *paren
     , m_channel(channel)
     , m_workingMode(Absolute)
     , m_relativeEncoding(TwosComplement)
+    , m_relativeInvert(false)
     , m_sensitivity(20)
     , m_emitExtraPressRelease(false)
     , m_inputValue(0)
@@ -231,6 +233,16 @@ void QLCInputSource::setRelativeEncoding(QLCInputSource::RelativeEncoding enc)
     m_relativeEncoding = enc;
 }
 
+bool QLCInputSource::relativeInvert() const
+{
+    return m_relativeInvert;
+}
+
+void QLCInputSource::setRelativeInvert(bool invert)
+{
+    m_relativeInvert = invert;
+}
+
 int QLCInputSource::decodeRelativeDelta(uchar value) const
 {
     // The MIDI plugin has already scaled the 0-127 data byte to 0-255
@@ -291,7 +303,9 @@ void QLCInputSource::updateInputValue(uchar value)
         // delta * sensitivity (sensitivity = DMX units per detent). This makes a
         // detent encoder that repeats the same code (e.g. OpenDeck sending 1,1,1)
         // move every time, which the old last-value comparison did not.
-        const int delta = decodeRelativeDelta(value);
+        int delta = decodeRelativeDelta(value);
+        if (m_relativeInvert)
+            delta = -delta;
         if (delta != 0)
         {
             const int step = qMax(1, qAbs(m_sensitivity));

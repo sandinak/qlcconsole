@@ -26,6 +26,8 @@
 #include <QSpinBox>
 #include <QLabel>
 #include <QDial>
+#include <QSlider>
+#include <QCheckBox>
 
 #include "inputoutputmap.h"
 
@@ -84,13 +86,17 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
     m_sensitivitySpin->setRange(1, 127);
     m_sensitivitySpin->setValue(4);
     m_sensitivitySpin->setToolTip(tr("Amount the control moves per encoder detent"));
+    m_invertCheck = new QCheckBox(tr("Invert"), m_relativeGroup);
+    m_invertCheck->setToolTip(tr("Reverse the turn direction if the control moves the wrong way"));
     rl->addWidget(new QLabel(tr("Behaviour:"), m_relativeGroup));
     rl->addWidget(m_behaviourCombo, 1);
     rl->addWidget(new QLabel(tr("Step:"), m_relativeGroup));
     rl->addWidget(m_sensitivitySpin);
+    rl->addWidget(m_invertCheck);
     rv->addLayout(rl);
 
-    // Live preview row: turn the physical control and watch this dial + readout.
+    // Live preview row: move the physical control and watch it here. A rotary
+    // dial is shown for relative encoders, a fader for absolute inputs.
     QHBoxLayout *pl = new QHBoxLayout;
     m_previewDial = new QDial(m_relativeGroup);
     m_previewDial->setWrapping(true);
@@ -101,9 +107,15 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
     m_previewDial->setEnabled(false);   // display only — driven by live input
     m_previewDial->setToolTip(tr("Live preview: turn your control and watch this dial. "
         "Smooth motion in the direction you turn = correct encoding."));
-    m_previewLabel = new QLabel(tr("Turn the control to test…"), m_relativeGroup);
+    m_previewSlider = new QSlider(Qt::Horizontal, m_relativeGroup);
+    m_previewSlider->setRange(0, 255);
+    m_previewSlider->setValue(m_previewAccum);
+    m_previewSlider->setEnabled(false); // display only
+    m_previewSlider->setToolTip(tr("Live preview: move your fader and watch this."));
+    m_previewLabel = new QLabel(tr("Move the control to test…"), m_relativeGroup);
     pl->addWidget(new QLabel(tr("Live:"), m_relativeGroup));
     pl->addWidget(m_previewDial);
+    pl->addWidget(m_previewSlider, 1);
     pl->addWidget(m_previewLabel, 1);
     rv->addLayout(pl);
 
@@ -114,6 +126,7 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
 
     connect(m_behaviourCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotBehaviourChanged()));
     connect(m_sensitivitySpin, SIGNAL(valueChanged(int)), this, SLOT(slotBehaviourChanged()));
+    connect(m_invertCheck, SIGNAL(toggled(bool)), this, SLOT(slotBehaviourChanged()));
 
     // Persistent live-preview tap on raw input (independent of auto-detect).
     connect(m_doc->inputOutputMap(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
@@ -319,8 +332,10 @@ void InputSelectionWidget::updateInputSource()
     m_previewAccum = 127;
     if (m_previewDial != NULL)
         m_previewDial->setValue(m_previewAccum);
+    if (m_previewSlider != NULL)
+        m_previewSlider->setValue(m_previewAccum);
     if (m_previewLabel != NULL)
-        m_previewLabel->setText(valid ? tr("Turn the control to test…")
+        m_previewLabel->setText(valid ? tr("Move the control to test…")
                                       : tr("Assign an input first"));
     m_behaviourCombo->blockSignals(true);
     m_sensitivitySpin->blockSignals(true);
@@ -332,8 +347,17 @@ void InputSelectionWidget::updateInputSource()
     m_behaviourCombo->setCurrentIndex(idx);
     if (valid)
         m_sensitivitySpin->setValue(qBound(1, m_inputSource->sensitivity(), 127));
+    m_invertCheck->blockSignals(true);
+    m_invertCheck->setChecked(valid && m_inputSource->relativeInvert());
+    m_invertCheck->blockSignals(false);
     m_behaviourCombo->blockSignals(false);
     m_sensitivitySpin->blockSignals(false);
+
+    const bool relative = (idx > 0);
+    m_sensitivitySpin->setEnabled(relative);
+    m_invertCheck->setEnabled(relative);
+    m_previewDial->setVisible(relative);
+    m_previewSlider->setVisible(!relative);
 }
 
 void InputSelectionWidget::slotBehaviourChanged()
@@ -355,6 +379,15 @@ void InputSelectionWidget::slotBehaviourChanged()
         m_inputSource->setRelativeEncoding(enc);
     }
     m_inputSource->setSensitivity(m_sensitivitySpin->value());
+    m_inputSource->setRelativeInvert(m_invertCheck->isChecked());
+
+    // Step + invert only apply to relative modes; the preview shows a fader for
+    // absolute inputs and a rotary dial for relative encoders.
+    const bool relative = (idx > 0);
+    m_sensitivitySpin->setEnabled(relative);
+    m_invertCheck->setEnabled(relative);
+    m_previewDial->setVisible(relative);
+    m_previewSlider->setVisible(!relative);
 }
 
 void InputSelectionWidget::slotPreviewInput(quint32 universe, quint32 channel, uchar value)
@@ -368,16 +401,19 @@ void InputSelectionWidget::slotPreviewInput(quint32 universe, quint32 channel, u
 
     if (m_behaviourCombo->currentIndex() <= 0)
     {
-        // Absolute: the dial simply follows the incoming value.
+        // Absolute: the fader preview simply follows the incoming value.
         m_previewAccum = value;
-        m_previewDial->setValue(value);
+        m_previewSlider->setValue(value);
         m_previewLabel->setText(tr("value %1").arg(value));
         return;
     }
 
-    // Relative: decode the signed step under the selected encoding and move the
-    // dial by delta * step, wrapping so an endless knob keeps turning.
-    const int delta = m_inputSource->decodeRelativeDelta(value);
+    // Relative: decode the signed step under the selected encoding (applying the
+    // invert flag) and move the dial by delta * step, wrapping so an endless knob
+    // keeps turning.
+    int delta = m_inputSource->decodeRelativeDelta(value);
+    if (m_invertCheck->isChecked())
+        delta = -delta;
     const int step  = qMax(1, m_sensitivitySpin->value());
     int pos = m_previewAccum + delta * step;
     while (pos < 0)   pos += 256;
