@@ -267,16 +267,13 @@ QList<quint32> EffectInstance::effectiveFixtureIds() const
         if (!fxIds.contains(fid))
             fxIds.append(fid);
 
-    // Fallback: if the scene has no explicit targets, include all fixture groups
-    // in the doc so an effect palette with no baked values still runs.
+    // An effect drives ONLY the fixtures/groups explicitly assigned to its look.
+    // (There used to be a fallback that ran the effect on every fixture in the
+    // doc when the look had no targets — convenient for authoring, but it meant
+    // adding an always-on effect like Confetti immediately lit the whole rig
+    // before any fixtures were chosen. No targets now means no output.)
     if (fxIds.isEmpty())
-    {
-        for (FixtureGroup *grp : m_doc->fixtureGroups())
-            if (grp)
-                for (quint32 fid : grp->fixtureList())
-                    if (!fxIds.contains(fid))
-                        fxIds.append(fid);
-    }
+        return {};
 
     const QStringList types = m_script.fixtureTypes();
     if (types.isEmpty())
