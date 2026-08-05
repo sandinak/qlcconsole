@@ -90,6 +90,16 @@ public:
     // --- Read last results (any thread, mutex-protected) ---
     QList<DmxWrite> dmxWrites() const;
 
+    /** True if the last tick drove nothing (all writes 0 / none) — e.g. a note
+     *  effect with no held notes and no live animation. */
+    bool lastFrameEmpty() const { return m_lastFrameEmpty; }
+
+    /** True if the script reacts to an input data channel (midi/audio/joystick):
+     *  such an effect can safely idle when its frame is empty and wake on input.
+     *  A purely time-driven effect (no data channels) returns false and always
+     *  ticks. */
+    bool canIdle() const { return !m_script.dataChannelKeys().isEmpty(); }
+
     /** Drop the last tick's writes so writeDMX() stops asserting them. Any
         runTick() bail-out must call this, or the effect's final frame stays
         pinned on the output at Override priority. */
@@ -167,6 +177,7 @@ private:
 
     mutable QMutex   m_mutex;
     QList<DmxWrite>  m_lastResults;
+    bool             m_lastFrameEmpty = false; //!< last tick drove nothing (idle hint)
 
     float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
 

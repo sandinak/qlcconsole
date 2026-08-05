@@ -280,14 +280,23 @@ void EffectInstance::runTick()
         }
     }
 
+    // Frame is "empty" (drives nothing) if every write is 0 — a note effect with
+    // no held notes and no live ripples. The runner uses this to skip the next
+    // tick until fresh input arrives (wait-for-input instead of polling at 50 Hz).
+    bool empty = true;
+    for (const DmxWrite &w : writes)
+        if (w.value != 0) { empty = false; break; }
+
     QMutexLocker locker(&m_mutex);
     m_lastResults = writes;
+    m_lastFrameEmpty = empty;
 }
 
 void EffectInstance::clearResults()
 {
     QMutexLocker locker(&m_mutex);
     m_lastResults.clear();
+    m_lastFrameEmpty = true;
 }
 
 void EffectInstance::collectGarbage()
@@ -1128,8 +1137,14 @@ EffectInstance::parseIntents(const QJSValue &intents,
                                    ch->group() == QLCChannel::Intensity);
                 if (isColourCh)
                 {
-                    writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c});
-                    matched = true;
+                    // Skip zero-value colour writes: they're HTP-merged (replace=false)
+                    // so max(base,0) leaves the base untouched — writing them just
+                    // churns the fader and, more importantly, keeps an idle frame
+                    // looking "busy". Dropping them lets a note effect with nothing
+                    // lit produce an EMPTY frame, which the runner uses to idle.
+                    if (dmxVal != 0)
+                        writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c});
+                    matched = true;   // the emitter exists regardless of this value
                 }
             }
             return matched;

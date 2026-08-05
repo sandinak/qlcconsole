@@ -380,8 +380,18 @@ void EffectScriptRunner::slotTick()
     // (see the header) and writeDMX() no longer reads it, so the MasterTimer
     // thread cannot be blocked by script evaluation here.
     QMutexLocker locker(&m_instanceMutex);
+    bool anyTicked = false;
     for (EffectInstance *inst : m_instances)
     {
+        // Wait-for-input: an input-reactive effect (midi/audio/joystick) whose
+        // last frame drove nothing, with no new input since, is skipped entirely
+        // — no 1024-cell JS rebuild at 50 Hz just to emit black. It keeps its
+        // (empty) last writes and wakes the moment fresh input sets m_inputDirty.
+        // Time-driven effects (canIdle() == false) always tick.
+        if (inst->canIdle() && inst->lastFrameEmpty() && !m_inputDirty)
+            continue;
+
+        anyTicked = true;
         inst->setLastSpotPositions(m_lastSpotDeg);
         inst->setDataChannels(m_dataChannels);
         inst->runTick();
@@ -393,6 +403,8 @@ void EffectScriptRunner::slotTick()
         for (auto it = deg.constBegin(); it != deg.constEnd(); ++it)
             m_lastSpotDeg[it.key()] = it.value();
     }
+    // Consume the input edge once every instance has had its chance to react.
+    m_inputDirty = false;
 
     // Bound the per-instance QJSEngine heap: runTick() allocates a fresh fixtures
     // array + objects every tick, which V4 only reclaims lazily, so RSS creeps up
@@ -406,7 +418,9 @@ void EffectScriptRunner::slotTick()
     }
     locker.unlock();
 
-    publishWrites();
+    // Nothing ticked → the aggregate is identical to last frame; skip the rebuild.
+    if (anyTicked)
+        publishWrites();
 }
 
 EffectInstance *EffectScriptRunner::instanceForPalette(quint32 paletteId) const
@@ -448,6 +462,9 @@ void EffectScriptRunner::publishWrites()
 void EffectScriptRunner::setDataChannel(const QString &name, const QVariantMap &data)
 {
     m_dataChannels[name] = data;
+    // Fresh input (midi/audio/joystick) → wake idle input-reactive effects on the
+    // next tick (see slotTick's idle skip).
+    m_inputDirty = true;
 }
 
 void EffectScriptRunner::publishMidiData()
@@ -519,6 +536,10 @@ void EffectScriptRunner::slotInputValueChanged(quint32 universe, quint32 channel
                                                 uchar value, const QString &key)
 {
     Q_UNUSED(key)
+
+    // Any input event wakes idle input-reactive effects for the next tick (covers
+    // bound CC/joystick inputs that don't flow through setDataChannel).
+    m_inputDirty = true;
 
     // --- MIDI note/CC → the "midi" data channel (for note-reactive effects) ---
     // The MIDI plugin decodes notes to input channels 128-255 (note = ch-128,

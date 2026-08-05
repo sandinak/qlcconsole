@@ -133,6 +133,10 @@ private:
      *  one-per-tick avoids a synchronized GC burst across all instances. */
     int m_gcCursor = 0;
     int m_gcTick = 0;
+    //!< Set when fresh input (midi/audio/joystick) arrives; lets slotTick wake
+    //!< input-reactive effects that idled on an empty frame. Starts true so the
+    //!< first tick after start always runs.
+    bool m_inputDirty = true;
 
     /** Hand-off buffer: written by the main thread at the end of a tick, read by
      *  the MasterTimer thread in writeDMX(). Guarded by its own mutex, which is
