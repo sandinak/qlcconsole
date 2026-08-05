@@ -1955,21 +1955,64 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
     const int     kind = m_effectScriptCombo->currentData(EffectKindRole).toInt();
     const QString name = m_effectScriptCombo->currentData().toString();
 
+    // Remember the outgoing settings so shared params (note range, MIDI source,
+    // axis, autoRange, speed…) carry across an effect swap instead of resetting.
+    const QMap<QString, double>  prevParams = p->effectParamValues();
+    const QMap<QString, QString> prevStr    = p->effectStringParams();
+
+    // Copy the params that ALSO exist in @p newScriptPath (by name or a declared
+    // alias), clamped to the new script's range/enum, onto palette @p pp.
+    auto carryOverParams = [&](QLCPalette *pp, const QString &newScriptPath) {
+        if (newScriptPath.isEmpty())
+            return;
+        EffectScript ns;
+        if (!ns.load(newScriptPath))
+            return;
+        for (const EffectScript::ParamDef &d : ns.paramDefs())
+        {
+            // Find the old value under this name or any of its former names.
+            bool have = prevParams.contains(d.name);
+            double v = have ? prevParams.value(d.name) : 0.0;
+            if (!have)
+                for (const QString &a : d.aliases)
+                    if (prevParams.contains(a)) { v = prevParams.value(a); have = true; break; }
+            if (have)
+            {
+                if (!d.enumValues.isEmpty())
+                    v = qBound(0.0, v, double(d.enumValues.size() - 1));
+                else if (d.type != QLatin1String("path"))
+                    v = qBound(double(d.min), v, double(d.max));
+                pp->setEffectParamValue(d.name, v);
+            }
+            // String/path params (e.g. a drawn path) carry over verbatim by name.
+            if (prevStr.contains(d.name))
+                pp->setEffectStringParam(d.name, prevStr.value(d.name));
+        }
+    };
+
     if (kind == EffectKindPreset)
     {
-        // Stamp the preset: engine script + pinned param values + identity.
+        // Stamp the preset: engine script + pinned param values + identity. The
+        // preset's own values win; shared params it doesn't pin still carry over.
         const EffectPresetCache::Preset pr =
             m_doc->effectScriptRunner()->presetCache()->preset(name);
-        p->setScriptPath(scache->scriptPath(pr.script));
+        const QString path = scache->scriptPath(pr.script);
+        p->setScriptPath(path);
         p->setEffectPreset(pr.name);
-        p->setEffectParamValues(pr.params);
+        p->clearEffectParamValues();
+        carryOverParams(p, path);
+        for (auto it = pr.params.constBegin(); it != pr.params.constEnd(); ++it)
+            p->setEffectParamValue(it.key(), it.value());
     }
     else
     {
-        // Raw script (or "(none)"): clear preset identity + stale params.
-        p->setScriptPath(name.isEmpty() ? QString() : scache->scriptPath(name));
+        // Raw script (or "(none)"): clear preset identity, then re-apply the
+        // shared params the new script also declares.
+        const QString path = name.isEmpty() ? QString() : scache->scriptPath(name);
+        p->setScriptPath(path);
         p->setEffectPreset(QString());
         p->clearEffectParamValues();
+        carryOverParams(p, path);
     }
     // Wipe old input bindings since the effect changed.
     p->clearEffectInputBindings();
