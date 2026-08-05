@@ -28,6 +28,7 @@
 #include <QDoubleSpinBox>
 
 #include <algorithm>
+#include <functional>
 
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"   // palette MIME type
@@ -165,7 +166,11 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
         hdr->setToolTip(LookColIn,  fadeTip);
         hdr->setToolTip(LookColOut, fadeTip);
     }
-    m_lookList->setRootIsDecorated(false);
+    // Tree view: an Effect look is a parent; Colour/Dimmer looks nested UNDER it
+    // feed that effect (its gradient/master), while looks at the TOP level light
+    // the fixtures directly (static base). Drag a colour onto an effect to feed
+    // it, or out to the top level to make it a base.
+    m_lookList->setRootIsDecorated(true);
     m_lookList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_lookList->setAllColumnsShowFocus(true);
     m_lookList->header()->setStretchLastSection(false);
@@ -182,9 +187,10 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     m_lookList->setDefaultDropAction(Qt::MoveAction);
     m_lookList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_lookList->setToolTip(
-        tr("Order sets precedence: lower looks are applied last and override "
-           "earlier ones on shared channels.\n"
-           "Drag to reorder, or use the Up/Down buttons.\n"
+        tr("Colours/dimmers nested UNDER an Effect feed that effect (its gradient "
+           "and master); looks at the top level light the fixtures directly.\n"
+           "Drag a colour onto an effect to feed it, or out to the top level to "
+           "make it a static base. Order still sets precedence among siblings.\n"
            "Double-click Fade In / Fade Out to set a per-look fade time. "
            "0 = snap instantly; \"step\" = follow the chaser step / scene fade "
            "(spin below 0, or right-click → Reset, to return to \"step\")."));
@@ -484,16 +490,33 @@ void SceneGroupLooks::reload()
 
     m_lookList->blockSignals(true);
     m_lookList->clear();
+    // Build the tree from the ordered palette list: each Effect becomes a
+    // top-level parent, and any Colour/Dimmer that FOLLOWS it (until the next
+    // effect) is nested under it as a child that feeds it. Looks before the first
+    // effect stay top-level — the static fixture base. The flat order is the
+    // source of truth (see QLCPalette::isEffectScoped); the tree is derived from
+    // it and re-derived after every reorder, so nesting == "after this effect".
+    QTreeWidgetItem *currentEffectParent = NULL;
     foreach (quint32 pid, m_scene->palettes())
     {
         QLCPalette *p = m_doc->palette(pid);
         const bool isEffect = (p != NULL && p->type() == QLCPalette::Effect);
 
-        QTreeWidgetItem *it = new QTreeWidgetItem(m_lookList);
+        // Effects (and any look before the first effect) are top-level; a
+        // non-effect after an effect nests under it.
+        QTreeWidgetItem *it = (isEffect || currentEffectParent == NULL)
+                                  ? new QTreeWidgetItem(m_lookList)
+                                  : new QTreeWidgetItem(currentEffectParent);
         it->setText(LookColName, lookLabel(pid));
         it->setData(LookColName, Qt::UserRole, pid);
         if (p != NULL)
             it->setIcon(LookColName, QIcon(p->iconResource()));
+
+        const bool feedsEffect = (!isEffect && currentEffectParent != NULL);
+        it->setToolTip(LookColName,
+            isEffect    ? tr("Effect. Nest colours/dimmers under it to feed its gradient and master.")
+            : feedsEffect ? tr("Feeds the effect above — not painted on the fixtures directly.")
+                          : tr("Lights the fixtures directly (static base)."));
 
         // In/Out fade cells (ms at Qt::UserRole; -1 = "step"). Effect looks are
         // faded by the script runner, not the scene, so their cells are inert.
@@ -506,16 +529,25 @@ void SceneGroupLooks::reload()
         it->setTextAlignment(LookColIn,  Qt::AlignRight | Qt::AlignVCenter);
         it->setTextAlignment(LookColOut, Qt::AlignRight | Qt::AlignVCenter);
 
-        // Flat rows only: draggable + (In/Out) editable, but NOT drop targets,
-        // so an internal-move drop lands between rows rather than nesting.
+        // Draggable + (In/Out) editable. Only EFFECT items accept drops, so
+        // dropping a colour onto one nests it (feeds the effect); dropping between
+        // rows at the top level makes it a base. Leaves never accept children.
         Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled;
         if (!isEffect)
             f |= Qt::ItemIsEditable;
+        if (isEffect)
+            f |= Qt::ItemIsDropEnabled;
+        else
+            f &= ~Qt::ItemIsDropEnabled;
         it->setFlags(f);
+
+        if (isEffect)
+            currentEffectParent = it;
 
         if (selPid != QLCPalette::invalidId() && pid == selPid)
             it->setSelected(true);
     }
+    m_lookList->expandAll();
     m_lookList->blockSignals(false);
 }
 
@@ -929,30 +961,49 @@ void SceneGroupLooks::moveSelectedLooks(int delta)
     if (sel.isEmpty() || delta == 0)
         return;
 
-    // Abort if any selected item would move past an edge — move the whole
-    // selection as a block or not at all (mirrors Collection/Chaser editors).
+    // Tree-aware: an item moves within its OWN sibling group (its effect's
+    // children, or the top level). Index/count come from the parent, so a nested
+    // colour reorders among the effect's other colours rather than jumping out.
+    auto rowIn = [&](QTreeWidgetItem *it) -> int {
+        QTreeWidgetItem *par = it->parent();
+        return par ? par->indexOfChild(it) : m_lookList->indexOfTopLevelItem(it);
+    };
+    auto countIn = [&](QTreeWidgetItem *it) -> int {
+        QTreeWidgetItem *par = it->parent();
+        return par ? par->childCount() : m_lookList->topLevelItemCount();
+    };
+
+    // Abort if any selected item would move past its group's edge — block move.
     foreach (QTreeWidgetItem *it, sel)
     {
-        const int row = m_lookList->indexOfTopLevelItem(it) + delta;
-        if (row < 0 || row >= m_lookList->topLevelItemCount())
+        const int row = rowIn(it) + delta;
+        if (row < 0 || row >= countIn(it))
             return;
     }
 
-    // Take/insert in an order that won't disturb pending rows: ascending when
-    // moving up, descending when moving down. Each swap only touches the two
-    // adjacent rows, so the original indices stay valid as we go.
-    QList<int> rows;
-    foreach (QTreeWidgetItem *it, sel)
-        rows << m_lookList->indexOfTopLevelItem(it);
-    std::sort(rows.begin(), rows.end());
+    // Process ascending when moving up, descending when moving down so adjacent
+    // indices stay valid as we go.
+    QList<QTreeWidgetItem*> ordered = sel;
+    std::sort(ordered.begin(), ordered.end(),
+              [&](QTreeWidgetItem *a, QTreeWidgetItem *b) { return rowIn(a) < rowIn(b); });
     if (delta > 0)
-        std::reverse(rows.begin(), rows.end());
+        std::reverse(ordered.begin(), ordered.end());
 
     m_lookList->blockSignals(true);
-    foreach (int row, rows)
+    foreach (QTreeWidgetItem *it, ordered)
     {
-        QTreeWidgetItem *it = m_lookList->takeTopLevelItem(row);
-        m_lookList->insertTopLevelItem(row + delta, it);
+        const int row = rowIn(it);
+        QTreeWidgetItem *par = it->parent();
+        if (par)
+        {
+            QTreeWidgetItem *taken = par->takeChild(row);
+            par->insertChild(row + delta, taken);
+        }
+        else
+        {
+            QTreeWidgetItem *taken = m_lookList->takeTopLevelItem(row);
+            m_lookList->insertTopLevelItem(row + delta, taken);
+        }
         it->setSelected(true);
     }
     m_lookList->blockSignals(false);
@@ -980,13 +1031,27 @@ void SceneGroupLooks::slotLooksReordered()
 
 void SceneGroupLooks::applyLookOrderFromList()
 {
+    // Depth-first walk: each top-level item, then its children in order. A child
+    // (colour nested under an effect) thus lands right after its effect in the
+    // flat order, which is exactly what marks it "effect-scoped" (isEffectScoped).
+    // reorderPalettes → reload() re-derives the canonical tree from this order, so
+    // any transient/invalid nesting (e.g. an effect dropped under an effect) is
+    // flattened back automatically.
     QList<quint32> order;
+    std::function<void(QTreeWidgetItem*)> walk = [&](QTreeWidgetItem *item) {
+        order << item->data(LookColName, Qt::UserRole).toUInt();
+        for (int c = 0; c < item->childCount(); ++c)
+            walk(item->child(c));
+    };
     for (int i = 0; i < m_lookList->topLevelItemCount(); ++i)
-        order << m_lookList->topLevelItem(i)->data(LookColName, Qt::UserRole).toUInt();
+        walk(m_lookList->topLevelItem(i));
 
     if (m_scene->reorderPalettes(order))
     {
         m_doc->setModified();
         emit sceneModified();
+        // Rebuild the tree from the new flat order so nesting is canonical (a
+        // colour dropped between two effects re-homes under the effect above it).
+        reload();
     }
 }

@@ -824,6 +824,13 @@ QJSValue EffectInstance::buildPalettesObject() const
                 pastThisEffect = true;
                 continue;
             }
+            // The NEXT effect ends this effect's run of child colours (in the tree
+            // view, those colours are nested under the other effect).
+            if (p->type() == QLCPalette::Effect)
+            {
+                pastThisEffect = false;
+                continue;
+            }
             if (p->type() == QLCPalette::Color)
             {
                 allColors.append(p->colorValue());
