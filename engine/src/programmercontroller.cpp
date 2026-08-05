@@ -50,6 +50,7 @@
 #include "programmerflasher.h"
 #include "highlighteffect.h"
 #include "parkeffect.h"
+#include "markeffect.h"
 #include "capturemanager.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
@@ -68,6 +69,10 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_programmerFlasher = new ProgrammerFlasher(m_doc);
     m_highlightEffect = new HighlightEffect(m_doc);
     m_parkEffect = new ParkEffect(m_doc);
+    m_markEffect = new MarkEffect(m_doc);
+    // The mark set auto-releases fixtures on reveal; surface that to the monitor.
+    connect(m_markEffect, &MarkEffect::fixtureRevealed,
+            this, &ProgrammerController::markChanged);
 
     connect(this, &ProgrammerController::programmerSelectionChanged,
             this, &ProgrammerController::slotSyncEffectFixtures);
@@ -1308,6 +1313,120 @@ bool ProgrammerController::loadParkXML(QXmlStreamReader &root)
         return false;
     const bool ok = m_parkEffect->loadXML(root);
     emit parkChanged();
+    return ok;
+}
+
+/*********************************************************************
+ * Mark / move-in-black
+ *********************************************************************/
+
+void ProgrammerController::markFixtures(const QList<quint32> &fixtureIds)
+{
+    if (fixtureIds.isEmpty() || m_markEffect == nullptr)
+        return;
+
+    // Capture each fixture's current pre-Grand-Master output, EXCLUDING the
+    // master intensity so the mark holds only where the beam points / its colour,
+    // and the fixture stays as dark as the show leaves it.
+    QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
+
+    bool changed = false;
+    for (quint32 fid : fixtureIds)
+    {
+        Fixture *fxi = m_doc->fixture(fid);
+        if (fxi == NULL || fxi->fixtureMode() == NULL)
+            continue;
+
+        const int uni = (int)fxi->universe();
+        const quint32 masterCh = fxi->masterIntensityChannel();
+        QHash<quint32, uchar> values;
+        const quint32 nCh = fxi->channels();
+        for (quint32 c = 0; c < nCh; c++)
+        {
+            if (c == masterCh)
+                continue;   // never hold intensity — a mark is dark
+            const int absAddr = (int)fxi->address() + (int)c;
+            if (absAddr >= UNIVERSE_SIZE)
+                break;
+            uchar v = 0;
+            if (uni >= 0 && uni < universes.size() && universes[uni] != NULL)
+                v = universes[uni]->preGMValue(absAddr);
+            values.insert(c, v);
+        }
+
+        if (!values.isEmpty())
+        {
+            m_markEffect->markFixture(fid, values);
+            changed = true;
+        }
+    }
+
+    m_doc->inputOutputMap()->releaseUniverses(false);
+
+    if (changed)
+    {
+        m_doc->setModified();
+        emit markChanged();
+    }
+}
+
+void ProgrammerController::unmarkFixtures(const QList<quint32> &fixtureIds)
+{
+    if (m_markEffect == nullptr)
+        return;
+
+    bool changed = false;
+    for (quint32 fid : fixtureIds)
+    {
+        if (m_markEffect->isMarked(fid))
+        {
+            m_markEffect->unmarkFixture(fid);
+            changed = true;
+        }
+    }
+
+    if (changed)
+    {
+        m_doc->setModified();
+        emit markChanged();
+    }
+}
+
+void ProgrammerController::unmarkAllFixtures()
+{
+    if (m_markEffect == nullptr || m_markEffect->isEmpty())
+        return;
+    m_markEffect->unmarkAll();
+    m_doc->setModified();
+    emit markChanged();
+}
+
+bool ProgrammerController::isFixtureMarked(quint32 fixtureId) const
+{
+    return m_markEffect != nullptr && m_markEffect->isMarked(fixtureId);
+}
+
+QList<quint32> ProgrammerController::markedFixtures() const
+{
+    return m_markEffect != nullptr ? m_markEffect->markedFixtures() : QList<quint32>();
+}
+
+bool ProgrammerController::hasMarkedFixtures() const
+{
+    return m_markEffect != nullptr && !m_markEffect->isEmpty();
+}
+
+bool ProgrammerController::saveMarkXML(QXmlStreamWriter *doc) const
+{
+    return m_markEffect != nullptr ? m_markEffect->saveXML(doc) : true;
+}
+
+bool ProgrammerController::loadMarkXML(QXmlStreamReader &root)
+{
+    if (m_markEffect == nullptr)
+        return false;
+    const bool ok = m_markEffect->loadXML(root);
+    emit markChanged();
     return ok;
 }
 

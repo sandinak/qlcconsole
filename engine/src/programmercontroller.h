@@ -36,6 +36,7 @@
 class ProgrammerFlasher;
 class HighlightEffect;
 class ParkEffect;
+class MarkEffect;
 class QLCPalette;
 class Scene;
 class QXmlStreamReader;
@@ -150,6 +151,31 @@ public:
     /** Workspace persistence — driven by Doc's thin forwarders. */
     bool saveParkXML(QXmlStreamWriter *doc) const;
     bool loadParkXML(QXmlStreamReader &root);
+
+    /*********************************************************************
+     * Mark / move-in-black (pre-position dark fixtures for the next cue)
+     *********************************************************************/
+public:
+    /** Mark @p fixtureIds: capture each fixture's current NON-intensity output
+     *  (pan/tilt, colour, gobo, beam…) and hold it on every DMX tick, so a dark
+     *  mover pre-sets to where it'll be revealed. Auto-releases when a real cue
+     *  lights the fixture; manual unmark also available. Persists. */
+    void markFixtures(const QList<quint32> &fixtureIds);
+    /** Release the mark on @p fixtureIds. */
+    void unmarkFixtures(const QList<quint32> &fixtureIds);
+    /** Release every mark. */
+    void unmarkAllFixtures();
+    bool isFixtureMarked(quint32 fixtureId) const;
+    QList<quint32> markedFixtures() const;
+    bool hasMarkedFixtures() const;
+
+    bool saveMarkXML(QXmlStreamWriter *doc) const;
+    bool loadMarkXML(QXmlStreamReader &root);
+
+signals:
+    /** Emitted when the mark set changes (add/remove/auto-release) so the 2D
+     *  monitor can refresh its ghost outlines. */
+    void markChanged();
 
     /*********************************************************************
      * Design-mode joystick (writes pan/tilt into the focused scene)
@@ -427,6 +453,8 @@ private:
     bool m_highlightActive = false;
     /** Persistent park DMXSource — holds parked fixtures at captured values. */
     ParkEffect *m_parkEffect = nullptr;
+    /** Persistent mark DMXSource — pre-positions dark fixtures (non-intensity). */
+    MarkEffect *m_markEffect = nullptr;
     // Controller axis binding (program-wide)
     quint32 m_panUniverse = 0,  m_panChannel  = 0;
     quint32 m_tiltUniverse = 0, m_tiltChannel = 0;

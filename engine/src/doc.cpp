@@ -64,6 +64,7 @@
 #include "fixturegroup.h"
 #include "programmercontroller.h"
 #include "parkeffect.h"
+#include "markeffect.h"
 #include "lastlookeffect.h"
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -1903,6 +1904,13 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             else
                 doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLQLCMark)
+        {
+            if (m_programmer != NULL)
+                m_programmer->loadMarkXML(doc);
+            else
+                doc.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown engine tag:" << doc.name();
@@ -1980,6 +1988,9 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
 
     if (m_programmer != NULL)
         m_programmer->saveParkXML(doc);
+
+    if (m_programmer != NULL)
+        m_programmer->saveMarkXML(doc);
 
     if (m_monitorProps != NULL)
         m_monitorProps->saveXML(doc, this);
