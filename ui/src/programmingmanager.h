@@ -281,9 +281,17 @@ private:
     /** Record the pre-edit baseline before the current edit takes effect. */
     void pushUndoSnapshot();
 
-    // Last Effect-palette set synced to ESR — used to avoid recreating instances
-    // on every refreshPreview() call when only non-Effect palettes changed.
-    QList<quint32>       m_lastSyncedEffectPalettes;
+    // Last Effect-palette signature synced to ESR — used to avoid recreating
+    // instances on every refreshPreview() call when only non-Effect palettes (or
+    // a running effect's own params) changed. The signature includes each Effect
+    // palette's id AND its script path + preset, so SWITCHING the effect script
+    // on an existing palette (same id) still forces a re-sync; a param-slider
+    // drag (same script) does not, preserving live JS state.
+    QStringList          m_lastSyncedEffectPalettes;
+
+    /** Build the Effect-palette sync signature for @p scene (id|script|preset per
+     *  Effect palette). Empty scene / non-scene → empty list. */
+    QStringList effectPaletteSignature(Scene *scene) const;
 
     // Toolbar buttons
     QPushButton *m_highlightBtn;

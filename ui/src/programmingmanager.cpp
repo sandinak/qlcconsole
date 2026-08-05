@@ -1236,16 +1236,7 @@ void ProgrammingManager::startPreview()
     // Seed the Effect-palette cache so the first canvas modification
     // (e.g. dropping a target group) doesn't falsely see the set as
     // "changed" and call syncScene(), which would tear down JS instances.
-    m_lastSyncedEffectPalettes.clear();
-    if (Scene *s = qobject_cast<Scene*>(f))
-    {
-        for (quint32 pid : s->palettes())
-        {
-            QLCPalette *p = m_doc->palette(pid);
-            if (p && p->type() == QLCPalette::Effect)
-                m_lastSyncedEffectPalettes << pid;
-        }
-    }
+    m_lastSyncedEffectPalettes = effectPaletteSignature(qobject_cast<Scene*>(f));
     updateTitle();
 }
 
@@ -1260,6 +1251,24 @@ void ProgrammingManager::stopPreview()
         f->stop(FunctionParent::master());
     m_previewFunction = Function::invalidId();
     updateTitle();
+}
+
+QStringList ProgrammingManager::effectPaletteSignature(Scene *scene) const
+{
+    QStringList sig;
+    if (scene == NULL)
+        return sig;
+    for (quint32 pid : scene->palettes())
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (p == NULL || p->type() != QLCPalette::Effect)
+            continue;
+        // id + script identity: a script swap on the same palette id must read as
+        // "changed" so the running instance reloads; a param drag must not.
+        sig << QString::number(pid) + QLatin1Char('|') + p->scriptPath()
+               + QLatin1Char('|') + p->effectPreset();
+    }
+    return sig;
 }
 
 void ProgrammingManager::refreshPreview()
@@ -1286,13 +1295,7 @@ void ProgrammingManager::refreshPreview()
             // continuously running effects (candle flicker loses its phase, etc.).
             if (m_doc->effectScriptRunner())
             {
-                QList<quint32> effectPals;
-                for (quint32 pid : s->palettes())
-                {
-                    QLCPalette *p = m_doc->palette(pid);
-                    if (p && p->type() == QLCPalette::Effect)
-                        effectPals << pid;
-                }
+                const QStringList effectPals = effectPaletteSignature(s);
                 if (effectPals != m_lastSyncedEffectPalettes)
                 {
                     m_lastSyncedEffectPalettes = effectPals;
@@ -1309,16 +1312,7 @@ void ProgrammingManager::refreshPreview()
         // Seed the cache with what the scene already has so the first
         // canvas modification (e.g. dropping a target group) doesn't
         // incorrectly see "effect palette set changed" and call syncScene().
-        m_lastSyncedEffectPalettes.clear();
-        if (Scene *startedScene = qobject_cast<Scene*>(f))
-        {
-            for (quint32 pid : startedScene->palettes())
-            {
-                QLCPalette *p = m_doc->palette(pid);
-                if (p && p->type() == QLCPalette::Effect)
-                    m_lastSyncedEffectPalettes << pid;
-            }
-        }
+        m_lastSyncedEffectPalettes = effectPaletteSignature(qobject_cast<Scene*>(f));
         updateTitle();
     }
     // NOTE: do NOT schedule a power recompute here. refreshPreview() runs on
@@ -2794,16 +2788,7 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
         // Update cache so the next refreshPreview() call doesn't redundantly
         // re-sync when the scene is already running with these palettes.
         Scene *stampScene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
-        m_lastSyncedEffectPalettes.clear();
-        if (stampScene)
-        {
-            for (quint32 pid : stampScene->palettes())
-            {
-                QLCPalette *p = m_doc->palette(pid);
-                if (p && p->type() == QLCPalette::Effect)
-                    m_lastSyncedEffectPalettes << pid;
-            }
-        }
+        m_lastSyncedEffectPalettes = effectPaletteSignature(stampScene);
     }
     m_paletteTree->updateTree();
     if (m_canvas) m_canvas->reload();  // rebuild look list to show new entries
