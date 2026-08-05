@@ -230,6 +230,38 @@ host-provided **`joystick`** channel:
 | `data.joystick.sensitivity` | global sensitivity (device/I-O Manager) |
 | `data.joystick.deadzone` | global deadzone (fraction; default 0.05) |
 
+The host-provided **`midi`** channel (live note state from any patched MIDI
+input; declare `dataChannels: ["midi"]`):
+
+| Key | Meaning |
+|---|---|
+| `data.midi.velocity` | `[128]` last-struck velocity per note (0–127) |
+| `data.midi.held` | `[128]` bool — is the key physically down |
+| `data.midi.sustain` | bool — sustain pedal (CC64) |
+| `data.midi.lastNote` | last note struck (−1 if none) |
+| `data.midi.lastVelocity` | velocity of the last note struck |
+| `data.midi.noteOnCount` | bumped on every fresh note-on (diff it to detect new strikes) |
+
+`velocity` is the value captured at the last strike (kept after release as the
+decay reference); `held` tells you if the key is still down. Do your own
+attack/decay in `state` (see the shipped `midi-keys`/`midi-flash`/`midi-puddles`/
+`midi-comet` effects). Note reactivity is opt-in and gated on `data.midi` being
+present, so an effect is safe when no MIDI is connected.
+
+The host-provided **`audio`** channel (live spectrum from the shared audio
+capture; declare `dataChannels: ["audio"]`). Subscribing turns the capture
+**on** (and unsubscribing off), so only pay for audio when an audio effect runs;
+it needs an audio input assigned in Inputs/Outputs:
+
+| Key | Meaning |
+|---|---|
+| `data.audio.bands` | `[16]` spectrum magnitudes 0..1, low→high frequency |
+| `data.audio.level` | overall volume 0..1 |
+| `data.audio.peak` | loudest band 0..1 |
+
+Present only while an audio input is delivering; guard on `data.audio` so the
+effect is dark-safe with no audio (see the shipped `audio-spectrum`/`audio-vu`).
+
 ---
 
 ## 6. Return value — intents

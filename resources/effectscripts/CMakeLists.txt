@@ -2,6 +2,8 @@ project(effectscripts)
 
 set(SCRIPT_FILES
     amber-pulse.js
+    audio-spectrum.js
+    audio-vu.js
     ballyhoo.js
     candle-flicker.js
     color-alternate.js

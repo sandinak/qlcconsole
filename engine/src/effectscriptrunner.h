@@ -70,6 +70,10 @@ public slots:
     void slotInputValueChanged(quint32 universe, quint32 channel,
                                uchar value, const QString &key);
 
+    /** Audio spectrum from the shared AudioCapture → the "audio" data channel. */
+    void slotAudioData(double *spectrumBands, int size,
+                       double maxMagnitude, quint32 power);
+
     /** Update a named real-time data channel (e.g. "joystick") injected into
      *  every subscribing effect script before each tick.  Call from the main thread. */
     void setDataChannel(const QString &name, const QVariantMap &data);
@@ -165,6 +169,11 @@ private:
     } m_midiState;
     /** Rebuild the "midi" data channel from m_midiState and publish it. */
     void publishMidiData();
+
+    /** Start/stop the shared audio capture based on whether any live effect
+     *  subscribes to the "audio" data channel. Called after instances change. */
+    void updateAudioSubscription();
+    bool m_audioActive = false;   //!< audio capture registered+connected by us
 
     /** Per-universe GenericFaders used to write effect DMX through the fader
      *  pipeline instead of directly to preGMValues (which zeroIntensityChannels

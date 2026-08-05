@@ -15,6 +15,7 @@
 #include "inputoutputmap.h"
 #include "universe.h"
 #include "fadechannel.h"
+#include "audiocapture.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -203,6 +204,8 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
         }
 
     }
+
+    updateAudioSubscription();
 }
 
 void EffectScriptRunner::syncScene(quint32 sceneId)
@@ -292,6 +295,74 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
         m_doc->inputOutputMap()->releaseUniverses(false);
         m_faders.clear();
     }
+
+    updateAudioSubscription();
+}
+
+void EffectScriptRunner::updateAudioSubscription()
+{
+    // Does any live instance subscribe to the "audio" data channel?
+    bool wantAudio = false;
+    {
+        QMutexLocker locker(&m_instanceMutex);
+        for (EffectInstance *inst : m_instances)
+        {
+            if (inst->dataChannelKeys().contains(QStringLiteral("audio")))
+            {
+                wantAudio = true;
+                break;
+            }
+        }
+    }
+
+    if (wantAudio == m_audioActive)
+        return;
+
+    QSharedPointer<AudioCapture> cap = m_doc->audioInputCapture();
+    if (cap.isNull())
+        return;
+    const int bands = 16;
+
+    if (wantAudio)
+    {
+        connect(cap.data(), SIGNAL(dataProcessed(double*,int,double,quint32)),
+                this, SLOT(slotAudioData(double*,int,double,quint32)));
+        cap->registerBandsNumber(bands);   // starts the capture thread on first use
+        m_audioActive = true;
+    }
+    else
+    {
+        cap->unregisterBandsNumber(bands);
+        disconnect(cap.data(), SIGNAL(dataProcessed(double*,int,double,quint32)),
+                   this, SLOT(slotAudioData(double*,int,double,quint32)));
+        m_audioActive = false;
+        // Clear the channel so a re-subscribing effect starts from silence.
+        setDataChannel(QStringLiteral("audio"), QVariantMap());
+    }
+}
+
+void EffectScriptRunner::slotAudioData(double *spectrumBands, int size,
+                                       double maxMagnitude, quint32 power)
+{
+    QVariantList bands;
+    bands.reserve(size);
+    double peak = 0.0;
+    for (int i = 0; i < size; i++)
+    {
+        double b = (maxMagnitude > 0.0) ? (spectrumBands[i] / maxMagnitude) : 0.0;
+        if (b < 0.0) b = 0.0; else if (b > 1.0) b = 1.0;
+        bands << b;
+        if (b > peak) peak = b;
+    }
+    // power is a 15-bit-ish signal power (matches AudioTriggerWidget's /0x7FFF).
+    double level = double(power) / 32767.0;
+    if (level > 1.0) level = 1.0;
+
+    QVariantMap ad;
+    ad[QStringLiteral("bands")] = bands;   // [16] low→high, 0..1
+    ad[QStringLiteral("level")] = level;   // overall volume 0..1
+    ad[QStringLiteral("peak")]  = peak;    // loudest band 0..1
+    setDataChannel(QStringLiteral("audio"), ad);
 }
 
 // ---------------------------------------------------------------------------
