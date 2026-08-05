@@ -383,9 +383,13 @@ void EffectScriptRunner::slotAudioData(double *spectrumBands, int size,
     if (level > 1.0) level = 1.0;
 
     QVariantMap ad;
-    ad[QStringLiteral("bands")] = bands;   // [16] low→high, 0..1
-    ad[QStringLiteral("level")] = level;   // overall volume 0..1
-    ad[QStringLiteral("peak")]  = peak;    // loudest band 0..1
+    ad[QStringLiteral("bands")]     = bands;   // [N] low→high, 0..1
+    ad[QStringLiteral("level")]     = level;   // overall volume 0..1
+    ad[QStringLiteral("peak")]      = peak;    // loudest band 0..1
+    // Frequency mapping so effects can focus a Hz range: the N bands tile
+    // 0..maxHz linearly, so band b covers [b*maxHz/N, (b+1)*maxHz/N].
+    ad[QStringLiteral("maxHz")]     = AudioCapture::maxFrequency();
+    ad[QStringLiteral("bandCount")] = size;
     setDataChannel(QStringLiteral("audio"), ad);
 }
 

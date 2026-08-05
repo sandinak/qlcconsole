@@ -16,12 +16,14 @@
     effect.author      = "QLC+";
     effect.fixtureTypes = ["rgb", "dimmer"];
     effect.dataChannels = ["audio"];
-    effect.notes = "The audio spectrum spread across the fixtures (low→high). On a matrix each column is a frequency band rising bar-graph style; on a strip each fixture is a band. Gain scales the response; Smooth eases the fall. Colours: Spectrum (low=red→high=blue) or the look's palette. Requires an audio input in Inputs/Outputs.";
+    effect.notes = "The audio spectrum spread across the fixtures (low→high). On a matrix each column is a frequency band rising bar-graph style; on a strip each fixture is a band. Gain scales the response; Smooth eases the fall. Set Start/End Hz to spread only part of the spectrum across the fixtures — e.g. 40–250 Hz to give a whole panel to the bass. Colours: Spectrum (low=red→high=blue) or the look's palette. Requires an audio input in Inputs/Outputs.";
 
     effect.parameters = [
-        { name: "gain",   description: "Response gain",           min: 0.2, max: 5.0, defaultValue: 1.4 },
-        { name: "smooth", description: "Fall smoothing (0-0.95)", min: 0.0, max: 0.95, defaultValue: 0.6 },
-        { name: "colors", description: "Colour source",           defaultValue: 0, values: ["Spectrum", "Look palette"] }
+        { name: "gain",    description: "Response gain",           min: 0.2, max: 5.0, defaultValue: 1.4 },
+        { name: "smooth",  description: "Fall smoothing (0-0.95)", min: 0.0, max: 0.95, defaultValue: 0.6 },
+        { name: "startHz", description: "Start Hz (0 = lowest)",   min: 0, max: 5000, defaultValue: 0 },
+        { name: "endHz",   description: "End Hz (5000 = highest)", min: 0, max: 5000, defaultValue: 5000 },
+        { name: "colors",  description: "Colour source",           defaultValue: 0, values: ["Spectrum", "Look palette"] }
     ];
 
     function hsv(h) {
@@ -49,6 +51,16 @@
         var bands = (a && a.bands) ? a.bands : [];
         var nb    = bands.length;
         var gain  = params.gain || 1.4;
+
+        // Focus band window from the Hz range (bands tile 0..maxHz linearly).
+        var maxHz = (a && a.maxHz) ? a.maxHz : 5000;
+        var startHz = Math.max(0, params.startHz | 0);
+        var endHz   = params.endHz ? (params.endHz | 0) : maxHz;
+        if (endHz <= startHz) endHz = maxHz;
+        var bLo = nb ? Math.max(0, Math.floor(startHz / maxHz * nb)) : 0;
+        var bHi = nb ? Math.min(nb, Math.ceil(endHz / maxHz * nb)) : 0;
+        if (bHi <= bLo) bHi = Math.min(nb, bLo + 1);
+        var focusN = bHi - bLo;   // bands spread across the fixtures
         var smooth = Math.min(0.95, Math.max(0, params.smooth || 0.6));
         var useLook = ((params.colors | 0) === 1);
         var lk = (palettes.look && palettes.look.colors) ? palettes.look.colors : [];
@@ -58,7 +70,8 @@
             state.col = []; for (var c = 0; c < cols; c++) state.col[c] = 0;
         }
         for (var c = 0; c < cols; c++) {
-            var bi = nb > 0 ? Math.min(nb - 1, Math.floor(c / cols * nb)) : 0;
+            // Spread only the focused band window [bLo, bHi) across the columns.
+            var bi = focusN > 0 ? Math.min(bHi - 1, bLo + Math.floor(c / cols * focusN)) : 0;
             var v = nb > 0 ? Math.min(1, bands[bi] * gain) : 0;
             state.col[c] = (v > state.col[c]) ? v : (state.col[c] * smooth + v * (1 - smooth));
         }
