@@ -33,6 +33,10 @@ private slots:
     /** Assigning a single fixture targets only that fixture. */
     void singleFixtureTargetOnly();
 
+    /** A multi-head fixture yields one cell PER HEAD (pixel addressing), not one
+     *  cell for the whole fixture. */
+    void multiHeadYieldsPerHeadCells();
+
 private:
     Doc          *m_doc = nullptr;
     FixtureGroup *m_group = nullptr;

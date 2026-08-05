@@ -18,6 +18,10 @@
 #include "fixturegroup.h"
 #include "scene.h"
 #include "qlcpalette.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
+#include "qlcfixturehead.h"
 #include "effectinstance.h"
 
 void EffectInstance_Test::init()
@@ -92,6 +96,61 @@ void EffectInstance_Test::singleFixtureTargetOnly()
     QList<quint32> got = inst.effectiveFixtureIds();
     QCOMPARE(got.size(), 1);
     QCOMPARE(got.first(), m_fixtureIds.first());
+}
+
+void EffectInstance_Test::multiHeadYieldsPerHeadCells()
+{
+    // A 4-head RGB fixture (12 channels) in a 4x1 group.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Pixel4");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel::PrimaryColour pc[3] = { QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue };
+    for (int h = 0; h < 4; h++)
+        for (int c = 0; c < 3; c++)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("H%1c%2").arg(h).arg(c));
+            ch->setGroup(QLCChannel::Intensity);
+            ch->setColour(pc[c]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, h * 3 + c);
+        }
+    for (int h = 0; h < 4; h++)
+    {
+        QLCFixtureHead head;
+        head.addChannel(h * 3 + 0); head.addChannel(h * 3 + 1); head.addChannel(h * 3 + 2);
+        mode->insertHead(-1, head);
+    }
+    mode->cacheHeads();
+    def->addMode(mode);
+
+    Fixture *fx = new Fixture(m_doc);
+    fx->setFixtureDefinition(def, mode);
+    fx->setUniverse(1); fx->setAddress(0);   // clear of the init() fixtures on uni 0
+    m_doc->addFixture(fx);
+    QCOMPARE(fx->heads(), 4);
+
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setSize(QSize(4, 1));
+    grp->assignFixture(fx->id());
+    m_doc->addFixtureGroup(grp);
+
+    Scene *scene = new Scene(m_doc);
+    scene->setName("PixelLook");
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(grp->id());
+
+    EffectInstance inst(m_doc, scene->id(), m_palette->id());
+    int cols = 0, rows = 0;
+    QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+
+    QCOMPARE(cells.size(), 4);   // one cell PER HEAD, not one per fixture
+    QCOMPARE(cols, 4);
+    QCOMPARE(rows, 1);
+    QList<int> heads;
+    for (const EffectInstance::EffectCell &c : cells) heads << c.head;
+    std::sort(heads.begin(), heads.end());
+    QCOMPARE(heads, (QList<int>() << 0 << 1 << 2 << 3));
 }
 
 QTEST_GUILESS_MAIN(EffectInstance_Test)

@@ -134,8 +134,9 @@ void EffectInstance::runTick()
     // Collect the fixture ids the scene targets, filtered by the script's
     // declared fixtureTypes (e.g. ["rgb"] excludes movers, ["moving"] excludes
     // wash fixtures).  If the script declares no types, all scene fixtures are used.
-    QList<quint32> fxIds = effectiveFixtureIds();
-    if (fxIds.isEmpty())
+    int gridCols = 1, gridRows = 1;
+    QList<EffectCell> cells = effectiveCells(gridCols, gridRows);
+    if (cells.isEmpty())
     {
         clearResults();
         return;
@@ -150,7 +151,7 @@ void EffectInstance::runTick()
     // modulate *around* the Dimmer/Colour looks instead of overriding them.
     buildSceneBaseValues();
 
-    QJSValue fixtures = buildFixturesArray(fxIds);
+    QJSValue fixtures = buildFixturesArray(cells, gridCols, gridRows);
     QJSValue inputs   = buildInputsObject();
     QJSValue palettes = buildPalettesObject();
     QJSValue params   = buildParamsObject();
@@ -164,7 +165,7 @@ void EffectInstance::runTick()
         return;
     }
 
-    QList<DmxWrite> writes = parseIntents(result, fxIds);
+    QList<DmxWrite> writes = parseIntents(result, cells);
 
     QMutexLocker locker(&m_mutex);
     m_lastResults = writes;
@@ -360,62 +361,87 @@ QList<quint32> EffectInstance::effectiveFixtureIds() const
     return filtered;
 }
 
-QJSValue EffectInstance::buildFixturesArray(const QList<quint32> &fxIds)
+QList<EffectInstance::EffectCell>
+EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
 {
-    QJSValue arr = m_script.engine()->newArray(fxIds.size());
+    QList<EffectCell> cells;
+    gridCols = 1;
+    gridRows = 1;
+
+    const QList<quint32> fxIds = effectiveFixtureIds();   // type-filtered fixtures
+    if (fxIds.isEmpty())
+        return cells;
+    const QSet<quint32> allowed(fxIds.constBegin(), fxIds.constEnd());
+
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
+    const QList<quint32> grpIds = scene ? scene->fixtureGroups() : QList<quint32>();
+
+    // Per-HEAD cells from the fixture-group head layouts, laid side by side
+    // (left→right) so two panels next to each other form ONE wide grid. Every
+    // head of a multi-head/pixel fixture is its own cell — this is what lets an
+    // effect address individual pixels instead of a whole fixture (RGB Matrix
+    // parity); a single-head fixture is just one cell.
+    int xOffset = 0, maxRows = 0;
+    for (quint32 gid : grpIds)
+    {
+        FixtureGroup *grp = m_doc->fixtureGroup(gid);
+        if (grp == nullptr || grp->size().width() <= 0 || grp->size().height() <= 0
+                           || grp->headsMap().isEmpty())
+            continue;
+        const QMap<QLCPoint, GroupHead> heads = grp->headsMap();
+        for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
+        {
+            const GroupHead &gh = it.value();
+            if (!allowed.contains(gh.fxi))
+                continue;
+            cells.append({gh.fxi, gh.head, xOffset + it.key().x(), it.key().y()});
+        }
+        xOffset += grp->size().width();
+        if (grp->size().height() > maxRows) maxRows = grp->size().height();
+    }
+
+    if (!cells.isEmpty())
+    {
+        gridCols = qMax(1, xOffset);
+        gridRows = qMax(1, maxRows);
+        return cells;
+    }
+
+    // Fallback: no laid-out group → a 1-D strip of every head of the loose
+    // fixtures, in fixture order.
+    int col = 0;
+    for (quint32 fid : fxIds)
+    {
+        Fixture *fxi = m_doc->fixture(fid);
+        if (fxi == nullptr)
+            continue;
+        const int nh = qMax(1, fxi->heads());
+        for (int h = 0; h < nh; ++h)
+            cells.append({fid, h, col++, 0});
+    }
+    gridCols = qMax(1, col);
+    gridRows = 1;
+    return cells;
+}
+
+QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCell> &cells,
+                                            int gridCols, int gridRows)
+{
+    QJSValue arr = m_script.engine()->newArray(cells.size());
     const MonitorProperties *mp = m_doc->monitorProperties();
     QLCPalette *effectPal = m_doc->palette(m_effectPaletteId);
 
-    // Grid coords for pixel-style effects (ripple, comet, matrix ports): map each
-    // fixture to a (col,row) cell. Sourced from the fixture group's head layout —
-    // the SAME data RGB Matrix maps through — when the scene targets a single
-    // laid-out group; otherwise the fixtures form a 1-D strip in list order, so an
-    // effect always has a coherent grid to render on.
-    int gridCols = fxIds.size() > 0 ? fxIds.size() : 1;
-    int gridRows = 1;
-    QHash<quint32, QPoint> gridPos;   // fixture id -> (col,row)
+    for (int i = 0; i < cells.size(); ++i)
     {
-        Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
-        const QList<quint32> grpIds = scene ? scene->fixtureGroups() : QList<quint32>();
-        // Lay each laid-out group side by side, LEFT TO RIGHT, into one combined
-        // grid: group N starts at column = sum of the widths before it. So two
-        // 64-wide panels next to each other read as one 128-wide grid, and a
-        // pixel effect / MIDI-note spread runs across the whole physical width.
-        int xOffset = 0, maxRows = 0;
-        bool anyLayout = false;
-        for (quint32 gid : grpIds)
-        {
-            FixtureGroup *grp = m_doc->fixtureGroup(gid);
-            if (!grp || grp->size().width() <= 0 || grp->size().height() <= 0
-                     || grp->headsMap().isEmpty())
-                continue;
-            const QMap<QLCPoint, GroupHead> heads = grp->headsMap();
-            for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
-                // First cell wins for a multi-head fixture (effect is per-id).
-                if (!gridPos.contains(it.value().fxi))
-                    gridPos.insert(it.value().fxi,
-                                   QPoint(xOffset + it.key().x(), it.key().y()));
-            xOffset += grp->size().width();
-            if (grp->size().height() > maxRows) maxRows = grp->size().height();
-            anyLayout = true;
-        }
-        if (anyLayout)
-        {
-            gridCols = xOffset;
-            gridRows = maxRows;
-        }
-    }
-
-    for (int i = 0; i < fxIds.size(); ++i)
-    {
-        quint32 fid = fxIds.at(i);
+        const EffectCell &cell = cells.at(i);
+        quint32 fid = cell.fixtureId;
         Fixture *fxi = m_doc->fixture(fid);
         if (!fxi)
             continue;
 
         QJSValue obj = m_script.engine()->newObject();
         obj.setProperty("id",   (int)fid);
-        obj.setProperty("head", 0);
+        obj.setProperty("head", cell.head);
 
         float panRange  = 360.0f;
         float tiltRange = 270.0f;
@@ -488,15 +514,11 @@ QJSValue EffectInstance::buildFixturesArray(const QList<quint32> &fxIds)
         posObj.setProperty("z", (double)pos.z());
         obj.setProperty("pos", posObj);
 
-        // grid: cell coords for pixel-style effects. col/row = this fixture's cell;
-        // cols/rows = grid size (from the group head layout, or a 1-D strip).
+        // grid: this HEAD's cell for pixel-style effects. col/row = cell position
+        // (from the group head layout, or a 1-D strip); cols/rows = grid size.
         QJSValue gridObj = m_script.engine()->newObject();
-        int gcol = i, grow = 0;
-        auto git = gridPos.constFind(fid);
-        if (git != gridPos.constEnd())     { gcol = git.value().x(); grow = git.value().y(); }
-        else if (gridRows > 1)             { gcol = i % gridCols; grow = i / gridCols; }
-        gridObj.setProperty("col",  gcol);
-        gridObj.setProperty("row",  grow);
+        gridObj.setProperty("col",  cell.col);
+        gridObj.setProperty("row",  cell.row);
         gridObj.setProperty("cols", gridCols);
         gridObj.setProperty("rows", gridRows);
         obj.setProperty("grid", gridObj);
@@ -793,22 +815,32 @@ QJSValue EffectInstance::buildDataChannelsObject() const
 
 QList<EffectInstance::DmxWrite>
 EffectInstance::parseIntents(const QJSValue &intents,
-                              const QList<quint32> &fxIds) const
+                              const QList<EffectInstance::EffectCell> &cells) const
 {
     QList<DmxWrite> writes;
     m_lastIntentDeg.clear();
 
-    int len = qMin(intents.property("length").toInt(), fxIds.size());
+    int len = qMin(intents.property("length").toInt(), cells.size());
     for (int i = 0; i < len; ++i)
     {
         QJSValue intent = intents.property(i);
         if (!intent.isObject())
             continue;
 
-        quint32 fid = fxIds.at(i);
+        const EffectCell &cell = cells.at(i);
+        quint32 fid  = cell.fixtureId;
+        int     head = cell.head;
         Fixture *fxi = m_doc->fixture(fid);
         if (!fxi || !fxi->fixtureMode())
             continue;
+        // The set of channels this CELL owns: just this head's channels for a
+        // multi-head/pixel fixture, or the whole fixture for a single-head one.
+        // Colour + colour-scaled-dimmer writes target only these, so a pixel
+        // effect lights individual pixels instead of the entire fixture.
+        const QLCFixtureHead cellHead = fxi->head(head);
+        QList<quint32> headChannels = cellHead.channels();
+        if (headChannels.isEmpty())
+            for (quint32 c = 0; c < fxi->channels(); ++c) headChannels << c;
 
         int uniIdx = (int)fxi->universe();
 
@@ -897,8 +929,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             }
             else if (fxi->fixtureMode() != nullptr)
             {
-                // No master dimmer: dim the fixture by scaling its colour channels.
-                for (quint32 c = 0; c < fxi->channels(); ++c)
+                // No master dimmer: dim by scaling THIS head's colour channels.
+                for (quint32 c : headChannels)
                 {
                     QLCChannel *ch = fxi->fixtureMode()->channel(c);
                     if (ch == nullptr) continue;
@@ -937,11 +969,13 @@ EffectInstance::parseIntents(const QJSValue &intents,
             // ramps in/holds with the scene) and by the look's master Dimmer.
             uchar dmxVal = (uchar)qBound(0, (int)qRound(dmxValRaw * m_envelope * lookColorMul), 255);
             bool matched = false;
-            quint32 nCh = fxi->channels();
-            for (quint32 c = 0; c < nCh; ++c)
+            // Only THIS head's channels — so a pixel effect colours one pixel, not
+            // the whole (multi-head) fixture.
+            for (quint32 c : headChannels)
             {
                 if (!fxi->fixtureMode()) break;
                 QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                if (ch == nullptr) continue;
                 // Accept both Colour-group and Intensity-group (IntensityRed/Green/Blue
                 // presets) channels — the fixture definition preset determines which
                 // group they land in, but both carry a meaningful colour value.

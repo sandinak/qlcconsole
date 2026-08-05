@@ -100,6 +100,21 @@ public:
     // If the script declares no types, all scene fixtures are returned.
     QList<quint32> effectiveFixtureIds() const;
 
+    /** One drawable CELL per fixture HEAD, with its grid position. A multi-head /
+     *  pixel fixture yields one cell per head (so effects can address individual
+     *  pixels — RGB Matrix parity), a single-head fixture yields one cell. */
+    struct EffectCell {
+        quint32 fixtureId;
+        int     head;
+        int     col;
+        int     row;
+    };
+    /** Build the per-head cell list + grid size the effect draws on. Sourced from
+     *  the scene's fixture-group head layouts (concatenated left→right), filtered
+     *  by the script's fixtureTypes; falls back to a 1-D strip of every head of
+     *  the loose fixtures when no group layout applies. */
+    QList<EffectCell> effectiveCells(int &gridCols, int &gridRows) const;
+
     /** Host scene's actuation level [0..1]: ramps 0→1 over the scene's fade-in,
      *  then holds at 1. Applied to the effect's intensity/colour output so the
      *  effect fires in sync with the scene rather than independent of it. */
@@ -116,14 +131,14 @@ public:
     uchar sceneBaseValue(quint32 fid, quint32 channel, uchar dflt) const;
 
 private:
-    QJSValue buildFixturesArray(const QList<quint32> &fxIds);
+    QJSValue buildFixturesArray(const QList<EffectCell> &cells, int gridCols, int gridRows);
     QJSValue buildInputsObject() const;
     QJSValue buildPalettesObject() const;
     QJSValue buildParamsObject() const;
     QJSValue buildDataChannelsObject() const;
 
     QList<DmxWrite> parseIntents(const QJSValue &intents,
-                                 const QList<quint32> &fxIds) const;
+                                 const QList<EffectCell> &cells) const;
 
     Doc    *m_doc;
     quint32 m_sceneId;
