@@ -10,19 +10,29 @@ to DONE.md when it ships. See also the session memory under
 
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
-- **Empty/missed-cue policy — blackout vs hold-last (discuss)** — an Effect look
-  with no targets now drives nothing (safety fix + `effectinstance` test). But
-  mid-show, should a missed/empty cue *black out* or *hold the last look*? This
-  is the LTP / last-look-persistence question (see memory: show LTP output
-  model). Decide the show-time policy before it bites live. *(raised during the
-  effect-fallback fix)*
-- **Effects should respect the look's master dimmer (discuss/build)** — an
-  effect (e.g. Confetti) currently fires at full even when the look has no /
-  a low Dimmer palette; the intensity envelope only tracks the scene fade-in.
-  Consider scaling effect output by the look's master Dimmer so an effect
-  modulates *within* the look's intensity rather than blasting full. Ties into
-  the dimmer-as-multiplier scene-base model (memory: effect output HTP). *(raised
-  testing Confetti)*
+- **Cue transition model — hold-on-miss + release-on-transition (4b; DEFERRED,
+  needs rig)** — DECIDED framing: a *missed/skipped* cue is a non-event → hold
+  last look (no blackout); a cue that *fires* releases what it replaces (outgoing
+  look + its effects fade out) → no dangling. Split confirmed: **fade intensity,
+  hold position/colour**. Risky part = the intensity-latch core-mixer work; needs
+  a live rig to test, so deferred until Branson has rig time. First verify whether
+  the current timeline transition already releases the outgoing look or holds it.
+- **Pre-positioning / mark cues + ghost visual + dangle detector** — how big
+  consoles do move-in-black. Same lookahead system does three things: (1) **mark /
+  MIB** — move dark fixtures (pan/tilt, colour wheel, gobo, prism, focus) to the
+  *next* cue's values during a dark window so the reveal has no sweep (vs a live
+  sweep = move with intensity up); (2) **ghost visual** in the 2D monitor — show
+  pre-set beams dim/ghosted, distinct from live; (3) **dangle detector** — a
+  positioned-but-dark fixture that matches an upcoming cue = valid pre-set; matches
+  nothing = warn. Slices: **1) manual mark + monitor ghosting (buildable now, no
+  rig)**, 2) auto-mark from timeline lookahead + force-live/force-mark overrides +
+  dark-move fade, 3) dangle detector (falls out of #2's lookahead). *(from the
+  cue-policy discussion)*
+- **Effects respect the look's master Dimmer — SHIPPED** (563c4b3b1): colour
+  output scales by the look's Dimmer on dimmerless fixtures; dimmered fixtures
+  carry it on the master channel. Move to DONE.md next pass.
+- **New control surface — integrate (TBD)** — a new hardware control surface to
+  bring in (details TBD). Fold into the MIDI-mapping work below once specced.
 - **MIDI controller mappings — revisit + PMJ version** — go back to the APC40
   mapping work (VC layout / programmer-mode LED feedback / expanded APC40 map)
   and build an equivalent mapping for the **PMJ** (OpenDeck PMJ_BLACK) controller
