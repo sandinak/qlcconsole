@@ -46,16 +46,16 @@ to DONE.md when it ships. See also the session memory under
   a live rig to test, so deferred until Branson has rig time. First verify whether
   the current timeline transition already releases the outgoing look or holds it.
 - **Pre-positioning / mark cues + ghost visual + dangle detector** — how big
-  consoles do move-in-black. Same lookahead system does three things: (1) **mark /
-  MIB** — move dark fixtures (pan/tilt, colour wheel, gobo, prism, focus) to the
-  *next* cue's values during a dark window so the reveal has no sweep (vs a live
-  sweep = move with intensity up); (2) **ghost visual** in the 2D monitor — show
-  pre-set beams dim/ghosted, distinct from live; (3) **dangle detector** — a
-  positioned-but-dark fixture that matches an upcoming cue = valid pre-set; matches
-  nothing = warn. Slices: **1) manual mark + monitor ghosting (buildable now, no
-  rig)**, 2) auto-mark from timeline lookahead + force-live/force-mark overrides +
-  dark-move fade, 3) dangle detector (falls out of #2's lookahead). *(from the
-  cue-policy discussion)*
+  consoles do move-in-black. Slice **1 SHIPPED** (verify auto-handoff on rig):
+  `MarkEffect` DMXSource (holds a fixture's NON-intensity channels, auto-releases
+  when a real cue lights it, `<Mark>` XML) + ProgrammerController/Doc wiring +
+  Mark/Unmark toolbar buttons + a dashed-violet 2D-monitor ghost outline. Still
+  open: (2) **auto-mark from timeline lookahead** + force-live/force-mark
+  overrides + dark-move fade; (3) **dangle detector** — a positioned-but-dark
+  fixture that matches an upcoming cue = valid pre-set, matches nothing = warn
+  (falls out of #2's lookahead). Also: capture "to a chosen look" instead of
+  current output; a monitor context-menu Mark action. *(from the cue-policy
+  discussion)*
 - **Effects respect the look's master Dimmer — SHIPPED** (563c4b3b1): colour
   output scales by the look's Dimmer on dimmerless fixtures; dimmered fixtures
   carry it on the master channel. Move to DONE.md next pass.
