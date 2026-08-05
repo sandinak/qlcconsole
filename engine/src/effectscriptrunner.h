@@ -67,6 +67,11 @@ public slots:
      *  Call this whenever a scene's palette list changes without a stop/start. */
     void syncScene(quint32 sceneId);
 
+    /** Push an Effect palette's edited param values onto its LIVE instance
+     *  without recreating it (preserves JS state). Main thread only. No-op if the
+     *  palette has no running instance. */
+    void updateEffectParams(quint32 paletteId);
+
     void slotInputValueChanged(quint32 universe, quint32 channel,
                                uchar value, const QString &key);
 

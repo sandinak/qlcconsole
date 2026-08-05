@@ -504,7 +504,15 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // a reload() → lookSelected → setPalette → rebuildEffectDynWidget cycle
     // that was causing all effect sliders to jump when any one slider moved.
     connect(m_lookEditor, &LookEditor::paletteValueChanged,
-            this, [this](quint32) { refreshPreview(); });
+            this, [this](quint32 pid) {
+        // Push edited Effect params onto the LIVE instance so a param change
+        // (axis, Learn'd note range, a slider) takes effect immediately, WITHOUT
+        // recreating the instance (which would reset the effect's JS state). The
+        // sync-signature path only reloads on a script SWAP, not a param edit.
+        if (m_doc->effectScriptRunner())
+            m_doc->effectScriptRunner()->updateEffectParams(pid);
+        refreshPreview();
+    });
     // Refresh canvas palette tiles when a palette is renamed in the tree.
     connect(m_paletteTree, &FunctionsTreeWidget::paletteRenamed,
             this, [this](quint32) { if (m_canvas) m_canvas->reload(); });

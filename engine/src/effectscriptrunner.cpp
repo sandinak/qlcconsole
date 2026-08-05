@@ -418,6 +418,15 @@ EffectInstance *EffectScriptRunner::instanceForPalette(quint32 paletteId) const
     return nullptr;
 }
 
+void EffectScriptRunner::updateEffectParams(quint32 paletteId)
+{
+    // Live param edit: overlay the palette's new values onto the running instance
+    // (main thread — same thread runTick() runs on, so no lock vs. the tick). No
+    // instance recreation, so the effect keeps its JS state.
+    if (EffectInstance *inst = instanceForPalette(paletteId))
+        inst->reloadParamsFromPalette();
+}
+
 void EffectScriptRunner::discardParked(quint32 paletteId)
 {
     delete m_parked.take(paletteId);

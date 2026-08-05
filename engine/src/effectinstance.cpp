@@ -114,6 +114,27 @@ void EffectInstance::setStringParamValue(const QString &name, const QString &val
     m_stringParamValues[name] = value;
 }
 
+void EffectInstance::reloadParamsFromPalette()
+{
+    // Live param edit (main thread): overlay the palette's current param values
+    // onto the running instance WITHOUT resetting m_state, so a param change
+    // (axis, note range from Learn, a slider) takes effect on the very next tick
+    // while the effect keeps its phase/held-note levels. Without this the tick
+    // reads m_paramValues, which was frozen at construction — the change was
+    // written to the palette but never reached the live effect.
+    QLCPalette *pal = m_doc->palette(m_effectPaletteId);
+    if (pal == nullptr)
+        return;
+    const QMap<QString, double> &pp = pal->effectParamValues();
+    for (auto it = pp.constBegin(); it != pp.constEnd(); ++it)
+        m_paramValues[it.key()] = it.value();
+    // Anything the palette doesn't pin keeps its current value (already seeded to
+    // the script default at construction).
+    const QMap<QString, QString> &sp = pal->effectStringParams();
+    for (auto it = sp.constBegin(); it != sp.constEnd(); ++it)
+        m_stringParamValues[it.key()] = it.value();
+}
+
 void EffectInstance::setDataChannels(const QHash<QString, QVariantMap> &channels)
 {
     m_dataChannels = channels;

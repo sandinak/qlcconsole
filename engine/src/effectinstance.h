@@ -79,6 +79,11 @@ public:
     void setParamValue(const QString &name, double value);
     void setStringParamValue(const QString &name, const QString &value);
 
+    /** Re-read this look's param values from its palette onto the LIVE instance
+     *  (main thread), without resetting JS state. Called when the user edits a
+     *  param so the change reaches the running effect on the next tick. */
+    void reloadParamsFromPalette();
+
     // --- Run one tick (MAIN THREAD ONLY) ---
     void runTick();
 
