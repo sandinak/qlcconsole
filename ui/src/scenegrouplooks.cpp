@@ -51,10 +51,11 @@ enum { TargetGroup = 0, TargetFixture = 1, TargetTypeFolder = 2 };
 // In/Out columns carry their fade override in ms at Qt::UserRole (-1 = "step",
 // i.e. follow the chaser step / scene fade).
 enum { LookColName = 0, LookColIn = 1, LookColOut = 2, LookColCount = 3 };
-// Marks a fade cell that belongs to an Effect look — the delegate uses it to
-// keep Fade In read-only for effects (their fade-in is the scene envelope) while
-// letting Fade Out be edited (the release fade the script runner honours).
-static const int LookIsEffectRole = Qt::UserRole + 3;
+// Marks a fade cell whose fade doesn't apply, so the delegate keeps it read-only
+// and it renders as "—": an Effect's Fade In (its fade-in is the scene envelope),
+// and BOTH fades of a colour/dimmer nested under an effect (it feeds the effect's
+// gradient — a value, not a painted look — so it has no fade of its own).
+static const int LookFadeInertRole = Qt::UserRole + 3;
 
 /** Human "1.5 s" / "step" text for a fade override in ms (-1 = step). */
 static QString fadeCellText(int ms)
@@ -76,8 +77,9 @@ public:
     {
         if (index.column() != LookColIn && index.column() != LookColOut)
             return nullptr;
-        // Effect looks: only Fade Out is editable (fade-in = scene envelope).
-        if (index.column() == LookColIn && index.data(LookIsEffectRole).toBool())
+        // Cells whose fade doesn't apply (effect Fade In, or a colour feeding an
+        // effect) are read-only.
+        if (index.data(LookFadeInertRole).toBool())
             return nullptr;
         QDoubleSpinBox *sp = new QDoubleSpinBox(parent);
         sp->setDecimals(2);
@@ -525,23 +527,34 @@ void SceneGroupLooks::reload()
             : feedsEffect ? tr("Feeds the effect above — not painted on the fixtures directly.")
                           : tr("Lights the fixtures directly (static base)."));
 
-        // In/Out fade cells (ms at Qt::UserRole; -1 = "step"). An effect's fade-IN
-        // is the scene envelope (cell inert), but its fade-OUT is a real release
-        // time the script runner honours — so that cell is live and editable.
+        // In/Out fade cells (ms at Qt::UserRole; -1 = "step").
+        //  • Effect: Fade In is the scene envelope (inert); Fade Out is a real
+        //    release time the runner honours (live).
+        //  • Colour/Dimmer feeding an effect: BOTH inert — it's a value the effect
+        //    reads, not a painted look, so it has no fade of its own.
+        //  • Top-level base look: both live.
+        const bool inInert  = isEffect || feedsEffect;
+        const bool outInert = feedsEffect;
         const int inMs  = isEffect ? -1 : m_scene->paletteFadeIn(pid);
         const int outMs = m_scene->paletteFadeOut(pid);
         it->setData(LookColIn,  Qt::UserRole, inMs);
         it->setData(LookColOut, Qt::UserRole, outMs);
-        it->setData(LookColIn,  LookIsEffectRole, isEffect);
-        it->setData(LookColOut, LookIsEffectRole, isEffect);
-        it->setText(LookColIn,  isEffect ? QStringLiteral("—") : fadeCellText(inMs));
-        it->setText(LookColOut, fadeCellText(outMs));
+        it->setData(LookColIn,  LookFadeInertRole, inInert);
+        it->setData(LookColOut, LookFadeInertRole, outInert);
+        it->setText(LookColIn,  inInert  ? QStringLiteral("—") : fadeCellText(inMs));
+        it->setText(LookColOut, outInert ? QStringLiteral("—") : fadeCellText(outMs));
         it->setTextAlignment(LookColIn,  Qt::AlignRight | Qt::AlignVCenter);
         it->setTextAlignment(LookColOut, Qt::AlignRight | Qt::AlignVCenter);
         if (isEffect)
             it->setToolTip(LookColOut,
                 tr("Release fade: when this look stops, the effect fades out over "
-                   "this time instead of snapping off. \"step\" = snap."));
+                   "this time instead of snapping off. \"step\" = snap.\n"
+                   "Per-key attack/decay comes from the effect's own parameters "
+                   "(e.g. Glow / Release), not this column."));
+        else if (feedsEffect)
+            it->setToolTip(LookColName,
+                tr("Feeds the effect above (its colour) — not painted on the "
+                   "fixtures, so it has no fade of its own."));
 
         // Draggable + (In/Out) editable. Only EFFECT items accept drops, so
         // dropping a colour onto one nests it (feeds the effect); dropping between
