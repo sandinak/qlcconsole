@@ -18,7 +18,7 @@
 
     effect.parameters = [
         { name: "midiSource", description: "MIDI source (0 = any; else universe # from Inputs/Outputs)", min: 0, max: 16, defaultValue: 0 },
-        { name: "autoRange", description: "Range mode", defaultValue: 1, values: ["Manual (use Note low/high)", "Learn — play your lowest & highest key"] },
+        { name: "autoRange", description: "Range (use the \"Learn range…\" button to auto-set)", defaultValue: 0, values: ["Manual (use Note low/high)", "Live-follow (tracks played notes)"] },
         { name: "noteLow",  description: "Lowest MIDI note (Manual mode)",  min: 0, max: 127, defaultValue: 36 },
         { name: "noteHigh", description: "Highest MIDI note (Manual mode)", min: 0, max: 127, defaultValue: 84 },
         { name: "axis",     description: "Note spread axis", defaultValue: 0, values: ["Horizontal (columns)", "Vertical (rows)", "Auto (wider)"] },
