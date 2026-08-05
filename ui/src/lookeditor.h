@@ -165,6 +165,20 @@ private:
     QPushButton *m_newScriptButton = nullptr;
     QPushButton *m_editScriptButton = nullptr;
 
+    // "Learn range" — capture a MIDI controller's lowest/highest played note and
+    // write them into this effect's noteLow/noteHigh params (persisted in the
+    // palette, so it "locks in" and survives restarts, unlike a script-side
+    // learn that lives only in transient JS state).
+    QPushButton *m_learnRangeButton = nullptr;
+    QLabel      *m_learnRangeStatus = nullptr;
+    bool         m_learning = false;
+    int          m_learnLo = 127;
+    int          m_learnHi = 0;
+    QString      m_learnLoParam, m_learnHiParam;
+    bool         m_learnHasAutoRange = false;   //!< flip autoRange→Manual on lock
+    void startLearnRange();
+    void stopLearnRange(bool commit);
+
     /** Open @p filePath in the in-app or OS editor per the app preference. */
     void openScriptInEditor(const QString &filePath);
 
@@ -187,6 +201,11 @@ private slots:
     void slotEffectPaletteBindingChanged(int index);
     void slotEffectTargetBindingChanged(int index);
     void slotEffectBindInput();
+    /** Toggle Learn-range capture on/off (button click). */
+    void slotLearnRangeClicked();
+    /** Live MIDI while learning: track lowest/highest note played. */
+    void slotLearnMidiInput(quint32 universe, quint32 channel, uchar value,
+                            const QString &key);
 
 private:
     void rebuildEffectDynWidget();

@@ -1328,6 +1328,13 @@ void LookEditor::rebuildEffectDynWidget()
         QString(), Qt::FindDirectChildrenOnly);
     for (QWidget *w : orphans) delete w;
 
+    // The Learn-range widgets (if any) were just deleted — abort any capture in
+    // progress and drop the dangling pointers before we (maybe) rebuild them.
+    if (m_learning)
+        stopLearnRange(false);
+    m_learnRangeButton = nullptr;
+    m_learnRangeStatus = nullptr;
+
     QVBoxLayout *dv = new QVBoxLayout(m_effectDynWidget);
     dv->setContentsMargins(0, 4, 0, 4);
     dv->setSpacing(6);
@@ -1596,6 +1603,48 @@ void LookEditor::rebuildEffectDynWidget()
                 });
                 form->addRow(pd.name, gdw);
             }
+            else if (pd.name == QLatin1String("midiSource"))
+            {
+                // MIDI source → a dropdown of the ACTUAL patched input devices by
+                // name (not an opaque universe number). Value stored = the 1-based
+                // universe the effect reads via data.midi.universes[n]; 0 = any.
+                QComboBox *cb = new QComboBox(m_effectDynWidget);
+                cb->addItem(tr("Any MIDI source (merged)"), 0);
+                InputOutputMap *iom = m_doc->inputOutputMap();
+                if (iom != NULL)
+                {
+                    for (quint32 u = 0; u < iom->universesCount(); u++)
+                    {
+                        InputPatch *ip = iom->inputPatch(u);
+                        if (ip == NULL || ip->inputName().isEmpty())
+                            continue;
+                        // e.g. "Universe 9 — Launchkey MK4 49"
+                        cb->addItem(tr("Universe %1 — %2").arg(u + 1).arg(ip->inputName()),
+                                    int(u + 1));
+                    }
+                }
+                const int want = int(cur);
+                int sel = cb->findData(want);
+                if (sel < 0)   // stored universe no longer patched → keep the number visible
+                {
+                    if (want > 0)
+                        cb->addItem(tr("Universe %1 (not connected)").arg(want), want);
+                    sel = qMax(0, cb->findData(want));
+                }
+                cb->setCurrentIndex(sel);
+                cb->setToolTip(pd.description);
+                const QString paramName = pd.name;
+                connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                        this, [this, cb, paramName](int) {
+                    if (m_loading) return;
+                    QLCPalette *pp = m_doc->palette(m_paletteId);
+                    if (!pp || pp->type() != QLCPalette::Effect) return;
+                    pp->setEffectParamValue(paramName, double(cb->currentData().toInt()));
+                    m_doc->setModified();
+                    emit paletteValueChanged(m_paletteId);
+                });
+                form->addRow(pd.name, cb);
+            }
             else if (!pd.enumValues.isEmpty())
             {
                 // Enum param → dropdown
@@ -1658,6 +1707,44 @@ void LookEditor::rebuildEffectDynWidget()
             }
         }
         dv->addLayout(form);
+
+        // "Learn range" — offered when the script has both note-range params.
+        // Plays live: click, play your lowest & highest key, click again to lock.
+        // Writes noteLow/noteHigh into the palette (persisted) and switches
+        // autoRange to Manual so the learned range is actually used.
+        bool hasLo = false, hasHi = false, hasAuto = false;
+        for (const EffectScript::ParamDef &pd : pdefs)
+        {
+            if (pd.name == QLatin1String("noteLow"))  hasLo = true;
+            if (pd.name == QLatin1String("noteHigh")) hasHi = true;
+            if (pd.name == QLatin1String("autoRange")) hasAuto = true;
+        }
+        if (hasLo && hasHi)
+        {
+            m_learnLoParam = QStringLiteral("noteLow");
+            m_learnHiParam = QStringLiteral("noteHigh");
+            m_learnHasAutoRange = hasAuto;
+
+            QWidget *lrow = new QWidget(m_effectDynWidget);
+            QHBoxLayout *ll = new QHBoxLayout(lrow);
+            ll->setContentsMargins(0, 2, 0, 0);
+            m_learnRangeButton = new QPushButton(tr("Learn range…"), lrow);
+            m_learnRangeButton->setToolTip(
+                tr("Click, then play your lowest and highest key on the controller; "
+                   "click again to lock the range in. Uses the selected MIDI source."));
+            connect(m_learnRangeButton, &QPushButton::clicked,
+                    this, &LookEditor::slotLearnRangeClicked);
+            ll->addWidget(m_learnRangeButton);
+            m_learnRangeStatus = new QLabel(lrow);
+            m_learnRangeStatus->setStyleSheet("color: palette(mid); font-style: italic;");
+            ll->addWidget(m_learnRangeStatus, 1);
+            dv->addWidget(lrow);
+        }
+        else
+        {
+            m_learnLoParam.clear();
+            m_learnHiParam.clear();
+        }
     }
 
     // --- Input bindings ---
@@ -2281,6 +2368,105 @@ void LookEditor::slotEffectEnumParamChanged(int index)
     p->setEffectParamValue(name, double(index));
     m_doc->setModified();
     emit paletteValueChanged(m_paletteId);
+}
+
+// --- Learn range ------------------------------------------------------------
+// Human note name using the user's Roland-style convention (C2 = MIDI 48), so
+// the readout matches the labels printed on their keyboard.
+static QString midiNoteLabel(int note)
+{
+    static const char *names[12] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+    if (note < 0 || note > 127) return QStringLiteral("--");
+    return QString::fromLatin1(names[note % 12]) + QString::number(note / 12 - 2);
+}
+
+void LookEditor::slotLearnRangeClicked()
+{
+    if (m_learning)
+        stopLearnRange(true);       // second click → lock it in
+    else
+        startLearnRange();
+}
+
+void LookEditor::startLearnRange()
+{
+    if (m_learnLoParam.isEmpty() || m_learnHiParam.isEmpty())
+        return;
+    m_learning = true;
+    m_learnLo  = 127;
+    m_learnHi  = 0;
+    if (m_doc->inputOutputMap() != NULL)
+        connect(m_doc->inputOutputMap(),
+                SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)),
+                this, SLOT(slotLearnMidiInput(quint32,quint32,uchar,const QString&)),
+                Qt::UniqueConnection);
+    if (m_learnRangeButton)
+        m_learnRangeButton->setText(tr("Stop && lock"));
+    if (m_learnRangeStatus)
+        m_learnRangeStatus->setText(tr("Play your lowest, then highest key…"));
+}
+
+void LookEditor::stopLearnRange(bool commit)
+{
+    if (m_doc->inputOutputMap() != NULL)
+        disconnect(m_doc->inputOutputMap(),
+                   SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)),
+                   this, SLOT(slotLearnMidiInput(quint32,quint32,uchar,const QString&)));
+    m_learning = false;
+
+    if (m_learnRangeButton)
+        m_learnRangeButton->setText(tr("Learn range…"));
+
+    if (!commit || m_learnHi <= m_learnLo)
+    {
+        if (commit && m_learnRangeStatus)
+            m_learnRangeStatus->setText(tr("No range captured — play two keys."));
+        return;
+    }
+
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Effect)
+        return;
+    p->setEffectParamValue(m_learnLoParam, double(m_learnLo));
+    p->setEffectParamValue(m_learnHiParam, double(m_learnHi));
+    if (m_learnHasAutoRange)
+        p->setEffectParamValue(QStringLiteral("autoRange"), 0.0);   // → Manual
+    m_doc->setModified();
+    emit paletteValueChanged(m_paletteId);
+
+    // Rebuild the panel so the noteLow/noteHigh sliders (and the autoRange combo)
+    // show the locked-in values. Clear the build key or the rebuild early-returns.
+    m_effectBuildKey.clear();
+    rebuildEffectDynWidget();
+    if (m_learnRangeStatus)   // recreated by the rebuild
+        m_learnRangeStatus->setText(tr("Locked: %1–%2")
+            .arg(midiNoteLabel(m_learnLo)).arg(midiNoteLabel(m_learnHi)));
+}
+
+void LookEditor::slotLearnMidiInput(quint32 universe, quint32 channel,
+                                    uchar value, const QString &key)
+{
+    Q_UNUSED(key)
+    if (!m_learning || value == 0)
+        return;
+    // Notes arrive on input channels 128-255 (note = channel - 128).
+    if (channel < 128 || channel > 255)
+        return;
+    // Honour the effect's selected MIDI source: if it targets one universe
+    // (midiSource = 1-based), ignore notes from any other device.
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p != NULL)
+    {
+        const int src = int(p->effectParamValues().value(QStringLiteral("midiSource"), 0.0));
+        if (src > 0 && quint32(src) != universe + 1)
+            return;
+    }
+    const int note = int(channel) - 128;
+    if (note < m_learnLo) m_learnLo = note;
+    if (note > m_learnHi) m_learnHi = note;
+    if (m_learnRangeStatus)
+        m_learnRangeStatus->setText(tr("Low %1 · High %2")
+            .arg(midiNoteLabel(m_learnLo)).arg(midiNoteLabel(m_learnHi)));
 }
 
 void LookEditor::slotEffectPaletteBindingChanged(int /*index*/)
