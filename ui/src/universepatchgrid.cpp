@@ -44,8 +44,9 @@
 #include "doc.h"
 
 // Combo item roles: the plugin name and its line index behind each entry.
-static const int R_PLUGIN = Qt::UserRole;
-static const int R_LINE   = Qt::UserRole + 1;
+static const int R_PLUGIN   = Qt::UserRole;
+static const int R_LINE     = Qt::UserRole + 1;
+static const int R_LINENAME = Qt::UserRole + 2;   // for re-resolving a line after a rescan
 
 // Column layout. Output is always shown; Input / Feedback / Passthrough are
 // collapsible groups toggled from the toolbar.
@@ -373,6 +374,7 @@ QComboBox *UniversePatchGrid::buildDeviceCombo(bool inputs, bool excludeMidi,
             combo->addItem(QString("%1 · %2").arg(plugin).arg(lines.at(li)));
             combo->setItemData(idx, plugin, R_PLUGIN);
             combo->setItemData(idx, li, R_LINE);
+            combo->setItemData(idx, lines.at(li), R_LINENAME);
             if (plugin == curPlugin && li == curLine)
                 sel = idx;
             idx++;
@@ -806,12 +808,36 @@ void UniversePatchGrid::onInputChanged(int row)
     QComboBox *c = qobject_cast<QComboBox *>(m_table->cellWidget(row, COL_IN));
     if (c == nullptr)
         return;
-    const QString plugin = c->currentData(R_PLUGIN).toString();
-    const int line = c->currentData(R_LINE).toInt();
+    const QString plugin   = c->currentData(R_PLUGIN).toString();
+    const int     line     = c->currentData(R_LINE).toInt();
+    const QString lineName = c->currentData(R_LINENAME).toString();
     if (plugin.isEmpty())
+    {
         m_ioMap->setInputPatch(row, KInputNone, "", QLCIOPlugin::invalidLine());
+    }
     else
-        m_ioMap->setInputPatch(row, plugin, "", quint32(line));
+    {
+        bool ok = m_ioMap->setInputPatch(row, plugin, "", quint32(line));
+        // A device can be offered from a cached enumeration but not yet openable
+        // (e.g. macOS MIDI hotplug — it appears in the list before it can be
+        // opened). If the patch didn't take, rescan that plugin and retry once,
+        // re-resolving the line by NAME since rescanning can reorder indices.
+        if (!ok || m_ioMap->inputPatch(row) == NULL)
+        {
+            if (QLCIOPlugin *p = m_doc->ioPluginCache()->plugin(plugin))
+                p->rescan();
+            refreshOptionCaches();
+            int reLine = line;
+            for (int i = 0; i < m_inPlugins.size(); i++)
+                if (m_inPlugins.at(i).first == plugin)
+                {
+                    const int idx2 = m_inPlugins.at(i).second.indexOf(lineName);
+                    if (idx2 >= 0) reLine = idx2;
+                    break;
+                }
+            m_ioMap->setInputPatch(row, plugin, "", quint32(reLine));
+        }
+    }
     m_doc->setModified();
     scheduleReload();
 }
