@@ -370,6 +370,26 @@ void EffectScriptRunner::setDataChannel(const QString &name, const QVariantMap &
     m_dataChannels[name] = data;
 }
 
+void EffectScriptRunner::publishMidiData()
+{
+    QVariantList velocity, held;
+    velocity.reserve(128);
+    held.reserve(128);
+    for (int i = 0; i < 128; i++)
+    {
+        velocity << int(m_midiState.velocity[i]);
+        held << m_midiState.held[i];
+    }
+    QVariantMap md;
+    md[QStringLiteral("velocity")]     = velocity;      // [128] 0-127
+    md[QStringLiteral("held")]         = held;          // [128] bool
+    md[QStringLiteral("sustain")]      = m_midiState.sustain;
+    md[QStringLiteral("lastNote")]     = m_midiState.lastNote;
+    md[QStringLiteral("lastVelocity")] = m_midiState.lastVelocity;
+    md[QStringLiteral("noteOnCount")]  = int(m_midiState.noteOnCount);
+    setDataChannel(QStringLiteral("midi"), md);
+}
+
 // ---------------------------------------------------------------------------
 // Input routing
 // ---------------------------------------------------------------------------
@@ -378,6 +398,43 @@ void EffectScriptRunner::slotInputValueChanged(quint32 universe, quint32 channel
                                                 uchar value, const QString &key)
 {
     Q_UNUSED(key)
+
+    // --- MIDI note/CC → the "midi" data channel (for note-reactive effects) ---
+    // The MIDI plugin decodes notes to input channels 128-255 (note = ch-128,
+    // value = velocity*2, 0 = note-off) and CCs to 0-127 (CC64 = sustain).
+    // NOTE: not scoped by patch type yet — a non-MIDI input in this channel range
+    // would also register; MIDI effects are opt-in via dataChannels:["midi"].
+    if (channel >= 128 && channel <= 255)
+    {
+        const int note = int(channel) - 128;
+        const bool held = value > 0;
+        if (held)
+        {
+            const uchar vel = (value == 255) ? 127 : uchar(value >> 1);
+            m_midiState.velocity[note] = vel;
+            if (!m_midiState.held[note])
+            {
+                m_midiState.noteOnCount++;
+                m_midiState.lastNote = note;
+                m_midiState.lastVelocity = vel;
+            }
+            m_midiState.held[note] = true;
+        }
+        else
+        {
+            m_midiState.held[note] = false;   // release; keep velocity as decay ref
+        }
+        publishMidiData();
+    }
+    else if (channel == 64)   // CC64 sustain pedal
+    {
+        const bool sus = value >= 128;        // MIDI2DMX(64) == 128
+        if (sus != m_midiState.sustain)
+        {
+            m_midiState.sustain = sus;
+            publishMidiData();
+        }
+    }
 
     const float norm = value / 255.0f;
 

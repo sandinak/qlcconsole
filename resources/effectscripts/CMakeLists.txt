@@ -22,6 +22,8 @@ set(SCRIPT_FILES
     lightning.js
     lissajous.js
     meteor.js
+    midi-flash.js
+    midi-keys.js
     native-strobe.js
     plasma.js
     orbit.js

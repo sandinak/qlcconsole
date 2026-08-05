@@ -152,6 +152,20 @@ private:
      *  Accessed only from the main thread; no mutex needed. */
     QHash<QString, QVariantMap> m_dataChannels;
 
+    /** Live MIDI note state fed to the "midi" data channel for note-reactive
+     *  effects (MIDI Keys/Flash/Puddles/Comet). Updated in slotInputValueChanged
+     *  from the note/CC input channels the MIDI plugin decodes to. Main-thread. */
+    struct MidiNoteState {
+        uchar   velocity[128] = {0};   //!< last-struck velocity 0-127 (0 = never)
+        bool    held[128]     = {false};
+        bool    sustain       = false; //!< CC64
+        int     lastNote      = -1;
+        int     lastVelocity  = 0;
+        quint32 noteOnCount   = 0;     //!< bumped on every fresh note-on
+    } m_midiState;
+    /** Rebuild the "midi" data channel from m_midiState and publish it. */
+    void publishMidiData();
+
     /** Per-universe GenericFaders used to write effect DMX through the fader
      *  pipeline instead of directly to preGMValues (which zeroIntensityChannels
      *  would wipe before processFaders re-writes colour faders). */

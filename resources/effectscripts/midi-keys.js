@@ -1,0 +1,86 @@
+/*
+  QLC+ Effect Script: MIDI Keys
+  Play a MIDI controller and the fixtures light up like keys — the note range
+  is tiled across the fixtures, each lit at its note's brightness and fading on
+  release (sustain-pedal aware). Port of the WLED "MIDI Keys" idea.
+
+  Subscribes to the host "midi" data channel (data.midi.velocity[]/held[]/
+  sustain). Colour comes from the look's Colour palette (by position).
+*/
+(function() {
+    var effect = new Object;
+    effect.apiVersion  = 1;
+    effect.name        = "MIDI Keys";
+    effect.description = "Fixtures light as keys when you play MIDI notes";
+    effect.author      = "WLED idea, port for QLC+";
+    effect.fixtureTypes = ["rgb", "dimmer"];
+    effect.dataChannels = ["midi"];
+    effect.notes = "Tiles the note range [Note low..Note high] across the fixtures: each note lights its band and fades on release. Hold the sustain pedal (CC64) for a slower fade. Colours come from the look's stacked Colour palettes, spread by position. Set Note low/high to match your controller.";
+
+    effect.parameters = [
+        { name: "noteLow",     description: "Lowest MIDI note",         min: 0, max: 127, defaultValue: 36 },
+        { name: "noteHigh",    description: "Highest MIDI note",        min: 0, max: 127, defaultValue: 96 },
+        { name: "release",     description: "Release fade (seconds)",   min: 0.05, max: 5.0,  defaultValue: 0.6 },
+        { name: "sustainFade", description: "Sustained fade (seconds)", min: 0.2,  max: 20.0, defaultValue: 6.0 },
+        { name: "velFloor",    description: "Min brightness for held notes (0-31)", min: 0, max: 31, defaultValue: 0 }
+    ];
+
+    effect.tick = function(fixtures, inputs, palettes, params, state, data) {
+        var n = fixtures.length;
+        if (n === 0) return [];
+
+        var m   = data && data.midi;
+        var lo  = params.noteLow  | 0;
+        var hi  = params.noteHigh | 0;
+        if (hi <= lo) hi = lo + 1;
+
+        // Per-note level (0..1), snapped up on strike, decayed on release.
+        if (!state.lvl) {
+            state.lvl = [];
+            for (var k = 0; k < 128; k++) state.lvl[k] = 0;
+            state.t = inputs._time || 0;
+        }
+        var dt = Math.max(0, (inputs._time || 0) - state.t);
+        state.t = inputs._time || 0;
+
+        var sustain = m ? m.sustain : false;
+        var relRate = 1 / Math.max(0.02, params.release || 0.6);
+        var susRate = 1 / Math.max(0.05, params.sustainFade || 6);
+        var floor   = (params.velFloor || 0) / 31;
+
+        var vel = m && m.velocity, held = m && m.held;
+        for (var note = lo; note <= hi; note++) {
+            var h = held ? held[note] : false;
+            var v = vel  ? vel[note] / 127 : 0;
+            if (h) {
+                if (v > state.lvl[note]) state.lvl[note] = v;   // softer retrigger doesn't dim
+                if (state.lvl[note] < floor) state.lvl[note] = floor;
+            } else {
+                var r = sustain ? susRate : relRate;
+                state.lvl[note] = Math.max(0, state.lvl[note] - r * dt);
+            }
+        }
+
+        var lk   = (palettes.look && palettes.look.colors) ? palettes.look.colors : [];
+        var span = hi - lo;
+
+        return fixtures.map(function(f, i) {
+            // This fixture's note band → brightest note in it.
+            var a = lo + Math.floor(i       / n * (span + 1));
+            var b = lo + Math.floor((i + 1) / n * (span + 1));
+            if (b <= a) b = a + 1;
+            var mx = 0;
+            for (var note = a; note < b && note <= hi; note++)
+                if (state.lvl[note] > mx) mx = state.lvl[note];
+
+            var pos = n > 1 ? i / (n - 1) : 0;
+            var col = lk.length ? lk[Math.min(lk.length - 1, Math.floor(pos * lk.length))]
+                                : { r: 255, g: 255, b: 255 };
+            var out = { r: Math.round(col.r * mx), g: Math.round(col.g * mx), b: Math.round(col.b * mx) };
+            if (f.hasDimmer) out.dimmer = mx;
+            return out;
+        });
+    };
+
+    return effect;
+})()
