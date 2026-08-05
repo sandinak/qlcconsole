@@ -93,13 +93,12 @@
             aimTilt = palettes.pos.tilt / 270.0;
         }
 
-        // Peak dimmer from the look's master Dimmer (default full).
-        var peakDim = (palettes.look && palettes.look.dimmer !== undefined)
-                      ? palettes.look.dimmer : 1.0;
-
+        // The look's master Dimmer is applied host-side now (to dimmer output via
+        // the scene base, and to colour on dimmerless fixtures), so the script no
+        // longer multiplies by palettes.look.dimmer itself — that double-dimmed.
         return fixtures.map(function(f, i) {
             var dist = Math.abs(i - hotPos);
-            var bright = dimForDistance(dist, trail, trailShape) * peakDim;
+            var bright = dimForDistance(dist, trail, trailShape);
 
             var intent = {};
 

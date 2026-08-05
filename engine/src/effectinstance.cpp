@@ -195,6 +195,7 @@ QList<EffectInstance::DmxWrite> EffectInstance::dmxWrites() const
 void EffectInstance::buildSceneBaseValues()
 {
     m_sceneBaseValues.clear();
+    m_lookDimmer = 1.0f;
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     if (scene == nullptr)
         return;
@@ -217,6 +218,9 @@ void EffectInstance::buildSceneBaseValues()
         QLCPalette *p = m_doc->palette(pid);
         if (p == nullptr || p->type() == QLCPalette::Effect)
             continue;
+        // Capture the look's master Dimmer (0..1) for host-side colour scaling.
+        if (p->type() == QLCPalette::Dimmer)
+            m_lookDimmer = qBound(0.0f, float(p->value().toDouble() / 255.0), 1.0f);
         const int cOff = QLCPalette::colorSetOffset(m_doc, orderedPalettes, pid);
         for (const SceneValue &sv : p->valuesFromFixtureGroups(m_doc, groups, scene, cOff))
             m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
@@ -867,12 +871,18 @@ EffectInstance::parseIntents(const QJSValue &intents,
 
         // RGB colour channels (additive mixing fixtures)
         int colourWritesBefore = writes.size();
+        // Respect the look's master Dimmer on colour output, but ONLY for fixtures
+        // with no master intensity channel — dimmered fixtures already carry the
+        // look Dimmer on that channel (via the scene base), so scaling colour too
+        // would double-dim them.
+        const float lookColorMul =
+            (fxi->masterIntensityChannel() == QLCChannel::invalid()) ? m_lookDimmer : 1.0f;
         // Write DMX @value onto every channel carrying primary @colour.
         // Returns true if the fixture actually has such an emitter.
         auto writeEmitter = [&](QLCChannel::PrimaryColour colour, uchar dmxValRaw) -> bool {
-            // Scale colour output by the scene's actuation envelope so the effect
-            // ramps in/holds with the scene instead of firing independently.
-            uchar dmxVal = (uchar)qBound(0, (int)qRound(dmxValRaw * m_envelope), 255);
+            // Scale colour output by the scene's actuation envelope (so the effect
+            // ramps in/holds with the scene) and by the look's master Dimmer.
+            uchar dmxVal = (uchar)qBound(0, (int)qRound(dmxValRaw * m_envelope * lookColorMul), 255);
             bool matched = false;
             quint32 nCh = fxi->channels();
             for (quint32 c = 0; c < nCh; ++c)

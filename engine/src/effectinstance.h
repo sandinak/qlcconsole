@@ -150,6 +150,13 @@ private:
 
     float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
 
+    //!< look's master Dimmer (0..1, 1.0 if none), rebuilt each runTick(). Applied
+    //!< host-side to effect colour output on fixtures WITHOUT a master intensity
+    //!< channel, so a colour effect respects the look's Dimmer palette. Fixtures
+    //!< that HAVE a master dimmer already carry it on that channel (via the scene
+    //!< base), so their colour is not additionally scaled (would double-dim).
+    float m_lookDimmer = 1.0f;
+
     //!< scene base DMX per (fixtureId<<32|channel), rebuilt each runTick()
     QHash<quint64, uchar> m_sceneBaseValues;
 };
