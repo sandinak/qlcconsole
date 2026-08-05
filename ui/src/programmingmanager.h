@@ -116,6 +116,12 @@ private slots:
     /** Refresh Park/Unpark button state from the ProgrammerController. */
     void slotParkChanged();
 
+    // Mark (move-in-black: pre-position dark fixtures)
+    void slotMarkSelection();
+    void slotUnmarkAll();
+    /** Refresh Mark/Unmark button state from the ProgrammerController. */
+    void slotMarkChanged();
+
     // Followspot
     void slotFollowSpotBindX();
     void slotFollowSpotBindY();
@@ -138,6 +144,7 @@ private slots:
 private:
     /** Enable/label the Park button (Park vs Unpark) from selection + park state. */
     void updateParkButtonLabel();
+    void updateMarkButtonLabel();
     void loadCanvas(quint32 sceneId);
     /** Host the stock editor for a non-scene function in the canvas. */
     void loadFunctionEditor(Function *function);
@@ -298,6 +305,8 @@ private:
     QPushButton *m_flashBtn    = nullptr;
     QPushButton *m_parkBtn     = nullptr;
     QPushButton *m_unparkBtn   = nullptr;
+    QPushButton *m_markBtn     = nullptr;
+    QPushButton *m_unmarkBtn   = nullptr;
     QPushButton *m_snapshotBtn = nullptr;
     // Blind-active in-context indicator (blue, EOS-style) — the global status-bar
     // chip lives in App; this banner is the tab-local, can't-miss-it version.

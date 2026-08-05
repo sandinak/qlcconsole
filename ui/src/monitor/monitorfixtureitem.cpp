@@ -69,6 +69,7 @@ static QCursor smallOpenHandCursor()
 #include "qlcfixturedef.h"
 #include "truss.h"
 #include "doc.h"
+#include "programmercontroller.h"
 
 #define MOVEMENT_THICKNESS    3
 #define STROBE_PERIOD 500 // 0.5s
@@ -790,6 +791,19 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setPen(QPen(ring, 2.0));
         painter->setBrush(Qt::NoBrush);
         painter->drawRect(QRectF(1.5, 1.5, m_width - 3, m_height - 3));
+    }
+
+    // Marked (move-in-black): a thin dashed violet outline so a pre-positioned-
+    // but-dark fixture reads distinctly from a live one. Outline only — the
+    // fixture's fill still shows whatever (dark) output it has.
+    if (m_doc->programmer() != NULL && m_doc->programmer()->isFixtureMarked(m_fid))
+    {
+        QPen markPen(QColor(200, 90, 255), 1.5);
+        markPen.setStyle(Qt::DashLine);
+        markPen.setCosmetic(true);
+        painter->setPen(markPen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRect(QRectF(0.75, 0.75, m_width - 1.5, m_height - 1.5));
     }
     // The pan/tilt indicators are drawn around screen-down (Qt angle 270°),
     // which represents the home/centre pointing = downstage. Rotating the

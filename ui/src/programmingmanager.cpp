@@ -157,6 +157,19 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_unparkBtn->setEnabled(false);
         toolbar->addWidget(m_unparkBtn);
 
+        m_markBtn = new QPushButton(tr("Mark"), this);
+        m_markBtn->setToolTip(tr("Move-in-black: pre-position the selected DARK fixtures "
+                                 "(pan/tilt, colour, gobo, beam) to where they'll be revealed, "
+                                 "held out of cue output. Auto-releases when a cue lights them; "
+                                 "saved with the workspace."));
+        m_markBtn->setEnabled(false);
+        toolbar->addWidget(m_markBtn);
+
+        m_unmarkBtn = new QPushButton(tr("Unmark all"), this);
+        m_unmarkBtn->setToolTip(tr("Release every marked fixture"));
+        m_unmarkBtn->setEnabled(false);
+        toolbar->addWidget(m_unmarkBtn);
+
         m_snapshotBtn = new QPushButton(tr("Snapshot"), this);
         m_snapshotBtn->setToolTip(tr("Bake the current live DMX output into the open "
             "scene as static values — capture a look built on an external console."));
@@ -226,6 +239,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                 this, &ProgrammingManager::slotParkSelection);
         connect(m_unparkBtn, &QPushButton::clicked,
                 this, &ProgrammingManager::slotUnparkAll);
+        connect(m_markBtn, &QPushButton::clicked,
+                this, &ProgrammingManager::slotMarkSelection);
+        connect(m_unmarkBtn, &QPushButton::clicked,
+                this, &ProgrammingManager::slotUnmarkAll);
         connect(m_saveBtn, &QPushButton::clicked,
                 this, &ProgrammingManager::slotSavePositions);
         connect(m_speedSpin, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -295,6 +312,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                     m_highlightBtn, &QPushButton::setChecked);
             connect(pc, &ProgrammerController::parkChanged,
                     this, &ProgrammingManager::slotParkChanged);
+            connect(pc, &ProgrammerController::markChanged,
+                    this, &ProgrammingManager::slotMarkChanged);
             connect(pc, &ProgrammerController::joystickUpdated,
                     this, &ProgrammingManager::slotJoystickUpdated);
             connect(pc, &ProgrammerController::buttonActionTriggered,
@@ -993,6 +1012,7 @@ void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
     if (m_flashBtn)
         m_flashBtn->setEnabled(!fixtureIds.isEmpty());
     updateParkButtonLabel();
+    updateMarkButtonLabel();
     if (Monitor::instance() != NULL)
         Monitor::instance()->highlightFixtures(fixtureIds);
     Scene *s = qobject_cast<Scene*>(m_doc->function(m_currentScene));
@@ -2344,6 +2364,59 @@ void ProgrammingManager::slotUnparkAll()
     ProgrammerController *pc = m_doc->programmer();
     if (pc)
         pc->unparkAllFixtures();
+}
+
+void ProgrammingManager::slotMarkSelection()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc == NULL || m_selectedFixtures.isEmpty())
+        return;
+
+    // Toggle: if the whole selection is already marked, unmark it; else mark.
+    bool allMarked = true;
+    for (quint32 fid : m_selectedFixtures)
+        if (!pc->isFixtureMarked(fid))
+            allMarked = false;
+
+    if (allMarked)
+        pc->unmarkFixtures(m_selectedFixtures);
+    else
+        pc->markFixtures(m_selectedFixtures);
+}
+
+void ProgrammingManager::slotUnmarkAll()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc)
+        pc->unmarkAllFixtures();
+}
+
+void ProgrammingManager::slotMarkChanged()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc == NULL)
+        return;
+    if (m_unmarkBtn)
+        m_unmarkBtn->setEnabled(pc->hasMarkedFixtures());
+    updateMarkButtonLabel();
+    // The 2D monitor refreshes its ghost outlines via its own markChanged
+    // connection (see Monitor).
+}
+
+void ProgrammingManager::updateMarkButtonLabel()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc == NULL || m_markBtn == NULL)
+        return;
+
+    bool anySel = !m_selectedFixtures.isEmpty();
+    bool allMarked = anySel;
+    for (quint32 fid : m_selectedFixtures)
+        if (!pc->isFixtureMarked(fid))
+            allMarked = false;
+
+    m_markBtn->setEnabled(anySel);
+    m_markBtn->setText(anySel && allMarked ? tr("Unmark") : tr("Mark"));
 }
 
 void ProgrammingManager::slotSnapshotLive()

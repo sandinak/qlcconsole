@@ -128,6 +128,7 @@
 #include "app.h"
 #include "apputil.h"
 #include "doc.h"
+#include "programmercontroller.h"
 
 #include <QTimer>
 #include "qlcfile.h"
@@ -185,6 +186,13 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
             this, SLOT(slotFixtureRemoved(quint32)));
     connect(m_doc->masterTimer(), SIGNAL(functionStarted(quint32)),
             this, SLOT(slotFunctionStarted(quint32)));
+    // Repaint fixture ghost outlines when the mark set changes (add/remove or an
+    // auto-release on reveal). The fixture item's paint() reads isFixtureMarked().
+    if (m_doc->programmer() != NULL)
+        connect(m_doc->programmer(), &ProgrammerController::markChanged, this, [this]() {
+            if (m_graphicsView != NULL && m_graphicsView->scene() != NULL)
+                m_graphicsView->scene()->update();
+        });
     // Re-render targets on Design/Operate switch so their drag-ability tracks the
     // mode (editable while designing, frozen in a show).
     connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode) {
