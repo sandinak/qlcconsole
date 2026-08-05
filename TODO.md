@@ -8,6 +8,25 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## Recently shipped (verify on rig, then move to DONE.md)
+
+- **Note-effect calibration + MIDI plumbing** — per-universe MIDI source scoping
+  (`data.midi.universes[n]` + a device-name dropdown, not a slider); switching a
+  look's effect script now reloads the live preview; **live param edits reach the
+  running effect** (`reloadParamsFromPalette`/`updateEffectParams` — was the root
+  cause of "axis does nothing / Learn won't lock"); persistent **Learn range**
+  button (writes noteLow/noteHigh, flips to Manual). `QLC_EFFECT_DEBUG=<path>`
+  env trace kept (grid/range/held/lit-cols + col0/col64 fixture+DMX+base).
+- **Looks: effect-vs-fixture colour separation + tree UI** — a Colour/Dimmer
+  palette *nested under* an Effect in the Looks tree feeds that effect and is NOT
+  painted as a static base; top-level looks light the fixtures. Fixes same-colour
+  strike-on-base washout (RGB-only fixtures). Mechanism = ordering
+  (`QLCPalette::isEffectScoped`); tree is derived from/rewrites the flat order.
+  *Open polish:* dropping an external palette onto a specific effect item should
+  nest under THAT effect (currently appends). Future: the richer per-item
+  assignment could grow beyond order (explicit bind) if multi-effect looks get
+  fiddly.
+
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
 - **Cue transition model — hold-on-miss + release-on-transition (4b; DEFERRED,
