@@ -27,6 +27,9 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QSet>
+#include <QHash>
+#include <QFile>
+#include <QTextStream>
 #include <QDebug>
 #include <QtMath>
 #include <cmath>
@@ -187,6 +190,60 @@ void EffectInstance::runTick()
     }
 
     QList<DmxWrite> writes = parseIntents(result, cells);
+
+    // --- Diagnostic: set QLC_EFFECT_DEBUG=<path> to trace note→column mapping ---
+    // Logs only when the held-note set changes (not at 50 Hz). Shows the grid, the
+    // held notes, and which grid COLUMNS the script actually lit — the ground
+    // truth for "column 0 stays dark".
+    static const QByteArray dbgPath = qgetenv("QLC_EFFECT_DEBUG");
+    if (!dbgPath.isEmpty())
+    {
+        const QVariantMap midi = m_dataChannels.value(QStringLiteral("midi"));
+        const QVariantList held = midi.value(QStringLiteral("held")).toList();
+        QList<int> heldNotes;
+        for (int i = 0; i < held.size(); ++i)
+            if (held.at(i).toBool()) heldNotes << i;
+
+        static QHash<const EffectInstance*, QString> lastKey;
+        QString key;
+        for (int n : heldNotes) key += QString::number(n) + ',';
+        if (lastKey.value(this) != key)
+        {
+            lastKey[this] = key;
+            // Which columns are lit in the raw script result?
+            QSet<int> litCols;
+            const int len = qMin(result.property("length").toInt(), cells.size());
+            for (int i = 0; i < len; ++i)
+            {
+                QJSValue o = result.property(i);
+                const int r = o.property("r").toInt(), g = o.property("g").toInt(),
+                          b = o.property("b").toInt();
+                const double dim = o.property("dimmer").toNumber();
+                if (r > 0 || g > 0 || b > 0 || dim > 0.001)
+                    litCols << cells.at(i).col;
+            }
+            QList<int> sortedCols(litCols.constBegin(), litCols.constEnd());
+            std::sort(sortedCols.begin(), sortedCols.end());
+            QString colStr;
+            for (int c : sortedCols) colStr += QString::number(c) + ' ';
+
+            QFile f(QString::fromLocal8Bit(dbgPath));
+            if (f.open(QIODevice::Append | QIODevice::Text))
+            {
+                QTextStream ts(&f);
+                ts << "grid=" << gridCols << "x" << gridRows
+                   << " cells=" << cells.size()
+                   << " lo=" << int(m_paramValues.value("noteLow", -1))
+                   << " hi=" << int(m_paramValues.value("noteHigh", -1))
+                   << " axis=" << int(m_paramValues.value("axis", -1))
+                   << " src=" << int(m_paramValues.value("midiSource", -1))
+                   << " | held=[";
+                for (int n : heldNotes) ts << n << ' ';
+                ts << "] litCols=[" << colStr << "]\n";
+                f.close();
+            }
+        }
+    }
 
     QMutexLocker locker(&m_mutex);
     m_lastResults = writes;
