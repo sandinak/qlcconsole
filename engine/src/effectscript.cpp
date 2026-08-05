@@ -41,24 +41,38 @@ static const char *RGB_HOST_WRAPPER = R"JS(
     var g0 = fixtures[0].grid || {cols:n, rows:1};
     var cols = g0.cols || n, rows = g0.rows || 1;
 
-    __rgbApplyProps(A, params);
-
     // Colour: feed the look's first colour as the mono rgb; stacked look colours
     // via rgbMapSetColors for multi-colour (API v3+) scripts.
     var lk = (palettes.look && palettes.look.colors) ? palettes.look.colors : [];
     var rgbInt = 0xFFFFFF;
     if (lk.length && lk[0].r !== undefined) rgbInt = (lk[0].r<<16)|(lk[0].g<<8)|lk[0].b;
-    if ((A.apiVersion|0) >= 3 && typeof A.rgbMapSetColors === "function" && lk.length){
-      var arr = []; for (var i=0;i<lk.length;i++) arr.push((lk[i].r<<16)|(lk[i].g<<8)|(lk[i].b));
-      try { A.rgbMapSetColors(arr); } catch(e){}
-    }
 
     var steps = 1; try { steps = A.rgbMapStepCount(cols, rows) | 0; } catch(e){}
     if (steps < 1) steps = 1;
     var rate = (params.rgbSpeed !== undefined) ? params.rgbSpeed : 8;
-    var step = Math.floor((inputs._time||0) * rate) % steps; if (step < 0) step += steps;
+    var raw  = Math.floor((inputs._time||0) * rate);
+    // Loop (wrap) vs Once (play through, then hold the last frame).
+    var once = ((params.rgbLoop|0) === 1);
+    var step = once ? Math.min(raw, steps - 1) : (raw % steps);
+    if (step < 0) step += steps;
 
-    var map; try { map = A.rgbMap(cols, rows, rgbInt, step); } catch(e){ map = null; }
+    // Regenerate the matrix ONLY when something that affects it changes — the
+    // step, the grid, the colour, or a property. rgbMap() is expensive (a full
+    // cols*rows matrix) and, for scripts using Math.random, non-deterministic per
+    // call: running it every tick both pegs the CPU on a big grid AND makes such
+    // scripts flash. The real RGB Matrix calls rgbMap once per step; match that.
+    var psig = ""; for (var pk in params) psig += pk + "=" + params[pk] + ";";
+    var key = step + "|" + cols + "x" + rows + "|" + rgbInt + "|" + psig;
+    if (state.__rgbKey !== key) {
+      __rgbApplyProps(A, params);
+      if ((A.apiVersion|0) >= 3 && typeof A.rgbMapSetColors === "function" && lk.length){
+        var arr = []; for (var i=0;i<lk.length;i++) arr.push((lk[i].r<<16)|(lk[i].g<<8)|(lk[i].b));
+        try { A.rgbMapSetColors(arr); } catch(e){}
+      }
+      try { state.__rgbMap = A.rgbMap(cols, rows, rgbInt, step); } catch(e){ state.__rgbMap = null; }
+      state.__rgbKey = key;
+    }
+    var map = state.__rgbMap;
 
     return fixtures.map(function(f){
       var g = f.grid || {col:0,row:0};
@@ -370,6 +384,17 @@ bool EffectScript::loadRGBScript()
         def.name = QStringLiteral("rgbSpeed");
         def.description = QStringLiteral("Animation speed (steps/sec)");
         def.min = 0.5f; def.max = 60.0f; def.defaultValue = 8.0f;
+        m_params.append(def);
+    }
+    // Loop vs single-shot: Once plays the animation through a single time and
+    // holds the final frame instead of restarting.
+    {
+        ParamDef def;
+        def.name = QStringLiteral("rgbLoop");
+        def.description = QStringLiteral("Playback");
+        def.enumValues = QStringList() << QStringLiteral("Loop")
+                                       << QStringLiteral("Once (hold last)");
+        def.defaultValue = 0.0f;
         m_params.append(def);
     }
 
