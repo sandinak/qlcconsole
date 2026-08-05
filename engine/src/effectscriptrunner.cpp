@@ -165,9 +165,18 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
 
         // Already running this look (another scene in the same collection also
         // carries it, or a crossfade has both scenes live)? Leave the single
-        // running engine alone — one look means one effect.
-        if (instanceForPalette(pid) != nullptr)
+        // running engine alone — one look means one effect. If it was releasing
+        // (a Fade Out started on stop), the look is back: cancel the fade and
+        // rebind so it resumes seamlessly instead of dying.
+        if (EffectInstance *existing = instanceForPalette(pid))
+        {
+            if (existing->isFadingOut())
+            {
+                existing->cancelFadeOut();
+                existing->rebindToScene(sceneId);
+            }
             continue;
+        }
 
         EffectInstance *inst = nullptr;
 
@@ -247,6 +256,22 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
             if (inst->sceneId() != sceneId)
                 continue;
 
+            const QLCPalette *pal = m_doc->palette(inst->effectPaletteId());
+
+            // Release fade-out: if the look sets a Fade Out time, keep the
+            // instance in m_instances and let it render with a decaying envelope
+            // (see runTick) instead of snapping off. slotTick reaps it when the
+            // fade completes. Persistence takes precedence (parked mid-flight).
+            int fadeOutMs = -1;
+            if (Scene *sc = qobject_cast<Scene*>(m_doc->function(sceneId)))
+                fadeOutMs = sc->paletteFadeOut(inst->effectPaletteId());
+            const bool persistent = (pal != nullptr && pal->persistent());
+            if (!persistent && fadeOutMs > 0 && !inst->isFadingOut())
+            {
+                inst->startFadeOut(uint(fadeOutMs));
+                continue;   // leave it in m_instances, ticking + fading
+            }
+
             it.remove();
 
             // A persistent look is PARKED rather than destroyed: hold the engine
@@ -254,8 +279,7 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
             // palette can pick the effect up mid-flight. Its writes stop
             // immediately either way — publishWrites() below only walks
             // m_instances, so a parked effect drives no DMX.
-            const QLCPalette *pal = m_doc->palette(inst->effectPaletteId());
-            if (pal != nullptr && pal->persistent())
+            if (persistent)
             {
                 // Shouldn't happen (one look = one engine), but never leak if it does.
                 delete m_parked.value(inst->effectPaletteId(), nullptr);
@@ -406,6 +430,22 @@ void EffectScriptRunner::slotTick()
     // Consume the input edge once every instance has had its chance to react.
     m_inputDirty = false;
 
+    // Reap instances whose release fade-out has completed.
+    bool reaped = false;
+    {
+        QMutableListIterator<EffectInstance*> rit(m_instances);
+        while (rit.hasNext())
+        {
+            EffectInstance *inst = rit.next();
+            if (inst->fadeOutDone())
+            {
+                rit.remove();
+                delete inst;
+                reaped = true;
+            }
+        }
+    }
+
     // Bound the per-instance QJSEngine heap: runTick() allocates a fresh fixtures
     // array + objects every tick, which V4 only reclaims lazily, so RSS creeps up
     // over a long show. GC one instance every few ticks (round-robin, not all at
@@ -418,9 +458,30 @@ void EffectScriptRunner::slotTick()
     }
     locker.unlock();
 
-    // Nothing ticked → the aggregate is identical to last frame; skip the rebuild.
-    if (anyTicked)
+    // Nothing ticked and nothing reaped → the aggregate is unchanged; skip the
+    // rebuild. A reap must republish so the removed effect's last frame is dropped.
+    if (anyTicked || reaped)
         publishWrites();
+
+    // A completed fade-out may have emptied the instance list — release the
+    // DMXSource + faders, mirroring destroyInstancesForScene's tail. (m_instances
+    // is main-thread-only and slotTick runs on the main thread, so this read is
+    // safe without the lock.)
+    if (reaped && m_instances.isEmpty() && m_registered)
+    {
+        m_registered = false;
+        if (m_doc->masterTimer())
+            m_doc->masterTimer()->unregisterDMXSource(this);
+        QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+        for (auto it2 = m_faders.begin(); it2 != m_faders.end(); ++it2)
+        {
+            int idx = it2.key();
+            if (!it2.value().isNull() && idx >= 0 && idx < ua.size())
+                ua.at(idx)->dismissFader(it2.value());
+        }
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        m_faders.clear();
+    }
 }
 
 EffectInstance *EffectScriptRunner::instanceForPalette(quint32 paletteId) const

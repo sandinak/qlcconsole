@@ -51,6 +51,10 @@ enum { TargetGroup = 0, TargetFixture = 1, TargetTypeFolder = 2 };
 // In/Out columns carry their fade override in ms at Qt::UserRole (-1 = "step",
 // i.e. follow the chaser step / scene fade).
 enum { LookColName = 0, LookColIn = 1, LookColOut = 2, LookColCount = 3 };
+// Marks a fade cell that belongs to an Effect look — the delegate uses it to
+// keep Fade In read-only for effects (their fade-in is the scene envelope) while
+// letting Fade Out be edited (the release fade the script runner honours).
+static const int LookIsEffectRole = Qt::UserRole + 3;
 
 /** Human "1.5 s" / "step" text for a fade override in ms (-1 = step). */
 static QString fadeCellText(int ms)
@@ -71,6 +75,9 @@ public:
                           const QModelIndex &index) const override
     {
         if (index.column() != LookColIn && index.column() != LookColOut)
+            return nullptr;
+        // Effect looks: only Fade Out is editable (fade-in = scene envelope).
+        if (index.column() == LookColIn && index.data(LookIsEffectRole).toBool())
             return nullptr;
         QDoubleSpinBox *sp = new QDoubleSpinBox(parent);
         sp->setDecimals(2);
@@ -518,23 +525,31 @@ void SceneGroupLooks::reload()
             : feedsEffect ? tr("Feeds the effect above — not painted on the fixtures directly.")
                           : tr("Lights the fixtures directly (static base)."));
 
-        // In/Out fade cells (ms at Qt::UserRole; -1 = "step"). Effect looks are
-        // faded by the script runner, not the scene, so their cells are inert.
+        // In/Out fade cells (ms at Qt::UserRole; -1 = "step"). An effect's fade-IN
+        // is the scene envelope (cell inert), but its fade-OUT is a real release
+        // time the script runner honours — so that cell is live and editable.
         const int inMs  = isEffect ? -1 : m_scene->paletteFadeIn(pid);
-        const int outMs = isEffect ? -1 : m_scene->paletteFadeOut(pid);
+        const int outMs = m_scene->paletteFadeOut(pid);
         it->setData(LookColIn,  Qt::UserRole, inMs);
         it->setData(LookColOut, Qt::UserRole, outMs);
+        it->setData(LookColIn,  LookIsEffectRole, isEffect);
+        it->setData(LookColOut, LookIsEffectRole, isEffect);
         it->setText(LookColIn,  isEffect ? QStringLiteral("—") : fadeCellText(inMs));
-        it->setText(LookColOut, isEffect ? QStringLiteral("—") : fadeCellText(outMs));
+        it->setText(LookColOut, fadeCellText(outMs));
         it->setTextAlignment(LookColIn,  Qt::AlignRight | Qt::AlignVCenter);
         it->setTextAlignment(LookColOut, Qt::AlignRight | Qt::AlignVCenter);
+        if (isEffect)
+            it->setToolTip(LookColOut,
+                tr("Release fade: when this look stops, the effect fades out over "
+                   "this time instead of snapping off. \"step\" = snap."));
 
         // Draggable + (In/Out) editable. Only EFFECT items accept drops, so
         // dropping a colour onto one nests it (feeds the effect); dropping between
         // rows at the top level makes it a base. Leaves never accept children.
-        Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled;
-        if (!isEffect)
-            f |= Qt::ItemIsEditable;
+        // Editable so a fade cell can be double-clicked (the delegate restricts an
+        // effect to its Fade Out cell). Only Effect items accept drops (nesting).
+        Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable
+                        | Qt::ItemIsDragEnabled | Qt::ItemIsEditable;
         if (isEffect)
             f |= Qt::ItemIsDropEnabled;
         else

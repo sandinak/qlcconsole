@@ -169,7 +169,15 @@ void EffectInstance::runTick()
     // Actuation envelope: scale intensity/colour output by the host scene's
     // fade-in ramp so the effect fires *with* the scene (ramps up as the scene
     // fades in, then holds) instead of blasting at full independent of it.
-    m_envelope = sceneEnvelope();
+    // While releasing (the look stopped with a Fade Out time) the scene is no
+    // longer running, so drive the envelope down linearly instead.
+    if (m_fadingOut)
+    {
+        const qint64 el = m_elapsed.elapsed() - m_fadeOutStartMs;
+        m_envelope = qBound(0.0f, 1.0f - float(el) / float(m_fadeOutMs), 1.0f);
+    }
+    else
+        m_envelope = sceneEnvelope();
 
     // Snapshot the scene's base per-channel values so an intensity flicker can
     // modulate *around* the Dimmer/Colour looks instead of overriding them.

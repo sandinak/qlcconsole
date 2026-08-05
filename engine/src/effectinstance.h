@@ -55,6 +55,17 @@ public:
      *  base values from changes. */
     void rebindToScene(quint32 sceneId) { m_sceneId = sceneId; }
 
+    // --- Release fade-out (main thread) ---------------------------------------
+    // When a look stops, instead of snapping off the effect can keep rendering
+    // with a linearly decaying envelope for @p ms, then be removed. Dormant
+    // unless the look sets a Fade Out time.
+    void startFadeOut(uint ms) { m_fadingOut = true; m_fadeOutMs = qMax(1u, ms);
+                                 m_fadeOutStartMs = m_elapsed.elapsed(); }
+    void cancelFadeOut()       { m_fadingOut = false; }
+    bool isFadingOut() const   { return m_fadingOut; }
+    bool fadeOutDone() const   { return m_fadingOut &&
+                                 (m_elapsed.elapsed() - m_fadeOutStartMs) >= qint64(m_fadeOutMs); }
+
     // --- Input values (main thread, set by EffectScriptRunner on input events) ---
     void setInputValue(const QString &slotName, float norm01);
     float inputValue(const QString &slotName) const;
@@ -178,6 +189,10 @@ private:
     mutable QMutex   m_mutex;
     QList<DmxWrite>  m_lastResults;
     bool             m_lastFrameEmpty = false; //!< last tick drove nothing (idle hint)
+
+    bool             m_fadingOut = false;   //!< in a release fade after the look stopped
+    uint             m_fadeOutMs = 0;
+    qint64           m_fadeOutStartMs = 0;  //!< m_elapsed.elapsed() when the fade began
 
     float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
 
