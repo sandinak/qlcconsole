@@ -1051,54 +1051,48 @@ void SceneGroupLooks::moveSelectedLooks(int delta)
     if (sel.isEmpty() || delta == 0)
         return;
 
-    // Tree-aware: an item moves within its OWN sibling group (its effect's
-    // children, or the top level). Index/count come from the parent, so a nested
-    // colour reorders among the effect's other colours rather than jumping out.
-    auto rowIn = [&](QTreeWidgetItem *it) -> int {
-        QTreeWidgetItem *par = it->parent();
-        return par ? par->indexOfChild(it) : m_lookList->indexOfTopLevelItem(it);
-    };
-    auto countIn = [&](QTreeWidgetItem *it) -> int {
-        QTreeWidgetItem *par = it->parent();
-        return par ? par->childCount() : m_lookList->topLevelItemCount();
-    };
-
-    // Abort if any selected item would move past its group's edge — block move.
+    // Move in the FLAT visual order (== the palette order), so a step can cross a
+    // nesting boundary: Up on a colour at the top of an effect's children pops it
+    // ABOVE the effect (→ becomes a base on reload); Down on a base colour pushes
+    // it under the following effect. reorderPalettes → reload() re-derives the
+    // tree, so nesting follows position automatically.
+    QList<quint32> order = m_scene->palettes();
+    QList<quint32> selPids;
     foreach (QTreeWidgetItem *it, sel)
-    {
-        const int row = rowIn(it) + delta;
-        if (row < 0 || row >= countIn(it))
-            return;
-    }
+        selPids << it->data(LookColName, Qt::UserRole).toUInt();
 
-    // Process ascending when moving up, descending when moving down so adjacent
-    // indices stay valid as we go.
-    QList<QTreeWidgetItem*> ordered = sel;
-    std::sort(ordered.begin(), ordered.end(),
-              [&](QTreeWidgetItem *a, QTreeWidgetItem *b) { return rowIn(a) < rowIn(b); });
+    QList<int> idx;
+    foreach (quint32 pid, selPids)
+    {
+        const int i = order.indexOf(pid);
+        if (i >= 0) idx << i;
+    }
+    if (idx.isEmpty())
+        return;
+    std::sort(idx.begin(), idx.end());
+    // Block-edge guard: don't run off either end.
+    if (idx.first() + delta < 0 || idx.last() + delta >= order.size())
+        return;
+    // Move each item; process the trailing edge first so indices stay valid.
     if (delta > 0)
-        std::reverse(ordered.begin(), ordered.end());
+        std::reverse(idx.begin(), idx.end());
+    foreach (int i, idx)
+        order.move(i, i + delta);
 
-    m_lookList->blockSignals(true);
-    foreach (QTreeWidgetItem *it, ordered)
+    if (m_scene->reorderPalettes(order))
     {
-        const int row = rowIn(it);
-        QTreeWidgetItem *par = it->parent();
-        if (par)
+        m_doc->setModified();
+        emit sceneModified();
+        reload();
+        // Re-select the moved looks (reload() rebuilt the tree).
+        QTreeWidgetItemIterator sit(m_lookList);
+        while (*sit)
         {
-            QTreeWidgetItem *taken = par->takeChild(row);
-            par->insertChild(row + delta, taken);
+            if (selPids.contains((*sit)->data(LookColName, Qt::UserRole).toUInt()))
+                (*sit)->setSelected(true);
+            ++sit;
         }
-        else
-        {
-            QTreeWidgetItem *taken = m_lookList->takeTopLevelItem(row);
-            m_lookList->insertTopLevelItem(row + delta, taken);
-        }
-        it->setSelected(true);
     }
-    m_lookList->blockSignals(false);
-
-    applyLookOrderFromList();
 }
 
 bool SceneGroupLooks::eventFilter(QObject *watched, QEvent *event)
