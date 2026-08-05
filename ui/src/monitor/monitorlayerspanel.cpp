@@ -422,33 +422,10 @@ void MonitorLayersPanel::createFixtureGroupFrom(const QList<quint32> &fixtureIds
 {
     if (fixtureIds.isEmpty())
         return;
-
-    // Seed a layout that reflects the fixtures' head structure, then let the user
-    // adjust name + grid in the same dialog the Fixture Manager / Programming use:
-    //   • multi-head fixtures (bars/strips) → heads ACROSS, one fixture per ROW
-    //     (maxHeads × fixtureCount) so each bar's pixels line up;
-    //   • single-head fixtures → a single row (count × 1).
-    const int nFix = fixtureIds.size();
-    int maxHeads = 1;
-    foreach (quint32 fid, fixtureIds)
-        if (Fixture *fx = m_doc->fixture(fid))
-            maxHeads = qMax(maxHeads, int(fx->heads()));
-    const QSize seed = (maxHeads > 1) ? QSize(maxHeads, nFix) : QSize(qMax(1, nFix), 1);
-
-    CreateFixtureGroup cfg(this);
-    cfg.setSize(seed);
-    if (cfg.exec() != QDialog::Accepted)
-        return;
-
-    FixtureGroup *grp = new FixtureGroup(m_doc);
-    grp->setName(cfg.name());
-    grp->setSize(cfg.size());
-    m_doc->addFixtureGroup(grp);   // emits fixtureGroupAdded
-    foreach (quint32 fid, fixtureIds)
-        grp->assignFixture(fid);    // lays each fixture's heads into the grid
-
-    m_doc->setModified();
-    reload();
+    // Shared creator (grid heuristic + physical-order arrangement), consistent
+    // with the Fixture Manager and Programming tab.
+    if (CreateFixtureGroup::createFromFixtures(m_doc, fixtureIds, this) != NULL)
+        reload();
 }
 
 void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)

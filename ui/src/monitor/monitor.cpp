@@ -124,6 +124,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "createfixturegroup.h"
 #include "app.h"
 #include "apputil.h"
 #include "doc.h"
@@ -2719,57 +2720,13 @@ void Monitor::studioCreateGroup(const QList<quint32> &fids, StructureStudioView 
             tr("Select one or more fixtures in the tree first."));
         return;
     }
-    // Name + matrix size (columns × rows), like a fixture group in the Fixtures tab.
-    QDialog dlg(this);
-    dlg.setWindowTitle(tr("New Fixture Group"));
-    QFormLayout *f = new QFormLayout(&dlg);
-    // Suggest a matrix from the fixtures' SPATIAL layout + head counts: cluster
-    // distinct vertical bands (rows), then cols = total heads / rows. The cluster
-    // tolerance is ADAPTIVE (fraction of the vertical spread ÷ N) so tightly-
-    // stacked rows — e.g. 8 strips on a 0.7 ft step face — still separate.
-    int sugRows = 1, totalHeads = 0;
-    {
-        QList<double> vv;
-        foreach (quint32 fid, fids)
-        {
-            Fixture *fx = m_doc->fixture(fid);
-            totalHeads += fx ? qMax(1, fx->heads()) : 1;
-            const QVector3D w = m_props->fixtureRigPosition(fid);
-            vv << ((view && view->plane() == StructureStudioView::Top) ? double(w.y()) : double(w.z()));
-        }
-        std::sort(vv.begin(), vv.end());
-        if (vv.size() > 1)
-        {
-            const double spread = vv.last() - vv.first();
-            const double tol = qMax(1e-4, spread / (2.0 * vv.size()));   // adaptive
-            double last = vv.first();
-            for (double v : vv) if (v - last > tol) { ++sugRows; last = v; }
-        }
-    }
-    const int sugCols = qMax(1, int(qCeil(qMax(1, totalHeads) / double(sugRows))));
-
-    QLineEdit *nameE = new QLineEdit(tr("Group %1").arg(m_doc->fixtureGroups().count() + 1), &dlg);
-    QSpinBox *colS = new QSpinBox(&dlg); colS->setRange(1, 512); colS->setValue(sugCols);
-    QSpinBox *rowS = new QSpinBox(&dlg); rowS->setRange(1, 512); rowS->setValue(sugRows);
-    colS->setToolTip(tr("Matrix width — heads are filled left→right, top→bottom."));
-    f->addRow(tr("Name:"), nameE);
-    f->addRow(tr("Columns (X):"), colS);
-    f->addRow(tr("Rows (Y):"), rowS);
-    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
-    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    f->addRow(bb);
-    if (dlg.exec() != QDialog::Accepted || nameE->text().trimmed().isEmpty())
+    // Shared creator: grid suggested from the fixtures' 2-D layout, name/size
+    // prompt, and fixtures arranged into the grid IN PHYSICAL ORDER (so a wide
+    // panel maps left→right instead of being transposed by fixture order).
+    if (CreateFixtureGroup::createFromFixtures(m_doc, fids, this) == NULL)
         return;
-
-    FixtureGroup *grp = new FixtureGroup(m_doc);
-    grp->setName(nameE->text().trimmed());
-    grp->setSize(QSize(colS->value(), rowS->value()));
-    m_doc->addFixtureGroup(grp);
-    foreach (quint32 fid, fids)
-        grp->assignFixture(fid);         // fills the grid left→right, top→bottom
-    m_doc->setModified();
-    if (view) view->reload();            // the tree regroups under the new folder
+    if (view)
+        view->reload();
 }
 
 void Monitor::studioDistribute(int kind, quint32 id, StructureStudioView *view,

@@ -18,6 +18,7 @@ set(SCRIPT_FILES
     figure8.js
     fire.js
     followspot.js
+    grid-probe.js
     diamond.js
     gobo-chase.js
     iris-pulse.js
