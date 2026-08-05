@@ -21,7 +21,9 @@ set(SCRIPT_FILES
     iris-pulse.js
     lightning.js
     lissajous.js
+    meteor.js
     native-strobe.js
+    plasma.js
     orbit.js
     pantilt-phaser.js
     rainbow.js

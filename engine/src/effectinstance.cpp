@@ -366,6 +366,34 @@ QJSValue EffectInstance::buildFixturesArray(const QList<quint32> &fxIds)
     const MonitorProperties *mp = m_doc->monitorProperties();
     QLCPalette *effectPal = m_doc->palette(m_effectPaletteId);
 
+    // Grid coords for pixel-style effects (ripple, comet, matrix ports): map each
+    // fixture to a (col,row) cell. Sourced from the fixture group's head layout —
+    // the SAME data RGB Matrix maps through — when the scene targets a single
+    // laid-out group; otherwise the fixtures form a 1-D strip in list order, so an
+    // effect always has a coherent grid to render on.
+    int gridCols = fxIds.size() > 0 ? fxIds.size() : 1;
+    int gridRows = 1;
+    QHash<quint32, QPoint> gridPos;   // fixture id -> (col,row)
+    {
+        Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
+        const QList<quint32> grpIds = scene ? scene->fixtureGroups() : QList<quint32>();
+        if (grpIds.size() == 1)
+        {
+            FixtureGroup *grp = m_doc->fixtureGroup(grpIds.first());
+            if (grp && grp->size().width() > 0 && grp->size().height() > 0
+                    && !grp->headsMap().isEmpty())
+            {
+                gridCols = grp->size().width();
+                gridRows = grp->size().height();
+                const QMap<QLCPoint, GroupHead> heads = grp->headsMap();
+                for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
+                    // First cell wins for a multi-head fixture (effect is per-id).
+                    if (!gridPos.contains(it.value().fxi))
+                        gridPos.insert(it.value().fxi, QPoint(it.key().x(), it.key().y()));
+            }
+        }
+    }
+
     for (int i = 0; i < fxIds.size(); ++i)
     {
         quint32 fid = fxIds.at(i);
@@ -447,6 +475,19 @@ QJSValue EffectInstance::buildFixturesArray(const QList<quint32> &fxIds)
         posObj.setProperty("y", (double)pos.y());
         posObj.setProperty("z", (double)pos.z());
         obj.setProperty("pos", posObj);
+
+        // grid: cell coords for pixel-style effects. col/row = this fixture's cell;
+        // cols/rows = grid size (from the group head layout, or a 1-D strip).
+        QJSValue gridObj = m_script.engine()->newObject();
+        int gcol = i, grow = 0;
+        auto git = gridPos.constFind(fid);
+        if (git != gridPos.constEnd())     { gcol = git.value().x(); grow = git.value().y(); }
+        else if (gridRows > 1)             { gcol = i % gridCols; grow = i / gridCols; }
+        gridObj.setProperty("col",  gcol);
+        gridObj.setProperty("row",  grow);
+        gridObj.setProperty("cols", gridCols);
+        gridObj.setProperty("rows", gridRows);
+        obj.setProperty("grid", gridObj);
 
         // aimAt: pre-computed pan/tilt for each bound target slot
         QJSValue aimAt = m_script.engine()->newObject();
