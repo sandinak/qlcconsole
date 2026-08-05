@@ -443,21 +443,62 @@ void EffectScriptRunner::setDataChannel(const QString &name, const QVariantMap &
 
 void EffectScriptRunner::publishMidiData()
 {
+    // Build a per-universe view AND a merged "any-source" view. Effects read the
+    // merged data.midi by default, or data.midi.universes[<n>] to lock onto one
+    // device (n = the universe number shown on the Inputs/Outputs page).
+    int   mergedVel[128];
+    bool  mergedHeld[128];
+    for (int i = 0; i < 128; i++) { mergedVel[i] = 0; mergedHeld[i] = false; }
+    bool    anySustain  = false;
+    int     lastNote    = -1;
+    int     lastVel     = 0;
+    quint32 noteOnCount = 0;
+    QVariantMap universes;
+
+    for (auto it = m_midiByUniverse.constBegin(); it != m_midiByUniverse.constEnd(); ++it)
+    {
+        const MidiNoteState &st = it.value();
+        QVariantList vel, held;
+        vel.reserve(128);
+        held.reserve(128);
+        for (int i = 0; i < 128; i++)
+        {
+            vel << int(st.velocity[i]);
+            held << st.held[i];
+            if (st.held[i])
+            {
+                mergedHeld[i] = true;
+                if (int(st.velocity[i]) > mergedVel[i]) mergedVel[i] = st.velocity[i];
+            }
+        }
+        if (st.sustain) anySustain = true;
+        noteOnCount += st.noteOnCount;
+        if (st.lastNote >= 0) { lastNote = st.lastNote; lastVel = st.lastVelocity; }
+
+        QVariantMap um;
+        um[QStringLiteral("velocity")]     = vel;
+        um[QStringLiteral("held")]         = held;
+        um[QStringLiteral("sustain")]      = st.sustain;
+        um[QStringLiteral("lastNote")]     = st.lastNote;
+        um[QStringLiteral("lastVelocity")] = st.lastVelocity;
+        um[QStringLiteral("noteOnCount")]  = int(st.noteOnCount);
+        // Key by the 1-based universe number shown on the I/O page.
+        universes[QString::number(it.key() + 1)] = um;
+    }
+
     QVariantList velocity, held;
     velocity.reserve(128);
     held.reserve(128);
-    for (int i = 0; i < 128; i++)
-    {
-        velocity << int(m_midiState.velocity[i]);
-        held << m_midiState.held[i];
-    }
+    for (int i = 0; i < 128; i++) { velocity << mergedVel[i]; held << mergedHeld[i]; }
+
     QVariantMap md;
-    md[QStringLiteral("velocity")]     = velocity;      // [128] 0-127
-    md[QStringLiteral("held")]         = held;          // [128] bool
-    md[QStringLiteral("sustain")]      = m_midiState.sustain;
-    md[QStringLiteral("lastNote")]     = m_midiState.lastNote;
-    md[QStringLiteral("lastVelocity")] = m_midiState.lastVelocity;
-    md[QStringLiteral("noteOnCount")]  = int(m_midiState.noteOnCount);
+    md[QStringLiteral("velocity")]     = velocity;      // merged [128] 0-127
+    md[QStringLiteral("held")]         = held;          // merged [128] bool
+    md[QStringLiteral("sustain")]      = anySustain;
+    md[QStringLiteral("lastNote")]     = lastNote;
+    md[QStringLiteral("lastVelocity")] = lastVel;
+    md[QStringLiteral("noteOnCount")]  = int(noteOnCount);
+    md[QStringLiteral("universes")]    = universes;     // per-source states
     setDataChannel(QStringLiteral("midi"), md);
 }
 
@@ -477,32 +518,34 @@ void EffectScriptRunner::slotInputValueChanged(quint32 universe, quint32 channel
     // would also register; MIDI effects are opt-in via dataChannels:["midi"].
     if (channel >= 128 && channel <= 255)
     {
+        MidiNoteState &st = m_midiByUniverse[universe];   // per-source state
         const int note = int(channel) - 128;
         const bool held = value > 0;
         if (held)
         {
             const uchar vel = (value == 255) ? 127 : uchar(value >> 1);
-            m_midiState.velocity[note] = vel;
-            if (!m_midiState.held[note])
+            st.velocity[note] = vel;
+            if (!st.held[note])
             {
-                m_midiState.noteOnCount++;
-                m_midiState.lastNote = note;
-                m_midiState.lastVelocity = vel;
+                st.noteOnCount++;
+                st.lastNote = note;
+                st.lastVelocity = vel;
             }
-            m_midiState.held[note] = true;
+            st.held[note] = true;
         }
         else
         {
-            m_midiState.held[note] = false;   // release; keep velocity as decay ref
+            st.held[note] = false;   // release; keep velocity as decay ref
         }
         publishMidiData();
     }
     else if (channel == 64)   // CC64 sustain pedal
     {
+        MidiNoteState &st = m_midiByUniverse[universe];
         const bool sus = value >= 128;        // MIDI2DMX(64) == 128
-        if (sus != m_midiState.sustain)
+        if (sus != st.sustain)
         {
-            m_midiState.sustain = sus;
+            st.sustain = sus;
             publishMidiData();
         }
     }

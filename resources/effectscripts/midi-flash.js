@@ -17,6 +17,7 @@
     effect.notes = "The whole rig flashes to the loudest currently-held note and fades out; playing any note pulls it back up. Sustain pedal (CC64) slows the fade. Colour comes from the look's first Colour palette.";
 
     effect.parameters = [
+        { name: "midiSource",  description: "MIDI source (0 = any; else universe # from Inputs/Outputs)", min: 0, max: 16, defaultValue: 0 },
         { name: "release",     description: "Release fade (seconds)",   min: 0.03, max: 4.0,  defaultValue: 0.4 },
         { name: "sustainFade", description: "Sustained fade (seconds)", min: 0.2,  max: 20.0, defaultValue: 6.0 },
         { name: "velFloor",    description: "Min brightness for held notes (0-31)", min: 0, max: 31, defaultValue: 0 }
@@ -27,6 +28,8 @@
         if (n === 0) return [];
 
         var m = data && data.midi;
+        var src = params.midiSource | 0;
+        if (m && src > 0 && m.universes && m.universes[src]) m = m.universes[src];
         if (state.f === undefined) { state.f = 0; state.t = inputs._time || 0; }
         var dt = Math.max(0, (inputs._time || 0) - state.t);
         state.t = inputs._time || 0;

@@ -17,6 +17,7 @@
     effect.notes = "A soft held-note glow plus a ripple that radiates from each note the instant it's struck (mapped across the fixture grid, or a 1-D strip). Speed sets ripple travel; Width the ring thickness. Notes map across [Note low..Note high]. Colours from the look's palette.";
 
     effect.parameters = [
+        { name: "midiSource", description: "MIDI source (0 = any; else universe # from Inputs/Outputs)", min: 0, max: 16, defaultValue: 0 },
         { name: "autoRange", description: "Range mode", defaultValue: 1, values: ["Manual (use Note low/high)", "Learn — play your lowest & highest key"] },
         { name: "noteLow",  description: "Lowest MIDI note (Manual mode)",  min: 0, max: 127, defaultValue: 36 },
         { name: "noteHigh", description: "Highest MIDI note (Manual mode)", min: 0, max: 127, defaultValue: 84 },
@@ -41,6 +42,8 @@
         var axisLen = Math.max(1, horizontal ? cols : rows);
 
         var m  = data && data.midi;
+        var src = params.midiSource | 0;
+        if (m && src > 0 && m.universes && m.universes[src]) m = m.universes[src];
         var lo = params.noteLow | 0, hi = params.noteHigh | 0;
         if ((params.autoRange | 0) === 1) {
             if (state.learnLo === undefined) { state.learnLo = 127; state.learnHi = 0; }

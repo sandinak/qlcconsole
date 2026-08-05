@@ -18,6 +18,7 @@
     effect.notes = "Tiles the note range [Note low..Note high] across the fixtures: each note lights its band and fades on release. Hold the sustain pedal (CC64) for a slower fade. Colours come from the look's stacked Colour palettes, spread by position. Set Note low/high to match your controller.";
 
     effect.parameters = [
+        { name: "midiSource",  description: "MIDI source (0 = any; else universe # from Inputs/Outputs)", min: 0, max: 16, defaultValue: 0 },
         { name: "autoRange",   description: "Range mode",               defaultValue: 1, values: ["Manual (use Note low/high)", "Learn — play your lowest & highest key"] },
         { name: "noteLow",     description: "Lowest MIDI note (Manual mode)",  min: 0, max: 127, defaultValue: 36 },
         { name: "noteHigh",    description: "Highest MIDI note (Manual mode)", min: 0, max: 127, defaultValue: 84 },
@@ -32,6 +33,9 @@
         if (n === 0) return [];
 
         var m   = data && data.midi;
+        // Lock onto one device by universe #, or 0 = any (merged).
+        var src = params.midiSource | 0;
+        if (m && src > 0 && m.universes && m.universes[src]) m = m.universes[src];
         var lo  = params.noteLow  | 0;
         var hi  = params.noteHigh | 0;
         // Learn mode: remember the lowest & highest notes ever played and use

@@ -166,7 +166,11 @@ private:
         int     lastNote      = -1;
         int     lastVelocity  = 0;
         quint32 noteOnCount   = 0;     //!< bumped on every fresh note-on
-    } m_midiState;
+    };
+    /** Note state per INPUT UNIVERSE, so an effect can pick which device (e.g. a
+     *  band keyboard vs a Launchpad) it reacts to. data.midi exposes a merged
+     *  "any" view plus data.midi.universes[<n>] per source. */
+    QHash<quint32, MidiNoteState> m_midiByUniverse;
     /** Rebuild the "midi" data channel from m_midiState and publish it. */
     void publishMidiData();
 
