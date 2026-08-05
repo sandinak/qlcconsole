@@ -49,14 +49,18 @@ static QString universeDestination(Doc *doc, quint32 uniID)
         if (op == NULL || op->pluginName().isEmpty())
             return QString();
         const QMap<QString, QVariant> p = op->getPluginParameters();
-        if (p.contains("outputIP"))
-        {
-            QString s = QString("%1: %2").arg(op->pluginName()).arg(p.value("outputIP").toString());
-            if (p.contains("outputUni"))
-                s += QString(" U:%1").arg(p.value("outputUni").toInt());
-            return s;
-        }
-        return op->pluginName();   // MIDI / USB / etc — no network address
+        QString s = op->pluginName();
+        // Target address: the explicit target IP if set, else the output line
+        // (the interface/port name — for ArtNet that's the sending interface).
+        QString addr = p.value("outputIP").toString();
+        if (addr.isEmpty())
+            addr = op->outputName();
+        if (!addr.isEmpty())
+            s += QString(": %1").arg(addr);
+        // ArtNet/network universe on that target.
+        if (p.contains("outputUni"))
+            s += QString(" U:%1").arg(p.value("outputUni").toInt());
+        return s;
     }
     return QString();
 }
