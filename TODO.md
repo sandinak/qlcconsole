@@ -22,10 +22,19 @@ to DONE.md when it ships. See also the session memory under
   painted as a static base; top-level looks light the fixtures. Fixes same-colour
   strike-on-base washout (RGB-only fixtures). Mechanism = ordering
   (`QLCPalette::isEffectScoped`); tree is derived from/rewrites the flat order.
+  Right-click → "Move to fixtures (base)" / "Feed effect ▸ <name>" for explicit
+  re-homing; Up/Down moves across nesting boundaries (flat-order move).
   *Open polish:* dropping an external palette onto a specific effect item should
   nest under THAT effect (currently appends). Future: the richer per-item
   assignment could grow beyond order (explicit bind) if multi-effect looks get
   fiddly.
+- **Effect perf + release fade-out** — input-reactive effects (midi/audio/
+  joystick) now WAIT for input instead of polling: an idle effect whose last
+  frame drove nothing is skipped until fresh input (`m_inputDirty` +
+  `lastFrameEmpty()`), killing the 50 Hz baseline load of a loaded note effect on
+  a big pixel grid. And effect looks have a **release fade-out** set via the Looks
+  Fade Out cell — on stop the effect decays over that time instead of snapping
+  (EffectInstance fade envelope; runner keeps it ticking then reaps).
 
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
