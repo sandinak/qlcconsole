@@ -17,8 +17,9 @@
     effect.notes = "A soft held-note glow plus a ripple that radiates from each note the instant it's struck (mapped across the fixture grid, or a 1-D strip). Speed sets ripple travel; Width the ring thickness. Notes map across [Note low..Note high]. Colours from the look's palette.";
 
     effect.parameters = [
-        { name: "noteLow",  description: "Lowest MIDI note (C2=36, C3=48, C4=60)",  min: 0, max: 127, defaultValue: 36 },
-        { name: "noteHigh", description: "Highest MIDI note (C6=84, C7=96)",        min: 0, max: 127, defaultValue: 84 },
+        { name: "autoRange", description: "Range mode", defaultValue: 1, values: ["Manual (use Note low/high)", "Learn — play your lowest & highest key"] },
+        { name: "noteLow",  description: "Lowest MIDI note (Manual mode)",  min: 0, max: 127, defaultValue: 36 },
+        { name: "noteHigh", description: "Highest MIDI note (Manual mode)", min: 0, max: 127, defaultValue: 84 },
         { name: "axis",     description: "Note spread axis", defaultValue: 0, values: ["Horizontal (columns)", "Vertical (rows)", "Auto (wider)"] },
         { name: "speed",    description: "Ripple speed (cells/sec)", min: 1, max: 60, defaultValue: 14 },
         { name: "width",    description: "Ripple width (cells)",     min: 1, max: 12, defaultValue: 3 },
@@ -41,6 +42,15 @@
 
         var m  = data && data.midi;
         var lo = params.noteLow | 0, hi = params.noteHigh | 0;
+        if ((params.autoRange | 0) === 1) {
+            if (state.learnLo === undefined) { state.learnLo = 127; state.learnHi = 0; }
+            var lh = m && m.held;
+            if (lh) for (var ln = 0; ln < 128; ln++) if (lh[ln]) {
+                if (ln < state.learnLo) state.learnLo = ln;
+                if (ln > state.learnHi) state.learnHi = ln;
+            }
+            if (state.learnHi > state.learnLo) { lo = state.learnLo; hi = state.learnHi; }
+        }
         if (hi <= lo) hi = lo + 1;
 
         if (!state.ripples) {

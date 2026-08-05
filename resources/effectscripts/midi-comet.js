@@ -18,8 +18,9 @@
     effect.notes = "Each note strike launches a comet from that note's position along the fixture grid (or strip). Direction is the reverse of the melodic interval: a higher note than the last flies one way, a lower note the other. Speed sets travel; Tail the trail length. Colours from the look's palette.";
 
     effect.parameters = [
-        { name: "noteLow",  description: "Lowest MIDI note (C2=36, C3=48, C4=60)",  min: 0, max: 127, defaultValue: 36 },
-        { name: "noteHigh", description: "Highest MIDI note (C6=84, C7=96)",        min: 0, max: 127, defaultValue: 84 },
+        { name: "autoRange", description: "Range mode", defaultValue: 1, values: ["Manual (use Note low/high)", "Learn — play your lowest & highest key"] },
+        { name: "noteLow",  description: "Lowest MIDI note (Manual mode)",  min: 0, max: 127, defaultValue: 36 },
+        { name: "noteHigh", description: "Highest MIDI note (Manual mode)", min: 0, max: 127, defaultValue: 84 },
         { name: "axis",     description: "Note spread axis", defaultValue: 0, values: ["Horizontal (columns)", "Vertical (rows)", "Auto (wider)"] },
         { name: "speed",    description: "Comet speed (cells/sec)", min: 2, max: 80, defaultValue: 24 },
         { name: "tail",     description: "Tail length (cells)",     min: 2, max: 24, defaultValue: 6 }
@@ -41,6 +42,15 @@
 
         var m  = data && data.midi;
         var lo = params.noteLow | 0, hi = params.noteHigh | 0;
+        if ((params.autoRange | 0) === 1) {
+            if (state.learnLo === undefined) { state.learnLo = 127; state.learnHi = 0; }
+            var lh = m && m.held;
+            if (lh) for (var ln = 0; ln < 128; ln++) if (lh[ln]) {
+                if (ln < state.learnLo) state.learnLo = ln;
+                if (ln > state.learnHi) state.learnHi = ln;
+            }
+            if (state.learnHi > state.learnLo) { lo = state.learnLo; hi = state.learnHi; }
+        }
         if (hi <= lo) hi = lo + 1;
 
         if (!state.comets) {
