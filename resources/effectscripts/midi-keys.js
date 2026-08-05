@@ -64,16 +64,26 @@
         var lk   = (palettes.look && palettes.look.colors) ? palettes.look.colors : [];
         var span = hi - lo;
 
+        // Spread the keyboard across the WIDER grid axis (columns for a wide grid,
+        // rows for a tall one) — the other axis mirrors the same note as a "key
+        // bar". A 1-D strip (rows=1) just maps note → fixture as before.
+        var g0 = fixtures[0].grid || { cols: n, rows: 1 };
+        var cols = g0.cols || n, rows = g0.rows || 1;
+        var horizontal = cols >= rows;
+        var axisLen = Math.max(1, horizontal ? cols : rows);
+
         return fixtures.map(function(f, i) {
-            // This fixture's note band → brightest note in it.
-            var a = lo + Math.floor(i       / n * (span + 1));
-            var b = lo + Math.floor((i + 1) / n * (span + 1));
+            var g = f.grid || { col: i, row: 0, cols: cols, rows: rows };
+            var axisPos = horizontal ? g.col : g.row;
+            // This cell's note band → brightest note in it.
+            var a = lo + Math.floor(axisPos       / axisLen * (span + 1));
+            var b = lo + Math.floor((axisPos + 1) / axisLen * (span + 1));
             if (b <= a) b = a + 1;
             var mx = 0;
             for (var note = a; note < b && note <= hi; note++)
                 if (state.lvl[note] > mx) mx = state.lvl[note];
 
-            var pos = n > 1 ? i / (n - 1) : 0;
+            var pos = axisLen > 1 ? axisPos / (axisLen - 1) : 0;
             var col = lk.length ? lk[Math.min(lk.length - 1, Math.floor(pos * lk.length))]
                                 : { r: 255, g: 255, b: 255 };
             var out = { r: Math.round(col.r * mx), g: Math.round(col.g * mx), b: Math.round(col.b * mx) };

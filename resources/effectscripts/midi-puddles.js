@@ -32,7 +32,10 @@
 
         var g0    = fixtures[0].grid || { cols: n, rows: 1 };
         var cols  = g0.cols || n, rows = g0.rows || 1;
-        var total = Math.max(1, cols * rows);
+        // Notes spread along the WIDER grid axis (columns for a wide grid); the
+        // ripple travels along that axis and the other axis mirrors it as bars.
+        var horizontal = cols >= rows;
+        var axisLen = Math.max(1, horizontal ? cols : rows);
 
         var m  = data && data.midi;
         var lo = params.noteLow | 0, hi = params.noteHigh | 0;
@@ -57,7 +60,7 @@
             var h = held ? held[note] : false;
             var v = vel  ? vel[note] / 127 : 0;
             if (h && !state.prevHeld[note]) {   // fresh strike
-                var pos = lo === hi ? 0 : Math.round((note - lo) / (hi - lo) * (total - 1));
+                var pos = lo === hi ? 0 : Math.round((note - lo) / (hi - lo) * (axisLen - 1));
                 state.ripples.push({ pos: pos, age: 0, vel: Math.max(0.2, v) });
                 if (state.ripples.length > MAX) state.ripples.shift();
             }
@@ -69,7 +72,7 @@
         var lk    = (palettes.look && palettes.look.colors) ? palettes.look.colors : [];
         function colAt(p) {
             if (!lk.length) return { r: 255, g: 255, b: 255 };
-            return lk[Math.min(lk.length - 1, Math.floor(p / total * lk.length))];
+            return lk[Math.min(lk.length - 1, Math.floor(p / axisLen * lk.length))];
         }
 
         var speed = params.speed || 14;
@@ -80,17 +83,17 @@
         for (var i = 0; i < state.ripples.length; i++) {
             var r = state.ripples[i];
             r.age += dt;
-            if (r.age * speed < total + width) live.push(r);
+            if (r.age * speed < axisLen + width) live.push(r);
         }
         state.ripples = live;
 
         return fixtures.map(function(f, idxFix) {
             var g   = f.grid || { col: idxFix, row: 0 };
-            var idx = g.col + g.row * cols;
+            var idx = horizontal ? g.col : g.row;   // note-axis position (cols on a wide grid)
 
-            // Held-note glow base (this cell's note band).
-            var a = lo + Math.floor(idxFix       / n * (hi - lo + 1));
-            var b = lo + Math.floor((idxFix + 1) / n * (hi - lo + 1));
+            // Held-note glow base (this cell's note band along the note axis).
+            var a = lo + Math.floor(idx       / axisLen * (hi - lo + 1));
+            var b = lo + Math.floor((idx + 1) / axisLen * (hi - lo + 1));
             if (b <= a) b = a + 1;
             var base = 0;
             for (var note = a; note < b && note <= hi; note++)
@@ -104,7 +107,7 @@
                 var d = Math.abs(idx - r.pos);
                 var edge = Math.abs(d - radius);
                 if (edge < width) {
-                    var amp = (1 - edge / width) * Math.max(0, 1 - r.age * speed / total) * r.vel;
+                    var amp = (1 - edge / width) * Math.max(0, 1 - r.age * speed / axisLen) * r.vel;
                     if (amp > rip) { rip = amp; ripPos = r.pos; }
                 }
             }
