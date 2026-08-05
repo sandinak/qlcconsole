@@ -227,6 +227,31 @@ void EffectInstance::runTick()
             QString colStr;
             for (int c : sortedCols) colStr += QString::number(c) + ' ';
 
+            // For two reference columns (0 = the "dark" edge, 64 = the "works"
+            // edge), report which fixture/DMX the cell maps to and what the effect
+            // actually WROTE there — the ground truth for "col 0 emits nothing".
+            auto describeCol = [&](int wantCol) -> QString {
+                for (int i = 0; i < cells.size(); ++i)
+                {
+                    if (cells.at(i).col != wantCol) continue;
+                    const EffectCell &c = cells.at(i);
+                    Fixture *fxi = m_doc->fixture(c.fixtureId);
+                    if (!fxi) return QString("col%1=<no fixture %2>").arg(wantCol).arg(c.fixtureId);
+                    QList<quint32> hc = fxi->head(c.head).channels();
+                    int wr = 0; QString vals;
+                    const int base = int(fxi->address());
+                    for (const DmxWrite &w : writes)
+                        if (w.fixtureId == fxi->id() &&
+                            hc.contains(quint32(w.channel)))
+                        { wr++; if (vals.size()<40) vals += QString("%1=%2 ").arg(w.channel).arg(w.value); }
+                    return QString("col%1: fix%2 '%3' uni%4 addr%5 head%6 ch[%7..] writes=%8 {%9}")
+                        .arg(wantCol).arg(fxi->id()).arg(fxi->name().left(10))
+                        .arg(fxi->universe()).arg(base).arg(c.head)
+                        .arg(hc.isEmpty()?-1:int(hc.first())).arg(wr).arg(vals.trimmed());
+                }
+                return QString("col%1=<no cell>").arg(wantCol);
+            };
+
             QFile f(QString::fromLocal8Bit(dbgPath));
             if (f.open(QIODevice::Append | QIODevice::Text))
             {
@@ -237,9 +262,12 @@ void EffectInstance::runTick()
                    << " hi=" << int(m_paramValues.value("noteHigh", -1))
                    << " axis=" << int(m_paramValues.value("axis", -1))
                    << " src=" << int(m_paramValues.value("midiSource", -1))
+                   << " totalWrites=" << writes.size()
                    << " | held=[";
                 for (int n : heldNotes) ts << n << ' ';
                 ts << "] litCols=[" << colStr << "]\n";
+                if (!heldNotes.isEmpty())
+                    ts << "    " << describeCol(0) << "\n    " << describeCol(64) << "\n";
                 f.close();
             }
         }
