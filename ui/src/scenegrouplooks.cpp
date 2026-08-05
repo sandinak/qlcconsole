@@ -844,26 +844,116 @@ void SceneGroupLooks::slotLookFadeEdited(QTreeWidgetItem *item, int column)
     emit sceneModified();
 }
 
+void SceneGroupLooks::moveLooksToTarget(const QList<quint32> &pids, quint32 effectPid)
+{
+    if (pids.isEmpty())
+        return;
+
+    QList<quint32> order = m_scene->palettes();
+    // Pull the moved palettes out, preserving their current relative order.
+    QList<quint32> block;
+    foreach (quint32 pid, order)
+        if (pids.contains(pid))
+            block << pid;
+    foreach (quint32 pid, block)
+        order.removeAll(pid);
+
+    int pos;
+    if (effectPid == QLCPalette::invalidId())
+    {
+        // Base: insert before the first Effect (so isEffectScoped() is false).
+        pos = order.size();
+        for (int i = 0; i < order.size(); ++i)
+        {
+            QLCPalette *p = m_doc->palette(order.at(i));
+            if (p != NULL && p->type() == QLCPalette::Effect) { pos = i; break; }
+        }
+    }
+    else
+    {
+        // Feed effect: insert right after it (becomes its first child).
+        pos = order.indexOf(effectPid) + 1;
+        if (pos == 0)
+            pos = order.size();   // effect vanished — fall back to the end
+    }
+    for (int i = 0; i < block.size(); ++i)
+        order.insert(pos + i, block.at(i));
+
+    if (m_scene->reorderPalettes(order))
+    {
+        m_doc->setModified();
+        emit sceneModified();
+        reload();
+    }
+}
+
 void SceneGroupLooks::slotLookContextMenu(const QPoint &pos)
 {
     QTreeWidgetItem *clicked = m_lookList->itemAt(pos);
     QList<QTreeWidgetItem*> rows = m_lookList->selectedItems();
     if (clicked != NULL && rows.contains(clicked) == false)
         rows = QList<QTreeWidgetItem*>() << clicked;
-    // Only looks that carry a fade (non-Effect, editable) can be reset.
+    // Only looks that carry a fade (non-Effect, editable) can be reset / re-homed.
     rows.erase(std::remove_if(rows.begin(), rows.end(), [](QTreeWidgetItem *it) {
                    return (it->flags() & Qt::ItemIsEditable) == 0;
                }), rows.end());
     if (rows.isEmpty())
         return;
 
+    // Collect the moved palette ids + whether any row is currently nested under
+    // an effect (→ can become base) or at the top level (→ can feed an effect).
+    QList<quint32> movePids;
+    bool anyNested = false, anyBase = false;
+    foreach (QTreeWidgetItem *it, rows)
+    {
+        movePids << it->data(LookColName, Qt::UserRole).toUInt();
+        if (it->parent() != NULL) anyNested = true; else anyBase = true;
+    }
+    // The look's effects, in list order, for the "Feed effect ▸" submenu.
+    QList<QPair<quint32,QString>> effects;
+    foreach (quint32 pid, m_scene->palettes())
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (p != NULL && p->type() == QLCPalette::Effect)
+            effects << qMakePair(pid, p->name());
+    }
+
     QMenu menu(m_lookList);
+    // --- Role: base (fixtures) vs feed an effect ---
+    QAction *toBase = NULL;
+    QHash<QAction*, quint32> feedActions;
+    if (!effects.isEmpty())
+    {
+        if (anyNested)
+            toBase = menu.addAction(tr("Move to fixtures (static base)"));
+        if (anyBase || anyNested)
+        {
+            QMenu *feed = menu.addMenu(tr("Feed effect"));
+            for (const auto &e : effects)
+            {
+                QAction *a = feed->addAction(e.second.isEmpty() ? tr("(effect)") : e.second);
+                feedActions.insert(a, e.first);
+            }
+        }
+        menu.addSeparator();
+    }
     QAction *rin   = menu.addAction(tr("Reset Fade In to step"));
     QAction *rout  = menu.addAction(tr("Reset Fade Out to step"));
     QAction *rboth = menu.addAction(tr("Reset both to step"));
     QAction *chosen = menu.exec(m_lookList->viewport()->mapToGlobal(pos));
     if (chosen == NULL)
         return;
+
+    if (chosen == toBase)
+    {
+        moveLooksToTarget(movePids, QLCPalette::invalidId());
+        return;
+    }
+    if (feedActions.contains(chosen))
+    {
+        moveLooksToTarget(movePids, feedActions.value(chosen));
+        return;
+    }
 
     const bool resetIn  = (chosen == rin  || chosen == rboth);
     const bool resetOut = (chosen == rout || chosen == rboth);

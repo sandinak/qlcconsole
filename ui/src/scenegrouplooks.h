@@ -106,6 +106,11 @@ private:
      *  precedence (used by both the buttons and internal drag-drop). */
     void applyLookOrderFromList();
 
+    /** Re-home look palettes @p pids in the ordered list: nest them right after
+     *  @p effectPid (feed that effect), or — when @p effectPid is invalid — place
+     *  them before the first effect (a static fixture base). Rebuilds the tree. */
+    void moveLooksToTarget(const QList<quint32> &pids, quint32 effectPid);
+
     /** After applying look(s): strip baked values the applied palettes now
      *  control (palette paramount), then offer to clear any remaining baked
      *  channels no applied look covers. */
