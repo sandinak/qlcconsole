@@ -377,20 +377,32 @@ QJSValue EffectInstance::buildFixturesArray(const QList<quint32> &fxIds)
     {
         Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
         const QList<quint32> grpIds = scene ? scene->fixtureGroups() : QList<quint32>();
-        if (grpIds.size() == 1)
+        // Lay each laid-out group side by side, LEFT TO RIGHT, into one combined
+        // grid: group N starts at column = sum of the widths before it. So two
+        // 64-wide panels next to each other read as one 128-wide grid, and a
+        // pixel effect / MIDI-note spread runs across the whole physical width.
+        int xOffset = 0, maxRows = 0;
+        bool anyLayout = false;
+        for (quint32 gid : grpIds)
         {
-            FixtureGroup *grp = m_doc->fixtureGroup(grpIds.first());
-            if (grp && grp->size().width() > 0 && grp->size().height() > 0
-                    && !grp->headsMap().isEmpty())
-            {
-                gridCols = grp->size().width();
-                gridRows = grp->size().height();
-                const QMap<QLCPoint, GroupHead> heads = grp->headsMap();
-                for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
-                    // First cell wins for a multi-head fixture (effect is per-id).
-                    if (!gridPos.contains(it.value().fxi))
-                        gridPos.insert(it.value().fxi, QPoint(it.key().x(), it.key().y()));
-            }
+            FixtureGroup *grp = m_doc->fixtureGroup(gid);
+            if (!grp || grp->size().width() <= 0 || grp->size().height() <= 0
+                     || grp->headsMap().isEmpty())
+                continue;
+            const QMap<QLCPoint, GroupHead> heads = grp->headsMap();
+            for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
+                // First cell wins for a multi-head fixture (effect is per-id).
+                if (!gridPos.contains(it.value().fxi))
+                    gridPos.insert(it.value().fxi,
+                                   QPoint(xOffset + it.key().x(), it.key().y()));
+            xOffset += grp->size().width();
+            if (grp->size().height() > maxRows) maxRows = grp->size().height();
+            anyLayout = true;
+        }
+        if (anyLayout)
+        {
+            gridCols = xOffset;
+            gridRows = maxRows;
         }
     }
 

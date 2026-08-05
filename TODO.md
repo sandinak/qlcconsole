@@ -31,6 +31,11 @@ to DONE.md when it ships. See also the session memory under
 - **Effects respect the look's master Dimmer — SHIPPED** (563c4b3b1): colour
   output scales by the look's Dimmer on dimmerless fixtures; dimmered fixtures
   carry it on the master channel. Move to DONE.md next pass.
+- **Move circuits / power usage to the footer bar** — the power/amperage &
+  circuit load estimator currently lives in the Programming space; move it to the
+  footer bar (like the timecode/load chips) so it's an always-visible status
+  readout and reclaims programming canvas. *(Branson request)* See memory: power
+  estimation feature.
 - **New control surface — integrate (TBD)** — a new hardware control surface to
   bring in (details TBD). Fold into the MIDI-mapping work below once specced.
 - **MIDI controller mappings — revisit + PMJ version** — go back to the APC40

@@ -18,8 +18,9 @@
     effect.notes = "Each note strike launches a comet from that note's position along the fixture grid (or strip). Direction is the reverse of the melodic interval: a higher note than the last flies one way, a lower note the other. Speed sets travel; Tail the trail length. Colours from the look's palette.";
 
     effect.parameters = [
-        { name: "noteLow",  description: "Lowest MIDI note",  min: 0, max: 127, defaultValue: 36 },
-        { name: "noteHigh", description: "Highest MIDI note", min: 0, max: 127, defaultValue: 96 },
+        { name: "noteLow",  description: "Lowest MIDI note (C2=36, C3=48, C4=60)",  min: 0, max: 127, defaultValue: 36 },
+        { name: "noteHigh", description: "Highest MIDI note (C6=84, C7=96)",        min: 0, max: 127, defaultValue: 84 },
+        { name: "axis",     description: "Note spread axis", defaultValue: 0, values: ["Horizontal (columns)", "Vertical (rows)", "Auto (wider)"] },
         { name: "speed",    description: "Comet speed (cells/sec)", min: 2, max: 80, defaultValue: 24 },
         { name: "tail",     description: "Tail length (cells)",     min: 2, max: 24, defaultValue: 6 }
     ];
@@ -32,9 +33,10 @@
 
         var g0    = fixtures[0].grid || { cols: n, rows: 1 };
         var cols  = g0.cols || n, rows = g0.rows || 1;
-        // Notes/comets travel along the WIDER grid axis (columns for a wide grid);
-        // the other axis mirrors as bars.
-        var horizontal = cols >= rows;
+        // Notes/comets travel along the chosen grid axis (default Horizontal =
+        // columns); the other axis mirrors as bars.
+        var ax = params.axis | 0;   // 0=Horizontal, 1=Vertical, 2=Auto
+        var horizontal = (ax === 1) ? false : (ax === 2) ? (cols >= rows) : true;
         var axisLen = Math.max(1, horizontal ? cols : rows);
 
         var m  = data && data.midi;

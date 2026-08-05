@@ -17,8 +17,9 @@
     effect.notes = "A soft held-note glow plus a ripple that radiates from each note the instant it's struck (mapped across the fixture grid, or a 1-D strip). Speed sets ripple travel; Width the ring thickness. Notes map across [Note low..Note high]. Colours from the look's palette.";
 
     effect.parameters = [
-        { name: "noteLow",  description: "Lowest MIDI note",  min: 0, max: 127, defaultValue: 36 },
-        { name: "noteHigh", description: "Highest MIDI note", min: 0, max: 127, defaultValue: 96 },
+        { name: "noteLow",  description: "Lowest MIDI note (C2=36, C3=48, C4=60)",  min: 0, max: 127, defaultValue: 36 },
+        { name: "noteHigh", description: "Highest MIDI note (C6=84, C7=96)",        min: 0, max: 127, defaultValue: 84 },
+        { name: "axis",     description: "Note spread axis", defaultValue: 0, values: ["Horizontal (columns)", "Vertical (rows)", "Auto (wider)"] },
         { name: "speed",    description: "Ripple speed (cells/sec)", min: 1, max: 60, defaultValue: 14 },
         { name: "width",    description: "Ripple width (cells)",     min: 1, max: 12, defaultValue: 3 },
         { name: "glow",     description: "Held-note glow fade (s)",  min: 0.1, max: 4, defaultValue: 0.7 }
@@ -32,9 +33,10 @@
 
         var g0    = fixtures[0].grid || { cols: n, rows: 1 };
         var cols  = g0.cols || n, rows = g0.rows || 1;
-        // Notes spread along the WIDER grid axis (columns for a wide grid); the
-        // ripple travels along that axis and the other axis mirrors it as bars.
-        var horizontal = cols >= rows;
+        // Notes spread along the chosen grid axis; the ripple travels along it and
+        // the other axis mirrors as bars. Default Horizontal (columns).
+        var ax = params.axis | 0;   // 0=Horizontal, 1=Vertical, 2=Auto
+        var horizontal = (ax === 1) ? false : (ax === 2) ? (cols >= rows) : true;
         var axisLen = Math.max(1, horizontal ? cols : rows);
 
         var m  = data && data.midi;

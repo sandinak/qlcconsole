@@ -18,8 +18,9 @@
     effect.notes = "Tiles the note range [Note low..Note high] across the fixtures: each note lights its band and fades on release. Hold the sustain pedal (CC64) for a slower fade. Colours come from the look's stacked Colour palettes, spread by position. Set Note low/high to match your controller.";
 
     effect.parameters = [
-        { name: "noteLow",     description: "Lowest MIDI note",         min: 0, max: 127, defaultValue: 36 },
-        { name: "noteHigh",    description: "Highest MIDI note",        min: 0, max: 127, defaultValue: 96 },
+        { name: "noteLow",     description: "Lowest MIDI note (C2=36, C3=48, C4=60)",  min: 0, max: 127, defaultValue: 36 },
+        { name: "noteHigh",    description: "Highest MIDI note (C6=84, C7=96, C8=108)", min: 0, max: 127, defaultValue: 84 },
+        { name: "axis",        description: "Note spread axis",         defaultValue: 0, values: ["Horizontal (columns)", "Vertical (rows)", "Auto (wider)"] },
         { name: "release",     description: "Release fade (seconds)",   min: 0.05, max: 5.0,  defaultValue: 0.6 },
         { name: "sustainFade", description: "Sustained fade (seconds)", min: 0.2,  max: 20.0, defaultValue: 6.0 },
         { name: "velFloor",    description: "Min brightness for held notes (0-31)", min: 0, max: 31, defaultValue: 0 }
@@ -69,7 +70,8 @@
         // bar". A 1-D strip (rows=1) just maps note → fixture as before.
         var g0 = fixtures[0].grid || { cols: n, rows: 1 };
         var cols = g0.cols || n, rows = g0.rows || 1;
-        var horizontal = cols >= rows;
+        var ax = params.axis | 0;   // 0=Horizontal, 1=Vertical, 2=Auto
+        var horizontal = (ax === 1) ? false : (ax === 2) ? (cols >= rows) : true;
         var axisLen = Math.max(1, horizontal ? cols : rows);
 
         return fixtures.map(function(f, i) {
