@@ -21,8 +21,12 @@
 #define CREATEFIXTUREGROUP_H
 
 #include <QDialog>
+#include <QList>
 
 #include "ui_createfixturegroup.h"
+
+class Doc;
+class FixtureGroup;
 
 /** @addtogroup ui_fixtures
  * @{
@@ -41,6 +45,20 @@ public:
 
     void setSize(const QSize& size);
     QSize size() const;
+
+    /** The ONE way to create a fixture group from a selection, shared by the
+     *  Fixture Manager, the Programming tab and the Studio so the flow is
+     *  consistent everywhere: suggest a grid (from the fixtures' 2-D layout when
+     *  placed, else a near-square of the head count), prompt name+size, then
+     *  arrange the fixtures into the grid IN PHYSICAL ORDER (rows top→bottom,
+     *  columns left→right). Returns the new group, or NULL if cancelled/empty. */
+    static FixtureGroup *createFromFixtures(Doc *doc,
+                                            const QList<quint32> &fixtureIds,
+                                            QWidget *parent);
+
+    /** Suggest a grid size for @p fixtureIds — a real cols×rows from their 2-D
+     *  positions if placed, otherwise a near-square of the total head count. */
+    static QSize suggestGrid(Doc *doc, const QList<quint32> &fixtureIds);
 };
 
 /** @} */

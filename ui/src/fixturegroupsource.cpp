@@ -394,40 +394,11 @@ void FixtureGroupSource::keyPressEvent(QKeyEvent *event)
 
 void FixtureGroupSource::createGroupFromFixtures(const QList<quint32> &fixtureIds)
 {
-    if (fixtureIds.isEmpty())
-        return;
-
-    // Total head count across the selection sizes a roughly-square grid to
-    // drop into (mirrors FixtureManager::addFixtureToGroup).
-    int headTotal = 0;
-    foreach (quint32 fid, fixtureIds)
-    {
-        Fixture *fxi = m_doc->fixture(fid);
-        if (fxi != NULL)
-            headTotal += fxi->heads();
-    }
-    qreal side = sqrt(qMax(1, headTotal));
-    if (side != floor(side))
-        side += 1; // not a perfect square: give the grid an extra row/column
-    if (side < 1)
-        side = 4;
-
-    CreateFixtureGroup cfg(this);
-    cfg.setSize(QSize(int(side), int(side)));
-    if (cfg.exec() != QDialog::Accepted)
-        return;
-
-    FixtureGroup *grp = new FixtureGroup(m_doc);
-    grp->setName(cfg.name());
-    grp->setSize(cfg.size());
-    m_doc->addFixtureGroup(grp);
-
-    foreach (quint32 fid, fixtureIds)
-        grp->assignFixture(fid); // lays each fixture's heads into the grid
-
-    m_doc->setModified();
-    // addFixtureGroup already triggers a reload via Doc::fixtureGroupAdded; the
-    // new group appears in the tree ready to drag onto a scene.
+    // The ONE shared creator (grid heuristic from the fixtures' 2-D layout,
+    // name/size prompt, physical-order arrangement) — same code the Fixture
+    // Manager and Studio use, so group creation is consistent app-wide.
+    // addFixtureGroup() triggers a tree reload via Doc::fixtureGroupAdded.
+    CreateFixtureGroup::createFromFixtures(m_doc, fixtureIds, this);
 }
 
 QMimeData* FixtureGroupSource::buildMimeData(const QList<QTreeWidgetItem*> &items) const

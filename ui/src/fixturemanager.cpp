@@ -2262,7 +2262,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     if (selFixtures.isEmpty() == false || selGroups.isEmpty() == false)
     {
         menu.addSeparator();
-        copyToNew = menu.addAction(tr("Copy to new group…"));
+        copyToNew = menu.addAction(tr("Create group from selection…"));
 
         const QList<FixtureGroup*> groups = m_doc->fixtureGroups();
         if (groups.isEmpty() == false)
@@ -2375,18 +2375,31 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
     else if (chosen == copyToNew)
     {
-        bool ok = false;
-        const QString name = QInputDialog::getText(
-            this, tr("Copy to new group"), tr("New group name:"),
-            QLineEdit::Normal, tr("New Group"), &ok);
-        if (ok)
+        if (selGroups.isEmpty() && !selFixtures.isEmpty())
         {
-            FixtureGroup *ng = new FixtureGroup(m_doc);
-            ng->setName(name.trimmed().isEmpty() ? tr("New Group") : name.trimmed());
-            ng->setSize(QSize(1, 1)); // grown to fit by copySelectionIntoGroup
-            m_doc->addFixtureGroup(ng);
-            copySelectionIntoGroup(ng, selFixtures, selGroups);
-            updateView();
+            // Loose fixtures → the shared creator (grid heuristic + name/size
+            // prompt + physical-order arrangement), consistent with the
+            // Programming tab and Studio.
+            if (CreateFixtureGroup::createFromFixtures(m_doc, selFixtures, this) != NULL)
+                updateView();
+        }
+        else
+        {
+            // Selection includes existing groups → keep the block-copy behaviour
+            // (each source group placed as a sub-group block, grown to fit).
+            bool ok = false;
+            const QString name = QInputDialog::getText(
+                this, tr("Create group from selection"), tr("New group name:"),
+                QLineEdit::Normal, tr("New Group"), &ok);
+            if (ok)
+            {
+                FixtureGroup *ng = new FixtureGroup(m_doc);
+                ng->setName(name.trimmed().isEmpty() ? tr("New Group") : name.trimmed());
+                ng->setSize(QSize(1, 1)); // grown to fit by copySelectionIntoGroup
+                m_doc->addFixtureGroup(ng);
+                copySelectionIntoGroup(ng, selFixtures, selGroups);
+                updateView();
+            }
         }
     }
     else if (copyIntoMenu != NULL && copyIntoMenu->actions().contains(chosen))
