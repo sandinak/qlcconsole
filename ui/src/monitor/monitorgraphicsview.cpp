@@ -2922,6 +2922,19 @@ void MonitorGraphicsView::updateAimLines()
             if (!mfi)
                 continue;
 
+            // Only AIMABLE fixtures (movers, with Pan/Tilt) draw a src→target
+            // trace — a target aims beams, and a fixed head (pixel panel, wash)
+            // has nothing to aim, so a trace to it is meaningless (and the Aim
+            // palette is a no-op on it anyway).
+            Fixture *fxi = m_doc->fixture(fid);
+            if (fxi == nullptr)
+                continue;
+            const bool canAim =
+                fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) != QLCChannel::invalid() ||
+                fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) != QLCChannel::invalid();
+            if (!canAim)
+                continue;
+
             QPointF fixPx = mfi->sceneBoundingRect().center();
 
             QGraphicsLineItem *line = m_scene->addLine(
@@ -2948,6 +2961,12 @@ void MonitorGraphicsView::updateAimLines()
             }
         }
     }
+
+    // Force a repaint of the affected region: when this runs from a target
+    // REMOVAL (lines just deleted, none re-added) the scene didn't always
+    // invalidate, leaving ghost traces until the next resize.
+    if (m_scene != nullptr)
+        m_scene->update();
 }
 
 void MonitorGraphicsView::setActiveScene(quint32 sceneId)
