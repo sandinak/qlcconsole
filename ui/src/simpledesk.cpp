@@ -557,6 +557,7 @@ void SimpleDesk::initSliderView(bool fullMode)
     {
         scrollArea = new QScrollArea();
         scrollArea->setWidgetResizable(true);
+        scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
         QFrame* grpBox = new QFrame(scrollArea);
         grpBox->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Preferred);
@@ -577,6 +578,10 @@ void SimpleDesk::initSliderView(bool fullMode)
                 console = new FixtureConsole(scrollArea, m_doc, FixtureConsole::GroupEven, false);
             console->setFixture(fixture->id());
             console->enableResetButton(true);
+            // Give each fixture a usable minimum width so a rig with many
+            // fixtures OVERFLOWS the row and the horizontal scrollbar appears,
+            // instead of squishing every slider down to nothing.
+            console->setMinimumWidth(qMax(72, int(fixture->channels()) * 26 + 44));
             quint32 absoluteAddr = fixture->universeAddress();
             QByteArray fxValues = fixture->channelValues();
             for (quint32 i = 0; i < fixture->channels(); i++)
