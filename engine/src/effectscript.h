@@ -175,6 +175,12 @@ public:
 private:
     bool parseMeta();
 
+    /** Wrap a QLC+ RGBScript (rgbMap/rgbMapStepCount API) as an effect: parse its
+     *  `properties` into params, seed Math.random for reproducibility, and install
+     *  a host tick() that maps its per-cell output onto the fixtures via the grid.
+     *  Called from load() when the script exposes rgbMap() but no tick(). */
+    bool loadRGBScript();
+
     QJSEngine m_engine;
     QJSValue  m_script;   // the object returned by the IIFE
     QJSValue  m_tickFn;   // the tick() function ref

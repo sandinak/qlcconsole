@@ -7,6 +7,7 @@
 
 #include "effectscriptcache.h"
 #include "qlcfile.h"
+#include "qlcconfig.h"   // RGBSCRIPTDIR / USERRGBSCRIPTDIR
 
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -33,6 +34,11 @@ void EffectScriptCache::rescan()
     // matches EffectPresetCache::rescan() and BundleCache::rescan().
     scanDir(userScriptsDirectory());
     scanDir(systemScriptsDirectory());
+    // RGBScript library (QLC+ RGB Matrix scripts) — run through the EffectScript
+    // compat host. Scanned AFTER effect scripts so a purpose-built effect of the
+    // same name wins (first-found-wins keyed on display name).
+    scanRgbDir(userRgbScriptsDirectory());
+    scanRgbDir(systemRgbScriptsDirectory());
     for (const QDir &d : m_extraDirs)
         scanDir(d);
 }
@@ -91,6 +97,29 @@ QDir EffectScriptCache::userScriptsDirectory()
                                   QStringList() << "*.js");
 }
 
+QDir EffectScriptCache::systemRgbScriptsDirectory()
+{
+    return QLCFile::systemDirectory(QString(RGBSCRIPTDIR), QString(".js"));
+}
+
+QDir EffectScriptCache::userRgbScriptsDirectory()
+{
+    return QLCFile::userDirectory(QString(USERRGBSCRIPTDIR), QString(RGBSCRIPTDIR),
+                                  QStringList() << "*.js");
+}
+
+void EffectScriptCache::scanRgbDir(const QDir &dir)
+{
+    if (!dir.exists())
+        return;
+    scanDir(dir);   // .js directly in the dir (packaged layout)
+    // Dev build symlinks the source dir one level down (Resources/RGBScripts/
+    // rgbscripts -> resources/rgbscripts); follow immediate subdirs too.
+    const QStringList subs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable);
+    for (const QString &s : subs)
+        scanDir(QDir(dir.absoluteFilePath(s)));
+}
+
 void EffectScriptCache::scanDir(const QDir &dir)
 {
     if (!dir.exists() || !dir.isReadable())
@@ -147,6 +176,21 @@ EffectScriptCache::ScriptMeta EffectScriptCache::parseMeta(const QString &path)
     meta.displayName  = extractField(src, "name");
     meta.description  = extractField(src, "description");
     meta.notes        = extractField(src, "notes");
+
+    // RGBScript (QLC+ RGB Matrix API): no effect.name, but algo.name + rgbMap().
+    // Run through the EffectScript compat host; treat as an RGB pixel effect.
+    if (meta.displayName.isEmpty() &&
+        src.contains(QStringLiteral("rgbMap")) &&
+        !src.contains(QStringLiteral("effect.tick")))
+    {
+        QRegularExpression nameRe(
+            QStringLiteral("\\balgo\\.name\\s*=\\s*[\"']([^\"']*)[\"']"));
+        const QRegularExpressionMatch nm = nameRe.match(src);
+        if (nm.hasMatch())
+            meta.displayName = nm.captured(1);
+        meta.fixtureTypes = QStringList() << QStringLiteral("rgb") << QStringLiteral("dimmer");
+        return meta;   // fixtureTypes set explicitly; skip the effect.* parsing below
+    }
 
     // Parse fixtureTypes array: effect.fixtureTypes = ["a", "b", ...]
     QRegularExpression ftRe("effect\\.fixtureTypes\\s*=\\s*\\[([^\\]]*)\\]");

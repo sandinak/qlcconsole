@@ -8,7 +8,70 @@
 #include "effectscript.h"
 
 #include <QFile>
+#include <QFileInfo>
+#include <QMap>
 #include <QDebug>
+
+// --- RGBScript compatibility host (see loadRGBScript) ------------------------
+
+// Seeded xorshift Math.random so RGBScripts (which use Math.random freely) stay
+// reproducible — the effect-script purity contract, relocated into a seed rather
+// than removed. Per-instance engine, so each run is deterministic.
+static const char *RGB_SEED_RANDOM =
+    "(function(){var s=305419896;Math.random=function(){"
+    "s^=s<<13;s^=s>>>17;s^=s<<5;return (s>>>0)/4294967296;};})();";
+
+// Applies the host's param values to the RGBScript via its declared setter fns
+// (__rgbProps maps param name -> setter method name on the algo).
+static const char *RGB_APPLY_PROPS_FN =
+    "function __rgbApplyProps(A,params){for(var k in __rgbProps){var fn=__rgbProps[k];"
+    "if(params[k]!==undefined&&typeof A[fn]==='function'){try{A[fn](params[k]);}catch(e){}}}}";
+
+// The effect wrapper: an object with tick() that drives the RGBScript. Reads the
+// grid size from the fixtures, applies params, feeds the look's colour(s), steps
+// from time, calls rgbMap(), and maps each fixture's cell to an r/g/b intent.
+static const char *RGB_HOST_WRAPPER = R"JS(
+(function(){
+  var A = __rgbAlgo;
+  var effect = new Object;
+  effect.apiVersion = 1;
+  effect.name = A.name || "RGB Effect";
+  effect.tick = function(fixtures, inputs, palettes, params, state){
+    var n = fixtures.length; if (n === 0) return [];
+    var g0 = fixtures[0].grid || {cols:n, rows:1};
+    var cols = g0.cols || n, rows = g0.rows || 1;
+
+    __rgbApplyProps(A, params);
+
+    // Colour: feed the look's first colour as the mono rgb; stacked look colours
+    // via rgbMapSetColors for multi-colour (API v3+) scripts.
+    var lk = (palettes.look && palettes.look.colors) ? palettes.look.colors : [];
+    var rgbInt = 0xFFFFFF;
+    if (lk.length && lk[0].r !== undefined) rgbInt = (lk[0].r<<16)|(lk[0].g<<8)|lk[0].b;
+    if ((A.apiVersion|0) >= 3 && typeof A.rgbMapSetColors === "function" && lk.length){
+      var arr = []; for (var i=0;i<lk.length;i++) arr.push((lk[i].r<<16)|(lk[i].g<<8)|(lk[i].b));
+      try { A.rgbMapSetColors(arr); } catch(e){}
+    }
+
+    var steps = 1; try { steps = A.rgbMapStepCount(cols, rows) | 0; } catch(e){}
+    if (steps < 1) steps = 1;
+    var rate = (params.rgbSpeed !== undefined) ? params.rgbSpeed : 8;
+    var step = Math.floor((inputs._time||0) * rate) % steps; if (step < 0) step += steps;
+
+    var map; try { map = A.rgbMap(cols, rows, rgbInt, step); } catch(e){ map = null; }
+
+    return fixtures.map(function(f){
+      var g = f.grid || {col:0,row:0};
+      var rr = map && map[g.row];
+      var c = rr ? (rr[g.col]|0) : 0;
+      var out = { r:(c>>16)&255, g:(c>>8)&255, b:(c&255) };
+      if (f.hasDimmer) out.dimmer = Math.max(out.r, Math.max(out.g, out.b))/255;
+      return out;
+    });
+  };
+  return effect;
+})()
+)JS";
 
 EffectScript::EffectScript()
 {
@@ -58,6 +121,13 @@ bool EffectScript::load(const QString &path)
                    << "script must return an object (use an IIFE)";
         return false;
     }
+
+    // RGBScript compatibility: a script exposing the QLC+ RGB Matrix API
+    // (rgbMap()/rgbMapStepCount()) but no tick() is run through a host wrapper
+    // that maps its per-cell output onto the effect fixtures via the grid context.
+    if (m_script.property("rgbMap").isCallable() &&
+        !m_script.property("tick").isCallable())
+        return loadRGBScript();
 
     m_tickFn = m_script.property("tick");
     qDebug() << "[ES-DIAG] tick: isCallable=" << m_tickFn.isCallable();
@@ -214,6 +284,119 @@ bool EffectScript::parseMeta()
         }
     }
 
+    return true;
+}
+
+bool EffectScript::loadRGBScript()
+{
+    QJSValue algo = m_script;   // the RGBScript's algo object (from the IIFE)
+
+    m_name   = algo.property("name").toString();
+    if (m_name.isEmpty())
+        m_name = QFileInfo(m_filePath).baseName();
+    m_author       = algo.property("author").toString();
+    m_apiVersion   = 1;
+    m_version      = 1;
+    m_fixtureTypes = QStringList() << "rgb" << "dimmer";
+
+    // Translate the RGBScript's `properties` strings into effect params, and build
+    // a name -> setter-method map so the host can push param values back in.
+    //   "name:density|type:range|display:Density|values:1,100|write:setDensity|read:getDensity"
+    QJSValue setterMap = m_engine.newObject();
+    QJSValue props = algo.property("properties");
+    if (props.isArray())
+    {
+        const int len = props.property("length").toInt();
+        for (int i = 0; i < len; ++i)
+        {
+            const QString spec = props.property(i).toString();
+            QMap<QString, QString> kv;
+            const QStringList pairs = spec.split('|', Qt::SkipEmptyParts);
+            for (const QString &pair : pairs)
+            {
+                const int c = pair.indexOf(':');
+                if (c > 0)
+                    kv.insert(pair.left(c).trimmed(), pair.mid(c + 1).trimmed());
+            }
+            const QString pname = kv.value("name");
+            if (pname.isEmpty())
+                continue;
+
+            ParamDef def;
+            def.name        = pname;
+            def.description = kv.value("display", pname);
+            const QString type = kv.value("type");
+            if (type == QLatin1String("range"))
+            {
+                const QStringList vv = kv.value("values").split(',');
+                if (vv.size() == 2) { def.min = vv[0].toFloat(); def.max = vv[1].toFloat(); }
+            }
+            else if (type == QLatin1String("bool"))
+            {
+                def.min = 0.0f; def.max = 1.0f;
+                def.enumValues << QStringLiteral("Off") << QStringLiteral("On");
+            }
+            else if (type == QLatin1String("list"))
+            {
+                // Dropdown: "values:A,B,C" → integer-index enum (the RGBScript's
+                // setter takes the index).
+                const QStringList opts = kv.value("values").split(',', Qt::SkipEmptyParts);
+                for (const QString &o : opts)
+                    def.enumValues << o.trimmed();
+                def.min = 0.0f;
+                def.max = float(qMax(0, def.enumValues.size() - 1));
+            }
+            // Default from the read fn, else the current property value.
+            const QString readFn = kv.value("read");
+            QJSValue cur;
+            if (!readFn.isEmpty() && algo.property(readFn).isCallable())
+                cur = algo.property(readFn).callWithInstance(algo);
+            else
+                cur = algo.property(pname);
+            if (cur.isNumber())
+                def.defaultValue = (float)cur.toNumber();
+            m_params.append(def);
+
+            const QString writeFn = kv.value("write");
+            if (!writeFn.isEmpty())
+                setterMap.setProperty(pname, writeFn);
+        }
+    }
+
+    // Animation-rate param: RGBScripts step through rgbMapStepCount frames driven
+    // by the RGB Matrix function clock; here we drive from time, so expose a rate.
+    {
+        ParamDef def;
+        def.name = QStringLiteral("rgbSpeed");
+        def.description = QStringLiteral("Animation speed (steps/sec)");
+        def.min = 0.5f; def.max = 60.0f; def.defaultValue = 8.0f;
+        m_params.append(def);
+    }
+
+    // Wire up the host wrapper and run it to produce the effect object.
+    m_engine.globalObject().setProperty(QStringLiteral("__rgbAlgo"), algo);
+    m_engine.globalObject().setProperty(QStringLiteral("__rgbProps"), setterMap);
+    m_engine.evaluate(QString::fromLatin1(RGB_SEED_RANDOM));
+    m_engine.evaluate(QString::fromLatin1(RGB_APPLY_PROPS_FN));
+
+    QJSValue wrapped = m_engine.evaluate(QString::fromLatin1(RGB_HOST_WRAPPER),
+                                         QStringLiteral("rgbhost"));
+    if (wrapped.isError() || !wrapped.isObject())
+    {
+        qWarning() << "[EffectScript] RGB host wrapper failed for" << m_filePath
+                   << (wrapped.isError() ? wrapped.toString() : QString());
+        return false;
+    }
+    m_script = wrapped;
+    m_tickFn = m_script.property("tick");
+    if (!m_tickFn.isCallable())
+    {
+        qWarning() << "[EffectScript] RGB host wrapper has no tick()" << m_filePath;
+        return false;
+    }
+
+    m_valid = true;
+    qDebug() << "[ES-DIAG] RGBScript host load OK:" << m_filePath << "name=" << m_name;
     return true;
 }
 

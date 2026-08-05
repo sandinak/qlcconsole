@@ -63,9 +63,15 @@ public:
     // --- Standard search directories ---
     static QDir systemScriptsDirectory();
     static QDir userScriptsDirectory();
+    // RGBScript (QLC+ RGB Matrix) library — run via the EffectScript compat host.
+    static QDir systemRgbScriptsDirectory();
+    static QDir userRgbScriptsDirectory();
 
 private:
     void scanDir(const QDir &dir);
+    /** Scan an RGBScript directory and its immediate subdirs (the dev build
+     *  symlinks the source dir one level down; production has .js directly). */
+    void scanRgbDir(const QDir &dir);
     static ScriptMeta parseMeta(const QString &path);
     static QString extractField(const QString &src, const QString &field);
 
