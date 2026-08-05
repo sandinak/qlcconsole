@@ -970,6 +970,27 @@ int QLCPalette::colorSetOffset(Doc *doc, const QList<quint32> &orderedPalettes, 
     return offset;
 }
 
+bool QLCPalette::isEffectScoped(Doc *doc, const QList<quint32> &orderedPalettes, quint32 paletteId)
+{
+    // Ordering paradigm for a look's palette list: a Colour/Dimmer palette placed
+    // AFTER an Effect palette "belongs to the effect" — it feeds the effect's
+    // colours (palettes.look) and must NOT be painted onto the fixtures as a
+    // static base. Otherwise the effect's output (which uses those same colours)
+    // is HTP-merged over an identical base and vanishes — e.g. the left, blue end
+    // of a note-effect gradient landing on an already-blue fixture. Palettes
+    // BEFORE the first Effect are the ordinary static base.
+    bool sawEffect = false;
+    for (quint32 pid : orderedPalettes)
+    {
+        if (pid == paletteId)
+            return sawEffect;
+        QLCPalette *p = doc->palette(pid);
+        if (p != NULL && p->type() == Effect)
+            sawEffect = true;
+    }
+    return false;
+}
+
 QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> groups,
                                                       const Scene *owner, int colorSetOffset)
 {

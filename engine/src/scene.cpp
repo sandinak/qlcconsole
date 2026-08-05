@@ -1017,6 +1017,8 @@ void Scene::handleFadersEnd(MasterTimer *timer)
         QLCPalette *palette = doc()->palette(pit.key());
         if (palette == NULL || palette->type() == QLCPalette::Effect)
             continue;
+        if (QLCPalette::isEffectScoped(doc(), palettes(), pit.key()))
+            continue;  // effect-scoped colour is not painted, so no fade-out for it
         uint t = uint(outMs);
         if (tempoType() == Beats)
             t = beatsToTime(t, timer->beatTimeDuration());
@@ -1125,6 +1127,11 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                     continue;
                 if (palette->type() == QLCPalette::Effect)
                     continue; // EffectScriptRunner handles these as a DMXSource
+                // A Colour/Dimmer palette AFTER an Effect in the list belongs to
+                // the effect (feeds its colours), so it is NOT painted as a static
+                // base — see QLCPalette::isEffectScoped.
+                if (QLCPalette::isEffectScoped(doc(), palettes(), paletteID))
+                    continue;
 
                 const int inOverride = paletteFadeMap.value(paletteID).fadeInMs;
                 const uint pFade = inOverride >= 0 ? uint(inOverride) : fadeIn;
@@ -1172,6 +1179,8 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 if (palette == NULL) continue;
                 if (palette->type() == QLCPalette::Effect)
                     continue;  // EffectScriptRunner owns these
+                if (QLCPalette::isEffectScoped(doc(), palettes(), paletteID))
+                    continue;  // effect-scoped colour, not a static base
                 if (positionsOnly &&
                     palette->type() != QLCPalette::Aim &&
                     palette->type() != QLCPalette::PanTilt) continue;

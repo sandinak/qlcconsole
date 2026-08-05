@@ -244,10 +244,17 @@ void EffectInstance::runTick()
                         if (w.fixtureId == fxi->id() &&
                             hc.contains(quint32(w.channel)))
                         { wr++; if (vals.size()<40) vals += QString("%1=%2 ").arg(w.channel).arg(w.value); }
-                    return QString("col%1: fix%2 '%3' uni%4 addr%5 head%6 ch[%7..] writes=%8 {%9}")
+                    // Scene BASE (non-effect Colour/Dimmer looks) for this head's
+                    // first 3 channels — if this equals the strike colour, HTP
+                    // merge hides the strike (same-colour-on-same-colour).
+                    QString baseRGB;
+                    for (int k = 0; k < qMin(3, hc.size()); ++k)
+                        baseRGB += QString::number(sceneBaseValue(fxi->id(), hc.at(k), 0)) + " ";
+                    return QString("col%1: fix%2 '%3' uni%4 addr%5 head%6 ch[%7..] writes=%8 {%9} base{%10}")
                         .arg(wantCol).arg(fxi->id()).arg(fxi->name().left(10))
                         .arg(fxi->universe()).arg(base).arg(c.head)
-                        .arg(hc.isEmpty()?-1:int(hc.first())).arg(wr).arg(vals.trimmed());
+                        .arg(hc.isEmpty()?-1:int(hc.first())).arg(wr).arg(vals.trimmed())
+                        .arg(baseRGB.trimmed());
                 }
                 return QString("col%1=<no cell>").arg(wantCol);
             };
@@ -324,6 +331,11 @@ void EffectInstance::buildSceneBaseValues()
     {
         QLCPalette *p = m_doc->palette(pid);
         if (p == nullptr || p->type() == QLCPalette::Effect)
+            continue;
+        // Colours placed AFTER an effect are the effect's own palette, not a
+        // static base — the scene doesn't paint them, so they must not count as
+        // this effect's base either (else the base would still wash it out).
+        if (QLCPalette::isEffectScoped(m_doc, orderedPalettes, pid))
             continue;
         // Capture the look's master Dimmer (0..1) for host-side colour scaling.
         if (p->type() == QLCPalette::Dimmer)
@@ -788,18 +800,36 @@ QJSValue EffectInstance::buildPalettesObject() const
     // just assembles a look (e.g. Red then Blue) and the effect consumes it —
     // no per-script colour binding required. Explicit bindings remain optional
     // per-slot overrides. Effect palettes (including this one) are skipped.
+    // Ordering paradigm: Colour palettes placed AFTER this effect in the look list
+    // are "the effect's colours" (they feed the gradient and are NOT painted onto
+    // the fixtures as a static base). Colours BEFORE the effect are the static
+    // base and are not consumed here. If nothing follows the effect, fall back to
+    // ALL colours so existing looks keep working (the base then also shows —
+    // reorder colours after the effect to separate them).
     QList<QColor> lookColors;
+    QList<QColor> afterColors;   // colours positioned after this effect
+    QList<QColor> allColors;     // every colour in the look (fallback)
     double lookDimmer = 1.0;
     bool   haveLookDimmer = false;
     if (Scene *scene = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
     {
+        bool pastThisEffect = false;
         foreach (quint32 pid, scene->palettes())
         {
             QLCPalette *p = m_doc->palette(pid);
             if (!p)
                 continue;
+            if (pid == m_effectPaletteId)
+            {
+                pastThisEffect = true;
+                continue;
+            }
             if (p->type() == QLCPalette::Color)
-                lookColors.append(p->colorValue());
+            {
+                allColors.append(p->colorValue());
+                if (pastThisEffect)
+                    afterColors.append(p->colorValue());
+            }
             else if (p->type() == QLCPalette::Dimmer)
             {
                 lookDimmer = p->value().toDouble() / 255.0;
@@ -807,6 +837,7 @@ QJSValue EffectInstance::buildPalettesObject() const
             }
         }
     }
+    lookColors = afterColors.isEmpty() ? allColors : afterColors;
 
     const QMap<QString, quint32> &bindings = effectPal->effectPaletteBindings();
     int nextLookColor = 0;   // walks lookColors as unbound Colour slots claim them

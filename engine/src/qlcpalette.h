@@ -177,6 +177,14 @@ public:
      */
     static int colorSetOffset(Doc *doc, const QList<quint32> &orderedPalettes, quint32 paletteId);
 
+    /**
+     * Look-list ordering rule: true if @a paletteId appears AFTER an Effect
+     * palette in @a orderedPalettes, meaning it belongs to the effect (feeds its
+     * colours) and must NOT be painted onto the fixtures as a static base.
+     * Palettes before the first Effect are the static base and return false.
+     */
+    static bool isEffectScoped(Doc *doc, const QList<quint32> &orderedPalettes, quint32 paletteId);
+
 protected:
     /** This method returns a normalized factor between 0.0 and 1.0
      *  which will then be multiplied by a value to obtain the final
