@@ -423,6 +423,7 @@ private:
     QLabel* m_statusBlindLabel;
     QLabel* m_statusTimecodeLabel;
     QLabel* m_statusLoadLabel;
+    QLabel* m_statusPowerLabel = nullptr;
     // Smooth (extrapolated) MTC chip readout, decoupled from the chunky packet
     // rate: anchor on each fresh position, then glide the display on a timer.
     QTimer* m_tcDisplayTimer = nullptr;

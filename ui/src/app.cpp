@@ -387,6 +387,23 @@ void App::init()
     {
         ProgrammingManager *pm = new ProgrammingManager(m_tab, m_doc);
         connect(pm, &ProgrammingManager::requestSave, this, &App::slotFileSave);
+        connect(pm, &ProgrammingManager::powerEstimateChanged, this,
+                [this](double amps, double kw, bool overload) {
+            if (m_statusPowerLabel == NULL)
+                return;
+            if (amps <= 0.0 && kw <= 0.0)   // cleared (Operate mode) → hide the chip
+            {
+                m_statusPowerLabel->hide();
+                return;
+            }
+            m_statusPowerLabel->setText(overload
+                ? tr("⚡ %1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
+                : tr("⚡ %1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
+            m_statusPowerLabel->setStyleSheet(overload
+                ? QStringLiteral("QLabel { color: #ff5555; font-weight: bold; }")
+                : QString());
+            m_statusPowerLabel->show();
+        });
         w = pm;
     }
     addTab(w, QIcon(":/scene.png"), tr("Programming"));
@@ -2551,6 +2568,15 @@ void App::initStatusBar()
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
     sb->addWidget(m_statusLoadLabel, 0);
+
+    // Estimated electrical load (Design mode) — the designed peak draw across the
+    // rig's power sources/circuits. Red when a circuit or UPS is over its limit.
+    m_statusPowerLabel = new QLabel(this);
+    m_statusPowerLabel->setFont(chipFont);
+    m_statusPowerLabel->setToolTip(tr("Estimated peak electrical load across the rig "
+        "(Design mode). Red = a circuit or UPS is over its rated/derated limit."));
+    m_statusPowerLabel->hide();   // shown once a Design-mode estimate arrives
+    sb->addWidget(m_statusPowerLabel, 0);
 
     // "Under timeline control" chip — visible only in Operate while a show drives
     // the rig. Green = timeline driving; amber = suspended (VC takeover). Sits

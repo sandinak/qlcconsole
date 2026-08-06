@@ -355,6 +355,9 @@ private:
 signals:
     /** Emitted when the user confirms Save in the Programming tab. */
     void requestSave();
+    /** Live power estimate for the app status-bar chip (Design mode). Amps, kW,
+     *  and whether any circuit/source is overloaded. */
+    void powerEstimateChanged(double amps, double kw, bool overload);
 };
 
 /** @} */

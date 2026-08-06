@@ -1459,11 +1459,12 @@ void ProgrammingManager::buildPowerFooter()
 
 void ProgrammingManager::updatePowerFooterActive()
 {
-    // Footer + timer live only in Design mode while the tab is on screen, so
-    // Operate/Run mode pays nothing for this feature.
-    const bool active = (m_doc->mode() == Doc::Design) && isVisible();
+    // The estimate now lives in the app status bar (always visible in Design
+    // mode), so the timer runs whenever we're in Design mode — regardless of
+    // which tab is on screen. The old in-tab footer is retired.
+    const bool active = (m_doc->mode() == Doc::Design);
     if (m_powerFooter != nullptr)
-        m_powerFooter->setVisible(active);
+        m_powerFooter->setVisible(false);
     if (m_powerTimer != nullptr)
     {
         if (active)
@@ -1475,14 +1476,16 @@ void ProgrammingManager::updatePowerFooterActive()
         else
         {
             m_powerTimer->stop();
+            emit powerEstimateChanged(0.0, 0.0, false);   // clear the chip in Operate
         }
     }
 }
 
 void ProgrammingManager::recomputePower()
 {
-    // Same gate as refreshPreview(): never compute outside Design mode.
-    if (m_doc->mode() != Doc::Design || isVisible() == false)
+    // Design mode only (the estimate is a "designed peak"); runs across tabs now
+    // that the readout is in the always-visible status bar.
+    if (m_doc->mode() != Doc::Design)
         return;
     if (m_powerAmpsLabel == nullptr)
         return;
@@ -1558,6 +1561,9 @@ void ProgrammingManager::recomputePower()
     m_powerAmpsLabel->setText(tr("%1 A").arg(totalAmps, 0, 'f', 1));
     m_powerKwLabel->setText(tr("%1 kW").arg(totalWatts / 1000.0, 0, 'f', 2));
     m_powerOverloadLabel->setVisible(overload);
+
+    // Push the same estimate to the app's always-visible status-bar chip.
+    emit powerEstimateChanged(totalAmps, totalWatts / 1000.0, overload);
 }
 
 void ProgrammingManager::slotOpenCircuits()
