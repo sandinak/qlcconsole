@@ -65,6 +65,7 @@
 #include "programmercontroller.h"
 #include "parkeffect.h"
 #include "markeffect.h"
+#include "markplanner.h"
 #include "lastlookeffect.h"
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -1911,6 +1912,13 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             else
                 doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLQLCMoveInBlack)
+        {
+            if (m_programmer != NULL)
+                m_programmer->loadMoveInBlackXML(doc);
+            else
+                doc.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown engine tag:" << doc.name();
@@ -1991,6 +1999,9 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
 
     if (m_programmer != NULL)
         m_programmer->saveMarkXML(doc);
+
+    if (m_programmer != NULL)
+        m_programmer->saveMoveInBlackXML(doc);
 
     if (m_monitorProps != NULL)
         m_monitorProps->saveXML(doc, this);

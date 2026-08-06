@@ -20,6 +20,8 @@
 
 #include <QtAlgorithms>
 #include <QDebug>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
 #include <algorithm>
 #include <climits>
 #include <cmath>
@@ -1443,6 +1445,51 @@ void ProgrammerController::setAutoMoveInBlack(bool enable)
 bool ProgrammerController::isAutoMoveInBlack() const
 {
     return m_markPlanner != nullptr && m_markPlanner->isEnabled();
+}
+
+void ProgrammerController::setMoveInBlackDarkGapMs(int ms)
+{
+    if (m_markPlanner != nullptr)
+    {
+        m_markPlanner->setDarkGapMs(ms);
+        m_doc->setModified();
+    }
+}
+
+int ProgrammerController::moveInBlackDarkGapMs() const
+{
+    return m_markPlanner != nullptr ? m_markPlanner->darkGapMs() : 800;
+}
+
+bool ProgrammerController::saveMoveInBlackXML(QXmlStreamWriter *doc) const
+{
+    if (m_markPlanner == nullptr)
+        return true;
+    doc->writeStartElement(KXMLQLCMoveInBlack);
+    doc->writeAttribute(QStringLiteral("Auto"), m_markPlanner->isEnabled() ? "1" : "0");
+    doc->writeAttribute(QStringLiteral("DarkGapMs"),
+                        QString::number(m_markPlanner->darkGapMs()));
+    doc->writeEndElement();
+    return true;
+}
+
+bool ProgrammerController::loadMoveInBlackXML(QXmlStreamReader &root)
+{
+    if (m_markPlanner == nullptr)
+    {
+        root.skipCurrentElement();
+        return false;
+    }
+    const QXmlStreamAttributes attrs = root.attributes();
+    const int gap = attrs.value(QStringLiteral("DarkGapMs")).toString().toInt();
+    if (gap > 0)
+        m_markPlanner->setDarkGapMs(gap);
+    const bool en = attrs.value(QStringLiteral("Auto")).toString().toInt() != 0;
+    root.skipCurrentElement();      // self-closing element, no children
+    // Enable last so the planner starts from the loaded gap.
+    m_markPlanner->setEnabled(en);
+    emit autoMoveInBlackChanged(en);
+    return true;
 }
 
 /*****************************************************************************

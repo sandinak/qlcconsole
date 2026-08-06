@@ -308,6 +308,7 @@ private:
     QPushButton *m_markBtn     = nullptr;
     QPushButton *m_unmarkBtn   = nullptr;
     QPushButton *m_autoMibBtn  = nullptr;
+    QDoubleSpinBox *m_mibGapSpin = nullptr;
     QPushButton *m_snapshotBtn = nullptr;
     // Blind-active in-context indicator (blue, EOS-style) — the global status-bar
     // chip lives in App; this banner is the tab-local, can't-miss-it version.

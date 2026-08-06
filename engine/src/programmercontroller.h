@@ -174,9 +174,15 @@ public:
     bool loadMarkXML(QXmlStreamReader &root);
 
     /** Automatic move-in-black: peek the next cue and pre-position dark movers
-     *  that it will reveal. Runtime toggle (not persisted yet). */
+     *  that it will reveal. Persisted with the workspace. */
     void setAutoMoveInBlack(bool enable);
     bool isAutoMoveInBlack() const;
+    /** Minimum lead time (ms) before the next cue to still pre-set (dark-gap). */
+    void setMoveInBlackDarkGapMs(int ms);
+    int  moveInBlackDarkGapMs() const;
+
+    bool saveMoveInBlackXML(QXmlStreamWriter *doc) const;
+    bool loadMoveInBlackXML(QXmlStreamReader &root);
 
 signals:
     /** Emitted when the mark set changes (add/remove/auto-release) so the 2D

@@ -25,6 +25,8 @@
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
+#include <QSignalBlocker>
 #include <QFrame>
 #include <QSettings>
 #include <algorithm>
@@ -178,6 +180,16 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                                     "lead time. Releases each fixture as its cue lights it."));
         toolbar->addWidget(m_autoMibBtn);
 
+        m_mibGapSpin = new QDoubleSpinBox(this);
+        m_mibGapSpin->setRange(0.1, 10.0);
+        m_mibGapSpin->setSingleStep(0.1);
+        m_mibGapSpin->setDecimals(1);
+        m_mibGapSpin->setSuffix(tr(" s lead"));
+        m_mibGapSpin->setToolTip(tr("Move-in-black lead time: the next cue must be at least this "
+                                    "far away for a dark mover to be pre-set. Below it there's no "
+                                    "time to move in black, so it's skipped."));
+        toolbar->addWidget(m_mibGapSpin);
+
         m_snapshotBtn = new QPushButton(tr("Snapshot"), this);
         m_snapshotBtn->setToolTip(tr("Bake the current live DMX output into the open "
             "scene as static values — capture a look built on an external console."));
@@ -255,6 +267,11 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
             if (ProgrammerController *pc = m_doc->programmer())
                 pc->setAutoMoveInBlack(on);
         });
+        connect(m_mibGapSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                this, [this](double s) {
+            if (ProgrammerController *pc = m_doc->programmer())
+                pc->setMoveInBlackDarkGapMs(int(s * 1000.0 + 0.5));
+        });
         connect(m_saveBtn, &QPushButton::clicked,
                 this, &ProgrammingManager::slotSavePositions);
         connect(m_speedSpin, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -326,8 +343,18 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                     this, &ProgrammingManager::slotParkChanged);
             connect(pc, &ProgrammerController::markChanged,
                     this, &ProgrammingManager::slotMarkChanged);
-            connect(pc, &ProgrammerController::autoMoveInBlackChanged,
-                    m_autoMibBtn, &QPushButton::setChecked);
+            connect(pc, &ProgrammerController::autoMoveInBlackChanged, this,
+                    [this, pc](bool on) {
+                QSignalBlocker b1(m_autoMibBtn), b2(m_mibGapSpin);
+                m_autoMibBtn->setChecked(on);
+                m_mibGapSpin->setValue(pc->moveInBlackDarkGapMs() / 1000.0);
+            });
+            // Seed from the (possibly already-loaded) workspace.
+            {
+                QSignalBlocker b1(m_autoMibBtn), b2(m_mibGapSpin);
+                m_autoMibBtn->setChecked(pc->isAutoMoveInBlack());
+                m_mibGapSpin->setValue(pc->moveInBlackDarkGapMs() / 1000.0);
+            }
             connect(pc, &ProgrammerController::joystickUpdated,
                     this, &ProgrammingManager::slotJoystickUpdated);
             connect(pc, &ProgrammerController::buttonActionTriggered,

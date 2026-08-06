@@ -20,9 +20,12 @@
 #include <QObject>
 #include <QTimer>
 #include <QSet>
+#include <QString>
 
 class Doc;
 class MarkEffect;
+
+#define KXMLQLCMoveInBlack QStringLiteral("MoveInBlack")
 
 class MarkPlanner : public QObject
 {
