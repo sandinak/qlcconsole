@@ -46,16 +46,20 @@ to DONE.md when it ships. See also the session memory under
   a live rig to test, so deferred until Branson has rig time. First verify whether
   the current timeline transition already releases the outgoing look or holds it.
 - **Pre-positioning / mark cues + ghost visual + dangle detector** — how big
-  consoles do move-in-black. Slice **1 SHIPPED** (verify auto-handoff on rig):
-  `MarkEffect` DMXSource (holds a fixture's NON-intensity channels, auto-releases
-  when a real cue lights it, `<Mark>` XML) + ProgrammerController/Doc wiring +
-  Mark/Unmark toolbar buttons + a dashed-violet 2D-monitor ghost outline. Still
-  open: (2) **auto-mark from timeline lookahead** + force-live/force-mark
-  overrides + dark-move fade; (3) **dangle detector** — a positioned-but-dark
-  fixture that matches an upcoming cue = valid pre-set, matches nothing = warn
-  (falls out of #2's lookahead). Also: capture "to a chosen look" instead of
-  current output; a monitor context-menu Mark action. *(from the cue-policy
-  discussion)*
+  consoles do move-in-black. See `MOVEINBLACK_DESIGN.md`. Slices **1 + 2 SHIPPED**
+  (all rig/visualiser-verify):
+  - **1** — `MarkEffect` DMXSource (holds non-intensity, auto-releases on reveal,
+    `<Mark>` XML) + Mark/Unmark buttons + dashed-violet monitor ghost.
+  - **2a** — `CueOutput`: offline "what would this cue output" (unit-tested).
+  - **2b** — `CueLookahead`: next cue + lead time for Chaser & Show.
+  - **2c** — `MarkPlanner` + **Auto MIB** toolbar toggle: look-ahead → pre-set
+    dark→lit→moving movers, dark-gap gated.
+  Still open: **verify CueLookahead timing on a rig** (the dark-gap depends on it);
+  **persist** the Auto-MIB toggle + expose the dark-gap as a setting;
+  **force-live / force-mark** per-cue overrides + dark-move fade; **(3) dangle
+  detector** (positioned-but-dark fixture matching no upcoming cue = warn — falls
+  out of the plan). Also: mark "to a chosen look"; a monitor context-menu Mark
+  action. *(from the cue-policy discussion)*
 - **Effects respect the look's master Dimmer — SHIPPED** (563c4b3b1): colour
   output scales by the look's Dimmer on dimmerless fixtures; dimmered fixtures
   carry it on the master channel. Move to DONE.md next pass.
