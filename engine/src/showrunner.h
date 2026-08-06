@@ -58,6 +58,9 @@ public:
     /** Stop the runner */
     void stop();
 
+    /** Current playhead position in ms (internal or external clock). */
+    quint32 currentTime() const { return m_elapsedTime; }
+
     void write(MasterTimer *timer, const QList<Universe*> &universes);
 
     /*********************************************************************

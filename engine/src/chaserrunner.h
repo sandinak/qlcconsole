@@ -103,6 +103,10 @@ public:
      */
     int currentStepIndex() const;
 
+    /** Effective duration (ms) of the currently running step (speed-mode aware).
+     *  0 = holds until a manual GO. */
+    uint currentStepDuration() const { return stepDuration(currentStepIndex()); }
+
     /**
      * External-clock mode. When enabled the runner NEVER advances a step on its
      * own elapsed time — the step changes only on an explicit action

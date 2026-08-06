@@ -588,6 +588,18 @@ int Chaser::runningStepsNumber() const
     return ret;
 }
 
+uint Chaser::currentStepDuration() const
+{
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
+    QMutexLocker runnerLocker(const_cast<QMutex*>(&m_runnerMutex));
+#else
+    QMutexLocker runnerLocker(const_cast<QRecursiveMutex*>(&m_runnerMutex));
+#endif
+    if (m_runner == NULL)
+        return 0;
+    return m_runner->currentStepDuration();
+}
+
 ChaserRunnerStep Chaser::currentRunningStep() const
 {
     ChaserRunnerStep ret;

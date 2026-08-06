@@ -272,6 +272,11 @@ public:
     /** Get the first step of the running list. If none is running this returns NULL */
     ChaserRunnerStep currentRunningStep() const;
 
+    /** Effective duration (ms) of the currently running step, honouring the
+     *  Common/PerStep speed mode. 0 = holds until a manual GO. Used by the
+     *  move-in-black look-ahead to gauge how soon the next cue fires. */
+    uint currentStepDuration() const;
+
 private:
     ChaserAction m_startupAction;
 

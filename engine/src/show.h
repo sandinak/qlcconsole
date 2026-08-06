@@ -272,6 +272,10 @@ public:
     /** Push the current external absolute position (ms) to the runner. */
     void setExternalTime(quint32 ms);
 
+    /** Current playhead position in ms while running (0 if not running).
+     *  Used by the move-in-black look-ahead to find the next cue's lead time. */
+    quint32 runningTime() const;
+
     /** Suspend/resume timeline OUTPUT while keeping the playhead position
      *  (Operate-mode VC takeover). Runtime-only, not persisted. */
     void setTimelineSuspended(bool enable);

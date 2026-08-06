@@ -628,6 +628,12 @@ void Show::setExternalTime(quint32 ms)
         m_runner->setExternalTime(ms);
 }
 
+quint32 Show::runningTime() const
+{
+    QMutexLocker rlock(&m_runnerMutex);
+    return m_runner != NULL ? m_runner->currentTime() : 0;
+}
+
 void Show::setTimelineSuspended(bool enable)
 {
     // Suspend is a runtime-only takeover state; it is meaningful only while the

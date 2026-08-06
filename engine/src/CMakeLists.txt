@@ -78,6 +78,7 @@ add_library(${module_name} SHARED
     parkeffect.cpp parkeffect.h
     markeffect.cpp markeffect.h
     cueoutput.cpp cueoutput.h
+    cuelookahead.cpp cuelookahead.h
     lastlookeffect.cpp lastlookeffect.h
     effectscript.cpp effectscript.h
     effectscriptcache.cpp effectscriptcache.h
