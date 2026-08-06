@@ -170,6 +170,14 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_unmarkBtn->setEnabled(false);
         toolbar->addWidget(m_unmarkBtn);
 
+        m_autoMibBtn = new QPushButton(tr("Auto MIB"), this);
+        m_autoMibBtn->setCheckable(true);
+        m_autoMibBtn->setToolTip(tr("Automatic move-in-black: while a chaser or the show "
+                                    "timeline runs, look ahead to the next cue and pre-position "
+                                    "any dark mover it will reveal — as long as there's enough "
+                                    "lead time. Releases each fixture as its cue lights it."));
+        toolbar->addWidget(m_autoMibBtn);
+
         m_snapshotBtn = new QPushButton(tr("Snapshot"), this);
         m_snapshotBtn->setToolTip(tr("Bake the current live DMX output into the open "
             "scene as static values — capture a look built on an external console."));
@@ -243,6 +251,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                 this, &ProgrammingManager::slotMarkSelection);
         connect(m_unmarkBtn, &QPushButton::clicked,
                 this, &ProgrammingManager::slotUnmarkAll);
+        connect(m_autoMibBtn, &QPushButton::toggled, this, [this](bool on) {
+            if (ProgrammerController *pc = m_doc->programmer())
+                pc->setAutoMoveInBlack(on);
+        });
         connect(m_saveBtn, &QPushButton::clicked,
                 this, &ProgrammingManager::slotSavePositions);
         connect(m_speedSpin, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -314,6 +326,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                     this, &ProgrammingManager::slotParkChanged);
             connect(pc, &ProgrammerController::markChanged,
                     this, &ProgrammingManager::slotMarkChanged);
+            connect(pc, &ProgrammerController::autoMoveInBlackChanged,
+                    m_autoMibBtn, &QPushButton::setChecked);
             connect(pc, &ProgrammerController::joystickUpdated,
                     this, &ProgrammingManager::slotJoystickUpdated);
             connect(pc, &ProgrammerController::buttonActionTriggered,

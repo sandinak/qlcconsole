@@ -51,6 +51,7 @@
 #include "highlighteffect.h"
 #include "parkeffect.h"
 #include "markeffect.h"
+#include "markplanner.h"
 #include "capturemanager.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
@@ -73,6 +74,9 @@ ProgrammerController::ProgrammerController(Doc *doc)
     // The mark set auto-releases fixtures on reveal; surface that to the monitor.
     connect(m_markEffect, &MarkEffect::fixtureRevealed,
             this, &ProgrammerController::markChanged);
+    m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
+    connect(m_markPlanner, &MarkPlanner::enabledChanged,
+            this, &ProgrammerController::autoMoveInBlackChanged);
 
     connect(this, &ProgrammerController::programmerSelectionChanged,
             this, &ProgrammerController::slotSyncEffectFixtures);
@@ -1428,6 +1432,17 @@ bool ProgrammerController::loadMarkXML(QXmlStreamReader &root)
     const bool ok = m_markEffect->loadXML(root);
     emit markChanged();
     return ok;
+}
+
+void ProgrammerController::setAutoMoveInBlack(bool enable)
+{
+    if (m_markPlanner != nullptr)
+        m_markPlanner->setEnabled(enable);
+}
+
+bool ProgrammerController::isAutoMoveInBlack() const
+{
+    return m_markPlanner != nullptr && m_markPlanner->isEnabled();
 }
 
 /*****************************************************************************

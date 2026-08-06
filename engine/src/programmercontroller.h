@@ -37,6 +37,7 @@ class ProgrammerFlasher;
 class HighlightEffect;
 class ParkEffect;
 class MarkEffect;
+class MarkPlanner;
 class QLCPalette;
 class Scene;
 class QXmlStreamReader;
@@ -172,10 +173,17 @@ public:
     bool saveMarkXML(QXmlStreamWriter *doc) const;
     bool loadMarkXML(QXmlStreamReader &root);
 
+    /** Automatic move-in-black: peek the next cue and pre-position dark movers
+     *  that it will reveal. Runtime toggle (not persisted yet). */
+    void setAutoMoveInBlack(bool enable);
+    bool isAutoMoveInBlack() const;
+
 signals:
     /** Emitted when the mark set changes (add/remove/auto-release) so the 2D
      *  monitor can refresh its ghost outlines. */
     void markChanged();
+    /** Auto move-in-black toggled (so the toolbar button tracks it). */
+    void autoMoveInBlackChanged(bool enable);
 
     /*********************************************************************
      * Design-mode joystick (writes pan/tilt into the focused scene)
@@ -455,6 +463,8 @@ private:
     ParkEffect *m_parkEffect = nullptr;
     /** Persistent mark DMXSource — pre-positions dark fixtures (non-intensity). */
     MarkEffect *m_markEffect = nullptr;
+    /** Automatic move-in-black planner (look-ahead → marks). */
+    MarkPlanner *m_markPlanner = nullptr;
     // Controller axis binding (program-wide)
     quint32 m_panUniverse = 0,  m_panChannel  = 0;
     quint32 m_tiltUniverse = 0, m_tiltChannel = 0;
