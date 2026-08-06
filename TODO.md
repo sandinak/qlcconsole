@@ -54,12 +54,28 @@ to DONE.md when it ships. See also the session memory under
   - **2b** — `CueLookahead`: next cue + lead time for Chaser & Show.
   - **2c** — `MarkPlanner` + **Auto MIB** toolbar toggle: look-ahead → pre-set
     dark→lit→moving movers, dark-gap gated.
+  - **2 persist** — Auto-MIB toggle + dark-gap round-trip (`<MoveInBlack>`) + a
+    "s lead" toolbar spinbox. DONE.
   Still open: **verify CueLookahead timing on a rig** (the dark-gap depends on it);
-  **persist** the Auto-MIB toggle + expose the dark-gap as a setting;
   **force-live / force-mark** per-cue overrides + dark-move fade; **(3) dangle
   detector** (positioned-but-dark fixture matching no upcoming cue = warn — falls
   out of the plan). Also: mark "to a chosen look"; a monitor context-menu Mark
   action. *(from the cue-policy discussion)*
+
+## Build-season freeze list *(LOCKED with Branson — ship before feature freeze)*
+
+- 🔴 **Rig test pass** — run `RIG_TEST_PLAN.md`, fix any ❌ (the gate).
+- 🔴 ~~Auto-MIB persist + dark-gap setting~~ **DONE** (b38795658).
+- 🔴 **PMJ (OpenDeck) mapping** — the operating surface for the show (free knobs =
+  the relative encoders already supported). APC40 map de-scoped.
+- 🟡 **Power/circuits → footer bar** (see below + memory: power estimation).
+- 🟡 **Native single-shot** — Loop/Once for native effects (confetti/meteor/MIDI/
+  audio), not just RGBScripts. (Needs a per-effect "one cycle then hold" convention;
+  small design first.)
+- 🟡 **Small polish batch** — drop-a-palette-onto-a-specific-effect nesting;
+  MTC-chip section glyph; show-length "End at SMPTE".
+- ⚪ Post-freeze: cue-transition 4b; dangle detector; "Look" as assembly unit;
+  unified object editor; more stage objects; rebrand to qlcconsole.
 - **Effects respect the look's master Dimmer — SHIPPED** (563c4b3b1): colour
   output scales by the look's Dimmer on dimmerless fixtures; dimmered fixtures
   carry it on the master channel. Move to DONE.md next pass.
