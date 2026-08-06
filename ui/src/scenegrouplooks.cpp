@@ -609,6 +609,22 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
     bool changed = false;
     bool palettesAdded = false;
 
+    // If the drop landed on an Effect row in the Looks list, nest any dropped
+    // colours/dimmers UNDER that effect (feed it) instead of appending them.
+    quint32 dropEffectPid = QLCPalette::invalidId();
+    {
+        const QPoint lp = m_lookList->viewport()->mapFrom(this, event->pos());
+        QTreeWidgetItem *it = m_lookList->itemAt(lp);
+        while (it != NULL)
+        {
+            const quint32 pid = it->data(LookColName, Qt::UserRole).toUInt();
+            QLCPalette *p = m_doc->palette(pid);
+            if (p != NULL && p->type() == QLCPalette::Effect) { dropEffectPid = pid; break; }
+            it = it->parent();
+        }
+    }
+    QList<quint32> addedPalettePids;
+
     if (mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType()))
     {
         QByteArray data = mime->data(FunctionsTreeWidget::paletteDragMimeType());
@@ -621,6 +637,7 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
                 && m_scene->palettes().contains(pid) == false)
             {
                 m_scene->addPalette(pid);
+                addedPalettePids << pid;
                 changed = true;
                 palettesAdded = true;
                 QLCPalette *ap = m_doc->palette(pid);
@@ -724,7 +741,12 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
     if (palettesAdded)
         QTimer::singleShot(0, this, [this]() { reconcileAfterPaletteApply(); });
 
-    if (changed)
+    // Nest the just-dropped looks under the effect they were dropped on. This
+    // reorders + reloads + emits, so skip the generic refresh below.
+    const bool nested = (dropEffectPid != QLCPalette::invalidId() && !addedPalettePids.isEmpty());
+    if (nested)
+        moveLooksToTarget(addedPalettePids, dropEffectPid);
+    else if (changed)
     {
         m_doc->setModified();
         reload();
