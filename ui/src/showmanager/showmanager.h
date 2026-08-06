@@ -274,6 +274,7 @@ protected slots:
     void slotMarkerMoved(quint32 oldStart, quint32 newStart, quint32 newEnd,
                          QString label, QColor color);
     void slotShowLengthChangeRequested(quint32 ms);
+    void slotShowEndAtSmpteRequested(quint32 smpteMs);
     void slotToggleSnapToGrid(bool enable);
     void slotChangeSize(int width, int height);
     void slotStepSelectionChanged(int index);

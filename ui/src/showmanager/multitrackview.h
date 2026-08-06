@@ -366,6 +366,9 @@ signals:
     /** The show end handle was dragged / menu-set. @p configuredMs is the new
      *  length (0 = fit-to-content/auto). Host writes Show::setConfiguredDuration. */
     void showLengthChangeRequested(quint32 configuredMs);
+    /** End the show at an absolute SMPTE time (ms); the ShowManager offsets it by
+     *  the show's timecode start to get the timeline length. */
+    void showEndAtSmpteRequested(quint32 smpteMs);
 
     /** Emitted when an item is dragged below the last track: the caller should
      *  (after confirming) make a new track and move the item onto it. */

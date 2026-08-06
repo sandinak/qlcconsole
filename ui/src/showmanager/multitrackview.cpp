@@ -1099,6 +1099,7 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
             QMenu emenu;
             QAction *fitAct = emenu.addAction(tr("Fit end to content (auto)"));
             QAction *setAct = emenu.addAction(tr("Set show length…"));
+            QAction *smpteAct = emenu.addAction(tr("End at SMPTE…"));
             QAction *chosen = emenu.exec(event->globalPos());
             if (chosen == fitAct)
             {
@@ -1112,6 +1113,29 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
                             tr("Length (seconds):"), cur, 0.25, 86400.0, 2, &ok);
                 if (ok)
                     emit showLengthChangeRequested(quint32(v * 1000.0));
+            }
+            else if (chosen == smpteAct)
+            {
+                // Parse hh:mm:ss(:ff) → absolute SMPTE ms; the ShowManager offsets
+                // it by the show's timecode start so the end lands on that timecode.
+                bool ok = false;
+                const QString txt = QInputDialog::getText(this, tr("End at SMPTE"),
+                            tr("Timecode (hh:mm:ss or hh:mm:ss:ff):"),
+                            QLineEdit::Normal, QStringLiteral("01:00:00:00"), &ok);
+                if (ok)
+                {
+                    const QStringList p = txt.trimmed().split(':');
+                    if (p.size() >= 3)
+                    {
+                        const int hh = p.value(0).toInt();
+                        const int mm = p.value(1).toInt();
+                        const int ss = p.value(2).toInt();
+                        const int ff = (p.size() >= 4) ? p.value(3).toInt() : 0;
+                        const quint32 smpteMs = quint32(((hh * 3600 + mm * 60 + ss) * 1000)
+                                                        + qRound(ff * (1000.0 / 30.0)));
+                        emit showEndAtSmpteRequested(smpteMs);
+                    }
+                }
             }
             return;
         }

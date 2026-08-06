@@ -199,6 +199,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotMarkerMoved(quint32,quint32,quint32,QString,QColor)));
     connect(m_showview, SIGNAL(showLengthChangeRequested(quint32)),
             this, SLOT(slotShowLengthChangeRequested(quint32)));
+    connect(m_showview, SIGNAL(showEndAtSmpteRequested(quint32)),
+            this, SLOT(slotShowEndAtSmpteRequested(quint32)));
     connect(m_showview, SIGNAL(itemDroppedBelowTracks(ShowItem*)),
             this, SLOT(slotItemDroppedBelowTracks(ShowItem*)));
 
@@ -2002,6 +2004,17 @@ void ShowManager::slotShowLengthChangeRequested(quint32 ms)
     m_show->setConfiguredDuration(ms);   // 0 = auto (fit content)
     m_doc->setModified();
     m_showview->setConfiguredLength(ms);
+}
+
+void ShowManager::slotShowEndAtSmpteRequested(quint32 smpteMs)
+{
+    if (m_show == NULL)
+        return;
+    // The show's timecode start (offset) maps to timeline position 0, so the
+    // timeline length that ends at this SMPTE = smpte − offset.
+    const quint32 offset = m_show->timecodeOffset();
+    const quint32 ms = (smpteMs > offset) ? (smpteMs - offset) : 0;
+    slotShowLengthChangeRequested(ms);
 }
 
 void ShowManager::slotMarkerSetCueList(quint32 time)
