@@ -63,6 +63,15 @@ and a colour or two nested under it (see §B).
 
 ---
 
+## C2 · One-shot effects (Wand / lifecycle)
+Use a look on the pixel panel with the **Wand** effect.
+| # | Step | Expect | ✅/❌ |
+|---|------|--------|------|
+| C2a | Run the look once | The wand sweeps across the panel **one time** and clears — it does NOT loop | |
+| C2b | Put the look on a chaser step and run the chase | The sweep **fits the step** (finishes about when the step ends), landing in time | |
+| C2c | In the effect panel set **One-shot length = 3 s**, run again | The sweep now takes ~3 s regardless of the step (per-look override wins) | |
+| C2d | Set One-shot length back to **auto** | Length follows the cue/step again | |
+
 ## D · 2D monitor / aim targets
 | # | Step | Expect | ✅/❌ |
 |---|------|--------|------|

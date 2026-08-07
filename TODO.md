@@ -70,9 +70,12 @@ to DONE.md when it ships. See also the session memory under
   the relative encoders already supported). APC40 map de-scoped. *Best built with
   the PMJ in hand (LED feedback / knob verify).*
 - 🟡 ~~Power/circuits → footer bar~~ **DONE** (a9aab77db) — ⚡ status-bar chip.
-- 🟡 **Native single-shot** — Loop/Once for native effects (confetti/meteor/MIDI/
-  audio), not just RGBScripts. *Pending a decision: duration field vs natural-end
-  vs only-where-meaningful.*
+- 🟡 ~~Native single-shot~~ **DONE — became the effect-lifecycle work** (4c7c9621c,
+  `EFFECT_LIFECYCLE_DESIGN.md`): effects declare loop/reactive/**oneshot**;
+  one-shots run on `inputs.phase`, duration resolves Look→cue/chase→default,
+  hold/release on finish; Wand example + per-look length UI. *Follow-ups (post-
+  freeze OK): span on the Show timeline (falls back to naturalDuration today);
+  fold RGBScript `Once` into the lifecycle; per-look syncTo/onFinish UI.*
 - 🟡 ~~Small polish batch~~ **DONE** — drop-onto-specific-effect nesting (5e-ish),
   End-at-SMPTE (751ce1b5a); MTC-chip glyph was already in place.
 - ⚪ Post-freeze: cue-transition 4b; dangle detector; "Look" as assembly unit;
