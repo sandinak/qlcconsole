@@ -8,7 +8,7 @@
  </Creator>
  <Engine>
   <InputOutputMap>
-   <BeatGenerator BeatType="Disabled" BPM="117"/>
+   <BeatGenerator BeatType="Disabled" BPM="0"/>
    <Universe Name="Universe 1" ID="0">
     <Output Plugin="ArtNet" UID="172.18.2.17" Line="1"/>
    </Universe>
@@ -21,7 +21,9 @@
    <Universe Name="Universe 3" ID="2">
     <Input Plugin="MIDI" UID="Network RTP Session 1" Line="2" HIDProfile="Microsoft Xbox Controller"/>
    </Universe>
-   <Universe Name="Universe 4" ID="3"/>
+   <Universe Name="Universe 4" ID="3">
+    <Input Plugin="MIDI" UID="Launchkey MK4 49 MIDI Out" Line="0"/>
+   </Universe>
    <Universe Name="Universe 5" ID="4"/>
    <Universe Name="Universe 6" ID="5"/>
    <Universe Name="Universe 7" ID="6"/>
@@ -38,13 +40,256 @@
    <Universe Name="Universe 14" ID="13"/>
    <Universe Name="Universe 15" ID="14"/>
    <Universe Name="Universe 16" ID="15"/>
-   <Universe Name="Universe 17" ID="16"/>
-   <Universe Name="Universe 18" ID="17"/>
-   <Universe Name="Universe 19" ID="18"/>
-   <Universe Name="Universe 20" ID="19"/>
-   <Universe Name="Universe 21" ID="20"/>
-   <Universe Name="Universe 22" ID="21"/>
-   <Universe Name="Universe 23" ID="22"/>
+   <Universe Name="U17-US1-1" ID="16">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.221" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U18-US1-2" ID="17">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.221" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U19-US1-3" ID="18">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.221" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U20-US1-4" ID="19">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.221" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U21-US2-1" ID="20">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.222" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U22-US2-2" ID="21">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.222" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U23-US2-3" ID="22">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.222" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U24-US2-4" ID="23">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.222" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U25-US3-1" ID="24">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.223" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U26-US3-2" ID="25">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.223" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U27-US3-3" ID="26">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.223" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U28-US3-4" ID="27">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.223" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U29-US4-1" ID="28">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.224" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U30-US4-2" ID="29">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.224" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U31-US4-3" ID="30">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.224" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U32-US4-4" ID="31">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.224" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U33-CS1-1" ID="32">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.211" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U34-CS1-2" ID="33">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.211" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U35-CS1-3" ID="34">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.211" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U36-CS1-4" ID="35">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.211" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U37-CS2-1" ID="36">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.212" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U38-CS2-2" ID="37">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.212" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U39-CS2-3" ID="38">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.212" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U40-CS2-4" ID="39">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.212" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U41-CS3-1" ID="40">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.213" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U42-CS3-2" ID="41">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.213" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U43-CS3-3" ID="42">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.213" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U44-CS3-4" ID="43">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.213" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U45-CS4-1" ID="44">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.214" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U46-CS4-2" ID="45">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.214" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U47-CS4-3" ID="46">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.214" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U48-CS4-4" ID="47">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.214" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U49-DS1-1" ID="48">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.201" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U50-DS1-2" ID="49">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.201" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U51-DS1-3" ID="50">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.201" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U52-DS1-4" ID="51">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.201" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U53-DS2-1" ID="52">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.202" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U54-DS2-2" ID="53">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.202" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U55-DS2-3" ID="54">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.202" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U56-DS2-4" ID="55">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.202" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U57-DS3-1" ID="56">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.203" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U58-DS3-2" ID="57">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.203" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U59-DS3-3" ID="58">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.203" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U60-DS3-4" ID="59">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.203" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U61-DS4-1" ID="60">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.204" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U62-DS4-2" ID="61">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.204" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="U63-DS4-3" ID="62">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.204" outputUni="2"/>
+    </Output>
+   </Universe>
+   <Universe Name="U64-DS4-4" ID="63">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.204" outputUni="3"/>
+    </Output>
+   </Universe>
+   <Universe Name="U65-StepBars-A" ID="64">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.230" outputUni="0"/>
+    </Output>
+   </Universe>
+   <Universe Name="U66-StepBars-B" ID="65">
+    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+     <PluginParameters outputIP="172.18.2.230" outputUni="1"/>
+    </Output>
+   </Universe>
   </InputOutputMap>
   <Fixture>
    <Manufacturer>Branson</Manufacturer>
@@ -102,8 +347,8 @@
    <Mode>48ch RGB</Mode>
    <ID>5</ID>
    <Name>US1aB</Name>
-   <Universe>0</Universe>
-   <Address>42</Address>
+   <Universe>64</Universe>
+   <Address>0</Address>
    <Channels>48</Channels>
   </Fixture>
   <Fixture>
@@ -112,8 +357,8 @@
    <Mode>16ch White</Mode>
    <ID>6</ID>
    <Name>US1aW</Name>
-   <Universe>0</Universe>
-   <Address>90</Address>
+   <Universe>64</Universe>
+   <Address>48</Address>
    <Channels>16</Channels>
   </Fixture>
   <Fixture>
@@ -152,7 +397,7 @@
    <Mode>ALL</Mode>
    <ID>10</ID>
    <Name>US1 #1</Name>
-   <Universe>2</Universe>
+   <Universe>16</Universe>
    <Address>0</Address>
    <Channels>192</Channels>
   </Fixture>
@@ -162,7 +407,7 @@
    <Mode>ALL</Mode>
    <ID>11</ID>
    <Name>US1 #2</Name>
-   <Universe>2</Universe>
+   <Universe>16</Universe>
    <Address>192</Address>
    <Channels>192</Channels>
   </Fixture>
@@ -172,7 +417,7 @@
    <Mode>ALL</Mode>
    <ID>12</ID>
    <Name>US1 #3</Name>
-   <Universe>3</Universe>
+   <Universe>17</Universe>
    <Address>0</Address>
    <Channels>192</Channels>
   </Fixture>
@@ -182,7 +427,7 @@
    <Mode>ALL</Mode>
    <ID>13</ID>
    <Name>US1 #4</Name>
-   <Universe>3</Universe>
+   <Universe>17</Universe>
    <Address>192</Address>
    <Channels>192</Channels>
   </Fixture>
@@ -192,7 +437,7 @@
    <Mode>ALL</Mode>
    <ID>14</ID>
    <Name>US1 #5</Name>
-   <Universe>4</Universe>
+   <Universe>18</Universe>
    <Address>0</Address>
    <Channels>192</Channels>
   </Fixture>
@@ -202,7 +447,7 @@
    <Mode>ALL</Mode>
    <ID>15</ID>
    <Name>US1 #6</Name>
-   <Universe>4</Universe>
+   <Universe>18</Universe>
    <Address>192</Address>
    <Channels>192</Channels>
   </Fixture>
@@ -212,7 +457,7 @@
    <Mode>ALL</Mode>
    <ID>16</ID>
    <Name>US1 #7</Name>
-   <Universe>5</Universe>
+   <Universe>19</Universe>
    <Address>0</Address>
    <Channels>192</Channels>
   </Fixture>
@@ -222,7 +467,7 @@
    <Mode>ALL</Mode>
    <ID>17</ID>
    <Name>US1 #8</Name>
-   <Universe>5</Universe>
+   <Universe>19</Universe>
    <Address>192</Address>
    <Channels>192</Channels>
   </Fixture>
@@ -305,6 +550,1106 @@
    <Universe>7</Universe>
    <Address>0</Address>
    <Channels>15</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>26</ID>
+   <Name>US2aB</Name>
+   <Universe>64</Universe>
+   <Address>64</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>27</ID>
+   <Name>US2aW</Name>
+   <Universe>64</Universe>
+   <Address>112</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>28</ID>
+   <Name>US2 #1</Name>
+   <Universe>20</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>29</ID>
+   <Name>US2 #2</Name>
+   <Universe>20</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>30</ID>
+   <Name>US2 #3</Name>
+   <Universe>21</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>31</ID>
+   <Name>US2 #4</Name>
+   <Universe>21</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>32</ID>
+   <Name>US2 #5</Name>
+   <Universe>22</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>33</ID>
+   <Name>US2 #6</Name>
+   <Universe>22</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>34</ID>
+   <Name>US2 #7</Name>
+   <Universe>23</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>35</ID>
+   <Name>US2 #8</Name>
+   <Universe>23</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>36</ID>
+   <Name>US3aB</Name>
+   <Universe>64</Universe>
+   <Address>128</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>37</ID>
+   <Name>US3aW</Name>
+   <Universe>64</Universe>
+   <Address>176</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>38</ID>
+   <Name>US3 #1</Name>
+   <Universe>24</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>39</ID>
+   <Name>US3 #2</Name>
+   <Universe>24</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>40</ID>
+   <Name>US3 #3</Name>
+   <Universe>25</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>41</ID>
+   <Name>US3 #4</Name>
+   <Universe>25</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>42</ID>
+   <Name>US3 #5</Name>
+   <Universe>26</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>43</ID>
+   <Name>US3 #6</Name>
+   <Universe>26</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>44</ID>
+   <Name>US3 #7</Name>
+   <Universe>27</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>45</ID>
+   <Name>US3 #8</Name>
+   <Universe>27</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>46</ID>
+   <Name>US4aB</Name>
+   <Universe>64</Universe>
+   <Address>192</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>47</ID>
+   <Name>US4aW</Name>
+   <Universe>64</Universe>
+   <Address>240</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>48</ID>
+   <Name>US4 #1</Name>
+   <Universe>28</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>49</ID>
+   <Name>US4 #2</Name>
+   <Universe>28</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>50</ID>
+   <Name>US4 #3</Name>
+   <Universe>29</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>51</ID>
+   <Name>US4 #4</Name>
+   <Universe>29</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>52</ID>
+   <Name>US4 #5</Name>
+   <Universe>30</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>53</ID>
+   <Name>US4 #6</Name>
+   <Universe>30</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>54</ID>
+   <Name>US4 #7</Name>
+   <Universe>31</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>55</ID>
+   <Name>US4 #8</Name>
+   <Universe>31</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>56</ID>
+   <Name>CS1aB</Name>
+   <Universe>64</Universe>
+   <Address>256</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>57</ID>
+   <Name>CS1aW</Name>
+   <Universe>64</Universe>
+   <Address>304</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>58</ID>
+   <Name>CS1 #1</Name>
+   <Universe>32</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>59</ID>
+   <Name>CS1 #2</Name>
+   <Universe>32</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>60</ID>
+   <Name>CS1 #3</Name>
+   <Universe>33</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>61</ID>
+   <Name>CS1 #4</Name>
+   <Universe>33</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>62</ID>
+   <Name>CS1 #5</Name>
+   <Universe>34</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>63</ID>
+   <Name>CS1 #6</Name>
+   <Universe>34</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>64</ID>
+   <Name>CS1 #7</Name>
+   <Universe>35</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>65</ID>
+   <Name>CS1 #8</Name>
+   <Universe>35</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>66</ID>
+   <Name>CS2aB</Name>
+   <Universe>64</Universe>
+   <Address>320</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>67</ID>
+   <Name>CS2aW</Name>
+   <Universe>64</Universe>
+   <Address>368</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>68</ID>
+   <Name>CS2 #1</Name>
+   <Universe>36</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>69</ID>
+   <Name>CS2 #2</Name>
+   <Universe>36</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>70</ID>
+   <Name>CS2 #3</Name>
+   <Universe>37</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>71</ID>
+   <Name>CS2 #4</Name>
+   <Universe>37</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>72</ID>
+   <Name>CS2 #5</Name>
+   <Universe>38</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>73</ID>
+   <Name>CS2 #6</Name>
+   <Universe>38</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>74</ID>
+   <Name>CS2 #7</Name>
+   <Universe>39</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>75</ID>
+   <Name>CS2 #8</Name>
+   <Universe>39</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>76</ID>
+   <Name>CS3aB</Name>
+   <Universe>64</Universe>
+   <Address>384</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>77</ID>
+   <Name>CS3aW</Name>
+   <Universe>64</Universe>
+   <Address>432</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>78</ID>
+   <Name>CS3 #1</Name>
+   <Universe>40</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>79</ID>
+   <Name>CS3 #2</Name>
+   <Universe>40</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>80</ID>
+   <Name>CS3 #3</Name>
+   <Universe>41</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>81</ID>
+   <Name>CS3 #4</Name>
+   <Universe>41</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>82</ID>
+   <Name>CS3 #5</Name>
+   <Universe>42</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>83</ID>
+   <Name>CS3 #6</Name>
+   <Universe>42</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>84</ID>
+   <Name>CS3 #7</Name>
+   <Universe>43</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>85</ID>
+   <Name>CS3 #8</Name>
+   <Universe>43</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>86</ID>
+   <Name>CS4aB</Name>
+   <Universe>64</Universe>
+   <Address>448</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>87</ID>
+   <Name>CS4aW</Name>
+   <Universe>64</Universe>
+   <Address>496</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>88</ID>
+   <Name>CS4 #1</Name>
+   <Universe>44</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>89</ID>
+   <Name>CS4 #2</Name>
+   <Universe>44</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>90</ID>
+   <Name>CS4 #3</Name>
+   <Universe>45</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>91</ID>
+   <Name>CS4 #4</Name>
+   <Universe>45</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>92</ID>
+   <Name>CS4 #5</Name>
+   <Universe>46</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>93</ID>
+   <Name>CS4 #6</Name>
+   <Universe>46</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>94</ID>
+   <Name>CS4 #7</Name>
+   <Universe>47</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>95</ID>
+   <Name>CS4 #8</Name>
+   <Universe>47</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>96</ID>
+   <Name>DS1aB</Name>
+   <Universe>65</Universe>
+   <Address>0</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>97</ID>
+   <Name>DS1aW</Name>
+   <Universe>65</Universe>
+   <Address>48</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>98</ID>
+   <Name>DS1 #1</Name>
+   <Universe>48</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>99</ID>
+   <Name>DS1 #2</Name>
+   <Universe>48</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>100</ID>
+   <Name>DS1 #3</Name>
+   <Universe>49</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>101</ID>
+   <Name>DS1 #4</Name>
+   <Universe>49</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>102</ID>
+   <Name>DS1 #5</Name>
+   <Universe>50</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>103</ID>
+   <Name>DS1 #6</Name>
+   <Universe>50</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>104</ID>
+   <Name>DS1 #7</Name>
+   <Universe>51</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>105</ID>
+   <Name>DS1 #8</Name>
+   <Universe>51</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>106</ID>
+   <Name>DS2aB</Name>
+   <Universe>65</Universe>
+   <Address>64</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>107</ID>
+   <Name>DS2aW</Name>
+   <Universe>65</Universe>
+   <Address>112</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>108</ID>
+   <Name>DS2 #1</Name>
+   <Universe>52</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>109</ID>
+   <Name>DS2 #2</Name>
+   <Universe>52</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>110</ID>
+   <Name>DS2 #3</Name>
+   <Universe>53</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>111</ID>
+   <Name>DS2 #4</Name>
+   <Universe>53</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>112</ID>
+   <Name>DS2 #5</Name>
+   <Universe>54</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>113</ID>
+   <Name>DS2 #6</Name>
+   <Universe>54</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>114</ID>
+   <Name>DS2 #7</Name>
+   <Universe>55</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>115</ID>
+   <Name>DS2 #8</Name>
+   <Universe>55</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>116</ID>
+   <Name>DS3aB</Name>
+   <Universe>65</Universe>
+   <Address>128</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>117</ID>
+   <Name>DS3aW</Name>
+   <Universe>65</Universe>
+   <Address>176</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>118</ID>
+   <Name>DS3 #1</Name>
+   <Universe>56</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>119</ID>
+   <Name>DS3 #2</Name>
+   <Universe>56</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>120</ID>
+   <Name>DS3 #3</Name>
+   <Universe>57</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>121</ID>
+   <Name>DS3 #4</Name>
+   <Universe>57</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>122</ID>
+   <Name>DS3 #5</Name>
+   <Universe>58</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>123</ID>
+   <Name>DS3 #6</Name>
+   <Universe>58</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>124</ID>
+   <Name>DS3 #7</Name>
+   <Universe>59</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>125</ID>
+   <Name>DS3 #8</Name>
+   <Universe>59</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>48ch RGB</Mode>
+   <ID>126</ID>
+   <Name>DS4aB</Name>
+   <Universe>65</Universe>
+   <Address>192</Address>
+   <Channels>48</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Oppsk</Manufacturer>
+   <Model>Wall Washer Light Bar</Model>
+   <Mode>16ch White</Mode>
+   <ID>127</ID>
+   <Name>DS4aW</Name>
+   <Universe>65</Universe>
+   <Address>240</Address>
+   <Channels>16</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>128</ID>
+   <Name>DS4 #1</Name>
+   <Universe>60</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>129</ID>
+   <Name>DS4 #2</Name>
+   <Universe>60</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>130</ID>
+   <Name>DS4 #3</Name>
+   <Universe>61</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>131</ID>
+   <Name>DS4 #4</Name>
+   <Universe>61</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>132</ID>
+   <Name>DS4 #5</Name>
+   <Universe>62</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>133</ID>
+   <Name>DS4 #6</Name>
+   <Universe>62</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>134</ID>
+   <Name>DS4 #7</Name>
+   <Universe>63</Universe>
+   <Address>0</Address>
+   <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>PHS Chorus</Manufacturer>
+   <Model>Step Row 64 Heads</Model>
+   <Mode>ALL</Mode>
+   <ID>135</ID>
+   <Name>DS4 #8</Name>
+   <Universe>63</Universe>
+   <Address>192</Address>
+   <Channels>192</Channels>
   </Fixture>
   <FixtureGroup ID="0">
    <Name>spots</Name>
@@ -1144,6 +2489,9 @@
    <EffectParam name="rate" value="1.4"/>
   </Palette>
   <Palette ID="20" Type="Effect" Name="New Effect" Path="Palettes/Effect/Color/Spatial Gradient/"/>
+  <Palette ID="21" Type="Effect" Name="midi-puddles" Path="Palettes/Effect/Dimmer/MIDI Puddles/">
+   <EffectScript>midi-puddles</EffectScript>
+  </Palette>
   <Function ID="0" Type="Scene" Name="Show" Path="Washes">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureVal ID="1">2,0,3,0,4,4,5,16</FixtureVal>
@@ -1371,6 +2719,116 @@
    <FxItem ID="22" XPos="7860.15" YPos="1496.29" LayerId="2"/>
    <FxItem ID="23" XPos="9107.05" YPos="1496.29" LayerId="2"/>
    <FxItem ID="24" XPos="10298.6" YPos="1505.63" LayerId="2"/>
+   <FxItem ID="26" XPos="3565" YPos="2742" LayerId="3" GroupId="6"/>
+   <FxItem ID="27" XPos="3564" YPos="2819" LayerId="3" GroupId="6"/>
+   <FxItem ID="28" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
+   <FxItem ID="29" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
+   <FxItem ID="30" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
+   <FxItem ID="31" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
+   <FxItem ID="32" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
+   <FxItem ID="33" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
+   <FxItem ID="34" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
+   <FxItem ID="35" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
+   <FxItem ID="36" XPos="5995" YPos="2743" LayerId="3" GroupId="7"/>
+   <FxItem ID="37" XPos="5994" YPos="2820" LayerId="3" GroupId="7"/>
+   <FxItem ID="38" XPos="6085.04" YPos="2920.44" LayerId="3" GroupId="7"/>
+   <FxItem ID="39" XPos="6085.04" YPos="2920.44" LayerId="3" GroupId="7"/>
+   <FxItem ID="40" XPos="6085.04" YPos="2920.44" LayerId="3" GroupId="7"/>
+   <FxItem ID="41" XPos="6085.04" YPos="2920.44" LayerId="3" GroupId="7"/>
+   <FxItem ID="42" XPos="6085.04" YPos="2920.44" LayerId="3" GroupId="7"/>
+   <FxItem ID="43" XPos="6085.04" YPos="2920.44" LayerId="3" GroupId="7"/>
+   <FxItem ID="44" XPos="6085.04" YPos="2920.44" LayerId="3" GroupId="7"/>
+   <FxItem ID="45" XPos="6085.04" YPos="2920.44" LayerId="3" GroupId="7"/>
+   <FxItem ID="46" XPos="8438" YPos="2741" LayerId="3" GroupId="8"/>
+   <FxItem ID="47" XPos="8437" YPos="2818" LayerId="3" GroupId="8"/>
+   <FxItem ID="48" XPos="8528.04" YPos="2918.44" LayerId="3" GroupId="8"/>
+   <FxItem ID="49" XPos="8528.04" YPos="2918.44" LayerId="3" GroupId="8"/>
+   <FxItem ID="50" XPos="8528.04" YPos="2918.44" LayerId="3" GroupId="8"/>
+   <FxItem ID="51" XPos="8528.04" YPos="2918.44" LayerId="3" GroupId="8"/>
+   <FxItem ID="52" XPos="8528.04" YPos="2918.44" LayerId="3" GroupId="8"/>
+   <FxItem ID="53" XPos="8528.04" YPos="2918.44" LayerId="3" GroupId="8"/>
+   <FxItem ID="54" XPos="8528.04" YPos="2918.44" LayerId="3" GroupId="8"/>
+   <FxItem ID="55" XPos="8528.04" YPos="2918.44" LayerId="3" GroupId="8"/>
+   <FxItem ID="56" XPos="1107" YPos="3962" LayerId="3" GroupId="9"/>
+   <FxItem ID="57" XPos="1106" YPos="4039" LayerId="3" GroupId="9"/>
+   <FxItem ID="58" XPos="1197.04" YPos="4139.44" LayerId="3" GroupId="9"/>
+   <FxItem ID="59" XPos="1197.04" YPos="4139.44" LayerId="3" GroupId="9"/>
+   <FxItem ID="60" XPos="1197.04" YPos="4139.44" LayerId="3" GroupId="9"/>
+   <FxItem ID="61" XPos="1197.04" YPos="4139.44" LayerId="3" GroupId="9"/>
+   <FxItem ID="62" XPos="1197.04" YPos="4139.44" LayerId="3" GroupId="9"/>
+   <FxItem ID="63" XPos="1197.04" YPos="4139.44" LayerId="3" GroupId="9"/>
+   <FxItem ID="64" XPos="1197.04" YPos="4139.44" LayerId="3" GroupId="9"/>
+   <FxItem ID="65" XPos="1197.04" YPos="4139.44" LayerId="3" GroupId="9"/>
+   <FxItem ID="66" XPos="3565" YPos="3962" LayerId="3" GroupId="10"/>
+   <FxItem ID="67" XPos="3564" YPos="4039" LayerId="3" GroupId="10"/>
+   <FxItem ID="68" XPos="3655.04" YPos="4139.44" LayerId="3" GroupId="10"/>
+   <FxItem ID="69" XPos="3655.04" YPos="4139.44" LayerId="3" GroupId="10"/>
+   <FxItem ID="70" XPos="3655.04" YPos="4139.44" LayerId="3" GroupId="10"/>
+   <FxItem ID="71" XPos="3655.04" YPos="4139.44" LayerId="3" GroupId="10"/>
+   <FxItem ID="72" XPos="3655.04" YPos="4139.44" LayerId="3" GroupId="10"/>
+   <FxItem ID="73" XPos="3655.04" YPos="4139.44" LayerId="3" GroupId="10"/>
+   <FxItem ID="74" XPos="3655.04" YPos="4139.44" LayerId="3" GroupId="10"/>
+   <FxItem ID="75" XPos="3655.04" YPos="4139.44" LayerId="3" GroupId="10"/>
+   <FxItem ID="76" XPos="5995" YPos="3962" LayerId="3" GroupId="11"/>
+   <FxItem ID="77" XPos="5994" YPos="4039" LayerId="3" GroupId="11"/>
+   <FxItem ID="78" XPos="6085.04" YPos="4139.44" LayerId="3" GroupId="11"/>
+   <FxItem ID="79" XPos="6085.04" YPos="4139.44" LayerId="3" GroupId="11"/>
+   <FxItem ID="80" XPos="6085.04" YPos="4139.44" LayerId="3" GroupId="11"/>
+   <FxItem ID="81" XPos="6085.04" YPos="4139.44" LayerId="3" GroupId="11"/>
+   <FxItem ID="82" XPos="6085.04" YPos="4139.44" LayerId="3" GroupId="11"/>
+   <FxItem ID="83" XPos="6085.04" YPos="4139.44" LayerId="3" GroupId="11"/>
+   <FxItem ID="84" XPos="6085.04" YPos="4139.44" LayerId="3" GroupId="11"/>
+   <FxItem ID="85" XPos="6085.04" YPos="4139.44" LayerId="3" GroupId="11"/>
+   <FxItem ID="86" XPos="8438" YPos="3962" LayerId="3" GroupId="12"/>
+   <FxItem ID="87" XPos="8437" YPos="4039" LayerId="3" GroupId="12"/>
+   <FxItem ID="88" XPos="8528.04" YPos="4139.44" LayerId="3" GroupId="12"/>
+   <FxItem ID="89" XPos="8528.04" YPos="4139.44" LayerId="3" GroupId="12"/>
+   <FxItem ID="90" XPos="8528.04" YPos="4139.44" LayerId="3" GroupId="12"/>
+   <FxItem ID="91" XPos="8528.04" YPos="4139.44" LayerId="3" GroupId="12"/>
+   <FxItem ID="92" XPos="8528.04" YPos="4139.44" LayerId="3" GroupId="12"/>
+   <FxItem ID="93" XPos="8528.04" YPos="4139.44" LayerId="3" GroupId="12"/>
+   <FxItem ID="94" XPos="8528.04" YPos="4139.44" LayerId="3" GroupId="12"/>
+   <FxItem ID="95" XPos="8528.04" YPos="4139.44" LayerId="3" GroupId="12"/>
+   <FxItem ID="96" XPos="1107" YPos="5183" LayerId="3" GroupId="13"/>
+   <FxItem ID="97" XPos="1106" YPos="5260" LayerId="3" GroupId="13"/>
+   <FxItem ID="98" XPos="1197.04" YPos="5360.44" LayerId="3" GroupId="13"/>
+   <FxItem ID="99" XPos="1197.04" YPos="5360.44" LayerId="3" GroupId="13"/>
+   <FxItem ID="100" XPos="1197.04" YPos="5360.44" LayerId="3" GroupId="13"/>
+   <FxItem ID="101" XPos="1197.04" YPos="5360.44" LayerId="3" GroupId="13"/>
+   <FxItem ID="102" XPos="1197.04" YPos="5360.44" LayerId="3" GroupId="13"/>
+   <FxItem ID="103" XPos="1197.04" YPos="5360.44" LayerId="3" GroupId="13"/>
+   <FxItem ID="104" XPos="1197.04" YPos="5360.44" LayerId="3" GroupId="13"/>
+   <FxItem ID="105" XPos="1197.04" YPos="5360.44" LayerId="3" GroupId="13"/>
+   <FxItem ID="106" XPos="3565" YPos="5183" LayerId="3" GroupId="14"/>
+   <FxItem ID="107" XPos="3564" YPos="5260" LayerId="3" GroupId="14"/>
+   <FxItem ID="108" XPos="3655.04" YPos="5360.44" LayerId="3" GroupId="14"/>
+   <FxItem ID="109" XPos="3655.04" YPos="5360.44" LayerId="3" GroupId="14"/>
+   <FxItem ID="110" XPos="3655.04" YPos="5360.44" LayerId="3" GroupId="14"/>
+   <FxItem ID="111" XPos="3655.04" YPos="5360.44" LayerId="3" GroupId="14"/>
+   <FxItem ID="112" XPos="3655.04" YPos="5360.44" LayerId="3" GroupId="14"/>
+   <FxItem ID="113" XPos="3655.04" YPos="5360.44" LayerId="3" GroupId="14"/>
+   <FxItem ID="114" XPos="3655.04" YPos="5360.44" LayerId="3" GroupId="14"/>
+   <FxItem ID="115" XPos="3655.04" YPos="5360.44" LayerId="3" GroupId="14"/>
+   <FxItem ID="116" XPos="5995" YPos="5183" LayerId="3" GroupId="15"/>
+   <FxItem ID="117" XPos="5994" YPos="5260" LayerId="3" GroupId="15"/>
+   <FxItem ID="118" XPos="6085.04" YPos="5360.44" LayerId="3" GroupId="15"/>
+   <FxItem ID="119" XPos="6085.04" YPos="5360.44" LayerId="3" GroupId="15"/>
+   <FxItem ID="120" XPos="6085.04" YPos="5360.44" LayerId="3" GroupId="15"/>
+   <FxItem ID="121" XPos="6085.04" YPos="5360.44" LayerId="3" GroupId="15"/>
+   <FxItem ID="122" XPos="6085.04" YPos="5360.44" LayerId="3" GroupId="15"/>
+   <FxItem ID="123" XPos="6085.04" YPos="5360.44" LayerId="3" GroupId="15"/>
+   <FxItem ID="124" XPos="6085.04" YPos="5360.44" LayerId="3" GroupId="15"/>
+   <FxItem ID="125" XPos="6085.04" YPos="5360.44" LayerId="3" GroupId="15"/>
+   <FxItem ID="126" XPos="8438" YPos="5183" LayerId="3" GroupId="16"/>
+   <FxItem ID="127" XPos="8437" YPos="5260" LayerId="3" GroupId="16"/>
+   <FxItem ID="128" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
+   <FxItem ID="129" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
+   <FxItem ID="130" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
+   <FxItem ID="131" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
+   <FxItem ID="132" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
+   <FxItem ID="133" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
+   <FxItem ID="134" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
+   <FxItem ID="135" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
    <MonitorLayer ID="1" Name="Fly" Visible="1" Order="0"/>
    <MonitorLayer ID="4" Name="Trusses" Visible="1" Order="1"/>
    <MonitorLayer ID="2" Name="Stage Lights" Visible="1" Order="2"/>
@@ -1381,8 +2839,19 @@
    <MonitorGroup ID="1" Name="Risers" LayerId="0"/>
    <MonitorGroup ID="2" Name="T-1" LayerId="4" AnchorKind="truss" AnchorId="1"/>
    <MonitorGroup ID="3" Name="Bar 6" LayerId="4" AnchorKind="truss" AnchorId="5"/>
-   <MonitorGroup ID="4" Name="US-1" LayerId="3" AnchorKind="platform" AnchorId="12" Frame="1" OX="1.042" OY="2.722" OZ="0.000" Rot="0.000"/>
+   <MonitorGroup ID="4" Name="US-1" LayerId="3" AnchorKind="platform" AnchorId="12" Frame="1" OX="1.042" OY="2.722" OZ="0.396" Rot="0.000"/>
    <MonitorGroup ID="5" Name="T-2" LayerId="4" AnchorKind="truss" AnchorId="2" Frame="1" OX="3.652" OY="1.292" OZ="2.476" Rot="0.000"/>
+   <MonitorGroup ID="6" Name="US-2" LayerId="3" AnchorKind="platform" AnchorId="13" Frame="1" OX="3.500" OY="2.721" OZ="0.396" Rot="0.000"/>
+   <MonitorGroup ID="7" Name="US-3" LayerId="3" AnchorKind="platform" AnchorId="14" Frame="1" OX="5.930" OY="2.722" OZ="0.396" Rot="0.000"/>
+   <MonitorGroup ID="8" Name="US-4" LayerId="3" AnchorKind="platform" AnchorId="15" Frame="1" OX="8.373" OY="2.720" OZ="0.396" Rot="0.000"/>
+   <MonitorGroup ID="9" Name="CS-1" LayerId="3" AnchorKind="platform" AnchorId="16" Frame="1" OX="1.042" OY="3.941" OZ="0.183" Rot="0.000"/>
+   <MonitorGroup ID="10" Name="CS-2" LayerId="3" AnchorKind="platform" AnchorId="17" Frame="1" OX="3.500" OY="3.941" OZ="0.183" Rot="0.000"/>
+   <MonitorGroup ID="11" Name="CS-3" LayerId="3" AnchorKind="platform" AnchorId="18" Frame="1" OX="5.930" OY="3.941" OZ="0.183" Rot="0.000"/>
+   <MonitorGroup ID="12" Name="CS-4" LayerId="3" AnchorKind="platform" AnchorId="19" Frame="1" OX="8.373" OY="3.941" OZ="0.183" Rot="0.000"/>
+   <MonitorGroup ID="13" Name="DS-1" LayerId="3" AnchorKind="platform" AnchorId="20" Frame="1" OX="1.042" OY="5.162" OZ="0.000" Rot="0.000"/>
+   <MonitorGroup ID="14" Name="DS-2" LayerId="3" AnchorKind="platform" AnchorId="21" Frame="1" OX="3.500" OY="5.162" OZ="0.000" Rot="0.000"/>
+   <MonitorGroup ID="15" Name="DS-3" LayerId="3" AnchorKind="platform" AnchorId="22" Frame="1" OX="5.930" OY="5.162" OZ="0.000" Rot="0.000"/>
+   <MonitorGroup ID="16" Name="DS-4" LayerId="3" AnchorKind="platform" AnchorId="23" Frame="1" OX="8.373" OY="5.162" OZ="0.000" Rot="0.000"/>
    <Truss ID="1" Name="T-1" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="1.201" OriginY="1.321" OriginZ="0.000" DirX="1.000000" DirY="0.000000" LayerId="4" GroupId="2"/>
    <Truss ID="2" Name="T-2" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="3.652" OriginY="1.292" OriginZ="0.000" DirX="1.000000" DirY="0.000000" LayerId="4" GroupId="5"/>
    <Truss ID="3" Name="T-3" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="8.215" OriginY="1.312" OriginZ="0.000" DirX="1.000000" DirY="0.000000" LayerId="4"/>
@@ -1401,9 +2870,17 @@
    <StagePlatform ID="10" Name="DSP3" OriginX="5.934" OriginY="3.934" Width="2.438" Depth="1.219" Height="0.183" Color="#3d5986" GroupId="1"/>
    <StagePlatform ID="11" Name="DSP4" OriginX="8.382" OriginY="3.925" Width="2.438" Depth="1.219" Height="0.183" Color="#3d5986" GroupId="1"/>
    <StagePlatform ID="12" Name="US-1" OriginX="1.042" OriginY="2.722" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="4"/>
-   <StagePlatform ID="13" Name="US-2" OriginX="3.500" OriginY="2.721" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3"/>
-   <StagePlatform ID="14" Name="US-3" OriginX="5.930" OriginY="2.722" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3"/>
-   <StagePlatform ID="15" Name="US-4" OriginX="8.373" OriginY="2.720" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3"/>
+   <StagePlatform ID="13" Name="US-2" OriginX="3.500" OriginY="2.721" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="6"/>
+   <StagePlatform ID="14" Name="US-3" OriginX="5.930" OriginY="2.722" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="7"/>
+   <StagePlatform ID="15" Name="US-4" OriginX="8.373" OriginY="2.720" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="8"/>
+   <StagePlatform ID="16" Name="CS-1" OriginX="1.042" OriginY="3.941" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="9"/>
+   <StagePlatform ID="17" Name="CS-2" OriginX="3.500" OriginY="3.941" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="10"/>
+   <StagePlatform ID="18" Name="CS-3" OriginX="5.930" OriginY="3.941" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="11"/>
+   <StagePlatform ID="19" Name="CS-4" OriginX="8.373" OriginY="3.941" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="12"/>
+   <StagePlatform ID="20" Name="DS-1" OriginX="1.042" OriginY="5.162" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="13"/>
+   <StagePlatform ID="21" Name="DS-2" OriginX="3.500" OriginY="5.162" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="14"/>
+   <StagePlatform ID="22" Name="DS-3" OriginX="5.930" OriginY="5.162" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="15"/>
+   <StagePlatform ID="23" Name="DS-4" OriginX="8.373" OriginY="5.162" Width="2.438" Depth="0.204" Height="0.204" Color="#dd4f18" LayerId="3" GroupId="16"/>
    <StageTarget ID="0" Name="Test Target" X="5.966" Y="2.292" Z="0.000" Color="#ffb400"/>
    <StageTarget ID="1" Name="Target 2" X="7.249" Y="1.247" Z="0.000" Color="#ffb400"/>
    <FixtureRig FID="0" Truss="4294967295" Offset="0.185" Mounting="TopHung" PanZero="0.0"/>
@@ -1430,6 +2907,116 @@
    <FixtureRig FID="22" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Deck="2" DeckH="0.000"/>
    <FixtureRig FID="23" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Deck="3" DeckH="0.000"/>
    <FixtureRig FID="24" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0" Deck="3" DeckH="0.000"/>
+   <FixtureRig FID="26" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="27" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="28" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="29" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="30" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="31" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="32" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="33" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="34" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="35" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="36" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="37" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="38" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="39" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="40" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="41" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="42" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="43" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="44" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="45" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="46" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="47" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="48" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="49" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="50" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="51" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="52" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="53" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="54" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="55" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="56" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="57" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="58" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="59" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="60" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="61" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="62" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="63" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="64" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="65" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="66" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="67" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="68" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="69" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="70" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="71" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="72" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="73" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="74" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="75" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="76" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="77" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="78" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="79" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="80" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="81" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="82" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="83" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="84" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="85" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="86" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="87" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="88" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="89" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="90" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="91" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="92" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="93" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="94" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="95" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="96" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="97" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="98" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="99" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="100" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="101" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="102" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="103" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="104" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="105" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="106" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="107" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="108" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="109" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="110" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="111" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="112" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="113" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="114" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="115" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="116" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="117" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="118" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="119" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="120" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="121" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="122" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="123" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="124" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="125" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
+   <FixtureRig FID="126" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="127" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
+   <FixtureRig FID="128" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
+   <FixtureRig FID="129" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
+   <FixtureRig FID="130" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140" SM="1" SA="0.0"/>
+   <FixtureRig FID="131" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.089" GLX="1.219" GLY="0.204" GLZ="0.115" SM="1" SA="0.0"/>
+   <FixtureRig FID="132" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.064" GLX="1.219" GLY="0.204" GLZ="0.089" SM="1" SA="0.0"/>
+   <FixtureRig FID="133" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064" SM="1" SA="0.0"/>
+   <FixtureRig FID="134" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038" SM="1" SA="0.0"/>
+   <FixtureRig FID="135" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013" SM="1" SA="0.0"/>
   </Monitor>
  </Engine>
  <VirtualConsole>
@@ -2925,6 +4512,5 @@
  </SimpleDesk>
  <AppState>
   <MonitorWindow open="1" geometry="AdnQywADAAAAAAHY///6rAAACDb////EAAAB2P//+swAAAg2////xAAAAAEAAAAACgAAAAHY///6zAAACDb////E"/>
-  <DetachedWindow class="ShowManager" tabIndex="3" geometry="AdnQywADAAAAAAF4AAAAfAAACWQAAAOMAAABeAAAAJwAAAlkAAADjAAAAAAAAAAACgAAAAF4AAAAnAAACWQAAAOM"/>
  </AppState>
 </Workspace>
