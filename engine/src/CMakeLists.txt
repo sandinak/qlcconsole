@@ -80,6 +80,8 @@ add_library(${module_name} SHARED
     cueoutput.cpp cueoutput.h
     cuelookahead.cpp cuelookahead.h
     markplanner.cpp markplanner.h
+    controlsurface.h
+    controlsurfaceengine.cpp controlsurfaceengine.h
     lastlookeffect.cpp lastlookeffect.h
     effectscript.cpp effectscript.h
     effectscriptcache.cpp effectscriptcache.h
