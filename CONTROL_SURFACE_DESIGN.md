@@ -116,24 +116,75 @@ the Xbox **right trigger** to swell the drum-riser wash and sweep a beam with th
 - **Auto-MIB, Blind, Park, Flash, Highlight** — already have engine + buttons.
 - **Per-widget MIDI mapping** + programmer-mode LED feedback (from the APC40 work).
 
-## Build slices (after the layout is confirmed)
+## Hardware: PMJ Black 1 (actual — `resources/inputprofiles/PMJ-Black-1.qxi`)
 
-- **P0 — decide the real PMJ layout** (buttons / encoders / faders / banks) and the
-  static-core assignments. *Needs the hardware / OpenDeck config in hand.*
-- **P1 — Design layout**: Fixtures/Groups select grid + paged parameter encoders +
-  static core, in Design mode; LED selection feedback.
-- **P2 — Runtime layout**: Cues grid + step nav + static core, in Operate; current-
-  cue LED.
-- **P3 — Xbox roles**: confirm the design-joystick handoff + add a runtime busking
-  profile (triggers/bumpers/d-pad) as an HID profile.
-- **P4 — Page/mode engine**: the surface auto-repaints on mode/tab/selection change
-  (the piece that makes paging feel intelligent rather than manual).
+A **10-strip + mode-button** board (not a pad grid), which maps almost 1:1 to the
+workflow:
 
-## Open — need from Branson
+- **Faders (11):** `Master` + `Ch 1–10` → Grand Master + 10 strip levels.
+- **10 channel strips:** each has `N` (select/fire), `N-Up`, `N-Down`, `N-Load` →
+  the 10 addressable "things" in the current page.
+- **Encoders (4):** `Enc 1–4` (with push) → the paged parameter encoders.
+- **Transport:** `Go`, `Back`, `Left`, `Right`, `Pre Page`, `Next Page`.
+- **Mode buttons:** `Favorites`, `Set`, `Effects`, `Groups`, `Looks`, `Macros`,
+  `Fix Cont` → **these ARE the pages**, in hardware.
+- **LEDs:** Note-On on **MIDI ch 9**, velocity = brightness **0–15** (per
+  `PMJ-Black-1-idle.qxm`). This is the "what's valid in the moment" channel.
 
-- The **actual PMJ hardware map**: how many buttons (grid shape), how many encoders,
-  any faders, and whether it has its own bank/shift buttons + LED-per-button.
-- Whether runtime busking should be **Xbox-only** or the PMJ encoders also live-
-  assign during the show.
-- Which controls are sacred **static** for *your* hands (everyone's muscle memory
-  differs).
+**Insight:** `Groups`/`Looks`/`Effects`/`Macros`/`Fix Cont` select what the 10
+strips address; `Pre/Next Page` bank through >10 items; the LEDs show which strips
+are populated/selected/active *right now*. The board is already a paging console —
+we just teach the tool to drive it.
+
+## The general control-surface engine (what Branson actually asked for)
+
+Don't hard-map the PMJ. Build a **surface-agnostic layer** and make each device an
+**overlay** onto it — so the PMJ, the **APC40 mk2**, and the next board all light
+up and page the same way.
+
+Three parts:
+
+1. **Surface model** — from the device's input profile: its controls typed as
+   *button (LED-capable)*, *encoder*, or *fader*, each with an input address and
+   (if it has one) an LED/feedback address + brightness range. Read generically; a
+   new device is just a profile + its LED addressing.
+2. **Logical roles + pages** — the *meaning* layer, device-independent:
+   `select[N]`, `load[N]`, `level[N]`, `param[E]`, `page:Groups|Looks|Effects|…`,
+   `transport:go/back/next/prev`, and the static core. Each role has a
+   **context-aware state** the engine computes from the app (mode, active tab,
+   selection, what's populated): *valid / active / selected / empty* → drives the
+   LED (bright / dim / off / colour where supported).
+3. **Overlay** — a per-device binding of physical controls → logical roles + the
+   LED map. The PMJ overlay binds `Groups`→page, `1..10`→select[1..10],
+   `N-Load`→load[N], `Enc 1..4`→param[1..4], `Master`→GM, etc. The APC40 mk2
+   overlay binds its pads/knobs to the *same* roles.
+
+The engine owns the **feedback loop**: on any relevant app change (selection,
+mode, page, cue) it recomputes role states and repaints every surface's LEDs. That
+single generic loop is the "LED lighting to identify what's valid in the moment,"
+for every board at once.
+
+## Build slices (revised — engine-first, then overlays)
+
+- **P0 — CONTROL SURFACE ENGINE (core, device-agnostic).** The surface model
+  (typed controls + LED addresses from a profile), the logical role/page vocabulary
+  with context-aware state, and the generic **feedback loop** that repaints LEDs on
+  app change. No device specifics yet — proves the abstraction.
+- **P1 — PMJ overlay + LED.** Bind the PMJ's controls to the roles; light the
+  strips/modes per validity (populated/selected/active). Start with the **Design
+  page** (Groups/Looks/Fix Cont → 10-strip select + Enc 1–4 params + Master GM).
+- **P2 — Runtime page.** `Looks`/`Macros` as cue banks, `Go`/`Back`/`Left`/`Right`
+  as transport, current-cue LED. Same engine, different page states.
+- **P3 — APC40 mk2 overlay.** Second device onto the SAME roles — proves the
+  engine generalises (and revives the APC40 work).
+- **P4 — Xbox roles.** Confirm the design-joystick handoff + a runtime busking HID
+  profile (sticks/triggers/bumpers) layered over the timeline.
+
+## Open — confirm before/along P0
+
+- **Static core for *your* hands**: which controls never page (proposed: `Master`
+  = GM, plus a couple of mode buttons reserved for Blackout / Blind / Auto-MIB /
+  Tap — say which).
+- Whether the **10 faders** are strip levels (per selected fixture/group) or fixed
+  submasters — affects P1.
+- Runtime busking: **Xbox-only**, or PMJ encoders also live-assign mid-show.
