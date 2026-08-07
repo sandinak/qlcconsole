@@ -1747,6 +1747,39 @@ void LookEditor::rebuildEffectDynWidget()
         }
     }
 
+    // --- One-shot length override (per look) ---
+    // A oneshot effect runs once over a resolved duration; this pins an explicit
+    // length for THIS look (independent per effect). auto (0) = follow the cue /
+    // chase step, then the effect's own default.
+    if (tmpScript.isOneShot())
+    {
+        QWidget *row = new QWidget(m_effectDynWidget);
+        QHBoxLayout *rl = new QHBoxLayout(row);
+        rl->setContentsMargins(0, 6, 0, 0);
+        rl->addWidget(new QLabel(tr("One-shot length:"), row));
+        QDoubleSpinBox *sp = new QDoubleSpinBox(row);
+        sp->setRange(0.0, 120.0);
+        sp->setSingleStep(0.1);
+        sp->setDecimals(1);
+        sp->setSuffix(tr(" s"));
+        sp->setSpecialValueText(tr("auto"));   // 0 → follow the cue / default
+        sp->setToolTip(tr("How long this one-shot runs, for this look. auto = follow the "
+                          "cue / chase step (or the effect's default); set a time to override."));
+        sp->setValue(p->effectParamValues().value(QStringLiteral("__durationMs"), 0.0) / 1000.0);
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                this, [this](double s) {
+            if (m_loading) return;
+            QLCPalette *pp = m_doc->palette(m_paletteId);
+            if (!pp || pp->type() != QLCPalette::Effect) return;
+            pp->setEffectParamValue(QStringLiteral("__durationMs"), s * 1000.0);  // 0 = auto
+            m_doc->setModified();
+            emit paletteValueChanged(m_paletteId);
+        });
+        rl->addWidget(sp);
+        rl->addStretch(1);
+        dv->addWidget(row);
+    }
+
     // --- Input bindings ---
     // Hide manual bindings when the script subscribes to the system "joystick"
     // data channel — the programmer controller auto-routes the HID/profile axes.

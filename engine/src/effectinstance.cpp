@@ -10,6 +10,9 @@
 
 #include "doc.h"
 #include "scene.h"
+#include "function.h"
+#include "chaser.h"
+#include "chaserstep.h"
 #include "fixture.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
@@ -155,6 +158,11 @@ void EffectInstance::runTick()
         return;
     }
 
+    // A finished one-shot is frozen: "hold" keeps the last frame already in
+    // m_lastResults, "release" left it cleared. Either way, skip the whole tick.
+    if (m_oneShotDone)
+        return;
+
     // Collect the fixture ids the scene targets, filtered by the script's
     // declared fixtureTypes (e.g. ["rgb"] excludes movers, ["moving"] excludes
     // wash fixtures).  If the script declares no types, all scene fixtures are used.
@@ -198,6 +206,22 @@ void EffectInstance::runTick()
     }
 
     QList<DmxWrite> writes = parseIntents(result, cells);
+
+    // One-shot lifecycle: finished when phase reaches 1 or the script sets
+    // state.done (it can finish early). On finish, "release" stops driving now
+    // (fixtures fall back to the base); "hold" keeps this final frame. Either way
+    // the frozen flag makes the next tick a no-op (see the top of runTick).
+    if (m_script.isOneShot() && !m_oneShotDone)
+    {
+        const int dur = resolvedDurationMs();
+        const double phase = dur > 0 ? qMin(1.0, double(m_elapsed.elapsed()) / dur) : 1.0;
+        if (phase >= 1.0 || m_state.property("done").toBool())
+        {
+            m_oneShotDone = true;
+            if (m_script.onFinish() == QLatin1String("release"))
+                writes.clear();
+        }
+    }
 
     // --- Diagnostic: set QLC_EFFECT_DEBUG=<path> to trace note→column mapping ---
     // Logs only when the held-note set changes (not at 50 Hz). Shows the grid, the
@@ -388,6 +412,61 @@ float EffectInstance::sceneEnvelope() const
     if (el >= fadeIn)
         return 1.0f;
     return float(el) / float(fadeIn);
+}
+
+int EffectInstance::resolvedDurationMs() const
+{
+    // 1. Look override — a positive per-effect duration on the palette wins
+    //    (L3 UI sets the reserved "__durationMs" value; persists with the look).
+    if (QLCPalette *pal = m_doc->palette(m_effectPaletteId))
+    {
+        const int ov = int(pal->effectParamValues().value(QStringLiteral("__durationMs"), 0.0));
+        if (ov > 0)
+            return ov;
+    }
+
+    // 2. Cue / chase timing, per the script's syncTo.
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
+    if (scene != nullptr)
+    {
+        auto finite = [](uint s) {
+            return s != 0 && s != Function::defaultSpeed() && s != Function::infiniteSpeed();
+        };
+        const QString sync = m_script.syncTo();
+        if (sync == QLatin1String("entrance"))
+        {
+            const uint fi = scene->fadeInSpeed();
+            if (finite(fi)) return int(fi);
+        }
+        else if (sync == QLatin1String("exit"))
+        {
+            const uint fo = scene->fadeOutSpeed();
+            if (finite(fo)) return int(fo);
+        }
+        else // "span" → the driving chase step's duration
+        {
+            for (Function *f : m_doc->functions())
+            {
+                if (f == nullptr || f->type() != Function::ChaserType || !f->isRunning())
+                    continue;
+                Chaser *ch = qobject_cast<Chaser*>(f);
+                if (ch == nullptr)
+                    continue;
+                const int cur = ch->currentStepIndex();
+                ChaserStep *cs = (cur >= 0) ? ch->stepAt(cur) : nullptr;
+                if (cs != nullptr && cs->fid == m_sceneId)
+                {
+                    const uint d = ch->currentStepDuration();
+                    if (d > 0)
+                        return int(d);
+                    break;
+                }
+            }
+        }
+    }
+
+    // 3. Script default.
+    return m_script.naturalDurationMs();
 }
 
 QList<quint32> EffectInstance::effectiveFixtureIds() const
@@ -787,6 +866,16 @@ QJSValue EffectInstance::buildInputsObject() const
         obj.setProperty("_bpm",       0.0);
         obj.setProperty("_beat",      0.0);
         obj.setProperty("_beatCount", 0);
+    }
+
+    // One-shot lifecycle: hand the effect its window so it fits any duration.
+    //   phase    — 0→1 progress through the resolved run length
+    //   duration — that length in ms
+    if (m_script.isOneShot())
+    {
+        const int dur = resolvedDurationMs();
+        obj.setProperty("phase", dur > 0 ? qMin(1.0, elapsedMs / double(dur)) : 1.0);
+        obj.setProperty("duration", double(dur));
     }
 
     return obj;

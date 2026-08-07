@@ -122,6 +122,17 @@ public:
      *  (presets) authored against an older Generator. */
     int         version()      const { return m_version; }
 
+    // --- Lifecycle (see EFFECT_LIFECYCLE_DESIGN.md) ---
+    /** "loop" (default) | "reactive" | "oneshot". */
+    QString     lifecycle()    const { return m_lifecycle; }
+    bool        isOneShot()    const { return m_lifecycle == QLatin1String("oneshot"); }
+    /** One-shot sync target: "entrance" | "span" | "exit". */
+    QString     syncTo()       const { return m_syncTo; }
+    /** One-shot end behaviour: "hold" | "release". */
+    QString     onFinish()     const { return m_onFinish; }
+    /** Fallback one-shot length (ms) when nothing else resolves it. */
+    int         naturalDurationMs() const { return m_naturalDurationMs; }
+
     /** Fixture-type tags declared in the script (e.g. "moving", "rgb", "dimmer").
      *  Empty list means the script works with any fixture type. */
     QStringList fixtureTypes() const { return m_fixtureTypes; }
@@ -189,6 +200,10 @@ private:
     QString     m_name, m_description, m_notes, m_author;
     int         m_apiVersion = 0;
     int         m_version = 1;
+    QString     m_lifecycle = QStringLiteral("loop");
+    QString     m_syncTo    = QStringLiteral("span");
+    QString     m_onFinish  = QStringLiteral("hold");
+    int         m_naturalDurationMs = 2000;
     QStringList m_fixtureTypes;
 
     QList<InputDef>   m_inputs;

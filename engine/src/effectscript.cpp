@@ -100,6 +100,10 @@ bool EffectScript::load(const QString &path)
     m_notes.clear();
     m_author.clear();
     m_apiVersion = 0;
+    m_lifecycle = QStringLiteral("loop");
+    m_syncTo    = QStringLiteral("span");
+    m_onFinish  = QStringLiteral("hold");
+    m_naturalDurationMs = 2000;
     m_inputs.clear();
     m_palettes.clear();
     m_targets.clear();
@@ -179,6 +183,20 @@ bool EffectScript::parseMeta()
     m_version     = m_script.property("version").toInt();
     if (m_version < 1)
         m_version = 1;   // default for Generators that don't declare one
+
+    // Lifecycle (see EFFECT_LIFECYCLE_DESIGN.md). Absent → loop (today's default).
+    m_lifecycle = m_script.property("lifecycle").toString().toLower();
+    if (m_lifecycle.isEmpty())
+        m_lifecycle = QStringLiteral("loop");
+    m_syncTo = m_script.property("syncTo").toString().toLower();
+    if (m_syncTo.isEmpty())
+        m_syncTo = QStringLiteral("span");
+    m_onFinish = m_script.property("onFinish").toString().toLower();
+    if (m_onFinish.isEmpty())
+        m_onFinish = QStringLiteral("hold");
+    m_naturalDurationMs = m_script.property("naturalDurationMs").toInt();
+    if (m_naturalDurationMs <= 0)
+        m_naturalDurationMs = 2000;
 
     if (m_name.isEmpty())
     {

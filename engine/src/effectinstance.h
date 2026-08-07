@@ -189,6 +189,12 @@ private:
     mutable QMutex   m_mutex;
     QList<DmxWrite>  m_lastResults;
     bool             m_lastFrameEmpty = false; //!< last tick drove nothing (idle hint)
+    bool             m_oneShotDone = false;     //!< a oneshot effect has finished its run
+
+    /** Resolved run length (ms) for a oneshot effect: Look override → cue/chase
+     *  timing (per syncTo) → the script's naturalDurationMs. See
+     *  EFFECT_LIFECYCLE_DESIGN.md. */
+    int resolvedDurationMs() const;
 
     bool             m_fadingOut = false;   //!< in a release fade after the look stopped
     uint             m_fadeOutMs = 0;
