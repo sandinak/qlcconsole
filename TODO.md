@@ -8,6 +8,33 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## ✈️ Travel / offline work — no show rig or control surface needed
+
+Buildable + testable on a laptop (offscreen QTest / node for JS effects; the app
+runs headless via `QT_QPA_PLATFORM=offscreen`). Good picks while away from the rig:
+
+- **More one-shot effects** — now that the lifecycle exists (`EFFECT_LIFECYCLE_DESIGN.md`),
+  author bursts / reveals / sweeps as `oneshot` scripts (pure JS, node-testable).
+  A `wand.js` is the template.
+- **Effect-lifecycle follow-ups** — `span` sync on the **Show timeline** (today falls
+  back to naturalDuration); fold the RGBScript `Once` path into the lifecycle;
+  per-look `syncTo`/`onFinish` override UI.
+- **Audio effects** — bump the FFT band count / raise the 5 kHz cap for finer Hz
+  targeting (node-testable); more audio-reactive scripts.
+- **Move-in-black slice 3 — dangle detector** (positioned-but-dark fixture matching
+  no upcoming cue = warn). Pure logic on `CueOutput`/`CueLookahead`, unit-testable.
+- **Rebrand → qlcconsole** — titles / About / launcher / macOS bundle names. No hardware.
+- **Design-doc work** — "Look" as first-class assembly unit; unified object editor.
+- **More stage objects** — flats / drapes / set pieces (2D monitor, offscreen-testable).
+- **Small polish** — MTC-chip already done; any bugs found reviewing the code.
+
+**Parked until back at the rig:** the whole **control-surface** effort (PMJ / APC40
+mk2 / Xbox — needs the boards) and the **`RIG_TEST_PLAN.md`** verification pass
+(needs movers / pixel panel / MIDI keyboard / audio in). The move-in-black + note-
+effect timing items also want the rig to confirm.
+
+---
+
 ## Recently shipped (verify on rig, then move to DONE.md)
 
 - **Note-effect calibration + MIDI plumbing** — per-universe MIDI source scoping
@@ -90,18 +117,24 @@ to DONE.md when it ships. See also the session memory under
   estimation feature.
 - **New control surface — integrate (TBD)** — a new hardware control surface to
   bring in (details TBD). Fold into the MIDI-mapping work below once specced.
-- **Control-surface engine (PMJ + APC40 mk2 + Xbox)** — see
-  `CONTROL_SURFACE_DESIGN.md`. Device-agnostic engine: surface model + logical
-  role/page vocabulary + context-aware **LED feedback loop**; boards are overlays
-  onto shared roles. Slices: **P0 CORE — DONE** (81eaab311, unit-tested); **P1**
-  PMJ overlay + LED (Design page: Groups/Looks/Fix-Cont → 10-strip select, Enc 1-4
-  params, Master GM); **P2** runtime page (Looks/Macros cue banks, Go/Back/Left/
-  Right transport, current-cue LED); **P3** APC40 mk2 overlay onto the same roles;
-  **P4** Xbox roles (design-joystick handoff + runtime busking HID profile). PMJ
-  Black 1 profile/template committed (`resources/inputprofiles/PMJ-Black-1.qxi`,
-  LEDs on MIDI ch9 v0-15). *Confirm before P1: the static core (which controls
-  never page) + whether the 10 faders are per-strip levels or fixed submasters.*
-  Relative encoders already built (encoding picker + live preview + step + invert).
+- **Control-surface engine (PMJ + APC40 mk2 + Xbox) — ⛔ PARKED (needs the
+  hardware; resume at THIS rig, not on travel).** See `CONTROL_SURFACE_DESIGN.md`.
+  Device-agnostic engine: surface model + role/page vocabulary + context-aware LED
+  loop; boards are overlays. **P0 CORE — DONE** (81eaab311, unit-tested
+  `engine/test/controlsurface/`). Decisions locked: static core = **GM, Blackout,
+  Blind, Tap, Go, Back** (identify more via workflow); **faders follow the page**
+  (optional submaster page). **P1 (PMJ overlay + LED) is blocked on 4 board facts**
+  — get these from OpenDeck / the QLC input monitor with the PMJ plugged in:
+  1. **Encoder ROTATION CC numbers** (profile only lists the Enc 1-4 *push*, CC11-14).
+  2. **LED velocity scale** — board wants brightness 0-15; QLC feedback maps
+     0-255→0-127. Which value = full?
+  3. **Output MIDI channel** (LEDs are ch 9) so the `sendFeedBack` params offset lands them.
+  4. **Static-core button placement** — PMJ has no Blackout/Blind/Tap buttons.
+     Proposed: `O`→Blackout, `Set`→Blind, `Favorites`→Tap (confirm/reassign).
+  Then: P1 PMJ overlay+LED (Design page) → P2 runtime page → P3 APC40 mk2 overlay →
+  P4 Xbox roles. Plumbing found: buttons are MIDI notes (offset-128; LED note ==
+  button note on ch9); faders/enc-push are CC (offset<128); LED via
+  `InputOutputMap::sendFeedBack`→`feedbackToMidi`. Relative encoders already built.
 - **Timecode slice 3 — auto-fill internal latency** — the packet→DMX figure needs
   plugin-side timestamping; once measured it folds into the offset. *(from Timecode
   calibration in DONE.md)*
