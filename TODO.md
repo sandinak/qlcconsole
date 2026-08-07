@@ -90,13 +90,18 @@ to DONE.md when it ships. See also the session memory under
   estimation feature.
 - **New control surface — integrate (TBD)** — a new hardware control surface to
   bring in (details TBD). Fold into the MIDI-mapping work below once specced.
-- **MIDI controller mappings — revisit + PMJ version** — go back to the APC40
-  mapping work (VC layout / programmer-mode LED feedback / expanded APC40 map)
-  and build an equivalent mapping for the **PMJ** (OpenDeck PMJ_BLACK) controller
-  we just tested with. The PMJ's free knobs are single-CC two's-complement
-  relative encoders — now supported (relative-encoder feature: encoding picker +
-  live preview + step + invert, profile-free per-widget mapping). Dual-CC not
-  needed (PMJ doesn't use it). *(from the relative-encoder work)*
+- **Control-surface engine (PMJ + APC40 mk2 + Xbox)** — see
+  `CONTROL_SURFACE_DESIGN.md`. Device-agnostic engine: surface model + logical
+  role/page vocabulary + context-aware **LED feedback loop**; boards are overlays
+  onto shared roles. Slices: **P0 CORE — DONE** (81eaab311, unit-tested); **P1**
+  PMJ overlay + LED (Design page: Groups/Looks/Fix-Cont → 10-strip select, Enc 1-4
+  params, Master GM); **P2** runtime page (Looks/Macros cue banks, Go/Back/Left/
+  Right transport, current-cue LED); **P3** APC40 mk2 overlay onto the same roles;
+  **P4** Xbox roles (design-joystick handoff + runtime busking HID profile). PMJ
+  Black 1 profile/template committed (`resources/inputprofiles/PMJ-Black-1.qxi`,
+  LEDs on MIDI ch9 v0-15). *Confirm before P1: the static core (which controls
+  never page) + whether the 10 faders are per-strip levels or fixed submasters.*
+  Relative encoders already built (encoding picker + live preview + step + invert).
 - **Timecode slice 3 — auto-fill internal latency** — the packet→DMX figure needs
   plugin-side timestamping; once measured it folds into the offset. *(from Timecode
   calibration in DONE.md)*
