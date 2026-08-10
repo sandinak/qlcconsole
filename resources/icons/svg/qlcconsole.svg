@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bgA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1c1e22"/>
+      <stop offset="100%" stop-color="#0a0b0d"/>
+    </linearGradient>
+    <radialGradient id="glowBottomA" cx="50%" cy="100%" r="70%">
+      <stop offset="0%" stop-color="#ff8a1f" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#ff8a1f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="capA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffc978"/>
+      <stop offset="55%" stop-color="#ffab3d"/>
+      <stop offset="100%" stop-color="#ff8a1f"/>
+    </linearGradient>
+    <radialGradient id="headHighlightA" cx="42%" cy="28%" r="55%">
+      <stop offset="0%" stop-color="#5a5e68" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#5a5e68" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="20" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#bgA)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#glowBottomA)"/>
+
+  <g transform="translate(512,560) scale(1.28) translate(-512,-560)">
+    <rect x="352" y="748" width="320" height="116" rx="30" fill="#26282d"/>
+
+    <path d="M 404,762 Q 312,644 360,530" fill="none" stroke="#34373d" stroke-width="78" stroke-linecap="round"/>
+    <path d="M 620,762 Q 712,644 664,530" fill="none" stroke="#34373d" stroke-width="78" stroke-linecap="round"/>
+
+    <path d="M 376,556 C 376,408 420,300 512,276 C 604,300 648,408 648,556 C 648,664 604,706 512,706 C 420,706 376,664 376,556 Z"
+          fill="#3a3d44"/>
+    <path d="M 376,556 C 376,408 420,300 512,276 C 604,300 648,408 648,556 C 648,664 604,706 512,706 C 420,706 376,664 376,556 Z"
+          fill="url(#headHighlightA)"/>
+
+    <rect x="460" y="332" width="104" height="336" rx="40" fill="#232529"/>
+    <g filter="url(#softGlow)">
+      <rect x="404" y="450" width="216" height="104" rx="26" fill="url(#capA)"/>
+    </g>
+  </g>
+</svg>

@@ -140,7 +140,7 @@ void App::startup()
     qmlRegisterType<FolderBrowser>("org.qlcplus.classes", 1, 0, "FolderBrowser");
 
     setTitle(APPNAME);
-    setIcon(QIcon(":/qlcplus.svg"));
+    setIcon(QIcon(":/qlcconsole.svg"));
 
     if (QFontDatabase::addApplicationFont(":/RobotoCondensed-Regular.ttf") < 0)
         qWarning() << "Roboto condensed cannot be loaded!";
@@ -253,7 +253,7 @@ void App::setLanguage(QString locale)
     if (locale.isEmpty() == true)
         locale = QLocale::system().name();
 
-    QString file(QString("%1_%2").arg("qlcplus").arg(locale));
+    QString file(QString("%1_%2").arg("qlcconsole").arg(locale));
     m_translator = new QTranslator(QCoreApplication::instance());
     if (m_translator->load(file, translationPath) == true)
         QCoreApplication::installTranslator(m_translator);

@@ -57,6 +57,6 @@ install(TARGETS ${module_name}
 if (UNIX AND NOT APPLE)
    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/z65-anyma-udmx.rules"
            DESTINATION ${UDEVRULESDIR})
-   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcplus.QLCPlus.udmx.metainfo.xml"
+   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcconsole.QLCConsole.udmx.metainfo.xml"
            DESTINATION ${METAINFODIR})
 endif()

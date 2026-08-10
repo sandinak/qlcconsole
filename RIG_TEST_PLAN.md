@@ -11,9 +11,9 @@ a phone photo or screenshot.
 - A **MIDI keyboard** on an input (for the note-effect tests) and, if you have
   one, a **second MIDI controller** (Launchpad/APC) on another input.
 - An **audio input** (line-in or mic) for the audio tests.
-- Run with: `build/main/qlcplus -o <your show>.qxw`.
+- Run with: `build/main/qlcconsole -o <your show>.qxw`.
 - To capture effect internals on a failure, relaunch with
-  `QLC_EFFECT_DEBUG=/tmp/effect.log build/main/qlcplus -o <show>.qxw` and attach
+  `QLC_EFFECT_DEBUG=/tmp/effect.log build/main/qlcconsole -o <show>.qxw` and attach
   `/tmp/effect.log`.
 
 ---

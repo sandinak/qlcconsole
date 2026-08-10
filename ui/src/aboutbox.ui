@@ -34,7 +34,7 @@
   </property>
   <property name="windowIcon">
    <iconset resource="qlcui.qrc">
-    <normaloff>:/qlcplus.png</normaloff>:/qlcplus.png</iconset>
+    <normaloff>:/qlcconsole.png</normaloff>:/qlcconsole.png</iconset>
   </property>
   <layout class="QGridLayout" name="gridLayout">
    <item row="5" column="0" colspan="4">
@@ -325,7 +325,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
       <string/>
      </property>
      <property name="pixmap">
-      <pixmap resource="qlcui.qrc">:/qlcplus.png</pixmap>
+      <pixmap resource="qlcui.qrc">:/qlcconsole.png</pixmap>
      </property>
      <property name="scaledContents">
       <bool>false</bool>

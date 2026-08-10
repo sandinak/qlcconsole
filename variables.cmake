@@ -19,10 +19,33 @@ endif()
 
 if(qmlui)
     add_definitions(-DQMLUI)
-    set(APPVERSION "5.1.1 GIT")
+    set(QLC_BASE_VERSION "5.1.1")
 else()
-    set(APPVERSION "4.14.4 GIT")
+    set(QLC_BASE_VERSION "4.14.2")
 endif()
+
+# APPVERSION = <QLC+ base we forked from>+qlcconsole.<N>, where N is the
+# number of commits on top of the QLC+_4.14.2 fork point (SemVer build
+# metadata, not a pre-release: qlcconsole isn't "less than" the base it
+# tracks, just iterating on top of it). N is git-derived so it moves with
+# the tree instead of needing a manual bump; falls back to "0" outside a
+# git checkout or if the fork-point tag is missing (e.g. a shallow clone).
+set(QLCCONSOLE_REV "0")
+find_package(Git QUIET)
+if(GIT_EXECUTABLE)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-list --count QLC+_4.14.2..HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE _qlcconsole_rev
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE _qlcconsole_rev_result
+    )
+    if(_qlcconsole_rev_result EQUAL 0 AND NOT _qlcconsole_rev STREQUAL "")
+        set(QLCCONSOLE_REV "${_qlcconsole_rev}")
+    endif()
+endif()
+set(APPVERSION "${QLC_BASE_VERSION}+qlcconsole.${QLCCONSOLE_REV}")
 
 if(UNIX)
     set(OLA_GIT "/usr/src/ola") # OLA directories
@@ -47,9 +70,9 @@ endif()
 
 # Installation paths
 if (WIN32)
-    set(INSTALLROOT "$ENV{SystemDrive}/qlcplus")
+    set(INSTALLROOT "$ENV{SystemDrive}/qlcconsole")
 elseif (APPLE)
-    set(INSTALLROOT "$ENV{HOME}/QLC+.app/Contents")
+    set(INSTALLROOT "$ENV{HOME}/qlcconsole.app/Contents")
 elseif (UNIX)
     set(INSTALLROOT "/usr")
 endif ()
@@ -104,7 +127,7 @@ if (WIN32)
 elseif (APPLE)
     set(DATADIR "Resources")
 elseif (UNIX)
-    set(DATADIR "share/qlcplus")
+    set(DATADIR "share/qlcconsole")
 endif ()
 
 if (ANDROID)
@@ -112,22 +135,22 @@ if (ANDROID)
 elseif (IOS)
     set(DATADIR "")
 elseif (appimage)
-    set(DATADIR "../share/qlcplus")
+    set(DATADIR "../share/qlcconsole")
 endif ()
 
 # User Data
 if (WIN32)
-    set(USERDATADIR "QLC+")
+    set(USERDATADIR "qlcconsole")
 elseif (APPLE)
-    set(USERDATADIR "Library/Application Support/QLC+")
+    set(USERDATADIR "Library/Application Support/qlcconsole")
 elseif (UNIX)
-    set(USERDATADIR ".qlcplus")
+    set(USERDATADIR ".qlcconsole")
 endif ()
 
 if (ANDROID)
-    set(USERDATADIR ".qlcplus")
+    set(USERDATADIR ".qlcconsole")
 elseif (IOS)
-    set(USERDATADIR ".qlcplus")
+    set(USERDATADIR ".qlcconsole")
 endif ()
 
 # Documentation
@@ -287,9 +310,9 @@ elseif (APPLE)
     set(PLUGINDIR "PlugIns")
 elseif (UNIX)
     if (appimage)
-        set(PLUGINDIR "../lib/qt${QT_MAJOR_VERSION}/plugins/qlcplus")
+        set(PLUGINDIR "../lib/qt${QT_MAJOR_VERSION}/plugins/qlcconsole")
     else ()
-        set(PLUGINDIR "${LIBSDIR}/qt${QT_MAJOR_VERSION}/plugins/qlcplus")
+        set(PLUGINDIR "${LIBSDIR}/qt${QT_MAJOR_VERSION}/plugins/qlcconsole")
     endif ()
 endif ()
 
@@ -512,7 +535,7 @@ if (UNIX AND NOT APPLE)
         set(QTLIBSDIR "${QT_INSTALL_LIBS}")
         set(QTPLUGINSDIR "${QT_INSTALL_PLUGINS}")
         string(REPLACE "/usr/" "" LIBSDIR "${QTLIBSDIR}")
-        string(REPLACE "/usr/" "" PLUGINDIR "${QTPLUGINSDIR}/qlcplus")
+        string(REPLACE "/usr/" "" PLUGINDIR "${QTPLUGINSDIR}/qlcconsole")
         set(AUDIOPLUGINDIR "${PLUGINDIR}/audio")
     endif()
 

@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=qlcconsole Fixture Definition Editor
+Name[fr]=Éditeur d'appareil QLC+
+GenericName=Edit fixtures
+GenericName[cz]=Editor definicí zařízení
+GenericName[de]=Gerätedefinitionen bearbeiten
+GenericName[fi]=Muokkaa valaisimia
+GenericName[fr]=Édition des appareils
+GenericName[it]=Editor di Fixture
+GenericName[nl]=Bewerker voor armaturen
+GenericName[es]=Editor de Fixtures
+GenericName[ca]=Editor de Fixtures
+Keywords=qlc;light;controller;fixture;
+Exec=qlcconsole-fixtureeditor --open %f
+Icon=qlcconsole-fixtureeditor
+MimeType=application/x-qlc-fixture;
+Categories=Qt;AudioVideo;

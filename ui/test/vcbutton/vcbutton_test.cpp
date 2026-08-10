@@ -223,8 +223,8 @@ void VCButton_Test::iconPath()
 
     VCButton btn(&w, m_doc);
     m_doc->resetModified();
-    btn.setIconPath("../../../resources/icons/png/qlcplus.png");
-    QCOMPARE(btn.iconPath(), QString("../../../resources/icons/png/qlcplus.png"));
+    btn.setIconPath("../../../resources/icons/png/qlcconsole.png");
+    QCOMPARE(btn.iconPath(), QString("../../../resources/icons/png/qlcconsole.png"));
     QCOMPARE(m_doc->isModified(), true);
 
     m_doc->resetModified();
@@ -281,7 +281,7 @@ void VCButton_Test::copy()
 
     VCButton btn(&w, m_doc);
     btn.setCaption("Foobar");
-    btn.setIconPath("../../../resources/icons/png/qlcplus.png");
+    btn.setIconPath("../../../resources/icons/png/qlcconsole.png");
     btn.setFunction(sc->id());
     btn.setAction(VCButton::Flash);
     btn.setKeySequence(QKeySequence(keySequenceB));
@@ -292,7 +292,7 @@ void VCButton_Test::copy()
     VCButton* copy = qobject_cast<VCButton*> (btn.createCopy(&parent));
     QVERIFY(copy != NULL);
     QCOMPARE(copy->caption(), QString("Foobar"));
-    QCOMPARE(copy->iconPath(), QString("../../../resources/icons/png/qlcplus.png"));
+    QCOMPARE(copy->iconPath(), QString("../../../resources/icons/png/qlcconsole.png"));
     QCOMPARE(copy->function(), sc->id());
     QCOMPARE(copy->action(), VCButton::Flash);
     QCOMPARE(copy->keySequence(), QKeySequence(keySequenceB));
@@ -315,7 +315,7 @@ void VCButton_Test::load()
 
     xmlWriter.writeStartElement("Button");
     xmlWriter.writeAttribute("Caption", "Pertti");
-    xmlWriter.writeAttribute("Icon", "qlcplus.png");
+    xmlWriter.writeAttribute("Icon", "qlcconsole.png");
 
     xmlWriter.writeStartElement("WindowState");
     xmlWriter.writeAttribute("X", "20");
@@ -358,7 +358,7 @@ void VCButton_Test::load()
     VCButton btn(&w, m_doc);
     QCOMPARE(btn.loadXML(xmlReader), true);
     QCOMPARE(btn.caption(), QString("Pertti"));
-    QCOMPARE(btn.iconPath(), QFileInfo(QString("../../../resources/icons/png/qlcplus.png")).canonicalFilePath());
+    QCOMPARE(btn.iconPath(), QFileInfo(QString("../../../resources/icons/png/qlcconsole.png")).canonicalFilePath());
     QCOMPARE(btn.function(), sc->id());
     QCOMPARE(btn.action(), VCButton::Flash);
     QCOMPARE(btn.keySequence(), QKeySequence(keySequenceA));
@@ -378,7 +378,7 @@ void VCButton_Test::load()
 
     QCOMPARE(btn.loadXML(xmlReader), true);
     QCOMPARE(btn.caption(), QString("Pertti"));
-    QCOMPARE(btn.iconPath(), QFileInfo(QString("../../../resources/icons/png/qlcplus.png")).canonicalFilePath());
+    QCOMPARE(btn.iconPath(), QFileInfo(QString("../../../resources/icons/png/qlcconsole.png")).canonicalFilePath());
     QCOMPARE(btn.function(), sc->id());
     QCOMPARE(btn.action(), VCButton::Flash);
     QCOMPARE(btn.keySequence(), QKeySequence(keySequenceA));
@@ -409,7 +409,7 @@ void VCButton_Test::save()
 
     VCButton btn(&w, m_doc);
     btn.setCaption("Foobar");
-    btn.setIconPath("../../../resources/icons/png/qlcplus.png");
+    btn.setIconPath("../../../resources/icons/png/qlcconsole.png");
     btn.setFunction(sc->id());
     btn.setAction(VCButton::Flash);
     btn.setKeySequence(QKeySequence(keySequenceB));
@@ -433,7 +433,7 @@ void VCButton_Test::save()
     xmlReader.readNextStartElement();
 
     QCOMPARE(xmlReader.name().toString(), QString("Button"));
-    QCOMPARE(xmlReader.attributes().value("Icon").toString(), QString("qlcplus.png"));
+    QCOMPARE(xmlReader.attributes().value("Icon").toString(), QString("qlcconsole.png"));
     QCOMPARE(xmlReader.attributes().value("Caption").toString(), QString("Foobar"));
 
     while (xmlReader.readNextStartElement())
@@ -694,7 +694,7 @@ void VCButton_Test::paint()
     btn.setState(VCButton::Inactive);
     btn.update();
     QTest::qWait(1);
-    btn.setIconPath("../../../resources/icons/png/qlcplus.png");
+    btn.setIconPath("../../../resources/icons/png/qlcconsole.png");
     btn.update();
     QTest::qWait(1);
     btn.setCaption("Foobar");

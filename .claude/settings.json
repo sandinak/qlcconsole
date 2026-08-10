@@ -14,7 +14,11 @@
       "Bash(clang --version)",
       "Bash(brew --prefix qt)",
       "Bash(ls -d \"$\\(brew --prefix qt\\)/lib/cmake/Qt6\")",
-      "Bash(./stresstest/engine/build/qlcstress --help)"
+      "Bash(./stresstest/engine/build/qlcstress --help)",
+      "Bash(cmake --build /Users/branson/git/qlcplus/build -j)",
+      "Bash(cmake --build /Users/branson/git/qlcplus/build --target qlcplus -j)",
+      "Bash(grep -E \"Built target qlcplus$|error:\")",
+      "Bash(cmake --build build -j)"
     ]
   }
 }

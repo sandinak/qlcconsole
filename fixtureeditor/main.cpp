@@ -60,8 +60,8 @@ void printVersion()
     cout << App::longName() << " " << App::version() << endl;
     cout << "This program is licensed under the terms of the ";
     cout << "Apache 2.0 license." << endl;
-    cout << "Copyright (c) Heikki Junnila (hjunnila@users.sf.net)." << endl;
-    cout << "Copyright (c) Massimo Callegari (massimocallegari@yahoo.it)." << endl;
+    cout << "By Branson Matheson" << endl;
+    cout << "Fork of QLC+ 4.14.2, based on the work of Heikki Junnila and Massimo Callegari" << endl;
     cout << endl;
 }
 
@@ -73,7 +73,7 @@ void printUsage()
     QTextStream cout(stdout, QIODevice::WriteOnly);
 
     cout << "Usage:";
-    cout << "  qlcplus-fixtureeditor [options]" << endl;
+    cout << "  qlcconsole-fixtureeditor [options]" << endl;
     cout << "Options:" << endl;
     cout << "  -o or --open <file>\t\tOpen the specified fixture definition file" << endl;
     cout << "  -l or --locale <locale>\tForce a locale for translation" << endl;
@@ -131,7 +131,7 @@ void loadTranslation(const QString& locale, QApplication& app)
         lc = locale;
     else
         lc = FXEDArgs::locale;
-    QString file(QString("qlcplus_%1").arg(lc));
+    QString file(QString("qlcconsole_%1").arg(lc));
 
     QString path = QLCFile::systemDirectory(TRANSLATIONDIR).path();
     QTranslator* translator = new QTranslator(&app);

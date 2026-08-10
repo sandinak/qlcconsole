@@ -12,7 +12,7 @@
 #include <algorithm>
 
 #define BUNDLEDIR     "Resources/Bundles"
-#define USERBUNDLEDIR "Library/Application Support/QLC+/Bundles"
+#define USERBUNDLEDIR "Library/Application Support/qlcconsole/Bundles"
 
 BundleCache::BundleCache(QObject *parent)
     : QObject(parent)

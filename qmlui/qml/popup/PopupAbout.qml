@@ -38,7 +38,7 @@ CustomPopupDialog
 
             Image
             {
-                source: "qrc:/qlcplus.svg"
+                source: "qrc:/qlcconsole.svg"
                 width: UISettings.iconSizeDefault * 3
                 height: width
                 sourceSize: Qt.size(width, height)

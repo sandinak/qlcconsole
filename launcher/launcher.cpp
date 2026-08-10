@@ -42,7 +42,7 @@ Launcher::Launcher(QWidget* parent) : QWidget(parent)
     setWindowTitle(APPNAME);
 
     QLabel* icon = new QLabel(this);
-    icon->setPixmap(QIcon(":/qlcplus.png").pixmap(64));
+    icon->setPixmap(QIcon(":/qlcconsole.png").pixmap(64));
     lay->addWidget(icon, 0, 0, 1, 1);
 
     QString text("<H1>%1 %2</H1>");
@@ -79,7 +79,7 @@ void Launcher::launchFXED(const QStringList& arguments)
     QString path(QApplication::applicationDirPath());
     if (path.endsWith(QString("/")) == false)
         path += QString("/");
-    path += QString("qlcplus-fixtureeditor");
+    path += QString("qlcconsole-fixtureeditor");
     QProcess::startDetached(path, arguments);
     QApplication::exit();
 }
@@ -89,7 +89,7 @@ void Launcher::launchQLC(const QStringList& arguments)
     QString path(QApplication::applicationDirPath());
     if (path.endsWith(QString("/")) == false)
         path += QString("/");
-    path += QString("qlcplus");
+    path += QString("qlcconsole");
     QProcess::startDetached(path, arguments);
     QApplication::exit();
 }

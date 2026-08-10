@@ -63,6 +63,6 @@ endif()
 
 if (UNIX AND NOT APPLE)
    # Rules to make USB DMX devices readable & writable by normal users
-   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcplus.QLCPlus.peperoni.metainfo.xml"
+   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcconsole.QLCConsole.peperoni.metainfo.xml"
            DESTINATION ${METAINFODIR})
 endif()

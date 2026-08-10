@@ -41,8 +41,8 @@ void printVersion()
     cout << APPNAME << " " << "version " << APPVERSION << Qt::endl;
     cout << "This program is licensed under the terms of the ";
     cout << "Apache 2.0 license." << Qt::endl;
-    cout << "Copyright (c) Heikki Junnila (hjunnila@users.sf.net)" << Qt::endl;
-    cout << "Copyright (c) Massimo Callegari (massimocallegari@yahoo.it)" << Qt::endl;
+    cout << "By Branson Matheson" << Qt::endl;
+    cout << "Fork of QLC+ 4.14.2, based on the work of Heikki Junnila and Massimo Callegari" << Qt::endl;
     cout << Qt::endl;
 }
 

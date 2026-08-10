@@ -5,7 +5,7 @@ Author is remote and can fix issues but **cannot test until back on-site**, so e
 item is a discrete, self-contained test with steps + expected result. Tick the box
 and jot anything that misbehaves.
 
-**How to launch:** `build/main/qlcplus -o surfacetesting.qxw`
+**How to launch:** `build/main/qlcconsole -o surfacetesting.qxw`
 (never pass a positional workspace arg — it can blank the file). Work against a
 scratchpad copy if you're worried: `cp surfacetesting.qxw /tmp/st.qxw` then `-o /tmp/st.qxw`.
 

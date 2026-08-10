@@ -1,4 +1,4 @@
-set(module_name "qlcplus-launcher")
+set(module_name "qlcconsole-launcher")
 
 set(TS_FILES
     launcher_fi_FI.ts
@@ -37,15 +37,15 @@ target_link_libraries(${module_name} PRIVATE
 )
 
 # Resources:
-set_source_files_properties("../resources/icons/png/qlcplus-fixtureeditor.png"
-    PROPERTIES QT_RESOURCE_ALIAS "qlcplus-fixtureeditor.png"
+set_source_files_properties("../resources/icons/png/qlcconsole-fixtureeditor.png"
+    PROPERTIES QT_RESOURCE_ALIAS "qlcconsole-fixtureeditor.png"
 )
-set_source_files_properties("../resources/icons/png/qlcplus.png"
-    PROPERTIES QT_RESOURCE_ALIAS "qlcplus.png"
+set_source_files_properties("../resources/icons/png/qlcconsole.png"
+    PROPERTIES QT_RESOURCE_ALIAS "qlcconsole.png"
 )
 set(launcher_resource_files
-    "../resources/icons/png/qlcplus-fixtureeditor.png"
-    "../resources/icons/png/qlcplus.png"
+    "../resources/icons/png/qlcconsole-fixtureeditor.png"
+    "../resources/icons/png/qlcconsole.png"
 )
 
 if(QT_VERSION_MAJOR GREATER 5)

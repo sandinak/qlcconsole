@@ -9,7 +9,7 @@
 # Exit on error
 set -e
 
-TARGET_DIR=$HOME/qlcplus.AppDir
+TARGET_DIR=$HOME/qlcconsole.AppDir
 CMAKE_OPTS=""
 
 if ! command -v chrpath 2>&1 >/dev/null
@@ -51,15 +51,15 @@ if [ ! -d "$TARGET_DIR" ]; then
 fi
 make install
 
-cp -v ../resources/icons/svg/qlcplus.svg $TARGET_DIR
-cp -v ../platforms/linux/qlcplus.desktop $TARGET_DIR
+cp -v ../resources/icons/svg/qlcconsole.svg $TARGET_DIR
+cp -v ../platforms/linux/qlcconsole.desktop $TARGET_DIR
 
 find $TARGET_DIR/usr/lib/ -name 'libqlcplusengine.so*' -exec strip -v {} \;
 
 if [ "$1" == "qmlui" ]; then
-    strip $TARGET_DIR/usr/bin/qlcplus-qml
+    strip $TARGET_DIR/usr/bin/qlcconsole-qml
     # FIXME: no rpath or runpath tag found.
-    chrpath -r "../lib" $TARGET_DIR/usr/bin/qlcplus-qml || true
+    chrpath -r "../lib" $TARGET_DIR/usr/bin/qlcconsole-qml || true
 
     pushd $TARGET_DIR/usr/bin
     find . -name plugins.qmltypes -type f -delete
@@ -69,11 +69,11 @@ if [ "$1" == "qmlui" ]; then
     rm -rf QtQuick/Controls.2/Universal QtQuick/Controls.2/Fusion
     rm -rf QtQuick/Controls.2/Imagine QtQuick/Controls.2/Scene2D
     popd
-    sed -i -e 's/Exec=qlcplus --open %f/Exec=qlcplus-qml/g' $TARGET_DIR/qlcplus.desktop
+    sed -i -e 's/Exec=qlcconsole --open %f/Exec=qlcconsole-qml/g' $TARGET_DIR/qlcconsole.desktop
 else
-    strip $TARGET_DIR/usr/bin/qlcplus
-    chrpath -r "../lib" $TARGET_DIR/usr/bin/qlcplus || true
-    sed -i -e 's/Exec=qlcplus --open %f/Exec=qlcplus/g' $TARGET_DIR/qlcplus.desktop
+    strip $TARGET_DIR/usr/bin/qlcconsole
+    chrpath -r "../lib" $TARGET_DIR/usr/bin/qlcconsole || true
+    sed -i -e 's/Exec=qlcconsole --open %f/Exec=qlcconsole/g' $TARGET_DIR/qlcconsole.desktop
 fi
 
 # There might be a new version of the tool available.
@@ -88,4 +88,4 @@ pushd $TARGET_DIR/..
 /tmp/appimagetool-x86_64.AppImage -v $TARGET_DIR
 popd
 
-echo "The application is now available at ~/Q_Light_Controller_Plus-x86_64.AppImage"
+echo "The application is now available at ~/qlcconsole-x86_64.AppImage"

@@ -41,4 +41,4 @@ install(TARGETS ${module_name}
     RUNTIME DESTINATION ${INSTALLROOT}/${PLUGINDIR}
 )
 
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcplus.QLCPlus.dmx4linux.metainfo.xml" DESTINATION ${METAINFODIR})
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcconsole.QLCConsole.dmx4linux.metainfo.xml" DESTINATION ${METAINFODIR})

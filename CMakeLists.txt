@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(qlcplus VERSION 4.14.2 LANGUAGES C CXX)
+project(qlcconsole VERSION 4.14.2 LANGUAGES C CXX)
 
 option(qmlui "Build for QLC+ 5 QML UI" OFF)
 
@@ -164,7 +164,7 @@ else ()
 endif()
 
 # Define the pattern for the .qm files
-set(translations_qm_pattern "${CMAKE_CURRENT_SOURCE_DIR}/qlcplus_*.qm")
+set(translations_qm_pattern "${CMAKE_CURRENT_SOURCE_DIR}/qlcconsole_*.qm")
 
 # Install command using a custom script
 install(CODE "
@@ -181,12 +181,12 @@ set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT
 if(UNIX)
     if(qmlui)
        add_custom_target(run
-            COMMAND ${CMAKE_COMMAND} -E env LD_LIBRARY_PATH=engine/src:$ENV{LD_LIBRARY_PATH} qmlui/qlcplus-qml
+            COMMAND ${CMAKE_COMMAND} -E env LD_LIBRARY_PATH=engine/src:$ENV{LD_LIBRARY_PATH} qmlui/qlcconsole-qml
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         )
     else()
        add_custom_target(run
-            COMMAND ${CMAKE_COMMAND} -E env LD_LIBRARY_PATH=engine/src:ui/src:webaccess/src:$ENV{LD_LIBRARY_PATH} main/qlcplus
+            COMMAND ${CMAKE_COMMAND} -E env LD_LIBRARY_PATH=engine/src:ui/src:webaccess/src:$ENV{LD_LIBRARY_PATH} main/qlcconsole
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         )
     endif()
@@ -195,7 +195,7 @@ endif()
 # run-fxe
 if(UNIX AND NOT qmlui)
     add_custom_target(run-fxe
-        COMMAND ${CMAKE_COMMAND} -E env LD_LIBRARY_PATH=engine/src:ui/src:webaccess/src:$ENV{LD_LIBRARY_PATH} ./fixtureeditor/qlcplus-fixtureeditor
+        COMMAND ${CMAKE_COMMAND} -E env LD_LIBRARY_PATH=engine/src:ui/src:webaccess/src:$ENV{LD_LIBRARY_PATH} ./fixtureeditor/qlcconsole-fixtureeditor
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
 endif()
@@ -220,7 +220,7 @@ if(NOT TARGET uninstall)
 endif()
 
 SET(CPACK_GENERATOR "DEB")
-set(CPACK_PACKAGE_NAME "qlcplus")
+set(CPACK_PACKAGE_NAME "qlcconsole")
 SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "Massimo Callegari") #required
 INCLUDE(CPack)
 

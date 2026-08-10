@@ -239,6 +239,58 @@ QDir QLCFile::userDirectory(QString path, QString fallBackPath, QStringList exte
     return dir;
 }
 
+void QLCFile::mergeLegacyUserData()
+{
+    QString oldRoot;
+#if defined(WIN32) || defined(Q_OS_WIN)
+    LPTSTR home = (LPTSTR) malloc(256 * sizeof(TCHAR));
+    GetEnvironmentVariable(TEXT("UserProfile"), home, 256);
+    oldRoot = QString("%1/QLC+").arg(QString::fromUtf16(reinterpret_cast<char16_t*>(home)));
+    free(home);
+#elif defined(__APPLE__) || defined(Q_OS_MAC)
+    oldRoot = QString("%1/Library/Application Support/QLC+").arg(getenv("HOME"));
+#else
+    oldRoot = QString("%1/.qlcplus").arg(getenv("HOME"));
+#endif
+
+    QString newRoot = QString("%1/%2").arg(getenv("HOME")).arg(USERQLCPLUSDIR);
+    if (oldRoot == newRoot)
+        return;
+
+    QDir oldDir(oldRoot);
+    if (oldDir.exists() == false)
+        return;
+
+#if defined(WIN32) || defined(Q_OS_WIN) || defined(__APPLE__) || defined(Q_OS_MAC)
+    static const QStringList subdirs = { "Fixtures", "RGBScripts", "MidiTemplates",
+        "ModifiersTemplates", "InputProfiles", "ColorFilters", "Bundles",
+        "EffectScripts", "EffectPresets" };
+#else
+    static const QStringList subdirs = { "fixtures", "rgbscripts", "miditemplates",
+        "modifierstemplates", "inputprofiles", "colorfilters", "Bundles",
+        "EffectScripts", "EffectPresets" };
+#endif
+
+    foreach (const QString &sub, subdirs)
+    {
+        QDir oldSub(oldDir.filePath(sub));
+        if (oldSub.exists() == false)
+            continue;
+
+        QDir newSub(QString("%1/%2").arg(newRoot).arg(sub));
+        newSub.mkpath(".");
+
+        foreach (const QString &fileName, oldSub.entryList(QDir::Files))
+        {
+            QString newFile = newSub.filePath(fileName);
+            if (QFile::exists(newFile) == true)
+                continue; // a file already placed under the new root wins
+
+            QFile::link(oldSub.filePath(fileName), newFile);
+        }
+    }
+}
+
 QString QLCFile::fileUrlPrefix()
 {
 #if defined(WIN32) || defined(Q_OS_WIN)

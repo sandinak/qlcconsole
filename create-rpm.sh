@@ -2,7 +2,7 @@
 #
 # This script creates Q Light Controller RPM packages.
 
-if [ ! -f platforms/linux/qlcplus.spec ]; then
+if [ ! -f platforms/linux/qlcconsole.spec ]; then
 	echo ERROR: This script must be run from the top-level QLC+ source directory
 	exit 1;
 fi
@@ -22,21 +22,21 @@ if [ ! -f $RPMBUILD ]; then
 fi
 
 # Put a plain RPM spec file where rpmbuild expects it
-sed -e "s/\$QLCPLUS_VERSION/$VERSION/g" platforms/linux/qlcplus.spec > $RPMBUILD/SPECS/qlcplus.spec
+sed -e "s/\$QLCPLUS_VERSION/$VERSION/g" platforms/linux/qlcconsole.spec > $RPMBUILD/SPECS/qlcconsole.spec
 
 # Prepare a source tarball and move it under $RPMBUILD/SOURCES
-echo "Packing sources into qlcplus-$VERSION.tar.gz..."
-if [ -d /tmp/qlcplus-$VERSION ]; then
-	rm -rf /tmp/qlcplus-$VERSION
+echo "Packing sources into qlcconsole-$VERSION.tar.gz..."
+if [ -d /tmp/qlcconsole-$VERSION ]; then
+	rm -rf /tmp/qlcconsole-$VERSION
 fi
 
-mkdir /tmp/qlcplus-$VERSION
-rsync -aC . /tmp/qlcplus-$VERSION
-tar --directory=/tmp -czf /tmp/qlcplus-$VERSION.tar.gz qlcplus-$VERSION
-mv /tmp/qlcplus-$VERSION.tar.gz $RPMBUILD/SOURCES
+mkdir /tmp/qlcconsole-$VERSION
+rsync -aC . /tmp/qlcconsole-$VERSION
+tar --directory=/tmp -czf /tmp/qlcconsole-$VERSION.tar.gz qlcconsole-$VERSION
+mv /tmp/qlcconsole-$VERSION.tar.gz $RPMBUILD/SOURCES
 
 cd $RPMBUILD/SPECS
-rpmbuild -ba qlcplus.spec
+rpmbuild -ba qlcconsole.spec
 if [ $? == 0 ]; then
 	echo Packages created in $RPMBUILD/RPMS
 fi

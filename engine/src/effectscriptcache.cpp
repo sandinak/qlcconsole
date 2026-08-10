@@ -17,7 +17,7 @@
 
 // macOS bundle layout mirrors RGBScripts
 #define EFFECTSCRIPTDIR     "Resources/EffectScripts"
-#define USEREFFECTSCRIPTDIR "Library/Application Support/QLC+/EffectScripts"
+#define USEREFFECTSCRIPTDIR "Library/Application Support/qlcconsole/EffectScripts"
 
 EffectScriptCache::EffectScriptCache(QObject *parent)
     : QObject(parent)

@@ -40,7 +40,7 @@
   </property>
   <property name="windowIcon">
    <iconset resource="qlcui.qrc">
-    <normaloff>:/qlcplus.png</normaloff>:/qlcplus.png</iconset>
+    <normaloff>:/qlcconsole.png</normaloff>:/qlcconsole.png</iconset>
   </property>
   <layout class="QGridLayout" name="gridLayout">
    <item row="0" column="0">

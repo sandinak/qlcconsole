@@ -1,5 +1,13 @@
 project(plugins)
 
+# Build every plugin straight into a flat build/plugins/ (no per-plugin
+# subdirectory), matching the layout the installed bundle already uses.
+# IOPluginCache::load() does a single-level (non-recursive) scan of its
+# plugin dir, so a per-plugin subdirectory here means the dev binary finds
+# NO output/input plugins at all — every universe patch shows up as "None".
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)
+
 # libusb-1.0
 pkg_check_modules(LIBUSB_1 IMPORTED_TARGET libusb-1.0)
 

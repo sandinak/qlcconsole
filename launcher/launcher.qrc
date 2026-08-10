@@ -1,6 +1,6 @@
 ﻿<RCC>
     <qresource prefix="/">
-        <file alias="qlcplus.png">../resources/icons/png/qlcplus.png</file>
-        <file alias="qlcplus-fixtureeditor.png">../resources/icons/png/qlcplus-fixtureeditor.png</file>
+        <file alias="qlcconsole.png">../resources/icons/png/qlcconsole.png</file>
+        <file alias="qlcconsole-fixtureeditor.png">../resources/icons/png/qlcconsole-fixtureeditor.png</file>
     </qresource>
 </RCC>

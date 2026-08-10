@@ -48,6 +48,6 @@ install(TARGETS ${module_name}
 )
 
 if (UNIX AND NOT APPLE)
-   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcplus.QLCPlus.osc.metainfo.xml"
+   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcconsole.QLCConsole.osc.metainfo.xml"
            DESTINATION ${METAINFODIR})
 endif()

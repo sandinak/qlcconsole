@@ -1,5 +1,5 @@
 #!/bin/bash
-# Developer ID sign + notarize + staple an already-built ~/QLC+.app, then
+# Developer ID sign + notarize + staple an already-built ~/qlcconsole.app, then
 # rebuild/sign/notarize/staple the DMG. Produces a distributable that opens on
 # any (Apple-Silicon) Mac with no Gatekeeper prompt or quarantine step.
 #
@@ -10,12 +10,12 @@
 #   SIGN_ID, ENT, NOTARY_PROFILE, APP, BUNDLE_ID
 set -euo pipefail
 
-REPO="/Volumes/Ext/git/qlcplus"
-APP="${APP:-$HOME/QLC+.app}"
+REPO="/Users/branson/git/qlcconsole"
+APP="${APP:-$HOME/qlcconsole.app}"
 SIGN_ID="${SIGN_ID:-Developer ID Application: Branson Matheson (B4N7HJ7VZ6)}"
-ENT="${ENT:-$REPO/platforms/macos/qlcplus.entitlements}"
+ENT="${ENT:-$REPO/platforms/macos/qlcconsole.entitlements}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-qlc-notary}"
-BUNDLE_ID="${BUNDLE_ID:-com.bransonmatheson.qlcplus}"
+BUNDLE_ID="${BUNDLE_ID:-com.bransonmatheson.qlcconsole}"
 SCRATCH="${SCRATCH:-/private/tmp/qlc-notarize}"; mkdir -p "$SCRATCH"
 
 step() { echo; echo "===== $* ====="; }
@@ -37,8 +37,8 @@ done
 find "$APP/Contents/Frameworks" -maxdepth 1 -name '*.framework' -print0 |
   while IFS= read -r -d '' fw; do codesign "${csflags[@]}" "$fw"; done
 
-step "2 Sign the real executables with entitlements (qlcplus runs the JS/JIT + mic)"
-for exe in qlcplus qlcplus-fixtureeditor; do
+step "2 Sign the real executables with entitlements (qlcconsole runs the JS/JIT + mic)"
+for exe in qlcconsole qlcconsole-fixtureeditor; do
   [ -f "$APP/Contents/MacOS/$exe" ] && codesign "${csflags[@]}" --entitlements "$ENT" "$APP/Contents/MacOS/$exe"
 done
 
@@ -66,13 +66,13 @@ step "6 Rebuild the DMG from the stapled app"
 APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' "$REPO/engine/src/qlcconfig.h")
 BUILD_DATE=$(date -u '+%Y%m%d'); GIT_REV=$(git -C "$REPO" rev-parse --short HEAD)
 DIST="$REPO/dist"; mkdir -p "$DIST"
-DMG="$DIST/QLC+-${APPVERSION}-${BUILD_DATE}-${GIT_REV}.dmg"
+DMG="$DIST/qlcconsole-${APPVERSION}-${BUILD_DATE}-${GIT_REV}.dmg"
 rm -f "$DMG"
 ( cd "$REPO/platforms/macos/dmg"
-  ./create-dmg --volname "Q Light Controller Plus ${APPVERSION}" \
-    --volicon "$REPO/resources/icons/qlcplus.icns" \
+  ./create-dmg --volname "qlcconsole ${APPVERSION}" \
+    --volicon "$REPO/resources/icons/qlcconsole.icns" \
     --background background.png --window-size 400 300 --window-pos 200 100 \
-    --icon-size 64 --icon "QLC+" 0 150 --app-drop-link 200 150 \
+    --icon-size 64 --icon "qlcconsole" 0 150 --app-drop-link 200 150 \
     "$DMG" "$APP" )
 
 step "7 Sign + notarize + staple the DMG"

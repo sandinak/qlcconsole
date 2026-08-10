@@ -91,8 +91,18 @@ def ensure_copied(dep):
         src_fw, rel = fw
         dest_fw = os.path.join(FW, os.path.basename(src_fw))
         if not os.path.exists(dest_fw):
+            # A broken/leftover symlink at dest_fw (e.g. CMake's install()
+            # preserved Homebrew's own symlink-heavy framework layout instead
+            # of copying real content) makes os.path.exists() report False
+            # while still occupying the path, so copytree's makedirs would
+            # fail — clear it first.
+            if os.path.islink(dest_fw) or os.path.exists(dest_fw):
+                if os.path.isdir(dest_fw) and not os.path.islink(dest_fw):
+                    shutil.rmtree(dest_fw)
+                else:
+                    os.remove(dest_fw)
             if os.path.isdir(src_fw):
-                shutil.copytree(src_fw, dest_fw, symlinks=True)
+                shutil.copytree(src_fw, dest_fw, symlinks=True, dirs_exist_ok=True)
                 make_writable(dest_fw)
                 # prune bulky, unneeded parts
                 for junk in ("Headers", "Versions/Current/Headers",
@@ -105,6 +115,8 @@ def ensure_copied(dep):
         base = os.path.basename(dep)
         dest = os.path.join(FW, base)
         if not os.path.exists(dest):
+            if os.path.islink(dest):
+                os.remove(dest)
             if os.path.isfile(dep):
                 shutil.copy2(dep, dest)
                 os.chmod(dest, os.stat(dest).st_mode | 0o200)
@@ -151,8 +163,32 @@ def all_macho():
                     out.append(p)
     return out
 
+def fix_broken_plugin_symlinks():
+    """CMake's install(FILES ...) for Contents/PlugIns/* preserves Homebrew's
+    own symlink (plugins/foo.dylib -> ../../Cellar/.../foo.dylib) rather than
+    copying real content. That relative symlink only resolves from its
+    original location, so once copied into the bundle it's broken. Unlike
+    unused Frameworks entries these are explicitly required (platforms/
+    libqcocoa.dylib in particular — no GUI without it), so replace with real
+    content by re-resolving from $QTDIR/plugins, not just delete."""
+    qtdir = os.environ.get("QTDIR", "")
+    plug = os.path.join(APP, "Contents", "PlugIns")
+    for root, _, files in os.walk(plug):
+        for name in files:
+            p = os.path.join(root, name)
+            if os.path.islink(p) and not os.path.exists(p):
+                rel = os.path.relpath(p, plug)
+                src = os.path.realpath(os.path.join(qtdir, "plugins", rel))
+                os.remove(p)
+                if os.path.isfile(src):
+                    shutil.copy2(src, p)
+                    os.chmod(p, os.stat(p).st_mode | 0o200)
+                else:
+                    print("WARNING: could not resolve plugin %s (source missing: %s)" % (rel, src))
+
 def main():
     seen = set()
+    fix_broken_plugin_symlinks()
     # Seed from executables and plugins (frameworks get pulled in transitively).
     seeds = []
     macos = os.path.join(APP, "Contents", "MacOS")
@@ -169,6 +205,20 @@ def main():
 
     for s in seeds:
         process(s, seen)
+
+    # Drop any framework/plugin CMake pre-installed that isn't an actual
+    # runtime dependency (so it was never walked/fixed above). Homebrew's Qt
+    # frameworks/plugins are themselves symlinks into the Cellar, and CMake's
+    # install() preserves that symlink rather than copying real content, so
+    # an unused one sits in the bundle as a broken link — codesign chokes on
+    # those, and they're dead weight anyway since nothing links to them.
+    for base in ("Contents/Frameworks", "Contents/PlugIns"):
+        d = os.path.join(APP, base)
+        for root, dirs, files in os.walk(d):
+            for name in list(dirs) + list(files):
+                p = os.path.join(root, name)
+                if os.path.islink(p) and not os.path.exists(p):
+                    os.remove(p)
 
     # rpath on the executables
     for name in os.listdir(macos):

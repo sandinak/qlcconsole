@@ -39,8 +39,9 @@ AboutBox::AboutBox(QWidget* parent) : QDialog (parent)
 
     m_titleLabel->setText(APPNAME);
     m_versionLabel->setText(APPVERSION);
-    m_copyrightLabel->setText(tr("Fork of <B>QLC+ 4.14.2</B> by Heikki Junnila, Massimo Callegari %1")
-                              .arg(tr("and contributors — not affiliated with the QLC+ project:")));
+    m_copyrightLabel->setText(tr("by <B>Branson Matheson</B><br>%1")
+                              .arg(tr("Fork of QLC+ 4.14.2, based on the work of Heikki Junnila, "
+                                      "Massimo Callegari, and the QLC+ project — not affiliated with QLC+:")));
     m_websiteLabel->setText(tr("QLC+: %1").arg("<A HREF=\"https://www.qlcplus.org/\">https://www.qlcplus.org/</A>"));
     connect(m_websiteLabel, SIGNAL(linkActivated(QString)),
             this, SLOT(slotWebsiteClicked()));
@@ -50,7 +51,9 @@ AboutBox::AboutBox(QWidget* parent) : QDialog (parent)
     connect(m_contributors, SIGNAL(itemClicked(QListWidgetItem*)),
             this, SLOT(slotItemClicked()));
     m_contributors->clear();
-    m_contributors->addItem("Contributors:");
+    m_contributors->addItem("QLC+ contributors:");
+    m_contributors->addItem("Heikki Junnila");
+    m_contributors->addItem("Massimo Callegari");
     m_contributors->addItem("Jano Svitok");
     m_contributors->addItem("David Garyga");
     m_contributors->addItem(QString::fromUtf8("Lukas Jähn"));

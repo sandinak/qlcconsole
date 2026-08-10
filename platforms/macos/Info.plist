@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIconFile</key>
-	<string>qlcplus.icns</string>
+	<string>qlcconsole.icns</string>
 
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
@@ -18,13 +18,13 @@
 	<string>????</string>
 
 	<key>CFBundleExecutable</key>
-	<string>qlcplus-launcher</string>
+	<string>qlcconsole-launcher</string>
 
 	<key>CFBundleName</key>
 	<string>qlcconsole</string>
 
 	<key>CFBundleIdentifier</key>
-	<string>com.bransonmatheson.qlcplus</string>
+	<string>com.bransonmatheson.qlcconsole</string>
 
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
@@ -42,7 +42,7 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeIconFile</key>
-			<string>qlcplus.icns</string>
+			<string>qlcconsole.icns</string>
 			<key>CFBundleTypeName</key>
 			<string>qlcconsole Workspace</string>
 			<key>CFBundleTypeExtensions</key>
@@ -54,7 +54,7 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeIconFile</key>
-			<string>qlcplus.icns</string>
+			<string>qlcconsole.icns</string>
 			<key>CFBundleTypeName</key>
 			<string>QLC+ Workspace</string>
 			<key>CFBundleTypeExtensions</key>
@@ -66,7 +66,7 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeIconFile</key>
-			<string>qlcplus.icns</string>
+			<string>qlcconsole.icns</string>
 			<key>CFBundleTypeName</key>
 			<string>QLC+ Fixture Definition</string>
 			<key>CFBundleTypeExtensions</key>

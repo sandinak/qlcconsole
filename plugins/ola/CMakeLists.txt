@@ -89,7 +89,7 @@ if(NOT APPLE)
 endif()
 
 if (UNIX AND NOT APPLE)
-   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcplus.QLCPlus.ola.metainfo.xml"
+   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcconsole.QLCConsole.ola.metainfo.xml"
            DESTINATION ${METAINFODIR})
 endif()
 

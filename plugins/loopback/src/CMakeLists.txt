@@ -49,6 +49,6 @@ install(TARGETS ${module_name}
 )
 
 if (UNIX AND NOT APPLE)
-   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcplus.QLCPlus.loopback.metainfo.xml"
+   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/org.qlcconsole.QLCConsole.loopback.metainfo.xml"
            DESTINATION ${METAINFODIR})
 endif()

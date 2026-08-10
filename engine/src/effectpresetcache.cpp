@@ -17,7 +17,7 @@
 #include <QDebug>
 
 #define EFFECTPRESETDIR     "Resources/EffectPresets"
-#define USEREFFECTPRESETDIR "Library/Application Support/QLC+/EffectPresets"
+#define USEREFFECTPRESETDIR "Library/Application Support/qlcconsole/EffectPresets"
 
 EffectPresetCache::EffectPresetCache(QObject *parent)
     : QObject(parent)

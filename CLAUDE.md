@@ -18,10 +18,12 @@ cmake --build build -j
 
 # Run. ALWAYS pass -o to open a workspace; positional args are ignored and
 # can overwrite the .qxw with an empty file (see memory: qlcplus-cli).
-build/main/qlcplus -o surfacetesting.qxw
+build/main/qlcconsole -o surfacetesting.qxw
 ```
 
-- App binary: `build/main/qlcplus` (arm64 Mach-O).
+- App binary: `build/main/qlcconsole` (arm64 Mach-O; renamed from `qlcplus` in
+  the qlcconsole rebrand — launcher/fixtureeditor binaries are
+  `qlcconsole-launcher` / `qlcconsole-fixtureeditor`).
 - Test workspace: `surfacetesting.qxw` — reuse it across iterations; don't
   rebuild fixtures/scenes/chasers from scratch (see memory: test-workspace).
 - `qmlui` is OFF; ignore `qmlui/` for this work.

@@ -1,7 +1,7 @@
-Source: qlcplus
+Source: qlcconsole
 Section: misc
 Priority: optional
-Maintainer: Massimo Callegari <massimocallegari@yahoo.it>
+Maintainer: Branson Matheson <branson.matheson@gmail.com>
 Build-Depends:
  debhelper (>= 7.0.50),
  g++,
@@ -22,7 +22,7 @@ Build-Depends:
 Standards-Version: 3.7.3
 Homepage: http://www.qlcplus.org/
 
-Package: qlcplus
+Package: qlcconsole
 Section: misc
 Architecture: any
 Depends:
@@ -31,15 +31,15 @@ Depends:
 Recommends:
  libsndfile1,
  libqt5multimedia5-plugins,
-Description: Q Light Controller Plus - The open DMX lighting desk
+Description: qlcconsole - a fork of Q Light Controller Plus, an open DMX lighting desk
  Software lighting desk for controlling professional lighting fixtures.
 
-Package: qlcplus-dbg
+Package: qlcconsole-dbg
 Architecture: any
 Section: debug
 Priority: extra
 Depends:
- qlcplus (= ${binary:Version}),
+ qlcconsole (= ${binary:Version}),
  ${misc:Depends},
-Description: Debugging symbols for Q Light Controller Plus
- Q Light Controller Plus debugging symbols.
+Description: Debugging symbols for qlcconsole
+ qlcconsole (fork of Q Light Controller Plus) debugging symbols.

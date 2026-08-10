@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIconFile</key>
-        <string>qlcplus.icns</string>
+        <string>qlcconsole.icns</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleSignature</key>
@@ -11,7 +11,7 @@
 	<key>CFBundleExecutable</key>
 	<string>qlcplus-qml</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.qlcplus.${PRODUCT_NAME:rfc1034identifier}</string>
+	<string>org.qlcconsole.${PRODUCT_NAME:rfc1034identifier}</string>
 	<key>CFBundleDisplayName</key>
 	<string>${PRODUCT_NAME}</string>
 	<key>CFBundleName</key>

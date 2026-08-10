@@ -1,22 +1,22 @@
 project(icons)
 
-set(desktop_FILES qlcplus.desktop)
+set(desktop_FILES qlcconsole.desktop)
 if(NOT qmlui)
-    list(APPEND desktop_FILES qlcplus-fixtureeditor.desktop)
+    list(APPEND desktop_FILES qlcconsole-fixtureeditor.desktop)
 endif()
 install(FILES ${desktop_FILES} DESTINATION ${INSTALLROOT}/share/applications/)
 
-set(icons_SRCS ../../resources/icons/png/qlcplus.png)
+set(icons_SRCS ../../resources/icons/png/qlcconsole.png)
 if(NOT qmlui)
-    list(APPEND icons_SRCS ../../resources/icons/png/qlcplus-fixtureeditor.png)
+    list(APPEND icons_SRCS ../../resources/icons/png/qlcconsole-fixtureeditor.png)
 endif()
 install(FILES ${icons_SRCS} DESTINATION ${INSTALLROOT}/share/pixmaps/)
 
-install(FILES qlcplus.xml DESTINATION ${INSTALLROOT}/share/mime/packages)
+install(FILES qlcconsole.xml DESTINATION ${INSTALLROOT}/share/mime/packages)
 
-set(appdata_FILES org.qlcplus.QLCPlus.appdata.xml)
+set(appdata_FILES org.qlcconsole.QLCConsole.appdata.xml)
 if(NOT qmlui)
-    list(APPEND appdata_FILES org.qlcplus.QLCPlusFixtureEditor.appdata.xml)
+    list(APPEND appdata_FILES org.qlcconsole.QLCConsoleFixtureEditor.appdata.xml)
 endif()
 install(FILES ${appdata_FILES} DESTINATION ${METAINFODIR})
 
@@ -26,7 +26,7 @@ if(NOT qmlui)
 endif()
 
 # install(FILES ../Sample.qxw DESTINATION ${INSTALLROOT}/${DATADIR})
-# install(FILES qlcplus-start.sh DESTINATION ${INSTALLROOT}/sbin)
+# install(FILES qlcconsole-start.sh DESTINATION ${INSTALLROOT}/sbin)
 
 if(appimage)
     if (QT_DIR STREQUAL "/usr/lib/x86_64-linux-gnu/cmake/Qt5")

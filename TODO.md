@@ -152,14 +152,28 @@ effect timing items also want the rig to confirm.
 
 ---
 
-## Now — rebrand the fork to "qlcconsole" *(app-wide; not started)*
+## Now — rebrand the fork to "qlcconsole" *(Phase 1 + 2 done; icons/bundle ID pending)*
 
 The fork is now firmly a **desktop console** (mouse+keyboard, MIDI, multi-window),
 well past the tablet/Android QML flavour — rebrand from QLC+ to **qlcconsole**.
 Distinct from the *Lighting Studio* rename (that was just the 2D tool; shipped).
-Scope: app/window title, About box, launcher, macOS bundle/package names
-(platforms/macos), and decide whether the `qlcplus` CLI binary name changes too.
 Keep upstream attribution/license — this is a fork identity, not a takeover.
+
+Phase 1 (2026-08-10, commit 7bf4f6daa) — display strings: window/About titles,
+log filename, `.qlcc` workspace extension (`.qxw` still read/imported).
+
+Phase 2 (2026-08-10) — build/binary names: top-level CMake project name and
+`CPACK_PACKAGE_NAME` → `qlcconsole`; executable targets `qlcplus` →
+`qlcconsole`, `qlcplus-launcher` → `qlcconsole-launcher`,
+`qlcplus-fixtureeditor` → `qlcconsole-fixtureeditor` (main/CMakeLists.txt,
+launcher/CMakeLists.txt, fixtureeditor/CMakeLists.txt, launcher.cpp's
+hardcoded spawn paths, macOS Info.plist CFBundleExecutable, Linux .desktop
+Exec= lines, CLAUDE.md/RIG_TEST_PLAN.md/testing_st.md run commands).
+
+Deliberately left alone: icon/asset filenames (still `qlcplus.icns` etc. —
+asset rename is a separate pass) and the macOS `CFBundleIdentifier`
+(`com.bransonmatheson.qlcplus` — changing it resets TCC permission grants and
+app preferences, so leave unless there's a reason to force that reset).
 
 ---
 
@@ -172,6 +186,23 @@ FIXTURE GROUP as assigned to this object; right-click to add fixtures/groups;
 multi-select → create a fixture group (opens the Fixtures-tab head-layout mapping);
 drag-drop tree→face to add; distribute/put-on-face via popup or right-click.
 **Design options being drafted — pick a direction before building.**
+
+---
+
+## Now — Fixtures tab: power tree + universe usage grid *(not started)*
+
+- **Power systems in the tree** — a `Power` folder in the Fixtures-tab tree
+  (peer to Fixture Groups); add devices under `Power → <circuit>` the same
+  drag/right-click workflow as adding fixtures to a group. Gives power
+  planning a real home in the tree instead of living only as a 2D stage-object
+  (see "more stage-feature objects" below — the tree entry and the map object
+  should probably reference the same underlying circuit).
+- **Rename the Fixtures tab → "Physical Groups"** — once it hosts fixture
+  groups AND power circuits (and maybe other physical groupings later),
+  "Fixtures" undersells what's actually in there.
+- **Double-click a universe folder → channel-usage grid** — same drill-down
+  gesture already used elsewhere in the tree; opens a grid showing what's
+  patched/consuming each channel in that universe.
 
 ---
 

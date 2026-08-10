@@ -1,4 +1,4 @@
-set(module_name "qlcplus-fixtureeditor")
+set(module_name "qlcconsole-fixtureeditor")
 
 set(TS_FILES
     fixtureeditor_fi_FI.ts
@@ -341,11 +341,11 @@ set_source_files_properties("../ui/src/../../resources/icons/png/player_stop.png
 set_source_files_properties("../ui/src/../../resources/icons/png/prism.png"
     PROPERTIES QT_RESOURCE_ALIAS "prism.png"
 )
-set_source_files_properties("../ui/src/../../resources/icons/png/qlcplus-fixtureeditor.png"
-    PROPERTIES QT_RESOURCE_ALIAS "qlcplus-fixtureeditor.png"
+set_source_files_properties("../ui/src/../../resources/icons/png/qlcconsole-fixtureeditor.png"
+    PROPERTIES QT_RESOURCE_ALIAS "qlcconsole-fixtureeditor.png"
 )
-set_source_files_properties("../ui/src/../../resources/icons/png/qlcplus.png"
-    PROPERTIES QT_RESOURCE_ALIAS "qlcplus.png"
+set_source_files_properties("../ui/src/../../resources/icons/png/qlcconsole.png"
+    PROPERTIES QT_RESOURCE_ALIAS "qlcconsole.png"
 )
 set_source_files_properties("../ui/src/../../resources/icons/png/qt.png"
     PROPERTIES QT_RESOURCE_ALIAS "qt.png"
@@ -559,8 +559,8 @@ set(qlcui_resource_files
     "../ui/src/../../resources/icons/png/player_play.png"
     "../ui/src/../../resources/icons/png/player_stop.png"
     "../ui/src/../../resources/icons/png/prism.png"
-    "../ui/src/../../resources/icons/png/qlcplus-fixtureeditor.png"
-    "../ui/src/../../resources/icons/png/qlcplus.png"
+    "../ui/src/../../resources/icons/png/qlcconsole-fixtureeditor.png"
+    "../ui/src/../../resources/icons/png/qlcconsole.png"
     "../ui/src/../../resources/icons/png/qt.png"
     "../ui/src/../../resources/icons/png/rainbow.png"
     "../ui/src/../../resources/icons/png/random.png"

@@ -138,8 +138,8 @@ void printVersion()
     cout << APPNAME << " " << "version " << APPVERSION << endl;
     cout << "This program is licensed under the terms of the ";
     cout << "Apache 2.0 license." << endl;
-    cout << "Copyright (c) Heikki Junnila (hjunnila@users.sf.net)" << endl;
-    cout << "Copyright (c) Massimo Callegari (massimocallegari@yahoo.it)" << endl;
+    cout << "By Branson Matheson" << endl;
+    cout << "Fork of QLC+ 4.14.2, based on the work of Heikki Junnila and Massimo Callegari" << endl;
     cout << endl;
 }
 
@@ -151,7 +151,7 @@ void printUsage()
     QTextStream cout(stdout, QIODevice::WriteOnly);
 
     cout << "Usage:";
-    cout << "  qlcplus [options]" << endl;
+    cout << "  qlcconsole [options]" << endl;
     cout << "Options:" << endl;
     cout << "  -c or --closebutton <x,y,w,h>\tPlace a close button in virtual console (only when -k is specified)" << endl;
     cout << "  -d or --debug <level>\t\tSet debug output level (0-3, see QtMsgType)" << endl;
@@ -314,7 +314,7 @@ int main(int argc, char** argv)
         return 0;
 
     /* Load translation for main application */
-    QLCi18n::loadTranslation("qlcplus");
+    QLCi18n::loadTranslation("qlcconsole");
 
     /* Handle debug messages */
     qInstallMessageHandler(qlcMessageHandler);

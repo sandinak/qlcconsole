@@ -283,7 +283,7 @@ void App::init()
 {
     QSettings settings;
 
-    setWindowIcon(QIcon(":/qlcplus.png"));
+    setWindowIcon(QIcon(":/qlcconsole.png"));
 
     m_tab = new QTabWidget(this);
     m_tab->setTabPosition(QTabWidget::South);
@@ -641,6 +641,10 @@ void App::initDoc()
 #ifdef DEBUG_SPEED
     speedTime.start();
 #endif
+    /* Surface any user content left under the old QLC+-named data dir into
+       the current (qlcconsole) one, so the rename doesn't orphan it */
+    QLCFile::mergeLegacyUserData();
+
     /* Load user fixtures first so that they override system fixtures */
     m_doc->fixtureDefCache()->load(QLCFixtureDefCache::userDefinitionDirectory());
     m_doc->fixtureDefCache()->loadMap(QLCFixtureDefCache::systemDefinitionDirectory());
@@ -1022,7 +1026,7 @@ void App::initActions()
     m_helpIndexAction->setShortcut(QKeySequence("SHIFT+F1"));
     connect(m_helpIndexAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpIndex()));
 
-    m_helpAboutAction = new QAction(QIcon(":/qlcplus.png"), tr("&About qlcconsole"), this);
+    m_helpAboutAction = new QAction(QIcon(":/qlcconsole.png"), tr("&About qlcconsole"), this);
     // macOS relocates this to the application menu ("About QLC+").
     m_helpAboutAction->setMenuRole(QAction::AboutRole);
     connect(m_helpAboutAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpAbout()));
@@ -2588,6 +2592,14 @@ void App::initStatusBar()
         "(the playhead keeps tracking; resume to hand it back)."));
     m_statusTimelineLabel->hide();
     sb->addWidget(m_statusTimelineLabel, 0);
+
+    // Mirror centreSpacer on the right of the chip group: QStatusBar's own
+    // built-in message-area stretch isn't a real, predictable counterpart to
+    // an explicit stretch=1 spacer, so relying on it left the MTC/Load/Power
+    // chips reading as right-justified instead of centred. Two matching
+    // spacers bracketing the group is the reliable way to centre it.
+    QWidget *centreSpacerRight = new QWidget(this);
+    sb->addWidget(centreSpacerRight, 1);
 
     // Smooth the chip readout: anchor on each fresh position, then a ~30Hz timer
     // glides the displayed time between packets (bounded, like the show cursor),

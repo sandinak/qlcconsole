@@ -3,16 +3,16 @@ set(module_name "qlcplusui")
 include(../../variables.cmake)
 
 set(TS_FILES
-    qlcplus_fi_FI.ts
-    qlcplus_fr_FR.ts
-    qlcplus_es_ES.ts
-    qlcplus_de_DE.ts
-    qlcplus_it_IT.ts
-    qlcplus_nl_NL.ts
-    qlcplus_cz_CZ.ts
-    qlcplus_pt_BR.ts
-    qlcplus_ca_ES.ts
-    qlcplus_ja_JP.ts
+    qlcconsole_fi_FI.ts
+    qlcconsole_fr_FR.ts
+    qlcconsole_es_ES.ts
+    qlcconsole_de_DE.ts
+    qlcconsole_it_IT.ts
+    qlcconsole_nl_NL.ts
+    qlcconsole_cz_CZ.ts
+    qlcconsole_pt_BR.ts
+    qlcconsole_ca_ES.ts
+    qlcconsole_ja_JP.ts
 )
 
 if(QT_VERSION_MAJOR GREATER 5)

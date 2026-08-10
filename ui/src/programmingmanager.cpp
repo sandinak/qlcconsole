@@ -233,7 +233,26 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_saveBtn->setToolTip(tr("Save joystick position edits to the workspace file"));
         toolbar->addWidget(m_saveBtn);
 
-        m_canvasLayout->addLayout(toolbar);
+        // The row above packs ~15 controls (Highlight/Flash/Park/Unpark/Mark/
+        // Unmark/Auto MIB/Snapshot/BPM/Tap/Beat On/Jog/Save) into one
+        // QHBoxLayout with no wrapping, so their summed minimum widths (~1866px)
+        // become this panel's minimum — and since QTabWidget's minimum size is
+        // the max over all pages, that drags the WHOLE app window wider than
+        // most screens and makes it unresizable. Wrap it in a horizontally
+        // scrollable, frameless container so it keeps its natural minimum
+        // width but doesn't force the rest of the layout to match.
+        QWidget *toolbarWidget = new QWidget(this);
+        toolbarWidget->setLayout(toolbar);
+
+        QScrollArea *toolbarScroll = new QScrollArea(this);
+        toolbarScroll->setWidget(toolbarWidget);
+        toolbarScroll->setWidgetResizable(false);
+        toolbarScroll->setFrameShape(QFrame::NoFrame);
+        toolbarScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        toolbarScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        toolbarScroll->setFixedHeight(toolbarWidget->sizeHint().height() + 4);
+
+        m_canvasLayout->addWidget(toolbarScroll);
 
         // Blind-active banner: full-width blue bar pinned at the very top of the
         // canvas (above the toolbar) so "the rig is muted" can't be missed while

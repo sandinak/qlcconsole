@@ -5,15 +5,15 @@
 # Branson's custom user content (RGB scripts / fixtures / templates / bundle)
 # so the effects work on a fresh machine.
 #
-# Result: ~/QLC+.app  and  <repo>/dist/QLC+-<ver>-<date>-<rev>.dmg
+# Result: ~/qlcconsole.app  and  <repo>/dist/qlcconsole-<ver>-<date>-<rev>.dmg
 set -euo pipefail
 
-REPO="/Volumes/Ext/git/qlcplus"
+REPO="/Users/branson/git/qlcconsole"
 SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD="$REPO/build-package"
 USERDATA="$HOME/Library/Application Support/QLC+"
-APP="$HOME/QLC+.app"
-export QTDIR="/opt/homebrew/opt/qt@5"
+APP="$HOME/qlcconsole.app"
+export QTDIR="/opt/homebrew/opt/qt6"
 
 cd "$REPO"
 
@@ -28,7 +28,7 @@ cmake -S . -B "$BUILD" \
 step "2/7 Build (parallel)"
 cmake --build "$BUILD" -j"$(sysctl -n hw.ncpu)"
 
-step "3/7 Install into ~/QLC+.app (fresh)"
+step "3/7 Install into ~/qlcconsole.app (fresh)"
 rm -rf "$APP"
 cmake --install "$BUILD"
 
@@ -88,16 +88,16 @@ APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' "$REP
 BUILD_DATE=$(date -u '+%Y%m%d')
 GIT_REV=$(git -C "$REPO" rev-parse --short HEAD)
 DIST="$REPO/dist"; mkdir -p "$DIST"
-DMG="$DIST/QLC+-${APPVERSION}-${BUILD_DATE}-${GIT_REV}.dmg"
+DMG="$DIST/qlcconsole-${APPVERSION}-${BUILD_DATE}-${GIT_REV}.dmg"
 rm -f "$DMG"
 cd "$REPO/platforms/macos/dmg"
-./create-dmg --volname "Q Light Controller Plus ${APPVERSION}" \
-  --volicon "$REPO/resources/icons/qlcplus.icns" \
+./create-dmg --volname "qlcconsole ${APPVERSION}" \
+  --volicon "$REPO/resources/icons/qlcconsole.icns" \
   --background background.png \
   --window-size 400 300 \
   --window-pos 200 100 \
   --icon-size 64 \
-  --icon "QLC+" 0 150 \
+  --icon "qlcconsole" 0 150 \
   --app-drop-link 200 150 \
   "$DMG" \
   "$APP"

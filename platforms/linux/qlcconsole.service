@@ -1,0 +1,15 @@
+[Unit]
+Description=qlcconsole (fork of Q Light Controller Plus)
+Documentation=man:qlcconsole(1)
+After=graphical.target
+DefaultDependencies=no
+
+[Service]
+Type=simple
+User=pi
+Restart=on-failure
+RestartSec=3
+ExecStart=/usr/sbin/qlcconsole-start.sh
+
+[Install]
+WantedBy=multi-user.target

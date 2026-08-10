@@ -1,5 +1,5 @@
-qlcplus/
-qlcplus-dbg/
+qlcconsole/
+qlcconsole-dbg/
 tmp/
 *.log
 *.debhelper

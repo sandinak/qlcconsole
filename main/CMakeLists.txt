@@ -1,4 +1,4 @@
-set(module_name "qlcplus")
+set(module_name "qlcconsole")
 
 add_executable(${module_name} WIN32
     main.cpp
@@ -37,7 +37,7 @@ endif()
 if(APPLE)
     # Embed Info.plist (carrying NSMicrophoneUsageDescription) into the bare dev
     # binary via a __TEXT,__info_plist section, so macOS TCC can prompt for
-    # microphone access when running build/main/qlcplus directly — not only from
+    # microphone access when running build/main/qlcconsole directly — not only from
     # the deployed .app bundle. Without this, audio input silently gets no signal
     # on a dev binary. (The bundle uses its own Contents/Info.plist; the embedded
     # copy is harmless there.)
@@ -72,8 +72,8 @@ endif()
 #     audio preview) silently gets NO signal.
 # Mirror all of them into <build>/plugins so the dev run finds them. (A real
 # macdeployqt bundle copies these itself, so this is dev-only.)
-if(APPLE AND QT_VERSION_MAJOR EQUAL 5 AND TARGET Qt5::qmake)
-    get_target_property(_qlc_qmake Qt5::qmake IMPORTED_LOCATION)
+if(APPLE AND TARGET Qt${QT_MAJOR_VERSION}::qmake)
+    get_target_property(_qlc_qmake Qt${QT_MAJOR_VERSION}::qmake IMPORTED_LOCATION)
     execute_process(COMMAND "${_qlc_qmake}" -query QT_INSTALL_PLUGINS
                     OUTPUT_VARIABLE _qlc_qt_plugins
                     OUTPUT_STRIP_TRAILING_WHITESPACE)

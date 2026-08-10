@@ -172,7 +172,7 @@ void PreviewContext::setDetached(bool detached)
         m_view->setSource(QUrl("qrc:/WindowLoader.qml"));
 
         m_view->setTitle(contextTitle());
-        m_view->setIcon(QIcon(":/qlcplus.svg"));
+        m_view->setIcon(QIcon(":/qlcconsole.svg"));
 
         m_view->setGeometry(0, 0, 800, 600);
         m_view->show();

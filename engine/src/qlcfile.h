@@ -141,6 +141,18 @@ public:
      */
     static QDir userDirectory(QString path, QString fallBackPath, QStringList extensions);
 
+    /**
+     * @brief One-time overlay: symlink resource files (Fixtures, RGBScripts,
+     *        MidiTemplates, ModifiersTemplates, InputProfiles, ColorFilters,
+     *        Bundles, EffectScripts, EffectPresets) that exist only under the
+     *        old QLC+-named user data root into the current (qlcconsole)
+     *        root, so the USERDATADIR rename doesn't orphan existing user
+     *        content. A file already present under the new root by name
+     *        always wins; no-op once both roots are the same or the old
+     *        root doesn't exist.
+     */
+    static void mergeLegacyUserData();
+
     /** @brief Return a OS dependent prefix used for local file URLs.
       *        Linux and macOS needs "file://", while Windows needs "file:///" */
     static QString fileUrlPrefix();

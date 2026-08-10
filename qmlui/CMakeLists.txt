@@ -1,16 +1,16 @@
-set(module_name "qlcplus-qml")
+set(module_name "qlcconsole-qml")
 
 set(TS_FILES
-    qlcplus_ca_ES.ts
-    qlcplus_de_DE.ts
-    qlcplus_es_ES.ts
-    qlcplus_fr_FR.ts
-    qlcplus_it_IT.ts
-    qlcplus_ja_JP.ts
-    qlcplus_nl_NL.ts
-    qlcplus_pl_PL.ts
-    qlcplus_ru_RU.ts
-    qlcplus_uk_UA.ts
+    qlcconsole_ca_ES.ts
+    qlcconsole_de_DE.ts
+    qlcconsole_es_ES.ts
+    qlcconsole_fr_FR.ts
+    qlcconsole_it_IT.ts
+    qlcconsole_ja_JP.ts
+    qlcconsole_nl_NL.ts
+    qlcconsole_pl_PL.ts
+    qlcconsole_ru_RU.ts
+    qlcconsole_uk_UA.ts
 )
 qt_add_translation(QM_FILES ${TS_FILES})
 

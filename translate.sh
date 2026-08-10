@@ -93,7 +93,7 @@ case "$ACTION" in
         rm -f "$files_tmp"
         continue
       fi
-      out="qlcplus_${lang}.qm"
+      out="qlcconsole_${lang}.qm"
       # shellcheck disable=SC2046
       "$LRELEASE" -silent $(cat "$files_tmp") -qm "$out"
       echo "  -> $out"
@@ -119,8 +119,8 @@ case "$ACTION" in
 
     if ! [ -s "$refs_tmp" ]; then
       echo "No reference .ts files found for flavor '$FLAVOR'."
-      echo "Creating default: ./qlcplus_${NEW_LANG}.ts"
-      "$LUPDATE" . -ts "./qlcplus_${NEW_LANG}.ts"
+      echo "Creating default: ./qlcconsole_${NEW_LANG}.ts"
+      "$LUPDATE" . -ts "./qlcconsole_${NEW_LANG}.ts"
       echo "Create complete."
       rm -f "$refs_tmp"
       exit 0

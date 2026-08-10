@@ -1,0 +1,17 @@
+?package(qlcconsole):\
+        needs="x11"\
+        section="Apps/Lighting"\
+        hints="QT,QLC+"\
+        title="qlcconsole"\
+        longtitle="qlcconsole (fork of Q Light Controller Plus)"\
+        icon="/usr/share/pixmaps/qlcconsole.png"\
+        command="/usr/bin/qlcconsole"
+
+?package(qlcconsole):\
+        needs="x11"\
+        section="Apps/Lighting"\
+        hints="QT,QLC+"\
+        title="qlcconsole Fixture Editor"\
+        longtitle="qlcconsole Device Class Editor"\
+        icon="/usr/share/pixmaps/qlcconsole-fixtureeditor.png"\
+        command="/usr/bin/qlcconsole-fixtureeditor"

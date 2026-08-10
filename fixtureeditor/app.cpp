@@ -65,7 +65,7 @@ App::App(QWidget *parent) : QMainWindow(parent)
     m_copyChannel = NULL;
 
     setWindowTitle(App::longName());
-    setWindowIcon(QIcon(":/qlcplus-fixtureeditor.png"));
+    setWindowIcon(QIcon(":/qlcconsole-fixtureeditor.png"));
     QMdiArea *mdiArea = new QMdiArea(this);
     mdiArea->setBackground(QBrush(QColor(0x60, 0x60, 0x60)));
     setCentralWidget(mdiArea);
@@ -278,7 +278,7 @@ void App::initActions()
     connect(m_helpIndexAction, SIGNAL(triggered(bool)),
             this, SLOT(slotHelpIndex()));
 
-    m_helpAboutAction = new QAction(QIcon(":/qlcplus.png"),
+    m_helpAboutAction = new QAction(QIcon(":/qlcconsole.png"),
                                     tr("About Fixture Definition Editor..."), this);
     connect(m_helpAboutAction, SIGNAL(triggered(bool)),
             this, SLOT(slotHelpAbout()));

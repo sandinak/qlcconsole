@@ -1,7 +1,7 @@
 #!/bin/bash
 #VERSION=$(head -1 debian/changelog | sed 's/.*(\(.*\)).*/\1/')
 #VERSION=$(grep -m 1 APPVERSION variables.pri | cut -d '=' -f 2 | sed -e 's/^[[:space:]]*//' | tr ' ' _ | tr -d '\r\n')
-APP_DIR=~/QLC+.app
+APP_DIR=~/qlcconsole.app
 BIN_DIR=$APP_DIR/Contents/MacOS
 QML_DIR=$APP_DIR/Contents/Resources/qml
 
@@ -58,11 +58,11 @@ VERSION=$(grep -E '^#define APPVERSION' engine/src/qlcconfig.h | sed -E 's/^#def
 
 echo "Fix non-Qt dependencies..."
 platforms/macos/fix_dylib_deps.sh $APP_DIR/Contents/Frameworks/libsndfile.1.dylib
-if [ -f "$BIN_DIR/qlcplus" ]; then
-    platforms/macos/fix_dylib_deps.sh $BIN_DIR/qlcplus
-    platforms/macos/fix_dylib_deps.sh $BIN_DIR/qlcplus-fixtureeditor
+if [ -f "$BIN_DIR/qlcconsole" ]; then
+    platforms/macos/fix_dylib_deps.sh $BIN_DIR/qlcconsole
+    platforms/macos/fix_dylib_deps.sh $BIN_DIR/qlcconsole-fixtureeditor
 else
-    platforms/macos/fix_dylib_deps.sh $BIN_DIR/qlcplus-qml
+    platforms/macos/fix_dylib_deps.sh $BIN_DIR/qlcconsole-qml
 fi
 
 echo "Run macdeployqt..."
@@ -83,7 +83,7 @@ fi
 if [ -n "$SIGNATURE" ]; then
     # sign package with codesign (macdeployqt fails in that too)
     echo "Signing binaries..."
-    ENTITLEMENTS="platforms/macos/qlcplus.entitlements"
+    ENTITLEMENTS="platforms/macos/qlcconsole.entitlements"
 
     find $APP_DIR/Contents/Frameworks -type f | while read file; do
         codesign --force --sign "$SIGNATURE" --timestamp "$file"
@@ -100,29 +100,29 @@ if [ -n "$SIGNATURE" ]; then
     codesign --sign "$SIGNATURE" --timestamp --deep --entitlements $ENTITLEMENTS --options runtime $APP_DIR
 
     # workaround first time sign failure
-    if [ -f "$BIN_DIR/qlcplus" ]; then
-        codesign --force --sign "$SIGNATURE" --timestamp --entitlements $ENTITLEMENTS --options runtime $BIN_DIR/qlcplus
-        codesign --force --sign "$SIGNATURE" --timestamp --entitlements $ENTITLEMENTS --options runtime $BIN_DIR/qlcplus-launcher
+    if [ -f "$BIN_DIR/qlcconsole" ]; then
+        codesign --force --sign "$SIGNATURE" --timestamp --entitlements $ENTITLEMENTS --options runtime $BIN_DIR/qlcconsole
+        codesign --force --sign "$SIGNATURE" --timestamp --entitlements $ENTITLEMENTS --options runtime $BIN_DIR/qlcconsole-launcher
     else
-        codesign --force --sign "$SIGNATURE" --timestamp --entitlements $ENTITLEMENTS --options runtime $BIN_DIR/qlcplus-qml
+        codesign --force --sign "$SIGNATURE" --timestamp --entitlements $ENTITLEMENTS --options runtime $BIN_DIR/qlcconsole-qml
     fi
 fi
 
-# Create Apple Disk iMaGe from ~/QLC+.app/
+# Create Apple Disk iMaGe from ~/qlcconsole.app/
 OUTDIR=$PWD
 cd platforms/macos/dmg
-./create-dmg --volname "Q Light Controller Plus $VERSION" \
-    --volicon $OUTDIR/resources/icons/qlcplus.icns \
+./create-dmg --volname "qlcconsole $VERSION" \
+    --volicon $OUTDIR/resources/icons/qlcconsole.icns \
     --background background.png \
     --window-size 400 300 \
     --window-pos 200 100 \
     --icon-size 64 \
-    --icon "QLC+" 0 150 \
+    --icon "qlcconsole" 0 150 \
     --app-drop-link 200 150 \
-    $OUTDIR/QLC+_$VERSION.dmg \
+    $OUTDIR/qlcconsole_$VERSION.dmg \
     $APP_DIR
 cd -
 
 if [ -n "$SIGNATURE" ]; then
-    codesign --sign "$SIGNATURE" --timestamp $OUTDIR/QLC+_$VERSION.dmg
+    codesign --sign "$SIGNATURE" --timestamp $OUTDIR/qlcconsole_$VERSION.dmg
 fi

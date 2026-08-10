@@ -88,7 +88,7 @@ endif()
 if (UNIX AND NOT APPLE)
    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/linux/z65-fx5-hid.rules"
            DESTINATION ${UDEVRULESDIR})
-   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/linux/org.qlcplus.QLCPlus.hid.metainfo.xml"
+   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/linux/org.qlcconsole.QLCConsole.hid.metainfo.xml"
            DESTINATION ${METAINFODIR})
 endif()
 
