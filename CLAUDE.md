@@ -72,5 +72,5 @@ active work at the top. Update it as features land (commits often say
 ## Memory
 
 Persistent notes live under
-`~/.claude/projects/-Volumes-Ext-git-qlcplus/memory/` (indexed by `MEMORY.md`).
+`~/.claude/projects/-Users-branson-git-qlcconsole/memory/` (indexed by `MEMORY.md`).
 Check there for workflow conventions before re-deriving them.
