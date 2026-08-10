@@ -39,9 +39,9 @@ AboutBox::AboutBox(QWidget* parent) : QDialog (parent)
 
     m_titleLabel->setText(APPNAME);
     m_versionLabel->setText(APPVERSION);
-    m_copyrightLabel->setText(QString("Copyright &copy; <B>Heikki Junnila, Massimo Callegari</B> %1")
-                              .arg(tr("and contributors:")));
-    m_websiteLabel->setText(tr("Website: %1").arg("<A HREF=\"https://www.qlcplus.org/\">https://www.qlcplus.org/</A>"));
+    m_copyrightLabel->setText(tr("Fork of <B>QLC+ 4.14.2</B> by Heikki Junnila, Massimo Callegari %1")
+                              .arg(tr("and contributors — not affiliated with the QLC+ project:")));
+    m_websiteLabel->setText(tr("QLC+: %1").arg("<A HREF=\"https://www.qlcplus.org/\">https://www.qlcplus.org/</A>"));
     connect(m_websiteLabel, SIGNAL(linkActivated(QString)),
             this, SLOT(slotWebsiteClicked()));
     connect(m_qtButton, SIGNAL(clicked()),

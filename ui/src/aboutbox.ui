@@ -30,7 +30,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>About Q Light Controller Plus</string>
+   <string>About qlcconsole</string>
   </property>
   <property name="windowIcon">
    <iconset resource="qlcui.qrc">

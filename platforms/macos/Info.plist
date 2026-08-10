@@ -21,7 +21,7 @@
 	<string>qlcplus-launcher</string>
 
 	<key>CFBundleName</key>
-	<string>Q Light Controller Plus</string>
+	<string>qlcconsole</string>
 
 	<key>CFBundleIdentifier</key>
 	<string>com.bransonmatheson.qlcplus</string>
@@ -44,13 +44,25 @@
 			<key>CFBundleTypeIconFile</key>
 			<string>qlcplus.icns</string>
 			<key>CFBundleTypeName</key>
+			<string>qlcconsole Workspace</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>qlcc</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+		</dict>
+		<dict>
+			<key>CFBundleTypeIconFile</key>
+			<string>qlcplus.icns</string>
+			<key>CFBundleTypeName</key>
 			<string>QLC+ Workspace</string>
 			<key>CFBundleTypeExtensions</key>
 			<array>
 				<string>qxw</string>
 			</array>
 			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
+			<string>Viewer</string>
 		</dict>
 		<dict>
 			<key>CFBundleTypeIconFile</key>

@@ -208,7 +208,7 @@ bool parseArgs()
         else if (arg == "-g" || arg == "--log")
         {
             QLCArgs::logToFile = true;
-            QString logFilename = QDir::homePath() + QDir::separator() + "QLC+.log";
+            QString logFilename = QDir::homePath() + QDir::separator() + "qlcconsole.log";
             QLCArgs::logFile.setFileName(logFilename);
             if (!QLCArgs::logFile.open(QIODevice::Append))
             {

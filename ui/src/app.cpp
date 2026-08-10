@@ -600,7 +600,7 @@ void App::slotSetProgressText(const QString& text)
     static int progress = 0;
     m_progressDialog->setValue(progress++);
     m_progressDialog->setLabelText(QString("<B>%1</B><BR/>%2")
-                                   .arg(tr("Starting Q Light Controller Plus"))
+                                   .arg(tr("Starting qlcconsole"))
                                    .arg(text));
     QApplication::processEvents();
 }
@@ -1022,7 +1022,7 @@ void App::initActions()
     m_helpIndexAction->setShortcut(QKeySequence("SHIFT+F1"));
     connect(m_helpIndexAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpIndex()));
 
-    m_helpAboutAction = new QAction(QIcon(":/qlcplus.png"), tr("&About QLC+"), this);
+    m_helpAboutAction = new QAction(QIcon(":/qlcplus.png"), tr("&About qlcconsole"), this);
     // macOS relocates this to the application menu ("About QLC+").
     m_helpAboutAction->setMenuRole(QAction::AboutRole);
     connect(m_helpAboutAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpAbout()));
@@ -1036,7 +1036,7 @@ void App::initActions()
 
     if (QLCFile::hasWindowManager() == false)
     {
-        m_quitAction = new QAction(QIcon(":/exit.png"), tr("Quit QLC+"), this);
+        m_quitAction = new QAction(QIcon(":/exit.png"), tr("Quit qlcconsole"), this);
         m_quitAction->setShortcut(QKeySequence("CTRL+ALT+Backspace"));
         connect(m_quitAction, SIGNAL(triggered(bool)), this, SLOT(close()));
     }
@@ -1101,7 +1101,7 @@ void App::initMenuBar()
         QAction *quitAction = m_quitAction;
         if (quitAction == NULL)
         {
-            quitAction = new QAction(tr("Quit QLC+"), this);
+            quitAction = new QAction(tr("Quit qlcconsole"), this);
             connect(quitAction, SIGNAL(triggered(bool)), this, SLOT(close()));
         }
         quitAction->setMenuRole(QAction::QuitRole);
@@ -1327,7 +1327,8 @@ QFile::FileError App::slotFileOpen()
 
     /* Append file filters to the dialog */
     QStringList filters;
-    filters << tr("Workspaces (*%1)").arg(KExtWorkspace);
+    filters << tr("qlcconsole Workspaces (*%1)").arg(KExtWorkspaceConsole);
+    filters << tr("QLC+ Workspaces (*%1)").arg(KExtWorkspace);
 #if defined(WIN32) || defined(Q_OS_WIN)
     filters << tr("All Files (*.*)");
 #else
@@ -1416,7 +1417,7 @@ QFile::FileError App::slotFileSaveAs()
 
     /* Append file filters to the dialog */
     QStringList filters;
-    filters << tr("Workspaces (*%1)").arg(KExtWorkspace);
+    filters << tr("qlcconsole Workspaces (*%1)").arg(KExtWorkspaceConsole);
 #if defined(WIN32) || defined(Q_OS_WIN)
     filters << tr("All Files (*.*)");
 #else
@@ -1438,9 +1439,9 @@ QFile::FileError App::slotFileSaveAs()
     if (fn.isEmpty() == true)
         return QFile::NoError;
 
-    /* Always use the workspace suffix */
-    if (fn.right(4) != KExtWorkspace)
-        fn += KExtWorkspace;
+    /* Default to .qlcc; also accept .qxw (QLC+ import) */
+    if (fn.right(5) != KExtWorkspaceConsole && fn.right(4) != KExtWorkspace)
+        fn += KExtWorkspaceConsole;
 
     /* Set the workspace path before saving the new XML. In this way local files
        can be loaded even if the workspace file will be moved */

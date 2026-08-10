@@ -39,9 +39,10 @@ class QString;
 #define KXMLQLCplusNamespace QStringLiteral("http://www.qlcplus.org/")
 
 // File extensions
-#define KExtFixture          QStringLiteral(".qxf")  // 'Q'LC+ 'X'ml 'F'ixture
-#define KExtFixtureList      QStringLiteral(".qxfl") // 'Q'LC+ 'X'ml 'F'ixture 'L'ist
-#define KExtWorkspace        QStringLiteral(".qxw")  // 'Q'LC+ 'X'ml 'W'orkspace
+#define KExtFixture             QStringLiteral(".qxf")   // 'Q'LC+ 'X'ml 'F'ixture
+#define KExtFixtureList         QStringLiteral(".qxfl")  // 'Q'LC+ 'X'ml 'F'ixture 'L'ist
+#define KExtWorkspace           QStringLiteral(".qxw")   // 'Q'LC+ 'X'ml 'W'orkspace (import/read)
+#define KExtWorkspaceConsole    QStringLiteral(".qlcc")  // qlcconsole workspace (native save format)
 #define KExtInputProfile     QStringLiteral(".qxi")  // 'Q'LC+ 'X'ml 'I'nput profile
 #define KExtModifierTemplate QStringLiteral(".qxmt") // 'Q'LC+ 'X'ml 'M'odifier 'T'emplate
 #define KExtColorFilters     QStringLiteral(".qxcf") // 'Q'LC+ 'X'ml 'C'olor 'F'ilters

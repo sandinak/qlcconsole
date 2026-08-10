@@ -2214,7 +2214,7 @@ class FixtureSourceTree : public QTreeWidget
 public:
     explicit FixtureSourceTree(QWidget *parent = nullptr) : QTreeWidget(parent) {}
 protected:
-    QMimeData *mimeData(const QList<QTreeWidgetItem *> items) const override
+    QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
     {
         QMimeData *m = new QMimeData;
         QByteArray b; QDataStream s(&b, QIODevice::WriteOnly);
