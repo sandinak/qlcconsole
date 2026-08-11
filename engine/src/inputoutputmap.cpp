@@ -48,8 +48,10 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     , m_blackout(false)
     , m_universeChanged(false)
     , m_localProfilesLoaded(false)
+    , m_beatGeneratorType(Disabled)
     , m_currentBPM(0)
     , m_beatTime(new QElapsedTimer())
+    , m_inputCapture(NULL)
 {
     m_grandMaster = new GrandMaster(this);
     for (quint32 i = 0; i < universes; i++)
