@@ -73,10 +73,16 @@ def main():
     ap.add_argument("--count", type=int, default=300)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--no-asan", action="store_true", help="use the plain build, not ASan")
+    ap.add_argument("--qlcstress", default=None,
+                     help="explicit qlcstress path (skips ASan auto-detection)")
     args = ap.parse_args()
 
-    asan = (not args.no_asan) and os.path.exists(ASAN)
-    qlcstress = ASAN if asan else PLAIN
+    if args.qlcstress:
+        qlcstress = args.qlcstress
+        asan = "asan" in os.path.basename(os.path.dirname(qlcstress))
+    else:
+        asan = (not args.no_asan) and os.path.exists(ASAN)
+        qlcstress = ASAN if asan else PLAIN
     if not os.path.exists(qlcstress):
         print(f"ERROR: qlcstress not found at {qlcstress}"); return 2
     print(f"fuzz: using {'ASan' if asan else 'plain'} build: {qlcstress}")
@@ -93,8 +99,26 @@ def main():
                        capture_output=True)
         print(f"fuzz: generated seed workspace {seed_ws}")
 
-    rc, _ = run_load(qlcstress, seed_ws, asan)
+    rc, out = run_load(qlcstress, seed_ws, asan)
     print(f"fuzz: baseline load of seed -> rc={rc} (expected 0)")
+    if rc != 0:
+        # The selected binary can't even load a well-formed workspace (e.g. a
+        # stale ASan build with a dylib rpath baked to an old repo path) --
+        # every "crash" from here on would just be this build failing to
+        # start, not a real loader finding. Fall back to the plain build
+        # rather than reporting hundreds of misleading crashes.
+        print(f"fuzz: WARNING - baseline load failed on the selected build "
+              f"({qlcstress}); output: {out.strip()[:300]!r}")
+        if asan and os.path.exists(PLAIN):
+            print("fuzz: falling back to the plain build")
+            qlcstress, asan = PLAIN, False
+            rc, out = run_load(qlcstress, seed_ws, asan)
+            print(f"fuzz: baseline load with plain build -> rc={rc} (expected 0)")
+        if rc != 0:
+            print("fuzz: ERROR - no working qlcstress build could load the "
+                  "baseline seed workspace; aborting (this is a build/"
+                  "environment problem, not a loader-robustness finding)")
+            return 2
 
     with open(seed_ws, "rb") as f:
         base = f.read()

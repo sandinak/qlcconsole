@@ -326,10 +326,13 @@ def cmd_robustness(args, cfg):
         line = next((l for l in p.stdout.splitlines() if l.startswith("roundtrip:")), "")
         print(line)
         if p.returncode != 0: rc_total = 1
-    # 2) loader fuzzing
+    # 2) loader fuzzing (let fuzz_projects.py auto-prefer its own ASan build
+    # unless the caller explicitly pointed --qlcstress somewhere else)
     print("\nrobustness: fuzzing loader (200 mutated workspaces)...")
-    fz = subprocess.run([sys.executable, os.path.join(HERE, "fuzz_projects.py"),
-                         "--count", "200"], capture_output=True, text=True)
+    fuzz_cmd = [sys.executable, os.path.join(HERE, "fuzz_projects.py"), "--count", "200"]
+    if args.qlcstress != DEF_QLCSTRESS:
+        fuzz_cmd += ["--qlcstress", args.qlcstress]
+    fz = subprocess.run(fuzz_cmd, capture_output=True, text=True)
     print(fz.stdout.splitlines()[-1] if fz.stdout else "(no fuzz output)")
     if fz.returncode != 0: rc_total = 1
     print(f"\nrobustness: {'PASS' if rc_total == 0 else 'FAIL'}")
