@@ -78,7 +78,8 @@
     for(var i=0; i<util.rings.length; i++) util.rings[i].r += steps;
 
     // Spawn a new ring whenever the innermost ring reaches ringSpacing distance
-    if(util.rings[util.rings.length-1].r >= algo.ringSpacing){
+    // (or there are no rings left at all, e.g. all retired past maxD in one jump)
+    if(util.rings.length === 0 || util.rings[util.rings.length-1].r >= algo.ringSpacing){
       util.rings.push({r: 0});
     }
 

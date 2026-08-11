@@ -37,13 +37,14 @@
   util.cycleIndex = 0; // increments each time the algorithm restarts its cycle
 
   // Property setters/getters
+  // Note: initialDuration and totalLength are each clamped to their own
+  // declared range only. The render loop (see idur >= total below) already
+  // guards against initialDuration exceeding totalLength at use-time, so
+  // the setters don't cross-mutate each other's stored value here.
   algo.setInitialDuration = function(v){
     var n = parseInt(v, 10);
     if (!isNaN(n) && n >= 1 && n <= 50) {
       algo.initialDuration = n;
-      if (algo.totalLength <= algo.initialDuration) {
-        algo.totalLength = algo.initialDuration + 1; // ensure some tail exists
-      }
     }
   };
   algo.getInitialDuration = function(){ return algo.initialDuration; };
@@ -52,9 +53,6 @@
     var n = parseInt(v, 10);
     if (!isNaN(n) && n >= 5 && n <= 300) {
       algo.totalLength = n;
-      if (algo.totalLength <= algo.initialDuration) {
-        algo.totalLength = algo.initialDuration + 1;
-      }
     }
   };
   algo.getTotalLength = function(){ return algo.totalLength; };

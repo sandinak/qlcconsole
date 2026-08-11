@@ -66,8 +66,12 @@
     for (var y=0;y<h;y++) for (var x=0;x<w;x++) map[y][x] = scaleColor(map[y][x], scale);
   }
 
-  algo.rgbMap = function(width, height, _rgb, _step){
-    if (!util.initialized || util.map===null){ util.map = makeMap(width,height,0); util.phase=0.0; util.initialized=true; }
+  algo.rgbMap = function(width, height, rgb, _step){
+    if (!util.initialized || util.map===null || util.map.length!==height || util.map[0].length!==width){
+      util.map = makeMap(width,height,0);
+      util.phase=0.0;
+      util.initialized=true;
+    }
     fadeMap(util.map, width, height, algo.fade);
 
     var inc = (algo.speed/50.0) * 0.4;

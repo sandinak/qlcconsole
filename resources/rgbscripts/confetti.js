@@ -60,7 +60,10 @@ var testAlgo;
   }
 
   algo.rgbMap = function(width, height, rgb, step){
-    if (!util.initialized || util.map===null){ util.map = makeMap(width,height,0); util.initialized=true; }
+    if (!util.initialized || util.map===null || util.map.length!==height || util.map[0].length!==width){
+      util.map = makeMap(width,height,0);
+      util.initialized=true;
+    }
 
     // fade current pixels
     fadeMap(util.map, width, height, algo.fade);

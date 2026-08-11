@@ -360,7 +360,7 @@
  <Mode Name="Effect (15ch)">
   <Physical>
    <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>
-   <Dimensions Weight="0" Width="100" Height="100" Depth="30"/>
+   <Dimensions Weight="0.01" Width="100" Height="100" Depth="30"/>
    <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
    <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
    <Technical PowerConsumption="15" DmxConnector="Other"/>
@@ -384,7 +384,7 @@
  <Mode Name="Single DRGB (4ch)">
   <Physical>
    <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>
-   <Dimensions Weight="0" Width="100" Height="100" Depth="30"/>
+   <Dimensions Weight="0.01" Width="100" Height="100" Depth="30"/>
    <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
    <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
    <Technical PowerConsumption="15" DmxConnector="Other"/>
@@ -397,7 +397,7 @@
  <Mode Name="Single RGB (3ch)">
   <Physical>
    <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>
-   <Dimensions Weight="0" Width="100" Height="100" Depth="30"/>
+   <Dimensions Weight="0.01" Width="100" Height="100" Depth="30"/>
    <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
    <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
    <Technical PowerConsumption="15" DmxConnector="Other"/>

@@ -21,9 +21,12 @@ set(SCRIPT_FILES
     fire.js
     fireworks.js
     flyingobjects.js
+    fountainbasin.js
+    fountainlip.js
     fractal.js
     gradient.js
     juggle.js
+    lantern.js
     lightning.js
     lines.js
     marquee.js
@@ -51,6 +54,9 @@ set(SCRIPT_FILES
     spark.js
     squares.js
     squaresfromcenter.js
+    staffrise.js
+    staffuplights.js
+    stagepulse.js
     starfield.js
     stripes.js
     stripesfromcenter.js
@@ -59,12 +65,6 @@ set(SCRIPT_FILES
     verticalfall.js
     waterflow.js
     waves.js
-    fountainlip.js
-    fountainbasin.js
-    lantern.js
-    staffrise.js
-    stagepulse.js
-    staffuplights.js
 )
 
 # Only perform the copy if we're building for Android

@@ -22,7 +22,7 @@
   algo.apiVersion = 3;
   algo.name = "TwinkleFox";
   algo.author = "FastLED idea, port by Augment";
-  algo.acceptColors = 8; // optional custom palette
+  algo.acceptColors = 5; // optional custom palette (engine/UI support at most 5 colors)
   algo.properties = [];
 
   // --- Properties ---

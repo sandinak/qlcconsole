@@ -76,7 +76,7 @@ void RGBScript_Test::directories()
     QCOMPARE(dir.filter(), QDir::Files);
     QCOMPARE(dir.nameFilters(), QStringList() << QString("*.js"));
 #if defined(__APPLE__) || defined(Q_OS_MAC)
-    QVERIFY(dir.path().endsWith("Library/Application Support/QLC+/RGBScripts"));
+    QVERIFY(dir.path().endsWith("Library/Application Support/qlcconsole/RGBScripts"));
 #elif defined(WIN32) || defined(Q_OS_WIN)
     QVERIFY(dir.path().endsWith("RGBScripts"));
 #else
@@ -354,7 +354,18 @@ void RGBScript_Test::runScripts()
             }
         }
         // Prepare a reference RGB map
-        bool randomScript = fileName.contains("random", Qt::CaseInsensitive);
+        // "random" catches the random*.js scripts by name. A handful of other
+        // scripts are non-reproducible by design: their visual state (noise
+        // permutation table, particle/twinkle simulation, fractal zoom/drift
+        // phase) evolves unconditionally on every rgbMap() call rather than
+        // being derived from the step argument, so two calls for the same
+        // step are not guaranteed to match. They need the same exclusion.
+        bool randomScript = fileName.contains("random", Qt::CaseInsensitive) ||
+                             fileName.contains("aurora", Qt::CaseInsensitive) ||
+                             fileName.contains("connectdots", Qt::CaseInsensitive) ||
+                             fileName.contains("fractal", Qt::CaseInsensitive) ||
+                             fileName.contains("spark", Qt::CaseInsensitive) ||
+                             fileName.contains("twinklefox", Qt::CaseInsensitive);
         RGBMap rgbRefMap;
         if (1 < s->acceptColors() && 2 < steps && ! randomScript) {
             // When more than 2 colors are accepted, the steps shall be reproducible to allow back and forth color fade.

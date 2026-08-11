@@ -77,8 +77,8 @@
     }
   }
 
-  algo.rgbMap = function(width, height, _rgb, _step){
-    if (!util.initialized || util.map === null){
+  algo.rgbMap = function(width, height, rgb, _step){
+    if (!util.initialized || util.map === null || util.map.length!==height || util.map[0].length!==width){
       util.map = makeMap(width, height, 0);
       util.phase = 0.0;
       util.initialized = true;

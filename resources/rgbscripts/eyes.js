@@ -31,8 +31,8 @@
   algo.properties.push("name:eyeSizeMin|type:range|display:Eye Size Min|values:2,20|write:setEyeSizeMin|read:getEyeSizeMin");
   algo.eyeSizeMax = 12;
   algo.properties.push("name:eyeSizeMax|type:range|display:Eye Size Max|values:2,20|write:setEyeSizeMax|read:getEyeSizeMax");
-  algo.eyeSpacingRatio = 1.5;
-  algo.properties.push("name:eyeSpacingRatio|type:range|display:Eye Spacing Ratio|values:0.5,4.0|write:setEyeSpacingRatio|read:getEyeSpacingRatio");
+  algo.eyeSpacingRatio = 150; // percent of eye size (e.g. 150 = 1.5x); RGBScriptProperty ranges are integer-only
+  algo.properties.push("name:eyeSpacingRatio|type:range|display:Eye Spacing Ratio (%)|values:50,400|write:setEyeSpacingRatio|read:getEyeSpacingRatio");
   algo.minSpacing = 8;
   algo.properties.push("name:minSpacing|type:range|display:Min Pair Spacing|values:2,30|write:setMinSpacing|read:getMinSpacing");
 
@@ -68,7 +68,7 @@
   algo.getEyeSizeMin = function(){ return algo.eyeSizeMin; };
   algo.setEyeSizeMax = function(v){ algo.eyeSizeMax = parseInt(v); };
   algo.getEyeSizeMax = function(){ return algo.eyeSizeMax; };
-  algo.setEyeSpacingRatio = function(v){ algo.eyeSpacingRatio = parseFloat(v); };
+  algo.setEyeSpacingRatio = function(v){ algo.eyeSpacingRatio = parseInt(v); };
   algo.getEyeSpacingRatio = function(){ return algo.eyeSpacingRatio; };
   algo.setMinSpacing = function(v){ algo.minSpacing = parseInt(v); };
   algo.getMinSpacing = function(){ return algo.minSpacing; };
@@ -212,7 +212,7 @@
       var cx = 0, cy = 0;
 
       for (var attempt = 0; attempt < maxAttempts; attempt++){
-        var eyeSpacing = Math.max(1, Math.floor(randomSize * algo.eyeSpacingRatio));
+        var eyeSpacing = Math.max(1, Math.floor(randomSize * algo.eyeSpacingRatio / 100));
         cx = Math.floor(Math.random() * (width - eyeSpacing - 2)) + eyeSpacing / 2 + 1;
         cy = Math.floor(Math.random() * height);
 
@@ -232,7 +232,7 @@
       }
 
       if (validPos){
-        var eyeSpacing = Math.max(1, Math.floor(randomSize * algo.eyeSpacingRatio));
+        var eyeSpacing = Math.max(1, Math.floor(randomSize * algo.eyeSpacingRatio / 100));
         var spacing = eyeSpacing / 2;
         var maxLife = algo.eyeLife;
         if (algo.eyeLifeRandomness > 0){
