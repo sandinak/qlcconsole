@@ -21,6 +21,7 @@
 
 #define private public
 #include "qlcfixturedefcache.h"
+#include "qlcchannel.h"
 #undef private
 
 #include "qlcfixturedefcache_test.h"

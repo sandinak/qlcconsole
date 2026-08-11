@@ -158,13 +158,17 @@ bool QLCFixtureDefCache::reloadFixtureDef(QLCFixtureDef *fixtureDef)
     if (idx == -1)
         return false;
 
-    QLCFixtureDef *def = m_defs.takeAt(idx);
-    QString absPath = def->definitionSourceFile();
-    delete def;
+    // Reload into a temporary object and deep-copy over the caller's
+    // instance in place, rather than deleting it and swapping in a new
+    // one: callers (e.g. the fixture editor) keep this pointer around,
+    // and replacing it out from under them would leave a dangling pointer.
+    QString absPath = fixtureDef->definitionSourceFile();
 
-    QLCFixtureDef *origDef = new QLCFixtureDef();
-    origDef->loadXML(absPath);
-    m_defs << origDef;
+    QLCFixtureDef reloaded;
+    if (reloaded.loadXML(absPath) != QFile::NoError)
+        return false;
+
+    *fixtureDef = reloaded;
 
     return true;
 }
