@@ -99,8 +99,8 @@ void Autosave_Test::autosaveFilePath()
     // Should end with untitled.qxw.autosave
     QVERIFY(path.endsWith("untitled.qxw.autosave"));
 
-    // Should contain the user QLC+ directory
-    QVERIFY(path.contains(".qlcplus") || path.contains("QLC+"));
+    // Should contain the app's user data directory
+    QVERIFY(path.contains(".qlcplus") || path.contains("QLC+") || path.contains("qlcconsole"));
 }
 
 void Autosave_Test::autosaveFilePathWithFileName()

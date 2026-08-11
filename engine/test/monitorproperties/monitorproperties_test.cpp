@@ -36,7 +36,7 @@ void MonitorProperties_Test::defaults()
     QCOMPARE(mp.gridUnits(), MonitorProperties::Meters);
     QCOMPARE(mp.pointOfView(), MonitorProperties::Undefined);
     QCOMPARE(mp.stageType(), MonitorProperties::StageSimple);
-    QCOMPARE(mp.labelsVisible(), false);
+    QCOMPARE(mp.labelsVisible(), true);
     QVERIFY(mp.commonBackgroundImage().isEmpty());
 }
 
@@ -541,7 +541,7 @@ void MonitorProperties_Test::reset()
     QCOMPARE(mp.gridUnits(), MonitorProperties::Meters);
     QCOMPARE(mp.pointOfView(), MonitorProperties::Undefined);
     QCOMPARE(mp.stageType(), MonitorProperties::StageSimple);
-    QCOMPARE(mp.labelsVisible(), false);
+    QCOMPARE(mp.labelsVisible(), true);
     QCOMPARE(mp.fixtureItemsID().count(), 0);
     QCOMPARE(mp.genericItemsID().count(), 0);
     QVERIFY(mp.commonBackgroundImage().isEmpty());

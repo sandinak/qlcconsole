@@ -249,7 +249,11 @@ void RGBText_Test::load()
 
     buffer.close();
     QByteArray bData = buffer.data();
-    bData.replace(fn.toString().toUtf8(), "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z");
+    // Note: QFont::fromString() has become lenient about malformed but
+    // non-empty strings across Qt versions (it will parse pretty much any
+    // comma-separated text without failing); an empty string remains the
+    // one reliably-invalid case that still exercises the "ignored" path.
+    bData.replace(fn.toString().toUtf8(), "");
     buffer.setData(bData);
     buffer.open(QIODevice::ReadWrite | QIODevice::Text);
     buffer.seek(0);

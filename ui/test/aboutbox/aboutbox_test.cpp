@@ -25,7 +25,7 @@
 #include "aboutbox.h"
 #undef protected
 
-#define CONTRIBCOUNT 34
+#define CONTRIBCOUNT 36
 
 void AboutBox_Test::initial()
 {
@@ -40,7 +40,7 @@ void AboutBox_Test::initial()
     QCOMPARE(ab.m_versionLabel->text(), QString(APPVERSION));
 
     QVERIFY(ab.m_copyrightLabel != NULL);
-    QVERIFY(ab.m_copyrightLabel->text().contains("Copyright &copy; <B>Heikki Junnila, Massimo Callegari</B>"));
+    QVERIFY(ab.m_copyrightLabel->text().contains("by <B>Branson Matheson</B>"));
 
     QVERIFY(ab.m_websiteLabel != NULL);
     QVERIFY(ab.m_websiteLabel->text().contains("<A HREF=\"https://www.qlcplus.org/\">https://www.qlcplus.org/</A>"));
