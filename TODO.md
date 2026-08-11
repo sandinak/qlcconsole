@@ -152,6 +152,27 @@ effect timing items also want the rig to confirm.
 
 ---
 
+## Now — real "Import" for .qxw, distinct from Open *(design-first; not started)*
+
+Today `-o`/File > Open and `--open` all *replace* the current document with
+another `.qxw`. There's no way to pull content FROM one workspace INTO the
+one you're already working in (merge in another show's fixtures/functions/
+palettes without starting over). Want a real **File > Import** workflow.
+Needs a design pass before building — at minimum:
+- What's importable: whole workspace vs. a scoped subset (fixtures only?
+  a function/show subtree? palettes/bundles?).
+- ID collision handling — imported fixtures/functions/universes will very
+  likely collide with IDs already in use; needs a remap-on-import strategy
+  (and probably a preview/picker UI, not a blind merge).
+- Where it fits: a dedicated import dialog (browse + pick what to bring in)
+  vs. drag-and-drop a second .qxw onto a tree (Fixtures tab, Function
+  Manager) the same way fixtures/groups already drag onto targets elsewhere
+  in this fork's UI.
+- Relationship to the `.qlcc` vs `.qxw` split from the rebrand (Phase 1) --
+  does Import read both extensions the same as Open does today?
+
+---
+
 ## Now — rebrand the fork to "qlcconsole" *(Phase 1 + 2 done; icons/bundle ID pending)*
 
 The fork is now firmly a **desktop console** (mouse+keyboard, MIDI, multi-window),
