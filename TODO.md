@@ -196,6 +196,17 @@ asset rename is a separate pass) and the macOS `CFBundleIdentifier`
 (`com.bransonmatheson.qlcplus` — changing it resets TCC permission grants and
 app preferences, so leave unless there's a reason to force that reset).
 
+Release readiness (2026-08-11) — v0.1.0 prep landed: `VERSION` file +
+`CHANGELOG.md` (SemVer release tags, independent of the git-derived
+`APPVERSION` build string); `README.md`/`CONTRIBUTING.md`/`SUPPORT.md`
+rewritten with correct qlcconsole branding, fork-of-QLC+ attribution, and
+links back to this repo instead of upstream; `RELEASE.md` + `release.sh`
+wiring up the existing local build/sign/notarize scripts
+(`platforms/macos/package-local.sh`, `sign-notarize.sh`) to tag + publish a
+signed macOS DMG as a GitHub Release. Still open before actually cutting
+v0.1.0: write the first real `CHANGELOG.md` entry against what's shipped by
+then, and run `release.sh` for real.
+
 ---
 
 ## Now — unify the object editor's fixture management *(design-first; options pending)*

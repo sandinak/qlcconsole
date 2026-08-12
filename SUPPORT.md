@@ -1,5 +1,15 @@
 # Support
 
+> **Note:** this is [qlcconsole](https://github.com/sandinak/qlcconsole), a
+> personal fork of QLC+ — not affiliated with the upstream project. **Fork-specific
+> bugs and questions** (Programming tab, group scenes, effect scripts, macOS
+> packaging) go to
+> [this repo's issues](https://github.com/sandinak/qlcconsole/issues).
+> **General QLC+ usage questions** (fixtures, DMX/Art-Net/sACN setup, virtual
+> console widgets, anything not specific to this fork) are better served by
+> upstream's forum and docs below, since that's where the broader knowledge
+> base lives.
+
 Thank you for using QLC+! This document will guide you on how to get help, report issues, and contribute effectively to the project.
 
 ## Where to Get Help

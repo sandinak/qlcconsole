@@ -1,3 +1,14 @@
+> **Note:** this repo, [qlcconsole](https://github.com/sandinak/qlcconsole), is a
+> personal fork of [QLC+](https://github.com/mcallegari/qlcplus). Fork-specific
+> issues and PRs belong here. Most of the guidelines below are inherited
+> verbatim from upstream QLC+, since the underlying C++/Qt engineering
+> practices still apply — but "the maintainer" below means qlcconsole's, not
+> upstream's, and cross-platform testing only meaningfully means macOS today
+> (see [RELEASE.md](RELEASE.md)). If your change is really about QLC+ itself
+> rather than this fork's programmer-mode workflow, it likely belongs
+> [upstream](https://github.com/mcallegari/qlcplus/blob/master/CONTRIBUTING.md)
+> instead.
+
 If you are a developer and you want to help to improve QLC+, then thanks for that!
 
 This page is meant to provide some guidelines about how to approach the QLC+ project, and to provide what is required to contribute to the code without messing things up or wasting the maintainers limited time.

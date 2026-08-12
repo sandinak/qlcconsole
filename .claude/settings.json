@@ -18,7 +18,14 @@
       "Bash(cmake --build /Users/branson/git/qlcplus/build -j)",
       "Bash(cmake --build /Users/branson/git/qlcplus/build --target qlcplus -j)",
       "Bash(grep -E \"Built target qlcplus$|error:\")",
-      "Bash(cmake --build build -j)"
+      "Bash(cmake --build build -j)",
+      "Bash(chmod +x release.sh)",
+      "Bash(bash -n release.sh)",
+      "Bash(awk -v ver=0.1.0 ' *)",
+      "Read(//opt/homebrew/opt/**)",
+      "Bash(brew list *)",
+      "Read(//Users/branson/qlcconsole.app/**)",
+      "Bash(./platforms/macos/package-local.sh)"
     ]
   }
 }
