@@ -283,6 +283,17 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_fadeRow->hide();
 
     m_stack = new QStackedWidget(this);
+    // QStackedWidget's minimumSizeHint() is the max over ALL pages, not just
+    // the current one (a well-known Qt quirk — same one QTabWidget has at
+    // the app-window level). The pan/tilt page's 200x200 XY pad
+    // (setMinimumSize below) was the widest page, so it silently forced this
+    // editor — and everything above it (canvas pane, Programming tab, the
+    // whole main window) — to never shrink below that, even on the Color or
+    // Dimmer page. Ignored + an explicit floor stops that from leaking out;
+    // whichever page IS current still enforces its own real minimum size
+    // normally within the space it's given.
+    m_stack->setSizePolicy(QSizePolicy::Ignored, m_stack->sizePolicy().verticalPolicy());
+    m_stack->setMinimumWidth(200);
     root->addWidget(m_stack);
 
     // Empty page

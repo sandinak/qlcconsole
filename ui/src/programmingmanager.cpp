@@ -418,6 +418,16 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // within the band if the console is taller.
     m_fixtureScroll->setMinimumHeight(200);
     m_fixtureScroll->setMaximumHeight(400);
+    // FixtureConsole lays out one ConsoleChannel per DMX channel in a plain
+    // QHBoxLayout with no wrap — a many-channel fixture (e.g. a 20+ channel
+    // moving head) makes this scroll area's un-scrolled minimumSizeHint very
+    // wide, which (with widgetResizable=true and no policy override) would
+    // otherwise leak straight into the whole main window's minimum width the
+    // moment a fixed-fixture target is selected. Ignored + a small floor
+    // keeps the horizontal scrollbar doing its job without pinning the
+    // window's minimum size to whatever fixture happens to be selected.
+    m_fixtureScroll->setSizePolicy(QSizePolicy::Ignored, m_fixtureScroll->sizePolicy().verticalPolicy());
+    m_fixtureScroll->setMinimumWidth(150);
     m_fixtureScroll->setWidget(m_fixtureConsole);
     m_fixtureScroll->hide();
     m_canvasLayout->addWidget(m_fixtureScroll);

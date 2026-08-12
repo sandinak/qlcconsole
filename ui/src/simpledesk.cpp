@@ -281,6 +281,17 @@ void SimpleDesk::initTopSide()
     //m_universeGroup->setFlat(true);
     grpLay->setContentsMargins(1, 1, 1, 1);
     grpLay->setSpacing(1);
+    // The default paged view drops m_channelsPerPage (32) sliders straight
+    // into this frame with no scroll wrapper (initUniverseSliders()), so its
+    // natural minimumSizeHint is ~32 sliders wide (~1300px). QTabWidget's
+    // minimum size is the max over ALL pages (not just the visible one), so
+    // that pinned the WHOLE main window's minimum width regardless of which
+    // tab was active — the window couldn't be resized smaller. Ignored +
+    // an explicit floor stops that width from being treated as a hard
+    // minimum; sliders below keep their own real minimums, so at a
+    // comfortable window size nothing here visually changes.
+    m_universeGroup->setSizePolicy(QSizePolicy::Ignored, m_universeGroup->sizePolicy().verticalPolicy());
+    m_universeGroup->setMinimumWidth(200);
     lay->addWidget(m_universeGroup);
 
     QVBoxLayout *vbox = new QVBoxLayout;
@@ -558,6 +569,21 @@ void SimpleDesk::initSliderView(bool fullMode)
         scrollArea = new QScrollArea();
         scrollArea->setWidgetResizable(true);
         scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        // Cap the scroll area's OWN minimum width. Without this, its
+        // minimumSizeHint tracks the full un-scrolled fixture row below
+        // (which can be huge — see the per-fixture setMinimumWidth() a few
+        // lines down), and since QTabWidget's minimum size is the max over
+        // ALL pages (not just the visible one), a busy universe here pins
+        // the whole main window's minimum width regardless of which tab is
+        // active. The per-fixture minimums still apply inside the scroll
+        // area, so sliders still overflow into a scrollbar instead of
+        // squishing — this only stops that width from leaking out.
+        // QSizePolicy::Ignored is required: a plain setMinimumWidth() alone
+        // has no effect here, since Qt's layout uses
+        // max(minimumSizeHint(), minimumSize()) — Ignored is what makes it
+        // stop consulting the (content-derived) minimumSizeHint at all.
+        scrollArea->setSizePolicy(QSizePolicy::Ignored, scrollArea->sizePolicy().verticalPolicy());
+        scrollArea->setMinimumWidth(200);
 
         QFrame* grpBox = new QFrame(scrollArea);
         grpBox->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Preferred);

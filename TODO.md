@@ -208,6 +208,20 @@ Console 26px / I-O Manager 32px / Show timeline 20px / Monitor 16px all stay
 as-is), no dark/light theme switcher, no SVG-icon migration, Fixture/Function
 Manager's own toolbars and the Programming tab's button styling untouched.
 
+Window couldn't be resized smaller / again (2026-08-11) — regression report
+led to finding `QTabWidget`/`QStackedWidget` compute minimum size as the max
+over ALL pages, not just the visible one, so any one oversized page pins the
+whole window (or sub-widget)'s minimum regardless of what's showing. Three
+real instances fixed with the same `QSizePolicy::Ignored` + explicit-floor
+pattern: `SimpleDesk::initSliderView()`'s unwrapped 32-slider row
+(simpledesk.cpp), `LookEditor`'s internal `QStackedWidget` where the pan/tilt
+page's 200x200 XY pad bloated every other page (lookeditor.cpp), and
+`ProgrammingManager`'s per-fixture console scroll area (proactive — same
+pattern, was hidden by default so not yet visibly triggered). Window minimum
+width dropped 1296px -> 942px. Not yet investigated: Simple Desk's "Cue
+Stack" tab (938px, now the binding constraint) looks like legitimate
+toolbar+cue-list content rather than a bug — stopped there per Branson's call.
+
 Release readiness (2026-08-11) — v0.1.0 prep landed: `VERSION` file +
 `CHANGELOG.md` (SemVer release tags, independent of the git-derived
 `APPVERSION` build string); `README.md`/`CONTRIBUTING.md`/`SUPPORT.md`
