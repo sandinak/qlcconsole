@@ -21,8 +21,6 @@ runs headless via `QT_QPA_PLATFORM=offscreen`). Good picks while away from the r
   per-look `syncTo`/`onFinish` override UI.
 - **Audio effects** — bump the FFT band count / raise the 5 kHz cap for finer Hz
   targeting (node-testable); more audio-reactive scripts.
-- **Move-in-black slice 3 — dangle detector** (positioned-but-dark fixture matching
-  no upcoming cue = warn). Pure logic on `CueOutput`/`CueLookahead`, unit-testable.
 - **Rebrand → qlcconsole** — titles / About / launcher / macOS bundle names. No hardware.
 - **Design-doc work** — "Look" as first-class assembly unit; unified object editor.
 - **More stage objects** — flats / drapes / set pieces (2D monitor, offscreen-testable).
@@ -120,11 +118,13 @@ effect timing items also want the rig to confirm.
     dark→lit→moving movers, dark-gap gated.
   - **2 persist** — Auto-MIB toggle + dark-gap round-trip (`<MoveInBlack>`) + a
     "s lead" toolbar spinbox. DONE.
+  - **3 — dangle detector** — `MarkPlanner::dangleFixtures()` + `dangleFixturesChanged`
+    signal, forwarded `ProgrammerController` → App footer chip. DONE (unit-tested,
+    engine/test/markplanner). Runs regardless of Auto-MIB being on (manual marks
+    dangle too). *Needs rig eyeball to confirm the chip reads right live.*
   Still open: **verify CueLookahead timing on a rig** (the dark-gap depends on it);
-  **force-live / force-mark** per-cue overrides + dark-move fade; **(3) dangle
-  detector** (positioned-but-dark fixture matching no upcoming cue = warn — falls
-  out of the plan). Also: mark "to a chosen look"; a monitor context-menu Mark
-  action. *(from the cue-policy discussion)*
+  **force-live / force-mark** per-cue overrides + dark-move fade. Also: mark "to a
+  chosen look"; a monitor context-menu Mark action. *(from the cue-policy discussion)*
 
 ## Build-season freeze list *(LOCKED with Branson — ship before feature freeze)*
 
@@ -142,7 +142,8 @@ effect timing items also want the rig to confirm.
   fold RGBScript `Once` into the lifecycle; per-look syncTo/onFinish UI.*
 - 🟡 ~~Small polish batch~~ **DONE** — drop-onto-specific-effect nesting (5e-ish),
   End-at-SMPTE (751ce1b5a); MTC-chip glyph was already in place.
-- ⚪ Post-freeze: cue-transition 4b; dangle detector; "Look" as assembly unit;
+- ⚪ ~~dangle detector~~ **DONE** (2026-08-12) — see slice 3 above.
+- ⚪ Post-freeze: cue-transition 4b; "Look" as assembly unit;
   unified object editor; more stage objects; rebrand to qlcconsole.
 - **Effects respect the look's master Dimmer — SHIPPED** (563c4b3b1): colour
   output scales by the look's Dimmer on dimmerless fixtures; dimmered fixtures

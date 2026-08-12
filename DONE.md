@@ -6,6 +6,34 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-08-12 — Simple Desk capture wiring + move-in-black dangle detector *(BUILT — needs rig eyeball)*
+Two travel-safe items off the "Deferred / next candidates" list, both offscreen-testable.
+- [x] **Simple Desk → CaptureManager** — `SimpleDesk::slotUniverseSliderValueChanged()`
+      now calls `CaptureManager::recordOverride()` when Live Edit capture is armed,
+      both the bound-fixture (`ConsoleChannel`) and channel-mode/page-slider
+      (`Doc::fixtureForAddress()`-resolved) paths — same as Virtual Console already
+      does, so a slider move now shows up in the same capture dialog and resolves
+      against running Scenes with the existing LTP + chaser-driven exclusion.
+      Verified end-to-end offscreen (real `ConsoleChannel` widget → real signal →
+      slot → `recordOverride()` → `buildPlan()` correctly resolved 1 Scene).
+- [x] **Move-in-black slice 3 — dangle detector** — `MarkPlanner::dangleFixtures()`:
+      `marked = MarkEffect::markedFixtures()` minus the union of fixtures any
+      `CueLookahead::upcoming()` cue's `CueOutput::computeCues()` reports `lit`.
+      Runs every tick **regardless of Auto-MIB being enabled** (manual marks
+      dangle too) — `MarkPlanner`'s timer is now always-on; the auto-preset body
+      stays gated on `isEnabled()`. New `dangleFixturesChanged(QList<quint32>)`
+      signal, change-detected (only emits when the set actually changes),
+      forwarded verbatim through `ProgrammerController` into an amber footer pill
+      in `App` (hidden when nothing dangles; tooltip lists fixture names).
+      Unit-tested: `engine/test/markplanner` (7/7 — in-cue not dangling,
+      not-in-cue dangling, no marks, no upcoming cue, signal fires only on change).
+- Deferred (unrelated, found along the way): the offscreen test harness hung on
+  `qApp->quit()` while a Scene function was left running via a raw
+  `MasterTimer::startFunction()` call instead of `Function::start()` — turned out
+  to be a test-methodology bug (bypassing `Function::start()`'s `m_sources`/
+  `m_running` bookkeeping), not an app bug; not investigated further as a
+  possible real "quit while a show is running" issue.
+
 ### 2026-07-27 — Show length: Logic-style end handle + park-at-end *(BUILT — needs hardware/eyeball)*
 Fixes "MTC past show end → cursor scrolls off and disappears." A show now has an
 EXPLICIT length (Logic-style end-of-project marker) that the cursor parks at.
