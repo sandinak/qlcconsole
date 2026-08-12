@@ -14,7 +14,9 @@ don't merge speculative or in-progress work.
 
 ## Build & run
 
-CMake + Qt5 (homebrew `qt@5`), out-of-tree in `build/` (Unix Makefiles, Debug).
+CMake, out-of-tree in `build/` (Unix Makefiles, Debug). `find_package(QT NAMES
+Qt5 Qt6 ...)` auto-detects whichever is installed — this machine only has
+Qt6 (homebrew `qt`), no `qt@5`, so builds are against Qt6.
 
 ```sh
 # Reconfigure only when CMakeLists/sources are added or removed:
