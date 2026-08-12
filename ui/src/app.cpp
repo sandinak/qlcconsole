@@ -66,6 +66,8 @@
 #include "vcframe.h"
 #include "app.h"
 #include "doc.h"
+#include "fixture.h"
+#include "programmercontroller.h"
 #include "qxwimporter.h"
 #include "importselectiondialog.h"
 #include "lastlookeffect.h"
@@ -414,6 +416,29 @@ void App::init()
             m_statusPowerLabel->show();
         });
         w = pm;
+    }
+    if (ProgrammerController *pc = m_doc->programmer())
+    {
+        connect(pc, &ProgrammerController::dangleFixturesChanged, this,
+                [this](const QList<quint32> &fixtureIds) {
+            if (m_statusDangleLabel == NULL)
+                return;
+            if (fixtureIds.isEmpty())
+            {
+                m_statusDangleLabel->hide();
+                return;
+            }
+            m_statusDangleLabel->setText(tr("⚠ %1 marked fixture(s) not in upcoming cue")
+                                          .arg(fixtureIds.size()));
+            QStringList names;
+            for (quint32 fid : fixtureIds)
+            {
+                Fixture *fxi = m_doc->fixture(fid);
+                names << (fxi != NULL ? fxi->name() : tr("Fixture %1").arg(fid));
+            }
+            m_statusDangleLabel->setToolTip(names.join(QStringLiteral("\n")));
+            m_statusDangleLabel->show();
+        });
     }
     addTab(w, QIcon(":/scene.png"), tr("Programming"));
     w = new ShowManager(m_tab, m_doc);
@@ -2884,6 +2909,17 @@ void App::initStatusBar()
         "(Design mode). Red = a circuit or UPS is over its rated/derated limit."));
     m_statusPowerLabel->hide();   // shown once a Design-mode estimate arrives
     sb->addWidget(m_statusPowerLabel, 0);
+
+    // Move-in-black dangle warning — a Marked (positioned-but-dark) fixture
+    // that no upcoming cue is about to light, i.e. a pre-set nothing is going
+    // to reveal. Checked continuously regardless of Auto move-in-black being
+    // on (manual marks dangle too). Amber pill; hidden when nothing dangles.
+    m_statusDangleLabel = new QLabel(this);
+    m_statusDangleLabel->setFont(chipFont);
+    m_statusDangleLabel->setStyleSheet(
+        "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }");
+    m_statusDangleLabel->hide();
+    sb->addWidget(m_statusDangleLabel, 0);
 
     // "Under timeline control" chip — visible only in Operate while a show drives
     // the rig. Green = timeline driving; amber = suspended (VC takeover). Sits

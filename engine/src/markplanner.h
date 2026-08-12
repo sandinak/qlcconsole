@@ -44,8 +44,18 @@ public:
     void setDarkGapMs(int ms) { m_darkGapMs = ms; }
     int  darkGapMs() const { return m_darkGapMs; }
 
+    /** Fixtures that are currently Marked (positioned-but-dark, manual or
+     *  auto) but do NOT appear, lit, in any upcoming cue within the
+     *  lookahead horizon -- a pre-set that nothing is about to reveal.
+     *  Pure query; safe to call regardless of isEnabled(). */
+    QList<quint32> dangleFixtures() const;
+
 signals:
     void enabledChanged(bool enable);
+    /** Emitted whenever the dangling-fixture set changes (including going
+     *  empty again). Checked every tick regardless of isEnabled(), since
+     *  manual marks can dangle even with auto move-in-black off. */
+    void dangleFixturesChanged(const QList<quint32> &fixtureIds);
 
 private slots:
     /** Re-evaluate the plan against the current/next cue. */
@@ -56,6 +66,8 @@ private:
     uchar liveValue(const class QList<class Universe*> &unis, int uni, int absAddr) const;
     /** Drop every mark the planner owns. */
     void clearPlanned();
+    /** Re-run dangleFixtures() and emit dangleFixturesChanged() on change. */
+    void updateDangleDetection();
 
     Doc        *m_doc;
     MarkEffect *m_mark;
@@ -63,6 +75,7 @@ private:
     bool        m_enabled = false;
     int         m_darkGapMs = 800;      //!< default lead time; tune on a rig
     QSet<quint32> m_planned;            //!< fixtures WE marked (vs manual marks)
+    QList<quint32> m_lastDangling;      //!< last emitted dangleFixturesChanged() value
 
     static const int DARK_LEVEL = 8;    //!< master intensity ≤ this = dark
     static const int TICK_MS   = 300;   //!< coarse re-plan cadence

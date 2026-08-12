@@ -7,6 +7,8 @@
 
 #include "markplanner.h"
 
+#include <algorithm>
+
 #include <QHash>
 
 #include "doc.h"
@@ -25,6 +27,9 @@ MarkPlanner::MarkPlanner(Doc *doc, MarkEffect *mark, QObject *parent)
 {
     m_timer.setInterval(TICK_MS);
     connect(&m_timer, &QTimer::timeout, this, &MarkPlanner::evaluate);
+    // Runs regardless of isEnabled(): dangle detection (below) has to see
+    // manual marks too, not just the auto-MIB pre-sets this class creates.
+    m_timer.start();
 }
 
 void MarkPlanner::setEnabled(bool enable)
@@ -34,12 +39,10 @@ void MarkPlanner::setEnabled(bool enable)
     m_enabled = enable;
     if (enable)
     {
-        m_timer.start();
         evaluate();          // act at once, don't wait a tick
     }
     else
     {
-        m_timer.stop();
         clearPlanned();      // release our pre-sets; manual marks stay
     }
     emit enabledChanged(enable);
@@ -62,8 +65,51 @@ uchar MarkPlanner::liveValue(const QList<Universe*> &unis, int uni, int absAddr)
     return unis.at(uni)->preGMValue(absAddr);
 }
 
+QList<quint32> MarkPlanner::dangleFixtures() const
+{
+    if (m_doc == nullptr || m_mark == nullptr)
+        return QList<quint32>();
+
+    const QList<quint32> marked = m_mark->markedFixtures();
+    if (marked.isEmpty())
+        return QList<quint32>();
+
+    // Union of every fixture lit by any cue within the lookahead horizon —
+    // not just the nearest one, so a mark aimed two cues out still counts.
+    const QList<CueLookahead::UpcomingCue> cues =
+        CueLookahead::upcoming(m_doc, HORIZON_MS);
+
+    QSet<quint32> litSoon;
+    for (const CueLookahead::UpcomingCue &cue : cues)
+    {
+        const QHash<quint32, CueOutput::FixtureCue> cueOut =
+            CueOutput::computeCues(m_doc, cue.functionId);
+        for (auto it = cueOut.constBegin(); it != cueOut.constEnd(); ++it)
+            if (it.value().lit)
+                litSoon.insert(it.key());
+    }
+
+    QList<quint32> dangling;
+    for (quint32 fid : marked)
+        if (!litSoon.contains(fid))
+            dangling << fid;
+    std::sort(dangling.begin(), dangling.end());
+    return dangling;
+}
+
+void MarkPlanner::updateDangleDetection()
+{
+    const QList<quint32> current = dangleFixtures();
+    if (current == m_lastDangling)
+        return;
+    m_lastDangling = current;
+    emit dangleFixturesChanged(current);
+}
+
 void MarkPlanner::evaluate()
 {
+    updateDangleDetection();
+
     if (!m_enabled || m_doc == nullptr || m_mark == nullptr)
         return;
 

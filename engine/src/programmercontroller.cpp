@@ -79,6 +79,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
     connect(m_markPlanner, &MarkPlanner::enabledChanged,
             this, &ProgrammerController::autoMoveInBlackChanged);
+    connect(m_markPlanner, &MarkPlanner::dangleFixturesChanged,
+            this, &ProgrammerController::dangleFixturesChanged);
 
     connect(this, &ProgrammerController::programmerSelectionChanged,
             this, &ProgrammerController::slotSyncEffectFixtures);

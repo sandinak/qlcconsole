@@ -460,6 +460,10 @@ private:
     bool m_showFooterPower = true;
     QAction* m_showFooterLoadAction = nullptr;
     QAction* m_showFooterPowerAction = nullptr;
+    // Move-in-black dangle warning: marked (positioned-but-dark) fixtures no
+    // upcoming cue is about to light. Hidden when empty; ProgrammerController
+    // forwards MarkPlanner::dangleFixturesChanged() into this.
+    QLabel* m_statusDangleLabel = nullptr;
     // Smooth (extrapolated) MTC chip readout, decoupled from the chunky packet
     // rate: anchor on each fresh position, then glide the display on a timer.
     QTimer* m_tcDisplayTimer = nullptr;

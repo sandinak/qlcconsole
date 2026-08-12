@@ -190,6 +190,11 @@ signals:
     void markChanged();
     /** Auto move-in-black toggled (so the toolbar button tracks it). */
     void autoMoveInBlackChanged(bool enable);
+    /** Marked (positioned-but-dark) fixtures that no upcoming cue is about to
+     *  light -- a pre-set nothing is going to reveal. Forwarded verbatim from
+     *  MarkPlanner so the UI doesn't need to reach into it directly. Checked
+     *  regardless of isAutoMoveInBlack() (manual marks dangle too). */
+    void dangleFixturesChanged(const QList<quint32> &fixtureIds);
 
     /*********************************************************************
      * Design-mode joystick (writes pan/tilt into the focused scene)
