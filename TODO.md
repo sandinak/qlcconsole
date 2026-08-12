@@ -72,12 +72,35 @@ effect timing items also want the rig to confirm.
   `vcxypadfixture.cpp`, with the existing capture/undo/diff/store workflow —
   see `LiveCaptureDialog`), but `SimpleDesk` (`ui/src/simpledesk.cpp`) has
   zero `CaptureManager` references — moving a Simple Desk fader doesn't
-  persist anywhere. `live-edit-4.x`'s own fix (a standalone
-  `LiveEditManager`, undo-less direct-write) was a simpler, disconnected
-  mechanism — better path is wiring Simple Desk's
-  `slotUniverseSliderValueChanged` into the existing `CaptureManager`
-  instead, so it gets the same undo/diff UX VC already has. Needs its own
-  design/implementation pass, not a quick cherry-pick.
+  persist anywhere. Better path is wiring Simple Desk's
+  `slotUniverseSliderValueChanged` into `CaptureManager` rather than
+  reviving `live-edit-4.x`'s standalone `LiveEditManager` (undo-less
+  direct-write) — confirmed `CaptureManager` isn't just equal plumbing,
+  it's strictly *better* than that reference implementation:
+  - `LiveEditManager::findMostSignificantScene()` (the "which running Scene
+    actually wins when several touch this channel" question) was left as an
+    explicit `// TODO: Implement HTP/LTP priority logic` stub —
+    `return scenes.first();`, i.e. never solved. `CaptureManager::buildPlan()`
+    already solves exactly this: it walks running functions in **start
+    order**, so the most-recently-started Scene wins LTP per (fxi, channel) —
+    a real, reasoned answer, inherited for free.
+  - `CaptureManager::buildPlan()` also already flags **chaser-driven
+    channels** (a channel currently under a running Chaser step's Scene) and
+    excludes them from capture by default — `LiveEditManager`'s plain
+    fader-walk has no equivalent, so a Simple Desk tweak there could point-edit
+    a Scene the Chaser immediately overwrites on its next step. Preserve this
+    exclusion when wiring Simple Desk in.
+  - One piece of `live-edit-4.x` *is* directly reusable regardless: unlike VC
+    widgets (pre-bound to a specific function), a Simple Desk slider only
+    knows an absolute `(universe, address)` — `LiveEditManager::
+    findScenesForChannel()`'s address -> `(fixtureId, channel)` resolution
+    via `Doc::fixtureForAddress()` is the correct, already-written way to get
+    from "which slider moved" to the `(fxi, channel)` pair
+    `CaptureManager::recordOverride()` actually wants.
+  - Net effect: Simple Desk gains MORE than `live-edit-4.x` ever had (undo,
+    conflict/chaser-driven visibility, save-as-new) for less new code than
+    reviving `LiveEditManager` would take.
+  Needs its own design/implementation pass, not a quick cherry-pick.
 
 - **Cue transition model — hold-on-miss + release-on-transition (4b; DEFERRED,
   needs rig)** — DECIDED framing: a *missed/skipped* cue is a non-event → hold
