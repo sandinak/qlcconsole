@@ -196,6 +196,18 @@ asset rename is a separate pass) and the macOS `CFBundleIdentifier`
 (`com.bransonmatheson.qlcplus` — changing it resets TCC permission grants and
 app preferences, so leave unless there's a reason to force that reset).
 
+UI polish pass (2026-08-11) — main toolbar + global actions (Blackout/Blind/
+Operate) + bottom tab bar: repadded/gloss-rendered the 4 mismatched action
+icons to match the classic Crystal/Oxygen set's shading (`resources/icons/png/
+blackout,blind,operate,design.png`), unified toolbar+tab-bar icon size to
+24x24 (`App::initToolBar()`), added a bundled default chrome QSS
+(`resources/qss/default.qss`, cascades under the existing user
+`~/.qlcconsole/qlcplusStyle.qss` override via `AppUtil::getStyleSheet`).
+Deliberately deferred: per-manager toolbar icon-size unification (Virtual
+Console 26px / I-O Manager 32px / Show timeline 20px / Monitor 16px all stay
+as-is), no dark/light theme switcher, no SVG-icon migration, Fixture/Function
+Manager's own toolbars and the Programming tab's button styling untouched.
+
 Release readiness (2026-08-11) — v0.1.0 prep landed: `VERSION` file +
 `CHANGELOG.md` (SemVer release tags, independent of the git-derived
 `APPVERSION` build string); `README.md`/`CONTRIBUTING.md`/`SUPPORT.md`

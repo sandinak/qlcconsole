@@ -139,5 +139,6 @@
         <file alias="xypad-point-blue.png">../../resources/icons/png/xypad-point-blue.png</file>
         <file alias="xypad-point-yellow.png">../../resources/icons/png/xypad-point-yellow.png</file>
         <file alias="xypad.png">../../resources/icons/png/xypad.png</file>
+        <file alias="style/default.qss">../../resources/qss/default.qss</file>
     </qresource>
 </RCC>

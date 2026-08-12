@@ -120,6 +120,30 @@ QStyle* AppUtil::saneStyle()
 bool styleCached = false;
 QMap<QString,QString> styleCache;
 
+// Bundled default chrome QSS (resources/qss/default.qss) — read once, applied
+// only to the "MAIN" component, ahead of the user's own override block below
+// so ~/.qlcconsole/qlcplusStyle.qss still cascades on top and can override it.
+static QString bundledMainStyleSheet()
+{
+    static QString bundled;
+    static bool loaded = false;
+    if (loaded == false)
+    {
+        QFile defFile(":/style/default.qss");
+        if (defFile.open(QIODevice::ReadOnly))
+            bundled = QTextStream(&defFile).readAll();
+        loaded = true;
+    }
+    return bundled;
+}
+
+static QString withBundledDefault(const QString &component, const QString &userBlock)
+{
+    if (component != "MAIN")
+        return userBlock;
+    return bundledMainStyleSheet() + "\n" + userBlock;
+}
+
 QString AppUtil::getStyleSheet(QString component)
 {
     QString block;
@@ -142,10 +166,10 @@ QString AppUtil::getStyleSheet(QString component)
 
         QFile ssFile(ssDir + QDir::separator() + USER_STYLESHEET_FILE);
         if (ssFile.exists() == false)
-            return block;
+            return withBundledDefault(component, block);
 
         if (ssFile.open(QIODevice::ReadOnly) == false)
-            return block;
+            return withBundledDefault(component, block);
 
         bool found = false;
         QString compName;
@@ -177,7 +201,7 @@ QString AppUtil::getStyleSheet(QString component)
             styleCache.insert(compName, block);
     }
 
-    return styleCache.value(component, QString());
+    return withBundledDefault(component, styleCache.value(component, QString()));
 }
 
 /*****************************************************************************

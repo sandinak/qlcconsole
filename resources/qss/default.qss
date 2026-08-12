@@ -1,0 +1,92 @@
+/*
+  qlcconsole default chrome stylesheet.
+
+  Applied automatically by AppUtil::getStyleSheet() under whatever the user
+  supplies in ~/.qlcconsole/qlcplusStyle.qss (that file's "=====MAIN====="
+  block is appended after this and wins on conflicts).
+
+  Deliberately conservative: no hardcoded colors (uses palette() roles so
+  native light/dark appearance still works, and so App::applyTheme()'s
+  backstage color themes reach this chrome automatically via a QPalette
+  swap — see app.cpp). Covers the main toolbar + tab bar chrome plus a few
+  common widget types (group boxes, menus) so a theme reaches a bit further
+  than just those two; most other chrome is native platform style and only
+  partially follows QPalette (see App::applyTheme()'s comment for why).
+*/
+
+QToolBar#MainToolBar {
+    border: none;
+    border-bottom: 1px solid palette(mid);
+    padding: 2px 4px;
+    spacing: 4px;
+}
+
+QToolBar#MainToolBar QToolButton {
+    padding: 3px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+}
+
+QToolBar#MainToolBar QToolButton:hover {
+    background: palette(midlight);
+    border: 1px solid palette(mid);
+}
+
+QToolBar#MainToolBar QToolButton:pressed,
+QToolBar#MainToolBar QToolButton:checked {
+    background: palette(mid);
+}
+
+QTabWidget#MainTabs::pane {
+    border-top: 1px solid palette(mid);
+}
+
+QTabWidget#MainTabs QTabBar::tab {
+    padding: 6px 12px;
+    margin: 0px 1px;
+    border: 1px solid transparent;
+}
+
+QTabWidget#MainTabs QTabBar::tab:hover:!selected {
+    background: palette(midlight);
+}
+
+QTabWidget#MainTabs QTabBar::tab:selected {
+    background: palette(base);
+    border-top: 2px solid palette(highlight);
+}
+
+QGroupBox {
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+    margin-top: 8px;
+    padding-top: 6px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 8px;
+    padding: 0px 4px;
+    color: palette(window-text);
+}
+
+QMenuBar {
+    background: palette(window);
+    color: palette(window-text);
+}
+
+QMenuBar::item:selected {
+    background: palette(highlight);
+    color: palette(highlighted-text);
+}
+
+QMenu {
+    background: palette(base);
+    color: palette(window-text);
+    border: 1px solid palette(mid);
+}
+
+QMenu::item:selected {
+    background: palette(highlight);
+    color: palette(highlighted-text);
+}

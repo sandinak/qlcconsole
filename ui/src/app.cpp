@@ -286,6 +286,7 @@ void App::init()
     setWindowIcon(QIcon(":/qlcconsole.png"));
 
     m_tab = new QTabWidget(this);
+    m_tab->setObjectName("MainTabs");
     m_tab->setTabPosition(QTabWidget::South);
     setCentralWidget(m_tab);
 
@@ -1049,10 +1050,12 @@ void App::initActions()
 void App::initToolBar()
 {
     m_toolbar = new QToolBar(tr("Workspace"), this);
+    m_toolbar->setObjectName("MainToolBar");
     m_toolbar->setFloatable(false);
     m_toolbar->setMovable(false);
     m_toolbar->setAllowedAreas(Qt::TopToolBarArea);
     m_toolbar->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_toolbar->setIconSize(QSize(24, 24)); // match the tab bar's icon size (m_tab, above)
     addToolBar(m_toolbar);
 
     // Native-first layout: the full command set lives in the menu bar (see
