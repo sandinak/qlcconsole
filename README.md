@@ -13,9 +13,9 @@
 <p align="center">
   <a href="https://github.com/sandinak/qlcconsole/releases/latest">
     <img src="https://img.shields.io/github/v/release/sandinak/qlcconsole" alt="Latest release version badge" /></a>
-  <a href="https://github.com/sandinak/qlcconsole/commits/programmer-mode/">
+  <a href="https://github.com/sandinak/qlcconsole/commits/main/">
     <img src="https://img.shields.io/github/commit-activity/w/sandinak/qlcconsole" alt="Weekly commit activity badge" /></a>
-  <a href="https://github.com/sandinak/qlcconsole/blob/programmer-mode/COPYING">
+  <a href="https://github.com/sandinak/qlcconsole/blob/main/COPYING">
     <img alt="License badge" src="https://img.shields.io/github/license/sandinak/qlcconsole?style=flat-square" /></a>
 </p>
 
@@ -159,7 +159,7 @@ work this fork inherits and builds on.
 
 ## License
 
-<a href="https://github.com/sandinak/qlcconsole/blob/programmer-mode/COPYING">
+<a href="https://github.com/sandinak/qlcconsole/blob/main/COPYING">
   <img alt="GitHub License badge" src="https://img.shields.io/github/license/sandinak/qlcconsole?style=flat-square" />
 </a>
 

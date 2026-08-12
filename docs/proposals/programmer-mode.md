@@ -1,6 +1,6 @@
 # Programmer mode — selection-driven parameter controllers
 
-**Status:** in progress on branch `programmer-mode`
+**Status:** proposal, not yet started (not referenced in TODO.md/DONE.md)
 **Owner:** active
 **Related:**
 [capture-live-edits](../../engine/src/capturemanager.h) (this feature

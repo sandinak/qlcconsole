@@ -100,9 +100,11 @@ to run ahead of time on the GUI thread.
 - **2b — `CueLookahead`.** Chaser + Show providers → `upcoming(horizon)`. Verify
   `fireInMs` against real step/cue timing.
 - **2c — `MarkPlanner`** wired to cue-change + toggle + dark-gap; feeds MarkEffect.
-- **2d — dangle detector** (slice 3 in TODO): a positioned-but-dark fixture that
-  matches an upcoming cue = valid pre-set; matches nothing = warn. Falls out of
-  the plan the planner already computes.
+- **2d — dangle detector** (slice 3 in TODO). **DONE** (2026-08-12):
+  `MarkPlanner::dangleFixtures()` — a positioned-but-dark fixture that matches
+  an upcoming cue is a valid pre-set; matches nothing = warn (amber footer
+  chip). Runs regardless of the Auto move-in-black toggle, since a manual mark
+  can dangle too. Unit-tested in `engine/test/markplanner`.
 
 ## Open questions / risks
 
