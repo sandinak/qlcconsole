@@ -115,6 +115,8 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define SETTINGS_AUTOSAVE_INTERVAL QStringLiteral("workspace/autosave/interval")
 #define SETTINGS_TAB_LABEL_MODE    QStringLiteral("workspace/tabLabelMode")
 #define SETTINGS_THEME             QStringLiteral("workspace/theme")
+#define SETTINGS_SHOW_FOOTER_LOAD  QStringLiteral("workspace/showFooterLoad")
+#define SETTINGS_SHOW_FOOTER_POWER QStringLiteral("workspace/showFooterPower")
 #define KXMLQLCWorkspaceWindow QStringLiteral("CurrentWindow")
 
 #define MAX_RECENT_FILES    10
@@ -401,6 +403,8 @@ void App::init()
                 m_statusPowerLabel->hide();
                 return;
             }
+            if (m_showFooterPower == false)   // View menu: chip disabled
+                return;
             m_statusPowerLabel->setText(overload
                 ? tr("⚡ %1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
                 : tr("⚡ %1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
@@ -434,6 +438,13 @@ void App::init()
         m_theme = settings.value(SETTINGS_THEME, ThemeDefault).toInt();
     }
     applyTheme();
+
+    // Load the footer load/power chip visibility preferences (View menu).
+    {
+        QSettings settings;
+        m_showFooterLoad = settings.value(SETTINGS_SHOW_FOOTER_LOAD, true).toBool();
+        m_showFooterPower = settings.value(SETTINGS_SHOW_FOOTER_POWER, true).toBool();
+    }
 
     // Build the native menu bar now that the workspace tabs exist, so the
     // View menu can offer accurate "jump to tab" entries.
@@ -1173,6 +1184,32 @@ void App::initMenuBar()
             setTheme(choice.id);
         });
     }
+
+    // Footer chip visibility: engine load / estimated power draw. Persisted
+    // (workspace/showFooterLoad, workspace/showFooterPower).
+    m_showFooterLoadAction = viewMenu->addAction(tr("Show Engine Load in Footer"));
+    m_showFooterLoadAction->setCheckable(true);
+    m_showFooterLoadAction->setChecked(m_showFooterLoad);
+    connect(m_showFooterLoadAction, &QAction::toggled, this, [this](bool on) {
+        m_showFooterLoad = on;
+        QSettings settings;
+        settings.setValue(SETTINGS_SHOW_FOOTER_LOAD, on);
+        if (m_statusLoadLabel != NULL)
+            m_statusLoadLabel->setVisible(on);
+    });
+
+    m_showFooterPowerAction = viewMenu->addAction(tr("Show Power Estimate in Footer"));
+    m_showFooterPowerAction->setCheckable(true);
+    m_showFooterPowerAction->setChecked(m_showFooterPower);
+    connect(m_showFooterPowerAction, &QAction::toggled, this, [this](bool on) {
+        m_showFooterPower = on;
+        QSettings settings;
+        settings.setValue(SETTINGS_SHOW_FOOTER_POWER, on);
+        if (m_statusPowerLabel != NULL && on == false)
+            m_statusPowerLabel->hide();
+        // When re-enabled, the chip stays hidden until the next
+        // powerEstimateChanged signal repopulates it (Design mode only).
+    });
 
     /* ---- Control: playback + live editing ---- */
     QMenu* ctrlMenu = mb->addMenu(tr("&Control"));
@@ -2836,6 +2873,7 @@ void App::initStatusBar()
         QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("Load: 00.00 / 00 ms (000%)")) + 14);
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
+    m_statusLoadLabel->setVisible(m_showFooterLoad);   // View menu preference
     sb->addWidget(m_statusLoadLabel, 0);
 
     // Estimated electrical load (Design mode) — the designed peak draw across the
@@ -3509,7 +3547,7 @@ void App::slotTimecodeStatusChanged()
 
 void App::slotUpdateHealthFooter()
 {
-    if (m_statusLoadLabel != NULL && m_doc != NULL && m_doc->masterTimer() != NULL)
+    if (m_statusLoadLabel != NULL && m_showFooterLoad && m_doc != NULL && m_doc->masterTimer() != NULL)
     {
         // Peak tick over the poll window — far more informative than the last
         // tick, which is tiny/noisy on a light show.

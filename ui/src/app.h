@@ -452,6 +452,14 @@ private:
     QLabel* m_statusTimecodeLabel;
     QLabel* m_statusLoadLabel;
     QLabel* m_statusPowerLabel = nullptr;
+    // Whether the engine-load / power-estimate footer chips are shown at all,
+    // toggleable from the View menu and persisted (workspace/showFooterLoad,
+    // workspace/showFooterPower). Independent of whether a chip currently has
+    // anything to show (e.g. Power only ever appears once an estimate exists).
+    bool m_showFooterLoad = true;
+    bool m_showFooterPower = true;
+    QAction* m_showFooterLoadAction = nullptr;
+    QAction* m_showFooterPowerAction = nullptr;
     // Smooth (extrapolated) MTC chip readout, decoupled from the chunky packet
     // rate: anchor on each fresh position, then glide the display on a timer.
     QTimer* m_tcDisplayTimer = nullptr;
