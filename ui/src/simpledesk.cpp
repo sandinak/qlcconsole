@@ -48,6 +48,7 @@
 #include "simpledesk.h"
 #include "cuestack.h"
 #include "apputil.h"
+#include "capturemanager.h"
 #include "cue.h"
 #include "doc.h"
 
@@ -980,6 +981,22 @@ void SimpleDesk::slotUniverseSliderValueChanged(quint32 fid, quint32 chan, uchar
         }
         m_engine->setValue(chanAbsAddr, value);
 
+        // Capture this manual adjustment (if Live Edit capture is armed) so it
+        // can be reviewed/applied/undone back into the Scene(s) driving this
+        // channel, the same way Virtual Console sliders already do. This path
+        // (a plain address-bound page slider) doesn't know its fixture, so
+        // resolve it the same way the rest of this file already does.
+        if (m_doc->captureManager()->isCapturing())
+        {
+            quint32 capFxi = m_doc->fixtureForAddress(chanAbsAddr);
+            Fixture *capFixture = m_doc->fixture(capFxi);
+            if (capFixture != NULL)
+            {
+                m_doc->captureManager()->recordOverride(
+                    capFxi, chanAbsAddr - capFixture->universeAddress(), value, tr("Simple Desk"));
+            }
+        }
+
         if (m_editCueStackButton->isChecked() == true)
             replaceCurrentCue();
     }
@@ -1001,6 +1018,11 @@ void SimpleDesk::slotUniverseSliderValueChanged(quint32 fid, quint32 chan, uchar
             }
         }
         m_engine->setValue(chanAbsAddr, value);
+
+        // Capture this manual adjustment (if Live Edit capture is armed) --
+        // fid/chan are already fixture-relative here, no resolution needed.
+        if (m_doc->captureManager()->isCapturing())
+            m_doc->captureManager()->recordOverride(fid, chan, value, tr("Simple Desk"));
 
         if (m_editCueStackButton->isChecked() == true)
             replaceCurrentCue();
