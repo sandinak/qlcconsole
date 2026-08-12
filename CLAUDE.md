@@ -3,7 +3,14 @@
 Guidance for working in this repo. This is a **fork of QLC+ 4.14.2** (Q Light
 Controller Plus) — the Qt5 **widgets** desktop UI, not the QML UI. The fork adds
 a *programmer-mode* workflow and a dedicated **Programming** tab for building
-scenes/"looks". Most fork work lives on the `programmer-mode` branch.
+scenes/"looks".
+
+## Branching
+
+`main` is the trunk (GitHub default branch). Do new work on a feature branch
+cut from `main`, then merge it back with a local merge commit (`git merge
+--no-ff`) and push directly — no PRs. Only commit/merge when the user asks;
+don't merge speculative or in-progress work.
 
 ## Build & run
 
