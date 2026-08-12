@@ -342,7 +342,7 @@ object set, all fixture-hosting, 2D + elevation, editors, XML:
 - [x] **Trusses with booms** — a pipe parented to a truss (drop-arm), base derived.
 - [x] **Tower** (16" sq × 8') with **shelves** at heights; fixtures mount on a
   shelf (towerU/V), derived from the tower.
-- Demo: `stage-structures-demo.qxw` (one of each + a fixture on the tower).
+- Demo: `test-workspaces/stage-structures-demo.qxw` (one of each + a fixture on the tower).
 
 Still open (lower priority — non-fixture-hosting scenery): flats, drapes/legs,
 set pieces. And: a Stand should also support a truss/tower (only pipes today);

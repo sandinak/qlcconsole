@@ -71,7 +71,7 @@ Mode (momentary/toggle/fader) is inferred from the input channel's
 
 ## Phased plan
 
-Each phase ships and is testable on `surfacetesting.qxw` independently. Nothing
+Each phase ships and is testable on `test-workspaces/surfacetesting.qxw` independently. Nothing
 changes existing VC/engine behaviour — all additive.
 
 ### Phase 0 — Vertical slice *(BUILT — needs hardware validation)*
