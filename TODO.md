@@ -179,10 +179,12 @@ effect timing items also want the rig to confirm.
   output, time the round-trip to detection = true audio latency. Needs an audio-emit
   path (AudioRenderer wants a decoder) and is unverifiable offscreen; the
   editable/seeded detection-latency + ±10 ms nudge cover it meanwhile.
-- **Show-length polish** — "End at SMPTE hh:mm:ss" convenience (needs the offset in
-  the host menu); bar/beat snapping for the end handle when a BPM is set; clean up
-  the end-handle label collision with a marker at the same position (found on the
-  spare-machine pass).
+- **Show-length polish** *(2026-08-12: end-handle label collision confirmed
+  already fixed — commit dcc620241 moved the length chip to the ruler strip
+  above the marker lane specifically to stop it colliding with a section
+  marker's own label. Genuinely still open:)* "End at SMPTE hh:mm:ss"
+  convenience (needs the offset in the host menu); bar/beat snapping for the
+  end handle when a BPM is set.
 - **GUI headful automation** — `screencapture` + `cliclick` driver so Claude can
   drive AND validate real UI (moving this to the spare machine). First task there:
   a `gui-drive.sh` wrapper, then drive the end-handle drag with eyes on real pixels.
@@ -235,7 +237,7 @@ note:
 
 ---
 
-## Now — rebrand the fork to "qlcconsole" *(Phase 1 + 2 done; icons/bundle ID pending)*
+## Done — rebrand the fork to "qlcconsole" *(all 3 phases shipped)*
 
 The fork is now firmly a **desktop console** (mouse+keyboard, MIDI, multi-window),
 well past the tablet/Android QML flavour — rebrand from QLC+ to **qlcconsole**.
@@ -253,10 +255,13 @@ launcher/CMakeLists.txt, fixtureeditor/CMakeLists.txt, launcher.cpp's
 hardcoded spawn paths, macOS Info.plist CFBundleExecutable, Linux .desktop
 Exec= lines, CLAUDE.md/RIG_TEST_PLAN.md/testing_st.md run commands).
 
-Deliberately left alone: icon/asset filenames (still `qlcplus.icns` etc. —
-asset rename is a separate pass) and the macOS `CFBundleIdentifier`
-(`com.bransonmatheson.qlcplus` — changing it resets TCC permission grants and
-app preferences, so leave unless there's a reason to force that reset).
+Phase 3 (2026-08-12, discovered already-shipped via commit 22fde51d1 + this
+pass) — icon/asset filenames (`qlcconsole.icns`, `qlcconsole-fixtureeditor.icns`
+etc.) and the macOS `CFBundleIdentifier` (`com.bransonmatheson.qlcconsole`)
+were already renamed; only `resources/doxygen/qlcplus.dox` (a docs-generation
+config, not app-facing) was still qlcplus-named — renamed to
+`qlcconsole.dox` + updated its `PROJECT_NAME` and the `CMakeLists.txt`
+doxygen target reference.
 
 UI polish pass (2026-08-11) — main toolbar + global actions (Blackout/Blind/
 Operate) + bottom tab bar: repadded/gloss-rendered the 4 mismatched action

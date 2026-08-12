@@ -203,7 +203,7 @@ endif()
 # doxygen
 if(UNIX)
     add_custom_target(doxygen
-        COMMAND cd resources/doxygen && rm -rf html/ && doxygen qlcplus.dox
+        COMMAND cd resources/doxygen && rm -rf html/ && doxygen qlcconsole.dox
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()
