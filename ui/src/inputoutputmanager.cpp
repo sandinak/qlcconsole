@@ -143,6 +143,9 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
 
     m_splitter->widget(0)->layout()->addWidget(m_toolbar);
 
+    // Match the main window's icon/text display preference.
+    applyToolbarLabelMode();
+
     connect(m_uniNameEdit, SIGNAL(textChanged(QString)),
             this, SLOT(slotUniverseNameChanged(QString)));
 
@@ -226,6 +229,21 @@ InputOutputManager::~InputOutputManager()
 InputOutputManager* InputOutputManager::instance()
 {
     return s_instance;
+}
+
+void InputOutputManager::applyToolbarLabelMode()
+{
+    // Mirror App::TabLabelMode: 0 = Icon+Text (-> text under icon),
+    // 1 = Icons only, 2 = Text only. Same "workspace/tabLabelMode" setting.
+    Qt::ToolButtonStyle style = Qt::ToolButtonTextUnderIcon;
+    const int mode = QSettings().value(QStringLiteral("workspace/tabLabelMode"), 0).toInt();
+    if (mode == 1)
+        style = Qt::ToolButtonIconOnly;
+    else if (mode == 2)
+        style = Qt::ToolButtonTextOnly;
+
+    if (m_toolbar)
+        m_toolbar->setToolButtonStyle(style);
 }
 
 /*****************************************************************************

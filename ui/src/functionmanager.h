@@ -54,6 +54,10 @@ public:
     /** Get the singleton instance */
     static FunctionManager* instance();
 
+    /** Match the main window's icon/text display preference
+     *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
+    void applyToolbarLabelMode();
+
 signals:
     /** Emitted when the FunctionManager's tab is de/activated */
     void functionManagerActive(bool active);

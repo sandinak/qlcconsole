@@ -355,6 +355,24 @@ void FunctionManager::initToolbar()
     m_toolbar->addAction(m_cloneAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_deleteAction);
+
+    // Match the main window's icon/text display preference.
+    applyToolbarLabelMode();
+}
+
+void FunctionManager::applyToolbarLabelMode()
+{
+    // Mirror App::TabLabelMode: 0 = Icon+Text (-> text under icon),
+    // 1 = Icons only, 2 = Text only. Same "workspace/tabLabelMode" setting.
+    Qt::ToolButtonStyle style = Qt::ToolButtonTextUnderIcon;
+    const int mode = QSettings().value(QStringLiteral("workspace/tabLabelMode"), 0).toInt();
+    if (mode == 1)
+        style = Qt::ToolButtonIconOnly;
+    else if (mode == 2)
+        style = Qt::ToolButtonTextOnly;
+
+    if (m_toolbar)
+        m_toolbar->setToolButtonStyle(style);
 }
 
 QString FunctionManager::getSelectedFolderPath()

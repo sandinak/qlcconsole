@@ -35,6 +35,7 @@
 #include <QAction>
 #include <QString>
 #include <QSet>
+#include <QSettings>
 #include <QRegularExpression>
 #include <QDebug>
 #include <QIcon>
@@ -86,6 +87,7 @@ FixtureManager* FixtureManager::s_instance = NULL;
 
 FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     : QWidget(parent)
+    , m_toolbar(NULL)
     , m_doc(doc)
     , m_splitter(NULL)
     , m_fixtures_tree(NULL)
@@ -1214,6 +1216,7 @@ void FixtureManager::updateGroupMenu()
 void FixtureManager::initToolBar()
 {
     QToolBar* toolbar = new QToolBar(tr("Fixture manager"), this);
+    m_toolbar = toolbar;
     toolbar->setFloatable(false);
     toolbar->setMovable(false);
     layout()->setMenuBar(toolbar);
@@ -1248,6 +1251,24 @@ void FixtureManager::initToolBar()
     QToolButton* btn = qobject_cast<QToolButton*> (toolbar->widgetForAction(m_groupAction));
     Q_ASSERT(btn != NULL);
     btn->setPopupMode(QToolButton::InstantPopup);
+
+    // Match the main window's icon/text display preference.
+    applyToolbarLabelMode();
+}
+
+void FixtureManager::applyToolbarLabelMode()
+{
+    // Mirror App::TabLabelMode: 0 = Icon+Text (-> text under icon),
+    // 1 = Icons only, 2 = Text only. Same "workspace/tabLabelMode" setting.
+    Qt::ToolButtonStyle style = Qt::ToolButtonTextUnderIcon;
+    const int mode = QSettings().value(QStringLiteral("workspace/tabLabelMode"), 0).toInt();
+    if (mode == 1)
+        style = Qt::ToolButtonIconOnly;
+    else if (mode == 2)
+        style = Qt::ToolButtonTextOnly;
+
+    if (m_toolbar)
+        m_toolbar->setToolButtonStyle(style);
 }
 
 void FixtureManager::addFixture()

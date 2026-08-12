@@ -37,6 +37,7 @@ class OutputMap;
 class QSplitter;
 class QAction;
 class QMenu;
+class QToolBar;
 class PowerDistributionWidget;
 
 /** @addtogroup ui_fixtures
@@ -61,9 +62,16 @@ public:
     /** Get the singleton instance */
     static FixtureManager* instance();
 
+    /** Match the main window's icon/text display preference
+     *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
+    void applyToolbarLabelMode();
+
 private:
     /** The singleton FixtureManager instance */
     static FixtureManager* s_instance;
+
+    /** The manager's own toolbar (add/remove/group/move/import/export/...) */
+    QToolBar* m_toolbar;
 
     /********************************************************************
      * Doc signal handlers

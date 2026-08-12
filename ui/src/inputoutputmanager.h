@@ -58,6 +58,10 @@ public:
     /** Get the singleton instance */
     static InputOutputManager* instance();
 
+    /** Match the main window's icon/text display preference
+     *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
+    void applyToolbarLabelMode();
+
 private:
     static InputOutputManager* s_instance;
     InputOutputMap* m_ioMap;

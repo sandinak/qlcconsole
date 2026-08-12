@@ -2355,6 +2355,18 @@ void App::applyTabLabelMode()
     // Keep the 2D monitor window's toolbars in sync if it is open.
     if (Monitor::instance() != NULL)
         Monitor::instance()->applyToolbarLabelMode();
+
+    // Same for each manager's own toolbar — previously only the main
+    // window's toolbar/tab bar (above) honored this setting; every
+    // per-manager toolbar was stuck on Qt's default (icons only) regardless.
+    if (FixtureManager::instance() != NULL)
+        FixtureManager::instance()->applyToolbarLabelMode();
+    if (FunctionManager::instance() != NULL)
+        FunctionManager::instance()->applyToolbarLabelMode();
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->applyToolbarLabelMode();
+    if (VirtualConsole::instance() != NULL)
+        VirtualConsole::instance()->applyToolbarLabelMode();
 }
 
 QString App::autosaveFilePath() const

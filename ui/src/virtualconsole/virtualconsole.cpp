@@ -179,6 +179,21 @@ VirtualConsole* VirtualConsole::instance()
     return s_instance;
 }
 
+void VirtualConsole::applyToolbarLabelMode()
+{
+    // Mirror App::TabLabelMode: 0 = Icon+Text (-> text under icon),
+    // 1 = Icons only, 2 = Text only. Same "workspace/tabLabelMode" setting.
+    Qt::ToolButtonStyle style = Qt::ToolButtonTextUnderIcon;
+    const int mode = QSettings().value(QStringLiteral("workspace/tabLabelMode"), 0).toInt();
+    if (mode == 1)
+        style = Qt::ToolButtonIconOnly;
+    else if (mode == 2)
+        style = Qt::ToolButtonTextOnly;
+
+    if (m_toolbar)
+        m_toolbar->setToolButtonStyle(style);
+}
+
 Doc *VirtualConsole::getDoc()
 {
     return m_doc;
@@ -609,6 +624,9 @@ void VirtualConsole::initMenuBar()
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_functionWizardAction);
     m_toolbar->addAction(m_toolsSettingsAction);
+
+    // Match the main window's icon/text display preference.
+    applyToolbarLabelMode();
 
     /* Always-visible Run/Stop toggle in the top-right, so you can go live
        straight from the Virtual Console. It sits in its own row above the edit

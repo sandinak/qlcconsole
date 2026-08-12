@@ -222,6 +222,17 @@ width dropped 1296px -> 942px. Not yet investigated: Simple Desk's "Cue
 Stack" tab (938px, now the binding constraint) looks like legitimate
 toolbar+cue-list content rather than a bug — stopped there per Branson's call.
 
+Per-manager toolbar text/icon label mode (2026-08-11) — the "Icons only /
+Text only / Icon+text" workspace setting (`App::applyTabLabelMode()`) only
+ever touched the main tab bar and the main window's own toolbar (Panic/
+Blackout/Blind/Operate); every per-manager toolbar (Function Manager, Fixture
+Manager, Input/Output Manager, Virtual Console) was hardcoded to Qt's
+icon-only default, deaf to the setting. Added a `applyToolbarLabelMode()`
+method to each (mirrors the existing `Monitor::applyToolbarLabelMode()`
+pattern — reads `workspace/tabLabelMode` directly via QSettings), called from
+`App::applyTabLabelMode()`. Simple Desk has no comparable QToolBar (its view
+controls are standalone QToolButtons), so it's not part of this.
+
 Release readiness (2026-08-11) — v0.1.0 prep landed: `VERSION` file +
 `CHANGELOG.md` (SemVer release tags, independent of the git-derived
 `APPVERSION` build string); `README.md`/`CONTRIBUTING.md`/`SUPPORT.md`

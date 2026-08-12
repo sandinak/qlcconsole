@@ -64,6 +64,10 @@ public:
     /** Get the singleton instance */
     static VirtualConsole* instance();
 
+    /** Match the main window's icon/text display preference
+     *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
+    void applyToolbarLabelMode();
+
     Doc *getDoc();
 
 protected:
