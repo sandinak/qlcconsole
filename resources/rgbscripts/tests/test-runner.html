@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RGB Script Test Runner</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            margin: 20px;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #569cd6;
+            text-align: center;
+        }
+        
+        .test-controls {
+            background: #2d2d30;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        
+        button:hover {
+            background: #1177bb;
+        }
+        
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .log-container {
+            background: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            border-radius: 8px;
+            height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .log-entry {
+            margin-bottom: 2px;
+        }
+        
+        .log-test { color: #569cd6; font-weight: bold; }
+        .log-pass { color: #4ec9b0; }
+        .log-fail { color: #f44747; }
+        .log-warn { color: #dcdcaa; }
+        .log-error { color: #f44747; }
+        .log-perf { color: #c586c0; }
+        .log-debug { color: #808080; }
+        .log-info { color: #d4d4d4; }
+        
+        .results-summary {
+            background: #2d2d30;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .matrix-test {
+            background: #2d2d30;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #666;
+        }
+        
+        .matrix-test.passed {
+            border-left-color: #4ec9b0;
+        }
+        
+        .matrix-test.failed {
+            border-left-color: #f44747;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #3c3c3c;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0e639c, #4ec9b0);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* Warning and Error Summary Styles */
+        .warning-summary {
+            background: #3c2415;
+            border: 2px solid #d7ba7d;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            color: #d7ba7d;
+            animation: pulse-warning 2s infinite;
+        }
+
+        .error-summary {
+            background: #2d1b1b;
+            border: 2px solid #f44747;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            color: #f44747;
+            animation: pulse-error 2s infinite;
+        }
+
+        .success-summary {
+            background: #1b2d1b;
+            border: 2px solid #4ec9b0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            color: #4ec9b0;
+        }
+
+        .issue-item {
+            background: rgba(244, 71, 71, 0.1);
+            border-left: 4px solid #f44747;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .warning-item {
+            background: rgba(215, 186, 125, 0.1);
+            border-left: 4px solid #d7ba7d;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .summary-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .summary-icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+
+        .script-name {
+            font-weight: bold;
+            color: #569cd6;
+        }
+
+        .success-rate {
+            font-weight: bold;
+        }
+
+        .success-rate.good {
+            color: #4ec9b0;
+        }
+
+        .success-rate.warning {
+            color: #d7ba7d;
+        }
+
+        .success-rate.error {
+            color: #f44747;
+        }
+
+        @keyframes pulse-warning {
+            0%, 100% { border-color: #d7ba7d; }
+            50% { border-color: #ffcc66; }
+        }
+
+        @keyframes pulse-error {
+            0%, 100% { border-color: #f44747; }
+            50% { border-color: #ff6666; }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .stat-card {
+            background: #2d2d30;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            border-left: 4px solid #569cd6;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #cccccc;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 RGB Script Test Runner</h1>
+        
+        <div class="test-controls">
+            <h3>Test Controls</h3>
+
+            <div style="margin-bottom: 15px;">
+                <label for="scriptSelect" style="color: #569cd6; font-weight: bold; margin-right: 10px;">Select Script:</label>
+                <select id="scriptSelect" onchange="loadSelectedScript()" style="padding: 5px 10px; background: #2d2d30; color: #d4d4d4; border: 1px solid #3c3c3c; border-radius: 4px;">
+                    <option value="">Loading scripts...</option>
+                </select>
+                <button onclick="refreshScriptList()" style="margin-left: 10px; padding: 5px 10px; font-size: 12px;">🔄 Refresh</button>
+            </div>
+
+            <button onclick="runBasicTests()">Run Basic Tests</button>
+            <button onclick="runEdgeCaseTests()">Run Edge Cases</button>
+            <button onclick="runStressTests()">Run Stress Tests</button>
+            <button onclick="runPerformanceTests()">Run Performance Tests</button>
+            <button onclick="runAllTests()">Run All Tests</button>
+            <button onclick="runAllScripts()" style="background: #d73a49; font-weight: bold;">🚀 Run ALL Scripts</button>
+            <button id="stopButton" onclick="stopTests()" style="background: #f44747; font-weight: bold; display: none;">⏹️ Stop Tests</button>
+            <button onclick="clearLog()">Clear Log</button>
+            
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar"></div>
+            </div>
+            <div id="progressText">Ready to run tests...</div>
+        </div>
+        
+        <div class="log-container" id="logContainer">
+            <div class="log-entry log-info">RGB Script Test Runner initialized. Click a button to start testing.</div>
+        </div>
+
+        <!-- Issues Report Area -->
+        <div class="results-summary" id="issuesReport" style="display: none;">
+            <h3 style="color: #f44747;">⚠️ Issues Report</h3>
+            <div id="issuesContent"></div>
+        </div>
+
+        <div class="results-summary" id="resultsSummary" style="display: none;">
+            <h3>Test Results Summary</h3>
+            <div id="summaryContent"></div>
+        </div>
+        
+        <div class="matrix-grid" id="matrixGrid"></div>
+    </div>
+
+    <!-- Load the scripts -->
+    <script src="test-suite.js"></script>
+    <script src="../lines.js"></script>
+    
+    <script>
+        // Global variables
+        let currentTests = 0;
+        let totalTests = 0;
+        let testResults = [];
+        let currentScript = 'lines.js';
+        let currentAlgo = testAlgo; // Default to lines.js algorithm
+        let availableScripts = {}; // Will be populated dynamically
+        let discoveredScripts = []; // List of all discovered scripts
+        let testingStopped = false; // Flag to stop running tests
+        let issuesCollected = []; // Collection of warnings and failures
+        
+        // Override console.log to capture output
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            logToUI(args.join(' '), 'info');
+        };
+        
+        function logToUI(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+
+            // Parse test runner log format
+            if (message.includes('[TEST]')) {
+                type = 'test';
+            } else if (message.includes('[PASS]')) {
+                type = 'pass';
+            } else if (message.includes('[FAIL]')) {
+                type = 'fail';
+            } else if (message.includes('[WARN]')) {
+                type = 'warn';
+            } else if (message.includes('[ERROR]')) {
+                type = 'error';
+            } else if (message.includes('[PERF]')) {
+                type = 'perf';
+            }
+
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Collect warnings and failures for the issues report
+            if (type === 'warn' || type === 'error' || type === 'fail') {
+                issuesCollected.push({
+                    message: message,
+                    type: type,
+                    timestamp: new Date().toLocaleTimeString(),
+                    script: currentScript
+                });
+                updateIssuesReport();
+            }
+        }
+
+        function stopTests() {
+            testingStopped = true;
+            document.getElementById('stopButton').style.display = 'none';
+            logToUI('🛑 Tests stopped by user', 'warn');
+            updateProgress(0, 0, 'Tests stopped');
+        }
+
+        function updateIssuesReport() {
+            const issuesReport = document.getElementById('issuesReport');
+            const issuesContent = document.getElementById('issuesContent');
+
+            if (issuesCollected.length === 0) {
+                issuesReport.style.display = 'none';
+                return;
+            }
+
+            issuesReport.style.display = 'block';
+
+            // Group issues by type
+            const warnings = issuesCollected.filter(issue => issue.type === 'warn');
+            const errors = issuesCollected.filter(issue => issue.type === 'error' || issue.type === 'fail');
+
+            let html = '';
+
+            if (errors.length > 0) {
+                html += `<div class="error-summary" style="margin-bottom: 15px;">
+                    <div class="summary-header">
+                        <span class="summary-icon">🚨</span>
+                        <span>ERRORS & FAILURES (${errors.length})</span>
+                    </div>`;
+
+                errors.forEach(error => {
+                    html += `<div class="issue-item">
+                        <div><strong>${error.script}</strong> at ${error.timestamp}</div>
+                        <div style="margin-top: 5px; font-size: 14px;">${error.message}</div>
+                    </div>`;
+                });
+
+                html += '</div>';
+            }
+
+            if (warnings.length > 0) {
+                html += `<div class="warning-summary">
+                    <div class="summary-header">
+                        <span class="summary-icon">⚠️</span>
+                        <span>WARNINGS (${warnings.length})</span>
+                    </div>`;
+
+                warnings.forEach(warning => {
+                    html += `<div class="warning-item">
+                        <div><strong>${warning.script}</strong> at ${warning.timestamp}</div>
+                        <div style="margin-top: 5px; font-size: 14px;">${warning.message}</div>
+                    </div>`;
+                });
+
+                html += '</div>';
+            }
+
+            issuesContent.innerHTML = html;
+        }
+
+        function clearLog() {
+            document.getElementById('logContainer').innerHTML = '';
+            document.getElementById('resultsSummary').style.display = 'none';
+            document.getElementById('matrixGrid').innerHTML = '';
+            issuesCollected = [];
+            updateIssuesReport();
+            updateProgress(0, 1, 'Ready to run tests...');
+            logToUI('Log cleared', 'info');
+        }
+
+        function updateProgress(current, total, text) {
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            
+            const percentage = total > 0 ? (current / total) * 100 : 0;
+            progressBar.style.width = percentage + '%';
+            progressText.textContent = text || `${current}/${total} tests completed (${percentage.toFixed(1)}%)`;
+        }
+        
+        function showResults(results) {
+            const summaryDiv = document.getElementById('resultsSummary');
+            const contentDiv = document.getElementById('summaryContent');
+            
+            const passed = results.passed || 0;
+            const total = results.total || 0;
+            const successRate = total > 0 ? (passed / total * 100).toFixed(1) : 0;
+            
+            contentDiv.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                    <div>
+                        <strong>Total Tests:</strong> ${total}<br>
+                        <strong>Passed:</strong> <span style="color: #4ec9b0">${passed}</span><br>
+                        <strong>Failed:</strong> <span style="color: #f44747">${total - passed}</span>
+                    </div>
+                    <div>
+                        <strong>Success Rate:</strong> ${successRate}%<br>
+                        <strong>Status:</strong> ${successRate >= 95 ? '🎉 Excellent' : successRate >= 80 ? '✅ Good' : '⚠️ Needs Work'}
+                    </div>
+                </div>
+            `;
+            
+            summaryDiv.style.display = 'block';
+        }
+        
+        // Discover all available RGB scripts
+        async function discoverScripts() {
+            logToUI('🔍 Discovering RGB scripts...', 'info');
+
+            // List of known RGB scripts (we'll try to load all of these)
+            const knownScripts = [
+                'alternate.js', 'balls.js', 'ballscolors.js', 'blinder.js', 'circles.js',
+                'circular.js', 'empty.js', 'evenodd.js', 'fill.js', 'fillfromcenter.js',
+                'fillunfill.js', 'fillunfillfromcenter.js', 'fillunfillsquaresfromcenter.js',
+                'fireworks.js', 'flyingobjects.js', 'gradient.js', 'lines.js', 'noise.js',
+                'onebyone.js', 'opposite.js', 'plasma.js', 'plasmacolors.js', 'randomcolumn.js',
+                'randomfillcolumn.js', 'randomfillrow.js', 'randomfillsingle.js',
+                'randompixelperrow.js', 'randompixelperrowmulticolor.js', 'randomrow.js',
+                'randomsingle.js', 'snowbubbles.js', 'squares.js', 'squaresfromcenter.js',
+                'starfield.js', 'stripes.js', 'stripesfromcenter.js', 'strobe.js',
+                'verticalfall.js', 'waves.js'
+            ];
+
+            // Due to CORS restrictions when opening HTML files directly,
+            // we can't reliably test file existence with fetch().
+            // Instead, we'll populate all known scripts and handle loading errors gracefully.
+            discoveredScripts = [...knownScripts];
+            availableScripts = {};
+
+            for (const script of knownScripts) {
+                availableScripts[script] = `../${script}`;
+            }
+
+            logToUI(`📋 Discovered ${discoveredScripts.length} RGB scripts`, 'info');
+            logToUI(`ℹ️ Note: Script availability verified on selection due to CORS restrictions`, 'debug');
+            return discoveredScripts;
+        }
+
+        // Populate the script selection dropdown
+        function populateScriptSelect() {
+            const select = document.getElementById('scriptSelect');
+            select.innerHTML = '';
+
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Select a script...';
+            select.appendChild(defaultOption);
+
+            // Add discovered scripts
+            discoveredScripts.sort().forEach(script => {
+                const option = document.createElement('option');
+                option.value = script;
+                option.textContent = script;
+                if (script === 'lines.js') {
+                    option.textContent += ' (Default)';
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+
+            logToUI(`📝 Populated script selector with ${discoveredScripts.length} scripts`, 'info');
+        }
+
+        // Refresh the script list
+        async function refreshScriptList() {
+            logToUI('🔄 Refreshing script list...', 'info');
+            await discoverScripts();
+            populateScriptSelect();
+        }
+
+        // Load selected script dynamically
+        async function loadSelectedScript() {
+            const select = document.getElementById('scriptSelect');
+            const scriptName = select.value;
+
+            if (scriptName === currentScript) {
+                return; // Already loaded
+            }
+
+            logToUI(`Loading script: ${scriptName}`, 'info');
+
+            try {
+                // Clear existing testAlgo
+                if (typeof testAlgo !== 'undefined') {
+                    delete window.testAlgo;
+                }
+
+                // Load new script
+                const scriptPath = availableScripts[scriptName];
+                if (!scriptPath) {
+                    throw new Error(`Script path not found for ${scriptName}`);
+                }
+
+                // Create script element and load
+                const script = document.createElement('script');
+                script.src = scriptPath;
+                script.onload = function() {
+                    if (typeof testAlgo !== 'undefined') {
+                        currentAlgo = testAlgo;
+                        currentScript = scriptName;
+                        logToUI(`✅ Successfully loaded ${scriptName}`, 'pass');
+                    } else {
+                        logToUI(`⚠️ ${scriptName} loaded but no testAlgo found`, 'warn');
+                    }
+                };
+                script.onerror = function() {
+                    logToUI(`❌ Failed to load ${scriptName}`, 'error');
+                };
+
+                document.head.appendChild(script);
+
+            } catch (error) {
+                logToUI(`❌ Error loading ${scriptName}: ${error.message}`, 'error');
+            }
+        }
+
+        // Programmatic script loading function for runAllScripts
+        async function loadScript(scriptName) {
+            if (scriptName === currentScript) {
+                return; // Already loaded
+            }
+
+            logToUI(`Loading script: ${scriptName}`, 'info');
+
+            return new Promise((resolve, reject) => {
+                try {
+                    // Clear existing testAlgo
+                    if (typeof testAlgo !== 'undefined') {
+                        delete window.testAlgo;
+                    }
+
+                    // Load new script
+                    const scriptPath = availableScripts[scriptName];
+                    if (!scriptPath) {
+                        throw new Error(`Script path not found for ${scriptName}`);
+                    }
+
+                    // Create script element and load
+                    const script = document.createElement('script');
+                    script.src = scriptPath;
+                    script.onload = function() {
+                        if (typeof testAlgo !== 'undefined') {
+                            currentAlgo = testAlgo;
+                            currentScript = scriptName;
+                            logToUI(`✅ Successfully loaded ${scriptName}`, 'pass');
+                            resolve();
+                        } else {
+                            logToUI(`⚠️ ${scriptName} loaded but no testAlgo found`, 'warn');
+                            reject(new Error(`No testAlgo found in ${scriptName}`));
+                        }
+                    };
+                    script.onerror = function() {
+                        logToUI(`❌ Failed to load ${scriptName}`, 'error');
+                        reject(new Error(`Failed to load script ${scriptName}`));
+                    };
+
+                    document.head.appendChild(script);
+
+                } catch (error) {
+                    logToUI(`❌ Error loading ${scriptName}: ${error.message}`, 'error');
+                    reject(error);
+                }
+            });
+        }
+
+        function visualizeMatrixTests(results) {
+            const gridDiv = document.getElementById('matrixGrid');
+            gridDiv.innerHTML = '<h3>Matrix Test Results</h3>';
+
+            if (!RGBTestSuite.testResults || RGBTestSuite.testResults.length === 0) {
+                return;
+            }
+
+            // Group results by matrix size
+            const matrixResults = {};
+            RGBTestSuite.testResults.forEach(result => {
+                const match = result.name.match(/on (\d+x\d+)/);
+                if (match) {
+                    const matrixName = match[1];
+                    if (!matrixResults[matrixName]) {
+                        matrixResults[matrixName] = { passed: 0, total: 0 };
+                    }
+                    matrixResults[matrixName].total++;
+                    if (result.status === 'passed') {
+                        matrixResults[matrixName].passed++;
+                    }
+                }
+            });
+
+            // Create visual grid
+            Object.entries(matrixResults).forEach(([matrix, stats]) => {
+                const div = document.createElement('div');
+                div.className = `matrix-test ${stats.passed === stats.total ? 'passed' : 'failed'}`;
+                div.innerHTML = `
+                    <strong>${matrix}</strong><br>
+                    ${stats.passed}/${stats.total} tests passed<br>
+                    <small>${(stats.passed/stats.total*100).toFixed(1)}% success</small>
+                `;
+                gridDiv.appendChild(div);
+            });
+        }
+        
+        async function runBasicTests() {
+            logToUI(`Starting basic functionality tests for ${currentScript}...`, 'test');
+            RGBTestSuite.clearResults();
+
+            try {
+                const results = RGBTestSuite.testScript(currentScript, currentAlgo);
+                showResults(results);
+                visualizeMatrixTests();
+                logToUI(`Basic tests completed: ${results.passed}/${results.total} passed`, 'test');
+            } catch (error) {
+                logToUI(`Basic tests failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function runEdgeCaseTests() {
+            logToUI(`Starting edge case tests for ${currentScript}...`, 'test');
+
+            try {
+                const results = RGBTestSuite.edgeCaseTest(currentScript, currentAlgo);
+                logToUI(`Edge case tests completed: ${results.passed}/${results.total} passed`, 'test');
+                showResults(results);
+            } catch (error) {
+                logToUI(`Edge case tests failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function runStressTests() {
+            logToUI(`Starting stress tests for ${currentScript}...`, 'test');
+
+            try {
+                const results = RGBTestSuite.stressTest(currentScript, currentAlgo);
+                logToUI(`Stress tests completed: ${results.passed}/${results.total} passed`, 'test');
+            } catch (error) {
+                logToUI(`Stress tests failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function runPerformanceTests() {
+            logToUI(`Starting performance tests for ${currentScript}...`, 'test');
+
+            try {
+                const results = RGBTestSuite.performanceTest(currentScript, currentAlgo);
+                logToUI('Performance test results:', 'perf');
+                results.forEach(result => {
+                    logToUI(`  ${result.name}: ${result.avgTime.toFixed(2)}ms/frame, ${result.pixelsPerMs.toFixed(0)} pixels/ms`, 'perf');
+                });
+            } catch (error) {
+                logToUI(`Performance tests failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function runAllTests() {
+            logToUI(`Starting comprehensive test suite for ${currentScript}...`, 'test');
+            RGBTestSuite.clearResults();
+
+            updateProgress(0, 5, 'Running all tests...');
+
+            try {
+                // Basic tests
+                updateProgress(1, 5, 'Running basic tests...');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const basicResults = RGBTestSuite.testScript(currentScript, currentAlgo);
+
+                // Edge case tests
+                updateProgress(2, 5, 'Running edge case tests...');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const edgeResults = RGBTestSuite.edgeCaseTest(currentScript, currentAlgo);
+
+                // Stress tests
+                updateProgress(3, 5, 'Running stress tests...');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const stressResults = RGBTestSuite.stressTest(currentScript, currentAlgo);
+
+                // Memory tests
+                updateProgress(4, 5, 'Running memory tests...');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const memoryResults = RGBTestSuite.memoryTest(currentScript, currentAlgo);
+
+                // Performance tests
+                updateProgress(5, 5, 'Running performance tests...');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const perfResults = RGBTestSuite.performanceTest(currentScript, currentAlgo);
+
+                // Generate report
+                const report = RGBTestSuite.generateReport();
+
+                updateProgress(5, 5, 'All tests completed!');
+                showResults(report);
+                visualizeMatrixTests();
+
+                logToUI('=== COMPREHENSIVE TEST COMPLETED ===', 'test');
+                logToUI(`Overall success rate: ${(report.successRate * 100).toFixed(1)}%`, 'test');
+                logToUI(`Basic: ${basicResults.passed}/${basicResults.total}, Edge: ${edgeResults.passed}/${edgeResults.total}, Stress: ${stressResults.passed}/${stressResults.total}`, 'test');
+
+            } catch (error) {
+                logToUI(`Test suite failed: ${error.message}`, 'error');
+                updateProgress(0, 5, 'Tests failed');
+            }
+        }
+
+        async function runAllScripts() {
+            logToUI('🚀 STARTING COMPREHENSIVE TEST OF ALL RGB SCRIPTS', 'test');
+            logToUI('This will test all 39 RGB scripts with the complete test suite...', 'info');
+
+            // Reset stop flag and show stop button
+            testingStopped = false;
+            document.getElementById('stopButton').style.display = 'inline-block';
+
+            const allScriptResults = {};
+            const failedScripts = [];
+            const totalScripts = discoveredScripts.length;
+            let completedScripts = 0;
+
+            updateProgress(0, totalScripts, `Testing all ${totalScripts} scripts...`);
+
+            for (const scriptName of discoveredScripts) {
+                // Check if user stopped the tests
+                if (testingStopped) {
+                    logToUI('🛑 Testing stopped by user', 'warn');
+                    break;
+                }
+
+                try {
+                    logToUI(`\n📋 Testing ${scriptName} (${completedScripts + 1}/${totalScripts})...`, 'test');
+
+                    // Load the script
+                    await loadScript(scriptName);
+
+                    if (!currentAlgo) {
+                        throw new Error(`Failed to load algorithm for ${scriptName}`);
+                    }
+
+                    // Run comprehensive tests
+                    RGBTestSuite.clearResults();
+
+                    const basicResults = RGBTestSuite.testScript(scriptName, currentAlgo);
+                    const edgeResults = RGBTestSuite.edgeCaseTest(scriptName, currentAlgo);
+                    const animationResults = RGBTestSuite.animationSequenceTest(scriptName, currentAlgo);
+                    const visualResults = RGBTestSuite.visualPatternTest(scriptName, currentAlgo);
+                    const boundaryResults = RGBTestSuite.propertyBoundaryTest(scriptName, currentAlgo);
+                    const stressResults = RGBTestSuite.stressTest(scriptName, currentAlgo);
+                    const memoryResults = RGBTestSuite.memoryTest(scriptName, currentAlgo);
+                    const perfResults = RGBTestSuite.performanceTest(scriptName, currentAlgo);
+
+                    const report = RGBTestSuite.generateReport();
+
+                    allScriptResults[scriptName] = {
+                        basic: basicResults,
+                        edge: edgeResults,
+                        animation: animationResults,
+                        visual: visualResults,
+                        boundary: boundaryResults,
+                        stress: stressResults,
+                        memory: memoryResults,
+                        performance: perfResults,
+                        report: report,
+                        successRate: report.successRate
+                    };
+
+                    const totalTests = basicResults.total + edgeResults.total + animationResults.total +
+                                     visualResults.total + boundaryResults.total + stressResults.total +
+                                     memoryResults.total;
+                    const passedTests = basicResults.passed + edgeResults.passed + animationResults.passed +
+                                      visualResults.passed + boundaryResults.passed + stressResults.passed +
+                                      memoryResults.passed;
+
+                    logToUI(`✅ ${scriptName}: ${passedTests}/${totalTests} tests passed (${(report.successRate * 100).toFixed(1)}%)`, 'pass');
+
+                    if (report.successRate < 0.95) { // Less than 95% success rate
+                        failedScripts.push({
+                            name: scriptName,
+                            successRate: report.successRate,
+                            issues: report.failedTests || []
+                        });
+                    }
+
+                } catch (error) {
+                    logToUI(`❌ ${scriptName}: FAILED - ${error.message}`, 'error');
+                    failedScripts.push({
+                        name: scriptName,
+                        successRate: 0,
+                        error: error.message
+                    });
+                    allScriptResults[scriptName] = { error: error.message };
+                }
+
+                completedScripts++;
+                updateProgress(completedScripts, totalScripts, `Completed ${completedScripts}/${totalScripts} scripts`);
+
+                // Small delay to prevent browser freezing
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            // Hide stop button
+            document.getElementById('stopButton').style.display = 'none';
+
+            // Generate comprehensive summary
+            generateAllScriptsSummary(allScriptResults, failedScripts);
+        }
+
+        function generateAllScriptsSummary(allResults, failedScripts) {
+            logToUI('\n🎯 COMPREHENSIVE TEST SUMMARY FOR ALL SCRIPTS', 'test');
+            logToUI('=' .repeat(60), 'test');
+
+            const scriptNames = Object.keys(allResults);
+            const successfulScripts = scriptNames.filter(name =>
+                allResults[name].successRate && allResults[name].successRate >= 0.95
+            );
+
+            // Calculate overall statistics
+            let totalTests = 0;
+            let totalPassed = 0;
+
+            scriptNames.forEach(scriptName => {
+                const result = allResults[scriptName];
+                if (result.basic) {
+                    totalTests += result.basic.total + result.edge.total + result.animation.total +
+                                result.visual.total + result.boundary.total + result.stress.total +
+                                result.memory.total;
+                    totalPassed += result.basic.passed + result.edge.passed + result.animation.passed +
+                                 result.visual.passed + result.boundary.passed + result.stress.passed +
+                                 result.memory.passed;
+                }
+            });
+
+            const overallSuccessRate = totalTests > 0 ? (totalPassed / totalTests) * 100 : 0;
+
+            // Create visual summary in the results area
+            createVisualSummary(scriptNames, successfulScripts, failedScripts, totalTests, totalPassed, overallSuccessRate);
+
+            // Log basic statistics
+            logToUI(`📊 Total Scripts Tested: ${scriptNames.length}`, 'info');
+            logToUI(`✅ Successful Scripts: ${successfulScripts.length}`, 'pass');
+            logToUI(`⚠️  Scripts with Issues: ${failedScripts.length}`, failedScripts.length > 0 ? 'warn' : 'info');
+
+            if (failedScripts.length > 0) {
+                logToUI('\n⚠️  SCRIPTS WITH ISSUES:', 'warn');
+                failedScripts.forEach(script => {
+                    if (script.error) {
+                        logToUI(`  ❌ ${script.name}: ${script.error}`, 'error');
+                    } else {
+                        logToUI(`  ⚠️  ${script.name}: ${(script.successRate * 100).toFixed(1)}% success rate`, 'warn');
+                    }
+                });
+            }
+
+            logToUI('\n📈 OVERALL STATISTICS:', 'test');
+            logToUI(`  Total Tests Executed: ${totalTests.toLocaleString()}`, 'info');
+            logToUI(`  Total Tests Passed: ${totalPassed.toLocaleString()}`, 'pass');
+            logToUI(`  Overall Success Rate: ${overallSuccessRate.toFixed(2)}%`, 'test');
+
+            if (overallSuccessRate >= 95) {
+                logToUI('\n🎉 EXCELLENT! RGB script ecosystem is highly stable!', 'pass');
+            } else if (overallSuccessRate >= 90) {
+                logToUI('\n✅ GOOD! RGB script ecosystem is mostly stable with minor issues.', 'pass');
+            } else {
+                logToUI('\n⚠️  ATTENTION NEEDED! Some RGB scripts require fixes.', 'warn');
+            }
+
+            updateProgress(scriptNames.length, scriptNames.length, `All ${scriptNames.length} scripts tested!`);
+        }
+
+        function createVisualSummary(scriptNames, successfulScripts, failedScripts, totalTests, totalPassed, overallSuccessRate) {
+            const summaryDiv = document.getElementById('resultsSummary');
+            const summaryContent = document.getElementById('summaryContent');
+
+            // Clear previous content
+            summaryContent.innerHTML = '';
+
+            // Create statistics cards
+            const statsGrid = document.createElement('div');
+            statsGrid.className = 'stats-grid';
+
+            const stats = [
+                { label: 'Scripts Tested', value: scriptNames.length, color: '#569cd6' },
+                { label: 'Successful Scripts', value: successfulScripts.length, color: '#4ec9b0' },
+                { label: 'Scripts with Issues', value: failedScripts.length, color: failedScripts.length > 0 ? '#f44747' : '#4ec9b0' },
+                { label: 'Overall Success Rate', value: `${overallSuccessRate.toFixed(1)}%`, color: overallSuccessRate >= 95 ? '#4ec9b0' : overallSuccessRate >= 90 ? '#d7ba7d' : '#f44747' }
+            ];
+
+            stats.forEach(stat => {
+                const card = document.createElement('div');
+                card.className = 'stat-card';
+                card.style.borderLeftColor = stat.color;
+                card.innerHTML = `
+                    <div class="stat-value" style="color: ${stat.color}">${stat.value}</div>
+                    <div class="stat-label">${stat.label}</div>
+                `;
+                statsGrid.appendChild(card);
+            });
+
+            summaryContent.appendChild(statsGrid);
+
+            // Create warning/error summary if there are issues
+            if (failedScripts.length > 0) {
+                const warningDiv = document.createElement('div');
+                warningDiv.className = failedScripts.some(s => s.error) ? 'error-summary' : 'warning-summary';
+
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'summary-header';
+                headerDiv.innerHTML = `
+                    <span class="summary-icon">${failedScripts.some(s => s.error) ? '🚨' : '⚠️'}</span>
+                    <span>${failedScripts.some(s => s.error) ? 'CRITICAL ISSUES DETECTED' : 'WARNINGS DETECTED'}</span>
+                `;
+                warningDiv.appendChild(headerDiv);
+
+                const issuesDiv = document.createElement('div');
+                failedScripts.forEach(script => {
+                    const issueDiv = document.createElement('div');
+                    issueDiv.className = script.error ? 'issue-item' : 'warning-item';
+
+                    if (script.error) {
+                        issueDiv.innerHTML = `
+                            <div><span class="script-name">❌ ${script.name}</span></div>
+                            <div style="margin-top: 5px; font-size: 14px;">Error: ${script.error}</div>
+                        `;
+                    } else {
+                        const successRateClass = script.successRate >= 0.9 ? 'warning' : 'error';
+                        issueDiv.innerHTML = `
+                            <div><span class="script-name">⚠️ ${script.name}</span></div>
+                            <div style="margin-top: 5px; font-size: 14px;">
+                                Success Rate: <span class="success-rate ${successRateClass}">${(script.successRate * 100).toFixed(1)}%</span>
+                                (Below 95% threshold)
+                            </div>
+                        `;
+                    }
+                    issuesDiv.appendChild(issueDiv);
+                });
+                warningDiv.appendChild(issuesDiv);
+
+                // Add recommendations
+                const recommendationsDiv = document.createElement('div');
+                recommendationsDiv.style.marginTop = '15px';
+                recommendationsDiv.style.fontSize = '14px';
+                recommendationsDiv.innerHTML = `
+                    <strong>Recommendations:</strong><br>
+                    • Review failed scripts for compatibility issues<br>
+                    • Check property configurations and boundary values<br>
+                    • Verify script syntax and API compliance<br>
+                    • Run individual script tests for detailed diagnostics
+                `;
+                warningDiv.appendChild(recommendationsDiv);
+
+                summaryContent.appendChild(warningDiv);
+            } else {
+                // Success summary
+                const successDiv = document.createElement('div');
+                successDiv.className = 'success-summary';
+
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'summary-header';
+                headerDiv.innerHTML = `
+                    <span class="summary-icon">🎉</span>
+                    <span>ALL SCRIPTS PASSED!</span>
+                `;
+                successDiv.appendChild(headerDiv);
+
+                const messageDiv = document.createElement('div');
+                messageDiv.innerHTML = `
+                    <p>Excellent! All ${scriptNames.length} RGB scripts passed comprehensive testing.</p>
+                    <p><strong>Total Tests:</strong> ${totalTests.toLocaleString()} executed, ${totalPassed.toLocaleString()} passed</p>
+                    <p><strong>Success Rate:</strong> <span class="success-rate good">${overallSuccessRate.toFixed(2)}%</span></p>
+                    <p>The RGB script ecosystem is highly stable and production-ready! 🚀</p>
+                `;
+                successDiv.appendChild(messageDiv);
+
+                summaryContent.appendChild(successDiv);
+            }
+
+            // Show the summary
+            summaryDiv.style.display = 'block';
+
+            // Scroll to summary
+            summaryDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+
+        
+        // Initialize
+        async function initialize() {
+            logToUI(`Test runner loaded. ${currentScript} algorithm ready.`, 'info');
+            logToUI(`Available test matrices: ${RGBTestSuite.testMatrixes.length}`, 'info');
+            logToUI(`Available edge case matrices: ${RGBTestSuite.edgeCaseMatrixes.length}`, 'info');
+
+            // Discover and populate scripts
+            await discoverScripts();
+            populateScriptSelect();
+
+            logToUI(`🎉 Initialization complete! Found ${discoveredScripts.length} RGB scripts`, 'info');
+        }
+
+        // Start initialization
+        initialize();
+    </script>
+</body>
+</html>

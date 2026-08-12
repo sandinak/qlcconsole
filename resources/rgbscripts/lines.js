@@ -17,11 +17,13 @@
   limitations under the License.
 */
 
+// Development tool access
+var testAlgo;
 
 (
   function()
   {
-    var algo = {};
+    var algo = new Object;
     algo.apiVersion = 2;
     algo.name = "Lines";
     algo.author = "Branson Matheson";
@@ -38,10 +40,9 @@
     algo.properties.push("name:linesBias|type:list|display:Starting Bias|values:Random,Top,Bottom,Left,Right,TopLeft,TopRight,BottomLeft,BottomRight|write:setBias|read:getBias");
     algo.linesDistribution = 0;
     algo.properties.push("name:linesDistribution|type:list|display:Distribution|values:All,Every 2nd,Every 3rd,Half A,Half B,Center Third,Edges Only|write:setDistribution|read:getDistribution");
-    algo.linesSlide = 0; // backs the "linesMovement" property (see getMovement/setMovement)
-    algo.linesRollover = 0;
+    algo.linesMovement = 0;
     algo.properties.push("name:linesMovement|type:list|display:Movement|values:None,Up,Down,Left,Right,Up Loop,Down Loop,Left Loop,Right Loop|write:setMovement|read:getMovement");
-    algo.linesSizeBehavior = 0; // backs the "linesLifecycle" property (see getLifecycle/setLifecycle)
+    algo.linesLifecycle = 0;
     algo.properties.push("name:linesLifecycle|type:list|display:Lifecycle|values:Grow,Grow Fade In,Grow Fade Out,Shrink,Shrink Fade In,Shrink Fade Out,Static,Static Fade In,Static Fade Out|write:setLifecycle|read:getLifecycle");
     algo.linesPattern = 0;
     algo.properties.push("name:linesPattern|type:list|display:Line Pattern|values:Solid,Dashed,Dotted,Double|write:setPattern|read:getPattern");
@@ -51,12 +52,12 @@
     algo.properties.push("name:linesMovementSpeed|type:range|display:Movement Energy|values:10,200|write:setMovementSpeed|read:getMovementSpeed");
     algo.fadeMode = 0;
 
-    var util = {};
+    var util = new Object;
     util.pixelMap = new Array();
     util.initialized = false;
     util.linesMaxSize = 0;
 
-    var lines = [];
+    var lines = new Array();
 
     function Line(x, y, step)
     {
@@ -71,10 +72,9 @@
 
     algo.setLinesSize = function(_size)
     {
-      // Only set if the input is valid.
-      var n = parseInt(_size, 10);
-      if (!isNaN(n) && n > 0) {
-        algo.linesSize = n;
+      if (!(parseInt(_size) === NaN) && parseInt(_size) > 0)
+      {
+        algo.linesSize = parseInt(_size);
         util.initialized = false;
       }
     };
@@ -86,9 +86,9 @@
 
     algo.setVariability = function(_var)
     {
-      var n = parseInt(_var, 10);
-      if (!isNaN(n) && n >= 0) {
-        algo.linesVariability = n;
+      if (!(parseInt(_var) === NaN) && parseInt(_var) >= 0)
+      {
+        algo.linesVariability = parseInt(_var);
         util.initialized = false;
       }
     };
@@ -100,9 +100,9 @@
 
     algo.setAmount = function(_amount)
     {
-      var n = parseInt(_amount, 10);
-      if (!isNaN(n) && n >= 1 && n <= 200) {
-        algo.linesAmount = n;
+      if (!(parseInt(_amount) === NaN) && parseInt(_amount) >= 1 && parseInt(_amount) <= 200)
+      {
+        algo.linesAmount = parseInt(_amount);
         util.initialized = false;
       }
     };
@@ -196,10 +196,9 @@
 
     algo.setBrightnessVariance = function(_variance)
     {
-      var n = parseInt(_variance, 10);
-      if (!isNaN(n) && n >= 0 && n <= 100)
+      if (!(parseInt(_variance) === NaN) && parseInt(_variance) >= 0 && parseInt(_variance) <= 100)
       {
-        algo.linesBrightnessVariance = n;
+        algo.linesBrightnessVariance = parseInt(_variance);
       }
     };
 
@@ -210,10 +209,9 @@
 
     algo.setMovementSpeed = function(_speed)
     {
-      var n = parseInt(_speed, 10);
-      if (!isNaN(n) && n >= 10 && n <= 200)
+      if (!(parseInt(_speed) === NaN) && parseInt(_speed) >= 10 && parseInt(_speed) <= 200)
       {
-        algo.linesMovementSpeed = n;
+        algo.linesMovementSpeed = parseInt(_speed);
       }
     };
 
@@ -382,18 +380,17 @@
 
     util.shouldDrawPixel = function(distance, effectiveSize)
     {
+      // Optimize: Early return for most common case
       if (algo.linesPattern === 0) {
-        // Solid: always draw
-        return true;
+        return true; // Solid: always draw
       }
       else if (algo.linesPattern === 1) {
         // Dashed: draw in segments of 3, skip 2
-        var segment = Math.floor(distance / 3) % 2;
-        return segment === 0;
+        return ((distance / 3) | 0) % 2 === 0;
       }
       else if (algo.linesPattern === 2) {
         // Dotted: draw every 3rd pixel
-        return (Math.floor(distance) % 3) === 0;
+        return (distance | 0) % 3 === 0;
       }
       else if (algo.linesPattern === 3) {
         // Double: draw at start and end portions
@@ -405,22 +402,24 @@
 
     util.applyBrightnessVariance = function(color, brightnessFactor)
     {
+      // Optimize: Early return for most common case
       if (algo.linesBrightnessVariance === 0) {
         return color;
       }
 
-      var r = (color >> 16) & 0x00FF;
-      var g = (color >> 8) & 0x00FF;
-      var b = color & 0x00FF;
+      var r = (color >> 16) & 0xFF;
+      var g = (color >> 8) & 0xFF;
+      var b = color & 0xFF;
 
-      var newR = Math.round(r * brightnessFactor);
-      var newG = Math.round(g * brightnessFactor);
-      var newB = Math.round(b * brightnessFactor);
+      // Optimize: Use bitwise operations for rounding and clamping
+      var newR = (r * brightnessFactor + 0.5) | 0;
+      var newG = (g * brightnessFactor + 0.5) | 0;
+      var newB = (b * brightnessFactor + 0.5) | 0;
 
-      // Clamp values to 0-255 range
-      newR = Math.max(0, Math.min(255, newR));
-      newG = Math.max(0, Math.min(255, newG));
-      newB = Math.max(0, Math.min(255, newB));
+      // Optimize: Faster clamping using bitwise operations
+      newR = newR > 255 ? 255 : (newR < 0 ? 0 : newR);
+      newG = newG > 255 ? 255 : (newG < 0 ? 0 : newG);
+      newB = newB > 255 ? 255 : (newB < 0 ? 0 : newB);
 
       return (newR << 16) + (newG << 8) + newB;
     };
@@ -429,111 +428,112 @@
     {
       var dimension = maxValue;
 
-      var range = 0;
-
       // Handle edge case for very small dimensions
       if (dimension <= 1)
       {
         return 0;
       }
 
+      // Optimize: Cache dimension-1 calculation
+      var maxPos = dimension - 1;
+
       if (algo.linesDistribution === 0)
       {
-        return Math.round(Math.random() * (dimension - 1));
+        return (Math.random() * maxPos + 0.5) | 0;
       }
       else if (algo.linesDistribution === 1)
       {
-        var step = 2;
-        var maxSteps = Math.floor(dimension / step);
+        var maxSteps = dimension >> 1; // Optimize: Use bit shift for division by 2
         if (maxSteps <= 0) return 0;
-        var stepIndex = Math.floor(Math.random() * maxSteps);
-        return Math.min(stepIndex * step, dimension - 1);
+        var stepIndex = (Math.random() * maxSteps) | 0;
+        return Math.min(stepIndex << 1, maxPos); // Optimize: Use bit shift for multiplication by 2
       }
       else if (algo.linesDistribution === 2)
       {
-        var step = 3;
-        var maxSteps = Math.floor(dimension / step);
+        var maxSteps = (dimension / 3) | 0;
         if (maxSteps <= 0) return 0;
-        var stepIndex = Math.floor(Math.random() * maxSteps);
-        return Math.min(stepIndex * step, dimension - 1);
+        var stepIndex = (Math.random() * maxSteps) | 0;
+        return Math.min(stepIndex * 3, maxPos);
       }
       else if (algo.linesDistribution === 3)
       {
-        var halfPoint = Math.floor(dimension / 2);
+        var halfPoint = dimension >> 1; // Optimize: Use bit shift
         if (halfPoint <= 1) return 0;
-        return Math.round(Math.random() * (halfPoint - 1));
+        return (Math.random() * (halfPoint - 1) + 0.5) | 0;
       }
       else if (algo.linesDistribution === 4)
       {
-        var halfPoint = Math.floor(dimension / 2);
-        range = dimension - halfPoint - 1;
-        if (range <= 0) return Math.min(halfPoint, dimension - 1);
-        return halfPoint + Math.round(Math.random() * range);
+        var halfPoint = dimension >> 1; // Optimize: Use bit shift
+        var range = dimension - halfPoint - 1;
+        if (range <= 0) return Math.min(halfPoint, maxPos);
+        return halfPoint + ((Math.random() * range + 0.5) | 0);
       }
       else if (algo.linesDistribution === 5)
       {
-        var thirdPoint = Math.floor(dimension / 3);
+        var thirdPoint = (dimension / 3) | 0; // Optimize: Use bitwise OR
         var startPos = thirdPoint;
         var endPos = dimension - thirdPoint;
-        range = endPos - startPos - 1;
-        if (range <= 0) return Math.min(startPos, dimension - 1);
-        return startPos + Math.round(Math.random() * range);
+        var range = endPos - startPos - 1;
+        if (range <= 0) return Math.min(startPos, maxPos);
+        return startPos + ((Math.random() * range + 0.5) | 0);
       }
       else if (algo.linesDistribution === 6)
       {
-        var quarterPoint = Math.floor(dimension / 4);
+        var quarterPoint = dimension >> 2; // Optimize: Use bit shift for division by 4
         if (quarterPoint <= 1)
         {
-          return Math.round(Math.random() * (dimension - 1));
+          return (Math.random() * maxPos + 0.5) | 0;
         }
 
         if (Math.random() < 0.5)
         {
-          return Math.round(Math.random() * (quarterPoint - 1));
+          return (Math.random() * (quarterPoint - 1) + 0.5) | 0;
         }
         else
         {
           var startPos = dimension - quarterPoint;
-          range = quarterPoint - 1;
-          if (range <= 0) return Math.min(startPos, dimension - 1);
-          return startPos + Math.round(Math.random() * range);
+          var range = quarterPoint - 1;
+          if (range <= 0) return Math.min(startPos, maxPos);
+          return startPos + ((Math.random() * range + 0.5) | 0);
         }
       }
 
-      return Math.round(Math.random() * (dimension - 1));
+      return (Math.random() * maxPos + 0.5) | 0;
     };
 
     util.getColor = function(step, rgb)
     {
+      // Optimize: Early return for most common case
       if (algo.fadeMode === 0)
       {
         return rgb;
       }
       else
       {
-        var r = (rgb >> 16) & 0x00FF;
-        var g = (rgb >> 8) & 0x00FF;
-        var b = rgb & 0x00FF;
+        var r = (rgb >> 16) & 0xFF;
+        var g = (rgb >> 8) & 0xFF;
+        var b = rgb & 0xFF;
 
-        var stepCount = Math.floor(util.linesMaxSize);
+        var stepCount = util.linesMaxSize | 0; // Optimize: Remove Math.floor
         var fadeStep = step;
         if (algo.fadeMode === 2) {
           fadeStep = stepCount - step;
         }
         var factor = fadeStep / stepCount;
-        var newR = Math.round(r * factor);
-        var newG = Math.round(g * factor);
-        var newB = Math.round(b * factor);
+        // Optimize: Use bitwise operations for rounding
+        var newR = (r * factor + 0.5) | 0;
+        var newG = (g * factor + 0.5) | 0;
+        var newB = (b * factor + 0.5) | 0;
 
-        var newRGB = (newR << 16) + (newG << 8) + newB;
-        return newRGB;
+        return (newR << 16) + (newG << 8) + newB;
       }
     };
 
     util.drawPixel = function(cx, cy, color, width, height)
     {
-      cx = Math.round(cx);
-      cy = Math.round(cy);
+      // Optimize: Use bitwise OR for faster integer conversion
+      cx = (cx + 0.5) | 0;
+      cy = (cy + 0.5) | 0;
       if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
         util.pixelMap[cy][cx] = color;
       }
@@ -542,14 +542,18 @@
     util.getNextStep = function(width, height, rgb)
     {
       var x, y;
-      // create an empty, black pixelMap
-      util.pixelMap = new Array(height);
-      for (y = 0; y < height; y++)
-      {
-        util.pixelMap[y] = new Array(width);
-        for (x = 0; x < width; x++) {
-          util.pixelMap[y][x] = 0;
+      // Optimize: Only recreate pixelMap if dimensions changed
+      if (!util.pixelMap || util.pixelMap.length !== height ||
+          (util.pixelMap.length > 0 && util.pixelMap[0].length !== width)) {
+        util.pixelMap = new Array(height);
+        for (y = 0; y < height; y++) {
+          util.pixelMap[y] = new Array(width);
         }
+      }
+
+      // Optimize: Fast array clearing using fill()
+      for (y = 0; y < height; y++) {
+        util.pixelMap[y].fill(0);
       }
 
       for (var i = 0; i < algo.linesAmount; i++)
@@ -592,10 +596,10 @@
           if (isHorizontalType && algo.linesDistribution > 0) {
             // Use distribution for Y when horizontal lines
             lines[i].yCenter = util.getDistributedPosition(height, true);
-          } else if (algo.linesBias === 1 || algo.linesBias === 5 || algo.linesBias === 6) {
+          } else if (algo.linesBias == 1 || algo.linesBias == 5 || algo.linesBias == 6) {
             // Top bias
             lines[i].yCenter = Math.round(Math.random() * height / 5);
-          } else if (algo.linesBias === 2 || algo.linesBias === 7 || algo.linesBias === 8) {
+          } else if (algo.linesBias == 2 || algo.linesBias == 7 || algo.linesBias == 8) {
             // Bottom bias
             lines[i].yCenter = (height - 1) - Math.round(Math.random() * height / 5);
           } else {
@@ -607,10 +611,10 @@
           if (isVerticalType && algo.linesDistribution > 0) {
             // Use distribution for X when vertical lines
             lines[i].xCenter = util.getDistributedPosition(width, false);
-          } else if (algo.linesBias === 3 || algo.linesBias === 5 || algo.linesBias === 7) {
+          } else if (algo.linesBias == 3 || algo.linesBias == 5 || algo.linesBias == 7) {
             // Left bias
             lines[i].xCenter = Math.round(Math.random() * width / 5);
-          } else if (algo.linesBias === 4 || algo.linesBias === 6 || algo.linesBias === 8) {
+          } else if (algo.linesBias == 4 || algo.linesBias == 6 || algo.linesBias == 8) {
             // Right bias
             lines[i].xCenter = (width - 1) - Math.round(Math.random() * width / 5);
           } else {
@@ -641,32 +645,70 @@
               continue;
             }
 
-            y = Math.sqrt(radius2 - (x * x));
+            // Optimize: Pre-calculate y value to avoid repeated Math.sqrt calls
+            var xSquared = x * x;
+            if (xSquared > radius2) continue; // Skip if outside radius
+            y = Math.sqrt(radius2 - xSquared);
 
-            if (algo.linesType === 0 || algo.linesType === 2 || algo.linesType === 4 || algo.linesType === 5) {
-              util.drawPixel(lines[i].xCenter - x, lines[i].yCenter, color, width, height);
+            // Optimize: Inline pixel drawing to reduce function call overhead
+            var cx, cy;
+            if (algo.linesType == 0 || algo.linesType == 2 || algo.linesType == 4 || algo.linesType == 5) {
+              cx = (lines[i].xCenter - x + 0.5) | 0;
+              cy = (lines[i].yCenter + 0.5) | 0;
+              if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                util.pixelMap[cy][cx] = color;
+              }
             }
-            if (algo.linesType === 0 || algo.linesType === 2 || algo.linesType === 4 || algo.linesType === 6) {
-              util.drawPixel(lines[i].xCenter + x, lines[i].yCenter, color, width, height);
+            if (algo.linesType == 0 || algo.linesType == 2 || algo.linesType == 4 || algo.linesType == 6) {
+              cx = (lines[i].xCenter + x + 0.5) | 0;
+              cy = (lines[i].yCenter + 0.5) | 0;
+              if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                util.pixelMap[cy][cx] = color;
+              }
             }
-            if (algo.linesType === 1 || algo.linesType === 2 || algo.linesType === 4 || algo.linesType === 7) {
-              util.drawPixel(lines[i].xCenter, lines[i].yCenter - x, color, width, height);
+            if (algo.linesType == 1 || algo.linesType == 2 || algo.linesType == 4 || algo.linesType == 7) {
+              cx = (lines[i].xCenter + 0.5) | 0;
+              cy = (lines[i].yCenter - x + 0.5) | 0;
+              if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                util.pixelMap[cy][cx] = color;
+              }
             }
-            if (algo.linesType === 1 || algo.linesType === 2 || algo.linesType === 4 || algo.linesType === 8) {
-              util.drawPixel(lines[i].xCenter, lines[i].yCenter + x, color, width, height);
+            if (algo.linesType == 1 || algo.linesType == 2 || algo.linesType == 4 || algo.linesType == 8) {
+              cx = (lines[i].xCenter + 0.5) | 0;
+              cy = (lines[i].yCenter + x + 0.5) | 0;
+              if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                util.pixelMap[cy][cx] = color;
+              }
             }
 
-            if (algo.linesType === 3 || algo.linesType === 4 ||  algo.linesType === 9) {
-              util.drawPixel(lines[i].xCenter + x, lines[i].yCenter - x, color, width, height);
+            // Optimize: Inline diagonal pixel drawing
+            if (algo.linesType == 3 || algo.linesType == 4 ||  algo.linesType == 9) {
+              cx = (lines[i].xCenter + x + 0.5) | 0;
+              cy = (lines[i].yCenter - x + 0.5) | 0;
+              if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                util.pixelMap[cy][cx] = color;
+              }
             }
-            if (algo.linesType === 3 || algo.linesType === 4 || algo.linesType === 10) {
-              util.drawPixel(lines[i].xCenter - x, lines[i].yCenter - x, color, width, height);
+            if (algo.linesType == 3 || algo.linesType == 4 || algo.linesType == 10) {
+              cx = (lines[i].xCenter - x + 0.5) | 0;
+              cy = (lines[i].yCenter - x + 0.5) | 0;
+              if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                util.pixelMap[cy][cx] = color;
+              }
             }
-            if (algo.linesType === 3 || algo.linesType === 4 || algo.linesType === 11) {
-              util.drawPixel(lines[i].xCenter + x, lines[i].yCenter + x, color, width, height);
+            if (algo.linesType == 3 || algo.linesType == 4 || algo.linesType == 11) {
+              cx = (lines[i].xCenter + x + 0.5) | 0;
+              cy = (lines[i].yCenter + x + 0.5) | 0;
+              if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                util.pixelMap[cy][cx] = color;
+              }
             }
-            if (algo.linesType === 3 || algo.linesType === 4 || algo.linesType === 12) {
-              util.drawPixel(lines[i].xCenter - x, lines[i].yCenter + x, color, width, height);
+            if (algo.linesType == 3 || algo.linesType == 4 || algo.linesType == 12) {
+              cx = (lines[i].xCenter - x + 0.5) | 0;
+              cy = (lines[i].yCenter + x + 0.5) | 0;
+              if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                util.pixelMap[cy][cx] = color;
+              }
             }
           }
         }
@@ -682,15 +724,15 @@
 
           while (lines[i].movementCounter >= 1.0)
           {
-            if (algo.linesSlide === 1) { lines[i].yCenter--; }
-            else if (algo.linesSlide === 2) { lines[i].yCenter++; }
-            else if (algo.linesSlide === 3) { lines[i].xCenter--; }
-            else if (algo.linesSlide === 4) { lines[i].xCenter++; }
+            if (algo.linesSlide == 1) { lines[i].yCenter--; }
+            else if (algo.linesSlide == 2) { lines[i].yCenter++; }
+            else if (algo.linesSlide == 3) { lines[i].xCenter--; }
+            else if (algo.linesSlide == 4) { lines[i].xCenter++; }
 
             lines[i].movementCounter -= 1.0;
           }
 
-          if (algo.linesRollover === 1)
+          if (algo.linesRollover == 1)
           {
             if (lines[i].xCenter < 0) { lines[i].xCenter = width - 1; }
             if (lines[i].yCenter < 0) { lines[i].yCenter = height - 1; }
@@ -732,7 +774,7 @@
       return util.pixelMap;
     };
 
-    algo.rgbMap = function(width, height, rgb, _step)
+    algo.rgbMap = function(width, height, rgb, step)
     {
       if (util.initialized === false)
       {
@@ -742,10 +784,25 @@
       return util.getNextStep(width, height, rgb);
     };
 
-    algo.rgbMapStepCount = function(_width, _height)
+    algo.rgbMapStepCount = function(width, height)
     {
       return 2;
     };
+
+    // Development tool access
+    testAlgo = algo;
+
+    // Test suite compatibility - setter functions with different names to avoid conflicts
+    algo.setLinesAmount = function(amount) { algo.setAmount(amount); };
+    algo.setLinesType = function(type) { algo.setType(type); };
+    algo.setLinesBias = function(bias) { algo.setBias(bias); };
+    algo.setLinesDistribution = function(distribution) { algo.setDistribution(distribution); };
+    algo.setLinesMovement = function(movement) { algo.setMovement(movement); };
+    algo.setLinesLifecycle = function(lifecycle) { algo.setLifecycle(lifecycle); };
+    algo.setLinesPattern = function(pattern) { algo.setPattern(pattern); };
+    algo.setLinesBrightnessVariance = function(variance) { algo.setBrightnessVariance(variance); };
+    algo.setLinesMovementSpeed = function(speed) { algo.setMovementSpeed(speed); };
+    algo.setLinesVariability = function(variability) { algo.setVariability(variability); };
 
     return algo;
   }
