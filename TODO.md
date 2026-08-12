@@ -65,6 +65,20 @@ effect timing items also want the rig to confirm.
 
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
+- **Simple Desk sliders have no write-back-to-scene path (PARKED, 2026-08-12)**
+  — found while triaging the old `live-edit-4.x` branch: Virtual Console
+  sliders/XY-pads already write manual adjustments back into the running
+  Scene via `CaptureManager::recordOverride()` (wired from `vcslider.cpp`/
+  `vcxypadfixture.cpp`, with the existing capture/undo/diff/store workflow —
+  see `LiveCaptureDialog`), but `SimpleDesk` (`ui/src/simpledesk.cpp`) has
+  zero `CaptureManager` references — moving a Simple Desk fader doesn't
+  persist anywhere. `live-edit-4.x`'s own fix (a standalone
+  `LiveEditManager`, undo-less direct-write) was a simpler, disconnected
+  mechanism — better path is wiring Simple Desk's
+  `slotUniverseSliderValueChanged` into the existing `CaptureManager`
+  instead, so it gets the same undo/diff UX VC already has. Needs its own
+  design/implementation pass, not a quick cherry-pick.
+
 - **Cue transition model — hold-on-miss + release-on-transition (4b; DEFERRED,
   needs rig)** — DECIDED framing: a *missed/skipped* cue is a non-event → hold
   last look (no blackout); a cue that *fires* releases what it replaces (outgoing
