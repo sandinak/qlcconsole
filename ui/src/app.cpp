@@ -408,8 +408,8 @@ void App::init()
             if (m_showFooterPower == false)   // View menu: chip disabled
                 return;
             m_statusPowerLabel->setText(overload
-                ? tr("⚡ %1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
-                : tr("⚡ %1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
+                ? tr("⚡︎ %1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
+                : tr("⚡︎ %1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
             m_statusPowerLabel->setStyleSheet(overload
                 ? QStringLiteral("QLabel { color: #ff5555; font-weight: bold; }")
                 : QString());
@@ -428,7 +428,7 @@ void App::init()
                 m_statusDangleLabel->hide();
                 return;
             }
-            m_statusDangleLabel->setText(tr("⚠ %1 marked fixture(s) not in upcoming cue")
+            m_statusDangleLabel->setText(tr("⚠︎ %1 marked fixture(s) not in upcoming cue")
                                           .arg(fixtureIds.size()));
             QStringList names;
             for (quint32 fid : fixtureIds)
@@ -2895,7 +2895,7 @@ void App::initStatusBar()
     // Fixed width sized to the widest reading, so the % / ms changing never
     // shifts the MTC chip left/right.
     m_statusLoadLabel->setFixedWidth(
-        QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("Load: 00.00 / 00 ms (000%)")) + 14);
+        QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("⚙︎ Load: 00.00 / 00 ms (000%)")) + 14);
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
     m_statusLoadLabel->setVisible(m_showFooterLoad);   // View menu preference
@@ -3496,13 +3496,13 @@ void App::slotTimecodeStatusChanged()
                     break;
                 }
             m_statusTimecodeLabel->setText(uname.isEmpty()
-                ? tr("MTC ◌ armed — waiting")
-                : tr("MTC ◌ %1 — waiting").arg(uname));
+                ? tr("⏱︎ MTC ◌ armed — waiting")
+                : tr("⏱︎ MTC ◌ %1 — waiting").arg(uname));
             applyStyle(amber);
         }
         else
         {
-            m_statusTimecodeLabel->setText(tr("MTC: no source"));
+            m_statusTimecodeLabel->setText(tr("⏱︎ MTC: no source"));
             applyStyle(grey);
         }
         return;
@@ -3571,12 +3571,12 @@ void App::slotTimecodeStatusChanged()
 
     if (running)
     {
-        m_statusTimecodeLabel->setText(QString("MTC ● %1 @%2fps%3").arg(code).arg(fps).arg(ctx));
+        m_statusTimecodeLabel->setText(QString("⏱︎ MTC ● %1 @%2fps%3").arg(code).arg(fps).arg(ctx));
         applyStyle(green);
     }
     else
     {
-        m_statusTimecodeLabel->setText(QString("MTC ❚❚ %1 (holding)%2").arg(code).arg(ctx));
+        m_statusTimecodeLabel->setText(QString("⏱︎ MTC ❚❚ %1 (holding)%2").arg(code).arg(ctx));
         applyStyle(amber);
     }
 }
@@ -3590,7 +3590,7 @@ void App::slotUpdateHealthFooter()
         double ms = m_doc->masterTimer()->tickComputePeakMs();
         double budget = double(MasterTimer::tick());
         int pct = budget > 0 ? int((ms / budget) * 100.0) : 0;
-        m_statusLoadLabel->setText(tr("Load: %1 / %2 ms (%3%)")
+        m_statusLoadLabel->setText(tr("⚙︎ Load: %1 / %2 ms (%3%)")
                                    .arg(ms, 0, 'f', 2).arg(int(budget)).arg(pct));
         const char *green = "QLabel { color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px; }";
         const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";

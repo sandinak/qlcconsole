@@ -35,6 +35,19 @@ effect timing items also want the rig to confirm.
 
 ## Recently shipped (verify on rig, then move to DONE.md)
 
+- **Footer chip polish (2026-08-12)** — Power/Dangle chips (`⚡`/`⚠`) were
+  rendering as full-size color emoji next to plain-text chips (Ready/Autosave/
+  Saved), reading as a font-size mismatch though the point size was identical
+  the whole time; root cause was Unicode emoji-presentation glyphs, not a
+  QFont issue. Fixed by appending the text-presentation variation selector
+  (U+FE0E) to `⚡`/`⚠`, and gave MTC (`⏱`) and Load (`⚙`) their own leading
+  icon in the same style, so all four global status-bar chips read at one
+  consistent visual size. Also corrected `platforms/macos/Info.plist.qmlui`
+  (only installed when `qmlui` is built) — it still had the pre-rebrand
+  `qlcplus-qml` executable/name and `qlcplus.icns` icon refs with no
+  `CFBundleIdentifier` at all; now matches the widgets build's
+  `com.bransonmatheson.qlcconsole` identity.
+
 - **Note-effect calibration + MIDI plumbing** — per-universe MIDI source scoping
   (`data.midi.universes[n]` + a device-name dropdown, not a slider); switching a
   look's effect script now reloads the live preview; **live param edits reach the
@@ -189,6 +202,17 @@ effect timing items also want the rig to confirm.
 - **GUI headful automation** — `screencapture` + `cliclick` driver so Claude can
   drive AND validate real UI (moving this to the spare machine). First task there:
   a `gui-drive.sh` wrapper, then drive the end-handle drag with eyes on real pixels.
+- **Clickable Load chip → per-function breakdown (2026-08-12 idea)** — today
+  `MasterTimer` only times the whole tick as one number (`engine/src/
+  mastertimer.cpp`, the `computeTimer` around `timerTickFunctions()` +
+  `timerTickDMXSources()`); no per-Function/per-DMXSource granularity exists.
+  Would need wrapping each `function->write()` call in the tick loop
+  individually, accumulating per-function-id compute time, and exposing a
+  top-N query — real engine instrumentation, not a UI-only change. The
+  existing single-number Load chip itself is already cheap (a single
+  `QElapsedTimer` read per tick, always-on regardless of the chip; the footer
+  just polls an atomic every 500ms) — no separate background load meter
+  needed for that part.
 
 ---
 

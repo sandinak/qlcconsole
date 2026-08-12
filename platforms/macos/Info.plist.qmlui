@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIconFile</key>
-	<string>qlcplus.icns</string>
+	<string>qlcconsole.icns</string>
 
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
@@ -18,10 +18,13 @@
 	<string>????</string>
 
 	<key>CFBundleExecutable</key>
-	<string>qlcplus-qml</string>
+	<string>qlcconsole</string>
 
 	<key>CFBundleName</key>
-	<string>Q Light Controller Plus</string>
+	<string>qlcconsole</string>
+
+	<key>CFBundleIdentifier</key>
+	<string>com.bransonmatheson.qlcconsole</string>
 
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
@@ -42,7 +45,7 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeIconFile</key>
-			<string>qlcplus.icns</string>
+			<string>qlcconsole.icns</string>
 			<key>CFBundleTypeName</key>
 			<string>QLC+ Workspace</string>
 			<key>CFBundleTypeExtensions</key>
