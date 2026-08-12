@@ -152,24 +152,49 @@ effect timing items also want the rig to confirm.
 
 ---
 
-## Now — real "Import" for .qxw, distinct from Open *(design-first; not started)*
+## Done — real "Import" for .qxw, distinct from Open *(2026-08-12, BUILT)*
 
-Today `-o`/File > Open and `--open` all *replace* the current document with
-another `.qxw`. There's no way to pull content FROM one workspace INTO the
-one you're already working in (merge in another show's fixtures/functions/
-palettes without starting over). Want a real **File > Import** workflow.
-Needs a design pass before building — at minimum:
-- What's importable: whole workspace vs. a scoped subset (fixtures only?
-  a function/show subtree? palettes/bundles?).
-- ID collision handling — imported fixtures/functions/universes will very
-  likely collide with IDs already in use; needs a remap-on-import strategy
-  (and probably a preview/picker UI, not a blind merge).
-- Where it fits: a dedicated import dialog (browse + pick what to bring in)
-  vs. drag-and-drop a second .qxw onto a tree (Fixtures tab, Function
-  Manager) the same way fixtures/groups already drag onto targets elsewhere
-  in this fork's UI.
-- Relationship to the `.qlcc` vs `.qxw` split from the rebrand (Phase 1) --
-  does Import read both extensions the same as Open does today?
+File > Import: merge fixtures/fixture groups/functions from a second .qxw
+into the CURRENTLY OPEN document, unlike Open (which replaces everything).
+Resolved the open design questions from this item's original design-first
+note:
+- **Scope**: fixtures, fixture groups, AND functions/shows — not fixtures-only.
+  Picking a function auto-expands to its full dependency closure (member
+  functions, the fixtures/groups they touch) via new `Doc::functionFunctions()`
+  (mirrors the existing `Doc::functionFixtures()`) — no manual dependency
+  picking needed.
+- **ID collisions**: real remap-on-import, not a blind merge. Three separate
+  ID spaces (fixture/function/fixture-group) each keep the source ID when
+  it's free in the target, else get a fresh one; every cross-reference
+  (`SceneValue::fxi`, `ChaserStep::fid`, `RGBMatrix`'s fixture group,
+  `FixtureGroup` head assignments, `Show`/`Track` function refs) gets
+  rewritten afterward to match. Also handles a DMX-address-space collision
+  (a fixture ID can be free while its address range still overlaps something
+  already patched) by relocating within the same universe, reported
+  separately from ID remaps.
+- **UI**: dedicated `ImportSelectionDialog` (browse + pick), not drag-and-drop
+  of a file — matches the existing `FixtureSelection`/`FunctionSelection`
+  picker convention rather than inventing a new one.
+- New engine module `engine/src/qxwimporter.{h,cpp}` (`QxwImporter::import()`)
+  does the actual closure/remap/clone/rewrite work, engine-side and
+  UI-independent; loads the source file into a throwaway scratch `Doc`
+  (`App::loadScratchDoc()`) rather than ever touching the live one mid-merge.
+- Verified end-to-end against real workspace files (not just code review):
+  clean imports, heavy-collision imports (96/96 IDs correctly remapped, exact
+  fixture/group/function count arithmetic), and an adversarial dense-universe
+  case (correctly reports "no free DMX address" per fixture rather than
+  corrupting anything) — all with zero dangling fixture references across
+  every function in the target doc afterward.
+- Caught and avoided reusing `Function::createCopy()`/`copyFrom()` for this —
+  `Show::copyFrom()` has a latent same-doc assumption (looks up member
+  functions via the *target* doc, not the source) that would have silently
+  dropped every child function of an imported Show. Cloning goes through each
+  object's own `saveXML()`/`loadXML()` round-trip instead (doc-agnostic,
+  same proven code path real file Open/Save already uses).
+- Not rewritten: function/fixture IDs referenced as literal numbers inside
+  Script text (can't safely parse arbitrary JS for this) — scripts import
+  verbatim. Audio/Video functions' referenced media files don't travel with
+  the import (same as moving a workspace to another machine today).
 
 ---
 

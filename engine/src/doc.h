@@ -611,6 +611,19 @@ public:
      *  Scene/EFX/RGBMatrix are the fixture-bearing leaves). */
     QList<quint32> functionFixtures(quint32 fid) const;
 
+    /** @p fid plus every function ID nested inside it (recurses containers:
+     *  Chaser/Sequence/Collection/Show/Track). Unlike functionFixtures(),
+     *  this stops at function IDs rather than resolving through to fixtures —
+     *  used by Import to know which functions must travel together as one
+     *  unit (e.g. importing a Show must bring its Chasers and their Scenes). */
+    QList<quint32> functionFunctions(quint32 fid) const;
+
+    /** First local DMX address (0-511) in @p universe with @p channels
+     *  consecutive free slots, or 0xFFFFFFFF if the universe has no room.
+     *  Used by Import to relocate a fixture whose original address is
+     *  already occupied in the target workspace. */
+    quint32 findFreeAddress(quint32 universe, quint32 channels) const;
+
     /** Snapshot the current pre-GM output of everything function @p fid drives
      *  and install it as the held last look (so the rig doesn't blackout when
      *  that function releases its faders). Must be called on the timer thread

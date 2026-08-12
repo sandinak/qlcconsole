@@ -65,6 +65,7 @@ add_library(${module_name}
     functionwizard.cpp functionwizard.h functionwizard.ui
     grandmasterslider.cpp grandmasterslider.h
     groupsconsole.cpp groupsconsole.h
+    importselectiondialog.cpp importselectiondialog.h
     inputchanneleditor.cpp inputchanneleditor.h inputchanneleditor.ui
     inputoutputmanager.cpp inputoutputmanager.h
     universepatchgrid.cpp universepatchgrid.h

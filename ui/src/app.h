@@ -207,9 +207,17 @@ private:
     bool handleFileError(QFile::FileError error);
     bool saveModifiedDoc(const QString & title, const QString & message);
 
+    /** Load @p fileName into a new, throwaway Doc (not m_doc) for File >
+     *  Import to pick items from. Returns NULL and sets @p error on
+     *  failure; caller owns the returned Doc on success. */
+    Doc *loadScratchDoc(const QString &fileName, QString &error);
+
 public slots:
     bool slotFileNew();
     QFile::FileError slotFileOpen();
+    /** File > Import: merge fixtures/groups/functions from a second .qxw
+     *  into the CURRENT document (unlike Open, does not replace it). */
+    void slotFileImport();
     QFile::FileError slotFileSave();
     QFile::FileError slotFileSaveAs();
 
@@ -256,6 +264,7 @@ public slots:
 private:
     QAction* m_fileNewAction;
     QAction* m_fileOpenAction;
+    QAction* m_fileImportAction;
     QAction* m_fileSaveAction;
     QAction* m_fileSaveAsAction;
 

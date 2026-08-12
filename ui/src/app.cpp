@@ -66,6 +66,8 @@
 #include "vcframe.h"
 #include "app.h"
 #include "doc.h"
+#include "qxwimporter.h"
+#include "importselectiondialog.h"
 #include "lastlookeffect.h"
 
 #include "qlcfixturedefcache.h"
@@ -136,6 +138,7 @@ App::App()
 
     , m_fileNewAction(NULL)
     , m_fileOpenAction(NULL)
+    , m_fileImportAction(NULL)
     , m_fileSaveAction(NULL)
     , m_fileSaveAsAction(NULL)
 
@@ -868,6 +871,11 @@ void App::initActions()
     m_fileOpenAction->setShortcut(QKeySequence("CTRL+O"));
     connect(m_fileOpenAction, SIGNAL(triggered(bool)), this, SLOT(slotFileOpen()));
 
+    m_fileImportAction = new QAction(QIcon(":/fileimport.png"), tr("&Import..."), this);
+    m_fileImportAction->setToolTip(tr("Bring fixtures/groups/functions in from another workspace, "
+                                       "without replacing what's already open"));
+    connect(m_fileImportAction, SIGNAL(triggered(bool)), this, SLOT(slotFileImport()));
+
     m_fileSaveAction = new QAction(QIcon(":/filesave.png"), tr("&Save"), this);
     m_fileSaveAction->setShortcut(QKeySequence("CTRL+S"));
     m_fileSaveAction->setShortcutContext(Qt::ApplicationShortcut);
@@ -1095,6 +1103,7 @@ void App::initMenuBar()
     QMenu* fileMenu = mb->addMenu(tr("&File"));
     fileMenu->addAction(m_fileNewAction);
     fileMenu->addAction(m_fileOpenAction);
+    fileMenu->addAction(m_fileImportAction);
     // Recent-files list becomes an "Open Recent" submenu (kept up to date by
     // updateFileOpenMenu(); no longer attached to the removed toolbar button).
     updateFileOpenMenu("");
@@ -1419,6 +1428,138 @@ QFile::FileError App::slotFileOpen()
     updateFileOpenMenu(fn);
 
     return error;
+}
+
+Doc *App::loadScratchDoc(const QString &fileName, QString &error)
+{
+    /* Load a workspace file into a throwaway Doc -- NOT m_doc. Doc::loadXML()
+       reads IDs verbatim from the XML and silently drops anything that
+       collides with what's already present, which is fine for a Doc that
+       started empty (this one) but would be exactly wrong for merging into
+       the live one. QxwImporter does the actual collision-aware merge,
+       working from this scratch copy. Caller owns the returned Doc. */
+    QXmlStreamReader *reader = QLCFile::getXMLReader(fileName);
+    if (reader == NULL || reader->device() == NULL || reader->hasError())
+    {
+        error = tr("Unable to read %1").arg(fileName);
+        return NULL;
+    }
+    while (!reader->atEnd())
+    {
+        if (reader->readNext() == QXmlStreamReader::DTD)
+            break;
+    }
+    if (reader->hasError() || reader->dtdName() != KXMLQLCWorkspace)
+    {
+        QLCFile::releaseXMLReader(reader);
+        error = tr("%1 is not a workspace file").arg(fileName);
+        return NULL;
+    }
+
+    Doc *scratchDoc = new Doc(this);
+    scratchDoc->fixtureDefCache()->load(QLCFixtureDefCache::userDefinitionDirectory());
+    scratchDoc->fixtureDefCache()->loadMap(QLCFixtureDefCache::systemDefinitionDirectory());
+    scratchDoc->modifiersCache()->load(QLCModifiersCache::systemTemplateDirectory(), true);
+    scratchDoc->modifiersCache()->load(QLCModifiersCache::userTemplateDirectory());
+
+    bool loaded = false;
+    if (reader->readNextStartElement() == true && reader->name() == KXMLQLCWorkspace)
+    {
+        while (reader->readNextStartElement())
+        {
+            if (reader->name() == KXMLQLCEngine)
+            {
+                loaded = scratchDoc->loadXML(*reader);
+                break;
+            }
+            else
+            {
+                reader->skipCurrentElement();
+            }
+        }
+    }
+    QLCFile::releaseXMLReader(reader);
+
+    if (loaded == false)
+    {
+        error = tr("%1 could not be loaded").arg(fileName);
+        delete scratchDoc;
+        return NULL;
+    }
+
+    return scratchDoc;
+}
+
+void App::slotFileImport()
+{
+    /* Pick the source workspace -- read-only, current document is untouched
+       until the user actually confirms a selection below. */
+    QFileDialog dialog(this);
+    dialog.setWindowTitle(tr("Import from Workspace"));
+    dialog.setAcceptMode(QFileDialog::AcceptOpen);
+    if (m_workingDirectory.exists() == true)
+        dialog.setDirectory(m_workingDirectory);
+
+    QStringList filters;
+    filters << tr("qlcconsole Workspaces (*%1)").arg(KExtWorkspaceConsole);
+    filters << tr("QLC+ Workspaces (*%1)").arg(KExtWorkspace);
+#if defined(WIN32) || defined(Q_OS_WIN)
+    filters << tr("All Files (*.*)");
+#else
+    filters << tr("All Files (*)");
+#endif
+    dialog.setNameFilters(filters);
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    QString fn = dialog.selectedFiles().first();
+    if (fn.isEmpty() == true)
+        return;
+
+    QString err;
+    Doc *scratchDoc = loadScratchDoc(fn, err);
+    if (scratchDoc == NULL)
+    {
+        QMessageBox::warning(this, tr("Import"), err);
+        return;
+    }
+
+    ImportSelectionDialog picker(this, scratchDoc);
+    if (picker.exec() != QDialog::Accepted)
+    {
+        delete scratchDoc;
+        return;
+    }
+
+    QList<quint32> fixtures = picker.selectedFixtures();
+    QList<quint32> groups = picker.selectedFixtureGroups();
+    QList<quint32> functions = picker.selectedFunctions();
+    if (fixtures.isEmpty() && groups.isEmpty() && functions.isEmpty())
+    {
+        delete scratchDoc;
+        return;
+    }
+
+    QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, fixtures, groups, functions);
+    delete scratchDoc;
+
+    if (FixtureManager::instance() != NULL)
+        FixtureManager::instance()->updateView();
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->updateList();
+    if (Monitor::instance() != NULL)
+        Monitor::instance()->updateView();
+
+    QString summary = tr("Imported %1 fixture(s), %2 fixture group(s), %3 function(s).")
+                        .arg(result.fixturesImported).arg(result.fixtureGroupsImported).arg(result.functionsImported);
+    if (result.idsRemapped > 0)
+        summary += tr("\n%1 ID(s) were remapped due to conflicts with the current workspace.").arg(result.idsRemapped);
+    if (result.fixturesRelocated > 0)
+        summary += tr("\n%1 fixture(s) were moved to a free DMX address.").arg(result.fixturesRelocated);
+    if (result.warnings.isEmpty() == false)
+        summary += tr("\n\n%1 item(s) skipped:\n").arg(result.warnings.size()) + result.warnings.join("\n");
+
+    QMessageBox::information(this, tr("Import complete"), summary);
 }
 
 QFile::FileError App::slotFileSave()

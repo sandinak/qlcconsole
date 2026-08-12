@@ -18,6 +18,7 @@
   limitations under the License.
 */
 
+#include <climits>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QRegularExpression>
@@ -858,6 +859,69 @@ QList<quint32> Doc::functionFixtures(quint32 fid) const
     QSet<quint32> visited;
     collectFunctionFixtures(this, fid, fixtures, visited, 0);
     return fixtures.values();
+}
+
+// Mirrors collectFunctionFixtures() above, but collects function IDs
+// (including fid itself) instead of resolving containers through to
+// fixtures.
+static void collectFunctionFunctions(const Doc *doc, quint32 fid,
+                                     QSet<quint32> &functions,
+                                     QSet<quint32> &visited, int depth)
+{
+    if (depth > 8 || doc == NULL || visited.contains(fid))
+        return;
+    visited.insert(fid);
+
+    Function *f = doc->function(fid);
+    if (f == NULL)
+        return;
+
+    functions.insert(fid);
+
+    switch (f->type())
+    {
+        case Function::ChaserType:
+        case Function::SequenceType:
+        case Function::CollectionType:
+        case Function::ShowType:
+            foreach (quint32 mid, f->components())
+                collectFunctionFunctions(doc, mid, functions, visited, depth + 1);
+            break;
+        default:
+            break;
+    }
+}
+
+QList<quint32> Doc::functionFunctions(quint32 fid) const
+{
+    QSet<quint32> functions;
+    QSet<quint32> visited;
+    collectFunctionFunctions(this, fid, functions, visited, 0);
+    return functions.values();
+}
+
+quint32 Doc::findFreeAddress(quint32 universe, quint32 channels) const
+{
+    if (channels == 0 || channels > 512)
+        return UINT_MAX;
+
+    for (quint32 start = 0; start + channels <= 512; start++)
+    {
+        bool free = true;
+        const quint32 base = (universe << 9) | start;
+        for (quint32 i = 0; i < channels; i++)
+        {
+            if (fixtureForAddress(base + i) != Fixture::invalidId())
+            {
+                free = false;
+                break;
+            }
+        }
+        if (free == true)
+            return start;
+    }
+
+    return UINT_MAX;
 }
 
 void Doc::captureLastLook(quint32 fid, const QList<Universe*> &universes,
