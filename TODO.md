@@ -205,8 +205,28 @@ blackout,blind,operate,design.png`), unified toolbar+tab-bar icon size to
 `~/.qlcconsole/qlcplusStyle.qss` override via `AppUtil::getStyleSheet`).
 Deliberately deferred: per-manager toolbar icon-size unification (Virtual
 Console 26px / I-O Manager 32px / Show timeline 20px / Monitor 16px all stay
-as-is), no dark/light theme switcher, no SVG-icon migration, Fixture/Function
+as-is), no dark/light theme switcher *(superseded — see backstage color
+themes below, 2026-08-11)*, no SVG-icon migration, Fixture/Function
 Manager's own toolbars and the Programming tab's button styling untouched.
+
+Backstage color themes (2026-08-11) — View menu > Theme: Default/Tan/Blue,
+picked from `App::Theme` (`ui/src/app.h`), persisted via `workspace/theme`
+(`QSettings`), applied live by `App::applyTheme()` (`ui/src/app.cpp`). Whole-
+app-surface theming via a `QPalette` swap (`qApp->setPalette()`) rather than
+hardcoded per-theme stylesheets — pays off the earlier chrome QSS work
+directly, since `resources/qss/default.qss` already reads colors via
+`palette(...)` functions, so it follows any theme with zero further changes.
+Extended `default.qss` slightly (QGroupBox/QMenuBar/QMenu, still
+palette()-only) so more chrome reaches along. Verified all 3 themes
+end-to-end via the offscreen snapshot harness (real screenshots, not just
+code review) — Default exactly restores the pre-theme look, Tan/Blue both
+tint the full window (toolbar, tabs, tables, panels) convincingly. Known
+platform caveat, not a bug: this app doesn't force the Fusion widget style
+app-wide (only a few `ConsoleChannel` sub-widgets use it), so a handful of
+plain native-style buttons/menus elsewhere may follow the palette less
+completely than content areas do — full uniform recoloring would mean
+switching the app's global QStyle to Fusion, a much bigger, separate
+look-and-feel decision, not done here.
 
 Window couldn't be resized smaller / again (2026-08-11) — regression report
 led to finding `QTabWidget`/`QStackedWidget` compute minimum size as the max

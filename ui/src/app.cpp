@@ -112,6 +112,7 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define SETTINGS_AUTOSAVE_ENABLED  QStringLiteral("workspace/autosave/enabled")
 #define SETTINGS_AUTOSAVE_INTERVAL QStringLiteral("workspace/autosave/interval")
 #define SETTINGS_TAB_LABEL_MODE    QStringLiteral("workspace/tabLabelMode")
+#define SETTINGS_THEME             QStringLiteral("workspace/theme")
 #define KXMLQLCWorkspaceWindow QStringLiteral("CurrentWindow")
 
 #define MAX_RECENT_FILES    10
@@ -423,6 +424,13 @@ void App::init()
         m_tabLabelMode = settings.value(SETTINGS_TAB_LABEL_MODE, TabIconAndText).toInt();
     }
     applyTabLabelMode();
+
+    // Load and apply the backstage color theme preference.
+    {
+        QSettings settings;
+        m_theme = settings.value(SETTINGS_THEME, ThemeDefault).toInt();
+    }
+    applyTheme();
 
     // Build the native menu bar now that the workspace tabs exist, so the
     // View menu can offer accurate "jump to tab" entries.
@@ -1133,6 +1141,27 @@ void App::initMenuBar()
         connect(jump, &QAction::triggered, this, [this, i]() {
             if (i < m_tab->count())
                 m_tab->setCurrentIndex(i);
+        });
+    }
+
+    // Backstage color themes: low-glare palettes for working near a stage/
+    // audience. Persisted (App::setTheme() -> workspace/theme).
+    viewMenu->addSeparator();
+    QMenu* themeMenu = viewMenu->addMenu(tr("Theme"));
+    QActionGroup* themeGroup = new QActionGroup(themeMenu);
+    struct { const char* label; int id; } themeChoices[] = {
+        { QT_TR_NOOP("Default"), ThemeDefault },
+        { QT_TR_NOOP("Tan"),     ThemeTan },
+        { QT_TR_NOOP("Blue"),    ThemeBlue },
+    };
+    for (const auto& choice : themeChoices)
+    {
+        QAction* themeAction = themeMenu->addAction(tr(choice.label));
+        themeAction->setCheckable(true);
+        themeAction->setActionGroup(themeGroup);
+        themeAction->setChecked(m_theme == choice.id);
+        connect(themeAction, &QAction::triggered, this, [this, choice]() {
+            setTheme(choice.id);
         });
     }
 
@@ -2367,6 +2396,85 @@ void App::applyTabLabelMode()
         InputOutputManager::instance()->applyToolbarLabelMode();
     if (VirtualConsole::instance() != NULL)
         VirtualConsole::instance()->applyToolbarLabelMode();
+}
+
+int App::theme() const
+{
+    return m_theme;
+}
+
+void App::setTheme(int theme)
+{
+    if (m_theme == theme)
+        return;
+    m_theme = theme;
+    QSettings settings;
+    settings.setValue(SETTINGS_THEME, theme);
+    applyTheme();
+}
+
+void App::applyTheme()
+{
+    // Backstage color themes: warm/cool low-glare palettes, the kind
+    // lighting consoles traditionally offer so the screen doesn't spill
+    // light or wreck night vision. QPalette (not per-theme stylesheets) is
+    // the mechanism: the chrome QSS (resources/qss/default.qss) already
+    // reads colors via palette(...) functions rather than hardcoding them,
+    // specifically so a QPalette swap here is all it takes for that chrome
+    // to follow along. Content areas (panels, trees, lists, dialogs) follow
+    // QPalette everywhere; some native macOS chrome (plain buttons, combo
+    // boxes with no QSS of their own) only partially does, since this app
+    // uses the native widget style outside of default.qss's reach — a
+    // known Qt/macOS behavior, not a bug here.
+    QPalette pal = m_defaultPalette;
+
+    switch (m_theme)
+    {
+    case ThemeTan:
+    {
+        pal.setColor(QPalette::Window, QColor("#3a3428"));
+        pal.setColor(QPalette::WindowText, QColor("#ecdfc4"));
+        pal.setColor(QPalette::Base, QColor("#2e2920"));
+        pal.setColor(QPalette::AlternateBase, QColor("#362f24"));
+        pal.setColor(QPalette::Text, QColor("#ecdfc4"));
+        pal.setColor(QPalette::Button, QColor("#4a4232"));
+        pal.setColor(QPalette::ButtonText, QColor("#ecdfc4"));
+        pal.setColor(QPalette::Highlight, QColor("#b8863b"));
+        pal.setColor(QPalette::HighlightedText, QColor("#1a1610"));
+        pal.setColor(QPalette::ToolTipBase, QColor("#4a4232"));
+        pal.setColor(QPalette::ToolTipText, QColor("#ecdfc4"));
+        pal.setColor(QPalette::Disabled, QPalette::WindowText, QColor("#8a8168"));
+        pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor("#8a8168"));
+        pal.setColor(QPalette::Disabled, QPalette::Text, QColor("#8a8168"));
+        break;
+    }
+    case ThemeBlue:
+    {
+        pal.setColor(QPalette::Window, QColor("#262b33"));
+        pal.setColor(QPalette::WindowText, QColor("#d7e0ea"));
+        pal.setColor(QPalette::Base, QColor("#1e222a"));
+        pal.setColor(QPalette::AlternateBase, QColor("#262b33"));
+        pal.setColor(QPalette::Text, QColor("#d7e0ea"));
+        pal.setColor(QPalette::Button, QColor("#333a44"));
+        pal.setColor(QPalette::ButtonText, QColor("#d7e0ea"));
+        pal.setColor(QPalette::Highlight, QColor("#3f6fa8"));
+        pal.setColor(QPalette::HighlightedText, QColor("#eef4fb"));
+        pal.setColor(QPalette::ToolTipBase, QColor("#333a44"));
+        pal.setColor(QPalette::ToolTipText, QColor("#d7e0ea"));
+        pal.setColor(QPalette::Disabled, QPalette::WindowText, QColor("#767f8a"));
+        pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor("#767f8a"));
+        pal.setColor(QPalette::Disabled, QPalette::Text, QColor("#767f8a"));
+        break;
+    }
+    default: // ThemeDefault
+        break;
+    }
+
+    qApp->setPalette(pal);
+
+    // Qt doesn't always re-evaluate palette(...)-based QSS on a palette
+    // change alone — force the chrome stylesheet to re-polish against it.
+    this->setStyleSheet(AppUtil::getStyleSheet("MAIN"));
 }
 
 QString App::autosaveFilePath() const

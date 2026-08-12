@@ -22,6 +22,7 @@
 #define APP_H
 
 #include <QMainWindow>
+#include <QApplication>
 #include <QString>
 #include <QList>
 #include <QFile>
@@ -29,6 +30,7 @@
 #include <QElapsedTimer>
 #include <QIcon>
 #include <QPair>
+#include <QPalette>
 
 #include "dmxdumpfactoryproperties.h"
 #include "qlcfixturedefcache.h"
@@ -123,6 +125,23 @@ public:
 private:
     int m_tabLabelMode = TabIconAndText;
     QList<QPair<QString, QIcon>> m_tabOriginals; // stored on first tab add
+
+    /*********************************************************************
+     * Backstage color theme
+     *********************************************************************/
+public:
+    enum Theme { ThemeDefault = 0, ThemeTan = 1, ThemeBlue = 2 };
+
+    int theme() const;
+    void setTheme(int theme);
+    void applyTheme();
+
+private:
+    int m_theme = ThemeDefault;
+    // Captured once, before any theme is ever applied (QApplication always
+    // exists by the time App is constructed — see main.cpp), so selecting
+    // "Default" can restore the true native palette exactly.
+    QPalette m_defaultPalette = qApp->palette();
 
 private:
     QTabWidget* m_tab;
