@@ -23,6 +23,10 @@
 #undef private
 #include "stageplatform.h"
 #include "truss.h"
+#include "pipe.h"
+#include "stand.h"
+#include "tower.h"
+#include "stagetarget.h"
 #include "monitorproperties_test.h"
 
 void MonitorProperties_Test::defaults()
@@ -551,6 +555,132 @@ void MonitorProperties_Test::reset()
     QCOMPARE(mp.activeLayerId(), MonitorProperties::defaultLayerId);
     QCOMPARE(mp.groups().count(), 0);
     QCOMPARE(mp.stageOrigin(), QPointF(0, 0));
+}
+
+void MonitorProperties_Test::stageStructureAddRemove()
+{
+    // Truss add already covered elsewhere (riserMount/childBarFollowsParent);
+    // remove was never exercised.
+    {
+        MonitorProperties mp;
+        Truss *a = mp.addTruss();
+        Truss *b = mp.addTruss();
+        QVERIFY(a->id() != b->id());
+        QCOMPARE(mp.trusses().count(), 2);
+        mp.removeTruss(a->id());
+        QCOMPARE(mp.trusses().count(), 1);
+        QCOMPARE(mp.trusses().first()->id(), b->id());
+        // Removing an id that's already gone is a safe no-op.
+        mp.removeTruss(a->id());
+        QCOMPARE(mp.trusses().count(), 1);
+    }
+
+    // Pipe (Boom/Bar/House-electric — all the same object).
+    {
+        MonitorProperties mp;
+        QCOMPARE(mp.pipes().count(), 0);
+        Pipe *a = mp.addPipe();
+        a->setName("Boom 1");
+        Pipe *b = mp.addPipe();
+        QVERIFY(a->id() != b->id());
+        QCOMPARE(mp.pipes().count(), 2);
+        mp.removePipe(a->id());
+        QCOMPARE(mp.pipes().count(), 1);
+        QCOMPARE(mp.pipes().first()->id(), b->id());
+        mp.removePipe(a->id());
+        QCOMPARE(mp.pipes().count(), 1);
+    }
+
+    // Stand.
+    {
+        MonitorProperties mp;
+        QCOMPARE(mp.stands().count(), 0);
+        Stand *a = mp.addStand();
+        a->setName("Stand 1");
+        Stand *b = mp.addStand();
+        QVERIFY(a->id() != b->id());
+        QCOMPARE(mp.stands().count(), 2);
+        mp.removeStand(a->id());
+        QCOMPARE(mp.stands().count(), 1);
+        QCOMPARE(mp.stands().first()->id(), b->id());
+        mp.removeStand(a->id());
+        QCOMPARE(mp.stands().count(), 1);
+    }
+
+    // Tower.
+    {
+        MonitorProperties mp;
+        QCOMPARE(mp.towers().count(), 0);
+        Tower *a = mp.addTower();
+        a->setName("Tower 1");
+        Tower *b = mp.addTower();
+        QVERIFY(a->id() != b->id());
+        QCOMPARE(mp.towers().count(), 2);
+        mp.removeTower(a->id());
+        QCOMPARE(mp.towers().count(), 1);
+        QCOMPARE(mp.towers().first()->id(), b->id());
+        mp.removeTower(a->id());
+        QCOMPARE(mp.towers().count(), 1);
+    }
+
+    // StageTarget.
+    {
+        MonitorProperties mp;
+        QCOMPARE(mp.stageTargets().count(), 0);
+        StageTarget *a = mp.addStageTarget();
+        a->setName("Target 1");
+        StageTarget *b = mp.addStageTarget();
+        QVERIFY(a->id() != b->id());
+        QCOMPARE(mp.stageTargets().count(), 2);
+        mp.removeStageTarget(a->id());
+        QCOMPARE(mp.stageTargets().count(), 1);
+        QCOMPARE(mp.stageTargets().first()->id(), b->id());
+        mp.removeStageTarget(a->id());
+        QCOMPARE(mp.stageTargets().count(), 1);
+    }
+}
+
+void MonitorProperties_Test::stageStructuresXmlRoundTrip()
+{
+    // One of each — Platform already covered by riserMount — survives a
+    // save/load cycle: the actual guarantee that matters (a Look built in
+    // Construction still has its rig on disk after a reload).
+    MonitorProperties mp;
+    Truss *truss = mp.addTruss();
+    truss->setName("US Truss");
+    Pipe *pipe = mp.addPipe();
+    pipe->setName("Boom SL");
+    Stand *stand = mp.addStand();
+    stand->setName("Stand 1");
+    Tower *tower = mp.addTower();
+    tower->setName("Tower 1");
+    StageTarget *target = mp.addStageTarget();
+    target->setName("Centre Stage");
+    target->setPosition(QVector3D(1.0f, 2.0f, 0.0f));
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+
+    QCOMPARE(mp2.trusses().count(), 1);
+    QCOMPARE(mp2.trusses().first()->name(), QString("US Truss"));
+    QCOMPARE(mp2.pipes().count(), 1);
+    QCOMPARE(mp2.pipes().first()->name(), QString("Boom SL"));
+    QCOMPARE(mp2.stands().count(), 1);
+    QCOMPARE(mp2.stands().first()->name(), QString("Stand 1"));
+    QCOMPARE(mp2.towers().count(), 1);
+    QCOMPARE(mp2.towers().first()->name(), QString("Tower 1"));
+    QCOMPARE(mp2.stageTargets().count(), 1);
+    QCOMPARE(mp2.stageTargets().first()->name(), QString("Centre Stage"));
+    QCOMPARE(mp2.stageTargets().first()->position(), QVector3D(1.0f, 2.0f, 0.0f));
 }
 
 QTEST_APPLESS_MAIN(MonitorProperties_Test)

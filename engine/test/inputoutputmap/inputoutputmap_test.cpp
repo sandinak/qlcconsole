@@ -616,7 +616,17 @@ void InputOutputMap_Test::profileDirectories()
 {
     QDir dir = InputOutputMap::systemProfileDirectory();
     QDir ipDir;
+#if defined(__APPLE__) || defined(Q_OS_MAC)
+    // QLCFile::systemDirectory() resolves this relative to the app bundle's
+    // executable (Contents/MacOS/<app> -> ../Resources/...), not the process's
+    // CWD — mirror that here rather than assuming a flat CWD-relative path
+    // (which only holds on Linux/Windows, where systemDirectory() doesn't
+    // consult applicationDirPath() at all).
+    ipDir.setPath(QString("%1/../%2").arg(QCoreApplication::applicationDirPath())
+                                      .arg(INPUTPROFILEDIR));
+#else
     ipDir.setPath(INPUTPROFILEDIR);
+#endif
     QVERIFY(dir.filter() & QDir::Files);
     QVERIFY(dir.nameFilters().contains(QString("*%1").arg(KExtInputProfile)));
     QCOMPARE(dir.absolutePath(), ipDir.absolutePath());
@@ -860,4 +870,8 @@ void InputOutputMap_Test::grandMaster()
     QVERIFY(iom.grandMasterValueMode() == GrandMaster::Limit);
 }
 
-QTEST_APPLESS_MAIN(InputOutputMap_Test)
+// Not APPLESS: profileDirectories() exercises QLCFile::systemDirectory(),
+// which calls QCoreApplication::applicationDirPath() on macOS/iOS/Windows —
+// that needs a real QCoreApplication instance to resolve correctly (without
+// one it warns and returns an empty path, failing the path comparison).
+QTEST_GUILESS_MAIN(InputOutputMap_Test)

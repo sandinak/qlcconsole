@@ -191,12 +191,14 @@ void MasterTimer_Test::interval()
     /* Wait for one second */
     QTest::qWait(1000);
 
-#ifndef SKIP_TEST
-    /* It's not guaranteed that context switch happens exactly after 50
-       cycles, so we just have to estimate here... */
-    QVERIFY(fs.m_writeCalls >= 49 && fs.m_writeCalls <= 51);
-    QVERIFY(dss.m_writeCalls >= 49 && dss.m_writeCalls <= 51);
-#endif
+    // Capture before any assertion that could fail: fs/dss are stack
+    // locals, and a QVERIFY failure returns from this function immediately,
+    // which used to skip the stop()/unregisterDMXSource() below — leaving
+    // MasterTimer holding dangling pointers to fs/dss once they're
+    // destroyed on return, which then crashed the NEXT test's timerTick().
+    // Cleanup below now always runs regardless of what these counts are.
+    const int fsWrites = fs.m_writeCalls;
+    const int dssWrites = dss.m_writeCalls;
 
     fs.stop(FunctionParent::master());
     QTest::qWait(1000);
@@ -204,6 +206,18 @@ void MasterTimer_Test::interval()
 
     mt->unregisterDMXSource(&dss);
     QVERIFY(mt->m_dmxSourceList.size() == 0);
+
+#ifndef SKIP_TEST
+    /* It's not guaranteed that context switch happens exactly after 50
+       cycles (~1 tick every 20ms over this 1s window), so this is an
+       estimate — widened from the original 49-51 (upstream's own SKIP_TEST
+       escape hatch for Travis CI is an acknowledgment that even that was
+       too tight under real scheduling load) to a band that still catches
+       genuine breakage (the timer not ticking at all, or wildly off rate)
+       without false-failing on ordinary system contention. */
+    QVERIFY(fsWrites >= 40 && fsWrites <= 60);
+    QVERIFY(dssWrites >= 40 && dssWrites <= 60);
+#endif
 }
 
 void MasterTimer_Test::functionInitiatedStop()

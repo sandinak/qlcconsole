@@ -35,6 +35,162 @@ effect timing items also want the rig to confirm.
 
 ## Recently shipped (verify on rig, then move to DONE.md)
 
+- **Release-gate scoping, phases 1+2, + all 3 surfaced failures fixed
+  (2026-08-17, BUILT)** — first concrete work off `SHOW_LIFECYCLE_DESIGN.md`'s
+  "good gates" thread.
+  - **Phase 1 — the macOS `make check` gate was silently broken**, and my
+    first fix attempt misdiagnosed *how* it's invoked. There are actually
+    **two** `unittest.sh` files: a root-level staging wrapper (already
+    correct, already copies every `test.sh` + needed resources into `build/`
+    and `cd`s there) that then runs the *copy* of `platforms/linux/
+    unittest.sh` it just placed in the build dir. The real, narrower bugs
+    were only in `platforms/linux/unittest.sh`: `RUN_UI_TESTS` never got set
+    to `1` on darwin at all (`ui/test/*` was unconditionally skipped), and
+    the UI-test loop bypassed each test's own `test.sh` (which already knew
+    how to resolve a macOS `.app`-bundled QTest binary) in favour of a bare
+    `./${test}_test` that doesn't exist for bundle-style tests. Fixed both,
+    keeping the script's existing plain-relative-path assumptions intact
+    (an earlier pass added `$2`/build-dir-prefixing logic on a wrong model
+    of the invocation chain — reverted). Also filled a structural gap the
+    now-working gate immediately hit: `engine/test/markplanner` had no
+    `test.sh` at all (a real test, just missing its runner).
+  - **Phase 2 — model-layer add/remove coverage.** `MonitorProperties` had
+    zero test coverage for `addPipe/removePipe` (Boom/Bar/Electric),
+    `addStand/removeStand`, `addTower/removeTower`,
+    `addStageTarget/removeStageTarget`, and `removeTruss` (add was tested,
+    remove wasn't) — added `stageStructureAddRemove()` +
+    `stageStructuresXmlRoundTrip()` to the existing
+    `engine/test/monitorproperties` suite. `PowerDistribution` (sources,
+    circuits, fixture assignment, the direct-source auto-create-circuit-0
+    behavior, XML round-trip) had **no test dir at all** — added
+    `engine/test/powerdistribution` from scratch.
+  - **All 3 pre-existing failures the gate surfaced are now fixed:**
+    - `inputoutputmap::profileDirectories()` and
+      `qlcfixturedefcache::defDirectories()` both failed on
+      `QCoreApplication::applicationDirPath: Please instantiate the
+      QApplication object first` — both binaries used `QTEST_APPLESS_MAIN`
+      (no `QCoreApplication` instance at all), but the code they exercise
+      (`QLCFile::systemDirectory()`) calls `applicationDirPath()` on macOS.
+      Switched both to `QTEST_GUILESS_MAIN` (constructs a `QCoreApplication`,
+      no widgets/GUI needed). That fixed the warning but exposed the real
+      bug underneath: `systemDirectory()` resolves paths relative to the
+      app-bundle executable (`Contents/MacOS/<app>` → `../Resources/...`),
+      but each test's own expected-path construction assumed a flat
+      CWD-relative path — true on Linux (where `systemDirectory()` doesn't
+      consult `applicationDirPath()` at all) but not on macOS. Fixed both
+      tests' expected-path construction to mirror the same
+      `applicationDirPath()/../<dir>` relationship on Apple platforms.
+    - `rgbscript`'s "Lines" script failed because its `linesMovement` and
+      `linesLifecycle` list properties' declared defaults
+      (`algo.linesMovement = 0` / `algo.linesLifecycle = 0`) are dead code —
+      `getMovement()`/`getLifecycle()` actually read `algo.linesSlide`/
+      `algo.linesRollover`/`algo.linesSizeBehavior`, never given a top-level
+      default, so the very first (pre-`setMovement()`/`setLifecycle()`) read
+      returned `""` — not one of the property's own declared list values.
+      Harmless at runtime (undefined behaved like the intended default, 0),
+      but broke property introspection. Fixed by initializing all three
+      backing variables at the top of `resources/rgbscripts/lines.js`.
+    - Verified clean with **two full, independent `cmake --build build
+      --target check` runs** (not just the individual binaries) — fixture
+      validation, all `engine/test/*`, all `ui/test/*`, and the enttecwing/
+      midi/artnet plugin tests all pass end-to-end.
+  - **`mastertimer_test` segfault — found + fixed (2026-08-17).** Root cause
+    was a real, deterministic bug, not pure flakiness: `interval()`'s cleanup
+    (`fs.stop()`, `mt->unregisterDMXSource(&dss)`) sat *after* a `QVERIFY` on
+    a razor-thin real-time tick-count window (49–51 ticks/sec — upstream's
+    own `SKIP_TEST` escape hatch for Travis CI is an acknowledgment this was
+    always too tight under real scheduling load). `QVERIFY` returns
+    immediately on failure, so a timing miss under load skipped cleanup
+    entirely — `fs`/`dss` (stack locals) got destroyed while still registered
+    with `MasterTimer`, leaving dangling pointers that crashed the *next*
+    test method's `timerTick()`. Fixed by moving cleanup before the timing
+    assertions (always runs now, regardless of outcome) and widening the
+    tolerance to 40–60 (still catches a genuinely broken timer, far less
+    sensitive to scheduler jitter). Verified clean on **2 more full `make
+    check` pipeline runs** (4 total now, back to back). Not caused by
+    anything built in this session (confirmed: `mastertimer` runs and
+    completes before
+    `ui/test` even starts, so the new `monitor_test` below isn't a factor).
+  - **Phase 3 — headful dialog-driven pilot (2026-08-17, BUILT, proven
+    viable).** New `ui/test/monitor` — the open question was whether a QTest
+    UI test can drive a real, *blocking* `QDialog::exec()` call (as
+    `Monitor::slotAddTruss()` uses) under `QT_QPA_PLATFORM=offscreen`.
+    It can: schedule the interaction via `QTimer::singleShot(0, ...)` *before*
+    calling the slot — `exec()`'s own nested event loop processes it,
+    `QApplication::activeModalWidget()` finds the live dialog, `findChild<>()`
+    reaches its fields/buttons. `addTrussAccepted()` fills the name field and
+    clicks OK, asserts the truss landed in `MonitorProperties` with the right
+    name; `addTrussCancelled()` clicks Cancel, asserts nothing was added.
+    Both pass, standalone and through the full `make check` pipeline. Power
+    Source turned out not to need this pattern at all — its add path
+    (`PowerDistributionWidget::slotAddSource()`) is a direct model mutation
+    with no dialog, already covered by Phase 2's `powerdistribution` tests —
+    so the pilot narrowed to just Truss, which was the one open technique.
+    Setup is cheap to replicate (`#define protected public` to reach the
+    slot + a bare `Doc`/`Monitor` pair, no plugin/patch wiring needed).
+  - **Phase 4 — expanded coverage + `slotRemoveSelected()` (2026-08-17,
+    BUILT).** Added to `ui/test/monitor`:
+    - `addTargetAccepted()`/`addTargetEditCancelled()` (`Monitor::
+      slotAddTarget()`) — same simple-form-dialog pattern as Truss, plus a
+      real behavioral difference worth proving: unlike Truss (object created
+      only on Accept), StageTarget/Platform/Pipe/Stand/Tower are all created
+      *immediately* with defaults, and the dialog that follows is an *edit*
+      of the just-created object — so even Cancel leaves it added. Also
+      asserts the accept path's bonus effect: a linked PanTilt palette gets
+      auto-created.
+    - `addPlatformEditCancelled()` (`Monitor::slotAddPlatform()`) — proves
+      the same add-then-cancel path through a **heavier** edit dialog (one
+      that embeds a full `StructureStudioView` canvas/tree/inspector via
+      `makeStudioPane()`, unlike Truss/Target's plain `QFormLayout`).
+    - `removeSelectedTruss()`/`removeSelectedCancelled()` — the other open
+      half of Phase 3: select a `TrussItem` in the `QGraphicsScene`
+      (`item->setSelected(true)`), call `slotRemoveSelected()`, which drives
+      a **second, different kind of modal** — `confirmFeatureDelete()`'s
+      `QMessageBox`, found the same way via `activeModalWidget()` — Accept
+      removes it, Cancel doesn't.
+    - **Two real bugs found writing these, both fixed in the tests
+      themselves (not app code):**
+      1. `QMessageBox::windowTitle()` reads back **empty** on macOS — native
+         alert-style message boxes don't surface a title bar, even though
+         `confirmFeatureDelete()` does call `setWindowTitle()`. Asserting on
+         it left the confirm dialog's `exec()` with nothing ever clicked —
+         a genuine **hang**, not a fast failure, and it corrupted whichever
+         test ran next. Fixed by asserting on `QMessageBox::text()` instead
+         (the actual message content), which *is* reliable.
+      2. Blind `findChild<QLineEdit*>()` (no name filter) is ambiguous
+         once a dialog embeds `StructureStudioView` — it contains its own
+         QLineEdits, so the lookup can silently grab the wrong one instead
+         of the name field. Rather than paper over it, **descoped**: no
+         "accept with a custom name" test for Platform (or, by the same
+         reasoning, Pipe/Stand/Tower — never attempted). The cancel-path
+         test for Platform only drives the unambiguous button box, so it
+         stays real coverage without the fragile lookup. Reliably testing
+         the accept path for these four would need the production dialogs
+         to tag their name field with `setObjectName()` first — not done.
+    - Verified: 9/9 pass standalone, and **2 more full `make check` pipeline
+      runs**, clean both times.
+  - **Phase 5 — `release.sh` gate (2026-08-17, BUILT).** New step **1/6**
+    (renumbered the existing 5 steps to 2/6–6/6): `cmake --build build
+    --target check`, against the standard dev `build/` dir (Debug, reused
+    as-is — a correctness gate on the codebase, not a rebuild of the exact
+    Release bits `package-local.sh` ships from its own separate
+    `build-package/`). `set -euo pipefail` (already at the top of
+    `release.sh`) means a failing gate aborts the *entire* release right
+    there — before `package-local.sh`, signing/notarizing, tagging, or
+    publishing ever run. Verified both directions: the real gate command
+    passes clean against this session's actual `build/`; a synthetic
+    reproduction of `release.sh`'s exact structure with a deliberately
+    failing stand-in step confirmed `set -e` genuinely halts before any
+    later step's `step "2/6 ..."` banner even prints (did **not** run the
+    real `release.sh` itself — that pushes a git tag and publishes a public
+    GitHub Release, real external side effects, not something to fire off
+    to validate a shell-flow change). `RELEASE.md`'s step list updated to
+    match.
+  - **Release-gate arc (Phases 1-5) is now complete end to end.** Remaining
+    known gap: full add/remove dialog coverage for Pipe/Stand/Tower, gated
+    on tagging their production dialogs' name fields with `setObjectName()`
+    first (see Phase 4) — not chased further, no immediate need driving it.
+
 - **Hardware tab: Power tree + universe usage grid (2026-08-12 → 08-13,
   BUILT)** — the former "Fixtures" tab is renamed **"Hardware"** (`app.cpp`,
   one-line tab-label change). Its tree already had a lazily-built

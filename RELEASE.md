@@ -40,6 +40,9 @@ Steps:
    highlights from [DONE.md](DONE.md)).
 3. Commit those two changes.
 4. Run `./release.sh`. This:
+   - runs the test gate (`cmake --build build --target check` — engine +
+     UI unit tests, fixture-definition validation) and **stops here** if
+     anything fails, before any of the slower/external steps below run,
    - builds + bundles via `platforms/macos/package-local.sh`,
    - Developer ID signs, notarizes, and staples via
      `platforms/macos/sign-notarize.sh`,

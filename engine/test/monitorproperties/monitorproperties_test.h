@@ -42,6 +42,12 @@ private slots:
     void studioFrameXmlRoundTrip();
     void studioFrameSlavedToPlatform();
     void reset();
+
+    // Lighting Studio add/remove gate coverage (2026-08-15): Truss add/remove
+    // and Platform add/remove/round-trip already existed above; Pipe/Stand/
+    // Tower/StageTarget had none at all.
+    void stageStructureAddRemove();
+    void stageStructuresXmlRoundTrip();
 };
 
 #endif

@@ -221,7 +221,17 @@ void QLCFixtureDefCache_Test::defDirectories()
     QVERIFY(dir.filter() & QDir::Files);
     QVERIFY(dir.nameFilters().contains(QString("*%1").arg(KExtFixture)));
     QDir fxDir;
+#if defined(__APPLE__) || defined(Q_OS_MAC)
+    // QLCFile::systemDirectory() resolves this relative to the app bundle's
+    // executable (Contents/MacOS/<app> -> ../Resources/...), not the process's
+    // CWD — mirror that here rather than assuming a flat CWD-relative path
+    // (which only holds on Linux/Windows, where systemDirectory() doesn't
+    // consult applicationDirPath() at all).
+    fxDir.setPath(QString("%1/../%2").arg(QCoreApplication::applicationDirPath())
+                                      .arg(FIXTUREDIR));
+#else
     fxDir.setPath(FIXTUREDIR);
+#endif
     QCOMPARE(dir.absolutePath(), fxDir.absolutePath());
 
     dir = QLCFixtureDefCache::userDefinitionDirectory();
@@ -248,4 +258,8 @@ void QLCFixtureDefCache_Test::storeDef()
     file.remove();
 }
 
-QTEST_APPLESS_MAIN(QLCFixtureDefCache_Test)
+// Not APPLESS: defDirectories() exercises QLCFile::systemDirectory(), which
+// calls QCoreApplication::applicationDirPath() on macOS/iOS/Windows — that
+// needs a real QCoreApplication instance to resolve correctly (without one
+// it warns and returns an empty path, failing the path comparison).
+QTEST_GUILESS_MAIN(QLCFixtureDefCache_Test)

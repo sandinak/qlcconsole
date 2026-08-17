@@ -7,6 +7,11 @@ RUN_UI_TESTS="0"
 THISCMD=`basename "$0"`
 
 TARGET=${1:-}
+# NOTE: this script is not run in place. The root-level ./unittest.sh stages
+# it (plus a fresh copy of every test.sh + the resources/ tests need) into
+# the build dir and cd's there BEFORE invoking this copy — so by the time we
+# get here, CWD already IS the build dir and plain relative paths
+# (${TESTDIR}/${test}) are correct. Don't reintroduce a build-dir prefix here.
 
 if [ "$TARGET" != "ui" ] && [ "$TARGET" != "qmlui" ]; then
   echo >&2 "Usage: $THISCMD ui|qmlui"
@@ -29,7 +34,8 @@ if [ "$CURRUSER" == "runner" ] \
     SLEEPCMD="sleep 1"
 
   elif [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "We're on OSX. Any prefix needed?"
+    TESTPREFIX="QT_QPA_PLATFORM=offscreen"
+    RUN_UI_TESTS="1"
   fi
 
 else
@@ -42,6 +48,10 @@ else
     if [ ${#XPID} -gt 0 ]; then
       RUN_UI_TESTS="1"
     fi
+  elif [[ "$OSTYPE" == "darwin"* ]]; then
+    # No X server concept on macOS to gate on — offscreen doesn't need one.
+    TESTPREFIX="QT_QPA_PLATFORM=offscreen"
+    RUN_UI_TESTS="1"
   fi
 fi
 
@@ -117,10 +127,12 @@ do
     test=$(echo ${test} | sed 's/ui\/test\///')
 
     $SLEEPCMD
-    # Execute the test
+    # Execute the test via its checked-in test.sh (sets LD_LIBRARY_PATH/
+    # DYLD_FALLBACK_LIBRARY_PATH itself, and already resolves the macOS
+    # <name>_test.app/Contents/MacOS/<name>_test bundle path vs. a plain
+    # executable — the old bare "./${test}_test" here didn't).
     pushd ${TESTDIR}/${test}
-    eval DYLD_FALLBACK_LIBRARY_PATH=../../../engine/src:../../src:$DYLD_FALLBACK_LIBRARY_PATH \
-        LD_LIBRARY_PATH=../../../engine/src:../../src:$LD_LIBRARY_PATH $TESTPREFIX ./${test}_test
+    eval $TESTPREFIX ./test.sh
     RESULT=${?}
     popd
     if [ ${RESULT} != 0 ]; then

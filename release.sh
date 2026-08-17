@@ -31,17 +31,28 @@ if ! grep -q "^## \[${VERSION}\]" CHANGELOG.md; then
   exit 1
 fi
 
-step "1/5 Build + bundle (platforms/macos/package-local.sh)"
+step "1/6 Test gate (cmake --build build --target check)"
+# Fast pre-flight against the standard dev build dir (Debug, iterated on all
+# session) rather than package-local.sh's separate Release build-package/ —
+# this is a correctness gate on the codebase, not a rebuild of the exact
+# shipping bits, so it should stay cheap and reuse whatever's already built.
+# set -e means a non-zero exit here (a real test failure) aborts the whole
+# release right here, before any of the expensive/external steps below.
+[ -d build ] || cmake -S . -B build
+cmake --build build -j"$(sysctl -n hw.ncpu)"
+cmake --build build --target check
+
+step "2/6 Build + bundle (platforms/macos/package-local.sh)"
 platforms/macos/package-local.sh
 
-step "2/5 Sign + notarize + staple (platforms/macos/sign-notarize.sh)"
+step "3/6 Sign + notarize + staple (platforms/macos/sign-notarize.sh)"
 platforms/macos/sign-notarize.sh
 
 DMG=$(ls -t dist/qlcconsole-*.dmg 2>/dev/null | head -1)
 [ -n "$DMG" ] || { echo "No DMG found in dist/ after sign-notarize.sh. Aborting."; exit 1; }
 echo "Release artifact: $DMG"
 
-step "3/5 Extract release notes from CHANGELOG.md"
+step "4/6 Extract release notes from CHANGELOG.md"
 NOTES_FILE="$(mktemp)"
 awk -v ver="$VERSION" '
   $0 ~ "^## \\[" ver "\\]" { found=1; next }
@@ -49,11 +60,11 @@ awk -v ver="$VERSION" '
   found { print }
 ' CHANGELOG.md > "$NOTES_FILE"
 
-step "4/5 Tag and push"
+step "5/6 Tag and push"
 git tag -a "$TAG" -m "qlcconsole $TAG"
 git push origin "$TAG"
 
-step "5/5 Publish GitHub Release"
+step "6/6 Publish GitHub Release"
 gh release create "$TAG" "$DMG" \
   --title "qlcconsole $TAG" \
   --notes-file "$NOTES_FILE"
