@@ -35,6 +35,7 @@
 #include "doc.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
+#include "powerdistribution.h"
 
 // Short output-destination description for a universe (by ID), e.g.
 // "ArtNet: 172.18.2.221 U:0", or the plugin name for non-network outputs.
@@ -227,9 +228,11 @@ void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
 
 void FixtureTreeWidget::dragEnterEvent(QDragEnterEvent* event)
 {
-    // The tree only accepts internal group-onto-folder drops; fixture drags
-    // are for external targets (the group editor grid), not this tree.
-    if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE))
+    // The tree accepts internal group-onto-folder drops, and — when power
+    // circuits are shown — fixture-onto-circuit drops. Fixture drags are
+    // otherwise for external targets (the group editor grid), not this tree.
+    if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE) ||
+        (m_showPower && event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)))
         event->acceptProposedAction();
     else
         event->ignore();
@@ -237,41 +240,88 @@ void FixtureTreeWidget::dragEnterEvent(QDragEnterEvent* event)
 
 void FixtureTreeWidget::dragMoveEvent(QDragMoveEvent* event)
 {
-    if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE) == false)
-    {
-        event->ignore();
-        return;
-    }
-
-    // Only a group folder, a group (drop alongside it), or the empty root are
-    // valid targets for a group drop.
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QTreeWidgetItem *target = itemAt(event->pos());
 #else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
 #endif
-    const bool valid = target == NULL ||
-            target->data(KColumnName, PROP_FOLDER).isValid() ||
-            target->data(KColumnName, PROP_GROUP).isValid();
-    if (valid)
-        event->acceptProposedAction();
-    else
-        event->ignore();
+
+    if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE))
+    {
+        // Only a group folder, a group (drop alongside it), or the empty root
+        // are valid targets for a group drop.
+        const bool valid = target == NULL ||
+                target->data(KColumnName, PROP_FOLDER).isValid() ||
+                target->data(KColumnName, PROP_GROUP).isValid();
+        if (valid)
+            event->acceptProposedAction();
+        else
+            event->ignore();
+        return;
+    }
+
+    if (m_showPower && event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE))
+    {
+        // A circuit node, a direct-source node, or a plain (multi-circuit)
+        // source node are all valid fixture targets — dropped straight on a
+        // source with no circuit picked lands on its first circuit. The bare
+        // "Power" root (sentinel source index -1) is not a valid target.
+        const QVariant srcVar = (target != NULL) ? target->data(KColumnName, PROP_SOURCE) : QVariant();
+        const bool valid = target != NULL &&
+                (target->data(KColumnName, PROP_CIRCUIT).isValid() ||
+                 (srcVar.isValid() && srcVar.toInt() >= 0));
+        if (valid)
+            event->acceptProposedAction();
+        else
+            event->ignore();
+        return;
+    }
+
+    event->ignore();
 }
 
 void FixtureTreeWidget::dropEvent(QDropEvent* event)
 {
-    if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE) == false)
-    {
-        event->ignore();
-        return;
-    }
-
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QTreeWidgetItem *target = itemAt(event->pos());
 #else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
 #endif
+
+    const QVariant dropSrcVar = (target != NULL) ? target->data(KColumnName, PROP_SOURCE) : QVariant();
+    const bool validPowerTarget = target != NULL &&
+            (target->data(KColumnName, PROP_CIRCUIT).isValid() ||
+             (dropSrcVar.isValid() && dropSrcVar.toInt() >= 0));
+
+    if (m_showPower && event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE) && validPowerTarget)
+    {
+        const int sourceIdx = dropSrcVar.toInt();
+        // A circuit-tagged node carries its own circuit index; a plain source
+        // node (no PROP_CIRCUIT) means "no circuit picked" -> its first circuit.
+        const QVariant cirVar = target->data(KColumnName, PROP_CIRCUIT);
+        const int circuitIdx = cirVar.isValid() ? cirVar.toInt() : 0;
+
+        QList<quint32> ids;
+        QByteArray data = event->mimeData()->data(FIXTURE_DRAG_MIME_TYPE);
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 fid = 0;
+            stream >> fid;
+            ids << fid;
+        }
+
+        if (ids.isEmpty() == false)
+            emit fixturesDroppedOnCircuit(ids, sourceIdx, circuitIdx);
+        event->acceptProposedAction();
+        return;
+    }
+
+    if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE) == false)
+    {
+        event->ignore();
+        return;
+    }
 
     // Resolve the destination folder path.
     QString destPath;
@@ -325,6 +375,7 @@ FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
     , m_showGroups(false)
     , m_showHeads(false)
     , m_channelSelection(false)
+    , m_showPower(false)
 {
     setFlags(flags);
 
@@ -386,6 +437,9 @@ void FixtureTreeWidget::setFlags(quint32 flags)
 
     if (flags & ChannelSelection)
         m_channelSelection = true;
+
+    if (flags & ShowPower)
+        m_showPower = true;
 
     setHeaderLabels(labels);
 }
@@ -718,6 +772,74 @@ void FixtureTreeWidget::updateTree()
             // Nest the group under its folder path (if any).
             QTreeWidgetItem* grpItem = new QTreeWidgetItem(groupFolderItem(grp->path()));
             updateGroupItem(grpItem, grp);
+        }
+    }
+
+    // Power sources/circuits, peer to the fixture-group folders and the
+    // Universes folder below. A source with 0 or 1 circuits feeds fixtures
+    // directly (mirrors the "(direct)" case in FixtureManager's right-click
+    // circuit menu); a source with 2+ circuits fans out into circuit nodes.
+    if (m_showPower == true)
+    {
+        const QList<PowerSource>& sources = m_doc->powerDistribution()->sources();
+
+        // Always present (even with zero sources yet) so it can be selected
+        // to switch the pane to the power view and add the first source there.
+        QTreeWidgetItem *powerRoot = new QTreeWidgetItem(this);
+        powerRoot->setText(KColumnName, tr("Power"));
+        powerRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+        powerRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        powerRoot->setData(KColumnName, PROP_SOURCE, -1); // sentinel: "the power tree", not a specific source
+        powerRoot->setExpanded(true);
+
+        for (int s = 0; s < sources.size(); s++)
+        {
+            const PowerSource& src = sources.at(s);
+            QTreeWidgetItem *srcItem = new QTreeWidgetItem(powerRoot);
+            srcItem->setData(KColumnName, PROP_SOURCE, s);
+            srcItem->setIcon(KColumnName, QIcon(":/folder.png"));
+            srcItem->setExpanded(true);
+
+            if (src.circuits.size() <= 1)
+            {
+                // Direct source: fixtures nest right under it (circuit 0,
+                // created on demand by PowerDistribution::assignFixture).
+                srcItem->setText(KColumnName, tr("%1  (direct)").arg(src.name));
+                srcItem->setData(KColumnName, PROP_CIRCUIT, 0);
+                if (src.circuits.size() == 1)
+                {
+                    foreach (quint32 fid, src.circuits.first().fixtures)
+                    {
+                        Fixture *fxi = m_doc->fixture(fid);
+                        if (fxi == NULL)
+                            continue;
+                        QTreeWidgetItem *fItem = new QTreeWidgetItem(srcItem);
+                        updateFixtureItem(fItem, fxi);
+                    }
+                }
+            }
+            else
+            {
+                srcItem->setText(KColumnName, src.name);
+                for (int c = 0; c < src.circuits.size(); c++)
+                {
+                    const PowerCircuit& cir = src.circuits.at(c);
+                    QTreeWidgetItem *cirItem = new QTreeWidgetItem(srcItem);
+                    cirItem->setText(KColumnName, cir.name);
+                    cirItem->setIcon(KColumnName, QIcon(":/folder.png"));
+                    cirItem->setData(KColumnName, PROP_SOURCE, s);
+                    cirItem->setData(KColumnName, PROP_CIRCUIT, c);
+                    cirItem->setExpanded(true);
+                    foreach (quint32 fid, cir.fixtures)
+                    {
+                        Fixture *fxi = m_doc->fixture(fid);
+                        if (fxi == NULL)
+                            continue;
+                        QTreeWidgetItem *fItem = new QTreeWidgetItem(cirItem);
+                        updateFixtureItem(fItem, fxi);
+                    }
+                }
+            }
         }
     }
 

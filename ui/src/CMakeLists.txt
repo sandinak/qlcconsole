@@ -120,6 +120,7 @@ add_library(${module_name}
     pathdrawwidget.cpp pathdrawwidget.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h
+    universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h

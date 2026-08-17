@@ -442,8 +442,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_fixtureMixedNote->hide();
     m_canvasLayout->addWidget(m_fixtureMixedNote);
 
-    // Estimated electrical load of the previewed look (Design mode only).
-    buildPowerFooter();
+    // Estimated electrical load of the previewed look (Design mode only);
+    // the readout is the app status-bar chip, this just drives the timer.
+    initPowerTimer();
 
     connect(m_fixtureConsole, SIGNAL(valueChanged(quint32,quint32,uchar)),
             this, SLOT(slotFixtureValueChanged(quint32,quint32,uchar)));
@@ -1445,40 +1446,8 @@ void ProgrammingManager::slotCanvasModified()
  * Power / amperage estimate (Design mode only)
  ****************************************************************************/
 
-void ProgrammingManager::buildPowerFooter()
+void ProgrammingManager::initPowerTimer()
 {
-    m_powerFooter = new QFrame(this);
-    m_powerFooter->setFrameShape(QFrame::StyledPanel);
-    QHBoxLayout *fl = new QHBoxLayout(m_powerFooter);
-    fl->setContentsMargins(6, 2, 6, 2);
-
-    QLabel *caption = new QLabel(tr("Estimated load:"), m_powerFooter);
-    m_powerAmpsLabel = new QLabel(QStringLiteral("0.0 A"), m_powerFooter);
-    QFont bold = m_powerAmpsLabel->font();
-    bold.setBold(true);
-    m_powerAmpsLabel->setFont(bold);
-    m_powerKwLabel = new QLabel(QStringLiteral("0.0 kW"), m_powerFooter);
-    m_powerKwLabel->setStyleSheet(QStringLiteral("QLabel { color: gray; }"));
-
-    m_powerOverloadLabel = new QLabel(tr("OVERLOAD"), m_powerFooter);
-    m_powerOverloadLabel->setStyleSheet(
-        QStringLiteral("QLabel { color: white; background: #c0392b; "
-                       "padding: 0 6px; border-radius: 3px; font-weight: bold; }"));
-    m_powerOverloadLabel->hide();
-
-    m_circuitsBtn = new QPushButton(tr("Circuits…"), m_powerFooter);
-    connect(m_circuitsBtn, &QPushButton::clicked,
-            this, &ProgrammingManager::slotOpenCircuits);
-
-    fl->addWidget(caption);
-    fl->addWidget(m_powerAmpsLabel);
-    fl->addWidget(m_powerKwLabel);
-    fl->addWidget(m_powerOverloadLabel);
-    fl->addStretch(1);
-    fl->addWidget(m_circuitsBtn);
-
-    m_canvasLayout->addWidget(m_powerFooter);
-
     // Low-frequency refresh so a held fader / palette change settles into the
     // reading without us hooking every DMX write. Design-mode-gated below.
     m_powerTimer = new QTimer(this);
@@ -1486,14 +1455,12 @@ void ProgrammingManager::buildPowerFooter()
     connect(m_powerTimer, &QTimer::timeout, this, &ProgrammingManager::recomputePower);
 }
 
-void ProgrammingManager::updatePowerFooterActive()
+void ProgrammingManager::updatePowerEstimateActive()
 {
-    // The estimate now lives in the app status bar (always visible in Design
+    // The estimate lives in the app status bar (always visible in Design
     // mode), so the timer runs whenever we're in Design mode — regardless of
-    // which tab is on screen. The old in-tab footer is retired.
+    // which tab is on screen.
     const bool active = (m_doc->mode() == Doc::Design);
-    if (m_powerFooter != nullptr)
-        m_powerFooter->setVisible(false);
     if (m_powerTimer != nullptr)
     {
         if (active)
@@ -1515,8 +1482,6 @@ void ProgrammingManager::recomputePower()
     // Design mode only (the estimate is a "designed peak"); runs across tabs now
     // that the readout is in the always-visible status bar.
     if (m_doc->mode() != Doc::Design)
-        return;
-    if (m_powerAmpsLabel == nullptr)
         return;
 
     // Take a consistent pre-Grand-Master snapshot of all universes (the
@@ -1587,15 +1552,11 @@ void ProgrammingManager::recomputePower()
         totalAmps += it.value() / defaultVoltage;
     }
 
-    m_powerAmpsLabel->setText(tr("%1 A").arg(totalAmps, 0, 'f', 1));
-    m_powerKwLabel->setText(tr("%1 kW").arg(totalWatts / 1000.0, 0, 'f', 2));
-    m_powerOverloadLabel->setVisible(overload);
-
-    // Push the same estimate to the app's always-visible status-bar chip.
+    // Push the estimate to the app's always-visible status-bar chip.
     emit powerEstimateChanged(totalAmps, totalWatts / 1000.0, overload);
 }
 
-void ProgrammingManager::slotOpenCircuits()
+void ProgrammingManager::openCircuitsDialog()
 {
     PowerDistributionDialog dlg(m_doc, this);
     dlg.exec();
@@ -1672,7 +1633,7 @@ void ProgrammingManager::slotModeChanged()
         m_operateFunction = Function::invalidId();
         m_previewFunction = Function::invalidId();
         startPreview();
-        updatePowerFooterActive(); // back in Design → show footer, start timer
+        updatePowerEstimateActive(); // back in Design → start timer
 
         // Operate → Design: the live follow-spot pin has no meaning while
         // designing — hide it so only the draggable StageTarget remains.
@@ -1704,7 +1665,7 @@ void ProgrammingManager::slotModeChanged()
             qDebug() << "[PM]   no preview function, starting fresh operate scene";
             startOperateScene();  // nothing was running; start fresh
         }
-        updatePowerFooterActive(); // Operate → hide footer, stop timer
+        updatePowerEstimateActive(); // Operate → stop timer, clear the chip
 
         // Design → Operate: now the follow-spot pin is meaningful — seed it at
         // the focused scene's aim target so it appears immediately (the gate in
@@ -1735,7 +1696,7 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
     if (ProgrammerController *pc = m_doc->programmer())
         pc->autoBindFromProfile();
     startPreview();
-    updatePowerFooterActive();
+    updatePowerEstimateActive();
     slotParkChanged(); // reflect any parks restored from the workspace
     // Blind survives tab switches — reflect the current engine state on return.
     slotBlindStateChanged(m_doc->inputOutputMap()->outputInhibited());
@@ -1754,7 +1715,7 @@ void ProgrammingManager::hideEvent(QHideEvent *ev)
     if (Monitor *mon = Monitor::instance())
         disconnect(mon, &Monitor::fixturesSelected,
                    this, &ProgrammingManager::slotFixturesSelected);
-    updatePowerFooterActive(); // stops the timer / hides the footer
+    updatePowerEstimateActive(); // stops the timer
     QWidget::hideEvent(ev);
 }
 

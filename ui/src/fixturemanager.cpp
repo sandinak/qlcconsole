@@ -54,6 +54,7 @@
 #include "createfixturegroup.h"
 #include "powerdistributionwidget.h"
 #include "powerdistribution.h"
+#include "universeusagewidget.h"
 #include "fixturegroupeditor.h"
 #include "fixturetreewidget.h"
 #include "channelsselection.h"
@@ -98,6 +99,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_groupEditorId(FixtureGroup::invalidId())
     , m_currentTabIndex(0)
     , m_power(NULL)
+    , m_universeUsage(NULL)
     , m_ctxUniverse(InputOutputMap::invalidUniverse())
     , m_addAction(NULL)
     , m_addRGBAction(NULL)
@@ -384,7 +386,8 @@ void FixtureManager::initDataView()
     /* Create a tree widget to the left part of the splitter */
     quint32 treeFlags = FixtureTreeWidget::UniverseNumber |
                         FixtureTreeWidget::AddressRange |
-                        FixtureTreeWidget::ShowGroups;
+                        FixtureTreeWidget::ShowGroups |
+                        FixtureTreeWidget::ShowPower;
 
     m_fixtures_tree = new FixtureTreeWidget(m_doc, treeFlags, this);
     m_fixtures_tree->setIconSize(QSize(32, 32));
@@ -404,6 +407,8 @@ void FixtureManager::initDataView()
             this, SLOT(slotGroupsDroppedOnFolder(QList<quint32>,QString)));
     connect(m_fixtures_tree, SIGNAL(groupFolderRenamed(QString,QString)),
             this, SLOT(slotGroupFolderRenamed(QString,QString)));
+    connect(m_fixtures_tree, SIGNAL(fixturesDroppedOnCircuit(QList<quint32>,int,int)),
+            this, SLOT(slotFixturesDroppedOnCircuit(QList<quint32>,int,int)));
 
     connect(m_fixtures_tree, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotSelectionChanged()));
@@ -596,6 +601,11 @@ void FixtureManager::clearRightPane()
         delete m_power;
         m_power = NULL;
     }
+    if (m_universeUsage != NULL)
+    {
+        delete m_universeUsage;
+        m_universeUsage = NULL;
+    }
 }
 
 void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
@@ -625,9 +635,20 @@ void FixtureManager::showPower()
     clearRightPane();
 
     // Embedded next to the fixture tree, so no built-in fixtures list: assignment
-    // is driven from the tree's right-click menu.
+    // is driven from the tree's right-click menu (or dragging onto a circuit).
     m_power = new PowerDistributionWidget(m_doc, false, this);
     m_splitter->insertWidget(1, m_power);
+
+    m_splitter->restoreState(state);
+}
+
+void FixtureManager::showUniverseUsage(quint32 universe)
+{
+    QByteArray state = m_splitter->saveState();
+    clearRightPane();
+
+    m_universeUsage = new UniverseUsageWidget(m_doc, universe, this);
+    m_splitter->insertWidget(1, m_universeUsage);
 
     m_splitter->restoreState(state);
 }
@@ -694,9 +715,59 @@ void FixtureManager::slotSelectionChanged()
         return;
     }
 
-    // Anything else — a fixture, a universe, nothing, or a multi-selection — shows
-    // the power systems in the wide right-hand pane.
-    showPower();
+    // A single universe → its address-usage grid.
+    if (selectedCount == 1)
+    {
+        const QVariant univar = items.first()->data(KColumnName, PROP_UNIVERSE);
+        if (univar.isValid() == true)
+        {
+            showUniverseUsage(univar.toUInt());
+            slotModeChanged(m_doc->mode());
+            return;
+        }
+    }
+
+    // A power-tree node selected (the Power folder itself, a source, or a
+    // circuit) → the power-distribution view. A plain fixture/group selection
+    // never lands here — only an explicit selection under Power.
+    bool anyPower = false;
+    foreach (QTreeWidgetItem *it, items)
+    {
+        if (it->data(KColumnName, PROP_SOURCE).isValid() ||
+            it->data(KColumnName, PROP_CIRCUIT).isValid())
+        {
+            anyPower = true;
+            break;
+        }
+    }
+    if (anyPower)
+    {
+        showPower();
+        slotModeChanged(m_doc->mode());
+        return;
+    }
+
+    // A single fixture → its info.
+    if (selectedCount == 1)
+    {
+        const QVariant fxivar = items.first()->data(KColumnName, PROP_ID);
+        if (fxivar.isValid() == true && items.first()->data(KColumnName, PROP_HEAD).isValid() == false)
+        {
+            fixtureSelected(fxivar.toUInt());
+            slotModeChanged(m_doc->mode());
+            return;
+        }
+    }
+
+    // Nothing selected, or a multi/mixed selection with no single clear
+    // target (e.g. several fixtures) → a generic info browser.
+    if (m_info == NULL)
+        createInfo();
+    m_info->setText(selectedCount == 0
+        ? tr("<HTML><BODY><H1>Nothing selected</H1>"
+             "<P>Select a fixture, group, universe, or power source "
+             "from the list.</P></BODY></HTML>")
+        : tr("<HTML><BODY><H1>%1 items selected</H1></BODY></HTML>").arg(selectedCount));
 
     // Enable/disable actions
     slotModeChanged(m_doc->mode());
@@ -776,6 +847,8 @@ void FixtureManager::slotDoubleClicked(QTreeWidgetItem* item)
         if (grp != NULL)
             fixtureGroupSelected(grp);
     }
+    // A universe or a power node just selects (slotSelectionChanged already
+    // swaps the right pane to its view) — no extra double-click behaviour.
 }
 
 void FixtureManager::slotChannelsGroupDoubleClicked(QTreeWidgetItem*)
@@ -2234,6 +2307,18 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         }
     }
 
+    // Was the click anywhere in the Power section? -2 = no; -1 = the "Power"
+    // root itself (only "Add power source…" applies); >= 0 = a specific
+    // source's index (a direct-source node, a multi-circuit source folder, or
+    // one of its circuits — "Add circuit…" adds to that source either way).
+    int ctxPowerSource = -2;
+    if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
+    {
+        const QVariant srcVar = clicked->data(KColumnName, PROP_SOURCE);
+        if (srcVar.isValid())
+            ctxPowerSource = srcVar.toInt();
+    }
+
     QMenu menu(this);
     menu.addAction(m_addAction);
     menu.addAction(m_addRGBAction);
@@ -2338,6 +2423,19 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             none->setEnabled(false);
         }
         removeFromCircuit = menu.addAction(tr("Remove from power circuit"));
+    }
+
+    // Build out the Power section itself: a new source from the "Power" folder
+    // (or from any power node — you don't have to hit the root exactly), a new
+    // circuit on whichever source was clicked.
+    QAction *addPowerSource = NULL;
+    QAction *addCircuit = NULL;
+    if (ctxPowerSource != -2)
+    {
+        menu.addSeparator();
+        addPowerSource = menu.addAction(tr("Add power source…"));
+        if (ctxPowerSource >= 0)
+            addCircuit = menu.addAction(tr("Add circuit…"));
     }
 
     // Fixture Studio: rebuild a composite group from the source groups recorded
@@ -2451,6 +2549,38 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (m_power != NULL)
             m_power->refresh();
     }
+    else if (chosen == addPowerSource)
+    {
+        // Same defaults slotAddSource() uses in the Power pane itself.
+        QSettings settings;
+        PowerDistribution *pd = m_doc->powerDistribution();
+        PowerSource src;
+        src.name = tr("Source %1").arg(pd->sources().size() + 1);
+        src.voltage = settings.value(QStringLiteral("power/defaultVoltage"), 120.0).toDouble();
+        pd->sources().append(src);
+        m_doc->setModified();
+        updateView();
+        if (m_power != NULL)
+            m_power->refresh();
+    }
+    else if (chosen == addCircuit && ctxPowerSource >= 0)
+    {
+        QSettings settings;
+        PowerDistribution *pd = m_doc->powerDistribution();
+        if (ctxPowerSource < pd->sources().size())
+        {
+            PowerCircuit cir;
+            PowerSource &src = pd->sources()[ctxPowerSource];
+            cir.name = tr("Circuit %1").arg(src.circuits.size() + 1);
+            cir.ratedAmps = settings.value(QStringLiteral("power/defaultBreakerAmps"), 20.0).toDouble();
+            cir.deratePercent = settings.value(QStringLiteral("power/deratePercent"), 80).toInt();
+            src.circuits.append(cir);
+            m_doc->setModified();
+            updateView();
+            if (m_power != NULL)
+                m_power->refresh();
+        }
+    }
 }
 
 void FixtureManager::slotGroupFolderRenamed(const QString& oldPath,
@@ -2503,5 +2633,22 @@ void FixtureManager::slotGroupsDroppedOnFolder(const QList<quint32>& groupIds,
             m_doc->setModified();
             updateView();
         }
+    });
+}
+
+void FixtureManager::slotFixturesDroppedOnCircuit(const QList<quint32>& fixtureIds,
+                                                  int sourceIdx, int circuitIdx)
+{
+    // Deferred for the same reason as slotGroupsDroppedOnFolder(): this runs
+    // from the tree's dropEvent, and updateView() rebuilds (deletes) the tree
+    // items while Qt's drag machinery still references the dragged item.
+    QTimer::singleShot(0, this, [this, fixtureIds, sourceIdx, circuitIdx]() {
+        PowerDistribution *pd = m_doc->powerDistribution();
+        foreach (quint32 fid, fixtureIds)
+            pd->assignFixture(fid, sourceIdx, circuitIdx);
+        m_doc->setModified();
+        if (m_power != NULL)
+            m_power->refresh();
+        updateView();
     });
 }

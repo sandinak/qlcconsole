@@ -39,6 +39,7 @@ class QAction;
 class QMenu;
 class QToolBar;
 class PowerDistributionWidget;
+class UniverseUsageWidget;
 
 /** @addtogroup ui_fixtures
  * @{
@@ -151,6 +152,9 @@ private:
      *  slot currently holds the info browser or a group editor). */
     void showPower();
 
+    /** Show the given universe's address-usage grid in the right pane. */
+    void showUniverseUsage(quint32 universe);
+
 private slots:
     /** Callback for fixture list selection changes */
     void slotSelectionChanged();
@@ -211,6 +215,7 @@ private:
     quint32 m_groupEditorId; //!< id of the group m_groupEditor is editing
     int m_currentTabIndex;
     PowerDistributionWidget* m_power; //!< rightmost pane: circuits + live load
+    UniverseUsageWidget* m_universeUsage; //!< rightmost pane: per-universe address grid
 
     /********************************************************************
      * Menu & Toolbar & Actions
@@ -260,6 +265,10 @@ private slots:
     /** Rename a fixture-group folder and update all groups whose path starts
      *  with @p oldPath. */
     void slotGroupFolderRenamed(const QString& oldPath, const QString& newLeaf);
+
+    /** Assign the dropped fixtures to a power circuit (dragged onto it in the
+     *  Power section of the tree). */
+    void slotFixturesDroppedOnCircuit(const QList<quint32>& fixtureIds, int sourceIdx, int circuitIdx);
 
 private:
     QAction* m_addAction;

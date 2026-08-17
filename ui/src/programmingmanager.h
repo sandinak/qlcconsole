@@ -63,6 +63,11 @@ public:
      *  Public entry for external navigation / automated screenshots. */
     void showFunction(quint32 fid);
 
+    /** Open the power-distribution (circuits) editor dialog. Public entry so
+     *  the app status-bar Power chip can reach it — the readout moved there,
+     *  taking the old in-canvas "Circuits…" button with it. */
+    void openCircuitsDialog();
+
 protected:
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
@@ -94,8 +99,6 @@ private slots:
     // Power/amperage estimate (Design mode only)
     /** Re-estimate the load of the previewed look and refresh the footer. */
     void recomputePower();
-    /** Open the power-distribution (circuits) editor dialog. */
-    void slotOpenCircuits();
 
     // Highlight
     void slotHighlightToggled(bool on);
@@ -337,20 +340,17 @@ private:
     QPushButton *m_saveBtn = nullptr;
     bool         m_saveArmed = false;
 
-    // Power/amperage footer (Design mode only). Hidden in Operate; the timer
-    // is stopped whenever the tab is hidden or the show goes live, so Run mode
-    // pays nothing.
-    QFrame      *m_powerFooter = nullptr;
-    QLabel      *m_powerAmpsLabel = nullptr;
-    QLabel      *m_powerKwLabel = nullptr;
-    QLabel      *m_powerOverloadLabel = nullptr;
-    QPushButton *m_circuitsBtn = nullptr;
+    // Power/amperage estimate (Design mode only). The readout lives in the
+    // app status-bar chip now (powerEstimateChanged); the timer here just
+    // drives the periodic re-estimate, stopped whenever the tab is hidden or
+    // the show goes live, so Run mode pays nothing.
     QTimer      *m_powerTimer = nullptr;
 
-    /** Build the footer widget and append it to the canvas layout. */
-    void buildPowerFooter();
-    /** Start/stop the periodic re-estimate and footer visibility per mode. */
-    void updatePowerFooterActive();
+    /** Start the periodic re-estimate timer. */
+    void initPowerTimer();
+    /** Start/stop the periodic re-estimate per mode; clears the status-bar
+     *  chip on the way into Operate. */
+    void updatePowerEstimateActive();
 
 signals:
     /** Emitted when the user confirms Save in the Programming tab. */

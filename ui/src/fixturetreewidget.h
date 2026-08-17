@@ -36,6 +36,8 @@ class Doc;
 #define PROP_HEAD     Qt::UserRole + 3
 #define PROP_CHANNEL  Qt::UserRole + 4
 #define PROP_FOLDER   Qt::UserRole + 5  //!< group-folder path (string)
+#define PROP_SOURCE   Qt::UserRole + 6  //!< power source index (int, into PowerDistribution::sources())
+#define PROP_CIRCUIT  Qt::UserRole + 7  //!< power circuit index (int, within its source's circuits())
 
 class FixtureTreeWidget final : public QTreeWidget
 {
@@ -89,6 +91,11 @@ signals:
      *  @p newName  new leaf name the user typed ("Right") */
     void groupFolderRenamed(const QString& oldPath, const QString& newName);
 
+    /** Emitted when one or more fixtures are dropped onto a Power circuit (or a
+     *  direct/wall-socket source) node. $sourceIdx/$circuitIdx index into
+     *  Doc::powerDistribution()->sources(). Only emitted with ShowPower set. */
+    void fixturesDroppedOnCircuit(const QList<quint32>& fixtureIds, int sourceIdx, int circuitIdx);
+
 protected:
     /** Provide fixture/group IDs for dragging onto drop targets (the group
      *  editor grid for fixtures, folders for groups). */
@@ -139,7 +146,8 @@ public:
         Model            = 1 << 5,
         ShowGroups       = 1 << 6,
         ShowHeads        = 1 << 7,
-        ChannelSelection = 1 << 8
+        ChannelSelection = 1 << 8,
+        ShowPower        = 1 << 9
     };
 
     void setFlags(quint32 flags);
@@ -156,6 +164,7 @@ private:
     bool m_showGroups;
     bool m_showHeads;
     bool m_channelSelection;
+    bool m_showPower;
 
     /****************************************************************************
      * Disabled items

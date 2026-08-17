@@ -35,6 +35,39 @@ effect timing items also want the rig to confirm.
 
 ## Recently shipped (verify on rig, then move to DONE.md)
 
+- **Hardware tab: Power tree + universe usage grid (2026-08-12 → 08-13,
+  BUILT)** — the former "Fixtures" tab is renamed **"Hardware"** (`app.cpp`,
+  one-line tab-label change). Its tree already had a lazily-built
+  "Universes" folder (`FixtureTreeWidget::updateTree()`); selecting a
+  universe node now swaps the right-hand pane to `UniverseUsageWidget`
+  (`ui/src/universeusagewidget.{h,cpp}` — embedded in the splitter like the
+  group-layout editor and power view, *not* a popup dialog; started as one,
+  corrected after eyeballing it) — a 512-cell address grid coloured per
+  occupying fixture (deterministic hue from fixture ID) built on
+  `Doc::fixtureForAddress()`, with a tooltip per cell and a fixture legend
+  below. A new **"Power"** folder (peer to Fixture Groups/Universes, gated
+  behind a new `FixtureTreeWidget::ShowPower` flag so the shared tree widget
+  doesn't pick it up in picker dialogs, and *always present* even with zero
+  sources so it can be selected/added-to) lists `PowerDistribution` sources →
+  circuits → assigned fixtures, mirroring the existing group-folder nesting.
+  Right-click the Power folder → **"Add power source…"**; right-click a
+  source/circuit → **"Add circuit…"** (same defaults as the Power pane's own
+  buttons). Dragging a fixture from anywhere in the tree onto a circuit *or
+  a bare source* (lands on its first circuit, auto-created if needed) assigns
+  it via `PowerDistribution::assignFixture()` — the same call the existing
+  right-click "Add to power circuit" menu already used, now with visual/drag
+  entry points too. `slotSelectionChanged()` was rewritten to route
+  explicitly by selection type (group → layout, universe → usage grid, any
+  Power-tree node → power view, single fixture → its info via the
+  previously-dead `fixtureSelected()`, else → generic info) instead of
+  defaulting everything-but-groups to the power view. The in-canvas
+  Programming-tab power footer (dead code — `ProgrammingManager::
+  m_powerFooter` was force-hidden since the readout moved to the app
+  status-bar chip) is fully removed; its "Circuits…" button is replaced by
+  making the status-bar Power chip itself clickable
+  (`ProgrammingManager::openCircuitsDialog()`, wired the same way the MTC
+  chip's click-to-bind menu already works).
+
 - **Footer chip polish (2026-08-12)** — Power/Dangle chips (`⚡`/`⚠`) were
   rendering as full-size color emoji next to plain-text chips (Ready/Autosave/
   Saved), reading as a font-size mismatch though the point size was identical
@@ -369,21 +402,6 @@ drag-drop tree→face to add; distribute/put-on-face via popup or right-click.
 **Design options being drafted — pick a direction before building.**
 
 ---
-
-## Now — Fixtures tab: power tree + universe usage grid *(not started)*
-
-- **Power systems in the tree** — a `Power` folder in the Fixtures-tab tree
-  (peer to Fixture Groups); add devices under `Power → <circuit>` the same
-  drag/right-click workflow as adding fixtures to a group. Gives power
-  planning a real home in the tree instead of living only as a 2D stage-object
-  (see "more stage-feature objects" below — the tree entry and the map object
-  should probably reference the same underlying circuit).
-- **Rename the Fixtures tab → "Physical Groups"** — once it hosts fixture
-  groups AND power circuits (and maybe other physical groupings later),
-  "Fixtures" undersells what's actually in there.
-- **Double-click a universe folder → channel-usage grid** — same drill-down
-  gesture already used elsewhere in the tree; opens a grid showing what's
-  patched/consuming each channel in that universe.
 
 ---
 

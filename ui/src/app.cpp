@@ -390,7 +390,7 @@ void App::init()
     };
 
     QWidget* w = new FixtureManager(m_tab, m_doc);
-    addTab(w, QIcon(":/fixture.png"), tr("Fixtures"));
+    addTab(w, QIcon(":/fixture.png"), tr("Hardware"));
     w = new FunctionManager(m_tab, m_doc);
     addTab(w, QIcon(":/function.png"), tr("Functions"));
     {
@@ -2906,7 +2906,10 @@ void App::initStatusBar()
     m_statusPowerLabel = new QLabel(this);
     m_statusPowerLabel->setFont(chipFont);
     m_statusPowerLabel->setToolTip(tr("Estimated peak electrical load across the rig "
-        "(Design mode). Red = a circuit or UPS is over its rated/derated limit."));
+        "(Design mode). Red = a circuit or UPS is over its rated/derated limit.\n\n"
+        "Click to open the circuits editor."));
+    m_statusPowerLabel->setCursor(Qt::PointingHandCursor);
+    m_statusPowerLabel->installEventFilter(this);   // click → circuits dialog
     m_statusPowerLabel->hide();   // shown once a Design-mode estimate arrives
     sb->addWidget(m_statusPowerLabel, 0);
 
@@ -3183,6 +3186,15 @@ bool App::eventFilter(QObject *watched, QEvent *event)
 
         QMouseEvent *me = static_cast<QMouseEvent *>(event);
         menu.exec(m_statusTimecodeLabel->mapToGlobal(me->pos()));
+        return true;
+    }
+
+    // Click the status-bar Power chip → the circuits editor (the readout
+    // moved here from the Programming canvas; this is its "Circuits…" button).
+    if (watched == m_statusPowerLabel && event->type() == QEvent::MouseButtonPress)
+    {
+        if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
+            pm->openCircuitsDialog();
         return true;
     }
     return QMainWindow::eventFilter(watched, event);
