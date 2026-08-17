@@ -438,14 +438,35 @@ per-fixture offsets along the run.
 
 ## Backlog — not started
 
+### Show lifecycle: Construction / Test-Validate / Production *(2026-08-15, design doc written)*
+See `SHOW_LIFECYCLE_DESIGN.md` — names the three phases a show moves through
+(building off-rig → matching Lighting Studio to the real rig → running on the
+road) and settles that this is **not** a third `Doc::mode()`; it's the
+existing Design/Operate axis crossed with a "connected to real hardware vs.
+fully simulated" axis (real, non-Dummy plugin patched **and** not Blind —
+Blind turned out to already BE the "disable real output" switch: it silences
+every protocol at once and is already Design-only/force-off-in-Operate, see
+the doc's 2026-08-15 finding). Concrete follow-ons, none started:
+1. Compute + expose the rolled-up connected/simulated state
+   (patched-and-not-Blind).
+2. Surface it as a footer chip alongside MTC/Load/Power.
+3. Decide + build whether Design mode should auto-engage Blind when it
+   detects real hardware patched, rather than leaving it opt-in.
+4. Turn `RIG_TEST_PLAN.md`'s manual checklist into an actual in-app
+   Test/Validate workflow (bigger; own design pass on where it lives).
+5. Retroactively tag the rest of this backlog by which phase it serves, to
+   sharpen prioritization instead of treating it as one flat list.
+
 ### "Look" as the assembly unit (Scene/Collection rethink) *(Branson shower-thought; design-doc-first)*
 Don't rename Scene/Collection (breaks traditional QLC users). Instead make the
 fork's **Look** first-class: give it (1) an explicit **fixture scope** (the
 "subpart vs whole stage" idea, as metadata) and (2) **palette/fixture state as the
 BASE that effects/RGBScripts consume** (parameterise effects by the Look's state
 vs discrete per-fixture config; old way still works). Continuous with palette-fed
-looks + dimmer-as-multiplier scene-base already built. Write a design doc first
-(à la FIXTURESTUDIO_DESIGN.md) before code.
+looks + dimmer-as-multiplier scene-base already built. Per the show-lifecycle doc
+above: (1) mainly serves Construction (organizing/filtering), (2) mainly serves
+Production (runtime behavior) — worth designing as two separate slices rather
+than one. Write a design doc first (à la FIXTURESTUDIO_DESIGN.md) before code.
 
 ### Tiny: mark the MTC-chip section label as show-sourced *(Branson shower-thought)*
 The MTC footer chip appends the current show SECTION under the playhead
