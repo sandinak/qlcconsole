@@ -68,7 +68,9 @@ TrackItem::TrackItem(Track *track, int number)
     m_soloRegion = new QRectF(45.0, 10.0, 25.0, 16.0);
     m_lockRegion = new QRectF(73.0, 10.0, 25.0, 16.0);
     // Intensity submaster bar (drag horizontally), between the buttons and name.
-    m_intensityRegion = new QRectF(8.0, 30.0, TRACK_WIDTH - 20.0, 9.0);
+    // Starts at x=14, clear of the active-indicator bar at x:1-11 (was x=8,
+    // which overlapped it) — same right edge as before (TRACK_WIDTH - 12).
+    m_intensityRegion = new QRectF(14.0, 30.0, TRACK_WIDTH - 26.0, 9.0);
 
     m_moveUp = new QAction(QIcon(":/up.png"), tr("Move up"), this);
     connect(m_moveUp, SIGNAL(triggered()),
@@ -146,6 +148,12 @@ void TrackItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     m_isActive = true;
     QGraphicsItem::mousePressEvent(event);
+    // The base implementation ignores the event for an item that's neither
+    // movable nor selectable (neither flag is set here) — left as ignored,
+    // the scene never grabs the mouse for this item, so mouseMoveEvent()
+    // below is never delivered on a drag; only the initial press lands,
+    // which read as "click-to-position works, dragging doesn't."
+    event->accept();
 
     // Remember whether the press was on a button (solo/mute/lock) row — a drag
     // there must NOT start a reorder.
@@ -302,6 +310,14 @@ void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
 
 void TrackItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
 {
+    const QPointF p = event->pos();
+    // Double-clicking Mute/Solo/Lock/Intensity is just two ordinary clicks
+    // (mousePressEvent already toggled each one) — it must not also fall
+    // through to itemDoubleClicked, which opens the track-rename dialog.
+    if (m_muteRegion->contains(p) || m_soloRegion->contains(p) ||
+        m_lockRegion->contains(p) || m_intensityRegion->contains(p))
+        return;
+
     // Double-clicking the name area (below the buttons) renames inline;
     // elsewhere keeps the old behaviour.
     if (event->pos().y() >= 44)

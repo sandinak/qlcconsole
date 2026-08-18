@@ -63,7 +63,16 @@ public:
     /** Get the monitor singleton instance. Can be NULL. */
     static Monitor* instance();
 
-    /** Create or show Monitor */
+    /** Constructed once as a permanent tab (see App::init()) — public like
+     *  every other tab-hosted manager (FunctionManager, ShowManager, …);
+     *  single-instance-ness is enforced by Q_ASSERT(s_instance == NULL) in
+     *  the constructor body, the same convention those use, not by hiding
+     *  the constructor. */
+    Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f = Qt::Widget);
+
+    /** Switch to the Lighting Studio tab (or raise its window if it's
+     *  currently detached into one) — does NOT create it; Monitor always
+     *  exists once the app has started up. */
     static void createAndShow(QWidget* parent, Doc* doc);
 
     /** Apply the workspace tab-label mode (icons only / text only / text under
@@ -117,9 +126,6 @@ protected:
     void showCurrentView();
 protected:
     void saveSettings();
-
-    /** Protected constructor to prevent multiple instances. */
-    Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f = Qt::Widget);
 
 protected:
     /** The singleton Monitor instance */
@@ -439,7 +445,6 @@ protected:
     /** Apply a view overlay: tint/annotate every placed fixture. */
     void applyMapView(int view);
     QAction *m_labelsAction;
-    QAction *m_buildAction;
     QAction *m_lockAction;
     QAction *m_layersAction;
     QAction *m_groupAction;

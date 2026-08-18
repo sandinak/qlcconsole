@@ -55,19 +55,23 @@
  </Channel>
  <Channel Number="32779">
   <Name>Enc 1</Name>
-  <Type>Button</Type>
+  <Type>Encoder</Type>
+  <Movement Sensitivity="1"/>
  </Channel>
  <Channel Number="32780">
   <Name>Enc 2</Name>
-  <Type>Button</Type>
+  <Type>Encoder</Type>
+  <Movement Sensitivity="1"/>
  </Channel>
  <Channel Number="32781">
   <Name>Enc 3</Name>
-  <Type>Button</Type>
+  <Type>Encoder</Type>
+  <Movement Sensitivity="1"/>
  </Channel>
  <Channel Number="32782">
   <Name>Enc 4</Name>
-  <Type>Button</Type>
+  <Type>Encoder</Type>
+  <Movement Sensitivity="1"/>
  </Channel>
  <Channel Number="32896">
   <Name>Go</Name>

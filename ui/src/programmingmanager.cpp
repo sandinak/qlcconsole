@@ -29,6 +29,8 @@
 #include <QSignalBlocker>
 #include <QFrame>
 #include <QSettings>
+#include <QToolButton>
+#include <QIcon>
 #include <algorithm>
 
 #include <QDebug>
@@ -100,10 +102,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     QVBoxLayout *navCol = new QVBoxLayout(navPanel);
     navCol->setContentsMargins(0, 0, 0, 0);
     navCol->addWidget(new QLabel(tr("Scenes / functions"), this));
-    QLineEdit *funcFilter = new QLineEdit(this);
-    funcFilter->setPlaceholderText(tr("Filter…"));
-    funcFilter->setClearButtonEnabled(true);
-    navCol->addWidget(funcFilter);
+
     m_funcTree = new FunctionsTreeWidget(m_doc, this);
     m_funcTree->setDisplayFilter(FunctionsTreeWidget::FunctionsOnly);
     m_funcTree->setHeaderHidden(true);
@@ -123,6 +122,52 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // duplicate them together. mimeData() already streams every selected id.
     m_funcTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_funcTree->updateTree();
+
+    QHBoxLayout *navToolbar = new QHBoxLayout;
+    navToolbar->setContentsMargins(0, 0, 0, 0);
+    QLineEdit *funcFilter = new QLineEdit(this);
+    funcFilter->setPlaceholderText(tr("Filter…"));
+    funcFilter->setClearButtonEnabled(true);
+    navToolbar->addWidget(funcFilter, 1);
+
+    // Tab-local "Add" menu: same New Scene/Chaser/… actions as the tree's
+    // right-click menu, just reachable without a right-click, with icons
+    // matching Function Manager's. Embedded here (not on the app's global
+    // menu bar) so it travels along when this tab is detached into its own
+    // window — see App::slotDetachContext, which gives a detached tab no
+    // menu bar of its own, only whatever the tab widget itself carries.
+    m_addFuncBtn = new QToolButton(this);
+    m_addFuncBtn->setText(tr("Add"));
+    m_addFuncBtn->setIcon(QIcon(":/edit_add.png"));
+    m_addFuncBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *addFuncMenu = new QMenu(m_addFuncBtn);
+    QAction *addSceneAction  = addFuncMenu->addAction(QIcon(":/scene.png"), tr("New Scene"));
+    QAction *addChaserAction = addFuncMenu->addAction(QIcon(":/chaser.png"), tr("New Chaser"));
+    QAction *addCollAction   = addFuncMenu->addAction(QIcon(":/collection.png"), tr("New Collection"));
+    QAction *addEFXAction    = addFuncMenu->addAction(QIcon(":/efx.png"), tr("New EFX"));
+    QAction *addMatrixAction = addFuncMenu->addAction(QIcon(":/rgbmatrix.png"), tr("New RGB Matrix"));
+    QAction *addShowAction   = addFuncMenu->addAction(QIcon(":/show.png"), tr("New Show"));
+    addFuncMenu->addSeparator();
+    QAction *addFolderAction = addFuncMenu->addAction(QIcon(":/folder.png"), tr("New Folder"));
+    connect(addSceneAction, &QAction::triggered, this, [this]() {
+        addNewFunction(Function::SceneType, selectedFuncFolderPath()); });
+    connect(addChaserAction, &QAction::triggered, this, [this]() {
+        addNewFunction(Function::ChaserType, selectedFuncFolderPath()); });
+    connect(addCollAction, &QAction::triggered, this, [this]() {
+        addNewFunction(Function::CollectionType, selectedFuncFolderPath()); });
+    connect(addEFXAction, &QAction::triggered, this, [this]() {
+        addNewFunction(Function::EFXType, selectedFuncFolderPath()); });
+    connect(addMatrixAction, &QAction::triggered, this, [this]() {
+        addNewFunction(Function::RGBMatrixType, selectedFuncFolderPath()); });
+    connect(addShowAction, &QAction::triggered, this, [this]() {
+        addNewFunction(Function::ShowType, selectedFuncFolderPath()); });
+    connect(addFolderAction, &QAction::triggered, m_funcTree, &FunctionsTreeWidget::addFolder);
+    m_addFuncBtn->setMenu(addFuncMenu);
+    navToolbar->addWidget(m_addFuncBtn);
+    // Match the main window's icon/text display preference.
+    applyToolbarLabelMode();
+
+    navCol->addLayout(navToolbar);
     navCol->addWidget(m_funcTree, 1);
     connect(funcFilter, &QLineEdit::textChanged,
             m_funcTree, &FunctionsTreeWidget::filterByText);
@@ -254,26 +299,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
         m_canvasLayout->addWidget(toolbarScroll);
 
-        // Blind-active banner: full-width blue bar pinned at the very top of the
-        // canvas (above the toolbar) so "the rig is muted" can't be missed while
-        // the 2D preview keeps showing the look. Hidden until Blind is armed.
-        m_blindBanner = new QLabel(tr("⬤  BLIND — rig muted, preview only.  "
-                                      "Turn off Blind to take the look live."), this);
-        m_blindBanner->setAlignment(Qt::AlignCenter);
-        m_blindBanner->setStyleSheet(
-            QStringLiteral("QLabel { background: #1565c0; color: white; font-weight: bold; "
-                           "padding: 4px; border-radius: 3px; }"));
-        m_blindBanner->hide();
-        m_canvasLayout->insertWidget(0, m_blindBanner);
-
         connect(m_highlightBtn, &QPushButton::toggled,
                 this, &ProgrammingManager::slotHighlightToggled);
         connect(m_flashBtn, &QPushButton::clicked,
                 this, &ProgrammingManager::slotFlashSelection);
-        // Blind is armed from the global toolbar (App); reflect the engine state
-        // in the canvas banner so building in-tab shows the muted-rig warning.
-        connect(m_doc->inputOutputMap(), &InputOutputMap::outputInhibitedChanged,
-                this, &ProgrammingManager::slotBlindStateChanged);
         connect(m_parkBtn, &QPushButton::clicked,
                 this, &ProgrammingManager::slotParkSelection);
         connect(m_unparkBtn, &QPushButton::clicked,
@@ -589,6 +618,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
     connect(m_lookEditor, SIGNAL(paletteChanged(quint32)),
             this, SLOT(slotLookEdited()));
+    connect(m_lookEditor, &LookEditor::lookFocusChanged,
+            this, &ProgrammingManager::currentPaletteIdChanged);
     // Lightweight live-value change (effect params, etc.) — only refresh the
     // DMX preview, do NOT rebuild the look list or palette tree.  This avoids
     // a reload() → lookSelected → setPalette → rebuildEffectDynWidget cycle
@@ -1564,6 +1595,34 @@ void ProgrammingManager::openCircuitsDialog()
     recomputePower();
 }
 
+void ProgrammingManager::applyToolbarLabelMode()
+{
+    // Mirror App::TabLabelMode: 0 = Icon+Text (-> text beside icon here —
+    // this button sits in a single-row toolbar, not a multi-row one, so
+    // "beside" reads better than "under"), 1 = Icons only, 2 = Text only.
+    // Same "workspace/tabLabelMode" setting as every other manager's
+    // toolbar.
+    Qt::ToolButtonStyle style = Qt::ToolButtonTextBesideIcon;
+    const int mode = QSettings().value(QStringLiteral("workspace/tabLabelMode"), 0).toInt();
+    if (mode == 1)
+        style = Qt::ToolButtonIconOnly;
+    else if (mode == 2)
+        style = Qt::ToolButtonTextOnly;
+
+    if (m_addFuncBtn)
+        m_addFuncBtn->setToolButtonStyle(style);
+}
+
+quint32 ProgrammingManager::currentPaletteId() const
+{
+    return m_lookEditor ? m_lookEditor->paletteId() : QLCPalette::invalidId();
+}
+
+quint32 ProgrammingManager::currentSceneId() const
+{
+    return m_currentScene;
+}
+
 void ProgrammingManager::startOperateScene()
 {
     // In Operate mode the preview can't run, so start the scene directly so all
@@ -1698,8 +1757,6 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
     startPreview();
     updatePowerEstimateActive();
     slotParkChanged(); // reflect any parks restored from the workspace
-    // Blind survives tab switches — reflect the current engine state on return.
-    slotBlindStateChanged(m_doc->inputOutputMap()->outputInhibited());
     QWidget::showEvent(ev);
 }
 
@@ -1778,14 +1835,14 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
         menu.addSeparator();
     }
 
-    QAction *aScene  = menu.addAction(tr("New Scene"));
-    QAction *aChaser = menu.addAction(tr("New Chaser"));
-    QAction *aColl   = menu.addAction(tr("New Collection"));
-    QAction *aEFX    = menu.addAction(tr("New EFX"));
-    QAction *aMatrix = menu.addAction(tr("New RGB Matrix"));
-    QAction *aShow   = menu.addAction(tr("New Show"));
+    QAction *aScene  = menu.addAction(QIcon(":/scene.png"), tr("New Scene"));
+    QAction *aChaser = menu.addAction(QIcon(":/chaser.png"), tr("New Chaser"));
+    QAction *aColl   = menu.addAction(QIcon(":/collection.png"), tr("New Collection"));
+    QAction *aEFX    = menu.addAction(QIcon(":/efx.png"), tr("New EFX"));
+    QAction *aMatrix = menu.addAction(QIcon(":/rgbmatrix.png"), tr("New RGB Matrix"));
+    QAction *aShow   = menu.addAction(QIcon(":/show.png"), tr("New Show"));
     menu.addSeparator();
-    QAction *aFolder = menu.addAction(tr("New Folder"));
+    QAction *aFolder = menu.addAction(QIcon(":/folder.png"), tr("New Folder"));
 
     menu.addSeparator();
     // Order top-level type categories by role (Show · Chaser · Collection · RGB
@@ -1844,18 +1901,36 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
         return;
     }
 
+    Function::Type type = Function::Undefined;
+    if (chosen == aScene)       type = Function::SceneType;
+    else if (chosen == aChaser) type = Function::ChaserType;
+    else if (chosen == aColl)   type = Function::CollectionType;
+    else if (chosen == aEFX)    type = Function::EFXType;
+    else if (chosen == aMatrix) type = Function::RGBMatrixType;
+    else if (chosen == aShow)   type = Function::ShowType;
+    else
+        return;
+
+    addNewFunction(type, clickedFolder);
+}
+
+void ProgrammingManager::addNewFunction(Function::Type type, const QString &folder)
+{
     Function *f = NULL;
     QString base;
-    if (chosen == aScene)       { f = new Scene(m_doc);      base = tr("New Scene"); }
-    else if (chosen == aChaser) { f = new Chaser(m_doc);     base = tr("New Chaser"); }
-    else if (chosen == aColl)   { f = new Collection(m_doc); base = tr("New Collection"); }
-    else if (chosen == aEFX)    { f = new EFX(m_doc);        base = tr("New EFX"); }
-    else if (chosen == aMatrix) { f = new RGBMatrix(m_doc);  base = tr("New RGB Matrix"); }
-    else if (chosen == aShow)   { f = new Show(m_doc);       base = tr("New Show"); }
+    switch (type)
+    {
+        case Function::SceneType:      f = new Scene(m_doc);      base = tr("New Scene"); break;
+        case Function::ChaserType:     f = new Chaser(m_doc);     base = tr("New Chaser"); break;
+        case Function::CollectionType: f = new Collection(m_doc); base = tr("New Collection"); break;
+        case Function::EFXType:        f = new EFX(m_doc);        base = tr("New EFX"); break;
+        case Function::RGBMatrixType:  f = new RGBMatrix(m_doc);  base = tr("New RGB Matrix"); break;
+        case Function::ShowType:       f = new Show(m_doc);       base = tr("New Show"); break;
+        default: return;
+    }
     if (f == NULL)
         return;
 
-    const QString folder = clickedFolder;
     if (folder.isEmpty() == false)
         f->setPath(folder);
 
@@ -2364,17 +2439,6 @@ void ProgrammingManager::slotFlashSelection()
 }
 
 /*****************************************************************************
- * Blind (mute physical output, keep 2D preview)
- *****************************************************************************/
-
-void ProgrammingManager::slotBlindStateChanged(bool on)
-{
-    // Reflect the engine's Blind state in the in-context canvas banner.
-    if (m_blindBanner != nullptr)
-        m_blindBanner->setVisible(on);
-}
-
-/*****************************************************************************
  * Park (hold fixtures out of cue output)
  *****************************************************************************/
 
@@ -2627,6 +2691,15 @@ void ProgrammingManager::slotDesignPositionWritten()
         m_saveBtn->setText(tr("Save"));
         m_saveBtn->setEnabled(true);
     }
+
+    // Re-show whatever palette the look editor already has open, in case
+    // its value was just changed from outside the widget itself (a control
+    // surface nudging pan/tilt directly on the engine side, rather than the
+    // user dragging the XY pad) — the joystick's Aim-target case doesn't
+    // touch a palette this widget displays, so this is a no-op for it; for
+    // a PanTilt palette it's the only thing that repaints the dot.
+    if (m_lookEditor && m_lookEditor->paletteId() != QLCPalette::invalidId())
+        m_lookEditor->setPalette(m_lookEditor->paletteId());
 }
 
 void ProgrammingManager::slotFollowSpotPinChanged(bool visible, float xMeters, float yMeters)

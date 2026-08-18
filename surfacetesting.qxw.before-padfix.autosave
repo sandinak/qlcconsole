@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Workspace>
-<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ProgrammingManager">
+<Workspace xmlns="http://www.qlcplus.org/Workspace">
  <Creator>
   <Name>qlcconsole</Name>
   <Version>4.14.2+qlcconsole.1038</Version>
@@ -73,7 +73,8 @@
    <Head X="0" Y="1" Fixture="2">0</Head>
   </FixtureGroup>
   <Palette ID="0" Type="PanTilt" Name="New PanTilt" Path="Palettes/PanTilt/" Value="540,270"/>
-  <Function ID="0" Type="Scene" Name="PanTilt" Path="Washes">
+  <Palette ID="1" Type="Color" Name="New Color" Path="Palettes/PanTilt/" Value="#8a8472000000"/>
+  <Function ID="0" Type="Scene" Name="Spots" Path="Washes">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureVal ID="1"/>
    <FixtureVal ID="2"/>
@@ -91,7 +92,8 @@
   </Function>
   <Function ID="3" Type="Scene" Name="Spot-Base" Path="Spots">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
-   <FixtureVal ID="0">0,127,1,127,2,127,3,127</FixtureVal>
+   <FixtureVal ID="0"/>
+   <Palette ID="0"/>
   </Function>
   <Function ID="4" Type="Scene" Name="Spot-Red" Path="Spots">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
@@ -1436,5 +1438,4 @@
  <SimpleDesk>
   <Engine/>
  </SimpleDesk>
- <AppState/>
 </Workspace>

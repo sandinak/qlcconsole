@@ -80,6 +80,8 @@
 #include "fixturegroup.h"
 #include "qlcfile.h"
 #include "apputil.h"
+#include "controlsurfaceengine.h"
+#include "pmjoverlay.h"
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "hotplugmonitor.h"
@@ -185,7 +187,7 @@ App::App()
     , m_statusSelectionLabel(NULL)
     , m_statusPadModeLabel(NULL)
     , m_statusShowLockLabel(NULL)
-    , m_statusBlindLabel(NULL)
+    , m_statusBlackoutLabel(NULL)
     , m_statusTimecodeLabel(NULL)
     , m_statusLoadLabel(NULL)
     , m_statusTimelineLabel(NULL)
@@ -385,12 +387,32 @@ void App::init()
 
     // Helper to add a tab and record the original label/icon for mode switching.
     auto addTab = [this](QWidget *w, const QIcon &icon, const QString &text) {
-        m_tab->addTab(w, icon, text);
+        const int idx = m_tab->addTab(w, icon, text);
         m_tabOriginals.append(qMakePair(text, icon));
+        // Stored as tab data (travels with the tab through detach/reattach's
+        // removeTab()/insertTab(), unlike m_tabOriginals' fixed construction-
+        // order indexing) so the window title can find the right label
+        // regardless of what's been detached before it.
+        m_tab->tabBar()->setTabData(idx, text);
     };
 
+    // Tab order follows the build workflow: rig/setup first (Hardware, I/O,
+    // Lighting Studio's physical layout) → build content (Functions,
+    // Programming) → run it (Shows, Virtual Console, Simple Desk).
     QWidget* w = new FixtureManager(m_tab, m_doc);
     addTab(w, QIcon(":/fixture.png"), tr("Hardware"));
+    w = new InputOutputManager(m_tab, m_doc);
+    addTab(w, QIcon(":/input_output.png"), tr("Inputs/Outputs"));
+    // Lighting Studio (Monitor) used to be a lazily-created standalone
+    // window (Qt::Window flag), created on first use via createAndShow()
+    // and destroyed on close (WA_DeleteOnClose) — inconsistent with every
+    // other tab, which is why it never picked up the app-wide title-bar/
+    // tab-label-mode/detach conventions. Now a permanent tab like the rest,
+    // constructed once here; still detachable into its own window via the
+    // same double-click mechanism as any other tab if you want it visible
+    // alongside another tab or on a second monitor.
+    w = new Monitor(m_tab, m_doc);
+    addTab(w, QIcon(":/grid.png"), tr("Lighting Studio"));
     w = new FunctionManager(m_tab, m_doc);
     addTab(w, QIcon(":/function.png"), tr("Functions"));
     {
@@ -447,8 +469,6 @@ void App::init()
     addTab(w, QIcon(":/virtualconsole.png"), tr("Virtual Console"));
     w = new SimpleDesk(m_tab, m_doc);
     addTab(w, QIcon(":/slidermatrix.png"), tr("Simple Desk"));
-    w = new InputOutputManager(m_tab, m_doc);
-    addTab(w, QIcon(":/input_output.png"), tr("Inputs/Outputs"));
 
     // Load and apply the tab label mode preference.
     {
@@ -479,6 +499,7 @@ void App::init()
     /* Detach the tab's widget onto a new window on doubleClick */
     connect(m_tab, SIGNAL(tabBarDoubleClicked(int)), this, SLOT(slotDetachContext(int)));
 #endif
+    connect(m_tab, SIGNAL(currentChanged(int)), this, SLOT(slotTabChanged(int)));
 
     // Listen to blackout changes and toggle m_controlBlackoutAction
     connect(m_doc->inputOutputMap(), SIGNAL(blackoutChanged(bool)), this, SLOT(slotBlackoutChanged(bool)));
@@ -730,21 +751,18 @@ void App::initDoc()
 
     m_doc->inputOutputMap()->startUniverses();
     m_doc->masterTimer()->start();
+
+    // Control-surface engine (CONTROL_SURFACE_DESIGN.md): device-agnostic
+    // core, plus the PMJ Black 1 overlay. Registering the PMJ here doesn't
+    // require the board to actually be connected/patched — it just means
+    // its role table + LED sink are ready the moment it is.
+    m_controlSurfaceEngine = new ControlSurfaceEngine(this);
+    m_pmjOverlay = new PMJOverlay(m_doc, m_controlSurfaceEngine, this, this);
 }
 
 void App::slotDocModified(bool state)
 {
-    QString caption(APPNAME);
-
-    if (fileName().isEmpty() == false)
-        caption += QString(" - ") + QDir::toNativeSeparators(fileName());
-    else
-        caption += tr(" - New Workspace");
-
-    if (state == true)
-        setWindowTitle(caption + QString(" *"));
-    else
-        setWindowTitle(caption);
+    updateWindowTitle();
 
     if (m_statusDirtyLabel != NULL)
     {
@@ -759,6 +777,35 @@ void App::slotDocModified(bool state)
             m_statusDirtyLabel->setStyleSheet("QLabel { color: gray; }");
         }
     }
+}
+
+void App::updateWindowTitle()
+{
+    QString caption(APPNAME);
+
+    if (fileName().isEmpty() == false)
+        caption += QString(" - ") + QDir::toNativeSeparators(fileName());
+    else
+        caption += tr(" - New Workspace");
+
+    if (m_doc != NULL && m_doc->isModified())
+        caption += QString(" *");
+
+    // m_tab->tabText() is empty under Icons-Only tab-label mode; the tab's
+    // own tabData (set once in addTab(), travels with the tab through
+    // detach/reattach) keeps the real label regardless of display mode or
+    // how many tabs before it have been detached.
+    const int tabIdx = m_tab != NULL ? m_tab->currentIndex() : -1;
+    if (tabIdx >= 0)
+        caption += QString(" - ") + m_tab->tabBar()->tabData(tabIdx).toString();
+
+    setWindowTitle(caption);
+}
+
+void App::slotTabChanged(int index)
+{
+    Q_UNUSED(index)
+    updateWindowTitle();
 }
 
 void App::slotDocAutosave()
@@ -926,7 +973,7 @@ void App::initActions()
     m_modeToggleAction->setShortcut(QKeySequence("CTRL+F12"));
     connect(m_modeToggleAction, SIGNAL(triggered(bool)), this, SLOT(slotModeToggle()));
 
-    m_controlMonitorAction = new QAction(QIcon(":/monitor.png"), tr("&Lighting Studio"), this);
+    m_controlMonitorAction = new QAction(QIcon(":/grid.png"), tr("&Lighting Studio"), this);
     // NOT Cmd+M — macOS reserves that for Minimize, which swallowed it.
     m_controlMonitorAction->setShortcut(QKeySequence("CTRL+SHIFT+M"));
     m_controlMonitorAction->setToolTip(tr("Lighting Studio — 2D plot, rigging & fixture layout"));
@@ -1171,7 +1218,11 @@ void App::initMenuBar()
 
     /* ---- View: tools + jump to a workspace tab ---- */
     QMenu* viewMenu = mb->addMenu(tr("&View"));
-    viewMenu->addAction(m_controlMonitorAction);
+    // m_controlMonitorAction (Ctrl+Shift+M) is deliberately NOT added to this
+    // menu — Lighting Studio is a regular tab now, so it already gets a jump
+    // entry from the loop below like every other tab; adding this too would
+    // just duplicate it. The action itself (and its shortcut) still exists
+    // and still works via slotControlMonitor().
     viewMenu->addAction(m_addressToolAction);
     viewMenu->addSeparator();
     // Jump-to-tab entries, taken from the real tab list (m_tabOriginals keeps
@@ -1195,9 +1246,12 @@ void App::initMenuBar()
     QMenu* themeMenu = viewMenu->addMenu(tr("Theme"));
     QActionGroup* themeGroup = new QActionGroup(themeMenu);
     struct { const char* label; int id; } themeChoices[] = {
-        { QT_TR_NOOP("Default"), ThemeDefault },
-        { QT_TR_NOOP("Tan"),     ThemeTan },
-        { QT_TR_NOOP("Blue"),    ThemeBlue },
+        { QT_TR_NOOP("Default"),      ThemeDefault },
+        { QT_TR_NOOP("Tan"),          ThemeTan },
+        { QT_TR_NOOP("Blue"),         ThemeBlue },
+        { QT_TR_NOOP("QLC+ Original"), ThemeQLCOriginal },
+        { QT_TR_NOOP("Red Shift"),    ThemeRedShift },
+        { QT_TR_NOOP("VS Code Dark"), ThemeVSCodeDark },
     };
     for (const auto& choice : themeChoices)
     {
@@ -1207,6 +1261,31 @@ void App::initMenuBar()
         themeAction->setChecked(m_theme == choice.id);
         connect(themeAction, &QAction::triggered, this, [this, choice]() {
             setTheme(choice.id);
+        });
+    }
+
+    // Toolbar style: icon+text / icons only / text only, for the tab strip,
+    // the main toolbar, and every per-manager toolbar's own "Add"/"Edit"
+    // dropdowns (Function Manager, Virtual Console, Programming, Shows,
+    // Fixture Manager, Input/Output Manager, the 2D Monitor). Backed by the
+    // same "workspace/tabLabelMode" setting those toolbars already read;
+    // this was previously set-once-at-startup with no way to change it
+    // short of hand-editing the setting.
+    QMenu* toolbarStyleMenu = viewMenu->addMenu(tr("Toolbar Style"));
+    QActionGroup* toolbarStyleGroup = new QActionGroup(toolbarStyleMenu);
+    struct { const char* label; int id; } toolbarStyleChoices[] = {
+        { QT_TR_NOOP("Icons && Text"), TabIconAndText },
+        { QT_TR_NOOP("Icons Only"),    TabIconOnly },
+        { QT_TR_NOOP("Text Only"),     TabTextOnly },
+    };
+    for (const auto& choice : toolbarStyleChoices)
+    {
+        QAction* styleAction = toolbarStyleMenu->addAction(tr(choice.label));
+        styleAction->setCheckable(true);
+        styleAction->setActionGroup(toolbarStyleGroup);
+        styleAction->setChecked(m_tabLabelMode == choice.id);
+        connect(styleAction, &QAction::triggered, this, [this, choice]() {
+            setTabLabelMode(choice.id);
         });
     }
 
@@ -1724,6 +1803,12 @@ void App::slotControlBlackout()
 void App::slotBlackoutChanged(bool state)
 {
     m_controlBlackoutAction->setChecked(state);
+
+    if (m_statusBlackoutLabel != NULL)
+    {
+        m_statusBlackoutLabel->setText(state ? tr("● BLACKOUT ") : QString());
+        m_statusBlackoutLabel->setVisible(state);
+    }
 }
 
 void App::slotControlBlind(bool checked)
@@ -1745,12 +1830,6 @@ void App::slotOutputInhibitedChanged(bool state)
     // in step (Blind may be cleared elsewhere, e.g. forced off on →Operate).
     if (m_controlBlindAction != NULL && m_controlBlindAction->isChecked() != state)
         m_controlBlindAction->setChecked(state);
-
-    if (m_statusBlindLabel != NULL)
-    {
-        m_statusBlindLabel->setText(state ? tr("● BLIND — rig muted, preview only ") : QString());
-        m_statusBlindLabel->setVisible(state);
-    }
 
     // Turn the WHOLE footer blue while Blind is armed so it's unmistakable at a
     // glance. Force white text on the plain labels for contrast; labels that set
@@ -1988,13 +2067,35 @@ void App::slotDetachContext(int index)
     QWidget *context = m_tab->widget(index);
     context->setProperty("tabIndex", index);
     context->setProperty("tabIcon", QVariant::fromValue(m_tab->tabIcon(index)));
-    context->setProperty("tabLabel", m_tab->tabText(index));
+    // m_tab->tabText() is empty under Icons-Only tab-label mode; tabData
+    // (set once in addTab()) keeps the real label regardless of display mode.
+    QString tabLabel = m_tab->tabBar()->tabData(index).toString();
+    if (tabLabel.isEmpty())
+        tabLabel = m_tab->tabText(index);
+    context->setProperty("tabLabel", tabLabel);
 
     qDebug() << "Detaching context" << context;
+
+    // Remove the tab-bar entry (the widget itself isn't deleted) — without
+    // this, the tab strip is left with a dangling entry for a page that no
+    // longer lives here once setCentralWidget() below reparents it out, and
+    // m_tab's currentIndex/currentChanged (which the window title tracks)
+    // never shifts to reflect what's actually still showing.
+    m_tab->removeTab(index);
+    updateWindowTitle();
 
     DetachedContext *detachedWindow = new DetachedContext(this);
     detachedWindow->setCentralWidget(context);
     detachedWindow->resize(800, 600);
+    // Identify both the showfile and which tab this window holds — a
+    // detached window otherwise carries no title at all.
+    QString title(APPNAME);
+    if (fileName().isEmpty() == false)
+        title += QString(" - ") + QDir::toNativeSeparators(fileName());
+    else
+        title += tr(" - New Workspace");
+    title += QString(" - ") + tabLabel;
+    detachedWindow->setWindowTitle(title);
     detachedWindow->show();
     context->show();
 
@@ -2015,6 +2116,11 @@ void App::slotReattachContext()
 
     context->setParent(m_tab);
     m_tab->insertTab(tabIndex, context, tabIcon, tabLabel);
+    // insertTab() creates a fresh tab-bar entry with no data of its own;
+    // restore it so a later re-detach (or the window title) can still find
+    // the real label under Icons-Only tab-label mode.
+    m_tab->tabBar()->setTabData(tabIndex, tabLabel);
+    updateWindowTitle();
 }
 
 /*****************************************************************************
@@ -2153,6 +2259,21 @@ QFile::FileError App::loadXML(const QString& fileName)
             setFileName(fileName);
             m_doc->resetModified();
             retval = QFile::NoError;
+
+            // Tabs constructed before this load (e.g. the app's startup-active
+            // tab, built during App::startup() — BEFORE a -o/--open command-line
+            // workspace has actually loaded) captured an empty doc. Force a
+            // refresh now that the doc is fully populated, same as the
+            // "recent file" open path already does. Without this, a workspace
+            // whose saved CurrentWindow is "Monitor" starts on a Lighting
+            // Studio tab that was filled from the empty doc and never
+            // refilled — trusses/fixtures silently missing despite loading
+            // correctly into the doc (confirmed present in Fixture Manager,
+            // whose tab is built lazily on first view and so isn't affected).
+            if (FixtureManager::instance() != NULL)
+                FixtureManager::instance()->updateView();
+            if (Monitor::instance() != NULL)
+                Monitor::instance()->updateView();
         }
     }
     else
@@ -2216,16 +2337,13 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
             // Collect the state now and act after the while loop.
             while (doc.readNextStartElement())
             {
-                if (doc.name() == "MonitorWindow"
-                    && doc.attributes().value("open") == "1")
-                {
-                    QByteArray geo = QByteArray::fromBase64(
-                        doc.attributes().value("geometry").toLatin1());
-                    Monitor::createAndShow(this, m_doc);
-                    if (Monitor::instance() && !geo.isEmpty())
-                        Monitor::instance()->restoreGeometry(geo);
-                }
-                else if (doc.name() == "DetachedWindow")
+                // "MonitorWindow" (pre-tab-conversion files: Monitor was a
+                // lazily-created standalone Qt::Window with its own open/
+                // geometry persistence) is silently ignored now — Monitor is
+                // a permanent tab like any other, always present, and if it
+                // was detached into its own window that's already covered by
+                // the generic "DetachedWindow" case below.
+                if (doc.name() == "DetachedWindow")
                 {
                     QString cls = doc.attributes().value("class").toString();
                     int tabIdx  = doc.attributes().value("tabIndex").toInt();
@@ -2240,6 +2358,12 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
                             w->setProperty("tabIndex", tabIdx);
                             w->setProperty("tabIcon",  QVariant::fromValue(m_tab->tabIcon(t)));
                             w->setProperty("tabLabel", m_tab->tabText(t));
+                            // Without this, the tab strip is left with a
+                            // dangling entry for a page that no longer lives
+                            // there once setCentralWidget() below reparents
+                            // it out (same fix as the interactive double-
+                            // click detach path in slotDetachContext()).
+                            m_tab->removeTab(t);
                             DetachedContext *dw = new DetachedContext(this);
                             dw->setCentralWidget(w);
                             if (!geo.isEmpty())
@@ -2333,14 +2457,10 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
 
     /* Write open window state */
     doc.writeStartElement("AppState");
-    if (Monitor::instance() != NULL && Monitor::instance()->isVisible())
-    {
-        doc.writeStartElement("MonitorWindow");
-        doc.writeAttribute("open", "1");
-        doc.writeAttribute("geometry",
-            QString::fromLatin1(Monitor::instance()->saveGeometry().toBase64()));
-        doc.writeEndElement();
-    }
+    // Monitor is a permanent tab now (see App::init()), not a lazily-shown
+    // standalone window — its own "MonitorWindow" persistence is retired;
+    // if it's currently detached, the DetachedWindow loop below already
+    // captures it like any other tab (its className is "Monitor").
     const QList<DetachedContext*> detached = findChildren<DetachedContext*>();
     for (DetachedContext *dw : detached)
     {
@@ -2599,6 +2719,10 @@ void App::applyTabLabelMode()
         InputOutputManager::instance()->applyToolbarLabelMode();
     if (VirtualConsole::instance() != NULL)
         VirtualConsole::instance()->applyToolbarLabelMode();
+    if (ShowManager::instance() != NULL)
+        ShowManager::instance()->applyToolbarLabelMode();
+    if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
+        pm->applyToolbarLabelMode();
 }
 
 int App::theme() const
@@ -2667,6 +2791,74 @@ void App::applyTheme()
         pal.setColor(QPalette::Disabled, QPalette::WindowText, QColor("#767f8a"));
         pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor("#767f8a"));
         pal.setColor(QPalette::Disabled, QPalette::Text, QColor("#767f8a"));
+        break;
+    }
+    case ThemeQLCOriginal:
+    {
+        // Classic medium-grey Qt/Fusion chrome — clear contrast between
+        // window/panel and button, white "paper" for text fields/lists,
+        // not just a light tint. The first pass here (near-white
+        // #efefef/#ffffff throughout) had too little contrast between
+        // Window/Base/Button to read as anything but a flat white wash —
+        // corrected per Branson's live check at the rig.
+        pal.setColor(QPalette::Window, QColor("#d4d4d4"));
+        pal.setColor(QPalette::WindowText, QColor("#000000"));
+        pal.setColor(QPalette::Base, QColor("#ffffff"));
+        pal.setColor(QPalette::AlternateBase, QColor("#eaeaea"));
+        pal.setColor(QPalette::Text, QColor("#000000"));
+        pal.setColor(QPalette::Button, QColor("#c0c0c0"));
+        pal.setColor(QPalette::ButtonText, QColor("#000000"));
+        pal.setColor(QPalette::Highlight, QColor("#3d7fc1"));
+        pal.setColor(QPalette::HighlightedText, QColor("#ffffff"));
+        pal.setColor(QPalette::ToolTipBase, QColor("#ffffdc"));
+        pal.setColor(QPalette::ToolTipText, QColor("#000000"));
+        pal.setColor(QPalette::Disabled, QPalette::WindowText, QColor("#8a8a8a"));
+        pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor("#8a8a8a"));
+        pal.setColor(QPalette::Disabled, QPalette::Text, QColor("#8a8a8a"));
+        break;
+    }
+    case ThemeRedShift:
+    {
+        // Night-vision-preserving: blue channel kept near-zero everywhere
+        // (the same principle as a red stage torch/astronomy light), so
+        // working backstage in the dark doesn't blow out your eyes'
+        // adaptation. A little green is let through for legibility (pure
+        // red-on-red has poor contrast between UI elements) but blue stays
+        // essentially off throughout.
+        pal.setColor(QPalette::Window, QColor("#241008"));
+        pal.setColor(QPalette::WindowText, QColor("#ffb08a"));
+        pal.setColor(QPalette::Base, QColor("#150a05"));
+        pal.setColor(QPalette::AlternateBase, QColor("#1e0f08"));
+        pal.setColor(QPalette::Text, QColor("#ffb08a"));
+        pal.setColor(QPalette::Button, QColor("#3a1f10"));
+        pal.setColor(QPalette::ButtonText, QColor("#ffb08a"));
+        pal.setColor(QPalette::Highlight, QColor("#b8481f"));
+        pal.setColor(QPalette::HighlightedText, QColor("#fff0e0"));
+        pal.setColor(QPalette::ToolTipBase, QColor("#3a1f10"));
+        pal.setColor(QPalette::ToolTipText, QColor("#ffb08a"));
+        pal.setColor(QPalette::Disabled, QPalette::WindowText, QColor("#8a6250"));
+        pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor("#8a6250"));
+        pal.setColor(QPalette::Disabled, QPalette::Text, QColor("#8a6250"));
+        break;
+    }
+    case ThemeVSCodeDark:
+    {
+        // VS Code's "Dark+" default — the editor/sidebar greys and the
+        // iconic #007acc accent blue.
+        pal.setColor(QPalette::Window, QColor("#1e1e1e"));
+        pal.setColor(QPalette::WindowText, QColor("#d4d4d4"));
+        pal.setColor(QPalette::Base, QColor("#252526"));
+        pal.setColor(QPalette::AlternateBase, QColor("#2d2d30"));
+        pal.setColor(QPalette::Text, QColor("#d4d4d4"));
+        pal.setColor(QPalette::Button, QColor("#3c3c3c"));
+        pal.setColor(QPalette::ButtonText, QColor("#d4d4d4"));
+        pal.setColor(QPalette::Highlight, QColor("#007acc"));
+        pal.setColor(QPalette::HighlightedText, QColor("#ffffff"));
+        pal.setColor(QPalette::ToolTipBase, QColor("#252526"));
+        pal.setColor(QPalette::ToolTipText, QColor("#cccccc"));
+        pal.setColor(QPalette::Disabled, QPalette::WindowText, QColor("#6a6a6a"));
+        pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor("#6a6a6a"));
+        pal.setColor(QPalette::Disabled, QPalette::Text, QColor("#6a6a6a"));
         break;
     }
     default: // ThemeDefault
@@ -3002,18 +3194,16 @@ void App::initStatusBar()
     m_statusShowLockLabel->hide();
     sb->addPermanentWidget(m_statusShowLockLabel);
 
-    // Blind indicator (global — Blind is an app-wide output mute, so it lives in
-    // the status bar and stays visible across tabs). While armed the WHOLE footer
-    // turns blue; this label is the white "BLIND" caption on it. Starts empty +
-    // hidden (QStatusBar re-shows permanent widgets when it first appears, so a
-    // label with permanent text would show even when inactive — keep it empty
-    // until slotOutputInhibitedChanged fills it in). Driven by
-    // InputOutputMap::outputInhibitedChanged.
-    m_statusBlindLabel = new QLabel(this);
-    m_statusBlindLabel->setAlignment(Qt::AlignRight);
-    m_statusBlindLabel->setStyleSheet("QLabel { color: white; font-weight: bold; }");
-    m_statusBlindLabel->hide();
-    sb->addPermanentWidget(m_statusBlindLabel);
+    // Blackout indicator (global, same reasoning as Blind used to have its own
+    // label before the whole-footer-blue treatment made it redundant —
+    // Blackout doesn't own the whole footer, so it needs its own chip to be
+    // visible at all). Starts empty + hidden. Driven by
+    // InputOutputMap::blackoutChanged.
+    m_statusBlackoutLabel = new QLabel(this);
+    m_statusBlackoutLabel->setAlignment(Qt::AlignRight);
+    m_statusBlackoutLabel->setStyleSheet("QLabel { color: #e60000; font-weight: bold; }");
+    m_statusBlackoutLabel->hide();
+    sb->addPermanentWidget(m_statusBlackoutLabel);
 
     // Programmer dirty indicator (between mode and autosave). Hidden
     // when clean, red bullet + text when dirty. Mirrors the in-frame

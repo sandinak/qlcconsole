@@ -77,7 +77,8 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
 
     , m_editAction(EditNone)
     , m_toolbar(NULL)
-    , m_runButton(NULL)
+    , m_addButton(NULL)
+    , m_editButton(NULL)
 
     , m_addActionGroup(NULL)
     , m_editActionGroup(NULL)
@@ -133,6 +134,9 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     , m_customMenu(NULL)
     , m_editMenu(NULL)
     , m_addMenu(NULL)
+    , m_bgMenu(NULL)
+    , m_fgMenu(NULL)
+    , m_fontMenu(NULL)
 
     , m_dockArea(NULL)
     , m_contentsLayout(NULL)
@@ -192,6 +196,13 @@ void VirtualConsole::applyToolbarLabelMode()
 
     if (m_toolbar)
         m_toolbar->setToolButtonStyle(style);
+    // QToolBar::setToolButtonStyle only auto-applies to buttons it creates
+    // from addAction(); a QToolButton added via addWidget() (m_addButton)
+    // needs it set directly.
+    if (m_addButton)
+        m_addButton->setToolButtonStyle(style);
+    if (m_editButton)
+        m_editButton->setToolButtonStyle(style);
 }
 
 Doc *VirtualConsole::getDoc()
@@ -315,6 +326,23 @@ QMenu* VirtualConsole::editMenu() const
 QMenu* VirtualConsole::addMenu() const
 {
     return m_addMenu;
+}
+
+QMenu* VirtualConsole::buildEmptyCanvasMenu()
+{
+    QMenu* menu = new QMenu();
+    // m_customMenu is already the bottom frame's "Add" submenu at this point
+    // — updateCustomMenu() rebuilds it on every selection change, and this
+    // is only ever called after a selection change settles (right-click).
+    if (m_customMenu != NULL)
+        menu->addMenu(m_customMenu);
+    menu->addSeparator();
+    menu->addAction(m_editPasteAction);
+    menu->addSeparator();
+    menu->addMenu(m_bgMenu);
+    menu->addMenu(m_fgMenu);
+    menu->addMenu(m_fontMenu);
+    return menu;
 }
 
 void VirtualConsole::initActions()
@@ -544,26 +572,26 @@ void VirtualConsole::initMenuBar()
     m_editMenu->addSeparator();
 
     /* Background Menu */
-    QMenu* bgMenu = new QMenu(m_editMenu);
-    bgMenu->setTitle(tr("&Background"));
-    m_editMenu->addMenu(bgMenu);
-    bgMenu->addAction(m_bgColorAction);
-    bgMenu->addAction(m_bgImageAction);
-    bgMenu->addAction(m_bgDefaultAction);
+    m_bgMenu = new QMenu(m_editMenu);
+    m_bgMenu->setTitle(tr("&Background"));
+    m_editMenu->addMenu(m_bgMenu);
+    m_bgMenu->addAction(m_bgColorAction);
+    m_bgMenu->addAction(m_bgImageAction);
+    m_bgMenu->addAction(m_bgDefaultAction);
 
     /* Foreground menu */
-    QMenu* fgMenu = new QMenu(m_editMenu);
-    fgMenu->setTitle(tr("&Foreground"));
-    m_editMenu->addMenu(fgMenu);
-    fgMenu->addAction(m_fgColorAction);
-    fgMenu->addAction(m_fgDefaultAction);
+    m_fgMenu = new QMenu(m_editMenu);
+    m_fgMenu->setTitle(tr("&Foreground"));
+    m_editMenu->addMenu(m_fgMenu);
+    m_fgMenu->addAction(m_fgColorAction);
+    m_fgMenu->addAction(m_fgDefaultAction);
 
     /* Font menu */
-    QMenu* fontMenu = new QMenu(m_editMenu);
-    fontMenu->setTitle(tr("F&ont"));
-    m_editMenu->addMenu(fontMenu);
-    fontMenu->addAction(m_fontAction);
-    fontMenu->addAction(m_resetFontAction);
+    m_fontMenu = new QMenu(m_editMenu);
+    m_fontMenu->setTitle(tr("F&ont"));
+    m_editMenu->addMenu(m_fontMenu);
+    m_fontMenu->addAction(m_fontAction);
+    m_fontMenu->addAction(m_resetFontAction);
 
     /* Frame menu */
     QMenu* frameMenu = new QMenu(m_editMenu);
@@ -590,37 +618,55 @@ void VirtualConsole::initMenuBar()
     m_toolbar->setIconSize(QSize(26,26));
     m_contentsLayout->addWidget(m_toolbar);
 
-    m_toolbar->addAction(m_addButtonAction);
-    m_toolbar->addAction(m_addButtonMatrixAction);
-    m_toolbar->addAction(m_addSliderAction);
-    m_toolbar->addAction(m_addSliderMatrixAction);
-    m_toolbar->addAction(m_addKnobAction);
-    m_toolbar->addAction(m_addSpeedDialAction);
-    m_toolbar->addAction(m_addXYPadAction);
-    m_toolbar->addAction(m_addCueListAction);
-    m_toolbar->addAction(m_addAnimationAction);
-    m_toolbar->addAction(m_addFrameAction);
-    m_toolbar->addAction(m_addSoloFrameAction);
-    m_toolbar->addAction(m_addLabelAction);
-    m_toolbar->addAction(m_addAudioTriggersAction);
-    m_toolbar->addAction(m_addClockAction);
+    // "Add" consolidates the New Button/Slider/…/Frame actions that used to
+    // be spelled out as fourteen separate toolbar buttons — reuses m_addMenu
+    // as-is (same QActions/order/separators already built above for the
+    // menu bar's own "&Add" entry and for VCFrame::customMenu()'s
+    // right-click submenu), so this also newly exposes Programmer Frame and
+    // Show control from the toolbar (previously menu-only). Placed first —
+    // leftmost/primary action on the toolbar.
+    m_addButton = new QToolButton(m_toolbar);
+    m_addButton->setText(tr("Add"));
+    m_addButton->setIcon(QIcon(":/edit_add.png"));
+    m_addButton->setPopupMode(QToolButton::InstantPopup);
+    m_addButton->setMenu(m_addMenu);
+    m_toolbar->addWidget(m_addButton);
     m_toolbar->addSeparator();
-    m_toolbar->addAction(m_editCutAction);
-    m_toolbar->addAction(m_editCopyAction);
-    m_toolbar->addAction(m_editPasteAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_editDeleteAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_editPropertiesAction);
-    m_toolbar->addAction(m_editRenameAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_stackingRaiseAction);
-    m_toolbar->addAction(m_stackingLowerAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_bgColorAction);
-    m_toolbar->addAction(m_bgImageAction);
-    m_toolbar->addAction(m_fgColorAction);
-    m_toolbar->addAction(m_fontAction);
+
+    // "Edit" consolidates the per-widget Cut/Copy/Paste/Delete/Properties/
+    // Rename/stacking/background/font actions that used to be twelve
+    // separate toolbar buttons. Same QActions (same keyboard shortcuts —
+    // Ctrl+X/C/V, Delete, Ctrl+E — still fire regardless of which menu the
+    // action is parked in), just reachable from one dropdown. Entries stay
+    // individually enabled/disabled by the existing selection logic
+    // (updateActions()) exactly as before, so with nothing selected the
+    // menu still opens — Paste/Background/Font remain usable against the
+    // canvas itself — but Cut/Copy/Delete/Properties/Rename/stacking show
+    // up grayed out rather than as always-present toolbar clutter.
+    m_editButton = new QToolButton(m_toolbar);
+    m_editButton->setText(tr("Edit"));
+    m_editButton->setIcon(QIcon(":/edit.png"));
+    m_editButton->setPopupMode(QToolButton::InstantPopup);
+    QMenu *editButtonMenu = new QMenu(m_editButton);
+    editButtonMenu->addAction(m_editCutAction);
+    editButtonMenu->addAction(m_editCopyAction);
+    editButtonMenu->addAction(m_editPasteAction);
+    editButtonMenu->addSeparator();
+    editButtonMenu->addAction(m_editDeleteAction);
+    editButtonMenu->addSeparator();
+    editButtonMenu->addAction(m_editPropertiesAction);
+    editButtonMenu->addAction(m_editRenameAction);
+    editButtonMenu->addSeparator();
+    editButtonMenu->addAction(m_stackingRaiseAction);
+    editButtonMenu->addAction(m_stackingLowerAction);
+    editButtonMenu->addSeparator();
+    editButtonMenu->addAction(m_bgColorAction);
+    editButtonMenu->addAction(m_bgImageAction);
+    editButtonMenu->addAction(m_fgColorAction);
+    editButtonMenu->addAction(m_fontAction);
+    m_editButton->setMenu(editButtonMenu);
+    m_toolbar->addWidget(m_editButton);
+
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_functionWizardAction);
     m_toolbar->addAction(m_toolsSettingsAction);
@@ -628,29 +674,10 @@ void VirtualConsole::initMenuBar()
     // Match the main window's icon/text display preference.
     applyToolbarLabelMode();
 
-    /* Always-visible Run/Stop toggle in the top-right, so you can go live
-       straight from the Virtual Console. It sits in its own row above the edit
-       toolbar (which is hidden in Operate mode), so it stays reachable in both
-       modes. */
-    {
-        QWidget *runBar = new QWidget(this);
-        QHBoxLayout *runLay = new QHBoxLayout(runBar);
-        runLay->setContentsMargins(0, 0, 0, 0);
-        runLay->addStretch(1);
-        m_runButton = new QToolButton(runBar);
-        m_runButton->setCheckable(true);
-        m_runButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        m_runButton->setIcon(QIcon(":/operate.png"));
-        m_runButton->setText(tr("Run"));
-        m_runButton->setToolTip(tr("Go live (Operate mode). Click again to return to Design."));
-        runLay->addWidget(m_runButton);
-        m_contentsLayout->insertWidget(0, runBar);
-        connect(m_runButton, &QToolButton::toggled, this, [this](bool on)
-        {
-            if ((m_doc->mode() == Doc::Operate) != on)
-                m_doc->setMode(on ? Doc::Operate : Doc::Design);
-        });
-    }
+    // No local Run/Stop toggle here — App::m_modeToggleAction (the global
+    // "Operate"/"Design" button, always visible on App's own top bar in
+    // every tab and every mode) already covers this; a second VC-local
+    // toggle driving the exact same Doc::mode() was redundant.
 }
 
 void VirtualConsole::updateCustomMenu()
@@ -1872,16 +1899,6 @@ void VirtualConsole::disableEdit()
 
 void VirtualConsole::slotModeChanged(Doc::Mode mode)
 {
-    // Keep the always-visible Run/Stop toggle in sync with the actual mode.
-    if (m_runButton != NULL)
-    {
-        m_runButton->blockSignals(true);
-        m_runButton->setChecked(mode == Doc::Operate);
-        m_runButton->setText(mode == Doc::Operate ? tr("Stop") : tr("Run"));
-        m_runButton->setIcon(QIcon(mode == Doc::Operate ? ":/design.png" : ":/operate.png"));
-        m_runButton->blockSignals(false);
-    }
-
     if (mode == Doc::Operate)
     { // Switch from Design mode to Operate mode
         // Hide edit tools

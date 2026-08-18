@@ -234,6 +234,34 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
         return;
     }
 
+    // A plain click on a fixture that's selected ONLY because its truss was
+    // clicked first (extendSelectionToGroups() pulled it in) needs to break
+    // out solo. Qt's default press handling leaves a click on an
+    // already-selected item's selection untouched (it assumes you're about
+    // to drag the group) — which would otherwise mean clicking the fixture
+    // right after the truss still drags both together. Force a solo
+    // re-select here so a fixture click behaves the same regardless of
+    // whether the truss happened to be selected first.
+    if (event->button() == Qt::LeftButton && !(event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier)))
+    {
+        QGraphicsItem *hit = itemAt(event->pos());
+        while (hit && hit->parentItem())
+            hit = hit->parentItem();
+        auto *mfi = dynamic_cast<MonitorFixtureItem *>(hit);
+        if (mfi != nullptr && mfi->isSelected())
+        {
+            const quint32 fid = m_fixtures.key(mfi, Fixture::invalidId());
+            const quint32 trussId = (fid != Fixture::invalidId())
+                ? m_doc->monitorProperties()->fixtureRigProps(fid).trussId : Truss::invalidId();
+            TrussItem *ti = (trussId != Truss::invalidId()) ? m_trussItems.value(trussId, nullptr) : nullptr;
+            if (ti != nullptr && ti->isSelected())
+            {
+                m_scene->clearSelection();
+                mfi->setSelected(true);
+            }
+        }
+    }
+
     // Save the current selection before Qt's default press handler clears it.
     // mouseDoubleClickEvent uses this to restore a multi-selection when the user
     // double-clicks a fixture that was already part of the selection.
@@ -296,6 +324,13 @@ MonitorGraphicsView::~MonitorGraphicsView()
         delete li;
     }
     m_aimLines.clear();
+
+    foreach (QGraphicsLineItem *li, m_trussAnchorLines)
+    {
+        m_scene->removeItem(li);
+        delete li;
+    }
+    m_trussAnchorLines.clear();
 
     // Scene was created without a parent — delete it explicitly.
     delete m_scene;
@@ -866,6 +901,18 @@ void MonitorGraphicsView::ensureTrussGroup(quint32 trussId)
     }
 }
 
+void MonitorGraphicsView::leaveDedicatedTrussGroup(quint32 fid, quint32 trussId)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const quint32 gid = props->fixtureGroup(fid);
+    if (gid == 0)
+        return;
+    const MonitorProperties::MonitorGroup g = props->group(gid);
+    if (g.anchorKind != QStringLiteral("truss") || g.anchorId != trussId)
+        return;   // a real/manual group (or anchored elsewhere) — leave it alone
+    props->setFixtureGroup(fid, 0);
+}
+
 int MonitorGraphicsView::structuralMembersOf(quint32 gid) const
 {
     if (gid == 0)
@@ -1367,6 +1414,21 @@ void MonitorGraphicsView::reparentGroupToGroup(quint32 groupId, quint32 parentGr
     emit mapStructureChanged();
 }
 
+bool MonitorGraphicsView::isGroupAnchorItem(QGraphicsItem *gi, const QString &anchorKind, quint32 anchorId) const
+{
+    if (anchorKind == QStringLiteral("truss"))
+    {
+        auto *ti = dynamic_cast<TrussItem *>(gi);
+        return ti != nullptr && ti->truss() != nullptr && ti->truss()->id() == anchorId;
+    }
+    if (anchorKind == QStringLiteral("platform"))
+    {
+        auto *pi = dynamic_cast<PlatformItem *>(gi);
+        return pi != nullptr && pi->platform() != nullptr && pi->platform()->id() == anchorId;
+    }
+    return false;
+}
+
 void MonitorGraphicsView::extendSelectionToGroups()
 {
     // Skip while items are being torn down/rebuilt: the scene emits
@@ -1381,13 +1443,31 @@ void MonitorGraphicsView::extendSelectionToGroups()
         return;
     m_extendingSelection = true;
 
-    // Selecting any grouped item selects its whole OUTERMOST group subtree.
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // Selecting any grouped item selects its whole OUTERMOST group subtree —
+    // EXCEPT for a dedicated structural group (anchorKind set: the auto-group
+    // ensureTrussGroup()/ensurePlatformGroup() maintains for a truss/riser and
+    // its rigged fixtures). That relationship is parent→child, not peers:
+    // the truss already carries its bound fixtures when IT moves (see
+    // slotTrussMoved(), independent of selection), but a fixture being
+    // repositioned relative to its truss must not drag the truss along too.
+    // So only extend a dedicated group when the anchor ITSELF (the truss/
+    // platform) is what got selected — clicking a member stays solo. A group
+    // the user has built out further manually (anchor cleared once it holds
+    // more than one structural item — see structuralMembersOf()) falls back
+    // to the normal symmetric select-together below.
     QSet<quint32> tops;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
     {
         const quint32 g = itemGroupId(gi);
-        if (g != 0)
-            tops.insert(topLevelGroup(g));
+        if (g == 0)
+            continue;
+        const quint32 top = topLevelGroup(g);
+        const MonitorProperties::MonitorGroup grp = props->group(top);
+        if (!grp.anchorKind.isEmpty() && !isGroupAnchorItem(gi, grp.anchorKind, grp.anchorId))
+            continue;
+        tops.insert(top);
     }
     foreach (quint32 top, tops)
         foreach (QGraphicsItem *gi, itemsUnderGroup(top))
@@ -1395,6 +1475,7 @@ void MonitorGraphicsView::extendSelectionToGroups()
                 gi->setSelected(true);
 
     m_extendingSelection = false;
+    updateTrussAnchorLines();   // tether color follows the truss's selected state
     emit mapSelectionChanged();
 }
 
@@ -1403,14 +1484,6 @@ void MonitorGraphicsView::setStageFeaturesOnly(bool on)
     if (m_stageOnly == on)
         return;
     m_stageOnly = on;
-    refreshItemLayerState();
-}
-
-void MonitorGraphicsView::setBuildFocus(bool on)
-{
-    if (m_buildFocus == on)
-        return;
-    m_buildFocus = on;
     refreshItemLayerState();
 }
 
@@ -1456,9 +1529,12 @@ void MonitorGraphicsView::refreshItemLayerState()
         const MonitorProperties::MonitorLayer lyr = props->layer(props->fixtureLayer(it.key()));
         const bool grpLock = props->groupChainLocked(props->fixtureGroup(it.key()));
         it.value()->setVisible(lyr.visible && !m_stageOnly);   // hidden in stage view
-        it.value()->setGhosted(m_buildFocus);                  // faint in build focus
-        it.value()->setMovable(!m_layoutLocked && !lyr.locked && !grpLock && !m_buildFocus);
-        applySelectable(it.value(), !lyr.locked && !m_buildFocus);
+        // Ghosted (faint) exactly when it's actually non-interactive — a
+        // locked layer already makes it unselectable/click-through below;
+        // this just makes that visible instead of a silent trap.
+        it.value()->setGhosted(lyr.locked);
+        it.value()->setMovable(!m_layoutLocked && !lyr.locked && !grpLock);
+        applySelectable(it.value(), !lyr.locked);
     }
 
     // Trusses: global + per-truss + group + layer lock all freeze dragging; only
@@ -1493,7 +1569,7 @@ void MonitorGraphicsView::refreshItemLayerState()
             continue;
         const PowerSource &src = pd->sources().at(s);
         const MonitorProperties::MonitorLayer lyr = props->layer(src.layerId);
-        ps->setVisible(lyr.visible && !m_stageOnly && !m_buildFocus);
+        ps->setVisible(lyr.visible && !m_stageOnly);
         ps->setMovable(!m_layoutLocked && !src.locked && !lyr.locked);
         applySelectable(ps, !lyr.locked);
     }
@@ -1505,7 +1581,7 @@ void MonitorGraphicsView::refreshItemLayerState()
         StageTarget *t = ti->target();
         const MonitorProperties::MonitorLayer lyr = props->layer(t ? t->layerId() : 0);
         const bool grpLock = props->groupChainLocked(t ? t->groupId() : 0);
-        ti->setVisible(lyr.visible && !m_stageOnly && !m_buildFocus);
+        ti->setVisible(lyr.visible && !m_stageOnly);
         ti->setMovable(m_doc->mode() == Doc::Design && !lyr.locked && !grpLock);
         applySelectable(ti, !lyr.locked);
     }
@@ -1561,6 +1637,8 @@ void MonitorGraphicsView::refreshItemLayerState()
         foreach (StandItem *i, m_standItems)             i->setMovable(false);
         foreach (TowerItem *i, m_towerItems)             i->setMovable(false);
     }
+
+    updateTrussAnchorLines();
 }
 
 void MonitorGraphicsView::setSnapDivisions(int divisions)
@@ -2305,7 +2383,10 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
             const FixtureRigProps rp = props->fixtureRigProps(fit.key());
             if (rp.trussId != t->id())
                 continue;
-            const QVector3D w = t->positionAt(rp.trussOffset);   // world metres
+            // fixtureRigPosition() (not the bare positionAt()) so a fixture
+            // dropped at a cross (perpendicular) offset from the centreline
+            // keeps that offset as its truss rides along with it.
+            const QVector3D w = props->fixtureRigPosition(fit.key());   // world metres
             const QPointF mm(w.x() * 1000.0, w.y() * 1000.0);
             moveFixtureTo(fit.key(), mm);       // reposition the item on the canvas
             emit fixtureMoved(fit.key(), mm);   // persist via Monitor::slotFixtureMoved
@@ -2327,6 +2408,8 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
         }
     if (hasChildBars)
         QTimer::singleShot(0, this, [this]() { followParentTrusses(); });
+
+    updateTrussAnchorLines();
 }
 
 void MonitorGraphicsView::updatePlatforms()
@@ -2969,6 +3052,98 @@ void MonitorGraphicsView::updateAimLines()
         m_scene->update();
 }
 
+void MonitorGraphicsView::updateTrussAnchorLines()
+{
+    foreach (QGraphicsLineItem *li, m_trussAnchorLines)
+    {
+        m_scene->removeItem(li);
+        delete li;
+    }
+    m_trussAnchorLines.clear();
+
+    if (m_cellPixels == 0)
+        return;
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr)
+        return;
+
+    // Neutral steady-state color matches the truss's own unselected chord
+    // (TrussItem::paint()) — a structural relationship, not an alert — and
+    // switches to the truss's own selected amber when the truss (and by
+    // extension its bound fixtures) is the current selection, so the tether
+    // reads as part of "this whole assembly is selected" rather than a
+    // separate always-on color competing with it.
+    const QColor neutralColor(160, 163, 172);
+    const QColor selectedColor(255, 180, 0);
+
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+    {
+        MonitorFixtureItem *mfi = it.value();
+        const FixtureRigProps rp = props->fixtureRigProps(it.key());
+        if (rp.trussId == Truss::invalidId())
+        {
+            mfi->setTrussGroupSelected(false);
+            continue;
+        }
+        Truss *t = props->truss(rp.trussId);
+        TrussItem *ti = m_trussItems.value(rp.trussId, nullptr);
+        const bool selected = (ti != nullptr && ti->isSelected());
+        // Propagate regardless of truss type / tether eligibility below — the
+        // fixture's own outline color should follow the truss's selection
+        // even when there's no cross offset (no line drawn) or it's a tower.
+        mfi->setTrussGroupSelected(selected);
+
+        if (t == nullptr || t->type() == Truss::Vertical)
+            continue;   // a tower's fixtures sit at its XY — no "across" to show
+
+        // No line while the fixture's centre still falls within the truss's
+        // own drawn thickness (plus a couple of pixels' slack for a very
+        // thin truss) — it visually reads as "sitting on the truss" over
+        // that whole width, not just exactly on the centreline.
+        const float halfWidthM = t->width() * 0.5f;
+        const double slackM = 2.0 * double(m_unitValue) / (double(m_cellPixels) * 1000.0);
+        if (double(qAbs(rp.trussCross)) < double(halfWidthM) + slackM)
+            continue;
+
+        // Derive BOTH ends from the same stored rig data (offset + cross)
+        // rather than reading the fixture's actual rendered position for one
+        // end — a fixture's on-screen position can drift a hair from what its
+        // stored offset/cross would recompute (rounding, or data that was
+        // never perfectly self-consistent to begin with), and that drift
+        // showed up as the tether visibly NOT perpendicular to the truss.
+        // Building both points from the truss's own direction vector makes
+        // the line perpendicular by construction, no matter the truss's
+        // on-screen orientation.
+        const QVector3D centreW = t->positionAt(rp.trussOffset);   // centreline point, metres
+
+        const QPointF dir = t->direction();
+        const QPointF perp(-dir.y(), dir.x());
+        const QVector3D fixW(centreW.x() + perp.x() * rp.trussCross,
+                             centreW.y() + perp.y() * rp.trussCross,
+                             centreW.z());
+        const QPointF fixPx = projectMm(fixW.x() * 1000.0, fixW.y() * 1000.0, fixW.z() * 1000.0);
+
+        // Terminate at the truss's near EDGE, not its centreline — the truss
+        // is drawn with real width, so stopping at the centre buried half
+        // the line under the truss body for no reason.
+        const float edgeCross = (rp.trussCross >= 0.0f) ? halfWidthM : -halfWidthM;
+        const QVector3D edgeW(centreW.x() + perp.x() * edgeCross,
+                              centreW.y() + perp.y() * edgeCross,
+                              centreW.z());
+        const QPointF anchorPx = projectMm(edgeW.x() * 1000.0, edgeW.y() * 1000.0, edgeW.z() * 1000.0);
+
+        QPen tetherPen(selected ? selectedColor : neutralColor, selected ? 3.0 : 2.4);
+        tetherPen.setStyle(Qt::DashLine);
+        tetherPen.setCapStyle(Qt::RoundCap);
+
+        QGraphicsLineItem *line = m_scene->addLine(
+            fixPx.x(), fixPx.y(), anchorPx.x(), anchorPx.y(), tetherPen);
+        line->setZValue(1.5);   // above the truss (-0.5), below fixtures (2)
+        m_trussAnchorLines.append(line);
+    }
+}
+
 void MonitorGraphicsView::setActiveScene(quint32 sceneId)
 {
     m_activeSceneId = sceneId;
@@ -3208,6 +3383,13 @@ void MonitorGraphicsView::setGridVisible(bool on)
         gi->setVisible(on);
 }
 
+void MonitorGraphicsView::setCenterLinesVisible(bool on)
+{
+    m_centerLinesVisible = on;
+    if (m_centerLineV != nullptr) m_centerLineV->setVisible(on);
+    if (m_centerLineH != nullptr) m_centerLineH->setVisible(on);
+}
+
 void MonitorGraphicsView::updateGrid()
 {
     // removeItem() hands ownership of the item back to the caller, so it has
@@ -3221,6 +3403,8 @@ void MonitorGraphicsView::updateGrid()
         m_scene->removeItem(item);
         delete item;
     }
+    if (m_centerLineV != nullptr) { m_scene->removeItem(m_centerLineV); delete m_centerLineV; m_centerLineV = nullptr; }
+    if (m_centerLineH != nullptr) { m_scene->removeItem(m_centerLineH); delete m_centerLineH; m_centerLineH = nullptr; }
 
     if (m_gridEnabled == true)
     {
@@ -3294,19 +3478,20 @@ void MonitorGraphicsView::updateGrid()
         }
 
         // Highlight the centre vertical & horizontal axes so the stage centre
-        // is obvious.
+        // is obvious. Kept out of m_gridItems (and rebuilt separately below)
+        // so their visibility toggles independently of the grid lines.
         QPen centerPen(QColor(0, 150, 140, 220)); // teal accent
         centerPen.setWidth(1);
         const qreal gridW = m_gridSize.width()  * m_cellPixels;
         const qreal gridH = m_gridSize.height() * m_cellPixels;
         const qreal cx = m_xOffset + gridW / 2.0;
         const qreal cy = m_yOffset + gridH / 2.0;
-        QGraphicsLineItem *cv = m_scene->addLine(cx, m_yOffset, cx, m_yOffset + gridH, centerPen);
-        cv->setZValue(2);
-        m_gridItems.append(cv);
-        QGraphicsLineItem *chz = m_scene->addLine(m_xOffset, cy, m_xOffset + gridW, cy, centerPen);
-        chz->setZValue(2);
-        m_gridItems.append(chz);
+        m_centerLineV = m_scene->addLine(cx, m_yOffset, cx, m_yOffset + gridH, centerPen);
+        m_centerLineV->setZValue(2);
+        m_centerLineV->setVisible(m_centerLinesVisible);
+        m_centerLineH = m_scene->addLine(m_xOffset, cy, m_xOffset + gridW, cy, centerPen);
+        m_centerLineH->setZValue(2);
+        m_centerLineH->setVisible(m_centerLinesVisible);
 
         if (m_bgItem != NULL)
         {
@@ -4046,6 +4231,7 @@ void MonitorGraphicsView::detachFixtureFromTruss(quint32 fid)
     FixtureRigProps rp = props->fixtureRigProps(fid);
     if (rp.trussId == Truss::invalidId())
         return;
+    const quint32 wasTrussId = rp.trussId;
     rp.trussId     = Truss::invalidId();
     rp.trussOffset = 0.0f;
     props->setFixtureRigProps(fid, rp);
@@ -4054,8 +4240,12 @@ void MonitorGraphicsView::detachFixtureFromTruss(quint32 fid)
         mfi->setBoundToTruss(false);
         mfi->setEscapeMode(false);
     }
-    // Leave it in the truss group for now (the user can regroup) — detaching is
-    // about the rig binding, not the spatial grouping.
+    // A fixture no longer rigged on this truss must also stop select/move-
+    // together with it — otherwise an unbound, physically-unrelated fixture
+    // stays permanently glued to the truss's selection (leaveDedicatedTrussGroup
+    // only touches the truss's OWN auto-group; a real/manual group the user
+    // built themselves is left alone).
+    leaveDedicatedTrussGroup(fid, wasTrussId);
     m_doc->setModified();
     emit mapStructureChanged();
 }
@@ -4098,6 +4288,7 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                 m_doc->setModified();
             }
         }
+        updateTrussAnchorLines();
         return;   // elevation: don't run the top-view move logic
     }
 
@@ -4159,24 +4350,40 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                 return;
             }
 
-            // Horizontal / Ground: project the fixture position onto the truss direction.
+            // Horizontal / Ground: project the fixture position onto the truss
+            // direction for the ALONG component, but keep whatever perpendicular
+            // (cross) offset it was actually dropped at — Branson asked for free
+            // placement anywhere touching the truss, not a forced snap onto the
+            // centreline. The red escape border (see mouseMoveEvent) already
+            // governs how far off is still "touching" vs. a detach; clamp cross
+            // to that same limit so the drop can never land past where it would
+            // have gone red.
             double ox = t->origin().x() * 1000.0;
             double oy = t->origin().y() * 1000.0;
             double dx = t->direction().x();
             double dy = t->direction().y();
-            double dot = (mmPos.x() - ox) * dx + (mmPos.y() - oy) * dy;
-            dot = qBound(0.0, dot, t->length() * 1000.0);
+            double along = (mmPos.x() - ox) * dx + (mmPos.y() - oy) * dy;
+            along = qBound(0.0, along, t->length() * 1000.0);
 
             // Snap along the truss to the same grid subdivision intervals.
             if (m_snapDivisions > 0 && m_gridSubdivisions > 0 && m_unitValue > 0)
             {
                 double snapMm = m_unitValue / m_gridSubdivisions;
-                dot = qRound(dot / snapMm) * snapMm;
-                dot = qBound(0.0, dot, t->length() * 1000.0);
+                along = qRound(along / snapMm) * snapMm;
+                along = qBound(0.0, along, t->length() * 1000.0);
             }
 
-            mmPos = QPointF(ox + dx * dot, oy + dy * dot);
-            rp.trussOffset = float(dot / 1000.0);
+            double cross = (mmPos.x() - ox) * -dy + (mmPos.y() - oy) * dx;
+            TrussItem *ti = m_trussItems.value(t->id(), nullptr);
+            if (ti != nullptr && m_cellPixels > 0)
+            {
+                const double crossLimitMm = double(ti->pxWid() * 2.0f) * double(m_unitValue) / double(m_cellPixels);
+                cross = qBound(-crossLimitMm, cross, crossLimitMm);
+            }
+
+            mmPos = QPointF(ox + dx * along - dy * cross, oy + dy * along + dx * cross);
+            rp.trussOffset = float(along / 1000.0);
+            rp.trussCross  = float(cross / 1000.0);
             props->setFixtureRigProps(fid, rp);
             mfi->setPos(realPositionToPixels(mmPos.x(), mmPos.y()) - halfIcon(mfi));
         };
@@ -4186,11 +4393,15 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
             if (mfi->escapeMode())
             {
                 // Pulled too far off the truss — unbind
+                const quint32 wasTrussId = rp.trussId;
                 rp.trussId     = Truss::invalidId();
                 rp.trussOffset = 0.0f;
                 props->setFixtureRigProps(fid, rp);
                 mfi->setEscapeMode(false);
                 mfi->setBoundToTruss(false);
+                // Same reasoning as detachFixtureFromTruss(): stop select/move-
+                // together with a truss this fixture just got pulled off of.
+                leaveDedicatedTrussGroup(fid, wasTrussId);
             }
             else
             {
@@ -4200,11 +4411,27 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                     snapToTruss(t);
             }
         }
-        // NOTE: dropping an unbound fixture onto a truss no longer auto-binds it
-        // (the "truss grabs overlapping fixtures" problem). Truss assignment is
-        // now explicit — via the fixture's right-click "Attach to Truss" menu or
-        // by dragging it onto the truss node in the Layers tree. A fixture that
-        // is already bound still snaps/constrains and detaches on escape (above).
+        // Auto-attach on drop: dropping an unbound fixture so it visually
+        // TOUCHES a truss (any overlap, not centered on the line) binds it —
+        // matching the explicit right-click "Attach to Truss" / Layers-tree-
+        // drag paths, which remain available too. This used to auto-bind on
+        // any overlap WHILE DRAGGING across the canvas ("truss grabs
+        // overlapping fixtures"), which is why it was pulled entirely; the
+        // fix here is scope, not removal — slotFixtureMoved() only runs once,
+        // on the completed drop (see itemDropped()), never mid-drag, so
+        // passing over a truss on the way somewhere else can't trigger this.
+        if (rp.trussId == Truss::invalidId() && m_cellPixels > 0)
+        {
+            for (auto tIt = m_trussItems.constBegin(); tIt != m_trussItems.constEnd(); ++tIt)
+            {
+                if (tIt.value() != nullptr && mfi->collidesWithItem(tIt.value()))
+                {
+                    attachFixtureToTruss(fid, tIt.key());
+                    rp = props->fixtureRigProps(fid);   // attach just changed this
+                    break;
+                }
+            }
+        }
 
         // Auto DECK-MOUNT: unlike trusses, a fixture dropped over a PLATFORM
         // stands on its deck (Z = deck top) — the user asked for this. Dragging
@@ -4264,6 +4491,8 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         }
         m_pendingMoveUndo.clear();
     }
+
+    updateTrussAnchorLines();
 }
 
 QPointF MonitorGraphicsView::snapScenePos(const QPointF &p) const

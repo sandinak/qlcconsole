@@ -23,6 +23,7 @@ class QListWidgetItem;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QPushButton;
+class QComboBox;
 class QLabel;
 class Scene;
 class Doc;
@@ -93,6 +94,8 @@ private slots:
     void slotLookContextMenu(const QPoint &pos);
     void slotTargetSelectionChanged();
     void slotTargetContextMenu(const QPoint &pos);
+    /** The Scope combo changed: push the choice to the scene. */
+    void slotScopeChanged(int index);
 
 private:
     QString lookLabel(quint32 paletteId) const;
@@ -122,6 +125,7 @@ private:
     bool m_includeFixtureTargets;
 
     QLabel *m_targetsLabel;     //!< "Targets (N fixtures)"
+    QComboBox *m_scopeCombo;    //!< declared look scope — see Scene::LookScope
     QTreeWidget *m_targetList;  //!< groups + fixtures grouped by type
     QTreeWidget *m_lookList;    //!< Look | In | Out (In/Out editable per look)
     QPushButton *m_removeTargetButton;

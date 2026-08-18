@@ -39,6 +39,28 @@ console-first programmer-mode workflow for macOS.
   [EFFECT_LIFECYCLE_DESIGN.md](EFFECT_LIFECYCLE_DESIGN.md).
 - **Effect presets** — named, reusable configurations layered over effect
   scripts; see [EFFECTPRESET_DESIGN.md](EFFECTPRESET_DESIGN.md).
+- **Lighting Studio** — a 2D rigging/plot tab: place and rig trusses,
+  platforms, pipes, stands, towers, and power sources; drag a fixture onto a
+  truss to bind it, with a visual tether line back to the truss and
+  select/move-together group behavior; a Layers panel for organizing the
+  plot; Top/Front/Side points of view and Power/DMX/Network/Stage-only
+  overlays.
+- **Hardware tab** (renamed from Fixtures) — a Power folder for modeling
+  power sources/circuits and assigning fixtures to them, plus a per-universe
+  DMX address usage grid.
+- **Backstage color themes** — six selectable app-wide color themes (View →
+  Theme): Default, Tan, Blue, QLC+ Original, Red Shift (keeps the blue
+  channel near-zero, for working in the dark without wrecking night vision),
+  and VS Code Dark.
+- **Move-in-black / pre-positioning** — Mark cues to silently pre-position
+  movers before a reveal, with a live dangle-detector footer chip flagging
+  any fixture left un-marked.
+- **Look scope** — a Scene/Look can declare whether it targets the whole
+  stage or a specific fixture group, surfaced as a Scope combo in the Looks
+  editor.
+- Real **File → Import** for `.qxw` — merge fixtures, fixture groups, and
+  functions (with their full dependency closure) from another workspace
+  file into the one currently open, with automatic ID-collision remapping.
 - Rebrand throughout: application, launcher, and fixture-editor binaries,
   macOS app bundle, and About box now identify as qlcconsole, with clear
   in-app attribution to QLC+ and its original authors.
@@ -48,5 +70,24 @@ console-first programmer-mode workflow for macOS.
   this fork tracks, plus a git-derived build count
   (`4.14.2+qlcconsole.<N>`); public releases additionally get a SemVer tag
   (see [RELEASE.md](RELEASE.md)).
+- Main tab order regrouped to follow the build workflow: Hardware →
+  Inputs/Outputs → Lighting Studio → Functions → Programming → Shows →
+  Virtual Console → Simple Desk.
+- Function Manager, Virtual Console, the Programming tab, and the Show
+  Editor each replaced their long rows of individual "New X" buttons with a
+  compact "Add ▾"/"Edit ▾" dropdown; a View → Toolbar Style menu switches
+  every toolbar at once between icons+text, icons-only, and text-only.
+
+### Fixed
+- A workspace whose last-active tab was Lighting Studio could come up with
+  the whole 2D plot empty on a fresh launch — trusses, layers, and every
+  fixture missing — even though the save was completely intact.
+- Selecting a truss no longer drags along a fixture you click immediately
+  afterward, and dragging a fixture bound to a truss no longer drags the
+  truss along with it.
+- A fixture dropped near (not exactly centered on) a truss can now be
+  placed anywhere across the truss's width while still touching it,
+  matching how fixtures are actually rigged, instead of always snapping to
+  dead center.
 
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0

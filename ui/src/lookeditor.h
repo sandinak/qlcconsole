@@ -55,6 +55,13 @@ public:
      *  when e.g. a Gobo look has no target fixture that supports gobos. */
     void setContextScene(Scene *scene);
 
+    /** The palette currently shown (invalidId() if none) — lets a caller that
+     *  changed a palette's value from outside this widget (e.g. a control
+     *  surface nudging pan/tilt directly on the engine side) ask for a
+     *  redisplay via setPalette(paletteId()) without needing to track the
+     *  id itself. */
+    quint32 paletteId() const { return m_paletteId; }
+
 public slots:
     /** Edit the given palette; invalidId() shows the empty page. */
     void setPalette(quint32 paletteId);
@@ -72,8 +79,17 @@ signals:
      *  preview — does NOT rebuild the look list or palette tree. */
     void paletteValueChanged(quint32 paletteId);
 
+    /** Emitted at the end of every setPalette() call — on a genuine focus
+     *  change (a different look selected on screen) as well as a same-id
+     *  redraw (e.g. after a control surface writes a new value into the
+     *  currently-shown palette). invalidId() when nothing's shown. Lets an
+     *  external listener (e.g. a control-surface overlay) recompute what's
+     *  "in use right now" without polling. */
+    void lookFocusChanged(quint32 paletteId);
+
 private slots:
     void slotColorChanged(const QColor &c);
+    void slotRgbSliderChanged();  //!< numbered R/G/B sliders (1-3)
     void slotColorExtraChanged(); //!< White/Amber/UV sliders
     void slotDimmerChanged(int v);
     void slotPanTiltChanged(const QPointF &p);
@@ -132,7 +148,11 @@ private:
     int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageAim, m_pageBeam, m_pageSingle, m_pageStrobe;
 
     QColorDialog *m_colorDialog;
-    QSlider *m_whiteSlider, *m_amberSlider, *m_uvSlider; //!< extra colour emitters
+    //!< Numbered (1-6) sliders mirroring the PMJ-style control surface fader
+    //!< mapping (PMJOverlay::slotRoleActivated's Level case) so it's visible
+    //!< on screen which physical fader does what.
+    QSlider *m_redSlider, *m_greenSlider, *m_blueSlider; //!< 1, 2, 3
+    QSlider *m_whiteSlider, *m_amberSlider, *m_uvSlider; //!< 4, 5, 6 — extra colour emitters
     QWidget *m_whiteRow, *m_amberRow, *m_uvRow;          //!< hidden when absent
     CapabilityBar *m_dimmerBar; //!< gradient + strobe region marks
     QLabel *m_dimmerValue;

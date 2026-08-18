@@ -30,6 +30,7 @@
 #include <QSplitter>
 #include <QSettings>
 #include <QToolBar>
+#include <QToolButton>
 #include <QMenuBar>
 #include <QPixmap>
 #include <QDebug>
@@ -85,6 +86,7 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     , m_vsplitter(NULL)
     , m_tree(NULL)
     , m_toolbar(NULL)
+    , m_addButton(NULL)
     , m_addSceneAction(NULL)
     , m_addChaserAction(NULL)
     , m_addCollectionAction(NULL)
@@ -335,17 +337,31 @@ void FunctionManager::initToolbar()
     m_toolbar->setFloatable(false);
     m_toolbar->setMovable(false);
     layout()->addWidget(m_toolbar);
-    m_toolbar->addAction(m_addSceneAction);
-    m_toolbar->addAction(m_addChaserAction);
-    m_toolbar->addAction(m_addSequenceAction);
-    m_toolbar->addAction(m_addEFXAction);
-    m_toolbar->addAction(m_addCollectionAction);
-    m_toolbar->addAction(m_addRGBMatrixAction);
-    m_toolbar->addAction(m_addScriptAction);
-    m_toolbar->addAction(m_addAudioAction);
-    m_toolbar->addAction(m_addVideoAction);
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_addFolderAction);
+
+    // "Add" consolidates the New Scene/Chaser/…/Folder actions that used to
+    // be spelled out as ten separate toolbar buttons — same QActions (same
+    // shortcuts, same slots, still reused as-is by the tree's right-click
+    // menu), just reachable from one dropdown instead of a wall of icons.
+    // Placed first so it's the leftmost/primary action on the toolbar.
+    m_addButton = new QToolButton(m_toolbar);
+    m_addButton->setText(tr("Add"));
+    m_addButton->setIcon(QIcon(":/edit_add.png"));
+    m_addButton->setPopupMode(QToolButton::InstantPopup);
+    QMenu *addMenu = new QMenu(m_addButton);
+    addMenu->addAction(m_addSceneAction);
+    addMenu->addAction(m_addChaserAction);
+    addMenu->addAction(m_addSequenceAction);
+    addMenu->addAction(m_addEFXAction);
+    addMenu->addAction(m_addCollectionAction);
+    addMenu->addAction(m_addRGBMatrixAction);
+    addMenu->addAction(m_addScriptAction);
+    addMenu->addAction(m_addAudioAction);
+    addMenu->addAction(m_addVideoAction);
+    addMenu->addSeparator();
+    addMenu->addAction(m_addFolderAction);
+    m_addButton->setMenu(addMenu);
+    m_toolbar->addWidget(m_addButton);
+
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_autostartAction);
     m_toolbar->addAction(m_wizardAction);
@@ -373,6 +389,11 @@ void FunctionManager::applyToolbarLabelMode()
 
     if (m_toolbar)
         m_toolbar->setToolButtonStyle(style);
+    // QToolBar::setToolButtonStyle only auto-applies to buttons it creates
+    // from addAction(); a QToolButton added via addWidget() (m_addButton)
+    // needs it set directly.
+    if (m_addButton)
+        m_addButton->setToolButtonStyle(style);
 }
 
 QString FunctionManager::getSelectedFolderPath()

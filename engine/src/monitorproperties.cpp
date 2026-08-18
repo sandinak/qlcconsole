@@ -22,6 +22,8 @@
 #include <QDebug>
 #include <QFont>
 #include <QtMath>
+#include <QFile>
+#include <QTextStream>
 
 #include <algorithm>
 #include <cmath>

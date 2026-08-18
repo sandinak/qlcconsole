@@ -37,6 +37,31 @@
 #define TYPE_INPUT "Input"
 #define TYPE_OUTPUT "Output"
 
+namespace {
+    // Built-in fallback init-message templates for known devices, used only
+    // when nothing has been saved yet for this device name (i.e. the very
+    // first time QLC+ sees it on this machine) — so a board this fork
+    // already ships a template for lights up correctly out of the box
+    // instead of silently defaulting to no init message. Matched by a
+    // case-insensitive substring of the device's enumerated port name (the
+    // exact string varies a little by OS/driver), and only applied to
+    // Output devices — an init/LED message is meaningless on an Input line.
+    struct KnownDeviceDefault { const char *nameContains; const char *initTemplate; };
+    const KnownDeviceDefault kKnownDeviceDefaults[] = {
+        { "PMJ", "PMJ Black 1 idle lights" },
+    };
+
+    QString defaultInitTemplateFor(const QString &deviceName)
+    {
+        for (const auto &known : kKnownDeviceDefaults)
+        {
+            if (deviceName.contains(QString::fromLatin1(known.nameContains), Qt::CaseInsensitive))
+                return QString::fromLatin1(known.initTemplate);
+        }
+        return QString();
+    }
+}
+
 
 /****************************************************************************
  * Device Type
@@ -221,6 +246,8 @@ void MidiDevice::loadSettings()
     }
     if (value.isValid() == true)
         setMidiTemplateName(value.toString());
+    else if (deviceType() == Output)
+        setMidiTemplateName(defaultInitTemplateFor(name()));
     else
         setMidiTemplateName("");
 }

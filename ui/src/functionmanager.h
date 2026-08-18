@@ -30,6 +30,7 @@ class FunctionsTreeWidget;
 class QTreeWidgetItem;
 class QSplitter;
 class QToolBar;
+class QToolButton;
 class QAction;
 class Fixture;
 class QMenu;
@@ -146,6 +147,7 @@ protected:
 
 protected:
     QToolBar* m_toolbar;
+    QToolButton* m_addButton;   //!< "Add" dropdown consolidating New Scene/Chaser/…/Folder
 
     QAction* m_addSceneAction;
     QAction* m_addChaserAction;

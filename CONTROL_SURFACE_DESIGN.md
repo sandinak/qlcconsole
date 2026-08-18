@@ -188,3 +188,217 @@ for every board at once.
 - Whether the **10 faders** are strip levels (per selected fixture/group) or fixed
   submasters — affects P1.
 - Runtime busking: **Xbox-only**, or PMJ encoders also live-assign mid-show.
+
+## P1 plan — PMJ overlay + LED (2026-08-18, Branson back at the rig, PMJ connected)
+
+Re-read `PMJ-Black-1.qxi` (the input profile) and `PMJ-Black-1-idle.qxm` (the LED
+init template) against the 4 open "board facts" from the P0 handoff. Two are now
+answered from the files themselves — no rig time needed for those. Two still need
+you, now that the board's actually connected.
+
+**Resolved from the files:**
+
+- **LED output channel** — `PMJ-Black-1-idle.qxm`'s init message is 54 repeats of
+  `98 <note> 0F`. `0x98` = Note-On on **MIDI channel 9** (0x90 | channel index 8).
+  Matches the design doc's existing assumption — confirmed, not just assumed.
+- **LED velocity scale** — the design doc's open question ("board wants 0-15; QLC
+  feedback maps to 0-127 — which value is full?") turns out to be based on a
+  slightly wrong premise. The profile's own `<Feedback LowerValue="15"
+  UpperValue="127"/>` on every LED-capable button is the answer already baked in:
+  **15 = dim/idle** (what the init message paints everything at, so the board
+  isn't pitch-black on connect), **127 = full/active**, and presumably **0 =
+  fully unlit** (a control QLC+ never touches, vs. one it's deliberately dimmed).
+  This maps directly onto `ControlSurface::brightness()`'s existing 4-state curve
+  if we treat `maxBrightness` as 127 and floor `State::Valid` at 15 instead of 0
+  (a small tweak — right now `Valid` = `maxBrightness/4` ≈ 31, which would already
+  read as lit-not-dim on this board; worth confirming by eye once the overlay's
+  running, not something to guess blind).
+
+**Resolved (2026-08-18), via `qlcplus-midi-profiler` (a separate, already
+fairly mature tool Branson had built in a prior session — `/Users/branson/git/
+qlcplus-midi-profiler`, see its own README for the full command set):**
+
+1. **Encoder ROTATION.** `qlc-midi monitor OpenDeck` (after clearing a macOS
+   Input-Monitoring permission gate that was silently blocking all MIDI input —
+   not a bug in the tool, just needed granting to the terminal/VS Code process)
+   showed `Enc 1-4` sending exactly `CC 11-14` on MIDI channel 9, value `1` one
+   direction / `127` the other — the classic twos-complement relative-encoder
+   pattern. Hand-corrected `maps/pmj-black-1.json` (type `Button` → `Encoder`)
+   and regenerated with `qlc-midi generate --idle-level 15 --init-template
+   profiles/PMJ-Black-1-idle.qxm` (the `--idle-level 15` matters — the plain
+   default regenerates every LED's `Feedback` at `LowerValue="0"`, which would
+   have silently undone the deliberate "steady dim glow instead of pitch black
+   on connect" behavior the current profile already has). Copied into
+   `resources/inputprofiles/PMJ-Black-1.qxi` — diff against the previous
+   tracked version is now exactly the 4 encoder channels gaining `<Type>
+   Encoder</Type><Movement Sensitivity="1"/>`, nothing else changed. **One
+   config step left for Branson**: `generate` reported "MIDI channel encoding:
+   embedded at bit 12 — set the QLC+ input line to 'any' MIDI channel" — the
+   PMJ's QLC+ input line needs to be set to listen on **any** MIDI channel
+   (not pinned to one) for the regenerated channel numbers to resolve
+   correctly.
+2. **Static-core button placement.** The board's actual named buttons (from the
+   profile) are: `Go`, `Back`, `Left`, `Right`, `Pre Page`, `Next Page`, `O`,
+   `Favorites`, `Set`, `Effects`, `Groups`, `Looks`, `Macros`, `Fix Cont` — no
+   button is labeled Blackout/Blind/Tap/GM. Design doc's proposal: `O` →
+   Blackout, `Set` → Blind, `Favorites` → Tap. **Your call** — keep that mapping,
+   or reassign. (`Master` fader → Grand Master is the one static-core binding
+   that's unambiguous — it's the only fader with no strip number.)
+
+**Role table for PMJ Black 1 (Design page, Phase 1 of the design doc) — ready to
+build once #1 above is answered:**
+
+| PMJ control | Role | Notes |
+|---|---|---|
+| `Master` fader | `Level(-1)` = Grand Master | static core, never pages |
+| `Ch 1-10` faders | `Level(1..10)` | per-strip level — the open "submaster vs. selected-fixture" question above still applies |
+| `1-10` buttons | `Select(1..10)` | fire/select strip N on the current page |
+| `N-Load` (1-10) | `Load(N)` | load item N into the programmer |
+| `N-Up`/`N-Down` | *unassigned* | not in the current Role vocabulary — likely `Param` fine-nudge for strip N, or bank-within-strip; needs a decision, see below |
+| `Enc 1-4` (push) | `Param(1..4)` push-to-... | reset-to-default is the EOS/Ma3 convention (see parity section below) — proposed, confirm |
+| `Enc 1-4` (turn) | `Param(1..4)` | resolved — CC 11-14, ch9, `Encoder` type, ready to bind |
+| `Groups`/`Looks`/`Effects`/`Macros`/`Fix Cont` | `Page(id)` | the page switch — hardware buttons ARE the page selector, exactly as the design doc already called out |
+| `Go`/`Back`/`Left`/`Right` | `Transport::Go/Back/Left/Right` | direct 1:1 with the existing enum |
+| `Pre Page`/`Next Page` | `Transport::Prev/Next` | banking through >10 items on the current page |
+| `O` | proposed `Static::Blackout` | pending your call above |
+| `Set` | proposed `Static::Blind` | pending your call above |
+| `Favorites` | proposed `Static::Tap` | pending your call above |
+
+`N-Up`/`N-Down` are the one set of physical controls with no obvious Role yet —
+worth discussing directly: on a lot of small boards these step a value up/down by
+a fixed increment (an alternative to grabbing the encoder), which would make them
+a **discrete-step sibling to `Param`**, scoped to strip N rather than the paged
+encoder bank. That reads as genuinely useful for "levels and positions" fine
+refinement without needing to grab an encoder at all — worth confirming that's
+what they're for on this board before binding them to something else.
+
+## Parity with EOS / grandMA3
+
+You asked for "honest parity" with how other consoles use their surfaces, not
+just internal consistency — worth naming where the roles above already match a
+convention those desks use, and where the PMJ's actual hardware can't quite get
+there:
+
+- **Parameter-category paging = EOS's Position/Color/Beam/... buttons, Ma3's
+  encoder-bar pages.** Direct match: `Groups`/`Looks`/`Effects`/`Macros`/`Fix
+  Cont` are exactly this idea, just PMJ-specific labels instead of ETC/MA's.
+  Nothing to change — the design doc already landed here independently.
+- **Context-aware LED = both desks' "populated vs. empty" fader/button
+  indication** (EOS's fader-page LCD blanks an unpatched fader; Ma3 dims an
+  empty executor). The `State::Empty/Valid/Selected/Active` vocabulary already
+  models this generically — P1 is just actually wiring real app state into it
+  for the PMJ specifically.
+- **Highlight.** EOS's dedicated Highlight button (temporarily slam the
+  selection to a visibility look) has a direct, already-built analog: Lighting
+  Studio's `MonitorFixtureItem::setGhosted()`/the whole ghosted/locked-layer
+  visual we already use — the same underlying idea (make the relevant thing
+  obviously distinct), just currently a canvas-only affordance. Worth a future
+  PMJ static-core button once one's free, but not blocking P1.
+- **Where PMJ hardware genuinely can't match EOS/Ma3, and that's fine:** neither
+  desk convention assumes a 10-strip board — EOS's channel/parameter encoders and
+  Ma3's executor faders both assume either a full fader wing or a command-line
+  keypad for exact numeric entry, which the PMJ doesn't have. The design doc's
+  `Enc 1-4` + push-to-select-page pattern is the honest PMJ-scale equivalent of
+  "dial in a category, then a number" — not a lesser version, a smaller-board
+  version. Don't chase literal 1:1 parity (e.g. a command line) the board can't
+  physically support; match the *convention* (page → precise value) at the scale
+  this board actually offers.
+- **One real gap worth closing for genuine parity:** both EOS and Ma3 let you
+  step through the *current selection* (Next/Last, or a "Select Last" button)
+  independent of the fixture-select grid — useful mid-focus-session without
+  re-grabbing the grid. PMJ's `Left`/`Right` buttons are currently only slated
+  for page-adjacent stepping in the table above; consider binding them to
+  "step selection" instead (or in addition, context-dependent on which page is
+  active) — flagging as a discussion point, not deciding unilaterally here.
+
+## P2 — Selection mode: what a whole SCENE ties to the faders (2026-08-18)
+
+P1 (slices 7-8) built fader/encoder mapping keyed on **whichever single
+palette is focused in the Look Editor** — great for precise authoring of one
+look, but a scene is usually several looks across several targets, and the
+board should be useful without drilling into one specific look every time.
+Branson: "it's clear when we select a specific palette, but what about the
+entire scene — should we identify specific things on the controller to
+specific things in the scene... have an option to select specific heads in a
+scene and alter those values via slider?"
+
+**The substrate for this already exists and is completely unused today:**
+`ProgrammerController::programmerSubSelection()` — a `QSet<quint32>` of
+fixture ids, toggled via `toggleInProgrammerSubSelection(fid)` /
+`clearProgrammerSubSelection()`. It already has real engine teeth:
+`tryRoutePaletteEdit()` (`engine/src/programmercontroller.cpp:520-523`)
+checks it to decide whether a pad edit routes to the shared group palette or
+to per-fixture channel overrides. Nothing in the UI or any hardware currently
+sets it. This is exactly "select specific heads and alter those values" — P2
+is wiring the PMJ into a mechanism that was already built for this, not
+inventing a new one.
+
+**Two modes, switched automatically by app state, no manual mode button:**
+
+- **Look-edit mode** (P1, unchanged): a specific palette is focused in the
+  Look Editor → faders/encoders are context-aware to *that palette's type*
+  (`PMJOverlay::faderInUse()`, slices 7-8). Precise single-look authoring.
+- **Selection mode** (new): nothing's focused in the Look Editor, or
+  `programmerSubSelection()` is non-empty → faders/encoders take **fixed**
+  roles and act on the selection. The quick, muscle-memory mode real consoles
+  default to.
+
+**Select(1-10) / Load(1-10) — finally wired, using the Role vocabulary these
+were already named for:**
+
+- **`Select(N)`**: toggle target N (by canvas order in the open scene) into
+  or out of `programmerSubSelection()` — **toggle multi-select**, confirmed
+  with Branson (builds a group like "select 1 thru 5" on a real console,
+  rather than Select acting as a redundant single-pick radio that duplicates
+  `Load`).
+- **`Load(N)`**: `clearProgrammerSubSelection()` then select only N — jump
+  straight to one thing, matching the Role's existing doc comment ("load
+  item N into the programmer").
+- **>10 targets in one scene**: confirmed with Branson — **page through**
+  using the already-unwired `Page` button/role to bank-switch which 10
+  targets Select/Load currently address, rather than silently capping at the
+  first 10.
+
+**Fixed encoders, always active in Selection mode:**
+
+- **Enc 1/2 → Pan/Tilt (H/V)** — generalizes `nudgeDesignPanTilt()` (P1
+  slice 4) to write per-fixture channel overrides for the *selection*
+  (via the same per-fixture-override path `tryRoutePaletteEdit()` already
+  routes to when a sub-selection is active), not just a focused PanTilt
+  palette.
+- **Enc 3/4 → Focus + Zoom** — confirmed with Branson. The next two most
+  commonly-grabbed continuous beam parameters after pan/tilt.
+
+**Fixed faders:**
+
+- **7-10 → RGBW of the selection** — confirmed with Branson. A fast,
+  always-available color path that doesn't require opening a Color look;
+  writes per-fixture overrides the same way the encoders do.
+- **1-6 → intensity, one fader per selected fixture** (up to 6 addressable
+  at once) — this is the answer to the "`Level(1..10)`: submaster vs.
+  selected-fixture" open question the P1 role table has been carrying since
+  slice 1: **selected-fixture**, not submaster.
+
+**Not yet designed — needed before this is buildable:**
+
+- The concrete write path: a selection-keyed sibling to `nudgeDesignPanTilt`/
+  `setDesignColorChannel`/`setDesignDimmerValue` that takes a `QSet<quint32>`
+  (or reads `programmerSubSelection()` directly) instead of a `paletteId`,
+  and writes per-fixture channel overrides through the same DMX-pad path
+  `tryRoutePaletteEdit()` already exists for — needs a `ProgrammerController`
+  method audit to find (or build) the right entry point for "write a raw
+  channel value for fixture F, channel group G, right now."
+- LED highlighting for Select(1-10)/Load(1-10) — the `State::Empty` default
+  from P1 slice 1 should become real once these are wired: lit for targets
+  that exist on the current page, brighter/`Selected` for whichever are in
+  `programmerSubSelection()`.
+- How "canvas order" is actually enumerated for a scene's targets (fixture
+  groups first then loose fixtures? Declaration order? Needs a concrete,
+  stable definition before Select(N) can mean the same thing twice in a
+  row).
+- Whether Enc 3/4 (Focus/Zoom) and faders 7-10 (RGBW) write into the
+  selection's *existing* palette assignments (deviate a shared group look
+  per-fixture, same as pan/tilt) or bypass palettes entirely for a raw
+  per-fixture channel poke — almost certainly the former, for consistency
+  with pan/tilt and with `tryRoutePaletteEdit()`'s existing model, but worth
+  stating explicitly once implementation starts.

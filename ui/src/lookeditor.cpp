@@ -302,9 +302,12 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     el->addWidget(new QLabel(tr("Select a look above to edit it."), empty));
     m_pageEmpty = m_stack->addWidget(empty);
 
-    // Color page: RGB picker on the LEFT, vertical extra-emitter sliders
-    // (White / Amber / UV) on the RIGHT — always visible beside the (tall)
-    // colour dialog rather than scrolled off-screen above/below it.
+    // Color page: RGB picker on the LEFT, vertical numbered sliders (R G B,
+    // then extra emitters White / Amber / UV) on the RIGHT — always visible
+    // beside the (tall) colour dialog rather than scrolled off-screen above
+    // or below it. Numbered 1-6 to match PMJOverlay::slotRoleActivated's
+    // Level-role fader mapping (fader N controls the Nth slider here), so
+    // it's visible on screen which physical fader does what.
     QWidget *colorPage = new QWidget(this);
     QHBoxLayout *cl = new QHBoxLayout(colorPage);
     cl->setContentsMargins(0, 0, 0, 0);
@@ -319,24 +322,32 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_colorDialog->setMaximumHeight(300);
     cl->addWidget(m_colorDialog, 1);
 
-    // One vertical slider (label above) per extra emitter.
-    auto makeColorCol = [&](const QString &name, QSlider *&slider) -> QWidget* {
+    // One vertical slider (numbered label above) per channel.
+    auto makeColorCol = [&](int number, const QString &name, QSlider *&slider,
+                             const char *slotSignature) -> QWidget* {
         QWidget *col = new QWidget(colorPage);
         QVBoxLayout *vl = new QVBoxLayout(col);
         vl->setContentsMargins(2, 0, 2, 0);
-        vl->addWidget(new QLabel(name, col), 0, Qt::AlignHCenter);
+        vl->addWidget(new QLabel(QStringLiteral("%1 %2").arg(number).arg(name), col),
+                      0, Qt::AlignHCenter);
         slider = new QSlider(Qt::Vertical, col);
         slider->setRange(0, 255);
         vl->addWidget(slider, 1, Qt::AlignHCenter);
-        connect(slider, SIGNAL(valueChanged(int)), this, SLOT(slotColorExtraChanged()));
+        connect(slider, SIGNAL(valueChanged(int)), this, slotSignature);
         return col;
     };
     QWidget *extras = new QWidget(colorPage);
     QHBoxLayout *xl = new QHBoxLayout(extras);
     xl->setContentsMargins(0, 0, 0, 0);
-    m_whiteRow = makeColorCol(tr("W"),  m_whiteSlider);
-    m_amberRow = makeColorCol(tr("A"),  m_amberSlider);
-    m_uvRow    = makeColorCol(tr("UV"), m_uvSlider);
+    QWidget *redRow   = makeColorCol(1, tr("R"),  m_redSlider,   SLOT(slotRgbSliderChanged()));
+    QWidget *greenRow = makeColorCol(2, tr("G"),  m_greenSlider, SLOT(slotRgbSliderChanged()));
+    QWidget *blueRow  = makeColorCol(3, tr("B"),  m_blueSlider,  SLOT(slotRgbSliderChanged()));
+    m_whiteRow = makeColorCol(4, tr("W"),  m_whiteSlider, SLOT(slotColorExtraChanged()));
+    m_amberRow = makeColorCol(5, tr("A"),  m_amberSlider, SLOT(slotColorExtraChanged()));
+    m_uvRow    = makeColorCol(6, tr("UV"), m_uvSlider,    SLOT(slotColorExtraChanged()));
+    xl->addWidget(redRow);
+    xl->addWidget(greenRow);
+    xl->addWidget(blueRow);
     xl->addWidget(m_whiteRow);
     xl->addWidget(m_amberRow);
     xl->addWidget(m_uvRow);
@@ -632,6 +643,7 @@ void LookEditor::setPalette(quint32 paletteId)
         m_stack->setCurrentIndex(m_pageEmpty);
         if (m_fadeRow) m_fadeRow->hide();
         setMaximumHeight(340);
+        emit lookFocusChanged(QLCPalette::invalidId());
         return;
     }
 
@@ -669,6 +681,11 @@ void LookEditor::setPalette(quint32 paletteId)
     {
         const QColor rgb = p->rgbValue();
         m_colorDialog->setCurrentColor(rgb);
+        m_redSlider->blockSignals(true); m_greenSlider->blockSignals(true); m_blueSlider->blockSignals(true);
+        m_redSlider->setValue(rgb.red());
+        m_greenSlider->setValue(rgb.green());
+        m_blueSlider->setValue(rgb.blue());
+        m_redSlider->blockSignals(false); m_greenSlider->blockSignals(false); m_blueSlider->blockSignals(false);
 
         // Extra emitters: load stored wauv, or default White to the additive
         // auto value (min of R,G,B) and Amber/UV to 0.
@@ -713,6 +730,7 @@ void LookEditor::setPalette(quint32 paletteId)
         const qreal y = qreal(p->intValue2()) / TILT_DEG * XY_MAX;
         m_xyPad->setPosition(QPointF(x, y));
         m_xyPad->setEnabled(true);
+        m_xyPad->update();
         m_stack->setCurrentIndex(m_pagePanTilt);
         setMaximumHeight(340);
         break;
@@ -872,6 +890,7 @@ void LookEditor::setPalette(quint32 paletteId)
     }
 
     m_loading = false;
+    emit lookFocusChanged(paletteId);
 }
 
 void LookEditor::setContextScene(Scene *scene)
@@ -1058,11 +1077,32 @@ void LookEditor::slotColorChanged(const QColor &c)
 {
     if (m_loading)
         return;
+    // Keep the numbered R/G/B sliders (fader 1-3 on a mapped control
+    // surface) in sync with the dialog's own picker.
+    m_redSlider->blockSignals(true); m_greenSlider->blockSignals(true); m_blueSlider->blockSignals(true);
+    m_redSlider->setValue(c.red());
+    m_greenSlider->setValue(c.green());
+    m_blueSlider->setValue(c.blue());
+    m_redSlider->blockSignals(false); m_greenSlider->blockSignals(false); m_blueSlider->blockSignals(false);
+
     // Auto-derive White additively (W = min(R,G,B), RGB kept) on colour change.
     const int autoW = qMin(c.red(), qMin(c.green(), c.blue()));
     m_whiteSlider->blockSignals(true);
     m_whiteSlider->setValue(autoW);
     m_whiteSlider->blockSignals(false);
+    commitColor();
+}
+
+void LookEditor::slotRgbSliderChanged()
+{
+    if (m_loading)
+        return;
+    // Keep the dialog's picker in sync with the numbered sliders (e.g. driven
+    // by a control-surface fader) without re-triggering slotColorChanged().
+    const QColor c(m_redSlider->value(), m_greenSlider->value(), m_blueSlider->value());
+    m_colorDialog->blockSignals(true);
+    m_colorDialog->setCurrentColor(c);
+    m_colorDialog->blockSignals(false);
     commitColor();
 }
 
@@ -1078,7 +1118,7 @@ void LookEditor::commitColor()
     QLCPalette *p = m_doc->palette(m_paletteId);
     if (p == NULL || p->type() != QLCPalette::Color)
         return;
-    const QColor rgb = m_colorDialog->currentColor();
+    const QColor rgb(m_redSlider->value(), m_greenSlider->value(), m_blueSlider->value());
     // wauv encodes White=red, Amber=green, UV=blue (see QLCPalette::Color).
     const QColor wauv(m_whiteSlider->value(), m_amberSlider->value(), m_uvSlider->value());
     p->setValue(QLCPalette::colorToString(rgb, wauv));

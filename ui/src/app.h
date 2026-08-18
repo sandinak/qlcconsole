@@ -130,7 +130,8 @@ private:
      * Backstage color theme
      *********************************************************************/
 public:
-    enum Theme { ThemeDefault = 0, ThemeTan = 1, ThemeBlue = 2 };
+    enum Theme { ThemeDefault = 0, ThemeTan = 1, ThemeBlue = 2,
+                 ThemeQLCOriginal = 3, ThemeRedShift = 4, ThemeVSCodeDark = 5 };
 
     int theme() const;
     void setTheme(int theme);
@@ -174,12 +175,29 @@ private slots:
     void slotDocModified(bool state);
     void slotDocAutosave();
     void slotUniverseWritten(quint32 idx, const QByteArray& ua);
+    /** Re-run updateWindowTitle() when the active tab changes, so the title
+     *  bar's tab name stays current. */
+    void slotTabChanged(int index);
+
+private:
+    /** Rebuild and apply the main window's title: app name, showfile name
+     *  (or "New Workspace"), a modified-state "*", and the active tab's
+     *  name — so the title bar always identifies both the open file and
+     *  which tab is showing, even before any edit has happened. */
+    void updateWindowTitle();
 
 private:
     void initDoc();
 
 private:
     Doc* m_doc;
+
+    /** Device-agnostic control-surface engine + the PMJ Black 1 overlay
+     *  (CONTROL_SURFACE_DESIGN.md). Parented to `this`, no manual cleanup
+     *  needed. Constructed at the end of initDoc(), once Doc's I/O map is
+     *  fully ready. */
+    class ControlSurfaceEngine* m_controlSurfaceEngine = nullptr;
+    class PMJOverlay* m_pmjOverlay = nullptr;
 
     /*********************************************************************
      * Main operating mode
@@ -448,7 +466,7 @@ private:
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;
     QLabel* m_statusShowLockLabel;
-    QLabel* m_statusBlindLabel;
+    QLabel* m_statusBlackoutLabel;
     QLabel* m_statusTimecodeLabel;
     QLabel* m_statusLoadLabel;
     QLabel* m_statusPowerLabel = nullptr;

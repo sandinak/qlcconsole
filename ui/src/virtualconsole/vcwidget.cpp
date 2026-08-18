@@ -1286,6 +1286,18 @@ void VCWidget::invokeMenu(const QPoint& point)
     if (vc == NULL)
         return;
 
+    // Empty canvas (nothing selected): show a scoped menu with "Add" first
+    // and Cut/Copy/Delete/Rename/Properties left out entirely — none of them
+    // have a target with nothing selected, so the full edit menu would just
+    // be mostly grayed-out clutter.
+    if (vc->selectedWidgets().isEmpty())
+    {
+        QMenu* menu = vc->buildEmptyCanvasMenu();
+        menu->exec(point);
+        delete menu;
+        return;
+    }
+
     QMenu* menu = vc->editMenu();
     Q_ASSERT(menu != NULL);
     menu->exec(point);

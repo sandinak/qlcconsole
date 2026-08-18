@@ -43,6 +43,7 @@ private slots:
     void loadWrongRoot();
     void save();
     void paletteFadeTime();
+    void lookScope();
     void copyFrom();
     void createCopy();
 

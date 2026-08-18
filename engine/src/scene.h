@@ -31,6 +31,7 @@
 #include "dmxsource.h"
 #include "function.h"
 #include "fixture.h"
+#include "fixturegroup.h"
 
 class QXmlStreamReader;
 
@@ -257,6 +258,37 @@ public:
 
 private:
     QList<quint32> m_fixtureGroups;
+
+    /*********************************************************************
+     * Look scope
+     *********************************************************************/
+public:
+    /** Declared intent — which fixtures a look is FOR, as opposed to
+     *  fixtureGroups()/fixtures() above (Targets), which are what it
+     *  actually paints. Two different axes: scope is metadata for a human
+     *  (or future tooling) to organise/filter by; Targets is what runs.
+     *  Unset (the default) means "nobody's said" — distinct from
+     *  WholeStage, which is an explicit statement of intent. */
+    enum LookScope
+    {
+        ScopeUnset = 0,     //!< no scope declared yet
+        ScopeWholeStage = 1,//!< explicitly "the whole rig", not a subpart
+        ScopeGroup = 2      //!< a specific FixtureGroup (see lookScopeGroupId())
+    };
+
+    /** Set this look's declared scope. @a groupId is only meaningful (and
+     *  only stored) when @a scope is ScopeGroup. */
+    void setLookScope(LookScope scope, quint32 groupId = FixtureGroup::invalidId());
+
+    LookScope lookScope() const;
+
+    /** The FixtureGroup this look is scoped to, or FixtureGroup::invalidId()
+     *  when lookScope() isn't ScopeGroup. */
+    quint32 lookScopeGroupId() const;
+
+private:
+    LookScope m_lookScope = ScopeUnset;
+    quint32 m_lookScopeGroupId = FixtureGroup::invalidId();
 
     /*********************************************************************
      * Palettes

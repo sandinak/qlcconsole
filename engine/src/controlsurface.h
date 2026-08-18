@@ -32,6 +32,7 @@ namespace ControlSurface
         Select,     //!< index = strip N — select / fire item N on the current page
         Load,       //!< index = strip N — load item N into the programmer
         Level,      //!< index = strip N (-1 = master) — a fader level
+        Reset,      //!< index = strip N — reset that fader's controlled value to default
         Param,      //!< index = encoder E — adjust parameter E on the current page
         Page,       //!< index = page id — switch the surface page/mode
         Transport,  //!< index = a Transport value below

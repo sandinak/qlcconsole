@@ -559,6 +559,74 @@ void Scene_Test::paletteFadeTime()
     QCOMPARE(s3.paletteFadeOut(9), 2500);
 }
 
+void Scene_Test::lookScope()
+{
+    Scene s(m_doc);
+
+    // Unset by default — distinct from an explicit WholeStage declaration.
+    QCOMPARE(s.lookScope(), Scene::ScopeUnset);
+    QCOMPARE(s.lookScopeGroupId(), FixtureGroup::invalidId());
+
+    s.setLookScope(Scene::ScopeWholeStage);
+    QCOMPARE(s.lookScope(), Scene::ScopeWholeStage);
+    QCOMPARE(s.lookScopeGroupId(), FixtureGroup::invalidId());
+
+    s.setLookScope(Scene::ScopeGroup, 7);
+    QCOMPARE(s.lookScope(), Scene::ScopeGroup);
+    QCOMPARE(s.lookScopeGroupId(), quint32(7));
+
+    // Switching away from ScopeGroup drops the stale group id.
+    s.setLookScope(Scene::ScopeWholeStage);
+    QCOMPARE(s.lookScopeGroupId(), FixtureGroup::invalidId());
+
+    // XML round-trip: WholeStage.
+    QBuffer wsBuffer;
+    wsBuffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter wsWriter(&wsBuffer);
+    QVERIFY(s.saveXML(&wsWriter) == true);
+    wsWriter.setDevice(NULL);
+    wsBuffer.close();
+
+    Scene wsLoaded(m_doc);
+    wsBuffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader wsReader(&wsBuffer);
+    wsReader.readNextStartElement();
+    QVERIFY(wsLoaded.loadXML(wsReader) == true);
+    QCOMPARE(wsLoaded.lookScope(), Scene::ScopeWholeStage);
+
+    // XML round-trip: a specific group.
+    s.setLookScope(Scene::ScopeGroup, 12);
+    QBuffer grpBuffer;
+    grpBuffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter grpWriter(&grpBuffer);
+    QVERIFY(s.saveXML(&grpWriter) == true);
+    grpWriter.setDevice(NULL);
+    grpBuffer.close();
+
+    Scene grpLoaded(m_doc);
+    grpBuffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader grpReader(&grpBuffer);
+    grpReader.readNextStartElement();
+    QVERIFY(grpLoaded.loadXML(grpReader) == true);
+    QCOMPARE(grpLoaded.lookScope(), Scene::ScopeGroup);
+    QCOMPARE(grpLoaded.lookScopeGroupId(), quint32(12));
+
+    // An old workspace with no LookScope attribute at all loads as Unset —
+    // the whole point of not writing the attribute when it's unset.
+    const char *legacy = "<Function Type=\"Scene\" Name=\"Old\"/>";
+    Scene legacyLoaded(m_doc);
+    QXmlStreamReader legacyReader(legacy);
+    legacyReader.readNextStartElement();
+    QVERIFY(legacyLoaded.loadXML(legacyReader) == true);
+    QCOMPARE(legacyLoaded.lookScope(), Scene::ScopeUnset);
+
+    // copyFrom carries the scope.
+    Scene copy(m_doc);
+    QVERIFY(copy.copyFrom(&grpLoaded) == true);
+    QCOMPARE(copy.lookScope(), Scene::ScopeGroup);
+    QCOMPARE(copy.lookScopeGroupId(), quint32(12));
+}
+
 void Scene_Test::copyFrom()
 {
     Scene s1(m_doc);

@@ -102,6 +102,7 @@ add_library(${module_name}
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
+    pmjoverlay.cpp pmjoverlay.h
     positiontool.cpp positiontool.h positiontool.ui
     preferencesdialog.cpp preferencesdialog.h
     rdmmanager.cpp rdmmanager.h rdmmanager.ui

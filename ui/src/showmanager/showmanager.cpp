@@ -83,6 +83,16 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     , m_showview(NULL)
     , m_funcTree(NULL)
     , m_toolbar(NULL)
+    , m_bottomToolbar(NULL)
+    , m_showButton(NULL)
+    , m_editButton(NULL)
+    , m_lengthButton(NULL)
+    , m_playStopButton(NULL)
+    , m_transportManualWidget(NULL)
+    , m_transportMtcWidget(NULL)
+    , m_transportManualAction(NULL)
+    , m_transportMtcAction(NULL)
+    , m_followMtcButton(NULL)
     , m_showsCombo(NULL)
     , m_addShowAction(NULL)
     , m_renameShowAction(NULL)
@@ -400,36 +410,66 @@ void ShowManager::initToolbar()
     m_toolbar->setFloatable(false);
     m_toolbar->setMovable(false);
     layout()->addWidget(m_toolbar);
-    m_toolbar->addAction(m_addShowAction);
+
+    // "Show" — which show container to work on: New/Rename/Delete. Distinct
+    // from "Edit" below: this is about WHICH show, not what's in it.
+    m_showButton = new QToolButton(m_toolbar);
+    m_showButton->setText(tr("Show"));
+    m_showButton->setIcon(QIcon(":/show.png"));
+    m_showButton->setPopupMode(QToolButton::InstantPopup);
+    QMenu *showButtonMenu = new QMenu(m_showButton);
+    showButtonMenu->addAction(m_addShowAction);
+    showButtonMenu->addSeparator();
+    showButtonMenu->addAction(m_renameShowAction);
+    showButtonMenu->addAction(m_deleteShowAction);
+    m_showButton->setMenu(showButtonMenu);
+    m_toolbar->addWidget(m_showButton);
+
     m_showsCombo = new QComboBox();
     m_showsCombo->setFixedWidth(250);
     m_showsCombo->setMaxVisibleItems(30);
     connect(m_showsCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotShowsComboChanged(int)));
     m_toolbar->addWidget(m_showsCombo);
-    m_toolbar->addAction(m_renameShowAction);
-    m_toolbar->addAction(m_deleteShowAction);
     m_toolbar->addSeparator();
 
-    m_toolbar->addAction(m_addTrackAction);
-    m_toolbar->addAction(m_addSequenceAction);
-    m_toolbar->addAction(m_addAudioAction);
-    m_toolbar->addAction(m_addVideoAction);
+    // "Edit" — everything that touches the open show's contents: adding a
+    // track/sequence/audio/video item, and editing whatever is selected.
+    // Entries stay individually enabled/disabled by the existing selection
+    // logic (updateActionsAvailability(), unchanged), so with nothing
+    // selected the add-item actions remain usable while Copy/Delete/etc.
+    // show up grayed rather than as always-present toolbar clutter.
+    m_editButton = new QToolButton(m_toolbar);
+    m_editButton->setText(tr("Edit"));
+    m_editButton->setIcon(QIcon(":/edit.png"));
+    m_editButton->setPopupMode(QToolButton::InstantPopup);
+    QMenu *editButtonMenu = new QMenu(m_editButton);
+    editButtonMenu->addAction(m_addTrackAction);
+    editButtonMenu->addAction(m_addSequenceAction);
+    editButtonMenu->addAction(m_addAudioAction);
+    editButtonMenu->addAction(m_addVideoAction);
+    editButtonMenu->addSeparator();
+    editButtonMenu->addAction(m_undoAction);
+    editButtonMenu->addAction(m_copyAction);
+    editButtonMenu->addAction(m_pasteAction);
+    editButtonMenu->addAction(m_deleteAction);
+    editButtonMenu->addSeparator();
+    editButtonMenu->addAction(m_colorAction);
+    editButtonMenu->addAction(m_lockAction);
+    editButtonMenu->addAction(m_timingsAction);
+    m_editButton->setMenu(editButtonMenu);
+    m_toolbar->addWidget(m_editButton);
 
-    m_toolbar->addSeparator();
-    m_toolbar->addAction(m_undoAction);
-    m_toolbar->addAction(m_copyAction);
-    m_toolbar->addAction(m_pasteAction);
-    m_toolbar->addAction(m_deleteAction);
-    m_toolbar->addSeparator();
+    // Flanking stretches center the transport cluster below, the way a DAW
+    // (e.g. Logic) centers its transport regardless of what's docked left/right.
+    QWidget *leftStretch = new QWidget(this);
+    leftStretch->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_toolbar->addWidget(leftStretch);
 
-    m_toolbar->addAction(m_colorAction);
-    m_toolbar->addAction(m_lockAction);
-    m_toolbar->addAction(m_timingsAction);
-    m_toolbar->addAction(m_snapGridAction);
-    m_toolbar->addSeparator();
-
-    // Time label and playback buttons
+    // --- Center cluster: position readout + length (always shown), then
+    // exactly one of the manual-transport or MTC-follow widgets below,
+    // toggled by slotFollowMtcToggled() as the only thing that changes which
+    // is relevant. ---
     m_timeLabel = new QLabel("00:00:00.00");
     m_timeLabel->setFixedWidth(150);
     m_timeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -438,54 +478,17 @@ void ShowManager::initToolbar()
     timeFont.setPixelSize(20);
     m_timeLabel->setFont(timeFont);
     m_toolbar->addWidget(m_timeLabel);
-    m_toolbar->addSeparator();
 
-    m_toolbar->addAction(m_stopAction);
-    m_toolbar->addAction(m_playAction);
-    m_toolbar->addSeparator();
-
-    // The Follow-MTC TOGGLE now lives on the global main toolbar (App), so it is
-    // reachable from any tab and MIDI-mappable via a VC FollowTimecode button.
-    // m_followMtcAction is kept as the internal per-show state holder (its
-    // toggled() still runs slotFollowMtcToggled) but is no longer shown here.
-    // The MTC SOURCE + timeline-offset controls stay here — they are Show-Manager
-    // configuration, not the global arming toggle.
-    slotFollowMtcToggled(m_followMtcAction->isChecked());
-
-    // MTC SOURCE selection now lives on the global footer MTC chip's bind menu
-    // (App status bar): it sets the same global TimecodeSource universe, so a
-    // per-tab combo here was redundant. Offset presets kept below.
-
-    // Timecode offset: which incoming SMPTE time maps to timeline 0. Logic
-    // usually rolls from 01:00:00:00, so offer that as a one-click default.
-    QToolButton *tcOffBtn = new QToolButton();
-    tcOffBtn->setText(tr("TC 0…"));
-    tcOffBtn->setToolTip(tr("Set which incoming timecode value lines up with the "
-                            "start of this show's timeline."));
-    tcOffBtn->setPopupMode(QToolButton::InstantPopup);
-    QMenu *tcMenu = new QMenu(tcOffBtn);
-    QAction *tcHour = tcMenu->addAction(tr("Timeline 0 = 01:00:00:00 (Logic default)"));
-    QAction *tcNow  = tcMenu->addAction(tr("Timeline 0 = current timecode"));
-    QAction *tcZero = tcMenu->addAction(tr("No offset (timeline 0 = 00:00:00:00)"));
-    connect(tcHour, &QAction::triggered, this, [this]() {
-        if (m_show) { m_show->setTimecodeOffset(3600000); m_doc->setModified(); } });
-    connect(tcNow, &QAction::triggered, this, [this]() {
-        if (m_show) { m_show->setTimecodeOffset(m_doc->timecodeSource()->positionMs());
-                      m_doc->setModified(); } });
-    connect(tcZero, &QAction::triggered, this, [this]() {
-        if (m_show) { m_show->setTimecodeOffset(0); m_doc->setModified(); } });
-    tcOffBtn->setMenu(tcMenu);
-    m_toolbar->addWidget(tcOffBtn);
-
-    // Show LENGTH: an always-visible way to set where the show ends (where the
-    // playhead parks) — complements the draggable end handle on the timeline,
-    // which can sit off-screen when the content runs long.
-    QToolButton *lenBtn = new QToolButton();
-    lenBtn->setText(tr("Length…"));
-    lenBtn->setToolTip(tr("Set the show's length — where the timeline ends and the "
+    // Show LENGTH: not superfluous even with the timeline's own draggable end
+    // handle — that handle can sit off-screen when the content runs long, so
+    // this stays as an always-reachable way to set/inspect it regardless of
+    // transport source.
+    m_lengthButton = new QToolButton();
+    m_lengthButton->setText(tr("Length…"));
+    m_lengthButton->setToolTip(tr("Set the show's length — where the timeline ends and the "
                           "playhead parks. Content past it is not played."));
-    lenBtn->setPopupMode(QToolButton::InstantPopup);
-    QMenu *lenMenu = new QMenu(lenBtn);
+    m_lengthButton->setPopupMode(QToolButton::InstantPopup);
+    QMenu *lenMenu = new QMenu(m_lengthButton);
     QAction *lenSet = lenMenu->addAction(tr("Set length…"));
     QAction *lenFit = lenMenu->addAction(tr("Fit to content (auto)"));
     QAction *lenCur = lenMenu->addAction(tr("End at current playhead"));
@@ -506,37 +509,143 @@ void ShowManager::initToolbar()
         if (m_show != NULL)
             slotShowLengthChangeRequested(m_showview->getTimeFromCursor());
     });
-    lenBtn->setMenu(lenMenu);
-    m_toolbar->addWidget(lenBtn);
+    m_lengthButton->setMenu(lenMenu);
+    m_toolbar->addWidget(m_lengthButton);
 
-    /* Create an empty widget between help items to flush them to the right */
-    QWidget* widget = new QWidget(this);
-    widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    m_toolbar->addWidget(widget);
+    // Follow-MTC toggle: the authoritative place to switch between manual
+    // (Timer) and MTC-driven timing for THIS show — reuses m_followMtcAction
+    // as-is, the same action already wired to the Control menu and the
+    // footer MTC chip's right-click menu (App), so all three stay in sync.
+    // Always visible (not part of the manual/mtc split below) since you need
+    // it reachable in both states: to arm follow from manual mode, and to
+    // drop back out of it once following. Its own text already flips
+    // between "Follow MTC (off)" and "● FOLLOWING MTC" (slotFollowMtcToggled),
+    // so it doubles as the indicator — no separate read-only label needed.
+    m_followMtcButton = new QToolButton(m_toolbar);
+    m_followMtcButton->setDefaultAction(m_followMtcAction);
+    m_toolbar->addWidget(m_followMtcButton);
+    m_toolbar->addSeparator();
 
-    /* Add time division elements */
-    QLabel* timeLabel = new QLabel(tr("Time division:"));
-    m_toolbar->addWidget(timeLabel);
+    // --- Manual (non-MTC) transport: Play/Pause + Stop, time division, BPM.
+    // Hidden while following MTC — there's nothing for a local transport to
+    // do when Logic (or whatever's upstream) is driving the timeline. ---
+    m_transportManualWidget = new QWidget(this);
+    QHBoxLayout *manualLay = new QHBoxLayout(m_transportManualWidget);
+    manualLay->setContentsMargins(0, 0, 0, 0);
 
-    m_timeDivisionCombo = new QComboBox();
+    // Play/Pause is the primary (single-click) action; Stop — a full
+    // stop-and-rewind, distinct from pausing in place — lives in the dropdown
+    // so the two don't need separate toolbar buttons.
+    m_playStopButton = new QToolButton(m_transportManualWidget);
+    m_playStopButton->setDefaultAction(m_playAction);
+    m_playStopButton->setPopupMode(QToolButton::MenuButtonPopup);
+    QMenu *playStopMenu = new QMenu(m_playStopButton);
+    playStopMenu->addAction(m_stopAction);
+    m_playStopButton->setMenu(playStopMenu);
+    manualLay->addWidget(m_playStopButton);
+
+    manualLay->addWidget(new QLabel(tr("Time division:"), m_transportManualWidget));
+
+    m_timeDivisionCombo = new QComboBox(m_transportManualWidget);
     m_timeDivisionCombo->setFixedWidth(100);
     m_timeDivisionCombo->addItem(tr("Time"), Show::Time);
     m_timeDivisionCombo->addItem("BPM 4/4", Show::BPM_4_4);
     m_timeDivisionCombo->addItem("BPM 3/4", Show::BPM_3_4);
     m_timeDivisionCombo->addItem("BPM 2/4", Show::BPM_2_4);
-    m_toolbar->addWidget(m_timeDivisionCombo);
     connect(m_timeDivisionCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotTimeDivisionTypeChanged(int)));
+    manualLay->addWidget(m_timeDivisionCombo);
 
-    m_bpmField = new QSpinBox();
+    m_bpmField = new QSpinBox(m_transportManualWidget);
     m_bpmField->setFixedWidth(70);
     m_bpmField->setMinimum(10);
     m_bpmField->setMaximum(240);
     m_bpmField->setValue(120);
     m_bpmField->setEnabled(false);
-    m_toolbar->addWidget(m_bpmField);
     connect(m_bpmField, SIGNAL(valueChanged(int)),
             this, SLOT(slotBPMValueChanged(int)));
+    manualLay->addWidget(m_bpmField);
+
+    m_transportManualAction = m_toolbar->addWidget(m_transportManualWidget);
+
+    // --- MTC-follow transport: just the timecode-offset setup, in place of
+    // playback controls that would have nothing to control (the incoming
+    // code IS the transport while following; m_followMtcButton above already
+    // shows the "● FOLLOWING MTC" state, so no separate indicator here). ---
+    m_transportMtcWidget = new QWidget(this);
+    QHBoxLayout *mtcLay = new QHBoxLayout(m_transportMtcWidget);
+    mtcLay->setContentsMargins(0, 0, 0, 0);
+
+    // Timecode offset: which incoming SMPTE time maps to timeline 0. Logic
+    // usually rolls from 01:00:00:00, so offer that as a one-click default.
+    QToolButton *tcOffBtn = new QToolButton(m_transportMtcWidget);
+    tcOffBtn->setText(tr("TC 0…"));
+    tcOffBtn->setToolTip(tr("Set which incoming timecode value lines up with the "
+                            "start of this show's timeline."));
+    tcOffBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *tcMenu = new QMenu(tcOffBtn);
+    QAction *tcHour = tcMenu->addAction(tr("Timeline 0 = 01:00:00:00 (Logic default)"));
+    QAction *tcNow  = tcMenu->addAction(tr("Timeline 0 = current timecode"));
+    QAction *tcZero = tcMenu->addAction(tr("No offset (timeline 0 = 00:00:00:00)"));
+    connect(tcHour, &QAction::triggered, this, [this]() {
+        if (m_show) { m_show->setTimecodeOffset(3600000); m_doc->setModified(); } });
+    connect(tcNow, &QAction::triggered, this, [this]() {
+        if (m_show) { m_show->setTimecodeOffset(m_doc->timecodeSource()->positionMs());
+                      m_doc->setModified(); } });
+    connect(tcZero, &QAction::triggered, this, [this]() {
+        if (m_show) { m_show->setTimecodeOffset(0); m_doc->setModified(); } });
+    tcOffBtn->setMenu(tcMenu);
+    mtcLay->addWidget(tcOffBtn);
+
+    m_transportMtcAction = m_toolbar->addWidget(m_transportMtcWidget);
+
+    QWidget *rightStretch = new QWidget(this);
+    rightStretch->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_toolbar->addWidget(rightStretch);
+
+    // Grid/Snap row, below the main toolbar — mirrors the 2D view's own
+    // Grid/Subdiv/Snap row at the bottom of its canvas.
+    m_bottomToolbar = new QToolBar(this);
+    layout()->addWidget(m_bottomToolbar);
+    m_bottomToolbar->addAction(m_snapGridAction);
+
+    // Show the manual controls or the MTC indicator, never both — driven by
+    // the show's actual follow state (also handles later toggles, e.g. from
+    // a VC Show Control widget or the global footer chip).
+    slotFollowMtcToggled(m_followMtcAction->isChecked());
+
+    // Match the main window's icon/text display preference.
+    applyToolbarLabelMode();
+}
+
+void ShowManager::applyToolbarLabelMode()
+{
+    // Mirror App::TabLabelMode: 0 = Icon+Text (-> text under icon),
+    // 1 = Icons only, 2 = Text only. Same "workspace/tabLabelMode" setting.
+    Qt::ToolButtonStyle style = Qt::ToolButtonTextUnderIcon;
+    const int mode = QSettings().value(QStringLiteral("workspace/tabLabelMode"), 0).toInt();
+    if (mode == 1)
+        style = Qt::ToolButtonIconOnly;
+    else if (mode == 2)
+        style = Qt::ToolButtonTextOnly;
+
+    if (m_toolbar)
+        m_toolbar->setToolButtonStyle(style);
+    if (m_bottomToolbar)
+        m_bottomToolbar->setToolButtonStyle(style);
+    // QToolBar::setToolButtonStyle only auto-applies to buttons it creates
+    // from addAction(); a QToolButton added via addWidget() needs it set
+    // directly.
+    if (m_showButton)
+        m_showButton->setToolButtonStyle(style);
+    if (m_editButton)
+        m_editButton->setToolButtonStyle(style);
+    if (m_lengthButton)
+        m_lengthButton->setToolButtonStyle(style);
+    if (m_playStopButton)
+        m_playStopButton->setToolButtonStyle(style);
+    if (m_followMtcButton)
+        m_followMtcButton->setToolButtonStyle(style);
 }
 
 /*********************************************************************
@@ -2099,13 +2208,33 @@ void ShowManager::slotFollowMtcToggled(bool enable)
             m_playAction->setIcon(QIcon(":/player_play.png"));
         }
     }
-    if (m_followMtcAction != NULL)
-        m_followMtcAction->setText(enable ? tr("● FOLLOWING MTC")
-                                          : tr("Follow MTC (off)"));
+    updateTransportVisibility(enable);
 
     // Keep global indicators (main-toolbar toggle, MIDI-mappable VC buttons) in
     // sync however the follow arming was changed.
     emit followTimecodeChanged(enable);
+}
+
+void ShowManager::updateTransportVisibility(bool followingMtc)
+{
+    // Manual transport controls have nothing to control while MTC drives the
+    // timeline; swap them for a read-only indicator, and back. Also updates
+    // m_followMtcButton's label (it doubles as the indicator — no separate
+    // read-only label). Factored out of slotFollowMtcToggled() because
+    // updateMultiTrackView() also needs to call this directly: it syncs
+    // m_followMtcAction's checked state via blockSignals() (switching shows
+    // must not re-arm/disarm anything), which means slotFollowMtcToggled() —
+    // wired to the action's toggled() — never runs for that path. Without
+    // this being called from both places, the button's checked state (which
+    // Qt does sync automatically via setDefaultAction) would say one thing
+    // while its stale text and the transport widgets said another.
+    if (m_followMtcAction != NULL)
+        m_followMtcAction->setText(followingMtc ? tr("● FOLLOWING MTC")
+                                                 : tr("Follow MTC (off)"));
+    if (m_transportManualAction != NULL)
+        m_transportManualAction->setVisible(!followingMtc);
+    if (m_transportMtcAction != NULL)
+        m_transportMtcAction->setVisible(followingMtc);
 }
 
 void ShowManager::slotTimecodePosition(quint32 msPosition)
@@ -2634,6 +2763,7 @@ void ShowManager::updateMultiTrackView()
         m_followMtcAction->setChecked(m_show->timecodeFollow());
         m_followMtcAction->blockSignals(false);
     }
+    updateTransportVisibility(m_show->timecodeFollow());
     emit followTimecodeChanged(m_show->timecodeFollow());
     // The active show changed — its running state defines timeline control.
     emit timelineControlChanged();

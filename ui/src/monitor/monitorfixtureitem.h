@@ -155,9 +155,19 @@ public:
     void setBoundToTruss(bool b) { m_boundToTruss = b; update(); }
     bool isBoundToTruss() const  { return m_boundToTruss; }
 
-    /** "Ghost" the fixture for Build/Rig focus: drawn faint and made
-     *  click-through (declines mouse buttons) so structure beneath it is the
-     *  interaction target. */
+    /** True when this fixture's truss is itself the current selection (not
+     *  just this fixture alone) — tints the selected-outline color to match
+     *  the truss's own selected amber instead of the plain yellow, so the
+     *  whole assembly reads as one selection. See
+     *  MonitorGraphicsView::updateTrussAnchorLines(). */
+    void setTrussGroupSelected(bool on) { if (m_trussGroupSelected != on) { m_trussGroupSelected = on; update(); } }
+    bool isTrussGroupSelected() const   { return m_trussGroupSelected; }
+
+    /** "Ghost" the fixture: drawn faint and made click-through (declines
+     *  mouse buttons) so whatever's beneath it is reachable. Used for a
+     *  fixture on a locked layer — a locked fixture is already
+     *  unselectable/click-through; this just makes that visible instead of
+     *  a silent trap. */
     void setGhosted(bool g)
     {
         m_ghosted = g;
@@ -277,9 +287,10 @@ private:
     QRect m_labelRect;
 
     bool m_boundToTruss  = false;
+    bool m_trussGroupSelected = false;
     bool m_escapeMode    = false;
     bool m_isolated      = false;   ///< drilled-in single selection within a group
-    bool m_ghosted       = false;   ///< Build/Rig focus: faint + click-through
+    bool m_ghosted       = false;   ///< locked-layer indicator: faint + click-through
     bool m_highlighted   = false;
 
     /** True if any head has a Pan channel (i.e. a moving head): only these

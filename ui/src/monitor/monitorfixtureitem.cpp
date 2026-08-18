@@ -764,8 +764,14 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     if (m_highlighted)
         defColor = QColor(255, 140, 0);   // orange — externally highlighted
     else if (this->isSelected() == true)
-        defColor = (m_isolated && this->isSelected()) ? QColor(0, 220, 255) // cyan — drilled-in
-                                                      : Qt::yellow;
+    {
+        if (m_isolated)
+            defColor = QColor(0, 220, 255);   // cyan — drilled-in
+        else if (m_trussGroupSelected)
+            defColor = QColor(255, 180, 0);   // amber — selected as part of its truss's assembly
+        else
+            defColor = Qt::yellow;
+    }
 
     {
         QPen bodyPen(defColor, 0); // cosmetic: 1px border at any zoom level

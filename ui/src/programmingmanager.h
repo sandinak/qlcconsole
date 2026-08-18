@@ -23,10 +23,10 @@
 #include <QWidget>
 #include <QSet>
 #include <QElapsedTimer>
+#include "function.h"
 
 class QTreeWidgetItem;
 class Scene;
-class Function;
 class FunctionsTreeWidget;
 class FixtureGroupSource;
 class Fixture;
@@ -39,7 +39,9 @@ class QScrollArea;
 class QVBoxLayout;
 class QLabel;
 class QPushButton;
+class QToolButton;
 class QSpinBox;
+class QDoubleSpinBox;
 class QTabWidget;
 class QWidget;
 class QFrame;
@@ -67,6 +69,25 @@ public:
      *  the app status-bar Power chip can reach it — the readout moved there,
      *  taking the old in-canvas "Circuits…" button with it. */
     void openCircuitsDialog();
+
+    /** Match the main window's icon/text display preference
+     *  ("workspace/tabLabelMode"). */
+    void applyToolbarLabelMode();
+
+    /** The palette the look editor is currently showing (invalidId() if
+     *  none) — the ground truth for "what the user is looking at right
+     *  now," independent of ProgrammerController's separate focused-scene/
+     *  palette tracking (which only updates when a scene is freshly opened
+     *  in this tab, and doesn't survive a relaunch). A control surface
+     *  nudging a value the on-screen widget shows should follow this, not
+     *  that tracking. */
+    quint32 currentPaletteId() const;
+
+    /** The scene currently shown in the canvas (Function::invalidId() if
+     *  none, e.g. nothing open or a non-scene function is open) — lets a
+     *  control surface enumerate "what should Select/Load(1-10) address
+     *  right now" without its own scene-tracking. */
+    quint32 currentSceneId() const;
 
 protected:
     void showEvent(QShowEvent *ev) override;
@@ -104,11 +125,6 @@ private slots:
     void slotHighlightToggled(bool on);
     /** Momentarily flash the selected fixtures to identify them in the rig. */
     void slotFlashSelection();
-
-    // Blind (mute physical output, keep 2D preview). The toggle itself is a
-    // global toolbar action (App); here we only reflect the engine state in the
-    // canvas banner so building in-tab shows the muted-rig warning.
-    void slotBlindStateChanged(bool on);
 
     // Snapshot live DMX into the open scene (capture an external-console look)
     void slotSnapshotLive();
@@ -151,6 +167,12 @@ private:
     void loadCanvas(quint32 sceneId);
     /** Host the stock editor for a non-scene function in the canvas. */
     void loadFunctionEditor(Function *function);
+    /** Create a new function of @p type in @p folder, name it, select it in the
+     *  nav tree, and open it in the canvas. Shared by the func-tree's
+     *  right-click "New …" menu and the nav toolbar's "Add" menu. No-op if
+     *  @p type isn't one of the creatable types (Scene/Chaser/Collection/EFX/
+     *  RGBMatrix/Show). */
+    void addNewFunction(Function::Type type, const QString &folder);
     /** Host the fixture-group head-layout editor in the canvas (visualize a
      *  group double-clicked in the Fixtures & Groups source). */
     void loadGroupEditor(quint32 groupId);
@@ -247,6 +269,7 @@ private:
     Doc *m_doc;
 
     FunctionsTreeWidget *m_funcTree;
+    QToolButton *m_addFuncBtn; //!< "Add" dropdown consolidating New Scene/Chaser/…/Folder
 
     QVBoxLayout *m_canvasLayout;
     QLabel *m_canvasTitle;
@@ -313,9 +336,6 @@ private:
     QPushButton *m_autoMibBtn  = nullptr;
     QDoubleSpinBox *m_mibGapSpin = nullptr;
     QPushButton *m_snapshotBtn = nullptr;
-    // Blind-active in-context indicator (blue, EOS-style) — the global status-bar
-    // chip lives in App; this banner is the tab-local, can't-miss-it version.
-    QLabel      *m_blindBanner = nullptr;
 
     // BPM / internal beat generator
     QPushButton  *m_bpmBtn;
@@ -355,6 +375,10 @@ private:
 signals:
     /** Emitted when the user confirms Save in the Programming tab. */
     void requestSave();
+    /** Re-emits LookEditor::lookFocusChanged — the on-screen look changed
+     *  (or was redrawn in place). Lets a control-surface overlay recompute
+     *  what's "in use right now" (e.g. LED highlighting) without polling. */
+    void currentPaletteIdChanged(quint32 paletteId);
     /** Live power estimate for the app status-bar chip (Design mode). Amps, kW,
      *  and whether any circuit/source is overloaded. */
     void powerEstimateChanged(double amps, double kw, bool overload);

@@ -138,6 +138,15 @@ public:
     QMenu* editMenu() const;
     QMenu* addMenu() const;
 
+    /** Build the right-click popup for empty canvas (nothing selected):
+     *  "Add" first — the action you're actually there for — then Paste (if
+     *  there's something to paste) and the canvas-level Background/
+     *  Foreground/Font actions. Cut/Copy/Delete/Rename/Properties and the
+     *  Frame/Stacking submenus are omitted entirely rather than shown
+     *  disabled, since none of them have a target with nothing selected.
+     *  Caller owns the returned menu (delete after exec()). */
+    QMenu* buildEmptyCanvasMenu();
+
 protected:
     /** Initialize actions */
     void initActions();
@@ -153,7 +162,8 @@ protected:
 
 protected:
     QToolBar* m_toolbar;
-    QToolButton* m_runButton; //!< always-visible Operate/Design toggle (top-right)
+    QToolButton* m_addButton; //!< "Add" dropdown consolidating New Button/Slider/…/Frame (m_addMenu)
+    QToolButton* m_editButton; //!< "Edit" dropdown consolidating Cut/Copy/Paste/…/Font
 
     QActionGroup* m_addActionGroup;
     QActionGroup* m_editActionGroup;
@@ -211,6 +221,12 @@ protected:
     QMenu* m_customMenu;
     QMenu* m_editMenu;
     QMenu* m_addMenu;
+    // Submenus of m_editMenu that also belong in buildEmptyCanvasMenu() —
+    // kept as members (rather than initMenuBar() locals) so both can use
+    // the same QMenu objects.
+    QMenu* m_bgMenu;
+    QMenu* m_fgMenu;
+    QMenu* m_fontMenu;
 
     /*********************************************************************
      * Add menu callbacks

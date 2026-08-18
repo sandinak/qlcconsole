@@ -35,6 +35,7 @@ class QComboBox;
 class QCheckBox;
 class QSplitter;
 class QToolBar;
+class QToolButton;
 class QSpinBox;
 class QAction;
 class QLabel;
@@ -64,6 +65,10 @@ public:
 
     /** Start from scratch; clear everything */
     void clearContents();
+
+    /** Match the main window's icon/text display preference
+     *  ("workspace/tabLabelMode"). */
+    void applyToolbarLabelMode();
 
     /*********************************************************************
      * Timeline control (global coordination — Operate mode)
@@ -168,7 +173,29 @@ protected:
 private:
     bool checkOverlapping(quint32 startTime, quint32 duration);
 
+    /** Show exactly one of the manual-transport / MTC-indicator toolbar
+     *  widgets, matching @p followingMtc. Called from both
+     *  slotFollowMtcToggled() and updateMultiTrackView() — the latter
+     *  syncs the follow state via blockSignals() when the active show
+     *  changes, which bypasses the toggled()-driven slot. */
+    void updateTransportVisibility(bool followingMtc);
+
     QToolBar *m_toolbar;
+    QToolBar *m_bottomToolbar;  //!< grid/snap row below the main toolbar, mirrors the 2D view's
+    QToolButton *m_showButton;  //!< "Show" dropdown: New/Rename/Delete show
+    QToolButton *m_editButton;  //!< "Edit" dropdown: add Track/Sequence/Audio/Video + edit actions
+    QToolButton *m_lengthButton; //!< "Length…" show-duration setter
+    QToolButton *m_playStopButton; //!< Play/Pause primary action, Stop in the dropdown
+    QWidget *m_transportManualWidget; //!< Play/Stop + time division + BPM — manual (non-MTC) mode
+    QWidget *m_transportMtcWidget;    //!< MTC-following indicator + TC offset — MTC mode
+    // QToolBar::addWidget() implicitly wraps a widget in a QWidgetAction; a
+    // later toolbar layout recompute (e.g. setToolButtonStyle()) re-syncs the
+    // widget's visibility FROM that action, silently undoing a plain
+    // widget->setVisible() call. Toggle visibility through these actions
+    // instead so it sticks — see updateTransportVisibility().
+    QAction *m_transportManualAction;
+    QAction *m_transportMtcAction;
+    QToolButton *m_followMtcButton; //!< authoritative Timer/MTC toggle for this show (m_followMtcAction)
     QComboBox *m_showsCombo;
     QLabel *m_timeLabel;
     QAction *m_addShowAction;

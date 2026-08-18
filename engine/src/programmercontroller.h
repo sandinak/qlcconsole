@@ -27,6 +27,7 @@
 #include <QHash>
 #include <QColor>
 #include <QRecursiveMutex>
+#include <QSharedPointer>
 #include <QTimer>
 #include <QVector3D>
 
@@ -40,6 +41,7 @@ class MarkEffect;
 class MarkPlanner;
 class QLCPalette;
 class Scene;
+class GenericFader;
 class QXmlStreamReader;
 class QXmlStreamWriter;
 
@@ -203,6 +205,54 @@ public:
     /** Apply current pan/tilt norm values as scene values on the focused scene.
      *  Called in Design mode; no-op if no scene is focused or no fixtures selected. */
     void applyDesignJoystick();
+
+    /** Nudge a PanTilt-type palette's stored value by a relative degree delta
+     *  (e.g. from a relative MIDI encoder) — the raw palette-value authoring
+     *  applyDesignJoystick() explicitly does NOT do for a "Standard Pan/Tilt"
+     *  look (fixed-angle, no floor geometry to drag). Deliberately takes the
+     *  palette id directly rather than reading m_focusedPaletteId/
+     *  m_focusedSceneId — that tracking only updates when a scene is freshly
+     *  opened in the Programming tab and doesn't survive an app relaunch, so
+     *  it can go stale relative to what's actually on screen; callers should
+     *  pass whatever palette id the UI is really showing (e.g.
+     *  ProgrammingManager::currentPaletteId()). No-op if the palette isn't a
+     *  PanTilt type (an Aim look uses the joystick's existing floor-target
+     *  path instead, applyDesignJoystick() above) — refreshes every scene
+     *  that actually references the palette, not just one assumed "focused"
+     *  scene, since a palette can be shared. */
+    void nudgeDesignPanTilt(quint32 paletteId, float dPanDeg, float dTiltDeg);
+
+    /** Set one channel of a Color-type palette's stored value directly —
+     *  faders are absolute (unlike the relative encoders nudgeDesignPanTilt()
+     *  serves), so this writes @p value straight in rather than nudging.
+     *  @p channelIndex: 0=R, 1=G, 2=B, 3=White, 4=Amber, 5=UV. Same
+     *  explicit-paletteId contract as nudgeDesignPanTilt() (pass
+     *  ProgrammingManager::currentPaletteId()); no-op if the palette isn't a
+     *  Color type. Refreshes every scene that references the palette. */
+    void setDesignColorChannel(quint32 paletteId, int channelIndex, uchar value);
+
+    /** Set a Dimmer-type palette's stored intensity directly. Same
+     *  explicit-paletteId contract as nudgeDesignPanTilt(); no-op if the
+     *  palette isn't a Dimmer type. */
+    void setDesignDimmerValue(quint32 paletteId, uchar value);
+
+    /** Write @p value to fixture @p fixtureId's DMX channel @p channel live —
+     *  the general-purpose, palette-agnostic raw write the above three
+     *  methods deliberately don't need (they go through a palette a running
+     *  Scene already re-evaluates every tick). This is for P2 "selection
+     *  mode": writes for an arbitrary set of selected fixtures that may not
+     *  share one palette. Mirrors VCSlider::writeDMXLevel's mechanism
+     *  exactly (ui/src/virtualconsole/vcslider.cpp) — grabs (or reuses) a
+     *  fader on the fixture's universe via Universe::requestFader(), sets
+     *  the target on that channel's FadeChannel. This is safe as a one-shot
+     *  call, not a per-tick one: Universe::processFaders() (called every
+     *  tick by the engine's own DMX loop, independent of the caller) writes
+     *  every outstanding requested fader on its own, so the target persists
+     *  without this method being re-invoked every frame. Also routes the
+     *  edit for Save-bookkeeping the same way (Doc::routeProgrammerEdit(),
+     *  falling back to Doc::setProgrammerValue()). No-op if the fixture or
+     *  its universe can't be resolved. */
+    void writeChannelLive(quint32 fixtureId, quint32 channel, uchar value);
 
     /** Finalize a design-mode joystick edit: the Aim target was moved live on
      *  every tick, so this just marks the scene edited and clears stage-aim
@@ -456,6 +506,9 @@ private:
     QSet<quint32> m_programmerSelectionLookup;
     QColor m_programmerColor;
     QHash<quint32, QHash<quint32, uchar>> m_programmerValues;
+    /** One lazily-created fader per universe, reused across writeChannelLive()
+     *  calls (mirrors VCSlider's own m_fadersMap) — keyed by universe id. */
+    QHash<quint32, QSharedPointer<GenericFader>> m_liveFadersMap;
     /** Most-recently-started running Scene fids, oldest → newest.
         routeProgrammerEdit walks this in reverse for LTP routing. */
     QList<quint32> m_runningScenes;

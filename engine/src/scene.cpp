@@ -41,6 +41,13 @@
 // Legacy single-value attribute (fork pre-split), read as fade-in only.
 #define KXMLQLCScenePaletteFadeTime QStringLiteral("FadeTime")
 
+// Declared look scope (see Scene::LookScope) — attributes on <Function>
+// itself; absent = ScopeUnset, so old workspaces round-trip unchanged.
+#define KXMLQLCSceneLookScope       QStringLiteral("LookScope")
+#define KXMLQLCSceneLookScopeGroup  QStringLiteral("LookScopeGroup")
+#define KXMLQLCSceneLookScopeWholeStage QStringLiteral("WholeStage")
+#define KXMLQLCSceneLookScopeGroupVal   QStringLiteral("Group")
+
 /*****************************************************************************
  * Initialization
  *****************************************************************************/
@@ -105,6 +112,8 @@ bool Scene::copyFrom(const Function* function)
     const QList<quint32> srcGroups = scene->fixtureGroups();
     const QList<quint32> srcPalettes = scene->palettes();
     const QHash<quint32, PaletteFade> srcPaletteFades = scene->paletteFades();
+    const LookScope srcScope = scene->lookScope();
+    const quint32 srcScopeGroupId = scene->lookScopeGroupId();
 
     {
         QMutexLocker locker(&m_valueListMutex);
@@ -124,6 +133,9 @@ bool Scene::copyFrom(const Function* function)
         m_palettes = srcPalettes;
         m_paletteFade = srcPaletteFades;
     }
+
+    m_lookScope = srcScope;
+    m_lookScopeGroupId = srcScopeGroupId;
 
     return Function::copyFrom(function);
 }
@@ -488,6 +500,29 @@ QList<quint32> Scene::fixtureGroups() const
 }
 
 /*********************************************************************
+ * Look scope
+ *********************************************************************/
+
+void Scene::setLookScope(LookScope scope, quint32 groupId)
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    m_lookScope = scope;
+    m_lookScopeGroupId = (scope == ScopeGroup) ? groupId : FixtureGroup::invalidId();
+}
+
+Scene::LookScope Scene::lookScope() const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_lookScope;
+}
+
+quint32 Scene::lookScopeGroupId() const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_lookScopeGroupId;
+}
+
+/*********************************************************************
  * Palettes
  *********************************************************************/
 
@@ -596,6 +631,20 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
 
     /* Common attributes */
     saveXMLCommon(doc);
+
+    /* Declared look scope (see Scene::LookScope) — must be written here,
+     *  while <Function> still only has attributes: saveXMLTempoType()/
+     *  saveXMLSpeed() below write CHILD ELEMENTS, after which
+     *  QXmlStreamWriter can no longer accept new attributes on <Function>. */
+    if (m_lookScope == ScopeWholeStage)
+    {
+        doc->writeAttribute(KXMLQLCSceneLookScope, KXMLQLCSceneLookScopeWholeStage);
+    }
+    else if (m_lookScope == ScopeGroup)
+    {
+        doc->writeAttribute(KXMLQLCSceneLookScope, KXMLQLCSceneLookScopeGroupVal);
+        doc->writeAttribute(KXMLQLCSceneLookScopeGroup, QString::number(m_lookScopeGroupId));
+    }
 
     /* Tempo type */
     saveXMLTempoType(doc);
@@ -709,6 +758,22 @@ bool Scene::loadXML(QXmlStreamReader &root)
     {
         qWarning() << Q_FUNC_INFO << "Function is not a scene";
         return false;
+    }
+
+    /* Declared look scope (see Scene::LookScope); absent = ScopeUnset,
+     * already the default. */
+    {
+        const QXmlStreamAttributes fnAttrs = root.attributes();
+        const QString scopeStr = fnAttrs.value(KXMLQLCSceneLookScope).toString();
+        if (scopeStr == KXMLQLCSceneLookScopeWholeStage)
+        {
+            setLookScope(ScopeWholeStage);
+        }
+        else if (scopeStr == KXMLQLCSceneLookScopeGroupVal)
+        {
+            const quint32 gid = fnAttrs.value(KXMLQLCSceneLookScopeGroup).toString().toUInt();
+            setLookScope(ScopeGroup, gid);
+        }
     }
 
     /* Load scene contents */

@@ -81,13 +81,6 @@ public:
     void setStageFeaturesOnly(bool on);
     bool stageFeaturesOnly() const { return m_stageOnly; }
 
-    /** "Build/Rig focus": fixtures are ghosted (faint + click-through) and
-     *  targets/power hidden, so trusses/platforms/images are the interaction
-     *  target — build structure without fighting the lights, while still seeing
-     *  where they are. */
-    void setBuildFocus(bool on);
-    bool buildFocus() const { return m_buildFocus; }
-
     /** Set the graphics view size in monitor units */
     void setGridSize(QSize size);
 
@@ -101,6 +94,11 @@ public:
      *  positions are unaffected). */
     void setGridVisible(bool on);
     bool gridVisible() const { return m_gridVisible; }
+
+    /** Show/hide the teal centre axes marking the stage centre — independent
+     *  of the grid toggle above. */
+    void setCenterLinesVisible(bool on);
+    bool centerLinesVisible() const { return m_centerLinesVisible; }
 
     /** Get the current number of grid sub-divisions */
     int gridSubdivisions() const { return m_gridSubdivisions; }
@@ -268,6 +266,12 @@ public:
     /** Rebuild the aim-line overlays for all selected TargetItems. */
     void updateAimLines();
 
+    /** Rebuild the thin tether lines from a truss-bound fixture back to its
+     *  anchor point on the truss centreline — shown only when the fixture is
+     *  sitting off-centre (a cross offset) far enough that the binding isn't
+     *  obvious from proximity alone. */
+    void updateTrussAnchorLines();
+
     /** Recompute every item's visibility and movability from the three lock
      *  sources — the global layout lock, the item's own per-item lock, and its
      *  organizational layer's visible/locked state. Call after any layer change
@@ -328,6 +332,14 @@ public:
      *  group (named after the truss) if needed, and pull in any bound fixtures
      *  that are still ungrouped. Leaves manually-grouped items alone. */
     void ensureTrussGroup(quint32 trussId);
+
+    /** Symmetric to ensureTrussGroup(): if @p fid is currently a member of a
+     *  group that's dedicated to @p trussId (anchorKind == "truss", anchorId
+     *  == trussId — i.e. still just "the truss's own group", not something
+     *  the user built out further), take it back out. Called wherever a
+     *  fixture's truss binding is cleared, so an unbound fixture doesn't keep
+     *  select/move-together with a truss it's no longer on. */
+    void leaveDedicatedTrussGroup(quint32 fid, quint32 trussId);
 
     /** Select on the canvas every item under group @p gid (recursively through
      *  nested sub-groups). Used by the Layers tree when a group folder is
@@ -511,6 +523,11 @@ private:
     /** Walk parentGroupId up to the outermost group containing @p g. */
     quint32 topLevelGroup(quint32 g) const;
 
+    /** True if @p gi IS the structural item identified by @p anchorKind
+     *  ("truss"/"platform") and @p anchorId, as opposed to a member merely
+     *  rigged on/mounted to it. */
+    bool isGroupAnchorItem(QGraphicsItem *gi, const QString &anchorKind, quint32 anchorId) const;
+
     /** True if group @p g is @p ancestor or nested somewhere beneath it. */
     bool groupIsUnder(quint32 g, quint32 ancestor) const;
 
@@ -648,6 +665,13 @@ private:
     bool m_gridEnabled;
     bool m_gridVisible = true;   ///< show/hide the grid LINES (geometry always computed)
 
+    /** Teal stage-centre axes, rebuilt alongside the grid in updateGrid() but
+     *  kept out of m_gridItems so their visibility is independent of the
+     *  grid toggle above. */
+    QGraphicsLineItem *m_centerLineV = nullptr;
+    QGraphicsLineItem *m_centerLineH = nullptr;
+    bool m_centerLinesVisible = true;
+
     /** Number of sub-divisions drawn inside each grid cell */
     int m_gridSubdivisions;
 
@@ -687,6 +711,10 @@ private:
 
     /** Aim-line overlays (rebuilt on selection change). */
     QList <QGraphicsLineItem*> m_aimLines;
+
+    /** Truss-attachment tether overlays (rebuilt whenever a bound fixture or
+     *  its truss moves). See updateTrussAnchorLines(). */
+    QList <QGraphicsLineItem*> m_trussAnchorLines;
 
     /** FollowSpot current-position pin (circle + crosshair), created lazily. */
     QGraphicsEllipseItem    *m_fsPinCircle = nullptr;
@@ -757,12 +785,8 @@ private:
     /** "Stage view" — hide fixtures/targets/power, keep only stage features. */
     bool m_stageOnly = false;
 
-    /** "Build/Rig focus" — ghost fixtures (faint, click-through), hide
-     *  targets/power, so structure is the interaction target. */
-    bool m_buildFocus = false;
-
-    /** Topmost item at a scene point, skipping ghosted fixtures (so a Build-focus
-     *  pick reaches the structure beneath a faint fixture). */
+    /** Topmost item at a scene point, skipping ghosted (locked, faint) fixtures
+     *  so a double-click pick reaches the structure beneath one. */
     QGraphicsItem *topPickableAt(const QPointF &scenePos) const;
 
     /** Origin offset (in current grid units) for the horizontal / vertical

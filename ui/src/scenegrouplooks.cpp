@@ -26,6 +26,7 @@
 #include <QTimer>
 #include <QStyledItemDelegate>
 #include <QDoubleSpinBox>
+#include <QComboBox>
 
 #include <algorithm>
 #include <functional>
@@ -133,11 +134,11 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     root->setContentsMargins(0, 6, 0, 0);
 
     QLabel *header = new QLabel(
-        tr("<b>Looks</b> (palettes) are applied to the <b>fixtures in this scene</b>. "
-           "Every look applies to every fixture.<br>"
+        tr("<b>Looks</b> (palettes) are applied to this look's <b>Targets</b>. "
+           "Every look applies to every target.<br>"
            "Drag here to add: <b>palettes</b> &rarr; looks; "
-           "<b>fixture groups</b> &rarr; scene fixtures (dynamic — follow membership); "
-           "individual <b>fixtures</b> &rarr; scene fixtures (fixed)."), this);
+           "<b>fixture groups</b> &rarr; Targets (dynamic — follow membership); "
+           "individual <b>fixtures</b> &rarr; Targets (fixed)."), this);
     header->setWordWrap(true);
     root->addWidget(header);
 
@@ -146,8 +147,23 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
 
     // --- Targets column (groups + optionally fixtures) ---
     QVBoxLayout *targetCol = new QVBoxLayout();
-    m_targetsLabel = new QLabel(tr("Fixtures in Scene"), this);
+    m_targetsLabel = new QLabel(tr("Targets"), this);
     targetCol->addWidget(m_targetsLabel);
+
+    // Declared SCOPE (Scene::LookScope) — what this look is FOR, as a
+    // statement of intent. Distinct from the Targets list below it (what it
+    // actually paints): a look can be scoped to "SR Truss" while its targets
+    // happen to be a superset/subset, e.g. mid-build. Purely organisational
+    // metadata today — doesn't affect playback.
+    QHBoxLayout *scopeRow = new QHBoxLayout();
+    scopeRow->addWidget(new QLabel(tr("Scope:"), this));
+    m_scopeCombo = new QComboBox(this);
+    m_scopeCombo->setToolTip(tr("What this look is FOR (a statement of intent) — "
+        "not what it paints. Whole Stage, or a specific fixture group/zone."));
+    scopeRow->addWidget(m_scopeCombo, 1);
+    targetCol->addLayout(scopeRow);
+    connect(m_scopeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotScopeChanged(int)));
+
     m_targetList = new QTreeWidget(this);
     m_targetList->setHeaderHidden(true);
     m_targetList->setRootIsDecorated(true);
@@ -485,7 +501,30 @@ void SceneGroupLooks::reload()
     foreach (FixtureGroup *g, groups)
         foreach (quint32 fid, g->fixtureList())
             allFixtures.insert(fid);
-    m_targetsLabel->setText(tr("Fixtures in Scene (count %n)", "", allFixtures.count()));
+    m_targetsLabel->setText(tr("Targets (%n fixture(s))", "", allFixtures.count()));
+
+    // Declared scope: (re)populate from every group in the doc (not just this
+    // scene's own targets — scope is a statement of intent, independent of
+    // what's actually painted yet), then select whatever the scene has.
+    {
+        m_scopeCombo->blockSignals(true);
+        m_scopeCombo->clear();
+        m_scopeCombo->addItem(tr("(not set)"), QVariant(Scene::ScopeUnset));
+        m_scopeCombo->addItem(tr("Whole Stage"), QVariant(Scene::ScopeWholeStage));
+        int selectIndex = (m_scene->lookScope() == Scene::ScopeWholeStage) ? 1 : 0;
+        foreach (FixtureGroup *g, m_doc->fixtureGroups())
+        {
+            if (g == NULL)
+                continue;
+            m_scopeCombo->addItem(g->name(), QVariant(Scene::ScopeGroup));
+            m_scopeCombo->setItemData(m_scopeCombo->count() - 1, g->id(), Qt::UserRole + 1);
+            if (m_scene->lookScope() == Scene::ScopeGroup &&
+                m_scene->lookScopeGroupId() == g->id())
+                selectIndex = m_scopeCombo->count() - 1;
+        }
+        m_scopeCombo->setCurrentIndex(selectIndex);
+        m_scopeCombo->blockSignals(false);
+    }
 
     // Looks = palettes — preserve the current selection so that moving an
     // effect slider (which triggers reload via slotLookEdited) doesn't
@@ -858,6 +897,20 @@ void SceneGroupLooks::slotTargetContextMenu(const QPoint &pos)
     QAction *removeAct = menu.addAction(tr("Remove"));
     if (menu.exec(m_targetList->viewport()->mapToGlobal(pos)) == removeAct)
         slotRemoveTarget();
+}
+
+void SceneGroupLooks::slotScopeChanged(int index)
+{
+    if (index < 0)
+        return;
+    const Scene::LookScope scope =
+        static_cast<Scene::LookScope>(m_scopeCombo->itemData(index).toInt());
+    const quint32 groupId = (scope == Scene::ScopeGroup)
+        ? m_scopeCombo->itemData(index, Qt::UserRole + 1).toUInt()
+        : FixtureGroup::invalidId();
+    m_scene->setLookScope(scope, groupId);
+    m_doc->setModified();
+    emit sceneModified();
 }
 
 void SceneGroupLooks::slotLookSelectionChanged()

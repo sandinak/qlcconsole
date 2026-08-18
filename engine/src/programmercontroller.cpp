@@ -58,6 +58,9 @@
 #include "inputoutputmap.h"
 #include "inputpatch.h"
 #include "qlcioplugin.h"
+#include "genericfader.h"
+#include "fadechannel.h"
+#include "universe.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "truss.h"
@@ -2069,6 +2072,152 @@ void ProgrammerController::applyDesignJoystick()
     if (firstEdit)
         markSceneEdited(m_focusedSceneId);
     emit designPositionWritten();
+}
+
+void ProgrammerController::nudgeDesignPanTilt(quint32 paletteId, float dPanDeg, float dTiltDeg)
+{
+    if (paletteId == QLCPalette::invalidId())
+        return;
+    QLCPalette *panTiltPal = m_doc->palette(paletteId);
+    if (!panTiltPal || panTiltPal->type() != QLCPalette::PanTilt)
+        return;   // nothing to nudge — e.g. an Aim look, which the joystick's own path already drives
+
+    // Same raw degree range LookEditor's XY pad authors this palette in
+    // (lookeditor.cpp's PAN_DEG/TILT_DEG) — a palette's stored pan/tilt is
+    // in this fixed space regardless of any one fixture's physical range.
+    const int kPanDegMax = 540;
+    const int kTiltDegMax = 270;
+
+    int oldPan = panTiltPal->intValue1();
+    int oldTilt = panTiltPal->intValue2();
+    int pan  = qBound(0, oldPan + int(dPanDeg),  kPanDegMax);
+    int tilt = qBound(0, oldTilt + int(dTiltDeg), kTiltDegMax);
+    if (pan == oldPan && tilt == oldTilt)
+        return;   // clamped to the same value (already at an edge) — nothing changed
+
+    panTiltPal->setValue(pan, tilt);
+
+    // Refresh every scene that actually USES this palette — not just
+    // whichever one ProgrammerController happens to have "focused" (that
+    // tracking only updates when a scene is freshly opened in the
+    // Programming tab, and doesn't survive an app relaunch, so it can go
+    // stale relative to what's actually on screen; a palette can also
+    // legitimately be shared by more than one scene). Same live-refresh
+    // path a Look Editor slider drag uses (see its other call site above)
+    // — re-evaluates the palette into each running scene's faders every
+    // call rather than resetRuntime()'s full teardown, so a string of
+    // nudges doesn't restart the scene's fade-in or flash the LEDs.
+    for (Function *f : m_doc->functions())
+    {
+        Scene *scene = qobject_cast<Scene*>(f);
+        if (scene && scene->palettes().contains(paletteId))
+            markSceneEdited(scene->id());
+    }
+
+    emit designPositionWritten();
+}
+
+void ProgrammerController::setDesignColorChannel(quint32 paletteId, int channelIndex, uchar value)
+{
+    if (paletteId == QLCPalette::invalidId())
+        return;
+    QLCPalette *pal = m_doc->palette(paletteId);
+    if (!pal || pal->type() != QLCPalette::Color)
+        return;
+
+    QColor rgb = pal->rgbValue();
+    QColor wauv = pal->wauvValue();
+    if (!wauv.isValid())
+        wauv = QColor(0, 0, 0);
+
+    switch (channelIndex)
+    {
+    case 0: rgb.setRed(value); break;
+    case 1: rgb.setGreen(value); break;
+    case 2: rgb.setBlue(value); break;
+    case 3: wauv.setRed(value); break;   // White
+    case 4: wauv.setGreen(value); break; // Amber
+    case 5: wauv.setBlue(value); break;  // UV
+    default: return;
+    }
+
+    pal->setValue(QLCPalette::colorToString(rgb, wauv));
+
+    for (Function *f : m_doc->functions())
+    {
+        Scene *scene = qobject_cast<Scene*>(f);
+        if (scene && scene->palettes().contains(paletteId))
+            markSceneEdited(scene->id());
+    }
+
+    emit designPositionWritten();
+}
+
+void ProgrammerController::setDesignDimmerValue(quint32 paletteId, uchar value)
+{
+    if (paletteId == QLCPalette::invalidId())
+        return;
+    QLCPalette *pal = m_doc->palette(paletteId);
+    if (!pal || pal->type() != QLCPalette::Dimmer)
+        return;
+
+    pal->setValue(int(value));
+
+    for (Function *f : m_doc->functions())
+    {
+        Scene *scene = qobject_cast<Scene*>(f);
+        if (scene && scene->palettes().contains(paletteId))
+            markSceneEdited(scene->id());
+    }
+
+    emit designPositionWritten();
+}
+
+void ProgrammerController::writeChannelLive(quint32 fixtureId, quint32 channel, uchar value)
+{
+    Fixture *fxi = m_doc->fixture(fixtureId);
+    if (fxi == NULL)
+        return;
+
+    Universe *universe = m_doc->inputOutputMap()->universe(fxi->universe());
+    if (universe == NULL)
+        return;
+
+    QSharedPointer<GenericFader> fader;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        fader = m_liveFadersMap.value(fxi->universe(), QSharedPointer<GenericFader>());
+        if (fader.isNull())
+        {
+            fader = universe->requestFader();
+            m_liveFadersMap[fxi->universe()] = fader;
+        }
+    }
+
+    FadeChannel *fc = fader->getChannelFader(m_doc, universe, fixtureId, channel);
+    if (fc->universe() == Universe::invalid())
+    {
+        fader->remove(fc);
+        return;
+    }
+
+    // Non-intensity channels are LTP — auto-remove once this stops asserting
+    // them so the rest of the show can take over cleanly (same reasoning as
+    // VCSlider::writeDMXLevel).
+    const QLCChannel *qch = fxi->channel(channel);
+    if (qch != NULL && qch->group() != QLCChannel::Intensity)
+        fc->addFlag(FadeChannel::AutoRemove);
+
+    fc->setStart(fc->current());
+    fc->setTarget(value);
+    fc->setReady(false);
+    fc->setElapsed(0);
+
+    // Edit-routing for Save, same as VCSlider: let an owning running Scene
+    // absorb the edit if one exists, else stash it in the programmer values
+    // map so Save can still bake it into a new scene.
+    if (routeProgrammerEdit(fixtureId, channel, value) == Function::invalidId())
+        setProgrammerValue(fixtureId, channel, value);
 }
 
 void ProgrammerController::commitDesignJoystick()

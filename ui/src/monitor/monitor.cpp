@@ -20,6 +20,8 @@
 
 #include <QApplication>
 #include <QActionGroup>
+#include <QTabWidget>
+#include <QMainWindow>
 #include <QColorDialog>
 #include <QSet>
 #include <QStyleOptionComboBox>
@@ -133,11 +135,11 @@
 #include <QTimer>
 #include "qlcfile.h"
 
-#define SETTINGS_GEOMETRY "monitor/geometry"
 #define SETTINGS_VSPLITTER "monitor/vsplitter2"
 #define SETTINGS_LAYERS_PANEL "monitor/layerspanel3"
 #define SETTINGS_RULERS "monitor/rulers"
 #define SETTINGS_GRID   "monitor/grid"
+#define SETTINGS_CENTERLINES "monitor/centerlines"
 
 Monitor* Monitor::s_instance = NULL;
 
@@ -169,6 +171,8 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     , m_pasteAction(NULL)
 {
     Q_ASSERT(doc != NULL);
+    Q_ASSERT(s_instance == NULL);
+    s_instance = this;
 
     m_props = m_doc->monitorProperties();
 
@@ -635,6 +639,17 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->addWidget(labelsBtn);
     connect(labelsBtn, &QToolButton::toggled, this, [this](bool on) { slotShowLabels(on); });
 
+    // Stage centre axes (the teal crosshair) show/hide toggle.
+    QToolButton *centerBtn = new QToolButton(footer);
+    centerBtn->setText(tr("Center"));
+    centerBtn->setCheckable(true);
+    centerBtn->setToolTip(tr("Show or hide the stage centre lines"));
+    fl->addWidget(centerBtn);
+    connect(centerBtn, &QToolButton::toggled, this, [this](bool on) {
+        m_graphicsView->setCenterLinesVisible(on);
+        QSettings().setValue(SETTINGS_CENTERLINES, on);
+    });
+
     // Origin / centering control: click-to-place or a preset. The ⌖ glyph
     // marks it as the "set the 0,0 origin / centre" control.
     QToolButton *originBtn = new QToolButton(footer);
@@ -718,6 +733,13 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     gridBtn->blockSignals(false);
     m_graphicsView->setGridVisible(showGrid);
 
+    // Restore centre-lines visibility (default on).
+    const bool showCenterLines = settings.value(SETTINGS_CENTERLINES, true).toBool();
+    centerBtn->blockSignals(true);
+    centerBtn->setChecked(showCenterLines);
+    centerBtn->blockSignals(false);
+    m_graphicsView->setCenterLinesVisible(showCenterLines);
+
     updateModeIndicator();
 }
 
@@ -779,17 +801,15 @@ void Monitor::updateModeIndicator()
         return;
     const QString pov = m_povCombo ? m_povCombo->currentText() : QString();
     const int overlay = m_mapView;
-    const bool build  = (m_graphicsView && m_graphicsView->buildFocus());
 
     QString text;
     QColor bg, fg(20, 20, 20);
-    if (build)                     { text = tr("BUILD");      bg = QColor(220, 150, 40); }
-    else if (overlay == ViewStage) { text = tr("STAGE ONLY"); bg = QColor(0, 150, 140); }
+    if (overlay == ViewStage)      { text = tr("STAGE ONLY"); bg = QColor(0, 150, 140); }
     else if (overlay == ViewPower) { text = tr("POWER");      bg = QColor(150, 90, 200); }
     else if (overlay == ViewDMX)   { text = tr("DMX");        bg = QColor(40, 130, 180); }
     else if (overlay == ViewNet)   { text = tr("NETWORK");    bg = QColor(60, 160, 120); }
     else { text = pov; bg = QColor(66, 66, 66); fg = QColor(210, 210, 210); }
-    if (build || overlay != ViewNormal)
+    if (overlay != ViewNormal)
         text += QStringLiteral("   ·   ") + pov;   // keep the POV visible too
 
     QPalette pal = m_modeLabel->palette();
@@ -953,7 +973,9 @@ Monitor* Monitor::instance()
 void Monitor::saveSettings()
 {
     QSettings settings;
-    settings.setValue(SETTINGS_GEOMETRY, saveGeometry());
+    // No more standalone-window geometry to save — Monitor is a permanent
+    // tab now; its DetachedContext (if detached) saves its own geometry
+    // into the workspace file's AppState, same as any other tab.
 
     if (m_splitter != NULL)
     {
@@ -973,43 +995,33 @@ void Monitor::saveSettings()
 
 void Monitor::createAndShow(QWidget* parent, Doc* doc)
 {
-    QWidget* window = NULL;
+    Q_UNUSED(parent)
+    Q_UNUSED(doc)
 
-    /* Must not create more than one instance */
+    // Monitor is constructed once as a permanent tab (App::init()), not
+    // lazily here — this now just makes sure it's what the user is looking
+    // at: switch to its tab, or if it's currently detached into its own
+    // window (same double-click mechanism as any other tab), bring that
+    // window forward instead.
+    Q_ASSERT(s_instance != NULL);
     if (s_instance == NULL)
+        return;
+
+    for (QWidget *p = s_instance->parentWidget(); p != NULL; p = p->parentWidget())
     {
-        /* Create a separate window for OSX */
-        s_instance = new Monitor(parent, doc, Qt::Window);
-        window = s_instance;
-
-        /* Set some common properties for the window and show it */
-        window->setAttribute(Qt::WA_DeleteOnClose);
-        window->setWindowIcon(QIcon(":/monitor.png"));
-        window->setWindowTitle(tr("Lighting Studio"));
-        window->setContextMenuPolicy(Qt::CustomContextMenu);
-
-        QSettings settings;
-        QVariant var = settings.value(SETTINGS_GEOMETRY);
-        if (var.isValid() == true)
-            window->restoreGeometry(var.toByteArray());
-        else
+        if (QTabWidget *tabs = qobject_cast<QTabWidget *>(p))
         {
-            QScreen *screen = QGuiApplication::screens().first();
-            QRect rect = screen->availableGeometry();
-            int rWd = rect.width() / 4;
-            int rHd = rect.height() / 4;
-            window->resize(rWd * 3, rHd * 3);
-            window->move(rWd / 2, rHd / 2);
+            tabs->setCurrentWidget(s_instance);
+            return;
         }
-        AppUtil::ensureWidgetIsVisible(window);
+        if (QMainWindow *mw = qobject_cast<QMainWindow *>(p))
+        {
+            mw->show();
+            mw->raise();
+            mw->activateWindow();
+            return;
+        }
     }
-    else
-    {
-        window = s_instance;
-    }
-
-    window->show();
-    window->raise();
 }
 
 /****************************************************************************
@@ -1185,9 +1197,9 @@ void Monitor::initGraphicsToolbar()
     connect(m_lockAction, SIGNAL(toggled(bool)), this, SLOT(slotLockToggled(bool)));
 
     m_graphicsToolBar->addSeparator();
-    // Group/Ungroup, the Overlay selector, Copy/Paste, labels, background and
-    // Build focus now live in the "More" popup (built after Add/Remove below),
-    // to keep this toolbar lean. Grid/units/snap/rulers stay in the footer.
+    // Group/Ungroup, the Overlay selector, Copy/Paste, labels and background
+    // live in the "More" popup (built after Add/Remove below), to keep this
+    // toolbar lean. Grid/units/snap/rulers stay in the footer.
 
     // Consolidated Add button with popup menu
     m_addBtn = new QToolButton(this);
@@ -1272,19 +1284,6 @@ void Monitor::initGraphicsToolbar()
     // a layer; flat background colour stays here.
     moreMenu->addAction(QIcon(":/color.png"), tr("Set background color"),
                         this, SLOT(slotSetBackgroundColor()));
-
-    // Build/Rig focus: ghost the lights (faint + click-through) so you build
-    // structure (trusses/platforms/images) without fighting the fixtures.
-    m_buildAction = new QAction(QIcon(":/configure.png"), tr("Build focus"), this);
-    m_buildAction->setCheckable(true);
-    m_buildAction->setToolTip(tr("Build/Rig focus: ghost the fixtures and make "
-                                 "structure the click target, for laying out trusses "
-                                 "and platforms. Toggle off to return to lighting."));
-    connect(m_buildAction, &QAction::toggled, this, [this](bool on) {
-        if (m_graphicsView) m_graphicsView->setBuildFocus(on);
-        updateModeIndicator();
-    });
-    moreMenu->addAction(m_buildAction);
 
     moreBtn->setMenu(moreMenu);
     m_graphicsToolBar->addWidget(moreBtn);
