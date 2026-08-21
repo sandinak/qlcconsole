@@ -55,7 +55,7 @@ CMake + Qt5 (Homebrew `qt@5` on macOS), built out-of-tree in `build/`:
 cmake -S . -B build
 
 # Incremental build (parallel). Run after editing sources:
-cmake --build build -j
+cmake --build build -j"$(sysctl -n hw.ncpu)"
 
 # Run. Always pass -o to open a workspace explicitly.
 build/main/qlcconsole -o your-workspace.qxw
