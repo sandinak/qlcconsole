@@ -64,11 +64,21 @@ step "5/7 Bundle & rewrite ALL dependencies (deterministic, framework-aware)"
 # absolute refs to @rpath, adds the executables' rpath, and verifies zero
 # absolute references remain (non-zero exit fails the build).
 # Add the SVG icon-engine plugin the CMake install step doesn't place.
-if [ -d "$QTDIR/plugins/iconengines" ]; then
+# Homebrew's Qt6 keeps plugins under share/qt/; official Qt/qt@5 don't.
+QTPLUGINS="$QTDIR/plugins"
+[ -d "$QTPLUGINS/platforms" ] || QTPLUGINS="$QTDIR/share/qt/plugins"
+if [ -d "$QTPLUGINS/iconengines" ]; then
   mkdir -p "$APP/Contents/PlugIns/iconengines"
-  cp -f "$QTDIR/plugins/iconengines/"*.dylib "$APP/Contents/PlugIns/iconengines/" 2>/dev/null || true
+  cp -f "$QTPLUGINS/iconengines/"*.dylib "$APP/Contents/PlugIns/iconengines/" 2>/dev/null || true
 fi
 python3 "$SCRIPTDIR/bundlefix.py" "$APP"
+
+# A bundle with no platform plugin builds and signs fine but cannot launch.
+# Check it here rather than discovering it on a fresh machine.
+if [ ! -f "$APP/Contents/PlugIns/platforms/libqcocoa.dylib" ]; then
+  echo "ERROR: $APP has no PlugIns/platforms/libqcocoa.dylib -- it won't launch."
+  exit 1
+fi
 
 step "6/7 Ad-hoc codesign"
 set +e   # codesign loops hit benign non-Mach-O files; gate explicitly below

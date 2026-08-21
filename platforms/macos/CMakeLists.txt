@@ -91,9 +91,24 @@ foreach(FW_NAME IN LISTS QT_FRAMEWORK_NAMES)
             PATTERN "Headers" EXCLUDE)
 endforeach()
 
-# install Qt plugins
-set(QT_PLUGINS_DIR $ENV{QTDIR}/plugins)
-set(QT_QML_DIR $ENV{QTDIR}/qml)
+# install Qt plugins.
+# Official Qt (and Homebrew's qt@5) keep plugins/qml directly under the
+# prefix; Homebrew's Qt6 keeps them under share/qt/. Probe both -- every
+# install() below is OPTIONAL, so a wrong root silently yields a bundle with
+# no platform plugin, which can't launch at all.
+unset(QT_PLUGINS_DIR)
+foreach(QT_ROOT "$ENV{QTDIR}" "$ENV{QTDIR}/share/qt")
+    if(EXISTS "${QT_ROOT}/plugins/platforms")
+        set(QT_PLUGINS_DIR "${QT_ROOT}/plugins")
+        set(QT_QML_DIR "${QT_ROOT}/qml")
+        break()
+    endif()
+endforeach()
+if(NOT QT_PLUGINS_DIR)
+    message(FATAL_ERROR
+        "Qt plugins not found under QTDIR='$ENV{QTDIR}' "
+        "(tried <QTDIR>/plugins and <QTDIR>/share/qt/plugins).")
+endif()
 
 # imageformats
 install(FILES ${QT_PLUGINS_DIR}/imageformats/libqgif.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/imageformats OPTIONAL)
@@ -109,8 +124,8 @@ else()
     install(FILES ${QT_PLUGINS_DIR}/mediaservice/libqavfmediaplayer.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/mediaservice OPTIONAL)
     install(FILES ${QT_PLUGINS_DIR}/mediaservice/libqtmedia_audioengine.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/mediaservice OPTIONAL)
 endif()
-# platforms
-install(FILES ${QT_PLUGINS_DIR}/platforms/libqcocoa.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/platforms OPTIONAL)
+# platforms -- NOT optional: the bundle can't start without libqcocoa.
+install(FILES ${QT_PLUGINS_DIR}/platforms/libqcocoa.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/platforms)
 # styles
 install(FILES ${QT_PLUGINS_DIR}/styles/libqmacstyle.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/styles OPTIONAL)
 

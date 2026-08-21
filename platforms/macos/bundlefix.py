@@ -172,13 +172,18 @@ def fix_broken_plugin_symlinks():
     libqcocoa.dylib in particular — no GUI without it), so replace with real
     content by re-resolving from $QTDIR/plugins, not just delete."""
     qtdir = os.environ.get("QTDIR", "")
+    # Homebrew's Qt6 keeps plugins under share/qt/; official Qt and qt@5 keep
+    # them directly under the prefix. Resolve against whichever exists.
+    qtplugins = os.path.join(qtdir, "plugins")
+    if not os.path.isdir(os.path.join(qtplugins, "platforms")):
+        qtplugins = os.path.join(qtdir, "share", "qt", "plugins")
     plug = os.path.join(APP, "Contents", "PlugIns")
     for root, _, files in os.walk(plug):
         for name in files:
             p = os.path.join(root, name)
             if os.path.islink(p) and not os.path.exists(p):
                 rel = os.path.relpath(p, plug)
-                src = os.path.realpath(os.path.join(qtdir, "plugins", rel))
+                src = os.path.realpath(os.path.join(qtplugins, rel))
                 os.remove(p)
                 if os.path.isfile(src):
                     shutil.copy2(src, p)
