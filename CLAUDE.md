@@ -23,7 +23,7 @@ Qt6 (homebrew `qt`), no `qt@5`, so builds are against Qt6.
 cmake -S . -B build
 
 # Incremental build (parallel). Run after editing sources:
-cmake --build build -j
+cmake --build build -j"$(sysctl -n hw.ncpu)"
 
 # Run. ALWAYS pass -o to open a workspace; positional args are ignored and
 # can overwrite the .qxw with an empty file (see memory: qlcplus-cli).

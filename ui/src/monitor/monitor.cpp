@@ -2206,14 +2206,18 @@ void Monitor::slotTrussDoubleClicked(quint32 tid)
 }
 
 // A QTreeWidget that hands out fixture ids on drag (for the studio source tree →
-// canvas drop). Qt5 uses the by-value mimeData() override.
+// canvas drop). Qt5 passes the item list by value; Qt6 by const-ref.
 namespace {
 class FixtureSourceTree : public QTreeWidget
 {
 public:
     explicit FixtureSourceTree(QWidget *parent = nullptr) : QTreeWidget(parent) {}
 protected:
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
+#else
+    QMimeData *mimeData(const QList<QTreeWidgetItem *> items) const override
+#endif
     {
         QMimeData *m = new QMimeData;
         QByteArray b; QDataStream s(&b, QIODevice::WriteOnly);
