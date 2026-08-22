@@ -105,9 +105,17 @@ foreach(QT_ROOT "$ENV{QTDIR}" "$ENV{QTDIR}/share/qt")
     endif()
 endforeach()
 if(NOT QT_PLUGINS_DIR)
-    message(FATAL_ERROR
-        "Qt plugins not found under QTDIR='$ENV{QTDIR}' "
-        "(tried <QTDIR>/plugins and <QTDIR>/share/qt/plugins).")
+    # QTDIR unset is the normal case for a plain dev build (`cmake -S . -B
+    # build`), which never runs these install rules -- only package-local.sh
+    # sets QTDIR. Only a set-but-wrong QTDIR is an error worth stopping for.
+    if("$ENV{QTDIR}" STREQUAL "")
+        set(QT_PLUGINS_DIR "$ENV{QTDIR}/plugins")
+        set(QT_QML_DIR "$ENV{QTDIR}/qml")
+    else()
+        message(FATAL_ERROR
+            "Qt plugins not found under QTDIR='$ENV{QTDIR}' "
+            "(tried <QTDIR>/plugins and <QTDIR>/share/qt/plugins).")
+    endif()
 endif()
 
 # imageformats
