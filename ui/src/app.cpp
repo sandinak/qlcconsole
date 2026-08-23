@@ -249,6 +249,22 @@ App::~App()
     if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
         delete pm;
 
+    // Same ordering trap: the overlay and the engine are both children of App,
+    // so QObject child deletion tears them down in construction order — engine
+    // first — and ~PMJOverlay's unregisterDevice() then lands on freed memory.
+    // Delete the overlay while its engine is still alive.
+    if (m_pmjOverlay != NULL)
+    {
+        delete m_pmjOverlay;
+        m_pmjOverlay = NULL;
+    }
+
+    if (m_controlSurfaceEngine != NULL)
+    {
+        delete m_controlSurfaceEngine;
+        m_controlSurfaceEngine = NULL;
+    }
+
     if (m_dumpProperties != NULL)
         delete m_dumpProperties;
 

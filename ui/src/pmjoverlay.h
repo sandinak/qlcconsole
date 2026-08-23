@@ -24,6 +24,7 @@
 #define PMJOVERLAY_H
 
 #include <QObject>
+#include <QPointer>
 #include <QHash>
 
 #include "controlsurface.h"
@@ -104,7 +105,10 @@ private:
     QList<quint32> sceneTargetFixtures() const;
 
     Doc *m_doc;
-    ControlSurfaceEngine *m_engine;
+    /* QPointer, not a raw pointer: the overlay and the engine are both
+       children of App, so on shutdown QObject child deletion can destroy the
+       engine first and leave this dangling (see ~PMJOverlay). */
+    QPointer<ControlSurfaceEngine> m_engine;
     App *m_app;
     mutable ProgrammingManager *m_programmingManager = nullptr;
 

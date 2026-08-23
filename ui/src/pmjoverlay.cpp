@@ -209,7 +209,10 @@ void PMJOverlay::findKnownUniverse()
 
 PMJOverlay::~PMJOverlay()
 {
-    m_engine->unregisterDevice(deviceId);
+    // App owns both this overlay and the engine. If the engine went first,
+    // the QPointer is already null and there is nothing left to unregister.
+    if (m_engine.isNull() == false)
+        m_engine->unregisterDevice(deviceId);
 }
 
 QList<quint32> PMJOverlay::sceneTargetFixtures() const
