@@ -497,10 +497,15 @@ jobs:
           echo "NPROC: ${NPROC}"
 
       - name: Dependencies
-        run: | 
+        run: |
           brew update
           brew install fftw mad libsndfile libftdi
-          brew link --overwrite python@3.13
+          # Upstream pinned `brew link --overwrite python@3.13` to work around a
+          # runner python/brew link clash. The image no longer ships that keg
+          # ("No such keg: /opt/homebrew/Cellar/python@3.13") and the hard
+          # failure killed the job three steps before Configure. Relink
+          # whatever python brew actually has, and never fail the build on it.
+          brew link --overwrite --force python3 2>/dev/null || true
     
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
