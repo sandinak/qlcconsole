@@ -73,12 +73,15 @@ PowerSource::PowerSource()
     : name(QStringLiteral("Source"))
     , type(Distro)
     , voltage(120)
-    , vaRating(0)
-    , runtimeMinutes(0)
-    , runtimeWatts(0)
+    // Declaration order (see the header): placed/posX/posY come before the
+    // UPS fields. Members initialise in declaration order whatever this list
+    // says, so keep the two in step.
     , placed(false)
     , posX(0)
     , posY(0)
+    , vaRating(0)
+    , runtimeMinutes(0)
+    , runtimeWatts(0)
 {
 }
 
@@ -298,8 +301,10 @@ bool PowerDistribution::saveXML(QXmlStreamWriter *doc, bool includeFixtures) con
             doc->writeTextElement(KXMLQLCPowerCircuitName, cir.name);
 
             if (includeFixtures)
+            {
                 foreach (quint32 fxId, cir.fixtures)
                     doc->writeTextElement(KXMLQLCPowerCircuitFixture, QString::number(fxId));
+            }
 
             doc->writeEndElement(); // Circuit
         }
@@ -467,8 +472,10 @@ static void resolveFunctionInto(Doc *doc, Function *f,
     if (Scene *sc = qobject_cast<Scene*>(f))
         resolveSceneInto(doc, sc, out);
     else if (Collection *col = qobject_cast<Collection*>(f))
+    {
         foreach (quint32 mid, col->functions())
             resolveFunctionInto(doc, doc->function(mid), out, visited);
+    }
     // Chasers run one step at a time; per-step worst case is handled separately.
 }
 

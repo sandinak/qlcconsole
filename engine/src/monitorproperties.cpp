@@ -1990,7 +1990,10 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
         doc->writeAttribute(KXMLQLCMonitorLayoutLocked, QString::number(1));
     if (snapDivisions() > 0)
         doc->writeAttribute(KXMLQLCMonitorSnapDivisions, QString::number(snapDivisions()));
-        doc->writeAttribute(KXMLQLCMonitorAimSubjectHeight, QString::number(aimSubjectHeight()));
+    // NOT part of the snapDivisions branch above -- it only looked that way.
+    // Written unconditionally, which is the behaviour every existing .qxw was
+    // saved with, so the indentation is what's wrong here, not the logic.
+    doc->writeAttribute(KXMLQLCMonitorAimSubjectHeight, QString::number(aimSubjectHeight()));
     if (!stageOrigin().isNull())
     {
         doc->writeAttribute(KXMLQLCMonitorOriginX, QString::number(stageOrigin().x()));

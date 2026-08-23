@@ -200,7 +200,7 @@ void MasterTimer::timerTick()
         {
             overruns++;
             qWarning("[TICKLOG] tick compute %.2f ms > budget %.0f ms (%d running funcs, %d universes)",
-                     ms, budgetMs, m_functionList.size(), int(universes.size()));
+                     ms, budgetMs, int(m_functionList.size()), int(universes.size()));
         }
         if ((nTicks % quint64(tickLogInterval())) == 0)
         {

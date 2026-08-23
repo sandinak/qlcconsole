@@ -71,6 +71,20 @@ static int trackFadePriority(Track *track)
 
 ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
     : QObject(NULL)
+    // Listed in the header's declaration order (showrunner.h): the suspend and
+    // timecode groups are declared ahead of m_doc. Members initialise in
+    // declaration order whatever this list says, so keep the two in step or
+    // -Wreorder fires -- and CI builds the engine with -Werror.
+    , m_suspended(false)
+    , m_suspendRequest(false)
+    , m_pausePending(false)
+    , m_pausePendingValue(false)
+    , m_tcHolding(false)
+    , m_timecodeFollow(false)
+    , m_externalTimeSet(false)
+    , m_externalTimeFresh(false)
+    , m_externalTime(0)
+    , m_msSinceFresh(0)
     , m_doc(doc)
     , m_currentTimeFunctionIndex(0)
     , m_elapsedTime(startTime)
@@ -79,16 +93,6 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
     , beatSynced(false)
     , m_totalRunTime(0)
     , m_endTime(0)
-    , m_timecodeFollow(false)
-    , m_externalTimeSet(false)
-    , m_externalTimeFresh(false)
-    , m_externalTime(0)
-    , m_msSinceFresh(0)
-    , m_suspended(false)
-    , m_suspendRequest(false)
-    , m_pausePending(false)
-    , m_pausePendingValue(false)
-    , m_tcHolding(false)
 {
     Q_ASSERT(m_doc != NULL);
     Q_ASSERT(showID != Show::invalidId());
