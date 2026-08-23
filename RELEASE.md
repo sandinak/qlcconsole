@@ -38,8 +38,8 @@ Steps:
    `release.sh`'s own gate builds only whichever Qt cmake picks up, and this
    fork ships Qt6 DMGs while development happens against whatever is
    installed. Three defects in one week came from that split (see the header
-   comment in `check-all.sh`). CI is Linux-only, so on macOS this script is
-   the only cross-Qt coverage there is.
+   comment in `check-all.sh`). CI's macOS job builds against Qt6 only and has
+   no Qt5 leg, so this script is the only cross-Qt coverage there is.
 1. Bump `VERSION` to the new release number.
 2. Add a `## [X.Y.Z] - YYYY-MM-DD` section to [CHANGELOG.md](CHANGELOG.md)
    summarizing what shipped since the last release (pull the user-facing
