@@ -128,6 +128,13 @@ signals:
     /** Emitted when the document has been completely loaded. */
     void loaded();
 
+    /** Emitted periodically while loadXML() walks the workspace so the UI can
+        show what it's chewing on. @a stage is a translatable description of the
+        element class being read, @a count how many of them are done so far.
+        The total isn't known until the file has been parsed, so this drives a
+        busy indicator with text rather than a percentage. */
+    void loadProgress(const QString &stage, int count);
+
     /*********************************************************************
      * Engine components
      *********************************************************************/
