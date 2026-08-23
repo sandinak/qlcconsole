@@ -1914,6 +1914,23 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     m_loadStatus = Loading;
     emit loading();
 
+    /* Progress reporting: loading a big workspace is dominated by fixtures and
+       fixture groups, and it happens with the main window already up, so
+       without this the app just looks hung. Emit at most every 8 items to keep
+       the signal (and the repaint it triggers) off the hot path. */
+    QString progressStage;
+    int progressCount = 0;
+    auto reportProgress = [&](const QString &stage)
+    {
+        if (stage != progressStage)
+        {
+            progressStage = stage;
+            progressCount = 0;
+        }
+        if ((++progressCount % 8) == 0)
+            emit loadProgress(stage, progressCount);
+    };
+
     if (doc.attributes().hasAttribute(KXMLQLCStartupFunction))
     {
         quint32 sID = doc.attributes().value(KXMLQLCStartupFunction).toString().toUInt();
@@ -1927,10 +1944,12 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         if (doc.name() == KXMLFixture)
         {
             Fixture::loader(doc, this);
+            reportProgress(tr("Loading fixtures"));
         }
         else if (doc.name() == KXMLQLCFixtureGroup)
         {
             FixtureGroup::loader(doc, this);
+            reportProgress(tr("Loading fixture groups"));
         }
         else if (doc.name() == KXMLQLCChannelsGroup)
         {
@@ -1939,11 +1958,13 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         else if (doc.name() == KXMLQLCPalette)
         {
             QLCPalette::loader(doc, this);
+            reportProgress(tr("Loading palettes"));
         }
         else if (doc.name() == KXMLQLCFunction)
         {
             //qDebug() << doc.attributes().value("Name").toString();
             Function::loader(doc, this);
+            reportProgress(tr("Loading functions"));
         }
         else if (doc.name() == KXMLQLCBus)
         {

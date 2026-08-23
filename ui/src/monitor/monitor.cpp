@@ -155,6 +155,7 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     , m_scrollArea(NULL)
     , m_monitorWidget(NULL)
     , m_monitorLayout(NULL)
+    , m_dmxViewPopulated(false)
     , m_currentUniverse(Universe::invalid())
     , m_graphicsToolBar(NULL)
     , m_splitter(NULL)
@@ -263,6 +264,24 @@ void Monitor::fillDMXView()
         delete m_monitorFixtures.takeFirst();
 
     m_monitorWidget->setFont(m_props->font());
+    m_dmxViewPopulated = false;
+
+    /* Building the fixture widgets is deferred until the DMX view is actually
+       shown. Each MonitorFixture creates three stylesheet'd QLabels per DMX
+       channel, so a large workspace means tens of thousands of widgets -- and
+       every one of them also subscribes to its Fixture's valuesChanged(), so
+       an unseen DMX view keeps costing during live output too. If the view is
+       on screen right now, rebuild it immediately. */
+    if (m_scrollArea != NULL && m_scrollArea->isVisible() == true)
+        populateDMXView();
+}
+
+void Monitor::populateDMXView()
+{
+    if (m_dmxViewPopulated == true)
+        return;
+
+    m_dmxViewPopulated = true;
 
     /* Create a bunch of MonitorFixtures for each fixture */
     foreach (Fixture* fxi, m_doc->fixtures())
@@ -272,11 +291,17 @@ void Monitor::fillDMXView()
             m_currentUniverse == fxi->universe())
                 createMonitorFixture(fxi);
     }
+
+    m_monitorLayout->sort();
+    m_monitorWidget->updateGeometry();
 }
 
 void Monitor::showDMXView()
 {
     qDebug() << Q_FUNC_INFO;
+
+    /* Deferred from fillDMXView(): build the widgets now that they'll be seen */
+    populateDMXView();
 
     hideFixtureItemEditor();
 
@@ -1402,6 +1427,13 @@ void Monitor::createMonitorFixture(Fixture* fxi)
 
 void Monitor::slotFixtureAdded(quint32 fxi_id)
 {
+    /* Nothing to keep in sync while the DMX view is unbuilt -- populateDMXView()
+       will pick this fixture up from the Doc when the view is first shown.
+       Adding it here would leave a list holding only the fixtures added since
+       load, which the view would then treat as complete. */
+    if (m_dmxViewPopulated == false)
+        return;
+
     Fixture* fxi = m_doc->fixture(fxi_id);
     if (fxi != NULL)
         createMonitorFixture(fxi);

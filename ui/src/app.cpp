@@ -140,6 +140,7 @@ App::App()
     , m_overscan(false)
     , m_noGui(false)
     , m_progressDialog(NULL)
+    , m_loadProgressDialog(NULL)
     , m_doc(NULL)
 
     , m_fileNewAction(NULL)
@@ -248,6 +249,22 @@ App::~App()
     // editors) while the Doc is still alive.
     if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
         delete pm;
+
+    // Same ordering trap: the overlay and the engine are both children of App,
+    // so QObject child deletion tears them down in construction order — engine
+    // first — and ~PMJOverlay's unregisterDevice() then lands on freed memory.
+    // Delete the overlay while its engine is still alive.
+    if (m_pmjOverlay != NULL)
+    {
+        delete m_pmjOverlay;
+        m_pmjOverlay = NULL;
+    }
+
+    if (m_controlSurfaceEngine != NULL)
+    {
+        delete m_controlSurfaceEngine;
+        m_controlSurfaceEngine = NULL;
+    }
 
     if (m_dumpProperties != NULL)
         delete m_dumpProperties;
@@ -661,6 +678,44 @@ void App::destroyProgressDialog()
     m_progressDialog = NULL;
 }
 
+void App::createLoadProgressDialog(const QString& fileName)
+{
+    if (m_noGui == true || m_loadProgressDialog != NULL)
+        return;
+
+    m_loadProgressDialog = new QProgressDialog(this);
+    m_loadProgressDialog->setWindowModality(Qt::ApplicationModal);
+    m_loadProgressDialog->setCancelButton(NULL);
+    // Busy indicator, not a percentage: the number of fixtures/functions in a
+    // workspace isn't known until the file has been parsed, and a made-up
+    // percentage is worse than an honest spinner.
+    m_loadProgressDialog->setRange(0, 0);
+    m_loadProgressDialog->setMinimumDuration(0);
+    m_loadProgressDialog->setLabelText(QString("<B>%1</B><BR/>%2")
+                                       .arg(tr("Loading workspace"))
+                                       .arg(QFileInfo(fileName).fileName()));
+    m_loadProgressDialog->show();
+    m_loadProgressDialog->raise();
+    QApplication::processEvents();
+}
+
+void App::destroyLoadProgressDialog()
+{
+    delete m_loadProgressDialog;
+    m_loadProgressDialog = NULL;
+}
+
+void App::slotLoadProgress(const QString& stage, int count)
+{
+    if (m_loadProgressDialog == NULL)
+        return;
+
+    m_loadProgressDialog->setLabelText(QString("<B>%1</B><BR/>%2")
+                                       .arg(stage)
+                                       .arg(count));
+    QApplication::processEvents();
+}
+
 void App::slotSetProgressText(const QString& text)
 {
     if (m_progressDialog == NULL)
@@ -707,6 +762,7 @@ void App::initDoc()
     connect(m_doc, SIGNAL(modified(bool)), this, SLOT(slotDocModified(bool)));
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
+    connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
 #ifdef DEBUG_SPEED
     speedTime.start();
 #endif
@@ -2250,6 +2306,10 @@ QFile::FileError App::loadXML(const QString& fileName)
 
     if (doc->dtdName() == KXMLQLCWorkspace)
     {
+        // The main window is already up by the time a -o/--open workspace is
+        // read, so a big file reads as a frozen app without this.
+        createLoadProgressDialog(fileName);
+
         if (loadXML(*doc) == false)
         {
             retval = QFile::ReadError;
@@ -2270,6 +2330,7 @@ QFile::FileError App::loadXML(const QString& fileName)
             // refilled — trusses/fixtures silently missing despite loading
             // correctly into the doc (confirmed present in Fixture Manager,
             // whose tab is built lazily on first view and so isn't affected).
+            slotLoadProgress(tr("Building views"), 0);
             if (FixtureManager::instance() != NULL)
                 FixtureManager::instance()->updateView();
             if (Monitor::instance() != NULL)
@@ -2282,6 +2343,8 @@ QFile::FileError App::loadXML(const QString& fileName)
         qWarning() << Q_FUNC_INFO << fileName
                    << "is not a workspace file";
     }
+
+    destroyLoadProgressDialog();
 
     QLCFile::releaseXMLReader(doc);
 

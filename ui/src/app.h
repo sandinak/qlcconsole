@@ -157,11 +157,21 @@ public:
     void createProgressDialog();
     void destroyProgressDialog();
 
+    /** Busy dialog shown while a workspace is being read. Unlike the startup
+        dialog above this one runs with the main window already visible, which
+        is exactly when a large workspace looks like a hang. */
+    void createLoadProgressDialog(const QString& fileName);
+    void destroyLoadProgressDialog();
+
 public slots:
     void slotSetProgressText(const QString& text);
 
+    /** Drives createLoadProgressDialog()'s dialog from Doc::loadProgress() */
+    void slotLoadProgress(const QString& stage, int count);
+
 private:
     QProgressDialog* m_progressDialog;
+    QProgressDialog* m_loadProgressDialog;
 
     /*********************************************************************
      * Doc
