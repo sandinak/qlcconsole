@@ -450,7 +450,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [build-v4, build-v5]
+        # Widgets UI only: this fork keeps qmlui OFF and doesn't carry the
+        # rebrand through qmlui/, so a build-v5 leg could only ever be red.
+        task: [build-v4]
     env:
       CI_REPO_SLUG: ${{ github.repository }}
       CI_BRANCH: ${{ github.head_ref }}
@@ -474,11 +476,6 @@ jobs:
       - name: Set v4 ENV variables
         shell: bash
         if: ${{ matrix.task == 'build-v4' }}
-        run: |
-
-      - name: Set v5 ENV variables
-        shell: bash
-        if: ${{ matrix.task == 'build-v5' }}
         run: |
 
       - name: Print ENV vars
@@ -516,19 +513,20 @@ jobs:
         shell: bash
         if: ${{ matrix.task == 'build-v4' }}
         run: |-
-          cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
-
-      - name: Configure v5 build
-        shell: bash
-        if: ${{ matrix.task == 'build-v5' }}
-        run: |-
-          cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -Dqmlui=ON
+          cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
 
       - name: Build
         shell: bash
         run: |-
           cd build
           make -j${{ env.NPROC }}
+
+      # macOS had no test step at all -- it built, packaged and uploaded a DMG
+      # without ever running the suite, so nothing here could fail on a broken
+      # build. This is the same gate the Linux jobs run.
+      - name: Test
+        shell: bash
+        run: cmake --build build --target check
 
       - name: Install
         shell: bash
@@ -546,18 +544,10 @@ jobs:
         shell: bash
         if: ${{ matrix.task == 'build-v4' }}
         run: |-
-          platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/Frameworks/libsndfile.1.dylib
-          platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus
-          platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus-fixtureeditor
-          ${{ env.QTDIR }}/bin/macdeployqt ~/QLC+.app
-
-      - name: Fix v5 dylib dependencies
-        shell: bash
-        if: ${{ matrix.task == 'build-v5' }}
-        run: |-
-          platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/Frameworks/libsndfile.1.dylib
-          platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus-qml
-          ${{ env.QTDIR }}/bin/macdeployqt ~/QLC+.app -qmldir=qmlui/qml
+          platforms/macos/fix_dylib_deps.sh ~/qlcconsole.app/Contents/Frameworks/libsndfile.1.dylib
+          platforms/macos/fix_dylib_deps.sh ~/qlcconsole.app/Contents/MacOS/qlcconsole
+          platforms/macos/fix_dylib_deps.sh ~/qlcconsole.app/Contents/MacOS/qlcconsole-fixtureeditor
+          ${{ env.QTDIR }}/bin/macdeployqt ~/qlcconsole.app
 
       - name: Create DMG
         # Use retry loop to work around a race condition on macOS causing
@@ -571,19 +561,19 @@ jobs:
           command: |
             OUTDIR=$PWD
             cd platforms/macos/dmg
-            ./create-dmg --volname "Q Light Controller Plus ${{env.APPVERSION}}" \
-            --volicon $OUTDIR/resources/icons/qlcplus.icns \
+            ./create-dmg --volname "qlcconsole ${{env.APPVERSION}}" \
+            --volicon $OUTDIR/resources/icons/qlcconsole.icns \
             --background background.png \
             --window-size 400 300 \
             --window-pos 200 100 \
             --icon-size 64 \
-            --icon "QLC+" 0 150 \
+            --icon "qlcconsole" 0 150 \
             --app-drop-link 200 150 \
-            $OUTDIR/QLC+_${{ matrix.task }}.dmg \
-            ~/QLC+.app
+            $OUTDIR/qlcconsole_${{ matrix.task }}.dmg \
+            ~/qlcconsole.app
 
       - name: Store DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QLC+-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.dmg
-          path: QLC+_${{ matrix.task }}.dmg
+          name: qlcconsole-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.dmg
+          path: qlcconsole_${{ matrix.task }}.dmg

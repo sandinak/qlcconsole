@@ -12,7 +12,11 @@
 #   - Array.prototype.fill() is ES6; the Qt5 script engine lacks it, so the
 #     Lines RGB script returned an empty map on Qt5 builds.
 #
-# CI covers Linux only, so on macOS this script is the coverage.
+# CI does not cover this: .github/workflows/build.yml has a build-macos job,
+# but it installs Qt6 only (no Qt5 leg), and as of this writing the workflow
+# has never actually run on this repo -- `gh run list` is empty and the
+# actions/workflows API reports total_count 0. Until CI is demonstrably
+# running, this script is the only cross-Qt coverage there is.
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
