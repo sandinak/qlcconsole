@@ -115,6 +115,35 @@ else()
     endif()
 endif()
 
+# The unittests target above just runs a script over whatever binaries happen
+# to be in the build dir -- nothing makes it build them first. That let "make
+# check" pass on stale objects (APPVERSION is baked in from the git commit
+# count, so a test binary one commit old fails against a freshly built lib) or
+# on binaries that no longer match the sources at all. Make every *_test
+# executable a prerequisite so the gate always tests what's checked out.
+function(qlc_collect_test_targets dir out)
+    get_property(subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    set(found "")
+    foreach(target IN LISTS targets)
+        if(target MATCHES "_test$")
+            list(APPEND found "${target}")
+        endif()
+    endforeach()
+    foreach(subdir IN LISTS subdirs)
+        qlc_collect_test_targets("${subdir}" sub)
+        list(APPEND found ${sub})
+    endforeach()
+    set(${out} "${found}" PARENT_SCOPE)
+endfunction()
+
+qlc_collect_test_targets("${CMAKE_SOURCE_DIR}" QLC_TEST_TARGETS)
+if(QLC_TEST_TARGETS)
+    list(LENGTH QLC_TEST_TARGETS QLC_TEST_TARGET_COUNT)
+    message(STATUS "Test gate: ${QLC_TEST_TARGET_COUNT} test executables wired to 'check'")
+    add_dependencies(unittests ${QLC_TEST_TARGETS})
+endif()
+
 add_custom_target(check
     DEPENDS unittests
 )
