@@ -155,6 +155,12 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     // A group ADDED elsewhere (e.g. created in the Lighting Studio) must appear
     // here too — the tree previously only refreshed on remove/change.
     connect(m_doc, &Doc::fixtureGroupAdded, this, [this](quint32) {
+        // ...but not once per group while a workspace is loading. Each rebuild
+        // walks every group and fixture, so doing one per added group is
+        // O(groups x tree) and dominated the parse (1213 of 1801 samples).
+        // slotDocLoaded() does the single rebuild they all collapse into.
+        if (m_doc->loadStatus() == Doc::Loading)
+            return;
         m_fixtures_tree->updateTree();
         updateGroupMenu();
     });
@@ -365,6 +371,11 @@ void FixtureManager::slotFixtureGroupChanged(quint32 id)
 
 void FixtureManager::slotDocLoaded()
 {
+    // The per-group rebuilds suppressed during the load (see the
+    // fixtureGroupAdded connection above) collapse into this one.
+    m_fixtures_tree->updateTree();
+    updateGroupMenu();
+
     slotTabChanged(m_currentTabIndex);
 }
 
