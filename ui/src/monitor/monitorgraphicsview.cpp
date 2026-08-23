@@ -821,29 +821,51 @@ void MonitorGraphicsView::ensurePlatformGroup(quint32 platformId)
     if (mounted.isEmpty())
         return;
 
+    // Track whether this actually changed anything, exactly as
+    // ensureTrussGroup() above does. Reporting a change unconditionally marks
+    // the document dirty on every load of a workspace that already has its
+    // groups migrated -- 43 times for a rig with 43 risers -- which starts the
+    // autosave timer and makes a quit claim there are edits to lose.
+    bool changed = false;
+
     quint32 gid = p->groupId();
     if (gid == 0 || !props->hasGroup(gid))
     {
         gid = props->nextGroupId();
         const QString nm = p->name().isEmpty() ? tr("Platform %1").arg(platformId) : p->name();
         props->createGroup(gid, nm, p->layerId(), 0);
-        p->setGroupId(gid);
+        changed = true;
     }
+    if (p->groupId() != gid)
+        changed = true;
     p->setGroupId(gid);
+
     // Mounting is a strong signal — force the mounted fixtures into the group.
     foreach (quint32 fid, mounted)
-        props->setFixtureGroup(fid, gid);
+    {
+        if (props->fixtureGroup(fid) != gid)
+        {
+            props->setFixtureGroup(fid, gid);
+            changed = true;
+        }
+    }
 
     // Anchor the group to this riser ONLY if it's dedicated (holds no other
     // structural item). A manual group of several risers stays a plain folder.
-    if (structuralMembersOf(gid) <= 1)
-        props->setGroupAnchor(gid, QStringLiteral("platform"), platformId);
-    else
-        props->setGroupAnchor(gid, QString(), 0);
+    const QString newAnchorKind = (structuralMembersOf(gid) <= 1) ? QStringLiteral("platform") : QString();
+    const quint32 newAnchorId   = (structuralMembersOf(gid) <= 1) ? platformId : 0u;
+    if (props->group(gid).anchorKind != newAnchorKind || props->group(gid).anchorId != newAnchorId)
+    {
+        props->setGroupAnchor(gid, newAnchorKind, newAnchorId);
+        changed = true;
+    }
 
     setGroupSubtreeLayer(gid, p->layerId());
-    m_doc->setModified();
-    emit mapStructureChanged();
+    if (changed)
+    {
+        m_doc->setModified();
+        emit mapStructureChanged();
+    }
 }
 
 void MonitorGraphicsView::ensureTrussGroup(quint32 trussId)
