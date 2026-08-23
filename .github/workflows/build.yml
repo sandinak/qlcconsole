@@ -1,6 +1,12 @@
 name: QLCplus Github Actions CI Build
 
-on: ["push", "pull_request"]
+on:
+  push:
+  pull_request:
+  # Lets a run be started from the Actions tab / `gh workflow run` without
+  # having to invent a commit. This workflow sat unregistered with GitHub for
+  # weeks; being able to fire it on demand makes that state easy to spot.
+  workflow_dispatch:
 
 jobs:
   build-linux:
