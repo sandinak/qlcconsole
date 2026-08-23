@@ -105,8 +105,16 @@ protected:
     /** Initialize the monitor view in DMX mode */
     void initDMXView();
 
-    /** Initialize settings & fill fixtures */
+    /** Drop any built DMX-view widgets and mark the view as needing a rebuild.
+        The widgets themselves are only created when the DMX view is actually
+        shown -- see populateDMXView(). */
     void fillDMXView();
+
+    /** Build the MonitorFixture widgets for the DMX view, if not already
+        built. One MonitorFixture holds three QLabels per DMX channel, so on a
+        large workspace this is tens of thousands of widgets; doing it eagerly
+        cost ~9.5s of every startup for a view that may never be opened. */
+    void populateDMXView();
 
     /** show */
     void showDMXView();
@@ -199,6 +207,8 @@ protected:
     QWidget* m_monitorWidget;
     MonitorLayout* m_monitorLayout;
     QList <MonitorFixture*> m_monitorFixtures;
+    /** false until populateDMXView() has built m_monitorFixtures */
+    bool m_dmxViewPopulated;
     quint32 m_currentUniverse;
 
     /********************************************************************
