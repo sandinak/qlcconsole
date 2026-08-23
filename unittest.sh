@@ -37,6 +37,12 @@ done
 
 cp $SOURCE_DIR/platforms/linux/unittest.sh $DEST_DIR/
 
+# Propagate the runner's exit status. Without capturing it, this script's exit
+# status is popd's -- always 0 -- so "make check" reported failures in its
+# output and still succeeded, which is exactly what a release gate must not do.
 pushd $DEST_DIR
 ./unittest.sh $1
+RESULT=$?
 popd
+
+exit $RESULT
