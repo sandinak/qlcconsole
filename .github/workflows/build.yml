@@ -506,13 +506,6 @@ jobs:
           # failure killed the job three steps before Configure. Relink
           # whatever python brew actually has, and never fail the build on it.
           brew link --overwrite --force python3 2>/dev/null || true
-          # resources/fixtures/scripts/check runs fixtures-tool.py --validate,
-          # which imports lxml. The Linux jobs install it ("Install python-lxml
-          # for fixtures-tool"); macOS never did, so the gate died with
-          # ModuleNotFoundError right after passing all 1712 fixture files.
-          # Install into whichever python3 is on PATH -- that's the interpreter
-          # the script's shebang picks -- rather than brew's, which may differ.
-          python3 -m pip install --break-system-packages lxml
     
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -542,6 +535,17 @@ jobs:
       # macOS had no test step at all -- it built, packaged and uploaded a DMG
       # without ever running the suite, so nothing here could fail on a broken
       # build. This is the same gate the Linux jobs run.
+      # Must run AFTER Install Qt, not in Dependencies: that action puts its own
+      # python ahead on PATH, so lxml installed earlier lands in a different
+      # interpreter than the one fixtures-tool.py's `#!/usr/bin/env python3`
+      # resolves to at test time. Installing it here guarantees they match.
+      - name: Install lxml for fixtures-tool
+        shell: bash
+        run: |
+          echo "python3 is: $(command -v python3) -- $(python3 --version)"
+          python3 -m pip install --break-system-packages lxml
+          python3 -c 'import lxml.etree; print("lxml", lxml.etree.__version__, "importable")'
+
       - name: Test
         shell: bash
         run: cmake --build build --target check
