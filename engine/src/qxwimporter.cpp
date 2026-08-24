@@ -203,8 +203,10 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
     {
         FixtureGroup *grp = sourceDoc->fixtureGroup(gid);
         if (grp != NULL)
+        {
             foreach (quint32 fxi, grp->fixtureList())
                 allFixtures.insert(fxi);
+        }
     }
 
     /*** 2. Clone fixtures. Doc::addFixture() auto-allocates a fresh ID
