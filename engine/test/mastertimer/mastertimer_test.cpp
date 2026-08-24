@@ -46,10 +46,23 @@ static bool untrustworthyClock()
     return qEnvironmentVariableIsSet("CI");
 }
 
+/* Most of these tests only need the timer to have ticked AT ALL before they
+   look at runningFunctions() -- a 60 ms wait is three nominal ticks, which a
+   shared runner can miss entirely. Give those waits room instead of skipping
+   the test, so CI still exercises the start/stop paths. Only a test that
+   asserts on the tick RATE (interval()) is unfixable this way and gets
+   skipped outright. */
+static int clockSlack()
+{
+    return untrustworthyClock() ? 8 : 1;
+}
+
+#define QWAIT_MS(ms) QTest::qWait(int(ms) * clockSlack())
+
 #define SKIP_IF_CLOCK_UNTRUSTWORTHY() \
     do { \
         if (untrustworthyClock()) \
-            QSKIP("wall-clock dependent; CI runners can't hold a 20 ms tick"); \
+            QSKIP("asserts on tick RATE; CI runners can't hold a 20 ms tick"); \
     } while (0)
 
 void MasterTimer_Test::initTestCase()
@@ -98,7 +111,7 @@ void MasterTimer_Test::startStop()
     MasterTimer* mt = m_doc->masterTimer();
 
     mt->start();
-    QTest::qWait(100);
+    QWAIT_MS(100);
 
     QVERIFY(mt->runningFunctions() == 0);
     QVERIFY(mt->m_functionList.size() == 0);
@@ -107,7 +120,7 @@ void MasterTimer_Test::startStop()
     QVERIFY(mt->m_stopAllFunctions == false);
 
     mt->stop();
-    QTest::qWait(100);
+    QWAIT_MS(100);
 
     QVERIFY(mt->runningFunctions() == 0);
     QVERIFY(mt->m_functionList.size() == 0);
@@ -135,9 +148,9 @@ void MasterTimer_Test::startStopFunction()
     mt->startFunction(&fs);
     QVERIFY(mt->runningFunctions() == 1);
 
-    QTest::qWait(100);
+    QWAIT_MS(100);
     fs.stop(FunctionParent::master());
-    QTest::qWait(100);
+    QWAIT_MS(100);
 
     QVERIFY(mt->runningFunctions() == 0);
 }
@@ -201,7 +214,7 @@ void MasterTimer_Test::interval()
     DMXSource_Stub dss;
 
     mt->start();
-    QTest::qWait(100);
+    QWAIT_MS(100);
 
     fs.start(mt, FunctionParent::master());
     mt->timerTick();
@@ -211,7 +224,7 @@ void MasterTimer_Test::interval()
     QVERIFY(mt->m_dmxSourceList.size() == 1);
 
     /* Wait for one second */
-    QTest::qWait(1000);
+    QWAIT_MS(1000);
 
     // Capture before any assertion that could fail: fs/dss are stack
     // locals, and a QVERIFY failure returns from this function immediately,
@@ -223,7 +236,7 @@ void MasterTimer_Test::interval()
     const int dssWrites = dss.m_writeCalls;
 
     fs.stop(FunctionParent::master());
-    QTest::qWait(1000);
+    QWAIT_MS(1000);
     QVERIFY(mt->runningFunctions() == 0);
 
     mt->unregisterDMXSource(&dss);
@@ -254,13 +267,13 @@ void MasterTimer_Test::functionInitiatedStop()
     QVERIFY(mt->runningFunctions() == 1);
 
     /* Wait a while so that the function starts running */
-    QTest::qWait(100);
+    QWAIT_MS(100);
 
     /* Stop the function after it has been running for a while */
     fs.stop(FunctionParent::master());
 
     /* Wait a while so that the function stops */
-    QTest::qWait(100);
+    QWAIT_MS(100);
 
     /* Verify that the function is really stopped and the correct
        pre&post handlers have been called. */
@@ -291,7 +304,7 @@ void MasterTimer_Test::runMultipleFunctions()
     QVERIFY(mt->runningFunctions() == 3);
 
     /* Wait a while so that the functions start running */
-    QTest::qWait(100);
+    QWAIT_MS(100);
 
     /* Stop the functions after they have been running for a while */
     fs1.stop(FunctionParent::master());
@@ -299,7 +312,7 @@ void MasterTimer_Test::runMultipleFunctions()
     fs3.stop(FunctionParent::master());
 
     /* Wait a while so that the functions stop */
-    QTest::qWait(100);
+    QWAIT_MS(100);
 
     QVERIFY(mt->runningFunctions() == 0);
 }
@@ -324,7 +337,7 @@ void MasterTimer_Test::stopAllFunctions()
     Function_Stub fs3(m_doc);
     fs3.start(mt, FunctionParent::master());
 
-    QTest::qWait(60);
+    QWAIT_MS(60);
 
     QVERIFY(mt->runningFunctions() == 3);
     QVERIFY(mt->m_dmxSourceList.size() == 2);
@@ -339,8 +352,6 @@ void MasterTimer_Test::stopAllFunctions()
 
 void MasterTimer_Test::stop()
 {
-    SKIP_IF_CLOCK_UNTRUSTWORTHY();
-
     MasterTimer* mt = m_doc->masterTimer();
     mt->start();
 
@@ -353,19 +364,17 @@ void MasterTimer_Test::stop()
     Function_Stub fs3(m_doc);
     fs3.start(mt, FunctionParent::master());
 
-    QTest::qWait(60);
+    QWAIT_MS(60);
     QVERIFY(mt->runningFunctions() == 3);
 
     mt->stop();
-    QTest::qWait(60);
+    QWAIT_MS(60);
     QVERIFY(mt->runningFunctions() == 0);
     // QVERIFY(mt->m_running == false);
 }
 
 void MasterTimer_Test::restart()
 {
-    SKIP_IF_CLOCK_UNTRUSTWORTHY();
-
     MasterTimer* mt = m_doc->masterTimer();
     mt->start();
 
@@ -378,11 +387,11 @@ void MasterTimer_Test::restart()
     Function_Stub fs3(m_doc);
     fs3.start(mt, FunctionParent::master());
 
-    QTest::qWait(60);
+    QWAIT_MS(60);
     QVERIFY(mt->runningFunctions() == 3);
 
     mt->stop();
-    QTest::qWait(60);
+    QWAIT_MS(60);
     QVERIFY(mt->runningFunctions() == 0);
     QVERIFY(mt->m_functionList.size() == 0);
     QVERIFY(mt->m_functionListMutex.tryLock() == true);
@@ -401,7 +410,7 @@ void MasterTimer_Test::restart()
     fs1.start(mt, FunctionParent::master());
     fs2.start(mt, FunctionParent::master());
     fs3.start(mt, FunctionParent::master());
-    QTest::qWait(60);
+    QWAIT_MS(60);
     QVERIFY(mt->runningFunctions() == 3);
 
     mt->stopAllFunctions();

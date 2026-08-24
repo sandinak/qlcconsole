@@ -413,7 +413,8 @@ void CollectionEditor::reorderFromDrop(QDropEvent* event)
 
     QList<quint32> dragged;
     QSet<quint32> draggedSet;
-    for (QTreeWidgetItem* it : qAsConst(sel))
+    const auto &const_sel = sel;
+    for (QTreeWidgetItem* it : const_sel)
     {
         const quint32 fid = it->data(0, PROP_ID).toUInt();
         dragged << fid;
@@ -439,7 +440,8 @@ void CollectionEditor::reorderFromDrop(QDropEvent* event)
     // Rebuild the order: pull the dragged ids out, then reinsert them as a block
     // at the drop point.
     QList<quint32> reduced;
-    for (quint32 fid : qAsConst(order))
+    const auto &const_order = order;
+    for (quint32 fid : const_order)
         if (!draggedSet.contains(fid))
             reduced << fid;
 
@@ -467,9 +469,10 @@ void CollectionEditor::reorderFromDrop(QDropEvent* event)
     // Apply the new order to the collection. The engine has no bulk reorder, so
     // clear the membership and re-add in the target order (same primitive the
     // Move Up/Down buttons use).
-    for (quint32 fid : qAsConst(order))
+    for (quint32 fid : const_order)
         m_collection->removeFunction(fid);
-    for (quint32 fid : qAsConst(newOrder))
+    const auto &const_newOrder = newOrder;
+    for (quint32 fid : const_newOrder)
         m_collection->addFunction(fid);
 
     updateFunctionList();

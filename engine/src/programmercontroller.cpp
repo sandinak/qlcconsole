@@ -443,7 +443,8 @@ quint32 ProgrammerController::routeProgrammerEdit(quint32 fid, quint32 ch, uchar
 
     // LTP: route to the first (newest) running Scene that already has
     // this (fid, ch) set.
-    for (Scene *scene : qAsConst(candidates))
+    const auto &const_candidates = candidates;
+    for (Scene *scene : const_candidates)
     {
         SceneValue probe(fid, ch);
         if (!scene->checkValue(probe))
@@ -3127,7 +3128,8 @@ quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGro
             }
             for (int i = runningScenes.size() - 1; i >= 0; --i)
                 collectActiveScenes(m_doc, m_doc->function(runningScenes.at(i)), candidates);
-            for (Scene *s : qAsConst(candidates))
+            const auto &const_candidates = candidates;
+            for (Scene *s : const_candidates)
             {
                 if (s->palettes().contains(focusedPaletteId))
                 {
