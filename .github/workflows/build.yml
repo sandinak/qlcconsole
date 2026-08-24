@@ -16,7 +16,11 @@ jobs:
     strategy:
       #fail-fast: false
       matrix:
-        task: [build-v4, build-v5, coverage-build-v4]
+        # No build-v5: it configures qmlui=ON, which this fork keeps OFF and
+        # never carried the rebrand through. It could only ever be red -- and
+        # with fail-fast on it was cancelling build-v4 and coverage-build-v4
+        # every run, so the jobs that actually matter never reported.
+        task: [build-v4, coverage-build-v4]
     env:
       CI_REPO_SLUG: ${{ github.repository }}
       CI_BRANCH: ${{ github.head_ref }}
@@ -72,15 +76,6 @@ jobs:
 
       - name: Set Qt ENV variables (v4)
         if: ${{ endsWith( matrix.task, 'v4') }}
-        run: |
-          echo "QT=${QT:-$(echo '${{matrix.task}}' | cut -d '-' -f 2)}" >> $GITHUB_ENV
-          echo "QT_INSTALL_DIR=/opt" >> $GITHUB_ENV
-          echo "QT_VERSION=6.8.1" >> $GITHUB_ENV
-          source $GITHUB_ENV && echo "QTDIR=${QT_INSTALL_DIR}/Qt/${QT_VERSION}/gcc_64" >> $GITHUB_ENV
-          source $GITHUB_ENV && echo "QMAKE=${QTDIR}/bin/qmake" >> $GITHUB_ENV
-
-      - name: Set Qt ENV variables (v5)
-        if: ${{ endsWith( matrix.task, 'v5') }}
         run: |
           echo "QT=${QT:-$(echo '${{matrix.task}}' | cut -d '-' -f 2)}" >> $GITHUB_ENV
           echo "QT_INSTALL_DIR=/opt" >> $GITHUB_ENV
@@ -150,11 +145,6 @@ jobs:
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake/" -Dappimage=ON -DINSTALL_ROOT=${INSTALL_ROOT} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
-      - name: Configure for v5 build
-        if: ${{ matrix.task == 'build-v5' }}
-        run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake/" -Dqmlui=ON -Dappimage=ON -DINSTALL_ROOT=${INSTALL_ROOT} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
       - name: Configure for coverage build
         if: ${{ matrix.task == 'coverage-build-v4' }}
         run: |
@@ -197,12 +187,6 @@ jobs:
         run: |
           chrpath -r "../lib" ${INSTALL_ROOT}/usr/bin/qlcplus
 
-      - name: Adapt qlcplus for AppImage (v5)
-        if: ${{ matrix.task == 'build-v5' }}
-        run: |
-          chrpath -r "../lib" ${INSTALL_ROOT}/usr/bin/qlcplus-qml
-          sed -i -e 's/Exec=qlcplus --open %f/Exec=qlcplus-qml/g' ${INSTALL_ROOT}/qlcplus.desktop
-
       - name: Store original install artifacts before stripping and AppImage
         # Activate for debugging
         if: ${{ false && ! startsWith( matrix.task, 'coverage') }}
@@ -215,12 +199,6 @@ jobs:
         if: ${{ matrix.task == 'build-v4' }}
         run: |
           strip -v ${INSTALL_ROOT}/usr/bin/qlcplus
-          find ${INSTALL_ROOT}/usr/lib/ -name libqlcplusengine.so.1.0.0 -exec strip -v {} \;
-
-      - name: Strip Binaries (v5)
-        if: ${{ matrix.task == 'build-v5' }}
-        run: |
-          strip -v ${INSTALL_ROOT}/usr/bin/qlcplus-qml
           find ${INSTALL_ROOT}/usr/lib/ -name libqlcplusengine.so.1.0.0 -exec strip -v {} \;
 
       - name: Delete unused files for AppImage
@@ -243,212 +221,12 @@ jobs:
           ./appimagetool-x86_64.AppImage -v ${INSTALL_ROOT}
           mv -v Q_Light_Controller_Plus_-_QLC+-x86_64.AppImage qlcplus-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
 
-      - name: Test Load AppImage
-        if: ${{ matrix.task == 'build-v5' }}
-        run: |
-          ./qlcplus-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage --platform offscreen --version
-
       - name: Store AppImage artifacts
         if: ${{ ! startsWith( matrix.task, 'coverage') }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.task }}-AppImage
           path: qlcplus-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
-
-  build-windows:
-    runs-on: windows-latest
-    name: QLCplus Windows ${{matrix.task}}
-    strategy:
-      fail-fast: false
-      matrix:
-        task: [build-v4, build-v5]
-    env:
-      CI_REPO_SLUG: ${{ github.repository }}
-      CI_BRANCH: ${{ github.head_ref }}
-      CI_PULL_REQUEST: ${{ github.event.number }}
-      QT_VERSION: "6.8.1"
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ github.job }}-${{ matrix.task }}
-
-      - name: Set ENV variables
-        shell: bash
-        run: |
-          echo "CI_BRANCH=$(echo $GITHUB_REF | cut -d '/' -f 3)" >> $GITHUB_ENV
-          echo "CI_SECURE_ENV_VARS=$(if [ -z '${{ secrets.something }}' ]; then echo 'false'; else echo 'true'; fi)" >> $GITHUB_ENV
-          echo "CI_EVENT_TYPE=$(if [ 'schedule' == '${{ github.event_name }}' ]; then echo 'cron'; else echo '${{ github.event_name }}'; fi)" >> $GITHUB_ENV
-          echo "NPROC=$(nproc)" >> $GITHUB_ENV
-          echo "TASK=$(echo '${{matrix.task}}' | cut -d '-' -f 2)" >> $GITHUB_ENV
-          echo "QT=${QT:-$(echo '${{matrix.task}}' | cut -d '-' -f 2)}" >> $GITHUB_ENV
-          echo "QTDIR=/d/a/qlcplus/qlcplus/qt/Qt/${{ env.QT_VERSION }}/mingw_64" >> $GITHUB_ENV
-          echo "BUILD_DATE=`date -u '+%Y%m%d'`" >> $GITHUB_ENV
-          echo "GIT_REV=`git rev-parse --short HEAD`" >> $GITHUB_ENV
-
-      - name: Set v4 ENV variables
-        shell: bash
-        if: ${{ matrix.task == 'build-v4' }}
-        run: |
-          echo "OUTFILE=`grep 'OutFile' platforms/windows/qlcplus4Qt6.nsi | cut -d'"' -f 2`" >> $GITHUB_ENV
-          echo "NSIS_SCRIPT=qlcplus4Qt6.nsi" >> $GITHUB_ENV
-
-      - name: Set v5 ENV variables
-        shell: bash
-        if: ${{ matrix.task == 'build-v5' }}
-        run: |
-          echo "OUTFILE=`grep 'OutFile' platforms/windows/qlcplus5Qt6.nsi | cut -d'"' -f 2`" >> $GITHUB_ENV
-          echo "NSIS_SCRIPT=qlcplus5Qt6.nsi" >> $GITHUB_ENV
-
-      - name: Print ENV vars
-        shell: bash
-        run: |
-          echo "CI_BRANCH: ${CI_BRANCH}"
-          echo "CI_PULL_REQUEST: ${CI_PULL_REQUEST}"
-          echo "CI_REPO_SLUG: ${CI_REPO_SLUG}"
-          echo "CI_EVENT_TYPE: ${CI_EVENT_TYPE}"
-          echo "CI_SECURE_ENV_VARS: ${CI_SECURE_ENV_VARS}"
-          echo "TASK: ${TASK}"
-          echo "QT: ${QT}"
-          echo "NPROC: ${NPROC}"
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ env.QT_VERSION }}
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_mingw'
-          dir: "${{ github.workspace }}/qt/"
-          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
-
-      - name: Update and install MSYS2 (64bit)
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: mingw64
-          release: true
-          update: false
-          path-type: inherit
-          install: >-
-            wget
-            unzip
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-gcc-libs
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-libmad
-            mingw-w64-x86_64-libsndfile
-            mingw-w64-x86_64-flac
-            mingw-w64-x86_64-fftw
-            mingw-w64-x86_64-libusb
-            mingw-w64-x86_64-python-lxml
-            mingw-w64-x86_64-nsis
-
-      - name: D2XX SDK (64 bit)
-        shell: msys2 {0}
-        run: |
-          mkdir -p /c/projects/D2XXSDK
-          wget https://qlcplus.org/misc/CDM-v2.12.36.20-WHQL-Certified.zip -O /c/projects/D2XXSDK/cdm.zip
-          cd /c/projects/D2XXSDK
-          unzip cdm.zip
-          cd amd64
-          gendef.exe - ftd2xx64.dll > ftd2xx.def
-          dlltool -k --input-def ftd2xx.def --dllname ftd2xx64.dll --output-lib libftd2xx.a
-
-      - name: Print program versions
-        shell: msys2 {0}
-        run: |
-          echo "pwd:"
-          pwd
-          echo "CXX:"
-          which ${CXX} || true
-          ${CXX} -v || true
-          echo "cmake:"
-          which cmake || true
-          cmake --version || true
-          pkg-config --modversion libusb-1.0
-          echo "ccache:"
-          ccache --version || true
-
-      - name: Fix build
-        shell: msys2 {0}
-        run: |
-          # force a release build
-          sed -i -e 's/Debug/Release/g' CMakeLists.txt
-          # disable Velleman plugin
-          sed -i -e 's/    add_subdirectory(velleman)/#    add_subdirectory(velleman)/g' plugins/CMakeLists.txt
-          # fix MSYS2 system path
-          sed -i -e 's/$ENV{SystemDrive}\/msys64/D:\/a\/_temp\/msys64/g' platforms/windows/CMakeLists.txt
-          # fix project path in NSIS script
-          sed -i -e 's/c\:\\projects/d:\\a\\qlcplus/g' platforms/windows/${{env.NSIS_SCRIPT}}
-
-      - name: Configure v4 build for Windows
-        shell: msys2 {0}
-        if: ${{ matrix.task == 'build-v4' }}
-        run: |
-          cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-      - name: Configure v5 build for Windows
-        shell: msys2 {0}
-        if: ${{ matrix.task == 'build-v5' }}
-        run: |
-          cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -Dqmlui=ON
-
-      - name: Build for Windows
-        shell: msys2 {0}
-        run: |
-          cd build
-          ninja
-
-      - name: Install on Windows
-        shell: msys2 {0}
-        run: |
-          cd build
-          ninja install
-
-      - name: Set APPVERSION
-        shell: msys2 {0}
-        run: |
-          APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
-          echo "APPVERSION=$APPVERSION" >> $GITHUB_ENV
-
-      - name: Run windeployqt for v4
-        shell: msys2 {0}
-        if: ${{ matrix.task == 'build-v4' }}
-        run: |-
-          ./translate.sh release ui
-          cp *.qm /c/qlcplus
-          cd /c/qlcplus
-          ${{ env.QTDIR }}/bin/windeployqt qlcplus.exe qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll plugins/dmxusb.dll
-
-      - name: Run windeployqt for v5
-        shell: msys2 {0}
-        if: ${{ matrix.task == 'build-v5' }}
-        run: |-
-          SRC_DIR=$PWD
-          ./translate.sh release qmlui
-          cp *.qm /c/qlcplus
-          cd /c/qlcplus
-          ${{ env.QTDIR }}/bin/windeployqt --qmldir $SRC_DIR/qmlui/qml qlcplus-qml.exe qlcplusengine.dll plugins/dmxusb.dll
-
-      - name: Build installation package
-        shell: msys2 {0}
-        run: |
-          cd /c/qlcplus
-          echo 'Creating package...'
-          makensis -X'SetCompressor /FINAL lzma' ${{env.NSIS_SCRIPT}}
-          mv /c/qlcplus/${{env.OUTFILE}} /d/a/qlcplus/qlcplus/${{matrix.task}}-${{env.OUTFILE}}
-
-      - name: Store executable artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: QLC+-${{matrix.task}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.exe
-          path: ${{matrix.task}}-${{env.OUTFILE}}
 
   build-macos:
     runs-on: macos-15
