@@ -506,6 +506,13 @@ jobs:
           # failure killed the job three steps before Configure. Relink
           # whatever python brew actually has, and never fail the build on it.
           brew link --overwrite --force python3 2>/dev/null || true
+          # resources/fixtures/scripts/check runs fixtures-tool.py --validate,
+          # which imports lxml. The Linux jobs install it ("Install python-lxml
+          # for fixtures-tool"); macOS never did, so the gate died with
+          # ModuleNotFoundError right after passing all 1712 fixture files.
+          # Install into whichever python3 is on PATH -- that's the interpreter
+          # the script's shebang picks -- rather than brew's, which may differ.
+          python3 -m pip install --break-system-packages lxml
     
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
