@@ -536,8 +536,15 @@ void VCXYPadFixture::writeDMX(qreal xmul, qreal ymul, QSharedPointer<GenericFade
     if (fader.isNull())
         return;
 
-    ushort x = floor(m_xRange * xmul + m_xOffset + 0.5);
-    ushort y = floor(m_yRange * ymul + m_yOffset + 0.5);
+    // Clamp BEFORE narrowing. xmul/ymul come from a pad position and are not
+    // guaranteed to sit inside [0, 1] -- and converting an out-of-range or
+    // negative double to ushort is undefined behaviour, not a wrap. Debug
+    // builds happened to wrap; -O2 does not, so a value past full scale could
+    // land anywhere, including 0 -- a fixture snapping to home instead of
+    // holding at its limit. Clamping is also the right behaviour on its own
+    // terms: a pad pushed past its end should stay at the end.
+    const ushort x = ushort(qBound(0.0, floor(m_xRange * xmul + m_xOffset + 0.5), 65535.0));
+    const ushort y = ushort(qBound(0.0, floor(m_yRange * ymul + m_yOffset + 0.5), 65535.0));
 
     FadeChannel *fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_xMSB);
     updateChannel(fc, uchar(x >> 8));

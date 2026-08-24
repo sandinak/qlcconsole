@@ -30,6 +30,7 @@
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
 #include "doc.h"
+#include "qlceventpos.h"
 
 StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent)
     : QWidget(parent)
@@ -1316,5 +1317,5 @@ void StructureStudioView::dropEvent(QDropEvent *e)
     while (!s.atEnd()) { quint32 fid; s >> fid; if (fid) fids << fid; }
     if (fids.isEmpty()) return;
     e->acceptProposedAction();
-    emit fixturesDropped(fids, e->posF());
+    emit fixturesDropped(fids, qlcEventPosF(e));
 }

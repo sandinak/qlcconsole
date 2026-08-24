@@ -29,6 +29,7 @@
 #include "fixture.h"
 #include "apputil.h"
 #include "doc.h"
+#include "qlceventpos.h"
 
 /*****************************************************************************
  * Initialization
@@ -117,7 +118,7 @@ void FixtureConsole::mouseDoubleClickEvent(QMouseEvent *ev)
     // Emit only when the click is in the title/header area of the QGroupBox.
     // The header is typically the top ~20px; use fontMetrics as an approximation.
     const int titleHeight = fontMetrics().height() + 8;
-    if (ev->y() <= titleHeight)
+    if (qlcEventPos(ev).y() <= titleHeight)
         emit fixtureDoubleClicked(m_fixture);
     else
         QGroupBox::mouseDoubleClickEvent(ev);

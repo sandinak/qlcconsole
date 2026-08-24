@@ -46,6 +46,7 @@ static const char *SM_FUNCTION_MIME = "application/x-qlcplus-functions";
 
 #include "multitrackview.h"
 #include "track.h"
+#include "qlceventpos.h"
 
 #define VIEW_DEFAULT_WIDTH  2000
 #define VIEW_DEFAULT_HEIGHT 600
@@ -1034,7 +1035,7 @@ void MultiTrackView::dropEvent(QDropEvent *event)
         return;
     }
 
-    QPointF scenePos = mapToScene(event->pos());
+    QPointF scenePos = mapToScene(qlcEventPos(event));
 
     // A drop to the left of the tracks column is not on the timeline.
     if (scenePos.x() < TRACK_WIDTH)

@@ -66,6 +66,7 @@
 #include "inputpatch.h"
 #include "inputoutputmap.h"
 #include "qlcioplugin.h"
+#include "qlceventpos.h"
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
 static const qreal XY_MAX = 256.0;
@@ -138,7 +139,7 @@ protected:
     void mousePressEvent(QMouseEvent *ev) override
     {
         if (ev->button() != Qt::LeftButton) { QLabel::mousePressEvent(ev); return; }
-        showPickMenu(ev->globalPos());
+        showPickMenu(qlcEventGlobalPos(ev));
     }
 
     void dragEnterEvent(QDragEnterEvent *ev) override

@@ -43,6 +43,7 @@
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
+#include "qlceventpos.h"
 
 // Target kinds, stored at Qt::UserRole + 1 on target items.
 enum { TargetGroup = 0, TargetFixture = 1, TargetTypeFolder = 2 };
@@ -652,7 +653,7 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
     // colours/dimmers UNDER that effect (feed it) instead of appending them.
     quint32 dropEffectPid = QLCPalette::invalidId();
     {
-        const QPoint lp = m_lookList->viewport()->mapFrom(this, event->pos());
+        const QPoint lp = m_lookList->viewport()->mapFrom(this, qlcEventPos(event));
         QTreeWidgetItem *it = m_lookList->itemAt(lp);
         while (it != NULL)
         {

@@ -58,6 +58,7 @@
 #include "function.h"
 #include "scene.h"
 #include "doc.h"
+#include "qlceventpos.h"
 
 #define KDefaultVoltageKey    "power/defaultVoltage"
 #define KDefaultDerateKey     "power/deratePercent"
@@ -305,7 +306,7 @@ void PowerCircuitTree::dragMoveEvent(QDragMoveEvent *event)
 {
     int s, c;
     if (event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)
-            && circuitIndicesForItem(itemAt(event->pos()), s, c))
+            && circuitIndicesForItem(itemAt(qlcEventPos(event)), s, c))
         event->acceptProposedAction();
     else
         event->ignore();
@@ -315,7 +316,7 @@ void PowerCircuitTree::dropEvent(QDropEvent *event)
 {
     int s, c;
     if (event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE) == false
-            || circuitIndicesForItem(itemAt(event->pos()), s, c) == false)
+            || circuitIndicesForItem(itemAt(qlcEventPos(event)), s, c) == false)
     {
         event->ignore();
         return;
