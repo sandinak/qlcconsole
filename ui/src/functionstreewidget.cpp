@@ -928,7 +928,8 @@ void FunctionsTreeWidget::mousePressEvent(QMouseEvent *event)
     {
         const bool wasBlocked = blockSignals(true);
         clearSelection();
-        for (QTreeWidgetItem *it : qAsConst(keepSelection))
+        const auto &const_keepSelection = keepSelection;
+        for (QTreeWidgetItem *it : const_keepSelection)
             it->setSelected(true);
         if (rightClicked != NULL)
             setCurrentItem(rightClicked);
