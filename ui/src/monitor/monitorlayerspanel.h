@@ -36,6 +36,7 @@
 #include <QDropEvent>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
+#include "qlceventpos.h"
 
 class QTreeWidgetItem;
 class QToolButton;
@@ -76,7 +77,7 @@ protected:
     void dropEvent(QDropEvent *e) override
     {
         // Do the model change via the signal, but DON'T let the base move rows.
-        emit itemsDropped(selectedItems(), itemAt(e->pos()));
+        emit itemsDropped(selectedItems(), itemAt(qlcEventPos(e)));
         e->setDropAction(Qt::CopyAction);   // never a Move → Qt won't remove rows
         e->accept();
     }

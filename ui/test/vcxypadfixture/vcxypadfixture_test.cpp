@@ -762,8 +762,8 @@ void VCXYPadFixture_Test::write8bitNoReverse()
     {
         xy.writeDMX(i, 1.0 - i, fader, ua[0]);
 
-        ushort x = floor((qreal(USHRT_MAX) * i) + 0.5);
-        ushort y = floor((qreal(USHRT_MAX) * (1.0 - i)) + 0.5);
+        ushort x = ushort(qBound(0.0, floor((qreal(USHRT_MAX) * i) + 0.5), 65535.0));
+        ushort y = ushort(qBound(0.0, floor((qreal(USHRT_MAX) * (1.0 - i)) + 0.5), 65535.0));
 
         ua[0]->processFaders();
         QCOMPARE(ua[0]->preGMValues()[0], char(x >> 8));
@@ -798,8 +798,8 @@ void VCXYPadFixture_Test::write8bitReverse()
     {
         xy.writeDMX(i, 1.0 - i, fader, ua[0]);
 
-        ushort x = floor((qreal(USHRT_MAX) * (1.0 - i)) + 0.5);
-        ushort y = floor((qreal(USHRT_MAX) * i) + 0.5);
+        ushort x = ushort(qBound(0.0, floor((qreal(USHRT_MAX) * (1.0 - i)) + 0.5), 65535.0));
+        ushort y = ushort(qBound(0.0, floor((qreal(USHRT_MAX) * i) + 0.5), 65535.0));
 
         ua[0]->processFaders();
         QCOMPARE(ua[0]->preGMValues()[0], char(x >> 8));
@@ -834,8 +834,8 @@ void VCXYPadFixture_Test::write16bitNoReverse()
     {
         xy.writeDMX(i, 1.0 - i, fader, ua[0]);
 
-        ushort x = floor((qreal(USHRT_MAX) * i) + 0.5);
-        ushort y = floor((qreal(USHRT_MAX) * (1.0 - i)) + 0.5);
+        ushort x = ushort(qBound(0.0, floor((qreal(USHRT_MAX) * i) + 0.5), 65535.0));
+        ushort y = ushort(qBound(0.0, floor((qreal(USHRT_MAX) * (1.0 - i)) + 0.5), 65535.0));
 
         ua[0]->processFaders();
         QCOMPARE(ua[0]->preGMValues()[0], char(x >> 8));
@@ -878,8 +878,8 @@ void VCXYPadFixture_Test::write16bitReverse()
         xmul = 1 - xmul;
         ymul = 1 - ymul;
 
-        ushort x = floor((qreal(USHRT_MAX) * xmul) + 0.5);
-        ushort y = floor((qreal(USHRT_MAX) * ymul) + 0.5);
+        ushort x = ushort(qBound(0.0, floor((qreal(USHRT_MAX) * xmul) + 0.5), 65535.0));
+        ushort y = ushort(qBound(0.0, floor((qreal(USHRT_MAX) * ymul) + 0.5), 65535.0));
 
         ua[0]->processFaders();
         QCOMPARE(ua[0]->preGMValues()[0], char(x >> 8));

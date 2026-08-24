@@ -134,6 +134,7 @@
 
 #include <QTimer>
 #include "qlcfile.h"
+#include "qlceventpos.h"
 
 #define SETTINGS_VSPLITTER "monitor/vsplitter2"
 #define SETTINGS_LAYERS_PANEL "monitor/layerspanel3"
@@ -5044,8 +5045,8 @@ protected:
             if (handleRect(i).contains(ev->pos()))
             {
                 m_dragIdx   = i;
-                m_anchorPx  = m_vertical ? ev->y() : ev->x();
-                m_anchorPxX = ev->x();
+                m_anchorPx  = m_vertical ? qlcEventPos(ev).y() : qlcEventPos(ev).x();
+                m_anchorPxX = qlcEventPos(ev).x();
                 m_anchorOff = m_slots[i].offset;
                 m_anchorCross = m_slots[i].barCross;
                 setCursor(Qt::ClosedHandCursor);
@@ -5071,13 +5072,13 @@ protected:
             const QRect bar = vBarRect();
             if (bar.height() > 0)
             {
-                float dOff = -float(ev->y() - m_anchorPx) / float(bar.height()) * m_len;
+                float dOff = -float(qlcEventPos(ev).y() - m_anchorPx) / float(bar.height()) * m_len;
                 m_slots[m_dragIdx].offset = qBound(0.0f, m_anchorOff + dOff, m_len);
             }
             const qreal sc = hScalePx();
             if (sc > 0.0)
             {
-                float c = m_anchorCross + float(ev->x() - m_anchorPxX) / float(sc);
+                float c = m_anchorCross + float(qlcEventPos(ev).x() - m_anchorPxX) / float(sc);
                 if (qAbs(c * sc) < 9.0)   // bump-snap to centred on the truss
                     c = 0.0f;
                 m_slots[m_dragIdx].barCross = c;
@@ -5090,14 +5091,14 @@ protected:
             const QRect bar = vBarRect();
             if (bar.height() <= 0) return;
             // Moving up (smaller y) increases offset for a tower
-            float delta = -float(ev->y() - m_anchorPx) / float(bar.height()) * m_len;
+            float delta = -float(qlcEventPos(ev).y() - m_anchorPx) / float(bar.height()) * m_len;
             m_slots[m_dragIdx].offset = qBound(0.0f, m_anchorOff + delta, m_len);
         }
         else
         {
             const QRect bar = hBarRect();
             if (bar.width() <= 0) return;
-            float delta = float(ev->x() - m_anchorPx) / float(bar.width()) * m_len;
+            float delta = float(qlcEventPos(ev).x() - m_anchorPx) / float(bar.width()) * m_len;
             m_slots[m_dragIdx].offset = qBound(0.0f, m_anchorOff + delta, m_len);
         }
         update();

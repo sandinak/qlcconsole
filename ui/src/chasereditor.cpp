@@ -45,6 +45,7 @@
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
+#include "qlceventpos.h"
 
 #define SETTINGS_GEOMETRY "chasereditor/geometry"
 #define PROP_STEP Qt::UserRole
@@ -1232,7 +1233,7 @@ void ChaserEditor::handleDropEvent(QDropEvent *event)
     // Insertion point: position of the item under the drop, or end of
     // list if dropped on empty space.
     int insertionPoint = m_tree->topLevelItemCount();
-    if (QTreeWidgetItem *target = m_tree->itemAt(event->pos()))
+    if (QTreeWidgetItem *target = m_tree->itemAt(qlcEventPos(event)))
         insertionPoint = m_tree->indexOfTopLevelItem(target) + 1;
 
     bool addedAny = false;
