@@ -173,8 +173,8 @@ jobs:
         if: ${{ ! startsWith( matrix.task, 'coverage') }}
         run: |
           cmake --build build --target install
-          cp -v resources/icons/svg/qlcplus.svg ${INSTALL_ROOT}
-          cp -v platforms/linux/qlcplus.desktop ${INSTALL_ROOT}
+          cp -v resources/icons/svg/qlcconsole.svg ${INSTALL_ROOT}
+          cp -v platforms/linux/qlcconsole.desktop ${INSTALL_ROOT}
 
       - name: Set APPVERSION
         if: ${{ ! startsWith( matrix.task, 'coverage') }}
@@ -182,10 +182,10 @@ jobs:
           APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
           echo "APPVERSION=$APPVERSION" >> $GITHUB_ENV
 
-      - name: Adapt qlcplus for AppImage (v4)
+      - name: Adapt qlcconsole for AppImage (v4)
         if: ${{ matrix.task == 'build-v4' }}
         run: |
-          chrpath -r "../lib" ${INSTALL_ROOT}/usr/bin/qlcplus
+          chrpath -r "../lib" ${INSTALL_ROOT}/usr/bin/qlcconsole
 
       - name: Store original install artifacts before stripping and AppImage
         # Activate for debugging
@@ -198,7 +198,7 @@ jobs:
       - name: Strip Binaries (v4)
         if: ${{ matrix.task == 'build-v4' }}
         run: |
-          strip -v ${INSTALL_ROOT}/usr/bin/qlcplus
+          strip -v ${INSTALL_ROOT}/usr/bin/qlcconsole
           find ${INSTALL_ROOT}/usr/lib/ -name libqlcplusengine.so.1.0.0 -exec strip -v {} \;
 
       - name: Delete unused files for AppImage
@@ -219,14 +219,14 @@ jobs:
           wget -c https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O ./appimagetool-x86_64.AppImage
           chmod a+x ./appimagetool-x86_64.AppImage
           ./appimagetool-x86_64.AppImage -v ${INSTALL_ROOT}
-          mv -v Q_Light_Controller_Plus_-_QLC+-x86_64.AppImage qlcplus-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
+          mv -v *-x86_64.AppImage qlcconsole-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
 
       - name: Store AppImage artifacts
         if: ${{ ! startsWith( matrix.task, 'coverage') }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.task }}-AppImage
-          path: qlcplus-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
+          path: qlcconsole-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
 
   build-macos:
     runs-on: macos-15
