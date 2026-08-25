@@ -33,6 +33,16 @@ private slots:
     /** Palette order is precedence, so it must survive the round trip. */
     void paletteOrderPreserved();
 
+    /** A fixture's 2D-map placement comes across with it. */
+    void mapPlacementFollowsFixture();
+    /** Layer/group ids belong to id spaces we don't import, so they must be
+        reset rather than left dangling. */
+    void mapLayerAndGroupAreReset();
+    /** A fixture patched to a power circuit arrives patched. */
+    void powerPatchFollowsFixture();
+    /** Importing into a workspace that already has the distro reuses it. */
+    void powerSourceMatchedByName();
+
 private:
     Doc *m_source;
     Doc *m_target;

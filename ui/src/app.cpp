@@ -1751,6 +1751,15 @@ void App::slotFileImport()
                         .arg(result.fixturesImported).arg(result.fixtureGroupsImported).arg(result.functionsImported);
     if (result.palettesImported > 0)
         summary += tr("\n%1 palette(s) came along with the imported scenes.").arg(result.palettesImported);
+    if (result.fixturesPlaced > 0)
+        summary += tr("\n%1 fixture(s) kept their position on the 2D map (layer/group reset).")
+                     .arg(result.fixturesPlaced);
+    if (result.fixturesPowerPatched > 0)
+        summary += tr("\n%1 fixture(s) were re-patched for power%2.")
+                     .arg(result.fixturesPowerPatched)
+                     .arg(result.powerSourcesCreated > 0
+                            ? tr(" (%1 new source(s) created)").arg(result.powerSourcesCreated)
+                            : QString());
     if (result.idsRemapped > 0)
         summary += tr("\n%1 ID(s) were remapped due to conflicts with the current workspace.").arg(result.idsRemapped);
     if (result.fixturesRelocated > 0)

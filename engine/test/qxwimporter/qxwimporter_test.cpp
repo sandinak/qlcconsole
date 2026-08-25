@@ -13,6 +13,9 @@
 #include "scene.h"
 #include "qlcpalette.h"
 #include "qxwimporter.h"
+#include "monitorproperties.h"
+#include "powerdistribution.h"
+#include "fixture.h"
 #undef protected
 #undef private
 
@@ -146,6 +149,113 @@ void QxwImporter_Test::paletteOrderPreserved()
     foreach (quint32 pid, imported->palettes())
         names << m_target->palette(pid)->name();
     QCOMPARE(names, QStringList() << "B" << "A" << "C");
+}
+
+
+/** A plain 2-channel dimmer -- no fixture definition needed. */
+static quint32 makeFixture(Doc *doc, int address)
+{
+    Fixture *fxi = new Fixture(doc);
+    fxi->setChannels(2);
+    fxi->setAddress(address);
+    doc->addFixture(fxi);
+    return fxi->id();
+}
+
+void QxwImporter_Test::mapPlacementFollowsFixture()
+{
+    const quint32 fid = makeFixture(m_source, 0);
+    PreviewItem item;
+    item.m_position = QVector3D(1200, 0, 3400);
+    item.m_rotation = QVector3D(0, 90, 0);
+    item.m_color = QColor(Qt::magenta);
+    m_source->monitorProperties()->setFixtureItem(fid, 0, 0, item);
+
+    QxwImportResult r = QxwImporter::import(m_source, m_target,
+                                            QList<quint32>() << fid,
+                                            QList<quint32>(), QList<quint32>());
+    QCOMPARE(r.fixturesImported, 1);
+    QCOMPARE(r.fixturesPlaced, 1);
+
+    QVERIFY(m_target->monitorProperties()->containsFixture(fid));
+    PreviewItem got = m_target->monitorProperties()->fixtureItem(fid, 0, 0);
+    QCOMPARE(got.m_position, QVector3D(1200, 0, 3400));
+    QCOMPARE(got.m_rotation, QVector3D(0, 90, 0));
+    QCOMPARE(got.m_color, QColor(Qt::magenta));
+}
+
+void QxwImporter_Test::mapLayerAndGroupAreReset()
+{
+    const quint32 fid = makeFixture(m_source, 0);
+    PreviewItem item;
+    item.m_position = QVector3D(500, 0, 500);
+    item.m_layerId = 9;
+    item.m_groupId = 42;
+    m_source->monitorProperties()->setFixtureItem(fid, 0, 0, item);
+
+    QxwImporter::import(m_source, m_target, QList<quint32>() << fid,
+                        QList<quint32>(), QList<quint32>());
+
+    PreviewItem got = m_target->monitorProperties()->fixtureItem(fid, 0, 0);
+    // Position survives; the references into id spaces we did not import
+    // do not, or ensureGroup() would invent a phantom group for id 42.
+    QCOMPARE(got.m_position, QVector3D(500, 0, 500));
+    QCOMPARE(got.m_layerId, quint32(0));
+    QCOMPARE(got.m_groupId, quint32(0));
+}
+
+void QxwImporter_Test::powerPatchFollowsFixture()
+{
+    const quint32 fid = makeFixture(m_source, 0);
+    PowerSource src;
+    src.name = "Distro A";
+    PowerCircuit cir;
+    cir.name = "C1";
+    cir.ratedAmps = 20;
+    src.circuits.append(cir);
+    m_source->powerDistribution()->sources().append(src);
+    m_source->powerDistribution()->assignFixture(fid, 0, 0);
+
+    QxwImportResult r = QxwImporter::import(m_source, m_target,
+                                            QList<quint32>() << fid,
+                                            QList<quint32>(), QList<quint32>());
+    QCOMPARE(r.fixturesPowerPatched, 1);
+    QCOMPARE(r.powerSourcesCreated, 1);
+
+    const QList<PowerSource> &dst = m_target->powerDistribution()->sources();
+    QCOMPARE(dst.size(), 1);
+    QCOMPARE(dst.at(0).name, QString("Distro A"));
+    QCOMPARE(dst.at(0).circuits.size(), 1);
+    QCOMPARE(dst.at(0).circuits.at(0).name, QString("C1"));
+    QVERIFY(dst.at(0).circuits.at(0).fixtures.contains(fid));
+}
+
+void QxwImporter_Test::powerSourceMatchedByName()
+{
+    const quint32 fid = makeFixture(m_source, 0);
+    PowerSource src;
+    src.name = "Distro A";
+    PowerCircuit cir; cir.name = "C1";
+    src.circuits.append(cir);
+    m_source->powerDistribution()->sources().append(src);
+    m_source->powerDistribution()->assignFixture(fid, 0, 0);
+
+    // Target already owns a distro of the same name.
+    PowerSource existing;
+    existing.name = "Distro A";
+    PowerCircuit ec; ec.name = "C1";
+    existing.circuits.append(ec);
+    m_target->powerDistribution()->sources().append(existing);
+
+    QxwImportResult r = QxwImporter::import(m_source, m_target,
+                                            QList<quint32>() << fid,
+                                            QList<quint32>(), QList<quint32>());
+    QCOMPARE(r.fixturesPowerPatched, 1);
+    // Reused, not duplicated.
+    QCOMPARE(r.powerSourcesCreated, 0);
+    const QList<PowerSource> &dst = m_target->powerDistribution()->sources();
+    QCOMPARE(dst.size(), 1);
+    QVERIFY(dst.at(0).circuits.at(0).fixtures.contains(fid));
 }
 
 QTEST_APPLESS_MAIN(QxwImporter_Test)
