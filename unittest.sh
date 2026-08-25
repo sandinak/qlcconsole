@@ -22,8 +22,16 @@ cp -r $SOURCE_DIR/resources/inputprofiles $DEST_DIR/resources
 cp -r $SOURCE_DIR/resources/rgbscripts $DEST_DIR/resources
 cp -r $SOURCE_DIR/resources/schemas $DEST_DIR/resources
 
-# Find all files necessary for tests recursively in the source directory and copy to destination directory
-for file in $(find $SOURCE_DIR -path $DEST_DIR -prune -o \( -name "test.sh" -o -name "*.xml*" \)); do
+# Find all files necessary for tests recursively in the source directory and copy
+# to destination directory.
+#
+# Prune EVERY build directory, not just $DEST_DIR. The old version pruned only
+# the destination, so a second build dir alongside it (a Qt5/Qt6 pair, a Release
+# tree, anything) got walked and copied: with a handful of them present this
+# find matched 462292 files instead of 124, and the copy loop below -- one
+# mkdir -p and one cp per file -- ground for over fifteen minutes before anyone
+# noticed it wasn't hung. .gitignore already treats build* as build output.
+for file in $(find $SOURCE_DIR \( -path "$SOURCE_DIR/build*" -o -path "$DEST_DIR" \) -prune -o \( -name "test.sh" -o -name "*.xml*" \) -print); do
 
     # Get the directory of the file (excluding the "./" prefix)
     dir=$(dirname ${file#./})

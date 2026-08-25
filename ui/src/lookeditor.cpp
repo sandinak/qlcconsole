@@ -715,8 +715,10 @@ void LookEditor::setPalette(quint32 paletteId)
         const QLCChannel *ich = representativeChannel(QLCChannel::Intensity);
         QList<CapabilityBar::Region> regions;
         if (ich != NULL)
+        {
             foreach (QLCCapability *cap, ich->capabilities())
                 regions.append({ int(cap->min()), int(cap->max()), cap->name() });
+        }
         m_dimmerBar->setRegions(regions);
         m_dimmerBar->setValue(p->intValue1());
         m_dimmerValue->setText(QString::number(p->intValue1()));
@@ -914,8 +916,10 @@ bool LookEditor::targetsHaveChannelGroup(int group) const
     {
         FixtureGroup *g = m_doc->fixtureGroup(gid);
         if (g != NULL)
+        {
             foreach (quint32 fid, g->fixtureList())
                 fixtures.insert(fid);
+        }
     }
 
     foreach (quint32 fid, fixtures)
@@ -1140,8 +1144,10 @@ bool LookEditor::targetsHaveColour(int primaryColour) const
     {
         FixtureGroup *g = m_doc->fixtureGroup(gid);
         if (g != NULL)
+        {
             foreach (quint32 fid, g->fixtureList())
                 fixtures.insert(fid);
+        }
     }
 
     foreach (quint32 fid, fixtures)
@@ -1295,8 +1301,10 @@ const QLCChannel *LookEditor::representativeChannel(int group) const
     {
         FixtureGroup *g = m_doc->fixtureGroup(gid);
         if (g != NULL)
+        {
             foreach (quint32 fid, g->fixtureList())
                 fixtures.insert(fid);
+        }
     }
 
     foreach (quint32 fid, fixtures)

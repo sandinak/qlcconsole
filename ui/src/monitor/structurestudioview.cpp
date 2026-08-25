@@ -260,8 +260,10 @@ QList<quint32> StructureStudioView::mountedFixtures() const
 
     QList<quint32> pipeIds;
     if (m_kind == StandKind)
+    {
         foreach (const Pipe *p, standPipes())
             pipeIds << p->id();
+    }
     else if (m_kind == PipeKind)
     {
         pipeIds << m_id;   // this pipe + any crossbars hung on it

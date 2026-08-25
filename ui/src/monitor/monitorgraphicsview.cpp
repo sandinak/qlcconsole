@@ -1210,8 +1210,6 @@ void MonitorGraphicsView::openStudioGroupEditor(quint32 groupId)
 
 int MonitorGraphicsView::ungroupSelectedItems()
 {
-    MonitorProperties *props = m_doc->monitorProperties();
-
     // Dissolve the OUTERMOST group of every selected grouped item by one level:
     // its direct child groups and items are promoted to the group's parent
     // (0 = directly under the layer for a top-level group).
@@ -2667,8 +2665,10 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
         const QPointF snapped = snapScenePos(item->pos());
         const QPointF delta = snapped - item->pos();
         if (!delta.isNull())
+        {
             foreach (PlatformItem *pi, moved)
                 pi->setPos(pi->pos() + delta);
+        }
     }
 
     MonitorProperties *mprops = m_doc->monitorProperties();
@@ -2803,8 +2803,10 @@ void MonitorGraphicsView::slotPowerSourceMoved(PowerSourceItem *item)
         const QPointF snapped = snapScenePos(item->pos());
         const QPointF delta = snapped - item->pos();
         if (!delta.isNull())
+        {
             foreach (PowerSourceItem *ps, moved)
                 ps->setPos(ps->pos() + delta);
+        }
     }
 
     bool any = false;
@@ -2998,8 +3000,10 @@ void MonitorGraphicsView::updateAimLines()
     {
         FixtureGroup *fg = m_doc->fixtureGroup(gid);
         if (fg)
+        {
             foreach (quint32 fid, fg->fixtureList())
                 candidates.insert(fid);
+        }
     }
 
     if (candidates.isEmpty())
@@ -3011,6 +3015,7 @@ void MonitorGraphicsView::updateAimLines()
     foreach (TargetItem *ti, m_targetItems)
         if (ti->isSelected()) { anySelected = true; break; }
 
+        {
     foreach (TargetItem *ti, m_targetItems)
     {
         if (anySelected && !ti->isSelected())
@@ -3066,6 +3071,7 @@ void MonitorGraphicsView::updateAimLines()
             }
         }
     }
+        }
 
     // Force a repaint of the affected region: when this runs from a target
     // REMOVAL (lines just deleted, none re-added) the scene didn't always
@@ -4338,8 +4344,10 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         const QPointF snapped = snapScenePos(item->pos());
         const QPointF delta = snapped - item->pos();
         if (delta.isNull() == false)
+        {
             foreach (MonitorFixtureItem *mfi, movedItems)
                 mfi->setPos(mfi->pos() + delta);
+        }
     }
 
     foreach (MonitorFixtureItem *mfi, movedItems)

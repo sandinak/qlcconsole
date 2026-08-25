@@ -330,10 +330,12 @@ void VCShowControl::slotPoll()
             {
                 Chaser *dc = NULL;
                 if (show != NULL)
+                {
                     foreach (Track *t, show->tracks())
                         foreach (ShowFunction *sf, t->showFunctions())
                             if ((dc = qobject_cast<Chaser *>(m_doc->function(sf->functionID()))) != NULL && dc->isRunning())
                                 break;
+                }
                 QTextStream(&f) << "[WIDGET] id=" << m_showID
                     << " showValid=" << (show != NULL)
                     << " running=" << (show && show->isRunning())

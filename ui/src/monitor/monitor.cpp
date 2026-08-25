@@ -1997,7 +1997,9 @@ void Monitor::slotRemoveSelected()
     if (choice == DeleteCancel)
         return;
     if (choice == DeleteWithFixtures)
+    {
         foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
+    }
 
     foreach (quint32 id, trussIds)  m_props->removeTruss(id);
     foreach (quint32 id, platIds)   m_props->removePlatform(id);
@@ -2725,8 +2727,10 @@ quint32 Monitor::structureBoomId(int kind, quint32 id) const
 {
     if (kind == 4) return id;
     if (kind == 0)
+    {
         foreach (Pipe *p, m_props->pipes())
             if (p->standId() == id) return p->id();
+    }
     return Pipe::invalidId();
 }
 
@@ -3185,7 +3189,9 @@ void Monitor::slotTrussRemoveRequested(quint32 tid)
     if (choice == DeleteCancel)
         return;
     if (choice == DeleteWithFixtures)
+    {
         foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
+    }
     m_props->removeTruss(tid);
     m_graphicsView->updateTrusses();
     m_graphicsView->refreshFixtureBindings();   // ex-fixtures are no longer bound
@@ -3276,7 +3282,9 @@ void Monitor::slotPlatformRemoveRequested(quint32 pid)
     if (choice == DeleteCancel)
         return;
     if (choice == DeleteWithFixtures)
+    {
         foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
+    }
     m_props->removePlatform(pid);
     m_graphicsView->updatePlatforms();
     m_graphicsView->refreshRiserFixtures();
@@ -3295,7 +3303,9 @@ void Monitor::slotPipeRemoveRequested(quint32 pid)
     if (choice == DeleteCancel)
         return;
     if (choice == DeleteWithFixtures)
+    {
         foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
+    }
     m_props->removePipe(pid);
     m_graphicsView->updatePlatforms();          // pipes/stands/towers live here
     m_graphicsView->refreshFixtureBindings();
@@ -3332,7 +3342,9 @@ void Monitor::slotTowerRemoveRequested(quint32 tid)
     if (choice == DeleteCancel)
         return;
     if (choice == DeleteWithFixtures)
+    {
         foreach (quint32 fid, fids) m_graphicsView->removeFixture(fid);
+    }
     m_props->removeTower(tid);
     m_graphicsView->updatePlatforms();
     m_graphicsView->refreshFixtureBindings();
@@ -6520,11 +6532,13 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
             for (const SceneValue &sv : sc->values())
                 if (sv.fxi == fxId_dlg) { sc->resetRuntime(); goto nextScene_dlg; }
             if (sc->fixtures().contains(fxId_dlg)) { sc->resetRuntime(); goto nextScene_dlg; }
+            {
             foreach (quint32 gid, sc->fixtureGroups())
             {
                 FixtureGroup *grp = m_doc->fixtureGroup(gid);
                 if (grp && grp->fixtureList().contains(fxId_dlg))
                 { sc->resetRuntime(); goto nextScene_dlg; }
+            }
             }
             nextScene_dlg:;
         }
@@ -6857,11 +6871,13 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         // Fixed fixture targets (no baked values but fixture-level membership)
         if (sc->fixtures().contains(fxId)) { sc->resetRuntime(); goto nextScene; }
         // Dynamic group targets
+        {
         foreach (quint32 gid, sc->fixtureGroups())
         {
             FixtureGroup *grp = m_doc->fixtureGroup(gid);
             if (grp && grp->fixtureList().contains(fxId))
             { sc->resetRuntime(); goto nextScene; }
+        }
         }
         nextScene:;
     }

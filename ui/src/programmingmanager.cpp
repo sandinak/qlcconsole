@@ -938,8 +938,10 @@ bool ProgrammingManager::containerHas(quint32 containerId, quint32 fid,
     if (Collection *col = qobject_cast<Collection*>(c))
         members = col->functions();
     else if (Chaser *ch = qobject_cast<Chaser*>(c))
+    {
         foreach (const ChaserStep &s, ch->steps())
             members << s.fid;
+    }
     else
         return false;
 

@@ -473,9 +473,11 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
     QString anchorName;
     QColor  anchorColor;
     if (!anchorKind.isEmpty())
+    {
         foreach (const ItemDesc &d, items)
             if (d.groupId == groupId && d.kind == anchorKind && d.id == anchorId)
             { anchorName = d.name; anchorColor = d.color; break; }
+    }
 
     // Anchor only applies if the anchor item is actually present in the group.
     const bool anchored = !anchorKind.isEmpty() && !anchorName.isEmpty();

@@ -836,8 +836,10 @@ void SceneGroupLooks::reconcileAfterPaletteApply()
                .arg(uncovered.count()).arg(fxis.count()),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         if (ret == QMessageBox::Yes)
+        {
             foreach (const SceneValue &scv, uncovered)
                 m_scene->unsetValue(scv.fxi, scv.channel);
+        }
     }
 
     // Trigger a second runtime reset so the scene fader is rebuilt from the
