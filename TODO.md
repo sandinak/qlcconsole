@@ -1543,6 +1543,29 @@ effect timing items also want the rig to confirm.
 
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
+- **Output ENDPOINT reachability check (BACK BURNER, 2026-08-25)** — the
+  readiness indicator added in `daeeb97d7` catches one failure mode: the
+  workspace names a plugin *line* (for the network plugins, an index into the
+  local interface list) that doesn't exist on this machine. It does **not**
+  catch the other one: the line is fine, but the ArtNet *node* at the far end
+  isn't answering. Found during the live soak on `ender`, where 50 of ~53
+  patched universes were failing to send to 13 node addresses
+  (`172.18.2.201`–`.230`) — in that instance correctly, because the devices
+  were in the trailer, which is exactly why this needs care rather than a
+  naive "ping the target" test:
+  - a broadcast/subnet target legitimately has nothing to answer it, so
+    unreachable ≠ misconfigured;
+  - nodes are routinely powered down between calls, and a desk that cries
+    wolf every load gets ignored (the same failure mode as the 2850-line
+    `sendDmx` spam this replaced);
+  - ARP/ping liveness is a poor proxy — an ArtNet node can answer ARP and
+    still not be listening on 6454.
+  Probably wants ArtPoll/ArtPollReply discovery rather than ICMP, surfaced as
+  an *informational* "N of M nodes responding" in the Hardware tab rather than
+  a blocking NOT READY. Only worth building when someone is actually chasing a
+  dark universe on a rig.
+
+
 - **Simple Desk sliders have no write-back-to-scene path (PARKED, 2026-08-12)**
   — found while triaging the old `live-edit-4.x` branch: Virtual Console
   sliders/XY-pads already write manual adjustments back into the running
