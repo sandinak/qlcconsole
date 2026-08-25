@@ -97,7 +97,6 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     , m_addShowAction(NULL)
     , m_renameShowAction(NULL)
     , m_deleteShowAction(NULL)
-    , m_undoAction(NULL)
     , m_addTrackAction(NULL)
     , m_addSequenceAction(NULL)
     , m_addAudioAction(NULL)
@@ -112,6 +111,7 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     , m_stopAction(NULL)
     , m_playAction(NULL)
     , m_followMtcAction(NULL)
+    , m_undoAction(NULL)
 {
     Q_ASSERT(s_instance == NULL);
     s_instance = this;
