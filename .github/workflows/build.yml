@@ -14,7 +14,9 @@ jobs:
     runs-on: ubuntu-22.04
     name: QLCplus Linux ${{matrix.task}}
     strategy:
-      #fail-fast: false
+      # Not fail-fast: coverage-build-v4 has been cancelled behind build-v4 in
+      # every run this repo has ever had, so it has never actually executed.
+      fail-fast: false
       matrix:
         # No build-v5: it configures qmlui=ON, which this fork keeps OFF and
         # never carried the rebrand through. It could only ever be red -- and
@@ -58,6 +60,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: false
+          # APPVERSION counts commits since the fork point; the default shallow
+          # clone yields 0, so artifacts came out as "...+qlcconsole.0".
+          fetch-depth: 0
 
       - name: Set General ENV variables
         run: |
@@ -216,9 +221,12 @@ jobs:
         run: |
           wget -c https://github.com/AppImage/AppImageKit/releases/download/continuous/AppRun-x86_64 -O ${INSTALL_ROOT}/AppRun
           chmod a+x ${INSTALL_ROOT}/AppRun
-          wget -c https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O ./appimagetool-x86_64.AppImage
-          chmod a+x ./appimagetool-x86_64.AppImage
-          ./appimagetool-x86_64.AppImage -v ${INSTALL_ROOT}
+          # Download the tool OUTSIDE the working directory: it is itself named
+          # *-x86_64.AppImage, so leaving it here makes the glob below match two
+          # files and mv then wants a destination directory.
+          wget -c https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O "${RUNNER_TEMP}/appimagetool-x86_64.AppImage"
+          chmod a+x "${RUNNER_TEMP}/appimagetool-x86_64.AppImage"
+          "${RUNNER_TEMP}/appimagetool-x86_64.AppImage" -v ${INSTALL_ROOT}
           mv -v *-x86_64.AppImage qlcconsole-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
 
       - name: Store AppImage artifacts
@@ -248,6 +256,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: false
+          # APPVERSION counts commits since the fork point; the default shallow
+          # clone yields 0, so artifacts came out as "...+qlcconsole.0".
+          fetch-depth: 0
 
       - name: Set ENV variables
         shell: bash
