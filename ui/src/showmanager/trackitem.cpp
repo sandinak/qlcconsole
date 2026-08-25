@@ -36,13 +36,13 @@ TrackItem::TrackItem(Track *track, int number)
     , m_isMute(false)
     , m_isSolo(false)
     , m_isLocked(false)
+    , m_intensityDrag(false)
     , m_nameProxy(NULL)
     , m_editing(false)
     , m_pressSceneY(0)
     , m_baseY(0)
     , m_dragging(false)
     , m_onButtonRow(false)
-    , m_intensityDrag(false)
 {
     m_font = qApp->font();
     m_font.setBold(true);

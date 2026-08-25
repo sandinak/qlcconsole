@@ -88,6 +88,8 @@ const QString submasterStyleSheet =
 
 VCSlider::VCSlider(QWidget *parent, Doc *doc)
     : VCWidget(parent, doc)
+    , m_parameterRole(RoleDimmer)
+    , m_parameterControlByte(QLCChannel::MSB)
     , m_valueDisplayStyle(ExactValue)
     , m_catchValues(false)
     , m_levelLowLimit(0)
@@ -106,8 +108,6 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
     , m_cngType(ClickAndGoWidget::None)
     , m_isOverriding(false)
     , m_lastInputValue(-1)
-    , m_parameterRole(RoleDimmer)
-    , m_parameterControlByte(QLCChannel::MSB)
 {
     /* Set the class name "VCSlider" as the object name as well */
     setObjectName(VCSlider::staticMetaObject.className());

@@ -53,7 +53,12 @@
 #define SETTINGS_GEOMETRY "fixturegroupeditor/geometry"
 
 #define PROP_FIXTURE Qt::UserRole
-#define PROP_HEAD Qt::UserRole + 1
+// Deliberately NOT PROP_HEAD: fixturetreewidget.h already defines that name as
+// UserRole + 3 and is pulled in above, so this file was silently redefining it.
+// The two are different roles on different widgets -- the grid cells here are
+// not FixtureTreeWidget items -- so give this one its own name rather than
+// letting whichever #define came last win.
+#define GRID_PROP_HEAD Qt::UserRole + 1
 
 // Mime type marking an internal drag of selected grid cells (payload is
 // carried in member state, not the mime data itself).
@@ -417,7 +422,7 @@ void FixtureGroupEditor::updateTable()
 
         QTableWidgetItem* item = new QTableWidgetItem(icon, str);
         item->setData(PROP_FIXTURE, head.fxi);
-        item->setData(PROP_HEAD, head.head);
+        item->setData(GRID_PROP_HEAD, head.head);
         item->setToolTip(str);
 
         // Colour cells by sub-group so blocks pasted from another group are

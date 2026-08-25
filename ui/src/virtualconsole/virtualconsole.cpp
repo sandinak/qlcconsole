@@ -74,12 +74,10 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     : QWidget(parent)
     , m_doc(doc)
     , m_latestWidgetId(0)
-
     , m_editAction(EditNone)
     , m_toolbar(NULL)
     , m_addButton(NULL)
     , m_editButton(NULL)
-
     , m_addActionGroup(NULL)
     , m_editActionGroup(NULL)
     , m_bgActionGroup(NULL)
@@ -87,7 +85,6 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     , m_fontActionGroup(NULL)
     , m_frameActionGroup(NULL)
     , m_stackingActionGroup(NULL)
-
     , m_addButtonAction(NULL)
     , m_addButtonMatrixAction(NULL)
     , m_addSliderAction(NULL)
@@ -99,50 +96,40 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     , m_addFrameAction(NULL)
     , m_addSoloFrameAction(NULL)
     , m_addLabelAction(NULL)
-    , m_addProgrammerFrameAction(NULL)
     , m_addAudioTriggersAction(NULL)
     , m_addClockAction(NULL)
     , m_addAnimationAction(NULL)
-
+    , m_addProgrammerFrameAction(NULL)
     , m_toolsSettingsAction(NULL)
     , m_functionWizardAction(NULL)
-
     , m_editCutAction(NULL)
     , m_editCopyAction(NULL)
     , m_editPasteAction(NULL)
     , m_editDeleteAction(NULL)
     , m_editPropertiesAction(NULL)
     , m_editRenameAction(NULL)
-
     , m_bgColorAction(NULL)
     , m_bgImageAction(NULL)
     , m_bgDefaultAction(NULL)
-
     , m_fgColorAction(NULL)
     , m_fgDefaultAction(NULL)
-
     , m_fontAction(NULL)
     , m_resetFontAction(NULL)
-
     , m_frameSunkenAction(NULL)
     , m_frameRaisedAction(NULL)
     , m_frameNoneAction(NULL)
-
     , m_stackingRaiseAction(NULL)
     , m_stackingLowerAction(NULL)
-
     , m_customMenu(NULL)
     , m_editMenu(NULL)
     , m_addMenu(NULL)
     , m_bgMenu(NULL)
     , m_fgMenu(NULL)
     , m_fontMenu(NULL)
-
     , m_dockArea(NULL)
     , m_contentsLayout(NULL)
     , m_scrollArea(NULL)
     , m_contents(NULL)
-
     , m_liveEdit(false)
 {
     Q_ASSERT(s_instance == NULL);
