@@ -1671,8 +1671,186 @@ effect timing items also want the rig to confirm.
 
   Still informational rather than a blocking NOT READY, and probably ArtPoll
   rather than ICMP — an ArtNet node can answer ARP and not be listening on
-  6454. Only worth building when someone is actually chasing a dark universe.
+  6454.
 
+  **Promoted off the back burner (2026-08-25, Branson):** warn the operator at
+  *config* time when a patched unicast target is down, rather than only when
+  someone is already chasing a dark universe. The scope is the same as above
+  (unicast targets on directly-attached subnets; broadcast degrades to
+  "interface up"), but the driver is now setup ergonomics, not debugging.
+
+  **The constraint that makes this non-trivial — poll load must scale with the
+  patch, not with the universe count.** This desk routinely patches 50+
+  universes (the `ender` soak ran ~53 across 13 node addresses at
+  `172.18.2.201`–`.230`). A naive per-universe probe would emit 50+ ArtPolls
+  where 13 would do, on a segment already carrying ~2484 pkt/s of DMX — and
+  the item above ("MasterTimer misses ticks at full output load") is an open
+  question about *scheduling jitter* on exactly that path. Probe traffic that
+  perturbs the thing being measured is worse than no probe. So the heuristics
+  are load-bearing, not polish:
+  - **Coalesce by destination IP, not by universe.** 13 nodes = 13 probes,
+    regardless of how many universes each carries. Fan the result back out to
+    every universe sharing that target.
+  - **Probe off the MasterTimer thread**, and never inside a tick. This must
+    not be able to cost a DMX frame.
+  - **Config-time and on-demand, not a continuous poller.** On workspace load,
+    on patch change, and on an explicit operator "check outputs" — not a
+    background heartbeat. A permanent poll across 50 universes is precisely
+    the "desk that cries wolf" / spam failure mode this whole area already
+    burned itself on once (the 2850-line `sendDmx` flood).
+  - **Backoff + hysteresis, shared with the ArtNet flapping item above.** A
+    node that is down stays down between probes; don't re-report. The
+    "don't announce recovery until it has held for N" rule wanted there is
+    the same rule wanted here — build it once.
+  - **Bounded concurrency + a short overall deadline**, so a rig with every
+    node in the trailer still finishes the check promptly instead of hanging
+    the load path on 13 timeouts.
+  Open: whether the result surfaces as a per-universe column in the I/O map,
+  the existing readiness indicator (`daeeb97d7`), or a footer chip. Probably
+  the first — it is a per-patch-row fact.
+
+
+- **RDM configuration tooling — DMX-Workshop-class rig setup (NEW, 2026-08-25,
+  Branson)** — make the desk the thing you use to *set up* the rig, not just
+  drive it: discover devices, read what they are, and set DMX address /
+  personality / inverts from the console instead of climbing to every fixture's
+  menu or carrying a laptop with DMX-Workshop on it.
+
+  **This is an extension, not a green field — check what's already here first.**
+  Upstream QLC+ shipped "Preliminary RDM support" (`9050a7f13`) and it is still
+  wired in:
+  - `plugins/interfaces/rdmprotocol.{h,cpp}` — a real E1.20 packetizer/parser
+    with the standard PID table already defined (`PID_DEVICE_INFO`,
+    `PID_DMX_START_ADDRESS`, `PID_DMX_PERSONALITY`(+`_DESCRIPTION`),
+    `PID_IDENTIFY_DEVICE`, `PID_DEVICE_LABEL`, `PID_PAN_INVERT` /
+    `PID_TILT_INVERT` / `PID_PAN_TILT_SWAP`, `PID_LAMP_HOURS`,
+    `PID_SENSOR_VALUE`, `PID_SUPPORTED_PARAMETERS`, …). The protocol layer is
+    NOT the missing piece.
+  - `QLCIOPlugin::RDM` capability + `sendRDMCommand()` / `rdmValueChanged()`,
+    implemented by **both** transports this rig actually uses: `artnet`
+    (`ArtNetController::sendRDMCommand`) and `dmxusb` (Enttec DMX USB Pro).
+  - `ui/src/rdmmanager.{h,cpp,ui}` (~900 lines) — a discovery worker thread +
+    UID list + raw get/set-a-PID panel, reachable from Fixture Manager
+    (`fixturemanager.cpp:457`).
+  So the gap is **workflow, not plumbing**. Today it is a protocol inspector:
+  it can talk to a device if you already know which PID you want. DMX-Workshop
+  parity means turning it into a rig-setup tool.
+
+  Wanted (roughly in value order — needs its own design doc + a decision on
+  where it lives, since Fixture Manager is already crowded):
+  1. **A device table, not a UID list** — one row per discovered device with
+     manufacturer / model / label / current address / footprint /
+     personality, populated by auto-`GET`ting the obvious PIDs on discovery
+     rather than making the operator issue each one.
+  2. **Editable address + personality in place**, with **overlap detection**
+     across the discovered set (the actual reason people open DMX-Workshop:
+     "who is sitting on top of whom"). Changing personality changes footprint,
+     so re-check overlaps after a personality set.
+  3. **Identify** as a first-class button per row (`PID_IDENTIFY_DEVICE`) —
+     the "which physical unit is this?" loop, and the single most-used RDM
+     feature on a call.
+  4. **Reconcile against the patch** — match discovered devices to patched
+     `Fixture`s and flag the three mismatches that ruin a focus session:
+     patched-but-not-present, present-but-not-patched, and
+     address-differs-from-patch. Offer "push patch → rig" and "pull rig →
+     patch". This is where it stops being a generic RDM tool and becomes
+     *this* console's, and it ties into `RIG_TEST_PLAN.md` /
+     `SHOW_LIFECYCLE_DESIGN.md`'s Test-Validate phase.
+  5. **Sensors + lamp hours** (`PID_SENSOR_VALUE`, `PID_LAMP_HOURS`,
+     `PID_DEVICE_HOURS`) — maintenance readout; low priority, easy once (1)
+     exists.
+
+  **Hardware finding (2026-08-25) — the ArtNet node on hand does NOT answer
+  RDM, so this is currently BLOCKED on hardware.** Probed `172.18.2.10`
+  directly from the show VLAN (this Mac is on `vlan0` as `172.18.2.17`):
+  - Node identifies as **`CR041R_001`** / `CR041R` — a **4-port** ArtNet→DMX
+    gateway, ArtNet 3, `net/sub 0/0`, `swOut 0,1,2,3`, OEM `0x0022`,
+    ESTA `0x707A`.
+  - It answers **`ArtPoll` → `ArtPollReply`** immediately and cleanly
+    (broadcast to `.255:6454`, not unicast back to the requester — relevant to
+    the endpoint-reachability item above if that ends up ArtPoll-based).
+  - It **ignores `ArtTodRequest`**: four sent (universes 0-3), full wire
+    capture of everything from that host, **zero `ArtTodData`** back. Its own
+    `goodOut` bits claim RDM is *not* disabled (bit 3 clear on all 4 ports),
+    i.e. it advertises a capability it does not deliver.
+  - The request packet was checked field-by-field against the Art-Net 4 spec
+    before concluding (56 bytes; Net@21, Command=TodFull@22, AddCount@23,
+    Address@24) — the silence is the node's, not a malformed probe.
+  - **First probe was invalid — corrected same day.** The initial run used
+    opcode `0x8080` for ArtTodRequest; the correct value is **`0x8000`**
+    (`plugins/artnet/src/artnetpacketizer.h:36`). The node was right to ignore
+    an undefined opcode. Re-probed with the correct opcode **and** an
+    `ArtTodControl`/**AtcFlush** (`0x8200`, command 1) first — AtcFlush is the
+    step that forces a node to actually *re-run* discovery, where ArtTodRequest
+    only asks for the TOD it already holds. Result unchanged: 16 `ArtPollReply`,
+    **zero `ArtTodData`**. The conclusion stands, but only after the correct
+    test. Note QLC+'s own `sendRDMCommand` sends ArtTodRequest with **no
+    preceding AtcFlush** — worth revisiting if a real node ever returns a
+    stale/empty TOD.
+  - **Control case found, which resolves the earlier ambiguity.** The Pi 5
+    build host (`192.168.20.119`) runs an **OLA Art-Net node**, and OLA answers
+    the identical probe with `ArtTodData rdmVer=0x01 uidTotal=0 uidCount=0` —
+    i.e. a node with an *empty* TOD and nothing attached still **replies**. So
+    "silent" is not how an empty TOD presents. The CR041R's total silence is
+    therefore best explained by it **not implementing Art-Net RDM at all**, and
+    that no longer needs an RDM fixture to establish.
+  - **Consequence:** an RDM-capable fixture on a CR041R DMX port will not be
+    discoverable *over Art-Net* regardless of the fixture's own RDM support —
+    the gateway will not relay it. (Branson has an **ADJ 3Z** on the rig and is
+    ordering a known-RDM fixture, 2026-08-25.) Viable transports are therefore
+    the **Enttec DMX USB Pro** (wired), or **OLA** as an Art-Net→RDM gateway.
+  - **OLA is a zero-hardware development target.** It implements Art-Net RDM
+    correctly, and OLA's dummy/simulated-RDM devices would let the entire
+    device-table / reconcile workflow be built and tested with no rig at all —
+    which would move this item off the ✈️-blocked list. Worth confirming
+    before assuming this feature needs hardware.
+  - Reproduce any of this with **`artnet-probe.py`** at the repo root.
+
+  **Paradigm answers (2026-08-25 discussion) — no new U→node binding needed.**
+  `ArtNetController::sendRDMCommand` (`artnetcontroller.cpp:374`) already looks
+  up `m_universeMap[universe]` and sends the TOD request to that universe's
+  patched `info.outputAddress` / `info.outputUniverse`. **RDM rides the
+  existing output patch**; Inputs/Outputs is already the mapping UI. Likewise
+  `handleArtNetTodData` (`:515`) → `rdmValueChanged` → `RDMManager` already
+  carries replies back, so "self-populate what it finds" is plumbed — the gap
+  is auto-`GET`ting the descriptive PIDs per UID to fill a table.
+  - Nuance: the binding is **U → (node IP, node *port*)**, not U → node. The
+    CR041R is one IP carrying four universes, so discovery is **per-port** —
+    a 4-port node needs 4 TOD requests. Note this is the *opposite* of the
+    coalesce-by-IP rule in the endpoint-reachability item above (13 IPs, not
+    53 universes): reachability coalesces, RDM cannot. Don't share that code
+    path by accident.
+
+  **Reconcile semantics — only one of four cases is an error:**
+  | Discovered | Patched | Verdict |
+  |---|---|---|
+  | yes | yes, same address | matched |
+  | yes | nothing at that address | **not an error** — offer to patch it |
+  | no | yes | **must NOT be an error by default** |
+  | yes | yes, *different* address | the real, actionable conflict |
+  Row 3 is the trap: most conventionals and much LED gear have no RDM at all,
+  so "patched but not discovered" is the *normal* case on a mixed rig. Flagging
+  it would cry wolf on first use — the same failure mode as the 2850-line
+  `sendDmx` flood.
+
+  **Blocking design decision — `Fixture` must persist an RDM UID.** Confirmed
+  `engine/src/fixture.h` has no `uid`/`rdm` field today. Without a stored
+  UID↔Fixture binding, reconciliation can only match on address, which is
+  circular: "this fixture moved address" is indistinguishable from "a different
+  fixture is now at this address". Row 4 above is unbuildable until this is
+  settled. It is a `.qxw` schema addition on `Fixture` — decide before writing
+  any UI. Also: there are **no RDM tests anywhere in the tree**.
+
+  **Cautions.** RDM is in-band with DMX on a wired line, so discovery
+  interleaves with output — do not run it from the MasterTimer thread, and
+  expect it to be visibly disruptive on a live wired universe (fine in
+  Construction phase, dangerous mid-show; probably gate it the same way Blind
+  is gated). ArtNet RDM is a different animal from wired RDM and node support
+  is uneven, so verify per-node rather than assuming. Discovery is a binary
+  search over the UID space and is *slow* — the existing worker is already a
+  `QThread` for that reason; keep it cancellable. **Needs the rig** to be
+  worth anything: none of this is verifiable offscreen beyond parser unit
+  tests, and there are no RDM tests today.
 
 - **Simple Desk sliders have no write-back-to-scene path (PARKED, 2026-08-12)**
   — found while triaging the old `live-edit-4.x` branch: Virtual Console
