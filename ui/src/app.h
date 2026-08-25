@@ -154,6 +154,11 @@ private:
      * Progress dialog
      *********************************************************************/
 public:
+    /** Re-check whether every patched universe can actually reach its output,
+        and update the footer indicator. Cheap; safe to call after any load or
+        re-patch. */
+    void updateOutputReadiness();
+
     void createProgressDialog();
     void destroyProgressDialog();
 
@@ -470,6 +475,7 @@ private slots:
 
 private:
     QLabel* m_statusModeLabel;
+    QLabel* m_statusRigLabel;
     QLabel* m_statusDirtyLabel;
     QLabel* m_statusAutosaveLabel;
     QLabel* m_statusProgrammerLabel;

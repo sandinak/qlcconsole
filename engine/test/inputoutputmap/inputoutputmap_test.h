@@ -38,6 +38,12 @@ private slots:
     void configurePlugin();
     void inputPluginStatus();
     void outputPluginStatus();
+    /** A patch naming a plugin line this machine doesn't have is reported,
+        so the UI can say the rig won't output instead of failing silently. */
+    void danglingOutputPatchDetected();
+    /** A patch inside the plugin's real line count is not reported. */
+    void validOutputPatchNotFlagged();
+
     void universeNames();
     void addUniverse();
     void removeUniverse();
