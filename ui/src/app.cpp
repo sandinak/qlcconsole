@@ -141,6 +141,7 @@ App::App()
     , m_noGui(false)
     , m_progressDialog(NULL)
     , m_loadProgressDialog(NULL)
+    , m_statusRigLabel(NULL)
     , m_doc(NULL)
 
     , m_fileNewAction(NULL)
@@ -816,6 +817,42 @@ void App::initDoc()
     m_pmjOverlay = new PMJOverlay(m_doc, m_controlSurfaceEngine, this, this);
 }
 
+void App::updateOutputReadiness()
+{
+    if (m_statusRigLabel == NULL || m_doc == NULL)
+        return;
+
+    const QList<InputOutputMap::DanglingPatch> bad =
+        m_doc->inputOutputMap()->danglingOutputPatches();
+
+    if (bad.isEmpty() == true)
+    {
+        m_statusRigLabel->hide();
+        m_statusRigLabel->setToolTip(QString());
+        return;
+    }
+
+    QStringList unis, detail;
+    foreach (const InputOutputMap::DanglingPatch &p, bad)
+    {
+        unis << QString::number(p.universe + 1);
+        detail << tr("Universe %1: %2 line %3 does not exist here "
+                     "(this machine offers %4). Nothing patched to it will output.")
+                    .arg(p.universe + 1).arg(p.pluginName).arg(p.line).arg(p.availableLines);
+    }
+
+    m_statusRigLabel->setText(tr("\u26A0 NOT READY - universe %1 has no output")
+                                .arg(unis.join(", ")));
+    m_statusRigLabel->setStyleSheet("QLabel { color: #e04030; font-weight: bold; }");
+    m_statusRigLabel->setToolTip(detail.join("\n") +
+                                 tr("\n\nRe-patch these universes in Inputs/Outputs, "
+                                    "or open the workspace on the machine it was built for."));
+    m_statusRigLabel->show();
+
+    foreach (const QString &line, detail)
+        qWarning() << "[output]" << line;
+}
+
 void App::slotDocModified(bool state)
 {
     updateWindowTitle();
@@ -953,6 +990,11 @@ void App::slotModeToggle()
 
 void App::slotModeChanged(Doc::Mode mode)
 {
+    // Re-check on every mode change: going to Operate is exactly when "can this
+    // rig actually output?" matters, and it's the last moment before someone
+    // starts running cues.
+    updateOutputReadiness();
+
     if (mode == Doc::Operate)
     {
         /* Disable editing features */
@@ -2342,6 +2384,7 @@ QFile::FileError App::loadXML(const QString& fileName)
             // correctly into the doc (confirmed present in Fixture Manager,
             // whose tab is built lazily on first view and so isn't affected).
             slotLoadProgress(tr("Building views"), 0);
+            updateOutputReadiness();
             if (FixtureManager::instance() != NULL)
                 FixtureManager::instance()->updateView();
             if (Monitor::instance() != NULL)
@@ -3278,6 +3321,15 @@ void App::initStatusBar()
     m_statusBlackoutLabel->setStyleSheet("QLabel { color: #e60000; font-weight: bold; }");
     m_statusBlackoutLabel->hide();
     sb->addPermanentWidget(m_statusBlackoutLabel);
+
+    // Output-readiness indicator. Hidden when every patched universe can
+    // actually reach its output; loud when one can't, because the failure it
+    // reports is otherwise invisible -- the patch looks fine, the plugin
+    // accepts writes, and the fixtures simply never light.
+    m_statusRigLabel = new QLabel(this);
+    m_statusRigLabel->setAlignment(Qt::AlignRight);
+    m_statusRigLabel->hide();
+    sb->addPermanentWidget(m_statusRigLabel);
 
     // Programmer dirty indicator (between mode and autosave). Hidden
     // when clean, red bullet + text when dirty. Mirrors the in-frame

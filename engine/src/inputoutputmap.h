@@ -411,6 +411,28 @@ public:
     OutputPatch* outputPatch(quint32 universe, int index = 0) const;
 
     /**
+     * A universe whose output patch names a plugin line that does not exist on
+     * this machine. Workspaces store the output line by INDEX, and for the
+     * network plugins that index is a position in the list of local network
+     * interfaces -- so a show saved on one machine and opened on another (or
+     * after an interface goes away) can point at a line that isn't there. The
+     * patch stays "patched", the plugin happily accepts writes, and every send
+     * fails silently: on a real rig that is a universe of fixtures that simply
+     * never lights, with nothing on screen to say so.
+     */
+    struct DanglingPatch
+    {
+        quint32 universe;       //!< 0-based universe index
+        QString pluginName;
+        quint32 line;           //!< the line index the workspace asked for
+        int availableLines;     //!< how many that plugin actually offers here
+    };
+
+    /** Output patches pointing at plugin lines this machine doesn't have.
+     *  Empty means every patched universe can actually reach its output. */
+    QList<DanglingPatch> danglingOutputPatches() const;
+
+    /**
      * Get the feedback mapping for a QLC universe.
      *
      * @param universe The internal universe to get mapping for

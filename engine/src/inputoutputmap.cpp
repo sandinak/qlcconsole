@@ -611,6 +611,41 @@ OutputPatch *InputOutputMap::outputPatch(quint32 universe, int index) const
     return m_universeArray.at(universe)->outputPatch(index);
 }
 
+QList<InputOutputMap::DanglingPatch> InputOutputMap::danglingOutputPatches() const
+{
+    QList<DanglingPatch> problems;
+
+    for (quint32 uni = 0; uni < universesCount(); uni++)
+    {
+        for (int idx = 0; idx < outputPatchesCount(uni); idx++)
+        {
+            OutputPatch *patch = outputPatch(uni, idx);
+            if (patch == NULL || patch->isPatched() == false)
+                continue;
+
+            QLCIOPlugin *plugin = patch->plugin();
+            if (plugin == NULL)
+                continue;
+
+            // outputName() resolves the stored line index against the lines the
+            // plugin offers RIGHT NOW; out of range means the workspace is
+            // asking for something this machine doesn't have.
+            const int available = plugin->outputs().size();
+            if (int(patch->output()) < available)
+                continue;
+
+            DanglingPatch bad;
+            bad.universe = uni;
+            bad.pluginName = patch->pluginName();
+            bad.line = patch->output();
+            bad.availableLines = available;
+            problems << bad;
+        }
+    }
+
+    return problems;
+}
+
 OutputPatch *InputOutputMap::feedbackPatch(quint32 universe) const
 {
     if (universe >= universesCount())

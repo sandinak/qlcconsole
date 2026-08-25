@@ -173,6 +173,28 @@ void InputOutputMap_Test::outputPluginStatus()
     QVERIFY(om.outputPluginStatus(stub->name(), 2) == stub->outputInfo(2));
 }
 
+void InputOutputMap_Test::danglingOutputPatchDetected()
+{
+    InputOutputMap iom(m_doc, 4);
+    // The stub offers 4 outputs (lines 0-3). Line 9 is what a workspace saved
+    // on a machine with more network interfaces looks like when opened here:
+    // still "patched", plugin still accepts writes, nothing ever transmits.
+    QVERIFY(iom.setOutputPatch(0, "I/O Plugin Stub", "", 9));
+
+    QList<InputOutputMap::DanglingPatch> bad = iom.danglingOutputPatches();
+    QCOMPARE(bad.size(), 1);
+    QCOMPARE(bad.first().universe, quint32(0));
+    QCOMPARE(bad.first().line, quint32(9));
+    QCOMPARE(bad.first().availableLines, 4);
+}
+
+void InputOutputMap_Test::validOutputPatchNotFlagged()
+{
+    InputOutputMap iom(m_doc, 4);
+    QVERIFY(iom.setOutputPatch(0, "I/O Plugin Stub", "", 0));
+    QVERIFY(iom.danglingOutputPatches().isEmpty());
+}
+
 void InputOutputMap_Test::universeNames()
 {
     InputOutputMap iom(m_doc, 4);
