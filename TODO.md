@@ -1560,10 +1560,21 @@ effect timing items also want the rig to confirm.
     `sendDmx` spam this replaced);
   - ARP/ping liveness is a poor proxy — an ArtNet node can answer ARP and
     still not be listening on 6454.
-  Probably wants ArtPoll/ArtPollReply discovery rather than ICMP, surfaced as
-  an *informational* "N of M nodes responding" in the Hardware tab rather than
-  a blocking NOT READY. Only worth building when someone is actually chasing a
-  dark universe on a rig.
+  **Shape agreed with Branson (2026-08-25):** the rig is mostly **unicast**, so
+  a per-target reachability check IS meaningful and is the main case worth
+  building — for a unicast destination, "is that node there?" is a real,
+  answerable question. For a **broadcast** target there is nothing to answer,
+  so the check degrades to "is the interface/subnet present and up?".
+  Critically: validate **directly-attached subnets only**. ArtNet nodes are
+  normally on a directly-attached segment; anything routed should be left
+  alone rather than guessed at, which also sidesteps the "pingable via the
+  default gateway but not actually the show network" false-positive seen on
+  ender (192.168.21.214 answered ping while being the wrong interface
+  entirely).
+
+  Still informational rather than a blocking NOT READY, and probably ArtPoll
+  rather than ICMP — an ArtNet node can answer ARP and not be listening on
+  6454. Only worth building when someone is actually chasing a dark universe.
 
 
 - **Simple Desk sliders have no write-back-to-scene path (PARKED, 2026-08-12)**
