@@ -203,8 +203,11 @@ void QxwImporter_Test::mapLayerAndGroupAreReset()
                         QList<quint32>(), QList<quint32>());
 
     PreviewItem got = m_target->monitorProperties()->fixtureItem(fid, 0, 0);
-    // Position survives; the references into id spaces we did not import
-    // do not, or ensureGroup() would invent a phantom group for id 42.
+    // Position survives. The layer/group ids here are DANGLING -- nothing in
+    // the source registry defines 9 or 42 -- so they must resolve to
+    // default/ungrouped rather than being invented in the target.
+    // MonitorProperties::layer() resolves unknown ids TO the Default layer, so
+    // a mapper that trusted it would create a second "Default" here.
     QCOMPARE(got.m_position, QVector3D(500, 0, 500));
     QCOMPARE(got.m_layerId, quint32(0));
     QCOMPARE(got.m_groupId, quint32(0));
@@ -262,6 +265,91 @@ void QxwImporter_Test::powerSourceMatchedByName()
     const QList<PowerSource> &dst = m_target->powerDistribution()->sources();
     QCOMPARE(dst.size(), 1);
     QVERIFY(dst.at(0).circuits.at(0).fixtures.contains(fid));
+}
+
+void QxwImporter_Test::mapLayerAndGroupAreTranslated()
+{
+    const quint32 fid = makeFixture(m_source, 0);
+    MonitorProperties *sp = m_source->monitorProperties();
+    const quint32 srcLayer = sp->addLayer("Overhead");
+    const quint32 srcGroup = sp->nextGroupId();
+    sp->createGroup(srcGroup, "Movers", srcLayer, 0);
+
+    PreviewItem item = PreviewItem();
+    item.m_position = QVector3D(100, 0, 200);
+    item.m_layerId = srcLayer;
+    item.m_groupId = srcGroup;
+    sp->setFixtureItem(fid, 0, 0, item);
+
+    QxwImportResult r = QxwImporter::import(m_source, m_target,
+                                            QList<quint32>() << fid,
+                                            QList<quint32>(), QList<quint32>());
+    QCOMPARE(r.layersCreated, 1);
+    QCOMPARE(r.mapGroupsCreated, 1);
+
+    MonitorProperties *tp = m_target->monitorProperties();
+    PreviewItem got = tp->fixtureItem(fid, 0, 0);
+    QVERIFY(got.m_layerId != 0);
+    QVERIFY(got.m_groupId != 0);
+    QCOMPARE(tp->layer(got.m_layerId).name, QString("Overhead"));
+    QCOMPARE(tp->group(got.m_groupId).name, QString("Movers"));
+    // The group must sit under the translated layer, not the source's id.
+    QCOMPARE(tp->group(got.m_groupId).layerId, got.m_layerId);
+}
+
+void QxwImporter_Test::mapLayerAndGroupMatchedByName()
+{
+    const quint32 fid = makeFixture(m_source, 0);
+    MonitorProperties *sp = m_source->monitorProperties();
+    const quint32 srcLayer = sp->addLayer("Overhead");
+    const quint32 srcGroup = sp->nextGroupId();
+    sp->createGroup(srcGroup, "Movers", srcLayer, 0);
+    PreviewItem item = PreviewItem();
+    item.m_layerId = srcLayer;
+    item.m_groupId = srcGroup;
+    sp->setFixtureItem(fid, 0, 0, item);
+
+    // Target already has both, by name.
+    MonitorProperties *tp = m_target->monitorProperties();
+    const quint32 tgtLayer = tp->addLayer("Overhead");
+    const quint32 tgtGroup = tp->nextGroupId();
+    tp->createGroup(tgtGroup, "Movers", tgtLayer, 0);
+
+    QxwImportResult r = QxwImporter::import(m_source, m_target,
+                                            QList<quint32>() << fid,
+                                            QList<quint32>(), QList<quint32>());
+    // Reused, not duplicated.
+    QCOMPARE(r.layersCreated, 0);
+    QCOMPARE(r.mapGroupsCreated, 0);
+    PreviewItem got = tp->fixtureItem(fid, 0, 0);
+    QCOMPARE(got.m_layerId, tgtLayer);
+    QCOMPARE(got.m_groupId, tgtGroup);
+}
+
+void QxwImporter_Test::mapGroupParentChainFollows()
+{
+    const quint32 fid = makeFixture(m_source, 0);
+    MonitorProperties *sp = m_source->monitorProperties();
+    const quint32 parent = sp->nextGroupId();
+    sp->createGroup(parent, "Stage Left", 0, 0);
+    const quint32 child = sp->nextGroupId();
+    sp->createGroup(child, "Movers", 0, parent);
+
+    PreviewItem item = PreviewItem();
+    item.m_groupId = child;
+    sp->setFixtureItem(fid, 0, 0, item);
+
+    QxwImporter::import(m_source, m_target, QList<quint32>() << fid,
+                        QList<quint32>(), QList<quint32>());
+
+    MonitorProperties *tp = m_target->monitorProperties();
+    const quint32 gotChild = tp->fixtureItem(fid, 0, 0).m_groupId;
+    QVERIFY(gotChild != 0);
+    QCOMPARE(tp->group(gotChild).name, QString("Movers"));
+    // The ancestor came too, and the child hangs off it.
+    const quint32 gotParent = tp->group(gotChild).parentGroupId;
+    QVERIFY(gotParent != 0);
+    QCOMPARE(tp->group(gotParent).name, QString("Stage Left"));
 }
 
 QTEST_APPLESS_MAIN(QxwImporter_Test)
