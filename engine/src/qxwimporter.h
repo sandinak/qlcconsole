@@ -37,6 +37,7 @@ public:
     int fixturesRelocated = 0;   //!< address moved due to a DMX conflict
     int fixtureGroupsImported = 0;
     int functionsImported = 0;
+    int palettesImported = 0;
     int idsRemapped = 0;         //!< fixture/function/group IDs that collided
     QStringList warnings;        //!< items skipped because they couldn't be placed
 };
@@ -54,8 +55,14 @@ public:
  * are three separate spaces), relocates a fixture to a free DMX address if
  * its original address is already occupied there, and rewrites every
  * cross-reference (SceneValue::fxi, ChaserStep::fid, RGBMatrix's fixture
- * group, FixtureGroup head assignments, Show/Track function references) so
- * the imported content is internally consistent in its new home.
+ * group, FixtureGroup head assignments, Show/Track function references,
+ * Scene palette references and their per-palette fade overrides) so the
+ * imported content is internally consistent in its new home.
+ *
+ * NOT yet carried across: MonitorProperties (2D plot position, layer and
+ * group membership, rig props) and PowerDistribution (which circuit feeds a
+ * fixture). An imported fixture therefore arrives unplaced on the 2D map and
+ * unpatched for power.
  */
 class QxwImporter
 {
