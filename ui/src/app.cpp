@@ -1796,6 +1796,9 @@ void App::slotFileImport()
     if (result.fixturesPlaced > 0)
         summary += tr("\n%1 fixture(s) kept their position on the 2D map (layer/group reset).")
                      .arg(result.fixturesPlaced);
+    if (result.layersCreated > 0 || result.mapGroupsCreated > 0)
+        summary += tr("\n2D map: %1 layer(s) and %2 group(s) created (existing ones reused).")
+                     .arg(result.layersCreated).arg(result.mapGroupsCreated);
     if (result.fixturesPowerPatched > 0)
         summary += tr("\n%1 fixture(s) were re-patched for power%2.")
                      .arg(result.fixturesPowerPatched)

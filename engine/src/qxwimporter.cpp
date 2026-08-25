@@ -181,6 +181,105 @@ static Function *cloneFunctionXml(Function *src, Doc *targetDoc)
  * Import
  *****************************************************************************/
 
+/**
+ * Map a source 2D-map layer onto the target, creating it if absent.
+ *
+ * Matched by NAME, like the power sources: importing the same rig twice should
+ * land on the one "House" layer, not accumulate "House", "House (2)"... Layer 0
+ * is the always-present Default and maps to itself.
+ *
+ * Visibility/lock/labels are deliberately NOT copied. They're view state, and a
+ * fixture arriving on a hidden layer looks to the user like the import silently
+ * failed.
+ */
+static quint32 mapLayer(MonitorProperties *src, MonitorProperties *dst,
+                        quint32 srcLayerId, QHash<quint32, quint32> &cache)
+{
+    if (srcLayerId == 0 || src == NULL || dst == NULL)
+        return 0;
+    if (cache.contains(srcLayerId))
+        return cache.value(srcLayerId);
+
+    // A dangling reference maps to Default, it does not invent a layer.
+    // MonitorProperties::layer() resolves an unknown id TO the Default layer,
+    // so without this check a fixture carrying a stale layer id would have its
+    // name ("Default") matched or created here -- producing a second "Default"
+    // layer alongside the real id-0 one.
+    if (src->hasLayer(srcLayerId) == false)
+    {
+        cache.insert(srcLayerId, 0);
+        return 0;
+    }
+
+    const QString name = src->layer(srcLayerId).name;
+    if (name.isEmpty())
+    {
+        cache.insert(srcLayerId, 0);
+        return 0;
+    }
+
+    quint32 mapped = 0;
+    foreach (const MonitorProperties::MonitorLayer &l, dst->layers())
+    {
+        if (l.name == name)
+        {
+            mapped = l.id;
+            break;
+        }
+    }
+    if (mapped == 0)
+        mapped = dst->addLayer(name);
+
+    cache.insert(srcLayerId, mapped);
+    return mapped;
+}
+
+/**
+ * Map a source 2D-map group onto the target, creating it and any ancestors.
+ *
+ * Matched by name WITHIN THE SAME PARENT, so two different "Movers" folders
+ * under different parents stay distinct. Recurses up the parent chain first so
+ * a nested group lands under the right ancestry; @a depth guards against a
+ * malformed file whose parent links form a cycle.
+ *
+ * anchorKind/anchorId are NOT carried: they point at truss/platform ids this
+ * importer doesn't bring across, and an anchor naming a structure that doesn't
+ * exist makes the Layers tree try to present the group AS a missing item.
+ */
+static quint32 mapGroup(MonitorProperties *src, MonitorProperties *dst,
+                        quint32 srcGroupId, QHash<quint32, quint32> &groupCache,
+                        QHash<quint32, quint32> &layerCache, int depth = 0)
+{
+    if (srcGroupId == 0 || src == NULL || dst == NULL || depth > 32)
+        return 0;
+    if (groupCache.contains(srcGroupId))
+        return groupCache.value(srcGroupId);
+    if (src->hasGroup(srcGroupId) == false)
+        return 0;
+
+    const MonitorProperties::MonitorGroup g = src->group(srcGroupId);
+    const quint32 parent = mapGroup(src, dst, g.parentGroupId, groupCache, layerCache, depth + 1);
+    const quint32 layer = mapLayer(src, dst, g.layerId, layerCache);
+
+    quint32 mapped = 0;
+    foreach (const MonitorProperties::MonitorGroup &cand, dst->groups())
+    {
+        if (cand.name == g.name && cand.parentGroupId == parent)
+        {
+            mapped = cand.id;
+            break;
+        }
+    }
+    if (mapped == 0)
+    {
+        mapped = dst->nextGroupId();
+        dst->createGroup(mapped, g.name, layer, parent);
+    }
+
+    groupCache.insert(srcGroupId, mapped);
+    return mapped;
+}
+
 QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
                                      const QList<quint32> &fixtureIds,
                                      const QList<quint32> &fixtureGroupIds,
@@ -366,8 +465,14 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
      *  Both are keyed by fixture id, so they follow fixtureMap. Neither is a
      *  function, so neither is reachable from the function walk above -- an
      *  imported fixture used to land unplaced and unpatched. ***/
+    // Named for the 2D map specifically: groupMap above is the FixtureGroup
+    // id space, which is a different thing entirely.
+    QHash<quint32, quint32> monLayerMap;   //!< source 2D layer id -> target
+    QHash<quint32, quint32> monGroupMap;   //!< source 2D group id -> target
     MonitorProperties *srcMon = sourceDoc->monitorProperties();
     MonitorProperties *dstMon = targetDoc->monitorProperties();
+    const int layersBefore = (dstMon != NULL) ? dstMon->layers().size() : 0;
+    const int monGroupsBefore = (dstMon != NULL) ? dstMon->groups().size() : 0;
     PowerDistribution *srcPower = sourceDoc->powerDistribution();
     PowerDistribution *dstPower = targetDoc->powerDistribution();
 
@@ -381,19 +486,20 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
         {
             FixturePreviewItem item = srcMon->fixtureProperties(oldFid);
 
-            // Layer and group ids belong to the SOURCE's own id spaces, which
-            // are not imported. Left as-is they would point at layers/groups
-            // that don't exist here -- and MonitorProperties::ensureGroup()
-            // CREATES a group for any unknown id it is handed, so the target
-            // would sprout phantom "Group N" entries on next load. Land the
-            // fixture on the default layer, ungrouped; position, rotation,
-            // scale, gel colour, zoom and flags all come across.
-            item.m_baseItem.m_layerId = 0;
-            item.m_baseItem.m_groupId = 0;
+            // Layer and group ids are the SOURCE's own id spaces, so they have
+            // to be translated, never copied: an untranslated id points at a
+            // layer/group that doesn't exist here, and
+            // MonitorProperties::ensureGroup() CREATES a group for any unknown
+            // id handed to it -- the target would sprout phantom "Group N"
+            // entries on next load.
+            item.m_baseItem.m_layerId =
+                mapLayer(srcMon, dstMon, item.m_baseItem.m_layerId, monLayerMap);
+            item.m_baseItem.m_groupId =
+                mapGroup(srcMon, dstMon, item.m_baseItem.m_groupId, monGroupMap, monLayerMap);
             for (auto sub = item.m_subItems.begin(); sub != item.m_subItems.end(); ++sub)
             {
-                sub->m_layerId = 0;
-                sub->m_groupId = 0;
+                sub->m_layerId = mapLayer(srcMon, dstMon, sub->m_layerId, monLayerMap);
+                sub->m_groupId = mapGroup(srcMon, dstMon, sub->m_groupId, monGroupMap, monLayerMap);
             }
 
             dstMon->setFixtureProperties(newFid, item);
@@ -475,6 +581,12 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
 
         dstPower->assignFixture(newFid, dSrcIdx, dCirIdx);
         result.fixturesPowerPatched++;
+    }
+
+    if (dstMon != NULL)
+    {
+        result.layersCreated = dstMon->layers().size() - layersBefore;
+        result.mapGroupsCreated = dstMon->groups().size() - monGroupsBefore;
     }
 
     /*** 4. Clone every function (IDs only -- cross-references still point

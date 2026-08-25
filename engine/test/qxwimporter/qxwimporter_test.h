@@ -43,6 +43,14 @@ private slots:
     /** Importing into a workspace that already has the distro reuses it. */
     void powerSourceMatchedByName();
 
+    /** A fixture's 2D layer and group are translated into the target's id
+        spaces rather than copied or dropped. */
+    void mapLayerAndGroupAreTranslated();
+    /** A same-named layer/group in the target is reused, not duplicated. */
+    void mapLayerAndGroupMatchedByName();
+    /** A nested group brings its ancestry with it. */
+    void mapGroupParentChainFollows();
+
 private:
     Doc *m_source;
     Doc *m_target;

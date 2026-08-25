@@ -41,6 +41,8 @@ public:
     int fixturesPlaced = 0;         //!< brought their 2D-map position along
     int fixturesPowerPatched = 0;   //!< re-patched onto a power circuit
     int powerSourcesCreated = 0;    //!< distros created to hold them
+    int layersCreated = 0;          //!< 2D-map layers created in the target
+    int mapGroupsCreated = 0;       //!< 2D-map groups created in the target
     int idsRemapped = 0;         //!< fixture/function/group IDs that collided
     QStringList warnings;        //!< items skipped because they couldn't be placed
 };
@@ -67,12 +69,15 @@ public:
  * source/circuit by name before creating one so importing the same rig twice
  * doesn't produce duplicate distros.
  *
- * NOT carried: 2D layer and group membership (those id spaces aren't imported,
- * and a dangling group id makes MonitorProperties::ensureGroup() invent a
- * phantom group), fixture rig props (they reference truss/platform ids that
- * aren't imported either), and a power source's stage position, which is
- * venue-fixed and belongs to the target's plot. Imported fixtures therefore
- * land on the default layer, ungrouped.
+ * 2D layer and group membership is translated, not copied: layers are matched
+ * by name and groups by name within the same parent (creating either if
+ * absent), so importing the same rig twice reuses them instead of duplicating.
+ *
+ * NOT carried: a group's truss/platform anchor and a fixture's rig props (both
+ * reference structure ids this importer doesn't bring across), and a power
+ * source's stage position, which is venue-fixed and belongs to the target's
+ * plot. Layer visibility/lock are not copied either -- they're view state, and
+ * a fixture arriving on a hidden layer reads as a failed import.
  */
 class QxwImporter
 {
