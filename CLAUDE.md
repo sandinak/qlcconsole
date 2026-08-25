@@ -18,6 +18,22 @@ CMake, out-of-tree in `build/` (Unix Makefiles, Debug). `find_package(QT NAMES
 Qt5 Qt6 ...)` auto-detects whichever is installed — this machine only has
 Qt6 (homebrew `qt`), no `qt@5`, so builds are against Qt6.
 
+Before a release — and after any non-trivial change — run `./check-all.sh`.
+It builds and runs the full gate against **Qt5, Qt6 and Qt6-Release** in
+separate build dirs. The Release leg is not redundant: one shipped bug
+(undefined narrowing in `VCXYPadFixture::writeDMX`) only misbehaved under
+`-O2` and was invisible to every default-build check.
+
+CI (`.github/workflows/build.yml`) runs macOS + Linux + Linux-coverage on every
+push. It had never executed before 2026-08-25; if runs stop appearing, check
+Settings → Actions → General rather than assuming the workflow is wrong.
+
+There is a second machine, **`ender`** (SSH, 14-core Mac, Qt6 only, repo at
+`~/git/qlcconsole`), on the `172.18.2.0/24` show VLAN via `vlan0`. It's the
+only place DMX output can be verified on real network hardware — see DONE.md
+2026-08-25 for the soak/throughput harnesses. Note `cmake` isn't on the
+non-interactive `PATH` there; prefix with `export PATH=/opt/homebrew/bin:$PATH`.
+
 ```sh
 # Reconfigure only when CMakeLists/sources are added or removed:
 cmake -S . -B build
