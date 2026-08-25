@@ -146,10 +146,20 @@ void MasterTimerPrivate::run()
         }
 
         /* Check if we're running late. This means that a tick is not enough
-         * to process all the running Functions :'( */
+         * to process all the running Functions :'( -- or that the kernel did
+         * not schedule this thread back in time. Report BOTH numbers so the
+         * two causes can be told apart: "late" is how far past the deadline we
+         * woke up, "compute" is how long the previous tick actually took. If
+         * compute is a small fraction of the tick budget while late is large,
+         * this is scheduling jitter, not engine load. */
         if (compareTime(finish, current) <= 0)
         {
-            qDebug() << Q_FUNC_INFO << "MasterTimer is running late!";
+            const long lateUs = long((current->tv_sec - finish->tv_sec) * 1000000L
+                                     + (current->tv_nsec - finish->tv_nsec) / 1000L);
+            qDebug() << Q_FUNC_INFO << "MasterTimer is running late!"
+                     << "late_us:" << lateUs
+                     << "compute_us:" << long(mt->tickComputeMs() * 1000.0)
+                     << "budget_us:" << (nsTickTime / 1000);
             /* No need to sleep. Immediately process the next tick */
             mt->timerTick();
             /* Now the finish time needs to be recalibrated */
