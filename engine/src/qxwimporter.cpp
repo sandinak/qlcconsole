@@ -29,6 +29,7 @@
 #include "fixturegroup.h"
 #include "grouphead.h"
 #include "function.h"
+#include "qlcpalette.h"
 #include "scene.h"
 #include "scenevalue.h"
 #include "chaser.h"
@@ -85,6 +86,25 @@ static FixtureGroup *cloneFixtureGroupXml(FixtureGroup *src, Doc *targetDoc)
     reader.readNextStartElement();
 
     FixtureGroup *copy = new FixtureGroup(targetDoc);
+    if (copy->loadXML(reader) == false)
+    {
+        delete copy;
+        return NULL;
+    }
+    return copy;
+}
+
+static QLCPalette *clonePaletteXml(QLCPalette *src, Doc *targetDoc)
+{
+    Q_UNUSED(targetDoc)
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    src->saveXML(&writer);
+
+    QXmlStreamReader reader(buf);
+    reader.readNextStartElement();
+
+    QLCPalette *copy = new QLCPalette(src->type());
     if (copy->loadXML(reader) == false)
     {
         delete copy;
@@ -152,7 +172,6 @@ static Function *cloneFunctionXml(Function *src, Doc *targetDoc)
         delete function;
         return NULL;
     }
-
     return function;
 }
 
@@ -198,6 +217,19 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
             allGroups.insert(rgb->fixtureGroup());
     }
 
+    // A Scene applies palettes by ID, so an imported Scene needs them too or it
+    // lands referring to palettes that don't exist in the target.
+    QSet<quint32> allPalettes;
+    foreach (quint32 fid, allFunctions)
+    {
+        Scene *sc = qobject_cast<Scene *>(sourceDoc->function(fid));
+        if (sc != NULL)
+        {
+            foreach (quint32 pid, sc->palettes())
+                allPalettes.insert(pid);
+        }
+    }
+
     // Any selected/depended-on FixtureGroup pulls in its own member fixtures.
     foreach (quint32 gid, allGroups)
     {
@@ -218,6 +250,7 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
     QHash<quint32, quint32> fixtureMap;
     QHash<quint32, quint32> functionMap;
     QHash<quint32, quint32> groupMap;
+    QHash<quint32, quint32> paletteMap;
 
     foreach (quint32 oldId, allFixtures)
     {
@@ -297,6 +330,35 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
         result.fixtureGroupsImported++;
     }
 
+    /*** 3b. Clone palettes. Standalone -- nothing inside a palette refers to a
+     *       fixture or function, so this only needs its own ID space remapped;
+     *       the Scenes that reference them are fixed up in step 5. ***/
+    foreach (quint32 oldId, allPalettes)
+    {
+        QLCPalette *src = sourceDoc->palette(oldId);
+        if (src == NULL)
+            continue;
+
+        QLCPalette *copy = clonePaletteXml(src, targetDoc);
+        if (copy == NULL)
+        {
+            result.warnings << QObject::tr("Skipped palette \"%1\": could not be read.").arg(src->name());
+            continue;
+        }
+
+        bool collides = (targetDoc->palette(oldId) != NULL);
+        if (targetDoc->addPalette(copy, collides ? QLCPalette::invalidId() : oldId) == false)
+        {
+            result.warnings << QObject::tr("Skipped palette \"%1\": could not be placed.").arg(src->name());
+            delete copy;
+            continue;
+        }
+        if (collides == true)
+            result.idsRemapped++;
+        paletteMap.insert(oldId, copy->id());
+        result.palettesImported++;
+    }
+
     /*** 4. Clone every function (IDs only -- cross-references still point
      *      at the SOURCE file's original IDs at this point) ***/
     foreach (quint32 oldId, allFunctions)
@@ -340,12 +402,25 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
         {
             Scene *scene = qobject_cast<Scene *>(f);
             QList<SceneValue> values = scene->values();
+            // Capture BEFORE clear(): it wipes m_palettes and m_paletteFade
+            // along with the values.
+            const QList<quint32> oldPalettes = scene->palettes();
+            const QHash<quint32, Scene::PaletteFade> oldFades = scene->paletteFades();
             scene->clear();
             foreach (const SceneValue &scv, values)
             {
                 SceneValue remapped(fixtureMap.value(scv.fxi, scv.fxi), scv.channel, scv.value);
                 scene->setValue(remapped);
             }
+
+            // Palette references, and the per-palette fade overrides keyed by
+            // the same ids. Re-added in the captured order because order is
+            // precedence: later entries override earlier ones.
+            foreach (quint32 pid, oldPalettes)
+                scene->addPalette(paletteMap.value(pid, pid));
+            for (auto it = oldFades.constBegin(); it != oldFades.constEnd(); ++it)
+                scene->setPaletteFade(paletteMap.value(it.key(), it.key()),
+                                      it.value().fadeInMs, it.value().fadeOutMs);
             break;
         }
         case Function::EFXType:

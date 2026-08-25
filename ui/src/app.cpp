@@ -1749,6 +1749,8 @@ void App::slotFileImport()
 
     QString summary = tr("Imported %1 fixture(s), %2 fixture group(s), %3 function(s).")
                         .arg(result.fixturesImported).arg(result.fixtureGroupsImported).arg(result.functionsImported);
+    if (result.palettesImported > 0)
+        summary += tr("\n%1 palette(s) came along with the imported scenes.").arg(result.palettesImported);
     if (result.idsRemapped > 0)
         summary += tr("\n%1 ID(s) were remapped due to conflicts with the current workspace.").arg(result.idsRemapped);
     if (result.fixturesRelocated > 0)
