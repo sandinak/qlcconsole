@@ -1445,7 +1445,7 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
                 const QString key = k + QLatin1Char(':') + QString::number(i);
                 if (!seen.contains(key)) { seen.insert(key); targets.append(qMakePair(k, i)); }
             };
-            auto inGroup = [this](QTreeWidgetItem *leaf) -> bool {
+            auto inGroup = [](QTreeWidgetItem *leaf) -> bool {
                 QTreeWidgetItem *pp = leaf->parent();
                 return pp != nullptr && pp->data(0, NodeTypeRole).toInt() == NodeGroup;
             };

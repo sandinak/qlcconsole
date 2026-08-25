@@ -75,7 +75,7 @@ void Monitor_Test::addTrussAccepted()
 
     const int before = m_doc->monitorProperties()->trusses().count();
 
-    QTimer::singleShot(0, [&mon]() {
+    QTimer::singleShot(0, []() {
         QWidget *modal = QApplication::activeModalWidget();
         QVERIFY(modal != NULL);
         QCOMPARE(modal->windowTitle(), QString("Add Truss"));
@@ -107,7 +107,7 @@ void Monitor_Test::addTrussCancelled()
 
     const int before = m_doc->monitorProperties()->trusses().count();
 
-    QTimer::singleShot(0, [&mon]() {
+    QTimer::singleShot(0, []() {
         QWidget *modal = QApplication::activeModalWidget();
         QVERIFY(modal != NULL);
 
@@ -136,7 +136,7 @@ void Monitor_Test::addTargetAccepted()
     const int beforeTargets = m_doc->monitorProperties()->stageTargets().count();
     const int beforePalettes = m_doc->palettes().count();
 
-    QTimer::singleShot(0, [&mon]() {
+    QTimer::singleShot(0, []() {
         QWidget *modal = QApplication::activeModalWidget();
         QVERIFY(modal != NULL);
         QVERIFY(modal->windowTitle().startsWith("Edit Target"));
@@ -179,7 +179,7 @@ void Monitor_Test::addTargetEditCancelled()
 
     const int before = m_doc->monitorProperties()->stageTargets().count();
 
-    QTimer::singleShot(0, [&mon]() {
+    QTimer::singleShot(0, []() {
         QWidget *modal = QApplication::activeModalWidget();
         QVERIFY(modal != NULL);
 
@@ -217,7 +217,7 @@ void Monitor_Test::addPlatformEditCancelled()
 
     const int before = m_doc->monitorProperties()->platforms().count();
 
-    QTimer::singleShot(0, [&mon]() {
+    QTimer::singleShot(0, []() {
         QWidget *modal = QApplication::activeModalWidget();
         QVERIFY(modal != NULL);
 
@@ -248,7 +248,7 @@ void Monitor_Test::removeSelectedTruss()
     Monitor mon(&parent, m_doc);
 
     quint32 addedId = Truss::invalidId();
-    QTimer::singleShot(0, [&mon]() {
+    QTimer::singleShot(0, []() {
         QWidget *modal = QApplication::activeModalWidget();
         QDialogButtonBox *btns = modal->findChild<QDialogButtonBox*>();
         btns->button(QDialogButtonBox::Ok)->click();
@@ -266,7 +266,7 @@ void Monitor_Test::removeSelectedTruss()
     QVERIFY(item != NULL);
     item->setSelected(true);
 
-    QTimer::singleShot(0, [&mon]() {
+    QTimer::singleShot(0, []() {
         // NOTE: don't assert on windowTitle() here — QMessageBox renders
         // without a title bar on macOS (a native-alert-style quirk), so it
         // reads back empty even though confirmFeatureDelete() sets one. The
@@ -292,7 +292,7 @@ void Monitor_Test::removeSelectedCancelled()
     QWidget parent;
     Monitor mon(&parent, m_doc);
 
-    QTimer::singleShot(0, [&mon]() {
+    QTimer::singleShot(0, []() {
         QWidget *modal = QApplication::activeModalWidget();
         QDialogButtonBox *btns = modal->findChild<QDialogButtonBox*>();
         btns->button(QDialogButtonBox::Ok)->click();
@@ -310,7 +310,7 @@ void Monitor_Test::removeSelectedCancelled()
     QVERIFY(item != NULL);
     item->setSelected(true);
 
-    QTimer::singleShot(0, [&mon]() {
+    QTimer::singleShot(0, []() {
         QWidget *modal = QApplication::activeModalWidget();
         QVERIFY(modal != NULL);
         QPushButton *cancelBtn = findButtonByText(modal, "Cancel");

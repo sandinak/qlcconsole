@@ -1408,7 +1408,6 @@ void PowerDistributionWidget::removeSelectedTreeItems()
             circuits.append(sc);
 
     // Tally what the removal will affect, for the warning.
-    int circuitCount = circuits.size();
     int fixtureCount = 0;
     bool sourceWithCircuits = false;
     foreach (const auto &sc, circuits)
@@ -1421,7 +1420,6 @@ void PowerDistributionWidget::removeSelectedTreeItems()
         const PowerSource &src = pd->sources().at(s);
         if (src.circuits.isEmpty() == false)
             sourceWithCircuits = true;
-        circuitCount += src.circuits.size();
         foreach (const PowerCircuit &cir, src.circuits)
             fixtureCount += cir.fixtures.size();
     }
