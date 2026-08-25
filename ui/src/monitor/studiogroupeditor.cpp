@@ -518,8 +518,10 @@ QList<quint32> StudioGroupEditor::selectedFixtureIds() const
 {
     QList<quint32> out;
     if (m_list != nullptr)
+    {
         foreach (QListWidgetItem *it, m_list->selectedItems())
             out << it->data(Qt::UserRole).toUInt();
+    }
     return out;
 }
 
