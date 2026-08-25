@@ -59,6 +59,18 @@ run_gate "Qt6" build-qt6 /opt/homebrew/opt/qt6  "" || true
 # class in reach locally instead of waiting for CI to find it.
 run_gate "Qt6-Release" build-qt6-rel /opt/homebrew/opt/qt6 "-DCMAKE_BUILD_TYPE=Release" || true
 
+# The Linux CI job builds with -Werror, and several of the classes it enforces
+# are invisible to a default local build -- -Wreorder in particular has now
+# broken CI twice from changes that passed every leg above. clang can see most
+# of them; turn them on here so the feedback is a minute away instead of a
+# push-and-wait. NOT -Werror across the board: the tree carries ~1150 warnings
+# outside CI's set (mostly third-party headers), so this enforces only the
+# classes CI actually fails on.
+WERROR_SET="-Werror=reorder-ctor -Werror=dangling-else -Werror=misleading-indentation"
+WERROR_SET="$WERROR_SET -Werror=format -Werror=macro-redefined -Werror=unused-function"
+WERROR_SET="$WERROR_SET -Werror=unused-variable -Werror=deprecated-declarations"
+run_gate "Qt6-Werror" build-qt6-werror /opt/homebrew/opt/qt6 "-DCMAKE_CXX_FLAGS=$WERROR_SET" || true
+
 echo
 if [ -n "$FAILED" ]; then
     echo "FAILED:$FAILED"
