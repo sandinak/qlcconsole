@@ -1543,6 +1543,46 @@ effect timing items also want the rig to confirm.
 
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
+- **Build host: Raspberry Pi 4 (TODO, 2026-08-25)** — the highest-value box to
+  add, because it answers an open question rather than just adding a build:
+  1. **Tick punctuality.** 51 universes at `transmitMode="Full"` on a 14-core
+     M-series logged 2 `MasterTimer is running late` events in 61 s at only
+     50% of one core (see the open item above). Four weak ARM cores is where
+     that either holds or doesn't. This is the measurement still outstanding.
+  2. **Different ABI.** ARM makes plain `char` *unsigned* where x86 makes it
+     signed, plus stricter alignment. DMX values are compared as `char` in
+     places (e.g. `QCOMPARE(ua.preGMValues()[0], char(255))` in
+     `ui/test/vcxypad/` — `-1` on x86, `255` on ARM). No amount of x86 testing
+     finds that class.
+  3. **Real target.** Upstream QLC+ ships Raspberry Pi builds; Pi-based
+     lighting controllers are common.
+  Build 32-bit (armhf) and you also get `qsizetype` as 32 bits — the width
+  assumption behind the `%d` format bug fixed in `mastertimer.cpp` this session.
+  Setup mirrors 192.168.1.245: cmake, Qt dev packages, xvfb, python3-lxml.
+
+- **Build host: Debian 12 guest (TODO, 2026-08-25)** — a *newer* toolchain
+  bound. CI is Ubuntu 22.04 (GCC 11, glibc 2.35, Qt 6.8); 192.168.1.245 is
+  Debian 11 (GCC 10, glibc 2.31, Qt5). Bookworm gives GCC 12 + `qt6-base-dev`,
+  which is the only combination not currently covered anywhere: Qt6 **and** a
+  compiler newer than CI's. Deliberately NOT another Ubuntu 22.04 box — that
+  duplicates CI exactly and would never find anything. The value of
+  192.168.1.245 was proven the day it was built: its older glibc exposed a
+  pthread linkage bug (`4a360911c`) that Ubuntu 22.04 structurally cannot see.
+
+- **Decide whether qlcconsole supports Intel Macs (TODO, 2026-08-25)** — a
+  product question, not a coverage gap, and worth settling before building
+  hardware for it. The shipped binary is **arm64 only** (`file` on both the
+  build output and the packaged app); nothing sets `CMAKE_OSX_ARCHITECTURES`,
+  so it targets whatever host builds it. An Intel Mac therefore cannot run the
+  current DMG at all. Note this is NOT a Rosetta problem — Rosetta translates
+  x86 -> arm, not the reverse, so its sunset doesn't threaten an arm64 build.
+  If the answer is "yes, support Intel", the cheap route is probably a
+  universal binary (`CMAKE_OSX_ARCHITECTURES="arm64;x86_64"`; Qt from
+  install-qt-action ships universal for macOS) rather than a second build
+  machine — one CI config change instead of another host to maintain. Branson
+  has an Intel Mac available if a real second machine turns out to be needed.
+
+
 - **MasterTimer misses ticks at full output load (OPEN, 2026-08-25)** — with 51
   universes forced to `transmitMode="Full"` on `ender` (~2484 pkt/s, ~49 Hz per
   universe) a 61 s run logged **2** `MasterTimer is running late` events while a
