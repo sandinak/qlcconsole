@@ -117,7 +117,8 @@ bool Launcher::eventFilter(QObject* object, QEvent* event)
             }
         }
 
-        if (path.endsWith(KExtWorkspace, Qt::CaseInsensitive) == true)
+        if (path.endsWith(KExtWorkspaceConsole, Qt::CaseInsensitive) == true ||
+            path.endsWith(KExtWorkspace, Qt::CaseInsensitive) == true)
         {
             launchQLC(QApplication::arguments() << "--open" << path);
             retval = true;
