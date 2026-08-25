@@ -165,7 +165,10 @@ static quint32 makeFixture(Doc *doc, int address)
 void QxwImporter_Test::mapPlacementFollowsFixture()
 {
     const quint32 fid = makeFixture(m_source, 0);
-    PreviewItem item;
+    // Value-initialise: PreviewItem only default-initialises m_layerId and
+    // m_groupId, so a plain declaration leaves position/rotation/scale/zoom/
+    // flags indeterminate and GCC rightly refuses it under -Werror.
+    PreviewItem item = PreviewItem();
     item.m_position = QVector3D(1200, 0, 3400);
     item.m_rotation = QVector3D(0, 90, 0);
     item.m_color = QColor(Qt::magenta);
@@ -187,7 +190,10 @@ void QxwImporter_Test::mapPlacementFollowsFixture()
 void QxwImporter_Test::mapLayerAndGroupAreReset()
 {
     const quint32 fid = makeFixture(m_source, 0);
-    PreviewItem item;
+    // Value-initialise: PreviewItem only default-initialises m_layerId and
+    // m_groupId, so a plain declaration leaves position/rotation/scale/zoom/
+    // flags indeterminate and GCC rightly refuses it under -Werror.
+    PreviewItem item = PreviewItem();
     item.m_position = QVector3D(500, 0, 500);
     item.m_layerId = 9;
     item.m_groupId = 42;
