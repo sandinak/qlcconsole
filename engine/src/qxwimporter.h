@@ -38,6 +38,9 @@ public:
     int fixtureGroupsImported = 0;
     int functionsImported = 0;
     int palettesImported = 0;
+    int fixturesPlaced = 0;         //!< brought their 2D-map position along
+    int fixturesPowerPatched = 0;   //!< re-patched onto a power circuit
+    int powerSourcesCreated = 0;    //!< distros created to hold them
     int idsRemapped = 0;         //!< fixture/function/group IDs that collided
     QStringList warnings;        //!< items skipped because they couldn't be placed
 };
@@ -59,10 +62,17 @@ public:
  * Scene palette references and their per-palette fade overrides) so the
  * imported content is internally consistent in its new home.
  *
- * NOT yet carried across: MonitorProperties (2D plot position, layer and
- * group membership, rig props) and PowerDistribution (which circuit feeds a
- * fixture). An imported fixture therefore arrives unplaced on the 2D map and
- * unpatched for power.
+ * Also carries each fixture's 2D-map placement (position, rotation, scale,
+ * gel colour, zoom, flags) and its power feed, matching an existing power
+ * source/circuit by name before creating one so importing the same rig twice
+ * doesn't produce duplicate distros.
+ *
+ * NOT carried: 2D layer and group membership (those id spaces aren't imported,
+ * and a dangling group id makes MonitorProperties::ensureGroup() invent a
+ * phantom group), fixture rig props (they reference truss/platform ids that
+ * aren't imported either), and a power source's stage position, which is
+ * venue-fixed and belongs to the target's plot. Imported fixtures therefore
+ * land on the default layer, ungrouped.
  */
 class QxwImporter
 {

@@ -29,6 +29,8 @@
 #include "fixturegroup.h"
 #include "grouphead.h"
 #include "function.h"
+#include "monitorproperties.h"
+#include "powerdistribution.h"
 #include "qlcpalette.h"
 #include "scene.h"
 #include "scenevalue.h"
@@ -357,6 +359,122 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
             result.idsRemapped++;
         paletteMap.insert(oldId, copy->id());
         result.palettesImported++;
+    }
+
+    /*** 3c. Carry each imported fixture's 2D-map placement and power feed.
+     *
+     *  Both are keyed by fixture id, so they follow fixtureMap. Neither is a
+     *  function, so neither is reachable from the function walk above -- an
+     *  imported fixture used to land unplaced and unpatched. ***/
+    MonitorProperties *srcMon = sourceDoc->monitorProperties();
+    MonitorProperties *dstMon = targetDoc->monitorProperties();
+    PowerDistribution *srcPower = sourceDoc->powerDistribution();
+    PowerDistribution *dstPower = targetDoc->powerDistribution();
+
+    for (auto it = fixtureMap.constBegin(); it != fixtureMap.constEnd(); ++it)
+    {
+        const quint32 oldFid = it.key();
+        const quint32 newFid = it.value();
+
+        /* --- 2D map placement ------------------------------------------- */
+        if (srcMon != NULL && dstMon != NULL && srcMon->containsFixture(oldFid))
+        {
+            FixturePreviewItem item = srcMon->fixtureProperties(oldFid);
+
+            // Layer and group ids belong to the SOURCE's own id spaces, which
+            // are not imported. Left as-is they would point at layers/groups
+            // that don't exist here -- and MonitorProperties::ensureGroup()
+            // CREATES a group for any unknown id it is handed, so the target
+            // would sprout phantom "Group N" entries on next load. Land the
+            // fixture on the default layer, ungrouped; position, rotation,
+            // scale, gel colour, zoom and flags all come across.
+            item.m_baseItem.m_layerId = 0;
+            item.m_baseItem.m_groupId = 0;
+            for (auto sub = item.m_subItems.begin(); sub != item.m_subItems.end(); ++sub)
+            {
+                sub->m_layerId = 0;
+                sub->m_groupId = 0;
+            }
+
+            dstMon->setFixtureProperties(newFid, item);
+            result.fixturesPlaced++;
+        }
+
+        /* --- power feed --------------------------------------------------- */
+        if (srcPower == NULL || dstPower == NULL)
+            continue;
+
+        int srcSrcIdx = -1, srcCirIdx = -1;
+        const QList<PowerSource> &srcSources = srcPower->sources();
+        for (int si = 0; si < srcSources.size() && srcSrcIdx < 0; si++)
+        {
+            for (int ci = 0; ci < srcSources.at(si).circuits.size(); ci++)
+            {
+                if (srcSources.at(si).circuits.at(ci).fixtures.contains(oldFid))
+                {
+                    srcSrcIdx = si;
+                    srcCirIdx = ci;
+                    break;
+                }
+            }
+        }
+        if (srcSrcIdx < 0)
+            continue;   // not patched for power in the source workspace
+
+        const PowerSource &sSrc = srcSources.at(srcSrcIdx);
+        const PowerCircuit &sCir = sSrc.circuits.at(srcCirIdx);
+
+        // Match an existing source/circuit by name before creating one -- a
+        // rig imported twice should land on the same distro, not a duplicate.
+        QList<PowerSource> &dstSources = dstPower->sources();
+        int dSrcIdx = -1;
+        for (int si = 0; si < dstSources.size(); si++)
+        {
+            if (dstSources.at(si).name == sSrc.name)
+            {
+                dSrcIdx = si;
+                break;
+            }
+        }
+        if (dSrcIdx < 0)
+        {
+            PowerSource copy;
+            copy.name = sSrc.name;
+            copy.type = sSrc.type;
+            copy.voltage = sSrc.voltage;
+            copy.connector = sSrc.connector;
+            // Deliberately NOT copying placed/posX/posY: those are venue-fixed
+            // (see the comment on PowerSource), so they belong to the target's
+            // own stage plot, not the imported show's.
+            dstSources.append(copy);
+            dSrcIdx = dstSources.size() - 1;
+            result.powerSourcesCreated++;
+        }
+
+        int dCirIdx = -1;
+        for (int ci = 0; ci < dstSources[dSrcIdx].circuits.size(); ci++)
+        {
+            if (dstSources[dSrcIdx].circuits.at(ci).name == sCir.name)
+            {
+                dCirIdx = ci;
+                break;
+            }
+        }
+        if (dCirIdx < 0)
+        {
+            PowerCircuit copy;
+            copy.name = sCir.name;
+            copy.voltage = sCir.voltage;
+            copy.ratedAmps = sCir.ratedAmps;
+            copy.deratePercent = sCir.deratePercent;
+            copy.demandPercent = sCir.demandPercent;
+            copy.connector = sCir.connector;
+            dstSources[dSrcIdx].circuits.append(copy);
+            dCirIdx = dstSources[dSrcIdx].circuits.size() - 1;
+        }
+
+        dstPower->assignFixture(newFid, dSrcIdx, dCirIdx);
+        result.fixturesPowerPatched++;
     }
 
     /*** 4. Clone every function (IDs only -- cross-references still point
