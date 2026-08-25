@@ -69,7 +69,7 @@ void RGBScript_Test::directories()
 #elif defined(WIN32) || defined(Q_OS_WIN)
     QVERIFY(dir.path().endsWith("RGBScripts"));
 #else
-    QVERIFY(dir.path().endsWith("qlcplus/rgbscripts"));
+    QVERIFY(dir.path().endsWith("qlcconsole/rgbscripts"));
 #endif
 
     dir = RGBScriptsCache::userScriptsDirectory();
@@ -80,7 +80,7 @@ void RGBScript_Test::directories()
 #elif defined(WIN32) || defined(Q_OS_WIN)
     QVERIFY(dir.path().endsWith("RGBScripts"));
 #else
-    QVERIFY(dir.path().endsWith(".qlcplus/rgbscripts"));
+    QVERIFY(dir.path().endsWith(".qlcconsole/rgbscripts"));
 #endif
 }
 
