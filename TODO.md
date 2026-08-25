@@ -1804,6 +1804,27 @@ effect timing items also want the rig to confirm.
     device-table / reconcile workflow be built and tested with no rig at all —
     which would move this item off the ✈️-blocked list. Worth confirming
     before assuming this feature needs hardware.
+  - **SUSPICION, not yet proven — QLC+'s `ArtTodRequest` is 25 bytes; the
+    Art-Net spec's is 56.** `ArtNetPacketizer::setupArtNetTodRequest`
+    (`artnetpacketizer.cpp:161`) builds a 12-byte common header + 9 filler/spare
+    + Net + Command + AddCount + **one** Address byte = 25 bytes. The spec
+    defines `Address` as a fixed `[32]` array, making the packet 56 bytes.
+    Permissive nodes will not care; a strict one would drop it — which is
+    exactly the shape of bug that makes RDM "mysteriously not work" against
+    real hardware while the code reads fine.
+    **NOT verified.** The comparison was attempted against the OLA node on the
+    Pi and was inconclusive: OLA answered the 56-byte probe earlier in the day
+    but answered neither length while the Pi was under a parallel build
+    (load 4.25), so the negative result says more about OLA being starved than
+    about packet length. **The test to run**, on an idle box with a known-good
+    RDM node: send the byte-exact 25-byte QLC+ layout and the 56-byte spec
+    layout to the same node and compare `ArtTodData` replies. Do this before
+    concluding anything about QLC+'s RDM working or not working.
+  - Develop against **`rdm-sim.py`** (repo root) when no node is available —
+    it answers ArtPoll / ArtTodRequest / ArtTodControl with a synthetic TOD and
+    ArtRdm GET for the device-table PIDs. Verified working end to end against
+    `artnet-probe.py` (3 simulated UIDs). Note it is deliberately *permissive*
+    about request length, so it cannot settle the 25-vs-56 question above.
   - Reproduce any of this with **`artnet-probe.py`** at the repo root.
 
   **Paradigm answers (2026-08-25 discussion) — no new U→node binding needed.**
