@@ -172,7 +172,6 @@ void SequenceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
         quint32 stepDuration = stepDisplayMs(stepIdx);
         float stepWidth = ((timeUnit * (float)stepDuration) / 1000);
 
-        const float top = 1.0f;
         const float bot = TRACK_HEIGHT - 3;
         // Fades live BELOW the title/move strip so they never intrude on the
         // block-move handle (object handles = top bar; fades stay under it).

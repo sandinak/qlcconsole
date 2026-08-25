@@ -28,18 +28,6 @@
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-static QString paletteTypeLabel(QLCPalette *p)
-{
-    switch (p->type())
-    {
-        case QLCPalette::Color:   return "Color";
-        case QLCPalette::Dimmer:  return "Dimmer";
-        case QLCPalette::Effect:  return "Effect";
-        case QLCPalette::PanTilt: return "PanTilt";
-        case QLCPalette::Beam:    return "Beam";
-        default:                  return "Other";
-    }
-}
 
 static BundleEntry entryFromPalette(QLCPalette *p, Scene *scene)
 {
