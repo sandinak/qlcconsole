@@ -1595,6 +1595,25 @@ effect timing items also want the rig to confirm.
   DMX not sent. Reproduce with `/tmp/throughput.sh` on ender (see DONE.md
   2026-08-25 for the harness).
 
+- **TRAP: on Linux, a build-dir run loads NO I/O plugins and silently outputs
+  nothing (2026-08-25)** — cost a full 10-minute soak that looked like a clean
+  pass. `IOPluginCache::load` resolves via `QLCFile::systemDirectory(PLUGINDIR)`
+  (`engine/src/qlcfile.cpp:181`), and on Linux that branch is just
+  `dir.setPath(path)` with `PLUGINDIR` a **compile-time absolute**
+  (`/usr/lib/qt6/plugins/qlcconsole`, or `qt5` on the Debian 11 box). There is
+  no env override. macOS is fine because its branch resolves
+  `applicationDirPath()/../PlugIns`, which the build tree mirrors — so this
+  bites only on Linux and only when running from `build/` without installing.
+  The failure is **silent and looks like success**: every universe logs
+  `setOutputPatch - plugin: "None"`, the app runs happily, CPU sits at ~0%, and
+  a punctuality soak reports **zero** late events because nothing was ever
+  transmitted. Check `grep -c artnet` in the run log, or CPU > 0, before
+  believing any Linux throughput/punctuality number.
+  Workaround for a build-dir run:
+  `sudo mkdir -p $PLUGINDIR && sudo ln -sf ~/git/qlcconsole/build/plugins/*.so $PLUGINDIR/`.
+  Worth considering a `QLC_PLUGIN_PATH` env override so test rigs stop needing
+  root to run what they just built.
+
 - **ArtNet failure reporting still flaps (OPEN, 2026-08-25)** — `e3905a2a1`
   replaced 2850 identical `sendDmx failed` lines with one report per universe
   per state change, which is an ~87% reduction but not the "one line" first
