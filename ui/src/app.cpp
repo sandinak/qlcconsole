@@ -3111,6 +3111,24 @@ void App::checkAutosaveRecovery()
 
     if (autosaveFile.exists())
     {
+        /* A modal prompt cannot be answered where there is nobody to answer it.
+           On the offscreen/minimal platforms -- the unit-test gate, headless
+           soak harnesses, CI -- QMessageBox renders happily and then blocks
+           App::init() forever, so the app never finishes starting and the test
+           binary hangs until its watchdog fires. Skip the prompt there and
+           leave the file alone, so a later interactive session can still
+           offer the recovery. QLC_NO_RECOVERY_PROMPT forces the same
+           behaviour for scripted runs on a real display. */
+        const QString platform = QGuiApplication::platformName();
+        if (platform == QLatin1String("offscreen")
+            || platform == QLatin1String("minimal")
+            || qEnvironmentVariableIsSet("QLC_NO_RECOVERY_PROMPT"))
+        {
+            qDebug() << "[Autosave] Recovery file present but no interactive "
+                        "display; left untouched:" << untitledAutosave;
+            return;
+        }
+
         QFileInfo fi(untitledAutosave);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         QString lastModified = QLocale().toString(fi.lastModified(), QLocale::LongFormat);
