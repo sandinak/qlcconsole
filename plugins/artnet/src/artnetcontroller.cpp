@@ -122,6 +122,7 @@ void ArtNetController::addUniverse(quint32 universe, ArtNetController::Type type
         info.outputUniverse = universe;
         info.outputTransmissionMode = Standard;
         info.type = type;
+        info.sendFailures = 0;
         m_universeMap[universe] = info;
     }
 
@@ -272,6 +273,42 @@ UniverseInfo *ArtNetController::getUniverseInfo(quint32 universe)
     return NULL;
 }
 
+/**
+ * Report a send result for one universe without flooding the log.
+ *
+ * A failing output usually fails on every frame -- the interface named by the
+ * workspace isn't on this machine, the route is gone -- so warning per send
+ * produced thousands of identical lines a minute and hid the one fact that
+ * matters: which universe is dark, and why. Warn on the first failure, count
+ * the rest, and say so once when it starts working again.
+ */
+void ArtNetController::reportSendResult(UniverseInfo &info, quint32 universe,
+                                        const QHostAddress &dest, bool ok)
+{
+    if (ok == false)
+    {
+        info.sendFailures++;
+        if (info.sendFailures == 1)
+        {
+            qWarning() << "[ArtNet] universe" << (universe + 1)
+                       << "output to" << dest.toString()
+                       << "is failing:" << m_udpSocket->errorString()
+                       << "- nothing patched to it will transmit."
+                       << "Further failures on this universe will be counted, not logged.";
+        }
+        return;
+    }
+
+    if (info.sendFailures > 0)
+    {
+        qWarning() << "[ArtNet] universe" << (universe + 1)
+                   << "output to" << dest.toString() << "recovered after"
+                   << info.sendFailures << "failed sends.";
+        info.sendFailures = 0;
+    }
+    m_packetSent++;
+}
+
 void ArtNetController::slotSendAllUniverses()
 {
     QMutexLocker locker(&m_dataMutex);
@@ -288,16 +325,7 @@ void ArtNetController::slotSendAllUniverses()
             m_packetizer->setupArtNetDmx(dmxPacket, info.outputUniverse, info.outputData);
 
             qint64 sent = m_udpSocket->writeDatagram(dmxPacket, info.outputAddress, ARTNET_PORT);
-            if (sent < 0)
-            {
-                qWarning() << "sendDmx failed";
-                qWarning() << "Errno: " << m_udpSocket->error();
-                qWarning() << "Errmgs: " << m_udpSocket->errorString();
-            }
-            else
-            {
-                m_packetSent++;
-            }
+            reportSendResult(info, it.key(), info.outputAddress, sent >= 0);
         }
     }
 }
@@ -340,16 +368,7 @@ void ArtNetController::sendDmx(const quint32 universe, const QByteArray &data, b
     }
 
     qint64 sent = m_udpSocket->writeDatagram(dmxPacket, outAddress, ARTNET_PORT);
-    if (sent < 0)
-    {
-        qWarning() << "sendDmx failed";
-        qWarning() << "Errno: " << m_udpSocket->error();
-        qWarning() << "Errmgs: " << m_udpSocket->errorString();
-    }
-    else
-    {
-        m_packetSent++;
-    }
+    reportSendResult(*info, universe, outAddress, sent >= 0);
 }
 
 bool ArtNetController::sendRDMCommand(const quint32 universe, uchar command, QVariantList params)

@@ -63,6 +63,13 @@ typedef struct _uinfo
 
     /** Universe data to be sent depending on the transmission mode */
     QByteArray outputData;
+
+    /** Consecutive failed sends for this universe. A send can fail forever --
+     *  most commonly when the workspace names a bind interface this machine
+     *  doesn't have -- and at DMX rates that produced thousands of identical
+     *  warnings a minute, burying the one line that says which universe is
+     *  dark. Report the first failure and the recovery; count the rest. */
+    quint64 sendFailures;
 } UniverseInfo;
 
 class ArtNetController final : public QObject
@@ -150,6 +157,11 @@ public:
     bool sendRDMCommand(const quint32 universe, uchar command, QVariantList params);
 
 private:
+    /** Log a send failure/recovery for one universe at most once per state
+     *  change, rather than once per frame. See the implementation. */
+    void reportSendResult(UniverseInfo &info, quint32 universe,
+                          const QHostAddress &dest, bool ok);
+
     /** The network interface associated to this controller */
     QNetworkInterface m_interface;
     QNetworkAddressEntry m_address;
