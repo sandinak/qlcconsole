@@ -84,8 +84,9 @@ SectionEnd
 
 ;--------------------------------
 ; Optional file association section
-Section "Associate .qxw and .qxf files" SEC_ASSOC
+Section "Associate .qlcc, .qxw and .qxf files" SEC_ASSOC
 	; Per-user classes (maps to HKCR for current user)
+	WriteRegStr HKCU "Software\Classes\.qlcc" "" "QLCConsole.Document"
 	WriteRegStr HKCU "Software\Classes\.qxw" "" "QLCConsole.Document"
 	WriteRegStr HKCU "Software\Classes\QLCConsole.Document" "" "qlcconsole Workspace"
 	WriteRegStr HKCU "Software\Classes\QLCConsole.Document\DefaultIcon" "" "$INSTDIR\qlcconsole-qml.exe,0"
@@ -162,6 +163,7 @@ Section "Uninstall"
 	RMDir $INSTDIR
 
 	; Remove file associations (per-user)
+	DeleteRegKey HKCU "Software\Classes\.qlcc"
 	DeleteRegKey HKCU "Software\Classes\.qxw"
 	DeleteRegKey HKCU "Software\Classes\QLCConsole.Document"
 	DeleteRegKey HKCU "Software\Classes\.qxf"

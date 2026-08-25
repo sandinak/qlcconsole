@@ -1,5 +1,13 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+	<mime-type type="application/x-qlcconsole-workspace">
+		<sub-class-of type="application/xml"/>
+		<magic priority="80">
+			<match type="string" offset="0:100" value="&lt;!DOCTYPE Workspace&gt;"/>
+		</magic>
+		<glob pattern="*.qlcc"/>
+		<comment xml:lang="en">qlcconsole workspace</comment>
+	</mime-type>
 	<mime-type type="application/x-qlc-workspace">
 		<sub-class-of type="application/xml"/>
 		<magic priority="80">

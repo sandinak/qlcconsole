@@ -99,6 +99,7 @@ Section
 	File /r RGBScripts
 	File /r Web
 
+	WriteRegStr HKCR ".qlcc" "" "QLCConsole.Document"
 	WriteRegStr HKCR ".qxw" "" "QLCConsole.Document"
 	WriteRegStr HKCR "QLCConsole.Document" "" "qlcconsole Workspace"
 	WriteRegStr HKCR "QLCConsole.Document\DefaultIcon" "" "$INSTDIR\qlcconsole.exe,0"
@@ -141,6 +142,7 @@ Section "Uninstall"
 
 	RMDir $INSTDIR
 
+	DeleteRegKey HKCR ".qlcc"
 	DeleteRegKey HKCR ".qxw"
 	DeleteRegKey HKCR "QLCConsole.Document"
 
