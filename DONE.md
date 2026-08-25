@@ -6,6 +6,58 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-08-25 — CI brought online, five shipped bugs, importer completion *(BUILT + verified)*
+
+A session that started as "do a build" and turned into the first real look at
+the fork's verification. Recorded here because most of it is invisible in the
+code itself.
+
+**CI existed but had never run.** `.github/workflows/build.yml` was present on
+`main` from repo creation (2026-08-10) yet GitHub had never registered it —
+`actions/runs` reported total_count 0. Enabling Actions in repo settings fixed
+push triggering; before that, every run had to be dispatched by hand. The
+macOS job also never ran the suite at all (no `Test` step) and still used
+upstream's `QLC+.app` / `qlcplus` paths, so it could only ever have failed.
+Linux needed ~40 `-Werror` fixes across engine and UI before it compiled.
+Now: macOS + Linux + Linux-coverage all green, triggered on push.
+
+**The test gate did not gate.** `make check` printed "unit tests failed" and
+exited 0 — `unittest.sh` ended on `popd`, so the runner's status was discarded.
+It also ran whatever binaries were lying in the build dir. Both fixed; the gate
+now blocks and builds what it tests.
+
+**Bugs found that were live in shipped builds:**
+- `~PMJOverlay` use-after-free — segfault on *every* quit (5 of 6 crash reports).
+- `VCXYPadFixture::writeDMX()` narrowed an unclamped double to ushort —
+  undefined behaviour that Debug wrapped and `-O2` did not, so a pad pushed
+  past full scale could land anywhere, including 0. Only the Release CI job
+  could see it; `check-all.sh` gained a Release leg because of this.
+- `lines.js` used ES6 `Array.fill()`, absent from the Qt5 script engine — the
+  Lines effect returned an empty map on every Qt5 build.
+- Loading a workspace marked it modified (`ensurePlatformGroup()` reported a
+  change unconditionally), so autosave fired on untouched documents.
+- `PROP_HEAD` defined twice with different values; include order decided which.
+
+**Startup 14.50s → 2.39s** on surfacetesting.qxw. Two causes, both measured:
+`Monitor::fillDMXView()` built ~58,700 stylesheet'd QLabels for a view this
+fork *retired* (69% of startup), and every FixtureGroup added during load
+triggered a full fixture-tree rebuild. Plus a load-progress dialog, since the
+window is already up while the file is read.
+
+**Importer (`File > Import`) completed** for the build-a-show-from-old-shows
+workflow: palettes (with fade overrides and precedence order), 2D map
+placement, power patching (reusing a same-named distro), and 2D layer/group
+membership (matched by name, parent chain walked). 13 tests, which caught two
+real bugs in that work before it shipped.
+
+**Live rig verification on `ender`** — first time DMX output has been proven on
+hardware. Worst case measured: 51 universes in `transmitMode="Full"` sustained
+**2,484 pkt/s (~49 Hz/universe, ~11 Mbit/s) at 50% of one core, 227 MB RSS,
+zero send failures**. Normal `Standard` mode is far lower (27 pkt/s on the same
+rig) because it only sends changed universes.
+
+Open items from this work live in TODO.md under "Deferred / next candidates".
+
 ### 2026-08-12 — Simple Desk capture wiring + move-in-black dangle detector *(BUILT — needs rig eyeball)*
 Two travel-safe items off the "Deferred / next candidates" list, both offscreen-testable.
 - [x] **Simple Desk → CaptureManager** — `SimpleDesk::slotUniverseSliderValueChanged()`

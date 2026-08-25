@@ -1543,6 +1543,63 @@ effect timing items also want the rig to confirm.
 
 ## Deferred / next candidates *(open slices carved out of shipped features)*
 
+- **MasterTimer misses ticks at full output load (OPEN, 2026-08-25)** — with 51
+  universes forced to `transmitMode="Full"` on `ender` (~2484 pkt/s, ~49 Hz per
+  universe) a 61 s run logged **2** `MasterTimer is running late` events while a
+  91 s run at the same settings logged **0**. CPU was only 50% avg / 64% peak of
+  one core, so this is not throughput saturation — it looks like scheduling
+  jitter, and it's the same wall-clock sensitivity that made
+  `MasterTimer_Test::interval()` and `VCCueList_Test::functionRemoved()` flaky
+  on CI. Rare, and the box was also running tcpdump. Worth understanding before
+  anyone trusts this desk for tight timecode work: a missed tick is a frame of
+  DMX not sent. Reproduce with `/tmp/throughput.sh` on ender (see DONE.md
+  2026-08-25 for the harness).
+
+- **ArtNet failure reporting still flaps (OPEN, 2026-08-25)** — `e3905a2a1`
+  replaced 2850 identical `sendDmx failed` lines with one report per universe
+  per state change, which is an ~87% reduction but not the "one line" first
+  claimed. A universe whose target never answers ARP oscillates fail →
+  succeed → fail (ARP cache expiry), so the live soak still produced 200
+  "is failing" + 150 "recovered" lines across 50 universes in 120 s. Wants
+  hysteresis: don't report recovery until it has held for N sends. Deliberately
+  NOT built on speculation, because the flapping was caused by absent hardware
+  (rig in storage) rather than a real-world configuration.
+
+- **`VCCueList_Test::functionRemoved()` flake — watch, don't assume fixed
+  (OPEN, 2026-08-25)** — failed on 2 of ~9 macOS CI runs asserting a tree row
+  count right after a 100 ms deferred refresh. `6d3757bb2` switched it to
+  `QTRY_COMPARE`, which polls instead of sleeping a guessed interval. NOT
+  proven: it passed 7 of 9 runs *before* the change too, and the failure could
+  not be reproduced locally even under six spinning cores. Sustained green
+  across many runs is the only evidence that counts. If it returns, the fix was
+  insufficient rather than wrong. Five other UI test files still use fixed
+  `QTest::qWait` and were left alone — none has failed.
+
+- **Windows CI removed, not repaired (OPEN, 2026-08-25)** — `fb9c5fd74` deleted
+  the `build-windows` job. Both legs failed at "Fix build" seding
+  `platforms/windows/qlcplus4Qt6.nsi`, which the rebrand renamed, and
+  RELEASE.md already lists Windows packaging as out of scope and stale. Removed
+  rather than left permanently red, because a job that cannot pass trains
+  people to ignore CI — which is exactly how this repo ended up with a workflow
+  nobody noticed had never run. Re-add when Windows is a real target and the
+  NSIS scripts have had their rebrand pass.
+
+- **Warning backlog outside the `-Werror` set (OPEN, 2026-08-25)** — a
+  tree-wide `-Wall -Wextra` sweep reports ~1100
+  `-Wunnecessary-virtual-specifier`, 92 `-Wdeprecated-declarations` (all in
+  Homebrew's OLA headers, not ours), 38 `-Wnon-c-typedef-for-linkage` (e.g.
+  `PreviewItem`) and 20 `-Winconsistent-missing-override`. None is in the set
+  CI enforces and most are third-party. Noted so the next person doesn't
+  rediscover them and assume they're new.
+
+- **Rig fidelity test not done (OPEN, 2026-08-25)** — throughput was measured
+  at the NIC with tcpdump, which proves what the console *transmits* but not
+  that a node *accepts* it. Branson has a single 4-universe node available;
+  the full rig is in storage. That's the test that would confirm packet
+  well-formedness end to end. `RIG_TEST_PLAN.md` as a whole remains
+  unexercised.
+
+
 - **Output ENDPOINT reachability check (BACK BURNER, 2026-08-25)** — the
   readiness indicator added in `daeeb97d7` catches one failure mode: the
   workspace names a plugin *line* (for the network plugins, an index into the
