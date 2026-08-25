@@ -125,6 +125,13 @@ def main():
     ap.add_argument("--net", type=int, default=0, help="Art-Net Net (default 0)")
     ap.add_argument("--universes", type=int, default=4,
                     help="how many universes/ports to ask about (default 4)")
+    ap.add_argument("--port", type=int, default=ARTNET_PORT,
+                    help="destination UDP port (default 6454)")
+    ap.add_argument("--listen-port", type=int, default=None,
+                    help="local port to receive on. Defaults to 6454 because "
+                         "real nodes reply there regardless of source port. "
+                         "Use 0 (ephemeral) when probing a simulator that "
+                         "replies to the sender.")
     ap.add_argument("--wait", type=float, default=6.0,
                     help="seconds to listen after the TOD requests")
     args = ap.parse_args()
@@ -138,7 +145,8 @@ def main():
             pass
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     try:
-        s.bind(("0.0.0.0", ARTNET_PORT))
+        lp = args.listen_port if args.listen_port is not None else ARTNET_PORT
+        s.bind(("0.0.0.0", lp))
     except OSError as e:
         print(f"cannot bind UDP {ARTNET_PORT}: {e}\n"
               f"A running qlcconsole holds this port. Quit it and retry "
@@ -148,7 +156,7 @@ def main():
     s.settimeout(1.0)
 
     unis = list(range(args.universes))
-    target = (args.target, ARTNET_PORT)
+    target = (args.target, args.port)
 
     print(f"--> ArtPoll to {args.target}")
     s.sendto(artnet_hdr(OP_POLL) + bytes([0x02, 0x00]), target)
