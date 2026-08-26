@@ -1409,11 +1409,11 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
     {
         while (doc.readNextStartElement())
         {
-            if (doc.name() == "EffectScript")
+            if (doc.name() == QLatin1String("EffectScript"))
                 m_scriptPath = doc.readElementText();
-            else if (doc.name() == "EffectPreset")
+            else if (doc.name() == QLatin1String("EffectPreset"))
                 m_effectPreset = doc.readElementText();
-            else if (doc.name() == "EffectInputBinding")
+            else if (doc.name() == QLatin1String("EffectInputBinding"))
             {
                 QString slot   = doc.attributes().value("slot").toString();
                 quint32 uni    = doc.attributes().value("universe").toUInt();
@@ -1422,7 +1422,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                     m_effectInputBindings[slot] = qMakePair(uni, ch);
                 doc.skipCurrentElement();
             }
-            else if (doc.name() == "EffectPaletteBinding")
+            else if (doc.name() == QLatin1String("EffectPaletteBinding"))
             {
                 QString slot = doc.attributes().value("slot").toString();
                 quint32 pid  = doc.attributes().value("palette").toUInt();
@@ -1430,7 +1430,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                     m_effectPaletteBindings[slot] = pid;
                 doc.skipCurrentElement();
             }
-            else if (doc.name() == "EffectTargetBinding")
+            else if (doc.name() == QLatin1String("EffectTargetBinding"))
             {
                 QString slot = doc.attributes().value("slot").toString();
                 quint32 tid  = doc.attributes().value("target").toUInt();
@@ -1438,7 +1438,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                     m_effectTargetBindings[slot] = tid;
                 doc.skipCurrentElement();
             }
-            else if (doc.name() == "EffectParam")
+            else if (doc.name() == QLatin1String("EffectParam"))
             {
                 QString name = doc.attributes().value("name").toString();
                 double  val  = doc.attributes().value("value").toDouble();
@@ -1446,7 +1446,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                     m_effectParamValues[name] = val;
                 doc.skipCurrentElement();
             }
-            else if (doc.name() == "EffectStringParam")
+            else if (doc.name() == QLatin1String("EffectStringParam"))
             {
                 QString name = doc.attributes().value("name").toString();
                 QString val  = doc.attributes().value("value").toString();
