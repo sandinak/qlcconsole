@@ -385,7 +385,7 @@ void TimecodeCalibrationDialog::slotListenToggled(bool on)
     if (io->beatGeneratorType() != InputOutputMap::Audio)
     {
         m_listenInfo->setText(tr("⚠ Could not start audio beat detection — check the "
-                                 "audio input device in Inputs/Outputs."));
+                                 "audio input device in Connections."));
         m_listenInfo->setStyleSheet("color:#c0392b;");
         const QSignalBlocker b(m_listenBtn);
         m_listenBtn->setChecked(false);
