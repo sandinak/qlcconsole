@@ -1822,6 +1822,33 @@ effect timing items also want the rig to confirm.
   the first — it is a per-patch-row fact.
 
 
+- **Art-Net node configuration (ArtAddress) — send path built and proven, but
+  no node here applies it (2026-08-26)** — `artnet-config.py` at the repo root
+  builds and sends ArtAddress (OpCode 0x6000); the plugin defines
+  `ARTNET_ADDRESS` and has never used it. Phase 1 (read/browse) shipped; this
+  is the write half.
+  Packet correctness is established two ways: the CR041R **acknowledges** a
+  short-name write by moving its NodeReport to `0006` (`RcShNameOk`), and OLA
+  logs `ArtNet got unknown packet 6000`, i.e. it read the header and opcode and
+  simply does not implement ArtAddress.
+  **But nothing applies.** Confirmed across a real power cycle of the CR041R:
+  the name came back `CR041R_001`, not the value written. This node acks and
+  discards -- it is front-panel configured, and its Status1 port-address
+  programming-authority bits never say "set by network". OLA has no ArtAddress
+  support at all. **Validating that changes stick needs a node that implements
+  network programming**; until then the write path stays out of the UI.
+  Two protocol notes worth keeping:
+  - The **NodeReport code is how a node acknowledges a config write** -- the
+    advertised fields may not change even on success, so diffing them is not a
+    test. Watch the code (`0006` RcShNameOk, `0007` RcLoNameOk).
+  - The NodeReport **counter does not reset on reboot** on this node (8943 →
+    31425 → 31733 across a confirmed restart), so it is useless as a power-cycle
+    indicator. The report *code* is the reliable signal.
+  Also: `NetSwitch`/`SubSwitch`/`SwIn`/`SwOut` are only acted on when bit 7 is
+  high (program 7 as `0x87`); `0x00` means "reset to zero" and `0x7f` means
+  "leave alone", so `0x7f` -- not `0x00` -- is the safe default for a field you
+  do not intend to change.
+
 - **RDM configuration tooling — DMX-Workshop-class rig setup (NEW, 2026-08-25,
   Branson)** — make the desk the thing you use to *set up* the rig, not just
   drive it: discover devices, read what they are, and set DMX address /
