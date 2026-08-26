@@ -1908,11 +1908,19 @@ effect timing items also want the rig to confirm.
     The reason is **hardware, not configuration**: RDM needs bidirectional
     RS-485 (talk, then turn the line around to listen), and this node only
     transmits. No firmware setting or update can add it.
-    Note this also explains the misleading ArtPollReply: the node advertises
-    `rdm_disabled=false` on every port, i.e. claims RDM is available. That bit
-    is simply wrong on this firmware, and DMX-Workshop ignores it in favour of
-    the real capability. **Do not trust GoodOutput bit 3 as a capability
-    probe** -- ask for a TOD and see whether anything answers.
+    **Correction (2026-08-26): the node was never lying; the wrong bit was
+    being read.** GoodOutput bit 3 means "RDM is *disabled* on this port" -- a
+    per-port setting, meaningless on a node with no RDM at all. The capability
+    flag is **Status1 bit 1**, and across 80 sampled ArtPollReplies it reads 0
+    ("not RDM capable") every time. The node reports itself correctly.
+    Separately, its Status1 does flap between `0x00` and `0x74` (ROM-booted +
+    port-address programming authority + indicator state) roughly 60/40, which
+    is almost certainly why DMX-Workshop's displayed lines appear to change on
+    their own -- but bit 1 stays 0 throughout, so the RDM verdict never
+    actually flips.
+    For capability, read Status1 bit 1; GoodOutput bit 3 answers a different
+    question. Still worth confirming with a TOD request, since capability bits
+    describe intent and a TOD reply is evidence.
     Consequence: RDM must come via the **DMXKing/Enttec Pro USB dongle**
     (wired, bidirectional; `EnttecDMXUSBPro::sendRDMCommand` already exists) or
     via **OLA** acting as an Art-Net→RDM gateway. The CR041R stays a pure
