@@ -1616,6 +1616,48 @@ effect timing items also want the rig to confirm.
   DMX not sent. Reproduce with `/tmp/throughput.sh` on ender (see DONE.md
   2026-08-25 for the harness).
 
+- **Gate hole: on headless Linux `make check` silently skips ALL UI tests and
+  still prints "Unit tests passed" (OPEN, 2026-08-26)** —
+  `platforms/linux/unittest.sh:44` decides whether to run `ui/test` from
+  `pidof X` / `pidof Xorg`, unless `whoami` is `runner`/`buildbot`/`abuild`.
+  On a headless box under a normal login both checks fail, so `RUN_UI_TESTS=0`
+  and **32 UI test binaries never run** — a third of the suite — while the gate
+  still reports success. The same branch also leaves `TESTPREFIX` empty, so the
+  engine tests run with no platform plugin and `genericdmxsource_test` aborts
+  with "could not connect to display". Note `xvfb-run` does NOT rescue it: the
+  process is named `Xvfb`, which `pidof X` does not match. Fix is to key off
+  "can Qt start a platform plugin" (or just always set
+  `QT_QPA_PLATFORM=offscreen`) rather than probing for an X server.
+
+- **The ARM char-signedness tripwire is commented out (OPEN, 2026-08-26)** —
+  the assertion cited as the reason to want an ARM build host,
+  `QCOMPARE(ua.preGMValues()[0], char(255))` at
+  `ui/test/vcxypad/vcxypad_test.cpp:474-483`, sits inside a `/* FIXME !! */`
+  block and runs nowhere. The live `char(...)` comparisons in
+  `vcxypadfixture_test.cpp` are signedness-*insensitive* (both sides go through
+  the same conversion) so they pass identically on x86 and ARM. The Pi 5
+  confirms the ABI is there — plain `char` is unsigned, `__CHAR_UNSIGNED__`
+  defined — but nothing in the suite exercises it. **Un-commenting that block
+  is the experiment that cashes in on the ARM host existing**; until then the
+  host proves nothing about this bug class.
+
+- **Debian 12 setup quirk: Qt6 `lrelease` is not on PATH (2026-08-26)** —
+  Debian's `qt6-l10n-tools` installs `lrelease`/`lupdate` to `/usr/lib/qt6/bin/`
+  with no `/usr/bin/lrelease-qt6` symlink (unlike the Qt5 packages), and
+  `translate.sh`'s `which_qt()` probes only `lrelease`, `lrelease-qt6`,
+  `lrelease-qt5` on PATH. Build dies at 1% with "lrelease not found". Workaround
+  `export PATH=/usr/lib/qt6/bin:$PATH`; durable fix is to fall back to
+  `qmake6 -query QT_HOST_LIBEXECS`/`QT_HOST_BINS` or have CMake pass the
+  `Qt6::lrelease` target location down.
+
+- **buildhost-qlcplus is missing 10 custom fixture definitions (2026-08-26)** —
+  headed runs there open with an error dialog: no definition found for Branson
+  LED Movinghead+Circle, Branson LED SPOT, Betopper LM70, ADJ Focus Spot Three
+  Z, Oppsk Wall Washer Light Bar, Warmdance XL-450, Junman Two Arm LED Beam,
+  PHS Chorus Step Row 64 Heads, WLED Effect Mode. Same cause as the
+  `/tmp/*.qxf` load failures seen on that host. Sync the `.qxf` files to
+  `~/.qlcconsole/fixtures/` there before using it for real UI validation.
+
 - **`-p` / `--operate` does not take effect on headless Linux (OPEN, 2026-08-25)**
   — this is what blocks every cross-platform MasterTimer punctuality number.
   With the identical workspace and `-p`, macOS enters Operate and runs the
