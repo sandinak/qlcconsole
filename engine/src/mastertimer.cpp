@@ -20,6 +20,7 @@
 
 #include <QDebug>
 #include <QSettings>
+#include <time.h>
 #include <QMutexLocker>
 
 #if defined(WIN32) || defined(Q_OS_WIN)
@@ -65,6 +66,32 @@ static int tickLogInterval()
     return n > 0 ? n : 200;
 }
 
+/**
+ * CPU time consumed by the calling thread, in nanoseconds; 0 if unavailable.
+ *
+ * The tick has always been timed with a QElapsedTimer, which measures elapsed
+ * REAL time. If the scheduler deschedules the timer thread mid-tick, that lost
+ * time is counted as engine work: one measured tick read 179 ms against a
+ * 20 ms budget while the engine had actually done ~53 us of work. A load
+ * indicator fed from that number reports catastrophic overload on a machine
+ * whose only problem is that it is not running us. Reading the thread's own
+ * CPU clock separates the two.
+ *
+ * CLOCK_THREAD_CPUTIME_ID is POSIX and present on both Linux and macOS
+ * (10.12+), so one implementation covers every platform this fork builds for
+ * except Windows, which falls back to 0 (the UI treats 0 as "unknown" and
+ * keeps showing the wall figure).
+ */
+static quint64 threadCpuNs()
+{
+#if defined(CLOCK_THREAD_CPUTIME_ID)
+    struct timespec ts;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0)
+        return quint64(ts.tv_sec) * 1000000000ULL + quint64(ts.tv_nsec);
+#endif
+    return 0;
+}
+
 /** The timer tick frequency in Hertz */
 uint MasterTimer::s_frequency = 50;
 uint MasterTimer::s_tick = 20;
@@ -97,6 +124,8 @@ MasterTimer::MasterTimer(Doc* doc)
 
     m_tickComputeUs.storeRelaxed(0);
     m_tickComputePeakUs.storeRelaxed(0);
+    m_tickCpuUs.storeRelaxed(0);
+    m_tickCpuPeakUs.storeRelaxed(0);
 
     QSettings settings;
     QVariant var = settings.value(MASTERTIMER_FREQUENCY);
@@ -176,6 +205,7 @@ void MasterTimer::timerTick()
     // per-tick logging below stays gated behind tickLogEnabled().
     QElapsedTimer computeTimer;
     computeTimer.start();
+    const quint64 cpuStart = threadCpuNs();
 
     timerTickFunctions(universes);
     timerTickDMXSources(universes);
@@ -185,6 +215,15 @@ void MasterTimer::timerTick()
     m_tickComputeUs.storeRelaxed(us);
     if (us > m_tickComputePeakUs.loadRelaxed())
         m_tickComputePeakUs.storeRelaxed(us);
+
+    /* CPU actually burned by this tick. Wall minus CPU is time the thread was
+       not running, i.e. scheduling jitter rather than engine load. */
+    const quint64 cpuEnd = threadCpuNs();
+    const quint32 cpuUs = (cpuStart && cpuEnd > cpuStart)
+                          ? quint32((cpuEnd - cpuStart) / 1000) : 0;
+    m_tickCpuUs.storeRelaxed(cpuUs);
+    if (cpuUs > m_tickCpuPeakUs.loadRelaxed())
+        m_tickCpuPeakUs.storeRelaxed(cpuUs);
 
     if (tlog)
     {
@@ -231,6 +270,16 @@ uint MasterTimer::tick()
 double MasterTimer::tickComputeMs() const
 {
     return m_tickComputeUs.loadRelaxed() / 1000.0;
+}
+
+double MasterTimer::tickCpuMs() const
+{
+    return m_tickCpuUs.loadRelaxed() / 1000.0;
+}
+
+double MasterTimer::tickCpuPeakMs()
+{
+    return m_tickCpuPeakUs.fetchAndStoreRelaxed(0) / 1000.0;
 }
 
 double MasterTimer::tickComputePeakMs()
