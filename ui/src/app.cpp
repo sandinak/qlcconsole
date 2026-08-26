@@ -2450,7 +2450,7 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
             /* Ignore creator information */
             doc.skipCurrentElement();
         }
-        else if (doc.name() == "AppState")
+        else if (doc.name() == QLatin1String("AppState"))
         {
             // Defer restoring windows until after the full workspace is loaded
             // so that Monitor and tabs are fully initialised first.
@@ -2463,7 +2463,7 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
                 // a permanent tab like any other, always present, and if it
                 // was detached into its own window that's already covered by
                 // the generic "DetachedWindow" case below.
-                if (doc.name() == "DetachedWindow")
+                if (doc.name() == QLatin1String("DetachedWindow"))
                 {
                     QString cls = doc.attributes().value("class").toString();
                     int tabIdx  = doc.attributes().value("tabIndex").toInt();
