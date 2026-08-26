@@ -231,7 +231,8 @@ void MasterTimerPrivate::run()
                                      + (current->tv_nsec - finish->tv_nsec) / 1000L);
             qDebug() << Q_FUNC_INFO << "MasterTimer is running late!"
                      << "late_us:" << lateUs
-                     << "compute_us:" << long(mt->tickComputeMs() * 1000.0)
+                     << "wall_us:" << long(mt->tickComputeMs() * 1000.0)
+                     << "cpu_us:" << long(mt->tickCpuMs() * 1000.0)
                      << "budget_us:" << (nsTickTime / 1000);
             /* No need to sleep. Immediately process the next tick */
             mt->timerTick();

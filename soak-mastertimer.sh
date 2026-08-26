@@ -143,8 +143,11 @@ import re, sys
 log, elapsed, cpun, cpusum, peakcpu, peakrss, pkts = sys.argv[1:8]
 elapsed, cpun, cpusum = int(elapsed), int(cpun), int(cpusum)
 txt = open(log, errors='replace').read()
+# Accepts both the current "wall_us/cpu_us" diagnostic and the older
+# "compute_us" one, so logs captured mid-change still parse.
 late = [(int(a), int(b), int(c)) for a, b, c in re.findall(
-    r'late_us:\s*(-?\d+)\s+compute_us:\s*(\d+)\s+budget_us:\s*(\d+)', txt)]
+    r'late_us:\s*(-?\d+)\s+(?:wall_us|compute_us):\s*(\d+)(?:\s+cpu_us:\s*\d+)?\s+budget_us:\s*(\d+)', txt)]
+cpu = [int(x) for x in re.findall(r'cpu_us:\s*(\d+)', txt)]
 n_raw = txt.count('running late')
 print(f"SOAK_SECONDS={elapsed}")
 print(f"SOAK_PACKETS_PER_6S_SAMPLE={pkts}")
@@ -158,8 +161,12 @@ if late:
     q = lambda v, p: v[min(len(v)-1, int(len(v)*p))]
     print(f"SOAK_BUDGET_US={b}")
     print(f"SOAK_LATE_US_MIN={L[0]} MED={q(L,.5)} P95={q(L,.95)} MAX={L[-1]}")
-    print(f"SOAK_COMPUTE_US_MIN={C[0]} MED={q(C,.5)} P95={q(C,.95)} MAX={C[-1]}")
-    print(f"SOAK_COMPUTE_PCT_OF_BUDGET_MED={100*q(C,.5)/b:.1f}")
+    print(f"SOAK_WALL_US_MIN={C[0]} MED={q(C,.5)} P95={q(C,.95)} MAX={C[-1]}")
+    print(f"SOAK_WALL_PCT_OF_BUDGET_MED={100*q(C,.5)/b:.1f}")
+    if cpu:
+        S=sorted(cpu)
+        print(f"SOAK_CPU_US_MIN={S[0]} MED={q(S,.5)} P95={q(S,.95)} MAX={S[-1]}")
+        print(f"SOAK_CPU_PCT_OF_BUDGET_MED={100*q(S,.5)/b:.2f}")
     print("SOAK_VERDICT=" + ("JITTER (compute well under budget)"
                              if q(C,.5) < 0.5*b else "LOAD (compute at/over budget)"))
 elif n_raw:

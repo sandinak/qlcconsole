@@ -41,13 +41,24 @@ if [ "$CURRUSER" == "runner" ] \
 else
 
   if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    XPID=$(pidof X)
-    if [ ! ${#XPID} -gt 0 ]; then
-      XPID=$(pidof Xorg)
+    # Do NOT gate on an X server being present. This used to probe
+    # `pidof X` / `pidof Xorg`, which meant that on any headless Linux box under
+    # a normal login RUN_UI_TESTS stayed 0 and all 32 UI test binaries were
+    # silently skipped -- a third of the suite -- while the gate still printed
+    # "Unit tests passed". The same branch left TESTPREFIX empty, so the engine
+    # tests then ran with no platform plugin and genericdmxsource_test aborted
+    # with "could not connect to display". `xvfb-run` did not rescue it either,
+    # because that process is named Xvfb and `pidof X` does not match it.
+    #
+    # Qt's offscreen platform needs no display at all, so use it whenever there
+    # isn't a real one and run everything. A real X session still gets used when
+    # DISPLAY points at one, which keeps headed runs behaving as before.
+    if [ -n "${DISPLAY:-}" ] && xdpyinfo >/dev/null 2>&1; then
+      TESTPREFIX=""
+    else
+      TESTPREFIX="QT_QPA_PLATFORM=offscreen"
     fi
-    if [ ${#XPID} -gt 0 ]; then
-      RUN_UI_TESTS="1"
-    fi
+    RUN_UI_TESTS="1" 
   elif [[ "$OSTYPE" == "darwin"* ]]; then
     # No X server concept on macOS to gate on — offscreen doesn't need one.
     TESTPREFIX="QT_QPA_PLATFORM=offscreen"

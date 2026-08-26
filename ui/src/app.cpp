@@ -3936,15 +3936,44 @@ void App::slotUpdateHealthFooter()
     {
         // Peak tick over the poll window — far more informative than the last
         // tick, which is tiny/noisy on a light show.
-        double ms = m_doc->masterTimer()->tickComputePeakMs();
+        //
+        // Load is the CPU the tick actually burned, NOT its wall duration. The
+        // wall figure includes any time the timer thread was descheduled
+        // mid-tick, so on a contended machine it reported "896% load" while the
+        // engine was idle — telling the operator to simplify the show when the
+        // real problem was the OS not scheduling the console. The gap between
+        // the two is exactly that scheduling jitter, so it is worth showing on
+        // its own rather than hiding inside the load number.
+        MasterTimer *mt = m_doc->masterTimer();
+        double wallMs = mt->tickComputePeakMs();
+        double cpuMs = mt->tickCpuPeakMs();
         double budget = double(MasterTimer::tick());
-        int pct = budget > 0 ? int((ms / budget) * 100.0) : 0;
-        m_statusLoadLabel->setText(tr("⚙︎ Load: %1 / %2 ms (%3%)")
-                                   .arg(ms, 0, 'f', 2).arg(int(budget)).arg(pct));
+        // Platforms with no per-thread CPU clock report 0; fall back to wall.
+        const bool haveCpu = cpuMs > 0.0;
+        double loadMs = haveCpu ? cpuMs : wallMs;
+        int pct = budget > 0 ? int((loadMs / budget) * 100.0) : 0;
+        // A tick that took far longer in wall time than it spent on CPU was
+        // stalled by the scheduler, not by us.
+        double stallMs = haveCpu ? (wallMs - cpuMs) : 0.0;
+        const bool stalled = stallMs >= 2.0;
+        if (stalled)
+            m_statusLoadLabel->setText(tr("⚙︎ Load: %1 / %2 ms (%3%)  ⏱ stall %4 ms")
+                                       .arg(loadMs, 0, 'f', 2).arg(int(budget))
+                                       .arg(pct).arg(stallMs, 0, 'f', 0));
+        else
+            m_statusLoadLabel->setText(tr("⚙︎ Load: %1 / %2 ms (%3%)")
+                                       .arg(loadMs, 0, 'f', 2).arg(int(budget)).arg(pct));
+        m_statusLoadLabel->setToolTip(
+            tr("Engine load: %1 ms of CPU per tick against a %2 ms budget.\n"
+               "Worst tick wall time: %3 ms.\n"
+               "A large gap between the two means the OS is not scheduling the\n"
+               "timer thread promptly (jitter), not that the engine is busy.")
+                .arg(loadMs, 0, 'f', 2).arg(int(budget)).arg(wallMs, 0, 'f', 2));
         const char *green = "QLabel { color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px; }";
         const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";
         const char *red   = "QLabel { color:#ffffff; background:#c62828; padding:1px 6px; border-radius:3px; }";
-        m_statusLoadLabel->setStyleSheet(pct >= 100 ? red : (pct >= 60 ? amber : green));
+        m_statusLoadLabel->setStyleSheet(pct >= 100 ? red
+                                         : ((pct >= 60 || stalled) ? amber : green));
     }
 
     // Safety refresh for the timecode chip between watchdog transitions.

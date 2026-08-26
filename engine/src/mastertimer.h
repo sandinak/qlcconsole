@@ -81,11 +81,25 @@ public:
      *  Lock-free; safe to read from the UI thread. */
     double tickComputeMs() const;
 
-    /** Peak per-tick compute time (ms) since the last call — reading resets
-     *  the peak, so a UI poll shows the worst tick in its window. This is what
-     *  a load indicator should display; the instantaneous last tick is far too
-     *  noisy/small on a light show. */
+    /** Peak per-tick WALL time (ms) since the last call — reading resets the
+     *  peak, so a UI poll shows the worst tick in its window.
+     *
+     *  Careful: this is elapsed real time, so it includes any period the timer
+     *  thread was descheduled mid-tick and counts it as if it were work. Under
+     *  scheduling pressure it can read many times the tick budget while the
+     *  engine is nearly idle. For "how loaded is the engine" use
+     *  tickCpuPeakMs(); the gap between the two is jitter, not load. */
     double tickComputePeakMs();
+
+    /** CPU time actually consumed by the most recent tick, in milliseconds.
+     *  Unlike tickComputeMs() this excludes time the thread was not running,
+     *  so it is the honest answer to "how much work did the engine do".
+     *  Returns 0 where the platform has no per-thread CPU clock. */
+    double tickCpuMs() const;
+
+    /** Peak per-tick CPU time (ms) since the last call — reading resets the
+     *  peak. This is what a load indicator should display. */
+    double tickCpuPeakMs();
 
 signals:
     void tickReady();
@@ -107,6 +121,11 @@ private:
 
     /** Peak per-tick compute (us) since the UI last read it (read = reset). */
     QAtomicInteger<quint32> m_tickComputePeakUs;
+
+    /** CPU time consumed by the last tick, and the peak since the UI last read
+     *  it (read = reset). Same threading contract as the wall-clock pair. */
+    QAtomicInteger<quint32> m_tickCpuUs;
+    QAtomicInteger<quint32> m_tickCpuPeakUs;
 
     /** The private reference to a MasterTimer platform dependent implementation */
     MasterTimerPrivate* d_ptr;

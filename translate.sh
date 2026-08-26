@@ -8,7 +8,21 @@ set -euo pipefail
 
 which_qt() {
   local base="$1"
-  command -v "$base" 2>/dev/null || command -v "${base}-qt6" 2>/dev/null || command -v "${base}-qt5" 2>/dev/null || true
+  command -v "$base" 2>/dev/null && return 0
+  command -v "${base}-qt6" 2>/dev/null && return 0
+  command -v "${base}-qt5" 2>/dev/null && return 0
+  # Debian ships Qt6's lrelease/lupdate in /usr/lib/qt6/bin with NO /usr/bin
+  # symlink (unlike its Qt5 packages), so the PATH probes above all miss and
+  # the build dies at 1% with "lrelease not found". Ask qmake where its host
+  # tools actually live instead of guessing.
+  local qm d
+  for qm in qmake6 qmake-qt6 qmake qmake-qt5; do
+    command -v "$qm" >/dev/null 2>&1 || continue
+    for d in $("$qm" -query QT_HOST_LIBEXECS 2>/dev/null) $("$qm" -query QT_HOST_BINS 2>/dev/null); do
+      [ -x "$d/$base" ] && { echo "$d/$base"; return 0; }
+    done
+  done
+  return 0
 }
 LRELEASE="$(which_qt lrelease)"
 LUPDATE="$(which_qt lupdate)"
