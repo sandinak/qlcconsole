@@ -160,7 +160,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     /* Rescan button — below the universe list so it's always visible */
     {
         QPushButton *rescanBtn = new QPushButton(
-            QIcon(":/refresh.png"), tr("Rescan Inputs/Outputs"), this);
+            QIcon(":/refresh.png"), tr("Rescan Connections"), this);
         rescanBtn->setToolTip(tr("Re-enumerate input/output devices "
                                  "(use after plugging in a controller)"));
         connect(rescanBtn, SIGNAL(clicked()), this, SLOT(slotRescanPlugins()));

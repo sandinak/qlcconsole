@@ -414,13 +414,26 @@ void App::init()
         m_tab->tabBar()->setTabData(idx, text);
     };
 
-    // Tab order follows the build workflow: rig/setup first (Hardware, I/O,
-    // Lighting Studio's physical layout) → build content (Functions,
-    // Programming) → run it (Shows, Virtual Console, Simple Desk).
-    QWidget* w = new FixtureManager(m_tab, m_doc);
-    addTab(w, QIcon(":/fixture.png"), tr("Hardware"));
-    w = new InputOutputManager(m_tab, m_doc);
-    addTab(w, QIcon(":/input_output.png"), tr("Inputs/Outputs"));
+    // Tab order follows the build workflow: rig/setup first (Connections, then
+    // the fixtures patched onto it, then Lighting Studio's physical layout) →
+    // build content (Functions, Programming) → run it (Shows, Virtual Console,
+    // Simple Desk).
+    //
+    // Connections comes first because it is the precondition for everything
+    // after it: a fixture patched to a universe with no output is just a row
+    // in a table. Setting up the signal path is genuinely the first thing you
+    // do on a new rig, and the first thing you check when a show is dark.
+    //
+    // "Hardware" used to name the Fixture Manager, which was confusing while
+    // sitting next to an I/O tab, and becomes plainly wrong now that I/O shows
+    // the actual hardware -- interfaces, nodes, dongles. The fixture tab is
+    // "Fixtures" (what it manages, and what every other console calls it) and
+    // the I/O tab is "Connections" (the signal path, covering network, USB and
+    // MIDI without implying any one of them).
+    QWidget* w = new InputOutputManager(m_tab, m_doc);
+    addTab(w, QIcon(":/input_output.png"), tr("Connections"));
+    w = new FixtureManager(m_tab, m_doc);
+    addTab(w, QIcon(":/fixture.png"), tr("Fixtures"));
     // Lighting Studio (Monitor) used to be a lazily-created standalone
     // window (Qt::Window flag), created on first use via createAndShow()
     // and destroyed on close (WA_DeleteOnClose) — inconsistent with every
@@ -845,7 +858,7 @@ void App::updateOutputReadiness()
                                 .arg(unis.join(", ")));
     m_statusRigLabel->setStyleSheet("QLabel { color: #e04030; font-weight: bold; }");
     m_statusRigLabel->setToolTip(detail.join("\n") +
-                                 tr("\n\nRe-patch these universes in Inputs/Outputs, "
+                                 tr("\n\nRe-patch these universes in Connections, "
                                     "or open the workspace on the machine it was built for."));
     m_statusRigLabel->show();
 
@@ -3516,7 +3529,7 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             QAction *hint = menu.addAction(tr("(waiting for the source to roll…)"));
             hint->setEnabled(false);
         }
-        menu.addAction(tr("Patch a MIDI input (Inputs/Outputs)…"), this, [this]() {
+        menu.addAction(tr("Patch a MIDI input (Connections)…"), this, [this]() {
             if (InputOutputManager::instance() != NULL && m_tab != NULL)
                 m_tab->setCurrentWidget(InputOutputManager::instance());
         });
@@ -3676,7 +3689,7 @@ void App::captureScenarioIfRequested()
             save(this, "io_groups");
         }
 
-        // Optionally scroll the Inputs/Outputs Overview grid to a given row and
+        // Optionally scroll the Connections Overview grid to a given row and
         // grab it (QLC_SHOT_IOROW=<row>), to verify deep rows render.
         const QByteArray ioRowEnv = qgetenv("QLC_SHOT_IOROW");
         if (ioRowEnv.isEmpty() == false)
