@@ -218,6 +218,56 @@ QString ArtNetPlugin::outputInfo(quint32 output)
     return str;
 }
 
+/** Nodes heard on any of our controllers.
+ *
+ *  A node announces itself roughly once a second, so this is current rather
+ *  than a cached scan result; the controller refreshes its entry on every
+ *  reply. Ports are reported per physical DMX port because that is how
+ *  Art-Net addresses them (Net:Sub:Universe) and how RDM discovery works --
+ *  per port, not per node.
+ */
+QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
+{
+    QList<QLCIOPlugin::Device> list;
+
+    /* m_IOmapping is indexed by plugin line, so the index IS the line. */
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        ArtNetController *ctrl = m_IOmapping.at(line).controller;
+        if (ctrl == NULL)
+            continue;
+
+        QHash<QHostAddress, ArtNetNodeInfo> nodes = ctrl->getNodesList();
+        QHashIterator<QHostAddress, ArtNetNodeInfo> it(nodes);
+        while (it.hasNext())
+        {
+            it.next();
+            const ArtNetNodeInfo &n = it.value();
+
+            QLCIOPlugin::Device dev;
+            dev.line = quint32(line);
+            dev.name = n.longName.isEmpty() ? n.shortName : n.longName;
+            dev.address = n.ipAddress.isEmpty() ? it.key().toString() : n.ipAddress;
+            dev.hardwareId = n.macAddress;
+            dev.status = n.nodeReport;
+            dev.rdmCapable = n.rdmCapable;
+            dev.detail = QObject::tr("firmware %1").arg(n.firmwareVersion);
+
+            for (int p = 0; p < qMin(n.portsNumber, 4); p++)
+            {
+                if ((n.portTypes[p] & 0x80) == 0)
+                    continue;   // not an output port
+                dev.portLabels << QString("%1:%2:%3").arg(n.netSwitch)
+                                  .arg(n.subSwitch).arg(n.swOut[p]);
+                dev.portUniverses << quint32((n.netSwitch << 8)
+                                             + (n.subSwitch << 4) + n.swOut[p]);
+            }
+            list << dev;
+        }
+    }
+    return list;
+}
+
 bool ArtNetPlugin::openOutput(quint32 output, quint32 universe)
 {
     if (requestLine(output) == false)

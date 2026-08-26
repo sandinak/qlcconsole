@@ -39,6 +39,7 @@
 #include "inputoutputpatcheditor.h"
 #include "universepatchgrid.h"
 #include "universeitemwidget.h"
+#include "connectionstree.h"
 #include "inputoutputmanager.h"
 #include "inputoutputmap.h"
 #include "ioplugincache.h"
@@ -89,6 +90,12 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     // and the classic per-universe "Detailed" editor (list + patch editor).
     m_ioTabs = new QTabWidget(this);
     layout()->addWidget(m_ioTabs);
+
+    /* Devices first: it answers "what is out there and is it reachable", which
+       is what you want before patching anything. Overview and Detailed remain
+       the editing surfaces -- this one is read-only on purpose. */
+    m_devicesTree = new ConnectionsTree(m_doc, this);
+    m_ioTabs->addTab(m_devicesTree, tr("Devices"));
 
     m_patchGrid = new UniversePatchGrid(m_doc, this);
     m_ioTabs->addTab(m_patchGrid, tr("Overview"));
