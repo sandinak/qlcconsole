@@ -1899,6 +1899,27 @@ effect timing items also want the rig to confirm.
     test. Note QLC+'s own `sendRDMCommand` sends ArtTodRequest with **no
     preceding AtcFlush** — worth revisiting if a real node ever returns a
     stale/empty TOD.
+  - **CONFIRMED by DMX-Workshop (2026-08-26).** Artistic Licence's own tool --
+    the Art-Net reference implementation -- connects to the node fine and
+    reports outright: **"RDM: Node is not RDM capable (Unidirectional DMX)"**,
+    with `Rdm Devices: 0 Detected of which 0 active` on all four outputs
+    (firmware V0.14, MAC 02:4D:48:12:02:0A, static, LLRP not supported).
+    So the probe's verdict was right, independently confirmed.
+    The reason is **hardware, not configuration**: RDM needs bidirectional
+    RS-485 (talk, then turn the line around to listen), and this node only
+    transmits. No firmware setting or update can add it.
+    Note this also explains the misleading ArtPollReply: the node advertises
+    `rdm_disabled=false` on every port, i.e. claims RDM is available. That bit
+    is simply wrong on this firmware, and DMX-Workshop ignores it in favour of
+    the real capability. **Do not trust GoodOutput bit 3 as a capability
+    probe** -- ask for a TOD and see whether anything answers.
+    Consequence: RDM must come via the **DMXKing/Enttec Pro USB dongle**
+    (wired, bidirectional; `EnttecDMXUSBPro::sendRDMCommand` already exists) or
+    via **OLA** acting as an Art-Net→RDM gateway. The CR041R stays a pure
+    output path.
+    Worth copying from DMX-Workshop's UI: it presents node config as a tree and
+    reports RDM device counts **per DMX output**, not per node -- matching the
+    per-port finding above.
   - **Control case found, which resolves the earlier ambiguity.** The Pi 5
     build host (`192.168.20.119`) runs an **OLA Art-Net node**, and OLA answers
     the identical probe with `ArtTodData rdmVer=0x01 uidTotal=0 uidCount=0` —
