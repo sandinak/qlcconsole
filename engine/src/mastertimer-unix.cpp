@@ -28,12 +28,79 @@
 
 #include <QDebug>
 
+#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+#include <mach/mach_time.h>
+#include <mach/thread_policy.h>
+#include <mach/thread_act.h>
+#include <pthread.h>
+#endif
+
 #include "mastertimer-unix.h"
 #include "mastertimer.h"
 
 /****************************************************************************
  * MasterTimerPrivate
  ****************************************************************************/
+
+#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+/**
+ * Ask the Mach scheduler to treat this thread as real-time.
+ *
+ * The DMX timer thread has a hard 20 ms deadline (at the default 50 Hz) but was
+ * started at ordinary priority, so it competed with every other thread on the
+ * machine. Measured over 12.5 h at 51 universes: the tick itself computed in
+ * 53 us median -- 0.27% of its budget -- while deadlines were missed by 19 ms
+ * median and up to 473 ms, i.e. 23 consecutive ticks. That is the scheduler,
+ * not the engine.
+ *
+ * It matters more than a dropped frame: Function::incrementElapsed() advances
+ * by a fixed MasterTimer::tick() per tick rather than by wall clock, and the
+ * loop re-anchors after a miss, so skipped ticks are gone for good and every
+ * fade, chase and timeline runs permanently slow by the lost time (~21 s over
+ * that run).
+ *
+ * THREAD_TIME_CONSTRAINT_POLICY is what CoreAudio uses for the same problem.
+ * We declare: we wake every `period`, need `computation` of CPU, and must be
+ * finished within `constraint` of the period start. preemptible stays true --
+ * DMX is not audio, and a 20 ms period does not justify blocking the machine.
+ *
+ * Advisory: if the kernel declines, we warn and keep the ordinary priority
+ * behaviour rather than failing to start.
+ */
+static void setTimerThreadRealtime(int nsTickTime)
+{
+    mach_timebase_info_data_t tb;
+    if (mach_timebase_info(&tb) != KERN_SUCCESS || tb.numer == 0)
+    {
+        qWarning() << "MasterTimer: no mach timebase; leaving thread priority alone";
+        return;
+    }
+
+    /* nanoseconds -> mach absolute time units */
+    const double toAbs = double(tb.denom) / double(tb.numer);
+
+    /* Headroom over the measured worst case, not a guess: p90 tick compute was
+       206 us, so 1 ms of declared computation is ~5x that, and a 2 ms
+       constraint bounds how late a tick may start while staying far inside the
+       20 ms period. */
+    thread_time_constraint_policy_data_t policy;
+    policy.period      = uint32_t(double(nsTickTime) * toAbs);
+    policy.computation = uint32_t(1000000.0 * toAbs);  /* 1 ms */
+    policy.constraint  = uint32_t(2000000.0 * toAbs);  /* 2 ms */
+    policy.preemptible = 1;
+
+    kern_return_t kr = thread_policy_set(pthread_mach_thread_np(pthread_self()),
+                                         THREAD_TIME_CONSTRAINT_POLICY,
+                                         reinterpret_cast<thread_policy_t>(&policy),
+                                         THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+    if (kr != KERN_SUCCESS)
+        qWarning() << "MasterTimer: real-time thread policy refused by the kernel"
+                   << "(kern_return" << kr << ") - falling back to normal priority";
+    else
+        qDebug() << "MasterTimer: real-time thread policy set - period"
+                 << nsTickTime / 1000 << "us, computation 1000 us, constraint 2000 us";
+}
+#endif
 
 MasterTimerPrivate::MasterTimerPrivate(MasterTimer* masterTimer)
     : QThread(masterTimer)
@@ -91,6 +158,12 @@ void MasterTimerPrivate::run()
 
     /* How long to wait each loop, in nanoseconds */
     int nsTickTime = 1000000000L / mt->frequency();
+
+#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+    /* Must be done from inside the thread itself: the policy applies to the
+       calling thread. */
+    setTimerThreadRealtime(nsTickTime);
+#endif
 
     /* Allocate this from stack here so that GCC doesn't have
        to do it every time implicitly when gettimeofday() is called */
