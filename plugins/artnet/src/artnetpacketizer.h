@@ -62,6 +62,13 @@
 
 #define ARTNET_CODE_STR "Art-Net"
 
+/** Everything an ArtPollReply tells us about a node.
+ *
+ *  A node broadcasts this roughly once a second unprompted, and the console
+ *  was keeping five fields and discarding the rest -- manufacturer, firmware,
+ *  MAC, per-port addressing and status were all being received and thrown
+ *  away, which is most of what an operator needs to answer "is that node
+ *  configured the way I think it is". */
 typedef struct
 {
     QString shortName;
@@ -70,7 +77,29 @@ typedef struct
     bool isInput;
     bool isOutput;
     ushort universe;
-    // ... can be extended with more info to be added by fillArtPollReplyInfo
+
+    QString ipAddress;      //!< as reported by the node itself, not the sender
+    QString macAddress;
+    QString nodeReport;     //!< last status text, e.g. "0006 [7666] ArtNet"
+    ushort reportCode;      //!< numeric part: 0x0006 == RcShNameOk, etc.
+    ushort firmwareVersion;
+    ushort oemCode;
+    ushort estaCode;
+    uchar netSwitch;        //!< Port-Address bits 14-8
+    uchar subSwitch;        //!< Port-Address bits 7-4
+    uchar status1;
+    uchar status2;
+    bool rdmCapable;        //!< Status1 bit 1 -- NOT GoodOutput bit 3
+    bool dhcpCapable;       //!< Status2 bit 1
+    uchar bindIndex;
+    QString bindIpAddress;
+    /* Per physical port, up to 4 per ArtPollReply (a node with more ports
+       sends several replies, distinguished by bindIndex). */
+    uchar portTypes[4];
+    uchar goodInput[4];
+    uchar goodOutput[4];
+    uchar swIn[4];
+    uchar swOut[4];
 } ArtNetNodeInfo;
 
 class ArtNetPacketizer final

@@ -227,32 +227,108 @@ bool ArtNetPacketizer::checkPacketAndCode(QByteArray const& data, quint16 &code)
     return true;
 }
 
+/** Art-Net's fixed-width name fields are NUL-terminated C strings.
+ *
+ *  The previous code replaced NULs with spaces and simplified(), which assumes
+ *  a node zero-fills the remainder of the field. Real hardware does not always
+ *  oblige: the rig's CR041R leaves stale bytes after the terminator, and those
+ *  survived into the displayed name as trailing garbage ("CR041R_001 <?> p<?>").
+ *  Cut at the first NUL instead, which is what the field actually means. */
+static QString artNetName(const QByteArray &raw)
+{
+    const int nul = raw.indexOf('\0');
+    return QString::fromLatin1(nul >= 0 ? raw.left(nul) : raw).trimmed();
+}
+
 bool ArtNetPacketizer::fillArtPollReplyInfo(QByteArray const& data, ArtNetNodeInfo& info)
 {
-    if (data.isNull())
+    /* A short reply is not necessarily malformed -- the spec has grown over
+       time and older nodes send fewer trailing fields -- but everything below
+       lives inside the first 212 bytes, so anything shorter cannot be parsed
+       safely. */
+    if (data.isNull() || data.size() < 212)
         return false;
 
     QByteArray shortName = data.mid(26, 18);
     QByteArray longName = data.mid(44, 64);
     QByteArray nodeReport = data.mid(108, 64);
-        uchar inputStatus = uchar(data.at(178));
+    uchar inputStatus = uchar(data.at(178));
 
-    info.shortName = QString(shortName.replace(0, 0x20)).simplified();
-    info.longName = QString(longName.replace(0, 0x20)).simplified();
+    info.shortName = artNetName(shortName);
+    info.longName = artNetName(longName);
     info.portsNumber = (uchar(data.at(172)) << 8) + uchar(data.at(173));
     info.isInput = (inputStatus & 0x04) == 0 ? true : false;
     info.isOutput = (inputStatus & 0x04) ? true : false;
     info.universe = (ushort(data.at(18)) << 8) + (ushort(data.at(19)) << 4) + ushort(data.at(186));
 
-#if 0
-    qDebug() << "getArtPollReplyInfo shortName:" << info.shortName;
-    qDebug() << "getArtPollReplyInfo longName:" << info.longName;Add commentMore actions
-    qDebug() << "getArtPollReplyInfo nodeReport:" << QString(nodeReport).simplified();
-    qDebug() << "getArtPollReplyInfo universe:" << QString::number(info.universe);
-#endif
+    info.ipAddress = QString("%1.%2.%3.%4")
+                        .arg(uchar(data.at(10))).arg(uchar(data.at(11)))
+                        .arg(uchar(data.at(12))).arg(uchar(data.at(13)));
+
+    info.firmwareVersion = (uchar(data.at(16)) << 8) + uchar(data.at(17));
+    info.netSwitch = uchar(data.at(18));
+    info.subSwitch = uchar(data.at(19));
+    info.oemCode = (uchar(data.at(20)) << 8) + uchar(data.at(21));
+    info.status1 = uchar(data.at(23));
+    /* EstaMan is the one little-endian field in an otherwise big-endian
+       packet. */
+    info.estaCode = uchar(data.at(24)) + (uchar(data.at(25)) << 8);
+
+    info.nodeReport = artNetName(nodeReport);
+    /* The report is "#xxxx [count] text"; the hex code says whether the node
+       accepted the last thing we asked of it -- 0x0006 RcShNameOk and 0x0007
+       RcLoNameOk are how an ArtAddress write is acknowledged, since a node may
+       report success without its advertised name changing. */
+    info.reportCode = 0;
+    {
+        QString rep = info.nodeReport;
+        int hash = rep.indexOf(QLatin1Char('#'));
+        if (hash >= 0 && rep.size() >= hash + 5)
+            info.reportCode = ushort(rep.mid(hash + 1, 4).toUShort(NULL, 16));
+        else if (rep.size() >= 4)
+            info.reportCode = ushort(rep.left(4).toUShort(NULL, 16));
+    }
+
+    for (int i = 0; i < 4; i++)
+    {
+        info.portTypes[i]  = uchar(data.at(174 + i));
+        info.goodInput[i]  = uchar(data.at(178 + i));
+        info.goodOutput[i] = uchar(data.at(182 + i));
+        info.swIn[i]       = uchar(data.at(186 + i));
+        info.swOut[i]      = uchar(data.at(190 + i));
+    }
+
+    /* Capability lives in Status1 bit 1. GoodOutput bit 3 is a different
+       question entirely -- "RDM is disabled on this port" -- and reading it as
+       a capability flag reports RDM support on nodes that have none. */
+    info.rdmCapable = (info.status1 & 0x02) ? true : false;
+
+    info.macAddress = QString("%1:%2:%3:%4:%5:%6")
+        .arg(uchar(data.at(201)), 2, 16, QLatin1Char('0'))
+        .arg(uchar(data.at(202)), 2, 16, QLatin1Char('0'))
+        .arg(uchar(data.at(203)), 2, 16, QLatin1Char('0'))
+        .arg(uchar(data.at(204)), 2, 16, QLatin1Char('0'))
+        .arg(uchar(data.at(205)), 2, 16, QLatin1Char('0'))
+        .arg(uchar(data.at(206)), 2, 16, QLatin1Char('0')).toUpper();
+
+    /* Fields beyond 206 arrived in later Art-Net revisions; older nodes stop
+       short, so default rather than read past the end. */
+    info.bindIpAddress = QString();
+    info.bindIndex = 0;
+    info.status2 = 0;
+    if (data.size() >= 211)
+        info.bindIpAddress = QString("%1.%2.%3.%4")
+                                .arg(uchar(data.at(207))).arg(uchar(data.at(208)))
+                                .arg(uchar(data.at(209))).arg(uchar(data.at(210)));
+    if (data.size() >= 212)
+        info.bindIndex = uchar(data.at(211));
+    if (data.size() >= 213)
+        info.status2 = uchar(data.at(212));
+    info.dhcpCapable = (info.status2 & 0x02) ? true : false;
 
     return true;
 }
+
 
 bool ArtNetPacketizer::fillDMXdata(QByteArray const& data, QByteArray &dmx, quint32 &universe)
 {
