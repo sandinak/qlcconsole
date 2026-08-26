@@ -20,6 +20,8 @@
 #include <QSettings>
 #include <QDebug>
 
+#include <QHash>
+
 #include "artnetplugin.h"
 #include "configureartnet.h"
 
@@ -159,9 +161,53 @@ QString ArtNetPlugin::outputInfo(quint32 output)
         str += QString("<B>%1:</B> %2").arg(tr("Can receive nodes information")).arg(boundString);
         str += QString("<BR>");
 
+        QHash<QHostAddress, ArtNetNodeInfo> nodes = ctrl->getNodesList();
         str += tr("Nodes discovered: ");
-        str += QString("%1").arg(ctrl->getNodesList().size());
+        str += QString("%1").arg(nodes.size());
         str += QString("<BR>");
+
+        /* Everything below already arrives in every ArtPollReply, about once a
+           second per node, and used to be parsed and dropped. Showing it means
+           an operator can answer "is that node addressed the way I think it
+           is" from the console instead of a separate Art-Net tool. */
+        if (nodes.isEmpty() == false)
+        {
+            /* One compact block per node rather than a wide table: this
+               panel is a narrow side pane, and a 7-column table wraps every
+               cell character-by-character and becomes unreadable. */
+            QHashIterator<QHostAddress, ArtNetNodeInfo> it(nodes);
+            while (it.hasNext())
+            {
+                it.next();
+                const ArtNetNodeInfo &node = it.value();
+
+                QString name = node.longName.isEmpty() ? node.shortName : node.longName;
+
+                /* A Port-Address is Net:Sub:Universe -- printing the raw
+                   SwOut alone is wrong for any node not sitting on net 0. */
+                QStringList ports;
+                for (int p = 0; p < qMin(node.portsNumber, 4); p++)
+                {
+                    if (node.portTypes[p] & 0x80)
+                        ports << QString("%1:%2:%3").arg(node.netSwitch)
+                                 .arg(node.subSwitch).arg(node.swOut[p]);
+                }
+
+                str += QString("<BR><B>%1</B>").arg(name.toHtmlEscaped());
+                str += QString("<BR>&nbsp;&nbsp;%1: %2").arg(tr("IP")).arg(node.ipAddress);
+                if (node.macAddress.isEmpty() == false)
+                    str += QString(" &nbsp; %1: %2").arg(tr("MAC")).arg(node.macAddress);
+                str += QString("<BR>&nbsp;&nbsp;%1: %2 &nbsp; %3: %4")
+                          .arg(tr("Firmware")).arg(node.firmwareVersion)
+                          .arg(tr("RDM")).arg(node.rdmCapable ? tr("Yes") : tr("No"));
+                if (ports.isEmpty() == false)
+                    str += QString("<BR>&nbsp;&nbsp;%1: %2")
+                              .arg(tr("Output universes")).arg(ports.join(", "));
+                if (node.nodeReport.isEmpty() == false)
+                    str += QString("<BR>&nbsp;&nbsp;%1").arg(node.nodeReport.toHtmlEscaped());
+                str += QString("<BR>");
+            }
+        }
         str += tr("Packets sent: ");
         str += QString("%1").arg(ctrl->getPacketSentNumber());
     }

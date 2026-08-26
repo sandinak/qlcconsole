@@ -433,8 +433,11 @@ bool ArtNetController::handleArtNetPollReply(QByteArray const& datagram, QHostAd
     qDebug() << "[ArtNet] ArtPollReply received";
 #endif
 
-    if (m_nodesList.contains(senderAddress) == false)
-        m_nodesList[senderAddress] = newNode;
+    /* Always refresh. This used to insert only on first sight, so a node that
+       was renamed, re-addressed or changed status kept showing whatever it
+       happened to be saying the first time we heard it -- despite announcing
+       itself roughly once a second ever since. */
+    m_nodesList[senderAddress] = newNode;
 
     ++m_packetReceived;
     return true;
