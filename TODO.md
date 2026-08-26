@@ -1658,40 +1658,29 @@ effect timing items also want the rig to confirm.
   `/tmp/*.qxf` load failures seen on that host. Sync the `.qxf` files to
   `~/.qlcconsole/fixtures/` there before using it for real UI validation.
 
-- **`-p` / `--operate` does not take effect on headless Linux (OPEN, 2026-08-25)**
-  — this is what blocks every cross-platform MasterTimer punctuality number.
-  With the identical workspace and `-p`, macOS enters Operate and runs the
-  `<Engine Autostart="...">` function; **both Linux hosts never do**:
-  | host | OS / Qt | `Doc::setMode` "Starting startup function" | packets |
-  |---|---|---|---|
-  | ender | macOS / Qt 6.11 | yes | yes (verified on the wire) |
-  | this Mac | macOS / Qt 6.11 | yes | yes |
-  | rpi5 | Debian 12 / Qt 6.4 | **no** | none |
-  | 192.168.1.245 | Debian 11 / Qt 5 | **no** | none |
-  It splits on **OS, not Qt version** (Qt5 and Qt6.4 both fail on Linux;
-  Qt6.11 works on macOS). Ruled out by test, not assumption:
-  - **Not the workspace.** The Pi's own repatched `.qxw`, copied to the Mac,
-    starts the function there. `<Engine Autostart="17">` is the first `<Engine>`
-    element and is structurally correct.
-  - **Not a stale build.** The Pi's engine/ui shared objects contain both the
-    `late_us` diagnostic and the autosave guard (check the `.so` files, not
-    `build/main/qlcconsole` — the code lives in `libqlcplusengine.so` /
-    `libqlcplusui.so`, which is easy to get wrong with `strings`).
-  - **Not a load failure.** 53 output patches open, no loadXML error, no
-    "Engine node not found", and the app reaches its event loop (the 5-minute
-    autosave timer fires).
-  - **Not the autosave dialog.** Guard in place and `QLC_NO_RECOVERY_PROMPT=1`.
-  Consequence chain: no Operate → startup function never runs → universe data
-  never changes → `Universe::dumpOutput` short-circuits → the ArtNet plugin is
-  never reached → zero packets. `transmitMode="Full"` cannot rescue it because
-  the universe stops short of the plugin.
-  Next step: `main.cpp` calls `app.slotModeOperate()` unconditionally after
-  `loadXML()`, and `Doc::setMode` early-returns when the mode already matches,
-  so instrument whether `setMode` is reached at all on Linux and what
-  `m_startupFunctionId` holds there. Note `[PM]` (ProgrammingManager) logs
-  nothing on the Pi while `[PC]` does, so the UI tab may not be constructed —
-  possibly related.
-
+- **~~`-p`/`--operate` does not take effect on headless Linux~~ WRONG — it was
+  missing fixture definitions (RESOLVED, 2026-08-26)** — the claim does not
+  survive testing, and the reasoning behind it was faulty twice over:
+  1. The check grepped the log for `"Starting startup function"`, which only
+     prints when a startup function **exists**. Stock `surfacetesting.qxw` has
+     `<Engine>` with no `Autostart` attribute, so it measured the absence of a
+     startup function, not the absence of Operate mode.
+  2. With a valid `Autostart` injected, `-p` works on Linux — proven twice:
+     `drift-test.sh` (minimal generated workspace) runs its chaser to
+     completion on Debian 12/aarch64, and `surfacetesting.qxw` + Autostart
+     enters Operate on Debian 11 as well.
+  **Actual root cause:** the custom `.qxf` fixture definitions were absent on
+  both Linux hosts. Without them the fixtures fail to load, the functions that
+  target them do not load either (`Function start` count 0), so there is no
+  startup function, nothing changes universe data, `Universe::dumpOutput`
+  short-circuits and the ArtNet plugin is never reached. That is the whole
+  reason both Linux boxes transmitted zero packets and could not produce a
+  punctuality measurement. Syncing the 99 `.qxf` files to
+  `~/.qlcconsole/fixtures/` on each host fixes it.
+  **Lesson worth keeping:** a grep for a success message is not a test for the
+  condition — a missing log line had two possible causes and the wrong one was
+  assumed. Assert the positive precondition first (does this workspace even
+  define a startup function?).
 - **Note: lateness magnitude was already logged before the `late_us` diag**
   — `mastertimer-unix.cpp:67,74` has a pre-existing
   `qDebug() << "Time is late by" << ... << "nanoseconds"` inside `compareTime()`.
