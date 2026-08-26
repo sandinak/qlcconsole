@@ -28,14 +28,22 @@ die() { echo "SOAK_ABORT=$*"; exit 1; }
 # Portable packet count: macOS has no coreutils `timeout`, and a preflight that
 # silently returns 0 there would abort every run on the very platform the
 # original measurement came from.
-capture_pkts() { # <iface> <seconds>
+capture_pkts() { # <iface> <src-ip> <seconds>
+    # Filter on OUR source address: a show VLAN carries other ArtNet senders
+    # (nodes' ArtPollReply, other consoles), and counting those would let the
+    # preflight pass while our own engine sits silent -- the exact false pass
+    # this harness exists to prevent.
     local f; f=$(mktemp)
-    sudo -n tcpdump -i "$1" -nn -c 500 'udp port 6454' > "$f" 2>/dev/null &
+    sudo -n tcpdump -i "$1" -nn -c 500 "udp port 6454 and src host $2" > "$f" 2>/dev/null &
     local td=$!
-    /bin/sleep "$2"
+    /bin/sleep "$3"
     sudo -n kill -INT "$td" 2>/dev/null; wait "$td" 2>/dev/null
-    grep -c . "$f" 2>/dev/null || echo 0
+    # wc, not `grep -c`: grep exits 1 on a zero count, which fired the
+    # fallback as well and produced a two-line "0\n0" that broke the caller's
+    # numeric test.
+    local n; n=$(wc -l < "$f" 2>/dev/null | tr -d ' ')
     rm -f "$f"
+    echo "${n:-0}"
 }
 [ -x "$BIN" ] || die "no binary at $BIN"
 
@@ -87,11 +95,18 @@ QT_QPA_PLATFORM=offscreen "$BIN" -p -d 0 -o "$WS" > "$OUT" 2>&1 &
 APP=$!
 
 # --- preflight: refuse to measure an engine that is not doing the work ---
-for _ in $(seq 1 45); do
+# Wait for the STARTUP FUNCTION, not merely for outputs to open. main.cpp
+# calls slotModeOperate() only after loadXML() returns, and on a slower box
+# that is tens of seconds after the first output patch appears. Sampling on
+# "outputs opened" measured a box that had not yet entered Operate, so no
+# function was running, nothing changed, and the preflight aborted a host that
+# was actually fine.
+for _ in $(seq 1 90); do
     kill -0 "$APP" 2>/dev/null || break
-    [ "$(grep -c 'Open output on address' "$OUT" 2>/dev/null)" -ge 10 ] && break
+    [ "$(grep -c 'Starting startup function' "$OUT" 2>/dev/null)" -ge 1 ] && break
     sleep 2
 done
+/bin/sleep 3   # let the first ticks actually emit
 OPENED=$(grep -c 'Open output on address' "$OUT" 2>/dev/null)
 PATCHED=$(grep -c 'plugin: "ArtNet"' "$OUT" 2>/dev/null)
 STARTED=$(grep -c 'Starting startup function' "$OUT" 2>/dev/null)
@@ -100,7 +115,7 @@ echo "PRE_UNIVERSES_PATCHED=$PATCHED"
 echo "PRE_STARTUP_FUNCTION=$STARTED"
 [ "$OPENED" -gt 0 ] || { kill -TERM $APP 2>/dev/null; die "no ArtNet outputs opened (plugins missing? see TODO: Linux PLUGINDIR trap)"; }
 
-PKTS=$(capture_pkts "$IFACE" 6)
+PKTS=$(capture_pkts "$IFACE" "$IP" 6)
 echo "PRE_PACKETS_6S=$PKTS"
 if [ "${PKTS:-0}" -eq 0 ]; then
     kill -TERM "$APP" 2>/dev/null

@@ -1595,6 +1595,47 @@ effect timing items also want the rig to confirm.
   DMX not sent. Reproduce with `/tmp/throughput.sh` on ender (see DONE.md
   2026-08-25 for the harness).
 
+- **`-p` / `--operate` does not take effect on headless Linux (OPEN, 2026-08-25)**
+  — this is what blocks every cross-platform MasterTimer punctuality number.
+  With the identical workspace and `-p`, macOS enters Operate and runs the
+  `<Engine Autostart="...">` function; **both Linux hosts never do**:
+  | host | OS / Qt | `Doc::setMode` "Starting startup function" | packets |
+  |---|---|---|---|
+  | ender | macOS / Qt 6.11 | yes | yes (verified on the wire) |
+  | this Mac | macOS / Qt 6.11 | yes | yes |
+  | rpi5 | Debian 12 / Qt 6.4 | **no** | none |
+  | 192.168.1.245 | Debian 11 / Qt 5 | **no** | none |
+  It splits on **OS, not Qt version** (Qt5 and Qt6.4 both fail on Linux;
+  Qt6.11 works on macOS). Ruled out by test, not assumption:
+  - **Not the workspace.** The Pi's own repatched `.qxw`, copied to the Mac,
+    starts the function there. `<Engine Autostart="17">` is the first `<Engine>`
+    element and is structurally correct.
+  - **Not a stale build.** The Pi's engine/ui shared objects contain both the
+    `late_us` diagnostic and the autosave guard (check the `.so` files, not
+    `build/main/qlcconsole` — the code lives in `libqlcplusengine.so` /
+    `libqlcplusui.so`, which is easy to get wrong with `strings`).
+  - **Not a load failure.** 53 output patches open, no loadXML error, no
+    "Engine node not found", and the app reaches its event loop (the 5-minute
+    autosave timer fires).
+  - **Not the autosave dialog.** Guard in place and `QLC_NO_RECOVERY_PROMPT=1`.
+  Consequence chain: no Operate → startup function never runs → universe data
+  never changes → `Universe::dumpOutput` short-circuits → the ArtNet plugin is
+  never reached → zero packets. `transmitMode="Full"` cannot rescue it because
+  the universe stops short of the plugin.
+  Next step: `main.cpp` calls `app.slotModeOperate()` unconditionally after
+  `loadXML()`, and `Doc::setMode` early-returns when the mode already matches,
+  so instrument whether `setMode` is reached at all on Linux and what
+  `m_startupFunctionId` holds there. Note `[PM]` (ProgrammingManager) logs
+  nothing on the Pi while `[PC]` does, so the UI tab may not be constructed —
+  possibly related.
+
+- **Note: lateness magnitude was already logged before the `late_us` diag**
+  — `mastertimer-unix.cpp:67,74` has a pre-existing
+  `qDebug() << "Time is late by" << ... << "nanoseconds"` inside `compareTime()`.
+  The new line's genuinely new information is **`compute_us` + `budget_us`**
+  alongside it, which is what separates jitter from load; the raw lateness
+  figure was obtainable already.
+
 - **TRAP: on Linux, a build-dir run loads NO I/O plugins and silently outputs
   nothing (2026-08-25)** — cost a full 10-minute soak that looked like a clean
   pass. `IOPluginCache::load` resolves via `QLCFile::systemDirectory(PLUGINDIR)`
