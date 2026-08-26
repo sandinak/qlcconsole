@@ -85,6 +85,9 @@ public:
     /** @reimp */
     QStringList outputs() override;
 
+    /** @reimp Art-Net nodes heard via ArtPollReply. */
+    QList<Device> discoveredDevices() const override;
+
     /** @reimp */
     QString outputInfo(quint32 output) override;
 

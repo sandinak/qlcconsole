@@ -184,6 +184,39 @@ public:
      *
      * @return A list of available output names
      */
+    /**
+     * One device a plugin has discovered on a line -- an Art-Net node, an
+     * sACN source, a USB widget. Deliberately protocol-neutral strings rather
+     * than a union of every protocol's fields: the UI needs to render a tree,
+     * not interpret the contents.
+     *
+     * This exists because the plugin interface previously exposed discovered
+     * hardware only through pluginInfo()/outputInfo() HTML. The console was
+     * receiving a full description of every Art-Net node roughly once a second
+     * and the only way for the UI to reach it was to parse a rendered string.
+     */
+    struct Device
+    {
+        Device() : line(QLCIOPlugin::invalidLine()), rdmCapable(false) {}
+        quint32 line;           //!< the plugin line it was discovered on
+        QString name;           //!< human name, e.g. "CR041R"
+        QString address;        //!< transport address, e.g. "172.18.2.10"
+        QString hardwareId;     //!< MAC, serial, or empty
+        QString detail;         //!< one line of extra description
+        QString status;         //!< last reported status, or empty
+        QStringList portLabels; //!< one label per physical port
+        QList<quint32> portUniverses; //!< protocol universe per port, parallel to portLabels
+        bool rdmCapable;
+    };
+
+
+    /**
+     * Devices this plugin has discovered. Default is none, so a plugin that
+     * has no concept of discovery (USB widgets, MIDI ports -- the line IS the
+     * device) needs to do nothing.
+     */
+    virtual QList<Device> discoveredDevices() const { return QList<Device>(); }
+
     virtual QStringList outputs();
 
     /**

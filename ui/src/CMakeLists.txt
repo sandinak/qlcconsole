@@ -68,6 +68,7 @@ add_library(${module_name}
     importselectiondialog.cpp importselectiondialog.h
     inputchanneleditor.cpp inputchanneleditor.h inputchanneleditor.ui
     inputoutputmanager.cpp inputoutputmanager.h
+    connectionstree.cpp connectionstree.h
     universepatchgrid.cpp universepatchgrid.h
     inputoutputpatcheditor.cpp inputoutputpatcheditor.h inputoutputpatcheditor.ui
     inputprofileeditor.cpp inputprofileeditor.h inputprofileeditor.ui
