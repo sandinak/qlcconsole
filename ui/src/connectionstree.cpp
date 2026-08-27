@@ -342,6 +342,12 @@ void ConnectionsTree::refresh()
                 if (dev.detail.isEmpty() == false) detail << dev.detail;
                 detail << (dev.rdmCapable ? tr("RDM") : tr("no RDM"));
                 ditem->setText(COL_DETAIL, detail.join(" \u00b7 "));
+                /* Same tint vocabulary as the universe rows: green means the
+                   path is real, amber means it is only configured. Applied to
+                   the node as well as its universes so availability reads at
+                   the level someone actually asks about it -- "is that node
+                   there", not "is that universe reachable". */
+                ditem->setBackground(COL_NAME, QBrush(QColor(46, 125, 50, 40)));
                 if (dev.status.isEmpty() == false)
                     ditem->setToolTip(COL_DETAIL, dev.status);
 
@@ -467,6 +473,8 @@ void ConnectionsTree::refresh()
                                        is whether it answered. */
                                     ghost->setText(COL_DETAIL,
                                         tr("%1 · not heard from").arg(addr));
+                                    ghost->setBackground(COL_NAME,
+                                        QBrush(QColor(245, 166, 35, 40)));
                                     ghost->setForeground(COL_DETAIL,
                                                          QBrush(QColor("#a06000")));
                                     ghostNodes.insert(addr, ghost);
@@ -722,6 +730,52 @@ void ConnectionsTree::refresh()
         }
     }
 
+    /* Summarise each protocol on its own row. The top-level row previously
+       said nothing at all, so the one line that is always visible when a
+       branch is collapsed carried no information -- which is the line most
+       worth reading when scanning for "is anything wrong over there". */
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+    {
+        QTreeWidgetItem *top = m_tree->topLevelItem(i);
+        if (top->data(COL_NAME, ROLE_KIND).toInt() != KIND_PLUGIN)
+            continue;
+
+        int ifaces = 0, nodes = 0, unheard = 0, unis = 0;
+        QList<QTreeWidgetItem *> stack;
+        for (int c = 0; c < top->childCount(); c++)
+        {
+            stack << top->child(c);
+            ifaces++;
+        }
+        while (stack.isEmpty() == false)
+        {
+            QTreeWidgetItem *it = stack.takeFirst();
+            const int k = it->data(COL_NAME, ROLE_KIND).toInt();
+            if (k == KIND_DEVICE)
+            {
+                nodes++;
+                if (it->text(COL_DETAIL).contains(tr("not heard from")))
+                    unheard++;
+            }
+            /* A folded row is a port AND a universe, so count it as both. */
+            if (k == KIND_UNIVERSE
+                    || (k == KIND_PORT && it->data(COL_NAME, ROLE_UNIVERSE).isValid()))
+                unis++;
+            for (int c = 0; c < it->childCount(); c++)
+                stack << it->child(c);
+        }
+
+        QStringList parts;
+        parts << tr("%1 interfaces").arg(ifaces);
+        if (nodes > 0)
+            parts << (unheard > 0 ? tr("%1 nodes (%2 silent)").arg(nodes).arg(unheard)
+                                  : tr("%1 nodes").arg(nodes));
+        top->setText(COL_DETAIL, parts.join(" · "));
+        top->setText(COL_CARRIES, unis > 0 ? tr("%1 universes").arg(unis) : QString());
+        if (unheard > 0)
+            top->setForeground(COL_DETAIL, QBrush(QColor("#a06000")));
+    }
+
     /* An empty tree is ambiguous -- "nothing is connected" and "the view is
        broken" look identical. Say which. */
     if (m_tree->topLevelItemCount() == 0)
@@ -782,6 +836,21 @@ QString ConnectionsTree::itemPath(QTreeWidgetItem *item)
     return parts.join("/");
 }
 
+/** Expand or collapse an item and everything beneath it. */
+static void setExpandedDeep(QTreeWidgetItem *item, bool expanded)
+{
+    QList<QTreeWidgetItem *> stack;
+    stack << item;
+    while (stack.isEmpty() == false)
+    {
+        QTreeWidgetItem *it = stack.takeFirst();
+        if (it->childCount() > 0)
+            it->setExpanded(expanded);
+        for (int c = 0; c < it->childCount(); c++)
+            stack << it->child(c);
+    }
+}
+
 void ConnectionsTree::slotContextMenu(const QPoint &pos)
 {
     QTreeWidgetItem *item = m_tree->itemAt(pos);
@@ -794,6 +863,19 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 
     QMenu menu(this);
 
+    /* Offered on anything with children, before the row-specific actions.
+       Deep branches are quick to open and tedious to close one triangle at a
+       time, and the plugin and device rows had no menu at all -- so the rows
+       most worth collapsing were the ones you could not act on. */
+    QAction *collapseAll = NULL;
+    QAction *expandAll = NULL;
+    if (item->childCount() > 0)
+    {
+        collapseAll = menu.addAction(tr("Collapse everything below"));
+        expandAll = menu.addAction(tr("Expand everything below"));
+        menu.addSeparator();
+    }
+
     if (kind == KIND_PLUGIN)
     {
         /* Protocol-level settings (ArtNet/E1.31 options and so on) live in the
@@ -805,10 +887,14 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
                 if (cand != NULL && cand->name() == plugin)
                     p = cand;
         }
-        if (p == NULL || p->canConfigure() == false)
+        QAction *cfg = (p != NULL && p->canConfigure())
+            ? menu.addAction(tr("Configure %1…").arg(plugin)) : NULL;
+        if (menu.isEmpty())
             return;
-        QAction *cfg = menu.addAction(tr("Configure %1…").arg(plugin));
-        if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == cfg)
+        QAction *pick0 = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (pick0 != NULL && (pick0 == collapseAll || pick0 == expandAll))
+        { setExpandedDeep(item, pick0 == expandAll); return; }
+        if (pick0 == cfg)
             configurePlugin(plugin);
         return;
     }
@@ -819,7 +905,10 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (addr.isEmpty())
             return;
         QAction *ren = menu.addAction(tr("Name this target…"));
-        if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == ren)
+        QAction *pick1 = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (pick1 != NULL && (pick1 == collapseAll || pick1 == expandAll))
+        { setExpandedDeep(item, pick1 == expandAll); return; }
+        if (pick1 == ren)
             renameTarget(addr);
         return;
     }
@@ -841,6 +930,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             menu.addSeparator();
             QAction *del = menu.addAction(tr("Delete universe entirely…"));
             QAction *c = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+            if (c != NULL && (c == collapseAll || c == expandAll))
+            { setExpandedDeep(item, c == expandAll); return; }
             if (c == ren)
                 renameUniverse(uni);
             else if (c == unp)
@@ -852,7 +943,10 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         }
 
         QAction *p = menu.addAction(tr("Patch a universe to this port…"));
-        if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == p)
+        QAction *pick2 = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (pick2 != NULL && (pick2 == collapseAll || pick2 == expandAll))
+        { setExpandedDeep(item, pick2 == expandAll); return; }
+        if (pick2 == p)
             patchUniverseToPort(plugin, line, addr, portAddr);
         return;
     }
@@ -891,6 +985,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (menu.isEmpty())
             return;
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (chosen != NULL && (chosen == collapseAll || chosen == expandAll))
+        { setExpandedDeep(item, chosen == expandAll); return; }
         if (pNew != NULL && chosen == pNew)
             patchToNewTarget(plugin, line);
         else if (pOut != NULL && chosen == pOut)
@@ -1019,6 +1115,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete universe entirely…"));
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (chosen != NULL && (chosen == collapseAll || chosen == expandAll))
+        { setExpandedDeep(item, chosen == expandAll); return; }
         if (chosen == NULL)
             return;
 
