@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Workspace>
-<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ProgrammingManager">
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="InputOutputManager">
  <Creator>
-  <Name>Q Light Controller Plus</Name>
-  <Version>4.14.4 GIT</Version>
+  <Name>qlcconsole</Name>
+  <Version>4.14.2+qlcconsole.1164</Version>
   <Author>Branson Matheson</Author>
  </Creator>
  <Engine>
@@ -26,7 +26,7 @@
     <Input Plugin="MIDI" UID="Network RTP Session 1" Line="2" HIDProfile="Microsoft Xbox Controller"/>
    </Universe>
    <Universe Name="Universe 4" ID="3">
-    <Input Plugin="MIDI" UID="OpenDeck | PMJ_BLACK_1" Line="3">
+    <Input Plugin="MIDI" UID="APC40 mkII" Line="3">
      <PluginParameters midichannel="8"/>
     </Input>
    </Universe>
@@ -298,6 +298,18 @@
      <PluginParameters outputIP="172.18.2.230" outputUni="1"/>
     </Output>
    </Universe>
+   <TargetAlias Address="172.18.2.201">DS1</TargetAlias>
+   <TargetAlias Address="172.18.2.202">DS2</TargetAlias>
+   <TargetAlias Address="172.18.2.203">DS3</TargetAlias>
+   <TargetAlias Address="172.18.2.204">DS4</TargetAlias>
+   <TargetAlias Address="172.18.2.211">CS1</TargetAlias>
+   <TargetAlias Address="172.18.2.212">CS2</TargetAlias>
+   <TargetAlias Address="172.18.2.213">CS3</TargetAlias>
+   <TargetAlias Address="172.18.2.214">CS4</TargetAlias>
+   <TargetAlias Address="172.18.2.221">US1</TargetAlias>
+   <TargetAlias Address="172.18.2.222">US2</TargetAlias>
+   <TargetAlias Address="172.18.2.223">US3</TargetAlias>
+   <TargetAlias Address="172.18.2.224">US4</TargetAlias>
   </InputOutputMap>
   <Fixture>
    <Manufacturer>Branson</Manufacturer>
@@ -9436,7 +9448,7 @@
    <EffectScript>stage-shape</EffectScript>
    <EffectParam name="shape" value="1"/>
   </Palette>
-  <Function ID="0" Type="Scene" Name="MIDI Puddles" Path="Washes">
+  <Function ID="0" Type="Scene" Name="Show" Path="Washes">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureVal ID="1">2,0,3,0,4,4,5,16</FixtureVal>
    <FixtureVal ID="2">2,0,3,0,4,4,5,16</FixtureVal>
@@ -9690,6 +9702,7 @@
     </Circuit>
    </Source>
   </PowerDistribution>
+  <MoveInBlack Auto="0" DarkGapMs="800"/>
   <Monitor DisplayMode="1" ShowLabels="0" AimSubjectHeight="1.39903">
    <Font>Arial,12,-1,5,50,0,0,0,0,0</Font>
    <ChannelStyle>0</ChannelStyle>
@@ -11520,7 +11533,5 @@
  <SimpleDesk>
   <Engine/>
  </SimpleDesk>
- <AppState>
-  <MonitorWindow open="1" geometry="AdnQywADAAAAAADV///6nwAACXz////bAAAA1f//+r8AAAl8////2wAAAAEAAAAACgAAAADV///6vwAACXz////b"/>
- </AppState>
+ <AppState/>
 </Workspace>
