@@ -1822,6 +1822,32 @@ effect timing items also want the rig to confirm.
   the first — it is a per-patch-row fact.
 
 
+- **App icon does not reach the runtime on Linux (OPEN, 2026-08-27)** — the
+  asset is fine; the delivery is not. `resources/icons/png/qlcconsole.png` is a
+  purpose-made fork icon (not the old QLC+ logo), `app.cpp:314` does
+  `setWindowIcon(QIcon(":/qlcconsole.png"))`, and `ui/src/qlcui.qrc` aliases it
+  correctly. What is wrong:
+  1. **One size only.** A single **96×96** PNG is shipped, and it is installed
+     to the legacy `share/pixmaps/` rather than the freedesktop icon theme
+     (`share/icons/hicolor/<size>/apps/qlcconsole.png`) --
+     `platforms/linux/CMakeLists.txt:9-13`. Modern shells prefer hicolor, and
+     scaling one 96px source to 128/256 looks soft. `.desktop` says
+     `Icon=qlcconsole`, which resolves through the theme first.
+  2. **The SVG is never installed.** `resources/icons/svg/qlcconsole.svg`
+     exists and would give every size for free via
+     `share/icons/hicolor/scalable/apps/`.
+  3. **Nothing is installed at all when running from `build/`**, which is how
+     every test run works, so the desktop falls back to a generic icon. Only
+     `_NET_WM_ICON` from `setWindowIcon` applies, and shells vary in whether
+     they use it for the task list.
+  4. **macOS dev builds are a bare binary**, not a `.app`, so
+     `CFBundleIconFile=qlcconsole.icns` only takes effect in a packaged DMG --
+     the icon is never seen during development.
+  Fix: install the SVG to `hicolor/scalable/apps/` plus rendered PNGs at
+  16/22/24/32/48/64/128/256 to `hicolor/<size>/apps/`, keep `share/pixmaps` for
+  compatibility, and run `gtk-update-icon-cache` on install. The `.icns`
+  (1024×1024) and `.ico` are already right for macOS/Windows packaging.
+
 - **Art-Net node configuration (ArtAddress) — send path built and proven, but
   no node here applies it (2026-08-26)** — `artnet-config.py` at the repo root
   builds and sends ArtAddress (OpCode 0x6000); the plugin defines
