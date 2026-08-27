@@ -21,6 +21,7 @@
 #include <QHostInfo>
 #include <QLabel>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QCheckBox>
 #include <QInputDialog>
 #include <QMessageBox>
@@ -68,6 +69,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     , m_showUnused(NULL)
     , m_populatedOnce(false)
     , m_rebuilding(false)
+    , m_since(new QElapsedTimer)
     , m_tree(NULL)
     , m_refreshTimer(NULL)
 {
@@ -123,11 +125,13 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     connect(m_refreshTimer, SIGNAL(timeout()), this, SLOT(refresh()));
     m_refreshTimer->start();
 
+    m_since->start();
     refresh();
 }
 
 ConnectionsTree::~ConnectionsTree()
 {
+    delete m_since;
 }
 
 QList<quint32> ConnectionsTree::universesOn(const QString &pluginName, quint32 line,
@@ -283,6 +287,9 @@ void ConnectionsTree::refresh()
             QHash<QString, QTreeWidgetItem *> portRows;
             /* Node rows synthesised for targets nothing has answered from. */
             QHash<QString, QTreeWidgetItem *> ghostNodes;
+            /* Port rows under unheard targets, so a configured node has the
+               same node -> port -> universe shape as a discovered one. */
+            QHash<QString, QTreeWidgetItem *> ghostPorts;
 
             /* Devices heard on this line. Most plugins report none -- for a
                USB widget or a MIDI port the line already IS the device, and
@@ -464,8 +471,35 @@ void ConnectionsTree::refresh()
                                                          QBrush(QColor("#a06000")));
                                     ghostNodes.insert(addr, ghost);
                                 }
-                                parentItem = ghost;
-                                targetText = tr("uni %1").arg(portAddr);
+                                /* Same three levels as a discovered node. A
+                                   node we have heard from showed
+                                   node -> port -> universe while a configured
+                                   one showed node -> universe, so two things
+                                   that are the same shape on the rig looked
+                                   different here purely because one had
+                                   answered. The port address is known from the
+                                   patch, so there is no reason to flatten it. */
+                                const QString gpKey =
+                                    QString("%1|%2").arg(addr).arg(portAddr);
+                                QTreeWidgetItem *gport = ghostPorts.value(gpKey);
+                                if (gport == NULL)
+                                {
+                                    gport = new QTreeWidgetItem(ghost);
+                                    gport->setText(COL_NAME,
+                                        tr("port %1").arg((portAddr & 0x0F) + 1));
+                                    gport->setText(COL_DETAIL,
+                                        QString("%1:%2:%3")
+                                            .arg((portAddr >> 8) & 0x7F)
+                                            .arg((portAddr >> 4) & 0x0F)
+                                            .arg(portAddr & 0x0F));
+                                    gport->setData(COL_NAME, ROLE_KIND, KIND_PORT);
+                                    gport->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
+                                    gport->setData(COL_NAME, ROLE_LINE, quint32(line));
+                                    gport->setData(COL_NAME, ROLE_ADDRESS, addr);
+                                    gport->setData(COL_NAME, ROLE_PORTADDR, portAddr);
+                                    ghostPorts.insert(gpKey, gport);
+                                }
+                                parentItem = gport;
                             }
                         }
                     }
@@ -540,6 +574,21 @@ void ConnectionsTree::refresh()
                     uitem->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
                     uitem->setData(COL_NAME, ROLE_LINE, quint32(line));
                     uitem->setData(COL_NAME, ROLE_OUTPUT, output);
+
+                    /* Colour by whether the path is complete, so a glance
+                       separates "this will output" from "this is aimed at
+                       something that has never answered". Kept as a background
+                       tint rather than text colour: the row already uses text
+                       colour for the over-512 warning, and two meanings on one
+                       channel is how colour coding stops meaning anything. */
+                    if (parentItem != litem)
+                    {
+                        const bool heard = (parentItem->parent() != NULL)
+                            && ghostNodes.values().contains(parentItem->parent()) == false;
+                        uitem->setBackground(COL_NAME, QBrush(heard
+                            ? QColor(46, 125, 50, 40)      // reachable
+                            : QColor(245, 166, 35, 40)));  // configured, silent
+                    }
 
                     /* Same usage figure the Overview grid shows: how full the
                        universe is. A patch row without it answers "where does
@@ -624,11 +673,25 @@ void ConnectionsTree::refresh()
     if (m_tree->topLevelItemCount() == 0)
     {
         QTreeWidgetItem *none = new QTreeWidgetItem(m_tree);
-        none->setText(COL_NAME, tr("Nothing connected"));
-        none->setText(COL_DETAIL, showAll
-            ? tr("No I/O plugins are available.")
-            : tr("No interface has a universe patched to it and no devices "
-                 "were heard. Tick \"Show unused\" to patch one."));
+        /* Discovery is passive: nodes announce themselves about once a second,
+           so for the first few seconds an empty tree means "not yet", not
+           "nothing is there". Saying the latter immediately on opening the tab
+           is simply wrong, and it is wrong at exactly the moment someone is
+           deciding whether the rig is plugged in. */
+        if (m_since->elapsed() < 6000)
+        {
+            none->setText(COL_NAME, tr("Searching…"));
+            none->setText(COL_DETAIL,
+                tr("Listening for devices announcing themselves."));
+        }
+        else
+        {
+            none->setText(COL_NAME, tr("Nothing connected"));
+            none->setText(COL_DETAIL, showAll
+                ? tr("No I/O plugins are available.")
+                : tr("No interface has a universe patched to it and no devices "
+                     "were heard. Tick \"Show unused\" to patch one."));
+        }
         none->setFirstColumnSpanned(false);
     }
 
