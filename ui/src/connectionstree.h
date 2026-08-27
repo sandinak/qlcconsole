@@ -107,6 +107,9 @@ private:
     bool m_populatedOnce;
     /** Suppresses itemChanged while refresh() rebuilds the tree. */
     bool m_rebuilding;
+    /* Nodes announce roughly once a second, so an empty tree in the first
+       moments means "not yet", not "nothing there". */
+    class QElapsedTimer *m_since;
     QTreeWidget *m_tree;
     /* Nodes announce themselves about once a second, so a periodic rebuild
        keeps the view honest without a manual rescan. */
