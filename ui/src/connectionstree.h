@@ -101,6 +101,7 @@ private:
 private:
     Doc *m_doc;
     QCheckBox *m_showUnused;
+    class QLabel *m_status;
     /* Collapse state survives the periodic rebuild; without this a refresh
        every 5 s reopened anything the operator had just closed. */
     QSet<QString> m_collapsed;

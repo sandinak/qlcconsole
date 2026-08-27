@@ -23,6 +23,7 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QCheckBox>
+#include <QApplication>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QMenu>
@@ -67,6 +68,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     : QWidget(parent)
     , m_doc(doc)
     , m_showUnused(NULL)
+    , m_status(NULL)
     , m_populatedOnce(false)
     , m_rebuilding(false)
     , m_since(new QElapsedTimer)
@@ -98,6 +100,16 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_showUnused->setChecked(false);
     connect(m_showUnused, SIGNAL(toggled(bool)), this, SLOT(refresh()));
     lay->addWidget(m_showUnused);
+
+    /* Discovery is passive: nodes announce themselves roughly once a second.
+       On first opening the tab the tree is therefore genuinely incomplete for
+       a few seconds, and it looks identical to a finished tree that is simply
+       missing a node. Saying so is the difference between "wait" and "go
+       investigate the rig". Shown even when the tree already has rows, because
+       that is exactly the case where the absence is invisible. */
+    m_status = new QLabel(tr("Searching for devices…"), this);
+    m_status->setStyleSheet("QLabel { color: #a06000; }");
+    lay->addWidget(m_status);
 
     m_tree = new QTreeWidget(this);
     m_tree->setColumnCount(3);
@@ -194,6 +206,16 @@ QList<quint32> ConnectionsTree::feedbackOn(const QString &pluginName,
 void ConnectionsTree::refresh()
 {
     if (m_tree == NULL || m_doc == NULL)
+        return;
+
+    /* Never rebuild under someone's hands. The periodic refresh tears down
+       every row, which destroys an open editor mid-word -- so renaming a target
+       became a race against a five second timer.
+       QAbstractItemView::state() would say this directly but is protected, so
+       detect the editor by focus: an open item editor is a focused widget
+       parented into the view. */
+    QWidget *focus = QApplication::focusWidget();
+    if (focus != NULL && m_tree->isAncestorOf(focus))
         return;
 
     /* Remember what the operator COLLAPSED, keyed by full path.
@@ -821,6 +843,9 @@ void ConnectionsTree::refresh()
     }
     m_populatedOnce = true;
     m_rebuilding = false;
+
+    if (m_status != NULL)
+        m_status->setVisible(m_since->elapsed() < 6000);
 }
 
 /** Stable identity for a row: its name plus every ancestor's, so two rows that
@@ -839,8 +864,13 @@ QString ConnectionsTree::itemPath(QTreeWidgetItem *item)
 /** Expand or collapse an item and everything beneath it. */
 static void setExpandedDeep(QTreeWidgetItem *item, bool expanded)
 {
+    /* "Below" means the descendants. Collapsing the row you invoked it from
+       makes the branch vanish from under the cursor, which is never what was
+       asked for -- and leaves nothing to expand back from in place. */
     QList<QTreeWidgetItem *> stack;
-    stack << item;
+    for (int c = 0; c < item->childCount(); c++)
+        stack << item->child(c);
+    item->setExpanded(true);
     while (stack.isEmpty() == false)
     {
         QTreeWidgetItem *it = stack.takeFirst();
