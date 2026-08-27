@@ -593,9 +593,26 @@ void ConnectionsTree::refresh()
                     if (it->child(c)->data(COL_NAME, ROLE_KIND).toInt() == KIND_UNIVERSE)
                         names << it->child(c)->text(COL_NAME);
                 if (names.isEmpty() == false)
+                {
                     it->setText(COL_CARRIES, names.count() > 3
                                 ? tr("%1 universes").arg(names.count())
                                 : names.join(", "));
+
+                    /* Two universes aimed at one physical DMX port is a fault,
+                       not a layout: both streams arrive at the same socket and
+                       whichever the node merges or drops is arbitrary. It is
+                       also easy to create by accident and invisible in a
+                       per-universe view, since each universe looks fine on its
+                       own -- the collision only exists between them. */
+                    if (k == KIND_PORT && names.count() > 1)
+                    {
+                        it->setForeground(COL_CARRIES, QBrush(QColor(220, 90, 90)));
+                        it->setToolTip(COL_CARRIES,
+                            tr("More than one universe is aimed at this port. "
+                               "Both will be sent to the same physical DMX "
+                               "output."));
+                    }
+                }
             }
             for (int c = 0; c < it->childCount(); c++)
                 stack << it->child(c);
@@ -1113,10 +1130,19 @@ bool ConnectionsTree::patchTarget(quint32 universe, const QString &pluginName,
            (broadcast, or simply never configured). */
         const QMap<QString, QVariant> params =
             const_cast<OutputPatch *>(op)->getPluginParameters();
+
+        /* Absent parameters are not zero -- they are the plugin's defaults, and
+           guessing wrong makes this view assert things that are false.
+           ArtNetController::addUniverse defaults outputAddress to the BROADCAST
+           address and outputUniverse to the universe's own id. Defaulting the
+           port address to 0 instead made every patch that had an IP but no
+           explicit universe collapse onto port 0, which showed up as several
+           universes apparently bound to one physical port -- a configuration
+           that would be a real fault if it were true. */
         if (params.contains("outputIP") == false)
-            return false;
+            return false;   // broadcast: no single node to sit under
         address = params.value("outputIP").toString();
-        portAddress = params.value("outputUni", 0).toUInt();
+        portAddress = params.value("outputUni", universe).toUInt();
         return address.isEmpty() == false;
     }
     return false;
