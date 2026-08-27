@@ -1422,6 +1422,7 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
 
     /** Reset the current universe list and read the new one */
     removeAllUniverses();
+    m_targetAliases.clear();
 
     while (root.readNextStartElement())
     {
@@ -1435,6 +1436,15 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
                 Universe *uni = m_universeArray.last();
                 uni->loadXML(root, m_universeArray.count() - 1, this);
             }
+        }
+        else if (root.name() == QStringLiteral("TargetAlias"))
+        {
+            const QString addr = root.attributes()
+                                 .value(QStringLiteral("Address")).toString();
+            const QString name = root.readElementText();
+            if (addr.isEmpty() == false && name.isEmpty() == false)
+                m_targetAliases[addr] = name;
+            continue;   // readElementText already consumed the end element
         }
         else if (root.name() == KXMLIOBeatGenerator)
         {
@@ -1458,6 +1468,26 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
     return true;
 }
 
+QString InputOutputMap::targetAlias(const QString &address) const
+{
+    return m_targetAliases.value(address);
+}
+
+void InputOutputMap::setTargetAlias(const QString &address, const QString &name)
+{
+    if (address.isEmpty())
+        return;
+    if (name.isEmpty())
+        m_targetAliases.remove(address);
+    else
+        m_targetAliases[address] = name;
+}
+
+QMap<QString, QString> InputOutputMap::targetAliases() const
+{
+    return m_targetAliases;
+}
+
 bool InputOutputMap::saveXML(QXmlStreamWriter *doc) const
 {
     Q_ASSERT(doc != NULL);
@@ -1472,6 +1502,19 @@ bool InputOutputMap::saveXML(QXmlStreamWriter *doc) const
 
     foreach (Universe *uni, m_universeArray)
         uni->saveXML(doc);
+
+    /* Operator-supplied names for output targets. Written after the universes
+       so an older build, which skips unknown elements, still reads the patch
+       itself correctly and merely loses the labels. */
+    QMapIterator<QString, QString> ait(m_targetAliases);
+    while (ait.hasNext())
+    {
+        ait.next();
+        doc->writeStartElement(QStringLiteral("TargetAlias"));
+        doc->writeAttribute(QStringLiteral("Address"), ait.key());
+        doc->writeCharacters(ait.value());
+        doc->writeEndElement();
+    }
 
     doc->writeEndElement();
 
