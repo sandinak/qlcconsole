@@ -19,6 +19,7 @@
 #define CONNECTIONSTREE_H
 
 #include <QString>
+#include <QSet>
 
 #include <QWidget>
 
@@ -76,6 +77,8 @@ private:
     /** Open a plugin's own configuration dialog. */
     void configurePlugin(const QString &pluginName);
 
+    static QString itemPath(class QTreeWidgetItem *item);
+
     /** Patch a universe and aim it at one physical port of a discovered node. */
     void patchUniverseToPort(const QString &pluginName, quint32 line,
                              const QString &deviceAddress, quint32 portAddress);
@@ -87,6 +90,10 @@ private:
 private:
     Doc *m_doc;
     QCheckBox *m_showUnused;
+    /* Collapse state survives the periodic rebuild; without this a refresh
+       every 5 s reopened anything the operator had just closed. */
+    QSet<QString> m_collapsed;
+    bool m_populatedOnce;
     QTreeWidget *m_tree;
     /* Nodes announce themselves about once a second, so a periodic rebuild
        keeps the view honest without a manual rescan. */
