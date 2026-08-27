@@ -78,6 +78,9 @@ private:
     void setProfile(quint32 universe, const QString &profileName);
     /** Open a plugin's own configuration dialog. */
     void configurePlugin(const QString &pluginName);
+    /** ArtNet transmit mode (Standard / Full / Partial) for one patch. */
+    void setTransmitMode(quint32 universe, const QString &pluginName,
+                         quint32 line, const QString &mode);
 
     static QString itemPath(class QTreeWidgetItem *item);
 

@@ -37,6 +37,7 @@
 #include "outputpatch.h"
 #include "inputpatch.h"
 #include "universe.h"
+#include "fixture.h"
 #include <QLineEdit>
 #include "doc.h"
 
@@ -432,6 +433,23 @@ void ConnectionsTree::refresh()
                     udetail << (output ? tr("output") : tr("input"));
                     if (targetText.isEmpty() == false)
                         udetail << targetText;
+
+                    /* Broadcast vs unicast changes what a patch means: a
+                       broadcast target reaches every node on the segment and
+                       has nothing to be "unreachable", while a unicast target
+                       is a specific box that can be off. Same field, entirely
+                       different diagnosis, so name it. */
+                    if (output)
+                    {
+                        QString a;
+                        quint32 pa = 0;
+                        if (patchTarget(uniId, plugin->name(), quint32(line), a, pa))
+                        {
+                            const bool bcast = a.endsWith(QLatin1String(".255"))
+                                               || a == QLatin1String("255.255.255.255");
+                            udetail << (bcast ? tr("broadcast") : tr("unicast"));
+                        }
+                    }
                     if (output == false)
                     {
                         InputPatch *ip = uni->inputPatch();
@@ -447,6 +465,25 @@ void ConnectionsTree::refresh()
                     uitem->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
                     uitem->setData(COL_NAME, ROLE_LINE, quint32(line));
                     uitem->setData(COL_NAME, ROLE_OUTPUT, output);
+
+                    /* Same usage figure the Overview grid shows: how full the
+                       universe is. A patch row without it answers "where does
+                       this go" but not "is there anything in it". */
+                    int nfx = 0, lastCh = 0;
+                    foreach (Fixture *fx, m_doc->fixtures())
+                    {
+                        if (fx == NULL || fx->universe() != uniId)
+                            continue;
+                        nfx++;
+                        lastCh = qMax(lastCh, int(fx->address() + fx->channels()));
+                    }
+                    if (nfx > 0)
+                    {
+                        uitem->setText(COL_CARRIES,
+                                       tr("%1 fx · %2/512").arg(nfx).arg(lastCh));
+                        if (lastCh > 512)
+                            uitem->setForeground(COL_CARRIES, QBrush(QColor(220, 90, 90)));
+                    }
                 }
             }
         }
@@ -462,6 +499,34 @@ void ConnectionsTree::refresh()
     /* Depth 2 so discovered devices AND their ports are visible: the port
        row is where the Net:Sub:Universe address lives, which is the whole
        reason for drilling in. */
+    /* Roll each port's universes up into its Carries cell. A port row that
+       says nothing while its children say plenty is the sort of gap that makes
+       people distrust the whole view. Done after the tree is built, since the
+       universes are attached as they are found. */
+    {
+        QList<QTreeWidgetItem *> stack;
+        for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+            stack << m_tree->topLevelItem(i);
+        while (stack.isEmpty() == false)
+        {
+            QTreeWidgetItem *it = stack.takeFirst();
+            const int k = it->data(COL_NAME, ROLE_KIND).toInt();
+            if ((k == KIND_PORT || k == KIND_DEVICE) && it->childCount() > 0)
+            {
+                QStringList names;
+                for (int c = 0; c < it->childCount(); c++)
+                    if (it->child(c)->data(COL_NAME, ROLE_KIND).toInt() == KIND_UNIVERSE)
+                        names << it->child(c)->text(COL_NAME);
+                if (names.isEmpty() == false)
+                    it->setText(COL_CARRIES, names.count() > 3
+                                ? tr("%1 universes").arg(names.count())
+                                : names.join(", "));
+            }
+            for (int c = 0; c < it->childCount(); c++)
+                stack << it->child(c);
+        }
+    }
+
     /* An empty tree is ambiguous -- "nothing is connected" and "the view is
        broken" look identical. Say which. */
     if (m_tree->topLevelItemCount() == 0)
@@ -567,6 +632,41 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 
         QAction *ren = menu.addAction(tr("Rename universe…"));
 
+        /* ArtNet transmit mode: Standard sends only on change (plus a periodic
+           refresh), Full sends every tick. It changes the packet rate by
+           orders of magnitude, so it belongs next to the patch it applies to
+           rather than buried in a grid column. */
+        QMenu *modeMenu = NULL;
+        QStringList modes;
+        if (output)
+        {
+            modes << "Standard" << "Full" << "Partial";
+            modeMenu = menu.addMenu(tr("Transmit mode"));
+            QString cur = "Standard";
+            Universe *u = m_doc->inputOutputMap()
+                          ? m_doc->inputOutputMap()->universe(uni) : NULL;
+            if (u != NULL)
+            {
+                for (int i = 0; i < u->outputPatchesCount(); i++)
+                {
+                    OutputPatch *op = u->outputPatch(i);
+                    if (op != NULL && op->plugin() != NULL
+                            && op->plugin()->name() == plugin && op->output() == line)
+                    {
+                        cur = op->getPluginParameters()
+                                .value("transmitMode", "Standard").toString();
+                        break;
+                    }
+                }
+            }
+            foreach (const QString &m, modes)
+            {
+                QAction *a = modeMenu->addAction(m);
+                a->setCheckable(true);
+                a->setChecked(m == cur);
+            }
+        }
+
         /* Feedback: which output line carries status back to a controller.
            Listed as a submenu of real lines rather than a free-text field so
            an unreachable line cannot be typed in. */
@@ -640,6 +740,13 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
                 if (idx >= 0 && idx < fbTargets.count())
                     setFeedback(uni, fbTargets.at(idx).first, fbTargets.at(idx).second);
             }
+            return;
+        }
+        if (modeMenu != NULL && chosen->parentWidget() == modeMenu)
+        {
+            const int idx = modeMenu->actions().indexOf(chosen);
+            if (idx >= 0 && idx < modes.count())
+                setTransmitMode(uni, plugin, line, modes.at(idx));
             return;
         }
         if (profMenu != NULL && chosen->parentWidget() == profMenu)
@@ -952,5 +1059,27 @@ void ConnectionsTree::patchUniverseToPort(const QString &pluginName, quint32 lin
         }
     }
     m_doc->setModified();
+    refresh();
+}
+
+void ConnectionsTree::setTransmitMode(quint32 universe, const QString &pluginName,
+                                      quint32 line, const QString &mode)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    Universe *uni = iomap ? iomap->universe(universe) : NULL;
+    if (uni == NULL)
+        return;
+
+    for (int i = 0; i < uni->outputPatchesCount(); i++)
+    {
+        OutputPatch *op = uni->outputPatch(i);
+        if (op != NULL && op->plugin() != NULL
+                && op->plugin()->name() == pluginName && op->output() == line)
+        {
+            op->setPluginParameter("transmitMode", mode);
+            m_doc->setModified();
+            break;
+        }
+    }
     refresh();
 }
