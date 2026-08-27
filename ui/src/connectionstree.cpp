@@ -490,9 +490,13 @@ void ConnectionsTree::refresh()
                         if (ip != NULL && ip->profileName().isEmpty() == false)
                             udetail << tr("profile: %1").arg(ip->profileName());
                     }
-                    OutputPatch *fb = iomap->feedbackPatch(uniId);
-                    if (fb != NULL && fb->plugin() != NULL)
-                        udetail << tr("feedback: %1").arg(fb->plugin()->name());
+                    /* Deliberately NOT naming the feedback transport here.
+                       Writing "feedback: MIDI" on a row sitting under an
+                       Art-Net port reads as though MIDI travels over Art-Net --
+                       and since MIDI over a network is a real thing (RTP-MIDI),
+                       that is a plausible misreading rather than a pedantic
+                       one. The feedback relationship is shown where it
+                       physically lives: as a row under the MIDI line itself. */
                     uitem->setText(COL_DETAIL, udetail.join(" \u00b7 "));
                     uitem->setData(COL_NAME, ROLE_KIND, KIND_UNIVERSE);
                     uitem->setData(COL_NAME, ROLE_UNIVERSE, uniId);
@@ -660,16 +664,43 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 
     if (kind == KIND_LINE)
     {
-        QAction *pNew = menu.addAction(tr("Patch a universe to a new target…"));
-        menu.addSeparator();
-        QAction *pOut = menu.addAction(tr("Patch a universe here (output)…"));
-        QAction *pIn = menu.addAction(tr("Patch a universe here (input)…"));
+        /* Only offer what this line can actually carry. A plugin advertises
+           its capabilities and its input/output line lists separately, and
+           offering an output patch on an input-only line produced a menu entry
+           that silently did nothing. */
+        QLCIOPlugin *p = NULL;
+        if (m_doc->ioPluginCache() != NULL)
+        {
+            foreach (QLCIOPlugin *cand, m_doc->ioPluginCache()->plugins())
+                if (cand != NULL && cand->name() == plugin)
+                    p = cand;
+        }
+        if (p == NULL)
+            return;
+
+        const bool canOut = (p->capabilities() & QLCIOPlugin::Output)
+                            && int(line) < p->outputs().count();
+        const bool canIn = (p->capabilities() & QLCIOPlugin::Input)
+                           && int(line) < p->inputs().count();
+
+        QAction *pNew = NULL;
+        if (canOut)
+        {
+            pNew = menu.addAction(tr("Patch a universe to a new target…"));
+            menu.addSeparator();
+        }
+        QAction *pOut = canOut
+            ? menu.addAction(tr("Patch a universe here (output)…")) : NULL;
+        QAction *pIn = canIn
+            ? menu.addAction(tr("Patch a universe here (input)…")) : NULL;
+        if (menu.isEmpty())
+            return;
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (chosen == pNew)
+        if (pNew != NULL && chosen == pNew)
             patchToNewTarget(plugin, line);
-        else if (chosen == pOut)
+        else if (pOut != NULL && chosen == pOut)
             patchUniverseTo(plugin, line, true);
-        else if (chosen == pIn)
+        else if (pIn != NULL && chosen == pIn)
             patchUniverseTo(plugin, line, false);
         return;
     }
@@ -730,7 +761,10 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         {
             foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
             {
-                if (p == NULL)
+                /* Feedback is its own capability -- a plugin that can output
+                   DMX cannot necessarily send anything back. Listing every
+                   output line here offered targets that could never work. */
+                if (p == NULL || (p->capabilities() & QLCIOPlugin::Feedback) == 0)
                     continue;
                 const QStringList outs = p->outputs();
                 for (int i = 0; i < outs.count(); i++)
