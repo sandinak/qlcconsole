@@ -109,6 +109,15 @@ public:
 public:
     void rescanDevices();
 
+    /** @reimp The Rescan action in the connections view. Without this the
+        base-class no-op runs and freshly plugged hardware never appears until
+        the app is restarted or the plugin's own dialog is opened. */
+    void rescan() override { rescanDevices(); }
+
+    /** @reimp A line here means a device is plugged in. */
+    bool linesAreHardware() const override { return true; }
+
+
 protected:
     /** Get a PeperoniDevice entry by its usbdev struct */
     bool device(libusb_device *usbdev) const;

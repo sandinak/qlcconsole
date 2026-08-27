@@ -23,6 +23,7 @@
 #include <QStringList>
 #include <QString>
 #include <QList>
+#include <QMap>
 
 #include "qlcioplugin.h"
 
@@ -50,6 +51,39 @@ public:
 
     /** @reimp */
     QString pluginInfo() const override;
+
+    /*********************************************************************
+     * Discovery / description hooks
+     *
+     * All driven by public members so a test can build a scenario -- a node
+     * heard on line 2, a plugin whose lines are hardware, a protocol that
+     * supports targets -- without needing real hardware or a network.
+     *********************************************************************/
+public:
+    /** @reimp */
+    QList<Device> discoveredDevices() const override { return m_devices; }
+
+    /** @reimp */
+    QString lineDescription(quint32 line, bool output) const override
+    { Q_UNUSED(output) return m_lineDescriptions.value(int(line)); }
+
+    /** @reimp */
+    bool linesAreHardware() const override { return m_linesAreHardware; }
+
+    /** @reimp */
+    bool supportsOutputTargets() const override { return m_supportsTargets; }
+
+    /** @reimp */
+    void rescan() override { m_rescanCalled++; }
+
+public:
+    QList<Device> m_devices;
+    QMap<int, QString> m_lineDescriptions;
+    bool m_linesAreHardware;
+    bool m_supportsTargets;
+    int m_rescanCalled;
+    /** Number of lines outputs()/inputs() advertise; 4 unless a test says otherwise. */
+    int m_lineCount;
 
     /*********************************************************************
      * Outputs

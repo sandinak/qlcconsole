@@ -25,6 +25,7 @@
 #include <QHeaderView>
 #include <QComboBox>
 #include <QColor>
+#include <QBrush>
 #include <QPalette>
 #include <QFont>
 #include <QToolBar>
@@ -380,6 +381,24 @@ QComboBox *UniversePatchGrid::buildDeviceCombo(bool inputs, bool excludeMidi,
             idx++;
         }
     }
+    /* A patch naming a plugin line this machine does not have -- a workspace
+       built on the show rig and opened on a laptop, a USB widget unplugged, a
+       NIC that went away -- matched nothing above and fell through with
+       sel == 0, so the cell read "(none)": indistinguishable from a universe
+       nobody ever patched. That is the one case where the difference matters
+       most, because the fix is opposite in each direction (go plug it in, vs
+       go patch it). Give the missing line a row of its own, selected, so the
+       patch is visible and can be repointed rather than silently lost. */
+    if (sel == 0 && curPlugin.isEmpty() == false)
+    {
+        combo->addItem(tr("%1 · line %2 — not available")
+                       .arg(curPlugin).arg(curLine + 1));
+        combo->setItemData(idx, curPlugin, R_PLUGIN);
+        combo->setItemData(idx, curLine, R_LINE);
+        combo->setItemData(idx, QBrush(QColor("#a06000")), Qt::ForegroundRole);
+        sel = idx;
+    }
+
     combo->setCurrentIndex(sel);
     return combo;
 }

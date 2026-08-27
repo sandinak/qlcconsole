@@ -221,6 +221,17 @@ public:
     // or if the packet should not be handled by another controller.
     bool handlePacket(QByteArray const& datagram, QHostAddress const& senderAddress);
 
+public:
+    /** Send a single ArtPoll now, outside the periodic cadence.
+     *
+     *  Discovery is otherwise driven entirely by the 3 s poll timer, and that
+     *  timer only runs on a line carrying an output (see addUniverse). An
+     *  operator who has just plugged a node in wants the answer now rather
+     *  than at the next tick -- and on an unpatched line there is no next
+     *  tick at all. One datagram, on demand.
+     */
+    void sendPoll() { slotSendPoll(); }
+
 protected slots:
     void slotSendPoll();
     void slotSendAllUniverses();

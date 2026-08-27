@@ -61,6 +61,15 @@ private slots:
     void blackout();
     void grandMaster();
 
+    /* Fork: operator-supplied labels, hand-declared targets, and the input
+       conflict query the connections tree warns from. */
+    void targetAliases();
+    void lineAliases();
+    void manualTargets();
+    void manualTargetPorts();
+    void universesWithInputOn();
+    void aliasesAndTargetsSurviveSaveLoad();
+
 private:
     Doc* m_doc;
 };

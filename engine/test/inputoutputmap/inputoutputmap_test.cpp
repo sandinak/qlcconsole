@@ -18,6 +18,7 @@
 */
 #include <QSignalSpy>
 #include <QtTest>
+#include <QBuffer>
 
 #define private public
 #include "iopluginstub.h"
@@ -890,6 +891,158 @@ void InputOutputMap_Test::grandMaster()
 
     iom.setGrandMasterValueMode(GrandMaster::Limit);
     QVERIFY(iom.grandMasterValueMode() == GrandMaster::Limit);
+}
+
+/****************************************************************************
+ * Fork additions: operator labels, hand-declared targets, input conflicts
+ ****************************************************************************/
+
+void InputOutputMap_Test::targetAliases()
+{
+    InputOutputMap iom(m_doc, 4);
+
+    QVERIFY(iom.targetAlias("172.18.2.10").isEmpty());
+
+    iom.setTargetAlias("172.18.2.10", "CR041R");
+    QCOMPARE(iom.targetAlias("172.18.2.10"), QString("CR041R"));
+    QCOMPARE(iom.targetAliases().count(), 1);
+
+    // An empty name CLEARS rather than storing an empty label, so the row
+    // falls back to the bare address instead of showing " ()".
+    iom.setTargetAlias("172.18.2.10", "");
+    QVERIFY(iom.targetAlias("172.18.2.10").isEmpty());
+    QCOMPARE(iom.targetAliases().count(), 0);
+}
+
+void InputOutputMap_Test::lineAliases()
+{
+    InputOutputMap iom(m_doc, 4);
+
+    QVERIFY(iom.lineAlias("ArtNet", "172.18.2.17").isEmpty());
+
+    iom.setLineAlias("ArtNet", "172.18.2.17", "FOH rack");
+    QCOMPARE(iom.lineAlias("ArtNet", "172.18.2.17"), QString("FOH rack"));
+
+    // Keyed by plugin AND line: the same line string under another protocol
+    // is a different cable and must not inherit the label.
+    QVERIFY(iom.lineAlias("E1.31", "172.18.2.17").isEmpty());
+
+    iom.setLineAlias("ArtNet", "172.18.2.17", "");
+    QVERIFY(iom.lineAlias("ArtNet", "172.18.2.17").isEmpty());
+}
+
+void InputOutputMap_Test::manualTargets()
+{
+    InputOutputMap iom(m_doc, 4);
+
+    QVERIFY(iom.manualTargets().isEmpty());
+    QVERIFY(iom.isManualTarget("172.18.2.99") == false);
+
+    iom.addManualTarget("ArtNet", 1, "172.18.2.99");
+    QCOMPARE(iom.manualTargets().count(), 1);
+    QVERIFY(iom.isManualTarget("172.18.2.99"));
+    QCOMPARE(iom.manualTargets().at(0).plugin, QString("ArtNet"));
+    QCOMPARE(iom.manualTargets().at(0).line, quint32(1));
+
+    // Declaring the same address twice is a no-op, not a duplicate row.
+    iom.addManualTarget("ArtNet", 2, "172.18.2.99");
+    QCOMPARE(iom.manualTargets().count(), 1);
+    QCOMPARE(iom.manualTargets().at(0).line, quint32(1));
+
+    // An empty address has no identity to key on and must not be stored.
+    iom.addManualTarget("ArtNet", 0, "");
+    QCOMPARE(iom.manualTargets().count(), 1);
+
+    iom.removeManualTarget("172.18.2.99");
+    QVERIFY(iom.manualTargets().isEmpty());
+    QVERIFY(iom.isManualTarget("172.18.2.99") == false);
+}
+
+void InputOutputMap_Test::manualTargetPorts()
+{
+    InputOutputMap iom(m_doc, 4);
+
+    iom.addManualTarget("ArtNet", 0, "172.18.2.99");
+    iom.addManualPort("172.18.2.99", 0x001);
+    iom.addManualPort("172.18.2.99", 0x002);
+    QCOMPARE(iom.manualTargets().at(0).ports.count(), 2);
+
+    // The same port address twice would be one port drawn twice, not two ports.
+    iom.addManualPort("172.18.2.99", 0x002);
+    QCOMPARE(iom.manualTargets().at(0).ports.count(), 2);
+
+    // Ports on an address nobody declared go nowhere rather than creating one.
+    iom.addManualPort("10.0.0.1", 0x003);
+    QCOMPARE(iom.manualTargets().count(), 1);
+
+    iom.removeManualPort("172.18.2.99", 0x001);
+    QCOMPARE(iom.manualTargets().at(0).ports.count(), 1);
+    QCOMPARE(iom.manualTargets().at(0).ports.at(0), quint32(0x002));
+
+    // Forgetting the target takes its ports with it.
+    iom.removeManualTarget("172.18.2.99");
+    QVERIFY(iom.manualTargets().isEmpty());
+}
+
+void InputOutputMap_Test::universesWithInputOn()
+{
+    InputOutputMap iom(m_doc, 4);
+
+    IOPluginStub* stub = static_cast<IOPluginStub*>
+                                (m_doc->ioPluginCache()->plugins().at(0));
+    QVERIFY(stub != NULL);
+
+    QVERIFY(iom.universesWithInputOn(stub->name(), 0).isEmpty());
+
+    QVERIFY(iom.setInputPatch(0, stub->name(), "", 0) == true);
+    QCOMPARE(iom.universesWithInputOn(stub->name(), 0).count(), 1);
+
+    // The engine happily lets a second universe subscribe to the same line --
+    // which is why the connections tree has to ask before doing it. Prove the
+    // query sees both, or the warning would never fire.
+    QVERIFY(iom.setInputPatch(1, stub->name(), "", 0) == true);
+    QCOMPARE(iom.universesWithInputOn(stub->name(), 0).count(), 2);
+
+    // A different line is a different cable and no conflict at all.
+    QVERIFY(iom.universesWithInputOn(stub->name(), 1).isEmpty());
+    QVERIFY(iom.universesWithInputOn("Nonexistent", 0).isEmpty());
+}
+
+void InputOutputMap_Test::aliasesAndTargetsSurviveSaveLoad()
+{
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter writer(&buffer);
+
+    {
+        InputOutputMap iom(m_doc, 4);
+        iom.setTargetAlias("172.18.2.10", "CR041R");
+        iom.setLineAlias("ArtNet", "172.18.2.17", "FOH rack");
+        iom.addManualTarget("ArtNet", 2, "172.18.2.99");
+        iom.addManualPort("172.18.2.99", 0x011);
+        iom.addManualPort("172.18.2.99", 0x012);
+        QVERIFY(iom.saveXML(&writer) == true);
+    }
+
+    buffer.close();
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader reader(&buffer);
+    reader.readNextStartElement();
+
+    InputOutputMap loaded(m_doc, 4);
+    QVERIFY(loaded.loadXML(reader) == true);
+
+    QCOMPARE(loaded.targetAlias("172.18.2.10"), QString("CR041R"));
+    QCOMPARE(loaded.lineAlias("ArtNet", "172.18.2.17"), QString("FOH rack"));
+    QCOMPARE(loaded.manualTargets().count(), 1);
+
+    const InputOutputMap::ManualTarget mt = loaded.manualTargets().at(0);
+    QCOMPARE(mt.plugin, QString("ArtNet"));
+    QCOMPARE(mt.line, quint32(2));
+    QCOMPARE(mt.address, QString("172.18.2.99"));
+    QCOMPARE(mt.ports.count(), 2);
+    QCOMPARE(mt.ports.at(0), quint32(0x011));
+    QCOMPARE(mt.ports.at(1), quint32(0x012));
 }
 
 // Not APPLESS: profileDirectories() exercises QLCFile::systemDirectory(),

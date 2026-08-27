@@ -131,6 +131,10 @@ public:
     /** @reimp — re-enumerate HID devices without opening the configure dialog. */
     void rescan() override { rescanDevices(); }
 
+    /** @reimp A line here means a device is plugged in. */
+    bool linesAreHardware() const override { return true; }
+
+
 signals:
     void configurationChanged();
 

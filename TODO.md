@@ -8,6 +8,26 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## 🔌 Connections tab — remaining
+
+- **Verify on `ender`** — none of the discovery work below has been tested
+  against real network hardware. Needs: Rescan finding a node on an unpatched
+  interface, and a hand-declared target on a subnet with no local interface
+  actually receiving DMX via the unicast patch (`ARTNET_OUTPUTIP`).
+- **Devices tab does not yet replace Overview / Detailed.** Still Overview-only:
+  bulk multi-row apply with `outputUni` auto-increment (ArtNet block patching),
+  feedback IP/universe, ArtNet `inputUni`, MIDI output mode (CC/Note/PC), MIDI
+  input channel filter, MIDI Out-vs-Feedback port role, live input-activity
+  indication. Still Detailed-only: setting universe passthrough (the ONLY place
+  it can be set), the whole Audio tab, input-profile creation/editing
+  (`InputProfileEditor`), USB hotplug toggle, plugin info browser. Audio,
+  profile editing and passthrough are deliberately staying in Detailed --
+  they are a different concern from topology.
+- **Ping-based availability** — the amber/green tint still means "heard from"
+  only, so a hand-declared target reads as silent forever even when it is up.
+
+---
+
 ## ✈️ Travel / offline work — no show rig or control surface needed
 
 Buildable + testable on a laptop (offscreen QTest / node for JS effects; the app

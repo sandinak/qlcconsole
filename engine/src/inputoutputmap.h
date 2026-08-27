@@ -597,6 +597,69 @@ public:
     void setTargetAlias(const QString &address, const QString &name);
     QMap<QString, QString> targetAliases() const;
 
+    /**
+     * A target declared by hand rather than heard on the wire.
+     *
+     * Discovery only ever tells you about hardware that answers a poll, which
+     * leaves two ordinary cases with no row to point at: a node on a subnet
+     * this machine cannot broadcast into (reached by unicast through the
+     * router, so it never replies to a broadcast poll), and a node that is
+     * not plugged in yet because the rig is being patched in the shop the
+     * week before. Both need to be describable in advance, and both need to
+     * survive a restart, so they are part of the workspace.
+     *
+     * Keyed by address like the aliases, and for the same reason: the address
+     * is what a patch points at and the only identity a silent node has.
+     * `line` is the plugin line the target hangs under -- stored as an index
+     * because that is what a patch stores too, so it is no more fragile than
+     * the patch it exists to serve; a stale index falls back to line 0 rather
+     * than dropping the target.
+     */
+    struct ManualTarget
+    {
+        ManualTarget() : line(0) {}
+        QString plugin;
+        quint32 line;
+        QString address;
+        /** Art-Net style port addresses: (net << 8) | (sub << 4) | universe. */
+        QList<quint32> ports;
+    };
+
+    /**
+     * A user-supplied name for a plugin LINE -- "FOH rack", "dimmer world" --
+     * as opposed to targetAlias(), which names something on the far end.
+     *
+     * Keyed by plugin name plus the line's own identifier string rather than
+     * its index, because the index is positional and the string is not: a NIC
+     * appearing or a USB widget being unplugged shifts indices, and a label
+     * that follows the shift ends up on the wrong cable.
+     */
+    QString lineAlias(const QString &plugin, const QString &lineName) const;
+    void setLineAlias(const QString &plugin, const QString &lineName,
+                      const QString &alias);
+
+    /**
+     * Universes whose INPUT comes from this plugin line.
+     *
+     * A universe has exactly one input patch, but nothing stops two universes
+     * subscribing to the same line -- and for MIDI that is almost always a
+     * mistake, because every event then fires twice, once per universe, with
+     * no indication of why. Callers use this to say so before it happens.
+     */
+    QList<quint32> universesWithInputOn(const QString &plugin, quint32 line) const;
+
+    QList<ManualTarget> manualTargets() const;
+    /** True if this address was declared by hand (so it can be removed). */
+    bool isManualTarget(const QString &address) const;
+    /** No-op if the address is already declared. */
+    void addManualTarget(const QString &plugin, quint32 line, const QString &address);
+    /** Drops the target and every port on it. Patches pointing at it are
+        deliberately left alone -- removing a label must not silently
+        unpatch a universe. */
+    void removeManualTarget(const QString &address);
+    void addManualPort(const QString &address, quint32 portAddress);
+    void removeManualPort(const QString &address, quint32 portAddress);
+
     QStringList profileNames();
 
     /** Get a profile by its name */
@@ -644,6 +707,9 @@ private:
 
     /** Operator-supplied names for output targets, keyed by address. */
     QMap<QString, QString> m_targetAliases;
+    QList<ManualTarget> m_manualTargets;
+    /** Keyed "plugin|lineName". */
+    QMap<QString, QString> m_lineAliases;
 
     bool m_localProfilesLoaded;
 

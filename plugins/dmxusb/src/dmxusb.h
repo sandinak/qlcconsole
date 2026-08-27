@@ -53,6 +53,15 @@ public:
     /** Find out what kinds of widgets there are currently connected */
     bool rescanWidgets();
 
+    /** @reimp The Rescan action in the connections view. Without this the
+        base-class no-op runs and freshly plugged hardware never appears until
+        the app is restarted or the plugin's own dialog is opened. */
+    void rescan() override { rescanWidgets(); }
+
+    /** @reimp A line here means a device is plugged in. */
+    bool linesAreHardware() const override { return true; }
+
+
     /** Get currently connected widgets (input & output) */
     QList <DMXUSBWidget*> widgets() const;
 

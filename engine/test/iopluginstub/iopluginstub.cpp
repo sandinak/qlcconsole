@@ -33,6 +33,12 @@ void IOPluginStub::init()
     m_configureCalled = 0;
     m_canConfigure = false;
     m_universe = QByteArray(int(4 * 512), char(0));
+    m_devices.clear();
+    m_lineDescriptions.clear();
+    m_linesAreHardware = false;
+    m_supportsTargets = false;
+    m_rescanCalled = 0;
+    m_lineCount = 4;
 }
 
 QString IOPluginStub::name() const
@@ -69,7 +75,7 @@ void IOPluginStub::closeOutput(quint32 output, quint32 universe)
 QStringList IOPluginStub::outputs()
 {
     QStringList list;
-    for (quint32 i = 0; i < 4; i++)
+    for (int i = 0; i < m_lineCount; i++)
         list << QString("%1: Stub %1").arg(i + 1);
     return list;
 }
@@ -119,7 +125,7 @@ void IOPluginStub::closeInput(quint32 input, quint32 universe)
 QStringList IOPluginStub::inputs()
 {
     QStringList list;
-    for (quint32 i = 0; i < 4; i++)
+    for (int i = 0; i < m_lineCount; i++)
         list << QString("%1: Stub %1").arg(i + 1);
     return list;
 }

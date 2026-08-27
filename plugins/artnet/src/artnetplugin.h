@@ -88,6 +88,15 @@ public:
     /** @reimp Art-Net nodes heard via ArtPollReply. */
     QList<Device> discoveredDevices() const override;
 
+    /** @reimp Poll every line once, including lines with nothing patched. */
+    void rescan() override;
+
+    /** @reimp The network interface a line lives on, e.g. "en0" or "vlan0". */
+    QString lineDescription(quint32 line, bool output) const override;
+
+    /** @reimp Patches carry outputIP + outputUni to aim at a node's port. */
+    bool supportsOutputTargets() const override { return true; }
+
     /** @reimp */
     QString outputInfo(quint32 output) override;
 
@@ -148,7 +157,8 @@ signals:
      *********************************************************************/
 private:
     QSharedPointer<QUdpSocket> getUdpSocket();
-    void handlePacket(QByteArray const& datagram, QHostAddress const& senderAddress);
+    void handlePacket(QByteArray const& datagram, QHostAddress const& senderAddress,
+                      uint interfaceIndex);
 
 private slots:
     void slotReadyRead();

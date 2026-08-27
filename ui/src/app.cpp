@@ -3483,25 +3483,43 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             slotTimecodeStatusChanged();
         });
 
-        int patchedInputs = 0;
+        /* Only universes that could actually deliver a frame. Timecode reaches
+           the engine down exactly one path -- QLCIOPlugin::timeCodeChanged --
+           and the MIDI plugin is the only implementation that emits it, so a
+           universe with no input patch, or one patched to Art-Net/OSC/DMX-USB,
+           is guaranteed to stay silent. Listing every universe made the menu
+           dozens of rows long with nearly all of them dead, and worse, let you
+           bind the source to one that could never carry code: the chip then
+           sits on "armed — waiting" forever with nothing to investigate.
+
+           Two exceptions stay listed even when they do not qualify: the
+           CURRENT selection, so a binding that lost its MIDI patch is visible
+           and clearable rather than invisible, and any universe that has
+           actually delivered code, so an unexpected-but-working source is
+           never filtered out of its own menu. */
+        int midiInputs = 0;
         for (quint32 i = 0; i < m_doc->inputOutputMap()->universesCount(); i++)
         {
             const quint32 uniID = m_doc->inputOutputMap()->getUniverseID(i);
+            InputPatch *ip = m_doc->inputOutputMap()->inputPatch(uniID);
+            const bool isMidi = (ip != NULL && ip->pluginName() == "MIDI");
+            const bool selected = (qint32(uniID) == cur);
+            const bool sawCode = (tc != NULL && tc->lastUniverse() == qint32(uniID));
+
+            if (isMidi)
+                midiInputs++;
+            else if (selected == false && sawCode == false)
+                continue;
+
             QString nm = m_doc->inputOutputMap()->getUniverseNameByIndex(i);
             if (nm.isEmpty())
                 nm = tr("Universe %1").arg(i + 1);
-            // Annotate with the MIDI input actually patched to this universe —
-            // MTC can only arrive where an input plugin is patched.
-            InputPatch *ip = m_doc->inputOutputMap()->inputPatch(uniID);
-            if (ip != NULL && !ip->pluginName().isEmpty())
-            {
-                nm += QString("  —  %1: %2").arg(ip->pluginName(), ip->inputName());
-                patchedInputs++;
-            }
+            if (isMidi)
+                nm += QString("  —  %1").arg(ip->inputName());
+            else if (ip != NULL && ip->pluginName().isEmpty() == false)
+                nm += tr("  —  %1 input: cannot carry MTC").arg(ip->pluginName());
             else
-            {
                 nm += tr("  —  no MIDI input");
-            }
             QAction *a = menu.addAction(nm);
             a->setCheckable(true);
             a->setActionGroup(grp);
@@ -3513,7 +3531,7 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         }
 
         menu.addSeparator();
-        if (patchedInputs == 0)
+        if (midiInputs == 0)
         {
             QAction *warn = menu.addAction(tr("⚠ No MIDI input patched — no MTC can arrive"));
             warn->setEnabled(false);

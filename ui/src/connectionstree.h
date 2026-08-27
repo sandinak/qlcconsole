@@ -20,6 +20,8 @@
 
 #include <QString>
 #include <QSet>
+#include <QPair>
+#include <QList>
 
 #include <QWidget>
 
@@ -27,6 +29,8 @@ class QTreeWidgetItem;
 class QTreeWidget;
 class QTimer;
 class QCheckBox;
+class QShowEvent;
+class QHideEvent;
 class Doc;
 
 /**
@@ -55,8 +59,18 @@ public slots:
     /** Rebuild from the current plugin/patch state. */
     void refresh();
 
+protected:
+    /* The rebuild timer is only worth running while the tab is on screen.
+       Started unconditionally in the constructor it clears and repopulates
+       the whole tree every five seconds for the entire session, including
+       right through a show, with nobody looking at it. */
+    void showEvent(QShowEvent *ev) override;
+    void hideEvent(QHideEvent *ev) override;
+
 private slots:
     void slotContextMenu(const QPoint &pos);
+    /** Poll every plugin for hardware now, rather than waiting for a tick. */
+    void slotRescan();
     /** Commit an inline edit of a target's name. */
     void slotItemChanged(class QTreeWidgetItem *item, int column);
 
@@ -83,12 +97,33 @@ private:
     /** ArtNet transmit mode (Standard / Full / Partial) for one patch. */
     void setTransmitMode(quint32 universe, const QString &pluginName,
                          quint32 line, const QString &mode);
+    /** Repoint an existing output patch at a different node / port. */
+    void retargetPatch(quint32 universe, const QString &pluginName, quint32 line);
+    /** Write outputIP / outputUni onto the patch of this universe on this line. */
+    bool applyTarget(quint32 universe, const QString &pluginName, quint32 line,
+                     const QString &address, quint32 portAddress);
+
+    /** Give an interface an operator-facing name. */
+    void renameLine(const QString &pluginName, const QString &lineName);
     /** Give an output target an operator-facing name. */
     void renameTarget(const QString &address);
     /** Patch a universe to a target typed in by hand. */
     void patchToNewTarget(const QString &pluginName, quint32 line);
 
+    /** Declare a target this console cannot discover for itself. */
+    void addManualTarget(const QString &pluginName, quint32 line);
+    /** Add a port (net:sub:universe) to a hand-declared target. */
+    void addManualPort(const QString &address);
+    /** Drop a hand-declared target. Patches aimed at it are left alone. */
+    void forgetTarget(const QString &address);
+
     static QString itemPath(class QTreeWidgetItem *item);
+
+    /** Ordered name/value pairs as a tooltip table, or empty if there are none. */
+    static QString propertyTooltip(const QString &title,
+                                   const QList<QPair<QString, QString> > &props);
+    /** Put a tooltip on every column, so it shows wherever the pointer lands. */
+    static void setRowTooltip(class QTreeWidgetItem *item, const QString &html);
 
     /** Patch a universe and aim it at one physical port of a discovered node. */
     void patchUniverseToPort(const QString &pluginName, quint32 line,
@@ -101,11 +136,25 @@ private:
 private:
     Doc *m_doc;
     QCheckBox *m_showUnused;
+    class QPushButton *m_rescan;
     class QLabel *m_status;
-    /* Collapse state survives the periodic rebuild; without this a refresh
-       every 5 s reopened anything the operator had just closed. */
-    QSet<QString> m_collapsed;
+    /* Which branches are open, by full path, so the periodic rebuild does not
+       fight the operator. Tracked as EXPANDED rather than collapsed because
+       the default is now "protocol and interface open, devices closed": with a
+       default that is closed in places and open in others, remembering only
+       one direction cannot express the other. */
+    QSet<QString> m_expanded;
+    /* Line identities ("plugin|line") seen on the previous rebuild, so a line
+       that was not there before can be recognised as newly plugged in. */
+    QSet<QString> m_knownLines;
+    bool m_linesBaselined;
+    /* New lines stay visible for as long as the tab is open, rather than for
+       the single rebuild in which they first appeared. */
+    QSet<QString> m_newLines;
     bool m_populatedOnce;
+    /* First show is the moment to go looking; the constructor may run long
+       before anyone opens the tab. */
+    bool m_shownOnce;
     /** Suppresses itemChanged while refresh() rebuilds the tree. */
     bool m_rebuilding;
     /* Nodes announce roughly once a second, so an empty tree in the first

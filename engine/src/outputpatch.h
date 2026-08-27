@@ -87,6 +87,16 @@ public:
     /** Set a parameter specific to the patched plugin */
     void setPluginParameter(QString prop, QVariant value);
 
+    /**
+     * Drop a plugin parameter entirely, as opposed to setting it empty.
+     *
+     * The difference is real: an absent "outputIP" means the plugin's own
+     * default (broadcast, for Art-Net), while an empty one is a configured
+     * destination of nowhere. Repointing a patch back to broadcast has to
+     * remove the parameter, not blank it.
+     */
+    void unSetPluginParameter(QString prop);
+
     /** Retrieve the map of custom parameters set to the patched plugin */
     QMap<QString, QVariant> getPluginParameters();
 

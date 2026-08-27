@@ -107,15 +107,26 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     detailedLay->addWidget(m_splitter);
     m_ioTabs->addTab(detailed, tr("Detailed"));
 
+    /* Parented to the Detailed page, not to the manager. Both actions live on
+       the Detailed toolbar, but as children of InputOutputManager with the
+       default WindowShortcut context they fired while ANY of the three tabs
+       was on screen -- so Ctrl+D on the Devices tab deleted the last universe
+       with no visible control having been touched, and no undo. Scoping them
+       to the widget that owns the buttons makes the shortcut mean what the
+       toolbar it belongs to says it means. */
     m_addUniverseAction = new QAction(QIcon(":/edit_add.png"),
-                                   tr("Add U&niverse"), this);
+                                   tr("Add U&niverse"), detailed);
     m_addUniverseAction->setShortcut(QKeySequence("CTRL+N"));
+    m_addUniverseAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    detailed->addAction(m_addUniverseAction);
     connect(m_addUniverseAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddUniverse()));
 
     m_deleteUniverseAction = new QAction(QIcon(":/edit_remove.png"),
-                                   tr("&Delete Universe"), this);
+                                   tr("&Delete Universe"), detailed);
     m_deleteUniverseAction->setShortcut(QKeySequence("CTRL+D"));
+    m_deleteUniverseAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    detailed->addAction(m_deleteUniverseAction);
     connect(m_deleteUniverseAction, SIGNAL(triggered(bool)),
             this, SLOT(slotDeleteUniverse()));
 
