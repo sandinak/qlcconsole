@@ -52,9 +52,20 @@ public slots:
     /** Rebuild from the current plugin/patch state. */
     void refresh();
 
+private slots:
+    void slotContextMenu(const QPoint &pos);
+
 private:
-    /** Universes patched to this plugin line, as display strings. */
-    QStringList universesOn(const QString &pluginName, quint32 line, bool output) const;
+    /** Universe ids patched to this plugin line. */
+    QList<quint32> universesOn(const QString &pluginName, quint32 line, bool output) const;
+
+    /** Patch an existing or new universe to this plugin line. */
+    void patchUniverseTo(const QString &pluginName, quint32 line, bool output);
+    /** Drop just this line's patch, leaving the universe itself alone. */
+    void unpatchFromLine(quint32 universe, const QString &pluginName,
+                         quint32 line, bool output);
+    void renameUniverse(quint32 universe);
+    void deleteUniverse(quint32 universe);
 
 private:
     Doc *m_doc;
