@@ -57,6 +57,8 @@ public slots:
 
 private slots:
     void slotContextMenu(const QPoint &pos);
+    /** Commit an inline edit of a target's name. */
+    void slotItemChanged(class QTreeWidgetItem *item, int column);
 
 private:
     /** Universe ids patched to this plugin line. */
@@ -103,6 +105,8 @@ private:
        every 5 s reopened anything the operator had just closed. */
     QSet<QString> m_collapsed;
     bool m_populatedOnce;
+    /** Suppresses itemChanged while refresh() rebuilds the tree. */
+    bool m_rebuilding;
     QTreeWidget *m_tree;
     /* Nodes announce themselves about once a second, so a periodic rebuild
        keeps the view honest without a manual rescan. */

@@ -67,6 +67,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     , m_doc(doc)
     , m_showUnused(NULL)
     , m_populatedOnce(false)
+    , m_rebuilding(false)
     , m_tree(NULL)
     , m_refreshTimer(NULL)
 {
@@ -106,6 +107,8 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_tree->header()->setSectionResizeMode(COL_NAME, QHeaderView::ResizeToContents);
     m_tree->header()->setSectionResizeMode(COL_DETAIL, QHeaderView::ResizeToContents);
     m_tree->header()->setSectionResizeMode(COL_CARRIES, QHeaderView::Stretch);
+    connect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem *, int)),
+            this, SLOT(slotItemChanged(QTreeWidgetItem *, int)));
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, SIGNAL(customContextMenuRequested(QPoint)),
             this, SLOT(slotContextMenu(QPoint)));
@@ -212,6 +215,7 @@ void ConnectionsTree::refresh()
         }
     }
 
+    m_rebuilding = true;
     m_tree->clear();
 
     const bool showAll = (m_showUnused != NULL && m_showUnused->isChecked());
@@ -310,10 +314,19 @@ void ConnectionsTree::refresh()
                 QTreeWidgetItem *ditem = new QTreeWidgetItem(litem);
                 const QString alias = iomapForAlias
                     ? iomapForAlias->targetAlias(dev.address) : QString();
-                ditem->setText(COL_NAME, alias.isEmpty()
-                    ? (dev.name.isEmpty() ? dev.address : dev.name)
-                    : alias);
+                const QString shown = alias.isEmpty()
+                    ? (dev.name.isEmpty() ? dev.address : dev.name) : alias;
+                /* Always carry the address alongside the name. A name is what
+                   an operator recognises; the address is what they have to
+                   type into a node's front panel or a ping. Showing one
+                   without the other means looking somewhere else. Display and
+                   edit values differ deliberately, so the inline editor offers
+                   the bare name rather than something with "(1.2.3.4)" glued
+                   on that would be saved back verbatim. */
+                ditem->setText(COL_NAME, shown == dev.address ? shown
+                                   : tr("%1 (%2)").arg(shown).arg(dev.address));
                 ditem->setData(COL_NAME, ROLE_ADDRESS, dev.address);
+                ditem->setFlags(ditem->flags() | Qt::ItemIsEditable);
                 ditem->setData(COL_NAME, ROLE_KIND, KIND_DEVICE);
 
                 QStringList detail;
@@ -436,12 +449,17 @@ void ConnectionsTree::refresh()
                                     ghost = new QTreeWidgetItem(litem);
                                     const QString galias = iomap
                                         ? iomap->targetAlias(addr) : QString();
-                                    ghost->setText(COL_NAME, galias.isEmpty()
-                                                   ? addr : galias);
+                                    ghost->setText(COL_NAME, galias.isEmpty() ? addr
+                                            : tr("%1 (%2)").arg(galias).arg(addr));
                                     ghost->setData(COL_NAME, ROLE_KIND, KIND_DEVICE);
                                     ghost->setData(COL_NAME, ROLE_ADDRESS, addr);
+                                    ghost->setFlags(ghost->flags() | Qt::ItemIsEditable);
+                                    /* Lead with the address, as a discovered
+                                       node's row does, so both kinds of target
+                                       read the same way and the only difference
+                                       is whether it answered. */
                                     ghost->setText(COL_DETAIL,
-                                                   tr("configured — not heard from"));
+                                        tr("%1 · not heard from").arg(addr));
                                     ghost->setForeground(COL_DETAIL,
                                                          QBrush(QColor("#a06000")));
                                     ghostNodes.insert(addr, ghost);
@@ -482,6 +500,25 @@ void ConnectionsTree::refresh()
                             const bool bcast = a.endsWith(QLatin1String(".255"))
                                                || a == QLatin1String("255.255.255.255");
                             udetail << (bcast ? tr("broadcast") : tr("unicast"));
+                        }
+
+                        /* Transmit mode belongs on the row it applies to: it is
+                           the difference between sending on change and sending
+                           every tick, which is orders of magnitude of packet
+                           rate, and it is set per patch rather than globally. */
+                        for (int i = 0; i < uni->outputPatchesCount(); i++)
+                        {
+                            OutputPatch *op = uni->outputPatch(i);
+                            if (op != NULL && op->plugin() != NULL
+                                    && op->plugin()->name() == plugin->name()
+                                    && op->output() == quint32(line))
+                            {
+                                const QMap<QString, QVariant> pp =
+                                    op->getPluginParameters();
+                                if (pp.contains("transmitMode"))
+                                    udetail << pp.value("transmitMode").toString().toLower();
+                                break;
+                            }
                         }
                     }
                     if (output == false)
@@ -595,6 +632,7 @@ void ConnectionsTree::refresh()
             stack << it->child(c);
     }
     m_populatedOnce = true;
+    m_rebuilding = false;
 }
 
 /** Stable identity for a row: its name plus every ancestor's, so two rows that
@@ -750,13 +788,26 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         /* Feedback: which output line carries status back to a controller.
            Listed as a submenu of real lines rather than a free-text field so
            an unreachable line cannot be typed in. */
-        QMenu *fbMenu = menu.addMenu(tr("Feedback to"));
-        QAction *fbNone = fbMenu->addAction(tr("None"));
+        /* Feedback exists so a control surface can be lit or its motorised
+           faders moved when the console changes -- it is sent by UI widgets
+           back to whatever provides INPUT for this universe. Offering it from a
+           universe's Art-Net OUTPUT row invited the reasonable question of what
+           MIDI was doing in an Art-Net patch. Offer it where the controller
+           relationship lives: the input row, or the feedback row itself. */
+        QMenu *fbMenu = NULL;
+        QAction *fbNone = NULL;
+        QList<QPair<QString, quint32> > fbTargets;
+        const bool feedbackRelevant =
+            (output == false) || (item->text(COL_DETAIL) == tr("feedback"));
+        if (feedbackRelevant)
+        fbMenu = menu.addMenu(tr("Feedback to"));
+        if (fbMenu != NULL)
+        {
+        fbNone = fbMenu->addAction(tr("None"));
         fbNone->setCheckable(true);
         OutputPatch *curFb = m_doc->inputOutputMap()
                              ? m_doc->inputOutputMap()->feedbackPatch(uni) : NULL;
         fbNone->setChecked(curFb == NULL || curFb->plugin() == NULL);
-        QList<QPair<QString, quint32> > fbTargets;
         if (m_doc->ioPluginCache() != NULL)
         {
             foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
@@ -778,6 +829,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
                     fbTargets << qMakePair(p->name(), quint32(i));
                 }
             }
+        }
         }
 
         /* Input profile: how a controller's notes/CCs map to widgets. Only
@@ -813,7 +865,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (chosen == NULL)
             return;
 
-        if (chosen->parentWidget() == fbMenu)
+        if (fbMenu != NULL && chosen->parentWidget() == fbMenu)
         {
             if (chosen == fbNone)
                 setFeedback(uni, QString(), 0);
@@ -1211,4 +1263,40 @@ void ConnectionsTree::patchToNewTarget(const QString &pluginName, quint32 line)
        make the console useless for prep. It simply shows as
        "configured - not heard from" until something answers. */
     patchUniverseToPort(pluginName, line, addr, quint32(portAddr));
+}
+
+void ConnectionsTree::slotItemChanged(QTreeWidgetItem *item, int column)
+{
+    /* refresh() rewrites every row, which fires this for each one; without the
+       guard a rebuild would write each row's text back as an alias. */
+    if (m_rebuilding || item == NULL || column != COL_NAME)
+        return;
+    if (item->data(COL_NAME, ROLE_KIND).toInt() != KIND_DEVICE)
+        return;
+
+    const QString addr = item->data(COL_NAME, ROLE_ADDRESS).toString();
+    if (addr.isEmpty())
+        return;
+
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    /* QTreeWidgetItem stores DisplayRole and EditRole in the same slot, so the
+       editor necessarily shows the decorated "Name (1.2.3.4)" text. Strip the
+       address back off rather than saving it into the alias, which would
+       otherwise accumulate a new set of parentheses on every edit. */
+    QString name = item->text(COL_NAME).trimmed();
+    const QString suffix = QString(" (%1)").arg(addr);
+    if (name.endsWith(suffix))
+        name.chop(suffix.length());
+    if (name == addr)
+        name.clear();
+    name = name.trimmed();
+    if (name == iomap->targetAlias(addr))
+        return;
+
+    iomap->setTargetAlias(addr, name);
+    m_doc->setModified();
+    refresh();
 }
