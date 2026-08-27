@@ -27,6 +27,8 @@
 #include <QMenu>
 #include <QHash>
 #include <QSet>
+#include <QBrush>
+#include <QColor>
 
 #include "connectionstree.h"
 #include "qlcioplugin.h"
@@ -163,6 +165,24 @@ QList<quint32> ConnectionsTree::universesOn(const QString &pluginName, quint32 l
     return list;
 }
 
+QList<quint32> ConnectionsTree::feedbackOn(const QString &pluginName,
+                                           quint32 line) const
+{
+    QList<quint32> list;
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return list;
+
+    foreach (Universe *uni, iomap->universes())
+    {
+        OutputPatch *fb = iomap->feedbackPatch(uni->id());
+        if (fb != NULL && fb->plugin() != NULL
+                && fb->plugin()->name() == pluginName && fb->output() == line)
+            list << uni->id();
+    }
+    return list;
+}
+
 void ConnectionsTree::refresh()
 {
     if (m_tree == NULL || m_doc == NULL)
@@ -222,6 +242,10 @@ void ConnectionsTree::refresh()
 
             QList<quint32> outUnis = universesOn(plugin->name(), quint32(line), true);
             QList<quint32> inUnis = universesOn(plugin->name(), quint32(line), false);
+            /* A line can carry nothing but feedback -- a MIDI control surface
+               being lit is exactly that -- and counting only in/out patches
+               filtered those lines out of the view entirely. */
+            QList<quint32> fbUnis = feedbackOn(plugin->name(), quint32(line));
 
             int devicesHere = 0;
             foreach (const QLCIOPlugin::Device &d, devices)
@@ -231,7 +255,7 @@ void ConnectionsTree::refresh()
             /* "Live" means something is patched to it or something was heard on
                it. An interface that is merely present is not interesting. */
             if (showAll == false && outUnis.isEmpty() && inUnis.isEmpty()
-                    && devicesHere == 0)
+                    && fbUnis.isEmpty() && devicesHere == 0)
                 continue;
 
             QTreeWidgetItem *litem = new QTreeWidgetItem(pitem);
@@ -245,13 +269,15 @@ void ConnectionsTree::refresh()
             if (line < inLines.count()) roles << tr("input");
             litem->setText(COL_DETAIL, roles.join(", "));
 
-            const int total = outUnis.count() + inUnis.count();
+            const int total = outUnis.count() + inUnis.count() + fbUnis.count();
             litem->setText(COL_CARRIES, total == 0 ? tr("nothing patched")
                                                    : tr("%1 universes").arg(total));
 
             /* Port rows, keyed by "node address|port address", so a universe
                can be filed under the port it is actually aimed at. */
             QHash<QString, QTreeWidgetItem *> portRows;
+            /* Node rows synthesised for targets nothing has answered from. */
+            QHash<QString, QTreeWidgetItem *> ghostNodes;
 
             /* Devices heard on this line. Most plugins report none -- for a
                USB widget or a MIDI port the line already IS the device, and
@@ -264,6 +290,14 @@ void ConnectionsTree::refresh()
             foreach (const QLCIOPlugin::Device &dev, devices)
             {
                 if (dev.line != quint32(line))
+                    continue;
+
+                /* Our own console answers ArtPoll like any other node, so it
+                   turns up as a device on its own interface -- "ArtNet ->
+                   172.18.2.17 -> Q Light Controller Plus on 172.18.2.17".
+                   That is just us looking in a mirror; the interface row
+                   already represents this machine. */
+                if (dev.address == label)
                     continue;
 
                 const QString devKey = dev.address + "|" + dev.hardwareId;
@@ -351,18 +385,44 @@ void ConnectionsTree::refresh()
                             QTreeWidgetItem *pr =
                                 portRows.value(QString("%1|%2").arg(addr).arg(portAddr));
                             if (pr != NULL)
+                            {
                                 parentItem = pr;
+                            }
                             else
-                                /* Aimed at a node we have not heard from -- it is
-                                   still patched, and where it is aimed is the
-                                   whole point, so show it rather than leaving the
-                                   row looking unconfigured. */
-                                targetText = tr("→ %1 uni %2").arg(addr).arg(portAddr);
+                            {
+                                /* Aimed at a node nothing has been heard from.
+                                   The patch is real, so give the address a row
+                                   of its own and hang the universe under it --
+                                   the shape then matches a discovered node, and
+                                   the difference between "configured" and
+                                   "actually there" is a label rather than a
+                                   different place in the tree. That difference
+                                   is usually the thing being diagnosed: a
+                                   universe under a silent node is precisely a
+                                   node that is off, unplugged or misaddressed. */
+                                QTreeWidgetItem *ghost = ghostNodes.value(addr);
+                                if (ghost == NULL)
+                                {
+                                    ghost = new QTreeWidgetItem(litem);
+                                    ghost->setText(COL_NAME, addr);
+                                    ghost->setText(COL_DETAIL,
+                                                   tr("configured — not heard from"));
+                                    ghost->setForeground(COL_DETAIL,
+                                                         QBrush(QColor("#a06000")));
+                                    ghostNodes.insert(addr, ghost);
+                                }
+                                parentItem = ghost;
+                                targetText = tr("uni %1").arg(portAddr);
+                            }
                         }
                     }
 
                     QTreeWidgetItem *uitem = new QTreeWidgetItem(parentItem);
-                    uitem->setText(COL_NAME, uni->name());
+                    /* Name plus id: names are free-form and duplicated across
+                       shows, and when someone is checking a patch against a
+                       plot they need the authoritative number. */
+                    uitem->setText(COL_NAME, tr("%1: %2").arg(uni->id() + 1)
+                                                          .arg(uni->name()));
                     /* Show feedback and profile state on the row itself.
                        Both were previously only visible by opening the
                        per-universe editor, which meant the answer to "is LED
