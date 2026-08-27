@@ -61,6 +61,8 @@ private slots:
 private:
     /** Universe ids patched to this plugin line. */
     QList<quint32> universesOn(const QString &pluginName, quint32 line, bool output) const;
+    /** Universe ids whose FEEDBACK is routed to this plugin line. */
+    QList<quint32> feedbackOn(const QString &pluginName, quint32 line) const;
 
     /** Patch an existing or new universe to this plugin line. */
     void patchUniverseTo(const QString &pluginName, quint32 line, bool output);
