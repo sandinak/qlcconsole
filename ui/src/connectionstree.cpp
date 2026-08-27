@@ -26,6 +26,7 @@
 #include <QMessageBox>
 #include <QMenu>
 #include <QHash>
+#include <QSet>
 
 #include "connectionstree.h"
 #include "qlcioplugin.h"
@@ -62,6 +63,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     : QWidget(parent)
     , m_doc(doc)
     , m_showUnused(NULL)
+    , m_populatedOnce(false)
     , m_tree(NULL)
     , m_refreshTimer(NULL)
 {
@@ -166,19 +168,27 @@ void ConnectionsTree::refresh()
     if (m_tree == NULL || m_doc == NULL)
         return;
 
-    /* Remember what was expanded so a periodic refresh does not collapse the
-       tree under the operator mid-look. */
-    QStringList expanded;
-    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+    /* Remember what the operator COLLAPSED, keyed by full path.
+       The previous version saved the expanded set, matched it back with
+       findItems() on the display name, and then called expandToDepth() every
+       refresh anyway -- so a closed branch reopened itself within five seconds,
+       and identically-named rows under different parents dragged each other
+       open. Tracking collapse instead means the default stays "open" without
+       fighting the operator. */
+    if (m_populatedOnce)
     {
-        QTreeWidgetItem *top = m_tree->topLevelItem(i);
-        for (int j = 0; j < top->childCount(); j++)
+        m_collapsed.clear();
+        QList<QTreeWidgetItem *> stack;
+        for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+            stack << m_tree->topLevelItem(i);
+        while (stack.isEmpty() == false)
         {
-            if (top->child(j)->isExpanded())
-                expanded << top->text(COL_NAME) + "/" + top->child(j)->text(COL_NAME);
+            QTreeWidgetItem *it = stack.takeFirst();
+            if (it->childCount() > 0 && it->isExpanded() == false)
+                m_collapsed.insert(itemPath(it));
+            for (int c = 0; c < it->childCount(); c++)
+                stack << it->child(c);
         }
-        if (top->isExpanded())
-            expanded << top->text(COL_NAME);
     }
 
     m_tree->clear();
@@ -246,10 +256,20 @@ void ConnectionsTree::refresh()
             /* Devices heard on this line. Most plugins report none -- for a
                USB widget or a MIDI port the line already IS the device, and
                inventing a second level for it would only add depth. */
+            /* A node can be heard more than once on one line -- it answers on
+               every interface it has, and the replies arrive from different
+               source addresses while carrying the same node identity. Key on
+               what identifies the hardware, not on who delivered the packet. */
+            QSet<QString> seenDevices;
             foreach (const QLCIOPlugin::Device &dev, devices)
             {
                 if (dev.line != quint32(line))
                     continue;
+
+                const QString devKey = dev.address + "|" + dev.hardwareId;
+                if (seenDevices.contains(devKey))
+                    continue;
+                seenDevices.insert(devKey);
 
                 QTreeWidgetItem *ditem = new QTreeWidgetItem(litem);
                 ditem->setText(COL_NAME, dev.name.isEmpty() ? dev.address : dev.name);
@@ -264,20 +284,39 @@ void ConnectionsTree::refresh()
                 if (dev.status.isEmpty() == false)
                     ditem->setToolTip(COL_DETAIL, dev.status);
 
+                /* Ports can share a port address -- OLA advertises swOut=0 on
+                   all four of its ports until they are configured. A packet
+                   carries only the port address, so ports sharing one are
+                   genuinely indistinguishable on the wire: anything sent to
+                   that address reaches all of them. Say so on the row instead
+                   of pretending the choice is meaningful, and file matches
+                   under the FIRST such port. Keying the lookup without this
+                   silently kept the LAST port, which is why patching to
+                   "port 1" landed under "port 4". */
+                QSet<quint32> seenPortAddr;
                 for (int p = 0; p < dev.portLabels.count(); p++)
                 {
+                    const quint32 pa = p < dev.portUniverses.count()
+                                       ? dev.portUniverses.at(p) : 0;
+                    const bool shared = seenPortAddr.contains(pa);
+                    seenPortAddr.insert(pa);
+
                     QTreeWidgetItem *pt = new QTreeWidgetItem(ditem);
                     pt->setText(COL_NAME, tr("port %1").arg(p + 1));
-                    pt->setText(COL_DETAIL, dev.portLabels.at(p));
+                    pt->setText(COL_DETAIL, shared
+                        ? tr("%1  (same address as an earlier port)")
+                              .arg(dev.portLabels.at(p))
+                        : dev.portLabels.at(p));
                     pt->setData(COL_NAME, ROLE_KIND, KIND_PORT);
                     pt->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
                     pt->setData(COL_NAME, ROLE_LINE, quint32(line));
                     pt->setData(COL_NAME, ROLE_ADDRESS, dev.address);
                     if (p < dev.portUniverses.count())
                     {
-                        pt->setData(COL_NAME, ROLE_PORTADDR, dev.portUniverses.at(p));
-                        portRows.insert(QString("%1|%2").arg(dev.address)
-                                            .arg(dev.portUniverses.at(p)), pt);
+                        pt->setData(COL_NAME, ROLE_PORTADDR, pa);
+                        const QString key = QString("%1|%2").arg(dev.address).arg(pa);
+                        if (portRows.contains(key) == false)
+                            portRows.insert(key, pt);
                     }
                 }
             }
@@ -301,6 +340,7 @@ void ConnectionsTree::refresh()
                        heard from) have no port to sit under, so they stay on
                        the interface. */
                     QTreeWidgetItem *parentItem = litem;
+                    QString targetText;
                     if (output)
                     {
                         QString addr;
@@ -312,6 +352,12 @@ void ConnectionsTree::refresh()
                                 portRows.value(QString("%1|%2").arg(addr).arg(portAddr));
                             if (pr != NULL)
                                 parentItem = pr;
+                            else
+                                /* Aimed at a node we have not heard from -- it is
+                                   still patched, and where it is aimed is the
+                                   whole point, so show it rather than leaving the
+                                   row looking unconfigured. */
+                                targetText = tr("→ %1 uni %2").arg(addr).arg(portAddr);
                         }
                     }
 
@@ -324,6 +370,8 @@ void ConnectionsTree::refresh()
                        else. */
                     QStringList udetail;
                     udetail << (output ? tr("output") : tr("input"));
+                    if (targetText.isEmpty() == false)
+                        udetail << targetText;
                     if (output == false)
                     {
                         InputPatch *ip = uni->inputPatch();
@@ -369,14 +417,34 @@ void ConnectionsTree::refresh()
 
     /* Depth 3 now: protocol > interface > device > port, with universes
        hanging under the port they leave by. */
-    m_tree->expandToDepth(3);
-    foreach (const QString &path, expanded)
+    /* Everything opens by default -- the interesting rows are the leaves --
+       then re-close whatever the operator had closed. */
+    m_tree->expandAll();
+    QList<QTreeWidgetItem *> stack;
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+        stack << m_tree->topLevelItem(i);
+    while (stack.isEmpty() == false)
     {
-        QList<QTreeWidgetItem *> hits =
-            m_tree->findItems(path.section('/', -1), Qt::MatchExactly | Qt::MatchRecursive, COL_NAME);
-        foreach (QTreeWidgetItem *it, hits)
-            it->setExpanded(true);
+        QTreeWidgetItem *it = stack.takeFirst();
+        if (m_collapsed.contains(itemPath(it)))
+            it->setExpanded(false);
+        for (int c = 0; c < it->childCount(); c++)
+            stack << it->child(c);
     }
+    m_populatedOnce = true;
+}
+
+/** Stable identity for a row: its name plus every ancestor's, so two rows that
+ *  share a display name under different parents are not confused. */
+QString ConnectionsTree::itemPath(QTreeWidgetItem *item)
+{
+    QStringList parts;
+    while (item != NULL)
+    {
+        parts.prepend(item->text(COL_NAME));
+        item = item->parent();
+    }
+    return parts.join("/");
 }
 
 void ConnectionsTree::slotContextMenu(const QPoint &pos)
