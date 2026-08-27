@@ -604,6 +604,108 @@ void ConnectionsTree_Test::retargetToBroadcastRemovesTheParameters()
 }
 
 /****************************************************************************
+ * Plugin parameters
+ ****************************************************************************/
+
+void ConnectionsTree_Test::patchParameterDistinguishesAbsentFromZero()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0) == true);
+
+    ConnectionsTree tree(m_doc);
+
+    // Absent is not zero. "midichannel 0" means every channel and "mode
+    // unset" means the plugin's default -- a reader that cannot tell the
+    // difference shows a value the rig is not actually using, and a menu
+    // built from it puts a checkmark on the wrong row.
+    QVERIFY(tree.patchParameter(0, stub->name(), 0, true, "mode").isValid() == false);
+
+    tree.setPatchParameter(0, stub->name(), 0, true, "mode", QString("Note Velocity"));
+    const QVariant v = tree.patchParameter(0, stub->name(), 0, true, "mode");
+    QVERIFY(v.isValid());
+    QCOMPARE(v.toString(), QString("Note Velocity"));
+
+    // A line this universe is not patched to has no parameters to report.
+    QVERIFY(tree.patchParameter(0, stub->name(), 2, true, "mode").isValid() == false);
+}
+
+void ConnectionsTree_Test::setPatchParameterWritesOutputAndInputPatches()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0) == true);
+    QVERIFY(iom->setInputPatch(0, stub->name(), "", 1) == true);
+
+    ConnectionsTree tree(m_doc);
+
+    // Output and input patches are separate objects under one universe, and a
+    // parameter written to the wrong one is silently lost.
+    tree.setPatchParameter(0, stub->name(), 1, false, "midichannel", 5);
+    QCOMPARE(tree.patchParameter(0, stub->name(), 1, false, "midichannel").toInt(), 5);
+    QVERIFY(tree.patchParameter(0, stub->name(), 0, true, "midichannel").isValid() == false);
+
+    tree.setPatchParameter(0, stub->name(), 0, true, "transmitMode", QString("Full"));
+    QCOMPARE(tree.patchParameter(0, stub->name(), 0, true, "transmitMode").toString(),
+             QString("Full"));
+    QVERIFY(tree.patchParameter(0, stub->name(), 1, false, "transmitMode").isValid() == false);
+}
+
+/****************************************************************************
+ * Live input activity
+ ****************************************************************************/
+
+void ConnectionsTree_Test::inputActivityTintsTheUniverseRow()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), "", 0) == true);
+
+    ConnectionsTree tree(m_doc);
+    tree.show();
+    tree.refresh();
+
+    QList<QTreeWidgetItem *> unis = itemsOfKind(tree.m_tree, KIND_UNIVERSE);
+    if (unis.isEmpty())
+    {
+        // Folded rows are a port AND a universe, so look for the universe role
+        // rather than the kind.
+        foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+        {
+            if (it->data(COL_NAME, ROLE_UNIVERSE).isValid())
+                unis << it;
+        }
+    }
+    QVERIFY2(unis.isEmpty() == false, "no universe row to light up");
+
+    tree.slotInputActivity(0, 9, 127);
+
+    bool tinted = false;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+    {
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid()
+                && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 0
+                && it->toolTip(COL_DETAIL).contains("channel 9 = 127"))
+            tinted = true;
+    }
+    QVERIFY2(tinted, "the universe that received input was not marked");
+
+    // Another universe's traffic must not light this one.
+    tree.slotActivityTimeout();
+    tree.slotInputActivity(3, 1, 1);
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+    {
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid()
+                && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 0)
+            QVERIFY(it->toolTip(COL_DETAIL).isEmpty());
+    }
+
+    // The tint decays rather than latching on forever.
+    tree.slotActivityTimeout();
+    QVERIFY(tree.m_activeUniverses.isEmpty());
+}
+
+/****************************************************************************
  * Tooltips
  ****************************************************************************/
 

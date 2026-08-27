@@ -70,6 +70,13 @@ private slots:
     void retargetWritesTargetOntoTheExistingPatch();
     void retargetToBroadcastRemovesTheParameters();
 
+    /* Plugin parameters previously reachable only from Overview */
+    void patchParameterDistinguishesAbsentFromZero();
+    void setPatchParameterWritesOutputAndInputPatches();
+
+    /* Live input activity */
+    void inputActivityTintsTheUniverseRow();
+
     /* Tooltip rendering */
     void propertyTooltipRendersPairs();
     void deviceRowCarriesItsPropertiesAsATooltip();

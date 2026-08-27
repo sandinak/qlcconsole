@@ -14,15 +14,20 @@ to DONE.md when it ships. See also the session memory under
   against real network hardware. Needs: Rescan finding a node on an unpatched
   interface, and a hand-declared target on a subnet with no local interface
   actually receiving DMX via the unicast patch (`ARTNET_OUTPUTIP`).
-- **Devices tab does not yet replace Overview / Detailed.** Still Overview-only:
-  bulk multi-row apply with `outputUni` auto-increment (ArtNet block patching),
-  feedback IP/universe, ArtNet `inputUni`, MIDI output mode (CC/Note/PC), MIDI
-  input channel filter, MIDI Out-vs-Feedback port role, live input-activity
-  indication. Still Detailed-only: setting universe passthrough (the ONLY place
-  it can be set), the whole Audio tab, input-profile creation/editing
-  (`InputProfileEditor`), USB hotplug toggle, plugin info browser. Audio,
-  profile editing and passthrough are deliberately staying in Detailed --
-  they are a different concern from topology.
+- **Devices/Overview parity — remaining.** Still Overview-only: bulk multi-row
+  apply with `outputUni` auto-increment (ArtNet block patching), and the MIDI
+  Out-vs-Feedback port-role toggle. Everything else has landed (feedback
+  IP/port, ArtNet `inputUni`, MIDI output mode, MIDI input channel, live input
+  activity). Still Detailed-only and staying there deliberately: universe
+  passthrough (the ONLY place it can be set), the Audio tab, input-profile
+  creation/editing (`InputProfileEditor`), USB hotplug toggle, plugin info
+  browser — a different concern from topology.
+- **Bulk patching needs undo first.** There is no `QUndoStack`/`QUndoCommand`
+  anywhere in engine/ or ui/; the only undo in the app is CaptureManager's
+  domain-specific single-step stack (`capturemanager.h:108-198`). Multi-select
+  bulk retargeting without undo means one wrong gesture silently repoints a
+  whole rig. Build a single-step "Undo bulk patch" on the CaptureManager
+  pattern as part of that work, not after it.
 - **Ping-based availability** — the amber/green tint still means "heard from"
   only, so a hand-declared target reads as silent forever even when it is up.
 

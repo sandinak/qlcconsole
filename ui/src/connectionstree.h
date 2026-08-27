@@ -20,6 +20,7 @@
 
 #include <QString>
 #include <QSet>
+#include <QVariant>
 #include <QPair>
 #include <QList>
 
@@ -59,6 +60,11 @@ public slots:
     /** Rebuild from the current plugin/patch state. */
     void refresh();
 
+private slots:
+    /** Flash the universe row that just received input. */
+    void slotInputActivity(quint32 universe, quint32 channel, uchar value);
+    void slotActivityTimeout();
+
 protected:
     /* The rebuild timer is only worth running while the tab is on screen.
        Started unconditionally in the constructor it clears and repopulates
@@ -97,6 +103,16 @@ private:
     /** ArtNet transmit mode (Standard / Full / Partial) for one patch. */
     void setTransmitMode(quint32 universe, const QString &pluginName,
                          quint32 line, const QString &mode);
+    /** Set a plugin parameter on this universe's patch on this line. */
+    void setPatchParameter(quint32 universe, const QString &pluginName,
+                           quint32 line, bool output,
+                           const QString &prop, const QVariant &value);
+    /** Current value of a plugin parameter on that patch, or an invalid QVariant. */
+    QVariant patchParameter(quint32 universe, const QString &pluginName,
+                            quint32 line, bool output, const QString &prop) const;
+    /** Repoint the FEEDBACK patch of this universe at a node / port. */
+    void retargetFeedback(quint32 universe);
+
     /** Repoint an existing output patch at a different node / port. */
     void retargetPatch(quint32 universe, const QString &pluginName, quint32 line);
     /** Write outputIP / outputUni onto the patch of this universe on this line. */
@@ -164,6 +180,11 @@ private:
     /* Nodes announce themselves about once a second, so a periodic rebuild
        keeps the view honest without a manual rescan. */
     QTimer *m_refreshTimer;
+    /* Rows tinted by live input, and the timer that fades them. Keyed by
+       universe id: the row a universe occupies is rebuilt every few seconds,
+       so a pointer would dangle. */
+    QSet<quint32> m_activeUniverses;
+    QTimer *m_activityTimer;
 };
 
 #endif

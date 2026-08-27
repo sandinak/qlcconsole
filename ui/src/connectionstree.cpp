@@ -73,13 +73,14 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     , m_showUnused(NULL)
     , m_rescan(NULL)
     , m_status(NULL)
-    , m_populatedOnce(false)
     , m_linesBaselined(false)
+    , m_populatedOnce(false)
     , m_shownOnce(false)
     , m_rebuilding(false)
     , m_since(new QElapsedTimer)
     , m_tree(NULL)
     , m_refreshTimer(NULL)
+    , m_activityTimer(NULL)
 {
     Q_ASSERT(doc != NULL);
 
@@ -160,8 +161,92 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     /* Deliberately NOT started here -- showEvent() owns the timer, so a
        hidden tab costs nothing. */
 
+    /* Live input. Devices is the tab you are on when asking "is that surface
+       actually sending anything", and it was the only one of the three that
+       could not answer -- Overview flashes its input combo, Detailed prints a
+       readout, this had no input hookup at all. Tinting the universe row says
+       it in the place the question is being asked. */
+    if (m_doc->inputOutputMap() != NULL)
+    {
+        connect(m_doc->inputOutputMap(),
+                SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+                this, SLOT(slotInputActivity(quint32,quint32,uchar)));
+    }
+    m_activityTimer = new QTimer(this);
+    m_activityTimer->setSingleShot(true);
+    connect(m_activityTimer, SIGNAL(timeout()), this, SLOT(slotActivityTimeout()));
+
     m_since->start();
     refresh();
+}
+
+/** Tint every row belonging to the universe that just received input.
+ *
+ *  A universe can occupy several rows at once -- one per output leg, plus a
+ *  feedback row under whichever line carries it -- and the input arrived at
+ *  the universe, not at any one of them. Lighting all of them is the honest
+ *  answer; picking one would be inventing a relationship.
+ */
+void ConnectionsTree::slotInputActivity(quint32 universe, quint32 channel,
+                                        uchar value)
+{
+    /* Free when the tab is not on screen, which is most of the time and every
+       MIDI event during a show. */
+    if (isVisible() == false)
+        return;
+
+    const QString tip = tr("Input active — channel %1 = %2").arg(channel).arg(value);
+    bool found = false;
+    QList<QTreeWidgetItem *> stack;
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+        stack << m_tree->topLevelItem(i);
+    while (stack.isEmpty() == false)
+    {
+        QTreeWidgetItem *it = stack.takeFirst();
+        const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
+        if (uv.isValid() && uv.toUInt() == universe)
+        {
+            it->setBackground(COL_DETAIL, QBrush(QColor(66, 133, 244, 150)));
+            it->setToolTip(COL_DETAIL, tip);
+            found = true;
+        }
+        for (int c = 0; c < it->childCount(); c++)
+            stack << it->child(c);
+    }
+
+    if (found == false)
+        return;
+
+    m_activeUniverses.insert(universe);
+    /* Restarted on every event, so a stream of MIDI holds the tint steady
+       instead of strobing it. */
+    m_activityTimer->start(300);
+}
+
+void ConnectionsTree::slotActivityTimeout()
+{
+    if (m_activeUniverses.isEmpty())
+        return;
+
+    QList<QTreeWidgetItem *> stack;
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+        stack << m_tree->topLevelItem(i);
+    while (stack.isEmpty() == false)
+    {
+        QTreeWidgetItem *it = stack.takeFirst();
+        const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
+        if (uv.isValid() && m_activeUniverses.contains(uv.toUInt()))
+        {
+            /* Back to no tint rather than to a remembered one: refresh()
+               owns the row's normal appearance and may have rebuilt it
+               underneath us in the meantime. */
+            it->setBackground(COL_DETAIL, QBrush());
+            it->setToolTip(COL_DETAIL, QString());
+        }
+        for (int c = 0; c < it->childCount(); c++)
+            stack << it->child(c);
+    }
+    m_activeUniverses.clear();
 }
 
 void ConnectionsTree::showEvent(QShowEvent *ev)
@@ -1439,6 +1524,66 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QAction *retgt = (output && pluginSupportsTargetsIn(m_doc, plugin))
             ? menu.addAction(tr("Change target address / port…")) : NULL;
 
+        const bool isMidi = plugin.contains("MIDI", Qt::CaseInsensitive);
+        const bool isArtNet = plugin.contains("ArtNet", Qt::CaseInsensitive);
+
+        /* Plugin parameters that were previously reachable only from the
+           Overview grid. They are properties of THIS patch, so they belong on
+           the row that represents it -- reading a value in one tab and having
+           to change it in another is how a rig ends up configured differently
+           from how it reads. */
+        QMenu *midiModeMenu = NULL;
+        QStringList midiModes;
+        if (output && isMidi)
+        {
+            midiModes << "Control Change" << "Note Velocity" << "Program Change";
+            midiModeMenu = menu.addMenu(tr("MIDI output mode"));
+            const QVariant curV = patchParameter(uni, plugin, line, true, "mode");
+            const QString cur = curV.isValid() ? curV.toString() : QString("Control Change");
+            foreach (const QString &m, midiModes)
+            {
+                QAction *a = midiModeMenu->addAction(m);
+                a->setCheckable(true);
+                a->setChecked(m == cur);
+            }
+        }
+
+        QMenu *midiChMenu = NULL;
+        if (output == false && isMidi)
+        {
+            /* 0 means "every channel" in the plugin's encoding; the operator
+               thinks in 1-16, so the menu counts the way the hardware is
+               labelled and the translation happens here. */
+            midiChMenu = menu.addMenu(tr("MIDI input channel"));
+            const QVariant curV = patchParameter(uni, plugin, line, false, "midichannel");
+            const int cur = curV.isValid() ? curV.toInt() : 0;
+            QAction *anyCh = midiChMenu->addAction(tr("All channels"));
+            anyCh->setCheckable(true);
+            anyCh->setChecked(cur == 0);
+            anyCh->setData(0);
+            midiChMenu->addSeparator();
+            for (int ch = 1; ch <= 16; ch++)
+            {
+                QAction *a = midiChMenu->addAction(tr("Channel %1").arg(ch));
+                a->setCheckable(true);
+                a->setChecked(cur == ch);
+                a->setData(ch);
+            }
+        }
+
+        QAction *inUni = NULL;
+        if (output == false && isArtNet)
+            inUni = menu.addAction(tr("Art-Net input universe…"));
+
+        /* Feedback has a destination of its own, under the same outputIP /
+           outputUni keys, and nothing outside the Overview grid could set it. */
+        Universe *fbU = m_doc->inputOutputMap()
+                        ? m_doc->inputOutputMap()->universe(uni) : NULL;
+        QAction *fbTgt = (fbU != NULL && fbU->feedbackPatch() != NULL
+                          && pluginSupportsTargetsIn(m_doc,
+                                 fbU->feedbackPatch()->pluginName()))
+            ? menu.addAction(tr("Change feedback address / port…")) : NULL;
+
         /* ArtNet transmit mode: Standard sends only on change (plus a periodic
            refresh), Full sends every tick. It changes the packet rate by
            orders of magnitude, so it belongs next to the patch it applies to
@@ -1582,6 +1727,36 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         }
 
+        if (midiModeMenu != NULL && chosen != NULL
+                && midiModeMenu->actions().contains(chosen))
+        {
+            setPatchParameter(uni, plugin, line, true, "mode", chosen->text());
+            return;
+        }
+        if (midiChMenu != NULL && chosen != NULL
+                && midiChMenu->actions().contains(chosen))
+        {
+            setPatchParameter(uni, plugin, line, false, "midichannel",
+                              chosen->data().toInt());
+            return;
+        }
+        if (inUni != NULL && chosen == inUni)
+        {
+            const QVariant curV = patchParameter(uni, plugin, line, false, "inputUni");
+            bool ok = false;
+            const int v = QInputDialog::getInt(
+                this, tr("Art-Net input universe"),
+                tr("Which Art-Net universe does this input listen to?"),
+                curV.isValid() ? curV.toInt() : 0, 0, 32767, 1, &ok);
+            if (ok)
+                setPatchParameter(uni, plugin, line, false, "inputUni", v);
+            return;
+        }
+        if (fbTgt != NULL && chosen == fbTgt)
+        {
+            retargetFeedback(uni);
+            return;
+        }
         if (retgt != NULL && chosen == retgt)
             retargetPatch(uni, plugin, line);
         else if (chosen == ren)
@@ -1936,6 +2111,146 @@ void ConnectionsTree::setTransmitMode(quint32 universe, const QString &pluginNam
             break;
         }
     }
+    refresh();
+}
+
+/** Read a plugin parameter off this universe's patch on this line.
+ *
+ *  Returns an invalid QVariant when the parameter is not set, which is NOT the
+ *  same as zero: absent means the plugin's own default, and a caller that
+ *  cannot tell the difference will show a value the rig is not using.
+ */
+QVariant ConnectionsTree::patchParameter(quint32 universe, const QString &pluginName,
+                                         quint32 line, bool output,
+                                         const QString &prop) const
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    Universe *uni = iomap ? iomap->universe(universe) : NULL;
+    if (uni == NULL)
+        return QVariant();
+
+    if (output == false)
+    {
+        InputPatch *ip = uni->inputPatch();
+        if (ip == NULL || ip->plugin() == NULL
+                || ip->plugin()->name() != pluginName || ip->input() != line)
+            return QVariant();
+        const QMap<QString, QVariant> params = ip->getPluginParameters();
+        return params.contains(prop) ? params.value(prop) : QVariant();
+    }
+
+    for (int i = 0; i < uni->outputPatchesCount(); i++)
+    {
+        OutputPatch *op = uni->outputPatch(i);
+        if (op == NULL || op->plugin() == NULL)
+            continue;
+        if (op->plugin()->name() != pluginName || op->output() != line)
+            continue;
+        const QMap<QString, QVariant> params = op->getPluginParameters();
+        return params.contains(prop) ? params.value(prop) : QVariant();
+    }
+    return QVariant();
+}
+
+/** Set a plugin parameter on this universe's patch on this line. */
+void ConnectionsTree::setPatchParameter(quint32 universe, const QString &pluginName,
+                                        quint32 line, bool output,
+                                        const QString &prop, const QVariant &value)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    Universe *uni = iomap ? iomap->universe(universe) : NULL;
+    if (uni == NULL)
+        return;
+
+    if (output == false)
+    {
+        InputPatch *ip = uni->inputPatch();
+        if (ip != NULL && ip->plugin() != NULL
+                && ip->plugin()->name() == pluginName && ip->input() == line)
+        {
+            ip->setPluginParameter(prop, value);
+            m_doc->setModified();
+            refresh();
+        }
+        return;
+    }
+
+    for (int i = 0; i < uni->outputPatchesCount(); i++)
+    {
+        OutputPatch *op = uni->outputPatch(i);
+        if (op == NULL || op->plugin() == NULL)
+            continue;
+        if (op->plugin()->name() != pluginName || op->output() != line)
+            continue;
+        op->setPluginParameter(prop, value);
+        m_doc->setModified();
+        refresh();
+        return;
+    }
+}
+
+/** Repoint the feedback patch of a universe.
+ *
+ *  Feedback stores its destination under the SAME keys as an output patch --
+ *  outputIP and outputUni -- because it is an output patch; it just happens to
+ *  carry values back to a control surface rather than to a fixture. Which is
+ *  why this can reuse applyTarget's sibling logic rather than inventing a
+ *  parallel one.
+ */
+void ConnectionsTree::retargetFeedback(quint32 universe)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    Universe *uni = iomap ? iomap->universe(universe) : NULL;
+    OutputPatch *fb = uni ? uni->feedbackPatch() : NULL;
+    if (fb == NULL)
+        return;
+
+    const QMap<QString, QVariant> params = fb->getPluginParameters();
+
+    bool ok = false;
+    const QString addr = QInputDialog::getText(
+        this, tr("Feedback target"),
+        tr("Send feedback to which address? Leave empty to broadcast:"),
+        QLineEdit::Normal, params.value("outputIP").toString(), &ok).trimmed();
+    if (ok == false)
+        return;
+
+    if (addr.isEmpty())
+    {
+        fb->unSetPluginParameter("outputIP");
+        fb->unSetPluginParameter("outputUni");
+        m_doc->setModified();
+        refresh();
+        return;
+    }
+
+    const quint32 cur = params.value("outputUni", universe).toUInt();
+    const QString curTxt = QString("%1:%2:%3").arg((cur >> 8) & 0x7F)
+                           .arg((cur >> 4) & 0x0F).arg(cur & 0x0F);
+    const QString txt = QInputDialog::getText(
+        this, tr("Feedback target"),
+        tr("Feedback port address on %1, as net:subnet:universe:").arg(addr),
+        QLineEdit::Normal, curTxt, &ok).trimmed();
+    if (ok == false)
+        return;
+
+    const QStringList parts = txt.split(':');
+    bool okNet = false, okSub = false, okUni = false;
+    const uint net = parts.value(0).toUInt(&okNet);
+    const uint sub = parts.value(1).toUInt(&okSub);
+    const uint u = parts.value(2).toUInt(&okUni);
+    if (parts.count() != 3 || !okNet || !okSub || !okUni
+            || net > 127 || sub > 15 || u > 15)
+    {
+        QMessageBox::warning(this, tr("Feedback target"),
+            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
+               "with net 0-127 and subnet and universe 0-15.").arg(txt));
+        return;
+    }
+
+    fb->setPluginParameter("outputIP", addr);
+    fb->setPluginParameter("outputUni", quint32((net << 8) | (sub << 4) | u));
+    m_doc->setModified();
     refresh();
 }
 
