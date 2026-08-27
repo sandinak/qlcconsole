@@ -18,6 +18,8 @@
 #ifndef CONNECTIONSTREE_H
 #define CONNECTIONSTREE_H
 
+#include <QString>
+
 #include <QWidget>
 
 class QTreeWidgetItem;
@@ -66,6 +68,21 @@ private:
                          quint32 line, bool output);
     void renameUniverse(quint32 universe);
     void deleteUniverse(quint32 universe);
+
+    /** Point this universe's feedback at a plugin line, or clear it. */
+    void setFeedback(quint32 universe, const QString &pluginName, quint32 line);
+    /** Apply an input profile to this universe, or clear it. */
+    void setProfile(quint32 universe, const QString &profileName);
+    /** Open a plugin's own configuration dialog. */
+    void configurePlugin(const QString &pluginName);
+
+    /** Patch a universe and aim it at one physical port of a discovered node. */
+    void patchUniverseToPort(const QString &pluginName, quint32 line,
+                             const QString &deviceAddress, quint32 portAddress);
+
+    /** The port address an output patch is aimed at, or invalid if untargeted. */
+    bool patchTarget(quint32 universe, const QString &pluginName, quint32 line,
+                     QString &address, quint32 &portAddress) const;
 
 private:
     Doc *m_doc;

@@ -25,6 +25,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QMenu>
+#include <QHash>
 
 #include "connectionstree.h"
 #include "qlcioplugin.h"
@@ -44,6 +45,8 @@
 #define ROLE_LINE       (Qt::UserRole + 3)
 #define ROLE_UNIVERSE   (Qt::UserRole + 4)
 #define ROLE_OUTPUT     (Qt::UserRole + 5)
+#define ROLE_ADDRESS    (Qt::UserRole + 6)
+#define ROLE_PORTADDR   (Qt::UserRole + 7)
 
 #define KIND_PLUGIN   1
 #define KIND_LINE     2
@@ -70,8 +73,9 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     QLabel *hint = new QLabel(
         tr("How this console is wired, following the signal outward: protocol → "
            "interface → devices heard on it → the universes they carry. "
-           "Right-click an interface to patch a universe to it, or a universe "
-           "to rename, unpatch or delete it."), this);
+           "Right-click an interface to patch a universe to it or configure "
+           "the protocol; right-click a universe to rename it, set its "
+           "feedback line or input profile, unpatch it, or delete it."), this);
     hint->setWordWrap(true);
     lay->addWidget(hint);
 
@@ -235,6 +239,10 @@ void ConnectionsTree::refresh()
             litem->setText(COL_CARRIES, total == 0 ? tr("nothing patched")
                                                    : tr("%1 universes").arg(total));
 
+            /* Port rows, keyed by "node address|port address", so a universe
+               can be filed under the port it is actually aimed at. */
+            QHash<QString, QTreeWidgetItem *> portRows;
+
             /* Devices heard on this line. Most plugins report none -- for a
                USB widget or a MIDI port the line already IS the device, and
                inventing a second level for it would only add depth. */
@@ -262,6 +270,15 @@ void ConnectionsTree::refresh()
                     pt->setText(COL_NAME, tr("port %1").arg(p + 1));
                     pt->setText(COL_DETAIL, dev.portLabels.at(p));
                     pt->setData(COL_NAME, ROLE_KIND, KIND_PORT);
+                    pt->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
+                    pt->setData(COL_NAME, ROLE_LINE, quint32(line));
+                    pt->setData(COL_NAME, ROLE_ADDRESS, dev.address);
+                    if (p < dev.portUniverses.count())
+                    {
+                        pt->setData(COL_NAME, ROLE_PORTADDR, dev.portUniverses.at(p));
+                        portRows.insert(QString("%1|%2").arg(dev.address)
+                                            .arg(dev.portUniverses.at(p)), pt);
+                    }
                 }
             }
 
@@ -276,9 +293,47 @@ void ConnectionsTree::refresh()
                     Universe *uni = iomap ? iomap->universe(uniId) : NULL;
                     if (uni == NULL)
                         continue;
-                    QTreeWidgetItem *uitem = new QTreeWidgetItem(litem);
+                    /* A universe belongs under the port it physically leaves
+                       by, not beside it: "which socket does universe 5 come
+                       out of" is the question this view exists to answer.
+                       Only output patches carry a target; inputs and patches
+                       aimed at a broadcast address (or at a node we have not
+                       heard from) have no port to sit under, so they stay on
+                       the interface. */
+                    QTreeWidgetItem *parentItem = litem;
+                    if (output)
+                    {
+                        QString addr;
+                        quint32 portAddr = 0;
+                        if (patchTarget(uniId, plugin->name(), quint32(line),
+                                        addr, portAddr))
+                        {
+                            QTreeWidgetItem *pr =
+                                portRows.value(QString("%1|%2").arg(addr).arg(portAddr));
+                            if (pr != NULL)
+                                parentItem = pr;
+                        }
+                    }
+
+                    QTreeWidgetItem *uitem = new QTreeWidgetItem(parentItem);
                     uitem->setText(COL_NAME, uni->name());
-                    uitem->setText(COL_DETAIL, output ? tr("output") : tr("input"));
+                    /* Show feedback and profile state on the row itself.
+                       Both were previously only visible by opening the
+                       per-universe editor, which meant the answer to "is LED
+                       feedback actually wired up" required going somewhere
+                       else. */
+                    QStringList udetail;
+                    udetail << (output ? tr("output") : tr("input"));
+                    if (output == false)
+                    {
+                        InputPatch *ip = uni->inputPatch();
+                        if (ip != NULL && ip->profileName().isEmpty() == false)
+                            udetail << tr("profile: %1").arg(ip->profileName());
+                    }
+                    OutputPatch *fb = iomap->feedbackPatch(uniId);
+                    if (fb != NULL && fb->plugin() != NULL)
+                        udetail << tr("feedback: %1").arg(fb->plugin()->name());
+                    uitem->setText(COL_DETAIL, udetail.join(" \u00b7 "));
                     uitem->setData(COL_NAME, ROLE_KIND, KIND_UNIVERSE);
                     uitem->setData(COL_NAME, ROLE_UNIVERSE, uniId);
                     uitem->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
@@ -312,7 +367,9 @@ void ConnectionsTree::refresh()
         none->setFirstColumnSpanned(false);
     }
 
-    m_tree->expandToDepth(2);
+    /* Depth 3 now: protocol > interface > device > port, with universes
+       hanging under the port they leave by. */
+    m_tree->expandToDepth(3);
     foreach (const QString &path, expanded)
     {
         QList<QTreeWidgetItem *> hits =
@@ -334,6 +391,35 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 
     QMenu menu(this);
 
+    if (kind == KIND_PLUGIN)
+    {
+        /* Protocol-level settings (ArtNet/E1.31 options and so on) live in the
+           plugin's own dialog; there is no generic model for them. */
+        QLCIOPlugin *p = NULL;
+        if (m_doc->ioPluginCache() != NULL)
+        {
+            foreach (QLCIOPlugin *cand, m_doc->ioPluginCache()->plugins())
+                if (cand != NULL && cand->name() == plugin)
+                    p = cand;
+        }
+        if (p == NULL || p->canConfigure() == false)
+            return;
+        QAction *cfg = menu.addAction(tr("Configure %1…").arg(plugin));
+        if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == cfg)
+            configurePlugin(plugin);
+        return;
+    }
+
+    if (kind == KIND_PORT)
+    {
+        const QString addr = item->data(COL_NAME, ROLE_ADDRESS).toString();
+        const quint32 portAddr = item->data(COL_NAME, ROLE_PORTADDR).toUInt();
+        QAction *p = menu.addAction(tr("Patch a universe to this port…"));
+        if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == p)
+            patchUniverseToPort(plugin, line, addr, portAddr);
+        return;
+    }
+
     if (kind == KIND_LINE)
     {
         QAction *pOut = menu.addAction(tr("Patch a universe here (output)…"));
@@ -352,6 +438,60 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         const bool output = item->data(COL_NAME, ROLE_OUTPUT).toBool();
 
         QAction *ren = menu.addAction(tr("Rename universe…"));
+
+        /* Feedback: which output line carries status back to a controller.
+           Listed as a submenu of real lines rather than a free-text field so
+           an unreachable line cannot be typed in. */
+        QMenu *fbMenu = menu.addMenu(tr("Feedback to"));
+        QAction *fbNone = fbMenu->addAction(tr("None"));
+        fbNone->setCheckable(true);
+        OutputPatch *curFb = m_doc->inputOutputMap()
+                             ? m_doc->inputOutputMap()->feedbackPatch(uni) : NULL;
+        fbNone->setChecked(curFb == NULL || curFb->plugin() == NULL);
+        QList<QPair<QString, quint32> > fbTargets;
+        if (m_doc->ioPluginCache() != NULL)
+        {
+            foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
+            {
+                if (p == NULL)
+                    continue;
+                const QStringList outs = p->outputs();
+                for (int i = 0; i < outs.count(); i++)
+                {
+                    QAction *a = fbMenu->addAction(QString("%1: %2").arg(p->name())
+                                                                    .arg(outs.at(i)));
+                    a->setCheckable(true);
+                    a->setChecked(curFb != NULL && curFb->plugin() != NULL
+                                  && curFb->plugin()->name() == p->name()
+                                  && curFb->output() == quint32(i));
+                    fbTargets << qMakePair(p->name(), quint32(i));
+                }
+            }
+        }
+
+        /* Input profile: how a controller's notes/CCs map to widgets. Only
+           meaningful on an input patch, so do not offer it otherwise. */
+        QMenu *profMenu = NULL;
+        QStringList profNames;
+        if (output == false && m_doc->inputOutputMap() != NULL)
+        {
+            profMenu = menu.addMenu(tr("Input profile"));
+            QAction *pNone = profMenu->addAction(tr("None"));
+            pNone->setCheckable(true);
+            Universe *u = m_doc->inputOutputMap()->universe(uni);
+            InputPatch *ip = u ? u->inputPatch() : NULL;
+            const QString cur = ip ? ip->profileName() : QString();
+            pNone->setChecked(cur.isEmpty());
+            profNames = m_doc->inputOutputMap()->profileNames();
+            profNames.sort();
+            foreach (const QString &pn, profNames)
+            {
+                QAction *a = profMenu->addAction(pn);
+                a->setCheckable(true);
+                a->setChecked(pn == cur);
+            }
+        }
+
         /* Wording matters here: a universe can be patched to several lines, so
            removing it from THIS one must not read as deleting the universe.
            Conflating the two would quietly destroy a fan-out. */
@@ -359,6 +499,28 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete universe entirely…"));
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (chosen == NULL)
+            return;
+
+        if (chosen->parentWidget() == fbMenu)
+        {
+            if (chosen == fbNone)
+                setFeedback(uni, QString(), 0);
+            else
+            {
+                const int idx = fbMenu->actions().indexOf(chosen) - 1; // skip "None"
+                if (idx >= 0 && idx < fbTargets.count())
+                    setFeedback(uni, fbTargets.at(idx).first, fbTargets.at(idx).second);
+            }
+            return;
+        }
+        if (profMenu != NULL && chosen->parentWidget() == profMenu)
+        {
+            const int idx = profMenu->actions().indexOf(chosen) - 1; // skip "None"
+            setProfile(uni, idx < 0 ? QString() : profNames.value(idx));
+            return;
+        }
+
         if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == unp)
@@ -508,6 +670,159 @@ void ConnectionsTree::deleteUniverse(quint32 universe)
         return;
 
     iomap->removeUniverse(int(universe));
+    m_doc->setModified();
+    refresh();
+}
+
+void ConnectionsTree::setFeedback(quint32 universe, const QString &pluginName,
+                                  quint32 line)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    /* Feedback is an output patch flagged as feedback; an empty plugin name
+       clears it. */
+    iomap->setOutputPatch(universe, pluginName, QString(), line, true, 0);
+    m_doc->setModified();
+    refresh();
+}
+
+void ConnectionsTree::setProfile(quint32 universe, const QString &profileName)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    if (iomap->setInputProfile(universe, profileName) == false)
+        QMessageBox::warning(this, tr("Input profile"),
+                             tr("That universe has no input patch to apply a "
+                                "profile to."));
+    else
+        m_doc->setModified();
+    refresh();
+}
+
+void ConnectionsTree::configurePlugin(const QString &pluginName)
+{
+    if (m_doc->ioPluginCache() == NULL)
+        return;
+    foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
+    {
+        if (p != NULL && p->name() == pluginName)
+        {
+            p->configure();
+            refresh();
+            return;
+        }
+    }
+}
+
+bool ConnectionsTree::patchTarget(quint32 universe, const QString &pluginName,
+                                  quint32 line, QString &address,
+                                  quint32 &portAddress) const
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    Universe *uni = iomap ? iomap->universe(universe) : NULL;
+    if (uni == NULL)
+        return false;
+
+    for (int i = 0; i < uni->outputPatchesCount(); i++)
+    {
+        OutputPatch *op = uni->outputPatch(i);
+        if (op == NULL || op->plugin() == NULL)
+            continue;
+        if (op->plugin()->name() != pluginName || op->output() != line)
+            continue;
+
+        /* Where a patch actually lands is protocol-specific and lives in the
+           plugin parameters, not in the patch itself. For Art-Net that is the
+           node IP plus a 15-bit port address encoded Net<<8 | Sub<<4 | Universe
+           -- the same encoding ArtPollReply reports per port, which is what
+           makes the two correlatable. A patch with neither is untargeted
+           (broadcast, or simply never configured). */
+        const QMap<QString, QVariant> params =
+            const_cast<OutputPatch *>(op)->getPluginParameters();
+        if (params.contains("outputIP") == false)
+            return false;
+        address = params.value("outputIP").toString();
+        portAddress = params.value("outputUni", 0).toUInt();
+        return address.isEmpty() == false;
+    }
+    return false;
+}
+
+void ConnectionsTree::patchUniverseToPort(const QString &pluginName, quint32 line,
+                                          const QString &deviceAddress,
+                                          quint32 portAddress)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    QStringList names;
+    QList<quint32> ids;
+    foreach (Universe *uni, iomap->universes())
+    {
+        names << uni->name();
+        ids << uni->id();
+    }
+    const QString newLabel = tr("<new universe>");
+    names << newLabel;
+
+    bool ok = false;
+    const QString pick = QInputDialog::getItem(
+        this, tr("Patch to port"),
+        tr("Patch which universe to %1 port %2?")
+            .arg(deviceAddress).arg(portAddress & 0x0F),
+        names, 0, false, &ok);
+    if (ok == false || pick.isEmpty())
+        return;
+
+    quint32 uniId = InputOutputMap::invalidUniverse();
+    if (pick == newLabel)
+    {
+        if (iomap->addUniverse() == false)
+            return;
+        QList<Universe *> all = iomap->universes();
+        if (all.isEmpty())
+            return;
+        uniId = all.last()->id();
+    }
+    else
+    {
+        const int idx = names.indexOf(pick);
+        if (idx < 0 || idx >= ids.count())
+            return;
+        uniId = ids.at(idx);
+    }
+
+    const int index = iomap->outputPatchesCount(uniId);
+    if (iomap->setOutputPatch(uniId, pluginName, QString(), line, false, index) == false)
+    {
+        QMessageBox::warning(this, tr("Patch to port"),
+                             tr("Could not patch that universe to %1.").arg(pluginName));
+        return;
+    }
+
+    /* Patching alone only chooses an interface; without these the data goes
+       wherever the plugin defaults to (broadcast) rather than to this node's
+       port, and the tree would show it as untargeted. */
+    Universe *uni = iomap->universe(uniId);
+    if (uni != NULL)
+    {
+        for (int i = 0; i < uni->outputPatchesCount(); i++)
+        {
+            OutputPatch *op = uni->outputPatch(i);
+            if (op != NULL && op->plugin() != NULL
+                    && op->plugin()->name() == pluginName && op->output() == line)
+            {
+                op->setPluginParameter("outputIP", deviceAddress);
+                op->setPluginParameter("outputUni", portAddress);
+                break;
+            }
+        }
+    }
     m_doc->setModified();
     refresh();
 }
