@@ -81,6 +81,10 @@ private:
     /** ArtNet transmit mode (Standard / Full / Partial) for one patch. */
     void setTransmitMode(quint32 universe, const QString &pluginName,
                          quint32 line, const QString &mode);
+    /** Give an output target an operator-facing name. */
+    void renameTarget(const QString &address);
+    /** Patch a universe to a target typed in by hand. */
+    void patchToNewTarget(const QString &pluginName, quint32 line);
 
     static QString itemPath(class QTreeWidgetItem *item);
 

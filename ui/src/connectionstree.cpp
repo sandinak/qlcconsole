@@ -287,6 +287,7 @@ void ConnectionsTree::refresh()
                every interface it has, and the replies arrive from different
                source addresses while carrying the same node identity. Key on
                what identifies the hardware, not on who delivered the packet. */
+            InputOutputMap *iomapForAlias = m_doc->inputOutputMap();
             QSet<QString> seenDevices;
             foreach (const QLCIOPlugin::Device &dev, devices)
             {
@@ -307,7 +308,12 @@ void ConnectionsTree::refresh()
                 seenDevices.insert(devKey);
 
                 QTreeWidgetItem *ditem = new QTreeWidgetItem(litem);
-                ditem->setText(COL_NAME, dev.name.isEmpty() ? dev.address : dev.name);
+                const QString alias = iomapForAlias
+                    ? iomapForAlias->targetAlias(dev.address) : QString();
+                ditem->setText(COL_NAME, alias.isEmpty()
+                    ? (dev.name.isEmpty() ? dev.address : dev.name)
+                    : alias);
+                ditem->setData(COL_NAME, ROLE_ADDRESS, dev.address);
                 ditem->setData(COL_NAME, ROLE_KIND, KIND_DEVICE);
 
                 QStringList detail;
@@ -354,6 +360,29 @@ void ConnectionsTree::refresh()
                             portRows.insert(key, pt);
                     }
                 }
+            }
+
+            /* Feedback is a patch to THIS line as much as an output is, so a
+               universe fed back here gets a row here -- otherwise a MIDI line
+               lighting a control surface shows an empty interface and the
+               relationship is only visible as a note on some ArtNet row
+               elsewhere. The same universe legitimately appears twice: once
+               under the port its DMX leaves by, once under the line its
+               feedback returns on. Those are two different cables. */
+            foreach (quint32 fbId, fbUnis)
+            {
+                Universe *fu = m_doc->inputOutputMap()
+                               ? m_doc->inputOutputMap()->universe(fbId) : NULL;
+                if (fu == NULL)
+                    continue;
+                QTreeWidgetItem *fitem = new QTreeWidgetItem(litem);
+                fitem->setText(COL_NAME, tr("%1: %2").arg(fu->id() + 1).arg(fu->name()));
+                fitem->setText(COL_DETAIL, tr("feedback"));
+                fitem->setData(COL_NAME, ROLE_KIND, KIND_UNIVERSE);
+                fitem->setData(COL_NAME, ROLE_UNIVERSE, fbId);
+                fitem->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
+                fitem->setData(COL_NAME, ROLE_LINE, quint32(line));
+                fitem->setData(COL_NAME, ROLE_OUTPUT, true);
             }
 
             /* Universes as rows, not as a summary string: they are the thing
@@ -405,7 +434,12 @@ void ConnectionsTree::refresh()
                                 if (ghost == NULL)
                                 {
                                     ghost = new QTreeWidgetItem(litem);
-                                    ghost->setText(COL_NAME, addr);
+                                    const QString galias = iomap
+                                        ? iomap->targetAlias(addr) : QString();
+                                    ghost->setText(COL_NAME, galias.isEmpty()
+                                                   ? addr : galias);
+                                    ghost->setData(COL_NAME, ROLE_KIND, KIND_DEVICE);
+                                    ghost->setData(COL_NAME, ROLE_ADDRESS, addr);
                                     ghost->setText(COL_DETAIL,
                                                    tr("configured — not heard from"));
                                     ghost->setForeground(COL_DETAIL,
@@ -603,6 +637,17 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         return;
     }
 
+    if (kind == KIND_DEVICE)
+    {
+        const QString addr = item->data(COL_NAME, ROLE_ADDRESS).toString();
+        if (addr.isEmpty())
+            return;
+        QAction *ren = menu.addAction(tr("Name this target…"));
+        if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == ren)
+            renameTarget(addr);
+        return;
+    }
+
     if (kind == KIND_PORT)
     {
         const QString addr = item->data(COL_NAME, ROLE_ADDRESS).toString();
@@ -615,10 +660,14 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 
     if (kind == KIND_LINE)
     {
+        QAction *pNew = menu.addAction(tr("Patch a universe to a new target…"));
+        menu.addSeparator();
         QAction *pOut = menu.addAction(tr("Patch a universe here (output)…"));
         QAction *pIn = menu.addAction(tr("Patch a universe here (input)…"));
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (chosen == pOut)
+        if (chosen == pNew)
+            patchToNewTarget(plugin, line);
+        else if (chosen == pOut)
             patchUniverseTo(plugin, line, true);
         else if (chosen == pIn)
             patchUniverseTo(plugin, line, false);
@@ -1082,4 +1131,50 @@ void ConnectionsTree::setTransmitMode(quint32 universe, const QString &pluginNam
         }
     }
     refresh();
+}
+
+void ConnectionsTree::renameTarget(const QString &address)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    bool ok = false;
+    const QString name = QInputDialog::getText(
+        this, tr("Name target"),
+        tr("A name for %1 — leave empty to clear:").arg(address),
+        QLineEdit::Normal, iomap->targetAlias(address), &ok);
+    if (ok == false)
+        return;
+
+    iomap->setTargetAlias(address, name.trimmed());
+    m_doc->setModified();
+    refresh();
+}
+
+void ConnectionsTree::patchToNewTarget(const QString &pluginName, quint32 line)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    bool ok = false;
+    const QString addr = QInputDialog::getText(
+        this, tr("Patch to a new target"),
+        tr("Target address (a node IP, or a broadcast address):"),
+        QLineEdit::Normal, QString(), &ok).trimmed();
+    if (ok == false || addr.isEmpty())
+        return;
+
+    const int portAddr = QInputDialog::getInt(
+        this, tr("Patch to a new target"),
+        tr("Port address on that target:"), 0, 0, 32767, 1, &ok);
+    if (ok == false)
+        return;
+
+    /* Deliberately no reachability check. A target that is absent on the bench
+       is routinely present on the rig, and refusing to configure it here would
+       make the console useless for prep. It simply shows as
+       "configured - not heard from" until something answers. */
+    patchUniverseToPort(pluginName, line, addr, quint32(portAddr));
 }

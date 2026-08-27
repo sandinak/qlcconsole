@@ -584,6 +584,19 @@ public:
     void loadProfiles(const QDir& dir);
 
     /** Get a list of available profile names */
+    /**
+     * A user-supplied name for an output target (an Art-Net node address, for
+     * example). Nodes cannot always be renamed over the wire -- plenty of
+     * cheap hardware acknowledges an ArtAddress write and discards it -- and a
+     * bare IP tells an operator nothing at 2am. Keyed by target address rather
+     * than by MAC on purpose: the address is what a patch actually points at,
+     * and it is the only identity available for a node nothing has answered
+     * from, which is exactly the case that most needs a label.
+     */
+    QString targetAlias(const QString &address) const;
+    void setTargetAlias(const QString &address, const QString &name);
+    QMap<QString, QString> targetAliases() const;
+
     QStringList profileNames();
 
     /** Get a profile by its name */
@@ -628,6 +641,9 @@ public:
 private:
     /** List that contains all available profiles */
     QList <QLCInputProfile*> m_profiles;
+
+    /** Operator-supplied names for output targets, keyed by address. */
+    QMap<QString, QString> m_targetAliases;
 
     bool m_localProfilesLoaded;
 
