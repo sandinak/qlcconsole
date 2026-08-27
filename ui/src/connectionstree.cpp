@@ -623,6 +623,60 @@ void ConnectionsTree::refresh()
     /* Depth 2 so discovered devices AND their ports are visible: the port
        row is where the Net:Sub:Universe address lives, which is the whole
        reason for drilling in. */
+    /* One port carrying one universe is the overwhelmingly common case, and
+       giving it two rows -- a port row saying almost nothing, and a child row
+       under it -- spends a whole level of indentation to state a one-to-one
+       relationship. Fold the universe onto the port line and use the width
+       instead. Ports with several universes keep their children: that is the
+       collision case, it is a fault, and it must stay conspicuous rather than
+       being flattened into a tidy single line. */
+    {
+        QList<QTreeWidgetItem *> stack;
+        for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+            stack << m_tree->topLevelItem(i);
+        while (stack.isEmpty() == false)
+        {
+            QTreeWidgetItem *it = stack.takeFirst();
+
+            /* Decide about this row BEFORE queueing its children. Queueing
+               first and then deleting a folded child left that child on the
+               stack as a dangling pointer, which crashed on the next
+               iteration. */
+            QTreeWidgetItem *fold = NULL;
+            if (it->data(COL_NAME, ROLE_KIND).toInt() == KIND_PORT
+                    && it->childCount() == 1
+                    && it->child(0)->data(COL_NAME, ROLE_KIND).toInt() == KIND_UNIVERSE)
+                fold = it->child(0);
+
+            for (int c = 0; c < it->childCount(); c++)
+                if (it->child(c) != fold)
+                    stack << it->child(c);
+
+            if (fold == NULL)
+                continue;
+            QTreeWidgetItem *u = fold;
+
+            /* Port address stays first in Detail -- it is the port's own
+               identity -- with the universe's state appended after it. */
+            const QString portAddr = it->text(COL_DETAIL);
+            it->setText(COL_NAME, tr("%1 → %2").arg(it->text(COL_NAME))
+                                               .arg(u->text(COL_NAME)));
+            it->setText(COL_DETAIL, portAddr.isEmpty()
+                        ? u->text(COL_DETAIL)
+                        : QString("%1 · %2").arg(portAddr).arg(u->text(COL_DETAIL)));
+            it->setText(COL_CARRIES, u->text(COL_CARRIES));
+            it->setBackground(COL_NAME, u->background(COL_NAME));
+            it->setForeground(COL_CARRIES, u->foreground(COL_CARRIES));
+
+            /* Carry the universe's identity so the row still answers to the
+               universe actions -- rename, unpatch, delete -- as well as the
+               port ones. */
+            it->setData(COL_NAME, ROLE_UNIVERSE, u->data(COL_NAME, ROLE_UNIVERSE));
+            it->setData(COL_NAME, ROLE_OUTPUT, u->data(COL_NAME, ROLE_OUTPUT));
+            delete it->takeChild(0);
+        }
+    }
+
     /* Roll each port's universes up into its Carries cell. A port row that
        says nothing while its children say plenty is the sort of gap that makes
        people distrust the whole view. Done after the tree is built, since the
@@ -774,6 +828,29 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
     {
         const QString addr = item->data(COL_NAME, ROLE_ADDRESS).toString();
         const quint32 portAddr = item->data(COL_NAME, ROLE_PORTADDR).toUInt();
+
+        /* A folded row is a port AND the universe on it, so it has to answer
+           to both sets of actions -- otherwise collapsing the rows would have
+           quietly removed the ability to rename or unpatch. */
+        const QVariant uniVar = item->data(COL_NAME, ROLE_UNIVERSE);
+        if (uniVar.isValid())
+        {
+            const quint32 uni = uniVar.toUInt();
+            QAction *ren = menu.addAction(tr("Rename universe…"));
+            QAction *unp = menu.addAction(tr("Unpatch from this interface"));
+            menu.addSeparator();
+            QAction *del = menu.addAction(tr("Delete universe entirely…"));
+            QAction *c = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+            if (c == ren)
+                renameUniverse(uni);
+            else if (c == unp)
+                unpatchFromLine(uni, plugin, line,
+                                item->data(COL_NAME, ROLE_OUTPUT).toBool());
+            else if (c == del)
+                deleteUniverse(uni);
+            return;
+        }
+
         QAction *p = menu.addAction(tr("Patch a universe to this port…"));
         if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == p)
             patchUniverseToPort(plugin, line, addr, portAddr);
