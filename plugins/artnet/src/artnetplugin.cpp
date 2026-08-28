@@ -368,6 +368,44 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
  *  routes a reply to the controller on the sender's subnet and drops it on
  *  the floor if there is none.
  */
+bool ArtNetPlugin::probeTarget(const QString &address)
+{
+    const QHostAddress addr(address);
+    if (addr.isNull())
+        return false;   // a hostname, not an address -- nothing to aim at
+
+    /* Prefer the controller whose subnet contains the target: its socket is
+       bound to the interface the packet should leave by, and its own address
+       is what the node will answer to. */
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        ArtNetController *ctrl = m_IOmapping.at(line).controller;
+        if (ctrl == NULL)
+            continue;
+        if (addr.isInSubnet(m_IOmapping.at(line).address.ip(),
+                            m_IOmapping.at(line).address.prefixLength()))
+        {
+            ctrl->sendPollTo(addr);
+            return true;
+        }
+    }
+
+    /* Otherwise any controller will do: the target is off-segment, the packet
+       goes out by whatever route the host chooses, and that is the whole point
+       of probing it rather than waiting for a broadcast it will never see. */
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        ArtNetController *ctrl = m_IOmapping.at(line).controller;
+        if (ctrl != NULL)
+        {
+            ctrl->sendPollTo(addr);
+            return true;
+        }
+    }
+
+    return false;   // no controller anywhere: nothing is listening for a reply
+}
+
 QString ArtNetPlugin::lineDescription(quint32 line, bool output) const
 {
     Q_UNUSED(output)   // in and out are the same interface on Art-Net

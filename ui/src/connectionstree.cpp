@@ -353,7 +353,76 @@ void ConnectionsTree::slotRescan()
                 plugin->rescan();
         }
     }
+
+    probeUnheardTargets();
     refresh();
+}
+
+/** Ask every address we believe in, but have never heard from, whether it is
+ *  there.
+ *
+ *  Discovery is broadcast-shaped, so it answers "what is on my segment" and
+ *  cannot answer "is that node alive". A target on another subnet -- declared
+ *  by hand, or named by a patch -- never sees a broadcast poll, so it sits
+ *  amber and "not heard from" forever whether it is powered up or in a flight
+ *  case. Probing each one directly is the difference between the tint meaning
+ *  "no answer" and meaning "no question asked".
+ *
+ *  Only the ones we have NOT heard from: a node already answering broadcasts
+ *  needs no unicast, and polling every known node individually would multiply
+ *  the traffic this deliberately keeps low.
+ */
+void ConnectionsTree::probeUnheardTargets()
+{
+    IOPluginCache *cache = m_doc->ioPluginCache();
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (cache == NULL || iomap == NULL)
+        return;
+
+    foreach (QLCIOPlugin *plugin, cache->plugins())
+    {
+        if (plugin == NULL)
+            continue;
+
+        QSet<QString> heard;
+        foreach (const QLCIOPlugin::Device &d, plugin->discoveredDevices())
+            heard.insert(d.address);
+
+        QSet<QString> wanted;
+
+        /* Hand-declared targets. */
+        foreach (const InputOutputMap::ManualTarget &mt, iomap->manualTargets())
+        {
+            if (mt.plugin == plugin->name())
+                wanted.insert(mt.address);
+        }
+
+        /* Addresses a patch is aimed at. A workspace built on the rig and
+           opened elsewhere is full of these, and they are the ones somebody is
+           squinting at wondering whether the rig is plugged in. */
+        foreach (Universe *uni, iomap->universes())
+        {
+            if (uni == NULL)
+                continue;
+            for (int i = 0; i < uni->outputPatchesCount(); i++)
+            {
+                OutputPatch *op = uni->outputPatch(i);
+                if (op == NULL || op->plugin() == NULL
+                        || op->plugin()->name() != plugin->name())
+                    continue;
+                const QString ip = op->getPluginParameters()
+                                   .value("outputIP").toString();
+                if (ip.isEmpty() == false)
+                    wanted.insert(ip);
+            }
+        }
+
+        foreach (const QString &addr, wanted)
+        {
+            if (heard.contains(addr) == false)
+                plugin->probeTarget(addr);
+        }
+    }
 }
 
 ConnectionsTree::~ConnectionsTree()
@@ -1662,6 +1731,16 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (output == false && isArtNet)
             inUni = menu.addAction(tr("Art-Net input universe…"));
 
+        /* A MIDI port carries output and feedback over the same physical
+           connection, so a universe uses it as one or the other, never both.
+           Overview expresses that as a two-state combo; here it is the one
+           action that swaps which side of the patch the line sits on, because
+           "unpatch the output, then set the feedback to the same line" is the
+           same intent spelled out in three steps. */
+        QAction *roleSwap = NULL;
+        if (isMidi && output)
+            roleSwap = menu.addAction(tr("Use this MIDI port for feedback instead"));
+
         /* Feedback has a destination of its own, under the same outputIP /
            outputUni keys, and nothing outside the Overview grid could set it. */
         Universe *fbU = m_doc->inputOutputMap()
@@ -1842,6 +1921,40 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
                 curV.isValid() ? curV.toInt() : 0, 0, 32767, 1, &ok);
             if (ok)
                 setPatchParameter(uni, plugin, line, false, "inputUni", v);
+            return;
+        }
+        if (roleSwap != NULL && chosen == roleSwap)
+        {
+            InputOutputMap *iom = m_doc->inputOutputMap();
+            if (iom != NULL)
+            {
+                if (iom->patchUndo() != NULL)
+                    iom->patchUndo()->capture(QList<quint32>() << uni,
+                        tr("use MIDI port for feedback on universe %1").arg(uni + 1));
+
+                /* Find this leg's index before dropping it: a universe fanned
+                   out to several lines must lose the right one. */
+                int index = 0;
+                Universe *u = iom->universe(uni);
+                if (u != NULL)
+                {
+                    for (int i = 0; i < u->outputPatchesCount(); i++)
+                    {
+                        OutputPatch *op = u->outputPatch(i);
+                        if (op != NULL && op->plugin() != NULL
+                                && op->plugin()->name() == plugin
+                                && op->output() == line)
+                        {
+                            index = i;
+                            break;
+                        }
+                    }
+                }
+                iom->setOutputPatch(uni, QString(), QString(), 0, false, index);
+                iom->setOutputPatch(uni, plugin, QString(), line, true, 0);
+                m_doc->setModified();
+                refresh();
+            }
             return;
         }
         if (fbTgt != NULL && chosen == fbTgt)

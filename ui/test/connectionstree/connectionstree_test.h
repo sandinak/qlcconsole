@@ -79,6 +79,10 @@ private slots:
     void selectedUniversesDeduplicatesFannedOutUniverses();
     void bulkRetargetNumbersPortsUpwardAndIsOneUndoStep();
 
+    /* Reachability probing */
+    void rescanProbesUnheardTargetsOnly();
+    void rescanProbesAddressesNamedByPatches();
+
     /* Live input activity */
     void inputActivityTintsTheUniverseRow();
 

@@ -232,6 +232,14 @@ public:
      */
     void sendPoll() { slotSendPoll(); }
 
+    /** Send one ArtPoll to a specific address rather than the broadcast one.
+     *
+     *  A node on a subnet this console has no interface on never sees a
+     *  broadcast poll, so it can never answer one -- which is exactly the node
+     *  somebody had to declare by hand, and exactly the node they most want to
+     *  know is alive. Unicast reaches it through the router if anything can. */
+    void sendPollTo(const QHostAddress &address);
+
 protected slots:
     void slotSendPoll();
     void slotSendAllUniverses();

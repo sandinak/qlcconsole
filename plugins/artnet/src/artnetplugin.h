@@ -97,6 +97,9 @@ public:
     /** @reimp Patches carry outputIP + outputUni to aim at a node's port. */
     bool supportsOutputTargets() const override { return true; }
 
+    /** @reimp Unicast an ArtPoll at one address. */
+    bool probeTarget(const QString &address) override;
+
     /** @reimp */
     QString outputInfo(quint32 output) override;
 

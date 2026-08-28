@@ -765,6 +765,52 @@ void ConnectionsTree_Test::bulkRetargetNumbersPortsUpwardAndIsOneUndoStep()
 }
 
 /****************************************************************************
+ * Reachability probing
+ ****************************************************************************/
+
+void ConnectionsTree_Test::rescanProbesUnheardTargetsOnly()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    // One target we have heard from, one we have only been told about.
+    stub->m_devices << makeDevice(0, "CR041R", "172.18.2.10");
+    iom->addManualTarget(stub->name(), 0, "172.18.2.99");
+
+    ConnectionsTree tree(m_doc);
+    stub->m_probed.clear();
+    tree.slotRescan();
+
+    // The silent one is asked directly -- otherwise its amber tint means "no
+    // question asked" rather than "no answer".
+    QVERIFY2(stub->m_probed.contains("172.18.2.99"),
+             "a hand-declared target that has never answered was not probed");
+
+    // The one already answering broadcasts is not: it needs no unicast, and
+    // probing every known node would multiply the traffic this keeps low.
+    QVERIFY2(stub->m_probed.contains("172.18.2.10") == false,
+             "a node already heard from should not be probed as well");
+}
+
+void ConnectionsTree_Test::rescanProbesAddressesNamedByPatches()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    // A patch aimed at a node nothing has answered from -- what a workspace
+    // built on the rig looks like when it is opened anywhere else.
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0) == true);
+    iom->outputPatch(0, 0)->setPluginParameter("outputIP", "10.9.9.9");
+
+    ConnectionsTree tree(m_doc);
+    stub->m_probed.clear();
+    tree.slotRescan();
+
+    QVERIFY2(stub->m_probed.contains("10.9.9.9"),
+             "an address a patch points at was not probed");
+}
+
+/****************************************************************************
  * Live input activity
  ****************************************************************************/
 

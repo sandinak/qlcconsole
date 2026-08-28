@@ -38,6 +38,7 @@ void IOPluginStub::init()
     m_linesAreHardware = false;
     m_supportsTargets = false;
     m_rescanCalled = 0;
+    m_probed.clear();
     m_lineCount = 4;
 }
 

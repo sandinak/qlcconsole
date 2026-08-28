@@ -141,6 +141,10 @@ private:
     /** Drop a hand-declared target. Patches aimed at it are left alone. */
     void forgetTarget(const QString &address);
 
+    /** Unicast a discovery probe at every address we believe in but have not
+        heard from, so "silent" means no answer rather than no question. */
+    void probeUnheardTargets();
+
     static QString itemPath(class QTreeWidgetItem *item);
 
     /** Ordered name/value pairs as a tooltip table, or empty if there are none. */

@@ -76,12 +76,18 @@ public:
     /** @reimp */
     void rescan() override { m_rescanCalled++; }
 
+    /** @reimp Records what was probed, so a test can assert on WHICH addresses
+        were asked -- the interesting part is that already-heard ones are not. */
+    bool probeTarget(const QString &address) override
+    { m_probed << address; return true; }
+
 public:
     QList<Device> m_devices;
     QMap<int, QString> m_lineDescriptions;
     bool m_linesAreHardware;
     bool m_supportsTargets;
     int m_rescanCalled;
+    QStringList m_probed;
     /** Number of lines outputs()/inputs() advertise; 4 unless a test says otherwise. */
     int m_lineCount;
 

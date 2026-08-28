@@ -415,6 +415,28 @@ public:
     virtual bool supportsOutputTargets() const { return false; }
 
     /**
+     * Ask one specific address whether it is there.
+     *
+     * Discovery is passive and broadcast-shaped, which answers "what is on my
+     * segment" and cannot answer "is THAT node alive" -- the node on another
+     * subnet, reached by unicast through a router, never sees a broadcast poll
+     * and so is indistinguishable from one that is switched off. That is
+     * precisely the node somebody had to declare by hand.
+     *
+     * Deliberately not an ICMP ping: this asks in the protocol's own terms, so
+     * a reply means "an Art-Net node answered", not "something at that address
+     * has a TCP/IP stack". It also needs no elevated privileges, and any reply
+     * arrives through the normal discovery path -- so a node that answers stops
+     * being a hand-declared guess and becomes a discovered device, with its
+     * real port list.
+     *
+     * Returns true if a probe was actually sent. The ANSWER, if any, arrives
+     * asynchronously; there is nothing to wait for here.
+     */
+    virtual bool probeTarget(const QString &address)
+    { Q_UNUSED(address) return false; }
+
+    /**
      * Re-enumerate hardware devices and update internal state.
      * Plugins that support hot-plug or need an explicit rescan can override
      * this; the default implementation does nothing.

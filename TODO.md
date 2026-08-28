@@ -14,11 +14,10 @@ to DONE.md when it ships. See also the session memory under
   against real network hardware. Needs: Rescan finding a node on an unpatched
   interface, and a hand-declared target on a subnet with no local interface
   actually receiving DMX via the unicast patch (`ARTNET_OUTPUTIP`).
-- **Devices/Overview parity — remaining.** Still Overview-only: bulk multi-row
-  apply with `outputUni` auto-increment (ArtNet block patching), and the MIDI
-  Out-vs-Feedback port-role toggle. Everything else has landed (feedback
-  IP/port, ArtNet `inputUni`, MIDI output mode, MIDI input channel, live input
-  activity). Still Detailed-only and staying there deliberately: universe
+- **Devices/Overview parity — done.** Bulk multi-row retarget with port
+  auto-increment, feedback IP/port, ArtNet `inputUni`, MIDI output mode, MIDI
+  input channel and the MIDI Out-vs-Feedback role swap have all landed on the
+  Devices tab. Still Detailed-only and staying there deliberately: universe
   passthrough (the ONLY place it can be set), the Audio tab, input-profile
   creation/editing (`InputProfileEditor`), USB hotplug toggle, plugin info
   browser — a different concern from topology.
@@ -34,8 +33,16 @@ to DONE.md when it ships. See also the session memory under
   argument as an ARRAY INDEX. They coincide only because `removeUniverse()`
   refuses anything but the last universe. Pre-existing and codebase-wide, but
   a live trap if that restriction is ever loosened.
-- **Ping-based availability** — the amber/green tint still means "heard from"
-  only, so a hand-declared target reads as silent forever even when it is up.
+- **Reachability probing — verify on `ender`.** Rescan now unicasts an ArtPoll
+  at every address believed in but not heard from (hand-declared targets and
+  addresses named by `outputIP`), so a node on another subnet can answer. Never
+  tested against a real off-segment node. Note it probes only on an explicit
+  Rescan, not on the 5 s tick — a live "is it up" indicator would need a
+  cadence decision, and continuous unicast polling of every configured node is
+  exactly the traffic this has been avoiding.
+- **Probing is Art-Net only.** `QLCIOPlugin::probeTarget()` defaults to a
+  no-op; nothing else implements it. Fine today, since Art-Net is the only
+  plugin with addressable targets at all.
 
 ---
 

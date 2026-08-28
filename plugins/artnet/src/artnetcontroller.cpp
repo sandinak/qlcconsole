@@ -582,6 +582,27 @@ bool ArtNetController::handlePacket(QByteArray const& datagram, QHostAddress con
     return true;
 }
 
+void ArtNetController::sendPollTo(const QHostAddress &address)
+{
+    if (address.isNull())
+        return;
+
+    QByteArray pollPacket;
+    m_packetizer->setupArtNetPoll(pollPacket);
+
+    const qint64 sent = m_udpSocket->writeDatagram(pollPacket, address, ARTNET_PORT);
+    if (sent < 0)
+    {
+        qWarning() << "Unable to send Poll packet to" << address.toString()
+                   << ": errno=" << m_udpSocket->error()
+                   << "(" << m_udpSocket->errorString() << ")";
+    }
+    else
+    {
+        m_packetSent++;
+    }
+}
+
 void ArtNetController::slotSendPoll()
 {
 #if 0
