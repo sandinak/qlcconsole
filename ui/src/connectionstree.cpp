@@ -38,6 +38,7 @@
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
+#include "patchundo.h"
 #include "outputpatch.h"
 #include "inputpatch.h"
 #include "universe.h"
@@ -72,6 +73,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     , m_doc(doc)
     , m_showUnused(NULL)
     , m_rescan(NULL)
+    , m_undo(NULL)
     , m_status(NULL)
     , m_linesBaselined(false)
     , m_populatedOnce(false)
@@ -118,11 +120,28 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
                             "continuous anyway; this just skips the wait."));
     connect(m_rescan, SIGNAL(clicked()), this, SLOT(slotRescan()));
 
+    /* Named for what it does, not offered as a bare "Undo". The app already
+       made this call once -- the capture action is "Undo Last Store" -- and
+       for the same reason: an operator who sees plain "Undo" will press it
+       after deleting a fixture, get silence, and stop trusting it. This one
+       covers patch changes and says so. */
+    m_undo = new QPushButton(tr("Undo Patch Change"), this);
+    m_undo->setEnabled(false);
+    connect(m_undo, SIGNAL(clicked()), this, SLOT(slotUndoPatch()));
+
     QHBoxLayout *bar = new QHBoxLayout;
     bar->addWidget(m_showUnused);
     bar->addStretch(1);
+    bar->addWidget(m_undo);
     bar->addWidget(m_rescan);
     lay->addLayout(bar);
+
+    if (m_doc->inputOutputMap() != NULL
+            && m_doc->inputOutputMap()->patchUndo() != NULL)
+    {
+        connect(m_doc->inputOutputMap()->patchUndo(), SIGNAL(changed()),
+                this, SLOT(slotUndoAvailabilityChanged()));
+    }
 
     /* Discovery is passive: nodes announce themselves roughly once a second.
        On first opening the tab the tree is therefore genuinely incomplete for
@@ -279,6 +298,47 @@ void ConnectionsTree::hideEvent(QHideEvent *ev)
        end of looking; anything still unpatched next time is just unpatched. */
     m_newLines.clear();
     QWidget::hideEvent(ev);
+}
+
+void ConnectionsTree::slotUndoAvailabilityChanged()
+{
+    if (m_undo == NULL || m_doc->inputOutputMap() == NULL)
+        return;
+    PatchUndo *pu = m_doc->inputOutputMap()->patchUndo();
+    if (pu == NULL)
+        return;
+
+    m_undo->setEnabled(pu->canUndo());
+    /* The label names the specific change, so the button says what pressing it
+       will actually put back rather than making the operator remember. */
+    m_undo->setToolTip(pu->canUndo()
+        ? tr("Put back: %1").arg(pu->summary())
+        : tr("Nothing to undo. Covers patch changes only — not adding or "
+             "removing universes."));
+}
+
+void ConnectionsTree::slotUndoPatch()
+{
+    if (m_doc->inputOutputMap() == NULL)
+        return;
+    PatchUndo *pu = m_doc->inputOutputMap()->patchUndo();
+    if (pu == NULL || pu->canUndo() == false)
+        return;
+
+    /* Restoring closes and reopens plugin lines, so output on the affected
+       universes drops for as long as that takes. Harmless at the bench and
+       emphatically not harmless mid-show, so say so rather than discovering
+       it during a cue. */
+    if (QMessageBox::question(this, tr("Undo patch change"),
+            tr("Put back: %1?\n\nRe-patching briefly interrupts output on the "
+               "universes involved.").arg(pu->summary()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes)
+            != QMessageBox::Yes)
+        return;
+
+    pu->undo();
+    m_doc->setModified();
+    refresh();
 }
 
 /** Ask every plugin to go looking, then redraw.
@@ -1876,6 +1936,10 @@ void ConnectionsTree::unpatchFromLine(quint32 universe, const QString &pluginNam
     if (iomap == NULL)
         return;
 
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(QList<quint32>() << universe,
+                                    tr("unpatch universe %1").arg(universe + 1));
+
     /* Patching to an empty plugin name is how this map clears a patch. */
     if (output)
     {
@@ -2162,6 +2226,11 @@ void ConnectionsTree::setPatchParameter(quint32 universe, const QString &pluginN
     if (uni == NULL)
         return;
 
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(QList<quint32>() << universe,
+                                    tr("change %1 on universe %2")
+                                        .arg(prop).arg(universe + 1));
+
     if (output == false)
     {
         InputPatch *ip = uni->inputPatch();
@@ -2206,6 +2275,11 @@ void ConnectionsTree::retargetFeedback(quint32 universe)
         return;
 
     const QMap<QString, QVariant> params = fb->getPluginParameters();
+
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(QList<quint32>() << universe,
+                                    tr("retarget feedback on universe %1")
+                                        .arg(universe + 1));
 
     bool ok = false;
     const QString addr = QInputDialog::getText(
@@ -2299,6 +2373,15 @@ void ConnectionsTree::retargetPatch(quint32 universe, const QString &pluginName,
     QString curAddr;
     quint32 curPort = 0;
     const bool targeted = patchTarget(universe, pluginName, line, curAddr, curPort);
+
+    /* Captured before anything is asked, not after the dialogs are answered:
+       an operator who changes their mind halfway leaves the held step
+       describing a state that is still current, which is harmless, whereas
+       capturing late can miss the change entirely. */
+    InputOutputMap *undoMap = m_doc->inputOutputMap();
+    if (undoMap != NULL && undoMap->patchUndo() != NULL)
+        undoMap->patchUndo()->capture(QList<quint32>() << universe,
+                                      tr("retarget universe %1").arg(universe + 1));
 
     bool ok = false;
     const QString addr = QInputDialog::getText(

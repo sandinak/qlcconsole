@@ -31,6 +31,7 @@
 #include <qmath.h>
 
 #include "inputoutputmap.h"
+#include "patchundo.h"
 #include "qlcinputchannel.h"
 #include "qlcinputsource.h"
 #include "audiocapture.h"
@@ -52,7 +53,9 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     , m_currentBPM(0)
     , m_beatTime(new QElapsedTimer())
     , m_inputCapture(NULL)
+    , m_patchUndo(NULL)
 {
+    m_patchUndo = new PatchUndo(this, this);
     m_grandMaster = new GrandMaster(this);
     for (quint32 i = 0; i < universes; i++)
         addUniverse();
@@ -1422,6 +1425,10 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
 
     /** Reset the current universe list and read the new one */
     removeAllUniverses();
+    /* A held step describes the patch of the workspace being replaced.
+       Restoring it onto this one would write one show's wiring into another. */
+    if (m_patchUndo != NULL)
+        m_patchUndo->clear();
     m_targetAliases.clear();
     m_manualTargets.clear();
     m_lineAliases.clear();
@@ -1550,6 +1557,11 @@ QList<quint32> InputOutputMap::universesWithInputOn(const QString &plugin,
             list << uni->id();
     }
     return list;
+}
+
+PatchUndo *InputOutputMap::patchUndo() const
+{
+    return m_patchUndo;
 }
 
 QList<InputOutputMap::ManualTarget> InputOutputMap::manualTargets() const

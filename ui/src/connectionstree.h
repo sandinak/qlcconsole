@@ -77,6 +77,10 @@ private slots:
     void slotContextMenu(const QPoint &pos);
     /** Poll every plugin for hardware now, rather than waiting for a tick. */
     void slotRescan();
+    /** Put the last patch change back. */
+    void slotUndoPatch();
+    /** Enable/label the undo button from what PatchUndo is holding. */
+    void slotUndoAvailabilityChanged();
     /** Commit an inline edit of a target's name. */
     void slotItemChanged(class QTreeWidgetItem *item, int column);
 
@@ -153,6 +157,7 @@ private:
     Doc *m_doc;
     QCheckBox *m_showUnused;
     class QPushButton *m_rescan;
+    class QPushButton *m_undo;
     class QLabel *m_status;
     /* Which branches are open, by full path, so the periodic rebuild does not
        fight the operator. Tracked as EXPANDED rather than collapsed because

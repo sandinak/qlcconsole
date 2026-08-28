@@ -22,12 +22,13 @@ to DONE.md when it ships. See also the session memory under
   passthrough (the ONLY place it can be set), the Audio tab, input-profile
   creation/editing (`InputProfileEditor`), USB hotplug toggle, plugin info
   browser — a different concern from topology.
-- **Bulk patching needs undo first.** There is no `QUndoStack`/`QUndoCommand`
-  anywhere in engine/ or ui/; the only undo in the app is CaptureManager's
-  domain-specific single-step stack (`capturemanager.h:108-198`). Multi-select
-  bulk retargeting without undo means one wrong gesture silently repoints a
-  whole rig. Build a single-step "Undo bulk patch" on the CaptureManager
-  pattern as part of that work, not after it.
+- **Patch undo — follow-ups.** `PatchUndo` (engine/src/patchundo.{h,cpp}) is
+  one step deep and does NOT cover adding or removing universes: undoing a
+  deleted universe means recreating it with its id intact so fixture
+  references resolve, and undoing an added one means removing it without
+  renumbering the rest. Also not yet captured from the Overview grid or the
+  Detailed editor — a change made there cannot be undone, which is a surprise
+  waiting to happen once operators learn the button exists.
 - **Ping-based availability** — the amber/green tint still means "heard from"
   only, so a hand-declared target reads as silent forever even when it is up.
 

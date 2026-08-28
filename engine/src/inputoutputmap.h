@@ -648,6 +648,13 @@ public:
      */
     QList<quint32> universesWithInputOn(const QString &plugin, quint32 line) const;
 
+    /**
+     * One step of undo for patch changes. Owned here because this is what owns
+     * the patches; the UI reaches it through the map rather than keeping its
+     * own, so a change made from any surface can be undone from any other.
+     */
+    class PatchUndo *patchUndo() const;
+
     QList<ManualTarget> manualTargets() const;
     /** True if this address was declared by hand (so it can be removed). */
     bool isManualTarget(const QString &address) const;
@@ -708,6 +715,7 @@ private:
     /** Operator-supplied names for output targets, keyed by address. */
     QMap<QString, QString> m_targetAliases;
     QList<ManualTarget> m_manualTargets;
+    class PatchUndo *m_patchUndo;
     /** Keyed "plugin|lineName". */
     QMap<QString, QString> m_lineAliases;
 
