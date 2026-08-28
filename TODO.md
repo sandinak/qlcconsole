@@ -12,13 +12,23 @@ to DONE.md when it ships. See also the session memory under
 
 *(Shipped work moved to [DONE.md](DONE.md), 2026-08-28.)*
 
-- **Verify on `ender`** — none of the discovery work below has been tested
-  against real network hardware. Needs: Rescan finding a node on an unpatched
-  interface, a hand-declared target on a subnet with no local interface
-  actually receiving DMX via the unicast patch (`ARTNET_OUTPUTIP`), and an
-  off-segment node answering a unicast probe. The packet-ATTRIBUTION half is
-  now covered by `artnet_test` (verified to fail against the old fallback), so
-  what is left to prove on hardware is the wire, not the logic.
+- **Hardware verification — status.** Use `build/tools/artnetprobe/artnetprobe`
+  (`--selftest` / `--poll <addr>` / `--listen`).
+  - ✅ **Arrival-interface reporting**: verified 2026-08-28 against live
+    traffic. Real ArtPollReplies from 172.18.2.218 and 172.18.2.10 were both
+    correctly attributed to `vlan0`, 5/5 datagrams carrying an index. This is
+    the routing fix confirmed on real gear, not a simulation.
+  - ✅ **USB devices appear**: DMXKing ultraDMX Micro and OpenDeck PMJ_BLACK_1
+    both listed under DMX USB / MIDI.
+  - ⚠️ **Off-segment unicast probe**: unproven. Every node reachable from this
+    host is on a subnet it has an interface on, so it answers broadcast polls
+    too and the reply is indistinguishable. Needs a node on a subnet with no
+    local interface.
+  - ⚠️ **Hand-declared target actually passing DMX**: unproven, and NOT
+    testable from one host. Console and probe both bind 6454 with
+    `ShareAddress`; broadcast reaches every bound socket but unicast reaches
+    exactly one, so the probe cannot see the console's own unicast output.
+    Run the probe on a different machine from the console.
 - **Devices/Overview parity — done.** Bulk multi-row retarget with port
   auto-increment, feedback IP/port, ArtNet `inputUni`, MIDI output mode, MIDI
   input channel and the MIDI Out-vs-Feedback role swap have all landed on the

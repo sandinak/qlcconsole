@@ -288,6 +288,10 @@ INCLUDE(CPack)
 # Leave this on the last row of this file
 add_subdirectory(platforms)
 
+# Bench instruments. Built so they cannot rot alongside the code they measure,
+# never installed.
+add_subdirectory(tools/artnetprobe)
+
 # HELPER: PRINT ALL VARIABLES KNOWN BY CMAKE
 
 #message("QTDIR: ${QT_DIR}")
