@@ -12,8 +12,11 @@ to DONE.md when it ships. See also the session memory under
 
 - **Verify on `ender`** — none of the discovery work below has been tested
   against real network hardware. Needs: Rescan finding a node on an unpatched
-  interface, and a hand-declared target on a subnet with no local interface
-  actually receiving DMX via the unicast patch (`ARTNET_OUTPUTIP`).
+  interface, a hand-declared target on a subnet with no local interface
+  actually receiving DMX via the unicast patch (`ARTNET_OUTPUTIP`), and an
+  off-segment node answering a unicast probe. The packet-ATTRIBUTION half is
+  now covered by `artnet_test` (verified to fail against the old fallback), so
+  what is left to prove on hardware is the wire, not the logic.
 - **Devices/Overview parity — done.** Bulk multi-row retarget with port
   auto-increment, feedback IP/port, ArtNet `inputUni`, MIDI output mode, MIDI
   input channel and the MIDI Out-vs-Feedback role swap have all landed on the

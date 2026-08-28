@@ -18,10 +18,15 @@
 */
 
 #include <QTest>
+#include <QNetworkInterface>
+#include <QUdpSocket>
+#include <QSharedPointer>
 
 #define private public
 #include "artnet_test.h"
 #include "artnetpacketizer.h"
+#include "artnetcontroller.h"
+#include "artnetplugin.h"
 #undef private
 
 /****************************************************************************
@@ -129,4 +134,117 @@ void ArtNet_Test::fillArtPollReplyInfo()
     // Too short to parse must be rejected rather than read past the end.
     QVERIFY(ap.fillArtPollReplyInfo(reply.left(100), info) == false);
     QVERIFY(ap.fillArtPollReplyInfo(QByteArray(), info) == false);
+}
+
+
+/****************************************************************************
+ * Packet attribution
+ *
+ * Which controller a received datagram belongs to. This used to fall back to
+ * "the first controller with a pulse" whenever the sender matched no
+ * interface's subnet -- and m_IOmapping is sorted by IP string, so first meant
+ * 127.0.0.1. Every node the console could not place was therefore filed under
+ * loopback, and the tree confidently showed 172.18.2.10 hanging off it.
+ ****************************************************************************/
+
+/** Two real interfaces with IPv4 addresses, or an empty list. Real ones
+ *  because QNetworkInterface::index() is read-only -- the routing being tested
+ *  compares against it, so it cannot be faked. */
+static QList<QNetworkInterface> twoIPv4Interfaces()
+{
+    QList<QNetworkInterface> out;
+    foreach (const QNetworkInterface &iface, QNetworkInterface::allInterfaces())
+    {
+        foreach (const QNetworkAddressEntry &e, iface.addressEntries())
+        {
+            if (e.ip().protocol() == QAbstractSocket::IPv4Protocol
+                    && e.ip().isNull() == false)
+            {
+                out << iface;
+                break;
+            }
+        }
+        if (out.count() == 2)
+            break;
+    }
+    return out;
+}
+
+static QNetworkAddressEntry firstIPv4(const QNetworkInterface &iface)
+{
+    foreach (const QNetworkAddressEntry &e, iface.addressEntries())
+    {
+        if (e.ip().protocol() == QAbstractSocket::IPv4Protocol)
+            return e;
+    }
+    return QNetworkAddressEntry();
+}
+
+void ArtNet_Test::packetIsAttributedToTheArrivalInterface()
+{
+    const QList<QNetworkInterface> ifaces = twoIPv4Interfaces();
+    if (ifaces.count() < 2)
+        QSKIP("needs two IPv4 interfaces to tell attribution apart");
+
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+
+    plugin.m_IOmapping.clear();
+    for (int i = 0; i < 2; i++)
+    {
+        ArtNetIO io;
+        io.iface = ifaces.at(i);
+        io.address = firstIPv4(ifaces.at(i));
+        io.controller = new ArtNetController(io.iface, io.address, sock,
+                                             quint32(i), &plugin);
+        plugin.m_IOmapping.append(io);
+    }
+
+    const QByteArray reply(cr041rPollReply, sizeof(cr041rPollReply));
+
+    /* A sender on no interface's subnet -- the L2-adjacent, L3-foreign node
+       that show gear ships as. Arrival interface is the SECOND entry, so
+       anything that ignores it and falls back to list order lands on the
+       first and fails here. */
+    plugin.handlePacket(reply, QHostAddress("203.0.113.7"),
+                        uint(ifaces.at(1).index()));
+
+    QCOMPARE(plugin.m_IOmapping.at(0).controller->getNodesList().count(), 0);
+    QCOMPARE(plugin.m_IOmapping.at(1).controller->getNodesList().count(), 1);
+
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::offSegmentPacketIsNotFiledUnderLoopback()
+{
+    const QList<QNetworkInterface> ifaces = twoIPv4Interfaces();
+    if (ifaces.count() < 2)
+        QSKIP("needs two IPv4 interfaces to tell attribution apart");
+
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+
+    plugin.m_IOmapping.clear();
+    for (int i = 0; i < 2; i++)
+    {
+        ArtNetIO io;
+        io.iface = ifaces.at(i);
+        io.address = firstIPv4(ifaces.at(i));
+        io.controller = new ArtNetController(io.iface, io.address, sock,
+                                             quint32(i), &plugin);
+        plugin.m_IOmapping.append(io);
+    }
+
+    const QByteArray reply(cr041rPollReply, sizeof(cr041rPollReply));
+
+    /* No arrival interface reported (0) AND no subnet match: there is no
+       honest answer, so the packet must be dropped rather than attributed to
+       whichever controller happens to sort first. Guessing here is what put
+       172.18.2.10 under 127.0.0.1. */
+    plugin.handlePacket(reply, QHostAddress("203.0.113.7"), 0);
+
+    QCOMPARE(plugin.m_IOmapping.at(0).controller->getNodesList().count(), 0);
+    QCOMPARE(plugin.m_IOmapping.at(1).controller->getNodesList().count(), 0);
+
+    plugin.m_IOmapping.clear();
 }
