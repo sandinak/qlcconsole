@@ -31,11 +31,16 @@ to DONE.md when it ships. See also the session memory under
   all three tabs, but nothing outside the patch — fixtures, functions, scenes.
   Ctrl+Z is scoped to the Connections widget (`Qt::WidgetWithChildrenShortcut`)
   so it cannot promise general undo elsewhere in the app.
-- **`InputOutputMap` universe id vs index.** `universe(id)` looks up by ID
-  while `outputPatch()`/`setOutputPatch()`/`setInputPatch()` treat the same
-  argument as an ARRAY INDEX. They coincide only because `removeUniverse()`
-  refuses anything but the last universe. Pre-existing and codebase-wide, but
-  a live trap if that restriction is ever loosened.
+- **`InputOutputMap` universe id vs index — not a live trap after all.**
+  `universe(id)` resolves by ID while `outputPatch()`/`setOutputPatch()`/
+  `setInputPatch()` take an ARRAY INDEX, but id == index is enforced
+  deliberately at both mutation points, not merely coincidental:
+  `addUniverse()` assigns the next index as the id, refuses an id already
+  present, and fills gaps so a higher id still lands at its own index;
+  `removeUniverse()` refuses anything but the last entry. The contract was
+  written nowhere, so it is now pinned by
+  `InputOutputMap_Test::universeIdAlwaysEqualsItsArrayIndex()` — relax either
+  rule and that test fails instead of the app repatching the wrong universe.
 - **Reachability probing — verify on `ender`.** Rescan now unicasts an ArtPoll
   at every address believed in but not heard from (hand-declared targets and
   addresses named by `outputIP`), so a node on another subnet can answer. Never

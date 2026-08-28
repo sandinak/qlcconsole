@@ -69,6 +69,7 @@ private slots:
     void manualTargetPorts();
     void universesWithInputOn();
     void aliasesAndTargetsSurviveSaveLoad();
+    void universeIdAlwaysEqualsItsArrayIndex();
 
 private:
     Doc* m_doc;

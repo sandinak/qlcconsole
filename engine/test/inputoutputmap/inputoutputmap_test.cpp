@@ -1045,6 +1045,56 @@ void InputOutputMap_Test::aliasesAndTargetsSurviveSaveLoad()
     QCOMPARE(mt.ports.at(1), quint32(0x012));
 }
 
+/** The invariant the whole patch API rests on.
+ *
+ *  universe(id) resolves by ID, while outputPatch(), setOutputPatch() and
+ *  setInputPatch() take the same argument as an ARRAY INDEX. Everything works
+ *  only because the two are always equal, and that is enforced deliberately at
+ *  both ends: addUniverse() assigns the next index as the id, refuses an id
+ *  already present, and fills any gap so a higher id still lands at its own
+ *  index; removeUniverse() refuses anything but the last entry rather than
+ *  leave a hole.
+ *
+ *  Nothing states that contract anywhere, so this test is where it is written
+ *  down. If either rule is ever relaxed -- to allow deleting a universe from
+ *  the middle, say -- this fails immediately, instead of the application
+ *  quietly repatching the wrong universe.
+ */
+void InputOutputMap_Test::universeIdAlwaysEqualsItsArrayIndex()
+{
+    InputOutputMap iom(m_doc, 4);
+
+    for (quint32 i = 0; i < iom.universesCount(); i++)
+    {
+        QCOMPARE(iom.universes().at(int(i))->id(), i);
+        QCOMPARE(iom.getUniverseID(int(i)), i);
+        QVERIFY(iom.universe(i) == iom.universes().at(int(i)));
+    }
+
+    // Appending keeps it.
+    QVERIFY(iom.addUniverse() == true);
+    QCOMPARE(iom.universes().last()->id(), quint32(4));
+
+    // An id that already exists is refused rather than duplicated.
+    QVERIFY(iom.addUniverse(2) == false);
+    QCOMPARE(iom.universesCount(), quint32(5));
+
+    // A higher id fills the gap, so it still lands at its own index -- the
+    // list never acquires a hole between id and position.
+    QVERIFY(iom.addUniverse(7) == true);
+    QCOMPARE(iom.universesCount(), quint32(8));
+    for (quint32 i = 0; i < iom.universesCount(); i++)
+        QCOMPARE(iom.universes().at(int(i))->id(), i);
+
+    // Removal is last-only, so it cannot open a hole either.
+    QVERIFY(iom.removeUniverse(3) == false);
+    QCOMPARE(iom.universesCount(), quint32(8));
+    QVERIFY(iom.removeUniverse(7) == true);
+    QCOMPARE(iom.universesCount(), quint32(7));
+    for (quint32 i = 0; i < iom.universesCount(); i++)
+        QCOMPARE(iom.universes().at(int(i))->id(), i);
+}
+
 // Not APPLESS: profileDirectories() exercises QLCFile::systemDirectory(),
 // which calls QCoreApplication::applicationDirPath() on macOS/iOS/Windows —
 // that needs a real QCoreApplication instance to resolve correctly (without
