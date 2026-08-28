@@ -6,6 +6,95 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-08-28 — Connections tab: discovery, CRUD, parity, patch undo *(BUILT — network hardware NOT yet verified)*
+
+Ten commits on `fix/tree-editing-and-collapse`, 46 files, ~5000 lines. Four
+clean `check-all.sh` runs (Qt5 / Qt6 / Qt6-Release / Qt6-Werror). The theme
+throughout: the Connections view was confidently reporting things that were
+not true.
+
+**Discovery was misattributing every unplaceable node.** `ArtNetPlugin::
+handlePacket()` fell back to "the first controller with a pulse" when the
+sender matched no interface's subnet — and `m_IOmapping` sorts by IP *string*,
+so first meant `127.0.0.1`. Show gear is routinely L2-adjacent but L3-foreign
+(a node still on its factory 2.x address, broadcasting onto a segment the
+console reaches at 192.168.1.x), so those nodes all appeared under loopback.
+Now routed by the interface the datagram actually ARRIVED on
+(`receiveDatagram()` / `interfaceIndex()`), then by subnet, then dropped with a
+warning. A loopback interface cannot receive a packet from a non-loopback
+sender; attributing one to it is a wrong answer wearing a right one's clothes.
+
+**`init()` renumbered lines under live controllers.** `outputs()` calls
+`init()`, the tree called `outputs()` every 5 s, and `init()` re-sorted the
+whole mapping — while `ArtNetController::m_line` is fixed at construction. On
+macOS, utun/awdl interfaces come and go on their own schedule, so a patched
+universe could silently change which NIC it left by, mid-show. New interfaces
+are now appended, never inserted.
+
+**Rescan reached nothing that mattered.** `QLCIOPlugin::rescan()` is the hook
+the action calls; only HID implemented it. DMX USB, MIDI, Peperoni and uDMX all
+had working rescan methods that nothing was calling.
+
+**Hardware lines were filtered out of existence.** The liveness rule ("patched
+or heard on") was written for protocols that synthesise a line per NIC. Only
+Art-Net implements `discoveredDevices()`, so a DMX USB widget could never be
+"heard on" — the DMXKing was enumerated at startup, its serial read, and then
+discarded from the view. New `linesAreHardware()` says where existing IS the
+discovery. Not Velleman: it advertises one hardcoded line whether or not
+hardware is present, and marking it briefly conjured a phantom device.
+
+**Two silent failures elsewhere in Connections.** Overview showed a patch whose
+plugin line no longer enumerates as `(none)` — indistinguishable from
+never-patched, which is the one case where the difference matters most because
+the remedy is opposite in each direction. And Ctrl+N/Ctrl+D were
+window-scoped, so **Ctrl+D on the Devices tab deleted the last universe** with
+no visible control touched and no undo.
+
+**MTC source menu offered impossible choices.** Timecode reaches the engine
+through exactly one signal and only `MidiPlugin` emits it, so the menu now
+lists MIDI-patched universes only. It previously offered every universe,
+including ones patched to Art-Net input, with no warning.
+
+**Then the additions:** manual targets and ports persisted in the `.qxw`,
+interface and target aliases, port-level patching, retargeting an existing
+patch in place, bulk multi-select retarget with port auto-increment, full
+Devices/Overview parity (feedback IP/port, ArtNet `inputUni`, MIDI mode and
+channel, Out-vs-Feedback role swap, live input activity), device/line/universe
+tooltips carrying per-port GoodOutput flags — including SHORT DETECTED, which
+arrives every second and had never had a path to the screen.
+
+**`PatchUndo`** (`engine/src/patchundo.{h,cpp}`): snapshot-and-restore rather
+than a command hierarchy, because a universe's patch state is small and fully
+enumerable, and hand-written inverses per operation are where undo rots. One
+step, patches plus the universe list, reachable from all three tabs and from
+Ctrl+Z scoped to the Connections widget. Restoring is not side-effect free — it
+closes and reopens plugin lines — so it confirms rather than acting silently.
+
+**Tests: 0 → 85 for this area.** New `ui/test/connectionstree` (32), new
+`engine/test/patchundo` (19), `inputoutputmap` 27 → 34, `artnet` 4 → 6. Three
+bugs were found by these tests rather than by hand: a hand-declared target that
+was stored and never drawn, a parameter clear that silently did nothing after
+a re-patch, and the ArtNet attribution tests were confirmed to FAIL against
+the old implementation before being kept.
+
+**Eyeball / verify on `ender`** — nothing here has touched real network
+hardware. The attribution *logic* is now covered by `artnet_test`, so what is
+left to prove is the wire: an off-segment node answering a unicast probe, a
+hand-declared target actually passing DMX, and the USB devices appearing.
+
+**Two self-inflicted near-misses worth remembering.** `-Werror=reorder-ctor`
+was added to catch a warning that had broken the Werror leg three times — and
+it is clang's spelling; GCC calls it `-Wreorder` and errors on
+`-Werror=<unknown>`. Linux CI builds with g++, so the change made to protect
+CI would have taken CI out entirely. Now probed with
+`check_cxx_compiler_flag`. The local gate could not have caught it: all four
+legs are clang, so it proves four *configurations*, not four *toolchains*.
+And a stale plugin dylib against a rebuilt test produced a garbage
+`m_lineCount` of 119175384 — the `check` target depends on every buildable
+target for exactly this reason.
+
+---
+
 ### 2026-08-25 — CI brought online, five shipped bugs, importer completion *(BUILT + verified)*
 
 A session that started as "do a build" and turned into the first real look at

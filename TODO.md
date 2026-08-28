@@ -10,6 +10,8 @@ to DONE.md when it ships. See also the session memory under
 
 ## 🔌 Connections tab — remaining
 
+*(Shipped work moved to [DONE.md](DONE.md), 2026-08-28.)*
+
 - **Verify on `ender`** — none of the discovery work below has been tested
   against real network hardware. Needs: Rescan finding a node on an unpatched
   interface, a hand-declared target on a subnet with no local interface
