@@ -52,8 +52,8 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     , m_beatGeneratorType(Disabled)
     , m_currentBPM(0)
     , m_beatTime(new QElapsedTimer())
-    , m_inputCapture(NULL)
     , m_patchUndo(NULL)
+    , m_inputCapture(NULL)
 {
     m_patchUndo = new PatchUndo(this, this);
     m_grandMaster = new GrandMaster(this);

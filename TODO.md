@@ -22,13 +22,17 @@ to DONE.md when it ships. See also the session memory under
   passthrough (the ONLY place it can be set), the Audio tab, input-profile
   creation/editing (`InputProfileEditor`), USB hotplug toggle, plugin info
   browser — a different concern from topology.
-- **Patch undo — follow-ups.** `PatchUndo` (engine/src/patchundo.{h,cpp}) is
-  one step deep and does NOT cover adding or removing universes: undoing a
-  deleted universe means recreating it with its id intact so fixture
-  references resolve, and undoing an added one means removing it without
-  renumbering the rest. Also not yet captured from the Overview grid or the
-  Detailed editor — a change made there cannot be undone, which is a surprise
-  waiting to happen once operators learn the button exists.
+- **Patch undo — remaining limits.** `PatchUndo` (engine/src/patchundo.{h,cpp})
+  is ONE step deep: a second change discards the first, deliberately, since a
+  state two changes stale would restore onto a rig that has moved under it.
+  It covers patches and the universe list (add/delete/name/passthrough) from
+  all three tabs, but nothing outside the patch — fixtures, functions, scenes.
+  No keyboard shortcut on purpose: Ctrl+Z would imply general undo.
+- **`InputOutputMap` universe id vs index.** `universe(id)` looks up by ID
+  while `outputPatch()`/`setOutputPatch()`/`setInputPatch()` treat the same
+  argument as an ARRAY INDEX. They coincide only because `removeUniverse()`
+  refuses anything but the last universe. Pre-existing and codebase-wide, but
+  a live trap if that restriction is ever loosened.
 - **Ping-based availability** — the amber/green tint still means "heard from"
   only, so a hand-declared target reads as silent forever even when it is up.
 

@@ -47,11 +47,18 @@ class InputOutputMap;
  * restored onto a rig which has since changed underneath it, and a stale
  * restore is worse than no restore -- it looks like it worked.
  *
- * Deliberately does NOT cover adding or removing universes. Undoing a deleted
- * universe means recreating it with its id intact so fixture references still
- * resolve; undoing an added one means removing it without renumbering the
- * rest. Both are real work and neither is what bulk patching needs, so this
- * says so plainly instead of half-supporting them.
+ * Adding and removing universes IS covered, via captureUniverses(): the whole
+ * universe list is snapshotted, and undo reconciles it before restoring
+ * patches. Two facts make that tractable rather than the project it sounds
+ * like. Removal is restricted to the LAST universe
+ * (InputOutputMap::removeUniverse refuses anything else, to avoid gaps), so
+ * the list only ever grows or shrinks at the end and no id is ever renumbered.
+ * And deleting a universe ORPHANS its fixtures rather than destroying them --
+ * they keep their universe id and simply lose output -- so restoring the
+ * universe under the same id re-adopts them with nothing else to rebuild.
+ *
+ * What is still not covered: the fixtures themselves, functions, or anything
+ * outside the patch. This is patch undo and says so in its name.
  *
  * Restoring is NOT side-effect free: setting a patch closes and reopens plugin
  * lines, so an undo interrupts output on the universes it touches. That is why
@@ -82,8 +89,10 @@ public:
     /** Everything about one universe that patching can change. */
     struct State
     {
-        State() : id(0) {}
+        State() : id(0), passthrough(false) {}
         quint32 id;
+        QString name;
+        bool passthrough;
         Patch input;
         QList<Patch> outputs;
         Patch feedback;
@@ -97,6 +106,15 @@ public:
      * undone ("retarget 16 universes"), not the mechanism.
      */
     void capture(const QList<quint32> &universes, const QString &summary);
+
+    /**
+     * Remember every universe -- which ones exist, as well as their patches.
+     *
+     * Use this for anything that can change the LIST: adding a universe,
+     * deleting one. capture() deliberately does not, because restoring a list
+     * the operation never touched would undo somebody else's unrelated add.
+     */
+    void captureUniverses(const QString &summary);
 
     bool canUndo() const;
     /** What capture() was told it was about to do. Empty if !canUndo(). */
@@ -116,12 +134,16 @@ signals:
 private:
     State captureOne(quint32 universe) const;
     void restoreOne(const State &state);
+    /** Make the universe list match what was held, from the end inwards. */
+    void restoreUniverseList();
 
 private:
     InputOutputMap *m_ioMap;
     QList<State> m_held;
     QString m_summary;
     bool m_valid;
+    /** True when the held step also describes WHICH universes existed. */
+    bool m_holdsUniverseList;
 };
 
 #endif

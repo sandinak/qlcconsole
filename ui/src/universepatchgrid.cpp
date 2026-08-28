@@ -37,6 +37,7 @@
 
 #include "universepatchgrid.h"
 #include "inputoutputmap.h"
+#include "patchundo.h"
 #include "outputpatch.h"
 #include "inputpatch.h"    // KInputNone
 #include "qlcioplugin.h"   // QLCIOPlugin::invalidLine()
@@ -120,6 +121,7 @@ UniversePatchGrid::UniversePatchGrid(Doc *doc, QWidget *parent)
     : QWidget(parent)
     , m_doc(doc)
     , m_ioMap(doc->inputOutputMap())
+    , m_undoAction(nullptr)
 {
     QVBoxLayout *lay = new QVBoxLayout(this);
     lay->setContentsMargins(4, 4, 4, 4);
@@ -128,6 +130,15 @@ UniversePatchGrid::UniversePatchGrid(Doc *doc, QWidget *parent)
     bar->setIconSize(QSize(20, 20));
     QAction *addAct = bar->addAction(QIcon(":/edit_add.png"), tr("Add Universe"));
     m_removeAction = bar->addAction(QIcon(":/edit_remove.png"), tr("Remove Universe"));
+    bar->addSeparator();
+    /* Undo belongs on every surface that can make the change. This grid is
+       where bulk edits happen, so it is the likeliest place to want it, and
+       sending an operator to another tab to undo what they just did here is
+       the kind of detail that stops a feature getting used. Same one step,
+       same shared state -- InputOutputMap owns it, not any one tab. */
+    m_undoAction = bar->addAction(QIcon(":/back.png"), tr("Undo Patch Change"));
+    m_undoAction->setEnabled(false);
+    connect(m_undoAction, &QAction::triggered, this, &UniversePatchGrid::onUndoPatch);
     bar->addSeparator();
     QAction *rescanAct = bar->addAction(QIcon(":/refresh.png"), tr("Rescan Devices"));
     rescanAct->setToolTip(tr("Re-detect connected input/output devices (USB/MIDI/network)"));
@@ -142,6 +153,11 @@ UniversePatchGrid::UniversePatchGrid(Doc *doc, QWidget *parent)
     m_ptToggle = bar->addAction(tr("Passthrough"));
     m_ptToggle->setCheckable(true);
     m_ptToggle->setToolTip(tr("Show the Passthrough column"));
+    if (m_ioMap != nullptr && m_ioMap->patchUndo() != nullptr)
+    {
+        connect(m_ioMap->patchUndo(), &PatchUndo::changed,
+                this, &UniversePatchGrid::onUndoAvailabilityChanged);
+    }
     connect(addAct, &QAction::triggered, this, &UniversePatchGrid::onAddUniverse);
     connect(m_removeAction, &QAction::triggered, this, &UniversePatchGrid::onRemoveUniverse);
     connect(rescanAct, &QAction::triggered, this, &UniversePatchGrid::onRescan);
@@ -734,11 +750,38 @@ void UniversePatchGrid::onMidiModeChanged(int row, const QString &mode)
 {
     if (m_loading)
         return;
+    captureUndo(QList<int>() << row,
+                tr("change %1 on universe %2").arg("MIDI output mode").arg(row + 1));
     if (OutputPatch *op = m_ioMap->outputPatch(row))
     {
         op->setPluginParameter(P_MIDI_MODE, mode);   // applied to the live device
         m_doc->setModified();
     }
+}
+
+/** Hold the current patch of these rows before changing them.
+ *
+ *  The undo button lives on the Devices tab, but the state it restores belongs
+ *  to InputOutputMap, not to that tab -- so a change made here is undoable
+ *  there. Wiring only one surface would be worse than wiring none: an operator
+ *  who has learned the button works does not check which tab they were on
+ *  before relying on it.
+ */
+void UniversePatchGrid::captureUndo(const QList<int> &rows, const QString &summary)
+{
+    if (m_ioMap == nullptr || m_ioMap->patchUndo() == nullptr)
+        return;
+
+    QList<quint32> unis;
+    foreach (int r, rows)
+    {
+        if (r >= 0 && quint32(r) < m_ioMap->universesCount())
+            unis << quint32(r);
+    }
+    if (unis.isEmpty())
+        return;
+
+    m_ioMap->patchUndo()->capture(unis, summary);
 }
 
 void UniversePatchGrid::applyToSelection(const QString &prop, const QVariant &value,
@@ -750,6 +793,10 @@ void UniversePatchGrid::applyToSelection(const QString &prop, const QVariant &va
     if (!rows.contains(triggerRow))
         rows = QList<int>() << triggerRow;
     std::sort(rows.begin(), rows.end());
+
+    captureUndo(rows, rows.count() > 1
+                ? tr("change %1 on %2 universes").arg(prop).arg(rows.count())
+                : tr("change %1 on universe %2").arg(prop).arg(rows.first() + 1));
 
     int step = 0;
     bool changed = false;
@@ -774,6 +821,9 @@ void UniversePatchGrid::applyToSelection(const QString &prop, const QVariant &va
 
 void UniversePatchGrid::onOutputDeviceChanged(int row)
 {
+    if (m_loading == false)
+        captureUndo(QList<int>() << row,
+                    tr("change %1 on universe %2").arg("output patch").arg(row + 1));
     if (m_loading)
         return;
     QWidget *cell = m_table->cellWidget(row, COL_OUT);
@@ -816,12 +866,18 @@ void UniversePatchGrid::onOutputDeviceChanged(int row)
 
 void UniversePatchGrid::onOutputRoleChanged(int row)
 {
+    if (m_loading == false)
+        captureUndo(QList<int>() << row,
+                    tr("change %1 on universe %2").arg("MIDI port role").arg(row + 1));
     // Role is just another facet of the output-cell patch — re-apply it.
     onOutputDeviceChanged(row);
 }
 
 void UniversePatchGrid::onInputChanged(int row)
 {
+    if (m_loading == false)
+        captureUndo(QList<int>() << row,
+                    tr("change %1 on universe %2").arg("input patch").arg(row + 1));
     if (m_loading)
         return;
     QComboBox *c = qobject_cast<QComboBox *>(m_table->cellWidget(row, COL_IN));
@@ -863,6 +919,9 @@ void UniversePatchGrid::onInputChanged(int row)
 
 void UniversePatchGrid::onProfileChanged(int row)
 {
+    if (m_loading == false)
+        captureUndo(QList<int>() << row,
+                    tr("change %1 on universe %2").arg("input profile").arg(row + 1));
     if (m_loading)
         return;
     QComboBox *c = qobject_cast<QComboBox *>(m_table->cellWidget(row, COL_IN_PROFILE));
@@ -875,6 +934,9 @@ void UniversePatchGrid::onProfileChanged(int row)
 
 void UniversePatchGrid::onFeedbackChanged(int row)
 {
+    if (m_loading == false)
+        captureUndo(QList<int>() << row,
+                    tr("change %1 on universe %2").arg("feedback patch").arg(row + 1));
     if (m_loading)
         return;
     QComboBox *c = qobject_cast<QComboBox *>(m_table->cellWidget(row, COL_FB));
@@ -888,6 +950,40 @@ void UniversePatchGrid::onFeedbackChanged(int row)
         m_ioMap->setOutputPatch(row, plugin, "", quint32(line), true);
     m_doc->setModified();
     scheduleReload();
+}
+
+void UniversePatchGrid::onUndoAvailabilityChanged()
+{
+    if (m_undoAction == nullptr || m_ioMap == nullptr
+            || m_ioMap->patchUndo() == nullptr)
+        return;
+    PatchUndo *pu = m_ioMap->patchUndo();
+    m_undoAction->setEnabled(pu->canUndo());
+    m_undoAction->setToolTip(pu->canUndo()
+        ? tr("Put back: %1").arg(pu->summary())
+        : tr("Nothing to undo. Covers patch and universe changes."));
+}
+
+void UniversePatchGrid::onUndoPatch()
+{
+    if (m_ioMap == nullptr || m_ioMap->patchUndo() == nullptr)
+        return;
+    PatchUndo *pu = m_ioMap->patchUndo();
+    if (pu->canUndo() == false)
+        return;
+
+    /* Re-patching closes and reopens plugin lines, so output stops briefly on
+       the universes involved -- nothing at the bench, something during a show. */
+    if (QMessageBox::question(this, tr("Undo patch change"),
+            tr("Put back: %1?\n\nRe-patching briefly interrupts output on the "
+               "universes involved.").arg(pu->summary()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes)
+            != QMessageBox::Yes)
+        return;
+
+    pu->undo();
+    m_doc->setModified();
+    reload();
 }
 
 void UniversePatchGrid::onRescan()
@@ -921,6 +1017,9 @@ void UniversePatchGrid::onSelectionChanged()
 
 void UniversePatchGrid::onAddUniverse()
 {
+    if (m_ioMap != nullptr && m_ioMap->patchUndo() != nullptr)
+        m_ioMap->patchUndo()->captureUniverses(tr("add a universe"));
+
     m_ioMap->addUniverse();
     m_ioMap->startUniverses();
     m_doc->setModified();
@@ -936,6 +1035,9 @@ void UniversePatchGrid::onAddUniverse()
 
 void UniversePatchGrid::onRemoveUniverse()
 {
+    if (m_ioMap != nullptr && m_ioMap->patchUndo() != nullptr)
+        m_ioMap->patchUndo()->captureUniverses(tr("remove universes"));
+
     QSet<int> selected;
     foreach (const QModelIndex &idx, m_table->selectionModel()->selectedRows())
         selected.insert(idx.row());

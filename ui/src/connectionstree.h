@@ -119,6 +119,10 @@ private:
 
     /** Repoint an existing output patch at a different node / port. */
     void retargetPatch(quint32 universe, const QString &pluginName, quint32 line);
+    /** Repoint every selected universe at one node, numbering the ports up. */
+    void retargetSelection(const QString &pluginName);
+    /** Universes selected in the tree, in row order, deduplicated. */
+    QList<quint32> selectedUniverses(QString &pluginName, QList<quint32> &lines) const;
     /** Write outputIP / outputUni onto the patch of this universe on this line. */
     bool applyTarget(quint32 universe, const QString &pluginName, quint32 line,
                      const QString &address, quint32 portAddress);

@@ -290,6 +290,86 @@ void PatchUndo_Test::captureIgnoresDuplicatesAndUnknownUniverses()
     QVERIFY(iom.patchUndo()->canUndo() == false);
 }
 
+void PatchUndo_Test::undoRestoresADeletedUniverseWithItsPatches()
+{
+    InputOutputMap iom(m_doc, 3);
+    const QString stub = stubName(m_doc);
+
+    QVERIFY(iom.setOutputPatch(2, stub, "", 1, false, 0) == true);
+    iom.outputPatch(2, 0)->setPluginParameter("outputIP", "172.18.2.20");
+    iom.setUniverseName(2, "FOH");
+
+    iom.patchUndo()->captureUniverses("delete universe FOH");
+    QVERIFY(iom.removeUniverse(2) == true);
+    QCOMPARE(iom.universesCount(), quint32(2));
+
+    QVERIFY(iom.patchUndo()->undo() == true);
+
+    // Back under the SAME id, which is what makes it safe: fixtures reference
+    // a universe by id and merely lose output while it is gone, so restoring
+    // the id re-adopts them with nothing else to rebuild.
+    QCOMPARE(iom.universesCount(), quint32(3));
+    QVERIFY(iom.universe(2) != NULL);
+    QCOMPARE(iom.universe(2)->name(), QString("FOH"));
+    QCOMPARE(iom.outputPatchesCount(2), 1);
+    QCOMPARE(iom.outputPatch(2, 0)->output(), quint32(1));
+    QCOMPARE(iom.outputPatch(2, 0)->getPluginParameters().value("outputIP").toString(),
+             QString("172.18.2.20"));
+}
+
+void PatchUndo_Test::undoRemovesAnAddedUniverse()
+{
+    InputOutputMap iom(m_doc, 2);
+
+    iom.patchUndo()->captureUniverses("add a universe");
+    QVERIFY(iom.addUniverse() == true);
+    QCOMPARE(iom.universesCount(), quint32(3));
+
+    QVERIFY(iom.patchUndo()->undo() == true);
+    QCOMPARE(iom.universesCount(), quint32(2));
+}
+
+void PatchUndo_Test::undoRestoresNameAndPassthroughOnlyWithTheList()
+{
+    InputOutputMap iom(m_doc, 2);
+    const QString stub = stubName(m_doc);
+    QVERIFY(iom.setOutputPatch(0, stub, "", 0, false, 0) == true);
+    iom.setUniverseName(0, "Original");
+
+    // A patch-only capture never claimed to hold the name, so undoing a patch
+    // change must not quietly revert a rename somebody made in between.
+    iom.patchUndo()->capture(QList<quint32>() << 0, "retarget");
+    iom.setUniverseName(0, "Renamed");
+    QVERIFY(iom.patchUndo()->undo() == true);
+    QCOMPARE(iom.universe(0)->name(), QString("Renamed"));
+
+    // A list capture DOES hold it, because it describes the universes
+    // themselves rather than just their wiring.
+    iom.patchUndo()->captureUniverses("delete a universe");
+    iom.setUniverseName(0, "Renamed again");
+    iom.universe(0)->setPassthrough(true);
+    QVERIFY(iom.patchUndo()->undo() == true);
+    QCOMPARE(iom.universe(0)->name(), QString("Renamed"));
+    QVERIFY(iom.universe(0)->passthrough() == false);
+}
+
+void PatchUndo_Test::captureUniversesCanRestoreToAnEmptyWorkspace()
+{
+    InputOutputMap iom(m_doc, 0);
+    QCOMPARE(iom.universesCount(), quint32(0));
+
+    // Undoing "add the first universe" has to be able to get back to none, so
+    // an empty capture is still a valid state rather than nothing held.
+    iom.patchUndo()->captureUniverses("add the first universe");
+    QVERIFY(iom.patchUndo()->canUndo() == true);
+
+    QVERIFY(iom.addUniverse() == true);
+    QCOMPARE(iom.universesCount(), quint32(1));
+
+    QVERIFY(iom.patchUndo()->undo() == true);
+    QCOMPARE(iom.universesCount(), quint32(0));
+}
+
 void PatchUndo_Test::clearForgetsTheHeldStep()
 {
     InputOutputMap iom(m_doc, 4);

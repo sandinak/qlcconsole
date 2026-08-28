@@ -27,6 +27,7 @@ PatchUndo::PatchUndo(InputOutputMap *ioMap, QObject *parent)
     : QObject(parent)
     , m_ioMap(ioMap)
     , m_valid(false)
+    , m_holdsUniverseList(false)
 {
     Q_ASSERT(ioMap != NULL);
 }
@@ -43,6 +44,13 @@ PatchUndo::State PatchUndo::captureOne(quint32 universe) const
 {
     State st;
     st.id = universe;
+
+    Universe *uni = m_ioMap->universe(universe);
+    if (uni != NULL)
+    {
+        st.name = uni->name();
+        st.passthrough = uni->passthrough();
+    }
 
     InputPatch *ip = m_ioMap->inputPatch(universe);
     if (ip != NULL && ip->plugin() != NULL)
@@ -96,7 +104,27 @@ void PatchUndo::capture(const QList<quint32> &universes, const QString &summary)
     }
 
     m_summary = summary;
+    m_holdsUniverseList = false;
     m_valid = (m_held.isEmpty() == false);
+    emit changed();
+}
+
+void PatchUndo::captureUniverses(const QString &summary)
+{
+    QList<quint32> all;
+    foreach (Universe *uni, m_ioMap->universes())
+    {
+        if (uni != NULL)
+            all << uni->id();
+    }
+
+    capture(all, summary);
+    /* Set after capture(), which clears it: this is the flag that tells undo()
+       to reconcile the LIST as well as the patches. */
+    m_holdsUniverseList = true;
+    /* An empty workspace is still a state worth restoring to -- undoing "add
+       the first universe" has to be able to get back to none. */
+    m_valid = true;
     emit changed();
 }
 
@@ -206,24 +234,73 @@ void PatchUndo::restoreOne(const State &st)
     }
 }
 
+/** Make the universe list match what was held.
+ *
+ *  Only ever at the end, in both directions, because that is the only place
+ *  InputOutputMap will change it: removeUniverse() refuses anything but the
+ *  last entry rather than leave a gap in the numbering. That restriction is
+ *  what makes this safe -- no id is ever renumbered, so a restored universe
+ *  reclaims exactly the id its fixtures still reference.
+ */
+void PatchUndo::restoreUniverseList()
+{
+    /* Too many now: drop from the end until the count matches. */
+    while (quint32(m_ioMap->universesCount()) > quint32(m_held.count()))
+    {
+        const int last = m_ioMap->universesCount() - 1;
+        if (m_ioMap->removeUniverse(last) == false)
+        {
+            qWarning() << Q_FUNC_INFO << "could not remove universe" << last
+                       << "-- stopping rather than looping";
+            break;
+        }
+    }
+
+    /* Too few: add back, in the order they were held, so ids land where they
+       were. addUniverse() takes the id explicitly for exactly this. */
+    for (int i = m_ioMap->universesCount(); i < m_held.count(); i++)
+    {
+        if (m_ioMap->addUniverse(m_held.at(i).id) == false)
+        {
+            qWarning() << Q_FUNC_INFO << "could not restore universe"
+                       << m_held.at(i).id;
+            break;
+        }
+    }
+}
+
 bool PatchUndo::undo()
 {
     if (m_valid == false)
         return false;
 
+    if (m_holdsUniverseList)
+        restoreUniverseList();
+
     foreach (const State &st, m_held)
     {
-        if (m_ioMap->universe(st.id) == NULL)
+        Universe *uni = m_ioMap->universe(st.id);
+        if (uni == NULL)
         {
-            /* The universe was deleted after the capture. Restoring a patch
-               onto something that no longer exists is not possible, and
-               silently skipping it is better than inventing the universe
-               back -- see the class comment on why add/remove is out of
-               scope. The rest of the step still restores. */
+            /* Either the universe was deleted after the capture and this step
+               does not hold the list (a patch-only capture cannot honestly
+               recreate it), or restoring the list failed above. Skipping is
+               better than inventing it back with no record of what it was;
+               the rest of the step still restores. */
             qWarning() << Q_FUNC_INFO << "universe" << st.id
                        << "no longer exists; skipping its patch restore";
             continue;
         }
+
+        /* Name and passthrough only when this step owns the list. A patch-only
+           capture must not quietly revert a rename somebody made in between --
+           it never claimed to be holding that. */
+        if (m_holdsUniverseList)
+        {
+            uni->setName(st.name);
+            uni->setPassthrough(st.passthrough);
+        }
+
         restoreOne(st);
     }
 
@@ -236,6 +313,7 @@ void PatchUndo::clear()
     m_held.clear();
     m_summary.clear();
     m_valid = false;
+    m_holdsUniverseList = false;
     emit changed();
 }
 

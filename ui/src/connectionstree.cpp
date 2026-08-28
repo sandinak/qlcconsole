@@ -157,6 +157,14 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_tree->setColumnCount(3);
     m_tree->setHeaderLabels(QStringList()
                             << tr("Device") << tr("Detail") << tr("Carries"));
+    /* Extended selection so several universes can be retargeted in one go --
+       the ArtNet block-patch case, where sixteen universes leave by one node
+       on consecutive ports. Every single-row action keeps working on the row
+       under the pointer, NOT on the selection: right-clicking one row while
+       twelve are selected must not quietly act on twelve. Only the explicitly
+       plural action reads the selection, and it says the count in its own
+       name before it does anything. */
+    m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_tree->setAlternatingRowColors(true);
     m_tree->setRootIsDecorated(true);
     m_tree->header()->setStretchLastSection(false);
@@ -1373,6 +1381,23 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 
     QMenu menu(this);
 
+    /* The one plural action, offered above everything else and named with its
+       own count so it can never be mistaken for the single-row entries below
+       it. Everything else in this menu acts on the row under the pointer,
+       whatever else happens to be selected. */
+    QAction *bulk = NULL;
+    {
+        QString selPlug;
+        QList<quint32> selLines;
+        const QList<quint32> selUnis = selectedUniverses(selPlug, selLines);
+        if (selUnis.count() > 1 && pluginSupportsTargetsIn(m_doc, selPlug))
+        {
+            bulk = menu.addAction(tr("Retarget %1 selected universes…")
+                                      .arg(selUnis.count()));
+            menu.addSeparator();
+        }
+    }
+
     /* Offered on anything with children, before the row-specific actions.
        Deep branches are quick to open and tedious to close one triangle at a
        time, and the plugin and device rows had no menu at all -- so the rows
@@ -1384,6 +1409,18 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         collapseAll = menu.addAction(tr("Collapse everything below"));
         expandAll = menu.addAction(tr("Expand everything below"));
         menu.addSeparator();
+    }
+
+    /* Resolved before the per-kind menus below, each of which exec()s its own
+       menu and returns. */
+    if (bulk != NULL && kind != KIND_UNIVERSE && kind != KIND_PORT)
+    {
+        QAction *pick = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (pick != NULL && (pick == collapseAll || pick == expandAll))
+        { setExpandedDeep(item, pick == expandAll); return; }
+        if (pick == bulk)
+            retargetSelection(QString());
+        return;
     }
 
     if (kind == KIND_PLUGIN)
@@ -1465,6 +1502,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             QAction *c = menu.exec(m_tree->viewport()->mapToGlobal(pos));
             if (c != NULL && (c == collapseAll || c == expandAll))
             { setExpandedDeep(item, c == expandAll); return; }
+            if (bulk != NULL && c == bulk)
+            { retargetSelection(QString()); return; }
             if (retgt != NULL && c == retgt)
                 retargetPatch(uni, plugin, line);
             else if (c == ren)
@@ -1490,6 +1529,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QAction *pick2 = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (pick2 != NULL && (pick2 == collapseAll || pick2 == expandAll))
         { setExpandedDeep(item, pick2 == expandAll); return; }
+        if (bulk != NULL && pick2 == bulk)
+        { retargetSelection(QString()); return; }
         if (pick2 == p)
             patchUniverseToPort(plugin, line, addr, portAddr);
         else if (rmPort != NULL && pick2 == rmPort)
@@ -1787,6 +1828,11 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         }
 
+        if (bulk != NULL && chosen == bulk)
+        {
+            retargetSelection(QString());
+            return;
+        }
         if (midiModeMenu != NULL && chosen != NULL
                 && midiModeMenu->actions().contains(chosen))
         {
@@ -1857,6 +1903,10 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
     quint32 uniId = InputOutputMap::invalidUniverse();
     if (pick == newLabel)
     {
+        /* Creating a universe changes the LIST, so the whole list is held --
+           a patch-only capture could not undo the creation itself. */
+        if (iomap->patchUndo() != NULL)
+            iomap->patchUndo()->captureUniverses(tr("add a universe"));
         if (iomap->addUniverse() == false)
             return;
         QList<Universe *> all = iomap->universes();
@@ -1994,14 +2044,19 @@ void ConnectionsTree::deleteUniverse(quint32 universe)
     if (uni == NULL)
         return;
 
-    /* Deleting a universe orphans every fixture patched into it, which is not
-       recoverable from this view, so make the consequence explicit. */
+    /* Deleting a universe orphans every fixture patched into it -- they keep
+       their universe id and simply lose output -- so this IS undoable, and the
+       warning says which part is recoverable. */
     if (QMessageBox::question(
             this, tr("Delete universe"),
             tr("Delete \"%1\" completely?\n\nAny fixtures patched into it will "
-               "lose their output.").arg(uni->name()),
+               "lose their output until it is restored.").arg(uni->name()),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
         return;
+
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->captureUniverses(tr("delete universe \"%1\"")
+                                                 .arg(uni->name()));
 
     iomap->removeUniverse(int(universe));
     m_doc->setModified();
@@ -2125,6 +2180,10 @@ void ConnectionsTree::patchUniverseToPort(const QString &pluginName, quint32 lin
     quint32 uniId = InputOutputMap::invalidUniverse();
     if (pick == newLabel)
     {
+        /* Creating a universe changes the LIST, so the whole list is held --
+           a patch-only capture could not undo the creation itself. */
+        if (iomap->patchUndo() != NULL)
+            iomap->patchUndo()->captureUniverses(tr("add a universe"));
         if (iomap->addUniverse() == false)
             return;
         QList<Universe *> all = iomap->universes();
@@ -2453,6 +2512,147 @@ void ConnectionsTree::retargetPatch(quint32 universe, const QString &pluginName,
     }
     m_doc->setModified();
     refresh();
+}
+
+/** The universes currently selected, in row order.
+ *
+ *  Returns them only when they agree on one plugin, and reports each one's
+ *  line alongside. A selection spanning two protocols has no single meaning
+ *  for "aim these at a node" -- the caller refuses rather than guessing which
+ *  half was meant.
+ */
+QList<quint32> ConnectionsTree::selectedUniverses(QString &pluginName,
+                                                  QList<quint32> &lines) const
+{
+    QList<quint32> unis;
+    lines.clear();
+    pluginName.clear();
+
+    foreach (QTreeWidgetItem *it, m_tree->selectedItems())
+    {
+        const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
+        if (uv.isValid() == false)
+            continue;
+        if (it->data(COL_NAME, ROLE_OUTPUT).toBool() == false)
+            continue;   // inputs and feedback have no port to number up
+
+        const quint32 u = uv.toUInt();
+        if (unis.contains(u))
+            continue;   // a universe fanned out appears on several rows
+
+        const QString plug = it->data(COL_NAME, ROLE_PLUGIN).toString();
+        if (pluginName.isEmpty())
+            pluginName = plug;
+        else if (plug != pluginName)
+        {
+            lines.clear();
+            unis.clear();
+            pluginName.clear();
+            return unis;
+        }
+
+        unis << u;
+        lines << it->data(COL_NAME, ROLE_LINE).toUInt();
+    }
+    return unis;
+}
+
+/** Aim every selected universe at one node, numbering the ports upward.
+ *
+ *  This is the whole reason for multi-select. Sixteen universes leaving by one
+ *  node on consecutive ports is an ordinary rig and sixteen separate dialogs
+ *  is not an ordinary way to describe it. The port address increments per
+ *  universe in selection order, which is the order they are shown in.
+ *
+ *  Undo is captured for the entire set as one step, so a wrong node address
+ *  costs one button press rather than sixteen corrections -- which is the
+ *  condition on which this feature is worth having at all.
+ */
+void ConnectionsTree::retargetSelection(const QString &pluginName)
+{
+    Q_UNUSED(pluginName)
+
+    QString plug;
+    QList<quint32> lines;
+    const QList<quint32> unis = selectedUniverses(plug, lines);
+    if (unis.count() < 2 || plug.isEmpty())
+        return;
+
+    bool ok = false;
+    const QString addr = QInputDialog::getText(
+        this, tr("Retarget %1 universes").arg(unis.count()),
+        tr("Send all %1 selected universes to which address?").arg(unis.count()),
+        QLineEdit::Normal, QString(), &ok).trimmed();
+    if (ok == false || addr.isEmpty())
+        return;
+
+    const QString txt = QInputDialog::getText(
+        this, tr("Retarget %1 universes").arg(unis.count()),
+        tr("Port address for the FIRST of them, as net:subnet:universe.\n"
+           "The rest follow on consecutive ports."),
+        QLineEdit::Normal, QString("0:0:0"), &ok).trimmed();
+    if (ok == false)
+        return;
+
+    const QStringList parts = txt.split(':');
+    bool okNet = false, okSub = false, okUni = false;
+    const uint net = parts.value(0).toUInt(&okNet);
+    const uint sub = parts.value(1).toUInt(&okSub);
+    const uint uni = parts.value(2).toUInt(&okUni);
+    if (parts.count() != 3 || !okNet || !okSub || !okUni
+            || net > 127 || sub > 15 || uni > 15)
+    {
+        QMessageBox::warning(this, tr("Retarget %1 universes").arg(unis.count()),
+            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
+               "with net 0-127 and subnet and universe 0-15.").arg(txt));
+        return;
+    }
+
+    const quint32 first = quint32((net << 8) | (sub << 4) | uni);
+
+    /* Art-Net port addresses are a packed 15-bit field, so incrementing runs
+       off the end at 0x7FFF rather than wrapping into a neighbour's net.
+       Refuse up front instead of silently aiming the tail of the selection
+       somewhere absurd. */
+    if (quint32(first + unis.count() - 1) > 0x7FFF)
+    {
+        QMessageBox::warning(this, tr("Retarget %1 universes").arg(unis.count()),
+            tr("Numbering %1 universes up from %2 runs past the last Art-Net "
+               "port address. Start lower.").arg(unis.count()).arg(txt));
+        return;
+    }
+
+    const quint32 last = first + quint32(unis.count() - 1);
+    if (QMessageBox::question(this, tr("Retarget %1 universes").arg(unis.count()),
+            tr("Aim %1 universes at %2, on ports %3:%4:%5 through %6:%7:%8?")
+                .arg(unis.count()).arg(addr)
+                .arg((first >> 8) & 0x7F).arg((first >> 4) & 0x0F).arg(first & 0x0F)
+                .arg((last >> 8) & 0x7F).arg((last >> 4) & 0x0F).arg(last & 0x0F),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
+            != QMessageBox::Yes)
+        return;
+
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap != NULL && iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(unis, tr("retarget %1 universes to %2")
+                                              .arg(unis.count()).arg(addr));
+
+    int applied = 0;
+    for (int i = 0; i < unis.count(); i++)
+    {
+        if (applyTarget(unis.at(i), plug, lines.at(i), addr, first + quint32(i)))
+            applied++;
+    }
+
+    m_doc->setModified();
+    refresh();
+
+    if (applied != unis.count())
+    {
+        QMessageBox::warning(this, tr("Retarget %1 universes").arg(unis.count()),
+            tr("%1 of %2 were repointed; the rest are no longer patched to %3.")
+                .arg(applied).arg(unis.count()).arg(plug));
+    }
 }
 
 /** Declare a target discovery cannot find.

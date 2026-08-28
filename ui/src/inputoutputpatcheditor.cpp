@@ -43,6 +43,7 @@
 #include "inputprofileeditor.h"
 #include "audioplugincache.h"
 #include "inputoutputmap.h"
+#include "patchundo.h"
 #include "outputpatch.h"
 #include "inputpatch.h"
 #include "doc.h"
@@ -286,6 +287,10 @@ void InputOutputPatchEditor::updateProfileColumnWidget(QTreeWidgetItem *item)
             const QString name = combo->currentData().toString();
             m_currentProfileName = name.isEmpty() ? KInputNone : name;
             editBtn->setEnabled(!name.isEmpty());
+            if (m_ioMap->patchUndo() != NULL)
+                m_ioMap->patchUndo()->capture(QList<quint32>() << m_universe,
+                                              tr("change input profile on universe %1")
+                                                  .arg(m_universe + 1));
             if (m_ioMap->setInputProfile(m_universe, m_currentProfileName) == false)
                 showPluginMappingError();
             emit mappingChanged();
@@ -549,6 +554,17 @@ void InputOutputPatchEditor::slotMapItemChanged(QTreeWidgetItem* item, int col)
 {
     if (item == NULL)
         return;
+
+    /* Held before the checkbox is acted on, so the Devices tab's undo can put
+       this universe's patch back. The button lives on another tab, but the
+       state it restores belongs to InputOutputMap -- wiring only some of the
+       surfaces would be worse than wiring none, because an operator who has
+       learned the button works will not check which tab they made the change
+       on before relying on it. */
+    if (m_ioMap != NULL && m_ioMap->patchUndo() != NULL)
+        m_ioMap->patchUndo()->capture(QList<quint32>() << m_universe,
+                                      tr("change patch on universe %1")
+                                          .arg(m_universe + 1));
 
     /* Temporarily disable this signal to prevent an endless loop */
     disconnect(m_mapTree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),

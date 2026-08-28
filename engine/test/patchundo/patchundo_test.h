@@ -43,6 +43,11 @@ private slots:
     void undoIsOneStepDeep();
     void undoSkipsUniversesThatWentAway();
     void captureIgnoresDuplicatesAndUnknownUniverses();
+    void undoRestoresADeletedUniverseWithItsPatches();
+    void undoRemovesAnAddedUniverse();
+    void undoRestoresNameAndPassthroughOnlyWithTheList();
+    void captureUniversesCanRestoreToAnEmptyWorkspace();
+
     void clearForgetsTheHeldStep();
     void changedSignalTracksAvailability();
 

@@ -74,6 +74,11 @@ private slots:
     void patchParameterDistinguishesAbsentFromZero();
     void setPatchParameterWritesOutputAndInputPatches();
 
+    /* Bulk retarget across a selection */
+    void selectedUniversesRejectsAMixedPluginSelection();
+    void selectedUniversesDeduplicatesFannedOutUniverses();
+    void bulkRetargetNumbersPortsUpwardAndIsOneUndoStep();
+
     /* Live input activity */
     void inputActivityTintsTheUniverseRow();
 

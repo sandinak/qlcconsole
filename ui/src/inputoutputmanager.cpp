@@ -42,6 +42,7 @@
 #include "connectionstree.h"
 #include "inputoutputmanager.h"
 #include "inputoutputmap.h"
+#include "patchundo.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
 #include "outputpatch.h"
@@ -438,6 +439,9 @@ void InputOutputManager::slotAudioInputChanged()
 
 void InputOutputManager::slotAddUniverse()
 {
+    if (m_ioMap != NULL && m_ioMap->patchUndo() != NULL)
+        m_ioMap->patchUndo()->captureUniverses(tr("add a universe"));
+
     m_ioMap->addUniverse();
     m_ioMap->startUniverses();
     m_doc->setModified();
@@ -445,6 +449,9 @@ void InputOutputManager::slotAddUniverse()
 
 void InputOutputManager::slotDeleteUniverse()
 {
+    if (m_ioMap != NULL && m_ioMap->patchUndo() != NULL)
+        m_ioMap->patchUndo()->captureUniverses(tr("delete a universe"));
+
     int uniIdx = m_list->currentRow();
 
     Q_ASSERT((uniIdx + 1) == (int)(m_ioMap->universesCount()));

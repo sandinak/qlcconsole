@@ -30,6 +30,7 @@
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
+#include "patchundo.h"
 #include "universe.h"
 #include "qlcfile.h"
 #include "doc.h"
@@ -649,6 +650,118 @@ void ConnectionsTree_Test::setPatchParameterWritesOutputAndInputPatches()
     QCOMPARE(tree.patchParameter(0, stub->name(), 0, true, "transmitMode").toString(),
              QString("Full"));
     QVERIFY(tree.patchParameter(0, stub->name(), 1, false, "transmitMode").isValid() == false);
+}
+
+/****************************************************************************
+ * Bulk retarget
+ ****************************************************************************/
+
+void ConnectionsTree_Test::selectedUniversesRejectsAMixedPluginSelection()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0) == true);
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 1, false, 0) == true);
+
+    ConnectionsTree tree(m_doc);
+    tree.refresh();
+
+    QList<QTreeWidgetItem *> unis;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+    {
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid()
+                && it->data(COL_NAME, ROLE_OUTPUT).toBool())
+            unis << it;
+    }
+    QVERIFY(unis.count() >= 2);
+
+    foreach (QTreeWidgetItem *it, unis)
+        it->setSelected(true);
+
+    QString plug;
+    QList<quint32> lines;
+    QCOMPARE(tree.selectedUniverses(plug, lines).count(), unis.count());
+    QCOMPARE(plug, stub->name());
+
+    // Two protocols in one selection have no single meaning for "aim these at
+    // a node" -- refusing beats guessing which half was meant.
+    unis.at(0)->setData(COL_NAME, ROLE_PLUGIN, QString("Some Other Protocol"));
+    QVERIFY(tree.selectedUniverses(plug, lines).isEmpty());
+    QVERIFY(plug.isEmpty());
+}
+
+void ConnectionsTree_Test::selectedUniversesDeduplicatesFannedOutUniverses()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // One universe, two output legs -- so it occupies two rows.
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0) == true);
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 1, false, 1) == true);
+
+    ConnectionsTree tree(m_doc);
+    tree.refresh();
+
+    int rows = 0;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+    {
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid()
+                && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 0
+                && it->data(COL_NAME, ROLE_OUTPUT).toBool())
+        {
+            it->setSelected(true);
+            rows++;
+        }
+    }
+    QVERIFY2(rows >= 2, "a fanned-out universe should occupy several rows");
+
+    // Selecting both legs is still one universe. Counting it twice would make
+    // the auto-increment skip a port for every extra leg.
+    QString plug;
+    QList<quint32> lines;
+    QCOMPARE(tree.selectedUniverses(plug, lines).count(), 1);
+    QCOMPARE(lines.count(), 1);
+}
+
+void ConnectionsTree_Test::bulkRetargetNumbersPortsUpwardAndIsOneUndoStep()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < 3; u++)
+        QVERIFY(iom->setOutputPatch(u, stub->name(), "", 0, false, 0) == true);
+
+    ConnectionsTree tree(m_doc);
+
+    // Drive applyTarget the way retargetSelection does, so the numbering rule
+    // is under test without a modal dialog in the way.
+    const QList<quint32> unis = QList<quint32>() << 0 << 1 << 2;
+    iom->patchUndo()->capture(unis, "retarget 3 universes");
+
+    const quint32 first = 0x011;    // 0:1:1
+    for (int i = 0; i < unis.count(); i++)
+        QVERIFY(tree.applyTarget(unis.at(i), stub->name(), 0, "172.18.2.10",
+                                 first + quint32(i)) == true);
+
+    for (int i = 0; i < unis.count(); i++)
+    {
+        QString a;
+        quint32 p = 0;
+        QVERIFY(tree.patchTarget(unis.at(i), stub->name(), 0, a, p) == true);
+        QCOMPARE(a, QString("172.18.2.10"));
+        QCOMPARE(p, first + quint32(i));
+    }
+
+    // One step for the whole set: a wrong node address costs one press, not
+    // three corrections. That is the condition the feature is worth having on.
+    QVERIFY(iom->patchUndo()->canUndo() == true);
+    QVERIFY(iom->patchUndo()->undo() == true);
+    for (int i = 0; i < unis.count(); i++)
+    {
+        QString a;
+        quint32 p = 0;
+        QVERIFY2(tree.patchTarget(unis.at(i), stub->name(), 0, a, p) == false,
+                 "undo left a target behind on one of the universes");
+    }
+    QVERIFY(iom->patchUndo()->canUndo() == false);
 }
 
 /****************************************************************************
