@@ -22,10 +22,12 @@ to DONE.md when it ships. See also the session memory under
 - **Devices/Overview parity — done.** Bulk multi-row retarget with port
   auto-increment, feedback IP/port, ArtNet `inputUni`, MIDI output mode, MIDI
   input channel and the MIDI Out-vs-Feedback role swap have all landed on the
-  Devices tab. Still Detailed-only and staying there deliberately: universe
-  passthrough (the ONLY place it can be set), the Audio tab, input-profile
-  creation/editing (`InputProfileEditor`), USB hotplug toggle, plugin info
-  browser — a different concern from topology.
+  Devices tab. Universe passthrough and the plugin
+  description/status have since moved onto Devices too. Still Detailed-only
+  and staying there deliberately: the Audio tab, input-profile
+  creation/editing (`InputProfileEditor`), and the USB hotplug toggle (an app
+  preference more than a patching control). The split now reads as
+  "Devices = the rig and its wiring, Detailed = audio and profile editing".
 - **Patch undo — remaining limits.** `PatchUndo` (engine/src/patchundo.{h,cpp})
   is ONE step deep: a second change discards the first, deliberately, since a
   state two changes stale would restore onto a rig that has moved under it.

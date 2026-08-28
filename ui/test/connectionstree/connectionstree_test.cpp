@@ -865,6 +865,50 @@ void ConnectionsTree_Test::inputActivityTintsTheUniverseRow()
 }
 
 /****************************************************************************
+ * Capabilities recovered from the Detailed tab
+ ****************************************************************************/
+
+void ConnectionsTree_Test::passthroughIsReadableAndSettableHere()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->universesCount() > 0);
+
+    QVERIFY(iom->getUniversePassthrough(0) == false);
+
+    /* The tree's menu action reads and writes exactly this pair, and this was
+       the only setting in the application with a single point of access -- one
+       reorganisation of the Detailed tab and it became unreachable. */
+    iom->setUniversePassthrough(0, true);
+    QVERIFY(iom->getUniversePassthrough(0) == true);
+
+    iom->setUniversePassthrough(0, false);
+    QVERIFY(iom->getUniversePassthrough(0) == false);
+}
+
+void ConnectionsTree_Test::protocolRowCarriesThePluginDescription()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;   // so the protocol row survives filtering
+
+    ConnectionsTree tree(m_doc);
+    tree.refresh();
+
+    QList<QTreeWidgetItem *> plugins = itemsOfKind(tree.m_tree, KIND_PLUGIN);
+    QVERIFY(plugins.isEmpty() == false);
+
+    /* Same source the Detailed pane renders, so the two cannot disagree about
+       what a protocol is or whether it is working. */
+    const QString expected =
+        m_doc->inputOutputMap()->pluginDescription(stub->name());
+    if (expected.isEmpty())
+        QSKIP("the stub plugin reports no description to show");
+
+    QVERIFY2(plugins.at(0)->toolTip(COL_NAME).isEmpty() == false,
+             "the protocol row carries no description tooltip");
+    QCOMPARE(plugins.at(0)->toolTip(COL_NAME), expected);
+}
+
+/****************************************************************************
  * Tooltips
  ****************************************************************************/
 

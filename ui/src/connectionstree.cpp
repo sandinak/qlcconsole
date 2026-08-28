@@ -552,6 +552,18 @@ void ConnectionsTree::refresh()
 
         QTreeWidgetItem *pitem = new QTreeWidgetItem(m_tree);
         pitem->setText(COL_NAME, plugin->name());
+        /* What the plugin says about itself. It was written to be read -- the
+           Detailed tab renders it in a browser pane -- and the protocol row is
+           where somebody asks "what IS E1.31, and is it working", so hovering
+           it should answer rather than sending them to another tab. Same
+           source as that pane, so the two cannot disagree. */
+        if (m_doc->inputOutputMap() != NULL)
+        {
+            const QString desc =
+                m_doc->inputOutputMap()->pluginDescription(plugin->name());
+            if (desc.isEmpty() == false)
+                setRowTooltip(pitem, desc);
+        }
         pitem->setData(COL_NAME, ROLE_KIND, KIND_PLUGIN);
         pitem->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
 
@@ -664,13 +676,38 @@ void ConnectionsTree::refresh()
                and packet counters for Art-Net. It is the best answer available
                to "what IS this thing", and it was reachable only by opening a
                different dialog. */
-            QString lineInfo;
-            if (line < outLines.count())
-                lineInfo = plugin->outputInfo(quint32(line));
-            if (lineInfo.isEmpty() && line < inLines.count())
-                lineInfo = plugin->inputInfo(quint32(line));
+            QStringList lineInfo;
+            if (m_doc->inputOutputMap() != NULL)
+            {
+                /* The same per-line status the Detailed pane shows -- packet
+                   counters, widget type, what the far end reported. */
+                if (line < inLines.count())
+                {
+                    const QString in = m_doc->inputOutputMap()
+                        ->inputPluginStatus(plugin->name(), quint32(line));
+                    if (in.isEmpty() == false)
+                        lineInfo << in;
+                }
+                if (line < outLines.count())
+                {
+                    const QString out = m_doc->inputOutputMap()
+                        ->outputPluginStatus(plugin->name(), quint32(line));
+                    if (out.isEmpty() == false)
+                        lineInfo << out;
+                }
+            }
+            if (lineInfo.isEmpty())
+            {
+                /* Fall back to what the plugin will say directly, so a plugin
+                   the map has nothing on is not left with a blank row. */
+                if (line < outLines.count())
+                    lineInfo << plugin->outputInfo(quint32(line));
+                if (lineInfo.isEmpty() && line < inLines.count())
+                    lineInfo << plugin->inputInfo(quint32(line));
+            }
+            lineInfo.removeAll(QString());
             if (lineInfo.isEmpty() == false)
-                setRowTooltip(litem, lineInfo);
+                setRowTooltip(litem, lineInfo.join("<br>"));
 
             const int total = outUnis.count() + inUnis.count() + fbUnis.count();
             litem->setText(COL_CARRIES, total == 0 ? tr("nothing patched")
@@ -1731,6 +1768,19 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (output == false && isArtNet)
             inUni = menu.addAction(tr("Art-Net input universe…"));
 
+        /* Passthrough is a property of the UNIVERSE, not of any one patch, and
+           until now the Detailed tab was the only place in the whole
+           application that could set it -- a single point of access for a
+           setting that changes what the universe does with incoming data. One
+           reorganisation of that tab and it becomes unreachable. */
+        QAction *ptAct = menu.addAction(tr("Passthrough"));
+        ptAct->setCheckable(true);
+        ptAct->setChecked(m_doc->inputOutputMap()
+                          ? m_doc->inputOutputMap()->getUniversePassthrough(int(uni))
+                          : false);
+        ptAct->setToolTip(tr("Pass incoming values straight through to the "
+                             "output instead of into the engine"));
+
         /* A MIDI port carries output and feedback over the same physical
            connection, so a universe uses it as one or the other, never both.
            Overview expresses that as a two-state combo; here it is the one
@@ -1921,6 +1971,21 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
                 curV.isValid() ? curV.toInt() : 0, 0, 32767, 1, &ok);
             if (ok)
                 setPatchParameter(uni, plugin, line, false, "inputUni", v);
+            return;
+        }
+        if (chosen == ptAct)
+        {
+            InputOutputMap *iom = m_doc->inputOutputMap();
+            if (iom != NULL)
+            {
+                iom->setUniversePassthrough(int(uni), ptAct->isChecked());
+                /* Detailed persists this immediately rather than on save, and
+                   a setting that disagrees between two tabs is worse than one
+                   that lives in only one of them. */
+                iom->saveDefaults();
+                m_doc->setModified();
+                refresh();
+            }
             return;
         }
         if (roleSwap != NULL && chosen == roleSwap)

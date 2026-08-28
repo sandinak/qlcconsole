@@ -86,6 +86,10 @@ private slots:
     /* Live input activity */
     void inputActivityTintsTheUniverseRow();
 
+    /* Capabilities that used to live only in the Detailed tab */
+    void passthroughIsReadableAndSettableHere();
+    void protocolRowCarriesThePluginDescription();
+
     /* Tooltip rendering */
     void propertyTooltipRendersPairs();
     void deviceRowCarriesItsPropertiesAsATooltip();
