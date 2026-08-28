@@ -39,6 +39,7 @@
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
 #include "patchundo.h"
+#include "inputoutputmanager.h"
 #include "outputpatch.h"
 #include "inputpatch.h"
 #include "universe.h"
@@ -325,28 +326,13 @@ void ConnectionsTree::slotUndoAvailabilityChanged()
              "removing universes."));
 }
 
+/** The button routes through InputOutputManager's action rather than doing the
+ *  work itself: one confirmation, one set of surfaces refreshed afterwards,
+ *  and no way for the three tabs to drift apart on either. */
 void ConnectionsTree::slotUndoPatch()
 {
-    if (m_doc->inputOutputMap() == NULL)
-        return;
-    PatchUndo *pu = m_doc->inputOutputMap()->patchUndo();
-    if (pu == NULL || pu->canUndo() == false)
-        return;
-
-    /* Restoring closes and reopens plugin lines, so output on the affected
-       universes drops for as long as that takes. Harmless at the bench and
-       emphatically not harmless mid-show, so say so rather than discovering
-       it during a cue. */
-    if (QMessageBox::question(this, tr("Undo patch change"),
-            tr("Put back: %1?\n\nRe-patching briefly interrupts output on the "
-               "universes involved.").arg(pu->summary()),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes)
-            != QMessageBox::Yes)
-        return;
-
-    pu->undo();
-    m_doc->setModified();
-    refresh();
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->slotUndoPatch();
 }
 
 /** Ask every plugin to go looking, then redraw.

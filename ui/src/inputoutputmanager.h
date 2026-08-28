@@ -70,6 +70,10 @@ private:
      * Tree widget
      *************************************************************************/
 public slots:
+    /** Put the last patch change back. Shared by all three tabs so they cannot
+        drift into confirming or refreshing differently. */
+    void slotUndoPatch();
+    void slotUndoAvailabilityChanged();
     /** Update the input/output mapping list */
     void updateList();
 
@@ -109,6 +113,7 @@ private:
     Doc *m_doc;
     class QTabWidget *m_ioTabs;
     class UniversePatchGrid *m_patchGrid;
+    QAction *m_undoPatchAction;
     class ConnectionsTree *m_devicesTree;
     QSplitter* m_splitter;
     QToolBar *m_toolbar;

@@ -66,6 +66,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     , m_doc(doc)
     , m_ioTabs(NULL)
     , m_patchGrid(NULL)
+    , m_undoPatchAction(NULL)
     , m_toolbar(NULL)
     , m_addUniverseAction(NULL)
     , m_deleteUniverseAction(NULL)
@@ -131,6 +132,31 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     connect(m_deleteUniverseAction, SIGNAL(triggered(bool)),
             this, SLOT(slotDeleteUniverse()));
 
+    /* Ctrl+Z, scoped to the Connections area rather than the window.
+       A global Ctrl+Z would promise general undo and deliver patch undo, which
+       is the objection to offering it at all. Scoped here it promises exactly
+       what it does: inside these three tabs there is nothing to undo BUT
+       patches, so within this context the shortcut means the whole of undo.
+       Same reasoning that moved Ctrl+N/Ctrl+D onto the Detailed page -- a
+       shortcut should mean what the surface it fires on says it means.
+
+       One action, shared: the Devices and Overview buttons route through this
+       too, so the confirmation text and what gets refreshed afterwards cannot
+       drift apart between tabs. */
+    m_undoPatchAction = new QAction(QIcon(":/back.png"),
+                                    tr("&Undo Patch Change"), this);
+    m_undoPatchAction->setShortcut(QKeySequence::Undo);
+    m_undoPatchAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    m_undoPatchAction->setEnabled(false);
+    addAction(m_undoPatchAction);
+    connect(m_undoPatchAction, SIGNAL(triggered(bool)), this, SLOT(slotUndoPatch()));
+
+    if (m_ioMap != NULL && m_ioMap->patchUndo() != NULL)
+    {
+        connect(m_ioMap->patchUndo(), SIGNAL(changed()),
+                this, SLOT(slotUndoAvailabilityChanged()));
+    }
+
     QWidget* ucontainer = new QWidget(this);
     m_splitter->addWidget(ucontainer);
     ucontainer->setLayout(new QVBoxLayout);
@@ -143,6 +169,9 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     m_toolbar->setIconSize(QSize(32, 32));
     m_toolbar->addAction(m_addUniverseAction);
     m_toolbar->addAction(m_deleteUniverseAction);
+    m_toolbar->addSeparator();
+    /* Detailed can change patches too, and had no visible undo at all. */
+    m_toolbar->addAction(m_undoPatchAction);
     m_toolbar->addSeparator();
 
     QLabel *uniLabel = new QLabel(tr("Universe name:"));
@@ -435,6 +464,52 @@ void InputOutputManager::slotMappingChanged()
 void InputOutputManager::slotAudioInputChanged()
 {
     m_doc->destroyAudioCapture();
+}
+
+void InputOutputManager::slotUndoAvailabilityChanged()
+{
+    if (m_undoPatchAction == NULL || m_ioMap == NULL
+            || m_ioMap->patchUndo() == NULL)
+        return;
+
+    PatchUndo *pu = m_ioMap->patchUndo();
+    m_undoPatchAction->setEnabled(pu->canUndo());
+    m_undoPatchAction->setToolTip(pu->canUndo()
+        ? tr("Put back: %1").arg(pu->summary())
+        : tr("Nothing to undo. Covers patch and universe changes in these "
+             "tabs — not fixtures or functions."));
+}
+
+void InputOutputManager::slotUndoPatch()
+{
+    if (m_ioMap == NULL || m_ioMap->patchUndo() == NULL)
+        return;
+
+    PatchUndo *pu = m_ioMap->patchUndo();
+    if (pu->canUndo() == false)
+        return;
+
+    /* Confirmed even though the shortcut is reflexive -- BECAUSE it is.
+       Re-patching closes and reopens plugin lines, so output stops briefly on
+       the universes involved: nothing at the bench, something during a show,
+       and a stray Ctrl+Z should not be able to cause it silently. */
+    if (QMessageBox::question(this, tr("Undo patch change"),
+            tr("Put back: %1?\n\nRe-patching briefly interrupts output on the "
+               "universes involved.").arg(pu->summary()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes)
+            != QMessageBox::Yes)
+        return;
+
+    pu->undo();
+    m_doc->setModified();
+
+    /* Every surface, not just the visible one: the others are still holding
+       rows describing the patch as it was a moment ago. */
+    if (m_devicesTree != NULL)
+        m_devicesTree->refresh();
+    if (m_patchGrid != NULL)
+        m_patchGrid->reload();
+    updateList();
 }
 
 void InputOutputManager::slotAddUniverse()

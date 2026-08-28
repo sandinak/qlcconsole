@@ -48,11 +48,14 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     , m_doc(doc)
     , m_blackout(false)
     , m_universeChanged(false)
+    /* Declaration order, not reading order: m_patchUndo sits up with the patch
+       members it belongs to by subject (near m_manualTargets, well before the
+       beat-generator block), so its initialiser has to sit here. */
+    , m_patchUndo(NULL)
     , m_localProfilesLoaded(false)
     , m_beatGeneratorType(Disabled)
     , m_currentBPM(0)
     , m_beatTime(new QElapsedTimer())
-    , m_patchUndo(NULL)
     , m_inputCapture(NULL)
 {
     m_patchUndo = new PatchUndo(this, this);

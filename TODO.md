@@ -27,7 +27,8 @@ to DONE.md when it ships. See also the session memory under
   state two changes stale would restore onto a rig that has moved under it.
   It covers patches and the universe list (add/delete/name/passthrough) from
   all three tabs, but nothing outside the patch — fixtures, functions, scenes.
-  No keyboard shortcut on purpose: Ctrl+Z would imply general undo.
+  Ctrl+Z is scoped to the Connections widget (`Qt::WidgetWithChildrenShortcut`)
+  so it cannot promise general undo elsewhere in the app.
 - **`InputOutputMap` universe id vs index.** `universe(id)` looks up by ID
   while `outputPatch()`/`setOutputPatch()`/`setInputPatch()` treat the same
   argument as an ARRAY INDEX. They coincide only because `removeUniverse()`

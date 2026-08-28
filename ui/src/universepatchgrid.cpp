@@ -38,6 +38,7 @@
 #include "universepatchgrid.h"
 #include "inputoutputmap.h"
 #include "patchundo.h"
+#include "inputoutputmanager.h"
 #include "outputpatch.h"
 #include "inputpatch.h"    // KInputNone
 #include "qlcioplugin.h"   // QLCIOPlugin::invalidLine()
@@ -119,9 +120,9 @@ static QTableWidgetItem *roItem(const QString &text)
 
 UniversePatchGrid::UniversePatchGrid(Doc *doc, QWidget *parent)
     : QWidget(parent)
+    , m_undoAction(nullptr)
     , m_doc(doc)
     , m_ioMap(doc->inputOutputMap())
-    , m_undoAction(nullptr)
 {
     QVBoxLayout *lay = new QVBoxLayout(this);
     lay->setContentsMargins(4, 4, 4, 4);
@@ -964,26 +965,12 @@ void UniversePatchGrid::onUndoAvailabilityChanged()
         : tr("Nothing to undo. Covers patch and universe changes."));
 }
 
+/** Routed through InputOutputManager for the same reason as the Devices
+ *  button: one confirmation and one refresh path for all three tabs. */
 void UniversePatchGrid::onUndoPatch()
 {
-    if (m_ioMap == nullptr || m_ioMap->patchUndo() == nullptr)
-        return;
-    PatchUndo *pu = m_ioMap->patchUndo();
-    if (pu->canUndo() == false)
-        return;
-
-    /* Re-patching closes and reopens plugin lines, so output stops briefly on
-       the universes involved -- nothing at the bench, something during a show. */
-    if (QMessageBox::question(this, tr("Undo patch change"),
-            tr("Put back: %1?\n\nRe-patching briefly interrupts output on the "
-               "universes involved.").arg(pu->summary()),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes)
-            != QMessageBox::Yes)
-        return;
-
-    pu->undo();
-    m_doc->setModified();
-    reload();
+    if (InputOutputManager::instance() != nullptr)
+        InputOutputManager::instance()->slotUndoPatch();
 }
 
 void UniversePatchGrid::onRescan()
