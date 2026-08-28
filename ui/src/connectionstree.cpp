@@ -2143,6 +2143,22 @@ void ConnectionsTree::deleteUniverse(quint32 universe)
     if (uni == NULL)
         return;
 
+    /* Only the LAST universe can go: removeUniverse() refuses anything else
+       rather than leave a gap in the numbering, which the whole patch API
+       depends on (see InputOutputMap_Test::universeIdAlwaysEqualsItsArrayIndex).
+       Say so BEFORE asking, rather than asking a question that cannot be
+       honoured -- this used to warn about fixtures losing output, take a Yes,
+       spend an undo step, and then do nothing at all, with no feedback. */
+    if (universe + 1 != iomap->universesCount())
+    {
+        QMessageBox::information(this, tr("Delete universe"),
+            tr("Only the last universe can be deleted — removing one from the "
+               "middle would renumber the others and repoint every patch after "
+               "it.\n\nDelete universe %1 first, and work back.")
+                .arg(iomap->universesCount()));
+        return;
+    }
+
     /* Deleting a universe orphans every fixture patched into it -- they keep
        their universe id and simply lose output -- so this IS undoable, and the
        warning says which part is recoverable. */
@@ -2157,7 +2173,18 @@ void ConnectionsTree::deleteUniverse(quint32 universe)
         iomap->patchUndo()->captureUniverses(tr("delete universe \"%1\"")
                                                  .arg(uni->name()));
 
-    iomap->removeUniverse(int(universe));
+    if (iomap->removeUniverse(int(universe)) == false)
+    {
+        /* Guarded above, so reaching here means the rule changed underneath
+           us. Do not leave a spent undo step and a modified flag behind for a
+           deletion that did not happen. */
+        if (iomap->patchUndo() != NULL)
+            iomap->patchUndo()->clear();
+        QMessageBox::warning(this, tr("Delete universe"),
+                             tr("\"%1\" could not be deleted.").arg(uni->name()));
+        return;
+    }
+
     m_doc->setModified();
     refresh();
 }
