@@ -33,6 +33,10 @@
 #include <mach/thread_policy.h>
 #include <mach/thread_act.h>
 #include <pthread.h>
+#elif defined(Q_OS_LINUX)
+#include <pthread.h>
+#include <sched.h>
+#include <string.h>
 #endif
 
 #include "mastertimer-unix.h"
@@ -100,6 +104,54 @@ static void setTimerThreadRealtime(int nsTickTime)
         qDebug() << "MasterTimer: real-time thread policy set - period"
                  << nsTickTime / 1000 << "us, computation 1000 us, constraint 2000 us";
 }
+#elif defined(Q_OS_LINUX)
+/**
+ * Ask the Linux scheduler to treat this thread as real-time. Same problem
+ * and same reasoning as the mac THREAD_TIME_CONSTRAINT_POLICY path above
+ * (see that comment) -- Linux has no equivalent declarative period/
+ * computation/constraint policy, so the closest match is SCHED_FIFO, the
+ * fixed-priority real-time class pro-audio apps (JACK, PipeWire) use for
+ * the same kind of periodic, low-latency, must-not-starve-the-system
+ * thread.
+ *
+ * Priority is deliberately NOT sched_get_priority_max() (typically 99):
+ * leaving headroom above this thread, the same convention those pro-audio
+ * apps follow, keeps it clearly real-time-scheduled without contending
+ * with anything genuinely more critical on the box.
+ *
+ * Advisory: SCHED_FIFO normally needs CAP_SYS_NICE or an rtprio resource
+ * limit, which an ordinary launch of this app will not have. Unlike the
+ * mac policy above (any user process may request it), that means this
+ * commonly DOES fail on a stock install -- expected, not a bug. On
+ * refusal we warn with the actual fix (grant the capability or an rtprio
+ * limit) and fall back to normal scheduling, exactly like the mac path.
+ */
+static void setTimerThreadRealtime(int nsTickTime)
+{
+    Q_UNUSED(nsTickTime)
+
+    struct sched_param sp;
+    memset(&sp, 0, sizeof(sp));
+    const int maxPrio = sched_get_priority_max(SCHED_FIFO);
+    sp.sched_priority = (maxPrio > 10) ? (maxPrio - 10) : maxPrio;
+
+    int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    if (rc != 0)
+        qWarning() << "MasterTimer: SCHED_FIFO real-time priority refused"
+                   << "(" << strerror(rc) << ") - falling back to normal priority."
+                   << "Usually needs CAP_SYS_NICE (setcap cap_sys_nice=eip on the"
+                   << "binary) or an rtprio resource limit.";
+    else
+        qDebug() << "MasterTimer: SCHED_FIFO real-time priority set"
+                 << "(priority" << sp.sched_priority << ")";
+}
+#else
+/* No known real-time scheduling mechanism on this platform -- ordinary
+   thread priority is all we get. */
+static void setTimerThreadRealtime(int nsTickTime)
+{
+    Q_UNUSED(nsTickTime)
+}
 #endif
 
 MasterTimerPrivate::MasterTimerPrivate(MasterTimer* masterTimer)
@@ -159,11 +211,10 @@ void MasterTimerPrivate::run()
     /* How long to wait each loop, in nanoseconds */
     int nsTickTime = 1000000000L / mt->frequency();
 
-#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
     /* Must be done from inside the thread itself: the policy applies to the
-       calling thread. */
+       calling thread. setTimerThreadRealtime() is defined for every branch
+       above (mac/Linux/other-unix no-op), so this call is unconditional. */
     setTimerThreadRealtime(nsTickTime);
-#endif
 
     /* Allocate this from stack here so that GCC doesn't have
        to do it every time implicitly when gettimeofday() is called */

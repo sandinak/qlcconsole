@@ -139,6 +139,7 @@ if(WIN32)
     target_link_libraries(${module_name} PUBLIC
         Qt${QT_MAJOR_VERSION}::Widgets
         winmm
+        avrt
     )
 endif()
 
