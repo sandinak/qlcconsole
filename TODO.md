@@ -8,6 +8,41 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## Fixture Manager — modernize + look at integrating with qlcconsole *(2026-09-02, design-first; investigation not started)*
+
+Branson: look at Fixture Manager and see what can be done to modernize it and
+maybe integrate it more with the rest of qlcconsole, rather than leaving it as
+the stock QLC+ tab.
+
+Starting context for whoever picks this up: `ui/src/fixturemanager.{h,cpp}`
+(~2680/~300 lines) is a listed fork hotspot (CLAUDE.md) — fixture-group
+folders, empty-group creation, and the head-layout grid editor (drag fixtures
+onto cells, add a group as a block, move a sub-group as a unit) all already
+live here, plus it's the entry point into `ui/src/rdmmanager.{h,cpp,ui}`
+(`fixturemanager.cpp:457`). That RDM entry already has its own open TODO
+entry above noting Fixture Manager is "already crowded" as a place to hang
+more UI — worth reading together with this one rather than planning either
+in isolation.
+
+Also worth reading alongside: the adjacent **"Now — unify the object editor's
+fixture management"** entry below — that one is about the Lighting Studio
+per-object editor's fixture picker specifically, a different (if related)
+surface from the Fixture Manager tab itself. Since this session separately
+did a full hierarchy/workflow rework of the Connections/Devices tree
+(strict per-level CRUD, consistent right-click ordering, a real host/protocol/
+target/port tree shape — see DONE.md 2026-09-02) and a workflow-UX review
+flagged Fixture Manager's empty-state onboarding as one of the *good*
+existing patterns not yet applied everywhere else, there may be real value in
+holding Fixture Manager up against those same conventions: does its tree
+hierarchy, menu structure, and empty/onboarding state now read as
+inconsistent with Connections/Devices? Is there UI here that belongs on a
+newer tab (Programming, Lighting Studio) instead? **Nothing decided yet** —
+start with an audit of the current tab (structure, menus, what's crowded,
+what's stock-QLC+-shaped vs already fork-modified) before proposing a
+direction, same as the object-editor and stage-feature entries below did.
+
+---
+
 ## "E1.31" shown as "E1.31 (sACN)" for clarity (2026-09-02) — SHIPPED
 
 Branson, after confirming E1.31 does load and is reachable via "Add a
