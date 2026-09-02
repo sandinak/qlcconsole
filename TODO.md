@@ -8,6 +8,1329 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## "E1.31" shown as "E1.31 (sACN)" for clarity (2026-09-02) — SHIPPED
+
+Branson, after confirming E1.31 does load and is reachable via "Add a
+protocol": "can we put sACN in parens for that proto so it's clear."
+
+New `displayPluginName()` (`ui/src/connectionstree.cpp`) — display-only,
+maps "E1.31" to "E1.31 (sACN)" everywhere the tree shows a protocol name to
+an operator (the protocol row itself, the "Add a protocol" list, "This
+Host"'s tooltip plugin list) without touching `QLCIOPlugin::name()`, the
+actual identity string a workspace file saves and every internal lookup
+matches by. Deliberately not a rename: `E131Plugin::name()` staying
+"E1.31" means every existing saved file, and everywhere in the engine that
+looks a plugin up by name, is completely unaffected — this is purely what
+gets drawn on screen.
+
+While in there: the "Add a protocol" menu's chosen-action lookup used to
+match by the action's TEXT back against a name — fragile the moment a
+display name could differ from the real one, which this same change just
+introduced. Switched to a direct `QMap<QAction*, QLCIOPlugin*>` built at
+menu-construction time instead, so the display text can be anything
+without breaking which plugin actually gets revealed.
+
+Builds clean, launched without error. **Not interactively verified** — the
+Devices tab and "This Host" → "Add a protocol" should both read
+"E1.31 (sACN)" now instead of bare "E1.31".
+
+## HID listed unusable devices as if they were real joysticks (2026-09-02) — SHIPPED
+
+Branson, with a screenshot: three "Apple" HID input rows, no distinguishing
+name, "nothing patched" on all three — "we shouldn't show things we can't
+use/patch to."
+
+Traced it: `HIDPlugin::refreshDevices()` calls `hid_enumerate(0, 0)` (every
+HID device on the system, no filter) and only keeps ones where
+`HIDOSXJoystick::isJoystick(cur_dev->usage)` matches a joystick/gamepad/
+multi-axis-controller/hatswitch top-level USAGE. That check passing does
+NOT mean the device turned out to have anything on it once its actual HID
+report descriptor got parsed (`HIDOSXJoystick::init()`, which populates
+`m_axesNumber`/`m_buttonsNumber`) — Apple's HID stack exposes several of
+its own internal devices (trackpad/keyboard auxiliary interfaces, wrapper
+nodes) reporting a joystick-shaped top-level usage despite being neither a
+joystick nor anything else patchable, typically with no product string
+either (`HIDJsDevice`'s name is `manufacturer + " " + product`; empty
+product is exactly why these three all just read "Apple"). They were
+never actually usable, and the tree had no way to say so.
+
+Added `HIDDevice::buttonCount()` alongside the existing `axisCount()`
+(both public on the base class, -1 for non-joystick types); after
+constructing a candidate joystick device, `refreshDevices()` now discards
+it instead of calling `addDevice()` when it has neither an axis nor a
+button (`<= 0` on both). Can't accidentally hide a real control surface —
+anything genuinely patchable has at least one of the two by definition.
+Scoped to the shared post-construction check, so it applies to
+Linux/Windows joystick construction too, not just the macOS path the
+screenshot showed.
+
+Rebuilt the `hidplugin` target directly first to confirm it compiles
+in isolation, then the full app — both clean, no errors.
+`HIDDevice`/`HIDJsDevice` are internal to `plugins/hid/` (not a shared
+interface header like `QLCIOPlugin`), so this doesn't carry the
+cross-library vtable-staleness risk the ArtNet subnet work hit earlier
+today. Launched without error. **Not interactively verified** — needs
+actual hardware to confirm the three bogus "Apple" rows are gone and a
+real joystick/control surface (if one is plugged in) still shows up
+correctly.
+
+## Title-bar toolbar was really two rows, not one (2026-09-02) — SHIPPED
+
+Branson, with a screenshot: the title text and the toolbar icons
+(Stop All/Blackout/Blind/Operate) were visibly on two separate lines
+inside the merged macOS title bar, not sitting level on one.
+
+Root cause: `Qt::ToolButtonTextUnderIcon` (the app's general default,
+governed by View → Toolbar Style, which this toolbar was still following)
+makes each button tall enough to fit a text label under its icon. Qt's
+unified title/toolbar chrome grows to accommodate whatever the toolbar
+actually needs, so it was still rendering ONE unified area — just a tall
+one, with the title text ending up as its own visual line inside that
+taller area rather than beside the icons. No stock macOS app with a
+unified toolbar labels its title-bar buttons (Safari, Mail, Xcode) for
+exactly this reason.
+
+Locked this one toolbar to `Qt::ToolButtonIconOnly` in `initToolBar()`,
+and excluded it from the "Toolbar Style" menu's sync logic on macOS (that
+menu still governs every per-manager toolbar and the tab bar normally —
+only this toolbar is pinned, and only on macOS, where the unified-chrome
+constraint actually applies).
+
+Builds clean, launched without error. **Not interactively verified** — the
+title bar should now read as one row, icons beside the title text rather
+than on a line below it.
+
+## "This Host" shows real identity; protocol Carries missed pending universes (2026-09-02) — SHIPPED
+
+Branson confirmed "This Host" fixed the add-a-protocol problem, then two
+follow-ups: replace the placeholder "This Host" label with real info
+(hostname, versions, "whatever else might be useful"), and — mid-turn, with
+a screenshot — the ArtNet row's Carries column was blank despite 52
+universes sitting right under it.
+
+**Host identity:** the root row's name is now the actual machine hostname
+(`QHostInfo::localHostName()`, falls back to "This Host" if that comes back
+empty), Detail shows `qlcconsole <version> · N I/O plugins`, and the
+tooltip carries the fuller picture: hostname, app version (`APPVERSION`),
+Qt version, OS (`QSysInfo::prettyProductName()`), and which I/O plugins are
+loaded. Checked whether OLA (specifically requested) exposes any version
+string of its own to surface — it doesn't (`OlaIO::pluginInfo()` has a
+one-line description, no version) — so it's listed by name like every
+other loaded plugin rather than a version number being invented for it.
+
+**Carries roll-up gap:** the protocol-row summary pass that rolls "N
+universes" up into Carries only counted `KIND_UNIVERSE` (and folded
+`KIND_PORT`) rows — it had no idea `KIND_PENDING_UNIVERSE` (this session's
+own addition, for a universe patched to an interface not present here)
+was also a real universe count against that protocol. A protocol carrying
+nothing BUT pending patches rolled up to an empty Carries cell instead of
+"52 universes". Added `KIND_PENDING_UNIVERSE` to that count — deliberately
+NOT folded into the same `patchedUniverses` set real/resolved rows use,
+since `pendingUniverseIds` (computed earlier in the same function) already
+tracks exactly this for the "Unpatched" folder's own exclusion logic; this
+is a display count, not a second copy of that tracking.
+
+Builds clean, launched without error. **Not interactively verified** — the
+host row should show a real hostname and version info instead of "This
+Host", and a protocol carrying only pending universes should now roll up
+its Carries count instead of showing nothing.
+
+## "This Host" root, fixture/head Carries, Delete Universe on empty space (2026-09-02) — SHIPPED
+
+Branson, three asks in one message, plus a mid-turn screenshot.
+
+**Mid-turn: "also this is still there on the right click"** — a screenshot
+of the empty-space menu still offering "Delete Universe 'U66-StepBars-B'…"
+alongside "Add Universe". Same bug as the ArtNet-row report two rounds ago,
+same fix, one spot I'd deliberately left alone at the time reasoning empty
+space was a legitimate contextual home for it. Branson's right that it
+isn't any more than any other row is -- deleting the LAST universe from a
+click that named a specific OTHER universe is the same false implication
+regardless of where the click landed. Removed; empty space now offers Add
+Universe only, matching everywhere else.
+
+**1. "Need the ability to add a protocol .. can we at least enable
+visibility temporarily during the session."** Branson's own proposed fix,
+better than what I'd tried: a permanent, always-right-clickable top-level
+"This Host" row, everything else nested under it. New `KIND_HOST`; every
+plugin row and the "Unpatched" folder now live under it instead of
+directly under the tree root. Right-clicking it offers "Add a protocol"
+listing every compiled-in plugin regardless of current visibility --
+selecting one reveals it exactly the way that protocol's own "Add an
+interface…" would (factored the shared logic into `revealInterface()`/
+`addTargetOnNewInterface()` so the host-level and protocol-level actions
+can't drift apart). This is a real structural change, not a cosmetic one:
+`refresh()`'s summary pass, the empty-tree message, and the default-expand
+depth calculation all previously assumed protocols WERE the top level and
+needed updating to walk `hostItem`'s children instead of the tree's.
+
+**2. "Carries should identify fixtures/heads for universes as
+configured."** The fixture COUNT was already there ("12 fx · 384/512");
+head count was not, and a rig built from a handful of multi-head fixtures
+(an LED bar, a pixel strip) has its real output measured in heads, not
+fixture instances. New shared `setCarriesFixtures()` adds head count
+(only when it differs from fixture count -- most rigs are single-head, and
+repeating the same number would just be noise), and now runs for pending
+and unpatched universe rows too, not just resolved ones -- fixture
+assignment is a Fixture Manager fact independent of whether the network
+path behind a universe currently resolves.
+
+**3. Franklin chart on swapping Protocol and Network order in the tree** --
+delivered as analysis in conversation, not code; see that response.
+
+Builds clean, launched without error. **Not interactively verified** — "This
+Host" should now be the tree's one root row, always right-clickable
+regardless of "Show unused"; a universe row should show head count
+whenever it differs from fixture count; the empty-space menu should no
+longer offer Delete Universe.
+
+## Reverted always-show-protocols; toolbar icon size (2026-09-02) — SHIPPED
+
+Branson pushed back on the previous round's "every protocol always stays
+listed" change: "UGH .. ok lets be clear we should only show unused if the
+box is checked." Then the actual need underneath: "to USE one I need the
+ability to add in-situ .. can we at least enable visibility temporarily
+during the session so we can then right click and add connection?"
+
+Reverted the previous round's change to `refresh()` — a protocol with
+nothing on it goes back to being deleted (not just its idle lines hidden)
+when "Show unused protocols and interfaces" is unchecked, restoring the
+checkbox's actual meaning. What Branson asked for after the "UGH" — reveal
+everything for the session, add a connection, done — is exactly what that
+checkbox already does when ticked, and always has: nothing new was needed
+there, the fix was undoing the previous overreach, not building a second
+mechanism next to an existing one.
+
+Noted, not actioned: "this tracks with the idea .. need the ability to
+'blind' configure connections and assets generally .. that might be harder
+for something more specific than not." A real design direction (configuring
+things you cannot currently see/reach live) broader than this specific
+checkbox — flagged here for whenever it becomes a concrete ask rather than
+guessed at now.
+
+**Toolbar icon size**, from a title-bar screenshot: the app-level toolbar
+(Stop ALL/Blackout/Blind/Operate — the one merged into the macOS title bar
+itself via `setUnifiedTitleAndToolBarOnMac`) was still at 24x24, the ONE
+toolbar in the app not already matching the 20x20 every per-manager
+toolbar converged on earlier this session. Matched it. Smaller icons here
+matter more than anywhere else in the app: this toolbar's height is space
+taken directly from the title bar, not just another row in a window.
+Also worth knowing: View → Toolbar Style → "Icons Only" already exists
+(added earlier this session) and applies to this exact toolbar — unchecking
+the text labels entirely is a bigger, already-available lever than icon
+size alone if more compactness is wanted.
+
+Builds clean, launched without error. **Not interactively verified** — the
+Devices tab should go back to hiding an idle protocol's row entirely with
+"Show unused" off, and the title-bar toolbar icons should read visibly
+smaller.
+
+## Protocol rows were disappearing entirely + Delete Universe on unrelated rows (2026-09-02) — SHIPPED
+
+Branson, on a screenshot of the ArtNet right-click menu: "still no add a
+protocol" (even though "Add an interface…"/"Add a target…" had just
+shipped) and "why delete universe on artnet?"
+
+**1. The actual gap "add a protocol" was pointing at:** `refresh()` didn't
+just hide an idle protocol's individual LINES when "Show unused" was off
+(that part is correct decluttering) — it deleted the entire PROTOCOL ROW
+outright whenever it ended up with zero children. So a protocol with
+nothing patched or pinned on it yet had no row to right-click "Add an
+interface…"/"Add a target…" ON at all, with no way back except knowing to
+tick "Show unused protocols and interfaces" first. That's the real
+"add a protocol" gap — not a missing action, a missing ROW to put the
+action on. Fixed: every compiled-in protocol now always stays listed as a
+top-level row, whether or not it currently has anything under it (shows
+"no lines" when empty) — only individual idle LINES are still subject to
+"Show unused".
+
+**2. "Delete Universe 'X'…" on the ArtNet row (or any row not about
+universe X) was a real design mistake, not a display quirk.**
+`appendUniversalMenuActions()` added it to literally every menu in the
+tree, unconditionally deleting whatever universe happened to be LAST
+regardless of what was actually clicked — reading as if it were an ArtNet
+action when it has nothing to do with ArtNet at all. Removed from the
+universal set. It already has real, contextual homes that were never
+touched: right-click a universe's own row directly (KIND_UNIVERSE/
+UNPATCHED/PENDING already each offer "Delete universe entirely…"), or
+empty space, which still offers Add and Delete together for when there's
+genuinely nothing else to click. "Add Universe" stays universal — it
+doesn't reference anything specific to the row it's on, so it doesn't
+carry the same false implication.
+
+Builds clean, no new warnings, launched without error. **Not interactively
+verified** — a protocol with nothing patched (E1.31, OSC, whichever else is
+compiled in but idle) should now show up as its own row even with "Show
+unused" off; right-clicking ArtNet (or anything not a universe) should no
+longer offer to delete one.
+
+## Add a target without patching a universe + dismiss-menu bug (2026-09-02) — SHIPPED
+
+Branson, two separate reports:
+
+**1. "Need ability to add a protocol .. I know I can do it by patching a U
+.. but I think we should be able to create a protocol and then patch to it
+as well."** Read as: create the connection (interface + target) on its
+own, patch a universe to it as a later, separate step — the only route to
+that today went through patching a universe first (`patchUnpatchedUniverseTo()`)
+or required already knowing to reveal an interface via "Add an interface…"
+and THEN separately right-click that row for "Add a target on this
+interface…". New "Add a target…" at the PROTOCOL row itself
+(target-capable protocols only — ArtNet today): resolves which interface
+to use the same way "Add an interface…" does (the only one, or asks),
+pins it visible, then prompts for the target address — genuinely "add
+interface + add target" in one step, still not touching any universe.
+Patching stays a separate, later action from the port row, same as always.
+
+**2. "If I right click on artnet .. and then exit that window it pops up
+configure artnet plugin."** Real bug, and a nasty one: `if (pick0 == cfg)`
+where `cfg` is `NULL` for ArtNet (that dialog is deliberately withheld for
+target-capable protocols, see the entry below this one) — and `pick0` is
+ALSO `NULL` whenever the menu is dismissed without picking anything.
+`NULL == NULL` is true, so dismissing the ArtNet context menu with no
+selection silently ran `configurePlugin()` anyway. Audited every one of
+the tree's other exec() sites for the same shape (an unconditional first
+comparison is safe even when `pick0` is `NULL`; comparing against a
+CONDITIONALLY-null action first is not) — only this one site had it; the
+rest either compare against an unconditional action first or already guard
+`chosen == NULL` up front (the big `KIND_UNIVERSE` branch needed the guard
+anyway to avoid a `chosen->parentWidget()` null-deref, so it was already
+safe by accident). Fixed with an explicit `if (pick0 == NULL) return;`
+right after the universal-action check, before any per-kind comparison —
+now the one place to look if a similar action gets added later at the
+protocol level.
+
+Builds clean, launched without error. **Not interactively verified** —
+right-click ArtNet and dismiss the menu with no selection (click away or
+Escape) — should do nothing now, not pop up Configure ArtNet. And "Add a
+target…" should appear directly on the ArtNet row and walk through
+interface + address without touching any universe.
+
+## "None" sentinel was mistaken for a real missing interface (2026-09-02) — SHIPPED
+
+Branson, with a screenshot: a ghost interface literally named "None" showed
+up alongside the real 172.18.2.x ones, with one universe under it. Asked
+what the difference was and whether it was set up with ArtNet with no IP
+— good question to ask rather than assume, and it pointed at a real bug.
+
+`"None"` is `KOutputNone`, `OutputPatch::outputName()`'s own long-standing
+fallback string for "this patch has a plugin but no line was ever actually
+resolved for it" — used the same way for MIDI input/feedback patches
+elsewhere in this same workspace file (`UID="None"`), predating this
+session entirely. It is a sentinel for ABSENCE of an identity, not an
+identity itself. The subnet/pending resolution added earlier today didn't
+know that: `outputUID.isEmpty()` is false for the string "None", so it
+went through the same matching path as a real IP, failed to match anything
+(obviously — "None" isn't an address), and landed in the pending branch,
+remembering it forever as a "missing interface" named None.
+
+Fixed with one exclusion in `InputOutputMap::setOutputPatch()`:
+`outputUID != KOutputNone` alongside the existing emptiness check, so this
+case falls through to the older index-based handling exactly as it did
+before pending existed — appropriate, since a patch that was never
+actually finished being set up isn't "on a network this machine can't
+reach," it just never had a real interface chosen for it, and 
+`danglingOutputPatches()`'s existing out-of-range check already covers it
+if the accompanying numeric line is out of bounds.
+
+New test `InputOutputMap_Test::noneSentinelDoesNotGoPending()`. Full sweep
+clean: `outputpatch_test` 6/6, `inputoutputmap_test` 36/36. Builds clean,
+launched without error. **Not interactively verified** — the "None" ghost
+interface should be gone from the tree entirely now; Universe 8 (the one
+that triggered it) should resolve or dangle the old way instead.
+
+## Pending patches' real targets were reading back as broadcast (2026-09-02) — SHIPPED
+
+Branson, with a screenshot: 52 universes under a pending "192.168.1.125"
+ArtNet interface all showed "output · broadcast" with no device/port
+breakout. Checked the actual workspace XML rather than guessing —
+`<PluginParameters outputIP="172.18.2.221" outputUni="0"/>` etc. were
+right there for most of them. Real bug, not a display gap in the previous
+round's work.
+
+**Root cause:** `OutputPatch::getPluginParameters()` doesn't read its own
+locally-cached parameters — it asks the PLUGIN for whatever it has stored
+for `(universe, line)`. A pending patch has no valid line
+(`QLCIOPlugin::invalidLine()`, by design — that's what keeps it from
+opening anything), so the plugin has nothing to report for it, and the
+real `outputIP`/`outputUni` values loaded straight off the file's
+`<PluginParameters>` — which DO land in `setPluginParameter()`'s local
+`m_parametersCache` correctly regardless of pending state — never made it
+back out through the one method the tree's rendering code (and anything
+else) calls to read them.
+
+Fixed in `OutputPatch::getPluginParameters()`: fall back to
+`m_parametersCache` whenever there's no valid line to ask the plugin about,
+instead of returning empty. This is the same cache `reconnect()` already
+trusts as the authoritative record to replay onto the plugin, so it's not
+a new source of truth, just the existing one finally being read from in
+the one case (`isPending()`) that didn't exist before this session. New
+test `OutputPatch_Test::pending()` extended to set outputIP/outputUni on a
+pending patch and assert they read back correctly — this would have caught
+it. Full sweep re-run clean: `outputpatch_test` 6/6, `inputoutputmap_test`
+35/35.
+
+**Known follow-on gap, not fixed (unreachable today, so left alone):** if a
+pending patch is ever resolved LIVE mid-session (not at file load — there
+is currently no such path; resolution only happens once, during
+`loadXML()`), nothing replays `m_parametersCache` onto the plugin the way
+`reconnect()` does. Not a real gap yet because nothing triggers a live
+pending→resolved transition today; would need its own fix the day
+"auto-retry when the network reappears" becomes a real feature.
+
+Builds clean, launched without error. **Not interactively verified** — the
+same 52-universe workspace should now show each pending universe's real
+target IP and port (e.g. 172.18.2.221 › port 0:0:0 › the universe), not
+"broadcast," for every one that actually has `outputIP` in the file.
+
+## Pending patches show their target/port breakout too (2026-09-02) — SHIPPED
+
+Branson, right after the ghost-interface restructure: "should show the
+target and ports breakout to the universe the same way as if it was
+connected."
+
+The interface being unreachable doesn't erase the rest of a targeted
+patch's address -- outputIP/outputUni are plugin PARAMETERS stored on the
+`OutputPatch` object itself, untouched by `setPending()` (which only clears
+`m_pluginLine`), so they were sitting right there the whole time, just not
+being read. Each pending universe's ghost interface row now reads those
+same parameters and builds the same device → port → universe breakout a
+resolved patch shows (device row per target address, folding multiple
+universes' ports under one node, matching how the live/manual-target case
+above it already folds), instead of listing every pending universe as a
+flat, undifferentiated child. A pending patch with no target at all
+(broadcast) still lists directly under the ghost interface, now explicitly
+labelled "output · broadcast" to match. Device/port rows here are
+deliberately non-interactive (no `ROLE_KIND` set) — they don't have a real
+plugin/line to act on, so right-clicking one falls through to the generic
+fallback (universal actions only) rather than a KIND_DEVICE/KIND_PORT menu
+built for context that doesn't exist here.
+
+Builds clean, launched without error. **Not interactively verified** — a
+pending universe patched to a specific target should now nest under a
+device/port breakout matching the live case's shape, not a flat list.
+
+## Pending patches shown on their real protocol branch, not isolated (2026-09-02) — SHIPPED
+
+Branson: "for interface not patched [pending] .. it makes more sense to
+show it where it would be with an error on the line showing why .. vs
+isolating in a different tree."
+
+Agreed — the "Interface not present" top-level folder was disconnected
+from the rest of the tree even though a pending patch has a real plugin
+association (that's exactly what it's waiting on); isolating it buried
+which protocol actually has the problem. Restructured `refresh()`: pending
+universes are now grouped up front by (plugin, missing interface), and
+each group gets a "ghost" interface row nested under its REAL protocol's
+top-level branch, right where a real interface row would sit if the
+interface existed — red text, a tooltip explaining why, with the affected
+universes as its children. The separate top-level "Interface not present"
+folder is gone; "Unpatched" (genuinely never-patched universes, which have
+no plugin to attach under at all) is untouched, still its own folder, since
+that case has nowhere else to go.
+
+One real subtlety: the ghost row has to be added to the plugin's row
+BEFORE the existing "if this protocol ended up with zero children, delete
+its row (or say 'no lines' if Show Unused is on)" check runs — otherwise a
+protocol with ONLY pending patches and no live lines would have its own
+top-level row deleted out from under the ghost row just added to it.
+Placed the new block immediately before that check, not after.
+
+Builds clean, launched without error. **Not interactively verified** — the
+actual repro (a pending universe should now show up nested under its real
+protocol, e.g. "ArtNet › 172.18.2.17 (in red) › 3: Universe 3", not in a
+separate folder) needs eyes on the running app.
+
+## Resolve a saved ArtNet patch by subnet, not just exact address (2026-09-02) — SHIPPED
+
+Branson: patching to network should target the subnet rather than this
+machine's own source IP, and have the system pick the right interface
+itself.
+
+**Design choice, stated up front:** the exact match on `outputs()`'s literal
+IP strings is what every existing saved workspace already relies on for its
+`LineUID`, and changing what `outputs()` RETURNS (subnet strings instead of
+addresses) would break exact matching for every workspace already saved —
+including on the SAME machine that built it. Implemented as an additional
+FALLBACK step in resolution instead: exact match first (unchanged), then
+subnet match, then pending (from the portability work earlier today).
+Nothing about what gets displayed or saved changes; only what "close
+enough" means when the exact address is gone.
+
+New `QLCIOPlugin::lineOnSameSubnet(identity)` (default -1 — most plugins
+have no concept of a subnet at all) and `ArtNetPlugin::lineOnSameSubnet()`,
+which reuses the exact `QHostAddress::isInSubnet(ip, prefixLength)` check
+`probeTarget()` already relies on, just walking `m_IOmapping` the other
+direction (does any CURRENT line's subnet contain the SAVED address,
+instead of does a target address fall in some line's subnet).
+`InputOutputMap::setOutputPatch()` now tries this before giving up and
+going pending. A DHCP re-lease changing this machine's own address, or the
+same workspace opened on different hardware plugged into the same physical
+network, both resolve automatically now instead of going pending — pending
+is reserved for genuinely being off that network. Saving again afterward
+naturally records the CURRENT address in the patch's `LineUID` (`outputName()`
+reads it live off the resolved line), so the mapping keeps drifting to
+whichever machine most recently opened and saved it, with no extra code
+needed for that self-healing.
+
+New test `ArtNet_Test::lineOnSameSubnetResolvesChangedAddress()` (doesn't
+need real system interfaces — builds a `QNetworkAddressEntry` by hand)
+pins: same subnet + different host part resolves; different subnet does
+not; a non-address string does not crash or false-match.
+
+**Build gotcha hit and fixed along the way:** adding a new virtual to
+`QLCIOPlugin` (ahead of `rescan()` in the header, not at the end) shifts
+every later virtual's vtable slot. `inputoutputmap_test` initially failed
+with a garbage line index — not a logic bug, but `libiopluginstub.dylib`
+having been built against the OLD vtable layout in an earlier partial
+build, so a virtual call landed on the wrong slot. Fixed by rebuilding
+everything (`cmake --build build` with no target, not a targeted one) — a
+prompt to remember RESULT after `check-all.sh` next, since a header change
+touching every plugin's shared base benefits from a full rebuild, not an
+incremental one, to be sure every `.dylib` agrees on the layout.
+
+Full test sweep after the full rebuild: `outputpatch_test` 6/6,
+`inputoutputmap_test` 35/35, `artnet_test` 7/7 (all passed, no failures).
+Builds clean; launched without error. **Not interactively verified** — the
+actual repro (build the file with one local IP, reopen with a different one
+on the same subnet, confirm it resolves instead of going pending) needs a
+real network change to test, not just a clean build.
+
+## Tree refresh silently no-op'd after almost every action (2026-09-02) — SHIPPED
+
+Branson tested the pending-patch work directly and hit real problems: a
+just-patched universe still showed under "Unpatched", the ArtNet screenshot
+showed a node "not heard from" sitting oddly, a broadcast patch didn't say
+"broadcast" anywhere, and — the one that explains most of the rest —
+"the tree didn't update immediately."
+
+**Root cause, one bug explaining the stale-tree symptoms:**
+`ConnectionsTree::refresh()`'s guard against rebuilding out from under an
+open inline editor was `if (focus != NULL && m_tree->isAncestorOf(focus))
+return;`. That matches ANY focus inside the tree, not just an actual open
+editor — and the tree's own NORMAL resting state after a right-click (menu,
+then any modal dialog it opened) is focus sitting on the tree or its
+viewport, restored there once the dialog closes. Every CRUD action added
+this session ends in `refresh()`, called synchronously right after that
+exact sequence — so the guard was silently skipping the rebuild almost
+every time, immediately after the very action that was supposed to show a
+result. (The five-second periodic timer then did eventually catch it up,
+which is why it looked like "didn't update immediately" rather than "never
+updates at all.") Fixed by excluding `m_tree` and `m_tree->viewport()`
+themselves from the check — only a genuinely deeper child (the actual
+inline `QLineEdit` editor an editable cell creates) still blocks it.
+
+**Broadcast wasn't shown:** `patchTarget()` returns false when a patch has
+no explicit target set at all — which its own comment already correctly
+calls "broadcast: no single node to sit under" — but the row-building code
+only appended a "broadcast"/"unicast" label when `patchTarget()` returned
+TRUE, so the plain/default broadcast case (exactly what "patch to this
+protocol" / leaving the target IP blank produces) said nothing at all.
+Added the missing branch: no explicit target AND the plugin supports
+targets at all → "broadcast", matching what the plugin actually does by
+default.
+
+Builds clean, launched without error. **Not interactively verified against
+these specific repro steps** — re-check: patch an unpatched universe to
+broadcast and confirm the row updates immediately and says "broadcast";
+confirm a universe never again shows in "Unpatched" once it has a real
+patch.
+
+## Footer chip: reason wording + a useful detail list (2026-09-02) — SHIPPED
+
+Same message, two more asks: the footer tooltip should read as "there ARE
+patched interfaces missing" rather than reciting universe numbers, and the
+click-through details dialog should be "a useful list of data," not a data
+dump.
+
+- `App::updateOutputReadiness()`'s registered summary now explains the
+  SITUATION — `"N patched network interfaces not present on this
+  machine"` — instead of `"Universe N has no output"`, which read like a
+  configuration mistake to go fix rather than an expected, resolves-itself
+  consequence of being off the show network. (Still distinguishes this from
+  the older, unrelated "line index out of range" case, worded separately,
+  in the rare event both occur together.)
+- `ShowStatus::Entry` grew an `items` field (`QStringList`, one line per
+  individually-affected thing) alongside the existing `summary`/`detail`.
+  `App::showStatusDetails()` (the click-through dialog) now renders a real
+  `QTreeWidget` — one bold top-level row per registered source, its detail
+  sentence as an italic child, then each item as its own row underneath —
+  instead of one long HTML paragraph per source. Matches the rest of the
+  app's own list-based idiom instead of introducing a text dump.
+
+Builds clean, launched without error. **Not interactively verified** —
+check the footer tooltip's new wording and open the details dialog to
+confirm it reads as a scannable list.
+
+## Pending patches stayed visible as patched + 3-density footer chip (2026-09-02) — SHIPPED
+
+Branson, right after the pending-patch/ShowStatus work landed: (1) a
+universe with a pending patch must not present as if it had been unpatched
+— "it should leave the patch and not route" — and (2) the footer's "Not
+ready" needs to be VERY short, mouseover for some details, and clickable
+for everything.
+
+**1. The tree gap:** `OutputPatch::isPending()` correctly makes
+`isPatched()` false while pending (nothing should route, right), but
+`ConnectionsTree::refresh()`'s "which universes did the plugin-rooted walk
+above already draw" tracking follows real plugin+line matches -- a pending
+patch's line is `QLCIOPlugin::invalidLine()`, which can never match a real
+line index in that walk. So a pending universe fell straight into the same
+"Unpatched" bucket as one that had genuinely never been touched, with
+nothing to say it was actually mapped to something, just unreachable. Split
+`refresh()`'s leftover pass into two: universes with a pending output patch
+now get their own "Interface not present" folder (new `KIND_PENDING_UNIVERSE`),
+each row naming exactly what it's waiting for (`"ArtNet: waiting for
+\"172.18.2.17\""`, e.g.). Its right-click menu deliberately excludes
+ordinary patch editing (retarget/transmit mode/etc. — none of it can mean
+anything until the interface exists again) and offers only Rename, new
+"Forget this patch (unpatch)…" (`ConnectionsTree::forgetPendingPatch()`,
+confirms then clears the pending patch — the one deliberate way to actually
+lose the mapping, distinct from it happening by accident), and Delete
+universe entirely.
+
+**2. Footer chip, three densities:** the chip text is now a fixed, source-
+independent `"Not ready"` (or `"Not ready (N)"` for N registered problems)
+instead of showing whichever `ShowStatus` entry happened to be worst — it
+no longer grows/shrinks/changes wording as sources come and go. Hovering
+shows each registered entry's short `summary` line, one per source, ending
+in "Click for details" — not the full explanation. Clicking (new
+`App::showStatusDetails()`, wired through the existing
+`m_statusModeLabel`/`eventFilter()` click pattern already used by the
+power and MTC chips) opens a small dialog with every entry's complete
+`detail` text. `ShowStatus::Entry` already had both fields from the
+original design; this was purely a rendering split that had not been done
+yet, not a new data need.
+
+Builds clean; engine unit tests re-run clean (outputpatch_test 6/6,
+inputoutputmap_test 35/35 — no regressions from the tree-level change,
+which touches only `ui/`). **Not interactively verified** — check the
+Devices tab shows "Interface not present" (not "Unpatched") for a pending
+universe, and click the footer's "Not ready" chip to confirm the details
+dialog opens with real content.
+
+## Portable patches (pending interfaces) + ShowStatus registry (2026-09-02) — SHIPPED
+
+Branson: showfiles get worked on hosts that don't have the network they were
+built for; in that case we should keep the mapping but not broadcast
+traffic. Agreed design, then implemented, plus a second ask that came with
+the go-ahead: register this as a footer warning through a general status
+registry other parts of the app can use too, rather than one more
+hand-wired check.
+
+**The bug this fixes:** `InputOutputMap::setOutputPatch()` already matched a
+saved ArtNet patch's interface by its recorded IP (`outputUID`) against
+`plugin->outputs()` first. When that IP wasn't found -- the normal case on
+a machine that isn't on that network -- it silently fell back to trusting
+the raw numeric line index that came with it. On a host with a *different*
+but still in-range set of interfaces, that index could resolve to a real
+but WRONG interface and actually open/broadcast on it, with nothing but a
+debug-only log to say so. `InputOutputMap::danglingOutputPatches()` (the
+existing rig-readiness check) only ever caught the index being out of
+range, not "resolved, just to the wrong thing" -- so this exact case was
+both dangerous and invisible.
+
+**Engine fix:** new `OutputPatch::setPending(plugin, uid)` /
+`isPending()` (`engine/src/outputpatch.{h,cpp}`) and
+`Universe::setOutputPatchPending()` (`engine/src/universe.{h,cpp}`). When a
+UID doesn't match, `InputOutputMap::setOutputPatch()` now calls this
+instead of falling through to the stale index: the patch keeps its plugin
+association and the original UID (so `outputName()` — and therefore
+`saveXML()`'s `LineUID` attribute — round-trips the SAME identity rather
+than collapsing to "None" and losing the mapping for good on next save),
+but `isPatched()` is false and nothing is ever opened. `set()` always
+supersedes a pending state, so the interface showing up again (open on the
+right host, or a hand re-patch) resolves it normally. `DanglingPatch` grew
+a `missingInterface` field so `danglingOutputPatches()` reports pending
+patches too, alongside the pre-existing out-of-range case (which still
+needs its own detection — an older workspace with no recorded UID at all
+has no better signal to go on than the index). Scoped to OUTPUT patches
+only, matching what was actually asked (input/feedback share the pattern
+but weren't touched). Two new unit tests pin the exact behavior:
+`OutputPatch_Test::pending()` and
+`InputOutputMap_Test::unresolvedInterfaceIdentityGoesPendingNotWrongIndex()`
+(the latter specifically proves an in-range-but-wrong index is never
+trusted). Ran the full `outputpatch_test`/`inputoutputmap_test`/
+`universe_test` suites — 65 passed, 0 failed, no regressions.
+
+**ShowStatus registry:** new `ui/src/showstatus.{h,cpp}` — small QObject
+singleton (`ShowStatus::instance()`) other parts of the app register a
+named entry into (`setStatus(key, severity, summary, detail)` /
+`clearStatus(key)`) instead of writing straight into a footer widget.
+`App::updateStatusBar()` now renders whichever entry is worst
+(`ShowStatus::instance()->worst()`) generically, connected via one
+`ShowStatus::changed()` signal wired in `initStatusBar()` — it does not
+know "output.dangling" or any other key exists. `App::updateOutputReadiness()`
+is now just the first registrant (`setStatus("output.dangling", Warning,
+...)` / `clearStatus(...)`), and its detail text now distinguishes the two
+DanglingPatch cases (pending interface vs. out-of-range index) instead of
+one generic message. `m_outputReadinessWarning` (the old single-purpose
+QString the footer used to read directly) is gone. The point: a future
+source (PMJ hardware gone missing, a fixture profile that failed to load,
+...) needs zero footer changes, just a setStatus()/clearStatus() call of
+its own.
+
+Builds clean (reconfigured for the two new source files); launched and
+exited cleanly with no errors in the log. **Not interactively verified** —
+the actual footer text/tooltip for a pending patch, and that "not broadcasting"
+is really true at runtime with a live ArtNet target absent, need eyes/hands
+on the running app (`build/main/qlcconsole -o test-workspaces/surfacetesting.qxw`),
+not just clean builds and passing unit tests.
+
+## Devices tree: strict hierarchy, one CRUD kind per level (2026-09-02) — SHIPPED
+
+Branson laid out the actual target shape after the previous round: every
+right-click menu should (1) list options in hierarchy order and (2) list
+ONLY options that apply at that exact level — nothing from a level above or
+below. Concretely: protocol → CRUD interfaces (by IP); interface → CRUD a
+target (IP or multicast); target → CRUD ports; port → patch a universe into
+it. And explicitly: no "Configure ArtNet…" at the protocol row — that
+dialog is the overall config this whole tree is replacing.
+
+This directly reversed the last round's "shortcut" additions (patch a
+universe / add a connection straight from the protocol row) — those reached
+past the interface level, exactly the violation being called out. Removed.
+
+**Per level, now:**
+- **Protocol** (`KIND_PLUGIN`): "Add an interface…" only. A network
+  interface is a real host NIC (`QNetworkInterface::allInterfaces()`,
+  confirmed in `ArtNetPlugin::outputs()`) that exists whether or not this
+  tree currently shows it — `refresh()`'s liveness filter hides an idle one.
+  There is nothing to fabricate, only something to stop hiding, so "Add"
+  here picks a line (`pickPluginLine()`) and adds it to a new session-
+  persistent `m_pinnedLines` set the liveness filter also checks. Honest
+  framing, not literal interface creation. "Configure %1…" is now shown
+  ONLY for plugins with no per-patch equivalent at all — confirmed
+  DMX-USB/MIDI widget settings (speed, mode, …) are genuinely per PHYSICAL
+  WIDGET with no tree row to live on — and hidden for target-capable
+  protocols (ArtNet), where `ConfigureArtNet`'s dialog turned out to be
+  nothing but a second, differently-shaped editor for the exact same target
+  IP / ArtNet universe number / transmit mode a target or port row already
+  edits directly.
+- **Interface** (`KIND_LINE`): "Add a target on this interface…" for
+  target-capable protocols — and, new, "Stop showing this interface" (the
+  symmetric D, offered only once idle) to unpin one added above. "Patch a
+  universe here" and "Patch a universe to a new target…" are GONE for
+  target-capable protocols (ArtNet) — patching now always goes interface →
+  target → port, never skipping a level. Kept as-is for lines with no
+  target concept at all (DMX-USB, MIDI): for those the line already IS the
+  endpoint, so this is the bottom of their hierarchy, not a skip.
+  "Reroute…" (previous round) stays here too — it is a line-level concern.
+- **Target** (`KIND_DEVICE`) and **port** (`KIND_PORT`): unchanged — already
+  matched the spec (rename/add-port/forget-target; patch-into-port), no
+  hierarchy violation found there.
+- **Unpatched universe**: new "Patch to…" — the explicit reverse-direction
+  entry point Branson asked for ("for unpatched .. right click .. patch to
+  ip/port"). New `patchUnpatchedUniverseTo()` asks protocol → interface →
+  (for a target-capable protocol) address/port, i.e. everything a normal
+  interface → target → port click-through would have supplied, since there
+  is no such row to click yet for an orphan universe.
+
+Also fixed the menu-ORDER half of the ask: the universal actions (Collapse/
+Expand, Add/Delete Universe) were being added to the shared `QMenu` before
+any per-kind branch added its own items, so they always rendered first
+regardless of what was clicked. Restructured so per-kind branches build
+their own items first and a new `appendUniversalMenuActions()` appends the
+generic ones immediately before whichever of the 9 `menu.exec()` call sites
+actually fires — every menu now reads specific-to-this-row first, generic
+last.
+
+**Known gap, called out rather than silently built around:** the user's
+model names "IP or multicast" as target kinds; this engine's ArtNet target
+is a single address field with no separate multicast-specific handling —
+typing a multicast group address into that field mechanically works (it's
+just an IP), but there's no dedicated multicast UI/validation. Not built,
+since inventing one wasn't asked for this round and would need its own look
+at what ArtNet 4 multicast actually requires here.
+
+Builds clean; launched and exited cleanly with no errors in the log
+(3-second smoke check, not left running — see prior note on why a
+background-launched instance doesn't persist for interactive use). **Not
+interactively verified** — run it yourself with
+`build/main/qlcconsole -o test-workspaces/surfacetesting.qxw` and check:
+right-click ArtNet → only "Add an interface…" (+ generic actions after a
+separator, no Configure); right-click an interface → only target CRUD, no
+direct patch; right-click an Unpatched universe → "Patch to…" is there.
+
+## Devices tree: menu order, IP-first patching, reroute (2026-09-02) — SHIPPED
+
+Branson, on the entry point fix below: "better .." then three more asks in
+one message.
+
+**1. Menu ordering should be by hierarchy.** The universal actions (Collapse/
+Expand, Add/Delete Universe) were being added to the shared `menu` object
+BEFORE any per-kind branch added its own row-specific items, so they always
+rendered first — a right-click on "ArtNet" led with "Add Universe" ahead of
+anything actually about ArtNet. Restructured so per-kind branches build
+their own items first, and a new `appendUniversalMenuActions()` appends the
+generic ones right before whichever `menu.exec()` fires (all 9 call sites
+now call it there instead of the actions being pre-built once at the top).
+Every menu now reads specific-to-this-row first, generic/root-level last.
+
+**2. "When I add an interface, shouldn't be asking for target IP — that
+should be by universe, right?"** Correct, and this was a real design
+mistake in the previous round: the protocol-level "add a connection" action
+went straight to `patchToNewTarget()`, which demands an IP before anything
+else — appropriate for aiming at one specific remote node (unicast), wrong
+as the default flow for "just start using ArtNet," which normally broadcasts
+and needs no address at all. "Patch a universe to this protocol…" (asks
+which universe first, same as patching from a line row, no IP) is now
+offered for EVERY protocol with any output/input line, including ArtNet —
+previously it was withheld from ArtNet on the assumption "Add a connection"
+covered it. The IP-first flow is still there as a clearly separate, now
+better-labelled "Add a connection to a specific target (by IP)…", for when
+unicast to one node is actually the goal.
+
+**3. Reroute.** "if it bound against lo0 .. reroute all bound universes to a
+different interface." Genuinely didn't exist — `retargetPatch()`/
+`retargetSelection()` only re-aim a universe's TARGET ADDRESS on the SAME
+line; nothing moved universes off a line entirely. New: right-click a line
+row that has universes patched to it → "Reroute N universe(s) to a different
+interface…", `ConnectionsTree::rerouteLine()`. Picks a new line (via the
+same `pickPluginLine()` from the entry-point fix), confirms, then re-patches
+every affected universe in one pass. Each patch's own settings (ArtNet
+target IP, transmit mode, ...) live on the `OutputPatch` object itself and
+survive untouched — confirmed by reading `Universe::setOutputPatch()` /
+`OutputPatch::set()`, which reuse the existing patch object and only update
+plugin+line — so this is a pure "which wire does it leave by" change, not a
+re-patch from scratch. Output patches only for now; input/feedback reroute
+was not asked for and `InputOutputMap::setInputPatch()` replaces the whole
+patch object rather than reusing it, so it would need its own look at
+whether the profile survives before doing the same trick there.
+
+Builds clean, smoke-tested. **Not interactively verified** — try right-
+clicking ArtNet with nothing patched (should lead with protocol actions,
+"Patch a universe to this protocol…" should NOT ask for an IP), and
+right-clicking a line with universes on it for the new Reroute action.
+
+## Devices tree had no way in for a protocol with nothing patched yet (2026-09-02) — SHIPPED
+
+Branson: "this doesn't allow to add an interface under artnet for instance
+which it should," and laid out the model he wants: root = protocol (CRUD),
+under a protocol = connection (CRUD, plus type-specific config), under a
+connection = patch universe (CRUD). Most of that already existed in the
+engine and the per-row menus (see the two entries below this one) — the
+actual bug was narrower and explains "can't add an interface" literally:
+`refresh()`'s liveness filter hides a LINE row (ArtNet's NIC, e.g.) until
+something is already patched or heard on it, and "Show unused" defaults
+off. So a protocol with nothing patched anywhere had every one of its lines
+invisible, and every "add a target" / "patch a universe" action lived on a
+line row — there was no way to reach them without first ticking "Show
+unused", which nothing prompted anyone to know to do. Chicken, egg.
+
+Two things fixed this without touching the visibility filter itself
+(reintroducing every idle NIC by default was the exact clutter it exists to
+avoid): the protocol (plugin) row's own context menu now offers "Add a
+connection (target)…" for target-capable protocols (ArtNet today) and
+"Patch a universe to this protocol…" for the rest (E1.31, OSC, and anything
+future that patches directly without a per-node target) — both reachable
+with zero visible lines. Neither needed a pre-existing line row: new
+`ConnectionsTree::pickPluginLine()` resolves which line to use itself (the
+only one if there's just one, otherwise a picker matching the same "alias
+(NIC name)" labelling every line row already uses), then hands off to the
+SAME `patchToNewTarget()` / `patchUniverseTo()` these actions already call
+from a line row — no new patch logic, just a new way to reach it.
+
+Root-level "CRUD a protocol" itself was not built as literal add/delete:
+protocols are fixed compiled-in plugins (ArtNet, MIDI, DMX-USB, …), not
+something a workspace can create or remove — "Configure %1…" (already
+existed) is the U, the tree row is the R. Worth saying explicitly since it
+diverges from the requested shape rather than silently doing something
+different.
+
+Builds clean, smoke-tested. **Not interactively verified** — try right-
+clicking "Art-Net" (or another protocol) in Devices with nothing patched
+yet; "Add a connection (target)…" should be there and should not require
+ticking "Show unused" first.
+
+## Devices tree hid every unpatched universe (2026-09-01) — SHIPPED
+
+Branson, right after the round-2 right-click fix landed: "universe1 not
+showing up in there.. neither is the one i added in the rigth click." Root
+cause was a step deeper than the right-click gap itself: `ConnectionsTree`
+(the "Devices" sub-tab) is rooted at `cache->plugins()` — protocol → line →
+device → port → universe — so a universe only ever gets a row as a *child of
+its patch*. A universe with nothing patched to it has no plugin/line/port to
+attach under, so it never rendered at all, regardless of whether it existed
+in the engine. That is true of Universe 1 on a fresh workspace (never
+patched to anything) and of literally every universe `addUniverse()` can
+ever create (a bare universe has no patch by definition) — so the brand-new
+right-click "Add Universe" always produced a universe that then looked like
+it had failed to appear.
+
+Fixed in `ConnectionsTree::refresh()`: the existing per-plugin summary pass
+already walks every row once to count devices/universes for the interface
+detail text, so it now also collects every universe id it sees
+(`patchedUniverses`) as it goes. After that pass, anything in
+`m_doc->inputOutputMap()->universes()` NOT in that set gets a synthetic
+top-level "Unpatched" folder with one child row per leftover universe (new
+`KIND_UNPATCHED_UNIVERSE`). Right-click on one of those rows offers Rename
+and Delete (reusing the existing `renameUniverse()`/`deleteUniverse()` —
+`deleteUniverse()` already self-guards "only the last universe can go", so
+no new guard logic needed); patching a row belongs to Overview/Detailed as
+before, so no patch UI was added here.
+
+Follow-up, same session: "no crud when right click cause every row is
+used... how to fix." The universe visibility fix above didn't reach the
+actual complaint from round 2 — the empty-space-only "Add Universe"/"Delete
+Universe" menu (`item == NULL` case) is only reachable when the tree has
+visible empty space below its rows, which a normally-patched rig (the usual
+case, and now literally every row given the fix above) doesn't have. Empty
+space was never a real route to Add/Delete Universe, just a theoretical one.
+
+Fixed by offering Add/Delete Universe on every row's context menu, not only
+empty space. `slotContextMenu()`'s per-kind branches (KIND_PLUGIN/DEVICE/
+PORT ×2/LINE/UNIVERSE/UNPATCHED_UNIVERSE) each build and `exec()` their own
+`QMenu`, but all reuse the SAME shared `menu` object built once at the top
+of the function (already the case for the pre-existing "Collapse/Expand
+everything below" actions) — so `addUniv`/`delUniv` actions added to that
+shared object right after collapse/expand now show up in all of them. New
+private helper `handleUniversalMenuAction()` centralizes the post-exec
+handling (collapse/expand + add/delete universe) so each of the 8 exec()
+call sites is a single delegating line instead of duplicated logic — same
+shape as the existing collapse/expand check it replaces, at every site that
+already had one.
+
+Builds clean, smoke-tested. **Not interactively verified** — right-click any
+row in Devices next time in the app; "Add Universe" (and "Delete Universe
+[last]…" once one exists) should appear at the top of every menu, not just
+on empty space.
+
+Follow-up regression, caught by Branson actually clicking around: "can't add
+device again on the devices page .. we had fixed that?" The "Unpatched"
+folder heading added by the fix above (see the entry below this one) has no
+`ROLE_KIND` — it's a label, not a plugin/line/device/universe — so it
+matched none of `slotContextMenu()`'s `if (kind == KIND_X)` branches, each
+of which builds AND execs the menu itself. Falling through all of them meant
+the menu was built (with Add/Delete Universe on it) but never shown —
+right-clicking the folder header did nothing, at all, silently. Fixed with a
+fallback `menu.exec()` at the end of the function for any row that matches
+no specific kind. Builds clean, smoke-tested; not re-verified interactively.
+
+## Connections right-click, round 2 (2026-08-18) — SHIPPED
+
+Branson: "still cannot right click to add/manage connections" after the
+earlier fix — that fix only reached the "Detailed" sub-tab's universe
+list. Connections actually has three sub-tabs (Devices/Overview/Detailed),
+each a structurally separate widget; right-click needed checking on all
+three, not assumed from one.
+
+- **Overview** (`UniversePatchGrid`) — had Add/Remove Universe on its own
+  toolbar already (`onAddUniverse()`/`onRemoveUniverse()`), but no
+  right-click at all. New `onContextMenu()`, wired to the table's
+  `customContextMenuRequested`, reuses those same slots.
+- **Devices** (`ConnectionsTree`) — Branson overrode the "read-only on
+  purpose" comment directly: "I DO want to be able to manage adding
+  devices in there." That comment is gone (was stale anyway — the tree
+  already had rich per-row editing via right-click: rename/patch/unpatch/
+  retarget/delete a specific universe; the only real gap was that
+  right-clicking *empty space* did nothing at all, `if (item == NULL)
+  return;`, since "add a universe" isn't a property of any existing row).
+  New `ConnectionsTree::addUniverse()` (mirrors the existing
+  `deleteUniverse()`'s undo-capture pattern) wired into that empty-space
+  case: right-click empty space in Devices now offers "Add Universe" and
+  "Delete Universe [last one]…" (reusing `deleteUniverse()`'s own already-
+  solid "only the last can go" guard/confirm/undo logic, not duplicated).
+  Deliberately did NOT thread these into the existing per-kind branches
+  (KIND_PLUGIN/DEVICE/PORT/LINE/UNIVERSE each build and `exec()` their own
+  menu separately) — too much surface to touch safely in one pass; the
+  empty-space case was the actual gap and the lowest-risk fix for it.
+- **Detailed** — already had it from the earlier round, unchanged.
+
+Right-click now works on all three Connections sub-tabs. Builds clean,
+smoke-tested. **Not interactively verified** (no GUI-automation path for
+right-click context menus in this session) — try right-clicking empty
+space in Devices, the Overview grid, and the Detailed universe list next
+time in the app.
+
+---
+
+## Footer consolidation round 2 (2026-08-18) — SHIPPED
+
+Branson, from a footer screenshot: the rig-readiness warning sat far to
+the right (past DESIGN), disconnected from "Ready" on the far left even
+though a readiness problem is exactly what that slot should mean; and
+Saved/Unsaved/Autosave were three separate chips that could be one.
+
+- **Output-readiness warning moved into `m_statusModeLabel`'s own slot**
+  (far left) instead of a separate right-side chip (`m_statusRigLabel`,
+  removed). New `m_outputReadinessWarning` (QString, empty when fine) —
+  `updateOutputReadiness()` sets it and calls `updateStatusBar()`, which
+  now shows it (red, bold) in priority over both the transient
+  `m_statusMessage` and the idle "Ready" text. The detailed per-universe
+  tooltip moved with it onto `m_statusModeLabel`.
+- **Unsaved/Autosaved/Saved consolidated into one chip** (`m_statusDirtyLabel`;
+  the separate always-visible `m_statusAutosaveLabel` "Autosave: Enabled"/
+  "Last autosave: HH:MM:SS" chip is gone). Driven by three existing signal
+  points, no new tracking state needed: `slotDocModified(true)` →
+  "● Unsaved changes" (orange), the autosave-completion point in
+  `saveXML()`'s autosave path → "Autosaved HH:MM:SS" (gray),
+  `slotDocModified(false)` (a real manual save) → "✓ Saved" (gray).
+  Autosave deliberately does NOT clear `Doc::isModified()` (confirmed in
+  `saveXML()` — only a real save does, via `resetModified()`), and
+  `Doc::setModified()` emits `modified(true)` unconditionally on every
+  edit, not just the dirty transition — so the very next edit after an
+  autosave re-fires `slotDocModified(true)` and flips the chip back to
+  "Unsaved changes" on its own, correctly, with no extra bookkeeping.
+  "Autosave: Disabled" as a persistent chip is gone too — matches
+  Branson's explicit 3-state ask; still configurable via Preferences, just
+  no longer occupying constant footer space.
+
+Builds clean, smoke-tested (stable, no crash). **Not visually confirmed** —
+tried reading label text via `osascript`'s accessibility bridge this round
+specifically (not just resizing/window-existence checks like earlier
+rounds), but Qt's static-text elements didn't expose readable values that
+way. Worth an eyeball check of the actual chip text/colors next time in
+the app, especially the readiness-warning priority-over-"Ready" logic and
+the autosave→edit→"Unsaved changes" flip.
+
+**GM/Blackout — resolved differently than proposed, SHIPPED**: recommended
+consolidating the footer presentation (one combined "is output actually
+happening" chip); Branson redirected instead to "add preference to show GM
+in bottom as option" — GM's footer presence is now a View menu toggle
+(`m_showFooterGMAction`/`m_showFooterGM`, persisted
+`workspace/showFooterGM`, defaults on), same pattern as the existing Load/
+Power chip toggles. GM and Blackout stay fully separate elements; the
+"consolidate" question was answered by making GM optional rather than
+merging it with anything.
+
+**Readiness text simplified**: dropped "NOT READY -" from the warning —
+Branson: it "doesn't need to say NOT READY, just needs to be either
+'ready' or 'why not' in red." The red bold styling already says "this is a
+problem"; the text is now just the reason ("Universe %1 has no output"),
+matching "Ready"'s own plain phrasing in the fine case.
+
+Builds clean, smoke-tested. **Not visually confirmed**, same caveat as
+everything else in this round.
+
+---
+
+## Toolbar real-estate + title bar (2026-08-18) — SHIPPED
+
+Branson: a Fixture Manager toolbar screenshot showed icon+text spacing so
+wide it was "untenable." Two asks: make toolbars more space-efficient, and
+consider moving controls into the title bar.
+
+- **Manager toolbar icon size, unified at 20x20** — `fixturemanager.cpp`,
+  `functionmanager.cpp`, `showmanager.cpp` (both its main and bottom
+  toolbars) never called `setIconSize` at all, falling back to a large
+  platform default; `inputoutputmanager.cpp` was 32x32, `virtualconsole.cpp`
+  was 26x26. All six now match `showtimelineeditor.cpp`'s existing 20x20
+  rather than inventing a new size. This alone shrinks every manager
+  toolbar meaningfully, especially combined with long action labels
+  ("Channels Fade Configuration") under the existing default
+  icon-above-text label mode (itself already a user-toggleable View-menu
+  setting, unchanged).
+- **App-level toolbar merged into the title bar** — `setUnifiedTitleAndToolBarOnMac(true)`
+  in `App::initToolBar()`, macOS-only. Only reaches the small app-level
+  toolbar (Panic/Blackout/Blind/Operate); the per-manager toolbars (like
+  the one in the screenshot) are embedded inside each tab's own widget via
+  `layout()->setMenuBar()`/`addWidget()`, not QMainWindow toolbars, so this
+  API structurally can't reach them — confirmed with Branson before
+  building, scoped to just the app-level one.
+
+**A real puzzle surfaced while verifying this, worth recording honestly
+rather than glossing over**: re-checking the window-minimum-width fix from
+earlier today (`QSizePolicy::Ignored` on tab pages), the minimum had grown
+from the previously-confirmed 791px to 1111px. Bisected hard — reverted the
+title-bar merge (call removed entirely, not just set false), reverted all
+six icon-size changes, and cleared the persisted `workspace.geometry`
+setting (`defaults delete org.qlcplus.qlcconsole "workspace.geometry"`,
+confirmed via a *different* initial window size afterward that this wasn't
+just a stale restore) — none of it moved the number. Every specific
+hypothesis from today's own changes came back negative. What matters:
+**1111px is still comfortably under the 1512px screen and the window
+resizes freely** — the actual bug (wider than the screen, unresizable) is
+confirmed gone; the 791→1111 shift is unexplained but not a regression of
+the resizability fix itself. Mid-investigation, `osascript`/System Events
+stopped being able to query windows for *any* app (Finder, Safari, the
+frontmost process itself all failed identically) — a macOS Accessibility
+session issue unrelated to qlcconsole, not something fixable from in here.
+If this is worth chasing further, it needs a real interactive session
+(Instruments/Qt's own layout debugging, not blind bisection from outside).
+
+Builds clean throughout. **Not visually confirmed** — same caveat as
+everything today, compounded by losing GUI-automation access partway
+through; worth a real look and a real resize-by-hand next time in the app.
+
+---
+
+## 🎨 Visual consistency review (2026-08-18) — SHIPPED (the confirmed bugs)
+
+Full findings: [VISUAL_CONSISTENCY_REVIEW.md](VISUAL_CONSISTENCY_REVIEW.md).
+Separate from the workflow UX review above — spacing/icons/color/theming,
+requested directly ("did you also evaluate look and feel for consistency").
+Key fact: `App::applyTheme()` does a real app-wide `QPalette` swap, so ANY
+hardcoded hex color is a deliberate theme opt-out, not just style — and two
+footer chips added earlier today (mode chip, Show Lock) had exactly that
+bug, confirmed via computed contrast against all 3 dark themes. **Fixed**:
+mode chip now uses `palette(text)`/a higher-contrast green; Show Lock moved
+off Blackout's identical red onto the app's existing `#a06000` amber
+convention, so it no longer reads as the same alarm tier as Blackout.
+
+**Still open, ranked in the doc's own "order of attack"**: toolbar icon
+size unification (24/26/32/platform-default/none across 5 managers — the
+single most visible inconsistency found, since every tab-switch shows it);
+LookEditor's Color-page sliders missing numeric value labels (a genuine
+loose end from this session's own slider work, Dimmer page has them,
+Color doesn't); Delete/Remove icon consolidation (3 different icons, one
+concept); one more isolated dark-theme legibility bug in
+`timecodecalibrationdialog.cpp`; everything else (icon family drift,
+semantic-red consolidation, section-header convention, dialog margins,
+Save button's one-off arm/confirm pattern, tooltip voice) — lower
+urgency/broader surface, deferred to a dedicated pass.
+
+---
+
+## Main window unresizable / off-screen — real bug, found and fixed
+(2026-08-18) — SHIPPED
+
+Branson reported the window couldn't be resized narrower and was hanging
+off the edge of the display. First hypothesis was today's own footer work
+(GM fader, mode chip) — reasonable given recency, but WRONG: trimming the
+GM slider's `setFixedWidth(80)` to a `setMaximumWidth`, and
+`m_statusModeLabel`'s hard `setMinimumWidth(300)` down to 160, had zero
+measurable effect on the window's minimum width. Verified this empirically
+throughout rather than trusting code-reading alone — `osascript`/System
+Events driving the real built app, resizing the actual window and reading
+back its real size, since there's no screenshot tool available here. That
+discipline is what caught two dead-end fixes before landing the real one:
+a speculative `ElideRight` swap for the tab bar's `ElideNone` (a 2021
+upstream macOS workaround, `ff84d8047`, "try to workaround TabWidget
+icon+text issue") also didn't move the number.
+
+**Root cause**: `QTabWidget`'s internal `QStackedWidget` sizes itself to
+the LARGEST of ALL its pages by default — documented Qt behavior — not
+just the currently-visible one. So whichever of the app's 8 tabs
+(Connections, Fixtures, Lighting Studio, Functions, Programming, Shows,
+Virtual Console, Simple Desk) happens to need the most width sets the
+floor for the WHOLE WINDOW, regardless of which tab is active. Confirmed
+by switching the active tab (Connections ↔ Fixtures) and seeing the
+minimum stay bit-for-bit identical at 1525px — on a 1512px-wide display,
+2px over what even a maximally-shrunk window could fit, so the app opened
+wider than the screen and couldn't be pulled back in.
+
+**Fix**: `app.cpp`'s shared `addTab` lambda (the single choke point all 8
+tabs already funnel through) now sets `QSizePolicy::Ignored` on both axes
+for every tab page right before adding it — the standard, documented
+pattern for excluding a stacked page from that max-of-all-pages
+aggregation while hidden; it still lays out and renders completely
+normally once it IS the current page. Verified: window now opens at
+1510px (fits the screen), resizes freely down to 500×400 and back up to
+1400×900, and tab-switching (tested Virtual Console/Simple Desk/
+Connections) still works with no crash. The speculative `ElideRight`
+change was reverted back to `ElideNone` once the real fix was confirmed —
+it turned out unnecessary (the remaining tab-bar-driven minimum with
+`ElideNone` restored is ~791px, comfortably inside the screen), so there
+was no reason to risk reintroducing whatever 2021 rendering bug
+`ElideNone` exists to work around. The GM-slider and mode-label width
+trims were kept regardless — real improvements (letting the layout
+actually compress under pressure instead of a hard, unshrinkable floor),
+just not the fix for this specific bug.
+
+Builds clean; this one got an actual behavioral check via `osascript`; the
+tab-switch/crash check above ran against the real binary too — more
+verification than most of today's changes got.
+
+**Follow-up**: Branson noticed moving the GM fader reflowed every chip to
+its right, since the value label's width floated with its text ("1%" vs
+"100%"). Fixed to the widest possible reading, same reasoning
+`m_statusLoadLabel` already used elsewhere in the footer. Reverified the
+resize fix still holds afterward (791px minimum, unaffected by 2 extra
+pixels) — no regression.
+
+---
+
+## Footer chip consistency pass (2026-08-18) — SHIPPED
+
+Started as two follow-up asks after the workflow UX review's GM/mode-chip
+work: move GM to the left of the footer (next to the mode-message label,
+`addWidget` not `addPermanentWidget` — non-permanent, like
+`m_statusModeLabel`, since this app doesn't use `statusBar()->showMessage()`
+so there's no flicker risk), and make the Design/Operate chip itself
+clickable (`installEventFilter`, triggers the same `m_modeToggleAction` the
+toolbar button does — one control, not two).
+
+That led to a real design question from Branson: the footer had accumulated
+several different "how do we show state" idioms with no shared logic —
+Blackout used a `●` dot, Show Lock a 🔒 emoji, Timecode mixed an emoji AND a
+dot, Power had an emoji with no dot, the new Mode chip had neither. Landed
+on a two-tier answer: **alarm-tier states that are meant to interrupt**
+(Blackout, Blind) keep their distinct, deliberately-loud treatment — Blind's
+whole-footer-blue and Blackout's dot are staying different from each other
+and from everything else on purpose, that's the point. **Passive-readout
+chips** (Mode, Timecode, Power, Show Lock, engine Load) converge on one
+plain style: bold text + a meaningful color, no decorative emoji icon.
+Dropped 🔒 (Show Lock), ⏱︎ (Timecode, 4 call sites), ⚡︎ (Power), ⚙︎/⏱ (Load).
+**Deliberately kept**: Blackout/Show Lock's own `●`-in-Blackout and
+Timecode's internal `◌`/`●`/`❚❚` state glyphs, Dangle's `⚠︎`, Dirty's `✓`,
+Timeline-suspended's `❚❚` — Branson's own distinction, confirmed:
+these carry real at-a-glance state meaning (same job as Blackout's dot),
+not decorative branding icons, so they're a different thing from the emoji
+prefixes that got removed. Show Lock's text also moved from an inline HTML
+`<span style=...>` to a `setStyleSheet()` call at construction, matching
+every other chip's convention, and its display text changed from "Show
+locked" to "SHOW LOCKED" to match the all-caps convention Blackout/Mode
+already use.
+
+Builds clean, smoke-tested each step. **Not yet visually confirmed** —
+this was a rapid design-question → implementation cycle without a
+screenshot checkpoint; worth a look next time the app's open.
+
+---
+
+## 🔍 Workflow UX review (2026-08-18)
+
+Full findings: [WORKFLOW_UX_REVIEW.md](WORKFLOW_UX_REVIEW.md). Requested
+while away from PMJ hardware: a discoverability/simplicity review across
+fixture setup, Programming-tab look-building, Function Manager/Show-Timeline,
+and Virtual Console/live-operating. Core pattern found: the app already has
+the right answer in several places (empty-state hints, footer safety chips,
+content-aware canvas tiles) — it's just not applied everywhere it's needed
+yet. **A separate look-and-feel/visual-consistency pass (spacing, icon sets,
+color usage, theme compliance) was explicitly NOT part of this review and is
+still open** — Branson asked directly, flagging it rather than letting it
+slide.
+
+**Shipped (2026-08-18), the pure-mechanical items — no design decision
+needed:**
+- Programming tab's Save button renamed "Save Positions" + clarifying
+  tooltip (was mislabeled as general Save; ordinary look edits are already
+  tracked by the existing app-wide footer "● Unsaved changes" indicator,
+  `programmingmanager.cpp`).
+- Tab tooltips distinguishing Fixture Groups vs. Channel Groups
+  (`fixturemanager.cpp`); clarified tooltips on the shared Add-group action
+  and the dynamic Add-action tooltip ("Add channel group..." vs. "Add
+  fixture...").
+- Head-layout-grid tooltip on `CreateFixtureGroup`'s size fields
+  (`createfixturegroup.ui`).
+- Palette-type tooltips in the Programming tab's "New…" menu for all nine
+  types, with Pan/Tilt vs. Aim spelled out explicitly since they look like
+  synonyms and aren't (`programmingmanager.cpp`;
+  `QMenu::setToolTipsVisible(true)` was needed too — off by default on most
+  platforms including macOS).
+- Programming tab's empty-palette-tree guidance folded into the existing
+  canvas placeholder text (both the constructor default and the runtime
+  `setText()` call) rather than a new separate hint.
+- Also: builds now use performance cores only, not `hw.ncpu`
+  (`CLAUDE.md`, `check-all.sh`) — Branson asked for this directly mid-review;
+  see memory `build-core-moderation`.
+
+**Shipped (2026-08-18), design decisions made:**
+- **Grand Master promoted to a compact footer fader** — Branson chose "always
+  visible/adjustable" over a readout+popup. New `m_statusGrandMasterSlider`/
+  `m_statusGrandMasterValueLabel` in `app.cpp`'s footer, wired to the same
+  `InputOutputMap::setGrandMasterValue()`/`grandMasterValueChanged()` hooks
+  the VC-embedded `GrandMasterSlider` uses, so both stay in sync. Deliberately
+  a new compact widget rather than reusing `GrandMasterSlider` itself — that
+  class is a tall vertical sidebar widget (min. 100px), not built for a
+  ~20px status-bar strip.
+- **Persistent Design/Operate mode chip** — new `m_statusModeChipLabel`,
+  updated in `slotModeChanged()` alongside the existing destination-mode
+  toggle button (left untouched). Green "OPERATE" / gray "DESIGN".
+- **Chaser-step and Show-timeline content swatches** — Branson chose a color
+  swatch over a mini-preview thumbnail. New `AppUtil::sceneSwatchColor(doc,
+  scene)` (`apputil.{h,cpp}`) — the RGB of the first Color-type palette a
+  scene references, invalid `QColor` (no swatch, falls back to the generic
+  icon) if it references none, e.g. a pure pan/tilt or dimmer-only scene.
+  Wired into `ChaserEditor::updateItem()` (replaces the generic per-type
+  icon with a swatch dot when available) and `SceneItem::paint()` on the
+  Show timeline (a small dot drawn top-left, deliberately separate from
+  `ShowItem`'s existing top-right type badge and from the block's own
+  `m_color`, which is a user-assigned organizational color unrelated to
+  scene content — conflating the two would have been a real bug). Sequences
+  (chaser-driven timeline items) were NOT touched — a sequence has multiple
+  per-step scenes with potentially different colors, no single obvious
+  swatch, and its lack of inline editing is already a separately-flagged
+  open gap (see item 1 below).
+- **Naming-convention nudge** — Branson chose placeholder-text-only, but
+  there's no dialog/QLineEdit at scene/chaser creation to put placeholder
+  text on (creation is silent auto-name + tree-inline-rename, and Qt's
+  built-in tree item editor doesn't support placeholder text without a
+  custom delegate — real extra engineering, out of scope for "cheap").
+  Landed the same-spirit, actually-cheap equivalent instead: tooltips on
+  the "New scene"/"New chaser" toolbar actions
+  (`functionmanager.cpp`) spelling out the convention with a concrete
+  example. Also **deliberately did not hardcode a "learn from siblings"
+  auto-namer** — CLAUDE.md is explicit the convention should be learned
+  from sibling names, not hardcoded, and no such inference logic exists
+  anywhere in the codebase to reuse; building one from scratch is a real
+  feature, not a nudge, and wasn't what was asked for here.
+- **Connections-tab onboarding hint** — the actual first tab a new
+  workspace opens on (not Fixture Manager). A fresh `Doc` always has 4
+  default universes (`Doc::Doc`'s default arg), so "count == 0" never
+  applies here the way it does for Fixture Manager's fixture tree — the
+  hint instead shows whenever none of them have any input/output patch
+  yet, hiding once the first one does (`InputOutputManager::updateList()`,
+  new `m_onboardingHint`).
+
+**Shipped (2026-08-18) — SceneItem double-click:**
+- **Timeline Scene clips now have an edit action** — double-click a bare
+  Scene block on the Show timeline (`SceneItem::mouseDoubleClickEvent()`,
+  new) and it jumps to the Programming tab with that scene loaded, reusing
+  `ProgrammingManager::showFunction(fid)` — an existing public entry point
+  ("exactly as clicking it in the nav tree would") that just had nothing
+  wired to call it from the timeline before. New
+  `App::switchToTabContaining(QWidget*)` does the actual tab-switch
+  (`m_tab->indexOf()`/`setCurrentIndex()`), reached from the
+  QGraphicsItem via the same `qApp->topLevelWidgets()` →
+  `qobject_cast<App*>` → `findChild<ProgrammingManager*>()` pattern already
+  used elsewhere (`monitor.cpp`'s Quit handling; `pmjoverlay.cpp`'s own
+  reach-pattern this session). Chose "jump to Programming tab" over a
+  separate Scene Editor dialog — that's where this fork's actual editing
+  workflow lives (CLAUDE.md), a legacy raw-channel Scene Editor would be
+  the wrong destination for this fork specifically.
+- **Sequences deliberately NOT touched in this pass** — `SequenceItem` has
+  real per-cue complexity already (`cueAt()`, `selectCue()`, per-cue drag
+  state) that a double-click handler needs to account for (which CUE was
+  double-clicked, not just "the sequence"), and DONE.md's existing
+  "Sequences: edit in Functions tab hint" note is really the same
+  underlying gap — deserves its own focused pass rather than bolting on a
+  rushed version here.
+- Builds clean, smoke-tested (starts/runs fine). **Not interactively
+  verified** — double-clicking a `QGraphicsScene` item can't be driven via
+  `osascript`/System Events (scene items aren't separate accessibility
+  elements the way native widgets are), so this needs a real click-test in
+  the app: open a Show with a Scene clip on the timeline, double-click it,
+  confirm it lands in the Programming tab with that scene loaded.
+
+**Item 2 (smaller/lower-urgency batch) — shipped (2026-08-18):**
+- **Cue list next-cue indicator — investigated, no fix needed.**
+  `VCCueList::setFaderInfo()`'s orange `#FF8000` highlight
+  (`vccuelist.cpp:1164`) has no gating on crossfade-panel visibility at
+  all — traced its only caller, `slotCurrentStepChanged()`, and the
+  `FaderMode::None` branch (no crossfade fader configured, the common
+  case) calls it unconditionally too. The original review finding was
+  imprecise; didn't force a speculative change against a check that
+  already appears correct on inspection — flagging instead of guessing.
+- **Design→Operate checkpoint** — mirrors `slotModeDesign()`'s existing
+  "there's something you might lose" warning, but gated specifically on
+  `Doc::isProgrammerDirty()` (uncommitted pad/Programming-tab edits — colors,
+  positions, etc. never saved into a scene), not `isModified()`, which
+  is true almost continuously while actively building a show and would
+  have reintroduced exactly the "friction on every toggle" the design
+  call was meant to avoid.
+- **SceneGroupLooks drop-zone precision** — `dropEvent()` now checks which
+  column (`m_targetList` vs `m_lookList`, both direct children of
+  `SceneGroupLooks` so their `geometry()` is directly comparable to the
+  drop position) a palette/fixture-group actually landed on, rejecting
+  (with a `QToolTip` explaining why — the original finding noted there
+  was no rejection/hint path at all) only the CLEAR wrong-column cases;
+  drops landing between/outside both lists still fall through to the
+  previous permissive behavior.
+- Builds clean, smoke-tested (starts/runs). **Not interactively verified**
+  — same caveat as item 1: needs a real click-test (try dropping a palette
+  on Targets, a fixture group on Looks, toggle to Operate with an
+  uncommitted pad edit) next time in the app.
+
+**Still open:**
+
+1. Timeline vocabulary (Track/Cue/handles) never explained in-app — no
+   glossary, first-run hint, or "?" affordance anywhere in the Show
+   timeline. Lowest urgency of what's left; not yet designed.
+
+---
+
 ## 🔌 Connections tab — remaining
 
 *(Shipped work moved to [DONE.md](DONE.md), 2026-08-28.)*
