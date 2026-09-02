@@ -6,6 +6,69 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-09-02 — Consistent cross-platform startup window *(BUILT — verified live)*
+
+Branson: a startup window with name/version, a scrolling panel of what's
+loading, and a progress bar, covering everything that has to happen before
+the app is usable — not just macOS, and not just plugin loading.
+
+New `StartupWindow` (`ui/src/startupwindow.{h,cpp}`) replaces the old
+mac-only, indeterminate `QProgressDialog` (`App::createProgressDialog()`,
+gated on `__APPLE__`) entirely. `App::startup()` now applies the saved
+theme *before* constructing it (`qApp->setPalette()` is app-wide, so the
+window opens already correctly themed instead of flashing native), then
+drives a determinate bar across 13 fixed phases in `init()`/`initDoc()` —
+fixture/modifier/RGB-script/plugin/audio/profile loading, universe start,
+control-surface init, tab construction, theming/menu/statusbar setup, and
+a final output-readiness check — each a bold `beginStep()` line with
+`logDetail()` sub-lines underneath (plugin names, per-cache counts, one
+per tab). No new engine signals needed for the count-based details:
+`QLCFixtureDefCache`/`QLCModifiersCache`/`RGBScriptsCache`/
+`AudioPluginCache` already expose `manufacturers()`/`templateNames()`/
+`names()`/`audioDevicesList()`.
+
+**Iterated twice more after the first pass, both from watching it run for
+real:**
+
+1. A `-o`/`--open` workspace load used to run *after* `app.show()`
+   (`main.cpp`), popping a second, unbranded `QProgressDialog`
+   (`createLoadProgressDialog`) once the main window was already visible —
+   looked like a stray extra window. `App::startup()` now takes an
+   optional `workspaceFile`; when given, it loads inline under the same
+   `StartupWindow` (`createLoadProgressDialog`/`slotLoadProgress` detect
+   `m_startupWindow` is still open and log into it instead of creating a
+   second dialog), so the main window only ever appears once fully loaded.
+   `main.cpp` passes `QLCArgs::workspace` into `startup()` instead of
+   loading it separately afterward.
+2. `App::checkAutosaveRecovery()` (called from `initAutosave()`, i.e.
+   still inside the boot sequence) popped a modal `QMessageBox::question()`
+   — another surprise window, and the actual cause of an observed
+   mid-boot "hang" once a stray `untitled.qxw.autosave` existed (this
+   session's own repeated `pkill`-during-testing produced exactly that
+   file). New `StartupWindow::askYesNo()` renders an inline label +
+   Yes/No row in the same window instead, blocking via a local
+   `QEventLoop` — same synchronous contract `QMessageBox::question()`
+   had, no second window. Falls back to the original `QMessageBox` path
+   when `m_startupWindow` is NULL (recovery prompted outside of boot).
+
+Also fixed along the way: the version label under the app name used
+`color: palette(mid)` (a shadow/groove tone, not a text color) and came
+out too faint to read on more than one theme — swapped for the same
+`WindowText` every theme already sets explicitly for legibility, just a
+point size smaller.
+
+Verified live via direct binary launches + screen capture: icon/name/
+version header, step-by-step scrolling log with per-plugin/per-cache
+detail lines, determinate bar reaching exactly "full" at boot completion,
+`-o` launch showing zero extra windows before the fully-loaded main
+window appears, and the inline Yes/No recovery row (confirmed via
+process-liveness polling rather than further screenshots once it became
+clear this session was running on Branson's live desktop, not an
+isolated box — a stray screenshot round briefly overlapped with him
+using Firefox/Omarchy on the same machine).
+
+---
+
 ### 2026-08-28 — Connections tab: discovery, CRUD, parity, patch undo *(BUILT — network hardware NOT yet verified)*
 
 Ten commits on `fix/tree-editing-and-collapse`, 46 files, ~5000 lines. Four
