@@ -3001,27 +3001,6 @@ effect timing items also want the rig to confirm.
   has an Intel Mac available if a real second machine turns out to be needed.
 
 
-- **`tickComputeMs()` measures WALL CLOCK, not CPU — it inflates under
-  scheduling pressure, and the UI Load chip inherits that (2026-08-26)** —
-  `mastertimer.cpp:177` times the tick with a `QElapsedTimer`, so any
-  deschedule *during* `timerTickFunctions()` is counted as engine compute.
-  This produced 7 apparent "engine stalls" of 20-179 ms in the 12.5 h
-  baseline that were nothing of the sort: in all 7, `compute_us` equals
-  `late_us` plus about one tick, i.e. one deschedule inflating both numbers.
-  Real tick compute stayed ~53 us (p50) throughout. Consistent with this, the
-  real-time-policy run showed zero events of either shape.
-  Two consequences:
-  1. There is **one** punctuality problem (scheduling), not two. An earlier
-     reading of this data claimed a separate engine-stall class; that was
-     wrong.
-  2. **`App`'s Load chip reads `tickComputePeakMs()` (`app.cpp:3939`)**, so it
-     over-reports on a contended machine — it can show high "engine load" when
-     the engine is idle and the OS simply is not running it. Do not use it for
-     capacity planning as-is. A true-cost figure wants
-     `thread_info(THREAD_BASIC_INFO)` / `clock_gettime(CLOCK_THREAD_CPUTIME_ID)`
-     rather than a wall clock; keeping both (wall vs CPU) would actually make
-     the chip a useful jitter indicator instead of a misleading load one.
-
 - **MasterTimer misses ticks at full output load (2026-08-25, 2026-09-02) —
   fixed on macOS, ROUGHED IN elsewhere, NOT YET VERIFIED on Linux/Windows.**
   With 51 universes forced to `transmitMode="Full"` on `ender` (~2484 pkt/s,
