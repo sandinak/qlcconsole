@@ -166,28 +166,52 @@ for every board at once.
 
 ## Build slices (revised — engine-first, then overlays)
 
-- **P0 — CONTROL SURFACE ENGINE (core, device-agnostic).** The surface model
-  (typed controls + LED addresses from a profile), the logical role/page vocabulary
+*(Status per TODO.md's "Build-season freeze list", most recently updated
+2026-09-02 — that's the live tracker; treat the per-slice detail below as
+historical design record, not a second source of truth for what's done.)*
+
+- **P0 — CONTROL SURFACE ENGINE (core, device-agnostic). DONE** (`81eaab311`,
+  unit-tested in `engine/test/controlsurface/`). The surface model (typed
+  controls + LED addresses from a profile), the logical role/page vocabulary
   with context-aware state, and the generic **feedback loop** that repaints LEDs on
   app change. No device specifics yet — proves the abstraction.
-- **P1 — PMJ overlay + LED.** Bind the PMJ's controls to the roles; light the
-  strips/modes per validity (populated/selected/active). Start with the **Design
-  page** (Groups/Looks/Fix Cont → 10-strip select + Enc 1–4 params + Master GM).
-- **P2 — Runtime page.** `Looks`/`Macros` as cue banks, `Go`/`Back`/`Left`/`Right`
-  as transport, current-cue LED. Same engine, different page states.
-- **P3 — APC40 mk2 overlay.** Second device onto the SAME roles — proves the
-  engine generalises (and revives the APC40 work).
-- **P4 — Xbox roles.** Confirm the design-joystick handoff + a runtime busking HID
-  profile (sticks/triggers/bumpers) layered over the timeline.
+- **P1 — PMJ overlay + LED. UNDERWAY**, 8 slices shipped (`ui/src/
+  pmjoverlay.{h,cpp}`; see DONE.md's "Recently shipped" section in TODO.md).
+  Bind the PMJ's controls to the roles; light the strips/modes per validity
+  (populated/selected/active). Start with the **Design page** (Groups/Looks/
+  Fix Cont → 10-strip select + Enc 1–4 params + Master GM). Still open:
+  Select/Load/Transport wiring (needs the app-side selection/paging model,
+  not built yet), Favorites/Tap binding, Enc 3/4 targeting, and the `Set`
+  button's LED specifically.
+- **P2 — Runtime page. NOT STARTED.** `Looks`/`Macros` as cue banks,
+  `Go`/`Back`/`Left`/`Right` as transport, current-cue LED. Same engine,
+  different page states.
+- **P3 — APC40 mk2 overlay. NOT STARTED.** Second device onto the SAME
+  roles — proves the engine generalises (and revives the APC40 work).
+- **P4 — Xbox roles. NOT STARTED.** Confirm the design-joystick handoff + a
+  runtime busking HID profile (sticks/triggers/bumpers) layered over the
+  timeline.
 
-## Open — confirm before/along P0
+## Open questions from the P0 handoff — resolved during P1
 
-- **Static core for *your* hands**: which controls never page (proposed: `Master`
-  = GM, plus a couple of mode buttons reserved for Blackout / Blind / Auto-MIB /
-  Tap — say which).
-- Whether the **10 faders** are strip levels (per selected fixture/group) or fixed
-  submasters — affects P1.
+*(This section originally asked these before P0 started; kept for the
+historical record instead of deleted, since the reasoning that led to each
+answer is spread across the P1 sections below.)*
+
+- **Static core for *your* hands**: which controls never page. **Resolved**
+  — `GM, Blackout, Blind, Tap, Go, Back` (TODO.md, "Decisions locked");
+  more may be identified via workflow.
+- Whether the **10 faders** are strip levels (per selected fixture/group) or
+  fixed submasters. **Answered two different ways in two places — flagged,
+  not resolved by this doc-cohesion pass:** the P1 slice-1 section below
+  (line ~380) says "selected-fixture, not submaster," but TODO.md's
+  "Decisions locked" line says "faders follow the page (optional submaster
+  page)," and TODO.md separately still lists "per-strip fader Level(1-10)
+  semantics (submaster vs per-fixture)" as an **open design question for
+  Branson**. These three don't agree; needs a real decision, not a doc edit,
+  to close.
 - Runtime busking: **Xbox-only**, or PMJ encoders also live-assign mid-show.
+  Not yet revisited since P0 — still open.
 
 ## P1 plan — PMJ overlay + LED (2026-08-18, Branson back at the rig, PMJ connected)
 
