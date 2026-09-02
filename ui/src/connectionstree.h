@@ -92,11 +92,58 @@ private:
 
     /** Patch an existing or new universe to this plugin line. */
     void patchUniverseTo(const QString &pluginName, quint32 line, bool output);
+    /** Resolve which of a plugin's lines an action should apply to: the only
+     *  one if there is only one, otherwise a picker. False if the plugin has
+     *  no line in that direction at all, or the user cancelled the picker.
+     *  Exists because the protocol-level "add a connection" / "patch a
+     *  universe" actions have no line context of their own to work from --
+     *  unlike everything else in this menu, which is reached by right-
+     *  clicking a specific line row. */
+    bool pickPluginLine(class QLCIOPlugin *p, bool output, quint32 &lineOut);
+    /** "Add an interface…" -- resolve a line on @p p (asking direction and
+     *  which line as needed) and pin it visible. Shared by the protocol
+     *  row's own action and the host row's "Add a protocol" picker, so the
+     *  two stay identical instead of drifting apart. */
+    void revealInterface(class QLCIOPlugin *p);
+    /** "Add a target…" -- reveal a line on @p p the same way
+     *  revealInterface() does, then declare a target on it. Shared the same
+     *  way revealInterface() is. */
+    void addTargetOnNewInterface(class QLCIOPlugin *p);
     /** Drop just this line's patch, leaving the universe itself alone. */
     void unpatchFromLine(quint32 universe, const QString &pluginName,
                          quint32 line, bool output);
+    /** Give up on a pending patch's interface ever coming back and clear it
+     *  -- the one action that makes sense on a KIND_PENDING_UNIVERSE row
+     *  besides renaming/deleting the universe itself (see
+     *  OutputPatch::isPending()). */
+    void forgetPendingPatch(quint32 universe);
     void renameUniverse(quint32 universe);
     void deleteUniverse(quint32 universe);
+    /** Append a new universe (always the last one — see deleteUniverse()'s
+     *  own "only the last can go" rule for why numbering never has gaps). */
+    void addUniverse();
+    /** Shared handling for the "Add/Delete Universe" and "Collapse/Expand
+     *  everything below" actions that every per-kind menu in
+     *  slotContextMenu() carries in addition to its own row-specific ones --
+     *  offered on every row, not just empty space, since a fully-patched
+     *  tree (the common case) has no empty space left to right-click.
+     *  Returns true if @p chosen was one of these (and has already been
+     *  fully acted on), so the caller knows to stop and return. */
+    bool handleUniversalMenuAction(class QAction *chosen, QTreeWidgetItem *item,
+                                   class QAction *collapseAll, class QAction *expandAll,
+                                   class QAction *addUniv, class QAction *delUniv);
+    /** Add the Collapse/Expand and Add/Delete Universe actions to an
+     *  already-built per-kind menu, right before it is shown -- kept last so
+     *  a menu reads top-down by hierarchy: what this exact row offers
+     *  first, the actions that apply regardless of what was clicked last. */
+    void appendUniversalMenuActions(class QMenu &menu, QTreeWidgetItem *item,
+                                    class QAction *&collapseAll, class QAction *&expandAll,
+                                    class QAction *&addUniv, class QAction *&delUniv);
+    /** Move every universe currently output-patched to (pluginName, oldLine)
+     *  onto a different line of the same plugin, in one step, preserving
+     *  each patch's own settings (target IP, transmit mode, ...). */
+    void rerouteLine(const QString &pluginName, quint32 oldLine,
+                     const QList<quint32> &universes);
 
     /** Point this universe's feedback at a plugin line, or clear it. */
     void setFeedback(quint32 universe, const QString &pluginName, quint32 line);
@@ -153,9 +200,25 @@ private:
     /** Put a tooltip on every column, so it shows wherever the pointer lands. */
     static void setRowTooltip(class QTreeWidgetItem *item, const QString &html);
 
+    /** Fill in a universe row's Carries cell with what is actually patched
+     *  into it -- fixture count, head count (only when it differs from the
+     *  fixture count -- most rigs are single-head and it would just repeat
+     *  the same number), and channel usage out of 512, red when over. A
+     *  no-op if nothing is patched to this universe. Shared by every kind
+     *  of universe row (patched, pending, unpatched) so "what's configured
+     *  here" reads the same regardless of whether the network path behind
+     *  it currently resolves -- fixture assignment does not depend on
+     *  that. */
+    void setCarriesFixtures(class QTreeWidgetItem *item, quint32 universeId) const;
+
     /** Patch a universe and aim it at one physical port of a discovered node. */
     void patchUniverseToPort(const QString &pluginName, quint32 line,
                              const QString &deviceAddress, quint32 portAddress);
+    /** Patch an UNPATCHED universe by choosing everything from scratch --
+     *  protocol, then interface, then (for a target-capable protocol) an
+     *  address and port -- since there is no line/target/port row to have
+     *  clicked to get here in the first place. */
+    void patchUnpatchedUniverseTo(quint32 universe);
 
     /** The port address an output patch is aimed at, or invalid if untargeted. */
     bool patchTarget(quint32 universe, const QString &pluginName, quint32 line,
@@ -180,6 +243,13 @@ private:
     /* New lines stay visible for as long as the tab is open, rather than for
        the single rebuild in which they first appeared. */
     QSet<QString> m_newLines;
+    /* Lines ("plugin|line") explicitly kept visible from the protocol row's
+       "Add an interface..." action, session-persistently rather than just
+       until the next rebuild -- unlike m_newLines. This is the closest this
+       engine gets to "create an interface": a real network interface is a
+       host NIC that already exists whether QLC+ has noticed it or not, so
+       there is nothing to fabricate, only something to stop hiding. */
+    QSet<QString> m_pinnedLines;
     bool m_populatedOnce;
     /* First show is the moment to go looking; the constructor may run long
        before anyone opens the tab. */

@@ -33,6 +33,7 @@
 #include <QSet>
 #include <QBrush>
 #include <QColor>
+#include <QSysInfo>
 
 #include "connectionstree.h"
 #include "qlcioplugin.h"
@@ -46,6 +47,7 @@
 #include "fixture.h"
 #include <QLineEdit>
 #include "doc.h"
+#include "qlcconfig.h"
 
 /* What a row represents, and enough identity to act on it. Kept on the item
    rather than inferred from depth, because "device" and "universe" are both
@@ -64,10 +66,41 @@
 #define KIND_DEVICE   3
 #define KIND_PORT     4
 #define KIND_UNIVERSE 5
+/* A universe that exists but has nothing patched to it at all -- freshly
+   added, or simply never wired up. The rest of this tree is rooted at
+   plugins, so a universe like that has no branch to hang off; this kind
+   marks the synthetic row that gives it one anyway (see refresh()). */
+#define KIND_UNPATCHED_UNIVERSE 6
+/* A universe that IS patched, but whose patch is pending -- the interface
+   it names (an ArtNet IP, most often) is not one this machine currently
+   has, most commonly a workspace opened on a different network than it was
+   built for (see OutputPatch::isPending()). Deliberately a different kind
+   from KIND_UNPATCHED_UNIVERSE: this one has a real mapping worth keeping
+   and showing, not an absence to fill in. */
+#define KIND_PENDING_UNIVERSE 7
+/* The tree's own root row -- "this machine", everything else nests under
+   it. Right-clicking it is the one place "add a protocol" belongs: unlike
+   a specific protocol's own row, this one always exists. */
+#define KIND_HOST 8
 
 #define COL_NAME    0
 #define COL_DETAIL  1
 #define COL_CARRIES 2
+
+/** How a protocol is shown to an operator, as opposed to QLCIOPlugin::name()
+ *  -- the identity string this same protocol is saved and matched by in the
+ *  workspace file and everywhere internally, which stays exactly as it is.
+ *  Display-only: a well-known protocol whose common name and its plugin's
+ *  own name() differ badly enough to cost someone a "why isn't sACN here"
+ *  moment gets that name added in parens, same shape a reader would expect
+ *  from a spec citing both. Nothing else changes -- adding an entry here
+ *  cannot rename anything the engine or a saved file depends on. */
+static QString displayPluginName(const QString &pluginName)
+{
+    if (pluginName == "E1.31")
+        return QObject::tr("E1.31 (sACN)");
+    return pluginName;
+}
 
 ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     : QWidget(parent)
@@ -497,9 +530,21 @@ void ConnectionsTree::refresh()
        became a race against a five second timer.
        QAbstractItemView::state() would say this directly but is protected, so
        detect the editor by focus: an open item editor is a focused widget
-       parented into the view. */
+       parented into the view.
+       Excluding m_tree and its viewport themselves matters: the tree's own
+       RESTING focus state after any right-click (context menu, then any
+       modal dialog it opened) is the tree or its viewport having focus --
+       not a child editor -- and every CRUD action here ends in refresh().
+       Without this exclusion, that resting state matched the same
+       ancestor check and silently skipped the rebuild right after almost
+       every action, which is a very different bug from the one this guard
+       exists to prevent: the row just never visibly updated at all,
+       looking like the action itself had silently failed. Only an ACTUAL
+       inline editor -- a QLineEdit parented deeper into the view than the
+       viewport, created for an editable cell -- still blocks it. */
     QWidget *focus = QApplication::focusWidget();
-    if (focus != NULL && m_tree->isAncestorOf(focus))
+    if (focus != NULL && focus != m_tree && focus != m_tree->viewport()
+            && m_tree->isAncestorOf(focus))
         return;
 
     /* Remember which branches are OPEN, keyed by full path, so the rebuild
@@ -529,6 +574,16 @@ void ConnectionsTree::refresh()
     m_rebuilding = true;
     m_tree->clear();
 
+    /* Root of everything below: a visible "this is all local to THIS
+       machine" boundary, and the one place "add a protocol" belongs --
+       right-clicking a specific protocol only works once that protocol
+       already has a row, which "Show unused" deliberately withholds by
+       default (see refresh()'s own comment on that below). This root
+       always exists and is always right-clickable, checkbox or not. */
+    QTreeWidgetItem *hostItem = new QTreeWidgetItem(m_tree);
+    hostItem->setData(COL_NAME, ROLE_KIND, KIND_HOST);
+    hostItem->setExpanded(true);
+
     const bool showAll = (m_showUnused != NULL && m_showUnused->isChecked());
 
     /* Which lines exist this time round, so the ones that were not here last
@@ -545,13 +600,74 @@ void ConnectionsTree::refresh()
         return;
     }
 
+    /* "This Host" on its own said nothing useful -- once it had a real job
+       (see the KIND_HOST comment above), it earned a real answer to "which
+       machine, running what". The identity that actually matters when a
+       show file was built somewhere else: which host this is, and which
+       I/O plugins it has to work with (their versions, where a plugin
+       reports one, live in its own pluginInfo() tooltip already -- shown
+       here is just which ones exist to try). */
+    {
+        const QString hostName = QHostInfo::localHostName();
+        hostItem->setText(COL_NAME, hostName.isEmpty() ? tr("This Host") : hostName);
+
+        QStringList pluginNames;
+        foreach (QLCIOPlugin *p, cache->plugins())
+            if (p != NULL)
+                pluginNames << displayPluginName(p->name());
+        hostItem->setText(COL_DETAIL,
+            tr("qlcconsole %1 · %2 I/O plugin%3")
+                .arg(APPVERSION).arg(pluginNames.count())
+                .arg(pluginNames.count() == 1 ? QString() : QString("s")));
+
+        setRowTooltip(hostItem, tr(
+            "<b>%1</b><br>"
+            "qlcconsole %2<br>"
+            "Qt %3<br>"
+            "%4<br><br>"
+            "I/O plugins: %5")
+                .arg(hostName.isEmpty() ? tr("(hostname unavailable)") : hostName)
+                .arg(APPVERSION)
+                .arg(QT_VERSION_STR)
+                .arg(QSysInfo::prettyProductName())
+                .arg(pluginNames.isEmpty() ? tr("none") : pluginNames.join(", ")));
+    }
+
+    /* Every universe with a pending output patch (see
+       OutputPatch::isPending()), grouped by which plugin and which missing
+       interface identity it is waiting for -- computed up front so the
+       per-plugin loop below can give each group a row right where a real
+       interface would sit, instead of the universe having nowhere to go
+       until a separate, isolated pass at the very end. A protocol problem
+       belongs on that protocol's own branch. */
+    QMap<QString, QMap<QString, QList<Universe *> > > pendingByPluginThenInterface;
+    QSet<quint32> pendingUniverseIds;
+    if (m_doc->inputOutputMap() != NULL)
+    {
+        foreach (Universe *u, m_doc->inputOutputMap()->universes())
+        {
+            if (u == NULL)
+                continue;
+            for (int i = 0; i < u->outputPatchesCount(); i++)
+            {
+                OutputPatch *op = u->outputPatch(i);
+                if (op != NULL && op->isPending())
+                {
+                    pendingByPluginThenInterface[op->pluginName()][op->outputName()] << u;
+                    pendingUniverseIds.insert(u->id());
+                    break;   // one ghost row per universe is enough
+                }
+            }
+        }
+    }
+
     foreach (QLCIOPlugin *plugin, cache->plugins())
     {
         if (plugin == NULL)
             continue;
 
-        QTreeWidgetItem *pitem = new QTreeWidgetItem(m_tree);
-        pitem->setText(COL_NAME, plugin->name());
+        QTreeWidgetItem *pitem = new QTreeWidgetItem(hostItem);
+        pitem->setText(COL_NAME, displayPluginName(plugin->name()));
         /* What the plugin says about itself. It was written to be read -- the
            Detailed tab renders it in a browser pane -- and the protocol row is
            where somebody asks "what IS E1.31, and is it working", so hovering
@@ -636,6 +752,7 @@ void ConnectionsTree::refresh()
                per network interface, and those plugins had simply inherited
                it. */
             if (showAll == false && isNew == false
+                    && m_pinnedLines.contains(lineKey) == false
                     && plugin->linesAreHardware() == false
                     && outUnis.isEmpty() && inUnis.isEmpty()
                     && fbUnis.isEmpty() && devicesHere == 0)
@@ -1049,6 +1166,19 @@ void ConnectionsTree::refresh()
                                                || a == QLatin1String("255.255.255.255");
                             udetail << (bcast ? tr("broadcast") : tr("unicast"));
                         }
+                        else if (plugin->supportsOutputTargets())
+                        {
+                            /* patchTarget() returning false here means no
+                               target was ever set -- which for a protocol
+                               that HAS a target concept IS the broadcast
+                               default (see its own "broadcast: no single
+                               node to sit under" comment), not merely
+                               nothing worth saying. Leaving the row blank
+                               read as if broadcast were an absence of
+                               choice rather than the choice actually in
+                               effect. */
+                            udetail << tr("broadcast");
+                        }
 
                         /* Transmit mode belongs on the row it applies to: it is
                            the difference between sending on change and sending
@@ -1107,20 +1237,16 @@ void ConnectionsTree::refresh()
                     /* Same usage figure the Overview grid shows: how full the
                        universe is. A patch row without it answers "where does
                        this go" but not "is there anything in it". */
-                    int nfx = 0, lastCh = 0;
+                    setCarriesFixtures(uitem, uniId);
+
+                    int nfx = 0, nheads = 0, lastCh = 0;
                     foreach (Fixture *fx, m_doc->fixtures())
                     {
                         if (fx == NULL || fx->universe() != uniId)
                             continue;
                         nfx++;
+                        nheads += qMax(1, fx->heads());
                         lastCh = qMax(lastCh, int(fx->address() + fx->channels()));
-                    }
-                    if (nfx > 0)
-                    {
-                        uitem->setText(COL_CARRIES,
-                                       tr("%1 fx · %2/512").arg(nfx).arg(lastCh));
-                        if (lastCh > 512)
-                            uitem->setForeground(COL_CARRIES, QBrush(QColor(220, 90, 90)));
                     }
 
                     /* The row can only ever show the ONE patch it sits under.
@@ -1167,6 +1293,8 @@ void ConnectionsTree::refresh()
                                            .arg(uni->feedbackPatch()->pluginName())
                                            .arg(uni->feedbackPatch()->outputName()));
                     uprops << Prop(tr("Fixtures"), QString::number(nfx));
+                    if (nheads != nfx)
+                        uprops << Prop(tr("Heads"), QString::number(nheads));
                     uprops << Prop(tr("Channels used"),
                                    tr("%1 of 512").arg(lastCh));
                     setRowTooltip(uitem, propertyTooltip(
@@ -1174,10 +1302,107 @@ void ConnectionsTree::refresh()
                 }
             }
         }
+        /* A patch pending on THIS plugin (see OutputPatch::isPending()) has
+           no real line to hang off -- that is the whole reason it is
+           pending -- so give it a ghost one anyway, shaped exactly like a
+           real interface row, marked as an error, right where a real one
+           would sit. Before the emptiness check below: a protocol with
+           nothing BUT pending patches must not have pitem deleted out from
+           under the rows just added to it. */
+        if (pendingByPluginThenInterface.contains(plugin->name()))
+        {
+            const QMap<QString, QList<Universe *> > &byIface =
+                pendingByPluginThenInterface.value(plugin->name());
+            for (QMap<QString, QList<Universe *> >::const_iterator it = byIface.constBegin();
+                 it != byIface.constEnd(); ++it)
+            {
+                QTreeWidgetItem *ghostLine = new QTreeWidgetItem(pitem);
+                ghostLine->setText(COL_NAME, it.key());
+                ghostLine->setText(COL_DETAIL, tr("not present on this machine"));
+                const QBrush errBrush(QColor(220, 90, 90));
+                ghostLine->setForeground(COL_NAME, errBrush);
+                ghostLine->setForeground(COL_DETAIL, errBrush);
+                setRowTooltip(ghostLine, tr(
+                    "<b>%1</b><br>This interface is not present on this machine "
+                    "-- the workspace was likely built on a different network. "
+                    "Nothing patched to it will output until it is opened "
+                    "somewhere that has this interface.").arg(it.key().toHtmlEscaped()));
+
+                /* Same target/port breakout a resolved patch on this
+                   interface would show -- device, then port, with the
+                   universe folded onto its port -- built from the SAME
+                   plugin parameters (outputIP/outputUni) a resolved patch
+                   reads. The interface being unreachable does not erase the
+                   rest of the address: it is sitting right there on the
+                   patch, unused until the network is back. One device row
+                   per target address, same as the live/manual-target case
+                   above folds multiple ports under one node. */
+                QHash<QString, QTreeWidgetItem *> ghostDevices;
+                foreach (Universe *u, it.value())
+                {
+                    OutputPatch *pendingOp = NULL;
+                    for (int i = 0; i < u->outputPatchesCount(); i++)
+                    {
+                        OutputPatch *cand = u->outputPatch(i);
+                        if (cand != NULL && cand->isPending())
+                        { pendingOp = cand; break; }
+                    }
+
+                    const QMap<QString, QVariant> params = pendingOp != NULL
+                        ? pendingOp->getPluginParameters() : QMap<QString, QVariant>();
+                    const QString targetAddr = params.value("outputIP").toString();
+
+                    QTreeWidgetItem *parentForUniverse = ghostLine;
+                    if (targetAddr.isEmpty() == false)
+                    {
+                        QTreeWidgetItem *ditem = ghostDevices.value(targetAddr);
+                        if (ditem == NULL)
+                        {
+                            ditem = new QTreeWidgetItem(ghostLine);
+                            ditem->setText(COL_NAME, targetAddr);
+                            ditem->setText(COL_DETAIL, tr("unreachable — interface not present"));
+                            ditem->setForeground(COL_NAME, errBrush);
+                            ditem->setForeground(COL_DETAIL, errBrush);
+                            ghostDevices.insert(targetAddr, ditem);
+                        }
+
+                        const quint32 portAddr = params.value("outputUni", u->id()).toUInt();
+                        QTreeWidgetItem *pt = new QTreeWidgetItem(ditem);
+                        pt->setText(COL_NAME, tr("port · %1:%2:%3")
+                                        .arg((portAddr >> 8) & 0x7F)
+                                        .arg((portAddr >> 4) & 0x0F)
+                                        .arg(portAddr & 0x0F));
+                        pt->setForeground(COL_NAME, errBrush);
+                        parentForUniverse = pt;
+                    }
+
+                    QTreeWidgetItem *uitem = new QTreeWidgetItem(parentForUniverse);
+                    uitem->setText(COL_NAME, tr("%1: %2").arg(u->id() + 1).arg(u->name()));
+                    uitem->setText(COL_DETAIL, targetAddr.isEmpty() ? tr("output · broadcast")
+                                                                     : tr("output"));
+                    uitem->setData(COL_NAME, ROLE_KIND, KIND_PENDING_UNIVERSE);
+                    uitem->setData(COL_NAME, ROLE_UNIVERSE, u->id());
+                    setCarriesFixtures(uitem, u->id());
+                }
+                ghostLine->setText(COL_CARRIES, tr("%1 universe%2")
+                                        .arg(it.value().count())
+                                        .arg(it.value().count() == 1 ? QString() : QString("s")));
+            }
+        }
+
+        /* "Show unused" means what it says: unchecked hides an idle
+           protocol entirely, same as it always hid an idle line -- that IS
+           the decluttering the checkbox exists for, and it stays off by
+           default on purpose. Reaching "Add an interface…"/"Add a
+           target…" for a protocol with nothing on it yet is exactly what
+           ticking the checkbox is FOR: reveal everything for as long as
+           the session needs it, act on what was hidden, untick it again
+           when done. That already works -- the fix here is not to bypass
+           the checkbox, it is to make sure ticking it is the whole story. */
         if (pitem->childCount() == 0)
         {
             if (showAll == false)
-                delete pitem;       // nothing live under this protocol
+                delete pitem;
             else
                 pitem->setText(COL_DETAIL, tr("no lines"));
         }
@@ -1294,9 +1519,12 @@ void ConnectionsTree::refresh()
        ghosts. Drives the banner below: "searching" should end when something
        has been found, not when a stopwatch says so. */
     int heardDevices = 0;
-    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+    /* Every universe id that already has a row somewhere in the tree above,
+       so the "unpatched" pass below can tell what still needs one. */
+    QSet<quint32> patchedUniverses;
+    for (int i = 0; i < hostItem->childCount(); i++)
     {
-        QTreeWidgetItem *top = m_tree->topLevelItem(i);
+        QTreeWidgetItem *top = hostItem->child(i);
         if (top->data(COL_NAME, ROLE_KIND).toInt() != KIND_PLUGIN)
             continue;
 
@@ -1321,7 +1549,25 @@ void ConnectionsTree::refresh()
             /* A folded row is a port AND a universe, so count it as both. */
             if (k == KIND_UNIVERSE
                     || (k == KIND_PORT && it->data(COL_NAME, ROLE_UNIVERSE).isValid()))
+            {
                 unis++;
+                const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
+                if (uv.isValid())
+                    patchedUniverses.insert(uv.toUInt());
+            }
+            /* Pending universes (see refresh()'s ghost-interface pass just
+               above this ArtNet-shaped example) sit under this SAME
+               protocol's row, real patches against it, just not routable
+               yet -- a protocol row that carries nothing but pending
+               patches must not roll up to "0 universes". Left out of
+               patchedUniverses on purpose: pendingUniverseIds (computed
+               earlier in refresh()) already excludes these from the
+               "Unpatched" folder; this is a display count, not a second
+               tracking set for the same thing. */
+            else if (k == KIND_PENDING_UNIVERSE)
+            {
+                unis++;
+            }
             for (int c = 0; c < it->childCount(); c++)
                 stack << it->child(c);
         }
@@ -1339,11 +1585,48 @@ void ConnectionsTree::refresh()
         heardDevices += (nodes - unheard);
     }
 
+    /* A universe with nothing patched to it never appeared above at all --
+       the tree is rooted at plugins, and an unpatched universe has no
+       plugin/line/port to be a child of. Without this, Universe 1 (the one
+       every new workspace starts with, patched to nothing) and any universe
+       just added via "Add Universe" both looked like they had silently
+       failed to appear. List what is left over once every id already
+       drawn above is excluded -- patched (drawn under its real line),
+       pending (drawn under its plugin's ghost line, just above), or
+       genuinely never patched, which is what is left here. */
+    if (m_doc->inputOutputMap() != NULL)
+    {
+        QList<Universe *> unpatched;
+        foreach (Universe *u, m_doc->inputOutputMap()->universes())
+        {
+            if (u != NULL && patchedUniverses.contains(u->id()) == false
+                    && pendingUniverseIds.contains(u->id()) == false)
+                unpatched << u;
+        }
+
+        if (unpatched.isEmpty() == false)
+        {
+            QTreeWidgetItem *folder = new QTreeWidgetItem(hostItem);
+            folder->setText(COL_NAME, tr("Unpatched"));
+            folder->setText(COL_DETAIL, tr("not connected to any interface"));
+            foreach (Universe *u, unpatched)
+            {
+                QTreeWidgetItem *uitem = new QTreeWidgetItem(folder);
+                uitem->setText(COL_NAME, tr("%1: %2").arg(u->id() + 1).arg(u->name()));
+                uitem->setText(COL_DETAIL, tr("not patched"));
+                uitem->setData(COL_NAME, ROLE_KIND, KIND_UNPATCHED_UNIVERSE);
+                uitem->setData(COL_NAME, ROLE_UNIVERSE, u->id());
+                setCarriesFixtures(uitem, u->id());
+            }
+            folder->setText(COL_CARRIES, tr("%1 universes").arg(unpatched.count()));
+        }
+    }
+
     /* An empty tree is ambiguous -- "nothing is connected" and "the view is
        broken" look identical. Say which. */
-    if (m_tree->topLevelItemCount() == 0)
+    if (hostItem->childCount() == 0)
     {
-        QTreeWidgetItem *none = new QTreeWidgetItem(m_tree);
+        QTreeWidgetItem *none = new QTreeWidgetItem(hostItem);
         /* Discovery is passive: nodes announce themselves about once a second,
            so for the first few seconds an empty tree means "not yet", not
            "nothing is there". Saying the latter immediately on opening the tab
@@ -1393,7 +1676,7 @@ void ConnectionsTree::refresh()
         {
             it->setExpanded(m_populatedOnce
                             ? m_expanded.contains(itemPath(it))
-                            : depth <= 1);
+                            : depth <= 2);   // was <= 1; "This Host" adds one level
         }
         for (int c = 0; c < it->childCount(); c++)
         {
@@ -1465,7 +1748,28 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 {
     QTreeWidgetItem *item = m_tree->itemAt(pos);
     if (item == NULL)
+    {
+        // Empty space — "add a universe" isn't a property of any existing
+        // row, so this (previously a no-op) is exactly where it belongs.
+        // Was a documented "read-only on purpose" surface; Branson asked
+        // directly to be able to manage universes from here too.
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        if (iom == NULL)
+            return;
+        /* Add only, same reasoning as the universal actions everywhere else
+           in this menu (see appendUniversalMenuActions()): "Delete Universe
+           'X'…" on a click that has nothing to do with X in particular reads
+           as if THIS is what's being deleted, when it silently drops
+           whichever universe is last regardless of where the click landed.
+           Deleting already has a real, contextual home -- right-click that
+           exact universe's own row. */
+        QMenu menu(this);
+        QAction *add = menu.addAction(QIcon(":/edit_add.png"), tr("Add Universe"));
+        QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (chosen == add)
+            addUniverse();
         return;
+    }
 
     const int kind = item->data(COL_NAME, ROLE_KIND).toInt();
     const QString plugin = item->data(COL_NAME, ROLE_PLUGIN).toString();
@@ -1490,35 +1794,92 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         }
     }
 
-    /* Offered on anything with children, before the row-specific actions.
-       Deep branches are quick to open and tedious to close one triangle at a
-       time, and the plugin and device rows had no menu at all -- so the rows
-       most worth collapsing were the ones you could not act on. */
+    /* Collapse/Expand and Add/Delete Universe are the same regardless of
+       what got right-clicked, so they read as generic, root-level actions
+       rather than something this particular row can do. Built here but not
+       ADDED to the menu until appendUniversalMenuActions() runs, right
+       before whichever exec() below actually fires -- so the menu reads
+       top-down by hierarchy: what this exact row offers first, the generic
+       stuff last, instead of the other way round. */
     QAction *collapseAll = NULL;
     QAction *expandAll = NULL;
-    if (item->childCount() > 0)
-    {
-        collapseAll = menu.addAction(tr("Collapse everything below"));
-        expandAll = menu.addAction(tr("Expand everything below"));
-        menu.addSeparator();
-    }
+    QAction *addUniv = NULL;
+    QAction *delUniv = NULL;
 
     /* Resolved before the per-kind menus below, each of which exec()s its own
        menu and returns. */
     if (bulk != NULL && kind != KIND_UNIVERSE && kind != KIND_PORT)
     {
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *pick = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (pick != NULL && (pick == collapseAll || pick == expandAll))
-        { setExpandedDeep(item, pick == expandAll); return; }
+        if (handleUniversalMenuAction(pick, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
         if (pick == bulk)
             retargetSelection(QString());
         return;
     }
 
+    if (kind == KIND_HOST)
+    {
+        /* The one place "add a protocol" always works. A specific
+           protocol's own row only exists to right-click once it already
+           has something under it, or "Show unused" is ticked (see
+           refresh()) -- deliberately, that is real decluttering, not a
+           bug. This is the way around needing either: list every
+           compiled-in protocol here, regardless of whether it currently
+           has a row of its own, and reveal whichever one is chosen the
+           same way that protocol's own "Add an interface…" would
+           (revealInterface() is shared code, not a re-implementation). */
+        QMenu *addProtoMenu = NULL;
+        /* Keyed by DISPLAY name (see displayPluginName()) so the menu sorts
+           the way it reads, not by the internal identity string underneath
+           it -- and actionToPlugin resolves the choice back to a plugin by
+           the QAction itself, not by re-matching its text, so a display
+           name is free to differ from QLCIOPlugin::name() without breaking
+           the lookup. */
+        QMap<QString, QLCIOPlugin *> protoByDisplayName;
+        if (m_doc->ioPluginCache() != NULL)
+        {
+            foreach (QLCIOPlugin *cand, m_doc->ioPluginCache()->plugins())
+            {
+                if (cand == NULL)
+                    continue;
+                const bool candOut = (cand->capabilities() & QLCIOPlugin::Output)
+                                     && cand->outputs().isEmpty() == false;
+                const bool candIn = (cand->capabilities() & QLCIOPlugin::Input)
+                                    && cand->inputs().isEmpty() == false;
+                if (candOut || candIn)
+                    protoByDisplayName.insert(displayPluginName(cand->name()), cand);
+            }
+        }
+        QMap<QAction *, QLCIOPlugin *> actionToPlugin;
+        if (protoByDisplayName.isEmpty() == false)
+        {
+            addProtoMenu = menu.addMenu(tr("Add a protocol"));
+            for (QMap<QString, QLCIOPlugin *>::const_iterator it = protoByDisplayName.constBegin();
+                 it != protoByDisplayName.constEnd(); ++it)
+                actionToPlugin.insert(addProtoMenu->addAction(it.key()), it.value());
+        }
+
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
+        QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
+        if (chosen == NULL)
+            return;
+        if (actionToPlugin.contains(chosen))
+            revealInterface(actionToPlugin.value(chosen));
+        return;
+    }
+
     if (kind == KIND_PLUGIN)
     {
-        /* Protocol-level settings (ArtNet/E1.31 options and so on) live in the
-           plugin's own dialog; there is no generic model for them. */
+        /* This level is protocol CRUD only: what interfaces (by IP/NIC) this
+           protocol uses. Nothing about a specific target or a universe
+           belongs here -- that starts one level down, on an interface row,
+           and goes deeper from there. Everything below was previously
+           reachable directly from here as a shortcut; removed so the menu
+           at every level only offers what that level actually owns. */
         QLCIOPlugin *p = NULL;
         if (m_doc->ioPluginCache() != NULL)
         {
@@ -1526,15 +1887,57 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
                 if (cand != NULL && cand->name() == plugin)
                     p = cand;
         }
-        QAction *cfg = (p != NULL && p->canConfigure())
+
+        /* A network interface is a host NIC that exists whether or not this
+           tree currently shows it -- refresh()'s liveness filter hides one
+           with nothing patched or heard on it until something changes that.
+           There is nothing to fabricate (the interface list IS whatever
+           NICs the OS reports, see ArtNetPlugin::outputs()), only something
+           to stop hiding, hence "Add" here really means "reveal and keep
+           visible" -- m_pinnedLines, checked by that same filter. */
+        const bool canOutHere = (p != NULL)
+            && (p->capabilities() & QLCIOPlugin::Output) && p->outputs().isEmpty() == false;
+        const bool canInHere = (p != NULL)
+            && (p->capabilities() & QLCIOPlugin::Input) && p->inputs().isEmpty() == false;
+        QAction *addIface = (canOutHere || canInHere)
+            ? menu.addAction(tr("Add an interface…")) : NULL;
+
+        /* "Create a connection, then patch a universe to it separately" --
+           the same thing "Add a target on this interface…" already does,
+           just reachable without first revealing (or already knowing)
+           which interface row to right-click. Resolves the interface
+           itself (the only one, or asks -- same as "Add an interface…",
+           and pins it visible the same way) before asking for the target
+           address, so this is genuinely "add interface + add target" in
+           one step, not a shortcut around either. Target-capable protocols
+           only: a DMX-USB/MIDI line has no target to declare, the line
+           itself IS the destination. */
+        QAction *addTgtHere = (canOutHere && p != NULL && p->supportsOutputTargets())
+            ? menu.addAction(tr("Add a target…")) : NULL;
+
+        /* Superseded by per-row CRUD everywhere below: this dialog is a
+           second, differently-shaped editor for the exact same target IP /
+           ArtNet universe number / transmit mode that a target or port row
+           already edits directly, and now duplicates a strict-hierarchy
+           tree instead of standing in front of it. Kept for plugins with
+           no per-patch equivalent at all -- DMX-USB/MIDI widget settings
+           (speed, mode, ...) are genuinely per PHYSICAL WIDGET, not
+           per-patch, and have no tree row to live on. */
+        QAction *cfg = (p != NULL && p->canConfigure() && p->supportsOutputTargets() == false)
             ? menu.addAction(tr("Configure %1…").arg(plugin)) : NULL;
-        if (menu.isEmpty())
-            return;
+
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *pick0 = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (pick0 != NULL && (pick0 == collapseAll || pick0 == expandAll))
-        { setExpandedDeep(item, pick0 == expandAll); return; }
+        if (handleUniversalMenuAction(pick0, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
+        if (pick0 == NULL)
+            return;   // menu dismissed -- cfg may be NULL too, and must not "match" this
         if (pick0 == cfg)
             configurePlugin(plugin);
+        else if (addIface != NULL && pick0 == addIface)
+            revealInterface(p);
+        else if (addTgtHere != NULL && pick0 == addTgtHere)
+            addTargetOnNewInterface(p);
         return;
     }
 
@@ -1560,9 +1963,10 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             forget = menu.addAction(tr("Forget this target…"));
         }
 
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *pick1 = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (pick1 != NULL && (pick1 == collapseAll || pick1 == expandAll))
-        { setExpandedDeep(item, pick1 == expandAll); return; }
+        if (handleUniversalMenuAction(pick1, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
         if (pick1 == ren)
             renameTarget(addr);
         else if (addPort != NULL && pick1 == addPort)
@@ -1591,9 +1995,10 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             QAction *unp = menu.addAction(tr("Unpatch from this interface"));
             menu.addSeparator();
             QAction *del = menu.addAction(tr("Delete universe entirely…"));
+            appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
             QAction *c = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-            if (c != NULL && (c == collapseAll || c == expandAll))
-            { setExpandedDeep(item, c == expandAll); return; }
+            if (handleUniversalMenuAction(c, item, collapseAll, expandAll, addUniv, delUniv))
+                return;
             if (bulk != NULL && c == bulk)
             { retargetSelection(QString()); return; }
             if (retgt != NULL && c == retgt)
@@ -1618,9 +2023,10 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             menu.addSeparator();
             rmPort = menu.addAction(tr("Remove this port"));
         }
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *pick2 = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (pick2 != NULL && (pick2 == collapseAll || pick2 == expandAll))
-        { setExpandedDeep(item, pick2 == expandAll); return; }
+        if (handleUniversalMenuAction(pick2, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
         if (bulk != NULL && pick2 == bulk)
         { retargetSelection(QString()); return; }
         if (pick2 == p)
@@ -1674,34 +2080,125 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 
         QAction *nameLine = menu.addAction(tr("Name this interface…"));
 
+        /* This level is interface CRUD only, scoped to targets -- a target
+           is the thing that hangs off an interface, same as a universe hangs
+           off a target's port. Patching a universe directly from here used
+           to be offered as a shortcut; removed for a target-capable
+           protocol so patching always goes interface -> target -> port,
+           never skipping a level. A line with no target concept at all
+           (DMX-USB, MIDI: the line IS the endpoint, there is nothing
+           further down) keeps patching here instead, since for those
+           this IS the bottom of the hierarchy. */
         QAction *addTgt = targets
             ? menu.addAction(tr("Add a target on this interface…")) : NULL;
-
-        QAction *pNew = NULL;
-        if (targets)
-        {
-            pNew = menu.addAction(tr("Patch a universe to a new target…"));
-            menu.addSeparator();
-        }
-        QAction *pOut = canOut
+        QAction *pOut = (canOut && targets == false)
             ? menu.addAction(tr("Patch a universe here (output)…")) : NULL;
-        QAction *pIn = canIn
+        QAction *pIn = (canIn && targets == false)
             ? menu.addAction(tr("Patch a universe here (input)…")) : NULL;
-        if (menu.isEmpty())
-            return;
+
+        /* "This got bound to lo0 by mistake, move every universe on it to
+           the real NIC" used to mean re-patching each affected universe by
+           hand, one at a time, through Overview or Detailed. Everything
+           else about each patch (target IP, transmit mode, ...) lives on
+           the OutputPatch object itself and survives a plain line change
+           untouched -- Universe::setOutputPatch() reuses the same patch and
+           only updates plugin+line, see OutputPatch::set() -- so only the
+           line index needs touching here, for every affected universe at
+           once. */
+        const QList<quint32> boundHere = canOut ? universesOn(plugin, line, true) : QList<quint32>();
+        QAction *reroute = boundHere.isEmpty() == false
+            ? menu.addAction(tr("Reroute %1 universe%2 to a different interface…")
+                                 .arg(boundHere.count())
+                                 .arg(boundHere.count() == 1 ? QString() : QString("s")))
+            : NULL;
+
+        /* Symmetric "D" for the protocol row's "Add an interface": once a
+           pinned interface is idle again -- nothing patched, nothing heard
+           -- it can go back to being hidden by default rather than staying
+           pinned forever. Only offered when there is nothing here to lose:
+           if anything is genuinely live, the liveness filter keeps it
+           visible regardless of the pin, so unpinning would be a no-op. */
+        const QString lineName = item->data(COL_NAME, ROLE_LINENAME).toString();
+        const bool isPinned = m_pinnedLines.contains(plugin + "|" + lineName);
+        const bool idle = boundHere.isEmpty()
+            && (canIn == false || universesOn(plugin, line, false).isEmpty());
+        QAction *unpin = (isPinned && idle)
+            ? menu.addAction(tr("Stop showing this interface")) : NULL;
+
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (chosen != NULL && (chosen == collapseAll || chosen == expandAll))
-        { setExpandedDeep(item, chosen == expandAll); return; }
+        if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
         if (chosen == nameLine)
-            renameLine(plugin, item->data(COL_NAME, ROLE_LINENAME).toString());
+            renameLine(plugin, lineName);
+        else if (reroute != NULL && chosen == reroute)
+            rerouteLine(plugin, line, boundHere);
+        else if (unpin != NULL && chosen == unpin)
+        {
+            m_pinnedLines.remove(plugin + "|" + lineName);
+            refresh();
+        }
         else if (addTgt != NULL && chosen == addTgt)
             addManualTarget(plugin, line);
-        else if (pNew != NULL && chosen == pNew)
-            patchToNewTarget(plugin, line);
         else if (pOut != NULL && chosen == pOut)
             patchUniverseTo(plugin, line, true);
         else if (pIn != NULL && chosen == pIn)
             patchUniverseTo(plugin, line, false);
+        return;
+    }
+
+    if (kind == KIND_UNPATCHED_UNIVERSE)
+    {
+        /* No plugin/line/port context exists for this row -- that is the
+           whole reason it is here -- so "Patch to..." asks for everything
+           the interface -> target -> port chain would normally have
+           supplied by being clicked through: which protocol, which
+           interface, and (for a target-capable protocol) which address and
+           port. Same destination as patching from a port row, just reached
+           by starting from the universe instead of from the wire. */
+        const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
+        QAction *patchTo = menu.addAction(tr("Patch to…"));
+        menu.addSeparator();
+        QAction *ren = menu.addAction(tr("Rename universe…"));
+        menu.addSeparator();
+        QAction *del = menu.addAction(tr("Delete universe entirely…"));
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
+        QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
+        if (chosen == patchTo)
+            patchUnpatchedUniverseTo(uni);
+        else if (chosen == ren)
+            renameUniverse(uni);
+        else if (chosen == del)
+            deleteUniverse(uni);
+        return;
+    }
+
+    if (kind == KIND_PENDING_UNIVERSE)
+    {
+        /* This universe IS patched -- see refresh()'s "Interface not
+           present" folder -- just to an interface not currently reachable.
+           Nothing here should look like ordinary patch editing (retarget,
+           transmit mode, ...): none of that can mean anything until the
+           interface exists again, and offering it invited configuring a
+           destination that has no effect. Only "give up on it" is real. */
+        const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
+        QAction *ren = menu.addAction(tr("Rename universe…"));
+        menu.addSeparator();
+        QAction *forget = menu.addAction(tr("Forget this patch (unpatch)…"));
+        menu.addSeparator();
+        QAction *del = menu.addAction(tr("Delete universe entirely…"));
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
+        QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
+        if (chosen == ren)
+            renameUniverse(uni);
+        else if (chosen == forget)
+            forgetPendingPatch(uni);
+        else if (chosen == del)
+            deleteUniverse(uni);
         return;
     }
 
@@ -1716,6 +2213,24 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            its front panel, used to cost. */
         QAction *retgt = (output && pluginSupportsTargetsIn(m_doc, plugin))
             ? menu.addAction(tr("Change target address / port…")) : NULL;
+
+        /* DMX-USB and MIDI widgets have no per-patch parameters at all --
+           their real settings (DMX output speed/mode, MIDI init template,
+           and so on) live per PHYSICAL WIDGET, reached only through the
+           plugin's own config dialog. That dialog was already reachable
+           from the plugin and interface rows above this one; offering it
+           here too means the universe row a patch actually shows up on is
+           also somewhere you can reach the hardware settings behind it,
+           rather than having to go find the right interface row first. */
+        QLCIOPlugin *ownerPlugin = NULL;
+        if (m_doc->ioPluginCache() != NULL)
+        {
+            foreach (QLCIOPlugin *cand, m_doc->ioPluginCache()->plugins())
+                if (cand != NULL && cand->name() == plugin)
+                    ownerPlugin = cand;
+        }
+        QAction *cfgIface = (ownerPlugin != NULL && ownerPlugin->canConfigure())
+            ? menu.addAction(tr("Configure interface…")) : NULL;
 
         const bool isMidi = plugin.contains("MIDI", Qt::CaseInsensitive);
         const bool isArtNet = plugin.contains("ArtNet", Qt::CaseInsensitive);
@@ -1911,9 +2426,10 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QAction *unp = menu.addAction(tr("Unpatch from this interface"));
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete universe entirely…"));
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (chosen != NULL && (chosen == collapseAll || chosen == expandAll))
-        { setExpandedDeep(item, chosen == expandAll); return; }
+        if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
         if (chosen == NULL)
             return;
 
@@ -2027,6 +2543,11 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             retargetFeedback(uni);
             return;
         }
+        if (cfgIface != NULL && chosen == cfgIface)
+        {
+            configurePlugin(plugin);
+            return;
+        }
         if (retgt != NULL && chosen == retgt)
             retargetPatch(uni, plugin, line);
         else if (chosen == ren)
@@ -2037,6 +2558,109 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             deleteUniverse(uni);
         return;
     }
+
+    /* Falls through here for a row with no per-kind menu of its own -- the
+       "Unpatched" folder heading is the one example today, added by
+       refresh() with no ROLE_KIND at all since it is not a plugin/line/
+       device/universe, just a grouping label. Every kind branch above
+       exec()s the menu itself and returns; without this, a kind that
+       matches none of them built a menu and never showed it -- right-
+       clicking the row did nothing, silently. */
+    appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
+    QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+    handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv);
+}
+
+bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineOut)
+{
+    if (p == NULL)
+        return false;
+
+    const QStringList lines = output ? p->outputs() : p->inputs();
+    if (lines.isEmpty())
+        return false;
+
+    if (lines.count() == 1)
+    {
+        lineOut = 0;
+        return true;
+    }
+
+    /* Same "operator name wins over NIC name" labelling as every line row in
+       the tree itself, so the picker reads exactly like what it is standing
+       in for. */
+    QStringList labels;
+    for (int i = 0; i < lines.count(); i++)
+    {
+        const QString ifname = p->lineDescription(quint32(i), output);
+        const QString alias = m_doc->inputOutputMap()
+            ? m_doc->inputOutputMap()->lineAlias(p->name(), lines.at(i)) : QString();
+        const QString shown = alias.isEmpty() ? ifname : alias;
+        labels << (shown.isEmpty() ? lines.at(i)
+                   : tr("%1 (%2)").arg(shown).arg(lines.at(i)));
+    }
+
+    bool ok = false;
+    const QString picked = QInputDialog::getItem(
+        this, tr("Choose an interface"),
+        tr("Which interface should this go out on?"), labels, 0, false, &ok);
+    if (ok == false)
+        return false;
+
+    const int idx = labels.indexOf(picked);
+    if (idx < 0)
+        return false;
+    lineOut = quint32(idx);
+    return true;
+}
+
+void ConnectionsTree::revealInterface(QLCIOPlugin *p)
+{
+    if (p == NULL)
+        return;
+
+    const bool candOut = (p->capabilities() & QLCIOPlugin::Output) && p->outputs().isEmpty() == false;
+    const bool candIn = (p->capabilities() & QLCIOPlugin::Input) && p->inputs().isEmpty() == false;
+
+    bool useOutput = candOut;
+    if (candOut && candIn)
+    {
+        bool ok = false;
+        QStringList dirs;
+        dirs << tr("Output") << tr("Input");
+        const QString d = QInputDialog::getItem(this, tr("Add an interface"),
+            tr("Output or input?"), dirs, 0, false, &ok);
+        if (ok == false)
+            return;
+        useOutput = (d == dirs.at(0));
+    }
+
+    quint32 ln = 0;
+    if (pickPluginLine(p, useOutput, ln) == false)
+        return;
+
+    const QStringList lines = useOutput ? p->outputs() : p->inputs();
+    const QString label = lines.value(int(ln));
+    if (label.isEmpty() == false)
+    {
+        m_pinnedLines.insert(p->name() + "|" + label);
+        refresh();
+    }
+}
+
+void ConnectionsTree::addTargetOnNewInterface(QLCIOPlugin *p)
+{
+    if (p == NULL)
+        return;
+
+    quint32 ln = 0;
+    if (pickPluginLine(p, true, ln) == false)
+        return;
+
+    const QString label = p->outputs().value(int(ln));
+    if (label.isEmpty() == false)
+        m_pinnedLines.insert(p->name() + "|" + label);
+    addManualTarget(p->name(), ln);   // prompts for the address; refreshes itself
 }
 
 void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
@@ -2140,6 +2764,37 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
     refresh();
 }
 
+void ConnectionsTree::forgetPendingPatch(quint32 universe)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    Universe *uni = iomap ? iomap->universe(universe) : NULL;
+    if (uni == NULL)
+        return;
+
+    if (QMessageBox::question(this, tr("Forget patch"),
+            tr("Stop waiting for this universe's interface and unpatch it?\n\n"
+               "The interface itself is unaffected -- this only clears what "
+               "this universe was pointed at."),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(QList<quint32>() << universe,
+                                    tr("forget pending patch on universe %1").arg(universe + 1));
+
+    // Clear from the end so removing one index does not shift the others
+    // out from under indices not yet visited.
+    for (int i = uni->outputPatchesCount() - 1; i >= 0; i--)
+    {
+        OutputPatch *op = uni->outputPatch(i);
+        if (op != NULL && op->isPending())
+            iomap->setOutputPatch(universe, QString(), QString(), 0, false, i);
+    }
+
+    m_doc->setModified();
+    refresh();
+}
+
 void ConnectionsTree::unpatchFromLine(quint32 universe, const QString &pluginName,
                                       quint32 line, bool output)
 {
@@ -2197,6 +2852,153 @@ void ConnectionsTree::renameUniverse(quint32 universe)
         return;
 
     iomap->setUniverseName(int(universe), name);
+    m_doc->setModified();
+    refresh();
+}
+
+bool ConnectionsTree::handleUniversalMenuAction(QAction *chosen, QTreeWidgetItem *item,
+    QAction *collapseAll, QAction *expandAll, QAction *addUniv, QAction *delUniv)
+{
+    if (chosen == NULL)
+        return false;
+    if (chosen == collapseAll || chosen == expandAll)
+    {
+        setExpandedDeep(item, chosen == expandAll);
+        return true;
+    }
+    if (chosen == addUniv)
+    {
+        addUniverse();
+        return true;
+    }
+    if (delUniv != NULL && chosen == delUniv)
+    {
+        InputOutputMap *iomap = m_doc->inputOutputMap();
+        if (iomap != NULL)
+            deleteUniverse(iomap->universesCount() - 1);
+        return true;
+    }
+    return false;
+}
+
+void ConnectionsTree::appendUniversalMenuActions(QMenu &menu, QTreeWidgetItem *item,
+    QAction *&collapseAll, QAction *&expandAll, QAction *&addUniv, QAction *&delUniv)
+{
+    if (menu.isEmpty() == false)
+        menu.addSeparator();
+
+    /* Deep branches are quick to open and tedious to close one triangle at a
+       time, and the plugin and device rows had no menu at all -- so the rows
+       most worth collapsing were the ones you could not act on. */
+    if (item->childCount() > 0)
+    {
+        collapseAll = menu.addAction(tr("Collapse everything below"));
+        expandAll = menu.addAction(tr("Expand everything below"));
+        menu.addSeparator();
+    }
+
+    /* Add Universe, on EVERY row, not just empty space -- empty space was
+       never a real route to it once every universe is patched to
+       something, which is most of the time on a working rig: the tree
+       fills its viewport and there is no empty space left to right-click.
+       It reads fine anywhere because it does not reference anything
+       specific to the row it is on.
+
+       Delete Universe is deliberately NOT offered here, unlike the
+       original version of this function -- "Delete Universe 'X'…" showing
+       up on an ArtNet row, or any row unrelated to universe X, read as if
+       deleting it were somehow an ArtNet action, when it silently deletes
+       whichever universe happens to be LAST regardless of what was
+       clicked. It already has real, contextual homes: right-click that
+       exact universe's own row (KIND_UNIVERSE/UNPATCHED/PENDING all offer
+       "Delete universe entirely…" already), or empty space, which still
+       offers both Add and Delete together for when there is truly nothing
+       else to click. @p delUniv stays NULL from here; kept as a parameter
+       so callers do not need their own special case for it. */
+    addUniv = menu.addAction(QIcon(":/edit_add.png"), tr("Add Universe"));
+}
+
+void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
+                                  const QList<quint32> &universes)
+{
+    if (universes.isEmpty())
+        return;
+
+    QLCIOPlugin *p = NULL;
+    if (m_doc->ioPluginCache() != NULL)
+    {
+        foreach (QLCIOPlugin *cand, m_doc->ioPluginCache()->plugins())
+            if (cand != NULL && cand->name() == pluginName)
+                p = cand;
+    }
+    if (p == NULL)
+        return;
+
+    quint32 newLine = 0;
+    if (pickPluginLine(p, true, newLine) == false)
+        return;
+    if (newLine == oldLine)
+        return;
+
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    const QString oldName = p->lineDescription(oldLine, true);
+    const QString newName = p->lineDescription(newLine, true);
+    if (QMessageBox::question(this, tr("Reroute interface"),
+            tr("Move %1 universe%2 from \"%3\" to \"%4\"?")
+                .arg(universes.count())
+                .arg(universes.count() == 1 ? QString() : QString("s"))
+                .arg(oldName).arg(newName),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(universes,
+            tr("reroute %1 from \"%2\" to \"%3\"").arg(pluginName).arg(oldName).arg(newName));
+
+    foreach (quint32 uniId, universes)
+    {
+        Universe *u = iomap->universe(uniId);
+        if (u == NULL)
+            continue;
+        for (int i = 0; i < u->outputPatchesCount(); i++)
+        {
+            OutputPatch *op = u->outputPatch(i);
+            if (op != NULL && op->plugin() != NULL
+                    && op->plugin()->name() == pluginName && op->output() == oldLine)
+            {
+                iomap->setOutputPatch(uniId, pluginName, QString(), newLine, false, i);
+                break;
+            }
+        }
+    }
+
+    m_doc->setModified();
+    refresh();
+}
+
+void ConnectionsTree::addUniverse()
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    // Creating a universe changes the whole list, same as the "new
+    // universe" branch of patchUniverseTo() above — a patch-only capture
+    // could not undo the creation itself.
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->captureUniverses(tr("add a universe"));
+
+    if (iomap->addUniverse() == false)
+    {
+        if (iomap->patchUndo() != NULL)
+            iomap->patchUndo()->clear();
+        return;
+    }
+
+    iomap->startUniverses();
     m_doc->setModified();
     refresh();
 }
@@ -2339,6 +3141,79 @@ bool ConnectionsTree::patchTarget(quint32 universe, const QString &pluginName,
         return address.isEmpty() == false;
     }
     return false;
+}
+
+void ConnectionsTree::patchUnpatchedUniverseTo(quint32 universe)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL || m_doc->ioPluginCache() == NULL)
+        return;
+
+    QStringList pluginNames;
+    foreach (QLCIOPlugin *cand, m_doc->ioPluginCache()->plugins())
+        if (cand != NULL && (cand->capabilities() & QLCIOPlugin::Output)
+                && cand->outputs().isEmpty() == false)
+            pluginNames << cand->name();
+    if (pluginNames.isEmpty())
+        return;
+
+    QString pluginName;
+    if (pluginNames.count() == 1)
+    {
+        pluginName = pluginNames.first();
+    }
+    else
+    {
+        bool ok = false;
+        pluginName = QInputDialog::getItem(this, tr("Patch universe"),
+            tr("Which protocol?"), pluginNames, 0, false, &ok);
+        if (ok == false)
+            return;
+    }
+
+    QLCIOPlugin *p = NULL;
+    foreach (QLCIOPlugin *cand, m_doc->ioPluginCache()->plugins())
+        if (cand != NULL && cand->name() == pluginName)
+            p = cand;
+    if (p == NULL)
+        return;
+
+    quint32 line = 0;
+    if (pickPluginLine(p, true, line) == false)
+        return;
+
+    const int index = iomap->outputPatchesCount(universe);
+    if (iomap->setOutputPatch(universe, pluginName, QString(), line, false, index) == false)
+    {
+        QMessageBox::warning(this, tr("Patch universe"),
+                             tr("Could not patch that universe to %1.").arg(pluginName));
+        return;
+    }
+
+    /* Same "which node, which port" question a port row already answers --
+       asked here instead since there is no port row yet to have clicked.
+       Left blank, this is a deliberate broadcast patch, not an abandoned
+       dialog: nothing further to configure. */
+    if (p->supportsOutputTargets())
+    {
+        bool ok = false;
+        const QString addr = QInputDialog::getText(
+            this, tr("Patch universe"),
+            tr("Target address (a node IP, or a broadcast address). "
+               "Leave empty to broadcast:"),
+            QLineEdit::Normal, QString(), &ok).trimmed();
+        if (ok && addr.isEmpty() == false)
+        {
+            const int portAddr = QInputDialog::getInt(
+                this, tr("Patch universe"),
+                tr("Port address on that target:"), 0, 0, 32767, 1, &ok);
+            if (ok)
+                applyTarget(universe, pluginName, line, addr, quint32(portAddr));
+        }
+    }
+
+    m_doc->setModified();
+    refresh();
 }
 
 void ConnectionsTree::patchUniverseToPort(const QString &pluginName, quint32 line,
@@ -2883,6 +3758,18 @@ void ConnectionsTree::addManualTarget(const QString &pluginName, quint32 line)
     iomap->addManualTarget(pluginName, line, addr);
     if (ok && name.isEmpty() == false)
         iomap->setTargetAlias(addr, name);
+
+    /* Declaring a target is exactly the moment someone wants to know whether
+       it is actually there. Leaving that to the next periodic rescan (up to
+       five seconds, or however long until "Rescan" is clicked by hand) made
+       "add a target by IP" look like it had silently done nothing. */
+    if (m_doc->ioPluginCache() != NULL)
+    {
+        foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
+            if (p != NULL && p->name() == pluginName && p->supportsOutputTargets())
+                p->probeTarget(addr);
+    }
+
     m_doc->setModified();
     refresh();
 }
@@ -2986,6 +3873,33 @@ void ConnectionsTree::setRowTooltip(QTreeWidgetItem *item, const QString &html)
        tooltip that only exists over one cell reads as no tooltip at all. */
     for (int c = 0; c < 3; c++)
         item->setToolTip(c, html);
+}
+
+void ConnectionsTree::setCarriesFixtures(QTreeWidgetItem *item, quint32 universeId) const
+{
+    if (item == NULL || m_doc == NULL)
+        return;
+
+    /* qMax(1, ...) matches how the rest of the app counts heads (see e.g.
+       createfixturegroup.cpp) -- a head-less/dimmer fixture still counts
+       as one real thing patched in. */
+    int nfx = 0, nheads = 0, lastCh = 0;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == NULL || fx->universe() != universeId)
+            continue;
+        nfx++;
+        nheads += qMax(1, fx->heads());
+        lastCh = qMax(lastCh, int(fx->address() + fx->channels()));
+    }
+    if (nfx == 0)
+        return;
+
+    item->setText(COL_CARRIES, nheads != nfx
+        ? tr("%1 fx · %2 heads · %3/512").arg(nfx).arg(nheads).arg(lastCh)
+        : tr("%1 fx · %2/512").arg(nfx).arg(lastCh));
+    if (lastCh > 512)
+        item->setForeground(COL_CARRIES, QBrush(QColor(220, 90, 90)));
 }
 
 /** Give an interface an operator-facing name. */
