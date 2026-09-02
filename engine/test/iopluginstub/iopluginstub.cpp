@@ -33,6 +33,13 @@ void IOPluginStub::init()
     m_configureCalled = 0;
     m_canConfigure = false;
     m_universe = QByteArray(int(4 * 512), char(0));
+    m_devices.clear();
+    m_lineDescriptions.clear();
+    m_linesAreHardware = false;
+    m_supportsTargets = false;
+    m_rescanCalled = 0;
+    m_probed.clear();
+    m_lineCount = 4;
 }
 
 QString IOPluginStub::name() const
@@ -52,9 +59,20 @@ int IOPluginStub::capabilities() const
 bool IOPluginStub::openOutput(quint32 output, quint32 universe)
 {
     Q_UNUSED(universe)
-    if (m_openOutputs.contains(output) == false && output < 4)
+    /* addToMap on EVERY open, not only the first for a given line. Real
+       plugins do (ArtNetPlugin::openOutput calls it unconditionally), and it
+       is what registers this universe with the plugin -- QLCIOPlugin's
+       parameter store is keyed by universe, and setParameter/unSetParameter
+       silently do nothing for a universe the plugin has never been told
+       about. Guarding it on "line not already open" meant the second and
+       later universes sharing one line had no parameter storage at all, so a
+       test could set outputIP on three universes, see three successes, and
+       find it on one. m_openOutputs stays deduplicated -- it is the list of
+       distinct open lines, which is what the tests using it mean. */
+    if (output < 4)
     {
-        m_openOutputs.append(output);
+        if (m_openOutputs.contains(output) == false)
+            m_openOutputs.append(output);
         addToMap(universe, output, Output);
     }
     return true;
@@ -69,7 +87,7 @@ void IOPluginStub::closeOutput(quint32 output, quint32 universe)
 QStringList IOPluginStub::outputs()
 {
     QStringList list;
-    for (quint32 i = 0; i < 4; i++)
+    for (int i = 0; i < m_lineCount; i++)
         list << QString("%1: Stub %1").arg(i + 1);
     return list;
 }
@@ -100,11 +118,11 @@ void IOPluginStub::writeUniverse(quint32 universe, quint32 output, const QByteAr
 
 bool IOPluginStub::openInput(quint32 input, quint32 universe)
 {
-    Q_UNUSED(universe)
 
-    if (m_openInputs.contains(input) == false && input < 4)
+    if (input < 4)
     {
-        m_openInputs.append(input);
+        if (m_openInputs.contains(input) == false)
+            m_openInputs.append(input);
         addToMap(universe, input, Input);
     }
     return true;
@@ -119,7 +137,7 @@ void IOPluginStub::closeInput(quint32 input, quint32 universe)
 QStringList IOPluginStub::inputs()
 {
     QStringList list;
-    for (quint32 i = 0; i < 4; i++)
+    for (int i = 0; i < m_lineCount; i++)
         list << QString("%1: Stub %1").arg(i + 1);
     return list;
 }

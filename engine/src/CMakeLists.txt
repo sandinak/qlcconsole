@@ -33,6 +33,7 @@ add_library(${module_name} SHARED
     grandmaster.cpp grandmaster.h
     grouphead.cpp grouphead.h
     inputoutputmap.cpp inputoutputmap.h
+    patchundo.cpp patchundo.h
     inputpatch.cpp inputpatch.h
     ioplugincache.cpp ioplugincache.h
     keypadparser.cpp keypadparser.h

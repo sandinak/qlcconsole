@@ -64,6 +64,12 @@ QString MidiPlugin::name() const
     return QString("MIDI");
 }
 
+void MidiPlugin::rescan()
+{
+    if (m_enumerator != NULL)
+        m_enumerator->rescan();
+}
+
 int MidiPlugin::capabilities() const
 {
     return QLCIOPlugin::Output | QLCIOPlugin::Input | QLCIOPlugin::Feedback | QLCIOPlugin::Beats;

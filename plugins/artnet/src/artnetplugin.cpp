@@ -18,6 +18,7 @@
 */
 
 #include <QSettings>
+#include <QNetworkDatagram>
 #include <QDebug>
 
 #include <QHash>
@@ -43,6 +44,26 @@ void ArtNetPlugin::init()
     else
         m_ifaceWaitTime = 0;
 
+    /* A line's POSITION is its identity for the rest of the session: a patch
+       holds a line index, ArtNetController caches its index as m_line and
+       stamps it on every valueChanged / rdmValueChanged it emits, and
+       discoveredDevices() reports it so the connections tree knows which
+       interface a node hangs off. init() is re-entered constantly -- outputs()
+       and inputs() both call it, and the connections tree calls those every
+       five seconds -- so sorting the whole list on each pass meant any newly
+       appearing interface could renumber every line underneath live
+       controllers. On macOS that is not hypothetical: utun and awdl
+       interfaces come and go on their own schedule, so a patched universe
+       could silently change which NIC it left by, mid-show, with nothing
+       touched.
+
+       So: entries already in the list never move. Only genuinely new ones are
+       appended, sorted among themselves so a batch still arrives in a sensible
+       order. Interfaces that disappear are deliberately left in place rather
+       than removed, because removing one would renumber everything after it --
+       the exact problem this avoids. A dead line simply carries no traffic. */
+    QList<ArtNetIO> discovered;
+
     foreach (QNetworkInterface iface, QNetworkInterface::allInterfaces())
     {
         foreach (QNetworkAddressEntry entry, iface.addressEntries())
@@ -64,14 +85,21 @@ void ArtNetPlugin::init()
                         break;
                     }
                 }
+                for (int j = 0; alreadyInList == false && j < discovered.count(); j++)
+                {
+                    if (discovered.at(j).address == tmpIO.address)
+                        alreadyInList = true;
+                }
                 if (alreadyInList == false)
                 {
-                    m_IOmapping.append(tmpIO);
+                    discovered.append(tmpIO);
                 }
             }
         }
     }
-    std::sort(m_IOmapping.begin(), m_IOmapping.end(), addressCompare);
+
+    std::sort(discovered.begin(), discovered.end(), addressCompare);
+    m_IOmapping.append(discovered);
 }
 
 QString ArtNetPlugin::name() const
@@ -262,10 +290,150 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
                 dev.portUniverses << quint32((n.netSwitch << 8)
                                              + (n.subSwitch << 4) + n.swOut[p]);
             }
+
+            /* Everything the reply told us that does not fit the fixed fields.
+               All of it arrives in every ArtPollReply about once a second and
+               was being parsed and then dropped; the operator questions it
+               answers -- "is this the node I think it is", "why is that port
+               not outputting", "did somebody set this to DHCP" -- are exactly
+               the ones asked while staring at the row. */
+            typedef QPair<QString, QString> Prop;
+            if (n.shortName.isEmpty() == false)
+                dev.properties << Prop(QObject::tr("Short name"), n.shortName);
+            if (n.longName.isEmpty() == false)
+                dev.properties << Prop(QObject::tr("Long name"), n.longName);
+            dev.properties << Prop(QObject::tr("IP address"),
+                                   n.ipAddress.isEmpty() ? it.key().toString()
+                                                         : n.ipAddress);
+            if (n.macAddress.isEmpty() == false)
+                dev.properties << Prop(QObject::tr("MAC"), n.macAddress);
+            dev.properties << Prop(QObject::tr("Firmware"),
+                                   QString::number(n.firmwareVersion));
+            dev.properties << Prop(QObject::tr("OEM / ESTA"),
+                                   QString("0x%1 / 0x%2")
+                                       .arg(n.oemCode, 4, 16, QChar('0'))
+                                       .arg(n.estaCode, 4, 16, QChar('0')));
+            dev.properties << Prop(QObject::tr("Addressing"),
+                                   n.dhcpCapable ? QObject::tr("DHCP capable")
+                                                 : QObject::tr("static only"));
+            dev.properties << Prop(QObject::tr("RDM"),
+                                   n.rdmCapable ? QObject::tr("yes")
+                                                : QObject::tr("no"));
+            dev.properties << Prop(QObject::tr("Ports"),
+                                   QString::number(n.portsNumber));
+
+            for (int p = 0; p < qMin(n.portsNumber, 4); p++)
+            {
+                if ((n.portTypes[p] & 0x80) == 0)
+                    continue;
+                /* GoodOutput bit 7 is "data is being transmitted", bit 2 is
+                   "output is merging", bit 3 is "DMX output short detected". A
+                   short is the single most useful thing a node ever reports
+                   and it has never been surfaced anywhere. */
+                QStringList st;
+                st << QString("%1:%2:%3").arg(n.netSwitch).arg(n.subSwitch)
+                      .arg(n.swOut[p]);
+                if (n.goodOutput[p] & 0x80) st << QObject::tr("transmitting");
+                if (n.goodOutput[p] & 0x08) st << QObject::tr("SHORT DETECTED");
+                if (n.goodOutput[p] & 0x04) st << QObject::tr("merging");
+                dev.properties << Prop(QObject::tr("Port %1").arg(p + 1),
+                                       st.join(" · "));
+            }
+
+            if (n.nodeReport.isEmpty() == false)
+                dev.properties << Prop(QObject::tr("Node report"), n.nodeReport);
+            if (n.bindIndex > 1)
+                dev.properties << Prop(QObject::tr("Bind"),
+                                       QObject::tr("index %1 of %2")
+                                           .arg(n.bindIndex).arg(n.bindIpAddress));
             list << dev;
         }
     }
     return list;
+}
+
+/** Poll every line once, on demand.
+ *
+ *  ArtPoll normally runs only where an output is open (ArtNetController::
+ *  addUniverse), which leaves an unpatched interface permanently dark:
+ *  nothing is sent, so nothing replies, so the nodes on it never appear --
+ *  and that is exactly the interface you are staring at when you are looking
+ *  for something to patch TO. Polling those lines continuously would raise
+ *  the steady-state broadcast load on every node on the segment, all day,
+ *  for the sake of a question only asked while patching. So: on demand.
+ *
+ *  A line with no controller gets one here. It is inert -- the constructor
+ *  starts no timers and no universe is added, so it neither polls again nor
+ *  sends DMX -- but it has to exist in order to RECEIVE: handlePacket()
+ *  routes a reply to the controller on the sender's subnet and drops it on
+ *  the floor if there is none.
+ */
+bool ArtNetPlugin::probeTarget(const QString &address)
+{
+    const QHostAddress addr(address);
+    if (addr.isNull())
+        return false;   // a hostname, not an address -- nothing to aim at
+
+    /* Prefer the controller whose subnet contains the target: its socket is
+       bound to the interface the packet should leave by, and its own address
+       is what the node will answer to. */
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        ArtNetController *ctrl = m_IOmapping.at(line).controller;
+        if (ctrl == NULL)
+            continue;
+        if (addr.isInSubnet(m_IOmapping.at(line).address.ip(),
+                            m_IOmapping.at(line).address.prefixLength()))
+        {
+            ctrl->sendPollTo(addr);
+            return true;
+        }
+    }
+
+    /* Otherwise any controller will do: the target is off-segment, the packet
+       goes out by whatever route the host chooses, and that is the whole point
+       of probing it rather than waiting for a broadcast it will never see. */
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        ArtNetController *ctrl = m_IOmapping.at(line).controller;
+        if (ctrl != NULL)
+        {
+            ctrl->sendPollTo(addr);
+            return true;
+        }
+    }
+
+    return false;   // no controller anywhere: nothing is listening for a reply
+}
+
+QString ArtNetPlugin::lineDescription(quint32 line, bool output) const
+{
+    Q_UNUSED(output)   // in and out are the same interface on Art-Net
+
+    if (line >= quint32(m_IOmapping.count()))
+        return QString();
+
+    return m_IOmapping.at(line).iface.humanReadableName();
+}
+
+void ArtNetPlugin::rescan()
+{
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        if (m_IOmapping.at(line).controller == NULL)
+        {
+            ArtNetController *controller = new ArtNetController(m_IOmapping.at(line).iface,
+                                                                m_IOmapping.at(line).address,
+                                                                getUdpSocket(),
+                                                                quint32(line), this);
+            connect(controller, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
+                    this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
+            connect(controller, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
+                    this , SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)));
+            m_IOmapping[line].controller = controller;
+        }
+        m_IOmapping[line].controller->sendPoll();
+    }
 }
 
 bool ArtNetPlugin::openOutput(quint32 output, quint32 universe)
@@ -525,20 +693,44 @@ void ArtNetPlugin::slotReadyRead()
     QUdpSocket* udpSocket = qobject_cast<QUdpSocket*>(sender());
     Q_ASSERT(udpSocket != NULL);
 
-    QByteArray datagram;
-    QHostAddress senderAddress;
     while (udpSocket->hasPendingDatagrams())
     {
-        datagram.resize(udpSocket->pendingDatagramSize());
-        udpSocket->readDatagram(datagram.data(), datagram.size(), &senderAddress);
-        handlePacket(datagram, senderAddress);
+        /* receiveDatagram() rather than readDatagram(): it carries the index
+           of the interface the packet actually ARRIVED on, which is the only
+           trustworthy answer to "whose node is this". Everything else is
+           inference from the sender's address, and show gear is routinely
+           L2-adjacent but L3-foreign -- a node still on its factory 2.x.x.x
+           address, broadcasting onto a network the console reaches at
+           192.168.1.x. Such a packet matches no interface's subnet at all. */
+        QNetworkDatagram dg = udpSocket->receiveDatagram();
+        if (dg.isValid() == false)
+            continue;
+        handlePacket(dg.data(), dg.senderAddress(), dg.interfaceIndex());
     }
 }
 
-void ArtNetPlugin::handlePacket(QByteArray const& datagram, QHostAddress const& senderAddress)
+void ArtNetPlugin::handlePacket(QByteArray const& datagram,
+                                QHostAddress const& senderAddress,
+                                uint interfaceIndex)
 {
-    // A first filter: look for a controller on the same subnet as the sender.
-    // This allows having the same ArtNet Universe on 2 different network interfaces.
+    /* First and best: the interface it came in on. An interface can hold
+       several addresses, so take the first entry on that NIC that is
+       listening. */
+    if (interfaceIndex != 0)
+    {
+        foreach (ArtNetIO io, m_IOmapping)
+        {
+            if (io.controller != NULL
+                    && uint(io.iface.index()) == interfaceIndex)
+            {
+                io.controller->handlePacket(datagram, senderAddress);
+                return;
+            }
+        }
+    }
+
+    /* Failing that, the sender's subnet. This also lets the same Art-Net
+       universe live on two different interfaces without them colliding. */
     foreach (ArtNetIO io, m_IOmapping)
     {
         if (senderAddress.isInSubnet(io.address.ip(), io.address.prefixLength()))
@@ -548,14 +740,14 @@ void ArtNetPlugin::handlePacket(QByteArray const& datagram, QHostAddress const& 
             return;
         }
     }
-    // Packet coming from another subnet. This is an unusual case.
-    // We stop at the first controller that handles this packet.
-    foreach (ArtNetIO io, m_IOmapping)
-    {
-        if (io.controller != NULL)
-        {
-            if (io.controller->handlePacket(datagram, senderAddress))
-                break;
-        }
-    }
+
+    /* And then stop. This used to fall back to "the first controller with a
+       pulse", which sorts by IP string and therefore means 127.0.0.1 -- so
+       every node the console could not place got filed under loopback, and
+       the tree confidently showed 172.18.2.10 hanging off 127.0.0.1. A
+       loopback interface cannot receive a packet from a non-loopback sender;
+       attributing one to it is not a fallback, it is a wrong answer that
+       looks like a right one. Better to drop it and say so. */
+    qDebug() << "[ArtNet] Unattributable packet from" << senderAddress.toString()
+             << "on interface index" << interfaceIndex << "-- ignored";
 }

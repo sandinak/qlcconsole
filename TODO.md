@@ -8,6 +8,66 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## 🔌 Connections tab — remaining
+
+*(Shipped work moved to [DONE.md](DONE.md), 2026-08-28.)*
+
+- **Hardware verification — status.** Use `build/tools/artnetprobe/artnetprobe`
+  (`--selftest` / `--poll <addr>` / `--listen`).
+  - ✅ **Arrival-interface reporting**: verified 2026-08-28 against live
+    traffic. Real ArtPollReplies from 172.18.2.218 and 172.18.2.10 were both
+    correctly attributed to `vlan0`, 5/5 datagrams carrying an index. This is
+    the routing fix confirmed on real gear, not a simulation.
+  - ✅ **USB devices appear**: DMXKing ultraDMX Micro and OpenDeck PMJ_BLACK_1
+    both listed under DMX USB / MIDI.
+  - ⚠️ **Off-segment unicast probe**: unproven. Every node reachable from this
+    host is on a subnet it has an interface on, so it answers broadcast polls
+    too and the reply is indistinguishable. Needs a node on a subnet with no
+    local interface.
+  - ⚠️ **Hand-declared target actually passing DMX**: unproven, and NOT
+    testable from one host. Console and probe both bind 6454 with
+    `ShareAddress`; broadcast reaches every bound socket but unicast reaches
+    exactly one, so the probe cannot see the console's own unicast output.
+    Run the probe on a different machine from the console.
+- **Devices/Overview parity — done.** Bulk multi-row retarget with port
+  auto-increment, feedback IP/port, ArtNet `inputUni`, MIDI output mode, MIDI
+  input channel and the MIDI Out-vs-Feedback role swap have all landed on the
+  Devices tab. Universe passthrough and the plugin
+  description/status have since moved onto Devices too. Still Detailed-only
+  and staying there deliberately: the Audio tab, input-profile
+  creation/editing (`InputProfileEditor`), and the USB hotplug toggle (an app
+  preference more than a patching control). The split now reads as
+  "Devices = the rig and its wiring, Detailed = audio and profile editing".
+- **Patch undo — remaining limits.** `PatchUndo` (engine/src/patchundo.{h,cpp})
+  is ONE step deep: a second change discards the first, deliberately, since a
+  state two changes stale would restore onto a rig that has moved under it.
+  It covers patches and the universe list (add/delete/name/passthrough) from
+  all three tabs, but nothing outside the patch — fixtures, functions, scenes.
+  Ctrl+Z is scoped to the Connections widget (`Qt::WidgetWithChildrenShortcut`)
+  so it cannot promise general undo elsewhere in the app.
+- **`InputOutputMap` universe id vs index — not a live trap after all.**
+  `universe(id)` resolves by ID while `outputPatch()`/`setOutputPatch()`/
+  `setInputPatch()` take an ARRAY INDEX, but id == index is enforced
+  deliberately at both mutation points, not merely coincidental:
+  `addUniverse()` assigns the next index as the id, refuses an id already
+  present, and fills gaps so a higher id still lands at its own index;
+  `removeUniverse()` refuses anything but the last entry. The contract was
+  written nowhere, so it is now pinned by
+  `InputOutputMap_Test::universeIdAlwaysEqualsItsArrayIndex()` — relax either
+  rule and that test fails instead of the app repatching the wrong universe.
+- **Reachability probing — verify on `ender`.** Rescan now unicasts an ArtPoll
+  at every address believed in but not heard from (hand-declared targets and
+  addresses named by `outputIP`), so a node on another subnet can answer. Never
+  tested against a real off-segment node. Note it probes only on an explicit
+  Rescan, not on the 5 s tick — a live "is it up" indicator would need a
+  cadence decision, and continuous unicast polling of every configured node is
+  exactly the traffic this has been avoiding.
+- **Probing is Art-Net only.** `QLCIOPlugin::probeTarget()` defaults to a
+  no-op; nothing else implements it. Fine today, since Art-Net is the only
+  plugin with addressable targets at all.
+
+---
+
 ## ✈️ Travel / offline work — no show rig or control surface needed
 
 Buildable + testable on a laptop (offscreen QTest / node for JS effects; the app

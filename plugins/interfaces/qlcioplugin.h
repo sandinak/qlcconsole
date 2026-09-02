@@ -22,6 +22,7 @@
 #define QLCIOPLUGIN_H
 
 #include <QStringList>
+#include <QPair>
 #include <QtPlugin>
 #include <QVariant>
 #include <QObject>
@@ -207,6 +208,19 @@ public:
         QStringList portLabels; //!< one label per physical port
         QList<quint32> portUniverses; //!< protocol universe per port, parallel to portLabels
         bool rdmCapable;
+        /**
+         * Everything else the plugin happens to know, as ordered name/value
+         * pairs for display. Ordered rather than a map because the order is
+         * editorial -- identity first, then capability, then status -- and a
+         * map would sort it alphabetically into nonsense.
+         *
+         * Deliberately open-ended: a protocol's discovery packet carries far
+         * more than the fixed fields above (Art-Net's reply alone has OEM and
+         * ESTA codes, DHCP capability, per-port status flags), and the UI has
+         * no business knowing what any of it means. It renders what it is
+         * handed.
+         */
+        QList<QPair<QString, QString> > properties;
     };
 
 
@@ -354,6 +368,73 @@ public:
      * @return true if the plugin can be configured, otherwise false.
      */
     virtual bool canConfigure() const;
+
+    /**
+     * A human-readable description of a line, beyond the identifier returned
+     * by outputs()/inputs().
+     *
+     * Deliberately separate from those lists rather than folded into them:
+     * a patch stores the line's STRING and matches it back on load
+     * (InputOutputMap::setOutputPatch), so decorating the identifier would
+     * break every workspace already saved against the bare one. This is for
+     * display only -- an Art-Net line, for instance, can say which NIC it is,
+     * which is the part an operator recognises and the part an IP does not
+     * tell them.
+     *
+     * The default is empty: a plugin with nothing extra to say says nothing.
+     */
+    virtual QString lineDescription(quint32 line, bool output) const
+    { Q_UNUSED(line) Q_UNUSED(output) return QString(); }
+
+    /**
+     * True when this plugin's lines exist only because hardware is attached.
+     *
+     * The distinction matters to anything that filters lines by whether they
+     * are worth showing. Art-Net, E1.31, OSC and Loopback synthesise a line
+     * per network interface (or out of nothing at all), so they always have
+     * lines and almost none of them are interesting -- they earn their place
+     * by carrying a patch or by a node answering on them. A DMX USB, HID or
+     * MIDI line is the opposite: it exists because something is plugged in.
+     * For those, existing IS the discovery, and hiding an unpatched one hides
+     * the widget the operator just connected.
+     */
+    virtual bool linesAreHardware() const { return false; }
+
+    /**
+     * True when a patch on this plugin can be aimed at a specific target on
+     * the far end -- a node address plus a port on it -- rather than simply
+     * leaving by the line.
+     *
+     * Art-Net is currently the only one: a patch carries an "outputIP" and an
+     * "outputUni" naming the node and port to unicast to. Nothing equivalent
+     * exists for a DMX USB widget, where the line IS the device and the cable
+     * IS the destination, nor for the other network protocols, which have no
+     * such parameter to set. Asking an operator for a target address on those
+     * is asking a question with no answer.
+     */
+    virtual bool supportsOutputTargets() const { return false; }
+
+    /**
+     * Ask one specific address whether it is there.
+     *
+     * Discovery is passive and broadcast-shaped, which answers "what is on my
+     * segment" and cannot answer "is THAT node alive" -- the node on another
+     * subnet, reached by unicast through a router, never sees a broadcast poll
+     * and so is indistinguishable from one that is switched off. That is
+     * precisely the node somebody had to declare by hand.
+     *
+     * Deliberately not an ICMP ping: this asks in the protocol's own terms, so
+     * a reply means "an Art-Net node answered", not "something at that address
+     * has a TCP/IP stack". It also needs no elevated privileges, and any reply
+     * arrives through the normal discovery path -- so a node that answers stops
+     * being a hand-declared guess and becomes a discovered device, with its
+     * real port list.
+     *
+     * Returns true if a probe was actually sent. The ANSWER, if any, arrives
+     * asynchronously; there is nothing to wait for here.
+     */
+    virtual bool probeTarget(const QString &address)
+    { Q_UNUSED(address) return false; }
 
     /**
      * Re-enumerate hardware devices and update internal state.

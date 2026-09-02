@@ -221,6 +221,25 @@ public:
     // or if the packet should not be handled by another controller.
     bool handlePacket(QByteArray const& datagram, QHostAddress const& senderAddress);
 
+public:
+    /** Send a single ArtPoll now, outside the periodic cadence.
+     *
+     *  Discovery is otherwise driven entirely by the 3 s poll timer, and that
+     *  timer only runs on a line carrying an output (see addUniverse). An
+     *  operator who has just plugged a node in wants the answer now rather
+     *  than at the next tick -- and on an unpatched line there is no next
+     *  tick at all. One datagram, on demand.
+     */
+    void sendPoll() { slotSendPoll(); }
+
+    /** Send one ArtPoll to a specific address rather than the broadcast one.
+     *
+     *  A node on a subnet this console has no interface on never sees a
+     *  broadcast poll, so it can never answer one -- which is exactly the node
+     *  somebody had to declare by hand, and exactly the node they most want to
+     *  know is alive. Unicast reaches it through the router if anything can. */
+    void sendPollTo(const QHostAddress &address);
+
 protected slots:
     void slotSendPoll();
     void slotSendAllUniverses();

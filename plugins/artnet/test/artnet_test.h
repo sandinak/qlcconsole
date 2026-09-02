@@ -29,6 +29,10 @@ class ArtNet_Test final : public QObject
 private slots:
     void setupArtNetDmx();
     void fillArtPollReplyInfo();
+
+    /* Which controller a received packet is attributed to. */
+    void packetIsAttributedToTheArrivalInterface();
+    void offSegmentPacketIsNotFiledUnderLoopback();
 };
 
 #endif

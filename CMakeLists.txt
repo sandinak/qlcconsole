@@ -3,6 +3,28 @@ project(qlcconsole VERSION 4.14.2 LANGUAGES C CXX)
 
 option(qmlui "Build for QLC+ 5 QML UI" OFF)
 
+# -Wreorder-ctor is in CI's -Werror set, and locally it only surfaced on the
+# fourth leg of check-all.sh -- a forty-minute round trip to learn that one
+# initialiser was in the wrong place. It has cost that three times. Promoting
+# just this one class to an error in every build turns it into a compile
+# failure seconds after the edit. NOT -Werror across the board: the tree
+# carries roughly 1150 warnings outside CI's set, mostly from third-party
+# headers, so a blanket setting would make the build unusable.
+# Spelled differently by the two compilers -- clang has -Wreorder-ctor, GCC has
+# -Wreorder -- and GCC treats -Werror=<unknown warning> as an error in itself,
+# so hard-coding either name breaks the other toolchain outright. Probe instead
+# of guessing: the check costs one compile at configure time and cannot break a
+# compiler nobody here has tried.
+include(CheckCXXCompilerFlag)
+foreach(_reorder_flag -Werror=reorder-ctor -Werror=reorder)
+    string(MAKE_C_IDENTIFIER "HAVE${_reorder_flag}" _reorder_var)
+    check_cxx_compiler_flag("${_reorder_flag}" ${_reorder_var})
+    if(${_reorder_var})
+        add_compile_options(${_reorder_flag})
+        break()
+    endif()
+endforeach()
+
 # Set Release build type by default
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
@@ -265,6 +287,10 @@ INCLUDE(CPack)
 
 # Leave this on the last row of this file
 add_subdirectory(platforms)
+
+# Bench instruments. Built so they cannot rot alongside the code they measure,
+# never installed.
+add_subdirectory(tools/artnetprobe)
 
 # HELPER: PRINT ALL VARIABLES KNOWN BY CMAKE
 

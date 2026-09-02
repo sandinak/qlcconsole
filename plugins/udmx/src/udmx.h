@@ -73,6 +73,15 @@ public:
     /** @reimp */
     void writeUniverse(quint32 universe, quint32 output, const QByteArray& data, bool dataChanged) override;
 
+    /** @reimp The Rescan action in the connections view. Without this the
+        base-class no-op runs and freshly plugged hardware never appears until
+        the app is restarted or the plugin's own dialog is opened. */
+    void rescan() override { rescanDevices(); }
+
+    /** @reimp A line here means a device is plugged in. */
+    bool linesAreHardware() const override { return true; }
+
+
 private:
     /** Attempt to find all uDMX devices */
     void rescanDevices();

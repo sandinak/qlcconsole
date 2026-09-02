@@ -31,6 +31,7 @@
 #include <qmath.h>
 
 #include "inputoutputmap.h"
+#include "patchundo.h"
 #include "qlcinputchannel.h"
 #include "qlcinputsource.h"
 #include "audiocapture.h"
@@ -47,12 +48,17 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     , m_doc(doc)
     , m_blackout(false)
     , m_universeChanged(false)
+    /* Declaration order, not reading order: m_patchUndo sits up with the patch
+       members it belongs to by subject (near m_manualTargets, well before the
+       beat-generator block), so its initialiser has to sit here. */
+    , m_patchUndo(NULL)
     , m_localProfilesLoaded(false)
     , m_beatGeneratorType(Disabled)
     , m_currentBPM(0)
     , m_beatTime(new QElapsedTimer())
     , m_inputCapture(NULL)
 {
+    m_patchUndo = new PatchUndo(this, this);
     m_grandMaster = new GrandMaster(this);
     for (quint32 i = 0; i < universes; i++)
         addUniverse();
@@ -1422,7 +1428,13 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
 
     /** Reset the current universe list and read the new one */
     removeAllUniverses();
+    /* A held step describes the patch of the workspace being replaced.
+       Restoring it onto this one would write one show's wiring into another. */
+    if (m_patchUndo != NULL)
+        m_patchUndo->clear();
     m_targetAliases.clear();
+    m_manualTargets.clear();
+    m_lineAliases.clear();
 
     while (root.readNextStartElement())
     {
@@ -1445,6 +1457,40 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
             if (addr.isEmpty() == false && name.isEmpty() == false)
                 m_targetAliases[addr] = name;
             continue;   // readElementText already consumed the end element
+        }
+        else if (root.name() == QStringLiteral("LineAlias"))
+        {
+            const QString plug = root.attributes()
+                                 .value(QStringLiteral("Plugin")).toString();
+            const QString ln = root.attributes()
+                               .value(QStringLiteral("Line")).toString();
+            const QString name = root.readElementText();
+            if (plug.isEmpty() == false && name.isEmpty() == false)
+                m_lineAliases[plug + "|" + ln] = name;
+            continue;   // readElementText already consumed the end element
+        }
+        else if (root.name() == QStringLiteral("ManualTarget"))
+        {
+            ManualTarget t;
+            t.plugin = root.attributes().value(QStringLiteral("Plugin")).toString();
+            t.line = root.attributes().value(QStringLiteral("Line")).toString().toUInt();
+            t.address = root.attributes().value(QStringLiteral("Address")).toString();
+            while (root.readNextStartElement())
+            {
+                if (root.name() == QStringLiteral("Port"))
+                {
+                    bool ok = false;
+                    const quint32 pa = root.attributes()
+                                       .value(QStringLiteral("Address"))
+                                       .toString().toUInt(&ok);
+                    if (ok)
+                        t.ports.append(pa);
+                }
+                root.skipCurrentElement();
+            }
+            if (t.address.isEmpty() == false)
+                m_manualTargets.append(t);
+            continue;   // the child loop already consumed our end element
         }
         else if (root.name() == KXMLIOBeatGenerator)
         {
@@ -1488,6 +1534,106 @@ QMap<QString, QString> InputOutputMap::targetAliases() const
     return m_targetAliases;
 }
 
+QString InputOutputMap::lineAlias(const QString &plugin, const QString &lineName) const
+{
+    return m_lineAliases.value(plugin + "|" + lineName);
+}
+
+void InputOutputMap::setLineAlias(const QString &plugin, const QString &lineName,
+                                  const QString &alias)
+{
+    const QString key = plugin + "|" + lineName;
+    if (alias.isEmpty())
+        m_lineAliases.remove(key);
+    else
+        m_lineAliases[key] = alias;
+}
+
+QList<quint32> InputOutputMap::universesWithInputOn(const QString &plugin,
+                                                    quint32 line) const
+{
+    QList<quint32> list;
+    foreach (Universe *uni, m_universeArray)
+    {
+        InputPatch *ip = uni->inputPatch();
+        if (ip != NULL && ip->pluginName() == plugin && ip->input() == line)
+            list << uni->id();
+    }
+    return list;
+}
+
+PatchUndo *InputOutputMap::patchUndo() const
+{
+    return m_patchUndo;
+}
+
+QList<InputOutputMap::ManualTarget> InputOutputMap::manualTargets() const
+{
+    return m_manualTargets;
+}
+
+bool InputOutputMap::isManualTarget(const QString &address) const
+{
+    foreach (const ManualTarget &t, m_manualTargets)
+    {
+        if (t.address == address)
+            return true;
+    }
+    return false;
+}
+
+void InputOutputMap::addManualTarget(const QString &plugin, quint32 line,
+                                     const QString &address)
+{
+    if (address.isEmpty() || isManualTarget(address))
+        return;
+
+    ManualTarget t;
+    t.plugin = plugin;
+    t.line = line;
+    t.address = address;
+    m_manualTargets.append(t);
+}
+
+void InputOutputMap::removeManualTarget(const QString &address)
+{
+    for (int i = 0; i < m_manualTargets.count(); i++)
+    {
+        if (m_manualTargets.at(i).address == address)
+        {
+            m_manualTargets.removeAt(i);
+            return;
+        }
+    }
+}
+
+void InputOutputMap::addManualPort(const QString &address, quint32 portAddress)
+{
+    for (int i = 0; i < m_manualTargets.count(); i++)
+    {
+        if (m_manualTargets.at(i).address != address)
+            continue;
+        /* Two ports on one node CAN legitimately share an address -- see the
+           OLA case in the connections tree -- but a duplicate here would be
+           the same row twice, not two ports. */
+        if (m_manualTargets.at(i).ports.contains(portAddress) == false)
+            m_manualTargets[i].ports.append(portAddress);
+        return;
+    }
+}
+
+void InputOutputMap::removeManualPort(const QString &address, quint32 portAddress)
+{
+    for (int i = 0; i < m_manualTargets.count(); i++)
+    {
+        if (m_manualTargets.at(i).address == address)
+        {
+            m_manualTargets[i].ports.removeAll(portAddress);
+            return;
+        }
+    }
+}
+
 bool InputOutputMap::saveXML(QXmlStreamWriter *doc) const
 {
     Q_ASSERT(doc != NULL);
@@ -1513,6 +1659,38 @@ bool InputOutputMap::saveXML(QXmlStreamWriter *doc) const
         doc->writeStartElement(QStringLiteral("TargetAlias"));
         doc->writeAttribute(QStringLiteral("Address"), ait.key());
         doc->writeCharacters(ait.value());
+        doc->writeEndElement();
+    }
+
+    QMapIterator<QString, QString> lit(m_lineAliases);
+    while (lit.hasNext())
+    {
+        lit.next();
+        const int sep = lit.key().indexOf('|');
+        if (sep < 0)
+            continue;
+        doc->writeStartElement(QStringLiteral("LineAlias"));
+        doc->writeAttribute(QStringLiteral("Plugin"), lit.key().left(sep));
+        doc->writeAttribute(QStringLiteral("Line"), lit.key().mid(sep + 1));
+        doc->writeCharacters(lit.value());
+        doc->writeEndElement();
+    }
+
+    /* Hand-declared targets, written last for the same reason as the aliases:
+       an older build skips what it does not recognise and still loads the
+       patch correctly. */
+    foreach (const ManualTarget &t, m_manualTargets)
+    {
+        doc->writeStartElement(QStringLiteral("ManualTarget"));
+        doc->writeAttribute(QStringLiteral("Plugin"), t.plugin);
+        doc->writeAttribute(QStringLiteral("Line"), QString::number(t.line));
+        doc->writeAttribute(QStringLiteral("Address"), t.address);
+        foreach (quint32 pa, t.ports)
+        {
+            doc->writeStartElement(QStringLiteral("Port"));
+            doc->writeAttribute(QStringLiteral("Address"), QString::number(pa));
+            doc->writeEndElement();
+        }
         doc->writeEndElement();
     }
 

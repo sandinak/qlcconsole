@@ -67,6 +67,15 @@ public:
     /** @reimp */
     QString pluginInfo() const override;
 
+    /** @reimp The Rescan action in the connections view. Without this the
+        base-class no-op runs and freshly plugged hardware never appears until
+        the app is restarted or the plugin's own dialog is opened. */
+    void rescan() override;
+
+    /** @reimp A line here means a device is plugged in. */
+    bool linesAreHardware() const override { return true; }
+
+
 private:
     MidiEnumerator* m_enumerator;
 

@@ -95,6 +95,17 @@ private:
     void applyToSelection(const QString &prop, const QVariant &value,
                           bool autoIncrement, int triggerRow);
 
+    /** Hold the current patch of these rows so the change can be put back. */
+    void captureUndo(const QList<int> &rows, const QString &summary);
+
+private slots:
+    /** Put the last patch change back, wherever it was made. */
+    void onUndoPatch();
+    void onUndoAvailabilityChanged();
+
+private:
+    class QAction *m_undoAction;
+
     /** Build an output/input/feedback device combo (in a cell widget). */
     QComboBox *buildDeviceCombo(bool inputs, bool excludeMidi,
                                 const QString &curPlugin, int curLine);

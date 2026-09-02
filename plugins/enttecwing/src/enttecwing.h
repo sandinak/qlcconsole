@@ -58,6 +58,9 @@ public:
     /** @reimp */
     QString pluginInfo() const override;
 
+    /** @reimp A line here means a device is plugged in. */
+    bool linesAreHardware() const override { return true; }
+
     /** Attempt to bind the socket to listen to EWing::UDPPort */
     bool reBindSocket();
 
