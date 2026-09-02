@@ -2433,7 +2433,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         if (chosen == NULL)
             return;
 
-        if (fbMenu != NULL && chosen->parentWidget() == fbMenu)
+        if (fbMenu != NULL && qobject_cast<QWidget*>(chosen->parent()) == fbMenu)
         {
             if (chosen == fbNone)
                 setFeedback(uni, QString(), 0);
@@ -2445,14 +2445,14 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             }
             return;
         }
-        if (modeMenu != NULL && chosen->parentWidget() == modeMenu)
+        if (modeMenu != NULL && qobject_cast<QWidget*>(chosen->parent()) == modeMenu)
         {
             const int idx = modeMenu->actions().indexOf(chosen);
             if (idx >= 0 && idx < modes.count())
                 setTransmitMode(uni, plugin, line, modes.at(idx));
             return;
         }
-        if (profMenu != NULL && chosen->parentWidget() == profMenu)
+        if (profMenu != NULL && qobject_cast<QWidget*>(chosen->parent()) == profMenu)
         {
             const int idx = profMenu->actions().indexOf(chosen) - 1; // skip "None"
             setProfile(uni, idx < 0 ? QString() : profNames.value(idx));
@@ -2884,6 +2884,11 @@ bool ConnectionsTree::handleUniversalMenuAction(QAction *chosen, QTreeWidgetItem
 void ConnectionsTree::appendUniversalMenuActions(QMenu &menu, QTreeWidgetItem *item,
     QAction *&collapseAll, QAction *&expandAll, QAction *&addUniv, QAction *&delUniv)
 {
+    // delUniv stays NULL from here (see the comment on addUniv below) -- kept
+    // as a parameter purely so callers share one signature with
+    // handleUniversalMenuAction() and don't need their own special case.
+    Q_UNUSED(delUniv)
+
     if (menu.isEmpty() == false)
         menu.addSeparator();
 
