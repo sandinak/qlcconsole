@@ -43,6 +43,16 @@ private slots:
     void danglingOutputPatchDetected();
     /** A patch inside the plugin's real line count is not reported. */
     void validOutputPatchNotFlagged();
+    /** A patch naming an interface identity (an ArtNet IP, say) that the
+     *  plugin does not currently offer must not silently trust the numeric
+     *  index alongside it -- that index may still be in range on THIS
+     *  machine and point at a completely different real interface. It
+     *  should go pending instead: reported, inert, mapping preserved. */
+    void unresolvedInterfaceIdentityGoesPendingNotWrongIndex();
+    /** "None" is OutputPatch::outputName()'s own sentinel for "no line was
+     *  ever resolved", not a real interface identity -- it must not be
+     *  mistaken for one and sent pending. */
+    void noneSentinelDoesNotGoPending();
 
     void universeNames();
     void addUniverse();

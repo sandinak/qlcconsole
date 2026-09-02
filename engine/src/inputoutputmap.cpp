@@ -562,7 +562,15 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
     QMutexLocker locker(&m_universeMutex);
     QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(pluginName);
 
-    if (!outputUID.isEmpty() && plugin != NULL)
+    /* "None" (KOutputNone) is the sentinel OutputPatch::outputName() itself
+       falls back to when a patch has a plugin but no line was ever actually
+       resolved for it -- not a real interface identity someone patched to
+       and could be waiting to see again. Treating it as one made an
+       incomplete/never-finished patch show up as its own "missing
+       interface" in the UI, literally named "None", once pending existed
+       to catch it. Excluded here so this case still falls through to the
+       older index-based handling below, exactly as before pending existed. */
+    if (!outputUID.isEmpty() && outputUID != KOutputNone && plugin != NULL)
     {
         QStringList inputs = plugin->outputs();
         int lIdx = inputs.indexOf(outputUID);
@@ -570,6 +578,39 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
         {
             qDebug() << "[IOMAP] Found match on output by name on universe" << universe << "-" << output << "vs" << lIdx;
             output = lIdx;
+        }
+        else if ((lIdx = plugin->lineOnSameSubnet(outputUID)) != -1)
+        {
+            /* The exact address is gone, but the NETWORK is not: a DHCP
+               re-lease changed this machine's own address, or the same
+               workspace opened on different hardware that is plugged into
+               the same physical segment and got a different address on
+               it. Both are "this machine can still reach that network",
+               just not through the specific address a patch happened to be
+               saved with -- worth resolving automatically the same way an
+               exact match would, rather than treating the network itself
+               as absent. Saving again after this naturally records the
+               CURRENT address in its place (outputName() reads it live),
+               so the mapping keeps up with whichever machine last opened
+               and saved it. */
+            qDebug() << "[IOMAP] Found match on output by SUBNET on universe" << universe
+                      << "-" << outputUID << "-> line" << lIdx;
+            output = lIdx;
+        }
+        else if (isFeedback == false)
+        {
+            /* Neither the exact address nor its subnet is reachable here --
+               a workspace opened on a machine that is not on the network it
+               was built for, most commonly. The stored numeric index used
+               to be trusted anyway at this point: on a host with a
+               different, but still in-range, set of interfaces that
+               silently bound the universe to a DIFFERENT real interface and
+               broadcast on it, with nothing but a debug log to say so.
+               Remember the mapping without opening anything instead -- see
+               OutputPatch::setPending(). */
+            qDebug() << "[IOMAP] No interface match for output on universe" << universe
+                      << "- keeping" << outputUID << "as pending rather than trusting index" << output;
+            return m_universeArray.at(universe)->setOutputPatchPending(plugin, outputUID, index);
         }
         else
         {
@@ -626,7 +667,22 @@ QList<InputOutputMap::DanglingPatch> InputOutputMap::danglingOutputPatches() con
         for (int idx = 0; idx < outputPatchesCount(uni); idx++)
         {
             OutputPatch *patch = outputPatch(uni, idx);
-            if (patch == NULL || patch->isPatched() == false)
+            if (patch == NULL)
+                continue;
+
+            if (patch->isPending())
+            {
+                DanglingPatch bad;
+                bad.universe = uni;
+                bad.pluginName = patch->pluginName();
+                bad.line = 0;
+                bad.availableLines = 0;
+                bad.missingInterface = patch->outputName();
+                problems << bad;
+                continue;
+            }
+
+            if (patch->isPatched() == false)
                 continue;
 
             QLCIOPlugin *plugin = patch->plugin();

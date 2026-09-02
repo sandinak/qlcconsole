@@ -33,6 +33,10 @@ private slots:
     /* Which controller a received packet is attributed to. */
     void packetIsAttributedToTheArrivalInterface();
     void offSegmentPacketIsNotFiledUnderLoopback();
+
+    /* Resolving a saved patch whose exact address no longer matches any
+       current line, but whose subnet still does. */
+    void lineOnSameSubnetResolvesChangedAddress();
 };
 
 #endif

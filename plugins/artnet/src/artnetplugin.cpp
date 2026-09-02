@@ -406,6 +406,22 @@ bool ArtNetPlugin::probeTarget(const QString &address)
     return false;   // no controller anywhere: nothing is listening for a reply
 }
 
+int ArtNetPlugin::lineOnSameSubnet(const QString &identity) const
+{
+    const QHostAddress saved(identity);
+    if (saved.isNull())
+        return -1;   // not an address at all -- nothing to compare a subnet to
+
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        const QNetworkAddressEntry &here = m_IOmapping.at(line).address;
+        if (saved.isInSubnet(here.ip(), here.prefixLength()))
+            return line;
+    }
+
+    return -1;
+}
+
 QString ArtNetPlugin::lineDescription(quint32 line, bool output) const
 {
     Q_UNUSED(output)   // in and out are the same interface on Art-Net

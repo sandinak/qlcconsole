@@ -411,21 +411,30 @@ public:
     OutputPatch* outputPatch(quint32 universe, int index = 0) const;
 
     /**
-     * A universe whose output patch names a plugin line that does not exist on
-     * this machine. Workspaces store the output line by INDEX, and for the
-     * network plugins that index is a position in the list of local network
-     * interfaces -- so a show saved on one machine and opened on another (or
-     * after an interface goes away) can point at a line that isn't there. The
-     * patch stays "patched", the plugin happily accepts writes, and every send
-     * fails silently: on a real rig that is a universe of fixtures that simply
-     * never lights, with nothing on screen to say so.
+     * A universe whose output patch does not resolve to a real line on this
+     * machine, in one of two ways:
+     *
+     * - PENDING: the patch remembers an interface identity (an ArtNet IP,
+     *   say) that this plugin does not currently offer -- a workspace
+     *   opened on a machine that is not on the network it was built for.
+     *   Deliberately inert (OutputPatch::isPending()): nothing is opened,
+     *   nothing is sent, and the mapping is preserved for when the right
+     *   network IS present again. missingInterface names what is missing.
+     *
+     * - out of range: an older patch with no recorded interface identity at
+     *   all, only a numeric line index that is out of bounds on this
+     *   machine (workspaces store the output line by INDEX, and for network
+     *   plugins that index is a position in the local interface list).
+     *   missingInterface is empty for this case; line/availableLines are 0
+     *   for the pending case above.
      */
     struct DanglingPatch
     {
         quint32 universe;       //!< 0-based universe index
         QString pluginName;
-        quint32 line;           //!< the line index the workspace asked for
-        int availableLines;     //!< how many that plugin actually offers here
+        quint32 line;           //!< the line index the workspace asked for (out-of-range case)
+        int availableLines;     //!< how many that plugin actually offers here (out-of-range case)
+        QString missingInterface;   //!< the interface identity that did not resolve (pending case)
     };
 
     /** Output patches pointing at plugin lines this machine doesn't have.

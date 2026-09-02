@@ -248,3 +248,32 @@ void ArtNet_Test::offSegmentPacketIsNotFiledUnderLoopback()
 
     plugin.m_IOmapping.clear();
 }
+
+void ArtNet_Test::lineOnSameSubnetResolvesChangedAddress()
+{
+    ArtNetPlugin plugin;
+
+    QNetworkAddressEntry entry;
+    entry.setIp(QHostAddress("172.18.2.42"));
+    entry.setPrefixLength(24);
+
+    ArtNetIO io;
+    io.controller = NULL;   // lineOnSameSubnet() never touches this
+    io.address = entry;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+
+    /* Same subnet, different host part -- a DHCP re-lease on this machine,
+       or the same workspace opened on different hardware plugged into the
+       same physical network. Line 0, even though this line's own address
+       (172.18.2.42) is not the one being looked up (172.18.2.17). */
+    QCOMPARE(plugin.lineOnSameSubnet("172.18.2.17"), 0);
+
+    // A genuinely different network must not match.
+    QCOMPARE(plugin.lineOnSameSubnet("10.0.0.5"), -1);
+
+    // Not an address at all -- must not crash or false-match.
+    QCOMPARE(plugin.lineOnSameSubnet("not an address"), -1);
+
+    plugin.m_IOmapping.clear();
+}

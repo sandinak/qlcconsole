@@ -68,6 +68,9 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
         m_plugin->closeOutput(m_pluginLine, m_universe);
 
+    // A concrete set() always supersedes whatever this patch was pending on.
+    m_pendingUID.clear();
+
     m_plugin = plugin;
     m_pluginLine = output;
 
@@ -106,6 +109,27 @@ bool OutputPatch::reconnect()
     return false;
 }
 
+void OutputPatch::setPending(QLCIOPlugin *plugin, const QString &uid)
+{
+    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+        m_plugin->closeOutput(m_pluginLine, m_universe);
+
+    m_plugin = plugin;
+    m_pluginLine = QLCIOPlugin::invalidLine();
+    m_pendingUID = uid;
+
+    if (m_plugin != NULL)
+        emit pluginNameChanged();
+    // outputName() now returns m_pendingUID rather than "None" -- same
+    // property, same signal, the identity just isn't open.
+    emit outputNameChanged();
+}
+
+bool OutputPatch::isPending() const
+{
+    return m_pluginLine == QLCIOPlugin::invalidLine() && m_pendingUID.isEmpty() == false;
+}
+
 QString OutputPatch::pluginName() const
 {
     if (m_plugin != NULL)
@@ -125,6 +149,14 @@ QString OutputPatch::outputName() const
         m_pluginLine < quint32(m_plugin->outputs().size()))
     {
         return m_plugin->outputs()[m_pluginLine];
+    }
+    else if (m_pendingUID.isEmpty() == false)
+    {
+        /* Unresolved, not unpatched -- saveXML() reads this to write
+           LineUID back out, so a pending patch round-trips to the same
+           identity rather than being written out as "None" and losing the
+           mapping for good the next time this file is saved. */
+        return m_pendingUID;
     }
     else
     {
@@ -158,10 +190,18 @@ void OutputPatch::unSetPluginParameter(QString prop)
 
 QMap<QString, QVariant> OutputPatch::getPluginParameters()
 {
-    if (m_plugin != NULL)
+    /* A pending patch (see setPending()) has no real line yet, so there is
+       nothing for the PLUGIN to report -- it only knows about lines that
+       actually exist. What this patch would send once it resolves is
+       exactly what setPluginParameter() already recorded locally: the same
+       cache reconnect() replays onto the plugin once a real line exists.
+       Reading that instead, rather than asking a plugin that has nothing
+       to say yet, is what keeps a pending ArtNet patch's target IP and port
+       visible instead of reading back as broadcast/untargeted. */
+    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
         return m_plugin->getParameters(m_universe, m_pluginLine, QLCIOPlugin::Output);
 
-    return QMap<QString, QVariant>();
+    return m_parametersCache;
 }
 
 /*****************************************************************************

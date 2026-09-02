@@ -662,6 +662,31 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index)
     return false;
 }
 
+bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index)
+{
+    if (index < 0 || plugin == NULL || pendingUID.isEmpty())
+        return false;
+
+    qDebug() << "[Universe] setOutputPatchPending - ID:" << m_id
+             << ", plugin:" << plugin->name() << ", pending UID:" << pendingUID;
+
+    if (index < m_outputPatchList.count())
+    {
+        OutputPatch *patch = m_outputPatchList.at(index);
+        patch->setPending(plugin, pendingUID);
+        emit outputPatchChanged();
+        return true;
+    }
+    else
+    {
+        OutputPatch *patch = new OutputPatch(m_id, this);
+        patch->setPending(plugin, pendingUID);
+        m_outputPatchList.append(patch);
+        emit outputPatchesCountChanged();
+        return true;
+    }
+}
+
 bool Universe::setFeedbackPatch(QLCIOPlugin *plugin, quint32 output)
 {
     qDebug() << Q_FUNC_INFO << "plugin:" << plugin << "output:" << output;

@@ -92,6 +92,10 @@ private slots:
     /** Displays an editor for the currently selected universe */
     void slotCurrentItemChanged();
 
+    /** Right-click on the universe list — Add/Delete Universe, matching
+     *  every other manager tab's right-click CRUD convention. */
+    void slotUniverseListContextMenu(const QPoint &pos);
+
     /** Updates the current item */
     void slotMappingChanged();
 
@@ -123,6 +127,7 @@ private:
     QCheckBox *m_uniPassthroughCheck;
     QAction* m_rescanAction;
     QListWidget *m_list;
+    QLabel *m_onboardingHint; //!< shown when no universe has any input/output patched
     QLabel *m_inputActivityLabel; //!< live "last input: uni/channel = value" readout
     QIcon m_icon;
     QTimer* m_timer;

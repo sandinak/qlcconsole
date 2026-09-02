@@ -32,6 +32,7 @@
 #include <QAction>
 #include <QMessageBox>
 #include <QIcon>
+#include <QMenu>
 #include <QTimer>
 #include <QSet>
 
@@ -183,6 +184,9 @@ UniversePatchGrid::UniversePatchGrid(Doc *doc, QWidget *parent)
     lay->addWidget(hint);
 
     m_table = new QTableWidget(this);
+    m_table->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_table, &QTableWidget::customContextMenuRequested,
+            this, &UniversePatchGrid::onContextMenu);
     m_table->setColumnCount(COL_COUNT);
     m_table->setHorizontalHeaderLabels(QStringList()
         << tr("Uni") << tr("Name") << tr("Usage")
@@ -1000,6 +1004,19 @@ void UniversePatchGrid::onSelectionChanged()
 {
     if (m_removeAction != nullptr)
         m_removeAction->setEnabled(m_ioMap->universesCount() > 0);
+}
+
+void UniversePatchGrid::onContextMenu(const QPoint &pos)
+{
+    QMenu menu(this);
+    QAction *add = menu.addAction(QIcon(":/edit_add.png"), tr("Add Universe"));
+    QAction *remove = menu.addAction(QIcon(":/edit_remove.png"), tr("Remove Universe"));
+    remove->setEnabled(m_ioMap->universesCount() > 0);
+    QAction *chosen = menu.exec(m_table->viewport()->mapToGlobal(pos));
+    if (chosen == add)
+        onAddUniverse();
+    else if (chosen == remove)
+        onRemoveUniverse();
 }
 
 void UniversePatchGrid::onAddUniverse()

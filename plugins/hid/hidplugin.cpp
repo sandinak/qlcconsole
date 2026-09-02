@@ -419,7 +419,19 @@ void HIDPlugin::rescanDevices()
         {
             dev = new HIDOSXJoystick(this, line++, cur_dev);
 #endif
-            addDevice(dev);
+            /* Matched a joystick-shaped top-level HID usage (why the
+               isJoystick() check above passed) but turned out, once its
+               actual report descriptor was parsed, to have neither an axis
+               nor a button. Apple's HID stack exposes several of its own
+               internal devices (trackpad/keyboard auxiliary interfaces,
+               wrapper nodes around the real device) this way, typically
+               with no product string either -- just a bare manufacturer
+               name and nothing to tell them apart or patch to. Not a real
+               control surface, so do not list it as if it might be one. */
+            if (dev != NULL && dev->axisCount() <= 0 && dev->buttonCount() <= 0)
+                delete dev;
+            else
+                addDevice(dev);
         }
 
         cur_dev = cur_dev->next;

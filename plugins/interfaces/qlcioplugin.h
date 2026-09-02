@@ -437,6 +437,27 @@ public:
     { Q_UNUSED(address) return false; }
 
     /**
+     * Find a line whose network shares a subnet with @p identity -- an
+     * address string previously returned by outputs()/inputs() and saved
+     * against a patch, that no longer exactly matches any line this plugin
+     * offers right now.
+     *
+     * The exact address changing does not mean the network is gone: DHCP
+     * re-leases, and the same workspace opened on different hardware
+     * plugged into the same physical segment gets a different address on
+     * that segment too. Both cases are still "this machine can reach that
+     * network", just not through the specific address a patch happened to
+     * be saved with -- worth resolving automatically rather than treating
+     * as absent (see OutputPatch::isPending()) whenever a plugin has enough
+     * of a notion of "subnet" to tell.
+     *
+     * Returns the matching line index, or -1 if this plugin has no concept
+     * of subnets (the default) or nothing here matches.
+     */
+    virtual int lineOnSameSubnet(const QString &identity) const
+    { Q_UNUSED(identity) return -1; }
+
+    /**
      * Re-enumerate hardware devices and update internal state.
      * Plugins that support hot-plug or need an explicit rescan can override
      * this; the default implementation does nothing.
