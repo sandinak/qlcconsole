@@ -64,6 +64,24 @@ public:
     bool set(QLCIOPlugin* plugin, quint32 output);
 
     /**
+     * Record a patch to @p plugin whose saved interface identity (@p uid --
+     * an ArtNet interface's IP, for instance) does not currently match any
+     * line the plugin offers -- a workspace opened on a machine that isn't
+     * on the network it was built for, most commonly. Keeps the plugin
+     * association and @p uid so the patch round-trips through saveXML()
+     * unchanged and re-resolves correctly back on a machine that DOES have
+     * that interface, but opens nothing: isPatched() is false and no
+     * hardware line is ever opened while pending. See isPending().
+     */
+    void setPending(QLCIOPlugin *plugin, const QString &uid);
+
+    /** True while this patch remembers an interface identity that did not
+     *  resolve to any line the plugin currently offers -- see setPending().
+     *  A pending patch is deliberately inert: nothing is opened and nothing
+     *  is sent, but the mapping itself is not lost. */
+    bool isPending() const;
+
+    /**
      * If a valid plugin and line have been set, close
      * the output line and re-open it again
      */
@@ -111,6 +129,9 @@ private:
     quint32 m_pluginLine;
     /** The universe that this Output patch is attached to */
     quint32 m_universe;
+    /** The interface identity this patch is waiting to find again, or
+     *  empty when not pending -- see setPending()/isPending(). */
+    QString m_pendingUID;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
 

@@ -602,7 +602,9 @@ void VirtualConsole::initMenuBar()
 
     /* Toolbar */
     m_toolbar = new QToolBar(this);
-    m_toolbar->setIconSize(QSize(26,26));
+    // Matches the app-wide 20x20 toolbar convention (was the outlier at
+    // 26x26 — see fixturemanager.cpp's initToolBar for the full reasoning).
+    m_toolbar->setIconSize(QSize(20, 20));
     m_contentsLayout->addWidget(m_toolbar);
 
     // "Add" consolidates the New Button/Slider/…/Frame actions that used to

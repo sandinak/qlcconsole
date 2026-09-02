@@ -223,12 +223,18 @@ void FunctionManager::initActions()
     m_addSceneAction = new QAction(QIcon(":/scene.png"),
                                    tr("New &scene"), this);
     m_addSceneAction->setShortcut(QKeySequence("CTRL+1"));
+    m_addSceneAction->setToolTip(tr(
+        "Creates a new scene — rename it to follow this show's naming "
+        "convention, e.g. SS-PP.II-Description (\"01-01.01-Warm Wash\")."));
     connect(m_addSceneAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddScene()));
 
     m_addChaserAction = new QAction(QIcon(":/chaser.png"),
                                     tr("New c&haser"), this);
     m_addChaserAction->setShortcut(QKeySequence("CTRL+2"));
+    m_addChaserAction->setToolTip(tr(
+        "Creates a new chaser — rename it to follow this show's naming "
+        "convention, e.g. SS-PP.II-Description (\"01-01.01-Warm Wash\")."));
     connect(m_addChaserAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddChaser()));
 
@@ -336,6 +342,9 @@ void FunctionManager::initToolbar()
     m_toolbar = new QToolBar("Function Manager", this);
     m_toolbar->setFloatable(false);
     m_toolbar->setMovable(false);
+    // Matches the app-wide 20x20 toolbar convention (was unset — see
+    // fixturemanager.cpp's initToolBar for the full reasoning).
+    m_toolbar->setIconSize(QSize(20, 20));
     layout()->addWidget(m_toolbar);
 
     // "Add" consolidates the New Scene/Chaser/…/Folder actions that used to

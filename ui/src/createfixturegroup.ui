@@ -47,6 +47,9 @@
    </item>
    <item>
     <widget class="QGroupBox" name="m_sizeGroup">
+     <property name="toolTip">
+      <string>The grid of head positions this group arranges its fixtures on — used later for XY-pad / per-head effects and Programming-tab drag targets. You can resize it after creating the group.</string>
+     </property>
      <property name="title">
       <string>Initial size</string>
      </property>

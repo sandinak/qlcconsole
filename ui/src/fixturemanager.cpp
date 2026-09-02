@@ -436,7 +436,10 @@ void FixtureManager::initDataView()
     connect(m_fixtures_tree, SIGNAL(collapsed(QModelIndex)),
             this, SLOT(slotFixtureItemExpanded()));
 
-    tabs->addTab(m_fixtures_tree, tr("Fixture Groups"));
+    tabs->setTabToolTip(tabs->addTab(m_fixtures_tree, tr("Fixture Groups")), tr(
+        "Spatial groups: fixtures arranged on a head-layout grid.\n"
+        "Used for XY-pad / per-head effects and as drag-drop dynamic targets "
+        "in the Programming tab. Not the same as Channel Groups (next tab)."));
 
     m_channel_groups_tree = new QTreeWidget(this);
     QStringList chan_labels;
@@ -452,7 +455,10 @@ void FixtureManager::initDataView()
     connect(m_channel_groups_tree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
             this, SLOT(slotChannelsGroupDoubleClicked(QTreeWidgetItem*)));
 
-    tabs->addTab(m_channel_groups_tree, tr("Channel Groups"));
+    tabs->setTabToolTip(tabs->addTab(m_channel_groups_tree, tr("Channel Groups")), tr(
+        "DMX-channel groups for Simple Desk (e.g. all the Gobo channels across "
+        "several fixtures, grouped for quick access). Not the same as Fixture "
+        "Groups (previous tab), which group whole fixtures spatially."));
 /*
     m_rdmManager = new RDMManager(this, m_doc);
     tabs->addTab(m_rdmManager, "RDM");
@@ -872,7 +878,7 @@ void FixtureManager::slotTabChanged(int index)
 {
     if (index == 1)
     {
-        m_addAction->setToolTip(tr("Add group..."));
+        m_addAction->setToolTip(tr("Add channel group..."));
         updateChannelsGroupView();
         slotChannelsGroupSelectionChanged();
     }
@@ -1234,6 +1240,10 @@ void FixtureManager::initActions()
     // Group actions
     m_groupAction = new QAction(QIcon(":/group.png"),
                                 tr("Add fixture to group..."), this);
+    m_groupAction->setToolTip(tr(
+        "Add the selected fixture(s) to an existing group, or create a new "
+        "one — click the dropdown arrow and pick \"New Group...\" at the "
+        "bottom of the list."));
 
     m_unGroupAction = new QAction(QIcon(":/ungroup.png"),
                                 tr("Remove fixture from group"), this);
@@ -1303,6 +1313,12 @@ void FixtureManager::initToolBar()
     m_toolbar = toolbar;
     toolbar->setFloatable(false);
     toolbar->setMovable(false);
+    // Was falling back to the platform default (unset here) — with the
+    // default TextUnderIcon label mode and several long action labels
+    // ("Channels Fade Configuration"), that made the whole toolbar
+    // untenably wide. Matches showtimelineeditor.cpp's existing 20x20,
+    // extended here to the other manager toolbars that never set one.
+    toolbar->setIconSize(QSize(20, 20));
     layout()->setMenuBar(toolbar);
     toolbar->addAction(m_addAction);
     toolbar->addAction(m_addRGBAction);

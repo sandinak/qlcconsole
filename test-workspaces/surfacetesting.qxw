@@ -2,35 +2,31 @@
 <!DOCTYPE Workspace>
 <Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="InputOutputManager">
  <Creator>
-  <Name>Q Light Controller Plus</Name>
-  <Version>4.14.4 GIT</Version>
-  <Author>Branson Matheson</Author>
+  <Name>qlcconsole</Name>
+  <Version>4.14.2+qlcconsole.1190</Version>
+  <Author>branson</Author>
  </Creator>
  <Engine>
   <InputOutputMap>
    <BeatGenerator BeatType="Disabled" BPM="0"/>
    <Universe Name="Universe 1" ID="0">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1"/>
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1"/>
    </Universe>
    <Universe Name="Universe 2" ID="1">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1"/>
-    <Feedback Plugin="MIDI" UID="Launchkey MK4 49 MIDI In" Line="0">
-     <PluginParameters midichannel="16"/>
-    </Feedback>
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1"/>
+    <Feedback Plugin="MIDI" UID="None" Line="0"/>
    </Universe>
    <Universe Name="Universe 3" ID="2">
-    <Input Plugin="MIDI" UID="Network RTP Session 1" Line="2" HIDProfile="Microsoft Xbox Controller"/>
+    <Input Plugin="MIDI" UID="None" Line="2" HIDProfile="Microsoft Xbox Controller"/>
    </Universe>
    <Universe Name="Universe 4" ID="3">
-    <Input Plugin="MIDI" UID="Launchkey MK4 49 MIDI Out" Line="0"/>
+    <Input Plugin="MIDI" UID="None" Line="0"/>
    </Universe>
    <Universe Name="Universe 5" ID="4"/>
    <Universe Name="Universe 6" ID="5"/>
    <Universe Name="Universe 7" ID="6"/>
    <Universe Name="Universe 8" ID="7">
-    <Output Plugin="ArtNet" UID="192.168.21.214" Line="4">
-     <PluginParameters outputIP="192.168.20.185" outputUni="0"/>
-    </Output>
+    <Output Plugin="ArtNet" UID="None" Line="4"/>
    </Universe>
    <Universe Name="Universe 9" ID="8"/>
    <Universe Name="Universe 10" ID="9"/>
@@ -41,252 +37,252 @@
    <Universe Name="Universe 15" ID="14"/>
    <Universe Name="Universe 16" ID="15"/>
    <Universe Name="U17-US1-1" ID="16">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.221" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U18-US1-2" ID="17">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.221" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U19-US1-3" ID="18">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.221" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U20-US1-4" ID="19">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.221" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U21-US2-1" ID="20">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.222" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U22-US2-2" ID="21">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.222" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U23-US2-3" ID="22">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.222" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U24-US2-4" ID="23">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.222" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U25-US3-1" ID="24">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.223" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U26-US3-2" ID="25">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.223" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U27-US3-3" ID="26">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.223" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U28-US3-4" ID="27">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.223" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U29-US4-1" ID="28">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.224" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U30-US4-2" ID="29">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.224" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U31-US4-3" ID="30">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.224" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U32-US4-4" ID="31">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.224" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U33-CS1-1" ID="32">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.211" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U34-CS1-2" ID="33">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.211" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U35-CS1-3" ID="34">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.211" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U36-CS1-4" ID="35">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.211" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U37-CS2-1" ID="36">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.212" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U38-CS2-2" ID="37">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.212" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U39-CS2-3" ID="38">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.212" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U40-CS2-4" ID="39">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.212" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U41-CS3-1" ID="40">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.213" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U42-CS3-2" ID="41">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.213" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U43-CS3-3" ID="42">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.213" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U44-CS3-4" ID="43">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.213" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U45-CS4-1" ID="44">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.214" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U46-CS4-2" ID="45">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.214" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U47-CS4-3" ID="46">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.214" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U48-CS4-4" ID="47">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.214" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U49-DS1-1" ID="48">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.201" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U50-DS1-2" ID="49">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.201" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U51-DS1-3" ID="50">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.201" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U52-DS1-4" ID="51">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.201" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U53-DS2-1" ID="52">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.202" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U54-DS2-2" ID="53">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.202" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U55-DS2-3" ID="54">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.202" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U56-DS2-4" ID="55">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.202" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U57-DS3-1" ID="56">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.203" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U58-DS3-2" ID="57">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.203" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U59-DS3-3" ID="58">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.203" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U60-DS3-4" ID="59">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.203" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U61-DS4-1" ID="60">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.204" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U62-DS4-2" ID="61">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.204" outputUni="1"/>
     </Output>
    </Universe>
    <Universe Name="U63-DS4-3" ID="62">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.204" outputUni="2"/>
     </Output>
    </Universe>
    <Universe Name="U64-DS4-4" ID="63">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.204" outputUni="3"/>
     </Output>
    </Universe>
    <Universe Name="U65-StepBars-A" ID="64">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.230" outputUni="0"/>
     </Output>
    </Universe>
    <Universe Name="U66-StepBars-B" ID="65">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
+    <Output Plugin="ArtNet" UID="192.168.1.125" Line="1">
      <PluginParameters outputIP="172.18.2.230" outputUni="1"/>
     </Output>
    </Universe>
@@ -2690,8 +2686,9 @@
     </Circuit>
    </Source>
   </PowerDistribution>
+  <MoveInBlack Auto="0" DarkGapMs="800"/>
   <Monitor DisplayMode="1" ShowLabels="0" LayoutLocked="1" AimSubjectHeight="1.39903">
-   <Font>Arial,12,-1,5,50,0,0,0,0,0</Font>
+   <Font>Arial,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0</Font>
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
    <Grid Width="40" Height="3" Depth="24" Units="1" Subdivisions="3"/>
@@ -4510,7 +4507,5 @@
  <SimpleDesk>
   <Engine/>
  </SimpleDesk>
- <AppState>
-  <MonitorWindow open="1" geometry="AdnQywADAAAAAAHY///6rAAACDb////EAAAB2P//+swAAAg2////xAAAAAEAAAAACgAAAAHY///6zAAACDb////E"/>
- </AppState>
+ <AppState/>
 </Workspace>

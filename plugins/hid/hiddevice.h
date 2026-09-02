@@ -123,6 +123,8 @@ public:
     virtual unsigned short productId() const { return 0; }
     /** Number of axes on joystick devices; -1 for non-joystick. */
     virtual int axisCount() const { return -1; }
+    /** Number of buttons on joystick devices; -1 for non-joystick. */
+    virtual int buttonCount() const { return -1; }
 
 protected:
     quint32 m_line;

@@ -57,6 +57,8 @@ protected:
     unsigned short productId() const override { return m_dev_info ? m_dev_info->product_id : 0; }
     /** @reimp */
     int axisCount() const override { return (int)m_axesNumber; }
+    /** @reimp */
+    int buttonCount() const override { return (int)m_buttonsNumber; }
 
 protected:
     struct hid_device_info *m_dev_info;

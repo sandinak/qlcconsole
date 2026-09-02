@@ -24,7 +24,9 @@
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-JOBS="$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+# Performance cores only, not hw.ncpu -- on Apple Silicon that also counts
+# efficiency cores, which saturating slows down everything else on the machine.
+JOBS="$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || nproc)"
 FAILED=""
 
 run_gate() { # <label> <build-dir> <qt-prefix-or-empty>

@@ -196,6 +196,57 @@ void InputOutputMap_Test::validOutputPatchNotFlagged()
     QVERIFY(iom.danglingOutputPatches().isEmpty());
 }
 
+void InputOutputMap_Test::unresolvedInterfaceIdentityGoesPendingNotWrongIndex()
+{
+    InputOutputMap iom(m_doc, 4);
+    IOPluginStub* stub = static_cast<IOPluginStub*>
+                                (m_doc->ioPluginCache()->plugins().at(0));
+    QVERIFY(stub != NULL);
+
+    // Line 1 is a real, in-range interface on this machine -- exactly the
+    // trap: an unmatched UID used to be treated as "use the numeric line
+    // anyway", silently binding to whatever line 1 happens to be here even
+    // though it is not the interface the workspace actually asked for.
+    QVERIFY(iom.setOutputPatch(0, stub->name(),
+                               "an interface this machine does not have", 1));
+
+    OutputPatch *op = iom.outputPatch(0, 0);
+    QVERIFY(op != NULL);
+    QVERIFY(op->isPending() == true);
+    QVERIFY(op->isPatched() == false);
+    QCOMPARE(op->outputName(), QString("an interface this machine does not have"));
+    QVERIFY(stub->m_openOutputs.isEmpty());
+
+    QList<InputOutputMap::DanglingPatch> bad = iom.danglingOutputPatches();
+    QCOMPARE(bad.size(), 1);
+    QCOMPARE(bad.first().universe, quint32(0));
+    QCOMPARE(bad.first().missingInterface,
+             QString("an interface this machine does not have"));
+}
+
+void InputOutputMap_Test::noneSentinelDoesNotGoPending()
+{
+    InputOutputMap iom(m_doc, 4);
+    IOPluginStub* stub = static_cast<IOPluginStub*>
+                                (m_doc->ioPluginCache()->plugins().at(0));
+    QVERIFY(stub != NULL);
+
+    // "None" (KOutputNone) is OutputPatch::outputName()'s own fallback for
+    // "no line was ever resolved" -- exactly what an incomplete/never-
+    // finished patch saves as its UID. It must not be treated as a real
+    // interface identity worth remembering as pending: line 1 here is a
+    // real, in-range interface, so the OLD index-based behavior should
+    // apply and this should resolve normally, not go pending under a ghost
+    // interface literally named "None".
+    QVERIFY(iom.setOutputPatch(0, stub->name(), KOutputNone, 1));
+
+    OutputPatch *op = iom.outputPatch(0, 0);
+    QVERIFY(op != NULL);
+    QVERIFY(op->isPending() == false);
+    QVERIFY(op->isPatched() == true);
+    QCOMPARE(op->output(), quint32(1));
+}
+
 void InputOutputMap_Test::universeNames()
 {
     InputOutputMap iom(m_doc, 4);

@@ -67,6 +67,9 @@ private slots:
     void onFeedbackChanged(int row);
     void onAddUniverse();
     void onRemoveUniverse();
+    /** Right-click on the grid — Add/Remove Universe, matching every other
+     *  manager tab's right-click CRUD convention (was toolbar-only here). */
+    void onContextMenu(const QPoint &pos);
     void onSelectionChanged();
     void onRescan();
     void toggleInputGroup(bool on);

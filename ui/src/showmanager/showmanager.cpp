@@ -409,6 +409,9 @@ void ShowManager::initToolbar()
     m_toolbar = new QToolBar("Show Manager", this);
     m_toolbar->setFloatable(false);
     m_toolbar->setMovable(false);
+    // Matches the app-wide 20x20 toolbar convention (was unset — see
+    // fixturemanager.cpp's initToolBar for the full reasoning).
+    m_toolbar->setIconSize(QSize(20, 20));
     layout()->addWidget(m_toolbar);
 
     // "Show" — which show container to work on: New/Rename/Delete. Distinct
@@ -606,6 +609,7 @@ void ShowManager::initToolbar()
     // Grid/Snap row, below the main toolbar — mirrors the 2D view's own
     // Grid/Subdiv/Snap row at the bottom of its canvas.
     m_bottomToolbar = new QToolBar(this);
+    m_bottomToolbar->setIconSize(QSize(20, 20));
     layout()->addWidget(m_bottomToolbar);
     m_bottomToolbar->addAction(m_snapGridAction);
 

@@ -143,6 +143,7 @@ add_library(${module_name}
     showmanager/timingstool.cpp showmanager/timingstool.h
     showmanager/trackitem.cpp showmanager/trackitem.h
     showmanager/videoitem.cpp showmanager/videoitem.h
+    showstatus.cpp showstatus.h
     simpledesk.cpp simpledesk.h
     simpledeskengine.cpp simpledeskengine.h
     speeddial.cpp speeddial.h

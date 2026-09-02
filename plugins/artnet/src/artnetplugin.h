@@ -100,6 +100,10 @@ public:
     /** @reimp Unicast an ArtPoll at one address. */
     bool probeTarget(const QString &address) override;
 
+    /** @reimp Every line already carries its own subnet (address +
+        prefix length), used for probeTarget()'s own routing decision. */
+    int lineOnSameSubnet(const QString &identity) const override;
+
     /** @reimp */
     QString outputInfo(quint32 output) override;
 

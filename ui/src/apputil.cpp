@@ -38,6 +38,9 @@
 
 #include "apputil.h"
 #include "qlcconfig.h"
+#include "qlcpalette.h"
+#include "scene.h"
+#include "doc.h"
 
 /****************************************************************************
  * Widget visibility helper
@@ -214,6 +217,20 @@ unsigned int AppUtil::digits(unsigned int n)
     while (n /= 10)
         ++res;
     return res;
+}
+
+QColor AppUtil::sceneSwatchColor(Doc *doc, Scene *scene)
+{
+    if (doc == NULL || scene == NULL)
+        return QColor();
+
+    for (quint32 pid : scene->palettes())
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p != NULL && p->type() == QLCPalette::Color)
+            return p->rgbValue();
+    }
+    return QColor();
 }
 
 /*****************************************************************************

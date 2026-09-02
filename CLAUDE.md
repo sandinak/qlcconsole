@@ -38,8 +38,10 @@ non-interactive `PATH` there; prefix with `export PATH=/opt/homebrew/bin:$PATH`.
 # Reconfigure only when CMakeLists/sources are added or removed:
 cmake -S . -B build
 
-# Incremental build (parallel). Run after editing sources:
-cmake --build build -j"$(sysctl -n hw.ncpu)"
+# Incremental build (parallel). Run after editing sources: performance cores
+# only, not hw.ncpu — on Apple Silicon that also counts efficiency cores,
+# which saturating slows down everything else running on the machine.
+cmake --build build -j"$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu)"
 
 # Run. ALWAYS pass -o to open a workspace; positional args are ignored and
 # can overwrite the .qxw with an empty file (see memory: qlcplus-cli).

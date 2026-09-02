@@ -19,6 +19,7 @@
 
 #include <QListWidgetItem>
 #include <QListWidget>
+#include <QMenu>
 #include <QHeaderView>
 #include <QStringList>
 #include <QVBoxLayout>
@@ -94,8 +95,10 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     layout()->addWidget(m_ioTabs);
 
     /* Devices first: it answers "what is out there and is it reachable", which
-       is what you want before patching anything. Overview and Detailed remain
-       the editing surfaces -- this one is read-only on purpose. */
+       is what you want before patching anything. Also a full editing surface
+       in its own right, not just Overview/Detailed -- right-click a row to
+       rename/patch/unpatch/retarget/delete that universe, or right-click
+       empty space to add a new one (ConnectionsTree::slotContextMenu()). */
     m_devicesTree = new ConnectionsTree(m_doc, this);
     m_ioTabs->addTab(m_devicesTree, tr("Devices"));
 
@@ -166,7 +169,9 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     m_toolbar = new QToolBar("Input Output Manager", this);
     m_toolbar->setFloatable(false);
     m_toolbar->setMovable(false);
-    m_toolbar->setIconSize(QSize(32, 32));
+    // Matches the app-wide 20x20 toolbar convention (was the outlier at
+    // 32x32 — see fixturemanager.cpp's initToolBar for the full reasoning).
+    m_toolbar->setIconSize(QSize(20, 20));
     m_toolbar->addAction(m_addUniverseAction);
     m_toolbar->addAction(m_deleteUniverseAction);
     m_toolbar->addSeparator();
@@ -200,9 +205,34 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     connect(m_uniPassthroughCheck, SIGNAL(toggled(bool)),
             this, SLOT(slotPassthroughChanged(bool)));
 
+    // Onboarding hint — this is the first tab a brand-new workspace opens
+    // on (Connections comes before Fixtures in the tab order, since it's
+    // the precondition for everything after it), but unlike Fixture
+    // Manager and the Show timeline, it had no empty-state hint of its own.
+    // A fresh Doc always has 4 default universes (Doc::Doc's default arg),
+    // so "universe count == 0" never happens here — the real "brand new"
+    // signal is that none of them are patched to anything yet.
+    m_onboardingHint = new QLabel(this);
+    m_onboardingHint->setWordWrap(true);
+    m_onboardingHint->setText(tr(
+        "<P>Nothing patched yet. Select a universe below, then pick an "
+        "input/output plugin for it in the panel on the right (ArtNet, "
+        "sACN, USB DMX, MIDI, …) — that's the first step before fixtures "
+        "or looks can do anything.</P>"));
+    m_onboardingHint->hide();
+    m_splitter->widget(0)->layout()->addWidget(m_onboardingHint);
+
     /* Universes list */
     m_list = new QListWidget(this);
     m_list->setItemDelegate(new UniverseItemWidget(m_list));
+    // Right-click Add/Delete Universe — this list previously only offered
+    // them via the toolbar + Ctrl+N/Ctrl+D, unlike every other manager tab
+    // in the app (Fixture Manager, Devices tab here too) which all support
+    // right-click CRUD. Reuses the existing toolbar actions directly rather
+    // than duplicating their logic.
+    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_list, &QListWidget::customContextMenuRequested,
+            this, &InputOutputManager::slotUniverseListContextMenu);
     m_splitter->widget(0)->layout()->addWidget(m_list);
 
     /* Rescan button — below the universe list so it's always visible */
@@ -305,9 +335,15 @@ void InputOutputManager::updateList()
 
     m_list->blockSignals(true);
     m_list->clear();
+    bool anyPatched = false;
     for (quint32 uni = 0; uni < m_ioMap->universesCount(); uni++)
+    {
         updateItem(new QListWidgetItem(m_list), uni);
+        if (m_ioMap->inputPatch(uni) != NULL || m_ioMap->outputPatch(uni) != NULL)
+            anyPatched = true;
+    }
     m_list->blockSignals(false);
+    m_onboardingHint->setVisible(!anyPatched);
 
     if (m_ioMap->universesCount() == 0)
     {
@@ -406,6 +442,22 @@ void InputOutputManager::slotTimerTimeout()
     /* Grey the readout to show input has gone idle, but keep the last value
        visible — it's the most useful thing when a controller stops sending. */
     m_inputActivityLabel->setStyleSheet("color: gray;");
+}
+
+void InputOutputManager::slotUniverseListContextMenu(const QPoint &pos)
+{
+    // Right-clicking a specific row selects it first, so Delete Universe's
+    // enabled state (only the LAST universe can be deleted — the universe
+    // id == array index invariant) reflects whatever was actually
+    // right-clicked, not whatever happened to be selected before.
+    QListWidgetItem *item = m_list->itemAt(pos);
+    if (item != NULL)
+        m_list->setCurrentItem(item);
+
+    QMenu menu(this);
+    menu.addAction(m_addUniverseAction);
+    menu.addAction(m_deleteUniverseAction);
+    menu.exec(m_list->mapToGlobal(pos));
 }
 
 void InputOutputManager::slotCurrentItemChanged()

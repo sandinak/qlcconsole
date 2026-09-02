@@ -19,6 +19,8 @@
 
 #include <QTreeWidgetItem>
 #include <QRadioButton>
+#include <QPixmap>
+#include <QPainter>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
@@ -1379,7 +1381,29 @@ void ChaserEditor::updateItem(QTreeWidgetItem* item, ChaserStep& step)
             displayName = functionPath + "/" + function->name();
 
         item->setText(COL_NAME, displayName);
-        item->setIcon(COL_NAME, function->getIcon());
+
+        // A color swatch is a faster answer to "what does this step
+        // actually paint" than the generic per-type icon, for the common
+        // case of a Scene that sets a color — falls back to the generic
+        // icon for anything else (pan/tilt-only scenes, other function
+        // types, …) rather than showing a made-up color.
+        Scene *scene = qobject_cast<Scene *>(function);
+        QColor swatch = scene ? AppUtil::sceneSwatchColor(m_doc, scene) : QColor();
+        if (swatch.isValid())
+        {
+            QPixmap pix(16, 16);
+            pix.fill(Qt::transparent);
+            QPainter painter(&pix);
+            painter.setRenderHint(QPainter::Antialiasing);
+            painter.setPen(QPen(swatch.darker(150), 1));
+            painter.setBrush(swatch);
+            painter.drawEllipse(1, 1, 14, 14);
+            item->setIcon(COL_NAME, QIcon(pix));
+        }
+        else
+        {
+            item->setIcon(COL_NAME, function->getIcon());
+        }
     }
 
     if (step.note.isEmpty() == false)

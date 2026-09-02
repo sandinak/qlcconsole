@@ -21,8 +21,11 @@
 #define APPUTIL_H
 
 #include <QStyledItemDelegate>
+#include <QColor>
 
 class QWidget;
+class Doc;
+class Scene;
 
 /** @addtogroup ui UI
  * @{
@@ -68,6 +71,20 @@ namespace AppUtil
      * Helper: get the number of digits in an unsigned int (base 10)
      */
     unsigned int digits(unsigned int num);
+
+    /*********************************************************************
+     * Scene content swatch
+     *********************************************************************/
+    /**
+     * A quick visual summary of what a scene paints — the RGB value of the
+     * first Color-type palette it references, so a chaser step / show-
+     * timeline block can show a swatch instead of just a name. Returns an
+     * invalid QColor (check isValid()) if the scene references no Color
+     * palette (e.g. a pure pan/tilt or dimmer-only scene) — callers should
+     * fall back to their normal icon/no-swatch rendering rather than
+     * inventing a color.
+     */
+    QColor sceneSwatchColor(Doc *doc, Scene *scene);
 };
 
 /*****************************************************************************

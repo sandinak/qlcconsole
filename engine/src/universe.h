@@ -218,6 +218,13 @@ public:
     /** Add/Remove/Replace an output patch on this Universe */
     bool setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index = 0);
 
+    /** Add/Replace an output patch at @p index whose saved interface
+     *  identity @p pendingUID did not match any line @p plugin currently
+     *  offers -- see OutputPatch::setPending(). Never deletes: unlike
+     *  setOutputPatch(), there is no "clear this patch" meaning here, only
+     *  "remember it, unresolved". */
+    bool setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index = 0);
+
     /** Sets a feedback patch for this Universe */
     bool setFeedbackPatch(QLCIOPlugin *plugin, quint32 output);
 
