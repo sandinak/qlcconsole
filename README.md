@@ -6,7 +6,8 @@
 <p align="center"><em>A console-first fork of QLC+, for macOS.</em></p>
 <p align="center">
   <strong>Lighting control built around running a show live</strong> —
-  mouse, joystick, and (soon) MIDI control surface first.<br/>
+  mouse, joystick, and MIDI control surfaces (OpenDeck PMJ Black 1 today;
+  APC40 mk2 and Xbox controller planned).<br/>
   Not affiliated with, and not a replacement for, the upstream QLC+ project.
 </p>
 
@@ -34,13 +35,21 @@ controller with a large community and an active forum, use
 
 qlcconsole exists because I wanted a **programmer-mode workflow** for
 building and running looks live from a console, driven by a mouse, a
-joystick, and eventually a MIDI control surface — not primarily from a
+joystick, and a MIDI control surface — not primarily from a
 patched-together virtual console. It adds a dedicated **Programming** tab
 (palettes → looks → group scenes, with live preview), an explicit show-length
-model, an effect-scripting system, and a bunch of Fixture Manager tooling for
-building fixture groups quickly. See [CHANGELOG.md](CHANGELOG.md) for a
-user-facing summary of what's changed, or [DONE.md](DONE.md)/[TODO.md](TODO.md)
-for the detailed development log.
+model, an effect-scripting system, and Fixture Manager tooling for building
+fixture groups quickly. The **Connections** tab is a full rework of QLC+'s
+I/O manager into a strict, hierarchical device tree (host → protocol →
+interface → target → port → universe) with patch undo and portable patches
+that survive opening a workspace on a machine missing the network it was
+built for. A device-agnostic **control-surface engine** drives hardware
+control surfaces (an OpenDeck PMJ Black 1 overlay today), and boot now runs
+through one consistent startup window — name/version, a live log of what's
+loading, a progress bar — instead of a bare, platform-inconsistent dialog.
+See [CHANGELOG.md](CHANGELOG.md) for a user-facing summary of what's
+changed, or [DONE.md](DONE.md)/[TODO.md](TODO.md) for the detailed
+development log.
 
 **Platform support:** macOS first. The upstream QLC+ codebase this is forked
 from supports Linux and Windows too, but qlcconsole's own testing, packaging,
@@ -48,14 +57,18 @@ and releases currently target macOS only — see [RELEASE.md](RELEASE.md).
 
 ## Building qlcconsole
 
-CMake + Qt5 (Homebrew `qt@5` on macOS), built out-of-tree in `build/`:
+CMake, built out-of-tree in `build/`. `find_package(QT NAMES Qt5 Qt6 ...)`
+auto-detects whichever Qt is installed (Homebrew `qt` gives Qt6; `qt@5` also
+works) — CI and this fork's own releases build against Qt6:
 
 ```sh
 # Reconfigure only when CMakeLists/sources are added or removed:
 cmake -S . -B build
 
-# Incremental build (parallel). Run after editing sources:
-cmake --build build -j"$(sysctl -n hw.ncpu)"
+# Incremental build (parallel). Run after editing sources: performance
+# cores only, not hw.ncpu — on Apple Silicon that also counts efficiency
+# cores, which saturating slows down everything else running on the machine.
+cmake --build build -j"$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu)"
 
 # Run. Always pass -o to open a workspace explicitly.
 build/main/qlcconsole -o your-workspace.qxw

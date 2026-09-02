@@ -45,9 +45,30 @@ console-first programmer-mode workflow for macOS.
   select/move-together group behavior; a Layers panel for organizing the
   plot; Top/Front/Side points of view and Power/DMX/Network/Stage-only
   overlays.
-- **Hardware tab** (renamed from Fixtures) — a Power folder for modeling
-  power sources/circuits and assigning fixtures to them, plus a per-universe
-  DMX address usage grid.
+- **Fixtures tab** — a Power folder for modeling power sources/circuits and
+  assigning fixtures to them, plus a per-universe DMX address usage grid.
+- **Connections tab** — the I/O manager rebuilt around a strict tree
+  hierarchy (host → protocol → interface → target → port → universe), with
+  right-click menus scoped to exactly what applies at each level, IP-first
+  patching, rerouting a line's universes to a different interface in one
+  step, and "portable" patches: opening a workspace on a machine missing the
+  network it was built for keeps the mapping intact (instead of losing it)
+  without broadcasting to the wrong place. Ctrl+Z undoes the last
+  patch/universe change made here.
+- **Control-surface engine** — a device-agnostic engine for hardware
+  control surfaces (role/page vocabulary, context-aware LED feedback), with
+  an OpenDeck PMJ Black 1 overlay underway; APC40 mk2 and Xbox controller
+  support planned on the same engine.
+- **Consistent startup window** — app icon/name/version, a scrolling log of
+  what's loading, and a progress bar cover the whole boot sequence (plugin/
+  fixture/profile loading, opening a workspace passed on the command line,
+  autosave recovery) on every platform, replacing the old indeterminate,
+  macOS-only progress dialog. The main window now only ever appears once
+  everything is actually ready.
+- **Real-time DMX output timing (macOS)** — the DMX timer thread now
+  requests real-time scheduling from the OS, fixing missed output ticks
+  under scheduling pressure on a busy machine; Linux/Windows equivalents
+  are in progress.
 - **Backstage color themes** — six selectable app-wide color themes (View →
   Theme): Default, Tan, Blue, QLC+ Original, Red Shift (keeps the blue
   channel near-zero, for working in the dark without wrecking night vision),
