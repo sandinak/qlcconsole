@@ -50,6 +50,7 @@ class QAction;
 class QLabel;
 class QSlider;
 class App;
+class StartupWindow;
 
 /** @addtogroup ui UI
  * @{
@@ -88,7 +89,11 @@ class App final : public QMainWindow
 public:
     App();
     ~App();
-    void startup();
+    /** @param workspaceFile If non-empty, loaded through the same
+     *         StartupWindow used for the rest of boot -- see the comment
+     *         on the StartupWindow member -- instead of main() loading it
+     *         separately after the main window is already visible. */
+    void startup(const QString &workspaceFile = QString());
     void enableOverscan();
     void disableGUI();
 
@@ -166,24 +171,31 @@ public:
         re-patch. */
     void updateOutputReadiness();
 
-    void createProgressDialog();
-    void destroyProgressDialog();
-
-    /** Busy dialog shown while a workspace is being read. Unlike the startup
-        dialog above this one runs with the main window already visible, which
-        is exactly when a large workspace looks like a hang. */
+    /** Busy dialog shown while a workspace is being read outside of boot
+        (File > Open, a recent file, autosave recovery) -- the main window
+        is already visible then, which is exactly when a large workspace
+        looks like a hang. A no-op (routes into StartupWindow instead) when
+        called during App::startup()'s own workspaceFile load, so callers
+        don't need to know which case they're in. */
     void createLoadProgressDialog(const QString& fileName);
     void destroyLoadProgressDialog();
 
 public slots:
-    void slotSetProgressText(const QString& text);
-
-    /** Drives createLoadProgressDialog()'s dialog from Doc::loadProgress() */
+    /** Drives createLoadProgressDialog()'s dialog (or, during boot,
+        StartupWindow) from Doc::loadProgress(). */
     void slotLoadProgress(const QString& stage, int count);
 
 private:
-    QProgressDialog* m_progressDialog;
     QProgressDialog* m_loadProgressDialog;
+
+    /** Owns the whole visible boot sequence: App::init()'s engine/plugin/UI
+        build, and -- when App::startup() was given a workspaceFile --
+        that file's load too, so a -o launch never shows more than this one
+        window before the fully-loaded main window appears. NULL once
+        startup() returns; every startup-time step guards on that so the
+        same code path works when App::init() is called directly (as the
+        autosave test does) with no StartupWindow at all. */
+    StartupWindow* m_startupWindow;
 
     /*********************************************************************
      * Doc

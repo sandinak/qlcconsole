@@ -331,14 +331,12 @@ int main(int argc, char** argv)
     if (QLCArgs::noGui == true)
         app.disableGUI();
 
-    app.startup();
+    // A -o/--open workspace loads here too, under the same StartupWindow as
+    // the rest of boot, so the main window only ever appears once fully
+    // ready -- see App::startup()'s doc comment.
+    app.startup(QLCArgs::workspace);
     app.show();
 
-    if (QLCArgs::workspace.isEmpty() == false)
-    {
-        if (app.loadXML(QLCArgs::workspace) == QFile::NoError)
-            app.updateFileOpenMenu(QLCArgs::workspace);
-    }
     if (QLCArgs::operate == true)
         app.slotModeOperate();
 

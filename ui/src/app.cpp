@@ -83,6 +83,7 @@
 #include "controlsurfaceengine.h"
 #include "pmjoverlay.h"
 #include "showstatus.h"
+#include "startupwindow.h"
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "hotplugmonitor.h"
@@ -132,6 +133,11 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define KModeTextDesign QObject::tr("Design")
 #define KUniverseCount 4
 
+// One beginStep() call per top-level phase in init()/initDoc() below --
+// keep this in sync with the actual count so the StartupWindow's progress
+// bar lands exactly on "full" when boot finishes, not short or wrapping.
+#define STARTUP_STEP_COUNT 13
+
 /*****************************************************************************
  * Initialization
  *****************************************************************************/
@@ -141,8 +147,8 @@ App::App()
     , m_tab(NULL)
     , m_overscan(false)
     , m_noGui(false)
-    , m_progressDialog(NULL)
     , m_loadProgressDialog(NULL)
+    , m_startupWindow(NULL)
     , m_doc(NULL)
 
     , m_fileNewAction(NULL)
@@ -279,19 +285,53 @@ App::~App()
     m_doc = NULL;
 }
 
-void App::startup()
+void App::startup(const QString &workspaceFile)
 {
-#if defined(__APPLE__) || defined(Q_OS_MAC)
-    createProgressDialog();
-#endif
+    // Applied here, before StartupWindow exists, rather than later in
+    // init() (where this used to run) -- qApp->setPalette() inside
+    // applyTheme() is application-wide, so doing it first means the
+    // startup window itself opens already in the user's chosen theme
+    // instead of flashing the native palette for the length of boot.
+    QSettings settings;
+    m_theme = settings.value(SETTINGS_THEME, ThemeDefault).toInt();
+    applyTheme();
+
+    if (m_noGui == false)
+    {
+        const int steps = STARTUP_STEP_COUNT + (workspaceFile.isEmpty() ? 0 : 1);
+        m_startupWindow = new StartupWindow(steps);
+        m_startupWindow->show();
+    }
 
     init();
+
+    if (m_startupWindow != NULL)
+    {
+        m_startupWindow->beginStep(tr("Checking output readiness"));
+        const QList<InputOutputMap::DanglingPatch> dangling =
+                m_doc->inputOutputMap()->danglingOutputPatches();
+        m_startupWindow->logDetail(dangling.isEmpty()
+                ? tr("All outputs ready")
+                : tr("%1 pending patch(es)").arg(dangling.count()));
+    }
+    updateOutputReadiness();
+
+    // Loaded here, still under the startup window, rather than by main()
+    // after App::show() -- that used to pop a second, unbranded dialog
+    // (createLoadProgressDialog) right after the main window appeared.
+    // createLoadProgressDialog()/slotLoadProgress() detect m_startupWindow
+    // is still alive and log into it instead of creating that dialog.
+    if (workspaceFile.isEmpty() == false)
+    {
+        if (loadXML(workspaceFile) == QFile::NoError)
+            updateFileOpenMenu(workspaceFile);
+    }
+
+    delete m_startupWindow;
+    m_startupWindow = NULL;
+
     slotModeDesign();
     slotDocModified(false);
-
-#if defined(__APPLE__) || defined(Q_OS_MAC)
-    destroyProgressDialog();
-#endif
 
     // Activate FixtureManager
     setActiveWindow(FixtureManager::staticMetaObject.className());
@@ -310,6 +350,9 @@ void App::disableGUI()
 void App::init()
 {
     QSettings settings;
+
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Restoring window state"));
 
     setWindowIcon(QIcon(":/qlcconsole.png"));
 
@@ -423,6 +466,8 @@ void App::init()
         // order indexing) so the window title can find the right label
         // regardless of what's been detached before it.
         m_tab->tabBar()->setTabData(idx, text);
+        if (m_startupWindow != NULL)
+            m_startupWindow->logDetail(text);
     };
 
     // Tab order follows the build workflow: rig/setup first (Connections, then
@@ -441,6 +486,8 @@ void App::init()
     // "Fixtures" (what it manages, and what every other console calls it) and
     // the I/O tab is "Connections" (the signal path, covering network, USB and
     // MIDI without implying any one of them).
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Building workspace"));
     QWidget* w = new InputOutputManager(m_tab, m_doc);
     addTab(w, QIcon(":/input_output.png"), tr("Connections"));
     w = new FixtureManager(m_tab, m_doc);
@@ -519,12 +566,9 @@ void App::init()
     }
     applyTabLabelMode();
 
-    // Load and apply the backstage color theme preference.
-    {
-        QSettings settings;
-        m_theme = settings.value(SETTINGS_THEME, ThemeDefault).toInt();
-    }
-    applyTheme();
+    // Theme is loaded/applied earlier now, in App::startup() before this
+    // window and the StartupWindow are constructed -- see the comment
+    // there. Nothing to do here anymore.
 
     // Load the footer load/power/GM chip visibility preferences (View menu).
     {
@@ -533,6 +577,9 @@ void App::init()
         m_showFooterPower = settings.value(SETTINGS_SHOW_FOOTER_POWER, true).toBool();
         m_showFooterGM = settings.value(SETTINGS_SHOW_FOOTER_GM, true).toBool();
     }
+
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Finalizing UI"));
 
     // Build the native menu bar now that the workspace tabs exist, so the
     // View menu can offer accurate "jump to tab" entries.
@@ -687,26 +734,23 @@ void App::closeEvent(QCloseEvent* e)
  * Progress dialog
  *****************************************************************************/
 
-void App::createProgressDialog()
-{
-    m_progressDialog = new QProgressDialog;
-    m_progressDialog->setCancelButton(NULL);
-    m_progressDialog->show();
-    m_progressDialog->raise();
-    m_progressDialog->setRange(0, 10);
-    slotSetProgressText(QString());
-    QApplication::processEvents();
-}
-
-void App::destroyProgressDialog()
-{
-    delete m_progressDialog;
-    m_progressDialog = NULL;
-}
-
 void App::createLoadProgressDialog(const QString& fileName)
 {
-    if (m_noGui == true || m_loadProgressDialog != NULL)
+    if (m_noGui == true)
+        return;
+
+    // Called during App::startup()'s own workspaceFile load too (loadXML()
+    // doesn't know which case it's in) -- log into the still-open
+    // StartupWindow instead of a second dialog, and let App::startup()
+    // close that window itself once the load returns.
+    if (m_startupWindow != NULL)
+    {
+        m_startupWindow->beginStep(tr("Loading workspace"));
+        m_startupWindow->logDetail(QFileInfo(fileName).fileName());
+        return;
+    }
+
+    if (m_loadProgressDialog != NULL)
         return;
 
     m_loadProgressDialog = new QProgressDialog(this);
@@ -727,31 +771,30 @@ void App::createLoadProgressDialog(const QString& fileName)
 
 void App::destroyLoadProgressDialog()
 {
+    // Nothing to close: this load ran under StartupWindow, which
+    // App::startup() owns closing once loadXML() returns to it.
+    if (m_startupWindow != NULL)
+        return;
+
     delete m_loadProgressDialog;
     m_loadProgressDialog = NULL;
 }
 
 void App::slotLoadProgress(const QString& stage, int count)
 {
+    if (m_startupWindow != NULL)
+    {
+        m_startupWindow->logDetail(count > 0 ? QStringLiteral("%1 (%2)").arg(stage).arg(count)
+                                              : stage);
+        return;
+    }
+
     if (m_loadProgressDialog == NULL)
         return;
 
     m_loadProgressDialog->setLabelText(QString("<B>%1</B><BR/>%2")
                                        .arg(stage)
                                        .arg(count));
-    QApplication::processEvents();
-}
-
-void App::slotSetProgressText(const QString& text)
-{
-    if (m_progressDialog == NULL)
-        return;
-
-    static int progress = 0;
-    m_progressDialog->setValue(progress++);
-    m_progressDialog->setLabelText(QString("<B>%1</B><BR/>%2")
-                                   .arg(tr("Starting qlcconsole"))
-                                   .arg(text));
     QApplication::processEvents();
 }
 
@@ -794,43 +837,77 @@ void App::initDoc()
 #endif
     /* Surface any user content left under the old QLC+-named data dir into
        the current (qlcconsole) one, so the rename doesn't orphan it */
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Merging legacy user data"));
     QLCFile::mergeLegacyUserData();
 
     /* Load user fixtures first so that they override system fixtures */
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Loading fixture definitions"));
     m_doc->fixtureDefCache()->load(QLCFixtureDefCache::userDefinitionDirectory());
     m_doc->fixtureDefCache()->loadMap(QLCFixtureDefCache::systemDefinitionDirectory());
+    if (m_startupWindow != NULL)
+        m_startupWindow->logDetail(tr("%1 manufacturer(s)")
+                                    .arg(m_doc->fixtureDefCache()->manufacturers().count()));
 
     /* Load channel modifiers templates */
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Loading channel modifiers"));
     m_doc->modifiersCache()->load(QLCModifiersCache::systemTemplateDirectory(), true);
     m_doc->modifiersCache()->load(QLCModifiersCache::userTemplateDirectory());
+    if (m_startupWindow != NULL)
+        m_startupWindow->logDetail(tr("%1 template(s)")
+                                    .arg(m_doc->modifiersCache()->templateNames().count()));
 
     /* Load RGB scripts */
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Loading RGB scripts"));
     m_doc->rgbScriptsCache()->load(RGBScriptsCache::systemScriptsDirectory());
     m_doc->rgbScriptsCache()->load(RGBScriptsCache::userScriptsDirectory());
+    if (m_startupWindow != NULL)
+        m_startupWindow->logDetail(tr("%1 script(s)")
+                                    .arg(m_doc->rgbScriptsCache()->names().count()));
 
     /* Load plugins */
-    connect(m_doc->ioPluginCache(), SIGNAL(pluginLoaded(const QString&)),
-            this, SLOT(slotSetProgressText(const QString&)));
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Loading I/O plugins"));
+    connect(m_doc->ioPluginCache(), &IOPluginCache::pluginLoaded, this,
+            [this](const QString &name) {
+        if (m_startupWindow != NULL)
+            m_startupWindow->logDetail(name);
+    });
     m_doc->ioPluginCache()->load(IOPluginCache::systemPluginDirectory());
 
     /* Load audio decoder plugins
      * This doesn't use a AudioPluginCache::systemPluginDirectory() cause
      * otherwise the qlcconfig.h creation should have been moved into the
      * audio folder, which doesn't make much sense */
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Loading audio plugins"));
     m_doc->audioPluginCache()->load(QLCFile::systemDirectory(AUDIOPLUGINDIR, KExtPlugin));
+    if (m_startupWindow != NULL)
+        m_startupWindow->logDetail(tr("%1 audio device(s)")
+                                    .arg(m_doc->audioPluginCache()->audioDevicesList().count()));
 
     /* Restore outputmap settings */
     Q_ASSERT(m_doc->inputOutputMap() != NULL);
 
     /* Load input plugins & profiles */
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Loading input profiles"));
     m_doc->inputOutputMap()->loadProfiles(InputOutputMap::userProfileDirectory());
     m_doc->inputOutputMap()->loadProfiles(InputOutputMap::systemProfileDirectory());
     m_doc->inputOutputMap()->loadDefaults();
+    if (m_startupWindow != NULL)
+        m_startupWindow->logDetail(tr("%1 profile(s)")
+                                    .arg(m_doc->inputOutputMap()->profileNames().count()));
 
 #ifdef DEBUG_SPEED
     qDebug() << "[App] Doc initialization took" << speedTime.elapsed() << "ms";
 #endif
 
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Starting universes"));
     m_doc->inputOutputMap()->startUniverses();
     m_doc->masterTimer()->start();
 
@@ -838,6 +915,8 @@ void App::initDoc()
     // core, plus the PMJ Black 1 overlay. Registering the PMJ here doesn't
     // require the board to actually be connected/patched — it just means
     // its role table + LED sink are ready the moment it is.
+    if (m_startupWindow != NULL)
+        m_startupWindow->beginStep(tr("Initializing control surfaces"));
     m_controlSurfaceEngine = new ControlSurfaceEngine(this);
     m_pmjOverlay = new PMJOverlay(m_doc, m_controlSurfaceEngine, this, this);
 }
@@ -3333,15 +3412,20 @@ void App::checkAutosaveRecovery()
         QString lastModified = fi.lastModified().toString(Qt::DefaultLocaleLongDate);
 #endif
 
-        int result = QMessageBox::question(this,
-            tr("Autosave Recovery"),
-            tr("An autosave file was found from a previous session.\n"
-               "Last modified: %1\n\n"
-               "Do you want to recover the unsaved work?").arg(lastModified),
-            QMessageBox::Yes | QMessageBox::No,
-            QMessageBox::Yes);
+        const QString question = tr("An autosave file was found from a previous "
+            "session (last modified: %1). Recover the unsaved work?").arg(lastModified);
 
-        if (result == QMessageBox::Yes)
+        // During boot (m_startupWindow still open) this asks inline in that
+        // same window instead of popping a separate QMessageBox -- a boot
+        // sequence that's still deciding whether to load a recovery file
+        // has no business spawning a second, unrelated-looking window.
+        bool recover = (m_startupWindow != NULL)
+                ? m_startupWindow->askYesNo(question)
+                : QMessageBox::question(this, tr("Autosave Recovery"), question,
+                                         QMessageBox::Yes | QMessageBox::No,
+                                         QMessageBox::Yes) == QMessageBox::Yes;
+
+        if (recover == true)
         {
             // Load the autosave file
             QFile::FileError error = loadXML(untitledAutosave);
