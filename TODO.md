@@ -3001,38 +3001,57 @@ effect timing items also want the rig to confirm.
   has an Intel Mac available if a real second machine turns out to be needed.
 
 
-- **`tickComputeMs()` measures WALL CLOCK, not CPU — it inflates under
-  scheduling pressure, and the UI Load chip inherits that (2026-08-26)** —
-  `mastertimer.cpp:177` times the tick with a `QElapsedTimer`, so any
-  deschedule *during* `timerTickFunctions()` is counted as engine compute.
-  This produced 7 apparent "engine stalls" of 20-179 ms in the 12.5 h
-  baseline that were nothing of the sort: in all 7, `compute_us` equals
-  `late_us` plus about one tick, i.e. one deschedule inflating both numbers.
-  Real tick compute stayed ~53 us (p50) throughout. Consistent with this, the
-  real-time-policy run showed zero events of either shape.
-  Two consequences:
-  1. There is **one** punctuality problem (scheduling), not two. An earlier
-     reading of this data claimed a separate engine-stall class; that was
-     wrong.
-  2. **`App`'s Load chip reads `tickComputePeakMs()` (`app.cpp:3939`)**, so it
-     over-reports on a contended machine — it can show high "engine load" when
-     the engine is idle and the OS simply is not running it. Do not use it for
-     capacity planning as-is. A true-cost figure wants
-     `thread_info(THREAD_BASIC_INFO)` / `clock_gettime(CLOCK_THREAD_CPUTIME_ID)`
-     rather than a wall clock; keeping both (wall vs CPU) would actually make
-     the chip a useful jitter indicator instead of a misleading load one.
-
-- **MasterTimer misses ticks at full output load (OPEN, 2026-08-25)** — with 51
-  universes forced to `transmitMode="Full"` on `ender` (~2484 pkt/s, ~49 Hz per
-  universe) a 61 s run logged **2** `MasterTimer is running late` events while a
-  91 s run at the same settings logged **0**. CPU was only 50% avg / 64% peak of
-  one core, so this is not throughput saturation — it looks like scheduling
-  jitter, and it's the same wall-clock sensitivity that made
+- **MasterTimer misses ticks at full output load (2026-08-25, 2026-09-02) —
+  fixed on macOS, ROUGHED IN elsewhere, NOT YET VERIFIED on Linux/Windows.**
+  With 51 universes forced to `transmitMode="Full"` on `ender` (~2484 pkt/s,
+  ~49 Hz per universe) a 61 s run logged **2** `MasterTimer is running late`
+  events while a 91 s run at the same settings logged **0**. CPU was only 50%
+  avg / 64% peak of one core, so this is not throughput saturation — it's
+  scheduling jitter, and it's the same wall-clock sensitivity that made
   `MasterTimer_Test::interval()` and `VCCueList_Test::functionRemoved()` flaky
-  on CI. Rare, and the box was also running tcpdump. Worth understanding before
-  anyone trusts this desk for tight timecode work: a missed tick is a frame of
-  DMX not sent. Reproduce with `/tmp/throughput.sh` on ender (see DONE.md
-  2026-08-25 for the harness).
+  on CI. Reproduce with `/tmp/throughput.sh` on ender (see DONE.md 2026-08-25
+  for the harness).
+
+  **macOS/iOS — fixed, and previously validated** (`feat/realtime-timer-thread`,
+  ported from the `rt-test` branch, `8487dbf71`): the DMX timer thread now
+  requests Mach `THREAD_TIME_CONSTRAINT_POLICY` (what CoreAudio uses for the
+  same problem) in `engine/src/mastertimer-unix.cpp`. Advisory — warns and
+  falls back to normal priority if the kernel refuses. This is the run
+  referenced above ("real-time-policy run showed zero events of either
+  shape").
+
+  **Linux — same file, `SCHED_FIFO` via `pthread_setschedparam`, ROUGHED IN,
+  UNVERIFIED** (no Linux box in that session; CI will give a real compile/link
+  result on push). Priority is `sched_get_priority_max(SCHED_FIFO) - 10`, not
+  max, matching the JACK/PipeWire convention of leaving headroom above this
+  thread. **Known limitation, not solved here:** `SCHED_FIFO` normally needs
+  `CAP_SYS_NICE` or an rtprio limit, which a stock install will not have — so
+  on most Linux installs this falls back to a warning + normal priority
+  exactly like an mac refusal would. Packaging a fix (setcap in a postinst,
+  or a bundled rtprio limits.d rule) is a separate, bigger decision — not
+  done, flagged as its own backlog item below.
+
+  **Windows — MMCSS ("Pro Audio" thread characteristics), ROUGHED IN,
+  UNVERIFIED, NO TEST PATH AVAILABLE.** Architecturally different from the
+  unix path: `mastertimer-win32.cpp`'s timer callback runs on a Windows
+  thread-pool worker (`CreateTimerQueueTimer`), not a thread this code owns,
+  so the boost happens inside the callback itself, `thread_local`-guarded to
+  run once per actual OS thread. No revert on stop (would need to run on the
+  same pool thread that acquired it, which nothing here tracks) — released
+  when that thread exits at process end. This one has had zero real-world
+  testing of any kind; treat as a rough sketch, not a working feature, until
+  someone with a Windows box confirms it.
+
+- **Linux: package a way to actually grant SCHED_FIFO (2026-09-02, follow-on
+  to the item above, not started)** — the DMX timer thread's real-time
+  priority request will silently fall back to normal scheduling on a stock
+  Linux install (no `CAP_SYS_NICE`, no rtprio limit). Options to weigh:
+  `setcap cap_sys_nice=eip` on the installed binary from a `.deb`
+  postinst/AppImage hook, vs. documenting a manual `/etc/security/
+  limits.d/qlcconsole.conf` rtprio rule (the traditional pro-audio-Linux
+  convention, needs the user in a group like `audio`). Needs a real Linux
+  box to even confirm the roughed-in `SCHED_FIFO` call links/behaves as
+  written before this is worth deciding.
 
 - **Gate hole: on headless Linux `make check` silently skips ALL UI tests and
   still prints "Unit tests passed" (OPEN, 2026-08-26)** —

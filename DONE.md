@@ -6,6 +6,29 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-08-26 — Load chip: measure tick CPU time, not wall clock *(SHIPPED, 8726bba60)*
+
+Diagnosed same day as filed: `mastertimer.cpp`'s tick timer used a
+`QElapsedTimer` (wall clock), so any deschedule *during*
+`timerTickFunctions()` was counted as engine compute. In a 12.5 h baseline
+this produced 7 apparent "engine stalls" of 20-179 ms that were nothing of
+the sort — in all 7, `compute_us` equaled `late_us` plus about one tick,
+i.e. one deschedule inflating both numbers; real tick compute stayed ~53 µs
+(p50) throughout. Consequence: there is **one** punctuality problem
+(scheduling jitter), not a separate engine-stall class as an earlier
+reading of the same data had claimed.
+
+Fixed same day: new `MasterTimer::tickCpuMs()`/`tickCpuPeakMs()` measure
+CPU time actually consumed (`thread_info`/`clock_gettime
+(CLOCK_THREAD_CPUTIME_ID)`-class per-thread clock, 0 where the platform has
+none). `App::slotUpdateHealthFooter()`'s Load chip (`app.cpp`) now shows
+CPU time when available (falling back to wall time only where there's no
+per-thread clock) and surfaces the wall-vs-CPU gap as a separate "stall Xms"
+indicator instead of folding it into the load number — exactly the "keep
+both, make it a jitter indicator" fix this entry originally called for.
+
+---
+
 ### 2026-09-02 — Consistent cross-platform startup window *(BUILT — verified live)*
 
 Branson: a startup window with name/version, a scrolling panel of what's
