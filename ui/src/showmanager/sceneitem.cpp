@@ -25,6 +25,9 @@
 
 #include "sceneitem.h"
 #include "trackitem.h"
+#include "apputil.h"
+#include "app.h"
+#include "programmingmanager.h"
 
 SceneItem::SceneItem(Scene *scene, ShowFunction *func)
     : ShowItem(func)
@@ -67,6 +70,19 @@ void SceneItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
     ShowItem::paint(painter, option, widget);
     // A bare Scene is a flat clip — nothing beyond the background block + name.
     ShowItem::postPaint(painter);
+
+    // Content swatch (top-left, opposite the type badge ShowItem::postPaint()
+    // already draws top-right) — what this scene actually paints, not just
+    // its name, since the block's own m_color is a user-assigned
+    // organizational color, unrelated to scene content.
+    QColor swatch = m_scene ? AppUtil::sceneSwatchColor(m_scene->doc(), m_scene) : QColor();
+    if (swatch.isValid() && m_width > 24)
+    {
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setPen(QPen(swatch.darker(150), 1));
+        painter->setBrush(swatch);
+        painter->drawEllipse(4, 4, 12, 12);
+    }
 }
 
 void SceneItem::setTimeScale(int val)
@@ -125,4 +141,24 @@ void SceneItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
         menu.addAction(action);
 
     menu.exec(QCursor::pos());
+}
+
+void SceneItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
+{
+    Q_UNUSED(event)
+    if (m_scene == NULL)
+        return;
+
+    foreach (QWidget *w, qApp->topLevelWidgets())
+    {
+        if (App *app = qobject_cast<App *>(w))
+        {
+            if (ProgrammingManager *pm = app->findChild<ProgrammingManager *>())
+            {
+                pm->showFunction(m_scene->id());
+                app->switchToTabContaining(pm);
+            }
+            break;
+        }
+    }
 }

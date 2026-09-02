@@ -27,6 +27,7 @@
 #include <QStyledItemDelegate>
 #include <QDoubleSpinBox>
 #include <QComboBox>
+#include <QToolTip>
 
 #include <algorithm>
 #include <functional>
@@ -645,6 +646,31 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
     const QMimeData *mime = event->mimeData();
     if (hasAcceptedFormat(mime) == false)
         return;
+
+    // Column precision: a palette (→ Looks) dropped squarely on the Targets
+    // column, or a fixture group (→ Targets) dropped squarely on the Looks
+    // column, is almost certainly a slip, not intent — the two-column
+    // layout visually promises "drag here means this," so silently
+    // accepting it anywhere was inconsistent with that. Drops landing
+    // between/outside both lists still fall through to the permissive
+    // default below (no column is a "clear" wrong answer there).
+    const QPoint dropPos = qlcEventPos(event);
+    const bool onTargetsCol = m_targetList->geometry().contains(dropPos);
+    const bool onLooksCol = m_lookList->geometry().contains(dropPos);
+    if (onTargetsCol && mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType())
+        && !mime->hasFormat(FixtureGroupSource::fixtureGroupMimeType()))
+    {
+        QToolTip::showText(mapToGlobal(dropPos),
+                            tr("Drop a palette on the Looks list, not Targets."), this);
+        return;
+    }
+    if (onLooksCol && mime->hasFormat(FixtureGroupSource::fixtureGroupMimeType())
+        && !mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType()))
+    {
+        QToolTip::showText(mapToGlobal(dropPos),
+                            tr("Drop a fixture group on the Targets list, not Looks."), this);
+        return;
+    }
 
     bool changed = false;
     bool palettesAdded = false;

@@ -51,6 +51,12 @@ public:
     /** @reimp */
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override;
 
+    /** @reimp — double-click jumps to the Programming tab with this scene
+     *  loaded, so there's an assisted path from a timeline clip to the look
+     *  it plays (previously: only "Align to cursor"/"Lock" in the context
+     *  menu, no edit action at all). */
+    void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
+
     /** @reimp */
     void setTimeScale(int val) override;
 

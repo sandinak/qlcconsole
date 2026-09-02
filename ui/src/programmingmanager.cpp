@@ -273,9 +273,13 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_speedSpin->setToolTip(tr("Joystick speed for position editing (100% = 2 m/s at full deflection)"));
         toolbar->addWidget(m_speedSpin);
 
-        m_saveBtn = new QPushButton(tr("Save"), this);
+        m_saveBtn = new QPushButton(tr("Save Positions"), this);
         m_saveBtn->setEnabled(false);
-        m_saveBtn->setToolTip(tr("Save joystick position edits to the workspace file"));
+        m_saveBtn->setToolTip(tr(
+            "Finalize joystick-driven pan/tilt/aim edits and save the workspace.\n"
+            "Only these joystick edits need this button — every other look edit "
+            "here (color, dimmer, gradient, …) is already live; the footer's "
+            "● Unsaved changes indicator tracks those."));
         toolbar->addWidget(m_saveBtn);
 
         // The row above packs ~15 controls (Highlight/Flash/Park/Unpark/Mark/
@@ -420,7 +424,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_canvasLayout->addWidget(m_canvasTitle);
     m_canvasPlaceholder = new QLabel(
         tr("Select or create a scene on the left, then drag palettes, "
-           "fixture groups and fixtures from the right onto it."), this);
+           "fixture groups and fixtures from the right onto it. No "
+           "palettes yet? Right-click the Palettes tab on the right to "
+           "create your first one."), this);
     m_canvasPlaceholder->setWordWrap(true);
     m_canvasPlaceholder->setAlignment(Qt::AlignCenter);
     m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
@@ -720,7 +726,9 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
             pc->seedStageAimFromScene(Function::invalidId());
         m_canvasPlaceholder->setText(
             tr("Select or create a scene on the left, then drag palettes, "
-               "fixture groups and fixtures from the right onto it."));
+               "fixture groups and fixtures from the right onto it. No "
+               "palettes yet? Right-click the Palettes tab on the right to "
+               "create your first one."));
         m_canvasPlaceholder->show();
         updateTitle();
         return;
@@ -2099,24 +2107,44 @@ void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
 void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
 {
     QMenu menu(this);
+    menu.setToolTipsVisible(true);   // off by default on most platforms (incl. macOS)
     // Type list, like the function tree's New menu. Only the types the
     // engine resolves per-fixture are offered.
-    struct { const char *label; int type; } types[] = {
-        { QT_TR_NOOP("New Color"),      QLCPalette::Color },
-        { QT_TR_NOOP("New Dimmer"),     QLCPalette::Dimmer },
-        { QT_TR_NOOP("New Pan/Tilt"),   QLCPalette::PanTilt },
-        { QT_TR_NOOP("New Aim"),        QLCPalette::Aim },
-        { QT_TR_NOOP("New Beam"),       QLCPalette::Beam },
-        { QT_TR_NOOP("New Gobo"),       QLCPalette::Gobo },
-        { QT_TR_NOOP("New Shutter"),    QLCPalette::Shutter },
-        { QT_TR_NOOP("New Strobe"),     QLCPalette::Strobe },
-        { QT_TR_NOOP("New Effect"),     QLCPalette::Effect },
+    struct { const char *label; int type; const char *tip; } types[] = {
+        { QT_TR_NOOP("New Color"),      QLCPalette::Color,
+          QT_TR_NOOP("RGB(+White/Amber/UV) mix, applied per fixture.") },
+        { QT_TR_NOOP("New Dimmer"),     QLCPalette::Dimmer,
+          QT_TR_NOOP("A single intensity value.") },
+        { QT_TR_NOOP("New Pan/Tilt"),   QLCPalette::PanTilt,
+          QT_TR_NOOP("Raw pan/tilt angles, set directly on the XY pad — the "
+                     "same numbers apply to every target fixture regardless "
+                     "of where it actually sits on stage. Use Aim instead if "
+                     "you want fixtures in different positions to converge "
+                     "on the same spot.") },
+        { QT_TR_NOOP("New Aim"),        QLCPalette::Aim,
+          QT_TR_NOOP("A point in stage space (or a Stage Target) that each "
+                     "target fixture's pan/tilt is computed to point at, "
+                     "using its own rigged position — needs fixtures placed "
+                     "in Lighting Studio first. Use Pan/Tilt instead for "
+                     "direct, position-independent angle values.") },
+        { QT_TR_NOOP("New Beam"),       QLCPalette::Beam,
+          QT_TR_NOOP("Focus / Frost / Iris.") },
+        { QT_TR_NOOP("New Gobo"),       QLCPalette::Gobo,
+          QT_TR_NOOP("A gobo wheel selection.") },
+        { QT_TR_NOOP("New Shutter"),    QLCPalette::Shutter,
+          QT_TR_NOOP("Shutter/strobe open-close state.") },
+        { QT_TR_NOOP("New Strobe"),     QLCPalette::Strobe,
+          QT_TR_NOOP("Strobe rate.") },
+        { QT_TR_NOOP("New Effect"),     QLCPalette::Effect,
+          QT_TR_NOOP("A scripted/reactive effect (audio, MIDI, time-based).") },
     };
     QList<QAction*> newActions;
     for (uint i = 0; i < sizeof(types) / sizeof(types[0]); i++)
     {
         QAction *a = menu.addAction(tr(types[i].label));
         a->setData(types[i].type);
+        a->setToolTip(tr(types[i].tip));
+        a->setStatusTip(tr(types[i].tip));
         newActions << a;
     }
 
@@ -2690,7 +2718,7 @@ void ProgrammingManager::slotDesignPositionWritten()
     if (m_saveBtn)
     {
         m_saveArmed = false;
-        m_saveBtn->setText(tr("Save"));
+        m_saveBtn->setText(tr("Save Positions"));
         m_saveBtn->setEnabled(true);
     }
 
@@ -2731,7 +2759,7 @@ void ProgrammingManager::slotSavePositions()
             if (m_saveArmed)
             {
                 m_saveArmed = false;
-                if (m_saveBtn) m_saveBtn->setText(tr("Save"));
+                if (m_saveBtn) m_saveBtn->setText(tr("Save Positions"));
             }
         });
     }
@@ -2739,7 +2767,7 @@ void ProgrammingManager::slotSavePositions()
     {
         // Second press: confirmed — commit joystick position then save workspace.
         m_saveArmed = false;
-        m_saveBtn->setText(tr("Save"));
+        m_saveBtn->setText(tr("Save Positions"));
         m_saveBtn->setEnabled(false);
         ProgrammerController *pc = m_doc->programmer();
         if (pc) pc->commitDesignJoystick();
