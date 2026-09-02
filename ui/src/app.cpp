@@ -82,6 +82,7 @@
 #include "apputil.h"
 #include "controlsurfaceengine.h"
 #include "pmjoverlay.h"
+#include "showstatus.h"
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "hotplugmonitor.h"
@@ -121,6 +122,7 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define SETTINGS_THEME             QStringLiteral("workspace/theme")
 #define SETTINGS_SHOW_FOOTER_LOAD  QStringLiteral("workspace/showFooterLoad")
 #define SETTINGS_SHOW_FOOTER_POWER QStringLiteral("workspace/showFooterPower")
+#define SETTINGS_SHOW_FOOTER_GM    QStringLiteral("workspace/showFooterGM")
 #define KXMLQLCWorkspaceWindow QStringLiteral("CurrentWindow")
 
 #define MAX_RECENT_FILES    10
@@ -182,9 +184,7 @@ App::App()
     , m_autosaveInterval(DEFAULT_AUTOSAVE_INTERVAL)
 
     , m_statusModeLabel(NULL)
-    , m_statusRigLabel(NULL)
     , m_statusDirtyLabel(NULL)
-    , m_statusAutosaveLabel(NULL)
     , m_statusProgrammerLabel(NULL)
     , m_statusSelectionLabel(NULL)
     , m_statusPadModeLabel(NULL)
@@ -405,6 +405,17 @@ void App::init()
 
     // Helper to add a tab and record the original label/icon for mode switching.
     auto addTab = [this](QWidget *w, const QIcon &icon, const QString &text) {
+        // QTabWidget's internal QStackedWidget sizes itself to the LARGEST
+        // of ALL its pages by default (documented Qt behavior), not just
+        // the currently-visible one — so whichever of the 8 tabs happens to
+        // need the most width sets the floor for the whole window
+        // regardless of which tab is active. Confirmed empirically: the
+        // window's minimum width stayed identical across different active
+        // tabs and was unaffected by trimming the status bar. Ignored on
+        // both axes excludes a page from that max-of-all-pages aggregation
+        // (it still renders and lays out normally once it IS the current
+        // page — this only stops it from being counted while hidden).
+        w->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
         const int idx = m_tab->addTab(w, icon, text);
         m_tabOriginals.append(qMakePair(text, icon));
         // Stored as tab data (travels with the tab through detach/reattach's
@@ -461,8 +472,8 @@ void App::init()
             if (m_showFooterPower == false)   // View menu: chip disabled
                 return;
             m_statusPowerLabel->setText(overload
-                ? tr("⚡︎ %1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
-                : tr("⚡︎ %1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
+                ? tr("%1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
+                : tr("%1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
             m_statusPowerLabel->setStyleSheet(overload
                 ? QStringLiteral("QLabel { color: #ff5555; font-weight: bold; }")
                 : QString());
@@ -515,11 +526,12 @@ void App::init()
     }
     applyTheme();
 
-    // Load the footer load/power chip visibility preferences (View menu).
+    // Load the footer load/power/GM chip visibility preferences (View menu).
     {
         QSettings settings;
         m_showFooterLoad = settings.value(SETTINGS_SHOW_FOOTER_LOAD, true).toBool();
         m_showFooterPower = settings.value(SETTINGS_SHOW_FOOTER_POWER, true).toBool();
+        m_showFooterGM = settings.value(SETTINGS_SHOW_FOOTER_GM, true).toBool();
     }
 
     // Build the native menu bar now that the workspace tabs exist, so the
@@ -832,7 +844,7 @@ void App::initDoc()
 
 void App::updateOutputReadiness()
 {
-    if (m_statusRigLabel == NULL || m_doc == NULL)
+    if (m_doc == NULL)
         return;
 
     const QList<InputOutputMap::DanglingPatch> bad =
@@ -840,29 +852,56 @@ void App::updateOutputReadiness()
 
     if (bad.isEmpty() == true)
     {
-        m_statusRigLabel->hide();
-        m_statusRigLabel->setToolTip(QString());
+        ShowStatus::instance()->clearStatus("output.dangling");
         return;
     }
 
-    QStringList unis, detail;
+    QStringList items;
+    int pendingCount = 0, rangeCount = 0;
     foreach (const InputOutputMap::DanglingPatch &p, bad)
     {
-        unis << QString::number(p.universe + 1);
-        detail << tr("Universe %1: %2 line %3 does not exist here "
-                     "(this machine offers %4). Nothing patched to it will output.")
-                    .arg(p.universe + 1).arg(p.pluginName).arg(p.line).arg(p.availableLines);
+        if (p.missingInterface.isEmpty() == false)
+        {
+            // Pending: the interface this patch names (an ArtNet IP, most
+            // often) just isn't one this machine has -- typically because
+            // the workspace was built on a different network. The mapping
+            // itself is untouched and will resolve again on a machine that
+            // does have it; nothing is being output in the meantime.
+            pendingCount++;
+            items << tr("Universe %1 — %2 \"%3\" not present here")
+                        .arg(p.universe + 1).arg(p.pluginName).arg(p.missingInterface);
+        }
+        else
+        {
+            rangeCount++;
+            items << tr("Universe %1 — %2 line %3 does not exist here (offers %4)")
+                        .arg(p.universe + 1).arg(p.pluginName).arg(p.line).arg(p.availableLines);
+        }
     }
 
-    m_statusRigLabel->setText(tr("\u26A0 NOT READY - universe %1 has no output")
-                                .arg(unis.join(", ")));
-    m_statusRigLabel->setStyleSheet("QLabel { color: #e04030; font-weight: bold; }");
-    m_statusRigLabel->setToolTip(detail.join("\n") +
-                                 tr("\n\nRe-patch these universes in Connections, "
-                                    "or open the workspace on the machine it was built for."));
-    m_statusRigLabel->show();
+    // The summary line (shown in the footer chip's tooltip) explains the
+    // SITUATION, not just which universes -- "has no output" read like a
+    // configuration mistake to fix, when on a laptop away from the show
+    // network it is simply expected and will resolve itself back on-site.
+    QStringList summaryParts;
+    if (pendingCount > 0)
+        summaryParts << tr("%1 patched network interface%2 not present on this machine")
+                            .arg(pendingCount).arg(pendingCount == 1 ? QString() : "s");
+    if (rangeCount > 0)
+        summaryParts << tr("%1 universe%2 patched to a line this machine doesn't have")
+                            .arg(rangeCount).arg(rangeCount == 1 ? QString() : "s");
 
-    foreach (const QString &line, detail)
+    // Registered into ShowStatus rather than written straight to the footer
+    // -- see showstatus.h. items carries the per-universe breakdown as an
+    // actual list for the full-detail dialog; detail is just the one
+    // closing sentence that applies to all of them.
+    ShowStatus::instance()->setStatus("output.dangling", ShowStatus::Warning,
+        summaryParts.join(" · "),
+        tr("Re-patch these universes in Connections, or open the workspace "
+           "on the machine it was built for."),
+        items);
+
+    foreach (const QString &line, items)
         qWarning() << "[output]" << line;
 }
 
@@ -967,6 +1006,28 @@ void App::createKioskCloseButton(const QRect& rect)
 
 void App::slotModeOperate()
 {
+    // Mirror slotModeDesign()'s "there's something you might lose" checkpoint
+    // in the other direction — but only when there's something genuinely
+    // worth flagging: uncommitted programmer values (colors/positions/etc.
+    // dragged in the pad/Programming tab but never saved into a scene) that
+    // are about to start affecting live output the instant Operate engages.
+    // Deliberately NOT gated on Doc::isModified() — that's true almost
+    // continuously while actively building a show, so warning on it would
+    // be exactly the "friction on every single toggle" this was meant to
+    // avoid, not a real heads-up.
+    if (m_doc->isProgrammerDirty())
+    {
+        int result = QMessageBox::warning(
+                         this,
+                         tr("Switch to Operate Mode"),
+                         tr("There are unsaved programmer edits (colors, "
+                            "positions, etc. not yet saved into a scene).\n"
+                            "Go live anyway? They'll affect output immediately."),
+                         QMessageBox::Yes,
+                         QMessageBox::No);
+        if (result == QMessageBox::No)
+            return;
+    }
     m_doc->setMode(Doc::Operate);
 }
 
@@ -1021,6 +1082,16 @@ void App::slotModeChanged(Doc::Mode mode)
         m_modeToggleAction->setText(tr("Design"));
         m_modeToggleAction->setToolTip(tr("Switch to design mode"));
 
+        if (m_statusModeChipLabel != NULL)
+        {
+            m_statusModeChipLabel->setText(tr("OPERATE"));
+            // #2e7d32 (Material green 800) is tuned for a light background —
+            // computed ~3.25:1 against the dark themes' window color, marginal
+            // even for bold text. #43a047 (green 600) keeps the same "live"
+            // green identity with real contrast margin on both light and dark.
+            m_statusModeChipLabel->setStyleSheet("QLabel { font-weight: bold; color: #43a047; }");
+        }
+
         // Blind is a Design-only build aid — never let a muted rig survive into
         // a live show. Force it off and disable the toggle in Operate.
         if (m_doc != NULL)
@@ -1044,6 +1115,19 @@ void App::slotModeChanged(Doc::Mode mode)
         m_modeToggleAction->setIcon(QIcon(":/operate.png"));
         m_modeToggleAction->setText(tr("Operate"));
         m_modeToggleAction->setToolTip(tr("Switch to operate mode"));
+
+        if (m_statusModeChipLabel != NULL)
+        {
+            m_statusModeChipLabel->setText(tr("DESIGN"));
+            // DESIGN is the neutral state (vs. OPERATE's deliberate green) —
+            // palette(text) instead of a hardcoded hex so it actually follows
+            // App::applyTheme()'s app-wide QPalette swap (confirmed real via
+            // qApp->setPalette()) rather than staying tuned to the light
+            // default and going low-contrast on the dark themes, same
+            // problem the hardcoded #555 here had.
+            m_statusModeChipLabel->setStyleSheet(
+                "QLabel { font-weight: bold; color: palette(text); }");
+        }
     }
 
     // The "under timeline control" chip + exit button are Operate-only.
@@ -1265,8 +1349,42 @@ void App::initToolBar()
     m_toolbar->setMovable(false);
     m_toolbar->setAllowedAreas(Qt::TopToolBarArea);
     m_toolbar->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_toolbar->setIconSize(QSize(24, 24)); // match the tab bar's icon size (m_tab, above)
+    // Matches every per-manager toolbar's icon size (Fixture/Function/Show
+    // Manager, Connections, ...), all already 20x20 — this was the one
+    // toolbar still at the tab bar's larger 24x24. Smaller icons shrink the
+    // whole row height, which matters more here than anywhere else: this
+    // is the one toolbar merged into the macOS title bar itself
+    // (setUnifiedTitleAndToolBarOnMac below), so its height is space taken
+    // from the title bar, not just another row in the window.
+    m_toolbar->setIconSize(QSize(20, 20));
     addToolBar(m_toolbar);
+
+#if defined(__APPLE__) || defined(Q_OS_MAC)
+    // Merge this toolbar into the title bar (native macOS "unified toolbar"
+    // look) instead of a separate strip below it — Branson asked for this
+    // directly, to use screen real estate more efficiently. Only applies to
+    // this app-level toolbar (Panic/Blackout/Blind/Operate); the per-manager
+    // toolbars (Fixture Manager's Add/Delete/Properties/etc.) are embedded
+    // inside each tab's own widget via layout()->setMenuBar()/addWidget(),
+    // not QMainWindow toolbars, so this API doesn't reach them.
+    setUnifiedTitleAndToolBarOnMac(true);
+
+    // Icon-only, locked, regardless of the general "Toolbar Style"
+    // preference (View menu) that governs every other toolbar and the tab
+    // bar: a button tall enough for a text label under its icon makes the
+    // unified chrome grow to fit it, which is what actually produced the
+    // two-row look Branson flagged from a screenshot ("icons at the top of
+    // the bar, not below the title line") — Qt was still rendering ONE
+    // unified area, just a tall one, with the title text effectively
+    // becoming its own line inside that taller area. Icon-only is short
+    // enough to sit level with the title text on the single native row,
+    // matching how every stock macOS app with a unified toolbar does this
+    // (Safari, Mail, Xcode, ...) — none of them label their title-bar
+    // buttons either. The general preference still governs every per-
+    // manager toolbar and the tab bar (see slotSetTabLabelMode below); it
+    // just does not reach this one, on purpose.
+    m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+#endif
 
     // Native-first layout: the full command set lives in the menu bar (see
     // initMenuBar). The toolbar keeps only the handful of live show controls
@@ -1424,6 +1542,17 @@ void App::initMenuBar()
             m_statusPowerLabel->hide();
         // When re-enabled, the chip stays hidden until the next
         // powerEstimateChanged signal repopulates it (Design mode only).
+    });
+
+    m_showFooterGMAction = viewMenu->addAction(tr("Show Grand Master in Footer"));
+    m_showFooterGMAction->setCheckable(true);
+    m_showFooterGMAction->setChecked(m_showFooterGM);
+    connect(m_showFooterGMAction, &QAction::toggled, this, [this](bool on) {
+        m_showFooterGM = on;
+        QSettings settings;
+        settings.setValue(SETTINGS_SHOW_FOOTER_GM, on);
+        if (m_statusGrandMasterBox != NULL)
+            m_statusGrandMasterBox->setVisible(on);
     });
 
     /* ---- Control: playback + live editing ---- */
@@ -1968,6 +2097,30 @@ void App::slotOutputInhibitedChanged(bool state)
             : QString());
 }
 
+void App::slotFooterGrandMasterMoved(int value)
+{
+    if (m_doc == NULL)
+        return;
+    // Avoid a redundant write/feedback-loop tick when this only just moved
+    // in response to slotFooterGrandMasterValueChanged() below.
+    if (m_doc->inputOutputMap()->grandMasterValue() == uchar(value))
+        return;
+    m_doc->inputOutputMap()->setGrandMasterValue(uchar(value));
+}
+
+void App::slotFooterGrandMasterValueChanged(uchar value)
+{
+    if (m_statusGrandMasterSlider != NULL)
+    {
+        m_statusGrandMasterSlider->blockSignals(true);
+        m_statusGrandMasterSlider->setValue(value);
+        m_statusGrandMasterSlider->blockSignals(false);
+    }
+    if (m_statusGrandMasterValueLabel != NULL)
+        m_statusGrandMasterValueLabel->setText(
+            QString("%1%").arg(qRound(double(value) * 100.0 / 255.0)));
+}
+
 void App::slotShowModeLock(bool checked)
 {
     if (m_doc != NULL)
@@ -1987,9 +2140,7 @@ void App::slotShowLockedChanged(bool locked)
     {
         if (locked)
         {
-            m_statusShowLockLabel->setText(
-                tr("<span style='color:#e60000;font-weight:bold;'>"
-                   "🔒 Show locked</span>"));
+            m_statusShowLockLabel->setText(tr("SHOW LOCKED"));
             m_statusShowLockLabel->show();
         }
         else
@@ -2821,6 +2972,17 @@ void App::applyTabLabelMode()
 
     // Apply the same mode to the main toolbar so "Text only" hides toolbar
     // icons and "Icons only" hides toolbar text labels.
+    //
+    // Except on macOS: initToolBar() locks it to icon-only there and this
+    // must not undo that. A text label under an icon makes the button tall
+    // enough that Qt's unified title/toolbar chrome grows to fit it, which
+    // is what actually produced a visible two-row title bar rather than
+    // icons sitting level with the title text on one native row — see
+    // initToolBar()'s own comment on this exact toolbar.
+#if defined(__APPLE__) || defined(Q_OS_MAC)
+    if (m_toolbar)
+        m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+#else
     if (m_toolbar)
     {
         switch (m_tabLabelMode)
@@ -2836,6 +2998,7 @@ void App::applyTabLabelMode()
             break;
         }
     }
+#endif
 
     // Keep the 2D monitor window's toolbars in sync if it is open.
     if (Monitor::instance() != NULL)
@@ -2856,6 +3019,15 @@ void App::applyTabLabelMode()
         ShowManager::instance()->applyToolbarLabelMode();
     if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
         pm->applyToolbarLabelMode();
+}
+
+void App::switchToTabContaining(QWidget *w)
+{
+    if (m_tab == NULL || w == NULL)
+        return;
+    int idx = m_tab->indexOf(w);
+    if (idx >= 0)
+        m_tab->setCurrentIndex(idx);
 }
 
 int App::theme() const
@@ -3098,9 +3270,21 @@ void App::slotAutosave()
         return;
     }
 
-    // Update last autosave time and status bar
+    // Update last autosave time and the consolidated dirty/autosave/saved
+    // chip. Autosave does NOT clear Doc::isModified() (it's a recovery
+    // copy, not a substitute for a real save — see saveXML()'s `if
+    // (!autosave)` guard around resetModified()), so the doc is still
+    // "dirty" here; this label says so anyway, reassuring that the current
+    // state IS captured somewhere. The very next edit re-fires
+    // slotDocModified(true) (Doc::setModified() emits unconditionally, not
+    // just on the dirty transition) and flips this back to "Unsaved
+    // changes" on its own — no extra tracking state needed.
     m_lastAutosaveTime = QTime::currentTime().toString("hh:mm:ss");
-    updateStatusBar();
+    if (m_statusDirtyLabel != NULL)
+    {
+        m_statusDirtyLabel->setText(tr("Autosaved %1").arg(m_lastAutosaveTime));
+        m_statusDirtyLabel->setStyleSheet("QLabel { color: gray; }");
+    }
 
     qDebug() << "[Autosave] Successfully saved to" << autosavePath;
 }
@@ -3203,8 +3387,59 @@ void App::initStatusBar()
     // Create mode label (far left). No stretch: a dedicated spacer centres the
     // global MTC/Load chips between the mode label and the right-hand chips.
     m_statusModeLabel = new QLabel(this);
-    m_statusModeLabel->setMinimumWidth(300);
+    m_statusModeLabel->setMinimumWidth(160);
+    m_statusModeLabel->installEventFilter(this);   // click → full ShowStatus details
     sb->addWidget(m_statusModeLabel, 0);
+
+    // Grand Master footer fader (far left, right after the mode label — moved
+    // here from the right-hand permanent-chip group per Branson). GM
+    // previously lived only inside the Virtual Console tab, unlike its
+    // safety-tier siblings (Blackout, Blind, Show Lock), all global-toolbar/
+    // footer. Compact horizontal slider, always visible and adjustable
+    // regardless of the active tab. Driven by the same InputOutputMap GM
+    // hooks the VC-embedded GrandMasterSlider widget uses, so both stay in
+    // sync. Non-permanent (addWidget, not addPermanentWidget) — like
+    // m_statusModeLabel, it would be temporarily hidden by statusBar()->
+    // showMessage(), which this app doesn't currently use.
+    {
+        QWidget *gmBox = new QWidget(this);
+        m_statusGrandMasterBox = gmBox;
+        QHBoxLayout *gmLayout = new QHBoxLayout(gmBox);
+        gmLayout->setContentsMargins(0, 0, 4, 0);
+        gmLayout->setSpacing(4);
+        gmLayout->addWidget(new QLabel(tr("GM"), gmBox));
+        m_statusGrandMasterSlider = new QSlider(Qt::Horizontal, gmBox);
+        m_statusGrandMasterSlider->setRange(0, 255);
+        // Cap, don't fix, the width — a hard setFixedWidth() here (stacked
+        // right next to m_statusModeLabel's own hard 300px minimum, both in
+        // the status bar's non-stretching left region) forced the whole
+        // window's minimum size wider than some displays, making it
+        // un-shrinkable and pushing it off-screen. A max lets the layout
+        // actually compress this under pressure instead.
+        m_statusGrandMasterSlider->setMaximumWidth(70);
+        m_statusGrandMasterSlider->setToolTip(tr("Grand Master"));
+        gmLayout->addWidget(m_statusGrandMasterSlider);
+        m_statusGrandMasterValueLabel = new QLabel(gmBox);
+        // Fixed to the widest possible reading ("100%") so dragging the
+        // fader doesn't reflow every chip to its right as the digit count
+        // changes (1% vs 100%) — same reasoning as m_statusLoadLabel below.
+        m_statusGrandMasterValueLabel->setFixedWidth(
+            QFontMetrics(font()).horizontalAdvance(QStringLiteral("100%")) + 2);
+        gmLayout->addWidget(m_statusGrandMasterValueLabel);
+        if (m_doc != NULL)
+        {
+            uchar gmVal = m_doc->inputOutputMap()->grandMasterValue();
+            m_statusGrandMasterSlider->setValue(gmVal);
+            m_statusGrandMasterValueLabel->setText(
+                QString("%1%").arg(qRound(double(gmVal) * 100.0 / 255.0)));
+            connect(m_doc->inputOutputMap(), &InputOutputMap::grandMasterValueChanged,
+                    this, &App::slotFooterGrandMasterValueChanged);
+        }
+        connect(m_statusGrandMasterSlider, &QSlider::valueChanged,
+                this, &App::slotFooterGrandMasterMoved);
+        gmBox->setVisible(m_showFooterGM);   // View menu preference
+        sb->addWidget(gmBox, 0);
+    }
 
     // Spacer that pushes the centred health chips (MTC/Load, created below)
     // rightward off the mode label. The status bar's built-in message area
@@ -3238,7 +3473,7 @@ void App::initStatusBar()
     // Fixed width sized to the widest reading, so the % / ms changing never
     // shifts the MTC chip left/right.
     m_statusLoadLabel->setFixedWidth(
-        QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("⚙︎ Load: 00.00 / 00 ms (000%)")) + 14);
+        QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("Load: 00.00 / 00 ms (000%)")) + 14);
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
     m_statusLoadLabel->setVisible(m_showFooterLoad);   // View menu preference
@@ -3339,11 +3574,46 @@ void App::initStatusBar()
     m_statusPadModeLabel->hide();
     sb->addPermanentWidget(m_statusPadModeLabel);
 
-    // Show-mode lock indicator. Hidden when unlocked; red 🔒 when on.
+    // Show-mode lock indicator. Hidden when unlocked; bold text when on
+    // (plain text + color, no icon — matches the other passive-readout
+    // chips: Mode, Timecode, Power. Blackout/Blind are deliberately the
+    // exception, kept visually distinct since they're meant to interrupt).
+    // #a06000 (amber/caution), not Blackout's #e60000 red — Show Lock is a
+    // deliberate, safe "don't let go move" toggle, not a hazard state, and
+    // reusing Blackout's exact red made them read as the same alarm tier.
+    // Reuses the app's existing amber convention (connectionstree.cpp,
+    // universepatchgrid.cpp both already use #a06000 for "pending/caution")
+    // rather than inventing a new color.
     m_statusShowLockLabel = new QLabel(this);
     m_statusShowLockLabel->setAlignment(Qt::AlignRight);
+    m_statusShowLockLabel->setStyleSheet("QLabel { color: #a06000; font-weight: bold; }");
     m_statusShowLockLabel->hide();
     sb->addPermanentWidget(m_statusShowLockLabel);
+
+    // Persistent Design/Operate indicator — see app.h for why this is
+    // separate from the mode-toggle button (which shows the destination
+    // mode, not the current one). Always visible.
+    m_statusModeChipLabel = new QLabel(this);
+    m_statusModeChipLabel->setAlignment(Qt::AlignRight);
+    m_statusModeChipLabel->setCursor(Qt::PointingHandCursor);
+    m_statusModeChipLabel->setToolTip(tr("Click to switch Design/Operate mode."));
+    m_statusModeChipLabel->installEventFilter(this);   // click → toggle mode
+    sb->addPermanentWidget(m_statusModeChipLabel);
+    // Seed directly rather than calling slotModeChanged() here — that
+    // function also toggles File/New/Open and live-edit actions, which may
+    // not exist yet at this point in construction. slotModeChanged() keeps
+    // this in sync on every real mode change from here on.
+    if (m_doc != NULL && m_doc->mode() == Doc::Operate)
+    {
+        m_statusModeChipLabel->setText(tr("OPERATE"));
+        m_statusModeChipLabel->setStyleSheet("QLabel { font-weight: bold; color: #43a047; }");
+    }
+    else
+    {
+        m_statusModeChipLabel->setText(tr("DESIGN"));
+        m_statusModeChipLabel->setStyleSheet(
+            "QLabel { font-weight: bold; color: palette(text); }");
+    }
 
     // Blackout indicator (global, same reasoning as Blind used to have its own
     // label before the whole-footer-blue treatment made it redundant —
@@ -3356,36 +3626,24 @@ void App::initStatusBar()
     m_statusBlackoutLabel->hide();
     sb->addPermanentWidget(m_statusBlackoutLabel);
 
-    // Output-readiness indicator. Hidden when every patched universe can
-    // actually reach its output; loud when one can't, because the failure it
-    // reports is otherwise invisible -- the patch looks fine, the plugin
-    // accepts writes, and the fixtures simply never light.
-    m_statusRigLabel = new QLabel(this);
-    m_statusRigLabel->setAlignment(Qt::AlignRight);
-    m_statusRigLabel->hide();
-    sb->addPermanentWidget(m_statusRigLabel);
-
-    // Programmer dirty indicator (between mode and autosave). Hidden
-    // when clean, red bullet + text when dirty. Mirrors the in-frame
-    // SaveProgrammer button highlight.
+    // Programmer dirty indicator. Hidden when clean, red bullet + text
+    // when dirty. Mirrors the in-frame SaveProgrammer button highlight.
     m_statusProgrammerLabel = new QLabel(this);
     m_statusProgrammerLabel->setAlignment(Qt::AlignRight);
     m_statusProgrammerLabel->hide();
     sb->addPermanentWidget(m_statusProgrammerLabel);
 
-    // Unsaved-changes indicator. Placed immediately before the autosave label so
-    // "unsaved changes" sits adjacent to "last autosave" at the far right.
-    // Permanent widget (same framed/aligned group as autosave — a normal
-    // addWidget item renders at a slightly different baseline).
+    // Consolidated Unsaved/Autosaved/Saved indicator — was three separate
+    // chips (a Saved/Unsaved toggle, plus an always-visible "Autosave:
+    // Enabled"/"Last autosave: HH:MM:SS" chip); folded into one, driven by
+    // slotDocModified() (unsaved/saved) and the autosave completion point
+    // in saveXML() (autosaved). Output-readiness moved out entirely — it
+    // now lives in m_statusModeLabel's own slot (far left, see
+    // updateOutputReadiness()), not a chip here.
     m_statusDirtyLabel = new QLabel(this);
     m_statusDirtyLabel->setAlignment(Qt::AlignRight);
     sb->addPermanentWidget(m_statusDirtyLabel);
     slotDocModified(m_doc != NULL ? m_doc->isModified() : false);
-
-    // Autosave label (far right, adjacent to the unsaved-changes indicator).
-    m_statusAutosaveLabel = new QLabel(this);
-    m_statusAutosaveLabel->setAlignment(Qt::AlignRight);
-    sb->addPermanentWidget(m_statusAutosaveLabel);
 
     if (m_doc != NULL)
     {
@@ -3402,6 +3660,12 @@ void App::initStatusBar()
         slotPadModeChanged(m_doc->padMode());
         slotShowLockedChanged(m_doc->isShowLocked());
     }
+
+    // A source registers into ShowStatus, not into this widget directly
+    // (see showstatus.h) -- this one connection is what makes that reach
+    // the footer at all, for every current AND future source alike.
+    connect(ShowStatus::instance(), &ShowStatus::changed,
+            this, &App::updateStatusBar);
 
     updateStatusBar();
 }
@@ -3563,6 +3827,25 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     {
         if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
             pm->openCircuitsDialog();
+        return true;
+    }
+
+    // Click the footer Design/Operate chip → same action the toolbar
+    // toggle button triggers (trigger(), not a direct slot call, so it
+    // still respects the action's own enabled state).
+    if (watched == m_statusModeChipLabel && event->type() == QEvent::MouseButtonPress
+        && m_modeToggleAction != NULL)
+    {
+        m_modeToggleAction->trigger();
+        return true;
+    }
+
+    // Click "Not ready" → the full detail behind it (see updateStatusBar()'s
+    // three densities). A no-op when nothing is registered / it currently
+    // reads "Ready" — showStatusDetails() itself checks and returns.
+    if (watched == m_statusModeLabel && event->type() == QEvent::MouseButtonPress)
+    {
+        showStatusDetails();
         return true;
     }
     return QMainWindow::eventFilter(watched, event);
@@ -3876,13 +4159,13 @@ void App::slotTimecodeStatusChanged()
                     break;
                 }
             m_statusTimecodeLabel->setText(uname.isEmpty()
-                ? tr("⏱︎ MTC ◌ armed — waiting")
-                : tr("⏱︎ MTC ◌ %1 — waiting").arg(uname));
+                ? tr("MTC ◌ armed — waiting")
+                : tr("MTC ◌ %1 — waiting").arg(uname));
             applyStyle(amber);
         }
         else
         {
-            m_statusTimecodeLabel->setText(tr("⏱︎ MTC: no source"));
+            m_statusTimecodeLabel->setText(tr("MTC: no source"));
             applyStyle(grey);
         }
         return;
@@ -3951,12 +4234,12 @@ void App::slotTimecodeStatusChanged()
 
     if (running)
     {
-        m_statusTimecodeLabel->setText(QString("⏱︎ MTC ● %1 @%2fps%3").arg(code).arg(fps).arg(ctx));
+        m_statusTimecodeLabel->setText(QString("MTC ● %1 @%2fps%3").arg(code).arg(fps).arg(ctx));
         applyStyle(green);
     }
     else
     {
-        m_statusTimecodeLabel->setText(QString("⏱︎ MTC ❚❚ %1 (holding)%2").arg(code).arg(ctx));
+        m_statusTimecodeLabel->setText(QString("MTC ❚❚ %1 (holding)%2").arg(code).arg(ctx));
         applyStyle(amber);
     }
 }
@@ -3988,11 +4271,11 @@ void App::slotUpdateHealthFooter()
         double stallMs = haveCpu ? (wallMs - cpuMs) : 0.0;
         const bool stalled = stallMs >= 2.0;
         if (stalled)
-            m_statusLoadLabel->setText(tr("⚙︎ Load: %1 / %2 ms (%3%)  ⏱ stall %4 ms")
+            m_statusLoadLabel->setText(tr("Load: %1 / %2 ms (%3%)  stall %4 ms")
                                        .arg(loadMs, 0, 'f', 2).arg(int(budget))
                                        .arg(pct).arg(stallMs, 0, 'f', 0));
         else
-            m_statusLoadLabel->setText(tr("⚙︎ Load: %1 / %2 ms (%3%)")
+            m_statusLoadLabel->setText(tr("Load: %1 / %2 ms (%3%)")
                                        .arg(loadMs, 0, 'f', 2).arg(int(budget)).arg(pct));
         m_statusLoadLabel->setToolTip(
             tr("Engine load: %1 ms of CPU per tick against a %2 ms budget.\n"
@@ -4206,30 +4489,99 @@ void App::slotProgrammerDirtyChanged(bool dirty)
 
 void App::updateStatusBar()
 {
-    // Update mode message
+    // Update mode message — a real rig-readiness problem takes priority
+    // over both the transient m_statusMessage and the idle "Ready" text,
+    // since "are we ready" is exactly what this slot means. The problem
+    // itself may come from anywhere: ShowStatus is a small registry any
+    // part of the app can declare a reason into (see showstatus.h) rather
+    // than this slot hand-checking one hardcoded source, so a second and
+    // third source (PMJ hardware gone missing, a fixture profile that
+    // failed to load, ...) need no changes here at all.
     if (m_statusModeLabel != NULL)
     {
-        if (m_statusMessage.isEmpty())
-            m_statusModeLabel->setText(tr("Ready"));
-        else
-            m_statusModeLabel->setText(m_statusMessage);
-    }
+        // Three densities on purpose, cheapest first: the chip itself says
+        // only THAT something is wrong (not what — "Not ready" stays just
+        // as short as "Ready" does, and does not grow or shrink as sources
+        // come and go), the tooltip lists each source's own short reason
+        // (one line per ShowStatus entry, not its full explanation), and a
+        // click opens every entry's complete detail text in one place.
+        const QList<ShowStatus::Entry> entries = ShowStatus::instance()->allEntries();
+        if (entries.isEmpty() == false)
+        {
+            m_statusModeLabel->setText(entries.count() == 1
+                ? tr("Not ready")
+                : tr("Not ready (%1)").arg(entries.count()));
+            m_statusModeLabel->setStyleSheet("QLabel { color: #e04030; font-weight: bold; }");
+            m_statusModeLabel->setCursor(Qt::PointingHandCursor);
 
-    // Update autosave status
-    if (m_statusAutosaveLabel != NULL)
-    {
-        if (m_autosaveEnabled)
-        {
-            if (m_lastAutosaveTime.isEmpty())
-                m_statusAutosaveLabel->setText(tr("Autosave: Enabled"));
-            else
-                m_statusAutosaveLabel->setText(tr("Last autosave: %1").arg(m_lastAutosaveTime));
+            QStringList lines;
+            foreach (const ShowStatus::Entry &e, entries)
+                lines << (e.summary.isEmpty() ? e.key : e.summary);
+            lines << QString() << tr("Click for details");
+            m_statusModeLabel->setToolTip(lines.join("\n"));
         }
         else
         {
-            m_statusAutosaveLabel->setText(tr("Autosave: Disabled"));
+            m_statusModeLabel->setStyleSheet(QString());
+            m_statusModeLabel->setToolTip(QString());
+            m_statusModeLabel->setCursor(Qt::ArrowCursor);
+            if (m_statusMessage.isEmpty())
+                m_statusModeLabel->setText(tr("Ready"));
+            else
+                m_statusModeLabel->setText(m_statusMessage);
         }
     }
+}
+
+void App::showStatusDetails()
+{
+    const QList<ShowStatus::Entry> entries = ShowStatus::instance()->allEntries();
+    if (entries.isEmpty())
+        return;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Show readiness"));
+
+    QVBoxLayout *lay = new QVBoxLayout(&dlg);
+
+    // An actual list, not a wall of prose: one top-level row per registered
+    // source (its summary, bold), the one-sentence detail as an italic
+    // child, then each individually affected thing (a universe, say) as its
+    // own row underneath -- so "which ones, specifically" is a glance
+    // rather than a re-read of a paragraph.
+    QTreeWidget *tree = new QTreeWidget(&dlg);
+    tree->setHeaderHidden(true);
+    tree->setColumnCount(1);
+    foreach (const ShowStatus::Entry &e, entries)
+    {
+        QTreeWidgetItem *top = new QTreeWidgetItem(tree);
+        top->setText(0, e.summary.isEmpty() ? e.key : e.summary);
+        QFont boldFont = top->font(0);
+        boldFont.setBold(true);
+        top->setFont(0, boldFont);
+
+        if (e.detail.isEmpty() == false)
+        {
+            QTreeWidgetItem *d = new QTreeWidgetItem(top);
+            d->setText(0, e.detail);
+            QFont italicFont = d->font(0);
+            italicFont.setItalic(true);
+            d->setFont(0, italicFont);
+        }
+        foreach (const QString &line, e.items)
+            new QTreeWidgetItem(top, QStringList(line));
+
+        top->setExpanded(true);
+    }
+    lay->addWidget(tree);
+
+    QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+    connect(box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    connect(box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    lay->addWidget(box);
+
+    dlg.resize(520, 360);
+    dlg.exec();
 }
 
 void App::setStatusMessage(const QString& message)

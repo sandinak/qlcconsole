@@ -48,6 +48,7 @@ class QToolBar;
 class QPixmap;
 class QAction;
 class QLabel;
+class QSlider;
 class App;
 
 /** @addtogroup ui UI
@@ -121,6 +122,12 @@ public:
     int tabLabelMode() const;
     void setTabLabelMode(int mode);
     void applyTabLabelMode();
+
+    /** Switch the main tab strip to whichever tab hosts @p w (no-op if @p w
+     *  isn't a direct tab-page widget). Lets a tab's own content navigate
+     *  elsewhere in the app — e.g. a Show-timeline clip's double-click
+     *  jumping to the Programming tab to edit the look it plays. */
+    void switchToTabContaining(QWidget *w);
 
 private:
     int m_tabLabelMode = TabIconAndText;
@@ -262,6 +269,11 @@ public slots:
     void slotBlackoutChanged(bool state);
     /** Show/hide the global Blind (output-inhibited) status-bar chip. */
     void slotOutputInhibitedChanged(bool state);
+    /** Footer Grand Master fader moved by the user. */
+    void slotFooterGrandMasterMoved(int value);
+    /** Engine-side Grand Master value changed (VC's own GM fader, MIDI/DMX
+     *  input, etc.) — keep the footer fader in sync. */
+    void slotFooterGrandMasterValueChanged(uchar value);
     void slotShowModeLock(bool checked);
     void slotShowLockedChanged(bool locked);
     /** Toggle the running show's timeline suspend (Operate-mode VC takeover). */
@@ -457,6 +469,11 @@ private:
     /** Update the status bar display */
     void updateStatusBar();
 
+    /** Full detail for every currently-registered ShowStatus entry, opened
+     *  by clicking the "Not ready" chip -- the third and most complete of
+     *  the chip's three information densities (see updateStatusBar()). */
+    void showStatusDetails();
+
 private slots:
     /** Programmer dirty/clean transition — refresh the status bar. */
     void slotProgrammerDirtyChanged(bool dirty);
@@ -475,25 +492,47 @@ private slots:
 
 private:
     QLabel* m_statusModeLabel;
-    QLabel* m_statusRigLabel;
+    /** Unsaved/Autosaved/Saved — one consolidated chip instead of three
+     *  (a separate "Saved"/"Unsaved" chip plus an always-visible
+     *  "Autosave: Enabled"/"Last autosave: HH:MM:SS" chip). Driven by the
+     *  existing Doc::modified signal (unsaved/saved) and the autosave
+     *  completion point (autosaved) — see slotDocModified() and the
+     *  autosave path in saveXML(). */
     QLabel* m_statusDirtyLabel;
-    QLabel* m_statusAutosaveLabel;
     QLabel* m_statusProgrammerLabel;
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;
     QLabel* m_statusShowLockLabel;
     QLabel* m_statusBlackoutLabel;
+    /** Persistent Design/Operate indicator — the toolbar's mode-toggle
+     *  button/icon always shows the mode a click would switch TO, not the
+     *  current one (standard play/pause-style affordance), so there was no
+     *  always-on "you are here" readout anywhere. This is that readout,
+     *  same footer-chip pattern as Blackout/Blind. */
+    QLabel* m_statusModeChipLabel = nullptr;
+    /** Compact footer Grand Master fader — GM previously lived only inside
+     *  the Virtual Console tab, unlike its safety-tier siblings (Blackout,
+     *  Blind, Show Lock), which are all global-toolbar/footer. This mirrors
+     *  those, always visible and adjustable regardless of active tab. */
+    QSlider* m_statusGrandMasterSlider = nullptr;
+    QLabel* m_statusGrandMasterValueLabel = nullptr;
+    /** The GM label+slider+value's shared container — toggled as one unit
+     *  by m_showFooterGM, same pattern as Load/Power below. */
+    QWidget* m_statusGrandMasterBox = nullptr;
     QLabel* m_statusTimecodeLabel;
     QLabel* m_statusLoadLabel;
     QLabel* m_statusPowerLabel = nullptr;
-    // Whether the engine-load / power-estimate footer chips are shown at all,
-    // toggleable from the View menu and persisted (workspace/showFooterLoad,
-    // workspace/showFooterPower). Independent of whether a chip currently has
+    // Whether the engine-load / power-estimate / GM-fader footer chips are
+    // shown at all, toggleable from the View menu and persisted
+    // (workspace/showFooterLoad, workspace/showFooterPower,
+    // workspace/showFooterGM). Independent of whether a chip currently has
     // anything to show (e.g. Power only ever appears once an estimate exists).
     bool m_showFooterLoad = true;
     bool m_showFooterPower = true;
+    bool m_showFooterGM = true;
     QAction* m_showFooterLoadAction = nullptr;
     QAction* m_showFooterPowerAction = nullptr;
+    QAction* m_showFooterGMAction = nullptr;
     // Move-in-black dangle warning: marked (positioned-but-dark) fixtures no
     // upcoming cue is about to light. Hidden when empty; ProgrammerController
     // forwards MarkPlanner::dangleFixturesChanged() into this.
