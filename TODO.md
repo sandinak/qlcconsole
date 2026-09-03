@@ -3059,6 +3059,25 @@ effect timing items also want the rig to confirm.
   box to even confirm the roughed-in `SCHED_FIFO` call links/behaves as
   written before this is worth deciding.
 
+- **`check-all.sh`'s Qt6-Werror leg fails at CMake configure, not code (OPEN,
+  2026-09-03)** — found running the full gate to verify the Fixture Manager
+  menu change (see DONE.md): `run_gate "Qt6-Werror" ...` dies immediately
+  with `CMake Error: The warning category "dangling-else" is not known.`,
+  before touching a single source file. Confirmed NOT a code regression —
+  the Qt6 and Qt6-Release legs (which actually build/link/test) both pass
+  clean, and manually invoking `clang++ -Werror=dangling-else` directly
+  compiles fine (Apple clang 21.0.0/Xcode, confirmed working). `cmake
+  --version` on this host is **4.4.0** — a very recent major version;
+  likely candidate is CMake 4.x's own compiler-diagnostics/warning-category
+  validation (added for IDE integration in recent CMake releases) rejecting
+  a `-Werror=<category>` flag it doesn't recognize by name, at configure
+  time, independent of whether the compiler itself supports it. Not
+  investigated further tonight — this is `check-all.sh` itself drifting out
+  of sync with a CMake upgrade, same *class* of problem as the Linux CI
+  `-Werror` break fixed 2026-09-02, but a different gate and needs its own
+  look at what CMake 4.4 actually changed about `-Werror=` flag validation
+  before guessing at a fix.
+
 - **Gate hole: on headless Linux `make check` silently skips ALL UI tests and
   still prints "Unit tests passed" (OPEN, 2026-08-26)** —
   `platforms/linux/unittest.sh:44` decides whether to run `ui/test` from

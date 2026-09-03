@@ -100,7 +100,15 @@ rework) and a line-by-line diff against upstream QLC+ 4.14.2 at
 
 Files: `ui/src/fixturemanager.h`, `ui/src/fixturemanager.cpp`.
 
-Build: clean (`cmake --build build`). No dedicated `FixtureManager` unit
+Build: clean (`cmake --build build`), and ran the full `check-all.sh` gate
+per CLAUDE.md's convention for a non-trivial change — Qt5 skipped (not
+installed on this host, documented/expected), **Qt6 PASS**, **Qt6-Release
+PASS** (both actually build/link/test this change), Qt6-Werror failed at
+CMake *configure*, before reaching any source file — confirmed unrelated to
+this change (see the new TODO.md entry: CMake 4.4.0 rejecting a
+`-Werror=<category>` flag name at configure time, pre-existing environment
+drift, not a code regression; Qt6 and Qt6-Release both compile the exact
+same warning-sensitive code cleanly). No dedicated `FixtureManager` unit
 test exists to extend. Manually launched the built app and confirmed the
 Fixtures tab renders and the tree populates correctly (screenshot-verified).
 **Not** verified: actually right-clicking each row kind and eyeballing the
