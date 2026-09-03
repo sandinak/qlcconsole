@@ -39,13 +39,12 @@ with no menu-text distinction between assign-semantics and copy-semantics —
 are real but are product decisions with more than one reasonable answer;
 documented, not decided, in the design doc.
 
-**Not interactively verified**: no GUI input-automation tool is installed
-in this environment (`cliclick` absent; TODO.md's own "GUI headful
-automation" item already tracks this gap) to actually right-click each row
-kind and eyeball the resulting menu. Build is clean and the app launches/
-renders correctly (screenshot-confirmed), but actually clicking through the
-Power root / a universe row / empty space in the Fixtures tab wants 30
-seconds of real eyes before trusting it fully.
+**Interactively verified** (2026-09-03, `cliclick` installed): right-clicked
+the Power root for real — now shows only Add power source/Add fixture/Add
+RGB panel/Add fixture to group, with Properties/Test Fixture/Delete items/
+Remove fixture from group gone (previously listed disabled); a fixture row
+still shows the full menu including all four, confirming the gating is
+selection-aware, not a blanket removal.
 
 ---
 

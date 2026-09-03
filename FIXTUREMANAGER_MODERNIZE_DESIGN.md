@@ -111,15 +111,21 @@ drift, not a code regression; Qt6 and Qt6-Release both compile the exact
 same warning-sensitive code cleanly). No dedicated `FixtureManager` unit
 test exists to extend. Manually launched the built app and confirmed the
 Fixtures tab renders and the tree populates correctly (screenshot-verified).
-**Not** verified: actually right-clicking each row kind and eyeballing the
-resulting menu content — this environment has no GUI input-automation tool
-installed (`cliclick` is absent; TODO.md's own "GUI headful automation"
-item already tracks this as a not-yet-built capability) and installing one
-unsupervised felt like overreach for an overnight pass. **This is the one
-thing worth 30 seconds of your own eyes before trusting it fully**: right-
-click the Power root, a universe row, and empty space in the Fixtures tab
-and confirm Properties/Test/Remove/Ungroup are gone from those menus, while
-Add/Add RGB/Add-to-group are still there.
+
+**Interactively verified** (2026-09-03, once you were up and asked to see
+it): installed `cliclick` (was absent; TODO.md's own "GUI headful
+automation" item tracks this gap generally, still worth building a real
+`gui-drive.sh` around it per that item rather than reaching for it ad hoc
+each time) and right-clicked for real. Confirmed: the Power root's menu is
+now "Add power source…" / "Add fixture…" / "Add RGB panel…" / "Add fixture
+to group…" only — Properties/Test Fixture/Delete items/Remove fixture from
+group are gone, where they used to appear disabled. A fixture row
+("US1aB") still shows the full menu including all four of those, since a
+fixture selection is exactly when they apply. Not separately re-checked: a
+plain universe row and empty space (same code path as the Power root,
+governed by the same `haveFixtureOrGroupSelection` condition, so covered
+by the same trace + this same visual confirmation, but not individually
+screenshotted).
 
 ## What was deliberately investigated and NOT changed
 
