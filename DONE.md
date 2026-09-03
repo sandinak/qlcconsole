@@ -29,6 +29,42 @@ both, make it a jitter indicator" fix this entry originally called for.
 
 ---
 
+### 2026-09-02 — Show-length polish: both remaining sub-items were already done *(docs-only, no code)*
+
+TODO.md's "Show-length polish" bullet (dated 2026-08-12, one item already
+crossed off there) still listed two "genuinely still open" sub-items. Traced
+both in the actual code before touching anything — both were already fully
+implemented, just never marked done:
+
+- **"End at SMPTE hh:mm:ss"** — shipped in `751ce1b5a` (2026-08-06).
+  `MultiTrackView::contextMenuEvent()` (`ui/src/showmanager/
+  multitrackview.cpp:1078-1143`) offers "End at SMPTE…" on the end handle's
+  right-click menu, parses `hh:mm:ss` or `hh:mm:ss:ff` (30fps) via
+  `QInputDialog::getText`, emits `showEndAtSmpteRequested(quint32 smpteMs)`.
+  `ShowManager::slotShowEndAtSmpteRequested()` (`showmanager.cpp:2122-2130`)
+  subtracts `Show::timecodeOffset()` — the same offset already configurable
+  from the show's timecode-offset menu (`showmanager.cpp:574-599`, "No
+  offset"/"Use current position"/"Zero") — to get the relative show length.
+  This is exactly the "offset in the host menu" the original TODO bullet was
+  waiting on; it already existed by the time this was written.
+- **Bar/beat snapping for the end handle when a BPM is set** — comes free
+  from the existing generic grid-snap, not a separate mechanism.
+  `MultiTrackView::snapTimeMs()` (`multitrackview.cpp:806-841`) snaps to
+  `m_header->getTimeStep()`, and `ShowHeaderItem::updateTimeStep()`
+  (`headeritems.cpp:110-115`) sets that step to the beat-pixel-width formula
+  `(120 * HALF_SECOND_WIDTH / BPMValue) / timeScale` whenever the show's
+  `TimeDivision` is a `BPM_x_x` mode (`Show::TimeDivision`, `engine/src/
+  show.h:95-120`) instead of `Time`. `computeEndDragValue()`
+  (`multitrackview.cpp:847-867`) always routes through `snapTimeMs()`, so
+  dragging the end handle already snaps to beat boundaries (and therefore
+  bar boundaries, which are just whole-beat multiples) once a show's time
+  division is set to a BPM mode and "Snap to grid" is on.
+
+No code changed — bullet removed from TODO.md's "Deferred / next
+candidates" list.
+
+---
+
 ### 2026-09-02 — Consistent cross-platform startup window *(BUILT — verified live)*
 
 Branson: a startup window with name/version, a scrolling panel of what's

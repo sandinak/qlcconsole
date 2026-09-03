@@ -3629,12 +3629,6 @@ effect timing items also want the rig to confirm.
   output, time the round-trip to detection = true audio latency. Needs an audio-emit
   path (AudioRenderer wants a decoder) and is unverifiable offscreen; the
   editable/seeded detection-latency + ±10 ms nudge cover it meanwhile.
-- **Show-length polish** *(2026-08-12: end-handle label collision confirmed
-  already fixed — commit dcc620241 moved the length chip to the ruler strip
-  above the marker lane specifically to stop it colliding with a section
-  marker's own label. Genuinely still open:)* "End at SMPTE hh:mm:ss"
-  convenience (needs the offset in the host menu); bar/beat snapping for the
-  end handle when a BPM is set.
 - **GUI headful automation** — `screencapture` + `cliclick` driver so Claude can
   drive AND validate real UI (moving this to the spare machine). First task there:
   a `gui-drive.sh` wrapper, then drive the end-handle drag with eyes on real pixels.
