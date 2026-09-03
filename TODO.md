@@ -8,38 +8,44 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
-## Fixture Manager — modernize + look at integrating with qlcconsole *(2026-09-02, design-first; investigation not started)*
+## Fixture Manager — modernize + look at integrating with qlcconsole *(2026-09-02, audit DONE, one fix shipped on a branch, bigger questions await Branson)*
 
 Branson: look at Fixture Manager and see what can be done to modernize it and
-maybe integrate it more with the rest of qlcconsole, rather than leaving it as
-the stock QLC+ tab.
+maybe integrate it more with the rest of qlcconsole. Followed up same night
+("run based on a discrete modernization... investigate integration with the
+main tool... do this work in a branch independently where we can not impact
+main") while Branson was asleep — full writeup, decisions, and what was
+deliberately left alone: **[FIXTUREMANAGER_MODERNIZE_DESIGN.md]
+(FIXTUREMANAGER_MODERNIZE_DESIGN.md)**. Branch:
+`feat/fixturemanager-modernization` — **not merged to `main`**, needs
+Branson's review first (both to sanity-check the shipped fix and to weigh in
+on the two bigger open questions the doc lays out, neither of which was
+resolved unilaterally).
 
-Starting context for whoever picks this up: `ui/src/fixturemanager.{h,cpp}`
-(~2680/~300 lines) is a listed fork hotspot (CLAUDE.md) — fixture-group
-folders, empty-group creation, and the head-layout grid editor (drag fixtures
-onto cells, add a group as a block, move a sub-group as a unit) all already
-live here, plus it's the entry point into `ui/src/rdmmanager.{h,cpp,ui}`
-(`fixturemanager.cpp:457`). That RDM entry already has its own open TODO
-entry above noting Fixture Manager is "already crowded" as a place to hang
-more UI — worth reading together with this one rather than planning either
-in isolation.
+Short version: the audit found the tree/CRUD structure itself is fine and
+fork-original (not touched), RDM is fully separable and stays exactly as
+dormant as it was (contributes nothing to current crowding — that's the
+fork's own Power/folders/composite-rebuild features), and the one concrete,
+single-answer fix was the context menu's construction order, which put a
+fixed Properties/Test/Remove/Ungroup block first and unconditionally
+(inherited from stock upstream QLC+) instead of following the
+Connections/Devices convention this session established
+(`appendUniversalMenuActions()` — specific-to-row first, generic last).
+Fixed and traced line-by-line against the existing selection-based
+enable/disable logic to confirm zero behavior regression. Two bigger
+findings — the always-visible 15-action toolbar vs. Connections' toolbar-
+free design, and three different UI routes to "put fixtures in a group"
+with no menu-text distinction between assign-semantics and copy-semantics —
+are real but are product decisions with more than one reasonable answer;
+documented, not decided, in the design doc.
 
-Also worth reading alongside: the adjacent **"Now — unify the object editor's
-fixture management"** entry below — that one is about the Lighting Studio
-per-object editor's fixture picker specifically, a different (if related)
-surface from the Fixture Manager tab itself. Since this session separately
-did a full hierarchy/workflow rework of the Connections/Devices tree
-(strict per-level CRUD, consistent right-click ordering, a real host/protocol/
-target/port tree shape — see DONE.md 2026-09-02) and a workflow-UX review
-flagged Fixture Manager's empty-state onboarding as one of the *good*
-existing patterns not yet applied everywhere else, there may be real value in
-holding Fixture Manager up against those same conventions: does its tree
-hierarchy, menu structure, and empty/onboarding state now read as
-inconsistent with Connections/Devices? Is there UI here that belongs on a
-newer tab (Programming, Lighting Studio) instead? **Nothing decided yet** —
-start with an audit of the current tab (structure, menus, what's crowded,
-what's stock-QLC+-shaped vs already fork-modified) before proposing a
-direction, same as the object-editor and stage-feature entries below did.
+**Not interactively verified**: no GUI input-automation tool is installed
+in this environment (`cliclick` absent; TODO.md's own "GUI headful
+automation" item already tracks this gap) to actually right-click each row
+kind and eyeball the resulting menu. Build is clean and the app launches/
+renders correctly (screenshot-confirmed), but actually clicking through the
+Power root / a universe row / empty space in the Fixtures tab wants 30
+seconds of real eyes before trusting it fully.
 
 ---
 

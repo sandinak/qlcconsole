@@ -115,6 +115,8 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_moveDownAction(NULL)
     , m_importAction(NULL)
     , m_exportAction(NULL)
+    , m_expandAllAction(NULL)
+    , m_collapseAllAction(NULL)
     , m_groupMenu(NULL)
 {
     Q_ASSERT(s_instance == NULL);
@@ -1279,6 +1281,18 @@ void FixtureManager::initActions()
                                tr("Remap fixtures..."), this);
     connect(m_remapAction, SIGNAL(triggered(bool)),
             this, SLOT(slotRemap()));
+
+    // Icon-less, matching ConnectionsTree::appendUniversalMenuActions()'s
+    // "Collapse/Expand everything below" -- expand/collapse-all is a tree-
+    // state toggle, not an add/remove of anything, so it shouldn't borrow
+    // edit_add/edit_remove's create/delete iconography.
+    m_expandAllAction = new QAction(tr("Expand all groups"), this);
+    connect(m_expandAllAction, &QAction::triggered, this,
+            [this]() { if (m_fixtures_tree) m_fixtures_tree->expandAll(); });
+
+    m_collapseAllAction = new QAction(tr("Collapse all groups"), this);
+    connect(m_collapseAllAction, &QAction::triggered, this,
+            [this]() { if (m_fixtures_tree) m_fixtures_tree->collapseAll(); });
 }
 
 void FixtureManager::updateGroupMenu()
@@ -1339,14 +1353,8 @@ void FixtureManager::initToolBar()
 
     // Discrete expand/collapse-all for the group tree.
     toolbar->addSeparator();
-    QAction *expandAllAction = new QAction(QIcon(":/edit_add.png"), tr("Expand all groups"), this);
-    QAction *collapseAllAction = new QAction(QIcon(":/edit_remove.png"), tr("Collapse all groups"), this);
-    connect(expandAllAction, &QAction::triggered, this,
-            [this]() { if (m_fixtures_tree) m_fixtures_tree->expandAll(); });
-    connect(collapseAllAction, &QAction::triggered, this,
-            [this]() { if (m_fixtures_tree) m_fixtures_tree->collapseAll(); });
-    toolbar->addAction(expandAllAction);
-    toolbar->addAction(collapseAllAction);
+    toolbar->addAction(m_expandAllAction);
+    toolbar->addAction(m_collapseAllAction);
 
     QToolButton* btn = qobject_cast<QToolButton*> (toolbar->widgetForAction(m_groupAction));
     Q_ASSERT(btn != NULL);
@@ -2347,14 +2355,6 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
 
     QMenu menu(this);
-    menu.addAction(m_addAction);
-    menu.addAction(m_addRGBAction);
-    menu.addAction(m_propertiesAction);
-    menu.addAction(m_testAction);
-    menu.addAction(m_removeAction);
-    menu.addSeparator();
-    menu.addAction(m_groupAction);
-    menu.addAction(m_unGroupAction);
 
     // Collect the selection so we can offer to move groups to a folder, and to
     // copy whole fixtures and/or whole fixture groups into a new/existing group.
@@ -2477,6 +2477,36 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             menu.addSeparator();
             rebuildComposite = menu.addAction(tr("Rebuild composite from members"));
         }
+    }
+
+    // Base fixture/group actions, appended LAST (after every row/selection-
+    // specific block above), matching ConnectionsTree's "specific-to-this-row
+    // first, generic last" convention (appendUniversalMenuActions()). Add/
+    // Add RGB panel/Group are genuinely universal -- they create something
+    // new and make sense from any row, including empty space or a Power/
+    // Universe row with nothing fixture-like selected (m_ctxUniverse,
+    // computed above, still gives "Add fixture..." a sensible default
+    // universe from a universe row even with no fixture selection; Group's
+    // dropdown offers "New Group..." too, which is exactly why
+    // slotModeChanged() force-enables it regardless of selection). Properties/
+    // Test/Remove/Ungroup all act ON an existing fixture-or-group selection,
+    // so unlike the old unconditional block, they're only listed when one
+    // exists -- previously they showed up (merely disabled) on every right-
+    // click, including the Power root, a universe row, or empty space, none
+    // of which they apply to.
+    const bool haveFixtureOrGroupSelection = selFixtures.isEmpty() == false
+                                           || selGroups.isEmpty() == false;
+    if (menu.isEmpty() == false)
+        menu.addSeparator();
+    menu.addAction(m_addAction);
+    menu.addAction(m_addRGBAction);
+    menu.addAction(m_groupAction);
+    if (haveFixtureOrGroupSelection)
+    {
+        menu.addAction(m_propertiesAction);
+        menu.addAction(m_testAction);
+        menu.addAction(m_removeAction);
+        menu.addAction(m_unGroupAction);
     }
 
     QAction *chosen = menu.exec(QCursor::pos());

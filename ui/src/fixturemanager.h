@@ -287,6 +287,8 @@ private:
 
     QAction* m_importAction;
     QAction* m_exportAction;
+    QAction* m_expandAllAction;
+    QAction* m_collapseAllAction;
     QMenu* m_groupMenu;
 };
 
