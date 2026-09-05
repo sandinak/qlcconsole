@@ -64,6 +64,21 @@ public:
     void setModified(bool modified = true);
 
 protected:
+    /** True if $path lives under QLCFixtureDefCache::systemDefinitionDirectory()
+     *  -- system definitions ship with the app and must stay static/
+     *  reinstallable, so this must never be a save target. */
+    bool isUnderSystemDefinitionDirectory(const QString& path) const;
+
+    /** The path under QLCFixtureDefCache::userDefinitionDirectory() that a
+     *  save of m_fixtureDef should redirect to when the original file is a
+     *  system definition -- same "<Manufacturer>-<Model>.qxf" naming
+     *  saveAs() already uses for a brand-new file, so the result also
+     *  becomes the local definition that overrides the system one for this
+     *  manufacturer/model (QLCFixtureDefCache loads the user directory
+     *  first and skips later duplicates by manufacturer+model). */
+    QString localOverridePath() const;
+
+protected:
     QLCFixtureDef* m_fixtureDef;
     QString m_fileName;
     bool m_modified;
@@ -119,6 +134,12 @@ protected:
     QLCFixtureMode* currentMode();
     void refreshModeList();
     void updateModeItem(const QLCFixtureMode *mode, QTreeWidgetItem *item);
+
+    /** True if $edited's channel count/order or head count differs from
+     *  $original's -- qlcconsole's Scenes/Chasers store values by channel
+     *  INDEX, so this is exactly the kind of change that silently
+     *  reinterprets an already-patched fixture's saved show data. */
+    bool modeStructureChanged(const QLCFixtureMode *original, const QLCFixtureMode *edited) const;
 
     /*********************************************************************
      * Aliases

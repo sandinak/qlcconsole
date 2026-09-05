@@ -20,6 +20,8 @@
 #include <QApplication>
 #include <QTextStream>
 #include <QTranslator>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QLocale>
 #include <QString>
 #include <QDebug>
@@ -28,6 +30,16 @@
 #include "qlcconfig.h"
 #include "qlcfile.h"
 #include "app.h"
+
+// Single-instance handoff: qlcconsole's "Edit Fixture Definition..." launches
+// this binary fresh every time (QProcess::startDetached(), see
+// AppUtil::launchFixtureEditor() in ui/src/apputil.cpp) -- with the editor
+// already open, right-clicking a different fixture used to pop up a whole
+// separate app window instead of adding another tab to the one already
+// there. A fixed QLocalServer name lets a second launch detect the first,
+// hand it the path to open, and exit immediately instead of ever
+// constructing its own App.
+static const char *KSingleInstanceServerName = "qlcconsole-fixtureeditor-instance";
 
 /* Use this namespace for command-line arguments so that we don't pollute
    the global namespace. */
@@ -175,8 +187,49 @@ int main(int argc, char** argv)
     /* Load translation for current locale */
     loadTranslation(QLocale::system().name(), qapp);
 
+    /* Single-instance handoff: if another Fixture Editor is already
+       running, hand it our file (if any) over the local socket and exit
+       immediately -- never construct our own App/window at all. */
+    {
+        QLocalSocket socket;
+        socket.connectToServer(KSingleInstanceServerName);
+        if (socket.waitForConnected(200) == true)
+        {
+            if (FXEDArgs::fixture.isEmpty() == false)
+            {
+                socket.write(FXEDArgs::fixture.toUtf8());
+                socket.waitForBytesWritten(1000);
+            }
+            socket.disconnectFromServer();
+            return 0;
+        }
+    }
+
+    /* We're the first instance -- listen for later launches to hand files
+       to. removeServer() first: a crashed previous instance can leave a
+       stale local socket file behind on Unix, which would otherwise make
+       listen() fail here even though nothing is actually listening. */
+    QLocalServer::removeServer(KSingleInstanceServerName);
+    QLocalServer *instanceServer = new QLocalServer(&qapp);
+    instanceServer->listen(KSingleInstanceServerName);
+
     /* Create and initialize the Fixture Editor application object */
     App app;
+
+    QObject::connect(instanceServer, &QLocalServer::newConnection, &app, [instanceServer, &app]() {
+        QLocalSocket *client = instanceServer->nextPendingConnection();
+        if (client == NULL)
+            return;
+        QObject::connect(client, &QLocalSocket::readyRead, &app, [client, &app]() {
+            const QString path = QString::fromUtf8(client->readAll()).trimmed();
+            if (path.isEmpty() == false)
+                app.loadFixtureDefinition(path);
+            app.raise();
+            app.activateWindow();
+        });
+        QObject::connect(client, &QLocalSocket::disconnected, client, &QLocalSocket::deleteLater);
+    });
+
     if (FXEDArgs::fixture.isEmpty() == false)
         app.loadFixtureDefinition(FXEDArgs::fixture);
 

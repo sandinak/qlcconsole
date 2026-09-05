@@ -459,6 +459,21 @@ QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) con
     return style()->standardIcon(QStyle::SP_FileIcon);
 }
 
+void MonitorLayersPanel::collectCollapsedNodes(QTreeWidgetItem *item, QSet<QString> &out) const
+{
+    const int type = item->data(0, NodeTypeRole).toInt();
+    if ((type == NodeLayer || type == NodeGroup) && item->isExpanded() == false)
+        out.insert(QString("%1:%2").arg(type).arg(item->data(0, NodeIdRole).toUInt()));
+
+    for (int i = 0; i < item->childCount(); i++)
+        collectCollapsedNodes(item->child(i), out);
+}
+
+bool MonitorLayersPanel::wasNodeCollapsed(NodeType type, quint32 id) const
+{
+    return m_collapsedKeys.contains(QString("%1:%2").arg(int(type)).arg(id));
+}
+
 void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId,
                                         const QList<ItemDesc> &items)
 {
@@ -556,7 +571,7 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
         addItemLeaf(host, d);
     }
 
-    node->setExpanded(true);
+    node->setExpanded(!wasNodeCollapsed(NodeGroup, groupId));
 }
 
 void MonitorLayersPanel::reload()
@@ -574,6 +589,16 @@ void MonitorLayersPanel::reload()
     // scrolls the tree back to the active layer after every reload — so moving
     // an item to a lower layer made that layer scroll out of view ("disappear").
     const int scroll = m_tree->verticalScrollBar()->value();
+
+    // Capture which layer/group nodes are currently collapsed BEFORE clear()
+    // discards them, so the rebuild below can restore that instead of
+    // hard-expanding everything -- reload() runs on ~20 different triggers
+    // (toggling a layer's visibility/lock, renaming, drag-drop, add/remove
+    // layer, ...), every one of which used to silently reopen every folder
+    // the user had closed.
+    m_collapsedKeys.clear();
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+        collectCollapsedNodes(m_tree->topLevelItem(i), m_collapsedKeys);
 
     m_reloading = true;
     m_tree->clear();
@@ -715,7 +740,7 @@ void MonitorLayersPanel::reload()
                 addItemLeaf(host, d);
             }
 
-        layerNode->setExpanded(true);
+        layerNode->setExpanded(!wasNodeCollapsed(NodeLayer, lyr.id));
         if (lyr.id == activeId)
             activeNode = layerNode;
     }

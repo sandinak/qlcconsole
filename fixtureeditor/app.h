@@ -111,7 +111,6 @@ protected:
     QAction* m_fileQuitAction;
 
     QAction* m_helpIndexAction;
-    QAction* m_helpAboutAction;
     QAction* m_helpAboutQtAction;
 
 protected:
@@ -127,7 +126,6 @@ protected slots:
     void slotFileQuit();
 
     void slotHelpIndex();
-    void slotHelpAbout();
     void slotHelpAboutQt();
 };
 

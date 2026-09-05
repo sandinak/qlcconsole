@@ -85,6 +85,25 @@ namespace AppUtil
      * inventing a color.
      */
     QColor sceneSwatchColor(Doc *doc, Scene *scene);
+
+    /*********************************************************************
+     * Fixture Editor launcher
+     *********************************************************************/
+    /**
+     * Launch the standalone Fixture Editor (qlcconsole-fixtureeditor) as a
+     * detached process — it has its own window/event loop, entirely separate
+     * from the main app's Doc. If @p fixtureFilePath is non-empty, it's
+     * opened directly (-o <path>), landing straight in that fixture's
+     * definition rather than the editor's blank/new-fixture state.
+     *
+     * @param fixtureFilePath Absolute path to a .qxf file to open, or empty
+     *                        to just launch the editor.
+     * @param parentForError  Parent for the "editor not found" QMessageBox,
+     *                        shown if the binary can't be located.
+     * @return true if the process was started.
+     */
+    bool launchFixtureEditor(const QString &fixtureFilePath = QString(),
+                             QWidget *parentForError = nullptr);
 };
 
 /*****************************************************************************

@@ -31,6 +31,7 @@
 #include <QString>
 #include <QList>
 #include <QPair>
+#include <QSet>
 #include <QColor>
 #include <QTreeWidget>
 #include <QDropEvent>
@@ -146,6 +147,13 @@ private:
     QList<ItemDesc> gatherItems() const;
     void buildGroupNode(QTreeWidgetItem *parent, quint32 groupId,
                         const QList<ItemDesc> &items);
+    /** Walks the (about-to-be-discarded) tree collecting a key per collapsed
+     *  layer/group node, so reload() can restore collapse state afterward
+     *  instead of hard-expanding everything -- see m_collapsedKeys. */
+    void collectCollapsedNodes(QTreeWidgetItem *item, QSet<QString> &out) const;
+    /** True if the layer/group node identified by (type, id) was collapsed
+     *  before the reload() currently in progress captured m_collapsedKeys. */
+    bool wasNodeCollapsed(NodeType type, quint32 id) const;
     /** Expand or collapse a node and all of its descendants. */
     static void setSubtreeExpanded(QTreeWidgetItem *node, bool expanded);
     /** Hide tree rows that don't match @p text (matches keep their ancestors +
@@ -227,6 +235,15 @@ private:
 
     /** Guards row-widget/selection/edit handlers while reload() repopulates. */
     bool m_reloading = false;
+
+    /** Layer/group nodes the user had collapsed, captured at the start of the
+     *  reload() currently in progress (from the tree about to be cleared) and
+     *  consulted while rebuilding, so a reload — triggered by ~20 different
+     *  things (toggling a layer's visibility/lock, renaming, drag-drop, add/
+     *  remove layer, ...) — no longer force-expands every folder the user had
+     *  deliberately closed. Keyed "<NodeType>:<id>"; only meaningful during a
+     *  single reload() call, not persisted across app runs. */
+    QSet<QString> m_collapsedKeys;
 };
 
 /** @} */

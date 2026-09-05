@@ -103,9 +103,13 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_universeUsage(NULL)
     , m_addAction(NULL)
     , m_addRGBAction(NULL)
+    , m_addFixtureButtonAction(NULL)
+    , m_addChannelsGroupAction(NULL)
     , m_removeAction(NULL)
     , m_propertiesAction(NULL)
     , m_testAction(NULL)
+    , m_locateAction(NULL)
+    , m_resetAction(NULL)
     , m_fadeConfigAction(NULL)
     , m_remapAction(NULL)
     , m_groupAction(NULL)
@@ -247,6 +251,11 @@ void FixtureManager::slotChannelsGroupRemoved(quint32 id)
 
 void FixtureManager::slotModeChanged(Doc::Mode mode)
 {
+    // Split out from m_addAction (see its declaration); mirrors the same
+    // Design-only gating m_addAction gets below, unconditionally in every
+    // Design sub-branch and unconditionally false in the Operate branch.
+    m_addChannelsGroupAction->setEnabled(mode == Doc::Design);
+
     if (mode == Doc::Design)
     {
         int selected = m_fixtures_tree->selectedItems().size();
@@ -272,11 +281,15 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
             {
                 m_propertiesAction->setEnabled(true);
                 m_testAction->setEnabled(true);
+                m_locateAction->setEnabled(true);
+                m_resetAction->setEnabled(true);
             }
             else
             {
                 m_propertiesAction->setEnabled(false);
                 m_testAction->setEnabled(false);
+                m_locateAction->setEnabled(false);
+                m_resetAction->setEnabled(false);
             }
             m_groupAction->setEnabled(true);
 
@@ -311,9 +324,14 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         else
             m_fadeConfigAction->setEnabled(false);
 
-        // Always allow creating a group (its menu's "New Group" makes an
-        // empty one when no fixtures are selected; you then drag fixtures in).
-        m_groupAction->setEnabled(true);
+        // m_groupAction ("Add fixture to group...") is left at whichever
+        // per-branch state was set above -- true only when an actual fixture
+        // is selected. It used to be force-enabled unconditionally here
+        // because its dropdown's "New Group..." entry needed to work even
+        // with nothing selected; that's now a right-click on the Fixture
+        // Groups root/a group folder instead (slotContextMenuRequested()),
+        // so this action's only remaining job -- assigning a selection to an
+        // existing group -- genuinely needs a fixture selected.
     }
     else
     {
@@ -329,6 +347,8 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         bool singleFixture = (item && item->data(KColumnName, PROP_ID).isValid() &&
                               m_fixtures_tree->selectedItems().size() == 1);
         m_testAction->setEnabled(singleFixture);
+        m_locateAction->setEnabled(singleFixture);
+        m_resetAction->setEnabled(singleFixture);
     }
 }
 
@@ -438,10 +458,14 @@ void FixtureManager::initDataView()
     connect(m_fixtures_tree, SIGNAL(collapsed(QModelIndex)),
             this, SLOT(slotFixtureItemExpanded()));
 
-    tabs->setTabToolTip(tabs->addTab(m_fixtures_tree, tr("Fixture Groups")), tr(
-        "Spatial groups: fixtures arranged on a head-layout grid.\n"
-        "Used for XY-pad / per-head effects and as drag-drop dynamic targets "
-        "in the Programming tab. Not the same as Channel Groups (next tab)."));
+    // Labeled "Fixtures" (not "Fixture Groups") -- this tree holds the whole
+    // patch (fixtures, spatial groups, Power, Universes), not just groups;
+    // the old label undersold what's actually in it.
+    tabs->setTabToolTip(tabs->addTab(m_fixtures_tree, tr("Fixtures")), tr(
+        "The full patch: fixtures, universes, power circuits, and spatial "
+        "groups (fixtures arranged on a head-layout grid, used for XY-pad / "
+        "per-head effects and as drag-drop dynamic targets in the "
+        "Programming tab). Not the same as Channel Groups (next tab)."));
 
     m_channel_groups_tree = new QTreeWidget(this);
     QStringList chan_labels;
@@ -451,11 +475,14 @@ void FixtureManager::initDataView()
     m_channel_groups_tree->setAllColumnsShowFocus(true);
     m_channel_groups_tree->setIconSize(QSize(32, 32));
     m_channel_groups_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_channel_groups_tree->setContextMenuPolicy(Qt::CustomContextMenu);
 
     connect(m_channel_groups_tree, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotChannelsGroupSelectionChanged()));
     connect(m_channel_groups_tree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
             this, SLOT(slotChannelsGroupDoubleClicked(QTreeWidgetItem*)));
+    connect(m_channel_groups_tree, SIGNAL(customContextMenuRequested(const QPoint&)),
+            this, SLOT(slotChannelGroupContextMenuRequested(const QPoint&)));
 
     tabs->setTabToolTip(tabs->addTab(m_channel_groups_tree, tr("Channel Groups")), tr(
         "DMX-channel groups for Simple Desk (e.g. all the Gobo channels across "
@@ -878,20 +905,24 @@ void FixtureManager::slotChannelsGroupDoubleClicked(QTreeWidgetItem*)
 
 void FixtureManager::slotTabChanged(int index)
 {
+    // Toolbar composition is per-tab: the "Add" dropdown (fixture/RGB panel)
+    // only makes sense on the fixtures tab; the Channel Groups tab gets its
+    // own single "Add Channel Group..." button.
+    const bool onChannelGroupsTab = (index == 1);
+    m_addFixtureButtonAction->setVisible(onChannelGroupsTab == false);
+    m_addChannelsGroupAction->setVisible(onChannelGroupsTab);
+
     if (index == 1)
     {
-        m_addAction->setToolTip(tr("Add channel group..."));
         updateChannelsGroupView();
         slotChannelsGroupSelectionChanged();
     }
     else if (index == 2)
     {
-        m_addAction->setToolTip(tr("Add fixture..."));
         updateRDMView();
     }
     else
     {
-        m_addAction->setToolTip(tr("Add fixture..."));
         updateView();
         slotSelectionChanged();
     }
@@ -1210,13 +1241,19 @@ void FixtureManager::initActions()
     // Fixture actions
     m_addAction = new QAction(QIcon(":/edit_add.png"),
                               tr("Add fixture..."), this);
-    connect(m_addAction, SIGNAL(triggered(bool)),
-            this, SLOT(slotAdd()));
+    connect(m_addAction, &QAction::triggered, this, &FixtureManager::addFixture);
 
     m_addRGBAction = new QAction(QIcon(":/rgbpanel.png"),
                               tr("Add RGB panel..."), this);
     connect(m_addRGBAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddRGBPanel()));
+
+    // Channel Groups tab's own creation action — split out from m_addAction
+    // (see m_addChannelsGroupAction's declaration) so the toolbar never
+    // shows the wrong label for the active tab.
+    m_addChannelsGroupAction = new QAction(QIcon(":/edit_add.png"),
+                              tr("Add Channel Group..."), this);
+    connect(m_addChannelsGroupAction, &QAction::triggered, this, &FixtureManager::addChannelsGroup);
 
     m_removeAction = new QAction(QIcon(":/edit_remove.png"),
                                  tr("Delete items"), this);
@@ -1233,6 +1270,18 @@ void FixtureManager::initActions()
     m_testAction->setEnabled(false);
     connect(m_testAction, SIGNAL(triggered(bool)),
             this, SLOT(slotTestFixture()));
+
+    m_locateAction = new QAction(QIcon(":/fixture.png"), tr("Locate"), this);
+    m_locateAction->setToolTip(tr("Flash this fixture at full intensity 3 times "
+                                  "to identify it on the rig."));
+    m_locateAction->setEnabled(false);
+    connect(m_locateAction, &QAction::triggered, this, &FixtureManager::slotLocateFixture);
+
+    m_resetAction = new QAction(QIcon(":/fixture.png"), tr("Reset"), this);
+    m_resetAction->setToolTip(tr("Send this fixture's reset command (only shown "
+                                 "when its definition has one)."));
+    m_resetAction->setEnabled(false);
+    connect(m_resetAction, &QAction::triggered, this, &FixtureManager::slotResetFixture);
 
     m_fadeConfigAction = new QAction(QIcon(":/fade.png"),
                                      tr("Channels Fade Configuration..."), this);
@@ -1307,15 +1356,15 @@ void FixtureManager::updateGroupMenu()
     foreach (QAction* a, m_groupMenu->actions())
         m_groupMenu->removeAction(a);
 
-    // Put all known fixture groups to the menu
+    // Put all known fixture groups to the menu. Creating a new one no longer
+    // lives here -- it's a right-click on the Fixture Groups root/a group
+    // folder instead (slotContextMenuRequested()) -- so every entry from
+    // here on is a real existing group with valid data().
     foreach (FixtureGroup* grp, m_doc->fixtureGroups())
     {
         QAction* a = m_groupMenu->addAction(grp->name());
         a->setData((qulonglong) grp);
     }
-
-    // Put a new group action to the group menu
-    m_groupMenu->addAction(m_newGroupAction);
 
     // Put the group menu to the group action
     m_groupAction->setMenu(m_groupMenu);
@@ -1334,31 +1383,54 @@ void FixtureManager::initToolBar()
     // extended here to the other manager toolbars that never set one.
     toolbar->setIconSize(QSize(20, 20));
     layout()->setMenuBar(toolbar);
-    toolbar->addAction(m_addAction);
-    toolbar->addAction(m_addRGBAction);
-    toolbar->addAction(m_removeAction);
-    toolbar->addAction(m_propertiesAction);
-    toolbar->addAction(m_testAction);
-    toolbar->addAction(m_fadeConfigAction);
-    toolbar->addSeparator();
-    toolbar->addAction(m_groupAction);
-    toolbar->addAction(m_unGroupAction);
-    toolbar->addSeparator();
-    toolbar->addAction(m_moveUpAction);
-    toolbar->addAction(m_moveDownAction);
-    toolbar->addSeparator();
-    toolbar->addAction(m_importAction);
-    toolbar->addAction(m_exportAction);
-    toolbar->addAction(m_remapAction);
 
-    // Discrete expand/collapse-all for the group tree.
-    toolbar->addSeparator();
-    toolbar->addAction(m_expandAllAction);
-    toolbar->addAction(m_collapseAllAction);
+    // Trimmed to creation-only actions (2026-09-03 modernization pass):
+    // Properties/Test/Remove/Ungroup/Move Up/Down are all selection- or
+    // row-dependent, so they now live only in the tree context menus
+    // (slotContextMenuRequested() / slotChannelGroupContextMenuRequested()),
+    // matching Connections/Devices' toolbar-free convention. Import/Export/
+    // Remap/Fade Configuration are document-wide, not row-dependent either —
+    // those moved to App's "Fixtures" menu bar entry (populateFixturesMenu()).
+    // Expand/Collapse-all moved into the fixture tree's context menu.
+    // "Add fixture to group..." (m_groupAction) is also selection-dependent
+    // (it assigns THIS selection to an existing group) -- dropped from the
+    // toolbar too, staying only in the fixture context menu. Group CREATION
+    // moved off this toolbar entirely, onto the Fixture Groups root/a group
+    // folder's own right-click ("New Group...", see
+    // slotContextMenuRequested()) instead of a menu-bar/toolbar action.
 
-    QToolButton* btn = qobject_cast<QToolButton*> (toolbar->widgetForAction(m_groupAction));
-    Q_ASSERT(btn != NULL);
-    btn->setPopupMode(QToolButton::InstantPopup);
+    // "Add" dropdown (Add Fixture.../Add RGB panel...) — consolidates what
+    // used to be two separate always-visible buttons. Fixtures-tab only;
+    // hidden on the Channel Groups tab in favor of m_addChannelsGroupAction.
+    QToolButton* addBtn = new QToolButton(toolbar);
+    addBtn->setText(tr("Add"));
+    addBtn->setIcon(QIcon(":/edit_add.png"));
+    addBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    addBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu* addMenu = new QMenu(addBtn);
+    addMenu->addAction(m_addAction);
+    addMenu->addAction(m_addRGBAction);
+    addBtn->setMenu(addMenu);
+    m_addFixtureButtonAction = toolbar->addWidget(addBtn);
+
+    // addBtn is a plain QToolButton, not an action-backed toolbar button, so
+    // it doesn't automatically gray out when its menu's actions do (e.g.
+    // Operate mode, via slotModeChanged()) -- mirror m_addAction's enabled
+    // state onto it explicitly. m_addAction and m_addRGBAction are always
+    // enabled/disabled together in slotModeChanged(), so tracking either is
+    // equivalent.
+    connect(m_addAction, &QAction::changed, addBtn, [addBtn, this]() {
+        addBtn->setEnabled(m_addAction->isEnabled());
+    });
+    addBtn->setEnabled(m_addAction->isEnabled());
+
+    toolbar->addAction(m_addChannelsGroupAction);
+
+    // Initial per-tab visibility: the fixtures tab (index 0) is active at
+    // startup, and slotTabChanged() isn't guaranteed to fire before this
+    // (its QTabWidget::currentChanged connection is only made once both
+    // tabs already exist in initDataView(), called after this).
+    m_addChannelsGroupAction->setVisible(false);
 
     // Match the main window's icon/text display preference.
     applyToolbarLabelMode();
@@ -1377,6 +1449,15 @@ void FixtureManager::applyToolbarLabelMode()
 
     if (m_toolbar)
         m_toolbar->setToolButtonStyle(style);
+}
+
+void FixtureManager::populateFixturesMenu(QMenu *menu)
+{
+    menu->addAction(m_importAction);
+    menu->addAction(m_exportAction);
+    menu->addAction(m_remapAction);
+    menu->addSeparator();
+    menu->addAction(m_fadeConfigAction);
 }
 
 void FixtureManager::addFixture()
@@ -1525,14 +1606,6 @@ void FixtureManager::addChannelsGroup()
     }
     else
         delete group;
-}
-
-void FixtureManager::slotAdd()
-{
-    if (m_currentTabIndex == 1)
-        addChannelsGroup();
-    else
-        addFixture();
 }
 
 void FixtureManager::slotAddRGBPanel()
@@ -1901,26 +1974,6 @@ void FixtureManager::editChannelGroupProperties()
     }
 }
 
-int FixtureManager::headCount(const QList <QTreeWidgetItem*>& items) const
-{
-    int count = 0;
-    QListIterator <QTreeWidgetItem*> it(items);
-    while (it.hasNext() == true)
-    {
-        QTreeWidgetItem* item = it.next();
-        Q_ASSERT(item != NULL);
-
-        QVariant var = item->data(KColumnName, PROP_ID);
-        if (var.isValid() == false)
-            continue;
-
-        Fixture* fxi = m_doc->fixture(var.toUInt());
-        count += fxi->heads();
-    }
-
-    return count;
-}
-
 void FixtureManager::slotProperties()
 {
     if (m_currentTabIndex == 1)
@@ -1940,6 +1993,32 @@ void FixtureManager::slotTestFixture()
     Monitor::createAndShow(this, m_doc);
     if (Monitor::instance())
         Monitor::instance()->showFixturePropertiesById(var.toUInt());
+}
+
+void FixtureManager::slotLocateFixture()
+{
+    QTreeWidgetItem* item = m_fixtures_tree->currentItem();
+    if (!item)
+        return;
+    QVariant var = item->data(KColumnName, PROP_ID);
+    if (!var.isValid())
+        return;
+    Monitor::createAndShow(this, m_doc);
+    if (Monitor::instance())
+        Monitor::instance()->locateFixture(var.toUInt());
+}
+
+void FixtureManager::slotResetFixture()
+{
+    QTreeWidgetItem* item = m_fixtures_tree->currentItem();
+    if (!item)
+        return;
+    QVariant var = item->data(KColumnName, PROP_ID);
+    if (!var.isValid())
+        return;
+    Monitor::createAndShow(this, m_doc);
+    if (Monitor::instance())
+        Monitor::instance()->resetFixture(var.toUInt());
 }
 
 void FixtureManager::slotFadeConfig()
@@ -2004,37 +2083,12 @@ void FixtureManager::slotUnGroup()
 
 void FixtureManager::slotGroupSelected(QAction* action)
 {
-    FixtureGroup* grp = NULL;
-
-    if (action->data().isValid() == true)
-    {
-        // Existing group selected
-        grp = (FixtureGroup*) (action->data().toULongLong());
-        Q_ASSERT(grp != NULL);
-    }
-    else
-    {
-        // New Group selected.
-
-        // Suggest an equilateral grid
-        qreal side = sqrt(headCount(m_fixtures_tree->selectedItems()));
-        if (side != floor(side))
-            side += 1; // Fixture number doesn't provide a full square
-        if (side < 1)
-            side = 4;  // empty group: a small default grid to drop into
-
-        CreateFixtureGroup cfg(this);
-        cfg.setSize(QSize(side, side));
-        if (cfg.exec() != QDialog::Accepted)
-            return; // User pressed cancel
-
-        grp = new FixtureGroup(m_doc);
-        Q_ASSERT(grp != NULL);
-        grp->setName(cfg.name());
-        grp->setSize(cfg.size());
-        m_doc->addFixtureGroup(grp);
-        updateGroupMenu();
-    }
+    // m_groupMenu (this action's origin) only ever lists real existing
+    // groups now -- "New Group..." creation moved to a right-click on the
+    // Fixture Groups root/a group folder (slotContextMenuRequested()).
+    Q_ASSERT(action->data().isValid());
+    FixtureGroup* grp = (FixtureGroup*) (action->data().toULongLong());
+    Q_ASSERT(grp != NULL);
 
     // Assign selected fixture items to the group
     foreach (QTreeWidgetItem* item, m_fixtures_tree->selectedItems())
@@ -2481,33 +2535,80 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 
     // Base fixture/group actions, appended LAST (after every row/selection-
     // specific block above), matching ConnectionsTree's "specific-to-this-row
-    // first, generic last" convention (appendUniversalMenuActions()). Add/
-    // Add RGB panel/Group are genuinely universal -- they create something
-    // new and make sense from any row, including empty space or a Power/
-    // Universe row with nothing fixture-like selected (m_ctxUniverse,
-    // computed above, still gives "Add fixture..." a sensible default
-    // universe from a universe row even with no fixture selection; Group's
-    // dropdown offers "New Group..." too, which is exactly why
-    // slotModeChanged() force-enables it regardless of selection). Properties/
-    // Test/Remove/Ungroup all act ON an existing fixture-or-group selection,
-    // so unlike the old unconditional block, they're only listed when one
-    // exists -- previously they showed up (merely disabled) on every right-
-    // click, including the Power root, a universe row, or empty space, none
-    // of which they apply to.
+    // first, generic last" convention (appendUniversalMenuActions()).
+    //
+    // Add fixture/Add RGB panel create something wholly new, unrelated to
+    // whatever row was actually clicked -- Branson: right-clicking a fixture
+    // shouldn't offer to create an unrelated one, only a root-ish context
+    // (empty space, Power root, Universes root, a universe row, the Fixture
+    // Groups root/a group folder -- anywhere with no fixture-or-group
+    // selection) should. Properties/Test/Edit Definition/Add-to-group/
+    // Remove/Ungroup all act ON an existing fixture-or-group selection, so
+    // they're the exact opposite: only listed when one exists.
     const bool haveFixtureOrGroupSelection = selFixtures.isEmpty() == false
                                            || selGroups.isEmpty() == false;
     if (menu.isEmpty() == false)
         menu.addSeparator();
-    menu.addAction(m_addAction);
-    menu.addAction(m_addRGBAction);
-    menu.addAction(m_groupAction);
     if (haveFixtureOrGroupSelection)
     {
         menu.addAction(m_propertiesAction);
         menu.addAction(m_testAction);
+        menu.addAction(m_locateAction);
+        menu.addAction(m_resetAction);
+        menu.addAction(m_groupAction);
         menu.addAction(m_removeAction);
         menu.addAction(m_unGroupAction);
     }
+    else
+    {
+        menu.addAction(m_addAction);
+        menu.addAction(m_addRGBAction);
+    }
+
+    // "New Group..." -- offered when the click landed on the Fixture Groups
+    // root or one of its sub-folders (both carry PROP_FOLDER; see
+    // FixtureTreeWidget::groupFolderItem()), filing the new group at that
+    // folder's path. Moved here from "Add fixture to group..."'s dropdown --
+    // Branson wanted group creation to live on the tree's own root/folder
+    // nodes instead, matching how "Add power source..." lives on the Power
+    // root rather than a menu-bar/toolbar action.
+    QString newGroupPath;
+    bool offerNewGroup = false;
+    if (QTreeWidgetItem *clickedItem = m_fixtures_tree->itemAt(pos))
+    {
+        const QVariant folderVar = clickedItem->data(KColumnName, PROP_FOLDER);
+        if (folderVar.isValid())
+        {
+            offerNewGroup = true;
+            newGroupPath = folderVar.toString();
+        }
+    }
+    if (offerNewGroup)
+        menu.addAction(m_newGroupAction);
+
+    // "Edit Fixture Definition..." -- opens the standalone Fixture Editor on
+    // exactly this fixture's .qxf, not Fixture Manager's own Properties
+    // dialog (patch/address/mode) which is a different thing entirely.
+    // Only offered for a single real fixture with an actual definition file
+    // -- a generic dimmer (fixtureDef() == NULL) has no .qxf to edit, and
+    // editing "the definition" of a multi-fixture or group selection isn't
+    // a coherent single action.
+    QAction *editDefinition = NULL;
+    if (selFixtures.size() == 1 && selGroups.isEmpty())
+    {
+        Fixture *fxi = m_doc->fixture(selFixtures.first());
+        if (fxi != NULL && fxi->fixtureDef() != NULL &&
+            fxi->fixtureDef()->definitionSourceFile().isEmpty() == false)
+        {
+            editDefinition = menu.addAction(tr("Edit Fixture Definition..."));
+        }
+    }
+
+    // Tree-wide view toggles, always available regardless of selection —
+    // same "generic, appended last" convention, moved here from the toolbar.
+    menu.addSeparator();
+    menu.addAction(m_expandAllAction);
+    menu.addAction(m_collapseAllAction);
 
     QAction *chosen = menu.exec(QCursor::pos());
 
@@ -2518,6 +2619,35 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 
     if (chosen == NULL)
         return;
+
+    if (offerNewGroup && chosen == m_newGroupAction)
+    {
+        // Suggest an equilateral grid, same heuristic slotGroupSelected() used
+        // for a selection-driven "New Group..." -- no selection is implied
+        // here (this is a root/folder click, not a fixture one), so this
+        // always takes the empty-group default (a small grid to drop into).
+        CreateFixtureGroup cfg(this);
+        cfg.setSize(QSize(4, 4));
+        if (cfg.exec() == QDialog::Accepted)
+        {
+            FixtureGroup *grp = new FixtureGroup(m_doc);
+            grp->setName(cfg.name());
+            grp->setSize(cfg.size());
+            grp->setPath(newGroupPath);
+            m_doc->addFixtureGroup(grp);
+            updateGroupMenu();
+            updateView();
+        }
+        return;
+    }
+
+    if (editDefinition != NULL && chosen == editDefinition)
+    {
+        Fixture *fxi = m_doc->fixture(selFixtures.first());
+        if (fxi != NULL && fxi->fixtureDef() != NULL)
+            AppUtil::launchFixtureEditor(fxi->fixtureDef()->definitionSourceFile(), this);
+        return;
+    }
 
     if (rebuildComposite != NULL && chosen == rebuildComposite)
     {
@@ -2638,6 +2768,35 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                 m_power->refresh();
         }
     }
+}
+
+void FixtureManager::slotChannelGroupContextMenuRequested(const QPoint &pos)
+{
+    QMenu menu(this);
+
+    // Creation is always offered, same as the fixtures tree's Add actions.
+    menu.addAction(m_addChannelsGroupAction);
+
+    // Properties/Move Up/Move Down only make sense for a single selected
+    // group; Remove works for one or several. Mirrors the enable-state
+    // logic slotChannelsGroupSelectionChanged() already maintains for these
+    // same actions' toolbar-button days — read fresh here since a menu
+    // should omit what doesn't apply, not just gray it out (matching the
+    // fixtures tree context menu's convention).
+    const int selectedCount = m_channel_groups_tree->selectedItems().size();
+    if (selectedCount > 0)
+    {
+        menu.addSeparator();
+        if (selectedCount == 1)
+        {
+            menu.addAction(m_propertiesAction);
+            menu.addAction(m_moveUpAction);
+            menu.addAction(m_moveDownAction);
+        }
+        menu.addAction(m_removeAction);
+    }
+
+    menu.exec(QCursor::pos());
 }
 
 void FixtureManager::slotGroupFolderRenamed(const QString& oldPath,

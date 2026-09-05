@@ -84,10 +84,15 @@ const char* FixtureTreeWidget::groupDragMimeType()
 
 QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
 {
-    if (path.isEmpty())
-        return invisibleRootItem();
+    // updateTree() seeds m_groupFolders[QString()] with the "Fixture Groups"
+    // root when groups are shown, so the empty-path case normally resolves
+    // there, not to the tree's own invisible root -- falling back to that
+    // only covers contexts where no such root was ever seeded (m_showGroups
+    // false, e.g. a plain fixture-selection dialog).
     if (m_groupFolders.contains(path))
         return m_groupFolders[path];
+    if (path.isEmpty())
+        return invisibleRootItem();
 
     const int slash = path.lastIndexOf('/');
     const QString parentPath = (slash < 0) ? QString() : path.left(slash);
@@ -767,9 +772,45 @@ void FixtureTreeWidget::updateTree()
 
     if (m_showGroups == true)
     {
+        // A dedicated "Fixture Groups" root, peer to "Power" and
+        // "Universes" below -- always present (even with zero groups yet)
+        // so group CREATION has a right-clickable home of its own
+        // (FixtureManager::slotContextMenuRequested()'s "New Group..."),
+        // instead of a toolbar/menu-bar action. Drop-enabled and tagged with
+        // an empty PROP_FOLDER so dragging a group onto it un-files it from
+        // any sub-folder, same as dropping onto any other folder node.
+        //
+        // setData()/setFlags() emit itemChanged() SYNCHRONOUSLY (see the
+        // keyPressEvent()/slotItemChanged() comments above for the other
+        // place this file already works around it). Every ordinary folder
+        // item is immune -- slotItemChanged() only treats a PROP_FOLDER item
+        // as user-renamed when its display text differs from its path's
+        // last segment, which is never true for a freshly-created folder
+        // (both come from the same string). This root breaks that
+        // invariant on purpose (text "Fixture Groups", path "") -- without
+        // blockSignals, that mismatch fooled slotItemChanged() into treating
+        // construction as a rename, which emitted groupFolderRenamed("",
+        // "Fixture Groups") into FixtureManager::slotGroupFolderRenamed(),
+        // which re-entered updateTree() (via updateView()) *while this very
+        // call was still building it* -- clear() there deleted the
+        // groupsRoot this call still held a pointer to, and everything after
+        // used it dangling. Crashed intermittently (classic use-after-free:
+        // heap-state dependent), reported twice with an identical
+        // EXC_BAD_ACCESS in FixtureTreeWidget::updateTree() -> ...
+        // setFlags() -> QTreeWidgetPrivate::dataChanged().
+        blockSignals(true);
+        QTreeWidgetItem *groupsRoot = new QTreeWidgetItem(this);
+        groupsRoot->setText(KColumnName, tr("Fixture Groups"));
+        groupsRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+        groupsRoot->setData(KColumnName, PROP_FOLDER, QString());
+        groupsRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+        blockSignals(false);
+        groupsRoot->setExpanded(true);
+        m_groupFolders[QString()] = groupsRoot;
+
         foreach (FixtureGroup* grp, m_doc->fixtureGroups())
         {
-            // Nest the group under its folder path (if any).
+            // Nest the group under its folder path (if any), under the root.
             QTreeWidgetItem* grpItem = new QTreeWidgetItem(groupFolderItem(grp->path()));
             updateGroupItem(grpItem, grp);
         }
@@ -844,21 +885,49 @@ void FixtureTreeWidget::updateTree()
     }
 
     // In the Fixture Manager (groups shown) keep all universes tidily under a
-    // single "Universes" folder, separate from the fixture-group folders.
+    // single "Universes" folder, separate from the fixture-group folders --
+    // always present (even with zero fixtures patched into it yet), same
+    // "always present" convention as Fixture Groups/Power above, so a
+    // universe added via the Connections/Devices editor shows up here
+    // immediately with a right-clickable row to patch the first fixture
+    // into. Previously this whole folder (and every universe row in it) was
+    // only ever created by iterating m_doc->fixtures() below, so a universe
+    // with no fixture patched into it yet -- exactly the state right after
+    // adding one in Connections -- had no row here at all: real bug, not a
+    // display gap.
     QTreeWidgetItem *universesRoot = NULL;
+
+    if (m_showGroups == true)
+    {
+        universesRoot = new QTreeWidgetItem(this);
+        universesRoot->setText(KColumnName, tr("Universes"));
+        universesRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+        universesRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        universesRoot->setExpanded(true);
+
+        for (quint32 uni = 0; uni < m_doc->inputOutputMap()->universesCount(); uni++)
+        {
+            QTreeWidgetItem *topItem = new QTreeWidgetItem(universesRoot);
+            QString uniLabel = m_doc->inputOutputMap()->getUniverseNameByID(uni);
+            const QString dest = universeDestination(m_doc, uni);
+            if (!dest.isEmpty())
+                uniLabel += QString("   —   %1").arg(dest);
+            topItem->setText(KColumnName, uniLabel);
+            topItem->setIcon(KColumnName, QIcon(":/folder.png"));
+            topItem->setData(KColumnName, PROP_UNIVERSE, uni);
+            topItem->setExpanded(true);
+            if (m_channelSelection)
+            {
+                topItem->setFlags(topItem->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsAutoTristate);
+                topItem->setCheckState(KColumnName, Qt::Unchecked);
+            }
+            m_universesCount++;
+        }
+    }
 
     foreach (Fixture* fixture, m_doc->fixtures())
     {
         Q_ASSERT(fixture != NULL);
-
-        if (m_showGroups && universesRoot == NULL)
-        {
-            universesRoot = new QTreeWidgetItem(this);
-            universesRoot->setText(KColumnName, tr("Universes"));
-            universesRoot->setIcon(KColumnName, QIcon(":/folder.png"));
-            universesRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-            universesRoot->setExpanded(true);
-        }
 
         // The universe nodes live under universesRoot (or at top level when
         // groups aren't shown, e.g. in fixture-selection dialogs).
@@ -880,7 +949,8 @@ void FixtureTreeWidget::updateTree()
                 }
             }
         }
-        // Haven't found this universe node ? Create it.
+        // Not pre-seeded above (m_showGroups == false, e.g. a fixture-
+        // selection dialog) ? Create it lazily, same as before.
         if (topItem == NULL)
         {
             topItem = new QTreeWidgetItem(uniParent);

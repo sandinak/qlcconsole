@@ -235,6 +235,7 @@ if(WIN32)
     target_include_directories(${module_name} PUBLIC ../../hotplugmonitor/src)
 endif()
 
+
 install(TARGETS ${module_name}
     LIBRARY DESTINATION ${INSTALLROOT}/${LIBSDIR}
     RUNTIME DESTINATION ${INSTALLROOT}/${LIBSDIR}

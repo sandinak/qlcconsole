@@ -1430,40 +1430,28 @@ void App::initToolBar()
     m_toolbar->setContextMenuPolicy(Qt::CustomContextMenu);
     // Matches every per-manager toolbar's icon size (Fixture/Function/Show
     // Manager, Connections, ...), all already 20x20 — this was the one
-    // toolbar still at the tab bar's larger 24x24. Smaller icons shrink the
-    // whole row height, which matters more here than anywhere else: this
-    // is the one toolbar merged into the macOS title bar itself
-    // (setUnifiedTitleAndToolBarOnMac below), so its height is space taken
-    // from the title bar, not just another row in the window.
+    // toolbar still at the tab bar's larger 24x24.
     m_toolbar->setIconSize(QSize(20, 20));
     addToolBar(m_toolbar);
 
-#if defined(__APPLE__) || defined(Q_OS_MAC)
-    // Merge this toolbar into the title bar (native macOS "unified toolbar"
-    // look) instead of a separate strip below it — Branson asked for this
-    // directly, to use screen real estate more efficiently. Only applies to
-    // this app-level toolbar (Panic/Blackout/Blind/Operate); the per-manager
-    // toolbars (Fixture Manager's Add/Delete/Properties/etc.) are embedded
-    // inside each tab's own widget via layout()->setMenuBar()/addWidget(),
-    // not QMainWindow toolbars, so this API doesn't reach them.
-    setUnifiedTitleAndToolBarOnMac(true);
-
-    // Icon-only, locked, regardless of the general "Toolbar Style"
-    // preference (View menu) that governs every other toolbar and the tab
-    // bar: a button tall enough for a text label under its icon makes the
-    // unified chrome grow to fit it, which is what actually produced the
-    // two-row look Branson flagged from a screenshot ("icons at the top of
-    // the bar, not below the title line") — Qt was still rendering ONE
-    // unified area, just a tall one, with the title text effectively
-    // becoming its own line inside that taller area. Icon-only is short
-    // enough to sit level with the title text on the single native row,
-    // matching how every stock macOS app with a unified toolbar does this
-    // (Safari, Mail, Xcode, ...) — none of them label their title-bar
-    // buttons either. The general preference still governs every per-
-    // manager toolbar and the tab bar (see slotSetTabLabelMode below); it
-    // just does not reach this one, on purpose.
-    m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-#endif
+    // A macOS-native "unified title bar" merge (icons sitting level with the
+    // window title, like Safari/Mail) was attempted here and repeatedly
+    // failed for months of iteration -- root-caused 2026-09-03: Qt's
+    // setUnifiedTitleAndToolBarOnMac() on the Cocoa platform plugin never
+    // actually creates a native NSToolbar object (confirmed both by a
+    // documented Qt/Cocoa limitation and, directly, by instrumenting
+    // AppKit's own NSWindow.toolbar and finding it nil at every check, on
+    // two separate machines). Every native call this toolbar tried
+    // (NSWindowToolbarStyleUnifiedCompact included) was therefore setting a
+    // property on a toolbar that never existed -- structurally incapable of
+    // doing anything, not a timing bug. A real fix needs an actual
+    // NSToolbar built in Objective-C++; deliberately not pursued (Branson's
+    // call) since it's macOS-only new surface area and Windows/Linux have no
+    // equivalent "unified title bar" concept to begin with -- a toolbar as
+    // its own row is already the normal, correct look there. This toolbar
+    // is now a plain, ordinary QMainWindow toolbar on every platform,
+    // following the same "Toolbar Style" preference as everything else
+    // (applyTabLabelMode()) instead of being locked to icon-only.
 
     // Native-first layout: the full command set lives in the menu bar (see
     // initMenuBar). The toolbar keeps only the handful of live show controls
@@ -1633,6 +1621,32 @@ void App::initMenuBar()
         if (m_statusGrandMasterBox != NULL)
             m_statusGrandMasterBox->setVisible(on);
     });
+
+    /* ---- Fixtures: document-wide fixture actions ----
+     * Import/Export/Remap and Channels Fade Configuration used to live on
+     * Fixture Manager's own toolbar, but none of them act on a specific
+     * tree row (they're document-wide), so a right-click context menu
+     * doesn't fit them the way it fits Properties/Remove — this menu is
+     * their home instead (2026-09-03 modernization pass). */
+    if (FixtureManager::instance() != NULL)
+    {
+        QMenu* fixturesMenu = mb->addMenu(tr("F&ixtures"));
+
+        // Launches the standalone Fixture Editor (qlcconsole-fixtureeditor)
+        // — editing fixture DEFINITIONS (channels/modes/capabilities), not
+        // Fixture Manager's own patch/properties. Branson specifically asked
+        // for the editor here, not a jump to the Fixture Manager tab (which
+        // is already one click away via its own tab, and via View's jump
+        // list) — this menu's whole reason to exist is actions that don't
+        // live anywhere else yet.
+        QAction* editorAction = fixturesMenu->addAction(tr("Fixture Editor..."));
+        connect(editorAction, &QAction::triggered, this, [this]() {
+            AppUtil::launchFixtureEditor(QString(), this);
+        });
+        fixturesMenu->addSeparator();
+
+        FixtureManager::instance()->populateFixturesMenu(fixturesMenu);
+    }
 
     /* ---- Control: playback + live editing ---- */
     QMenu* ctrlMenu = mb->addMenu(tr("&Control"));
@@ -3050,18 +3064,12 @@ void App::applyTabLabelMode()
     }
 
     // Apply the same mode to the main toolbar so "Text only" hides toolbar
-    // icons and "Icons only" hides toolbar text labels.
-    //
-    // Except on macOS: initToolBar() locks it to icon-only there and this
-    // must not undo that. A text label under an icon makes the button tall
-    // enough that Qt's unified title/toolbar chrome grows to fit it, which
-    // is what actually produced a visible two-row title bar rather than
-    // icons sitting level with the title text on one native row — see
-    // initToolBar()'s own comment on this exact toolbar.
-#if defined(__APPLE__) || defined(Q_OS_MAC)
-    if (m_toolbar)
-        m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-#else
+    // icons and "Icons only" hides toolbar text labels. Used to be locked to
+    // icon-only on macOS while this toolbar was (unsuccessfully) trying to
+    // merge into the native title bar -- that attempt is gone (see
+    // initToolBar()'s comment: no real NSToolbar was ever involved, so
+    // nothing was actually merging), so this toolbar now follows the same
+    // general preference as every other toolbar and platform.
     if (m_toolbar)
     {
         switch (m_tabLabelMode)
@@ -3077,7 +3085,6 @@ void App::applyTabLabelMode()
             break;
         }
     }
-#endif
 
     // Keep the 2D monitor window's toolbars in sync if it is open.
     if (Monitor::instance() != NULL)

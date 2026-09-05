@@ -219,6 +219,8 @@ void Monitor::slotFunctionStarted(quint32 id)
 
 Monitor::~Monitor()
 {
+    cancelAllLocateSessions();
+
     while (m_monitorFixtures.isEmpty() == false)
         delete m_monitorFixtures.takeFirst();
 
@@ -3505,8 +3507,10 @@ void Monitor::slotAddTarget()
     t->setX(float(mm.x() / 1000.0));
     t->setY(float(mm.y() / 1000.0));
     t->setZ(0.0f);
+    t->setLayerId(m_props->activeLayerId());   // land on the selected layer
 
     m_graphicsView->updateTargets();
+    if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 
     // Open the edit dialog; if confirmed, auto-create a linked PanTilt palette.
@@ -4656,6 +4660,107 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+
+struct Monitor::LocateSession
+{
+    std::shared_ptr<FixtureLocate> src;
+    QTimer *timer = nullptr;
+    int step = 0;
+};
+
+void Monitor::cancelAllLocateSessions()
+{
+    qDeleteAll(m_locateSessions);
+    m_locateSessions.clear();
+}
+
+void Monitor::locateFixture(quint32 fxId)
+{
+    // Re-triggering while already flashing cancels it early -- matches the
+    // rig editor's own Locate button, which stops on a second click too.
+    auto it = m_locateSessions.find(fxId);
+    if (it != m_locateSessions.end())
+    {
+        delete it.value();
+        m_locateSessions.erase(it);
+        return;
+    }
+
+    Fixture *fxi = m_doc->fixture(fxId);
+    if (fxi == nullptr)
+        return;
+
+    LocateSession *session = new LocateSession;
+    session->src = std::make_shared<FixtureLocate>(fxi, m_doc);
+    session->src->setOn(true);
+    session->step = 1;
+    session->timer = new QTimer(this);
+    session->timer->setInterval(300);
+    connect(session->timer, &QTimer::timeout, this, [this, fxId]() {
+        auto sit = m_locateSessions.find(fxId);
+        if (sit == m_locateSessions.end())
+            return;
+        LocateSession *s = sit.value();
+        ++s->step;
+        // Steps 1,3,5 = on (300 ms); steps 2,4,6 = off (150 ms); step 7 = done
+        // -- same 3-flash cadence as the rig editor's own Locate button.
+        if (s->step > 6)
+        {
+            m_locateSessions.erase(sit);
+            delete s;
+            return;
+        }
+        const bool isOn = (s->step % 2 == 1);
+        s->src->setOn(isOn);
+        s->timer->setInterval(isOn ? 300 : 150);
+    });
+    m_locateSessions.insert(fxId, session);
+    session->timer->start();
+}
+
+void Monitor::resetFixture(quint32 fxId)
+{
+    Fixture *fxi = m_doc->fixture(fxId);
+    if (fxi == nullptr || fxi->fixtureMode() == nullptr)
+        return;
+
+    // Same "reset" Maintenance-capability detection the Fixture Test
+    // quick-dialog uses (see slotTestFixture()'s dialog further down) --
+    // duplicated rather than shared since that dialog also handles Identify,
+    // which this right-click action doesn't.
+    int resetCh = -1;
+    uchar resetVal = 0;
+    for (int ci = 0; ci < fxi->fixtureMode()->channels().count(); ci++)
+    {
+        const QLCChannel *ch = fxi->fixtureMode()->channel(ci);
+        if (!ch || ch->group() != QLCChannel::Maintenance)
+            continue;
+        for (const QLCCapability *cap : ch->capabilities())
+        {
+            if (cap->name().toLower().contains("reset"))
+            {
+                resetCh = ci;
+                resetVal = uchar((cap->min() + cap->max()) / 2);
+                break;
+            }
+        }
+        if (resetCh >= 0)
+            break;
+    }
+    if (resetCh < 0)
+        return;
+
+    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+    const quint32 u = fxi->universe();
+    if (u < quint32(ua.size()))
+    {
+        Universe *uni = ua[int(u)];
+        uni->write(int(fxi->address()) + resetCh, resetVal);
+        const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
+        uni->dumpOutput(pg, true);
+    }
+    m_doc->inputOutputMap()->releaseUniverses(false);
+}
 
 class TrussStripWidget : public QWidget
 {
@@ -6324,8 +6429,19 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     testRowLayout->addWidget(testModeCb, 1);
     testRowLayout->addWidget(testTargetCb, 1);
     testRowLayout->addWidget(testBtn);
-    testRowLayout->addWidget(locateBtn);
     rigForm->addRow(tr("Test orientation:"), testRowWidget);
+
+    // Locate (flash-to-identify) is useful for ANY fixture, not just movers —
+    // an LED bar/wash has no orientation to test but still needs identifying
+    // on the rig. Kept as its own row, separate from Test Orientation (which
+    // is hidden entirely below for a non-mover, since Pan/Tilt-only controls
+    // mean nothing without them) so Locate stays visible regardless.
+    QWidget *locateRowWidget = new QWidget;
+    QHBoxLayout *locateRowLayout = new QHBoxLayout(locateRowWidget);
+    locateRowLayout->setContentsMargins(0, 0, 0, 0);
+    locateRowLayout->addWidget(locateBtn);
+    locateRowLayout->addStretch();
+    rigForm->addRow(tr("Identify:"), locateRowWidget);
 
     connect(testModeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int) {
         testTargetCb->setVisible(testModeCb->currentData().toInt() == 2);
@@ -6342,6 +6458,15 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     trussSideCb->setCurrentIndex(trussSideCb->findData(int(rp.trussMountSide)));
     trussCrossCb->setCurrentIndex(trussCrossCb->findData(
         rp.trussCross < 0.0f ? -1 : (rp.trussCross > 0.0f ? +1 : 0)));
+    // Remember the bucketed index this dialog loaded with. Left/Centered/Right
+    // is only a coarse 3-state PROXY for what's actually a continuous value —
+    // a fixture can sit anywhere across a truss via canvas drag (see the
+    // drag-to-any-position truss work) — so Save must only re-encode this
+    // combo into rp.trussCross when the user actually changed it; otherwise a
+    // precisely-dragged fixture gets silently snapped onto one of only 3
+    // discrete positions every time this dialog is opened and accepted, even
+    // for an edit that has nothing to do with truss placement.
+    const int initialTrussCrossIndex = trussCrossCb->currentIndex();
     for (int i = 0; i < deckCb->count(); ++i)
         if (deckCb->itemData(i).toUInt() == rp.deckPlatformId)
         { deckCb->setCurrentIndex(i); break; }
@@ -6830,7 +6955,12 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     { const int side = mountCb->currentData(Qt::UserRole + 1).toInt();
       if (side >= 0) newRp.trussMountSide = side; }
     // Across-truss position: Left/Right map to ± half the selected truss width
-    // (onto a chord); Centered = 0.
+    // (onto a chord); Centered = 0. Only touched when the user actually
+    // changed the selection (see initialTrussCrossIndex above) — otherwise
+    // newRp.trussCross keeps whatever continuous value canvas dragging last
+    // set, instead of being re-snapped to one of these 3 discrete positions
+    // on every unrelated save.
+    if (trussCrossCb->currentIndex() != initialTrussCrossIndex)
     {
         const int crossSel = trussCrossCb->currentData().toInt();
         float halfW = 0.15f;   // fallback ≈ half a 12" truss
@@ -6890,7 +7020,14 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         Truss *t = m_props->truss(newRp.trussId);
         if (t)
         {
-            QVector3D wp = t->positionAt(newRp.trussOffset);
+            // fixtureRigPosition(), not a raw t->positionAt() -- the latter is
+            // the truss CENTERLINE only, ignoring trussCross entirely, which
+            // would silently recentre an off-centre fixture back onto the
+            // centerline on every offset edit. setFixtureRigProps(newRp) just
+            // ran above, so this reads the JUST-STORED rig (cross included)
+            // via the same authoritative derivation aimsolver/effectinstance
+            // already use, rather than duplicating a narrower version of it.
+            QVector3D wp = m_props->fixtureRigPosition(fxItem->fixtureID());
             QPointF tp(wp.x() * 1000.0, wp.y() * 1000.0);
             // Centre the icon on the truss line (see MonitorGraphicsView::halfIcon).
             const QPointF tpPx = m_graphicsView->realPositionToPixels(tp.x(), tp.y());

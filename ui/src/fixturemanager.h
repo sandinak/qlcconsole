@@ -67,6 +67,12 @@ public:
      *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
     void applyToolbarLabelMode();
 
+    /** Append the document-wide fixture actions (Import/Export/Remap/Fade
+     *  Configuration) to @p menu — used by App to build its "Fixtures" menu
+     *  bar entry. These aren't tied to any tree row, so they live in the
+     *  menu bar rather than a right-click context menu or the toolbar. */
+    void populateFixturesMenu(QMenu *menu);
+
 private:
     /** The singleton FixtureManager instance */
     static FixtureManager* s_instance;
@@ -236,17 +242,15 @@ private:
     /** Edit properties for the selected channels group */
     void editChannelGroupProperties();
 
-    /** Count the number of heads in the list of fixture items */
-    int headCount(const QList <QTreeWidgetItem*>& items) const;
-
     QString createDialog(bool import);
 
 private slots:
-    void slotAdd();
     void slotAddRGBPanel();
     void slotRemove();
     void slotProperties();
     void slotTestFixture();
+    void slotLocateFixture();
+    void slotResetFixture();
     void slotFadeConfig();
     void slotRemap();
     void slotUnGroup();
@@ -258,6 +262,9 @@ private slots:
 
     /** Callback for right mouse button clicks over a fixture item */
     void slotContextMenuRequested(const QPoint& pos);
+
+    /** Callback for right mouse button clicks over a channel group item */
+    void slotChannelGroupContextMenuRequested(const QPoint& pos);
 
     /** Move the dropped fixture groups into folder $destPath ("" = root). */
     void slotGroupsDroppedOnFolder(const QList<quint32>& groupIds, const QString& destPath);
@@ -273,9 +280,25 @@ private slots:
 private:
     QAction* m_addAction;
     QAction* m_addRGBAction;
+    /** Toolbar-only container action for the "Add" dropdown button (Add
+     *  Fixture.../Add RGB Panel...) — toggled visible/hidden per active tab
+     *  in slotTabChanged(), separately from m_addAction/m_addRGBAction
+     *  themselves, which stay usable from the fixture context menu on
+     *  either state. */
+    QAction* m_addFixtureButtonAction;
+    /** "Add Channel Group..." — the Channel Groups tab's own creation
+     *  action, split out from m_addAction so its toolbar label is never
+     *  wrong (previously m_addAction did double duty, dispatching by tab in
+     *  slotAdd() with only a tooltip hinting at the swap). */
+    QAction* m_addChannelsGroupAction;
     QAction* m_removeAction;
     QAction* m_propertiesAction;
     QAction* m_testAction;
+    /** Flash-to-identify and send-reset, reachable directly from the context
+     *  menu instead of only via the "Test Fixture..." dialog's own buttons —
+     *  same single-fixture gating as m_testAction (see slotModeChanged()). */
+    QAction* m_locateAction;
+    QAction* m_resetAction;
     QAction* m_fadeConfigAction;
     QAction* m_remapAction;
     QAction* m_groupAction;

@@ -29,6 +29,7 @@ add_executable(${module_name} WIN32
     edithead.cpp edithead.h edithead.ui
     editmode.cpp editmode.h editmode.ui
     editphysical.cpp editphysical.h editphysical.ui
+    fixturebrowser.cpp fixturebrowser.h
     fixtureeditor.cpp fixtureeditor.h fixtureeditor.ui
     main.cpp
     util.h
@@ -45,6 +46,7 @@ target_link_libraries(${module_name} PRIVATE
     Qt${QT_MAJOR_VERSION}::Core
     Qt${QT_MAJOR_VERSION}::Gui
     Qt${QT_MAJOR_VERSION}::Widgets
+    Qt${QT_MAJOR_VERSION}::Network
     qlcplusengine
 )
 

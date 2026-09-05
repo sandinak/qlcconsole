@@ -46,17 +46,22 @@ StartupWindow::StartupWindow(int totalSteps, QWidget *parent)
     m_layout = new QVBoxLayout(this);
 
     QHBoxLayout *header = new QHBoxLayout;
+    // Stretches on both sides centre the whole icon+title+version block in
+    // the window, instead of pinning it to the left edge.
+    header->addStretch();
     QLabel *icon = new QLabel(this);
     icon->setPixmap(QIcon(":/qlcconsole.png").pixmap(48, 48));
     header->addWidget(icon);
 
     QVBoxLayout *titleBox = new QVBoxLayout;
     QLabel *name = new QLabel(QStringLiteral(APPNAME), this);
+    name->setAlignment(Qt::AlignHCenter);
     QFont nameFont = name->font();
     nameFont.setBold(true);
     nameFont.setPointSize(nameFont.pointSize() + 4);
     name->setFont(nameFont);
     QLabel *version = new QLabel(QStringLiteral(APPVERSION), this);
+    version->setAlignment(Qt::AlignHCenter);
     // Every theme in App::applyTheme() sets WindowText explicitly for
     // exactly this reason -- it's guaranteed readable against Window.
     // palette(mid) (shadow/groove tone, never meant for text) was tried

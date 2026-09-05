@@ -22,9 +22,11 @@
 #include <QHeaderView>
 #include <QTreeWidget>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QToolButton>
 #include <QFileDialog>
 #include <QCloseEvent>
+#include <QFileInfo>
 #include <QSettings>
 #include <QComboBox>
 #include <QLineEdit>
@@ -34,6 +36,7 @@
 #include <QMenu>
 #include <QList>
 #include <QUrl>
+#include <QDir>
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
@@ -254,6 +257,21 @@ bool QLCFixtureEditor::checkManufacturerModel()
     return true;
 }
 
+bool QLCFixtureEditor::isUnderSystemDefinitionDirectory(const QString& path) const
+{
+    const QString sysDir = QDir::cleanPath(QLCFixtureDefCache::systemDefinitionDirectory().absolutePath());
+    const QString target = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+    return target == sysDir || target.startsWith(sysDir + "/");
+}
+
+QString QLCFixtureEditor::localOverridePath() const
+{
+    const QString man = m_fixtureDef->manufacturer().replace(" ", "-");
+    const QString mod = m_fixtureDef->model().replace(" ", "-");
+    const QDir dir = QLCFixtureDefCache::userDefinitionDirectory();
+    return dir.absoluteFilePath(QString("%1-%2%3").arg(man).arg(mod).arg(KExtFixture));
+}
+
 bool QLCFixtureEditor::save()
 {
     if (checkManufacturerModel() == false)
@@ -265,10 +283,34 @@ bool QLCFixtureEditor::save()
     }
     else
     {
+        QString targetPath = m_fileName;
+        bool redirected = false;
+        if (isUnderSystemDefinitionDirectory(m_fileName) == true)
+        {
+            // System definitions ship with the app and must stay static --
+            // silently rewriting one in place would make it indistinguishable
+            // from an install/upgrade, and un-reinstallable without knowing
+            // it had been touched. Redirect to a local override instead.
+            targetPath = localOverridePath();
+            QMessageBox::information(this, tr("System fixture definition"),
+                tr("\"%1\" is a system fixture definition and can't be "
+                   "modified in place.\n\nYour changes will be saved as a "
+                   "local copy instead:\n\n%2\n\nwhich will override the "
+                   "system definition for this manufacturer and model from "
+                   "now on -- the original stays untouched.")
+                   .arg(QFileInfo(m_fileName).fileName()).arg(targetPath));
+            redirected = true;
+        }
+
         m_fixtureDef->setPhysical(m_phyEdit->physical());
-        QFile::FileError error = m_fixtureDef->saveXML(m_fileName);
+        QFile::FileError error = m_fixtureDef->saveXML(targetPath);
         if (error == QFile::NoError)
         {
+            if (redirected == true)
+            {
+                m_fileName = targetPath;
+                setCaption();
+            }
             setModified(false);
             return true;
         }
@@ -321,6 +363,20 @@ bool QLCFixtureEditor::saveAs()
     {
         if (path.right(KExtFixture.length()) != KExtFixture)
             path += KExtFixture;
+
+        if (isUnderSystemDefinitionDirectory(path) == true)
+        {
+            // Same rule as save(): never write into the system directory,
+            // even when the destination was hand-picked in this dialog.
+            const QString requested = path;
+            path = localOverridePath();
+            QMessageBox::information(this, tr("System fixture definition"),
+                tr("\"%1\" is under the system fixture directory, which "
+                   "can't be modified.\n\nSaving as a local copy instead:"
+                   "\n\n%2\n\nwhich will override the system definition for "
+                   "this manufacturer and model from now on.")
+                   .arg(QFileInfo(requested).fileName()).arg(path));
+        }
 
         m_fixtureDef->setPhysical(m_phyEdit->physical());
         QFile::FileError error = m_fixtureDef->saveXML(path);
@@ -846,22 +902,99 @@ void QLCFixtureEditor::slotEditMode()
             this, SLOT(slotCopyPhysicalClipboard(QLCPhysical)));
     if (em.exec() == QDialog::Accepted)
     {
-        *mode = *(em.mode());
-
-        item = m_modeList->currentItem();
-        updateModeItem(mode, item);
-
-        // if mode name has changed, update
-        // all aliases referring to the old name
-        if (mode->name() != origName)
+        // A channel-count/order or head-count change to a mode that's
+        // already been saved to disk at least once is exactly the change
+        // class that silently corrupts an already-patched fixture's saved
+        // show data (Scenes/Chasers store values by channel INDEX, not
+        // name) -- offer to keep the original mode untouched and save the
+        // edit as a new mode instead, same mechanics slotCloneMode() already
+        // uses. Skipped for a definition that's never been saved at all --
+        // nothing could possibly be patched to a mode that doesn't exist on
+        // disk yet.
+        bool saveAsNewMode = false;
+        if (m_fileName.simplified().isEmpty() == false &&
+            modeStructureChanged(mode, em.mode()) == true)
         {
-            updateAliasModeName(origName, mode->name());
-            refreshAliasTree();
+            QMessageBox box(QMessageBox::Warning, tr("Mode layout changed"),
+                tr("This changes the channel layout of \"%1\" -- channel count, "
+                   "order, or head count differs from what's saved. Any fixture "
+                   "already patched to this mode may show incorrect behavior "
+                   "after saving, until it's re-patched, since shows store "
+                   "channel values by position, not by name.\n\n"
+                   "Keep \"%1\" as it is and save this edit as a new mode "
+                   "instead?").arg(origName), QMessageBox::NoButton, this);
+            QPushButton *newModeBtn = box.addButton(tr("Save as New Mode..."), QMessageBox::AcceptRole);
+            box.addButton(tr("Change \"%1\" Anyway").arg(origName), QMessageBox::DestructiveRole);
+            QPushButton *cancelBtn = box.addButton(QMessageBox::Cancel);
+            box.setDefaultButton(newModeBtn);
+            box.exec();
+
+            if (box.clickedButton() == cancelBtn)
+            {
+                disconnect(&em, SIGNAL(copyToClipboard(QLCPhysical)),
+                           this, SLOT(slotCopyPhysicalClipboard(QLCPhysical)));
+                return;
+            }
+            saveAsNewMode = (box.clickedButton() == newModeBtn);
         }
 
-        refreshAliasModes();
+        if (saveAsNewMode == true)
+        {
+            // Same mechanics as slotCloneMode(): prompt for a unique name,
+            // add the EDITED layout under it, leave the original mode (and
+            // anything already patched to it) completely untouched.
+            bool ok = false;
+            QString text;
+            while (true)
+            {
+                text = QInputDialog::getText(this, tr("Name the new mode"),
+                                             tr("Give a unique name for the mode"),
+                                             QLineEdit::Normal,
+                                             tr("%1 (edited)").arg(origName), &ok);
+                if (ok == false)
+                    break;
+                if (text.isEmpty() == true)
+                    continue;
+                if (m_fixtureDef->mode(text) != NULL)
+                {
+                    QMessageBox::information(this, tr("Invalid name"),
+                                             tr("Another mode by that name already exists."));
+                    continue;
+                }
+                break;
+            }
 
-        setModified();
+            if (ok == true && text.isEmpty() == false)
+            {
+                QLCFixtureMode *newMode = new QLCFixtureMode(m_fixtureDef, em.mode());
+                newMode->setName(text);
+                item = new QTreeWidgetItem(m_modeList);
+                m_fixtureDef->addMode(newMode);
+                updateModeItem(newMode, item);
+                m_modeList->setCurrentItem(item);
+                refreshAliasModes();
+                setModified();
+            }
+        }
+        else
+        {
+            *mode = *(em.mode());
+
+            item = m_modeList->currentItem();
+            updateModeItem(mode, item);
+
+            // if mode name has changed, update
+            // all aliases referring to the old name
+            if (mode->name() != origName)
+            {
+                updateAliasModeName(origName, mode->name());
+                refreshAliasTree();
+            }
+
+            refreshAliasModes();
+
+            setModified();
+        }
         m_modeList->header()->resizeSections(QHeaderView::ResizeToContents);
     }
     disconnect(&em, SIGNAL(copyToClipboard(QLCPhysical)),
@@ -980,6 +1113,28 @@ void QLCFixtureEditor::refreshModeList()
     m_modeList->resizeColumnToContents(MODE_COL_NAME);
     m_modeList->resizeColumnToContents(MODE_COL_HEAD);
     m_modeList->resizeColumnToContents(MODE_COL_CHS);
+}
+
+bool QLCFixtureEditor::modeStructureChanged(const QLCFixtureMode *original,
+                                            const QLCFixtureMode *edited) const
+{
+    Q_ASSERT(original != NULL);
+    Q_ASSERT(edited != NULL);
+
+    if (original->channels().size() != edited->channels().size())
+        return true;
+    if (original->heads().size() != edited->heads().size())
+        return true;
+
+    for (int i = 0; i < original->channels().size(); i++)
+    {
+        const QLCChannel *a = original->channel(i);
+        const QLCChannel *b = edited->channel(i);
+        if (a == NULL || b == NULL || a->name() != b->name() || a->group() != b->group())
+            return true;
+    }
+
+    return false;
 }
 
 void QLCFixtureEditor::updateModeItem(const QLCFixtureMode *mode,

@@ -221,6 +221,18 @@ protected:
 public:
     void showFixturePropertiesById(quint32 fxId);
 
+    /** Flash a fixture at full intensity 3x to help find it on the rig -- same
+     *  mechanism as the rig editor's own "Locate" button, but callable directly
+     *  (e.g. from a right-click), no dialog required. Calling this again on a
+     *  fixture that's still flashing cancels it early. No-op for an invalid id. */
+    void locateFixture(quint32 fxId);
+
+    /** Send a fixture's "reset" Maintenance-channel capability once -- same
+     *  detection the old Fixture Test quick-dialog uses, but callable directly
+     *  (e.g. from a right-click). No-op if the fixture has no Maintenance-group
+     *  capability whose name contains "reset". */
+    void resetFixture(quint32 fxId);
+
 protected:
     /** Dismiss any open fixture property editor (no-op with popup design). */
     void hideFixtureItemEditor();
@@ -463,6 +475,17 @@ protected:
     QAction *m_pasteAction;
 
 private:
+    /** Opaque state for an in-progress locateFixture() flash sequence -- defined
+     *  in monitor.cpp (owns a FixtureLocate + QTimer, both file-local types
+     *  there). One per fixture id currently flashing; erased when the sequence
+     *  finishes or is cancelled by a second locateFixture() call on the same id. */
+    struct LocateSession;
+    QHash<quint32, LocateSession *> m_locateSessions;
+    /** Stops and deletes every in-progress locateFixture() session -- called
+     *  from the destructor. Defined next to LocateSession's own definition
+     *  (needs the complete type to actually delete each one). */
+    void cancelAllLocateSessions();
+
     /** Which structural feature a fixture lookup is scoped to. */
     enum FeatureKind { TrussFeature, PipeFeature, TowerFeature, PlatformFeature };
     /** Fixture ids currently mounted on the given feature (direct rig mount, or —

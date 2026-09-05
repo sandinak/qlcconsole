@@ -20,8 +20,11 @@
 #include <QComboBox>
 #include <QStyleFactory>
 #include <QApplication>
+#include <QCoreApplication>
+#include <QMessageBox>
 #include <QTextStream>
 #include <QSettings>
+#include <QProcess>
 #include <QLocale>
 #include <QWidget>
 #include <QScreen>
@@ -231,6 +234,41 @@ QColor AppUtil::sceneSwatchColor(Doc *doc, Scene *scene)
             return p->rgbValue();
     }
     return QColor();
+}
+
+bool AppUtil::launchFixtureEditor(const QString &fixtureFilePath, QWidget *parentForError)
+{
+    const QString binName =
+#if defined(WIN32) || defined(Q_OS_WIN)
+        QStringLiteral("qlcconsole-fixtureeditor.exe");
+#else
+        QStringLiteral("qlcconsole-fixtureeditor");
+#endif
+
+    const QDir appDir(QCoreApplication::applicationDirPath());
+    // Installed layout: a flat bindir holding every qlcconsole binary side by
+    // side. Checked first since that's the real deployment target.
+    QString editorPath = appDir.absoluteFilePath(binName);
+    if (QFile::exists(editorPath) == false)
+    {
+        // Dev-build layout: build/main/qlcconsole -> build/fixtureeditor/...
+        // (see CLAUDE.md's documented build/run layout).
+        editorPath = appDir.absoluteFilePath(QStringLiteral("../fixtureeditor/") + binName);
+    }
+
+    if (QFile::exists(editorPath) == false)
+    {
+        QMessageBox::warning(parentForError, QObject::tr("Fixture Editor not found"),
+            QObject::tr("Could not find the Fixture Editor (%1) next to this "
+                        "application.").arg(binName));
+        return false;
+    }
+
+    QStringList args;
+    if (fixtureFilePath.isEmpty() == false)
+        args << QStringLiteral("--open") << fixtureFilePath;
+
+    return QProcess::startDetached(editorPath, args);
 }
 
 /*****************************************************************************

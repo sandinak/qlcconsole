@@ -18,6 +18,7 @@
 */
 
 #include <QContextMenuEvent>
+#include <QApplication>
 #include <QTimer>
 #include <QWheelEvent>
 #include <QMouseEvent>
@@ -197,6 +198,40 @@ bool MonitorGraphicsView::viewportEvent(QEvent *event)
 
 void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
 {
+    // Recorded unconditionally, regardless of which branch below actually
+    // handles the press, so mouseReleaseEvent's cross-kind persistence sweep
+    // (see its own comment) can tell a real drag from a bare click/select —
+    // the same distinction each item's own mouseReleaseEvent already makes
+    // via its private m_dragMoved before deciding whether to emit
+    // itemDropped() at all.
+    m_pressViewPos = event->pos();
+
+    // Triple-click on a fixture that mouseDoubleClickEvent just isolated (drilled
+    // into) rather than opened an editor for: Qt has no native triple-click event,
+    // so the third rapid press just arrives here as an ordinary press. Treat it as
+    // "open this fixture's editor now" instead of requiring a whole separate
+    // second double-click to reach the same result.
+    if (event->button() == Qt::LeftButton && m_lastFixtureDoubleClickItem != nullptr
+        && m_lastFixtureDoubleClickTimer.isValid()
+        && m_lastFixtureDoubleClickTimer.elapsed() <= QApplication::doubleClickInterval())
+    {
+        // Same resolution mouseDoubleClickEvent used to pick this fixture in the
+        // first place (topPickableAt, not plain itemAt) -- keeps the two clicks'
+        // hit-testing consistent (it sees through a ghosted click-through fixture).
+        QGraphicsItem *hit = topPickableAt(mapToScene(event->pos()));
+        MonitorFixtureItem *fi = (hit == m_lastFixtureDoubleClickItem)
+            ? dynamic_cast<MonitorFixtureItem *>(hit) : nullptr;
+        m_lastFixtureDoubleClickItem = nullptr;
+        m_lastFixtureDoubleClickTimer.invalidate();
+        if (fi != nullptr)
+        {
+            m_suppressNextViewClick = true;
+            emit fixtureDoubleClicked(fi->fixtureID());
+            event->accept();
+            return;
+        }
+    }
+
     // "Click to place 0,0" mode: consume the click, set the origin there.
     if (m_pickingOrigin && event->button() == Qt::LeftButton)
     {
@@ -2130,38 +2165,55 @@ void MonitorGraphicsView::slotImageMoved(MonitorImageItem *item)
 {
     if (item == nullptr || m_cellPixels == 0)
         return;
+
     MonitorProperties *props = m_doc->monitorProperties();
-    MonitorProperties::MonitorImage img = props->image(item->imageId());
     const qreal scale = qreal(m_cellPixels) / m_unitValue;
-    const QPointF p = item->pos();   // scene-pixel top-left
 
-    // Persist the (possibly resized) rectangle: convert px extents back to metres.
-    if (scale > 0.0)
-    {
-        img.width  = float(item->pixelSize().width()  / (1000.0 * scale));
-        img.height = float(item->pixelSize().height() / (1000.0 * scale));
-    }
+    // Persist every selected image (group move) -- see slotTowerMoved()'s
+    // comment for why this rebuild from the live selection is necessary.
+    // Resizing only ever applies to the single grabbed item (only it could
+    // have had its resize handle dragged), so that part stays scoped to
+    // `item`; position applies to the whole selection.
+    QList<MonitorImageItem *> moved;
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
+            moved.append(ii);
+    if (!moved.contains(item))
+        moved.append(item);
 
-    if (img.plane == MonitorProperties::MonitorImage::Floor)
+    foreach (MonitorImageItem *ii, moved)
     {
-        const QPointF mm = pixelsToRealPosition(p.x(), p.y());
-        img.originX = float(mm.x() / 1000.0);
-        img.originY = float(mm.y() / 1000.0);
+        MonitorProperties::MonitorImage img = props->image(ii->imageId());
+        const QPointF p = ii->pos();   // scene-pixel top-left
+
+        // Persist the (possibly resized) rectangle: convert px extents back to metres.
+        if (ii == item && scale > 0.0)
+        {
+            img.width  = float(ii->pixelSize().width()  / (1000.0 * scale));
+            img.height = float(ii->pixelSize().height() / (1000.0 * scale));
+        }
+
+        if (img.plane == MonitorProperties::MonitorImage::Floor)
+        {
+            const QPointF mm = pixelsToRealPosition(p.x(), p.y());
+            img.originX = float(mm.x() / 1000.0);
+            img.originY = float(mm.y() / 1000.0);
+        }
+        else if (img.plane == MonitorProperties::MonitorImage::FrontBackdrop)
+        {
+            img.originX = float((p.x() - m_xOffset) / (1000.0 * scale));
+            // p.y is the TOP edge → convert to Z, then subtract the height.
+            const double zTop = (floorPixelY() - p.y()) / (1000.0 * scale);
+            img.originZ = float(zTop - img.height);
+        }
+        else // SideBackdrop
+        {
+            img.originY = float((p.x() - m_xOffset) / (1000.0 * scale));
+            const double zTop = (floorPixelY() - p.y()) / (1000.0 * scale);
+            img.originZ = float(zTop - img.height);
+        }
+        props->setImage(img);
     }
-    else if (img.plane == MonitorProperties::MonitorImage::FrontBackdrop)
-    {
-        img.originX = float((p.x() - m_xOffset) / (1000.0 * scale));
-        // p.y is the TOP edge → convert to Z, then subtract the height.
-        const double zTop = (floorPixelY() - p.y()) / (1000.0 * scale);
-        img.originZ = float(zTop - img.height);
-    }
-    else // SideBackdrop
-    {
-        img.originY = float((p.x() - m_xOffset) / (1000.0 * scale));
-        const double zTop = (floorPixelY() - p.y()) / (1000.0 * scale);
-        img.originZ = float(zTop - img.height);
-    }
-    props->setImage(img);
     m_doc->setModified();
 }
 
@@ -2605,16 +2657,33 @@ void MonitorGraphicsView::slotTowerMoved(TowerItem *item)
 {
     if (item == nullptr || m_cellPixels == 0)
         return;
-    Tower *tw = item->tower();
-    if (tw == nullptr)
-        return;
-    const QPointF c = item->pos();
-    tw->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
-    tw->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
-    // Fixtures on its shelves follow (derived).
-    foreach (Fixture *fx, m_doc->fixtures())
-        if (m_doc->monitorProperties()->fixtureRigProps(fx->id()).towerId == tw->id())
-            updateFixture(fx->id());
+
+    // Persist every selected tower (group move), not just the dropped one --
+    // Qt's QGraphicsScene only delivers mouse press/move/release to the item
+    // actually grabbed during a multi-select drag; co-selected siblings move
+    // on screen (Qt repositions them internally) but never fire their own
+    // itemDropped(), so without rebuilding the selection here only the one
+    // item the mouse happened to grab actually got saved.
+    QList<TowerItem *> moved;
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        if (auto *ti = dynamic_cast<TowerItem *>(gi))
+            moved.append(ti);
+    if (!moved.contains(item))
+        moved.append(item);
+
+    foreach (TowerItem *ti, moved)
+    {
+        Tower *tw = ti->tower();
+        if (tw == nullptr)
+            continue;
+        const QPointF c = ti->pos();
+        tw->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+        tw->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+        // Fixtures on its shelves follow (derived).
+        foreach (Fixture *fx, m_doc->fixtures())
+            if (m_doc->monitorProperties()->fixtureRigProps(fx->id()).towerId == tw->id())
+                updateFixture(fx->id());
+    }
     m_doc->setModified();
     emit mapStructureChanged();
 }
@@ -2623,12 +2692,25 @@ void MonitorGraphicsView::slotStandMoved(StandItem *item)
 {
     if (item == nullptr || m_cellPixels == 0)
         return;
-    Stand *s = item->stand();
-    if (s == nullptr)
-        return;
-    const QPointF c = item->pos();
-    s->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
-    s->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+
+    // Persist every selected stand (group move) -- see slotTowerMoved()'s
+    // comment for why this rebuild from the live selection is necessary.
+    QList<StandItem *> moved;
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        if (auto *si = dynamic_cast<StandItem *>(gi))
+            moved.append(si);
+    if (!moved.contains(item))
+        moved.append(item);
+
+    foreach (StandItem *si, moved)
+    {
+        Stand *s = si->stand();
+        if (s == nullptr)
+            continue;
+        const QPointF c = si->pos();
+        s->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+        s->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+    }
     m_doc->monitorProperties()->recomputeStandMounts();   // pipes on it follow
     m_doc->setModified();
     emit mapStructureChanged();
@@ -2638,12 +2720,25 @@ void MonitorGraphicsView::slotPipeMoved(PipeItem *item)
 {
     if (item == nullptr || m_cellPixels == 0)
         return;
-    Pipe *b = item->pipe();
-    if (b == nullptr)
-        return;
-    const QPointF c = item->pos();   // base centre in scene pixels
-    b->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
-    b->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+
+    // Persist every selected pipe (group move) -- see slotTowerMoved()'s
+    // comment for why this rebuild from the live selection is necessary.
+    QList<PipeItem *> moved;
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        if (auto *pi = dynamic_cast<PipeItem *>(gi))
+            moved.append(pi);
+    if (!moved.contains(item))
+        moved.append(item);
+
+    foreach (PipeItem *pi, moved)
+    {
+        Pipe *b = pi->pipe();
+        if (b == nullptr)
+            continue;
+        const QPointF c = pi->pos();   // base centre in scene pixels
+        b->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+        b->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+    }
     m_doc->setModified();
     emit mapStructureChanged();
 }
@@ -3609,6 +3704,69 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 
     QGraphicsView::mouseReleaseEvent(e);
 
+    // A multi-selection drag only delivers mouse press/move/release to the
+    // ONE item Qt actually grabbed -- every co-selected item just moved on
+    // screen by Qt's own internal handling, without ever getting its own
+    // mouseReleaseEvent. The line above just fired exactly one kind's
+    // itemDropped()/slotXMoved (whichever kind the grabbed item was), which
+    // persists every co-selected item of THAT SAME kind -- each slot already
+    // rebuilds its kind's full moved-list from the live selection. But a
+    // MIXED-KIND selection (e.g. fixtures dragged together with trusses)
+    // never fires any slot for the kinds that weren't the grabbed item's
+    // own, so they silently keep their old saved position and snap back on
+    // the next reload, even though they visibly moved during the drag.
+    //
+    // Sweep every kind present in the current selection and invoke its slot
+    // directly (a plain call, not through the itemDropped signal) with one
+    // arbitrary item of that kind as the anchor -- each slot's own
+    // selectedItems() rebuild takes it from there and persists the whole
+    // group. Redundantly re-invoking the kind that already got a real
+    // itemDropped is harmless: every slot compares the new position against
+    // what it just stored, so a second call computes a zero delta and writes
+    // nothing new.
+    //
+    // Only when an actual drag happened, though -- gated the same way each
+    // item's own mouseReleaseEvent gates its itemDropped emit (m_dragMoved),
+    // otherwise a bare click to select something would run every selected
+    // kind's slot for no reason, needlessly marking the document modified.
+    const bool wasDrag = (e->pos() - m_pressViewPos).manhattanLength()
+                          >= QApplication::startDragDistance();
+    if (wasDrag && m_scene != nullptr)
+    {
+        MonitorFixtureItem *repFixture = nullptr;
+        TrussItem          *repTruss   = nullptr;
+        PlatformItem       *repPlatform = nullptr;
+        PipeItem           *repPipe    = nullptr;
+        StandItem          *repStand   = nullptr;
+        TowerItem          *repTower   = nullptr;
+        PowerSourceItem    *repPower   = nullptr;
+        MonitorImageItem   *repImage   = nullptr;
+        TargetItem         *repTarget  = nullptr;
+
+        foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        {
+            if (repFixture == nullptr)  repFixture  = dynamic_cast<MonitorFixtureItem *>(gi);
+            if (repTruss == nullptr)    repTruss    = dynamic_cast<TrussItem *>(gi);
+            if (repPlatform == nullptr) repPlatform = dynamic_cast<PlatformItem *>(gi);
+            if (repPipe == nullptr)     repPipe     = dynamic_cast<PipeItem *>(gi);
+            if (repStand == nullptr)    repStand    = dynamic_cast<StandItem *>(gi);
+            if (repTower == nullptr)    repTower    = dynamic_cast<TowerItem *>(gi);
+            if (repPower == nullptr)    repPower    = dynamic_cast<PowerSourceItem *>(gi);
+            if (repImage == nullptr)    repImage    = dynamic_cast<MonitorImageItem *>(gi);
+            if (repTarget == nullptr)   repTarget   = dynamic_cast<TargetItem *>(gi);
+        }
+
+        if (repFixture != nullptr)  slotFixtureMoved(repFixture);
+        if (repTruss != nullptr)    slotTrussMoved(repTruss);
+        if (repPlatform != nullptr) slotPlatformMoved(repPlatform);
+        if (repPipe != nullptr)     slotPipeMoved(repPipe);
+        if (repStand != nullptr)    slotStandMoved(repStand);
+        if (repTower != nullptr)    slotTowerMoved(repTower);
+        if (repPower != nullptr)    slotPowerSourceMoved(repPower);
+        if (repImage != nullptr)    slotImageMoved(repImage);
+        if (repTarget != nullptr)   slotTargetMoved(repTarget);
+    }
+
     // Restore rubber-band selection after a shift-drag pan.
     if (dragMode() == QGraphicsView::ScrollHandDrag)
         setDragMode(QGraphicsView::RubberBandDrag);
@@ -3724,10 +3882,14 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
     {
         // A fixture mounted ON a feature → open that FEATURE's editor (the fixture
         // sits in its tree/inspector). This is the common "double-click the riser"
-        // case, where the feature is covered by its own fixtures.
+        // case, where the feature is covered by its own fixtures. Truss binding is
+        // deliberately NOT included here -- a truss-bound fixture instead follows
+        // the drill-in-then-edit path below (first double-click isolates the
+        // fixture, second opens ITS OWN editor); a truss is a long, mostly-
+        // uncovered feature, so its own editor is still one double-click away by
+        // clicking the truss itself elsewhere.
         MonitorProperties *mp = m_doc->monitorProperties();
         const FixtureRigProps rp = mp->fixtureRigProps(fi->fixtureID());
-        if (rp.trussId != Truss::invalidId())            { emit trussDoubleClicked(rp.trussId); return; }
         if (rp.pipeId != Pipe::invalidId())              { emit pipeDoubleClicked(rp.pipeId); return; }
         if (rp.towerId != Tower::invalidId())            { emit towerDoubleClicked(rp.towerId); return; }
         if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId()) { emit platformDoubleClicked(rp.riserPlatformId); return; }
@@ -3755,6 +3917,11 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
             fi->setIsolated(true);
             m_extendingSelection = false;
             emit mapSelectionChanged();
+            // Arm the triple-click shortcut (see mousePressEvent): a further
+            // rapid click on this same fixture opens its editor right away,
+            // rather than requiring a whole separate second double-click.
+            m_lastFixtureDoubleClickItem = fi;
+            m_lastFixtureDoubleClickTimer.restart();
             return;
         }
 

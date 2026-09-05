@@ -20,6 +20,7 @@
 #ifndef MONITORGRAPHICSVIEW_H
 #define MONITORGRAPHICSVIEW_H
 
+#include <QElapsedTimer>
 #include <QGraphicsView>
 #include <QHash>
 #include <QList>
@@ -735,6 +736,14 @@ private:
      *  them onto — more reliable than comparing fixture-centre geometry. */
     QSet<quint32> m_droppedOnTrussIds;
 
+    /** View-coordinate mouse position at the start of the current press,
+     *  recorded unconditionally in mousePressEvent. mouseReleaseEvent
+     *  compares this against the release position to tell an actual drag
+     *  from a bare click/select before running its cross-kind persistence
+     *  sweep — otherwise every plain click would re-persist (and dirty) the
+     *  current selection's positions for no reason. */
+    QPoint m_pressViewPos;
+
     /** Tagged undo entry — covers fixture moves, truss moves and stage-feature
      *  pastes so that Ctrl+Z replays operations in the order they were
      *  performed. */
@@ -762,6 +771,16 @@ private:
      *  handler clears the selection. Used by mouseDoubleClickEvent to restore
      *  a multi-selection that was active when the user double-clicked. */
     QList<QGraphicsItem *> m_savedSelection;
+
+    /** Set right after a double-click ISOLATES (drills into) a grouped/truss-
+     *  bound fixture instead of opening its editor. Qt has no native
+     *  triple-click event -- a real third rapid press just arrives at
+     *  mousePressEvent as an ordinary press -- so a press on the SAME fixture
+     *  within QApplication::doubleClickInterval() of this timestamp is treated
+     *  as a triple-click and opens the fixture's own editor directly, instead
+     *  of requiring a whole separate second double-click. */
+    QGraphicsItem *m_lastFixtureDoubleClickItem = nullptr;
+    QElapsedTimer m_lastFixtureDoubleClickTimer;
 
     /** Positions snapshot taken at move-start, committed to m_moveUndo on
      *  drop if anything actually moved. */
