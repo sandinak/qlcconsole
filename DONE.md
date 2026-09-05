@@ -6,6 +6,155 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-09-05 — Startup window: center the title/version block *(SHIPPED — Branson-verified)*
+
+Branson: "can we center the title and version text on the startup window."
+`ui/src/startupwindow.cpp`'s header row (`StartupWindow::StartupWindow()`)
+had the icon+name+version block pinned to the left edge with a single
+trailing `addStretch()`. Added a matching `addStretch()` before the icon too
+(centers the whole icon+text block in the window instead of the left edge)
+and `Qt::AlignHCenter` on both the name and version `QLabel`s (keeps them
+centred relative to each other within their own narrower column, in case
+one is wider than the other).
+
+Builds clean. Not screenshot-verified by me — the startup window is only
+visible for the brief span while fixture defs/plugins load, and by the time
+I tried to catch it, VS Code was covering the entire display (fully
+maximized, window fully hidden behind it regardless of z-order) — chasing a
+sub-second-lived window through that felt like more collision risk than
+this simple, purely-cosmetic layout change (two `addStretch()`s + two
+`setAlignment()`s, no logic) warranted. `check-all.sh` gate run after.
+Branson confirmed live (2026-09-05): centered.
+
+---
+
+### 2026-09-04 — Studio canvas: multi-select drag only persisted the grabbed item *(SHIPPED — Branson-verified)*
+
+Branson: "with the plot unlocked I selected all to move things to center and
+several things didn't move." Investigated before touching anything (per his
+standing "stop guessing" instruction from the title-bar saga) — confirmed,
+concrete, not ambiguous.
+
+**Root cause**: Qt's `QGraphicsScene` only delivers `mousePress`/`mouseMove`/
+`mouseRelease` to the one item actually grabbed during a multi-select drag —
+every other co-selected item is repositioned on screen by Qt's own internal
+group-move handling, but never fires its own move event. Five item kinds
+already knew this and rebuilt the full moved-set from
+`m_scene->selectedItems()` inside their move-slot before persisting
+(Fixture, Platform, Truss (top view), Power Source, Target) — but four
+didn't, and silently saved only the grabbed item's new position, leaving
+every other selected instance of that kind visually moved on screen but
+snapping back to its old position on the next reload/scene rebuild: **Pipe**
+(`slotPipeMoved`), **Stand** (`slotStandMoved`), **Tower** (`slotTowerMoved`),
+**Image** (`slotImageMoved`) — all in `ui/src/monitor/monitorgraphicsview.cpp`.
+
+**Fix**: same pattern as the five working kinds, applied to all four —
+rebuild a `moved` list by `dynamic_cast`-filtering `m_scene->selectedItems()`
+to the relevant item type (plus the grabbed `item` itself, in case it
+wasn't part of a rubber-band selection), then loop the existing per-item
+persistence logic over that list instead of just the single passed-in
+`item`. Deliberately did **not** add the grid-snap-and-shift-selection
+behavior Platform/PowerSource have — Pipe/Stand/Tower never had grid
+snapping at all before this, and adding it wasn't asked for. For Image,
+kept the resize-handle logic (`pixelSize()`) scoped to only the grabbed
+item (`ii == item`) since only it could have had a resize handle dragged;
+position persistence now covers the whole selection.
+
+**Separately noticed, not fixed (different bug, not what was reported)**:
+`MonitorGraphicsView::refreshItemLayerState()` gates Target movability on
+`Doc::mode() == Doc::Design` instead of `!m_layoutLocked` like every other
+kind (`monitorgraphicsview.cpp:1605`) — a target won't move even with the
+plot explicitly unlocked, if the doc isn't in Design mode. Left alone: not
+what Branson described (plot was unlocked; presumably already in Design
+mode to be editing the layout at all), and might be intentional given
+targets are "live show" dynamic aim points rather than static rig geometry
+— flagged here rather than guessed at. Still deferred, not fixed.
+
+**Follow-up: the real bug was MIXED-kind selections, not same-kind ones.**
+Branson, after the fix above: "no .. still have some lights that are not
+moving with everything else." The fix above was real but incomplete — it
+only covered "multiple items of the SAME kind, one of them grabbed." The
+actual mechanism is one level deeper: each item kind's `itemDropped` signal
+is emitted from *that item's own* `mouseReleaseEvent` (e.g.
+`pipeitem.cpp:203-207`), and Qt's `QGraphicsScene` only ever delivers mouse
+press/move/release to the ONE item actually grabbed during a drag — so a
+**mixed-kind** selection (fixtures + trusses + platforms, say, all dragged
+together) fires exactly ONE kind's slot: whichever kind the grabbed item
+happened to be. Every other selected item, regardless of kind, visibly
+moves (Qt repositions it) but nothing ever persists it, because no slot for
+its kind ever runs at all. "Lights" (fixtures) not moving matches this
+precisely — they're simply not the kind that happened to get grabbed.
+
+**Fix**: `MonitorGraphicsView::mouseReleaseEvent()` (`monitorgraphicsview.cpp`)
+now sweeps the *entire* current selection after the base class call handles
+the real drop, finds one representative item of every kind present
+(Fixture/Truss/Platform/Pipe/Stand/Tower/PowerSource/Image/Target), and
+calls that kind's `slotXMoved()` directly (a plain function call, not
+through the signal) — each slot already rebuilds its own kind's full
+moved-list from `m_scene->selectedItems()` (either pre-existing or from the
+fix above), so this reaches every kind, not just the grabbed one.
+Redundantly re-invoking the kind that *did* get a real `itemDropped` is
+deliberately left in rather than tracked/excluded — traced through each
+slot's actual math (not assumed) to confirm every one of them compares the
+new position against what it just stored and computes a zero delta on a
+second call, so nothing is double-applied. One nuance surfaced by that
+trace, left alone as out of scope: `slotFixtureMoved()`'s Elevation-view
+branch only ever handles the single passed-in item, never the group,
+unlike its own Top-view branch a few lines down — so elevation-dragging a
+multi-fixture selection has a narrower version of this same bug that this
+fix only partially helps (the one representative fixture now persists; the
+rest of a same-kind elevation group still needs the Top-view branch's
+already-correct pattern applied to Elevation too). Not touched — a distinct,
+pre-existing issue from what Branson reported.
+
+**Guarded against a real regression this approach could have caused**: the
+sweep must not fire on a bare click (select without moving), or every
+click would spuriously re-persist and dirty the document for no reason.
+Confirmed each item's own `itemDropped` is already gated the same way
+(`PipeItem::mouseReleaseEvent`'s private `m_dragMoved` flag) — added the
+equivalent at the view level: `mousePressEvent()` now unconditionally
+records the press position (`m_pressViewPos`, `monitorgraphicsview.h`), and
+the sweep only runs if the release position moved more than
+`QApplication::startDragDistance()` from it.
+
+Builds clean; full `check-all.sh` gate run after both rounds. Branson
+confirmed live (2026-09-05): select and drag worked.
+
+---
+
+### 2026-09-03 — Lighting Studio layers tree: reload() force-expanded everything *(SHIPPED — Branson-verified)*
+
+Branson: "in the studio when I click a layer and change it's stage the tree
+reopens all the closed folders." No literal "stage" property exists on a
+layer (checked exhaustively — closest candidate is the per-layer visibility/
+label/lock toggle buttons), but it didn't matter for the fix: every one of
+those triggers, plus ~17 others (rename, drag-drop, add/remove layer, move-
+to-layer, ...), all funnel through the same `MonitorLayersPanel::reload()`
+(`ui/src/monitor/monitorlayerspanel.cpp:577-750`), which did a full
+`m_tree->clear()` + rebuild and **unconditionally** called
+`setExpanded(true)` on every layer node (`:743`) and every group node
+(`buildGroupNode()`, `:559`) — discarding whatever the user had manually
+collapsed, every single time, regardless of which of those ~20 things
+triggered it.
+
+**Fix**: before `clear()`, walk the (about-to-be-discarded) tree and record
+which layer/group nodes are currently collapsed into a new
+`QSet<QString> m_collapsedKeys` member (keyed `"<NodeType>:<id>"`, via the
+existing `NodeTypeRole`/`NodeIdRole` item-data roles already used to
+identify nodes elsewhere in this file) — new `collectCollapsedNodes()`
+(recursive) and `wasNodeCollapsed()` helpers. Both hardcoded
+`setExpanded(true)` call sites now read `!wasNodeCollapsed(...)` instead.
+A node with no prior state (new layer/group, or the very first reload of a
+freshly-opened workspace) still defaults to expanded, matching the old
+behavior exactly — only a node the user had *actually collapsed* is now
+respected. One fix at the shared `reload()` level covers all ~20 triggers
+at once, not just the visibility/lock toggles.
+
+Builds clean (`ui/src`, full `qlcconsole` rebuild); `check-all.sh` gate run.
+Branson confirmed live (2026-09-05): fixed.
+
+---
+
 ### 2026-08-26 — Load chip: measure tick CPU time, not wall clock *(SHIPPED, 8726bba60)*
 
 Diagnosed same day as filed: `mastertimer.cpp`'s tick timer used a

@@ -8,7 +8,404 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
-## Fixture Manager — modernize + look at integrating with qlcconsole *(2026-09-02, audit DONE, one fix shipped on a branch, bigger questions await Branson)*
+## Right-click "Locate" and "Reset" directly on a fixture — SHIPPED, not yet Branson-verified (2026-09-05)
+
+Branson: "be nice to have reset as a right click option on a fixture" /
+"be nice to have locate as a right click option on a fixture" — both
+already existed one level deep (inside the rig Properties dialog, or the
+old "Test Fixture..." quick dialog's own buttons); this flattens them onto
+the context menu directly, no dialog required.
+
+**`Monitor::locateFixture(quint32)` / `Monitor::resetFixture(quint32)`**
+(`ui/src/monitor/monitor.{h,cpp}`) — new public methods, reusing the
+existing mechanisms rather than duplicating their DMX logic:
+- `locateFixture()` drives the same `FixtureLocate` 3-flash sequence the
+  rig editor's own "Locate" button uses, but self-owned instead of
+  dialog-scoped — a new private `Monitor::LocateSession` (forward-declared
+  in the header, defined next to `FixtureLocate` in the .cpp since it holds
+  one) + `QHash<quint32, LocateSession*> m_locateSessions` tracks one
+  in-progress flash per fixture id, so triggering it from a right-click
+  works with no dialog open at all. Calling it again on a fixture that's
+  still flashing cancels early (matches the rig editor's own button
+  toggle-off behavior). `Monitor::~Monitor()` now calls a new
+  `cancelAllLocateSessions()` first, so an in-progress flash can't outlive
+  the Monitor and leak its Override fader.
+- `resetFixture()` reuses the exact same Maintenance-channel "reset"
+  capability detection the old "Test Fixture..." quick-dialog already had
+  (scan for a `QLCChannel::Maintenance`-group channel with a capability
+  name containing "reset", write its range midpoint once) — duplicated
+  rather than shared with that dialog's copy, since the dialog also
+  handles Identify, which this action doesn't.
+
+**`FixtureManager`** (`ui/src/fixturemanager.{h,cpp}`): two new actions,
+`m_locateAction`/`m_resetAction`, enabled under the exact same single-
+fixture-selected gating as the existing `m_testAction` (both Design and
+Operate mode — Locate/Reset are hardware diagnostics, useful in either),
+inserted into the context menu right after "Test Fixture...". Both actions
+show unconditionally for a single selected fixture (same as Test Fixture)
+rather than being gated on the fixture actually having a reset capability —
+matches this exact file's own existing precedent (Test Fixture's outer menu
+action doesn't check for Maintenance capabilities either; its own dialog
+just shows nothing extra if there aren't any).
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check: right-click a
+fixture, confirm Locate flashes it 3x and Reset sends its reset command
+(if it has one) — including confirming Locate started from a right-click
+still cancels cleanly if clicked again mid-flash.
+
+## New target: landed on the wrong layer and wasn't shown in the Layers tree — SHIPPED, not yet Branson-verified (2026-09-05)
+
+Branson: "also added a target .. should show up in layers on the current
+layre we're on. And also be visible on the stage .. can't see it." Two
+separate things bundled in one report — root-caused each before touching
+anything.
+
+**Layer assignment — a real, clear bug, fixed.** `Monitor::slotAddTarget()`
+(`ui/src/monitor.cpp`) was the ONE stage-object creation slot that never
+called `setLayerId(m_props->activeLayerId())` — every sibling (`slotAddPipe`,
+`slotAddStand`, `slotAddTruss`, `slotAddPlatform`, `slotAddTower`, …) sets
+this immediately after positioning the new object; `slotAddTarget()` simply
+never did, so a new target always silently landed on layer 0 ("Default")
+regardless of which layer was actually active — exactly why it didn't show
+up under "the current layer we're on" in the tree. It was ALSO missing the
+`if (m_layersPanel) m_layersPanel->reload()` call every sibling makes right
+after, so even a target that did land on the right layer wouldn't refresh
+the tree to show it until something else happened to trigger a reload.
+Fixed: added both lines, matching the established pattern exactly.
+
+**Visibility on the 2D canvas — investigated, NOT changed, flagging as a
+design question rather than deciding unilaterally.** `MonitorGraphicsView::
+updateTargets()` (`ui/src/monitor/monitorgraphicsview.cpp:2962-2977`)
+deliberately shows a `StageTarget` ONLY when it's referenced by an
+`Aim`-type `QLCPalette` that belongs to the scene currently focused in the
+Programming tab (`m_activeSceneId`) — explicit comment: "With no scene
+focused there is nothing to aim, so show nothing." This makes a target the
+ONE stage-object type that's conditionally hidden by default; every other
+kind (truss/platform/pipe/stand/tower/fixture) is unconditionally visible
+once placed. Compounding this: `slotAddTarget()`'s own auto-created
+companion palette is typed `QLCPalette::PanTilt`, not `QLCPalette::Aim` —
+per an explicit comment elsewhere in the codebase
+(`programmingmanager.cpp:1027`, "`case QLCPalette::Aim: break; // no
+m_values; target set in LookEditor`"), `stageTargetId()` is only meaningful
+on an Aim-type palette; setting it on a PanTilt one (as `slotAddTarget()`
+does) is inert, dead data. So a fresh target never gets a working Aim
+palette at all, and even if it did, that palette would still need adding to
+whichever scene is currently focused to satisfy the visibility gate above.
+**Not changed** — whether targets should default to always-visible (like
+every other stage object) or the auto-created palette should be Aim-typed
+and auto-attached to the focused scene are real design decisions with more
+than one reasonable answer, not a one-line bug fix; flagged here for
+Branson to decide rather than guessed at.
+
+Builds clean (`qlcconsole` target, layer-assignment fix only). Full
+`check-all.sh` gate run after (see job result). Not yet verified live —
+needs a real check: add a target while a non-Default layer is active,
+confirm it appears immediately under that layer in the Layers tree.
+
+## Front (elevation) view: moving things relative to a truss — investigated, NOT YET fixed, needs Branson to confirm which case (2026-09-05)
+
+Branson: "also in front view .. can't move things relative to the truss ..
+should be able to do that." Traced the relevant gating in
+`ui/src/monitor/monitorgraphicsview.cpp` rather than guess a fix:
+
+- A **fixture already bound to a truss** IS elevation-draggable today
+  (`elevationFixtureDraggable()`, `:2327-2333` — slides it along the truss,
+  handled in `slotFixtureMoved()`'s elevation branch, `:4450-4488`) — this
+  path looks structurally present and correct on read-through.
+- A fixture mounted on a **pipe or tower** instead of a truss is NOT
+  elevation-draggable at all — `elevationFixtureDraggable()` only checks
+  `rp.trussId`, never `rp.pipeId`/`rp.towerId`. If the fixture in question
+  is actually pipe/tower-mounted (easy to conflate with "truss" informally),
+  this would fully explain "can't move."
+- A **child bar/crossbar** (e.g. a batten hung off a larger truss) is only
+  elevation-draggable when its PARENT is a vertical tower
+  (`elevationBarDraggable()`, `:2335-2346`,
+  `parent->type() == Truss::Vertical`) — one hung off a horizontal truss
+  isn't elevation-draggable at all.
+
+Three genuinely different mechanisms, three different fixes, and "things"
+in the report doesn't pin down which one Branson actually hit. Rather than
+patch all three speculatively, need one concrete detail back: what exactly
+was being dragged (a fixture, or a bar/crossbar?) and what is IT actually
+mounted to (a truss, a pipe, a tower)? No code changed for this item yet.
+
+## Fixture rig editor: "Locate" was hidden for LED bars/washes — SHIPPED, not yet Branson-verified (2026-09-05)
+
+Branson: "also .. led bars and washes need a locate button." Confirmed and
+fixed directly — a clear, unambiguous UI gap, not a design question.
+
+**Root cause**: `Monitor::showFixtureItemEditor()` (`ui/src/monitor.cpp`)
+bundled the "Locate" button (flash-to-identify — useful for ANY fixture)
+into the same `testRowWidget` as the Pan/Tilt-specific "Test Orientation"
+controls (mode combo, target combo, "Test" toggle). That whole row gets
+hidden with `hideRow(testRowWidget)` for any fixture with no Pan or Tilt
+channel (`!isMover`) — correct for the orientation-test controls themselves
+(meaningless without Pan/Tilt), but it took Locate down with it, even
+though `FixtureLocate` (the class behind the button) never touches Pan/Tilt
+at all — it only sets intensity/colour channels + shutter, which every
+fixture has some form of.
+
+**Fix**: split Locate out into its own row (`locateRowWidget`, a plain
+`QHBoxLayout` holding just the button), added via a separate `rigForm->
+addRow(tr("Identify:"), ...)` call, outside the `!isMover` hide block. Test
+Orientation (mode/target/Test button) stays mover-only exactly as before;
+Locate is now unconditional.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — same collision-avoidance as the
+entries above — needs a real check: open the rig editor for an LED bar or
+wash (no Pan/Tilt), confirm "Identify:" / Locate is now visible and flashes
+the fixture.
+
+## Fixture rig editor's "Test" — investigated a report that it doesn't light an American DJ Focus Spot Three Z; code looks correct, root cause NOT YET confirmed (2026-09-05)
+
+Branson: "on the 3z when I do test it doesn't light .. It has intensity and
+shutter does test activeate both?" ("the 3z" = the patched **American DJ
+Focus Spot Three Z**, confirmed from the workspace's fixture list — not a
+channel or setting name).
+
+**Direct answer to the question asked**: yes, by design, both "Test" and
+"Locate" are supposed to drive intensity AND shutter together —
+`appendFixtureOnValues()` (`ui/src/monitor.cpp`) sets the fixture's
+detected master-intensity channel (or every Colour-group channel, for an
+RGB fixture) to 255, THEN separately scans for a Shutter-group channel
+whose capability name contains "open" (and not "strobe"/"close") and sets
+it to that capability's midpoint value — both channels, one call, used by
+both features.
+
+**Investigated the Three Z's own bundled definition specifically** (not
+guessed) to rule out the obvious "fixture data misclassified" explanation
+that fits this shape of bug so well elsewhere: confirmed byte-identical to
+`~/git/qlcplus`'s copy (not a fork-introduced issue either way). Its
+"Master Dimmer" channel uses `Preset="IntensityMasterDimmer"`, which
+resolves to `Group=Intensity, MSB, NoColour` (`qlcchannel.cpp:172-174`) —
+exactly what both `masterIntensityChannel()` and this feature's own
+fallback loop look for. Its "Strobe/Shutter" channel's first "Open"
+capability (DMX 8-15, `Preset="ShutterOpen"`) has a clean name with neither
+"strobe" nor "close" in it, so the exclusion filter doesn't wrongly skip
+it. Traced the toggle-on path too (`testBtn`'s `toggled` connection →
+`refreshTest()` → `FixtureOrientationTest::setDegrees()`) — it does call
+`appendFixtureOnValues()` immediately, not just on a later change.
+
+**So the fixture definition and the write path both look structurally
+correct** — I don't have a confirmed root cause, and won't guess one just
+to have shipped something, per the standing "stop guessing" bar from
+earlier this session. No code changed for this specific report. To narrow
+it down, need from Branson: (1) does the fixture's **Pan/Tilt actually
+move** when Test is toggled on (proves the Override-priority fader is
+reaching the universe at all, vs. nothing reaching it) — if pan/tilt moves
+but the light stays dark, that's the more interesting half of this bug;
+(2) a DMX monitor/console reading of the fixture's Master Dimmer + Strobe/
+Shutter channel values while Test is toggled on, if available at the rig.
+
+---
+
+## Lighting Studio: opening/saving the fixture editor corrupted a truss-bound fixture's dragged position — SHIPPED, not yet Branson-verified (2026-09-05)
+
+Branson: "everytime I save the eidtor it moves the fixture position .. I
+think it's because the relative position I move it to on the truss isn't
+stored in the fixture def and when I open it it's wrong and so when it
+saves it it's wrong." His hypothesis pointed at the right area (the rig
+editor's truss-position fields); root-caused the exact mechanism before
+touching anything — turned out to be **two** independent bugs in
+`Monitor::showFixtureItemEditor()` (`ui/src/monitor/monitor.cpp`), both
+firing on essentially every save of a fixture with a non-zero across-truss
+offset.
+
+**Bug 1 — the "Across truss" combo silently re-buckets a continuous value.**
+Canvas drag-to-any-position (shipped 2026-08-17, see the truss-geometry
+entries in DONE.md) lets `FixtureRigProps::trussCross` be any continuous
+float — a fixture can sit anywhere across a truss's width, not just
+dead-centre. But this dialog's "Across truss" field is only a 3-item combo
+(Left / Centered / Right, ±half the truss width or 0) — and Save
+**unconditionally** re-derived `newRp.trussCross` from whichever of those 3
+buckets the combo happened to be sitting on, discarding the real continuous
+value every single time the dialog was accepted, whether or not the user
+ever touched that control. Loading the dialog already lossy-bucketed
+whatever continuous value was there (`rp.trussCross < 0 ? -1 : ...`), so
+this was a guaranteed round-trip loss: open → snap to a bucket → save →
+overwrite the real value with that bucket.
+
+Fix: capture the combo's initially-loaded index
+(`initialTrussCrossIndex`) right after loading it. Save now only
+re-derives `newRp.trussCross` from the combo when its index actually
+**changed** from that — an untouched control leaves `newRp.trussCross`
+exactly as it started (it's a copy of the existing rig,
+`FixtureRigProps newRp = m_props->fixtureRigProps(...)`, so simply not
+writing to it preserves the original continuous value). Left/Centered/Right
+still work as explicit quick-set actions when actually chosen.
+
+**Bug 2 — the post-save reposition math drops the cross offset entirely.**
+Separately, whenever the truss binding or along-truss offset changed (which
+also happens spuriously from float round-trip through the offset spinbox's
+display-unit conversion, so this fired more often than it looked like it
+should), the dialog recomputed the fixture's stored/on-screen XY via a raw
+`Truss::positionAt(newRp.trussOffset)` — the truss **centerline only**,
+with no cross term at all. This is the exact same "positionAt() ignores
+cross" shape of bug the 2026-08-17 truss work already found and fixed for
+canvas dragging (`slotTrussMoved()`, switched to
+`MonitorProperties::fixtureRigPosition()`) — but this dialog's own
+reposition code was never updated to match, so it kept silently recentring
+any off-centre fixture back onto the truss's centerline on save.
+
+Fix: swapped the raw `t->positionAt(newRp.trussOffset)` call for
+`m_props->fixtureRigPosition(fxItem->fixtureID())` — `setFixtureRigProps
+(newRp)` already ran a few lines above this, so this reads the
+just-stored rig through the same authoritative position derivation
+`aimsolver.cpp`/`effectinstance.cpp` already trust (cross offset, mount-side
+Z, and the mount height nudge all included), instead of a narrower
+duplicate that drops terms.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — same collision-avoidance as the
+entries above (Branson has his own instance running) — needs a real check:
+drag a truss-bound fixture to an off-centre cross position, open its
+Properties dialog without touching "Across truss," hit OK, and confirm the
+fixture stays exactly where it was dragged instead of snapping back toward
+the truss centerline.
+
+---
+
+## Lighting Studio: triple-click a grouped/truss-bound fixture to open its editor — SHIPPED, not yet Branson-verified (2026-09-05)
+
+Branson, right after the truss-double-click fix above: "I am fine with
+isolation selection .. but a triple click should open the fixture editor."
+Confirms the drill-in (double-click isolates) behavior is wanted as-is —
+the ask is a faster way to reach the editor afterward than a whole separate
+second double-click.
+
+**Mechanism**: Qt has no native triple-click event — a real third rapid
+press just arrives at `mousePressEvent()` as an ordinary
+`QEvent::MouseButtonPress` (Qt only ever turns the *second* press within
+`QApplication::doubleClickInterval()` into `QEvent::MouseButtonDblClick`; a
+third press gets no special treatment from Qt itself). So detecting a
+triple-click means the double-click handler has to leave a breadcrumb for
+the press handler to notice.
+
+**Implementation**: when `mouseDoubleClickEvent()`'s isolate branch fires
+(a grouped/truss-bound fixture, first double-click, drills in rather than
+opening an editor), it now also records the fixture + a running
+`QElapsedTimer` (`m_lastFixtureDoubleClickItem`/`m_lastFixtureDoubleClickTimer`,
+new members in `monitorgraphicsview.h`). `mousePressEvent()` checks this
+first, before anything else: if a new left-press lands on that SAME
+fixture (resolved via `topPickableAt()`, the identical ghosted-item-aware
+hit-test the double-click handler itself uses, not plain `itemAt()`) within
+`QApplication::doubleClickInterval()` of that timestamp, it's treated as
+the triple-click — opens the fixture's own editor
+(`emit fixtureDoubleClicked(fi->fixtureID())`) immediately, sets
+`m_suppressNextViewClick` (same convention the double-click path already
+uses so the paired release doesn't immediately close what was just
+opened), and consumes the press (no call to the base class, matching how
+every other "handled" branch in this same double-click/press code already
+works — never calling the Qt base handler when a real item was hit).
+Deliberately scoped to just fixtures (what was asked) — the same "single
+click groups, double click isolates" pattern also exists for bare
+truss/platform/pipe/stand/tower selection (`drilledIntoGroup()`), so the
+same triple-click trick could extend there too if ever wanted, but wasn't
+built now since it wasn't asked for.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — same collision-avoidance as the two
+entries above (Branson has his own instance running) — needs a real check:
+single-click a truss's fixture group (whole thing highlights), double-click
+one fixture (isolates just it, nothing opens), then a further quick click
+on that same fixture (should open its editor immediately — no need for a
+second full double-click).
+
+---
+
+## Lighting Studio: double-clicking a truss-bound fixture always edited the truss — SHIPPED, not yet Branson-verified (2026-09-05)
+
+Branson: "when adding a fixture to a truss on the studio .. when I
+doubleclick the fixture, it edits the truss." Root-caused before touching
+anything.
+
+**Root cause**: `MonitorGraphicsView::mouseDoubleClickEvent()`
+(`ui/src/monitor/monitorgraphicsview.cpp:3856-3903`) had two competing rules
+for a truss-bound fixture, and the wrong one always won. An early,
+unconditional block ("a fixture mounted ON a feature → open that feature's
+editor," written for the platform/riser case where the mounting feature is
+literally covered by its own fixtures) checked `rp.trussId` **first** and
+returned immediately — before ever reaching the later, more specific block
+built for exactly this scenario: "grouped or truss-bound fixture: the FIRST
+double-click drills in (selects just this fixture, distinct highlight) so
+it can be dragged/detached; a SECOND double-click, now isolated, opens the
+fixture's own editor." That second block's `fi->isBoundToTruss()` condition
+was real, working code — just permanently unreachable, because the early
+`rp.trussId` check above it fired first on every single double-click,
+truss-bound or not, isolated or not, and returned before the isolation
+check ever ran.
+
+**Fix**: removed the `rp.trussId` branch from the early "open the feature's
+editor" block. Truss binding now falls straight through to the existing
+drill-in-then-edit logic, which was already correct and already built for
+this. Pipe/tower/platform/riser mounts keep the old immediate-redirect
+behavior — deliberately not touched, since those features really can be
+fully covered by their own mounted fixture (no uncovered spot left to
+double-click directly), unlike a truss, which is a long mostly-uncovered
+bar you can still double-click elsewhere on to reach its own editor.
+
+**Noticed, not fixed (same shape of bug, not what was reported)**: the same
+early-return ordering issue could in principle also make a *grouped*
+platform/pipe/tower-mounted fixture's drill-in unreachable (`itemGroupId(fi)
+!= 0` is also checked by the later block, but the earlier platform/pipe/
+tower checks fire regardless of group membership) — not confirmed as an
+actual live bug, since it depends on a fixture being both mounted AND
+manually grouped, and not raised by Branson; flagged here rather than
+guessed at or fixed unprompted.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — Branson had his own instance running
+throughout, so this shipped without relaunching to avoid colliding with it
+— needs a real check: double-click a truss-bound fixture once (should
+isolate/highlight just that fixture, not open anything), double-click it
+again (should now open the fixture's own editor, not the truss's).
+
+---
+
+## Fixtures page: a universe patched in Connections didn't appear there at all — SHIPPED, not yet Branson-verified (2026-09-05)
+
+Branson: "if I patch a universe in the connections editor .. it doesn't
+appear on the fixtures page." Investigated before touching anything, per the
+standing "root-cause, don't guess" bar from earlier in this session.
+
+**Root cause, confirmed by reading the code, not assumed**:
+`FixtureTreeWidget::updateTree()` (`ui/src/fixturetreewidget.cpp:887`) only
+ever built the "Universes" folder — and every universe row inside it — by
+looping over **patched fixtures**. A universe row existed purely as a side
+effect of a fixture happening to sit in it; a universe that was patched in
+Connections/Devices but had no fixture assigned to it yet had **no row at
+all**, not a hidden or greyed-out one. This broke the same "always present,
+even with nothing in it yet" convention this file already uses for the
+neighboring "Fixture Groups" and "Power" folders one section up — both exist
+specifically so there's something to right-click and create the first
+member on; "Universes" was the one folder that never got that treatment.
+
+**Fix**: the "Universes" folder and one row per universe are now pre-built
+from `Doc::inputOutputMap()->universesCount()` *before* the fixture loop
+runs, so every patched universe shows up immediately regardless of fixture
+count. The fixture loop then just fills in each universe's fixtures as
+before; its old lazy-create-on-first-fixture path is kept, but now only
+fires for the fixture-picker dialogs that don't show groups at all
+(`m_showGroups == false`) — those never showed empty universes and don't
+need to, since there's nothing to pick from one.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after:
+Qt6 and Qt6-Release both pass clean (Qt5 skipped, not installed on this
+machine); `Qt6-Werror` fails at CMake *configure* time on an unrelated,
+pre-existing break (`"dangling-else" is not known` as a warning category) —
+confirmed unrelated by checking it's a configure-stage CMake error, not a
+compile error in anything this change touched. Not yet verified live —
+Branson had his own instance running against a live session throughout, so
+this shipped without relaunching to avoid colliding with it (same collision
+risk documented earlier this session) — needs a real check: patch a new
+universe in Connections, switch to the Fixtures page without touching
+anything else, confirm the new universe's row is there immediately.
+
+---
+
+## Fixture Manager — modernize + look at integrating with qlcconsole *(2026-09-02 audit, 2026-09-03 follow-up: both open questions answered + shipped, editor merge still open)*
 
 Branson: look at Fixture Manager and see what can be done to modernize it and
 maybe integrate it more with the rest of qlcconsole. Followed up same night
@@ -45,6 +442,328 @@ RGB panel/Add fixture to group, with Properties/Test Fixture/Delete items/
 Remove fixture from group gone (previously listed disabled); a fixture row
 still shows the full menu including all four, confirming the gating is
 selection-aware, not a blanket removal.
+
+### Follow-up: Branson answered the two open questions, plus new asks (2026-09-03) — toolbar/menu work SHIPPED, editor merge NOT started
+
+Branson came back with five asks in one message, the last one flagged "ONE
+MORE TIME" (frustration that the 2026-09-02 title-bar merge fix, marked
+SHIPPED but never interactively verified, evidently hadn't actually fixed
+what he was seeing). Asked three scoping questions via AskUserQuestion
+before touching code, since two of the asks map directly onto this doc's
+open questions and one is a brand-new, large architectural decision:
+
+- **Fixture Editor integration → "Full tab/panel merge"** chosen. This is a
+  big rearchitecture (the standalone `fixtureeditor/` app has its own
+  window and its own fixture-definition model, currently has zero in-app
+  entry point at all) and has **not been started** — needs its own
+  investigation + design pass, tracked as a new item below this one.
+- **Toolbar trim → "Trim to creation-only"** chosen (this doc's
+  recommendation). **Shipped**, see below.
+- **Three-routes-to-group wording → "Leave as-is for now"** — not touched.
+
+**Title bar, actually root-caused this time.** The 2026-09-02 fix (locking
+the toolbar to icon-only) reduced button height but didn't touch the real
+cause: since macOS 11 (Big Sur), AppKit's default "unified" `NSToolbar`
+style puts the window title on its own centered line above the toolbar row
+whenever a window has more than a couple of toolbar items — Qt's
+`setUnifiedTitleAndToolBarOnMac()` only merges the background; it has no
+API for the older single-line "compact" style. Confirmed by screenshot
+(traffic lights + title on one line, Stop/Blackout/Blind/Operate visibly
+lower on a second line, inside the same dark unified background — easy to
+mistake for "basically merged" from a quick glance, which is likely why the
+2026-09-02 fix looked plausible without an actual screenshot check). Fixed
+with a direct AppKit call: new `ui/src/mactoolbarstyle.{h,mm}`
+(`macSetWindowToolbarStyleUnifiedCompact()`, sets
+`NSWindowToolbarStyleUnifiedCompact` on the native `NSWindow`), called from
+`App::initToolBar()` after forcing native window creation via `winId()`.
+**Interactively verified**: before/after screenshots — title and toolbar
+icons now share one row, matching Safari/Mail/Xcode's compact-toolbar look.
+
+**`check-all.sh` caught a real regression from this fix**: both Qt6 and
+Qt6-Release `check` runs SIGSEGV'd immediately in `autosave_test`'s
+`initTestCase()` — which constructs a real `App` (and so hits
+`initToolBar()`) under `QT_QPA_PLATFORM=offscreen` for headless test runs.
+`macSetWindowToolbarStyleUnifiedCompact()` was reinterpret-casting
+`QWindow::winId()` to `NSView*` unconditionally; under the offscreen QPA
+platform that's never a real Cocoa view, so messaging `.window` on it
+crashed (SEGV_ACCERR) — a nil check alone wouldn't have caught this, since
+the garbage pointer wasn't nil, just not a valid Objective-C object. Fixed
+by guarding on `QGuiApplication::platformName() == "cocoa"` before touching
+anything AppKit-side. Re-ran `autosave_test` directly (7/7 PASS) and the
+full `check-all.sh` gate after the fix.
+
+**Fixture Manager toolbar, actually trimmed.** Turned out to be more
+tangled than the doc's own preview implied — three tabs (Fixtures, Channel
+Groups, RDM-dormant) share one toolbar with per-tab retargeted meaning, and
+two categories of action didn't fit a plain "move to context menu": global/
+doc-wide actions (Import/Export/Remap/Fade Config — not tied to any row),
+and the Channel Groups tab, which had zero context menu of its own before
+this. Asked two more scoping questions, both resolved toward full
+consistency rather than partial/lower-risk options:
+
+- **`ui/src/fixturemanager.{h,cpp}`**: toolbar now shows only creation
+  actions per tab — an "Add ▾" dropdown (Add Fixture.../Add RGB panel...,
+  consolidating what were two separate always-visible buttons) + "Add
+  fixture to group..." on the Fixtures tab; a single "Add Channel Group..."
+  on the Channel Groups tab (split out from the old shared `m_addAction`,
+  which used to silently mean different things per tab with only a tooltip
+  hinting at the swap — a real instance of the "unclear wording" Branson
+  flagged). Properties/Test/Remove/Ungroup/Move Up/Down moved to context-
+  menu-only; Expand/Collapse-all moved into the fixtures tree's context menu
+  (matching Connections' convention). Channel Groups tab got a **new**
+  context menu (`slotChannelGroupContextMenuRequested()`) it never had
+  before — Properties/Move Up/Move Down/Remove, reusing the same tab-aware
+  actions/slots the toolbar used, so no new business logic, just a new
+  place to reach it from. Also renamed the inner "Fixture Groups" sub-tab to
+  "Fixtures" — it actually holds the whole patch (fixtures, groups, power,
+  universes), not just groups; the old label undersold its contents (a
+  second, smaller "concise wording" fix).
+- **`ui/src/app.{h,cpp}`**: new "Fixtures" menu bar entry (between View and
+  Control) holding Import/Export/Remap/Fade Configuration —
+  `FixtureManager::populateFixturesMenu()` builds it, called from
+  `App::initMenuBar()`.
+
+Builds clean. **Interactively verified**: toolbar screenshot (Add ▾ + Add
+fixture to group ▾ only, tab relabeled), Fixtures menu bar contents via
+accessibility API (Import/Export/Remap/separator/Fade Configuration), and
+the fixtures-tree context menu including the new Expand/Collapse-all
+entries, via a real right-click. **Not verified**: the new Channel Groups
+context menu specifically (a `cliclick` coordinate slipped and landed a
+single click in the VS Code window instead mid-session — harmless, no text
+typed, but stopped further blind-coordinate GUI automation for this pass
+rather than risk another one; the code is a direct mirror of the
+already-verified fixtures-tree pattern, reusing its exact actions/slots).
+Branson confirmed live (2026-09-05): the Add ▾ dropdown is there and working.
+
+Icon differentiation (ask: "sub icons... identification via grouping") was
+**not done** — the tree's Power root/sources/circuits and Universes root
+all still reuse plain `folder.png` (see the earlier design-doc audit's tree
+icon inventory). No dedicated icon assets exist in `resources/icons/` for
+these concepts; fabricating new icon art ad hoc without design input felt
+like the wrong call. Flagged here rather than guessed at.
+
+### Second follow-up: title-bar race fix confirmed, in-app Fixture Editor launcher, Fixture Groups root (2026-09-03)
+
+Branson: the title bar was still broken after the showEvent() fix, screenshotted from `ender` directly (`branson@ender qlcconsole %`). Turned out `ender` **is** this same machine/session (`hostname` on both sides matched, and `ssh ender` from here loops back to the identical working tree) — so the flakiness wasn't a second machine running stale code, it was a genuine timing race, now closed. 15+ cold-launch screenshots after the fix all showed one row; Branson's later messages moved on without further complaint, so treating this as resolved.
+
+**Real finding from this round**: my own `pkill -f "build/main/qlcconsole"` calls before each test launch were killing Branson's own running instance — his VS Code-embedded terminal showed `zsh: terminated build/main/qlcconsole...`. He's running/watching a live session side-by-side with the chat, not just reading screenshots after the fact. Stopped calling pkill on it; switched to asking him to relaunch/verify on his end for anything after this point, rather than risking his session or fighting flaky coordinate-based `cliclick` automation (which twice mis-clicked "Delete items" instead of a menu entry — caught both times by the confirmation dialog, cancelled via an accessibility-API button-name search rather than more coordinate guessing, no data lost).
+
+**In-app Fixture Editor launcher — SHIPPED, Branson-verified.** Two asks: "Fixture Editor" (not a jump to the Fixture Manager tab) in the new Fixtures menu, and a right-click "Edit Fixture Definition..." on a fixture. `AppUtil::launchFixtureEditor()` (`ui/src/apputil.{h,cpp}`) resolves the sibling `qlcconsole-fixtureeditor` binary (installed-flat-bindir path checked first, dev-build `../fixtureeditor/` path as fallback) and `QProcess::startDetached()`s it, optionally with `--open <path>` for a specific `.qxf`. Wired into `App`'s new "Fixtures" menu bar entry (`app.cpp`) and into `FixtureManager::slotContextMenuRequested()` (`fixturemanager.cpp`), gated to a single fixture with a real `fixtureDef()->definitionSourceFile()` (a generic dimmer has none). Branson confirmed both work.
+
+**Fixture Groups tree root + toolbar/context-menu restructuring — SHIPPED, Branson-verified (2026-09-05)** (didn't relaunch to avoid clobbering his live session at the time; asked him to test directly instead — confirmed live: "FG tree root is there"). Three related asks in his last two messages:
+
+- **"Add fixture to group" still in the Fixtures toolbar** — removed. It only ever made sense with a fixture selected (assign-to-existing-group); the toolbar is creation-only now (just the "Add ▾" dropdown).
+- **A "Fixture Groups" root node, with group creation moved to right-click on it** — `FixtureTreeWidget::updateTree()` now creates this root unconditionally (`ui/src/fixturetreewidget.cpp`, peer to "Power"/"Universes", same "always present, even empty" convention as Power), and `groupFolderItem("")` resolves to it instead of the tree's invisible root, so every existing group-folder nests under it automatically — no separate migration needed, existing `path()`-based folder nesting is unchanged, just one level deeper. Right-clicking the root (or any group folder under it, all sharing `PROP_FOLDER`) now offers "New Group...", filing the new group at that folder's path — replacing the old "Add fixture to group ▾ → New Group..." dropdown entry, which is removed (`updateGroupMenu()` no longer adds `m_newGroupAction`; `slotGroupSelected()`'s now-unreachable "invalid data = new group" branch removed; dead `headCount()` helper removed with it since it was New-Group-only).
+- **A fixture's own right-click shouldn't offer "Add fixture..."/"Add RGB panel..."** — those two are creation actions unrelated to the clicked row; now shown only when nothing fixture-or-group-like is selected (empty space, Power root, Universes root, a universe row, the Fixture Groups root) — the exact inverse of the Properties/Test/Remove/Ungroup block, which gained "Add fixture to group..." (moved out of the always-shown block, since it's equally selection-dependent). Caught and fixed a real bug surfaced by this while re-reading `slotModeChanged()`: `m_groupAction` was being force-`setEnabled(true)` unconditionally at the end of the Design-mode branch, overriding the correct per-selection-state logic just above it — a leftover from when its dropdown's "New Group..." needed to work with nothing selected. Removed the override now that assigning-to-an-existing-group is its only job again.
+
+Builds clean (`cmake --build build --target qlcconsole`). `check-all.sh` run after this round; see next entry for its result.
+
+### Third follow-up: real crash, root-caused and fixed with a debugger-grade explanation, not a guess (2026-09-03)
+
+Branson, after testing the Fixture Groups root round: still saw the title bar broken (same screenshot signature as before), then — after being told plainly "stop guessing, stop shotgunning, investigate end to end" — reported it **segfaulted**. That crash was the real, actionable bug this round; the title-bar report that preceded it was not re-investigated further (no repro, no new evidence beyond "still broken" — see the open question at the end of this entry).
+
+**Root cause, confirmed from two identical macOS crash reports** (`~/Library/Logs/DiagnosticReports/qlcconsole-2026-09-03-19564\*.ips` and `-2002\*.ips`, both `EXC_BAD_ACCESS` at the identical fault address, both the identical stack: `FixtureTreeWidget::updateTree()` line 786 → `QTreeWidgetItem::setFlags()` → `QTreeWidgetPrivate::dataChanged`, reached via `Doc::loadXML → Doc::loaded() → FixtureManager::slotDocLoaded()`) — a genuine reentrancy bug in the previous round's "Fixture Groups" root, not environmental:
+
+`QTreeWidgetItem::setFlags()`/`setData()` emit `itemChanged()` *synchronously* — `fixturetreewidget.cpp` already knew this and works around it once already (`keyPressEvent()`'s `blockSignals` around arming a fixture row for inline rename). `FixtureTreeWidget::slotItemChanged()` treats any item carrying a valid `PROP_FOLDER` as a folder-rename event *unless* its display text equals its path's last segment — true for every ordinary folder (both come from the same string at creation) but **not** for the new "Fixture Groups" root, whose text ("Fixture Groups") and `PROP_FOLDER` (`""`) deliberately differ. Constructing it — `setData()` then `setFlags()` — fired `itemChanged()` unguarded, which read as "the root got renamed to 'Fixture Groups'", which emitted `groupFolderRenamed("", "Fixture Groups")`, which `FixtureManager::slotGroupFolderRenamed()` turned into `updateView()` → **a nested `updateTree()` call while the outer one was still mid-construction** — `clear()` in the inner call deleted the very `groupsRoot` object the outer call still held a raw pointer to, and every subsequent use of it (`setExpanded()`, storing it in `m_groupFolders`, parenting new items under it) touched freed memory. Classic heap-state-dependent use-after-free — explains the non-determinism (crashed twice for Branson, wouldn't reproduce for me in 20+ attempts, incl. under `sudo lldb` since normal `lldb` attach is blocked in this sandboxed environment) without needing any environment-difference theory. The earlier "different machine" / "stale binary" avenues explored before this were dead ends on the *real* bug, though the `ender`-is-this-session finding and the title-bar `showEvent()` race stand on their own as separately confirmed, unrelated fixes from earlier rounds.
+
+**Fix**: `blockSignals(true)`/`blockSignals(false)` around the Fixture Groups root's `setData()`/`setFlags()` calls in `FixtureTreeWidget::updateTree()` — same pattern already used elsewhere in this file for this exact hazard. This doesn't just make the crash less likely, it makes the reentrant path structurally unreachable (the signal never fires during construction). Verified: 15/15 consecutive fresh launches of the real crash's workspace file, clean; no new crash report generated (checked `~/Library/Logs/DiagnosticReports/` before and after); `check-all.sh` re-run.
+
+**Update — the "still open" hypothesis above was wrong, and here's why, for real this time.** Branson re-tested after the crash fix: title bar still broken, same as ever. Rather than guess a fourth time, added `qWarning()` diagnostics directly to `macSetWindowToolbarStyleUnifiedCompact()` and `App::showEvent()` — logging every branch taken and the actual `NSWindow.toolbarStyle`/`.toolbar` values. First real obstacle: qlcconsole has its **own** `qInstallMessageHandler` (`main.cpp`) that filters everything below `QLCArgs::debugLevel` (defaults to `QtCriticalMsg`) — every `qWarning()` this session had ever added was being silently swallowed; needed `-d` to actually see them. Once visible, both here and on Branson's own run (he pasted the literal terminal output, not a screenshot — first fully unambiguous data point in this whole saga):
+
+```
+[ToolbarStyle] applied: was 0 now 4 (UnifiedCompact == 4) toolbar= false visible= false
+[ToolbarStyle] App::showEvent fired, applying synchronously
+[ToolbarStyle] applied: was 4 now 4 (UnifiedCompact == 4) toolbar= false visible= false
+[ToolbarStyle] +100ms recheck ... toolbar= false
+[ToolbarStyle] +1000ms recheck ... toolbar= false
+```
+
+`toolbar= false` at every single check, identically on both machines. **`NSWindow.toolbar` is `nil` the entire time.** `setUnifiedTitleAndToolBarOnMac()` on Qt's Cocoa platform plugin never creates a real `NSToolbar` object — confirmed independently by a [documented Qt/Cocoa forum thread](https://forum.qt.io/topic/62750/how-to-unified-os-x-title-bars) ("calling `setUnifiedTitleAndToolBarOnMac` has no effect… on the Cocoa platform"). Every native call across all three rounds of this saga — the original `setUnifiedTitleAndToolBarOnMac(true)`, the icon-only lock, `NSWindowToolbarStyleUnifiedCompact`, the `showEvent()` re-assert, the deferred re-checks — was setting a property on a toolbar object that structurally never existed. Not a timing race, not an environment difference, not a version quirk: the whole mechanism was incapable of doing anything from the very first attempt. The apparent "fixed!" screenshots throughout this session were real renders of *something* (confirmed separately: automated `screencapture -R` region grabs aren't window-scoped — one diagnostic screenshot mid-session silently captured VS Code sitting at the same screen coordinates instead of qlcconsole, with no error), just never caused by any code in this repo.
+
+**Decision, put to Branson directly given the size of what a real fix requires**: the only way to actually get the single-row Safari/Mail look is a genuine native `NSToolbar` built in Objective-C++ (real `NSToolbarItem`s, real click routing back into Qt, real icon/state sync) — materially bigger and riskier than anything tried so far. Also asked, unprompted by him: would that even help Windows/Linux? No — it'd be `#if defined(__APPLE__)`-only new surface area, and Windows/Linux have no "unified title bar" concept to begin with (a toolbar as its own row is already their normal, correct look). Branson chose **not** to pursue native: keep two rows, make them look intentional instead of half-merged.
+
+**Shipped**: removed all of it — `ui/src/mactoolbarstyle.{h,mm}` deleted, `App::showEvent()` override removed (`app.h`/`app.cpp`), `setUnifiedTitleAndToolBarOnMac()` call removed, the APPLE-only CMake block (Cocoa framework link) removed, the icon-only-lock-on-macOS special case in `applyTabLabelMode()` removed — this toolbar now follows the same "Toolbar Style" preference as every other toolbar, on every platform, no macOS special-casing left at all. Restored `default.qss`'s `QToolBar#MainToolBar` padding to comfortable values (had been zeroed for an abandoned "fit within native title-bar height" experiment that turned out to be irrelevant, since there's no native chrome involved). Verified with the lesson from the VS Code mixup applied properly this time — explicit `set frontmost` + a verification query *before* every screenshot, not after: clean, clearly-separated, well-labeled toolbar row (Stop ALL functions / Toggle Blackout / Toggle Blind / Operate, full text labels, proper spacing) sitting honestly below the title bar. `check-all.sh` re-run clean.
+
+**Real lesson for next time a "fixed it, screenshot attached" claim doesn't match what Branson sees**: verify with logging/text output before trusting a screenshot at all — screenshots from this environment have now been shown unreliable in two independent ways (can silently capture the wrong window; "looks right" at a glance doesn't mean the mechanism believed responsible actually ran). Text output copy-pasted from Branson's own terminal was the only evidence in this entire saga that was never in question.
+
+## Fixture Editor integration into the main window *(2026-09-03, not started — needs its own investigation)*
+
+Branson wants the standalone Fixture Editor (`fixtureeditor/`, currently a
+fully separate app — own window, own fixture-definition model, zero in-app
+launch point today) embedded as part of the Fixtures tab rather than a
+separate application. Chose "full tab/panel merge" over an in-app-launcher-
+only or dockable-panel option when asked. This is a much bigger job than
+the toolbar/menu work above — needs a real audit of `fixtureeditor/`'s
+architecture (its `Doc`-equivalent model, file I/O, widget tree) before it's
+even sizeable, let alone planned. Not started this session.
+
+### Fixture Library browser dock — SHIPPED (2026-09-03)
+
+Branson: "can we make a side tree listing of existing fixtures.. make it
+searchable by fixture model, manufacturer" for the standalone Fixture Editor.
+Smaller and orthogonal to the tab-merge item above — the editor previously
+had zero connection to the on-disk `.qxf` library beyond a raw `QFileDialog`
+(`App::slotFileOpen()`); no `QLCFixtureDefCache` was ever instantiated there
+at all.
+
+New `fixtureeditor/fixturebrowser.{h,cpp}` — `FixtureBrowser`, a `QWidget`
+owning its own `QLCFixtureDefCache` (loaded the same split the app's existing
+working-directory default implied: `load()` for the user dir, `loadMap()` for
+the larger system dir), a `QLineEdit` search box, and a `QTreeWidget` grouped
+by manufacturer → model, filtered by manufacturer-or-model substring on every
+keystroke (mirrors `ui/src/addfixture.cpp`'s `AddFixture::fillTree()` pattern,
+simplified — no "Generic" section, since browsing existing files to edit has
+no equivalent of "create a generic dimmer"). Double-click emits
+`definitionActivated(path)`, resolved via `cache->fixtureDef(manuf,
+model)->definitionSourceFile()`.
+
+Wired into `App` as a `QDockWidget` (`fixtureeditor/app.cpp`), not a splitter
+replacing `centralWidget()` — deliberately: `loadFixtureDefinition()`
+and six other call sites all do `qobject_cast<QMdiArea*>(centralWidget())`,
+which a splitter swap would have silently broken (caught before it shipped,
+not after). The dock leaves all of that completely untouched.
+
+Verified interactively, screenshot-confirmed at every step: panel renders
+with all manufacturers (1712 fixtures found in the map log), search "focus
+spot" correctly narrows to American DJ's three matching models, double-click
+opens the exact right `.qxf` in a new MDI sub-window with correct metadata
+(Manufacturer/Model/Type/Author fields populated). Full `check-all.sh` gate
+re-run after.
+
+### Fixture Library follow-up: fixed dock, single-instance, prefs, About — SHIPPED (2026-09-03)
+
+Four issues from actually using the panel above, in one message:
+
+- **"closed the tree by mistake .. that shouldn't be able to happen"** —
+  `QDockWidget`'s default features include its own close button, and this
+  app has no menu bar (`initMenuBar()` is commented out in `App::App()`, has
+  been since before this session) offering any way to bring it back once
+  dismissed — closing it would have permanently stranded a session without
+  the browser. `browserDock->setFeatures(QDockWidget::NoDockWidgetFeatures)`
+  — no close, float, or move; it's a fixed panel now, matching "should be
+  fixed left hand side of window" literally.
+- **"icons aren't following prefs (icons plus text)"** — this app's toolbar
+  never had a label-mode preference of its own (no `setToolButtonStyle()`
+  call at all before this, so it fell back to Qt's bare default = icon-only).
+  Rather than invent a second, separate preference, `initToolBar()` now
+  reads qlcconsole's own `"workspace/tabLabelMode"` directly —
+  `QSettings(QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"))`,
+  explicit org+app rather than this app's own `QSettings` default (its
+  `applicationName` is `FXEDNAME` = "Fixture Definition Editor", a
+  genuinely different settings file — confirmed two separate plists exist
+  under `~/Library/Preferences/`) — so this toolbar now matches whatever the
+  main window's Toolbar Style is actually set to, not a value that can drift
+  out of sync between the two apps.
+- **"with fixture editor already open .. right click on another fixture and
+  say edit opens another instance .. should probably be in same instance"**
+  — `AppUtil::launchFixtureEditor()` (`ui/src/apputil.cpp`) always
+  `QProcess::startDetached()`s a brand new process, every time, regardless
+  of whether one's already running; confirmed live — the user's own session
+  had two separate stale `qlcconsole-fixtureeditor` processes running from
+  testing this exact bug. Since the fix has to live in the editor itself
+  (qlcconsole can't know if a previously-launched detached process is still
+  alive), added single-instance handoff to `fixtureeditor/main.cpp`: a
+  `QLocalServer` on a fixed name (`qlcconsole-fixtureeditor-instance`);
+  before constructing its own `App`, every launch first tries connecting to
+  that name as a client — if it succeeds, another instance is already up,
+  so this one just writes the requested path (if any) to the socket and
+  exits (`return 0`) without ever building a window; the instance actually
+  holding the server relays the path into its own already-running
+  `App::loadFixtureDefinition()` (opens as another MDI tab) and raises
+  itself. `QLocalServer::removeServer()` first, defensively, since a crashed
+  prior instance can leave a stale socket file on Unix that would otherwise
+  make a genuinely-first launch's own `listen()` fail. Needed
+  `Qt::Network` added to `fixtureeditor/CMakeLists.txt`'s link libraries
+  (wasn't linked at all before — `QLocalSocket`/`QLocalServer` live there).
+- **"the about is superfluous given the main menu[bar]'s stuff"** — this is
+  one app in the qlcconsole suite, not a standalone product; removed
+  `m_helpAboutAction`/`slotHelpAbout()`/the `AboutBox` include entirely
+  (not just off the toolbar — it had no other reachable home either, since
+  `initMenuBar()` is dead code) rather than leave it as an action nothing
+  can trigger.
+
+Verified together in one screenshot after fixing a real self-inflicted
+verification hazard: three `qlcconsole-fixtureeditor` processes were running
+simultaneously (two of Branson's own stale pre-fix instances, plus this
+session's fresh test) and `osascript`'s name-based process targeting doesn't
+disambiguate between same-named processes — an early screenshot silently
+captured one of the *stale* processes and looked like every fix had failed.
+Closed the two stale ones (pure test artifacts of the exact bug being fixed,
+not live show state) before re-verifying against the actual current binary:
+toolbar shows full text labels, About gone, dock has no close control, and
+a second launch's `-o` file opened as a new tab in the first instance's
+window rather than a separate one. `check-all.sh` re-run clean after.
+
+### Mode-layout save warning + system-definition local override — SHIPPED (2026-09-03)
+
+Branson raised this as a design question first ("given the fixture def is very
+tied to configuration in qlc .. if the definition is changed relative to
+#'s of channels/heads/mode .. should get a warning... or are there other
+ways to handle this dichotomy"), not a bug report — worth recording the
+actual risk, since it's worse than "might affect a running show": Scenes/
+Chasers store per-channel values by channel **index**, not name, so a
+channel-count/order change to a mode that's already patched silently
+reinterprets a show's saved values (channel 5 meant "Gobo", now means
+"Strobe", every saved value at index 5 keeps applying) — and it's not even
+a *live* risk, since a running process already has the old definition in
+memory; the corruption hits on the *next* load, which is easy to miss since
+it's delayed. Branson picked "both" (warn, and offer a new-mode escape
+hatch) plus a third requirement once the design was discussed: system
+definitions must never be edited in place, only shadowed by a local
+override.
+
+**1. Mode-layout warning + "save as new mode" instead** —
+`fixtureeditor/fixtureeditor.{h,cpp}`. New `QLCFixtureEditor::modeStructureChanged()`
+compares channel count, per-index channel name+group, and head count
+between the original `QLCFixtureMode` and the edited copy (`EditMode`
+always edits a deep copy — `editmode.cpp`'s `EditMode(QWidget*,
+QLCFixtureMode*)` ctor — so the comparison is against the untouched
+original right up until commit). `slotEditMode()` now checks this (only
+for a definition that's been saved to disk at least once — nothing could
+be patched to a mode that doesn't exist on disk yet, so a same-session new
+mode is exempt) and offers three ways forward via a `QMessageBox` with
+custom buttons: **Save as New Mode...** (reuses `slotCloneMode()`'s exact
+mechanics — prompt for a unique name, `addMode()` the edited layout under
+it, leave the original mode object completely untouched), **Change
+"<mode>" Anyway** (the old unconditional behavior — `*mode =
+*(em.mode())`), or **Cancel** (discards the edit entirely).
+
+**2. System definitions redirect to a local override on save** —
+new `QLCFixtureEditor::isUnderSystemDefinitionDirectory()` (path-prefix
+check against `QLCFixtureDefCache::systemDefinitionDirectory()`) and
+`localOverridePath()` (same `"<Manufacturer>-<Model>.qxf"` naming
+`saveAs()` already used for a brand-new file, landing in
+`userDefinitionDirectory()`). Wired into both `save()` and `saveAs()` —
+whichever path a save would actually write to, if it resolves under the
+system directory the target is silently redirected to the local-override
+path instead, with an explanation dialog (not silent — Branson's phrasing
+was "re-written as local definition," which implies knowing it happened).
+This piggybacks on cache semantics already confirmed correct and
+pre-existing (not something this session needed to fix): both `ui/src/app.cpp`
+and `fixturebrowser.cpp` load the user directory before the system one, and
+`QLCFixtureDefCache::addFixtureDef()` silently drops a later duplicate by
+manufacturer+model — so a user-dir file for the same manufacturer/model
+already wins the lookup once it exists, no extra plumbing needed for the
+override to actually take effect.
+
+Verified live: opened `ETC/ETC-ColorSource-PAR.qxf` (confirmed via
+`~/Library/Application Support/qlcconsole/Fixtures/` — no existing ETC
+override there) straight from the system directory via the Fixture Library
+browser, hit Save, got the exact expected redirect dialog naming the local
+target path. Filesystem-level proof after (screenshot verification kept
+colliding with Branson's own clicks on the same live window, so leaned on
+this instead): the local override file was written
+(`~/Library/.../Fixtures/ETC-ColorSource-PAR.qxf`, fresh timestamp) and the
+original system file's mtime was completely unchanged (Aug 25, untouched).
+Removed the test artifact after confirming (no real edits in it, would have
+silently shadowed the real system definition going forward for no reason).
+The mode-layout warning dialog itself was traced through the code carefully
+but not independently click-tested this round — flagged for Branson to
+confirm directly (edit an existing mode's channel list and expect the
+three-way prompt) since we were actively bumping into each other on the
+same window by this point. Full rebuild + `check-all.sh` gate run after.
+**Branson confirmed live (2026-09-05)**: the three-way mode-change warning
+dialog is there.
 
 ---
 
@@ -3858,6 +4577,41 @@ per-fixture offsets along the run.
 ---
 
 ## Backlog — not started
+
+### App-wide UI zoom, Cmd+/Cmd- (2026-09-03, long-term, not prioritized) — not started
+Branson: VS Code-style zoom — Cmd+/Cmd- (and presumably Cmd+0 to reset)
+scaling the whole app's fonts *and* icon sizes together, not just one view.
+Explicitly deferred — filed for later, not asked for now.
+
+Checked before filing, so the scope is accurate rather than guessed: **no
+zoom infrastructure exists app-wide today.** Two views already have their
+*own*, local zoom (Show Manager's timeline — a slider + Ctrl+scroll driving
+a `timeScale` variable, `ui/src/showmanager/multitrackview.cpp`; Lighting
+Studio's 2D view — Shift+scroll + trackpad pinch,
+`ui/src/monitor/monitorgraphicsview.cpp`), but neither is wired to Cmd+/
+Cmd-, and neither is what "app-wide" means here — a real implementation is
+a different, bigger thing than extending either of those.
+
+**Why this is more than "add a keyboard shortcut + scale the font,"
+concretely:** `QApplication::setFont()` cascades point size to most widgets
+via font-metric-based sizing, which covers a lot for free — but toolbar/
+tree icon sizes are hardcoded pixel values scattered across many call
+sites (`toolbar->setIconSize(QSize(20, 20))` appears independently in
+Fixture Manager, Connections, and other manager toolbars — see this
+session's own work touching several of them), not derived from font size
+at all, so they would not scale along with text unless each site is
+touched (or icon sizing is centralized first — its own small refactor)
+and multiplied by the same zoom factor. `resources/qss/default.qss` also
+has fixed-pixel padding/margin values that a pure font-size change
+wouldn't touch, so some chrome would look increasingly cramped or loose
+relative to the scaled text as the zoom level moves away from 100%.
+
+Not scoped further than this — no design doc yet, no decision on whether
+to centralize icon-size constants first or handle it site-by-site, no
+persisted-setting design (a `workspace/uiZoom` `QSettings` key alongside
+the existing theme/tab-label-mode pattern would be the obvious fit). Pick
+up with a real audit of every `setIconSize()`/fixed-pixel QSS rule before
+estimating effort for real.
 
 ### Show lifecycle: Construction / Test-Validate / Production *(2026-08-15, design doc written)*
 See `SHOW_LIFECYCLE_DESIGN.md` — names the three phases a show moves through
