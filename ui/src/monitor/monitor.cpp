@@ -3522,20 +3522,27 @@ void Monitor::slotAddTarget()
     if (!updated)
         return;   // user may have removed it (shouldn't happen, but guard anyway)
 
-    // Auto-create a PanTilt palette linked to this target, unless one already exists.
+    /* Auto-create an AIM palette linked to this target, unless one already
+       exists. It was creating a PanTilt palette, which is the wrong thing in
+       two ways: a PanTilt palette carries fixed pan/tilt values, so it does
+       not follow the target when the target moves, and nothing that looks for
+       "what aims at this target" -- the canvas glow, the light-path lines --
+       recognises it. An Aim palette resolves per fixture from the rig geometry,
+       which is the whole reason StageTarget exists. */
     bool alreadyLinked = false;
     foreach (QLCPalette *p, m_doc->palettes())
     {
-        if (p && p->stageTargetId() == tid)
+        if (p && p->stageTargetId() == tid && p->type() == QLCPalette::Aim)
         { alreadyLinked = true; break; }
     }
     if (!alreadyLinked)
     {
-        QLCPalette *pal = new QLCPalette(QLCPalette::PanTilt);
+        QLCPalette *pal = new QLCPalette(QLCPalette::Aim);
         pal->setName(updated->name());
-        pal->setValue(0, 0);          // default: pan=0, tilt=0
+        // Aim carries no values of its own: the target IS the value, and each
+        // fixture solves its own pan/tilt from where it sits on the rig.
         pal->setStageTargetId(tid);
-        pal->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(QLCPalette::PanTilt)));
+        pal->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(QLCPalette::Aim)));
         m_doc->addPalette(pal);
         m_doc->setModified();
     }
@@ -4231,6 +4238,15 @@ void Monitor::slotEditPlatform(quint32 pid)
         if (c.isValid()) {
             chosenColor = c;
             colorBtn->setStyleSheet(QString("background-color: %1").arg(c.name()));
+            /* Apply straight away, like the size spin boxes and the two
+               checkboxes in this same dialog. It used to update only the
+               button swatch, so the platform on the canvas kept its old colour
+               until OK -- which is exactly the moment you can no longer
+               compare it against the stage. Cancel already restores snapColor
+               along with the other snapshotted fields. */
+            p->setColor(c);
+            m_graphicsView->updatePlatforms();
+            m_doc->setModified();
         }
     });
     form->addRow(tr("Color:"), colorBtn);
@@ -4571,14 +4587,34 @@ public:
 
     ~FixtureOrientationTest()
     {
+        /* Dismissing a fader only unhooks it (Universe::dismissFader takes it
+           out of the list and nothing else) -- it does not clear what the
+           fader last wrote. While a scene is running something else overwrites
+           those channels on the next tick and nobody notices. In Design mode
+           with nothing running, nothing does: the fixture stayed at the test
+           position with the lamp open until the app was restarted.
+
+           So zero the channels this test drove, before letting go of the
+           fader that is driving them. */
         QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
         for (auto it = m_faders.begin(); it != m_faders.end(); ++it)
         {
             int idx = it.key();
-            if (!it.value().isNull() && idx < ua.size())
-                ua[idx]->dismissFader(it.value());
+            if (it.value().isNull() || idx >= ua.size())
+                continue;
+
+            it.value()->removeAll();
+            ua[idx]->dismissFader(it.value());
         }
-        m_doc->inputOutputMap()->releaseUniverses(false);
+
+        /* Reset only the fixture's own address range. Universe::reset() with
+           no argument would blank the entire universe, which is a far bigger
+           hammer than "stop testing one light" and would knock out anything
+           else the operator had running. */
+        if (m_fixtureUniIdx >= 0 && m_fixtureUniIdx < ua.size() && m_fxi != nullptr)
+            ua[m_fixtureUniIdx]->reset(int(m_fxi->address()), int(m_fxi->channels()));
+
+        m_doc->inputOutputMap()->releaseUniverses(true);
     }
 
     void setDegrees(float panDeg, float tiltDeg)
@@ -4610,6 +4646,107 @@ private:
     QHash<int, Universe*>                    m_universes;
 };
 
+/* ---- Locate appearance, operator-configurable ----------------------------
+ *
+ * Locate used to be three full-intensity white flashes, which is a lot of
+ * light for "which one is this" -- painful next to the fixture, and in a
+ * blacked-out house it lights the room. Colour, level and count are settings
+ * so it can be dialled down to something you can stand next to, or up when the
+ * rig is in daylight. Read at flash time rather than cached, so a change in
+ * Preferences applies to the very next Locate without a restart.
+ */
+#define SETTINGS_LOCATE_COLOR     "monitor/locate/color"
+#define SETTINGS_LOCATE_INTENSITY "monitor/locate/intensity"
+#define SETTINGS_LOCATE_FLASHES   "monitor/locate/flashes"
+
+QColor Monitor::locateColor()
+{
+    QSettings s;
+    const QVariant v = s.value(SETTINGS_LOCATE_COLOR);
+    QColor c = v.isValid() ? QColor(v.toString()) : QColor(Qt::white);
+    return c.isValid() ? c : QColor(Qt::white);
+}
+
+int Monitor::locateIntensity()
+{
+    QSettings s;
+    const int v = s.value(SETTINGS_LOCATE_INTENSITY, 255).toInt();
+    return qBound(1, v, 255);
+}
+
+int Monitor::locateFlashes()
+{
+    QSettings s;
+    const int v = s.value(SETTINGS_LOCATE_FLASHES, 3).toInt();
+    return qBound(1, v, 10);
+}
+
+/** Values that make a fixture visible for LOCATE, at the configured colour and
+ *  level -- as opposed to appendFixtureOnValues(), which is the flat
+ *  everything-to-255 the orientation TEST wants.
+ *
+ *  Colour is applied per emitter: an RGB(W/A/UV) fixture gets the picked
+ *  colour's components, and the white/amber/UV emitters are driven only by
+ *  how white the pick actually is, so choosing deep blue does not quietly come
+ *  out pale because the white emitter stayed at full. */
+static void appendFixtureLocateValues(Fixture *fxi, QList<SceneValue> &svs,
+                                      const QColor &colour, int level)
+{
+    if (!fxi->fixtureMode()) return;
+
+    quint32 mi = fxi->masterIntensityChannel();
+    if (mi == QLCChannel::invalid())
+    {
+        for (quint32 c = 0; c < fxi->channels(); ++c)
+        {
+            QLCChannel *ch = fxi->fixtureMode()->channel(c);
+            if (ch && ch->group() == QLCChannel::Intensity
+                && ch->controlByte() == QLCChannel::MSB
+                && ch->colour() == QLCChannel::NoColour)
+            { mi = c; break; }
+        }
+    }
+    if (mi != QLCChannel::invalid())
+        svs << SceneValue(fxi->id(), mi, uchar(level));
+
+    /* A fixture with no dimmer channel has to be dimmed through its emitters,
+       or "50% locate" would be full brightness on exactly the LED washes most
+       likely to be blinding. */
+    const bool scaleByLevel = (mi == QLCChannel::invalid());
+    const double k = scaleByLevel ? (level / 255.0) : 1.0;
+
+    for (quint32 c = 0; c < fxi->channels(); ++c)
+    {
+        QLCChannel *ch = fxi->fixtureMode()->channel(c);
+        if (!ch || ch->controlByte() != QLCChannel::MSB) continue;
+        const bool isColourGroup     = (ch->group() == QLCChannel::Colour);
+        const bool isIntensityColour = (ch->group() == QLCChannel::Intensity
+                                        && ch->colour() != QLCChannel::NoColour);
+        if (!(isColourGroup || isIntensityColour))
+            continue;
+
+        int v = 0;
+        switch (ch->colour())
+        {
+        case QLCChannel::Red:   v = colour.red();   break;
+        case QLCChannel::Green: v = colour.green(); break;
+        case QLCChannel::Blue:  v = colour.blue();  break;
+        // White/amber/UV follow the neutral part of the pick: full for white,
+        // nothing for a saturated colour.
+        case QLCChannel::White: v = qMin(qMin(colour.red(), colour.green()), colour.blue()); break;
+        case QLCChannel::Amber: v = qMin(colour.red(), colour.green()) / 2;                  break;
+        case QLCChannel::UV:    v = colour.blue() / 4;                                       break;
+        default: continue;
+        }
+        svs << SceneValue(fxi->id(), c, uchar(qBound(0.0, v * k, 255.0)));
+    }
+
+    uchar shutterVal = 0;
+    quint32 shutterCh = fixtureShutterChannel(fxi, shutterVal);
+    if (shutterCh != QLCChannel::invalid())
+        svs << SceneValue(fxi->id(), shutterCh, shutterVal);
+}
+
 /** Locate flash — no blackout; just overrides the fixture's intensity + shutter
  *  so it pops up over any running scene.  Call setOn(false/true) to strobe. */
 class FixtureLocate
@@ -4626,7 +4763,8 @@ public:
             m_fader->setName(QStringLiteral("FixtureLocate"));
         }
         m_doc->inputOutputMap()->releaseUniverses(false);
-        appendFixtureOnValues(m_fxi, m_onValues);
+        appendFixtureLocateValues(m_fxi, m_onValues,
+                                  Monitor::locateColor(), Monitor::locateIntensity());
         setOn(true);
     }
 
@@ -4702,9 +4840,11 @@ void Monitor::locateFixture(quint32 fxId)
             return;
         LocateSession *s = sit.value();
         ++s->step;
-        // Steps 1,3,5 = on (300 ms); steps 2,4,6 = off (150 ms); step 7 = done
-        // -- same 3-flash cadence as the rig editor's own Locate button.
-        if (s->step > 6)
+        /* Odd steps are on (300 ms), even are off (150 ms), so N flashes take
+           2N steps and the run ends on the step after the last off. The count
+           came from the rig editor's fixed three; it is a setting now, because
+           three full-intensity flashes is a lot of light to stand next to. */
+        if (s->step > 2 * Monitor::locateFlashes())
         {
             m_locateSessions.erase(sit);
             delete s;
@@ -4716,6 +4856,16 @@ void Monitor::locateFixture(quint32 fxId)
     });
     m_locateSessions.insert(fxId, session);
     session->timer->start();
+}
+
+void Monitor::locateFixtures(const QList<quint32> &ids)
+{
+    /* Sessions are keyed by fixture id, so a group Locate is just several of
+       them running side by side -- each fixture keeps its own flash timing and
+       its own fader, and re-triggering the group cancels exactly the ones that
+       were already flashing. */
+    foreach (quint32 id, ids)
+        locateFixture(id);
 }
 
 void Monitor::resetFixture(quint32 fxId)

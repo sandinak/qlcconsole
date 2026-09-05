@@ -90,6 +90,29 @@ ChannelsSelection::~ChannelsSelection()
     settings.setValue(SETTINGS_GEOMETRY, saveGeometry());
 }
 
+void ChannelsSelection::expandFixture(quint32 fxi)
+{
+    /* Top level is the UNIVERSE, fixtures hang under it, channels under those
+       -- so the fixture is a second-level item and its id is in KColumnID. */
+    for (int u = 0; u < m_channelsTree->topLevelItemCount(); u++)
+    {
+        QTreeWidgetItem *uniItem = m_channelsTree->topLevelItem(u);
+        if (uniItem == NULL)
+            continue;
+        for (int f = 0; f < uniItem->childCount(); f++)
+        {
+            QTreeWidgetItem *fItem = uniItem->child(f);
+            if (fItem == NULL || fItem->text(KColumnID).toUInt() != fxi)
+                continue;
+            uniItem->setExpanded(true);
+            fItem->setExpanded(true);
+            m_channelsTree->scrollToItem(fItem, QAbstractItemView::PositionAtTop);
+            m_channelsTree->setCurrentItem(fItem);
+            return;
+        }
+    }
+}
+
 void ChannelsSelection::setChannelsList(QList<SceneValue> list)
 {
     if (list.count() > 0)

@@ -36,6 +36,8 @@
 #include <QPixmap>
 
 #include "monitorfixtureitem.h"
+#include <QGraphicsScene>
+#include "monitor.h"
 
 // Returns a 16×16 open-hand cursor — much smaller than the macOS system hand.
 static QCursor smallOpenHandCursor()
@@ -1022,6 +1024,14 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 
     QMenu menu;
 
+    /* Locate first, and available whether or not the rig is unlocked or the
+       app is in Operate: everything else in this menu edits the rig, while
+       Locate only asks "which physical light is this one" -- the question you
+       have while pointing at the canvas with the rig in front of you. Acts on
+       the whole selection when several fixtures are selected. */
+    QAction *locateAct = menu.addAction(tr("Locate"));
+    menu.addSeparator();
+
     // Facing (pan-zero direction) quick-set for moving heads — rig editing, so
     // only offered while unlocked.
     QAction *faceDS = NULL, *faceSR = NULL, *faceUS = NULL, *faceSL = NULL;
@@ -1064,6 +1074,31 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     QAction *chosen = menu.exec(event->screenPos());
     if (chosen == NULL)
     {
+        event->accept();
+        return;
+    }
+
+    if (chosen == locateAct)
+    {
+        /* The whole selection, so selecting a truss-worth of heads and asking
+           where they are lights all of them. Falls back to this item when
+           nothing is selected -- right-clicking a fixture you have not clicked
+           first is the common case. */
+        QList<quint32> ids;
+        if (scene() != NULL)
+        {
+            foreach (QGraphicsItem *gi, scene()->selectedItems())
+            {
+                MonitorFixtureItem *fi = dynamic_cast<MonitorFixtureItem *>(gi);
+                if (fi != NULL && !ids.contains(fi->fixtureID()))
+                    ids << fi->fixtureID();
+            }
+        }
+        if (ids.isEmpty())
+            ids << m_fid;
+
+        if (Monitor::instance() != NULL)
+            Monitor::instance()->locateFixtures(ids);
         event->accept();
         return;
     }

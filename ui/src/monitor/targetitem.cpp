@@ -68,9 +68,22 @@ void TargetItem::setMovable(bool movable)
 
 QRectF TargetItem::boundingRect() const
 {
+    /* The crosshair arms already reach 1.4x the radius, and the aimed halo
+       reaches three rings beyond it. The rect covers the largest of those
+       unconditionally rather than changing with state: a bounding rect that
+       shrinks when the glow turns off leaves the outer rings smeared on the
+       canvas until something else forces a repaint. */
     const qreal pad = 3.0;
-    const qreal r = kRadius + pad;
+    const qreal r = kRadius + 3 * 4.0 + pad;
     return QRectF(-r, -r, r * 2, r * 2);
+}
+
+void TargetItem::setAimed(bool aimed)
+{
+    if (m_aimed == aimed)
+        return;
+    m_aimed = aimed;
+    update();
 }
 
 void TargetItem::paint(QPainter *painter,
@@ -84,6 +97,26 @@ void TargetItem::paint(QPainter *painter,
     // A locked target is drawn red so the frozen state reads at a glance.
     if (m_target->locked())
         col = QColor(200, 60, 60);
+
+    /* Glow for a target the focused scene actually aims at. Every target is
+       drawn, because a target exists as soon as it is placed in the studio --
+       but "something is pointing at this one right now" is the thing worth
+       finding on a crowded stage, so it gets a halo rather than a different
+       shape. Concentric fading rings: cheap, does not move the item's centre,
+       and still legible against both the light and dark canvas. */
+    if (m_aimed)
+    {
+        painter->setBrush(Qt::NoBrush);
+        for (int i = 3; i >= 1; i--)
+        {
+            QColor halo = col;
+            halo.setAlpha(30 + 20 * (3 - i));
+            painter->setPen(QPen(halo, 3.0));
+            painter->drawEllipse(QPointF(0, 0),
+                                 double(kRadius) + i * 4.0,
+                                 double(kRadius) + i * 4.0);
+        }
+    }
 
     // Outer ring
     QPen ringPen(col, selected ? 2.5 : 1.5);

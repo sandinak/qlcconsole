@@ -2959,9 +2959,14 @@ void MonitorGraphicsView::updateTargets()
     if (props == nullptr || m_cellPixels == 0)
         return;
 
-    // Only show targets referenced by the active scene's Aim palettes.
-    // With no scene focused there is nothing to aim, so show nothing.
-    QSet<quint32> visibleTargetIds;
+    /* Which targets the focused scene aims at. This used to decide whether a
+       target was DRAWN AT ALL, which made a target invisible from the moment
+       it was created: you place one in the studio, no scene aims at it yet, so
+       it does not exist on the canvas. A target is a piece of stage geometry
+       -- it is placed, moved and named like a truss -- so it is always drawn.
+       Being aimed is a temporary property of the scene on screen, and it earns
+       a glow and light-path lines instead. */
+    QSet<quint32> aimedTargetIds;
     if (m_activeSceneId != Function::invalidId())
     {
         Scene *activeScene = qobject_cast<Scene *>(m_doc->function(m_activeSceneId));
@@ -2971,16 +2976,13 @@ void MonitorGraphicsView::updateTargets()
             {
                 QLCPalette *pal = m_doc->palette(pid);
                 if (pal && pal->type() == QLCPalette::Aim)
-                    visibleTargetIds.insert(pal->stageTargetId());
+                    aimedTargetIds.insert(pal->stageTargetId());
             }
         }
     }
 
     foreach (StageTarget *t, props->stageTargets())
     {
-        if (!visibleTargetIds.contains(t->id()))
-            continue;
-
         // projectMm places the target at its 3-D position for Top or elevation.
         const QPointF tp = projectMm(t->x() * 1000.0, t->y() * 1000.0, t->z() * 1000.0);
         float pxX = float(tp.x());
@@ -2991,6 +2993,7 @@ void MonitorGraphicsView::updateTargets()
         // the rig layout is locked), but frozen in Run/Operate — in a show the
         // operator drives the follow-spot pin, not the target.
         ti->setMovable(m_doc->mode() == Doc::Design);
+        ti->setAimed(aimedTargetIds.contains(t->id()));
         m_scene->addItem(ti);
         m_targetItems.insert(t->id(), ti);
 
@@ -3104,15 +3107,22 @@ void MonitorGraphicsView::updateAimLines()
     if (candidates.isEmpty())
         return;
 
-    // If a target is selected, draw only to selected targets.
-    // If no target is selected, draw to all targets in the view.
+    /* Only targets the ACTIVE SCENE aims at. Every target is drawn on the
+       canvas now, so "all targets in the view" is no longer the same set as
+       "targets this scene uses" -- iterating m_targetItems drew a line from
+       every fixture in the scene to every target on the stage, and switching
+       scenes just added the next scene's lines to the last one's.
+       isAimed() is set in updateTargets() from the scene's Aim palettes, so
+       the lines and the glow can never disagree about which is which. */
     bool anySelected = false;
     foreach (TargetItem *ti, m_targetItems)
-        if (ti->isSelected()) { anySelected = true; break; }
+        if (ti->isAimed() && ti->isSelected()) { anySelected = true; break; }
 
         {
     foreach (TargetItem *ti, m_targetItems)
     {
+        if (!ti->isAimed())
+            continue;
         if (anySelected && !ti->isSelected())
             continue;
 

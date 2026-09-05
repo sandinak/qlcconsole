@@ -281,16 +281,20 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
             {
                 m_propertiesAction->setEnabled(true);
                 m_testAction->setEnabled(true);
-                m_locateAction->setEnabled(true);
                 m_resetAction->setEnabled(true);
             }
             else
             {
                 m_propertiesAction->setEnabled(false);
                 m_testAction->setEnabled(false);
-                m_locateAction->setEnabled(false);
                 m_resetAction->setEnabled(false);
             }
+            /* Locate is not single-selection like the others. Properties and
+               Reset act on one fixture because they have nowhere to put a
+               second answer; Locate just flashes, and "which of these twelve
+               are the front truss" is the question it exists to answer. Works
+               on a multi-selection and on a whole group. */
+            m_locateAction->setEnabled(true);
             m_groupAction->setEnabled(true);
 
             // Don't allow ungrouping from the "All fixtures" group
@@ -347,8 +351,9 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         bool singleFixture = (item && item->data(KColumnName, PROP_ID).isValid() &&
                               m_fixtures_tree->selectedItems().size() == 1);
         m_testAction->setEnabled(singleFixture);
-        m_locateAction->setEnabled(singleFixture);
         m_resetAction->setEnabled(singleFixture);
+        // Locate works on any selection, including in Operate mode.
+        m_locateAction->setEnabled(m_fixtures_tree->selectedItems().isEmpty() == false);
     }
 }
 
@@ -1283,8 +1288,15 @@ void FixtureManager::initActions()
     m_resetAction->setEnabled(false);
     connect(m_resetAction, &QAction::triggered, this, &FixtureManager::slotResetFixture);
 
+    /* Named "Channels Fade Configuration" it read as fade-only, so the channel
+       MODIFIER column -- the tool that remaps a channel's DMX values on the way
+       out, e.g. an LM70 whose 0-127 is intensity and 128-255 is strobe -- was
+       effectively unfindable. Same dialog, honest name. */
     m_fadeConfigAction = new QAction(QIcon(":/fade.png"),
-                                     tr("Channels Fade Configuration..."), this);
+                                     tr("Channel Behaviour && Modifiers..."), this);
+    m_fadeConfigAction->setToolTip(
+        tr("Per-channel fade behaviour (HTP/LTP, can-fade) and value modifier "
+           "curves, which remap a channel's DMX values as they are sent."));
     connect(m_fadeConfigAction, SIGNAL(triggered(bool)),
             this, SLOT(slotFadeConfig()));
 
@@ -1997,15 +2009,40 @@ void FixtureManager::slotTestFixture()
 
 void FixtureManager::slotLocateFixture()
 {
-    QTreeWidgetItem* item = m_fixtures_tree->currentItem();
-    if (!item)
+    /* Every fixture in the selection, expanding any selected GROUP to its
+       members -- selecting a group and asking "where is it" should light the
+       group, not nothing. Deduplicated, because a group and one of its own
+       fixtures can both be selected and flashing one fixture twice would
+       cancel it (locateFixture toggles). */
+    QList<quint32> ids;
+    QSet<quint32> seen;
+    foreach (QTreeWidgetItem *item, m_fixtures_tree->selectedItems())
+    {
+        const QVariant fxVar = item->data(KColumnName, PROP_ID);
+        if (fxVar.isValid())
+        {
+            const quint32 fid = fxVar.toUInt();
+            if (!seen.contains(fid)) { seen.insert(fid); ids << fid; }
+            continue;
+        }
+
+        const QVariant grpVar = item->data(KColumnName, PROP_GROUP);
+        if (grpVar.isValid())
+        {
+            FixtureGroup *grp = m_doc->fixtureGroup(grpVar.toUInt());
+            if (grp == NULL)
+                continue;
+            foreach (quint32 fid, grp->fixtureList())
+                if (!seen.contains(fid)) { seen.insert(fid); ids << fid; }
+        }
+    }
+
+    if (ids.isEmpty())
         return;
-    QVariant var = item->data(KColumnName, PROP_ID);
-    if (!var.isValid())
-        return;
+
     Monitor::createAndShow(this, m_doc);
     if (Monitor::instance())
-        Monitor::instance()->locateFixture(var.toUInt());
+        Monitor::instance()->locateFixtures(ids);
 }
 
 void FixtureManager::slotResetFixture()
@@ -2024,6 +2061,16 @@ void FixtureManager::slotResetFixture()
 void FixtureManager::slotFadeConfig()
 {
     ChannelsSelection cfg(m_doc, this, ChannelsSelection::ConfigurationMode);
+    /* Arriving from a fixture's own context menu, open on that fixture rather
+       than on the whole rig collapsed. The dialog still lists everything --
+       the same modifier usually wants setting on several fixtures at once. */
+    QTreeWidgetItem *item = m_fixtures_tree->currentItem();
+    if (item != NULL)
+    {
+        const QVariant var = item->data(KColumnName, PROP_ID);
+        if (var.isValid())
+            cfg.expandFixture(var.toUInt());
+    }
     if (cfg.exec() == QDialog::Rejected)
         return; // User pressed cancel
     m_doc->setModified();
@@ -2554,6 +2601,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         menu.addAction(m_propertiesAction);
         menu.addAction(m_testAction);
         menu.addAction(m_locateAction);
+        menu.addAction(m_fadeConfigAction);
         menu.addAction(m_resetAction);
         menu.addAction(m_groupAction);
         menu.addAction(m_removeAction);

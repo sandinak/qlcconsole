@@ -65,6 +65,15 @@ public:
     ChannelsSelection(Doc* doc, QWidget *parent = 0, ChannelSelectionType mode = NormalMode);
     ~ChannelsSelection();
 
+    /** Open with this fixture expanded and scrolled into view.
+     *
+     *  In ConfigurationMode the dialog lists every fixture in the workspace,
+     *  which is the right scope -- a modifier curve is per fixture-channel and
+     *  you often set the same one on several. But arriving from "configure THIS
+     *  fixture" and being handed the whole rig collapsed is a search, so the
+     *  caller can say which one it meant. */
+    void expandFixture(quint32 fxi);
+
     void setChannelsList(QList<SceneValue> list);
     QList<SceneValue> channelsList();
 

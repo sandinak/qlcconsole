@@ -182,6 +182,17 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
     connect(m_doc->programmer(), &ProgrammerController::programmerSelectionChanged,
             this, [this]() { m_engine->refreshDevice(deviceId); });
 
+    /* The workspace is loaded AFTER App::startup() builds this overlay (see
+       main.cpp), so at this point no universe has an input patch yet and the
+       scan below finds nothing -- which is why the board came up dark after a
+       restart and stayed dark until something was pressed. Re-scan whenever a
+       document finishes loading, which is the moment the patch that names this
+       board actually exists. */
+    connect(m_doc, &Doc::loaded, this, [this]() {
+        findKnownUniverse();
+        m_engine->refreshDevice(deviceId);
+    });
+
     findKnownUniverse();
     m_engine->refreshDevice(deviceId);
 }

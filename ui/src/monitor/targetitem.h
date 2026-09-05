@@ -57,6 +57,16 @@ public:
     /** Enable or disable movement (global layout lock). */
     void setMovable(bool movable);
 
+    /** Mark this target as aimed by the scene currently in focus.
+     *
+     *  A target exists from the moment it is created in the studio, so it is
+     *  always drawn. Being AIMED is a different and temporary fact -- this
+     *  scene, right now, points lights at it -- and it earns the glow and the
+     *  light-path lines. Drawing the two states identically left no way to see
+     *  which targets the scene on screen actually uses. */
+    void setAimed(bool aimed);
+    bool isAimed() const { return m_aimed; }
+
     // QGraphicsItem interface
     QRectF   boundingRect() const override;
     void     paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
@@ -76,6 +86,7 @@ private:
     StageTarget       *m_target;
     Doc               *m_doc;
     QGraphicsTextItem *m_label;
+    bool               m_aimed = false;
 };
 
 /** @} */

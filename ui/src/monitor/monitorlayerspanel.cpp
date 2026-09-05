@@ -326,9 +326,24 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
         d.groupId = t->groupId();
         out << d;
     }
-    // Stage targets are intentionally omitted: they're dynamic aim points that
-    // move across levels during a show, so organising them into fixed layers /
-    // groups doesn't fit. They live on the canvas (for the active scene) only.
+    /* Stage targets. They were omitted here on the grounds that they are
+       dynamic aim points, but that only describes them once a scene is USING
+       one. At the point of creation a target is placed in the studio like any
+       other piece of geometry -- it has a position, a name and a layer, and
+       slotAddTarget() has always assigned it one -- so leaving it out of this
+       list meant a newly created target appeared nowhere at all and could not
+       be renamed, re-layered or found. Being aimed at is shown on the canvas
+       (glow + light-path lines), which is where that changes moment to moment. */
+    foreach (StageTarget *t, m_props->stageTargets())
+    {
+        ItemDesc d;
+        d.kind    = QStringLiteral("target");
+        d.id      = t->id();
+        d.name    = t->name().isEmpty() ? tr("Target %1").arg(t->id() + 1) : t->name();
+        d.layerId = t->layerId();
+        d.groupId = t->groupId();
+        out << d;
+    }
     PowerDistribution *pd = m_doc->powerDistribution();
     for (int s = 0; s < pd->sources().size(); s++)
     {
@@ -455,6 +470,7 @@ QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) con
     if (kind == QStringLiteral("stand"))    return glyphIcon(QStringLiteral("\xF0\x9F\x93\x8D"), QColor(150, 200, 235)); // 📍 stand
     if (kind == QStringLiteral("tower"))    return glyphIcon(QStringLiteral("\xF0\x9F\x8F\xAF"), QColor(150, 200, 235)); // 🏯 tower
     if (kind == QStringLiteral("power"))    return glyphIcon(QStringLiteral("\xE2\x9A\xA1"), QColor(235, 185, 0));       // ⚡
+    if (kind == QStringLiteral("target"))   return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xAF"), QColor(255, 180, 0));    // 🎯 aim target
     if (kind == QStringLiteral("image"))    return QIcon(":/image.png");
     return style()->standardIcon(QStyle::SP_FileIcon);
 }
@@ -1019,7 +1035,7 @@ bool MonitorLayersPanel::kindLockable(const QString &kind) const
     return kind == QStringLiteral("truss") || kind == QStringLiteral("platform")
         || kind == QStringLiteral("image") || kind == QStringLiteral("power")
         || kind == QStringLiteral("pipe")  || kind == QStringLiteral("stand")
-        || kind == QStringLiteral("tower");
+        || kind == QStringLiteral("tower") || kind == QStringLiteral("target");
 }
 
 bool MonitorLayersPanel::objectLocked(const QString &kind, quint32 id) const
@@ -1036,6 +1052,8 @@ bool MonitorLayersPanel::objectLocked(const QString &kind, quint32 id) const
         { Stand *s = m_props->stand(id); return s && s->locked(); }
     if (kind == QStringLiteral("tower"))
         { Tower *t = m_props->tower(id); return t && t->locked(); }
+    if (kind == QStringLiteral("target"))
+        { StageTarget *t = m_props->stageTarget(id); return t && t->locked(); }
     if (kind == QStringLiteral("power"))
     {
         PowerDistribution *pd = m_doc->powerDistribution();
@@ -1062,6 +1080,8 @@ void MonitorLayersPanel::setObjectLocked(const QString &kind, quint32 id, bool l
         { if (Stand *s = m_props->stand(id)) s->setLocked(locked); }
     else if (kind == QStringLiteral("tower"))
         { if (Tower *t = m_props->tower(id)) t->setLocked(locked); }
+    else if (kind == QStringLiteral("target"))
+        { if (StageTarget *t = m_props->stageTarget(id)) t->setLocked(locked); }
     else if (kind == QStringLiteral("power"))
     {
         PowerDistribution *pd = m_doc->powerDistribution();
@@ -1121,6 +1141,11 @@ void MonitorLayersPanel::renameMapItem(const QString &kind, quint32 id, const QS
     {
         if (Tower *t = m_props->tower(id)) t->setName(name);
         if (m_view) m_view->updatePlatforms();
+    }
+    else if (kind == QStringLiteral("target"))
+    {
+        if (StageTarget *t = m_props->stageTarget(id)) t->setName(name);
+        if (m_view) m_view->updateTargets();
     }
 }
 

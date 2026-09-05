@@ -227,6 +227,17 @@ public:
      *  fixture that's still flashing cancels it early. No-op for an invalid id. */
     void locateFixture(quint32 fxId);
 
+    /** Locate appearance, shared with the Preferences page that sets it.
+     *  Read at flash time so a change applies to the next Locate. */
+    static QColor locateColor();
+    static int    locateIntensity();
+    static int    locateFlashes();
+
+    /** Flash every fixture in @p ids at once -- a group Locate. Public for the
+     *  same reason locateFixture() is: Fixtures & Groups and the studio canvas
+     *  both drive it. */
+    void locateFixtures(const QList<quint32> &ids);
+
     /** Send a fixture's "reset" Maintenance-channel capability once -- same
      *  detection the old Fixture Test quick-dialog uses, but callable directly
      *  (e.g. from a right-click). No-op if the fixture has no Maintenance-group
