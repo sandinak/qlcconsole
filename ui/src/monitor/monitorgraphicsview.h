@@ -257,7 +257,10 @@ public:
     void updateImages();
 
     /** Rebuild the target marker items from MonitorProperties. */
-    void updateTargets();
+    /* Q_INVOKABLE so a TargetItem can ask for a rebuild by queued call after
+       deleting itself -- tearing down the item from inside its own context
+       menu handler is not survivable. */
+    Q_INVOKABLE void updateTargets();
 
     /** Reposition existing TargetItems in place from their StageTarget data
      *  (no recreate) — used when the joystick moves an aim target live so the

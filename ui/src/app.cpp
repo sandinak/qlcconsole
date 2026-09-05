@@ -988,6 +988,14 @@ void App::slotDocModified(bool state)
 {
     updateWindowTitle();
 
+    /* Saving changes what the programmer chip should SAY without changing what
+       the programmer holds, so it has to be re-rendered here too -- otherwise
+       it keeps its red "unsaved" styling until the next unrelated programmer
+       event. */
+    if (m_doc != NULL)
+        slotProgrammerDirtyChanged(m_doc->hasProgrammerValues()
+                                   || !m_doc->editedSceneIds().isEmpty());
+
     if (m_statusDirtyLabel != NULL)
     {
         if (state == true)
@@ -4572,9 +4580,37 @@ void App::slotProgrammerDirtyChanged(bool dirty)
     if (hasNew)
         parts << tr("new values pending");
     const QString detail = parts.join(QStringLiteral(", "));
-    m_statusProgrammerLabel->setText(
-        tr("<span style='color:#e60000;font-weight:bold;'>"
-           "● Programmer: %1</span>").arg(detail));
+
+    /* Two different situations wear the same red warning otherwise.
+       The programmer holds a pre-edit snapshot per scene so Revert can undo an
+       edit, and that snapshot deliberately SURVIVES a save -- you can save your
+       work and still change your mind. But a red "● Programmer: 2 scenes
+       edited" after saving reads as "you have unsaved work", which is exactly
+       what the operator has just dealt with, so it teaches them to ignore the
+       one indicator that matters when it is real.
+
+       Red while the document is genuinely dirty; a calmer "held" while it is
+       saved and the only thing outstanding is the ability to revert. Values
+       captured in the programmer but not yet stored anywhere are always red,
+       saved document or not -- those really would be lost. */
+    const bool docDirty = m_doc->isModified();
+    if (docDirty || hasNew)
+    {
+        m_statusProgrammerLabel->setText(
+            tr("<span style='color:#e60000;font-weight:bold;'>"
+               "● Programmer: %1</span>").arg(detail));
+        m_statusProgrammerLabel->setToolTip(
+            tr("The programmer is holding edits that are not saved yet."));
+    }
+    else
+    {
+        m_statusProgrammerLabel->setText(
+            tr("<span style='color:#909090;font-weight:bold;'>"
+               "◍ Programmer: %1 (saved, revertable)</span>").arg(detail));
+        m_statusProgrammerLabel->setToolTip(
+            tr("Saved. The programmer still holds each scene's pre-edit state, "
+               "so Revert can undo these edits."));
+    }
     m_statusProgrammerLabel->show();
 }
 

@@ -555,7 +555,12 @@ private:
     /** Show-mode safety lock. */
     bool m_showLocked = false;
     /** Scenes whose values have been mutated by the programmer
-        since the last Save / Revert. */
+        since the edit began. Deliberately SURVIVES a save: saving writes the
+        edits to disk, it does not end the edit session, so Revert still works
+        afterwards and you can save your work and still change your mind. The
+        status chip distinguishes the two (red while the document is dirty,
+        grey "saved, revertable" once it is not) rather than this set being
+        cleared to make the chip look right. */
     QSet<quint32> m_editedScenes;
     /** Pre-edit snapshot per scene: captured the first time a scene becomes
         "edited" so Revert can restore it. Revert goes through Scene::clear(),

@@ -18,6 +18,12 @@
 #include <QFont>
 #include <QMenu>
 
+#include <QMessageBox>
+#include <QGraphicsScene>
+#include "monitorgraphicsview.h"
+#include "qlcpalette.h"
+#include "scene.h"
+#include "monitorproperties.h"
 #include "targetitem.h"
 #include "stagetarget.h"
 #include "doc.h"
@@ -168,8 +174,14 @@ void TargetItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     QMenu menu;
     QAction *lockAct = menu.addAction(
         m_target->locked() ? tr("Unlock Target") : tr("Lock Target"));
+    menu.addSeparator();
+    QAction *deleteAct = menu.addAction(tr("Delete Target…"));
 
-    if (menu.exec(event->screenPos()) == lockAct)
+    QAction *chosen = menu.exec(event->screenPos());
+    if (chosen == NULL)
+        return;
+
+    if (chosen == lockAct)
     {
         m_target->setLocked(!m_target->locked());
         const bool canMove = !m_target->locked();
@@ -178,5 +190,84 @@ void TargetItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         update();
         if (m_doc)
             m_doc->setModified();
+        return;
+    }
+
+    if (chosen == deleteAct)
+        confirmAndDelete();
+}
+
+/** Delete this target, saying first what else it will take with it.
+ *
+ *  A target is not an isolated marker: Aim palettes point at it, and scenes
+ *  use those palettes. Deleting one silently would leave those palettes aiming
+ *  at an id that no longer resolves -- the lights keep whatever position they
+ *  last had and nothing says why. So name the scenes before asking, because
+ *  "2 scenes use this" is the fact that decides the answer.
+ */
+void TargetItem::confirmAndDelete()
+{
+    if (m_doc == NULL || m_target == NULL)
+        return;
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == NULL)
+        return;
+
+    const quint32 tid = m_target->id();
+    const QString tname = m_target->name();
+
+    // Palettes aiming here, and the scenes that use them.
+    QList<quint32> boundPalettes;
+    foreach (QLCPalette *pal, m_doc->palettes())
+    {
+        if (pal != NULL && pal->stageTargetId() == tid)
+            boundPalettes << pal->id();
+    }
+
+    QStringList sceneNames;
+    if (boundPalettes.isEmpty() == false)
+    {
+        foreach (Function *f, m_doc->functions())
+        {
+            Scene *sc = qobject_cast<Scene *>(f);
+            if (sc == NULL)
+                continue;
+            foreach (quint32 pid, sc->palettes())
+            {
+                if (boundPalettes.contains(pid))
+                { sceneNames << sc->name(); break; }
+            }
+        }
+    }
+
+    QString question = tr("Delete target \"%1\"?").arg(tname);
+    if (sceneNames.isEmpty() == false)
+    {
+        question += tr("\n\n%n scene(s) aim at it: %1.\n"
+                       "They will keep the Aim look but it will no longer "
+                       "resolve, so those fixtures hold their last position.",
+                       "", sceneNames.size()).arg(sceneNames.join(", "));
+    }
+    else if (boundPalettes.isEmpty() == false)
+    {
+        question += tr("\n\n%n Aim palette(s) point at it and will stop "
+                       "resolving.", "", boundPalettes.size());
+    }
+
+    if (QMessageBox::question(nullptr, tr("Delete target"), question,
+                              QMessageBox::Yes | QMessageBox::No,
+                              QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    props->removeStageTarget(tid);
+    m_doc->setModified();
+
+    /* The view owns this item and rebuilds the whole set, so ask it to --
+       deleting ourselves from inside our own event handler is not survivable. */
+    if (MonitorGraphicsView *view =
+            qobject_cast<MonitorGraphicsView *>(scene() ? scene()->views().value(0) : nullptr))
+    {
+        QMetaObject::invokeMethod(view, "updateTargets", Qt::QueuedConnection);
     }
 }

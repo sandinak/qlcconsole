@@ -73,6 +73,10 @@ public:
                    QWidget *widget) override;
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
 
+private:
+    /** Delete this target after naming the scenes that aim at it. */
+    void confirmAndDelete();
+
 protected:
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
