@@ -1827,6 +1827,30 @@ qreal MonitorGraphicsView::floorPixelY() const
     return m_yOffset + qreal(m_gridSize.height()) * m_cellPixels;
 }
 
+QVector3D MonitorGraphicsView::unprojectMm(const QPointF &px, const QVector3D &currentMm) const
+{
+    const qreal scale = (m_unitValue > 0.0) ? (qreal(m_cellPixels) / m_unitValue) : 0.0;
+    if (scale <= 0.0)
+        return currentMm;
+
+    switch (m_pov)
+    {
+    case PovFront:  // X across, height (Z) up; depth (Y) is not on screen
+        return QVector3D(float((px.x() - m_xOffset) / scale),
+                         currentMm.y(),
+                         float((floorPixelY() - px.y()) / scale));
+    case PovSide:   // Y across, height (Z) up; X is not on screen
+        return QVector3D(currentMm.x(),
+                         float((px.x() - m_xOffset) / scale),
+                         float((floorPixelY() - px.y()) / scale));
+    case PovTop:
+    default:        // X across, Y upstage; height (Z) is not on screen
+        return QVector3D(float((px.x() - m_xOffset) / scale),
+                         float((px.y() - m_yOffset) / scale),
+                         currentMm.z());
+    }
+}
+
 QPointF MonitorGraphicsView::projectMm(qreal xMm, qreal yMm, qreal zMm) const
 {
     const qreal scale = (m_unitValue > 0.0) ? (qreal(m_cellPixels) / m_unitValue) : 0.0;
@@ -3034,13 +3058,24 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
         if (t == nullptr)
             continue;
         const QPointF oldPos(double(t->x()), double(t->y()));
-        QPointF mm = pixelsToRealPosition(ti->pos().x(), ti->pos().y());
-        const QPointF newPos(mm.x() / 1000.0, mm.y() / 1000.0);
-        if (newPos != oldPos)
+        const float oldZ = t->z();
+
+        /* Invert the SAME projection the marker was drawn with. Reading the
+           drop as an X/Y move regardless of view meant that in Front or Side
+           the redraw put the marker somewhere else entirely -- indistinguishable
+           from "it snapped back" -- and silently rewrote the wrong axis while
+           it was at it. */
+        const QVector3D curMm(t->x() * 1000.0f, t->y() * 1000.0f, t->z() * 1000.0f);
+        const QVector3D newMm = unprojectMm(ti->pos(), curMm);
+        const QPointF newPos(double(newMm.x()) / 1000.0, double(newMm.y()) / 1000.0);
+        const float newZ = float(newMm.z()) / 1000.0f;
+
+        if (newPos != oldPos || !qFuzzyCompare(newZ, oldZ))
         {
             e.targetPositions.insert(t->id(), oldPos);
             t->setX(float(newPos.x()));
             t->setY(float(newPos.y()));
+            t->setZ(newZ);
             emit targetMoved(ti->targetId(), QPointF(double(t->x()), double(t->y())));
         }
     }

@@ -266,6 +266,17 @@ public:
      *  the plane matching the current POV are shown). */
     void updateImages();
 
+    /** Inverse of projectMm() for the CURRENT point of view.
+     *
+     *  A drag gives back two screen numbers; which two stage axes they mean
+     *  depends entirely on which way the stage is being looked at, and the
+     *  third axis is not represented on screen at all -- so it is passed in
+     *  unchanged rather than invented. Without this, a drop was always read as
+     *  a Top-view X/Y move while the redraw projected for the actual view, so
+     *  in Front or Side the marker landed somewhere other than where it was
+     *  dropped and looked like it had snapped back. */
+    QVector3D unprojectMm(const QPointF &px, const QVector3D &currentMm) const;
+
     /** Rebuild the target marker items from MonitorProperties. */
     /* Q_INVOKABLE so a TargetItem can ask for a rebuild by queued call after
        deleting itself -- tearing down the item from inside its own context
