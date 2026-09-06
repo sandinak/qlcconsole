@@ -4521,12 +4521,26 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                 // onto the truss/bar axis → Δoffset along it.
                 const QVector3D wd = (m_pov == PovFront) ? QVector3D(float(dH), 0, float(dV))
                                                          : QVector3D(0, float(dH), float(dV));
-                const QVector3D axis = (truss->type() == Truss::Vertical)
+                const bool verticalTruss = (truss->type() == Truss::Vertical);
+                const QVector3D axis = verticalTruss
                     ? QVector3D(0, 0, 1)
                     : QVector3D(truss->direction().x(), truss->direction().y(), 0);
                 const double dOff = QVector3D::dotProduct(wd, axis);
                 float off = qBound(0.0f, rp.trussOffset + float(dOff), truss->length());
                 rp.trussOffset = off;
+
+                /* Vertical drag changes the HANG HEIGHT, it is not thrown away.
+                   On a horizontal truss the axis is (1,0,0) or (0,1,0), so the
+                   dot product above keeps only the horizontal component and dV
+                   vanished -- dragging a fixture up or down in Front did
+                   nothing at all, which looked like the drag had been refused.
+                   A fixture hanging on a drop below its truss is an ordinary
+                   rig, and mountZOffset is the field that already describes it.
+                   Skipped for a vertical truss, where up/down IS along the
+                   truss and has already gone into trussOffset. */
+                if (!verticalTruss && !qFuzzyIsNull(dV))
+                    rp.mountZOffset = qBound(-20.0f, rp.mountZOffset + float(dV), 20.0f);
+
                 props->setFixtureRigProps(fid, rp);
                 const QVector3D nw = truss->positionAt(off);   // new world pos
                 updateFixture(fid);
