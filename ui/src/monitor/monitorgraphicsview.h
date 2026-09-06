@@ -240,6 +240,16 @@ public:
     void followParentTrusses();
 
     /** Rebuild the truss overlay items from MonitorProperties. */
+    /** Rebuild every item class from the model at the current scale.
+     *
+     *  updateGrid()/setGridSize()/setGridMetrics() historically re-placed only
+     *  the FIXTURES, so anything else on the stage -- trusses, platforms,
+     *  targets, power sources, images -- kept the pixel positions it had at the
+     *  old scale until something happened to rebuild it. Changing units left
+     *  the stage visibly torn, and resizing the window "fixed" it only because
+     *  a resize eventually rebuilds the lot. */
+    void refreshAllItems();
+
     void updateTrusses();
 
     /** Rebuild the platform overlay items from MonitorProperties. */

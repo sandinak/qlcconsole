@@ -372,18 +372,28 @@ MonitorGraphicsView::~MonitorGraphicsView()
     m_scene = nullptr;
 }
 
-void MonitorGraphicsView::setGridSize(QSize size)
+void MonitorGraphicsView::refreshAllItems()
 {
-    m_gridSize = size;
-    updateGrid();
     QHashIterator <quint32, MonitorFixtureItem*> it(m_fixtures);
     while (it.hasNext() == true)
     {
         it.next();
         updateFixture(it.key());
     }
+    updateTrusses();
+    updatePlatforms();
+    updateTargets();
+    updatePowerSources();
+    updateImages();
     // cell pixels / offsets may have changed: refresh snapping
     applySnapToAllItems();
+}
+
+void MonitorGraphicsView::setGridSize(QSize size)
+{
+    m_gridSize = size;
+    updateGrid();
+    refreshAllItems();
 }
 
 void MonitorGraphicsView::setGridSubdivisions(int subdivisions)
@@ -1637,7 +1647,12 @@ void MonitorGraphicsView::refreshItemLayerState()
         const MonitorProperties::MonitorLayer lyr = props->layer(t ? t->layerId() : 0);
         const bool grpLock = props->groupChainLocked(t ? t->groupId() : 0);
         ti->setVisible(lyr.visible && !m_stageOnly);
-        ti->setMovable(m_doc->mode() == Doc::Design && !lyr.locked && !grpLock);
+        /* t->locked() belongs in here. It was left out, so the per-target
+           "Lock Target" menu item set a flag that this function overwrote on
+           the very next refresh -- locking a target did nothing at all, while
+           the equivalent line for trusses above has always honoured it. */
+        ti->setMovable(m_doc->mode() == Doc::Design
+                       && !(t && t->locked()) && !lyr.locked && !grpLock);
         applySelectable(ti, !lyr.locked);
     }
 
@@ -1719,12 +1734,9 @@ void MonitorGraphicsView::applySnapToAllItems()
 void MonitorGraphicsView::setGridMetrics(float value)
 {
     m_unitValue = value;
-    QHashIterator <quint32, MonitorFixtureItem*> it(m_fixtures);
-    while (it.hasNext() == true)
-    {
-        it.next();
-        updateFixture(it.key());
-    }
+    // Everything on the stage is placed through m_unitValue, not just the
+    // fixtures -- so everything has to be re-placed when it changes.
+    refreshAllItems();
     emit rulersChanged();
 }
 
@@ -3656,13 +3668,7 @@ void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
 {
     QGraphicsView::resizeEvent(event);
     updateGrid();
-    QHashIterator <quint32, MonitorFixtureItem*> it(m_fixtures);
-    while (it.hasNext() == true)
-    {
-        it.next();
-        updateFixture(it.key());
-    }
-    applySnapToAllItems();
+    refreshAllItems();
     emit rulersChanged();
 }
 
