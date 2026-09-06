@@ -29,6 +29,9 @@
 #include <QMenu>
 #include <functional>
 
+#include <QTreeWidget>
+#include <QDialogButtonBox>
+#include <QDialog>
 #include "lookeditor.h"
 #include "pathdrawwidget.h"
 #include "gradientdirectionwidget.h"
@@ -541,7 +544,26 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     efScriptRow->addWidget(new QLabel(tr("Effect:"), effectPage));
     m_effectScriptCombo = new QComboBox(effectPage);
     m_effectScriptCombo->setToolTip(tr("Pick an Effect (or a raw Generator) for this look"));
+    /* Cap the popup and force it to scroll. Several styles (macOS among them)
+       otherwise draw every item at once, and with categories, generators and
+       every preset under each, the list grew taller than the screen -- so the
+       ends of it simply could not be reached. "combobox-popup: 0" is the
+       documented way to make Qt use a scrolling list view that honours
+       maxVisibleItems. */
+    m_effectScriptCombo->setMaxVisibleItems(20);
+    m_effectScriptCombo->setStyleSheet(QStringLiteral("QComboBox { combobox-popup: 0; }"));
     efScriptRow->addWidget(m_effectScriptCombo, 1);
+
+    /* A flat list is the wrong shape for data that is three levels deep, and no
+       amount of scrolling fixes "I know it is a Chase, show me the chases". The
+       Browse dialog presents the SAME items as a filterable tree; picking there
+       just sets this combo, so the combo stays the single source of truth and
+       nothing downstream has to know the dialog exists. */
+    QPushButton *browseBtn = new QPushButton(tr("Browse…"), effectPage);
+    browseBtn->setToolTip(tr("Pick from a searchable tree of categories, "
+                             "generators and presets"));
+    connect(browseBtn, &QPushButton::clicked, this, &LookEditor::slotBrowseEffects);
+    efScriptRow->addWidget(browseBtn);
 
     m_newScriptButton = new QPushButton(tr("New script…"), effectPage);
     m_newScriptButton->setToolTip(tr("Create a new effect script from a template and open it in the editor"));
@@ -2375,6 +2397,128 @@ void LookEditor::openScriptInEditor(const QString &filePath)
         populateEffectPicker(p);
         m_effectScriptCombo->blockSignals(false);
     }
+}
+
+/** Pick an effect from a filterable tree instead of a screen-tall dropdown.
+ *
+ *  Built by walking the combo rather than re-reading the caches: the combo is
+ *  already the assembled, sorted, correctly-grouped list, and rebuilding it
+ *  here would be a second copy of that logic to keep in step. Each row carries
+ *  its combo index, so choosing one is just setCurrentIndex() and every
+ *  existing handler fires exactly as it would have.
+ */
+void LookEditor::slotBrowseEffects()
+{
+    if (m_effectScriptCombo == nullptr)
+        return;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Choose an effect"));
+    QVBoxLayout *lay = new QVBoxLayout(&dlg);
+
+    QLineEdit *filter = new QLineEdit(&dlg);
+    filter->setPlaceholderText(tr("Type to filter…"));
+    filter->setClearButtonEnabled(true);
+    lay->addWidget(filter);
+
+    QTreeWidget *tree = new QTreeWidget(&dlg);
+    tree->setHeaderHidden(true);
+    tree->setUniformRowHeights(true);
+    lay->addWidget(tree, 1);
+
+    const int kIndexRole = Qt::UserRole + 1;
+
+    QTreeWidgetItem *category = nullptr;   // current header
+    QTreeWidgetItem *script   = nullptr;   // current generator, presets nest under it
+    for (int i = 0; i < m_effectScriptCombo->count(); i++)
+    {
+        const int kind = m_effectScriptCombo->itemData(i, EffectKindRole).toInt();
+        // The combo indents with spaces and bullets for visual nesting; the
+        // tree provides real nesting, so strip that decoration back off.
+        QString text = m_effectScriptCombo->itemText(i);
+        text.remove(QStringLiteral("•"));
+        text = text.trimmed();
+
+        QTreeWidgetItem *item = nullptr;
+        if (kind == EffectKindHeader)
+        {
+            category = new QTreeWidgetItem(tree);
+            category->setText(0, text);
+            QFont f = category->font(0); f.setBold(true); category->setFont(0, f);
+            category->setFlags(category->flags() & ~Qt::ItemIsSelectable);
+            script = nullptr;
+            continue;
+        }
+        if (kind == EffectKindPreset && script != nullptr)
+            item = new QTreeWidgetItem(script);
+        else if (category != nullptr)
+            { item = new QTreeWidgetItem(category); script = item; }
+        else
+            { item = new QTreeWidgetItem(tree); script = item; }
+
+        item->setText(0, text);
+        item->setToolTip(0, m_effectScriptCombo->itemData(i, Qt::ToolTipRole).toString());
+        item->setData(0, kIndexRole, i);
+        if (i == m_effectScriptCombo->currentIndex())
+        {
+            tree->setCurrentItem(item);
+            item->setSelected(true);
+        }
+    }
+    tree->expandAll();
+
+    /* Filtering hides non-matching leaves and any category left with nothing
+       under it, so the tree collapses down to what was asked for rather than
+       leaving empty headings behind. */
+    connect(filter, &QLineEdit::textChanged, &dlg, [tree](const QString &needle) {
+        for (int c = 0; c < tree->topLevelItemCount(); c++)
+        {
+            QTreeWidgetItem *cat = tree->topLevelItem(c);
+            int visible = 0;
+            for (int s = 0; s < cat->childCount(); s++)
+            {
+                QTreeWidgetItem *sc = cat->child(s);
+                int subVisible = 0;
+                for (int pr = 0; pr < sc->childCount(); pr++)
+                {
+                    QTreeWidgetItem *pi = sc->child(pr);
+                    const bool m = needle.isEmpty()
+                        || pi->text(0).contains(needle, Qt::CaseInsensitive);
+                    pi->setHidden(!m);
+                    if (m) subVisible++;
+                }
+                const bool selfMatch = needle.isEmpty()
+                    || sc->text(0).contains(needle, Qt::CaseInsensitive);
+                sc->setHidden(!selfMatch && subVisible == 0);
+                if (!sc->isHidden()) visible++;
+            }
+            cat->setHidden(visible == 0);
+        }
+    });
+
+    QDialogButtonBox *bb = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    lay->addWidget(bb);
+
+    // Double-click picks and closes, which is what everyone tries first.
+    connect(tree, &QTreeWidget::itemDoubleClicked, &dlg,
+            [&dlg](QTreeWidgetItem *it, int) {
+        if (it != nullptr && it->data(0, Qt::UserRole + 1).isValid())
+            dlg.accept();
+    });
+
+    dlg.resize(460, 520);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    QTreeWidgetItem *chosen = tree->currentItem();
+    if (chosen == nullptr)
+        return;
+    const QVariant idx = chosen->data(0, kIndexRole);
+    if (idx.isValid())
+        m_effectScriptCombo->setCurrentIndex(idx.toInt());
 }
 
 void LookEditor::slotNewEffectScript()

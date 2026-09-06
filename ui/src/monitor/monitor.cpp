@@ -331,23 +331,17 @@ void Monitor::showDMXView()
             m_doc->inputOutputMap()->setUniverseMonitor(i, false);
     }
 
-    // Cmd/Ctrl+Q while this detached window has focus should quit the app with
-    // the SAME "save the workspace?" gutcheck as the main window — route to
-    // App::close() (→ App::closeEvent → saveModifiedDoc), not just close us.
-    QAction *quitAct = new QAction(this);
-    quitAct->setShortcut(QKeySequence::Quit);
-    quitAct->setShortcutContext(Qt::WindowShortcut);
-    addAction(quitAct);
-    connect(quitAct, &QAction::triggered, this, []() {
-        foreach (QWidget *w, QApplication::topLevelWidgets())
-        {
-            if (App *app = qobject_cast<App *>(w))
-            {
-                app->close();   // runs the save-before-quit gutcheck
-                return;
-            }
-        }
-    });
+    /* No local Quit action here any more. There used to be one, so Cmd+Q would
+       reach App::close() from this window -- but the main window's Quit has the
+       same shortcut, and two actions claiming one sequence in the same scope is
+       an ambiguous overload: Qt fires NEITHER and just warns. That is why Cmd+Q
+       did nothing here, and Cmd+S nothing at all, since it had no local action
+       to be ambiguous with in the first place.
+
+       Both are application-level operations on the one shared document, so
+       they are Qt::ApplicationShortcut on the App's own actions now (see
+       App::initActions) and fire from whichever window has focus, with the
+       save-before-quit gutcheck intact. */
 }
 
 void Monitor::initGraphicsView()
@@ -1521,24 +1515,40 @@ void Monitor::slotGridUnitsChanged(int index)
     if (var.isValid())
         units = MonitorProperties::GridUnits(var.toInt());
 
-    // Convert grid dimensions so the physical size stays the same.
-    // m_gridSize stores values in the current display unit, so we must
-    // re-express them in the new unit before changing the scale factor.
+    /* Re-express the stage in the new unit WITHOUT re-quantising it.
+     *
+     * This used to read the integer spin boxes, multiply, and qRound back into
+     * integers -- so the stored extent was rounded to a whole foot or metre on
+     * every toggle. A 10 m stage became 33 ft, which is 10.058 m: the stage
+     * physically grew, everything on it shifted relative to the grid, and
+     * toggling back did not undo it because the rounding had already thrown
+     * the original away. Switch units twice and the rig has moved.
+     *
+     * m_gridSize is a QVector3D of floats, so the exact converted value fits.
+     * Convert from the STORED extent rather than from the spin boxes -- the
+     * spin boxes are integers and reading them back is what lost the precision
+     * in the first place -- and round only for display. */
     if (units != m_props->gridUnits())
     {
         const double factor = (units == MonitorProperties::Feet) ? 3.28084 : (1.0 / 3.28084);
-        int newW = qMax(1, qRound(m_gridWSpin->value() * factor));
-        int newH = qMax(1, qRound(m_gridHSpin->value() * factor));
+        const QVector3D cur = m_props->gridSize();
+        const double exactW = qMax(0.001, double(cur.x()) * factor);
+        const double exactH = qMax(0.001, double(cur.z()) * factor);
+        const double exactY = double(cur.y()) * factor;
 
         m_gridWSpin->blockSignals(true);
         m_gridHSpin->blockSignals(true);
-        m_gridWSpin->setValue(newW);
-        m_gridHSpin->setValue(newH);
+        m_gridWSpin->setValue(qMax(1, qRound(exactW)));
+        m_gridHSpin->setValue(qMax(1, qRound(exactH)));
         m_gridWSpin->blockSignals(false);
         m_gridHSpin->blockSignals(false);
 
-        m_graphicsView->setGridSize(QSize(newW, newH));
-        m_props->setGridSize(QVector3D(newW, m_props->gridSize().y(), newH));
+        // The view draws whole grid cells, so it gets the rounded count --
+        // that only decides how many lines are painted. The DOCUMENT keeps the
+        // exact extent, which is what has to survive a round trip.
+        m_graphicsView->setGridSize(QSize(qMax(1, qRound(exactW)),
+                                          qMax(1, qRound(exactH))));
+        m_props->setGridSize(QVector3D(float(exactW), float(exactY), float(exactH)));
     }
 
     if (units == MonitorProperties::Meters)

@@ -214,6 +214,8 @@ private slots:
     void slotImportEffect();
     /** Create a new effect script from a template and open it in the editor. */
     void slotNewEffectScript();
+    /** Pick an effect from a filterable tree rather than a screen-tall list. */
+    void slotBrowseEffects();
     /** Open the current Generator's .js in the editor. */
     void slotEditEffectScript();
     void slotEffectParamChanged(int value);

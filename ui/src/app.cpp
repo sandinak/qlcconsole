@@ -1243,6 +1243,12 @@ void App::initActions()
 
     m_fileSaveAction = new QAction(QIcon(":/filesave.png"), tr("&Save"), this);
     m_fileSaveAction->setShortcut(QKeySequence("CTRL+S"));
+    /* Application-wide, not window-wide. Saving the workspace is an operation
+       on the DOCUMENT, and the document is the same one whichever window has
+       focus -- so Cmd+S has to work from the Lighting Studio pulled off into
+       its own window, which is exactly where somebody has been arranging a rig
+       for an hour and most wants to save. */
+    m_fileSaveAction->setShortcutContext(Qt::ApplicationShortcut);
     m_fileSaveAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_fileSaveAction, SIGNAL(triggered(bool)), this, SLOT(slotFileSave()));
 
@@ -1517,6 +1523,8 @@ void App::initMenuBar()
         }
         quitAction->setMenuRole(QAction::QuitRole);
         quitAction->setShortcut(QKeySequence::Quit);
+        // Same reasoning as Save: quitting is an application-level act.
+        quitAction->setShortcutContext(Qt::ApplicationShortcut);
         fileMenu->addAction(quitAction);
     }
 
