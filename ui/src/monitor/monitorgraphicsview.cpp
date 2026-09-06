@@ -385,6 +385,9 @@ void MonitorGraphicsView::refreshAllItems()
     updateTargets();
     updatePowerSources();
     updateImages();
+    // The tethers are projected like everything else, so a scale or
+    // point-of-view change invalidates them too.
+    updateTrussAnchorLines();
     // cell pixels / offsets may have changed: refresh snapping
     applySnapToAllItems();
 }
@@ -1872,11 +1875,12 @@ void MonitorGraphicsView::setViewPOV(ViewPOV pov)
         return;
     m_pov = pov;
 
-    // Rebuild the whole projection. updateGrid() re-lays the grid and rebuilds
-    // trusses/platforms/power/targets; fixtures are repositioned explicitly.
+    /* Rebuild the whole projection. Every item is placed through projectMm(),
+       so changing which way the stage is being looked at invalidates all of
+       them -- one refreshAllItems() rather than a hand-picked list that has to
+       be remembered whenever a new item class appears. */
     updateGrid();
-    QHashIterator<quint32, MonitorFixtureItem*> it(m_fixtures);
-    while (it.hasNext()) { it.next(); updateFixture(it.key()); }
+    refreshAllItems();
     refreshItemLayerState();
     emit rulersChanged();
 }
@@ -3277,41 +3281,44 @@ void MonitorGraphicsView::updateTrussAnchorLines()
         if (t == nullptr || t->type() == Truss::Vertical)
             continue;   // a tower's fixtures sit at its XY — no "across" to show
 
-        // No line while the fixture's centre still falls within the truss's
-        // own drawn thickness (plus a couple of pixels' slack for a very
-        // thin truss) — it visually reads as "sitting on the truss" over
-        // that whole width, not just exactly on the centreline.
         const float halfWidthM = t->width() * 0.5f;
-        const double slackM = 2.0 * double(m_unitValue) / (double(m_cellPixels) * 1000.0);
-        if (double(qAbs(rp.trussCross)) < double(halfWidthM) + slackM)
-            continue;
 
-        // Derive BOTH ends from the same stored rig data (offset + cross)
-        // rather than reading the fixture's actual rendered position for one
-        // end — a fixture's on-screen position can drift a hair from what its
-        // stored offset/cross would recompute (rounding, or data that was
-        // never perfectly self-consistent to begin with), and that drift
-        // showed up as the tether visibly NOT perpendicular to the truss.
-        // Building both points from the truss's own direction vector makes
-        // the line perpendicular by construction, no matter the truss's
-        // on-screen orientation.
-        const QVector3D centreW = t->positionAt(rp.trussOffset);   // centreline point, metres
+        /* The tether is drawn in whatever view is on screen, so BOTH ends are
+           real 3-D points and projectMm() decides what that looks like.
+           It used to be built purely from trussCross, with both ends sharing
+           the truss's own Z -- which describes the across offset and nothing
+           else. In Top that is the whole story; in an elevation the across
+           axis is not on screen at all, so the line collapsed to zero length
+           and vanished. And a fixture hung below its truss on mountZOffset --
+           now that dragging vertically in Front sets exactly that -- had no
+           across offset to speak of, so it was skipped outright and hung in
+           space with nothing connecting it.
 
+           Fixture end: its real rigged position, which already includes the
+           cross offset, the mount side and the height nudge. Truss end: the
+           point on the truss at the same offset, moved out to the near EDGE
+           rather than the centreline, since the truss is drawn with real width
+           and stopping at the centre buries half the line under it. */
+        const QVector3D centreW = t->positionAt(rp.trussOffset);   // metres
         const QPointF dir = t->direction();
         const QPointF perp(-dir.y(), dir.x());
-        const QVector3D fixW(centreW.x() + perp.x() * rp.trussCross,
-                             centreW.y() + perp.y() * rp.trussCross,
-                             centreW.z());
-        const QPointF fixPx = projectMm(fixW.x() * 1000.0, fixW.y() * 1000.0, fixW.z() * 1000.0);
 
-        // Terminate at the truss's near EDGE, not its centreline — the truss
-        // is drawn with real width, so stopping at the centre buried half
-        // the line under the truss body for no reason.
+        const QVector3D fixW = props->fixtureRigPosition(it.key());
         const float edgeCross = (rp.trussCross >= 0.0f) ? halfWidthM : -halfWidthM;
         const QVector3D edgeW(centreW.x() + perp.x() * edgeCross,
                               centreW.y() + perp.y() * edgeCross,
                               centreW.z());
+
+        const QPointF fixPx    = projectMm(fixW.x() * 1000.0, fixW.y() * 1000.0, fixW.z() * 1000.0);
         const QPointF anchorPx = projectMm(edgeW.x() * 1000.0, edgeW.y() * 1000.0, edgeW.z() * 1000.0);
+
+        /* Skip only when the two ends land on top of each other IN THIS VIEW.
+           Deciding that from trussCross alone was a Top-view judgement applied
+           to every view: it hid lines that would have been perfectly visible
+           in an elevation, and drew zero-length ones that could not be. */
+        const QPointF d = fixPx - anchorPx;
+        if ((d.x() * d.x() + d.y() * d.y()) < (3.0 * 3.0))
+            continue;
 
         QPen tetherPen(selected ? selectedColor : neutralColor, selected ? 3.0 : 2.4);
         tetherPen.setStyle(Qt::DashLine);
