@@ -723,9 +723,11 @@ qreal MonitorFixtureItem::facingReach() const
 
 QRectF MonitorFixtureItem::boundingRect() const
 {
-    // Arc strokes are drawn up to MOVEMENT_THICKNESS px outside the fixture cell
-    // rectangle; add a margin so Qt's dirty-region clipping never hides them.
-    const qreal m = MOVEMENT_THICKNESS + 1;
+    // Arc strokes reach MOVEMENT_THICKNESS px outside the cell rectangle and
+    // the selection halo reaches 6 px (3 px offset + half its 6 px pen); the
+    // margin covers the larger, or Qt's dirty-region clipping leaves stale
+    // halo fragments on the canvas when the selection changes.
+    const qreal m = qMax(qreal(MOVEMENT_THICKNESS), qreal(6.0)) + 1;
     QRectF rect;
     if (m_labelVisibility)
         rect = QRectF(-10 - m, -m, m_width + 20 + 2 * m, m_height + m_labelRect.height() + 2 + m);
@@ -785,7 +787,33 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
             bodyPen.setStyle(Qt::DashLine);
             bodyPen.setCosmetic(true);
         }
+        else if (this->isSelected() || m_highlighted)
+        {
+            /* A one-pixel outline disappears on a multi-head bar: the LED
+               heads are bright child items covering the whole interior, so the
+               only selected-ness on screen was a hairline around a 300 px
+               strip. Selection has to survive being next to its own light. */
+            bodyPen.setWidthF(2.5);
+            bodyPen.setCosmetic(true);
+        }
         painter->setPen(bodyPen);
+    }
+
+    /* Halo just OUTSIDE the body for selection/highlight, where no head can
+       cover it. Drawn by the parent, so it wraps the fixture's full laid-out
+       extent whatever grid the heads use -- "all the LEDs", not a few. */
+    if ((this->isSelected() || m_highlighted) && !m_isolated)
+    {
+        QColor halo = defColor;
+        halo.setAlpha(110);
+        QPen haloPen(halo, 6.0);
+        haloPen.setCosmetic(true);
+        haloPen.setJoinStyle(Qt::MiterJoin);
+        painter->setBrush(Qt::NoBrush);
+        const QPen keep = painter->pen();
+        painter->setPen(haloPen);
+        painter->drawRect(QRectF(-3.0, -3.0, m_width + 6.0, m_height + 6.0));
+        painter->setPen(keep);
     }
 
     // draw item background

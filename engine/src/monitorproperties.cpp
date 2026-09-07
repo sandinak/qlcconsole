@@ -1626,7 +1626,19 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemYPosition))
                 pos.setY(tAttrs.value(KXMLQLCMonitorItemYPosition).toString().toDouble());
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemZPosition))
-                pos.setZ(tAttrs.value(KXMLQLCMonitorItemZPosition).toString().toDouble());
+            {
+                double z = tAttrs.value(KXMLQLCMonitorItemZPosition).toString().toDouble();
+                /* Z is METRES (X/Y are millimetres -- see fixtureRigPosition).
+                   A run of builds wrote millimetres into it, so workspaces in
+                   the wild carry hang heights of 2500 "metres": the fixture is
+                   drawn kilometres above the stage and simply cannot be found
+                   in the elevation views. No venue is 100 m tall, so anything
+                   past that is confidently the mm bug -- repair it on load
+                   rather than making the operator hunt for an invisible light. */
+                if (qAbs(z) > 100.0)
+                    z /= 1000.0;
+                pos.setZ(z);
+            }
             item.m_position = pos;
 
             if (tAttrs.hasAttribute(KXMLQLCMonitorFixtureRotation)) // check legacy first
@@ -1693,7 +1705,19 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemYPosition))
                 pos.setY(tAttrs.value(KXMLQLCMonitorItemYPosition).toString().toDouble());
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemZPosition))
-                pos.setZ(tAttrs.value(KXMLQLCMonitorItemZPosition).toString().toDouble());
+            {
+                double z = tAttrs.value(KXMLQLCMonitorItemZPosition).toString().toDouble();
+                /* Z is METRES (X/Y are millimetres -- see fixtureRigPosition).
+                   A run of builds wrote millimetres into it, so workspaces in
+                   the wild carry hang heights of 2500 "metres": the fixture is
+                   drawn kilometres above the stage and simply cannot be found
+                   in the elevation views. No venue is 100 m tall, so anything
+                   past that is confidently the mm bug -- repair it on load
+                   rather than making the operator hunt for an invisible light. */
+                if (qAbs(z) > 100.0)
+                    z /= 1000.0;
+                pos.setZ(z);
+            }
             item.m_position = pos;
 
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemXRotation))

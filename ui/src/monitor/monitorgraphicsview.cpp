@@ -2118,8 +2118,24 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     }
     else if (m_pov == PovTop)
     {
-        const QPointF p = realPositionToPixels(item->realPosition().x(), item->realPosition().y());
-        item->setPos(onTruss ? (p - halfIcon(item)) : p);
+        if (onTruss)
+        {
+            /* A bound fixture's position IS its binding -- truss + offset +
+               cross. Placing it from the item's cached realPosition instead
+               made the cache a second source of truth, and every path that
+               bound a fixture without also updating the cache (attach, a
+               test, a workspace load) stranded the icon wherever the cache
+               last pointed. Derive from the rig, the way the elevations
+               always have, and the cache cannot strand anything. */
+            const QVector3D w = m_doc->monitorProperties()->fixtureRigPosition(id);
+            const QPointF p = projectMm(w.x() * 1000.0, w.y() * 1000.0, w.z() * 1000.0);
+            item->setPos(p - halfIcon(item));
+        }
+        else
+        {
+            const QPointF p = realPositionToPixels(item->realPosition().x(), item->realPosition().y());
+            item->setPos(p);
+        }
     }
     else
     {
@@ -2503,7 +2519,8 @@ bool MonitorGraphicsView::elevationFixtureDraggable(quint32 fid) const
     return rp.trussId != Truss::invalidId();   // slides along its truss/bar
 }
 
-TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi) const
+TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi,
+                                                  float widths, bool forAttach) const
 {
     if (mfi == nullptr)
         return nullptr;
@@ -2517,6 +2534,8 @@ TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi) const
         Truss *t = ti->truss();
         if (t == nullptr || !ti->isVisible())
             continue;
+        if (forAttach && t->locked())
+            continue;   // a locked structure does not acquire new members
 
         const QPointF local = ti->mapFromScene(centre);
         float dist;
@@ -2531,7 +2550,7 @@ TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi) const
             dist = qAbs(float(local.y()));
         }
 
-        if (dist > ti->pxWid() * 2.0f)
+        if (dist > ti->pxWid() * widths)
             continue;
         if (best == nullptr || dist < bestDist)
         {
@@ -4160,7 +4179,7 @@ void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
                     /* Unbound: green while it is over a truss, so releasing
                        there visibly means "attach". The mirror of the red
                        escape border below. */
-                    mfi->setAttachMode(trussUnderFixture(mfi) != nullptr);
+                    mfi->setAttachMode(trussUnderFixture(mfi, 1.0f, true) != nullptr);
                     continue;
                 }
                 mfi->setAttachMode(false);
@@ -4815,7 +4834,7 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
             /* Released over a truss: bind to it. Attaching is not a top-view
                privilege -- hanging a light on a bar is exactly the thing you
                do while looking at the bar from the front. */
-            if (TrussItem *over = trussUnderFixture(item))
+            if (TrussItem *over = trussUnderFixture(item, 1.0f, true))
             {
                 attachFixtureToTrussAt(fid, over, item);
                 updateTrussAnchorLines();
@@ -5114,7 +5133,7 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                release without ever having gone green, or go green and then
                not attach. The promise the colour makes is now the promise the
                drop keeps. */
-            if (TrussItem *over = trussUnderFixture(mfi))
+            if (TrussItem *over = trussUnderFixture(mfi, 1.0f, true))
             {
                 attachFixtureToTrussAt(fid, over, mfi);
                 rp = props->fixtureRigProps(fid);   // attach just changed this

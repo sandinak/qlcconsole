@@ -489,9 +489,7 @@ void Monitor_Test::dropOnTrussAttachesAndStays()
 
     // Drop the fixture's CENTRE onto the truss line, 2 m along the run.
     const QPointF onTrussPx = rig.gv->realPositionToPixels(12000.0, 12000.0);
-    const QPointF half(rig.item->boundingRect().width() / 2.0,
-                       rig.item->boundingRect().height() / 2.0);
-    rig.item->setPos(onTrussPx - half);
+    rig.item->setPos(rig.item->pos() + (onTrussPx - rig.item->sceneBoundingRect().center()));
     const QPointF target = rig.item->pos();
     rig.gv->slotFixtureMoved(rig.item);
 
@@ -543,6 +541,93 @@ void Monitor_Test::dropOffTrussDetachesAndStays()
              "pulled well clear of the truss but still bound");
     QVERIFY2(jump < 2.0, qPrintable(QString("detach jumped %1 px at the drop").arg(jump)));
     QVERIFY2(back < 2.0, qPrintable(QString("detach snapped back %1 px on re-place").arg(back)));
+
+    props->removeTruss(t->id());
+}
+
+void Monitor_Test::nudgeOffTrussKeepsBindingAndOffset()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("NudgeBar");
+    t->setOrigin(QVector3D(10.0f, 12.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    rig.gv->updateTrusses();
+
+    FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
+    rp.trussId = t->id();
+    rp.trussOffset = 2.0f;
+    rp.trussCross = 0.0f;
+    props->setFixtureRigProps(rig.fxi->id(), rp);
+    rig.item->setBoundToTruss(true);
+    rig.gv->updateFixture(rig.fxi->id());
+
+    // Nudge 0.45 m downstage -- 1.5 truss widths, inside the two-width zone.
+    const qreal nudgePx = 0.45 * rig.gv->m_cellPixels;   // 1 cell = 1 m here
+    qreal jump = 0, back = 0;
+    dropAndMeasure(rig.gv, rig.item, rig.fxi->id(), QPointF(0, nudgePx), jump, back);
+
+    const FixtureRigProps after = props->fixtureRigProps(rig.fxi->id());
+    QVERIFY2(after.trussId == t->id(),
+             "a nudge inside the zone must stay attached");
+    QVERIFY2(after.trussCross > 0.3f && after.trussCross < 0.6f,
+             qPrintable(QString("trussCross should be ~0.45m, is %1").arg(after.trussCross)));
+    QVERIFY2(jump < 2.0, qPrintable(QString("nudge jumped %1 px at the drop").arg(jump)));
+    QVERIFY2(back < 2.0, qPrintable(QString("nudge snapped back %1 px on re-place").arg(back)));
+
+    props->removeTruss(t->id());
+}
+
+void Monitor_Test::nearTrussStaysFreeAndLockedTrussRefuses()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("BandBar");
+    t->setOrigin(QVector3D(10.0f, 12.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    rig.gv->updateTrusses();
+    rig.gv->updateFixture(rig.fxi->id());
+
+    // Drop 0.45 m off the line: inside the old grab-everything zone, inside
+    // the detach zone, but OUTSIDE the attach zone. Near-but-free must exist.
+    /* Position by the item's actual scene CENTRE: boundingRect's origin is
+       not (0,0) (it carries a halo/label margin), so "pos minus half the rect"
+       misses by that margin -- the product code judges by the centre, so the
+       test must place by it too. */
+    const QPointF nearPx = rig.gv->realPositionToPixels(12000.0, 12450.0);
+    rig.item->setPos(rig.item->pos() + (nearPx - rig.item->sceneBoundingRect().center()));
+    const QPointF target = rig.item->pos();
+    rig.gv->slotFixtureMoved(rig.item);
+
+    FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
+    QVERIFY2(rp.trussId == Truss::invalidId(),
+             "0.45 m off the bar must stay FREE -- that band exists so a "
+             "fixture can live near a truss without being grabbed");
+    rig.gv->updateFixture(rig.fxi->id());
+    QVERIFY2((rig.item->pos() - target).manhattanLength() < 2.0,
+             "the near-band drop moved on re-place");
+
+    // Locked truss: drop dead ON the line; must still stay free.
+    t->setLocked(true);
+    rig.gv->updateTrusses();
+    const QPointF onPx = rig.gv->realPositionToPixels(12000.0, 12000.0);
+    rig.item->setPos(rig.item->pos() + (onPx - rig.item->sceneBoundingRect().center()));
+    rig.gv->slotFixtureMoved(rig.item);
+    rp = props->fixtureRigProps(rig.fxi->id());
+    QVERIFY2(rp.trussId == Truss::invalidId(),
+             "a LOCKED truss must not acquire a dropped fixture");
 
     props->removeTruss(t->id());
 }

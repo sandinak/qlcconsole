@@ -51,6 +51,12 @@ private slots:
     void dropStaysPutSideView();
     void dropOnTrussAttachesAndStays();
     void dropOffTrussDetachesAndStays();
+    /** Bound, dragged a little off the bar (inside the two-widths zone):
+     *  stays bound, keeps the sideways offset, and stays where dropped. */
+    void nudgeOffTrussKeepsBindingAndOffset();
+    /** The hysteresis band and the locked-truss rule: near-but-free stays
+     *  free, and a locked truss never acquires a dropped fixture. */
+    void nearTrussStaysFreeAndLockedTrussRefuses();
 
 private:
     Doc* m_doc;

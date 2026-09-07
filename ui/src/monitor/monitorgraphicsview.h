@@ -85,7 +85,17 @@ public:
      *  two-widths threshold the detach rule uses -- so "far enough to detach"
      *  and "close enough to attach" are the same line seen from either side,
      *  and a fixture can never be in both states at once. */
-    class TrussItem *trussUnderFixture(class MonitorFixtureItem *mfi) const;
+    /* Attach and detach use different radii ON PURPOSE (hysteresis): to
+       attach you must drop essentially ON the bar (1 width); once bound you
+       are not lost until you pull clearly away (2 widths). The band between
+       is where a fixture can live NEAR a truss without the drop grabbing it
+       -- without a gap, "close to but not on" was unrepresentable. forAttach
+       also skips LOCKED trusses: locking a structure means "do not change
+       it", and hanging a new light on it changes it; bound fixtures on a
+       locked truss stay bound (the detach test never skips). */
+    class TrussItem *trussUnderFixture(class MonitorFixtureItem *mfi,
+                                       float widths = 2.0f,
+                                       bool forAttach = false) const;
 
     /** Bind @p fid to @p trussItem, taking its along-position from where it
      *  was dropped. */
