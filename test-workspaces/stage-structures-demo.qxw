@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Workspace>
-<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="InputOutputManager">
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FunctionManager">
  <Creator>
   <Name>qlcconsole</Name>
-  <Version>4.14.2+qlcconsole.1164</Version>
+  <Version>4.14.2+qlcconsole.1213</Version>
   <Author>Branson Matheson</Author>
  </Creator>
  <Engine>
@@ -11533,5 +11533,7 @@
  <SimpleDesk>
   <Engine/>
  </SimpleDesk>
- <AppState/>
+ <AppState>
+  <DetachedWindow class="Monitor" tabIndex="2" geometry="AdnQywADAAAAAAGIAAABBwAACUEAAAWNAAABiAAAAScAAAlBAAAFjQAAAAAAAAAACgAAAAGIAAABJwAACUEAAAWN"/>
+ </AppState>
 </Workspace>

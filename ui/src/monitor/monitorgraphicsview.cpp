@@ -372,6 +372,20 @@ MonitorGraphicsView::~MonitorGraphicsView()
     m_scene = nullptr;
 }
 
+void MonitorGraphicsView::showEvent(QShowEvent *event)
+{
+    QGraphicsView::showEvent(event);
+    /* Queued, not immediate: at showEvent time the widget still reports its
+       pre-layout geometry, so re-fitting here would use the same wrong numbers
+       that caused the problem. One turn of the event loop later the layout has
+       run and width()/height() are real. */
+    QTimer::singleShot(0, this, [this]() {
+        updateGrid();
+        refreshAllItems();
+        emit rulersChanged();
+    });
+}
+
 void MonitorGraphicsView::refreshAllItems()
 {
     QHashIterator <quint32, MonitorFixtureItem*> it(m_fixtures);
@@ -1702,10 +1716,26 @@ void MonitorGraphicsView::refreshItemLayerState()
     {
         for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
             it.value()->setMovable(elevationFixtureDraggable(it.key()));
-        foreach (TrussItem *i, m_trussItems)             i->setMovable(elevationBarDraggable(i->truss()));
+        /* Trusses: a tower crossbar has always been draggable here, and a
+           free-standing truss now is too -- dragging one up or down in Front is
+           how you set its trim height, and refusing it silently was the "can't
+           move the XL-450 and it is unlocked" report. Locks still apply. */
+        foreach (TrussItem *i, m_trussItems)
+        {
+            Truss *t = i->truss();
+            const bool locked = (t != nullptr && t->locked()) || m_layoutLocked;
+            i->setMovable(elevationBarDraggable(t) || !locked);
+        }
         foreach (PlatformItem *i, m_platformItems)       i->setMovable(false);
         foreach (PowerSourceItem *i, m_powerSourceItems) i->setMovable(false);
-        foreach (TargetItem *i, m_targetItems)           i->setMovable(false);
+        /* Targets were frozen here outright. Their drop is unprojected for the
+           current view now, so dragging one in an elevation sets its HEIGHT --
+           which is the only way to give a target a Z at all. */
+        foreach (TargetItem *i, m_targetItems)
+        {
+            StageTarget *t = i->target();
+            i->setMovable(m_doc->mode() == Doc::Design && !(t && t->locked()));
+        }
         foreach (PipeItem *i, m_pipeItems)               i->setMovable(false);
         foreach (StandItem *i, m_standItems)             i->setMovable(false);
         foreach (TowerItem *i, m_towerItems)             i->setMovable(false);
@@ -1828,6 +1858,26 @@ qreal MonitorGraphicsView::floorPixelY() const
 {
     // Bottom of the grid = the Z=0 floor line for elevation views.
     return m_yOffset + qreal(m_gridSize.height()) * m_cellPixels;
+}
+
+float MonitorGraphicsView::floorHeightAt(float xMetres, float yMetres) const
+{
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
+    if (props == nullptr)
+        return 0.0f;
+
+    float best = 0.0f;
+    foreach (StagePlatform *p, props->platforms())
+    {
+        if (p == nullptr || !p->solid())
+            continue;
+        if (xMetres < p->originX() || xMetres > p->originX() + p->width())
+            continue;
+        if (yMetres < p->originY() || yMetres > p->originY() + p->depth())
+            continue;
+        best = qMax(best, p->height());
+    }
+    return best;
 }
 
 QVector3D MonitorGraphicsView::unprojectMm(const QPointF &px, const QVector3D &currentMm) const
@@ -2414,8 +2464,30 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
         foreach (TrussItem *ti, moved)
         {
             Truss *t = ti->truss();
-            if (!elevationBarDraggable(t))
+            if (t == nullptr)
                 continue;
+            if (!elevationBarDraggable(t))
+            {
+                /* A free-standing truss has no parent to be positioned
+                   relative to, so the drop is simply its new origin -- read
+                   back through the same projection it was drawn with, leaving
+                   the axis that is not on screen alone. */
+                if ((t->locked()) || m_layoutLocked)
+                    continue;
+                const QVector3D curMm(t->origin().x() * 1000.0f,
+                                      t->origin().y() * 1000.0f,
+                                      t->origin().z() * 1000.0f);
+                const QVector3D newMm = unprojectMm(ti->pos(), curMm);
+                const QVector3D newOrigin(newMm.x() / 1000.0f,
+                                          newMm.y() / 1000.0f,
+                                          newMm.z() / 1000.0f);
+                if (!qFuzzyCompare(newOrigin, t->origin()))
+                {
+                    t->setOrigin(newOrigin);
+                    any = true;
+                }
+                continue;
+            }
             const Truss *parent = props->truss(t->parentTrussId());
             // Drop DELTA in the two visible screen axes.
             const QPointF pExpected = projectMm(t->origin().x() * 1000.0,
@@ -3072,7 +3144,21 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
         const QVector3D curMm(t->x() * 1000.0f, t->y() * 1000.0f, t->z() * 1000.0f);
         const QVector3D newMm = unprojectMm(ti->pos(), curMm);
         const QPointF newPos(double(newMm.x()) / 1000.0, double(newMm.y()) / 1000.0);
-        const float newZ = float(newMm.z()) / 1000.0f;
+        float newZ = float(newMm.z()) / 1000.0f;
+
+        /* Dropped in TOP view, height is not something the drag could express,
+           so it is inherited from what the target now stands on: the top of any
+           solid platform under it, or the deck. A target left at z=0 over a
+           riser sits inside the riser, which is both wrong to look at and wrong
+           to aim at -- the lights would point at the floor under someone's
+           feet. Elevations set height directly, so they are left alone. */
+        if (m_pov == PovTop)
+        {
+            const float deck = floorHeightAt(float(newPos.x()), float(newPos.y()));
+            const float oldDeck = floorHeightAt(float(oldPos.x()), float(oldPos.y()));
+            // Preserve any height the operator set ABOVE the old surface.
+            newZ = deck + qMax(0.0f, oldZ - oldDeck);
+        }
 
         if (newPos != oldPos || !qFuzzyCompare(newZ, oldZ))
         {

@@ -3516,7 +3516,9 @@ void Monitor::slotAddTarget()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     t->setX(float(mm.x() / 1000.0));
     t->setY(float(mm.y() / 1000.0));
-    t->setZ(0.0f);
+    // Sit on whatever solid platform it was dropped over, not at deck level --
+    // same rule a drag follows, so placing and moving agree.
+    t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));
     t->setLayerId(m_props->activeLayerId());   // land on the selected layer
 
     m_graphicsView->updateTargets();

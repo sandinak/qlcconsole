@@ -277,6 +277,16 @@ public:
      *  dropped and looked like it had snapped back. */
     QVector3D unprojectMm(const QPointF &px, const QVector3D &currentMm) const;
 
+    /** Height (metres) of the top surface of the tallest SOLID platform under
+     *  this stage position, or 0 for bare floor.
+     *
+     *  A target is a point in the room that lights are aimed at, and a person
+     *  standing on a riser is a metre higher than one on the deck -- so a
+     *  target dropped over a riser belongs on top of it, not buried inside it.
+     *  Only solid platforms count: a stackable step is something you put ON a
+     *  deck, and treating it as ground would stack heights twice. */
+    float floorHeightAt(float xMetres, float yMetres) const;
+
     /** Rebuild the target marker items from MonitorProperties. */
     /* Q_INVOKABLE so a TargetItem can ask for a rebuild by queued call after
        deleting itself -- tearing down the item from inside its own context
@@ -464,6 +474,14 @@ protected:
 
     /** Event caught when the GraphicsView is resized */
     void resizeEvent(QResizeEvent *event) override;
+    /** Re-fit once the widget actually has its laid-out size.
+     *
+     *  updateGrid() derives m_cellPixels from this->width()/height(), and
+     *  before the first layout pass those are the widget's DEFAULT size, not
+     *  the size it will occupy -- so the first draw used a scale unrelated to
+     *  the window and the stage came up zoomed in. Resizing "fixed" it only
+     *  because that finally ran updateGrid() against real dimensions. */
+    void showEvent(QShowEvent *event) override;
 
     /** Scroll wheel zooms the view around the cursor. */
     void wheelEvent(QWheelEvent *event) override;
