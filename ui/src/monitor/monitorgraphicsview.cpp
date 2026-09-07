@@ -4702,12 +4702,23 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         if (fid != Fixture::invalidId() && !elevationFixtureDraggable(fid)
                 && (item->flags() & QGraphicsItem::ItemIsMovable))
         {
-            const QVector3D curMm = props->fixturePosition(fid, 0, 0);
+            /* A free-placed fixture's stored position is MIXED UNITS: X and Y
+               in millimetres, Z in METRES (see the tail of
+               MonitorProperties::fixtureRigPosition, which divides X/Y by 1000
+               and passes Z straight through). Writing a plain mm vector put a
+               metre value of, say, 2500 into Z -- two and a half kilometres up
+               -- and the redraw then placed the fixture nowhere near the drop,
+               which reads as snapping back. Convert on the way in and out. */
+            const QVector3D stored = props->fixturePosition(fid, 0, 0);
+            const QVector3D curMm(stored.x(), stored.y(), stored.z() * 1000.0f);
+
             const QPointF dropPx = item->pos() + halfIcon(item);
             const QVector3D newMm = unprojectMm(dropPx, curMm);
+
             if (!qFuzzyCompare(newMm, curMm))
             {
-                props->setFixturePosition(fid, 0, 0, newMm);
+                props->setFixturePosition(fid, 0, 0,
+                    QVector3D(newMm.x(), newMm.y(), newMm.z() / 1000.0f));
                 updateFixture(fid);
                 emit fixtureMoved(fid, QPointF(double(newMm.x()), double(newMm.y())));
                 m_doc->setModified();
