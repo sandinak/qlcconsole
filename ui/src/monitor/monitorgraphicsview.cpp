@@ -3679,6 +3679,29 @@ void MonitorGraphicsView::updateGrid()
     if (m_centerLineV != nullptr) { m_scene->removeItem(m_centerLineV); delete m_centerLineV; m_centerLineV = nullptr; }
     if (m_centerLineH != nullptr) { m_scene->removeItem(m_centerLineH); delete m_centerLineH; m_centerLineH = nullptr; }
 
+    /* Before the widget has been laid out, width()/height() are still its
+       default size and the scale derived from them is unrelated to the window
+       -- which is what made the studio open zoomed in until the first resize.
+       Schedule a re-fit for once the geometry is real, but go on and compute
+       with what we have: returning early would leave m_cellPixels at 0, and
+       every item builder bails on that, so nothing would be created at all
+       (headless callers never get a bigger size and would draw an empty
+       stage). Guarded here rather than at one caller so every entry point
+       benefits. */
+    if (m_gridEnabled == true && !m_awaitingLayout
+            && (this->width() < 50 || this->height() < 50))
+    {
+        m_awaitingLayout = true;
+        QTimer::singleShot(0, this, [this]() {
+            m_awaitingLayout = false;
+            if (this->width() < 50 || this->height() < 50)
+                return;             // still not laid out: leave it alone
+            updateGrid();
+            refreshAllItems();
+            emit rulersChanged();
+        });
+    }
+
     if (m_gridEnabled == true)
     {
         m_xOffset = 0;

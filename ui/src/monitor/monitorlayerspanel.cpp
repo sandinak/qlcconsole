@@ -1388,8 +1388,14 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
         {
             const quint32 lid = lyr.id;
             moveMenu->addAction(lyr.name, this, [this, objs, lid]() {
-                m_view->selectMapItems(objs);
-                m_view->setSelectedItemsLayer(lid);
+                /* Same call the drag-and-drop path uses. This went via
+                   selectMapItems() + setSelectedItemsLayer(), which only moves
+                   what it manages to SELECT first -- and an item that is
+                   hidden or non-selectable in the current view cannot be
+                   selected, so the menu silently moved nothing while dragging
+                   the same row worked. reparentToLayer() addresses items by
+                   kind and id and does not care what is selected or on screen. */
+                if (m_view) m_view->reparentToLayer(objs, lid);
                 reload();
             });
         }

@@ -483,6 +483,12 @@ protected:
      *  because that finally ran updateGrid() against real dimensions. */
     void showEvent(QShowEvent *event) override;
 
+private:
+    /** One pending re-fit at a time while waiting for a real layout size. */
+    bool m_awaitingLayout = false;
+
+protected:
+
     /** Scroll wheel zooms the view around the cursor. */
     void wheelEvent(QWheelEvent *event) override;
 

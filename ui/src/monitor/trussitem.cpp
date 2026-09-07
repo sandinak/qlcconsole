@@ -121,7 +121,23 @@ QRectF TrussItem::boundingRect() const
         const qreal ph = qMax(qreal(m_pxWid), m_pxWid / 2.0 + 7.0) + pad;
         return QRectF(-ph, -ph, 2 * ph, 2 * ph);
     }
-    return QRectF(-pad, -m_pxWid / 2.0 - pad, m_pxLen + 2*pad, m_pxWid + 2*pad);
+    QRectF r(-pad, -m_pxWid / 2.0 - pad, m_pxLen + 2*pad, m_pxWid + 2*pad);
+
+    /* A truss seen END-ON projects to almost nothing: a left-right truss in
+       Side view has a length of ~0 px, leaving a four-pixel hit area that is
+       drawn but cannot realistically be clicked -- which is why an unlocked
+       XL-450 could not be selected there to place it. Hit testing uses this
+       rect (there is no shape() override), so give it a floor. paint() draws
+       its own geometry regardless, so nothing looks different; there is just
+       something to grab. */
+    const qreal kMinGrab = 14.0;
+    if (r.width() < kMinGrab || r.height() < kMinGrab)
+    {
+        const qreal w = qMax(r.width(),  kMinGrab);
+        const qreal h = qMax(r.height(), kMinGrab);
+        r = QRectF(r.center().x() - w / 2.0, r.center().y() - h / 2.0, w, h);
+    }
+    return r;
 }
 
 void TrussItem::paint(QPainter *painter,
