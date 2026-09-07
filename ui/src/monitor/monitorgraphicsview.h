@@ -502,6 +502,14 @@ private:
      *  again. */
     QSize m_fittedGrid;
     float m_fittedUnit = -1.0f;
+    /** True once setGridSize() has supplied the document's own grid. Until
+     *  then the view still holds its default, and painting it shows the stage
+     *  at a scale that is about to change -- the visible flash at startup,
+     *  because Monitor shows the view before it fills it. */
+    bool m_gridAuthoritative = false;
+    /** Fail-safe: if the document's grid never arrives, render anyway rather
+     *  than leave the operator looking at nothing. */
+    bool m_paintDeadlinePassed = false;
 
 protected:
     void paintEvent(QPaintEvent *event) override;

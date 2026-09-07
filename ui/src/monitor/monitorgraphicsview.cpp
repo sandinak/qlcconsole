@@ -396,6 +396,22 @@ void MonitorGraphicsView::paintEvent(QPaintEvent *event)
      * Terminates: updateGrid() does not change the widget's size, so the next
      * paint finds m_fittedSize equal and does nothing.
      */
+    /* Hold the first frame until the document's grid has been supplied.
+       Monitor shows this view and fills it afterwards, so without this the
+       stage is painted once at the default grid and again at the real one --
+       the flash on startup. Bounded by a deadline so a path that never calls
+       setGridSize() still ends up drawing something. */
+    if (!m_gridAuthoritative && !m_paintDeadlinePassed)
+    {
+        QPainter p(viewport());
+        p.fillRect(viewport()->rect(), backgroundBrush());
+        QTimer::singleShot(500, this, [this]() {
+            m_paintDeadlinePassed = true;
+            update();
+        });
+        return;
+    }
+
     if ((size() != m_fittedSize || m_gridSize != m_fittedGrid
             || !qFuzzyCompare(m_unitValue, m_fittedUnit))
             && width() > 0 && height() > 0)
@@ -455,6 +471,7 @@ void MonitorGraphicsView::resetViewZoom()
 
 void MonitorGraphicsView::setGridSize(QSize size)
 {
+    m_gridAuthoritative = true;
     m_gridSize = size;
     updateGrid();
     refreshAllItems();
@@ -1762,7 +1779,24 @@ void MonitorGraphicsView::refreshItemLayerState()
     if (isElevation())
     {
         for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
-            it.value()->setMovable(elevationFixtureDraggable(it.key()));
+        {
+            /* A truss-bound fixture slides along its truss (and, since the
+               vertical-drag work, up and down off it). A FREE-PLACED one --
+               trussId invalid -- was not draggable here at all, because
+               elevationFixtureDraggable() requires a binding. That is what
+               made the XL-450 impossible to grab in Side view: it is not
+               bound to anything, so the elevation rule refused it outright,
+               in every elevation, forever. It moves in the plane of the view
+               like everything else that is unlocked. */
+            const FixtureRigProps frp = props->fixtureRigProps(it.key());
+            const bool bound = (frp.trussId != Truss::invalidId());
+            const MonitorProperties::MonitorLayer flyr =
+                props->layer(props->fixtureLayer(it.key()));
+            const bool frozen = m_layoutLocked || flyr.locked
+                              || props->groupChainLocked(props->fixtureGroup(it.key()));
+            it.value()->setMovable(bound ? elevationFixtureDraggable(it.key())
+                                         : !frozen);
+        }
         /* Trusses: a tower crossbar has always been draggable here, and a
            free-standing truss now is too -- dragging one up or down in Front is
            how you set its trim height, and refusing it silently was the "can't
@@ -4661,6 +4695,27 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
     {
         MonitorProperties *props = m_doc->monitorProperties();
         const quint32 fid = m_fixtures.key(item, Fixture::invalidId());
+
+        /* Free-placed fixture: no truss to slide along, so the drop simply IS
+           its new position -- unprojected for the view it was dropped in, with
+           the axis that is not on screen left as it was. */
+        if (fid != Fixture::invalidId() && !elevationFixtureDraggable(fid)
+                && (item->flags() & QGraphicsItem::ItemIsMovable))
+        {
+            const QVector3D curMm = props->fixturePosition(fid, 0, 0);
+            const QPointF dropPx = item->pos() + halfIcon(item);
+            const QVector3D newMm = unprojectMm(dropPx, curMm);
+            if (!qFuzzyCompare(newMm, curMm))
+            {
+                props->setFixturePosition(fid, 0, 0, newMm);
+                updateFixture(fid);
+                emit fixtureMoved(fid, QPointF(double(newMm.x()), double(newMm.y())));
+                m_doc->setModified();
+            }
+            updateTrussAnchorLines();
+            return;
+        }
+
         if (fid != Fixture::invalidId() && elevationFixtureDraggable(fid))
         {
             FixtureRigProps rp = props->fixtureRigProps(fid);
