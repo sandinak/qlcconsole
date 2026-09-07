@@ -406,10 +406,14 @@ void MonitorGraphicsView::paintEvent(QPaintEvent *event)
         updateGrid();
         refreshAllItems();
         emit rulersChanged();
+        /* The scale is derived from three inputs and a wrong result is only
+           visible as "it looks wrong", which cost a long time to pin down
+           once. QLC_GRIDFIT_DEBUG prints all three and the answer, so the next
+           report can be diagnosed from a number instead of a screenshot. */
         if (qEnvironmentVariableIsSet("QLC_GRIDFIT_DEBUG"))
-            qDebug() << "[gridfit] paint fit at" << m_fittedSize
+            qDebug() << "[gridfit] fit" << m_fittedSize
                      << "grid" << m_gridSize << "unit" << m_unitValue
-                     << "cellPixels" << m_cellPixels
+                     << "-> cellPixels" << m_cellPixels
                      << "viewScale" << transform().m11();
     }
     QGraphicsView::paintEvent(event);
@@ -3722,22 +3726,32 @@ void MonitorGraphicsView::updateGrid()
     if (m_centerLineV != nullptr) { m_scene->removeItem(m_centerLineV); delete m_centerLineV; m_centerLineV = nullptr; }
     if (m_centerLineH != nullptr) { m_scene->removeItem(m_centerLineH); delete m_centerLineH; m_centerLineH = nullptr; }
 
-    if (qEnvironmentVariableIsSet("QLC_GRIDFIT_DEBUG"))
-        qDebug() << "[gridfit] updateGrid widget" << size()
-                 << "gridSize" << m_gridSize << "unitValue" << m_unitValue;
-
     if (m_gridEnabled == true)
     {
         m_xOffset = 0;
         m_yOffset = 0;
-        int xInc = this->width() / m_gridSize.width();
-        int yInc = this->height() / m_gridSize.height();
-        if (yInc < xInc)
+        const int xInc = this->width() / m_gridSize.width();
+        const int yInc = this->height() / m_gridSize.height();
+
+        /* Fit to whichever axis runs out first -- and note the <=.
+         *
+         * This was `if (yInc < xInc) ... else if (xInc < yInc) ...` with no
+         * final else, so when the two came out EQUAL neither branch ran and
+         * m_cellPixels silently kept whatever it was last set to. That is not
+         * a rare tie: it is what a 40x24 grid in a 1667x991 view produces
+         * (41 and 41), and the value left behind was 198, computed earlier
+         * against the default 5x5 grid before the workspace had been read.
+         * 40 cells at 198 px is eight of them across the window -- the studio
+         * opening zoomed in. Resizing appeared to fix it only because almost
+         * any other window size makes the two unequal again, at which point a
+         * branch finally runs.
+         */
+        if (yInc <= xInc)
         {
             m_cellPixels = yInc;
             m_xOffset = (this->width() - (m_cellPixels * m_gridSize.width())) / 2;
         }
-        else if (xInc < yInc)
+        else
         {
             m_cellPixels = xInc;
             m_yOffset = (this->height() - (m_cellPixels * m_gridSize.height())) / 2;
