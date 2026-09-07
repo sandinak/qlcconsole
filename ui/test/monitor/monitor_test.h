@@ -40,6 +40,18 @@ private slots:
     void removeSelectedTruss();
     void removeSelectedCancelled();
 
+    /* Drop round-trips: a released drag must (a) not jump at the moment of
+       the drop and (b) still be where it was dropped after the item is
+       re-placed from the model. Failing either is what the operator reports
+       as "snaps back" / "jumps somewhere else". One test per view, plus the
+       attach/detach transitions, all through the same slotFixtureMoved() the
+       real mouse release invokes. */
+    void dropStaysPutTopView();
+    void dropStaysPutFrontView();
+    void dropStaysPutSideView();
+    void dropOnTrussAttachesAndStays();
+    void dropOffTrussDetachesAndStays();
+
 private:
     Doc* m_doc;
 };

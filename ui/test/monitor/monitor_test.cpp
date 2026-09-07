@@ -27,6 +27,7 @@
 #define private public
 #include "monitor.h"
 #include "monitorgraphicsview.h"
+#include "monitorfixtureitem.h"
 #include "trussitem.h"
 #undef protected
 #undef private
@@ -327,3 +328,221 @@ void Monitor_Test::removeSelectedCancelled()
 }
 
 QTEST_MAIN(Monitor_Test)
+
+/****************************************************************************
+ * Drop round-trips
+ *
+ * Each test simulates the END of a drag exactly the way Qt leaves it -- the
+ * item is at its new scene position, nothing else has happened -- then calls
+ * the same slotFixtureMoved() the mouse release calls, and asserts:
+ *   1. the item does not jump at the moment of the drop, and
+ *   2. after updateFixture() re-places it FROM THE MODEL, it is still there.
+ * (2) is the round trip: it fails if the drop wrote the wrong thing, wrote it
+ * with the wrong anchor or units, or wrote it somewhere the redraw does not
+ * read. Every "snaps back" and "jumps on drop" report is one of those.
+ ****************************************************************************/
+
+namespace
+{
+struct DropRig
+{
+    QWidget parent;
+    Monitor *mon = nullptr;
+    MonitorGraphicsView *gv = nullptr;
+    Fixture *fxi = nullptr;
+    MonitorFixtureItem *item = nullptr;
+    Doc *docForCleanup = nullptr;
+
+    /* RAII, because QVERIFY returns out of the test on failure: an explicit
+       teardown call is skipped exactly when the test fails, and a leaked
+       Monitor poisons every test after it. */
+    ~DropRig()
+    {
+        if (docForCleanup != nullptr && fxi != nullptr)
+            docForCleanup->deleteFixture(fxi->id());
+        delete mon;
+    }
+
+    // Not a QObject: assertion macros need a plain function scope.
+    bool build(Doc *doc, const QVector3D &posMm)
+    {
+        docForCleanup = doc;
+        mon = new Monitor(&parent, doc);
+        gv = mon->findChild<MonitorGraphicsView *>();
+        if (gv == nullptr)
+            return false;
+
+        fxi = new Fixture(doc);
+        fxi->setName("DropProbe");
+        fxi->setChannels(1);
+        if (doc->addFixture(fxi) == false)
+            return false;
+
+        doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, posMm);
+
+        /* A deterministic canvas: known widget size, metric grid, no snap.
+           setGridSize()/setGridMetrics() recompute cellPixels from width(),
+           which resize() has already set even though nothing is shown. */
+        gv->resize(1230, 760);
+        gv->setSnapDivisions(0);
+        gv->setGridMetrics(1000.0);            // metres
+        gv->setGridSize(QSize(40, 24));        // 1230/40=30, 760/24=31 -> 30 px/cell
+        if (gv->m_cellPixels <= 0)
+            return false;
+
+        gv->addFixture(fxi->id(), QPointF(posMm.x(), posMm.y()));
+        item = gv->m_fixtures.value(fxi->id(), nullptr);
+        return item != nullptr;
+    }
+
+};
+
+/* Drop the item at an offset from where it currently sits and return how far
+ * it ended up from the intended drop point, (a) immediately and (b) after a
+ * model-driven re-place. */
+static void dropAndMeasure(MonitorGraphicsView *gv, MonitorFixtureItem *item,
+                           quint32 fid, const QPointF &deltaPx,
+                           qreal &jumpPx, qreal &snapBackPx)
+{
+    const QPointF target = item->pos() + deltaPx;
+    item->setPos(target);
+    gv->slotFixtureMoved(item);
+    jumpPx = (item->pos() - target).manhattanLength();
+    gv->updateFixture(fid);
+    snapBackPx = (item->pos() - target).manhattanLength();
+}
+} // namespace
+
+void Monitor_Test::dropStaysPutTopView()
+{
+    DropRig rig;
+    // Far corner: nowhere near any truss, so attach logic cannot interfere.
+    QVERIFY(rig.build(m_doc, QVector3D(35000, 20000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    rig.gv->updateFixture(rig.fxi->id());
+
+    qreal jump = 0, back = 0;
+    dropAndMeasure(rig.gv, rig.item, rig.fxi->id(), QPointF(-150, -90), jump, back);
+    QVERIFY2(jump < 2.0, qPrintable(QString("item jumped %1 px at the drop").arg(jump)));
+    QVERIFY2(back < 2.0, qPrintable(QString("item moved %1 px when re-placed from the model").arg(back)));
+
+}
+
+void Monitor_Test::dropStaysPutFrontView()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(35000, 20000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovFront);
+    rig.gv->updateFixture(rig.fxi->id());
+
+    const float yBefore = m_doc->monitorProperties()
+                          ->fixturePosition(rig.fxi->id(), 0, 0).y();
+    qreal jump = 0, back = 0;
+    dropAndMeasure(rig.gv, rig.item, rig.fxi->id(), QPointF(-120, -60), jump, back);
+    QVERIFY2(jump < 2.0, qPrintable(QString("front: jumped %1 px at the drop").arg(jump)));
+    QVERIFY2(back < 2.0, qPrintable(QString("front: moved %1 px on re-place").arg(back)));
+
+    // Front edits X and height; stage depth (Y) is not on screen and must
+    // come through untouched.
+    const float yAfter = m_doc->monitorProperties()
+                         ->fixturePosition(rig.fxi->id(), 0, 0).y();
+    QCOMPARE(yAfter, yBefore);
+
+}
+
+void Monitor_Test::dropStaysPutSideView()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(35000, 20000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovSide);
+    rig.gv->updateFixture(rig.fxi->id());
+
+    const float xBefore = m_doc->monitorProperties()
+                          ->fixturePosition(rig.fxi->id(), 0, 0).x();
+    qreal jump = 0, back = 0;
+    dropAndMeasure(rig.gv, rig.item, rig.fxi->id(), QPointF(100, -80), jump, back);
+    QVERIFY2(jump < 2.0, qPrintable(QString("side: jumped %1 px at the drop").arg(jump)));
+    QVERIFY2(back < 2.0, qPrintable(QString("side: moved %1 px on re-place").arg(back)));
+
+    // Side edits Y and height; X is not on screen.
+    const float xAfter = m_doc->monitorProperties()
+                         ->fixturePosition(rig.fxi->id(), 0, 0).x();
+    QCOMPARE(xAfter, xBefore);
+
+}
+
+void Monitor_Test::dropOnTrussAttachesAndStays()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("DropBar");
+    t->setOrigin(QVector3D(10.0f, 12.0f, 4.0f));   // metres
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    rig.gv->updateTrusses();
+    rig.gv->updateFixture(rig.fxi->id());
+
+    // Drop the fixture's CENTRE onto the truss line, 2 m along the run.
+    const QPointF onTrussPx = rig.gv->realPositionToPixels(12000.0, 12000.0);
+    const QPointF half(rig.item->boundingRect().width() / 2.0,
+                       rig.item->boundingRect().height() / 2.0);
+    rig.item->setPos(onTrussPx - half);
+    const QPointF target = rig.item->pos();
+    rig.gv->slotFixtureMoved(rig.item);
+
+    const FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
+    QVERIFY2(rp.trussId == t->id(), "released on the truss but did not attach");
+
+    // The drop point WAS on the truss line, so attaching must not teleport it:
+    // it stays where it was released, both immediately and re-placed.
+    QVERIFY2((rig.item->pos() - target).manhattanLength() < qreal(rig.gv->m_cellPixels),
+             qPrintable(QString("attach teleported the item %1 px away")
+                        .arg((rig.item->pos() - target).manhattanLength())));
+    rig.gv->updateFixture(rig.fxi->id());
+    QVERIFY2((rig.item->pos() - target).manhattanLength() < qreal(rig.gv->m_cellPixels),
+             qPrintable(QString("attach then snapped back %1 px on re-place")
+                        .arg((rig.item->pos() - target).manhattanLength())));
+
+    props->removeTruss(t->id());
+}
+
+void Monitor_Test::dropOffTrussDetachesAndStays()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("DropBar2");
+    t->setOrigin(QVector3D(10.0f, 12.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    rig.gv->updateTrusses();
+
+    FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
+    rp.trussId = t->id();
+    rp.trussOffset = 2.0f;
+    props->setFixtureRigProps(rig.fxi->id(), rp);
+    rig.item->setBoundToTruss(true);
+    rig.gv->updateFixture(rig.fxi->id());
+
+    // Drag it 3 m off the truss line -- far beyond the two-widths rule.
+    qreal jump = 0, back = 0;
+    dropAndMeasure(rig.gv, rig.item, rig.fxi->id(), QPointF(0, 3.0 * rig.gv->m_cellPixels),
+                   jump, back);
+
+    const FixtureRigProps after = props->fixtureRigProps(rig.fxi->id());
+    QVERIFY2(after.trussId == Truss::invalidId(),
+             "pulled well clear of the truss but still bound");
+    QVERIFY2(jump < 2.0, qPrintable(QString("detach jumped %1 px at the drop").arg(jump)));
+    QVERIFY2(back < 2.0, qPrintable(QString("detach snapped back %1 px on re-place").arg(back)));
+
+    props->removeTruss(t->id());
+}

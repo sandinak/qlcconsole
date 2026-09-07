@@ -2569,10 +2569,30 @@ void MonitorGraphicsView::attachFixtureToTrussAt(quint32 fid, TrussItem *trussIt
                                      double(t->length()));
         rp.trussOffset = float(alongM);
     }
-    // Land on the centreline; the operator can slide it across afterwards.
-    rp.trussCross = 0.0f;
+    if (m_pov == PovTop && trussItem->pxLen() > 4.0f)
+    {
+        /* Keep the sideways offset it was DROPPED at (clamped to the same
+           two-widths zone that made the ring green) -- attaching means "hang
+           it here", not "teleport it to the centreline". In an elevation the
+           across axis is not on screen, so there is nothing to read. */
+        const QPointF local = trussItem->mapFromScene(mfi->sceneBoundingRect().center());
+        const double crossM = local.y() * mmPerPx / 1000.0;
+        const double limitM = double(trussItem->pxWid() * 2.0f) * mmPerPx / 1000.0;
+        rp.trussCross = float(qBound(-limitM, crossM, limitM));
+    }
+    else
+        rp.trussCross = 0.0f;
 
     props->setFixtureRigProps(fid, rp);
+
+    /* The top view places a BOUND fixture from the item's cached realPosition,
+       not from the rig -- so an attach that leaves the cache stale makes the
+       very next redraw teleport the item back to wherever it was before the
+       drag. That was the reported "snaps back to where it started". Derive the
+       cache from the rig position just stored. */
+    const QVector3D nw = props->fixtureRigPosition(fid);
+    mfi->setRealPosition(QPointF(nw.x() * 1000.0, nw.y() * 1000.0));
+
     mfi->setBoundToTruss(true);
     mfi->setAttachMode(false);
     mfi->setEscapeMode(false);
@@ -4806,13 +4826,25 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
             const QVector3D stored = props->fixturePosition(fid, 0, 0);
             const QVector3D curMm(stored.x(), stored.y(), stored.z() * 1000.0f);
 
-            const QPointF dropPx = item->pos() + halfIcon(item);
+            /* Read the drop with the SAME anchor updateFixture places with.
+               An unbound elevation fixture is anchored top-left (setPos(p)),
+               a decked one bottom-centre. Reading the centre here while the
+               redraw placed the top-left shifted the item by half an icon on
+               every single drop -- the reported "jumps somewhere else". */
+            const FixtureRigProps arp = props->fixtureRigProps(fid);
+            QPointF dropPx = item->pos();
+            if (arp.onDeck())
+                dropPx += halfIcon(item) + QPointF(0.0, halfIcon(item).y());
+
             const QVector3D newMm = unprojectMm(dropPx, curMm);
 
             if (!qFuzzyCompare(newMm, curMm))
             {
                 props->setFixturePosition(fid, 0, 0,
                     QVector3D(newMm.x(), newMm.y(), newMm.z() / 1000.0f));
+                /* Keep the top view's cache in step, or switching views after
+                   an elevation move snaps X/Y back to wherever they were. */
+                item->setRealPosition(QPointF(double(newMm.x()), double(newMm.y())));
                 updateFixture(fid);
                 emit fixtureMoved(fid, QPointF(double(newMm.x()), double(newMm.y())));
                 m_doc->setModified();
@@ -4825,6 +4857,36 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         {
             FixtureRigProps rp = props->fixtureRigProps(fid);
             Truss *truss = props->truss(rp.trussId);
+
+            /* Released clear of its truss: detach here too -- the red ring
+               made that promise in this view, so this view has to keep it. */
+            if (truss != nullptr
+                && trussUnderFixture(item) != m_trussItems.value(rp.trussId, nullptr))
+            {
+                const quint32 wasTrussId = rp.trussId;
+                rp.trussId     = Truss::invalidId();
+                rp.trussOffset = 0.0f;
+                rp.trussCross  = 0.0f;
+                props->setFixtureRigProps(fid, rp);
+                item->setEscapeMode(false);
+                item->setBoundToTruss(false);
+                leaveDedicatedTrussGroup(fid, wasTrussId);
+
+                /* Now free: persist the drop as a free position (top-left
+                   anchor, mixed units -- see the free branch above). */
+                const QVector3D stored = props->fixturePosition(fid, 0, 0);
+                const QVector3D curMm(stored.x(), stored.y(), stored.z() * 1000.0f);
+                const QVector3D newMm = unprojectMm(item->pos(), curMm);
+                props->setFixturePosition(fid, 0, 0,
+                    QVector3D(newMm.x(), newMm.y(), newMm.z() / 1000.0f));
+                item->setRealPosition(QPointF(double(newMm.x()), double(newMm.y())));
+                updateFixture(fid);
+                emit fixtureMoved(fid, QPointF(double(newMm.x()), double(newMm.y())));
+                m_doc->setModified();
+                updateTrussAnchorLines();
+                return;
+            }
+
             if (truss != nullptr && m_cellPixels > 0)
             {
                 const double mPerPx = double(m_unitValue) / (double(m_cellPixels) * 1000.0);
@@ -4860,6 +4922,7 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
 
                 props->setFixtureRigProps(fid, rp);
                 const QVector3D nw = truss->positionAt(off);   // new world pos
+                item->setRealPosition(QPointF(nw.x() * 1000.0, nw.y() * 1000.0));
                 updateFixture(fid);
                 emit fixtureMoved(fid, QPointF(nw.x() * 1000.0, nw.y() * 1000.0));
                 m_doc->setModified();
@@ -4981,6 +5044,15 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                 // Same reasoning as detachFixtureFromTruss(): stop select/move-
                 // together with a truss this fixture just got pulled off of.
                 leaveDedicatedTrussGroup(fid, wasTrussId);
+
+                /* mmPos was computed with the BOUND anchor (icon centre); the
+                   fixture ends this drop UNBOUND, and the unbound top view
+                   stores and places by the TOP-LEFT corner. Recompute with the
+                   anchor of the state it will be redrawn in, or the store is
+                   half an icon off and the re-place shifts it -- "snaps to a
+                   different spot when I let go". */
+                mmPos.setX(((mfi->pos().x() - m_xOffset) * m_unitValue) / m_cellPixels);
+                mmPos.setY(((mfi->pos().y() - m_yOffset) * m_unitValue) / m_cellPixels);
             }
             else
             {
@@ -5016,6 +5088,10 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                     mfi->setEscapeMode(false);
                     mfi->setBoundToTruss(false);
                     leaveDedicatedTrussGroup(fid, wasTrussId);
+
+                    // Same anchor correction as the escape branch above.
+                    mmPos.setX(((mfi->pos().x() - m_xOffset) * m_unitValue) / m_cellPixels);
+                    mmPos.setY(((mfi->pos().y() - m_yOffset) * m_unitValue) / m_cellPixels);
                 }
                 else if (t != nullptr)
                     snapToTruss(t);
@@ -5042,6 +5118,12 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
             {
                 attachFixtureToTrussAt(fid, over, mfi);
                 rp = props->fixtureRigProps(fid);   // attach just changed this
+                /* The final setRealPosition() below must store the BOUND
+                   convention (icon centre, on the truss), not the top-left mm
+                   this loop derived while the fixture was still free --
+                   otherwise it overwrites the cache the attach just fixed. */
+                const QVector3D nw = props->fixtureRigPosition(fid);
+                mmPos = QPointF(nw.x() * 1000.0, nw.y() * 1000.0);
             }
         }
         mfi->setAttachMode(false);
