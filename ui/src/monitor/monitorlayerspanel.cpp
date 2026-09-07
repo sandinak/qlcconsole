@@ -224,6 +224,18 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, &MonitorLayersPanel::slotItemDoubleClicked);
     connect(m_tree, &QTreeWidget::itemChanged, this, &MonitorLayersPanel::slotItemChanged);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &MonitorLayersPanel::updateButtons);
+    /* Selecting here selects on the canvas, which is what the tree is for --
+       and it is the only way to get hold of an item the projection has buried.
+       In Side view every fixture on a left-right truss lands on the same point
+       (X is not on screen), so they stack and only the top one can be clicked;
+       picking it by name here reaches the rest. */
+    connect(m_tree, &QTreeWidget::itemSelectionChanged, this, [this]() {
+        if (m_syncingSelection || m_view == nullptr)
+            return;
+        m_syncingSelection = true;
+        m_view->selectMapItems(selectedObjects());
+        m_syncingSelection = false;
+    });
     connect(m_tree, &QWidget::customContextMenuRequested, this, &MonitorLayersPanel::slotContextMenu);
 
     if (m_doc != nullptr)

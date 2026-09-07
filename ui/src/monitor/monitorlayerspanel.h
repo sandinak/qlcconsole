@@ -212,6 +212,8 @@ private:
     Doc                 *m_doc;
     MonitorProperties   *m_props;
     MonitorGraphicsView *m_view;
+    /** Guards the tree -> canvas selection sync against feeding back. */
+    bool m_syncingSelection = false;
 
     LayersTreeWidget *m_tree;
     class QLineEdit *m_search = nullptr;   //!< filter box above the tree

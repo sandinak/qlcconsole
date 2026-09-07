@@ -250,6 +250,9 @@ public:
      *  a resize eventually rebuilds the lot. */
     void refreshAllItems();
 
+    /** Drop any wheel/pinch zoom back to 1:1. */
+    void resetViewZoom();
+
     void updateTrusses();
 
     /** Rebuild the platform overlay items from MonitorProperties. */
@@ -490,6 +493,15 @@ private:
      *  Compared on every paint, because paint is the first and only moment the
      *  real, laid-out size is guaranteed to be known. */
     QSize m_fittedSize;
+    /** Grid extent and unit the fit was computed FROM. The scale depends on
+     *  all three -- widget size, grid size, mm-per-cell -- and the workspace
+     *  supplies the last two AFTER the view first appears, so watching the
+     *  widget size alone missed the case that actually happens: fitted at the
+     *  default 5x5 grid, then handed the real 40x24 while the widget was still
+     *  a few pixels tall, and never corrected because the size never changed
+     *  again. */
+    QSize m_fittedGrid;
+    float m_fittedUnit = -1.0f;
 
 protected:
     void paintEvent(QPaintEvent *event) override;

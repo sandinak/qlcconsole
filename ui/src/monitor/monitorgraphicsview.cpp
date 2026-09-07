@@ -396,15 +396,21 @@ void MonitorGraphicsView::paintEvent(QPaintEvent *event)
      * Terminates: updateGrid() does not change the widget's size, so the next
      * paint finds m_fittedSize equal and does nothing.
      */
-    if (size() != m_fittedSize && width() > 0 && height() > 0)
+    if ((size() != m_fittedSize || m_gridSize != m_fittedGrid
+            || !qFuzzyCompare(m_unitValue, m_fittedUnit))
+            && width() > 0 && height() > 0)
     {
         m_fittedSize = size();
+        m_fittedGrid = m_gridSize;
+        m_fittedUnit = m_unitValue;
         updateGrid();
         refreshAllItems();
         emit rulersChanged();
         if (qEnvironmentVariableIsSet("QLC_GRIDFIT_DEBUG"))
             qDebug() << "[gridfit] paint fit at" << m_fittedSize
-                     << "cellPixels" << m_cellPixels;
+                     << "grid" << m_gridSize << "unit" << m_unitValue
+                     << "cellPixels" << m_cellPixels
+                     << "viewScale" << transform().m11();
     }
     QGraphicsView::paintEvent(event);
 }
@@ -427,6 +433,20 @@ void MonitorGraphicsView::refreshAllItems()
     updateTrussAnchorLines();
     // cell pixels / offsets may have changed: refresh snapping
     applySnapToAllItems();
+}
+
+void MonitorGraphicsView::resetViewZoom()
+{
+    /* The wheel/pinch zoom lives in the QGraphicsView TRANSFORM, which is
+       separate from the grid scale and was never reset by anything -- so a
+       zoom applied while looking at one workspace was still in force after
+       loading the next, and no amount of re-fitting the grid would undo it
+       (the grid maths cannot see it). A newly loaded document starts at 1:1. */
+    if (!qFuzzyCompare(transform().m11(), 1.0))
+    {
+        resetTransform();
+        emit rulersChanged();
+    }
 }
 
 void MonitorGraphicsView::setGridSize(QSize size)
@@ -3702,6 +3722,10 @@ void MonitorGraphicsView::updateGrid()
     if (m_centerLineV != nullptr) { m_scene->removeItem(m_centerLineV); delete m_centerLineV; m_centerLineV = nullptr; }
     if (m_centerLineH != nullptr) { m_scene->removeItem(m_centerLineH); delete m_centerLineH; m_centerLineH = nullptr; }
 
+    if (qEnvironmentVariableIsSet("QLC_GRIDFIT_DEBUG"))
+        qDebug() << "[gridfit] updateGrid widget" << size()
+                 << "gridSize" << m_gridSize << "unitValue" << m_unitValue;
+
     if (m_gridEnabled == true)
     {
         m_xOffset = 0;
@@ -3819,6 +3843,8 @@ void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
 {
     QGraphicsView::resizeEvent(event);
     m_fittedSize = size();
+    m_fittedGrid = m_gridSize;
+    m_fittedUnit = m_unitValue;
     updateGrid();
     refreshAllItems();
     emit rulersChanged();

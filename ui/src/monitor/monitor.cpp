@@ -886,6 +886,10 @@ void Monitor::fillGraphicsView()
     m_graphicsView->setGridSubdivisions(m_props->gridSubdivisions());
     m_graphicsView->setSnapDivisions(m_props->snapDivisions());
     m_graphicsView->setGridSize(QSize(m_props->gridSize().x(), m_props->gridSize().z()));
+    /* This runs when a workspace's monitor settings are applied, which is
+       exactly the point a leftover zoom from the previous document stops
+       making sense. */
+    m_graphicsView->resetViewZoom();
     m_graphicsView->setBackgroundImage(m_props->commonBackgroundImage());
     m_graphicsView->setBackgroundColor(m_props->commonBackgroundColor());
 

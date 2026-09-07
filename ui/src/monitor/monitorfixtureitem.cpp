@@ -930,6 +930,19 @@ QVariant MonitorFixtureItem::itemChange(GraphicsItemChange change, const QVarian
     if (change == ItemSelectedHasChanged && !value.toBool())
         m_isolated = false;
 
+    /* Bring a selected fixture to the front of its own kind.
+     *
+     *  An orthographic view flattens one axis away, so items that differ only
+     *  along it land on exactly the same point -- in Side view every fixture on
+     *  a left-right truss stacks up, and the mouse can only ever reach whichever
+     *  one happens to be on top. Selecting one (from the layers tree, say) and
+     *  then finding the drag grabs a different fixture is the same trap from the
+     *  other side. Raising the selected one puts the thing you just chose under
+     *  the pointer. Half a z-step, so it clears its peers without jumping above
+     *  targets (3.0) or anything else with a deliberate layer. */
+    if (change == ItemSelectedHasChanged)
+        setZValue(value.toBool() ? 2.5 : 0.0);
+
     // Snapping is intentionally NOT done per-item here: quantising each
     // selected fixture independently during a drag scrambles a multi-
     // selection's relative layout. The view snaps the whole move as a group on
