@@ -76,6 +76,22 @@ public:
      *  elevation view — it slides ALONG its truss/bar (Front view only). */
     bool elevationFixtureDraggable(quint32 fid) const;
 
+    /** The truss a fixture is currently over, judged on screen, or nullptr.
+     *
+     *  Screen space on purpose: it works in every view without knowing which
+     *  plane the view represents, because the truss item's own transform
+     *  already carries the projection. Distance is measured perpendicular to
+     *  the truss's drawn run (radially for a tower), against the same
+     *  two-widths threshold the detach rule uses -- so "far enough to detach"
+     *  and "close enough to attach" are the same line seen from either side,
+     *  and a fixture can never be in both states at once. */
+    class TrussItem *trussUnderFixture(class MonitorFixtureItem *mfi) const;
+
+    /** Bind @p fid to @p trussItem, taking its along-position from where it
+     *  was dropped. */
+    void attachFixtureToTrussAt(quint32 fid, class TrussItem *trussItem,
+                                class MonitorFixtureItem *mfi);
+
     /** "Stage view": hide everything except the scenic/structural features
      *  (trusses, platforms, images) so the bare stage can be seen. Fixtures,
      *  targets and power sources are hidden while on. */

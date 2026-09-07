@@ -64,6 +64,9 @@ public:
 
     /** Rendered pixel width of this truss (used for escape-from-truss threshold). */
     float pxWid() const { return m_pxWid; }
+    /** Drawn length in scene pixels. Near zero when the truss is edge-on, which
+     *  callers use to tell "along the run" from "no run visible in this view". */
+    float pxLen() const { return m_pxLen; }
 
     /** Highlight the truss (e.g. while a fixture is dragged over it). */
     void setHighlighted(bool highlighted);

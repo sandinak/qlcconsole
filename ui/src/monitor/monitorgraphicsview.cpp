@@ -2503,6 +2503,83 @@ bool MonitorGraphicsView::elevationFixtureDraggable(quint32 fid) const
     return rp.trussId != Truss::invalidId();   // slides along its truss/bar
 }
 
+TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi) const
+{
+    if (mfi == nullptr)
+        return nullptr;
+
+    const QPointF centre = mfi->sceneBoundingRect().center();
+    TrussItem *best = nullptr;
+    float bestDist = 0.0f;
+
+    foreach (TrussItem *ti, m_trussItems)
+    {
+        Truss *t = ti->truss();
+        if (t == nullptr || !ti->isVisible())
+            continue;
+
+        const QPointF local = ti->mapFromScene(centre);
+        float dist;
+        if (t->type() == Truss::Vertical)
+            dist = float(qSqrt(local.x() * local.x() + local.y() * local.y()));
+        else
+        {
+            // Off the ends of the run is not "on the truss", however close the
+            // perpendicular distance happens to be.
+            if (local.x() < -ti->pxWid() || local.x() > ti->pxLen() + ti->pxWid())
+                continue;
+            dist = qAbs(float(local.y()));
+        }
+
+        if (dist > ti->pxWid() * 2.0f)
+            continue;
+        if (best == nullptr || dist < bestDist)
+        {
+            best = ti;
+            bestDist = dist;
+        }
+    }
+    return best;
+}
+
+void MonitorGraphicsView::attachFixtureToTrussAt(quint32 fid, TrussItem *trussItem,
+                                                 MonitorFixtureItem *mfi)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr || trussItem == nullptr || mfi == nullptr)
+        return;
+    Truss *t = trussItem->truss();
+    if (t == nullptr || m_cellPixels <= 0)
+        return;
+
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.trussId = t->id();
+
+    /* Where along the truss it landed, taken from the truss item's own local
+       frame so it works whatever the view has done to the truss on screen.
+       An END-ON truss (a left-right run seen from the Side) has no length to
+       speak of, and a position along it cannot be read from a projection that
+       has flattened it away -- so leave the offset alone rather than derive a
+       meaningless one from a couple of pixels. */
+    const double mmPerPx = double(m_unitValue) / double(m_cellPixels);
+    if (t->type() != Truss::Vertical && trussItem->pxLen() > 4.0f)
+    {
+        const QPointF local = trussItem->mapFromScene(mfi->sceneBoundingRect().center());
+        const double alongM = qBound(0.0, local.x() * mmPerPx / 1000.0,
+                                     double(t->length()));
+        rp.trussOffset = float(alongM);
+    }
+    // Land on the centreline; the operator can slide it across afterwards.
+    rp.trussCross = 0.0f;
+
+    props->setFixtureRigProps(fid, rp);
+    mfi->setBoundToTruss(true);
+    mfi->setAttachMode(false);
+    mfi->setEscapeMode(false);
+    updateFixture(fid);
+    m_doc->setModified();
+}
+
 bool MonitorGraphicsView::elevationBarDraggable(const Truss *t) const
 {
     if (!isElevation() || t == nullptr || !t->isChildBar())
@@ -4058,19 +4135,22 @@ void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
                 quint32 fid = m_fixtures.key(mfi, Fixture::invalidId());
                 if (fid == Fixture::invalidId()) continue;
                 FixtureRigProps rp = props->fixtureRigProps(fid);
-                if (rp.trussId == Truss::invalidId()) continue;
+                if (rp.trussId == Truss::invalidId())
+                {
+                    /* Unbound: green while it is over a truss, so releasing
+                       there visibly means "attach". The mirror of the red
+                       escape border below. */
+                    mfi->setAttachMode(trussUnderFixture(mfi) != nullptr);
+                    continue;
+                }
+                mfi->setAttachMode(false);
                 TrussItem *ti = m_trussItems.value(rp.trussId, nullptr);
                 if (!ti) continue;
 
-                QPointF local = ti->mapFromScene(mfi->sceneBoundingRect().center());
-                float distPx;
-                if (ti->truss()->type() == Truss::Vertical)
-                    // Radial distance from tower centre
-                    distPx = float(qSqrt(local.x() * local.x() + local.y() * local.y()));
-                else
-                    // Perpendicular distance from truss centreline
-                    distPx = qAbs(float(local.y()));
-                mfi->setEscapeMode(distPx > ti->pxWid() * 2.0f);
+                // Same yardstick both ways: trussUnderFixture() applies the
+                // two-widths rule, so "still on it" and "far enough to detach"
+                // cannot disagree.
+                mfi->setEscapeMode(trussUnderFixture(mfi) != ti);
             }
         }
         else
@@ -4079,7 +4159,10 @@ void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
             foreach (QGraphicsItem *gi, m_scene->selectedItems())
             {
                 if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+                {
                     mfi->setEscapeMode(false);
+                    mfi->setAttachMode(false);
+                }
             }
         }
     }
@@ -4709,6 +4792,17 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                metre value of, say, 2500 into Z -- two and a half kilometres up
                -- and the redraw then placed the fixture nowhere near the drop,
                which reads as snapping back. Convert on the way in and out. */
+            /* Released over a truss: bind to it. Attaching is not a top-view
+               privilege -- hanging a light on a bar is exactly the thing you
+               do while looking at the bar from the front. */
+            if (TrussItem *over = trussUnderFixture(item))
+            {
+                attachFixtureToTrussAt(fid, over, item);
+                updateTrussAnchorLines();
+                return;
+            }
+            item->setAttachMode(false);
+
             const QVector3D stored = props->fixturePosition(fid, 0, 0);
             const QVector3D curMm(stored.x(), stored.y(), stored.z() * 1000.0f);
 
@@ -4902,22 +4996,15 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                    to centre" case: the drag was refused by a rule that had
                    already decided you had not moved far enough, using a
                    different ruler from the one doing the refusing. */
-                bool detach = false;
-                if (t != nullptr && t->type() != Truss::Vertical && m_cellPixels > 0)
-                {
-                    TrussItem *tItem = m_trussItems.value(t->id(), nullptr);
-                    if (tItem != nullptr)
-                    {
-                        const double ox = t->origin().x() * 1000.0;
-                        const double oy = t->origin().y() * 1000.0;
-                        const double dx = t->direction().x();
-                        const double dy = t->direction().y();
-                        const double crossMm = (mmPos.x() - ox) * -dy + (mmPos.y() - oy) * dx;
-                        const double limitMm = double(tItem->pxWid() * 2.0f)
-                                             * double(m_unitValue) / double(m_cellPixels);
-                        detach = (qAbs(crossMm) > limitMm);
-                    }
-                }
+                /* One test for the whole question, and the same one the red
+                   border used while dragging: is this fixture still over its
+                   truss? Deriving detach separately here from mmPos and a
+                   cross-limit was a second ruler that could -- and did --
+                   disagree with the border the operator had just been shown. */
+                TrussItem *tItem = (t != nullptr)
+                    ? m_trussItems.value(t->id(), nullptr) : nullptr;
+                const bool detach = (tItem == nullptr)
+                                  || (trussUnderFixture(mfi) != tItem);
 
                 if (detach)
                 {
@@ -4945,16 +5032,19 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         // passing over a truss on the way somewhere else can't trigger this.
         if (rp.trussId == Truss::invalidId() && m_cellPixels > 0)
         {
-            for (auto tIt = m_trussItems.constBegin(); tIt != m_trussItems.constEnd(); ++tIt)
+            /* Judged by trussUnderFixture(), the same test that turned the
+               border green a moment ago. It used to be collidesWithItem(),
+               a different and looser rule -- so a fixture could attach on
+               release without ever having gone green, or go green and then
+               not attach. The promise the colour makes is now the promise the
+               drop keeps. */
+            if (TrussItem *over = trussUnderFixture(mfi))
             {
-                if (tIt.value() != nullptr && mfi->collidesWithItem(tIt.value()))
-                {
-                    attachFixtureToTruss(fid, tIt.key());
-                    rp = props->fixtureRigProps(fid);   // attach just changed this
-                    break;
-                }
+                attachFixtureToTrussAt(fid, over, mfi);
+                rp = props->fixtureRigProps(fid);   // attach just changed this
             }
         }
+        mfi->setAttachMode(false);
 
         // Auto DECK-MOUNT: unlike trusses, a fixture dropped over a PLATFORM
         // stands on its deck (Z = deck top) — the user asked for this. Dragging

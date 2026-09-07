@@ -792,10 +792,17 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     painter->setBrush(QBrush(QColor(33, 33, 33)));
     painter->drawRect(0, 0, m_width, m_height);
 
-    // Truss-bind indicator: inner border ring (cyan = bound, red = escaping)
-    if (m_escapeMode || m_boundToTruss)
+    /* Truss-bind indicator, inner border ring:
+         cyan  = bound to a truss and staying that way
+         red   = bound, but far enough off that releasing will DETACH it
+         green = not bound, but over a truss, so releasing will ATTACH it
+       The two mid-drag colours answer "what happens if I let go" while there
+       is still time to change your mind. */
+    if (m_escapeMode || m_attachMode || m_boundToTruss)
     {
-        QColor ring = m_escapeMode ? QColor(220, 60, 60) : QColor(0, 180, 255);
+        QColor ring = m_escapeMode ? QColor(220, 60, 60)
+                    : m_attachMode ? QColor(60, 200, 90)
+                                   : QColor(0, 180, 255);
         painter->setPen(QPen(ring, 2.0));
         painter->setBrush(Qt::NoBrush);
         painter->drawRect(QRectF(1.5, 1.5, m_width - 3, m_height - 3));

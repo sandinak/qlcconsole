@@ -183,8 +183,17 @@ public:
     bool isIsolated() const   { return m_isolated; }
 
     /** Show a red escape-from-truss indicator while dragging far off the truss. */
-    void setEscapeMode(bool e) { m_escapeMode = e; update(); }
+    void setEscapeMode(bool e) { if (m_escapeMode != e) { m_escapeMode = e; update(); } }
     bool escapeMode() const    { return m_escapeMode; }
+
+    /** "Release here and it will ATTACH to the truss under it."
+     *
+     *  The mirror of escape mode: red says releasing will break the binding,
+     *  green says releasing will make one. Both are only ever true mid-drag,
+     *  so the fixture answers "what happens if I let go" before you commit
+     *  rather than after. */
+    void setAttachMode(bool a) { if (m_attachMode != a) { m_attachMode = a; update(); } }
+    bool attachMode() const    { return m_attachMode; }
 
     /** Highlight from an external source (e.g. Programming tab selection). */
     void setHighlighted(bool h) { m_highlighted = h; update(); }
@@ -289,6 +298,7 @@ private:
     bool m_boundToTruss  = false;
     bool m_trussGroupSelected = false;
     bool m_escapeMode    = false;
+    bool m_attachMode    = false;
     bool m_isolated      = false;   ///< drilled-in single selection within a group
     bool m_ghosted       = false;   ///< locked-layer indicator: faint + click-through
     bool m_highlighted   = false;
