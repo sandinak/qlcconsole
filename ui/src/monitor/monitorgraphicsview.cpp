@@ -20,6 +20,7 @@
 #include <QContextMenuEvent>
 #include <QApplication>
 #include <QTimer>
+#include <QDebug>
 #include <QWheelEvent>
 #include <QMouseEvent>
 #include <QNativeGestureEvent>
@@ -375,15 +376,37 @@ MonitorGraphicsView::~MonitorGraphicsView()
 void MonitorGraphicsView::showEvent(QShowEvent *event)
 {
     QGraphicsView::showEvent(event);
-    /* Queued, not immediate: at showEvent time the widget still reports its
-       pre-layout geometry, so re-fitting here would use the same wrong numbers
-       that caused the problem. One turn of the event loop later the layout has
-       run and width()/height() are real. */
-    QTimer::singleShot(0, this, [this]() {
+    // paintEvent() does the real work; this just guarantees one repaint.
+    update();
+}
+
+void MonitorGraphicsView::paintEvent(QPaintEvent *event)
+{
+    /* Fit to the size we are actually painting at.
+     *
+     * The scale comes from the widget's dimensions, and every earlier attempt
+     * to catch "the widget now has its real size" guessed at when that
+     * happens: the constructor is too early, showEvent still reports
+     * pre-layout geometry, a queued call after showEvent can land before a
+     * splitter has restored its sizes, and a "looks too small" heuristic never
+     * fires when the wrong size is merely wrong rather than tiny. Painting is
+     * the one moment the size is known to be real, because it is the size the
+     * user is about to see.
+     *
+     * Terminates: updateGrid() does not change the widget's size, so the next
+     * paint finds m_fittedSize equal and does nothing.
+     */
+    if (size() != m_fittedSize && width() > 0 && height() > 0)
+    {
+        m_fittedSize = size();
         updateGrid();
         refreshAllItems();
         emit rulersChanged();
-    });
+        if (qEnvironmentVariableIsSet("QLC_GRIDFIT_DEBUG"))
+            qDebug() << "[gridfit] paint fit at" << m_fittedSize
+                     << "cellPixels" << m_cellPixels;
+    }
+    QGraphicsView::paintEvent(event);
 }
 
 void MonitorGraphicsView::refreshAllItems()
@@ -3679,29 +3702,6 @@ void MonitorGraphicsView::updateGrid()
     if (m_centerLineV != nullptr) { m_scene->removeItem(m_centerLineV); delete m_centerLineV; m_centerLineV = nullptr; }
     if (m_centerLineH != nullptr) { m_scene->removeItem(m_centerLineH); delete m_centerLineH; m_centerLineH = nullptr; }
 
-    /* Before the widget has been laid out, width()/height() are still its
-       default size and the scale derived from them is unrelated to the window
-       -- which is what made the studio open zoomed in until the first resize.
-       Schedule a re-fit for once the geometry is real, but go on and compute
-       with what we have: returning early would leave m_cellPixels at 0, and
-       every item builder bails on that, so nothing would be created at all
-       (headless callers never get a bigger size and would draw an empty
-       stage). Guarded here rather than at one caller so every entry point
-       benefits. */
-    if (m_gridEnabled == true && !m_awaitingLayout
-            && (this->width() < 50 || this->height() < 50))
-    {
-        m_awaitingLayout = true;
-        QTimer::singleShot(0, this, [this]() {
-            m_awaitingLayout = false;
-            if (this->width() < 50 || this->height() < 50)
-                return;             // still not laid out: leave it alone
-            updateGrid();
-            refreshAllItems();
-            emit rulersChanged();
-        });
-    }
-
     if (m_gridEnabled == true)
     {
         m_xOffset = 0;
@@ -3818,6 +3818,7 @@ void MonitorGraphicsView::updateGrid()
 void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
 {
     QGraphicsView::resizeEvent(event);
+    m_fittedSize = size();
     updateGrid();
     refreshAllItems();
     emit rulersChanged();
@@ -4783,9 +4784,47 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
             }
             else
             {
-                // Already bound — constrain to the current truss.
                 Truss *t = props->truss(rp.trussId);
-                if (t != nullptr)
+
+                /* Decide detach from the DROP itself, not only from the
+                   escape-mode flag set during the drag. The two measured
+                   different things -- escapeMode used the item's scene
+                   bounding-box centre, the clamp below uses pos()+halfIcon --
+                   so a fixture could be pulled clearly off its truss, fail to
+                   trip escapeMode, and then be yanked back by the clamp. That
+                   is the "could not move it away from the truss, snapped back
+                   to centre" case: the drag was refused by a rule that had
+                   already decided you had not moved far enough, using a
+                   different ruler from the one doing the refusing. */
+                bool detach = false;
+                if (t != nullptr && t->type() != Truss::Vertical && m_cellPixels > 0)
+                {
+                    TrussItem *tItem = m_trussItems.value(t->id(), nullptr);
+                    if (tItem != nullptr)
+                    {
+                        const double ox = t->origin().x() * 1000.0;
+                        const double oy = t->origin().y() * 1000.0;
+                        const double dx = t->direction().x();
+                        const double dy = t->direction().y();
+                        const double crossMm = (mmPos.x() - ox) * -dy + (mmPos.y() - oy) * dx;
+                        const double limitMm = double(tItem->pxWid() * 2.0f)
+                                             * double(m_unitValue) / double(m_cellPixels);
+                        detach = (qAbs(crossMm) > limitMm);
+                    }
+                }
+
+                if (detach)
+                {
+                    const quint32 wasTrussId = rp.trussId;
+                    rp.trussId     = Truss::invalidId();
+                    rp.trussOffset = 0.0f;
+                    rp.trussCross  = 0.0f;
+                    props->setFixtureRigProps(fid, rp);
+                    mfi->setEscapeMode(false);
+                    mfi->setBoundToTruss(false);
+                    leaveDedicatedTrussGroup(fid, wasTrussId);
+                }
+                else if (t != nullptr)
                     snapToTruss(t);
             }
         }

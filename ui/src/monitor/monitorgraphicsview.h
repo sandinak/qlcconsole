@@ -484,10 +484,15 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 private:
-    /** One pending re-fit at a time while waiting for a real layout size. */
-    bool m_awaitingLayout = false;
+    /** Viewport size the grid was last fitted to. The scale is derived from
+     *  the widget's dimensions, so any size we have NOT fitted to is a scale
+     *  that does not match the window -- which is what "opens zoomed in" was.
+     *  Compared on every paint, because paint is the first and only moment the
+     *  real, laid-out size is guaranteed to be known. */
+    QSize m_fittedSize;
 
 protected:
+    void paintEvent(QPaintEvent *event) override;
 
     /** Scroll wheel zooms the view around the cursor. */
     void wheelEvent(QWheelEvent *event) override;
