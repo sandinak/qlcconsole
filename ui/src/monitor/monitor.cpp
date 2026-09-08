@@ -1913,7 +1913,24 @@ void Monitor::showStageOverview()
        knows how to project and paint a structure and the fixtures on it;
        StageKind points it at every structure instead of one, so there is a
        single renderer to keep correct rather than two that drift apart. */
-    QDialog dlg(this);
+    /* MODELESS, and remembered: it is a reference window you keep open beside
+       the work, not a question to answer. exec() made it modal, which locked
+       the rest of the app -- "when in the overview I can't go away from the
+       studio". Reusing the one instance also means a second click raises the
+       window you already have instead of stacking another. */
+    if (m_overviewDlg != NULL)
+    {
+        m_overviewDlg->show();
+        m_overviewDlg->raise();
+        m_overviewDlg->activateWindow();
+        return;
+    }
+
+    QDialog *dlgPtr = new QDialog(this);
+    QDialog &dlg = *dlgPtr;
+    m_overviewDlg = dlgPtr;
+    connect(dlgPtr, &QObject::destroyed, this, [this]() { m_overviewDlg = NULL; });
+    dlg.setAttribute(Qt::WA_DeleteOnClose);
     dlg.setWindowTitle(tr("Rig Overview"));
     dlg.resize(1100, 760);
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
@@ -1940,9 +1957,15 @@ void Monitor::showStageOverview()
     vl->addWidget(view, 1);
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
-    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::close);
     vl->addWidget(bb);
-    dlg.exec();
+
+    /* Follow the rig while it is open: structures and fixtures move under it as
+       the plot is edited, and a stale overview is worse than none. */
+    connect(m_graphicsView, &MonitorGraphicsView::mapSelectionChanged, view,
+            [view]() { view->reload(); });
+
+    dlg.show();
 }
 
 void Monitor::slotPOVChanged(int index)

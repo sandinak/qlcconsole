@@ -262,6 +262,13 @@ protected:
      *  StageKind). Opened from the View combo's Overview entry. */
     void showStageOverview();
 
+private:
+    /** The rig-overview window, kept so a second click raises the one that is
+     *  already open rather than stacking another. Cleared when it closes. */
+    class QDialog *m_overviewDlg = NULL;
+
+public:
+
 protected slots:
     /** Slot called when the grid width changes */
     void slotGridWidthChanged(int value);

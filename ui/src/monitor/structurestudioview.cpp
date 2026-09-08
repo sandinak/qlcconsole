@@ -1296,6 +1296,49 @@ void StructureStudioView::fixtureBoxPx(quint32 fid, const FixtureVisualTraits &t
                    qMax(3.0, halfX * 2.0), qMax(3.0, halfY * 2.0));
 }
 
+/* The eight world corners of a fixture's own W x H x D box.
+ *
+ * fixtureBoxPx() returns the axis-aligned SCREEN rectangle that contains this,
+ * which is all a flat view needs. At an angle that rectangle is a billboard: the
+ * body stayed square-on to the viewer while its pixels projected properly, so a
+ * bar drew as a rectangle with a diagonal strip through it, and a moving head
+ * appeared to swivel to follow the camera. Projecting these corners instead
+ * makes a fixture sit still in the rig as you orbit around it. */
+void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTraits &traits,
+                                            QVector3D out[8]) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const QVector3D c = props->fixtureRigPosition(fid);
+
+    const QVector3D L = fixtureAxisLocal(rp);
+    QVector3D N;
+    switch (rp.studioMount)
+    {
+    case 0:  N = QVector3D(0, 0, 1); break;
+    case 2:  N = QVector3D(1, 0, 0); break;
+    case 1:
+    default: N = QVector3D(0, 1, 0); break;
+    }
+    QVector3D H = QVector3D::crossProduct(N, L);
+    if (H.length() < 1e-6f)
+        H = QVector3D(0, 0, 1);
+    H.normalize();
+
+    const double w = (traits.physW > 0.0f) ? double(traits.physW) : qMax(0.05, fixtureLenM(fid));
+    const double h = (traits.physH > 0.0f) ? double(traits.physH) : w * 0.2;
+    const double d = (traits.physD > 0.0f) ? double(traits.physD) : h;
+
+    const QVector3D l = L * float(w * 0.5);
+    const QVector3D u = H * float(h * 0.5);
+    const QVector3D n = N * float(d * 0.5);
+
+    out[0] = c - l - u - n; out[1] = c + l - u - n;
+    out[2] = c + l - u + n; out[3] = c - l - u + n;
+    out[4] = c - l + u - n; out[5] = c + l + u - n;
+    out[6] = c + l + u + n; out[7] = c - l + u + n;
+}
+
 void StructureStudioView::drawFixtures(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
@@ -1330,6 +1373,47 @@ void StructureStudioView::drawFixtures(QPainter &p) const
         // just "the same icon, slightly lower."
         const FixtureRigProps rp = props->fixtureRigProps(fid);
         const FixtureVisualTraits traits = classifyFixture(fx);
+
+        if (m_plane == Angled)
+        {
+            /* One rule for every fixture kind here: a solid box in its own
+               orientation. The flat views' silhouettes (mover yokes, bar
+               tick-marks) are drawn in SCREEN space and would swing round to
+               face the camera, which is exactly what "the moving heads follow
+               me" was. */
+            QVector3D corner[8];
+            fixtureBoxCorners(fid, traits, corner);
+            drawSolidBox(p, corner, col, col.lighter(150));
+
+            // Pixels on the face that is pointing at us, when a grid is declared.
+            if (traits.layout.isValid())
+            {
+                const int cols = traits.layout.width(), rows = traits.layout.height();
+                const QVector3D &f0 = corner[4], &f1 = corner[5];
+                const QVector3D &b0 = corner[0], &b1 = corner[1];
+                p.setPen(Qt::NoPen);
+                p.setBrush(col.lighter(135));
+                int placed = 0;
+                for (int r = 0; r < rows && placed < traits.headCount; ++r)
+                {
+                    const float fr = (rows > 1) ? float(r) / (rows - 1) : 0.5f;
+                    for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
+                    {
+                        const float fc = (cols > 1) ? float(cx) / (cols - 1) : 0.5f;
+                        const QVector3D lo = b0 + (b1 - b0) * fc;
+                        const QVector3D hi = f0 + (f1 - f0) * fc;
+                        p.drawEllipse(w2s(lo + (hi - lo) * fr), 1.2, 1.2);
+                    }
+                }
+            }
+            if (hi && fx != nullptr)
+            {
+                p.setPen(QColor(210, 214, 220));
+                p.drawText(w2s(corner[6]) + QPointF(6, -4), fx->name());
+            }
+            continue;
+        }
+
         if (rp.towerId != Tower::invalidId() && (m_plane == Front || m_plane == Side))
         {
             const bool hung = (rp.mountingType == Truss::TopHung);

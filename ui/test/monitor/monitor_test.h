@@ -129,6 +129,9 @@ private slots:
     /** StageKind draws the WHOLE rig: every structure and every placed
      *  fixture, framed by the fit, and read-only. */
     void stageOverviewDrawsEveryStructure();
+    /** In the angled view a fixture must keep its own orientation as the
+     *  camera orbits, not swing round to face it. */
+    void angledFixturesAreNotBillboards();
 
 private:
     Doc* m_doc;

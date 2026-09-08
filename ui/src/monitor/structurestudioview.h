@@ -204,6 +204,10 @@ private:
      *  for why a view-dependent projection is needed at all. */
     void fixtureBoxPx(quint32 fid, const struct FixtureVisualTraits &traits,
                       QPointF &wPx, QPointF &hPx, QRectF &boxPx) const;
+    /** The same box in WORLD space, for the angled view: a fixture has to keep
+     *  its orientation as the camera orbits, not turn to face it. */
+    void fixtureBoxCorners(quint32 fid, const struct FixtureVisualTraits &traits,
+                           QVector3D out[8]) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame

@@ -501,6 +501,41 @@ that physW was exactly channels*300 for every fixture. Load
 
 `monitor_test` 34/34. `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 11: fixtures were still billboards; the overview was modal
+
+Branson: "not sure what those blue triangles are coming out for each platform?
+also not sure why the moving heads follow me vs staying in position as I move
+around them?" -- ONE bug behind both. Follow-on 10 gave the STRUCTURES real
+geometry but left the fixtures drawn into an axis-aligned SCREEN rectangle
+(`fixtureBoxPx()`) centred on the projected position, while their pixel grid
+projected properly along the true axis. A rectangle with a diagonal strip
+through it reads as a wedge, and a mover with no world orientation appears to
+swivel to follow the viewer. Cropping and enlarging his screenshot is what made
+it legible -- they were rectangles-plus-diagonals, not triangles.
+
+New `fixtureBoxCorners()` builds the fixture's W x H x D box in WORLD space from
+the same axes `fixtureBoxPx()` already used, and the Angled plane paints every
+fixture through the same `drawSolidBox()` as the structures: depth-sorted faces,
+real shear, declared pixel grid on the face pointing at the viewer. One rule for
+every fixture kind there, which also retires the screen-space mover silhouette
+that caused the swivel.
+
+**Test** (`monitor_test` 35/35): `angledFixturesAreNotBillboards` asserts the
+screen ANGLE of a fixture's width axis changes between two camera azimuths, and
+so does its on-screen length. A billboard fails both -- this is the property
+that matters, rather than a screenshot anyone has to eyeball.
+
+**Modal overview.** "when in the overview I can't go away from the studio" --
+it was `dlg.exec()`. Now modeless + `WA_DeleteOnClose`, kept in `m_overviewDlg`
+so a second click raises the existing window instead of stacking another, and
+reloading on `mapSelectionChanged` so it cannot sit showing a stale rig.
+
+**Accepted trade:** at overview scale the movers are now plain oriented boxes
+rather than yoke silhouettes. That is the cost of them holding still; a true 3-D
+yoke is a much larger piece of drawing. Flagged to Branson rather than assumed.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

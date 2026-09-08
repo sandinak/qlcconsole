@@ -34,6 +34,7 @@
 #include "monitorfixtureitem.h"
 #include "structurestudioview.h"
 #include "fixturevisualtraits.h"
+#include <QtMath>
 #include "trussitem.h"
 #undef protected
 #undef private
@@ -1567,3 +1568,42 @@ void Monitor_Test::stageOverviewDrawsEveryStructure()
     props->removeTower(tw->id());
 }
 
+
+void Monitor_Test::angledFixturesAreNotBillboards()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+    rig.view->setPlane(StructureStudioView::Angled);
+
+    const FixtureVisualTraits traits = classifyFixture(m_doc->fixture(rig.fxi->id()));
+
+    /* The screen direction of the fixture's own width axis. A billboard keeps
+       this fixed however the camera swings -- that is exactly what made the
+       moving heads appear to follow the viewer around the rig. */
+    auto widthAngleAt = [&](double az, double el) {
+        rig.view->setAngledView(az, el);
+        QVector3D c[8];
+        rig.view->fixtureBoxCorners(rig.fxi->id(), traits, c);
+        const QPointF a = rig.view->w2s(c[0]);
+        const QPointF b = rig.view->w2s(c[1]);
+        return qRadiansToDegrees(qAtan2(b.y() - a.y(), b.x() - a.x()));
+    };
+
+    const double a0 = widthAngleAt(0.0, 30.0);
+    const double a1 = widthAngleAt(60.0, 30.0);
+    QVERIFY2(qAbs(a1 - a0) > 2.0,
+             qPrintable(QString("the fixture drew at %1 deg from both cameras — "
+                                "it is still a billboard").arg(a0)));
+
+    // And the box has real depth: swinging the camera must change its extent.
+    auto widthPxAt = [&](double az) {
+        rig.view->setAngledView(az, 30.0);
+        QVector3D c[8];
+        rig.view->fixtureBoxCorners(rig.fxi->id(), traits, c);
+        const QPointF a = rig.view->w2s(c[0]);
+        const QPointF b = rig.view->w2s(c[1]);
+        return QLineF(a, b).length();
+    };
+    QVERIFY2(qAbs(widthPxAt(0.0) - widthPxAt(75.0)) > 1.0,
+             "the fixture kept the same on-screen width at every angle");
+}
