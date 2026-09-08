@@ -236,6 +236,19 @@ void MonitorProperties::removeFixture(quint32 fid)
 {
     if (m_fixtureItems.contains(fid))
         m_fixtureItems.take(fid);
+
+    /* Drop the rig props with it. Two separate bugs came from keeping them:
+
+       - Leaving a MOUNT behind stranded the fixture -- no item means it
+         vanishes from everything driven by fixtureItemsID() (the Layers tree,
+         the 2D plot), while the studio editor still listed it on its
+         truss/pipe/tower from the rig props alone: visible in one place,
+         unreachable in every other.
+       - Fixture ids are REUSED (Doc::createFixtureId() hands back any free id),
+         so a stale entry is inherited wholesale by the NEXT fixture to take
+         that id -- which silently arrives pre-mounted on a structure, at some
+         dead fixture's offset and drop height. */
+    m_rigProps.remove(fid);
 }
 
 void MonitorProperties::removeFixture(quint32 fid, quint16 head, quint16 linked)
@@ -882,8 +895,20 @@ Truss *MonitorProperties::addTruss()
     return t;
 }
 
-// Unit stage-space vector pointing OUT of a truss face. Stage convention here:
-// +X = stage-right, +Y = downstage (toward audience), +Z = up.
+// Unit stage-space vector pointing OUT of a truss face.
+//
+// Stage convention, as the app actually behaves: +X = stage LEFT, +Y = downstage
+// (toward the audience), +Z = up. Confirmed against real shows -- in
+// stage-structures-demo.qxw the "SR Tower" is at X=0.21 and the "SL Tower" at
+// X=11.61 -- and it is what puts the plot in the standard ground-plan
+// orientation (audience at the bottom, upstage at the top, stage right on the
+// viewer's left).
+//
+// KNOWN INCONSISTENCY, left alone deliberately: the two X cases below are
+// therefore named backwards -- FaceStageRight returns +X, which is stage LEFT.
+// Correcting the mapping would MOVE every bar already placed via those faces
+// when its workspace is reloaded, so it is a deliberate call not to silently
+// change saved shows. Fix it only alongside a migration.
 static QVector3D barFaceVector(int face)
 {
     switch (face)
@@ -891,8 +916,8 @@ static QVector3D barFaceVector(int face)
         case Truss::FaceTop:        return QVector3D(0, 0,  1);
         case Truss::FaceDownstage:  return QVector3D(0,  1, 0);
         case Truss::FaceUpstage:    return QVector3D(0, -1, 0);
-        case Truss::FaceStageRight: return QVector3D( 1, 0, 0);
-        case Truss::FaceStageLeft:  return QVector3D(-1, 0, 0);
+        case Truss::FaceStageRight: return QVector3D( 1, 0, 0);   // see above: actually stage LEFT
+        case Truss::FaceStageLeft:  return QVector3D(-1, 0, 0);   // see above: actually stage RIGHT
         case Truss::FaceBottom:
         default:                    return QVector3D(0, 0, -1);
     }
@@ -1374,9 +1399,15 @@ void MonitorProperties::setFixtureRigProps(quint32 fid, const FixtureRigProps &p
 
 QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
 {
-    if (!m_fixtureItems.contains(fid))
-        return QVector3D();
-
+    /* NB: NO m_fixtureItems guard up here. A truss/pipe/tower/riser mount
+       derives the world position ENTIRELY from the structure's geometry plus
+       the mount offsets, so it is well defined whether or not the fixture also
+       has a 2D-plot item. It used to return a null vector for a fixture with no
+       item, which pinned a genuinely truss-mounted fixture to the world origin:
+       it drew far from its truss in the studio editor, and dragging it there
+       updated trussOffset/trussCross while the reported position stayed (0,0,0)
+       -- so it never appeared to move. Only the free-placed and deck branches
+       actually read m_fixtureItems, and they check for themselves. */
     const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
 
     const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
@@ -1392,14 +1423,18 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         // Centered: leave on the chord.
         // Horizontal cross-position: slide across the truss width, perpendicular
         // to the run in the horizontal plane (Left/Right chord vs centred).
-        if (rp.trussCross != 0.0f)
+        if (t->type() == Truss::Vertical)
         {
-            if (t->type() == Truss::Vertical)
-            {
-                // A tower's run is vertical — "across" is stage left/right (X).
-                p.setX(p.x() + rp.trussCross);
-            }
-            else
+            /* A tower's run IS the Z axis, so both horizontals are free around
+               it — one scalar cannot say which face of the tower a fixture is
+               clamped to. trussCross is X, trussCrossY is Y. Without the second
+               one, a lateral drag in the SIDE view (whose horizontal screen
+               axis is Y) had nowhere to go and the fixture would not move. */
+            p.setX(p.x() + rp.trussCross);
+            p.setY(p.y() + rp.trussCrossY);
+        }
+        else if (rp.trussCross != 0.0f)
+        {
             {
                 const QPointF d = t->direction();
                 const double dl = std::hypot(d.x(), d.y());
@@ -1456,7 +1491,7 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     if (rp.onDeck())
     {
         const StagePlatform *pl = m_platforms.value(rp.deckPlatformId, nullptr);
-        if (pl != nullptr)
+        if (pl != nullptr && m_fixtureItems.contains(fid))
         {
             const QVector3D p = m_fixtureItems[fid].m_baseItem.m_position;   // mm
             return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f,
@@ -1507,6 +1542,8 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     // branch above and the target/platform world coordinates that callers (aim
     // solver, effect engine, Aim palette) subtract it from. Convert X/Y; Z is
     // already in metres (always 0 today).
+    if (!m_fixtureItems.contains(fid))
+        return QVector3D();   // free-placed with nowhere recorded to be
     const QVector3D p = m_fixtureItems[fid].m_baseItem.m_position;
     return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f, p.z());
 }
@@ -1952,6 +1989,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.trussMountSide = a.value("TrussSide").toInt();
             if (a.hasAttribute("TrussCross"))
                 rp.trussCross = a.value("TrussCross").toFloat();
+            if (a.hasAttribute("TrussCrossY"))
+                rp.trussCrossY = a.value("TrussCrossY").toFloat();
             if (a.hasAttribute("MountZ"))
                 rp.mountZOffset = a.value("MountZ").toFloat();
             if (a.hasAttribute("Deck"))
@@ -2019,8 +2058,82 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
     recomputeChildTrusses();
     // Re-slave platform-anchored studio frames to their platforms.
     recomputeAnchoredFrames();
+    // Give any structurally-mounted fixture that lost its plot item one back,
+    // and drop any second mount left behind by an earlier attach.
+    repairOrphanedMounts();
 
     return true;
+}
+
+void MonitorProperties::repairOrphanedMounts()
+{
+    /* A fixture can end up rigged on a truss/pipe/tower/riser while having no
+       FxItem at all -- removeFixture() drops the item but leaves the rig props,
+       so any path that takes a mounted fixture off the 2D plot strands it. The
+       result is a fixture that is invisible everywhere the UI enumerates
+       fixtureItemsID() (the Layers tree, the plot) while still being listed on
+       its structure by the studio editor. stage-structures-demo.qxw shipped
+       with exactly this: fixture 7 (an XL-450) mounted on truss 2 with no item.
+
+       The mount already says where it is, so rebuild the item from
+       fixtureRigPosition() (metres -> the mm this map stores) and let it show
+       up again. */
+    /* First: collapse any fixture carrying MORE THAN ONE structural mount down
+       to its primary one. The mounts are mutually exclusive, but
+       attachFixtureToTruss()/...ToTower() used to set their own id without
+       clearing a previous one, so e.g. a fixture moved from a deck onto a truss
+       kept both. Nothing crashed -- it just meant two different bits of code
+       could pick two different structures for the same fixture, and the plot's
+       double-click opened the wrong editor. */
+    QMutableMapIterator<quint32, FixtureRigProps> mit(m_rigProps);
+    while (mit.hasNext())
+    {
+        mit.next();
+        FixtureRigProps rp = mit.value();
+        const FixtureRigProps::MountKind keep = rp.primaryMount();
+        if (keep == FixtureRigProps::NoMount)
+            continue;
+        const int mounts = int(rp.trussId != Truss::invalidId()) + int(rp.onPipe())
+                         + int(rp.onTower()) + int(rp.onDeck()) + int(rp.onRiser());
+        if (mounts < 2)
+            continue;
+
+        const quint32 truss = rp.trussId, pipe = rp.pipeId, tower = rp.towerId;
+        const quint32 deck = rp.deckPlatformId, riser = rp.riserPlatformId;
+        rp.clearMounts();
+        switch (keep)
+        {
+        case FixtureRigProps::TrussMount: rp.trussId = truss;         break;
+        case FixtureRigProps::PipeMount:  rp.pipeId = pipe;           break;
+        case FixtureRigProps::TowerMount: rp.towerId = tower;         break;
+        case FixtureRigProps::DeckMount:  rp.deckPlatformId = deck;   break;
+        case FixtureRigProps::RiserMount: rp.riserPlatformId = riser; break;
+        default: break;
+        }
+        mit.setValue(rp);
+        qDebug() << "[Monitor] fixture" << mit.key() << "carried" << mounts
+                 << "structural mounts; kept the one it is drawn on";
+    }
+
+    QMapIterator<quint32, FixtureRigProps> it(m_rigProps);
+    while (it.hasNext())
+    {
+        it.next();
+        const quint32 fid = it.key();
+        const FixtureRigProps &rp = it.value();
+        if (m_fixtureItems.contains(fid))
+            continue;
+        if (rp.trussId == Truss::invalidId() && !rp.onPipe() && !rp.onTower()
+            && !rp.onRiser() && !rp.onDeck())
+            continue;
+
+        const QVector3D w = fixtureRigPosition(fid);   // metres, from the mount
+        PreviewItem item;
+        item.m_position = QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z());
+        m_fixtureItems[fid].m_baseItem = item;
+        qDebug() << "[Monitor] rebuilt the missing plot item for mounted fixture"
+                 << fid << "at" << w;
+    }
 }
 
 bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) const
@@ -2379,6 +2492,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("TrussSide"), QString::number(rp.trussMountSide));
         if (rp.trussCross != 0.0f)
             doc->writeAttribute(QStringLiteral("TrussCross"), QString::number(double(rp.trussCross), 'f', 3));
+            if (!qFuzzyIsNull(rp.trussCrossY))
+                doc->writeAttribute(QStringLiteral("TrussCrossY"), QString::number(double(rp.trussCrossY), 'f', 3));
         if (rp.mountZOffset != 0.0f)
             doc->writeAttribute(QStringLiteral("MountZ"), QString::number(double(rp.mountZOffset), 'f', 3));
         if (rp.onDeck())

@@ -218,7 +218,9 @@ static double distToSegSq(const QPointF &p, const QPointF &a, const QPointF &b)
 quint32 StudioPlaneView::hitTest(const QPointF &px) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
-    quint32 best = 0;
+    // Fixture::invalidId(), not 0 -- fixture 0 is the first fixture in a
+    // workspace, so a 0 sentinel makes it permanently unclickable.
+    quint32 best = Fixture::invalidId();
     double bestD = (kDotRadius + 5) * (kDotRadius + 5);
     // Hit the whole LED bar, not just its centre, so wide fixtures (and the
     // horizontal bars drawn in the elevation views) are easy to grab.
@@ -572,7 +574,7 @@ void StudioPlaneView::mousePressEvent(QMouseEvent *e)
     if (e->button() != Qt::LeftButton)
         return;
     m_dragFid = hitTest(e->pos());
-    if (m_dragFid != 0)
+    if (m_dragFid != Fixture::invalidId())
     {
         update();
     }
@@ -587,7 +589,7 @@ void StudioPlaneView::mousePressEvent(QMouseEvent *e)
 
 void StudioPlaneView::mouseMoveEvent(QMouseEvent *e)
 {
-    if (m_dragFid != 0)
+    if (m_dragFid != Fixture::invalidId())
     {
         MonitorProperties *props = m_doc->monitorProperties();
         FixtureRigProps rp = props->fixtureRigProps(m_dragFid);
@@ -620,9 +622,9 @@ void StudioPlaneView::mouseMoveEvent(QMouseEvent *e)
 
 void StudioPlaneView::mouseReleaseEvent(QMouseEvent *)
 {
-    if (m_dragFid != 0 || m_panning)
+    if (m_dragFid != Fixture::invalidId() || m_panning)
     {
-        m_dragFid = 0;
+        m_dragFid = Fixture::invalidId();
         m_panning = false;
         unsetCursor();
         update();

@@ -19,6 +19,7 @@
 #include <QDataStream>
 #include <QSet>
 #include <QtMath>
+#include <cmath>
 
 #include "structurestudioview.h"
 #include "fixturevisualtraits.h"
@@ -87,19 +88,61 @@ QPointF StructureStudioView::project(const QVector3D &w) const
     }
 }
 
+/* The in-plane (a,b) -> screen OFFSET mapping, with the view rotation applied.
+ *
+ * Rotation is deliberately a VIEW transform and nothing more: it lives here, in
+ * the one place world coordinates become pixels, so stored coordinates never
+ * move and everything routed through w2s()/screenToPlane() -- drawing, dragging,
+ * hit-testing, the rulers -- follows for free. Quarter turns only, so the
+ * handedness of the plot is preserved: a rotated plan still tells the truth
+ * about which side of the stage a fixture is on. (A MIRROR would not, which is
+ * why "downstage at the top with stage right still on the left" is not offered
+ * here -- that flips the sense of every direction on the plot.) */
+QPointF StructureStudioView::planeToScreenVec(const QPointF &ab) const
+{
+    const double vSign = (m_plane == Top) ? 1.0 : -1.0;   // Top: Y screen-down; else Z up
+    const QPointF v(ab.x() * m_scale, vSign * ab.y() * m_scale);
+    switch (m_rotation & 3)
+    {
+    case 1:  return QPointF(-v.y(),  v.x());   // 90 deg clockwise
+    case 2:  return QPointF(-v.x(), -v.y());   // 180
+    case 3:  return QPointF( v.y(), -v.x());   // 270
+    default: return v;
+    }
+}
+
+QPointF StructureStudioView::screenVecToPlane(const QPointF &vIn) const
+{
+    QPointF v = vIn;
+    switch (m_rotation & 3)                    // the inverse turn
+    {
+    case 1:  v = QPointF( vIn.y(), -vIn.x()); break;
+    case 2:  v = QPointF(-vIn.x(), -vIn.y()); break;
+    case 3:  v = QPointF(-vIn.y(),  vIn.x()); break;
+    default: break;
+    }
+    const double vSign = (m_plane == Top) ? 1.0 : -1.0;
+    return QPointF(v.x() / m_scale, v.y() / (vSign * m_scale));
+}
+
 QPointF StructureStudioView::w2s(const QVector3D &w) const
 {
-    const QPointF ab = project(w);
-    const double vSign = (m_plane == Top) ? 1.0 : -1.0;   // Top: Y screen-down; else Z up
-    return QPointF(m_originPx.x() + ab.x() * m_scale,
-                   m_originPx.y() + vSign * ab.y() * m_scale);
+    return m_originPx + planeToScreenVec(project(w));
 }
 
 QPointF StructureStudioView::screenToPlane(const QPointF &px) const
 {
-    const double vSign = (m_plane == Top) ? 1.0 : -1.0;
-    return QPointF((px.x() - m_originPx.x()) / m_scale,
-                   (px.y() - m_originPx.y()) / (vSign * m_scale));
+    return screenVecToPlane(px - m_originPx);
+}
+
+void StructureStudioView::setRotation(int quarterTurns)
+{
+    const int r = ((quarterTurns % 4) + 4) % 4;
+    if (m_rotation == r)
+        return;
+    m_rotation = r;
+    refit();
+    update();
 }
 
 bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
@@ -191,19 +234,82 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         return true;
     }
 
-    // On a truss: slide along the truss axis → trussOffset.
+    // On a truss: move it in the plane, resolved onto the two freedoms a truss
+    // mount actually has — ALONG the run (trussOffset) and ACROSS it
+    // (trussCross, the sideways nudge that keeps a fixture bound while it hangs
+    // off the chord).
+    //
+    // Worked as a DELTA from where the fixture is now, not from the truss
+    // origin: fixtureRigPosition() adds the mount-side half-width and
+    // mountZOffset on top of positionAt(), and those constants cancel in a
+    // difference. The off-plane world component of the target equals the
+    // fixture's current one, so it contributes nothing to either dot product —
+    // dragging in an elevation cannot disturb a value only the top view can
+    // see, and vice versa.
+    //
+    // This replaces a pure project-onto-the-axis version that (a) ignored
+    // trussCross entirely, so a bound fixture could never be positioned just
+    // off the bar as it is really mounted, and (b) bailed out whenever the run
+    // projected to a point — which is EVERY top view of a vertical truss, where
+    // the fixture then could not be moved at all.
     if (rp.trussId != Truss::invalidId())
     {
         Truss *t = props->truss(rp.trussId);
         if (t == nullptr) return false;
-        const QPointF A = w2s(t->origin());
-        const QPointF B = w2s(t->positionAt(t->length()));
-        const QPointF d = B - A;
-        const double l2 = d.x() * d.x() + d.y() * d.y();
-        if (l2 < 1e-6) return false;   // truss runs into the screen; can't slide here
-        double u = ((px.x() - A.x()) * d.x() + (px.y() - A.y()) * d.y()) / l2;
-        u = qBound(0.0, u, 1.0);
-        rp.trussOffset = float(u * t->length());
+
+        const QVector3D cur = props->fixtureRigPosition(fid);
+        const QPointF ab = screenToPlane(px);
+        QVector3D w = cur;
+        if (m_plane == Top)        { w.setX(float(ab.x())); w.setY(float(ab.y())); }
+        else if (m_plane == Front) { w.setX(float(ab.x())); w.setZ(float(ab.y())); }
+        else                       { w.setY(float(ab.x())); w.setZ(float(ab.y())); }
+        const QVector3D dw = w - cur;
+
+        /* An ORTHONORMAL basis for the mount's three freedoms, so a drag in any
+           plane resolves onto whichever of them that plane can see. The third
+           axis is stored differently per truss type, because that is what the
+           geometry means:
+
+             vertical run  -- the run IS Z, so BOTH horizontals are free around
+                              the tower: trussCross (X) and trussCrossY (Y).
+             horizontal run -- along the run, across it in the horizontal plane
+                              (trussCross), and height, which is the drop
+                              (mountZOffset).
+
+           A vertical run used to offer only X across, so a lateral drag in the
+           SIDE view (horizontal screen axis = Y) resolved to zero and the
+           fixture would not move at all. */
+        QVector3D axis, cross, cross2;
+        const bool vertical = (t->type() == Truss::Vertical);
+        if (vertical)
+        {
+            axis   = QVector3D(0.0f, 0.0f, t->isChildBar() ? -1.0f : 1.0f);
+            cross  = QVector3D(1.0f, 0.0f, 0.0f);   // -> trussCross
+            cross2 = QVector3D(0.0f, 1.0f, 0.0f);   // -> trussCrossY
+        }
+        else
+        {
+            const QPointF d = t->direction();
+            const double dl = std::hypot(d.x(), d.y());
+            if (dl < 1e-9) return false;
+            axis   = QVector3D(float(d.x() / dl), float(d.y() / dl), 0.0f);
+            cross  = QVector3D(float(-d.y() / dl), float(d.x() / dl), 0.0f);
+            cross2 = QVector3D(0.0f, 0.0f, 1.0f);   // -> mountZOffset (the drop)
+        }
+
+        rp.trussOffset = qBound(0.0f, rp.trussOffset + QVector3D::dotProduct(dw, axis),
+                                t->length());
+        // Same two-widths zone the plot uses to decide a fixture is still "on"
+        // this truss: past it, it is no longer a truss mount at all.
+        const float limit = qMax(0.05f, t->width() * 2.0f);
+        rp.trussCross = qBound(-limit, rp.trussCross + QVector3D::dotProduct(dw, cross),
+                               limit);
+
+        const float d2 = QVector3D::dotProduct(dw, cross2);
+        if (vertical)
+            rp.trussCrossY = qBound(-limit, rp.trussCrossY + d2, limit);
+        else
+            rp.mountZOffset += d2;   // the drop: how far it hangs below the bar
         props->setFixtureRigProps(fid, rp);
         return true;
     }
@@ -393,8 +499,12 @@ void StructureStudioView::refit()
     }
     if (first) { minA = maxA = minB = maxB = 0; }
 
-    const double spanA = qMax(maxA - minA, 0.6);
-    const double spanB = qMax(maxB - minB, 0.6);
+    double spanA = qMax(maxA - minA, 0.6);
+    double spanB = qMax(maxB - minB, 0.6);
+    // An odd quarter turn puts the 'a' extent on the screen's VERTICAL axis, so
+    // the fit has to compare the spans the way they will actually be laid out.
+    if (m_rotation & 1)
+        qSwap(spanA, spanB);
     const double margin = 42.0;
     const double availW = qMax(1.0, width()  - 2 * margin);
     const double availH = qMax(1.0, height() - 2 * margin);
@@ -402,9 +512,12 @@ void StructureStudioView::refit()
 
     const double cA = (minA + maxA) / 2.0;
     const double cB = (minB + maxB) / 2.0;
-    const double vSign = (m_plane == Top) ? 1.0 : -1.0;
-    m_originPx = QPointF(width() / 2.0 - cA * m_scale,
-                         height() / 2.0 - vSign * cB * m_scale);
+    // Centre the structure by placing its middle at the widget centre: the
+    // rotation is baked into planeToScreenVec(), so ask it where the centre
+    // lands and subtract.
+    m_originPx = QPointF(0, 0);
+    m_originPx = QPointF(width() / 2.0, height() / 2.0)
+                 - planeToScreenVec(QPointF(cA, cB));
 }
 
 /*********************************************************************
@@ -785,6 +898,70 @@ double StructureStudioView::moverBaseRadius(const FixtureVisualTraits &traits) c
     return traits.hasFocus ? 9.0 : 6.5;
 }
 
+/* The fixture's own box, projected into the current plane.
+ *
+ * A fixture is a W x H x D box in its own frame: its LONG axis (fixtureAxisLocal,
+ * from studioMount + studioAngle) carries the declared Width, the plane normal of
+ * that mount carries the Depth, and what is left carries the Height. Each view
+ * sees two of those three, and which two depends on how the fixture is turned --
+ * so the on-screen body has to be PROJECTED, not assumed.
+ *
+ * Without this a fixture was drawn as a line from fixtureEndA() to fixtureEndB()
+ * with its across-extent taken from physH regardless of view. Two things went
+ * wrong: in the SIDE view of a front-facing panel the long axis points into the
+ * screen, so both ends landed on the same pixel and the fixture collapsed to a
+ * dot with no body at all; and the TOP view drew it Height-tall when a plan view
+ * should see its Depth.
+ *
+ * Returns the screen-space vectors spanning the full width (@p wPx) and height
+ * (@p hPx) of the fixture, plus the axis-aligned screen box that contains the
+ * whole solid including its depth. A span that points into the screen comes back
+ * near zero, which is exactly right: the pixels along it then stack on top of
+ * each other and the depth is what still gives the body its size. */
+void StructureStudioView::fixtureBoxPx(quint32 fid, const FixtureVisualTraits &traits,
+                                       QPointF &wPx, QPointF &hPx, QRectF &boxPx) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const QPointF c = w2s(props->fixtureRigPosition(fid));
+
+    const QVector3D L = fixtureAxisLocal(rp);          // along the length
+    QVector3D N;                                       // the mount plane's normal = depth
+    switch (rp.studioMount)
+    {
+    case 0:  N = QVector3D(0, 0, 1); break;            // laid flat: depth is up
+    case 2:  N = QVector3D(1, 0, 0); break;            // side face: depth across stage
+    case 1:
+    default: N = QVector3D(0, 1, 0); break;            // front face: depth upstage
+    }
+    QVector3D H = QVector3D::crossProduct(N, L);       // the remaining in-face axis
+    if (H.length() < 1e-6f)
+        H = QVector3D(0, 0, 1);
+    H.normalize();
+
+    const double w = (traits.physW > 0.0f) ? double(traits.physW) : qMax(0.05, fixtureLenM(fid));
+    const double h = (traits.physH > 0.0f) ? double(traits.physH) : w * 0.2;
+    const double d = (traits.physD > 0.0f) ? double(traits.physD) : h;
+
+    // A world vector's screen delta: w2s() is affine, so the offset from the
+    // centre is enough and the origin cancels.
+    const QVector3D worldC = props->fixtureRigPosition(fid);
+    auto span = [&](const QVector3D &axis, double len) {
+        return w2s(worldC + axis * float(len)) - c;
+    };
+
+    wPx = span(L, w);
+    hPx = span(H, h);
+    const QPointF dPx = span(N, d);
+
+    // Half-extents of the projected solid: each edge contributes its absolute
+    // screen projection on each axis.
+    const double halfX = 0.5 * (qAbs(wPx.x()) + qAbs(hPx.x()) + qAbs(dPx.x()));
+    const double halfY = 0.5 * (qAbs(wPx.y()) + qAbs(hPx.y()) + qAbs(dPx.y()));
+    boxPx = QRectF(c.x() - halfX, c.y() - halfY,
+                   qMax(3.0, halfX * 2.0), qMax(3.0, halfY * 2.0));
+}
+
 void StructureStudioView::drawFixtures(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
@@ -937,8 +1114,9 @@ void StructureStudioView::drawFixtures(QPainter &p) const
             // enough pixels to actually form rows) draws as a grid instead
             // of a single line, so a panel actually looks like a panel and a
             // long single-row bar still looks like a bar.
-            const bool isMatrix = traits.physW > 0.0f && traits.physH > traits.physW * 0.15f
-                                 && traits.headCount >= 4;
+            const bool isMatrix = traits.layout.isValid()
+                                 || (traits.physW > 0.0f && traits.physH > traits.physW * 0.15f
+                                     && traits.headCount >= 4);
             if (hi)
             {
                 QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
@@ -947,33 +1125,48 @@ void StructureStudioView::drawFixtures(QPainter &p) const
             }
             if (isMatrix)
             {
-                const double aspect = double(traits.physH / traits.physW);
-                const int rows = qBound(2, int(qRound(qSqrt(double(traits.headCount) * aspect))),
-                                        traits.headCount);
-                const int cols = qMax(1, (traits.headCount + rows - 1) / rows);
-                const QPointF dir = b - a;
-                const double dlen = qSqrt(dir.x() * dir.x() + dir.y() * dir.y());
-                const QPointF along = (dlen > 1e-6) ? dir / dlen : QPointF(1, 0);
-                const QPointF perp(-along.y(), along.x());
-                const double totalHeightPx = qMax(8.0, double(traits.physH) * m_scale);
-                const double rowGapPx = (rows > 1) ? totalHeightPx / (rows - 1) : 0.0;
-                QPen body(col.darker(140)); body.setWidth((drag || hi) ? 3 : 2);
-                p.setPen(body);
-                for (int r = 0; r < rows; ++r)
+                /* Honour the definition's declared grid (an XL-450 says
+                   15 x 5); only guess a grid from head count and aspect when
+                   there is nothing declared. */
+                int rows, cols;
+                if (traits.layout.isValid())
                 {
-                    const double rowOff = (r - (rows - 1) / 2.0) * rowGapPx;
-                    p.drawLine(a + perp * rowOff, b + perp * rowOff);
+                    cols = traits.layout.width();
+                    rows = traits.layout.height();
                 }
+                else
+                {
+                    const double aspect = double(traits.physH / traits.physW);
+                    rows = qBound(2, int(qRound(qSqrt(double(traits.headCount) * aspect))),
+                                  traits.headCount);
+                    cols = qMax(1, (traits.headCount + rows - 1) / rows);
+                }
+
+                /* Place every pixel at its TRUE position in the fixture's box
+                   and project that -- so the grid squashes correctly when an
+                   axis turns away from the viewer instead of being drawn along
+                   the a-b line at a fixed across-extent. */
+                QPointF wPx, hPx; QRectF boxPx;
+                fixtureBoxPx(fid, traits, wPx, hPx, boxPx);
+
+                p.setPen(QPen(col.darker(140), (drag || hi) ? 2.0 : 1.2));
+                p.setBrush(Qt::NoBrush);
+                p.drawRect(boxPx);                    // the body, at its real proportions
+
                 p.setPen(Qt::NoPen);
                 p.setBrush(col);
+                // A pixel's dot: its own cell, never bigger than it should be.
+                const double cellW = boxPx.width() / qMax(1, cols);
+                const double cellH = boxPx.height() / qMax(1, rows);
+                const double rad = qBound(0.8, qMin(cellW, cellH) * 0.42, 3.0);
                 int placed = 0;
                 for (int r = 0; r < rows && placed < traits.headCount; ++r)
                 {
-                    const double rowOff = (r - (rows - 1) / 2.0) * rowGapPx;
+                    const double fy = (rows > 1) ? (double(r) / (rows - 1) - 0.5) : 0.0;
                     for (int cix = 0; cix < cols && placed < traits.headCount; ++cix, ++placed)
                     {
-                        const double t = (cols > 1) ? double(cix) / (cols - 1) : 0.5;
-                        p.drawEllipse(a + (b - a) * t + perp * rowOff, 2.2, 2.2);
+                        const double fx2 = (cols > 1) ? (double(cix) / (cols - 1) - 0.5) : 0.0;
+                        p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
                     }
                 }
             }
@@ -1256,8 +1449,14 @@ double StructureStudioView::structureCentreA() const
     { foreach (quint32 fid, mountedFixtures()) c << props->fixtureRigPosition(fid);
       if (c.isEmpty()) c << props->group(m_id).origin; }
     if (c.isEmpty()) return 0.0;
-    double minA = project(c.first()).x(), maxA = minA;
-    foreach (const QVector3D &w, c) { const double a = project(w).x(); minA = qMin(minA, a); maxA = qMax(maxA, a); }
+    /* Along whichever in-plane axis the horizontal ruler is measuring: an odd
+       quarter turn swaps a and b on screen, and a ruler centred on the wrong
+       one puts its zero somewhere off the structure. */
+    const bool useB = (m_rotation & 1);
+    auto comp = [useB](const QPointF &ab) { return useB ? ab.y() : ab.x(); };
+    double minA = comp(project(c.first())), maxA = minA;
+    foreach (const QVector3D &w, c)
+    { const double a = comp(project(w)); minA = qMin(minA, a); maxA = qMax(maxA, a); }
     return (minA + maxA) / 2.0;
 }
 
@@ -1277,6 +1476,18 @@ double StructureStudioView::structureTopZ() const
     else if (m_kind == GroupKind)
     { foreach (quint32 fid, mountedFixtures()) z = qMax(z, double(props->fixtureRigPosition(fid).z())); }
     return z;
+}
+
+/* A world point that varies along one of the two in-plane axes, so the rulers
+ * can ask for "the axis that is vertical on screen right now" instead of
+ * assuming it. Which of a/b that is depends on the view rotation. */
+QVector3D StructureStudioView::axisWorldPoint(bool useB, double val) const
+{
+    const float v = float(val);
+    if (useB)                                       // b: Top -> Y, elevations -> Z
+        return (m_plane == Top) ? QVector3D(0, v, 0) : QVector3D(0, 0, v);
+    return (m_plane == Side) ? QVector3D(0, v, 0)   // a: Side -> Y, else X
+                             : QVector3D(v, 0, 0);
 }
 
 void StructureStudioView::drawRulers(QPainter &p) const
@@ -1306,7 +1517,7 @@ void StructureStudioView::drawRulers(QPainter &p) const
         p.setPen(edge); p.drawLine(QPointF(GW - 1, 0), QPointF(GW - 1, height()));
         for (int k = 0; k < 400; ++k)
         {
-            const double sy = w2s(QVector3D(0, 0, float(k * stepM))).y();
+            const double sy = w2s(axisWorldPoint(!(m_rotation & 1), k * stepM)).y();
             if (sy < 12) break;
             if (sy > height()) continue;
             p.setPen(tickCol); p.drawLine(QPointF(GW - 6, sy), QPointF(GW - 1, sy));
@@ -1320,7 +1531,7 @@ void StructureStudioView::drawRulers(QPainter &p) const
         const double topZ = structureTopZ();
         if (topZ > 0.01)
         {
-            const double sy = w2s(QVector3D(0, 0, float(topZ))).y();
+            const double sy = w2s(axisWorldPoint(!(m_rotation & 1), topZ)).y();
             const QColor mk(80, 170, 255);   // same blue as the main-window ruler cursor
             p.setPen(QPen(mk, 1.0));          // full-width guide line at the max height
             p.drawLine(QPointF(GW, sy), QPointF(width(), sy));
@@ -1339,8 +1550,7 @@ void StructureStudioView::drawRulers(QPainter &p) const
     for (int k = -200; k <= 200; ++k)
     {
         const double aVal = centreA + k * stepM;
-        const QVector3D w = (m_plane == Side) ? QVector3D(0, float(aVal), 0) : QVector3D(float(aVal), 0, 0);
-        const double sx = w2s(w).x();
+        const double sx = w2s(axisWorldPoint(m_rotation & 1, aVal)).x();
         if (sx < GW || sx > width() + 20) continue;
         p.setPen((k == 0) ? QPen(QColor(0, 190, 255), 1.2) : QPen(tickCol, 1.0));
         p.drawLine(QPointF(sx, by), QPointF(sx, by + 6));
@@ -1395,6 +1605,69 @@ void StructureStudioView::drawCursorReadout(QPainter &p) const
     p.drawText(r, Qt::AlignVCenter | Qt::AlignHCenter, t);
 }
 
+/* Which way is which. The plane badge names the projection but not its
+   orientation, so "Side" gave no clue whether the left of the canvas was
+   upstage or down -- you had to drag something and watch which way it went.
+
+   The directions below are taken from how the app actually BEHAVES, not from
+   the axis comments, because the two disagree. monitorproperties.cpp's
+   barFaceVector() says "+Y = downstage (toward audience)" and maps
+   FaceDownstage to (0,+1,0); the geometry headers (pipe.h, tower.h,
+   stageplatform.h, stagetarget.h, stand.h, truss.h) and monitor.cpp's
+   "X (stage right):" / "Y (upstage):" spin-box labels claim the opposite on
+   BOTH axes. Real shows settle it: in stage-structures-demo.qxw the "SR Tower"
+   sits at X=0.21 and the "SL Tower" at X=11.61, and the upstage platforms are
+   at Y=1.53 with the downstage ones at Y=3.97. So +X is stage LEFT and +Y is
+   DOWNSTAGE, which is also what puts the plot in the standard ground-plan
+   orientation: audience at the bottom of the page, upstage at the top, stage
+   right on the viewer's left.
+
+   Screen mapping, from project() and w2s(): the horizontal screen axis always
+   increases with the in-plane 'a' component, and the vertical one increases
+   with 'b' EXCEPT in Top, where vSign flips it -- which is exactly what makes
+   downstage read downward like a plan drawing. */
+void StructureStudioView::drawOrientationLabels(QPainter &p) const
+{
+    QString leftLbl, rightLbl, topLbl, bottomLbl;
+    switch (m_plane)
+    {
+    case Top:                                  // a = X, b = Y (screen-down)
+        leftLbl  = tr("stage right");  rightLbl  = tr("stage left");
+        topLbl   = tr("upstage");      bottomLbl = tr("downstage");
+        break;
+    case Front:                                // a = X, b = Z (screen-up)
+        leftLbl  = tr("stage right");  rightLbl  = tr("stage left");
+        topLbl   = tr("up");           bottomLbl = tr("floor");
+        break;
+    case Side:                                 // a = Y, b = Z (screen-up)
+        leftLbl  = tr("upstage");      rightLbl  = tr("downstage");
+        topLbl   = tr("up");           bottomLbl = tr("floor");
+        break;
+    }
+
+    /* Follow the view rotation: after a quarter turn the edge that WAS the left
+       is the top, and so on. Without this a rotated plot would still claim
+       upstage was where it used to be -- worse than no label at all. */
+    for (int i = 0; i < (m_rotation & 3); ++i)
+    {
+        const QString l = leftLbl, t = topLbl, r = rightLbl, b = bottomLbl;
+        topLbl = l; rightLbl = t; bottomLbl = r; leftLbl = b;   // 90 deg clockwise
+    }
+
+    // Inside the drawing area, clear of the rulers drawn along the left edge
+    // and the bottom.
+    const double GW = 34.0, GH = 22.0;
+    const QRectF area(GW + 4, 4, qMax(1.0, width() - GW - 8),
+                      qMax(1.0, height() - GH - 8));
+
+    QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
+    p.setPen(QColor(120, 160, 220, 190));      // the rulers' axis blue
+    p.drawText(area, Qt::AlignVCenter | Qt::AlignLeft,  QStringLiteral("◀ ") + leftLbl);
+    p.drawText(area, Qt::AlignVCenter | Qt::AlignRight, rightLbl + QStringLiteral(" ▶"));
+    p.drawText(area, Qt::AlignHCenter | Qt::AlignTop,    QStringLiteral("▲ ") + topLbl);
+    p.drawText(area, Qt::AlignHCenter | Qt::AlignBottom, QStringLiteral("▼ ") + bottomLbl);
+}
+
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
@@ -1410,6 +1683,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     const char *names[] = { "Top", "Front", "Side" };
     p.drawText(rect().adjusted(0, 6, -8, 0), Qt::AlignTop | Qt::AlignRight,
                tr("2D — %1").arg(names[int(m_plane)]));
+    drawOrientationLabels(p);
 }
 
 /*********************************************************************
@@ -1452,9 +1726,9 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
                 }
             }
         }
-        m_dragFid = hitTestFixture(e->pos());   // 0 if empty space
+        m_dragFid = hitTestFixture(e->pos());   // invalidId() if empty space
         m_dragged = false;
-        if (m_dragFid != 0)
+        if (m_dragFid != Fixture::invalidId())
         {
             setCursor(m_locked ? Qt::ArrowCursor : Qt::ClosedHandCursor);
             setHighlight({ m_dragFid });
@@ -1484,7 +1758,7 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
         update();
         return;
     }
-    if (m_dragFid != 0 && !m_locked)   // move only when unlocked
+    if (m_dragFid != Fixture::invalidId() && !m_locked)   // move only when unlocked
     {
         if (!m_dragged)
             emit editAboutToStart();   // snapshot for undo before the first change
@@ -1512,7 +1786,7 @@ void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
         reload();
         return;
     }
-    if (m_dragFid != 0)
+    if (m_dragFid != Fixture::invalidId())
     {
         setCursor(Qt::ArrowCursor);
         if (m_dragged)
@@ -1520,7 +1794,7 @@ void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
             m_doc->setModified();
             emit fixtureMoved(m_dragFid);
         }
-        m_dragFid = 0;
+        m_dragFid = Fixture::invalidId();
         m_dragged = false;
     }
 }
@@ -1536,7 +1810,12 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
     // making it hard to reliably click/grab (the visible body and the
     // clickable area disagreed).
     MonitorProperties *props = m_doc->monitorProperties();
-    quint32 best = 0; double bestD = 9.0;
+    // NOT 0: QLC+ hands the FIRST fixture in a workspace id 0 (Doc's
+    // m_latestFixtureId starts there), so a 0 sentinel made fixture 0
+    // indistinguishable from empty space -- it could never be selected,
+    // dragged, double-clicked or right-clicked in this editor. The real
+    // "no fixture" marker is Fixture::invalidId().
+    quint32 best = Fixture::invalidId(); double bestD = 9.0;
     foreach (quint32 fid, mountedFixtures())
     {
         double d;
@@ -1647,7 +1926,7 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
 void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)
 {
     const quint32 fid = hitTestFixture(e->pos());
-    if (fid != 0)
+    if (fid != Fixture::invalidId())
         emit fixtureActivated(fid);
 }
 

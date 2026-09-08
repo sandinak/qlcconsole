@@ -65,6 +65,14 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
     if (phys.height() > 0) t.physH = float(phys.height()) / 1000.0f;
     if (phys.depth()  > 0) t.physD = float(phys.depth())  / 1000.0f;
 
+    /* The declared pixel grid, when it can actually hold this mode's heads.
+       layoutSize() defaults to 1x1, and some definitions declare a layout that
+       belongs to a different mode's head count. */
+    const QSize declared = phys.layoutSize();
+    if (declared.width() > 0 && declared.height() > 0 && declared != QSize(1, 1)
+        && declared.width() * declared.height() >= fx->heads())
+        t.layout = declared;
+
     QSet<int> colours;
     QSet<int> panTiltHeads;
     for (quint32 c = 0; c < fx->channels(); ++c)

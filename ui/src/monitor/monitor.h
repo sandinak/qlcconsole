@@ -252,7 +252,11 @@ protected:
     /** @param onlyFid if non-zero, edit JUST that fixture (studio single path,
      *  bypassing the map selection / group select-together); else edit the
      *  current map selection. */
-    void showFixtureItemEditor(quint32 onlyFid = 0);
+    /** @p onlyFid == Fixture::invalidId() means "use the map selection".
+     *  Spelt out rather than calling Fixture::invalidId() because monitor.h
+     *  only forward-declares Fixture; 0 is a REAL fixture id (the first one in
+     *  any workspace) and must never be used as the sentinel. */
+    void showFixtureItemEditor(quint32 onlyFid = quint32(~0u));
 
 protected slots:
     /** Slot called when the grid width changes */

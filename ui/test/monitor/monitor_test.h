@@ -58,6 +58,66 @@ private slots:
      *  free, and a locked truss never acquires a dropped fixture. */
     void nearTrussStaysFreeAndLockedTrussRefuses();
 
+    /* Lighting Studio Editor (StructureStudioView) — a different widget from
+       the plot's MonitorGraphicsView, with its own drag path. The operator
+       report is "cannot move this fixture on this truss even though it's
+       bound to the truss", so these drive the real press/move/release on a
+       VERTICAL truss (the T-2 case) in every plane. */
+    void studioTrussDragMovesFixture();
+    void studioTrussDragBlockedWhenLocked();
+    void studioTrussDragInEveryPlane();
+    /** Every plane moves a truss-mounted fixture in SOME direction -- including
+     *  the top view of a vertical run, where there is no axis to slide along
+     *  and only the across-the-truss freedom exists. */
+    void studioTrussDragAcrossTheRun();
+    /** The same drag on a HORIZONTAL truss, and with a fixture whose id is not
+     *  0 -- so a pass here isn't an artefact of the id-0 rig. */
+    void studioHorizontalTrussDragMovesFixture();
+    /** Vertical drag in an elevation on a horizontal run = the drop length
+     *  (mountZOffset), so a bar-hung fixture can be raised/lowered there. */
+    void studioTrussDragSetsDropInElevation();
+    /** A fixture that is NOT on the 2D plot must not be able to poison
+     *  MonitorGraphicsView::m_fixtures with a null entry -- QHash::operator[]
+     *  INSERTS on a miss, and updateFixture()'s contains() guard then waves the
+     *  null straight through to item->setSize(). Observed as a SIGSEGV on
+     *  releasing a studio-editor drag. */
+    void updateFixtureSurvivesUnplacedFixture();
+    /** End to end through the REAL "Lighting Studio Editor" dialog: open it on
+     *  a truss, unlock, drag a mounted fixture, release. This is the exact
+     *  chain that crashed -- mouseReleaseEvent -> fixtureMoved ->
+     *  Monitor::updateFixture -> MonitorFixtureItem::setSize. */
+    void studioEditorDialogDragDoesNotCrash();
+    /** stage-structures-demo.qxw's fixture 7 (XL-450): rigged on truss 2 with
+     *  NO FxItem. It drew at the world origin instead of on its truss, was
+     *  absent from the Layers tree, and dragging it changed the rig props while
+     *  the reported position stayed (0,0,0) -- so it never moved. */
+    void mountedFixtureWithoutPlotItemIsPositionedAndMovable();
+    /** A definition that DECLARES its pixel layout (the XL-450 says 15 x 5)
+     *  must be drawn in that arrangement, not in one re-derived from the head
+     *  count and the aspect ratio. */
+    void declaredHeadLayoutIsUsed();
+    /** A VERTICAL run's axis is Z, so both horizontals are free around it. The
+     *  side view's horizontal screen axis is Y, which had no field to move --
+     *  lateral drags there did nothing. */
+    void verticalTrussMovesLaterallyInSideView();
+    /** Every view must box a fixture by the two of its W/H/D that the view
+     *  actually sees: Top = W x D, Front = W x H, Side = D x H. The side view
+     *  of a front-facing panel used to collapse to a dot because both ends of
+     *  its long axis landed on the same pixel. */
+    void fixtureIsBoxedByItsRealDimensionsInEveryView();
+    /** The structural mounts are mutually exclusive. Attaching to a truss must
+     *  clear a previous deck/riser/pipe/tower mount, and load must collapse any
+     *  file that already carries two -- otherwise the position resolver and the
+     *  plot's double-click each pick a different structure. */
+    void structuralMountsAreExclusive();
+    /** The "On Rig" toggle hides only the fixtures mounted on a structure, so
+     *  the structure under them can be clicked; free-standing ones stay. */
+    void mountedFixturesToggleHidesOnlyMountedOnes();
+    /** The view rotation is a VIEW transform: a fixture's stored position must
+     *  not move, the drag must still land where the cursor is, and the edge
+     *  labels must turn with the view. */
+    void viewRotationIsScreenOnlyAndDragStillWorks();
+
 private:
     Doc* m_doc;
 };

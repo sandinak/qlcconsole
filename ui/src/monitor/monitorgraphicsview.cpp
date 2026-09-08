@@ -433,6 +433,86 @@ void MonitorGraphicsView::paintEvent(QPaintEvent *event)
                      << "viewScale" << transform().m11();
     }
     QGraphicsView::paintEvent(event);
+    drawOrientationLabels();
+}
+
+/* Stage-direction labels around the edge of the plot, same as the studio
+   editor's. Painted on the VIEWPORT after the scene so they stay pinned to the
+   window while the plot pans and zooms underneath.
+ *
+ * Directions come from how the app behaves, not from its axis comments, which
+ * contradict each other: barFaceVector() (monitorproperties.cpp) says
+ * "+Y = downstage (toward audience)" and maps FaceDownstage to (0,+1,0), while
+ * the geometry headers and the "X (stage right):" / "Y (upstage):" spin-box
+ * labels claim the opposite on both axes. Real shows settle it -- in
+ * stage-structures-demo.qxw the "SR Tower" is at X=0.21 and the "SL Tower" at
+ * X=11.61, and the upstage platforms are at Y=1.53 against the downstage ones
+ * at Y=3.97. So +X is stage LEFT and +Y is DOWNSTAGE, which is what puts this
+ * plot in the standard ground-plan orientation: audience at the bottom of the
+ * page, upstage at the top, stage right on the viewer's left. */
+void MonitorGraphicsView::drawOrientationLabels()
+{
+    if (!m_showOrientationLabels)
+        return;
+
+    QString leftLbl, rightLbl, topLbl, bottomLbl;
+    switch (m_pov)
+    {
+    case PovTop:                                  // screen X = X, screen Y = Y
+        leftLbl  = tr("stage right");  rightLbl  = tr("stage left");
+        topLbl   = tr("upstage");      bottomLbl = tr("downstage");
+        break;
+    case PovSide:                                 // screen X = Y, screen Y = up
+        leftLbl  = tr("upstage");      rightLbl  = tr("downstage");
+        topLbl   = tr("up");           bottomLbl = tr("floor");
+        break;
+    case PovFront:
+    default:                                      // screen X = X, screen Y = up
+        leftLbl  = tr("stage right");  rightLbl  = tr("stage left");
+        topLbl   = tr("up");           bottomLbl = tr("floor");
+        break;
+    }
+
+    QPainter p(viewport());
+    QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
+    p.setPen(QColor(120, 160, 220, 190));
+    const QRectF area = QRectF(viewport()->rect()).adjusted(6, 4, -6, -4);
+    p.drawText(area, Qt::AlignVCenter | Qt::AlignLeft,  QStringLiteral("\u25C0 ") + leftLbl);
+    p.drawText(area, Qt::AlignVCenter | Qt::AlignRight, rightLbl + QStringLiteral(" \u25B6"));
+    p.drawText(area, Qt::AlignHCenter | Qt::AlignTop,    QStringLiteral("\u25B2 ") + topLbl);
+    p.drawText(area, Qt::AlignHCenter | Qt::AlignBottom, QStringLiteral("\u25BC ") + bottomLbl);
+}
+
+void MonitorGraphicsView::setMountedFixturesVisible(bool on)
+{
+    /* Fixtures clamped to a truss/pipe/tower/riser/deck sit ON TOP of the
+       structure that carries them, so in the top view they can cover the thing
+       you are trying to click. Hiding them clears the plot for placing
+       structures; the fixtures themselves are untouched, this is purely what
+       is drawn. Free-standing fixtures are never hidden -- nothing is under
+       them to reach. */
+    if (m_showMountedFixtures == on)
+        return;
+    m_showMountedFixtures = on;
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    QHashIterator<quint32, MonitorFixtureItem *> it(m_fixtures);
+    while (it.hasNext())
+    {
+        it.next();
+        MonitorFixtureItem *item = it.value();
+        if (item == NULL)
+            continue;
+        const bool mounted = props->fixtureRigProps(it.key()).primaryMount()
+                             != FixtureRigProps::NoMount;
+        if (!mounted)
+            continue;
+        // Never override a layer that is itself hidden.
+        const MonitorProperties::MonitorLayer lyr =
+            props->layer(props->fixtureLayer(it.key()));
+        item->setVisible(on && lyr.visible);
+    }
+    m_scene->update();
 }
 
 void MonitorGraphicsView::refreshAllItems()
@@ -1868,16 +1948,22 @@ QList<quint32> MonitorGraphicsView::fixturesID() const
     return m_fixtures.keys();
 }
 
+/* NB throughout: read m_fixtures with value(), NEVER operator[].
+   QHash::operator[] on a non-const hash INSERTS a default-constructed value
+   when the key is missing, so a lookup for a fixture that is not on the plot
+   (a truss-mounted one edited only in the studio, say) left {id, nullptr}
+   behind. updateFixture()'s contains() guard then passed the null straight
+   through to item->setSize() -- a SIGSEGV on releasing a studio drag. */
 void MonitorGraphicsView::setFixtureGelColor(quint32 id, QColor col)
 {
-    MonitorFixtureItem *item = m_fixtures[id];
+    MonitorFixtureItem *item = m_fixtures.value(id, NULL);
     if (item != NULL)
         item->setGelColor(col);
 }
 
 void MonitorGraphicsView::setFixtureRotation(quint32 id, ushort degrees)
 {
-    MonitorFixtureItem *item = m_fixtures[id];
+    MonitorFixtureItem *item = m_fixtures.value(id, NULL);
     if (item != NULL)
         item->setRotation(degrees);
 }
@@ -1920,7 +2006,7 @@ QRect MonitorGraphicsView::selectionViewportRect() const
 
 QColor MonitorGraphicsView::fixtureGelColor(quint32 id)
 {
-    MonitorFixtureItem *item = m_fixtures[id];
+    MonitorFixtureItem *item = m_fixtures.value(id, NULL);
     if (item == NULL)
         return QColor();
 
@@ -2059,7 +2145,9 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         height = (n > 1) ? 300.0 / n : 300.0;
     }
 
-    MonitorFixtureItem *item = m_fixtures[id];
+    MonitorFixtureItem *item = m_fixtures.value(id, NULL);
+    if (item == NULL)
+        return;   // belt and braces: never dereference what the hash handed back
 
     // On-screen size from the physical dimensions, keeping the TRUE aspect
     // ratio (so a thin tape stays thin and its heads lay out in the right
@@ -2271,7 +2359,7 @@ bool MonitorGraphicsView::removeFixture(quint32 id)
             id = item->fixtureID();
     }
     else
-        item = m_fixtures[id];
+        item = m_fixtures.value(id, NULL);
 
     if (item == NULL)
         return false;
@@ -2573,6 +2661,7 @@ void MonitorGraphicsView::attachFixtureToTrussAt(quint32 fid, TrussItem *trussIt
         return;
 
     FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.clearMounts();   // the structural mounts are mutually exclusive
     rp.trussId = t->id();
 
     /* Where along the truss it landed, taken from the truss item's own local
@@ -4255,10 +4344,23 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         // clicking the truss itself elsewhere.
         MonitorProperties *mp = m_doc->monitorProperties();
         const FixtureRigProps rp = mp->fixtureRigProps(fi->fixtureID());
-        if (rp.pipeId != Pipe::invalidId())              { emit pipeDoubleClicked(rp.pipeId); return; }
-        if (rp.towerId != Tower::invalidId())            { emit towerDoubleClicked(rp.towerId); return; }
-        if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId()) { emit platformDoubleClicked(rp.riserPlatformId); return; }
-        if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())  { emit platformDoubleClicked(rp.deckPlatformId); return; }
+        /* Ask WHICH structure through the one shared accessor, so this can
+           never disagree with the position resolver again. It used to test the
+           ids in its own order -- deck before truss -- so a fixture carrying a
+           stale second mount was DRAWN on its truss but opened the editor for
+           an unrelated platform. (A truss deliberately falls through to the
+           drill-in path below; it is long and mostly uncovered, so its own
+           editor is a double-click away on the truss itself.) */
+        switch (rp.primaryMount())
+        {
+        case FixtureRigProps::PipeMount:  emit pipeDoubleClicked(rp.pipeId);   return;
+        case FixtureRigProps::TowerMount: emit towerDoubleClicked(rp.towerId); return;
+        case FixtureRigProps::RiserMount: emit platformDoubleClicked(rp.riserPlatformId); return;
+        case FixtureRigProps::DeckMount:  emit platformDoubleClicked(rp.deckPlatformId);  return;
+        case FixtureRigProps::TrussMount:                 // drill-in path below
+        case FixtureRigProps::NoMount:
+        default: break;
+        }
         if (const quint32 fg = mp->fixtureFrameGroup(fi->fixtureID()))
         {
             const MonitorProperties::MonitorGroup g = mp->group(fg);
@@ -4778,9 +4880,7 @@ void MonitorGraphicsView::attachFixtureToPipe(quint32 fid, quint32 pipeId)
 
     FixtureRigProps rp = props->fixtureRigProps(fid);
     // Boom mount is mutually exclusive with the other structural mounts.
-    rp.trussId = Truss::invalidId();
-    rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
-    rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
+    rp.clearMounts();   // ...including towerId, which this used to miss
     rp.pipeId = pipeId;
     if (rp.pipeOffset <= 0.0f)            // first mount → sit near the top
         rp.pipeOffset = b->height() * 0.85f;
@@ -4804,6 +4904,7 @@ void MonitorGraphicsView::attachFixtureToTruss(quint32 fid, quint32 trussId)
         return;
 
     FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.clearMounts();   // the structural mounts are mutually exclusive
     rp.trussId = trussId;
 
     // Snap the fixture onto the nearest point of the truss line so it doesn't
@@ -4862,6 +4963,7 @@ void MonitorGraphicsView::attachFixtureToTower(quint32 fid, quint32 towerId)
     rp.pipeId = Pipe::invalidId();
     rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
     rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
+    rp.clearMounts();   // the structural mounts are mutually exclusive
     rp.towerId = towerId;
     rp.towerMountSide = FixtureRigProps::TowerShelf;
     if (!alreadyOnAShelf)

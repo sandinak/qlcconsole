@@ -67,6 +67,13 @@ public:
     /** True when the view is an elevation (Front/Side) — editing is disabled. */
     bool isElevation() const { return m_pov != PovTop; }
 
+    /** Stage-direction labels (upstage/downstage/stage left/right) around the
+     *  edge of the plot. On by default; the Rulers-style toggles can turn them
+     *  off for a clean plot. */
+    bool orientationLabelsVisible() const { return m_showOrientationLabels; }
+    void setOrientationLabelsVisible(bool on)
+    { m_showOrientationLabels = on; viewport()->update(); }
+
     /** True if @p t is a bar we allow the user to DRAG in the current elevation
      *  view (WYSIWYG placement). Scope: a tower crossbar (Across) shown broadside
      *  in the Front view → drag = height (Along) + horizontal (cross-shift). */
@@ -897,6 +904,21 @@ private:
 
     /** Current point of view (Top = editable default). */
     ViewPOV m_pov = PovTop;
+    bool    m_showOrientationLabels = true;   ///< edge stage-direction labels
+
+    /** Paint the edge stage-direction labels on the viewport. */
+    void drawOrientationLabels();
+
+public:
+    /** Show or hide the fixtures that are MOUNTED on a structure, so a truss or
+     *  riser covered by its own fixtures can still be clicked. Free-standing
+     *  fixtures always stay visible. Hidden fixtures are only undrawn, not
+     *  changed. */
+    void setMountedFixturesVisible(bool on);
+    bool mountedFixturesVisible() const { return m_showMountedFixtures; }
+
+private:
+    bool m_showMountedFixtures = true;
 
     /** True while an update*() method is deleting+recreating items. Guards
      *  extendSelectionToGroups from dynamic_cast-ing half-deleted items when

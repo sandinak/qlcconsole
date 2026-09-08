@@ -25,6 +25,8 @@
 #include <QHash>
 #include <QSet>
 
+#include "fixture.h"   // Fixture::invalidId()
+
 class Doc;
 
 /** Fixture Studio — orthographic plane editor (FIXTURESTUDIO_DESIGN Phase 1,
@@ -104,7 +106,7 @@ private:
 
     double   m_scale = 60.0;   ///< pixels per metre
     QPointF  m_originPx;       ///< where local (0,0) lands on screen
-    quint32  m_dragFid = 0;
+    quint32  m_dragFid = Fixture::invalidId();   ///< 0 is a real fixture id
     bool     m_panning = false;
     QPointF  m_panLast;
     QSet<quint32> m_highlight;

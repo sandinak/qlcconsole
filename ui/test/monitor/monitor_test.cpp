@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <QTimer>
+#include <QApplication>
 #include <QLineEdit>
 #include <QDialogButtonBox>
 #include <QMessageBox>
@@ -28,6 +30,8 @@
 #include "monitor.h"
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
+#include "structurestudioview.h"
+#include "fixturevisualtraits.h"
 #include "trussitem.h"
 #undef protected
 #undef private
@@ -38,6 +42,11 @@
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "qlcpalette.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
 #include "doc.h"
 
 // Find a visible QPushButton by its exact text anywhere under a widget —
@@ -630,4 +639,769 @@ void Monitor_Test::nearTrussStaysFreeAndLockedTrussRefuses()
              "a LOCKED truss must not acquire a dropped fixture");
 
     props->removeTruss(t->id());
+}
+
+/****************************************************************************
+ * Lighting Studio Editor (StructureStudioView)
+ *
+ * The plot canvas and the studio editor are two different widgets with two
+ * different drag paths; every earlier drop fix landed in MonitorGraphicsView
+ * and none of it applies here. The reported case is a VERTICAL truss ("T-2",
+ * origin 13.01/4.41 ft, length 10 ft) with one XL-450 bound to it, which the
+ * editor refuses to move. These drive the widget's real handlers rather than
+ * asserting on the model, so a refusal anywhere in press -> move -> release
+ * shows up as a failure.
+ ****************************************************************************/
+
+struct StudioRig
+{
+    Doc *doc = nullptr;
+    Truss *truss = nullptr;
+    QList<quint32> spares;
+    Fixture *fxi = nullptr;
+    StructureStudioView *view = nullptr;
+
+    ~StudioRig()
+    {
+        delete view;
+        if (doc != nullptr && fxi != nullptr)
+            doc->deleteFixture(fxi->id());
+        if (doc != nullptr)
+            foreach (quint32 sid, spares)
+                doc->deleteFixture(sid);
+        if (doc != nullptr && truss != nullptr)
+            doc->monitorProperties()->removeTruss(truss->id());
+    }
+
+    bool build(Doc *d, Truss::TrussType type = Truss::Vertical, int spareFixtures = 0)
+    {
+        doc = d;
+        // Burn ids so the probe fixture is NOT id 0 when a test asks for it.
+        for (int i = 0; i < spareFixtures; ++i)
+        {
+            Fixture *sp = new Fixture(d);
+            sp->setName(QString("spare%1").arg(i));
+            sp->setChannels(1);
+            sp->setAddress(quint32(i + 1) * 16);   // distinct: addFixture() rejects overlaps
+            if (d->addFixture(sp) == false)
+                return false;
+            spares << sp->id();
+        }
+        MonitorProperties *props = d->monitorProperties();
+
+        truss = props->addTruss();
+        truss->setName("T-2");
+        truss->setType(type);
+        truss->setOrigin(QVector3D(3.966f, 1.344f,
+                                   type == Truss::Vertical ? 0.0f : 2.0f));
+        truss->setDirection(QPointF(1.0, 0.0));
+        truss->setLength(3.048f);                            // 10 ft
+        truss->setWidth(0.29f);
+
+        fxi = new Fixture(d);
+        fxi->setName("XL-450");
+        fxi->setChannels(1);
+        fxi->setAddress(256);
+        if (d->addFixture(fxi) == false)
+            return false;
+
+        // fixtureRigPosition() returns a null vector for a fixture with no
+        // monitor item, so give it one first (the plot does this on placement).
+        props->setFixturePosition(fxi->id(), 0, 0, QVector3D(0, 0, 0));
+
+        FixtureRigProps rp = props->fixtureRigProps(fxi->id());
+        rp.trussId = truss->id();
+        rp.trussOffset = truss->length() / 2.0f;             // mid-run
+        props->setFixtureRigProps(fxi->id(), rp);
+
+        view = new StructureStudioView(d, StructureStudioView::TrussKind, truss->id());
+        view->resize(700, 600);
+        view->reload();                                      // computes m_scale/m_originPx
+        return view->m_scale > 0.0;
+    }
+
+    /* The three handlers a real drag runs, in order. Returns the world
+       position the fixture ended up at. */
+    QVector3D dragTo(const QPointF &px)
+    {
+        QMouseEvent press(QEvent::MouseButtonPress, view->w2s(pos()),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        view->mousePressEvent(&press);
+        QMouseEvent move(QEvent::MouseMove, px, Qt::NoButton,
+                         Qt::LeftButton, Qt::NoModifier);
+        view->mouseMoveEvent(&move);
+        QMouseEvent rel(QEvent::MouseButtonRelease, px,
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        view->mouseReleaseEvent(&rel);
+        return pos();
+    }
+
+    QVector3D pos() const { return doc->monitorProperties()->fixtureRigPosition(fxi->id()); }
+};
+
+void Monitor_Test::studioTrussDragMovesFixture()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    // Precondition: the editor agrees the fixture is on this truss (this is
+    // what fills the dialog's "Fixtures on this object" tree).
+    QCOMPARE(rig.view->mountedFixtures().count(), 1);
+    QCOMPARE(rig.view->mountedFixtures().first(), rig.fxi->id());
+
+    // The reported fixture is the FIRST one in its workspace, i.e. id 0 --
+    // which is a perfectly valid fixture id (Fixture::invalidId() is UINT_MAX).
+    // Keep the rig on that id: a 0-means-nothing sentinel anywhere in the
+    // press/drag path is exactly what made it unselectable and unmovable.
+    QCOMPARE(rig.fxi->id(), quint32(0));
+
+    // A truss opens in Front elevation, where a vertical run is a full-height
+    // line -- the plane in which it can actually be slid.
+    QCOMPARE(int(rig.view->plane()), int(StructureStudioView::Front));
+    rig.view->setLocked(false);
+
+    // Press must find the fixture where the view itself draws it.
+    const QPointF startPx = rig.view->w2s(rig.pos());
+    QCOMPARE(rig.view->hitTestFixture(startPx), rig.fxi->id());
+
+    // Drag it a metre DOWN the truss (screen-down = -Z in an elevation).
+    const QVector3D before = rig.pos();
+    const QPointF targetPx = startPx + QPointF(0.0, rig.view->m_scale * 1.0);
+    const QVector3D after = rig.dragTo(targetPx);
+
+    QVERIFY2(!qFuzzyCompare(after.z(), before.z()),
+             qPrintable(QString("drag did not move the fixture: z stayed %1")
+                        .arg(double(before.z()))));
+    QVERIFY2(qAbs(double(after.z() - before.z()) + 1.0) < 0.15,
+             qPrintable(QString("dragged 1 m down but z moved %1 m")
+                        .arg(double(after.z() - before.z()))));
+}
+
+void Monitor_Test::studioTrussDragBlockedWhenLocked()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    // The dialog hands the view its lock state; locked means select-only.
+    rig.view->setLocked(true);
+    const QVector3D before = rig.pos();
+    const QPointF startPx = rig.view->w2s(before);
+    const QVector3D after = rig.dragTo(startPx + QPointF(0.0, rig.view->m_scale));
+    QCOMPARE(after, before);
+}
+
+void Monitor_Test::studioTrussDragInEveryPlane()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.view->setLocked(false);
+
+    // "In any view I should be able to select any unlocked fixture and move it
+    // in the plane of the view." For a VERTICAL truss, Top sees the run
+    // end-on -- there is no axis to slide along there -- but both elevations
+    // must work.
+    const StructureStudioView::Plane elevations[2] =
+        { StructureStudioView::Front, StructureStudioView::Side };
+
+    for (int i = 0; i < 2; ++i)
+    {
+        rig.view->setPlane(elevations[i]);
+        const QVector3D before = rig.pos();
+        const QPointF startPx = rig.view->w2s(before);
+        QVERIFY2(rig.view->hitTestFixture(startPx) == rig.fxi->id(),
+                 qPrintable(QString("plane %1: fixture not grabbable at its "
+                                    "own drawn position").arg(i)));
+        const QVector3D after = rig.dragTo(startPx + QPointF(0.0, rig.view->m_scale * 0.5));
+        QVERIFY2(!qFuzzyCompare(after.z(), before.z()),
+                 qPrintable(QString("plane %1: drag refused").arg(i)));
+    }
+}
+
+void Monitor_Test::studioTrussDragAcrossTheRun()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.view->setLocked(false);
+
+    // Top view of a VERTICAL truss: the run points into the screen, so there is
+    // no along-axis slide -- but the across-the-truss freedom is in plane, and
+    // the operator's rule is that an unlocked fixture moves in every view.
+    rig.view->setPlane(StructureStudioView::Top);
+    const QVector3D before = rig.pos();
+    const QPointF startPx = rig.view->w2s(before);
+    QCOMPARE(rig.view->hitTestFixture(startPx), rig.fxi->id());
+
+    // 10 cm of sideways travel: inside the two-widths band, so it stays bound.
+    const QVector3D after = rig.dragTo(startPx + QPointF(rig.view->m_scale * 0.1, 0.0));
+    QVERIFY2(!qFuzzyCompare(after.x(), before.x()),
+             "top view of a vertical truss refused to move the fixture at all");
+    QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(rig.fxi->id()).trussId,
+             rig.truss->id());
+    QVERIFY2(qAbs(double(after.z() - before.z())) < 1e-4,
+             "sideways drag changed the height too");
+}
+
+void Monitor_Test::studioHorizontalTrussDragMovesFixture()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal, 3));
+    QVERIFY2(rig.fxi->id() != 0, "rig meant to test a NON-zero fixture id");
+    rig.view->setLocked(false);
+
+    // Front elevation of a horizontal run: the axis is on screen (X), so a
+    // horizontal drag slides it along the bar.
+    rig.view->setPlane(StructureStudioView::Front);
+    const QVector3D before = rig.pos();
+    const QPointF startPx = rig.view->w2s(before);
+    QCOMPARE(rig.view->hitTestFixture(startPx), rig.fxi->id());
+    const QVector3D after = rig.dragTo(startPx + QPointF(rig.view->m_scale * 0.5, 0.0));
+    QVERIFY2(qAbs(double(after.x() - before.x()) - 0.5) < 0.1,
+             qPrintable(QString("dragged 0.5 m along the bar but x moved %1 m")
+                        .arg(double(after.x() - before.x()))));
+
+    // Top view: across the run (Y) is in plane here, so it can be nudged off
+    // the chord without losing the binding.
+    rig.view->setPlane(StructureStudioView::Top);
+    const QVector3D b2 = rig.pos();
+    const QVector3D a2 = rig.dragTo(rig.view->w2s(b2) + QPointF(0.0, rig.view->m_scale * 0.1));
+    QVERIFY2(!qFuzzyCompare(a2.y(), b2.y()), "top view refused the across-the-run nudge");
+    QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(rig.fxi->id()).trussId,
+             rig.truss->id());
+}
+
+void Monitor_Test::studioTrussDragSetsDropInElevation()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+    rig.view->setLocked(false);
+    rig.view->setPlane(StructureStudioView::Front);
+
+    // Straight down, 0.4 m: the run has no vertical freedom, so this is the
+    // drop -- the fixture hangs that far under the bar and stays bound.
+    const QVector3D before = rig.pos();
+    const QVector3D after =
+        rig.dragTo(rig.view->w2s(before) + QPointF(0.0, rig.view->m_scale * 0.4));
+
+    QVERIFY2(qAbs(double(after.z() - before.z()) + 0.4) < 0.05,
+             qPrintable(QString("dragged 0.4 m down but z moved %1 m")
+                        .arg(double(after.z() - before.z()))));
+    QVERIFY2(qAbs(double(after.x() - before.x())) < 1e-4,
+             "a purely vertical drag slid it along the bar too");
+    QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(rig.fxi->id()).trussId,
+             rig.truss->id());
+}
+
+void Monitor_Test::updateFixtureSurvivesUnplacedFixture()
+{
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    MonitorGraphicsView *gv = mon.findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->resize(1230, 760);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(40, 24));
+
+    // A fixture that exists in the Doc but was never placed on the plot --
+    // exactly what a truss-mounted fixture in the studio editor can be.
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Unplaced");
+    fxi->setChannels(1);
+    fxi->setAddress(400);
+    QVERIFY(m_doc->addFixture(fxi));
+    const quint32 fid = fxi->id();
+    QVERIFY(gv->m_fixtures.contains(fid) == false);
+
+    // Any of these reads used to be a hidden INSERT of {fid, nullptr}.
+    QCOMPARE(gv->removeFixture(fid), false);
+    gv->setFixtureGelColor(fid, QColor(Qt::red));
+    gv->setFixtureRotation(fid, 90);
+    gv->fixtureGelColor(fid);
+
+    QVERIFY2(gv->m_fixtures.contains(fid) == false,
+             "a lookup for an unplaced fixture inserted a null item into m_fixtures");
+
+    // The crash: contains() passes, the null goes to item->setSize().
+    gv->updateFixture(fid);
+
+    m_doc->deleteFixture(fid);
+}
+
+void Monitor_Test::studioEditorDialogDragDoesNotCrash()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    Truss *t = props->addTruss();
+    t->setName("T-2");
+    t->setType(Truss::Vertical);
+    t->setOrigin(QVector3D(3.966f, 1.344f, 0.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(3.048f);
+    t->setWidth(0.29f);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("XL-450");
+    fxi->setChannels(1);
+    fxi->setAddress(300);
+    QVERIFY(m_doc->addFixture(fxi));
+    const quint32 fid = fxi->id();
+
+    // Mounted on the truss and given a monitor item, but deliberately NOT added
+    // to the 2D plot -- the state that made updateFixture() dereference null.
+    props->setFixturePosition(fid, 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.trussId = t->id();
+    rp.trussOffset = t->length() / 2.0f;
+    props->setFixtureRigProps(fid, rp);
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, m_doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+
+    /* Poison the plot's item map the way a real session does. removeFixture()
+       drops the fixture's plot item and its monitor-properties entry, but NOT
+       the fixture itself -- it stays alive in the Doc. A SECOND call for the
+       same id (easy to reach: deleting a truss runs removeFixture() over
+       fixturesOnFeature(), read from the rig props, and several other paths
+       call it too) then hit `m_fixtures[id]` on a missing key. That INSERTS
+       {id, nullptr}, so contains() went on saying yes for a live fixture and
+       updateFixture() dereferenced the null. */
+    QCOMPARE(gv->removeFixture(fid), true);    // the real one
+    QCOMPARE(gv->removeFixture(fid), false);   // the one that used to poison
+    QVERIFY2(gv->m_fixtures.contains(fid) == false,
+             "a second removeFixture() poisoned m_fixtures with a null item");
+    QVERIFY2(m_doc->fixture(fid) != nullptr, "the fixture must still be alive");
+
+    // slotEditTruss() blocks in exec(); drive the drag from inside that loop.
+    QTimer::singleShot(0, mon, [mon, fid]() {
+        StructureStudioView *view = nullptr;
+        foreach (QWidget *w, QApplication::topLevelWidgets())
+        {
+            if (QDialog *d = qobject_cast<QDialog *>(w))
+                if ((view = d->findChild<StructureStudioView *>()) != nullptr)
+                {
+                    view->setLocked(false);
+                    const QPointF start =
+                        view->w2s(view->m_doc->monitorProperties()->fixtureRigPosition(fid));
+                    const QPointF end = start + QPointF(0.0, 40.0);
+                    QMouseEvent press(QEvent::MouseButtonPress, start, Qt::LeftButton,
+                                      Qt::LeftButton, Qt::NoModifier);
+                    QMouseEvent move(QEvent::MouseMove, end, Qt::NoButton,
+                                     Qt::LeftButton, Qt::NoModifier);
+                    QMouseEvent rel(QEvent::MouseButtonRelease, end, Qt::LeftButton,
+                                    Qt::NoButton, Qt::NoModifier);
+                    // The release is the one that emits fixtureMoved().
+                    view->mousePressEvent(&press);
+                    view->mouseMoveEvent(&move);
+                    view->mouseReleaseEvent(&rel);
+                    d->reject();
+                    return;
+                }
+        }
+        QFAIL("no StructureStudioView in any open dialog");
+    });
+    mon->slotEditTruss(t->id());   // reaching here at all means it did not crash
+
+    delete mon;
+    m_doc->deleteFixture(fid);
+    props->removeTruss(t->id());
+}
+
+void Monitor_Test::mountedFixtureWithoutPlotItemIsPositionedAndMovable()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    Truss *t = props->addTruss();
+    t->setName("T-2");
+    t->setType(Truss::Vertical);
+    t->setOrigin(QVector3D(3.965f, 1.344f, 0.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(3.048f);
+    t->setWidth(0.290f);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("XL-450");
+    fxi->setChannels(1);
+    fxi->setAddress(320);
+    QVERIFY(m_doc->addFixture(fxi));
+    const quint32 fid = fxi->id();
+
+    // The workspace's actual state: rigged on the truss, no plot item at all.
+    // Built from a DEFAULT FixtureRigProps, not the stored one: ids are reused
+    // between tests, so reading the existing entry inherits whatever a
+    // previous fixture on this id left behind (mountZOffset especially).
+    FixtureRigProps rp;
+    rp.trussId     = t->id();
+    rp.trussOffset = 2.396f;
+    rp.trussCross  = 0.093f;
+    props->setFixtureRigProps(fid, rp);
+    QVERIFY2(props->fixtureItemsID().contains(fid) == false,
+             "rig meant to model a fixture with NO monitor item");
+
+    // The mount alone fixes where it is -- it must NOT read as the origin.
+    const QVector3D w = props->fixtureRigPosition(fid);
+    QVERIFY2(!w.isNull(), "a truss-mounted fixture with no plot item read as (0,0,0)");
+    QVERIFY2(qAbs(double(w.z() - 2.396)) < 0.2,
+             qPrintable(QString("expected it up the truss, got z=%1").arg(double(w.z()))));
+    QVERIFY2(qAbs(double(w.x() - 3.965 - 0.093)) < 0.01,
+             qPrintable(QString("expected it across at the truss, got x=%1").arg(double(w.x()))));
+
+    // And it must be draggable in the studio editor, which is what "cannot move
+    // it" was: the drag wrote rig props that the position never reflected.
+    StructureStudioView view(m_doc, StructureStudioView::TrussKind, t->id());
+    view.resize(700, 600);
+    view.reload();
+    view.setLocked(false);
+    view.setPlane(StructureStudioView::Front);
+    QCOMPARE(view.mountedFixtures().count(), 1);
+
+    const QPointF startPx = view.w2s(w);
+    QCOMPARE(view.hitTestFixture(startPx), fid);
+    const QPointF endPx = startPx + QPointF(0.0, view.m_scale * 0.5);
+    QMouseEvent press(QEvent::MouseButtonPress, startPx, Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent move(QEvent::MouseMove, endPx, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent rel(QEvent::MouseButtonRelease, endPx, Qt::LeftButton,
+                    Qt::NoButton, Qt::NoModifier);
+    view.mousePressEvent(&press);
+    view.mouseMoveEvent(&move);
+    view.mouseReleaseEvent(&rel);
+
+    const QVector3D after = props->fixtureRigPosition(fid);
+    QVERIFY2(qAbs(double(after.z() - w.z()) + 0.5) < 0.1,
+             qPrintable(QString("dragged 0.5 m down but z moved %1 m")
+                        .arg(double(after.z() - w.z()))));
+
+    m_doc->deleteFixture(fid);
+    props->removeTruss(t->id());
+}
+
+void Monitor_Test::declaredHeadLayoutIsUsed()
+{
+    // A definition shaped like the real XL-450: 15 columns x 5 rows of heads,
+    // 401 x 180 mm. Aspect alone (401/180 = 2.2) would put every head in a
+    // grid of its own choosing; the declaration must win.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Warmdance");
+    def->setModel("XL-450");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+
+    const int cols = 15, rowsDeclared = 5;
+    for (int i = 0; i < cols * rowsDeclared; ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("Dimmer %1").arg(i));
+        ch->setGroup(QLCChannel::Intensity);
+        def->addChannel(ch);
+    }
+
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Pixel");
+    QLCPhysical phys;
+    phys.setWidth(401);
+    phys.setHeight(180);
+    phys.setDepth(100);
+    phys.setLayoutSize(QSize(cols, rowsDeclared));
+    mode->setPhysical(phys);
+    foreach (QLCChannel *ch, def->channels())
+    {
+        mode->insertChannel(ch, mode->channels().size());
+        QLCFixtureHead head;
+        head.addChannel(mode->channels().size() - 1);
+        mode->insertHead(-1, head);
+    }
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("XL-450");
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(0);
+    fxi->setUniverse(3);
+    QVERIFY(m_doc->addFixture(fxi));
+    QCOMPARE(fxi->heads(), cols * rowsDeclared);
+
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    MonitorGraphicsView *gv = mon.findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->resize(1230, 760);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(40, 24));
+    m_doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(2000, 2000, 0));
+    gv->addFixture(fxi->id(), QPointF(2000, 2000));
+
+    MonitorFixtureItem *item = gv->m_fixtures.value(fxi->id(), nullptr);
+    QVERIFY(item != nullptr);
+
+    /* Read the layout back off the placed heads: count the distinct head
+       top-edges (rows) and left-edges (columns). Comparing geometry rather
+       than an internal counter keeps this honest about what is DRAWN. */
+    QSet<int> tops, lefts;
+    foreach (FixtureHead *h, item->m_heads)
+    {
+        const QRectF r = h->m_item->boundingRect();
+        tops  << qRound(r.top());
+        lefts << qRound(r.left());
+    }
+    QCOMPARE(tops.count(), rowsDeclared);
+    QCOMPARE(lefts.count(), cols);
+
+    m_doc->deleteFixture(fxi->id());
+}
+
+
+void Monitor_Test::verticalTrussMovesLaterallyInSideView()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc));           // vertical truss by default
+    rig.view->setLocked(false);
+
+    // SIDE: horizontal screen axis is Y (downstage <- -> upstage).
+    rig.view->setPlane(StructureStudioView::Side);
+    const QVector3D before = rig.pos();
+    const QPointF startPx = rig.view->w2s(before);
+    QCOMPARE(rig.view->hitTestFixture(startPx), rig.fxi->id());
+
+    const QVector3D after = rig.dragTo(startPx + QPointF(rig.view->m_scale * 0.1, 0.0));
+    QVERIFY2(!qFuzzyCompare(after.y(), before.y()),
+             "side view refused to move a tower-mounted fixture laterally (Y)");
+    QVERIFY2(qAbs(double(after.x() - before.x())) < 1e-4,
+             "a lateral side-view drag also moved it in X");
+    QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(rig.fxi->id()).trussId,
+             rig.truss->id());
+
+    // FRONT still drives the OTHER horizontal (X) and must not disturb Y.
+    rig.view->setPlane(StructureStudioView::Front);
+    const QVector3D b2 = rig.pos();
+    const QVector3D a2 = rig.dragTo(rig.view->w2s(b2) + QPointF(rig.view->m_scale * 0.1, 0.0));
+    QVERIFY2(!qFuzzyCompare(a2.x(), b2.x()), "front view refused the lateral (X) drag");
+    QVERIFY2(qAbs(double(a2.y() - b2.y())) < 1e-4,
+             "a front-view drag disturbed the side view's Y offset");
+}
+
+
+void Monitor_Test::fixtureIsBoxedByItsRealDimensionsInEveryView()
+{
+    // An XL-450: 401 x 180 x 100 mm, 15 x 5 pixels, front-facing on a tower.
+    const double W = 0.401, H = 0.180, D = 0.100;
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Warmdance"); def->setModel("XL-450");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    for (int i = 0; i < 75; ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("D%1").arg(i));
+        ch->setGroup(QLCChannel::Intensity);
+        def->addChannel(ch);
+    }
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Pixel");
+    QLCPhysical ph;
+    ph.setWidth(401); ph.setHeight(180); ph.setDepth(100);
+    ph.setLayoutSize(QSize(15, 5));
+    mode->setPhysical(ph);
+    foreach (QLCChannel *ch, def->channels())
+    {
+        mode->insertChannel(ch, mode->channels().size());
+        QLCFixtureHead h; h.addChannel(mode->channels().size() - 1);
+        mode->insertHead(-1, h);
+    }
+    def->addMode(mode);
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("T-2"); t->setType(Truss::Vertical);
+    t->setOrigin(QVector3D(3.965f, 1.344f, 0.0f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(3.048f); t->setWidth(0.290f);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("XL-450");
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(0);
+    QVERIFY(m_doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t->id(); rp.trussOffset = 1.5f;
+    rp.studioMount = 1;                      // front face: long axis X, depth Y
+    props->setFixtureRigProps(fxi->id(), rp);
+
+    StructureStudioView view(m_doc, StructureStudioView::TrussKind, t->id());
+    view.resize(700, 600);
+    view.reload();
+
+    const FixtureVisualTraits traits = classifyFixture(fxi);
+    QCOMPARE(traits.layout, QSize(15, 5));   // the declaration reached the renderer
+
+    struct { StructureStudioView::Plane plane; double w, h; const char *name; } cases[] = {
+        { StructureStudioView::Top,   W, D, "top"   },
+        { StructureStudioView::Front, W, H, "front" },
+        { StructureStudioView::Side,  D, H, "side"  },
+    };
+
+    for (int i = 0; i < 3; ++i)
+    {
+        view.setPlane(cases[i].plane);
+        QPointF wPx, hPx; QRectF box;
+        view.fixtureBoxPx(fxi->id(), traits, wPx, hPx, box);
+        const double expW = cases[i].w * view.m_scale;
+        const double expH = cases[i].h * view.m_scale;
+        QVERIFY2(qAbs(box.width() - expW) < 1.0,
+                 qPrintable(QString("%1 view: box is %2 px wide, expected %3")
+                            .arg(cases[i].name).arg(box.width()).arg(expW)));
+        QVERIFY2(qAbs(box.height() - expH) < 1.0,
+                 qPrintable(QString("%1 view: box is %2 px tall, expected %3")
+                            .arg(cases[i].name).arg(box.height()).arg(expH)));
+    }
+
+    m_doc->deleteFixture(fxi->id());
+    props->removeTruss(t->id());
+}
+
+void Monitor_Test::structuralMountsAreExclusive()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("USP2");
+    pl->setOriginX(3.661f); pl->setOriginY(1.530f);
+    pl->setWidth(2.438f); pl->setDepth(1.219f); pl->setHeight(0.610f);
+
+    Truss *t = props->addTruss();
+    t->setName("T-2"); t->setType(Truss::Vertical);
+    t->setOrigin(QVector3D(3.965f, 1.344f, 0.0f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(3.048f); t->setWidth(0.290f);
+
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    MonitorGraphicsView *gv = mon.findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->resize(1230, 760);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(40, 24));
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("XL-450"); fxi->setChannels(1); fxi->setAddress(340);
+    QVERIFY(m_doc->addFixture(fxi));
+    const quint32 fid = fxi->id();
+    props->setFixturePosition(fid, 0, 0, QVector3D(4000, 1500, 0));
+    gv->addFixture(fid, QPointF(4000, 1500));
+
+    // Standing on the platform, then moved onto the truss -- the sequence that
+    // produced "Truss=2 ... Deck=1" in stage-structures-demo.qxw.
+    FixtureRigProps rp;
+    rp.deckPlatformId = pl->id();
+    props->setFixtureRigProps(fid, rp);
+    QCOMPARE(props->fixtureRigProps(fid).primaryMount(), FixtureRigProps::DeckMount);
+
+    gv->attachFixtureToTruss(fid, t->id());
+
+    const FixtureRigProps after = props->fixtureRigProps(fid);
+    QCOMPARE(after.trussId, t->id());
+    QVERIFY2(after.onDeck() == false,
+             "attaching to a truss left the previous deck mount in place");
+    QCOMPARE(after.primaryMount(), FixtureRigProps::TrussMount);
+
+    /* And the two consumers must agree. The position comes from the truss, so
+       whatever the double-click resolves to has to be the truss as well -- that
+       disagreement is what opened USP2's editor for a fixture drawn on T-2. */
+    const QVector3D w = props->fixtureRigPosition(fid);
+    QVERIFY2(qAbs(double(w.x() - t->origin().x())) < 0.5,
+             "the fixture is not positioned on the truss it is mounted on");
+
+    m_doc->deleteFixture(fid);
+    props->removeTruss(t->id());
+    props->removePlatform(pl->id());
+}
+
+void Monitor_Test::mountedFixturesToggleHidesOnlyMountedOnes()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("T-2"); t->setType(Truss::Vertical);
+    t->setOrigin(QVector3D(3.965f, 1.344f, 0.0f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(3.048f); t->setWidth(0.290f);
+
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    MonitorGraphicsView *gv = mon.findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->resize(1230, 760);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(40, 24));
+
+    Fixture *onRig = new Fixture(m_doc);
+    onRig->setName("OnTruss"); onRig->setChannels(1); onRig->setAddress(360);
+    QVERIFY(m_doc->addFixture(onRig));
+    Fixture *free_ = new Fixture(m_doc);
+    free_->setName("FreeStanding"); free_->setChannels(1); free_->setAddress(370);
+    QVERIFY(m_doc->addFixture(free_));
+
+    foreach (Fixture *f, QList<Fixture *>() << onRig << free_)
+    {
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(4000, 1500, 0));
+        gv->addFixture(f->id(), QPointF(4000, 1500));
+    }
+    gv->attachFixtureToTruss(onRig->id(), t->id());
+
+    MonitorFixtureItem *rigItem  = gv->m_fixtures.value(onRig->id(), nullptr);
+    MonitorFixtureItem *freeItem = gv->m_fixtures.value(free_->id(), nullptr);
+    QVERIFY(rigItem != nullptr && freeItem != nullptr);
+    QVERIFY(gv->mountedFixturesVisible());
+    QVERIFY(rigItem->isVisible());
+
+    gv->setMountedFixturesVisible(false);
+    QVERIFY2(rigItem->isVisible() == false, "the truss-mounted fixture stayed visible");
+    QVERIFY2(freeItem->isVisible(), "a free-standing fixture must never be hidden");
+
+    gv->setMountedFixturesVisible(true);
+    QVERIFY2(rigItem->isVisible(), "the mounted fixture did not come back");
+
+    m_doc->deleteFixture(onRig->id());
+    m_doc->deleteFixture(free_->id());
+    props->removeTruss(t->id());
+}
+
+void Monitor_Test::viewRotationIsScreenOnlyAndDragStillWorks()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.view->setPlane(StructureStudioView::Front);
+    rig.view->setLocked(false);
+
+    const QVector3D before = rig.pos();
+
+    for (int turns = 0; turns < 4; ++turns)
+    {
+        rig.view->setRotation(turns);
+        QCOMPARE(rig.view->rotation(), turns);
+
+        // Rotating must not move anything in the model.
+        QCOMPARE(rig.pos(), before);
+
+        // w2s/screenToPlane must stay exact inverses at every turn, which is
+        // what keeps dragging and hit-testing honest.
+        const QPointF px = rig.view->w2s(before);
+        const QPointF ab = rig.view->screenToPlane(px);
+        const QPointF abDirect = rig.view->project(before);
+        QVERIFY2(qAbs(ab.x() - abDirect.x()) < 1e-6 && qAbs(ab.y() - abDirect.y()) < 1e-6,
+                 qPrintable(QString("turn %1: screenToPlane is not the inverse of w2s")
+                            .arg(turns)));
+
+        // And the fixture is still grabbable where it is drawn.
+        QVERIFY2(rig.view->hitTestFixture(px) == rig.fxi->id(),
+                 qPrintable(QString("turn %1: fixture not grabbable at its drawn position")
+                            .arg(turns)));
+    }
+
+    /* Drag DOWN the screen at 180 degrees. The truss runs up the screen when
+       unrotated, so a downward drag then raises it -- the point being that the
+       drag follows the CURSOR, not the world axis. */
+    rig.view->setRotation(2);
+    const QVector3D b2 = rig.pos();
+    const QVector3D a2 = rig.dragTo(rig.view->w2s(b2) + QPointF(0.0, rig.view->m_scale * 0.5));
+    QVERIFY2(qAbs(double(a2.z() - b2.z()) - 0.5) < 0.1,
+             qPrintable(QString("at 180 degrees a downward drag moved z by %1, expected +0.5")
+                        .arg(double(a2.z() - b2.z()))));
+
+    rig.view->setRotation(0);
 }

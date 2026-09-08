@@ -36,6 +36,8 @@ class Fixture;
 
 enum class FixtureSilhouette { Bar, Mover, Par, Generic };
 
+#include <QSize>
+
 struct FixtureVisualTraits
 {
     FixtureSilhouette kind = FixtureSilhouette::Generic;
@@ -45,6 +47,12 @@ struct FixtureVisualTraits
     int   headCount = 1;
     bool  multiHeadPanTilt = false; ///< 2+ heads, each with its own Pan or Tilt channel
     float physW = 0.0f, physH = 0.0f, physD = 0.0f;  ///< metres; 0 = not declared
+    /** The definition's declared pixel grid (the Physical tab's "Layout
+     *  (Columns x Rows)" -- an XL-450 says 15 x 5). QSize() when the
+     *  definition does not declare one (layoutSize() defaults to 1x1) or when
+     *  it cannot hold this mode's heads. Columns run along the fixture's LONG
+     *  axis, rows across its height. */
+    QSize layout;
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);

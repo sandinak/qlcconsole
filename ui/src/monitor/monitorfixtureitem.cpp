@@ -66,6 +66,7 @@ static QCursor smallOpenHandCursor()
 #include "monitorproperties.h"
 #include "qlcfixturehead.h"
 #include "qlcfixturemode.h"
+#include "qlcphysical.h"
 #include "qlccapability.h"
 #include "fixture.h"
 #include "qlcfixturedef.h"
@@ -393,25 +394,54 @@ void MonitorFixtureItem::setSize(QSize size)
     int headsWidth = m_width;
     int headsHeight = m_height;
 
-    // Choose the head grid from the HEAD COUNT and the fixture's ASPECT RATIO,
-    // not from the pixel area (stable at any size, no degenerate wrapping).
+    const int n = m_heads.count();
+    int columns = 0, rows = 0;
+
+    /* The fixture definition may DECLARE its pixel layout (the Physical tab's
+       "Layout (Columns x Rows)" -- an XL-450 says 15 x 5). That is the real
+       arrangement of the LEDs in the housing, so honour it rather than
+       re-deriving a guess: the guess below infers a grid from head count and
+       aspect ratio, which for a 15x5 matrix produced the wrong number of rows
+       and drew a fixture that looks nothing like the actual product.
+       Only trust it when it can actually hold the heads this mode has --
+       layoutSize() defaults to 1x1 and some definitions declare a layout for a
+       different mode's head count. */
+    if (Fixture *fxi = m_doc->fixture(m_fid))
+    {
+        if (const QLCFixtureMode *mode = fxi->fixtureMode())
+        {
+            const QSize declared = mode->physical().layoutSize();
+            if (declared.width() > 0 && declared.height() > 0
+                && declared != QSize(1, 1)
+                && declared.width() * declared.height() >= n)
+            {
+                columns = declared.width();
+                rows    = declared.height();
+            }
+        }
+    }
+
+    // No usable declaration: choose the head grid from the HEAD COUNT and the
+    // fixture's ASPECT RATIO, not from the pixel area (stable at any size, no
+    // degenerate wrapping).
     //  - clearly elongated fixtures (tape / battens / pixel bars) -> a single
     //    line: one row when wide, one column when tall;
     //  - otherwise a grid matching the shape (cols ~ sqrt(N*AR)).
-    const int n = m_heads.count();
-    const double aspect = double(headsWidth) / double(headsHeight); // w/h
-    const double kLineAspect = 3.0; // beyond this, treat as a single strip
-    int columns, rows;
-    if (aspect >= kLineAspect)        { columns = n; rows = 1; }     // wide strip
-    else if (aspect <= 1.0 / kLineAspect) { columns = 1; rows = n; } // tall strip
-    else
+    if (columns == 0)
     {
-        columns = qRound(sqrt(double(n) * aspect));
-        if (columns < 1)
-            columns = 1;
-        if (columns > n)
-            columns = n;
-        rows = (n + columns - 1) / columns; // ceil(n/columns)
+        const double aspect = double(headsWidth) / double(headsHeight); // w/h
+        const double kLineAspect = 3.0; // beyond this, treat as a single strip
+        if (aspect >= kLineAspect)        { columns = n; rows = 1; }     // wide strip
+        else if (aspect <= 1.0 / kLineAspect) { columns = 1; rows = n; } // tall strip
+        else
+        {
+            columns = qRound(sqrt(double(n) * aspect));
+            if (columns < 1)
+                columns = 1;
+            if (columns > n)
+                columns = n;
+            rows = (n + columns - 1) / columns; // ceil(n/columns)
+        }
     }
 
     if (rows < 1)

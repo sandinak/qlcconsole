@@ -7,8 +7,15 @@
   height above the floor.
 
   Coordinate convention (same as Truss and the 2-D Monitor):
-    X = stage right (+) / stage left (-)
-    Y = upstage (+) / downstage (-)
+    X = stage left (+) / stage right (-)
+    Y = downstage (+) / upstage (-)
+    (These match how the app BEHAVES -- see barFaceVector() in
+    monitorproperties.cpp and any real show: in stage-structures-demo.qxw the
+    "SR Tower" sits at X=0.21 with the "SL Tower" at X=11.61, and the upstage
+    platforms are at Y=1.53 against the downstage ones at Y=3.97. The plot
+    draws +X rightward and +Y downward, which is the standard ground plan:
+    audience at the bottom of the page, upstage at the top, stage right on the
+    viewer's left. These comments used to say the opposite on both axes.)
     Z = height above stage floor (metres, always >= 0)
 
   The platform occupies the floor rectangle [origin.x, origin.x+width] x

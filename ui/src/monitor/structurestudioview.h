@@ -30,6 +30,8 @@
 #include <QList>
 #include <QSet>
 
+#include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
+
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
@@ -49,6 +51,13 @@ public:
 
     void setPlane(Plane p);
     Plane plane() const { return m_plane; }
+
+    /** Turn the view in 90-degree steps (0..3, clockwise). A pure VIEW
+     *  transform -- stored coordinates never move -- so a designer who reads a
+     *  plan with downstage at the top can have it without the file changing.
+     *  Quarter turns keep the handedness honest; see planeToScreenVec(). */
+    void setRotation(int quarterTurns);
+    int  rotation() const { return m_rotation; }
 
     /** Locked = fixtures can be selected but not dragged (like the main plot lock);
      *  unlocked = drag a selected fixture / a boom top to move it. */
@@ -131,6 +140,27 @@ private:
     double structureTopZ() const;              ///< highest point of the structure (metres, for the max marker)
     quint32 hitTestFixture(const QPointF &px) const;
 
+    /** In-plane (a,b) -> screen offset, and back, with the view rotation
+     *  applied. Every world<->pixel path goes through these two. */
+    QPointF planeToScreenVec(const QPointF &ab) const;
+    QPointF screenVecToPlane(const QPointF &v) const;
+
+    /** A world point varying along the in-plane a (useB=false) or b axis, so a
+     *  ruler can measure whichever one the rotation has made vertical. */
+    QVector3D axisWorldPoint(bool useB, double val) const;
+
+    /** Edge labels naming which way is which in the current plane (stage
+     *  left/right, upstage/downstage, up/floor) -- the plane badge alone does
+     *  not say how the projection is oriented. */
+    void drawOrientationLabels(QPainter &p) const;
+
+    /** The fixture's own W x H x D box projected into the current plane: the
+     *  screen spans of its width and height axes, plus the axis-aligned screen
+     *  box containing the whole solid (depth included). See the implementation
+     *  for why a view-dependent projection is needed at all. */
+    void fixtureBoxPx(quint32 fid, const struct FixtureVisualTraits &traits,
+                      QPointF &wPx, QPointF &hPx, QRectF &boxPx) const;
+
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame
     /** True when @p rp has a real structural mount (truss/pipe/tower/riser/
@@ -171,12 +201,13 @@ private:
     Kind     m_kind;
     quint32  m_id;
     Plane    m_plane = Front;
+    int      m_rotation = 0;   ///< view turn, 0..3 quarter turns clockwise
 
     double   m_scale = 60.0;    ///< pixels per metre
     QPointF  m_originPx;        ///< where world (a=0,b=0) lands on screen
     bool     m_panning = false;
     QPointF  m_panLast;
-    quint32  m_dragFid = 0;    ///< fixture being dragged (0 = none)
+    quint32  m_dragFid = Fixture::invalidId();   ///< fixture being dragged
     bool     m_dragged = false;
     quint32  m_resizeBoom = 0; ///< +1 boom id whose top is being dragged (0 = none)
     QPointF  m_cursorPx;       ///< last pointer position (for the ruler readout)

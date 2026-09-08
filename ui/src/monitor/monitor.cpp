@@ -141,6 +141,8 @@
 #define SETTINGS_RULERS "monitor/rulers"
 #define SETTINGS_GRID   "monitor/grid"
 #define SETTINGS_CENTERLINES "monitor/centerlines"
+#define SETTINGS_MOUNTEDFIXTURES "monitor/mountedfixtures"
+#define SETTINGS_STUDIOROTATION "monitor/studiorotation"
 
 Monitor* Monitor::s_instance = NULL;
 
@@ -661,6 +663,22 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->addWidget(labelsBtn);
     connect(labelsBtn, &QToolButton::toggled, this, [this](bool on) { slotShowLabels(on); });
 
+    /* Fixtures-on-structures show/hide toggle. A truss or riser covered by its
+       own fixtures is hard to click in the top view; hiding them clears the
+       plot while structures are being placed. Free-standing fixtures are never
+       hidden -- there is nothing under them to reach. */
+    QToolButton *mountedBtn = new QToolButton(footer);
+    mountedBtn->setText(tr("On Rig"));
+    mountedBtn->setCheckable(true);
+    mountedBtn->setToolTip(tr("Show or hide the fixtures mounted on trusses, "
+                              "pipes, towers and platforms, so the structure "
+                              "underneath can be clicked"));
+    fl->addWidget(mountedBtn);
+    connect(mountedBtn, &QToolButton::toggled, this, [this](bool on) {
+        m_graphicsView->setMountedFixturesVisible(on);
+        QSettings().setValue(SETTINGS_MOUNTEDFIXTURES, on);
+    });
+
     // Stage centre axes (the teal crosshair) show/hide toggle.
     QToolButton *centerBtn = new QToolButton(footer);
     centerBtn->setText(tr("Center"));
@@ -761,6 +779,13 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     centerBtn->setChecked(showCenterLines);
     centerBtn->blockSignals(false);
     m_graphicsView->setCenterLinesVisible(showCenterLines);
+
+    // Restore fixtures-on-structures visibility (default on).
+    const bool showMounted = settings.value(SETTINGS_MOUNTEDFIXTURES, true).toBool();
+    mountedBtn->blockSignals(true);
+    mountedBtn->setChecked(showMounted);
+    mountedBtn->blockSignals(false);
+    m_graphicsView->setMountedFixturesVisible(showMounted);
 
     updateModeIndicator();
 }
@@ -2252,12 +2277,22 @@ bool Monitor::isLinearFixture(Fixture *fx) const
     return false;
 }
 
+/* A studio tree row's fixture id. Folder rows never set Qt::UserRole, so a
+   plain toUInt() yields 0 -- which is a REAL fixture id (the first fixture in
+   any workspace), not a "no fixture" marker. Read it as Fixture::invalidId()
+   when the role is unset so fixture 0 behaves like every other fixture. */
+static quint32 studioRowFid(const QTreeWidgetItem *it)
+{
+    const QVariant v = it->data(0, Qt::UserRole);
+    return v.isValid() ? v.toUInt() : Fixture::invalidId();
+}
+
 void Monitor::editFixtureProperties(quint32 fid)
 {
     // The studio's single-fixture path (inspector 'Full properties…', canvas
     // double-click, tree double-click): ALWAYS edit just this one fixture,
     // bypassing the map selection (and its group select-together).
-    if (fid != 0)
+    if (fid != Fixture::invalidId())
         showFixtureItemEditor(fid);
 }
 
@@ -2284,8 +2319,8 @@ protected:
         QByteArray b; QDataStream s(&b, QIODevice::WriteOnly);
         foreach (QTreeWidgetItem *it, items)
         {
-            const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-            if (fid) s << fid;
+            const quint32 fid = studioRowFid(it);
+            if (fid != Fixture::invalidId()) s << fid;
         }
         m->setData(QStringLiteral("application/x-qlc-fid"), b);
         return m;
@@ -2353,6 +2388,16 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     QComboBox *planeCombo = new QComboBox(center);
     planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
     bar->addWidget(planeCombo);
+    /* Turn the view in quarter steps. Some designers read a plan with downstage
+       at the TOP; 180 degrees gives them that. It is a view transform only --
+       nothing in the workspace moves -- and quarter turns keep the handedness
+       honest, so stage left/right stay truthful (the edge labels turn with it).
+       Remembered across sessions, since it is a personal reading preference. */
+    QToolButton *rotBtn = new QToolButton(center);
+    rotBtn->setToolTip(tr("Turn the view 90° clockwise. A view setting only — "
+                          "nothing in the workspace moves."));
+    bar->addWidget(rotBtn);
+
     QPushButton *lockBtn = new QPushButton(tr("🔒 Locked"), center);
     lockBtn->setCheckable(true); lockBtn->setChecked(true);
     lockBtn->setToolTip(tr("Locked: click to select fixtures. Unlock to drag them."));
@@ -2375,6 +2420,18 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         m_doc, StructureStudioView::Kind(kind), id, center);
     view->setMinimumSize(320, 300);
     planeCombo->setCurrentIndex(int(view->plane()));
+
+    auto applyRotation = [view, rotBtn](int turns) {
+        view->setRotation(turns);
+        static const char *names[] = { "0°", "90°", "180°", "270°" };
+        rotBtn->setText(QString("⟳ %1").arg(names[view->rotation() & 3]));
+    };
+    applyRotation(QSettings().value(SETTINGS_STUDIOROTATION, 0).toInt());
+    QObject::connect(rotBtn, &QToolButton::clicked, view, [view, applyRotation]() {
+        const int next = (view->rotation() + 1) & 3;
+        applyRotation(next);
+        QSettings().setValue(SETTINGS_STUDIOROTATION, next);
+    });
     cv->addWidget(view, 1);
     QLabel *hint = new QLabel(tr("click a fixture to select · double-click to edit · "
                                  "drag to reposition · wheel zoom · shift-drag pan"), center);
@@ -2411,10 +2468,13 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     iv->addStretch();
     insp->setMinimumWidth(190);
 
-    auto curFid = QSharedPointer<quint32>::create(0u);
+    // Fixture::invalidId(), NOT 0: fixture 0 is the first fixture in any
+    // workspace, so a 0 "nothing selected" sentinel silently dropped every
+    // inspector edit made to it.
+    auto curFid = QSharedPointer<quint32>::create(Fixture::invalidId());
     auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, angleSpin, mountCombo, fullBtn, inspForm]() {
         const quint32 fid = *curFid;
-        Fixture *fx = fid ? m_doc->fixture(fid) : nullptr;
+        Fixture *fx = (fid != Fixture::invalidId()) ? m_doc->fixture(fid) : nullptr;
         const bool have = (fx != nullptr);
         const bool frame = have && (m_props->fixtureFrameGroup(fid) != 0);
         const bool linear = have && isLinearFixture(fx);   // strip / bar / tape
@@ -2451,7 +2511,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     connect(view, &StructureStudioView::fixtureSelected, insp,
             [curFid, populate](quint32 fid){ *curFid = fid; populate(); });
     connect(gelBtn, &QPushButton::clicked, insp, [this, curFid, view, populate]() {
-        if (*curFid == 0) return;
+        if (*curFid == Fixture::invalidId()) return;
         const QColor c = QColorDialog::getColor(m_props->fixtureGelColor(*curFid, 0, 0),
                                                 this, tr("Fixture Colour"));
         if (!c.isValid()) return;
@@ -2462,20 +2522,20 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     });
     connect(faceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
             [this, curFid, view, populate](int i) {
-        if (*curFid == 0) return;
+        if (*curFid == Fixture::invalidId()) return;
         if (view) view->setFixtureFace(*curFid, i);
         m_graphicsView->updateFixture(*curFid);
         populate();
     });
     connect(angleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
             [this, curFid, view](double v) {
-        if (*curFid == 0) return;
+        if (*curFid == Fixture::invalidId()) return;
         if (view) view->setFixtureAngle(*curFid, float(v));
         m_graphicsView->updateFixture(*curFid);
     });
     connect(mountCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
             [this, curFid, view, mountCombo](int) {
-        if (*curFid == 0) return;
+        if (*curFid == Fixture::invalidId()) return;
         FixtureRigProps rp = m_props->fixtureRigProps(*curFid);
         rp.mountingType = static_cast<Truss::MountingType>(mountCombo->currentData(Qt::UserRole).toInt());
         const int side = mountCombo->currentData(Qt::UserRole + 1).toInt();
@@ -2556,11 +2616,11 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         QList<quint32> ids;
         foreach (QTreeWidgetItem *it, tree->selectedItems())
         {
-            const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-            if (fid != 0) ids << fid;
+            const quint32 fid = studioRowFid(it);
+            if (fid != Fixture::invalidId()) ids << fid;
         }
         view->setHighlight(ids);
-        *curFid = ids.isEmpty() ? 0u : ids.first();
+        *curFid = ids.isEmpty() ? Fixture::invalidId() : ids.first();
         populate();
     });
     // Canvas click → select the matching tree row.
@@ -2568,7 +2628,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         tree->blockSignals(true);
         tree->clearSelection();
         QTreeWidgetItemIterator it(tree);
-        while (*it) { if ((*it)->data(0, Qt::UserRole).toUInt() == fid) { (*it)->setSelected(true); } ++it; }
+        while (*it) { if (studioRowFid(*it) == fid) { (*it)->setSelected(true); } ++it; }
         tree->blockSignals(false);
     });
     // Rename a group folder (F2 or right-click Rename) → update the fixture group.
@@ -2586,8 +2646,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     });
     // Double-click a tree fixture → edit it; a GROUP folder → its head-layout grid.
     connect(tree, &QTreeWidget::itemDoubleClicked, tree, [this](QTreeWidgetItem *it, int) {
-        const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-        if (fid != 0) { editFixtureProperties(fid); return; }
+        const quint32 fid = studioRowFid(it);
+        if (fid != Fixture::invalidId()) { editFixtureProperties(fid); return; }
         const quint32 gid = it->data(0, Qt::UserRole + 1).toUInt();
         if (gid != 0) openGroupLayout(gid);
     });
@@ -2596,8 +2656,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         QList<quint32> ids;
         foreach (QTreeWidgetItem *it, tree->selectedItems())
         {
-            const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-            if (fid != 0) ids << fid;
+            const quint32 fid = studioRowFid(it);
+            if (fid != Fixture::invalidId()) ids << fid;
         }
         return ids;
     };
@@ -2712,7 +2772,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             [this, kind, id, view, tree, selectedFids, rebuildTree, rebuildSource, pushUndo, refreshMap]
             (const QPoint &globalPos, quint32 fidUnder) {
         QMenu m;
-        if (fidUnder != 0)
+        if (fidUnder != Fixture::invalidId())
         {
             QAction *aEdit = m.addAction(tr("Edit fixture…"));
             QAction *aRem  = m.addAction(tr("Remove from object"));
@@ -3469,8 +3529,8 @@ void Monitor::slotEditImage(quint32 id)
     form->addRow(tr("Width:"), wSpin);
     form->addRow(tr("Height:"), hSpin);
     form->addRow(tr("Rotation:"), rotSpin);
-    form->addRow(tr("X (stage right):"), xSpin);
-    form->addRow(tr("Y (upstage):"), ySpin);
+    form->addRow(tr("X (stage left):"), xSpin);
+    form->addRow(tr("Y (downstage):"), ySpin);
     form->addRow(tr("Z (bottom, elevation):"), zSpin);
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -3598,12 +3658,12 @@ void Monitor::slotEditTarget(quint32 tid)
     QDoubleSpinBox *xSpin = new QDoubleSpinBox(&dlg);
     xSpin->setRange(-posRange_t, posRange_t); xSpin->setSuffix(unitSfx_t); xSpin->setDecimals(2);
     xSpin->setValue(double(t->x()) * toDisp_t);
-    form->addRow(tr("X (stage right):"), xSpin);
+    form->addRow(tr("X (stage left):"), xSpin);
 
     QDoubleSpinBox *ySpin = new QDoubleSpinBox(&dlg);
     ySpin->setRange(-posRange_t, posRange_t); ySpin->setSuffix(unitSfx_t); ySpin->setDecimals(2);
     ySpin->setValue(double(t->y()) * toDisp_t);
-    form->addRow(tr("Y (upstage):"), ySpin);
+    form->addRow(tr("Y (downstage):"), ySpin);
 
     QDoubleSpinBox *zSpin = new QDoubleSpinBox(&dlg);
     zSpin->setRange(0, isFeet_t ? 65.6 : 20.0); zSpin->setSuffix(unitSfx_t); zSpin->setDecimals(2);
@@ -5891,12 +5951,12 @@ void Monitor::slotAddTruss()
     QDoubleSpinBox *originX = new QDoubleSpinBox(&dlg);
     originX->setRange(-posRange_a, posRange_a); originX->setSuffix(unitSfx_a); originX->setDecimals(2);
     originX->setValue(pendMm.x() / 1000.0 * toDisp_a);
-    form->addRow(tr("Origin X (stage right):"), originX);
+    form->addRow(tr("Origin X (stage left):"), originX);
 
     QDoubleSpinBox *originY = new QDoubleSpinBox(&dlg);
     originY->setRange(-posRange_a, posRange_a); originY->setSuffix(unitSfx_a); originY->setDecimals(2);
     originY->setValue(pendMm.y() / 1000.0 * toDisp_a);
-    form->addRow(tr("Origin Y (upstage):"), originY);
+    form->addRow(tr("Origin Y (downstage):"), originY);
 
     QDoubleSpinBox *originZ = new QDoubleSpinBox(&dlg);
     originZ->setRange(0, zMax_a); originZ->setSuffix(unitSfx_a); originZ->setDecimals(2);
@@ -6276,7 +6336,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     // — the group "select-together" would otherwise re-select all members and
     // force the multi editor.
     QList<MonitorFixtureItem *> items;
-    if (onlyFid != 0)
+    if (onlyFid != Fixture::invalidId())
     {
         if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(onlyFid))
             items << it;

@@ -9,8 +9,15 @@
   targets.
 
   Coordinate convention (same as the 2-D Monitor):
-    X = stage right (positive) / stage left (negative)
-    Y = upstage (positive) / downstage (negative)
+    X = stage left (positive) / stage right (negative)
+    Y = downstage (positive) / upstage (negative)
+    (These match how the app BEHAVES -- see barFaceVector() in
+    monitorproperties.cpp and any real show: in stage-structures-demo.qxw the
+    "SR Tower" sits at X=0.21 with the "SL Tower" at X=11.61, and the upstage
+    platforms are at Y=1.53 against the downstage ones at Y=3.97. The plot
+    draws +X rightward and +Y downward, which is the standard ground plan:
+    audience at the bottom of the page, upstage at the top, stage right on the
+    viewer's left. These comments used to say the opposite on both axes.)
     Z = height above stage floor (metres, always positive)
 
   Licensed under the Apache License, Version 2.0 (the "License");
@@ -244,6 +251,14 @@ struct FixtureRigProps
      *  near/far chord (Left/Right) instead of dead-centre while staying attached. */
     float            trussCross = 0.0f;
 
+    /** Second horizontal offset (metres), VERTICAL runs only. A vertical run's
+     *  axis IS the Z axis, so BOTH horizontal directions are free around it —
+     *  one scalar cannot say where on a tower a fixture is clamped.
+     *  @c trussCross is the X offset and this is the Y one. Meaningless for a
+     *  horizontal run, whose two non-axis freedoms are the horizontal normal
+     *  (@c trussCross) and height (@c mountZOffset). */
+    float            trussCrossY = 0.0f;
+
     /** Fine height nudge (metres, +up) applied on TOP of a structural mount
      *  (truss / pipe / tower) — e.g. to raise a followspot above the truss it
      *  sits on. 0 = flush with the mount. */
@@ -301,6 +316,40 @@ struct FixtureRigProps
     bool onPipe()  const { return pipeId != UINT_MAX; }
     bool onTower() const { return towerId != UINT_MAX; }
     enum RiserFace { RiserFront = 0, RiserTop = 1 };
+
+    /** The structural mounts are MUTUALLY EXCLUSIVE -- a fixture is clamped to
+     *  a truss, or riding a pipe, or on a tower shelf, or standing on a deck,
+     *  or bolted to a riser face, never two at once. */
+    enum MountKind { NoMount = 0, TrussMount, PipeMount, TowerMount,
+                     DeckMount, RiserMount };
+
+    /** Which structure this fixture is on, in the SAME precedence
+     *  MonitorProperties::fixtureRigPosition() uses to derive its position.
+     *  Everything that asks "what is this fixture mounted on?" must go through
+     *  here: when a stale second mount was left behind, the position resolver
+     *  and the plot's double-click each picked a DIFFERENT one, so a fixture
+     *  drawn on its truss opened the editor for an unrelated platform. */
+    MountKind primaryMount() const
+    {
+        if (trussId != Truss::invalidId()) return TrussMount;
+        if (onPipe())                      return PipeMount;
+        if (onTower())                     return TowerMount;
+        if (onDeck())                      return DeckMount;
+        if (onRiser())                     return RiserMount;
+        return NoMount;
+    }
+
+    /** Unrig it from every structure. Call before setting a new mount so the
+     *  kinds stay exclusive -- attachFixtureToTruss()/...ToTower() used to set
+     *  their own id and leave any previous one in place. */
+    void clearMounts()
+    {
+        trussId          = Truss::invalidId();
+        pipeId           = UINT_MAX;
+        towerId          = UINT_MAX;
+        deckPlatformId   = UINT_MAX;
+        riserPlatformId  = UINT_MAX;
+    }
 };
 
 /** @} */

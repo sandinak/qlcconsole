@@ -8,6 +8,377 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## Lighting Studio Editor: fixture 0 was unclickable; truss drag only had one freedom — SHIPPED, not yet Branson-verified (2026-09-08)
+
+Branson: "still cannot move this fixture on this truss even though it's bound
+to the truss" (Lighting Studio Editor — T-2, a Vertical truss with an XL-450
+on it). Found by writing the drag as a headless test first
+(`ui/test/monitor/monitor_test.cpp`, `StudioRig`) instead of guessing — the
+rig drives the widget's real `mousePressEvent`/`mouseMoveEvent`/
+`mouseReleaseEvent`, so a refusal anywhere in the chain shows up as a failure.
+
+**Root cause 1 — the id-0 sentinel.** `StructureStudioView::hitTestFixture()`
+returned `0` for "nothing here". But QLC+ hands the FIRST fixture in a
+workspace id **0** (`Doc::m_latestFixtureId` starts there; the real marker is
+`Fixture::invalidId()` == `UINT_MAX`). So fixture 0 was indistinguishable from
+empty space and could never be selected, dragged, double-clicked or
+right-clicked in the studio editor. Not hypothetical: in `~/Desktop/office.qlcc`
+fixture 0 is bound to the Office Truss. The same `0`-means-nothing pattern was
+in `StudioPlaneView` (`m_dragFid`, `hitTest`), the studio inspector's `curFid`
+(every gel/face/angle/mount edit to fixture 0 silently dropped), the studio
+tree rows (`data(0, UserRole).toUInt()` — folder rows never set the role, so
+they read as 0 too; now via `studioRowFid()`), and
+`Monitor::showFixtureItemEditor(quint32 onlyFid = 0)`. All now use
+`Fixture::invalidId()`.
+
+**Root cause 2 — the truss branch had one freedom and one dead end.**
+`dragFixtureTo()` projected the mouse onto the truss axis and set `trussOffset`
+only, so (a) `trussCross` was never reachable — a bound fixture could not be
+positioned just off the bar as it is really mounted, which Branson reported
+separately as "attach and then position just off the truss ... doesn't work" —
+and (b) it bailed out with `l2 < 1e-6` whenever the run projected to a point,
+i.e. EVERY top view of a vertical truss, where nothing could be moved at all.
+Rewritten to work as a **delta** in world space: take the two in-plane
+components from the mouse, keep the third from the fixture's current position,
+then resolve that delta onto the mount's real freedoms — `trussOffset` along
+the run, `trussCross` across it (clamped to the same two-widths zone the plot
+uses), and whatever vertical is left over into `mountZOffset` (the drop). The
+delta form makes the mount-side half-width and existing `mountZOffset` cancel,
+so drags do not accumulate drift, and the off-plane component is zero by
+construction — an elevation drag cannot disturb a top-view-only value.
+
+Net effect per view: vertical truss — Front/Side slide along it, Top moves it
+sideways; horizontal truss — Top slides + nudges across, elevations slide +
+set the drop.
+
+**Tests** (7 new, `monitor_test` now 22/22): `studioTrussDragMovesFixture`,
+`studioTrussDragBlockedWhenLocked` (the Locked toggle still means select-only),
+`studioTrussDragInEveryPlane`, `studioTrussDragAcrossTheRun` (top view of a
+vertical run), `studioHorizontalTrussDragMovesFixture` (also pins a NON-zero
+fixture id, so a pass is not an artefact of the id-0 rig),
+`studioTrussDragSetsDropInElevation`.
+
+**Note for the operator:** the editor's lock button still defaults to
+**🔒 Locked** (select-only) — unchanged here, since Branson has been reading
+that state deliberately ("...and it is unlocked"). Say the word if it should
+open unlocked instead.
+
+### Follow-on: the drag then SEGFAULTED (same day, fixed)
+
+Branson: "tried to move it and segfault". Crash report
+`qlcconsole-2026-09-08-120925.ips`: `EXC_BAD_ACCESS`,
+`KERN_INVALID_ADDRESS at 0x18`, on
+`mouseReleaseEvent` → `fixtureMoved` → `Monitor::updateFixture`
+(`monitor.cpp:2693`) → `MonitorFixtureItem::setSize` →
+`QGraphicsItem::prepareGeometryChange()`. The tiny fault address (0x18 =
+`QGraphicsItem::d_ptr` in a `QGraphicsObject` with a null `this`) said NULL
+pointer, not dangling.
+
+**Cause:** `QHash::operator[]` on a non-const hash **inserts** on a miss.
+`MonitorGraphicsView` read `m_fixtures[id]` as an rvalue in
+`setFixtureGelColor`, `setFixtureRotation`, `fixtureGelColor` and
+`removeFixture`; every miss left `{id, nullptr}` behind, after which
+`updateFixture()`'s `contains(id)` guard waved the null through to
+`item->setSize()`. The reachable route is a SECOND `removeFixture(id)` for the
+same id — it drops the plot item and the monitor-properties entry but not the
+Doc fixture, so the id stays live while the map holds null (deleting a truss
+runs `removeFixture()` across `fixturesOnFeature()`, which is read from the rig
+props). The sentinel fix above is what first made the studio drag emit
+`fixtureMoved` at all, which is why a latent crash surfaced now.
+
+All five sites now use `value(id, NULL)`, plus a null guard in
+`updateFixture()`. The seven sibling maps (`m_trussItems`, `m_targetItems`,
+`m_imageItems`, `m_platformItems`, `m_pipeItems`, `m_standItems`,
+`m_towerItems`) were swept — clean.
+
+**Tests** (`monitor_test` now 24/24): `updateFixtureSurvivesUnplacedFixture`
+and `studioEditorDialogDragDoesNotCrash` (opens the real editor via
+`slotEditTruss()`, poisons the map through the double-remove route, then drives
+a genuine press/move/release). BOTH were revert-checked: each produces signal
+11 with the fix backed out. Worth remembering — the first version of the
+end-to-end test was **vacuous** (passed with the fix reverted, because an
+unplaced fixture never reaches the dereference). Revert-check every regression
+test before believing it.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
+### Follow-on 2: the REAL reason that XL-450 would not move — a broken artifact
+
+Branson: "STILL cannot grab that XL450 ... interestingly I can't find it in the
+layres tree using search or perusing the tree .. do we have a broken artifact
+in the file?" Yes. In `test-workspaces/stage-structures-demo.qxw` the `<FxItem>`
+list jumps 6 → 9: **fixture 7 (the XL-450) is rigged on truss 2 with no monitor
+item at all** (`<FixtureRig FID="7" Truss="2" Offset="2.396" TrussCross="0.093" .../>`
+with no matching FxItem). Fixture 25 is likewise item-less, but it has no rig
+props either, so it is just unplaced rather than stranded.
+
+One missing element produced all three symptoms:
+- **Invisible in the Layers tree** — `MonitorLayersPanel` builds from
+  `fixtureItemsID()`, which only enumerates fixtures that HAVE items.
+- **Drawn at the world origin** — `fixtureRigPosition()` opened with
+  `if (!m_fixtureItems.contains(fid)) return QVector3D();`, so a genuinely
+  truss-mounted fixture reported (0,0,0).
+- **Could not be moved** — the drag *did* write trussOffset/trussCross, but the
+  position lookup kept saying (0,0,0), so nothing appeared to change. None of
+  the earlier drag work could have helped: the drag was fine, the lookup lied.
+
+**Fixes** (all `engine/src/monitorproperties.{h,cpp}`):
+1. `fixtureRigPosition()` no longer needs a monitor item. A truss/pipe/tower/
+   riser mount derives the position entirely from the structure geometry; only
+   the free-placed and deck branches read `m_fixtureItems`, and they now guard
+   themselves.
+2. New `repairOrphanedMounts()`, called once at the end of `loadXML()`: rebuilds
+   the plot item from `fixtureRigPosition()` for any fixture that is mounted but
+   item-less. Verified against the real file — logs `rebuilt the missing plot
+   item for mounted fixture 7 at QVector3D(4.058, 1.344, 2.251)` (X = truss
+   3.965 + cross 0.093, Z = offset 2.396 − half-width 0.145).
+3. `removeFixture()` now drops the rig props with the item, so the orphan state
+   cannot be created again. This also fixes a second latent bug found while
+   testing: **fixture ids are REUSED** (`Doc::createFixtureId()` returns any free
+   id), so a stale rig-props entry was inherited wholesale by the next fixture to
+   take that id — arriving silently pre-mounted on a structure at a dead
+   fixture's offset and drop height. It first showed up as test
+   cross-contamination (a leaked `mountZOffset` of -0.4 m).
+
+### Follow-on 3: heads now laid out per the fixture definition
+
+Branson: "we have in the fixture def the layout of the leds .. that is how it
+should appear in the containing box for the fixture." `MonitorFixtureItem::setSize()`
+re-derived a grid from head count + aspect ratio and drew the XL-450's 15 x 5
+matrix as **6 rows** (confirmed by reverting: the test reports `Actual 6,
+Expected 5`). It now honours `mode->physical().layoutSize()` when the declared
+grid can hold that mode's heads, falling back to the old inference otherwise
+(`layoutSize()` defaults to 1x1, and some definitions declare a layout for a
+different mode's head count). This is also the earlier "the highlighting doesn't
+get all the LEDs as they're laid out .. hard to detect".
+
+**Tests** (`monitor_test` now 26/26, both revert-checked):
+`mountedFixtureWithoutPlotItemIsPositionedAndMovable` (models fixture 7 exactly:
+rigged, item-less; asserts it reads on the truss and drags),
+`declaredHeadLayoutIsUsed` (counts distinct drawn head top/left edges, so it
+tests what is RENDERED rather than an internal counter).
+
+`check-all.sh`: all four legs pass, 0 failures.
+
+### Follow-on 4: side-view lateral drag + which-way-is-which labels
+
+Branson: "ok .. can move it from front .. cannot move it laterally on side view
+and there's no clear identification of which way is which in side view?"
+
+**Lateral drag.** A VERTICAL run's axis IS the Z axis, so both horizontals are
+free around it — but `FixtureRigProps` had only the single `trussCross` scalar,
+hardcoded to X (`fixtureRigPosition()`: "a tower's run is vertical — across is
+stage left/right (X)"). The side view's horizontal screen axis is Y, so a
+lateral drag there resolved to exactly zero and nothing moved. Front worked only
+because its horizontal axis happens to be the one X was assigned to.
+
+Added `trussCrossY` (engine/src/truss.h) with XML round-trip, written only when
+non-zero so existing workspaces are byte-identical. `dragFixtureTo()` now builds
+an orthonormal basis of all three freedoms and assigns each to the field that
+actually stores it:
+
+| run        | along axis            | cross                 | third                        |
+|------------|-----------------------|-----------------------|------------------------------|
+| Vertical   | `trussOffset` (Z)     | `trussCross` (X)      | `trussCrossY` (Y)            |
+| Horizontal | `trussOffset`         | `trussCross`          | `mountZOffset` (the drop)    |
+
+Each plane drives the two freedoms it can see and leaves the third alone.
+
+**Orientation labels.** `drawOrientationLabels()` draws edge labels on all four
+sides of the canvas, using the vocabulary already in the app (+X = stage right,
++Y = upstage, +Z = up — cf. the "X (stage right):" / "Y (upstage):" spin-box
+labels in monitor.cpp). Verified by grabbing the widget offscreen:
+  - Side  : ◀ downstage / upstage ▶ / ▲ up / ▼ floor
+  - Top   : ◀ stage left / stage right ▶ / ▲ downstage / ▼ upstage
+  - Front : ◀ stage left / stage right ▶ / ▲ up / ▼ floor
+
+NOT changed, deliberately: the Front view puts stage right on the RIGHT, which
+matches +X = stage right everywhere else in the app. A theatrical front
+elevation drawn from the audience's viewpoint would mirror that. Left consistent
+with the app rather than flipped unilaterally — Branson's call.
+
+**Test** (`monitor_test` now 27/27, revert-checked):
+`verticalTrussMovesLaterallyInSideView` — a side drag moves Y without touching
+X, and a front drag moves X without touching Y.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
+### Follow-on 5: fixtures boxed by their real dimensions in every view
+
+Branson: "so TOP view looks right / SIDE view looks the old way.. all should
+look right and be boxed in based on relative dimensions of the device."
+
+`StructureStudioView::drawFixtures()` drew a bar/matrix as a LINE from
+`fixtureEndA()` to `fixtureEndB()`, with its across-extent always taken from
+`physH` and `physD` never used at all. In the SIDE view of a front-facing panel
+the long axis points into the screen, so both ends landed on the same pixel and
+the fixture collapsed to a dot with no body — the "old way" look. The TOP view
+drew it Height-tall when a plan view sees its Depth.
+
+**Fix:** new `fixtureBoxPx()` treats a fixture as the W x H x D solid it is. Its
+long axis (`fixtureAxisLocal`, from studioMount + studioAngle) carries Width,
+the mount plane's normal carries Depth, and the remaining in-face axis carries
+Height. All three are projected through `w2s()`, giving the screen spans of the
+width/height axes plus the axis-aligned box containing the whole solid. Pixels
+are placed at their TRUE 3-D position and projected, so the grid squashes on its
+own when an axis turns away — no per-view special-casing:
+
+| view  | box     | grid                                            |
+|-------|---------|-------------------------------------------------|
+| Top   | W x D   | 15 columns; rows collapse (stacked in Z)        |
+| Front | W x H   | the full 15 x 5                                 |
+| Side  | D x H   | 5 rows; columns collapse into depth             |
+
+The studio renderer ALSO had its own aspect-ratio guess for the grid, separate
+from the plot's, so Follow-on 3 had not touched it. `FixtureVisualTraits` now
+carries the declared `layoutSize()` (validated against the mode's head count) so
+both renderers read one source.
+
+**Test** (`monitor_test` now 28/28, revert-checked — dropping depth reports
+"top view: box is 3 px tall, expected 32"):
+`fixtureIsBoxedByItsRealDimensionsInEveryView` asserts the projected box equals
+the right dimension PAIR per plane, for a real XL-450 (401 x 180 x 100 mm,
+15 x 5). Renders eyeballed offscreen for all three planes.
+
+**For Branson to judge:** the TOP view is now flatter than the screenshot he
+liked — 100 mm of depth rather than 180 mm of height, one row of 15 pixels
+instead of 5 rows. That is the honest plan view (from above you see the panel's
+top edge, not its face), but he called the old one "right", so if plan view
+should keep showing the whole array as a schematic it needs a deliberate
+special case.
+
+**NOT done:** `MonitorGraphicsView::updateFixture()` (the main 2D plot) does its
+own elevation foreshortening from width and height and likewise ignores depth —
+same class of bug, separate renderer, left alone since the report was about the
+studio editor.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
+### Follow-on 6: double-click opened the wrong structure; the axis convention is backwards in half the tree
+
+Branson: "when I double click on the xl450 at the top of t2 .. I should open t2
+right? But instead it's opening USP2 .. which is adjacent but not under T2."
+
+**Cause.** Fixture 7 carries `Truss="2"` AND `Deck="1"` -- two structural mounts
+at once. `attachFixtureToTruss()`/`...ToTrussAt()`/`...ToTower()` set their own
+id without clearing a previous mount (only `attachFixtureToPipe()` did, and even
+it missed `towerId`), so moving a deck-standing fixture onto a truss left the
+deck behind forever. `mouseDoubleClickEvent()` then tested the ids in its OWN
+order -- deck before truss -- while `fixtureRigPosition()` checks truss first.
+The fixture was DRAWN on T-2 and OPENED USP2 (platform id 1 is named "USP2").
+
+**Fixes:** `FixtureRigProps::clearMounts()` called before every attach;
+`FixtureRigProps::primaryMount()` as the single shared precedence (same order
+`fixtureRigPosition()` uses) with the double-click switching on it, so the two
+consumers cannot diverge again; and `repairOrphanedMounts()` extended to
+collapse any file that already carries two mounts down to its primary.
+
+### The axis convention: half the tree says the opposite of what the app does
+
+Branson: "just realized my current layout in the screen has DS at bottom and US
+at top? is that backwards from the standard?" No -- his layout is the STANDARD
+ground plan (audience at the bottom of the page, upstage at the top, stage right
+on the viewer's left). The code is what is wrong, and it contradicts itself:
+
+  - `barFaceVector()` (monitorproperties.cpp:899) says "+Y = downstage (toward
+    audience)" and maps `FaceDownstage` to `(0,+1,0)`.
+  - `pipe.h`, `stagetarget.h`, `stageplatform.h`, `tower.h`, `stand.h`,
+    `truss.h` and monitor.cpp's "X (stage right):" / "Y (upstage):" spin-box
+    labels all claim the OPPOSITE, on both axes.
+
+Real shows settle it. In `stage-structures-demo.qxw` the "SR Tower" is at
+X=0.21 and the "SL Tower" at X=11.61; the upstage platforms are at Y=1.53 and
+the downstage ones at Y=3.97. The plot draws +X rightward and +Y downward.
+So **+X is stage LEFT and +Y is DOWNSTAGE**.
+
+LESSON: Follow-on 4's orientation labels were derived from the spin-box wording
+and were therefore BACKWARDS on both axes. They shipped wrong and Branson's
+question is what caught it. Measure against real data, not against a label.
+
+**Done** (Branson chose "labels + comments only" -- zero behaviour change):
+the six spin-box labels and the six geometry headers now say stage left /
+downstage, each header carrying the evidence above so nobody re-derives it from
+the wrong half. The studio labels are corrected, and the same edge labels are
+now on the MAIN plot (`MonitorGraphicsView::drawOrientationLabels()`, painted on
+the viewport after the scene so they stay pinned while the plot pans/zooms;
+`setOrientationLabelsVisible()` toggles).
+
+**Deliberately NOT done:** `barFaceVector()` maps `FaceStageRight` to `+X`,
+which is stage LEFT -- so a bar placed on the "stage right" face goes to stage
+left. Correcting the mapping would MOVE every bar already placed that way when
+its workspace reloads, so it needs a migration. Marked KNOWN INCONSISTENCY in
+the source rather than silently changed.
+
+### Follow-on 7: "On Rig" toggle
+
+Branson asked whether truss fixtures should be visible from the top at all, or
+hidden so the truss is selectable, and chose a toggle. New footer button beside
+Rulers/Labels/Center: hides only fixtures with a structural mount (free-standing
+ones are never hidden -- nothing is under them to reach), respects layer
+visibility, persists to QSettings, defaults on.
+
+**Tests** (`monitor_test` now 30/30, both revert-checked):
+`structuralMountsAreExclusive` (deck -> truss must clear the deck, and the
+position must agree with the mount) and
+`mountedFixturesToggleHidesOnlyMountedOnes`.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
+### Follow-on 8: view rotation (studio editor) — SHIPPED; plot + axonometric still open
+
+Branson: "should we allow rotation in view as well as direction... so for users
+that like it they can put DS at top. also is there an ability to look from an
+angle .. like front from 30 degrees up?" He chose 90-degree steps, and a
+view-only axonometric.
+
+**Done — StructureStudioView.** `⟳` button in the dialog toolbar cycles
+0/90/180/270, persisted (`monitor/studiorotation`). Implemented as a pure VIEW
+transform inside `planeToScreenVec()` / `screenVecToPlane()` — the two functions
+every world<->pixel path already funnelled through — so drawing, dragging,
+hit-testing and the rulers all follow for free and NOTHING in the workspace
+moves. Supporting changes: `refit()` swaps its span comparison on odd turns (the
+'a' extent lands on the screen's vertical axis); `drawRulers()` measures
+whichever axis is now vertical via the new `axisWorldPoint()`;
+`structureCentreA()` centres on the axis the horizontal ruler is actually
+measuring (otherwise its zero sits off the structure at 90/270); and
+`drawOrientationLabels()` rotates the four edge labels with the view.
+
+Quarter turns ONLY, deliberately: they preserve handedness, so a rotated plan
+still tells the truth about which side of the stage a fixture is on. "Downstage
+at the top with stage right still on the left" is a MIRROR, which flips the
+sense of every direction on the plot — offered as an option and not chosen.
+
+**Test** (`monitor_test` now 31/31): `viewRotationIsScreenOnlyAndDragStillWorks`
+— stored positions unchanged at every turn, `screenToPlane()` an exact inverse
+of `w2s()` at every turn, the fixture grabbable where drawn, and a DOWNWARD drag
+at 180 degrees RAISES it (the drag follows the cursor, not the world axis).
+
+**NOT done: the main plot's rotation.** It needs a different technique — the
+plot is a QGraphicsView whose items draw their own geometry, so the rotation
+belongs on the view transform, not the projection. Two obstacles, both scoped:
+  - Labels. Nothing uses `ItemIgnoresTransformations`, so every label would turn
+    upside down at 180. Tractable: trussitem/platformitem/toweritem/pipeitem/
+    standitem/targetitem use CHILD text items and can be counter-rotated in one
+    generic pass; only monitorfixtureitem and powersourceitem draw text inline.
+  - **The grid fit.** Under a quarter turn the viewport's width maps to the
+    grid's HEIGHT, so `m_cellPixels`/`m_xOffset`/`m_yOffset` need the same swap
+    refit() got. This is the code behind the "STILL OPENS ZOOMED" saga, so it
+    should land as its OWN commit with its own gate run — isolated and
+    revertible — rather than inside a large mixed diff.
+
+**NOT done: the axonometric view.** `project()` picks two of three coordinates,
+which is exactly why `screenToPlane()` can invert. At an angle a screen point
+maps to a RAY, so the inverse is ambiguous and dragging needs a constraint. The
+mount-basis code from Follow-on 4 already resolves a screen delta onto the
+mount's freedoms by dot product and generalises to any projection, so
+structurally-mounted fixtures would still drag; free-placed ones are the hard
+case. Agreed plan: ship it VIEW-ONLY first (look/measure/screenshot), editing
+stays on Top/Front/Side.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
+---
+
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)
 
 Branson, after the group-editor regression fix let heads show up in the

@@ -496,6 +496,15 @@ public:
      *  move/resize and once after load. See recomputeAnchoredFrames impl. */
     void recomputeAnchoredFrames();
 
+    /** Rebuild the plot item for any fixture that is rigged on a structure but
+     *  has no FxItem -- removeFixture() drops the item and leaves the rig
+     *  props, stranding the fixture out of everything driven by
+     *  fixtureItemsID() (Layers tree, 2D plot) while the studio editor still
+     *  lists it on its structure. Also collapses any fixture carrying more than
+     *  one structural mount down to its primaryMount(). Called once after
+     *  load. */
+    void repairOrphanedMounts();
+
 private:
     QMap<quint32, Truss*> m_trusses;
 
