@@ -126,6 +126,9 @@ private slots:
      *  angles where they coincide, and it must REFUSE drags (there is no honest
      *  inverse for an axonometric). */
     void angledViewProjectsAndRefusesEdits();
+    /** StageKind draws the WHOLE rig: every structure and every placed
+     *  fixture, framed by the fit, and read-only. */
+    void stageOverviewDrawsEveryStructure();
 
 private:
     Doc* m_doc;

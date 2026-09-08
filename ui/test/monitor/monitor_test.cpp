@@ -50,6 +50,9 @@
 #include "qlcphysical.h"
 #include "qlcchannel.h"
 #include "doc.h"
+#include "qlcfile.h"
+#include "qlcfixturedefcache.h"
+#include <QXmlStreamReader>
 
 // Find a visible QPushButton by its exact text anywhere under a widget —
 // QMessageBox's extra buttons (confirmFeatureDelete's "Delete"/"Detach &&
@@ -1504,3 +1507,63 @@ void Monitor_Test::angledViewProjectsAndRefusesEdits()
     QVERIFY2(!qFuzzyCompare(after.x(), before.x()),
              "the flat view stopped editing after visiting the angled one");
 }
+
+void Monitor_Test::stageOverviewDrawsEveryStructure()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    Truss *t = props->addTruss();
+    t->setName("OV Truss"); t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(1.0f, 1.5f, 3.5f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f); t->setWidth(0.3f);
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("OV Deck"); pl->setOriginX(3.0f); pl->setOriginY(5.0f);
+    pl->setWidth(2.4f); pl->setDepth(1.2f); pl->setHeight(0.6f);
+    Tower *tw = props->addTower();
+    tw->setName("OV Tower"); tw->setOriginX(9.0f); tw->setOriginY(2.0f);
+    tw->setWidth(0.5f); tw->setDepth(0.5f); tw->setHeight(3.0f);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("OV PAR"); fxi->setChannels(1); fxi->setAddress(380);
+    QVERIFY(m_doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(2000, 1500, 0));
+    FixtureRigProps rp; rp.trussId = t->id(); rp.trussOffset = 2.0f;
+    props->setFixtureRigProps(fxi->id(), rp);
+
+    StructureStudioView view(m_doc, StructureStudioView::StageKind, 0);
+    view.resize(900, 640);
+    view.reload();
+
+    // Every structure is enumerated, whatever kind it is.
+    const QList<QPair<StructureStudioView::Kind, quint32> > all = view.everyStructure();
+    QVERIFY2(all.size() >= 3, "the overview did not find all three structures");
+
+    // The fit has to FRAME the whole rig, not one object: the truss at x=1..7
+    // and the tower at x=9 must both land inside the widget.
+    view.setPlane(StructureStudioView::Top);
+    foreach (const QPointF &px, QList<QPointF>()
+             << view.w2s(t->origin())
+             << view.w2s(t->positionAt(t->length()))
+             << view.w2s(QVector3D(tw->originX(), tw->originY(), 0)))
+    {
+        QVERIFY2(view.rect().contains(px.toPoint()),
+                 qPrintable(QString("the fit left %1,%2 outside the view")
+                            .arg(px.x()).arg(px.y())));
+    }
+
+    // Fixtures come from the whole plot, not one structure's mount list.
+    QVERIFY(view.mountedFixtures().contains(fxi->id()));
+
+    // Read-only: it is an overview, and the angled plane has no inverse anyway.
+    view.setPlane(StructureStudioView::Angled);
+    QVERIFY(view.isViewOnly());
+    const QVector3D before = props->fixtureRigPosition(fxi->id());
+    QVERIFY(view.dragFixtureTo(fxi->id(), view.w2s(before) + QPointF(50, 30)) == false);
+    QCOMPARE(props->fixtureRigPosition(fxi->id()), before);
+
+    m_doc->deleteFixture(fxi->id());
+    props->removeTruss(t->id());
+    props->removePlatform(pl->id());
+    props->removeTower(tw->id());
+}
+

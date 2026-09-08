@@ -258,6 +258,10 @@ protected:
      *  any workspace) and must never be used as the sentinel. */
     void showFixtureItemEditor(quint32 onlyFid = quint32(~0u));
 
+    /** A read-only angled look at the whole rig (StructureStudioView's
+     *  StageKind). Opened from the View combo's Overview entry. */
+    void showStageOverview();
+
 protected slots:
     /** Slot called when the grid width changes */
     void slotGridWidthChanged(int value);

@@ -768,6 +768,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_overlayCombo->setCurrentIndex(qMax(0, m_overlayCombo->findData(m_mapView)));
     m_overlayCombo->setToolTip(tr("Recolour / filter the plot — click to cycle, "
                                   "arrow for the full list"));
+    m_overlayCombo->setProperty("cycleOnClick", true);
     m_overlayCombo->installEventFilter(this);   // click the box to cycle
     fl->addWidget(m_overlayCombo);
     connect(m_overlayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
@@ -777,6 +778,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     addSep();
     fl->addWidget(new QLabel(tr("View:")));
     m_povCombo->setToolTip(tr("Point of view — click to cycle, arrow for the full list"));
+    m_povCombo->setProperty("cycleOnClick", true);
     m_povCombo->installEventFilter(this);       // click the box to cycle
     fl->addWidget(m_povCombo);
 
@@ -790,6 +792,16 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     plotRotBtn->setToolTip(tr("Turn the plot 90° clockwise. A view setting "
                               "only — nothing in the workspace moves."));
     fl->addWidget(plotRotBtn);
+
+    /* The rig overview opens a WINDOW, so it is an action and belongs on a
+       button -- not an entry in the View list, where every other item is a
+       state the plot can sit in. It sits beside View and the rotate control
+       because it answers the same question: how am I looking at the rig. */
+    QToolButton *overviewBtn = new QToolButton(footer);
+    overviewBtn->setText(QString::fromUtf8("\u2b21 45\u00b0"));
+    overviewBtn->setToolTip(tr("Open an angled, read-only overview of the whole rig"));
+    fl->addWidget(overviewBtn);
+    connect(overviewBtn, &QToolButton::clicked, this, [this]() { showStageOverview(); });
     auto applyPlotRotation = [this, plotRotBtn](int turns) {
         m_graphicsView->setViewRotation(turns);
         static const char *names[] = { "0°", "90°", "180°", "270°" };
@@ -850,9 +862,12 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
 
 bool Monitor::eventFilter(QObject *watched, QEvent *event)
 {
-    // Overlay / View dropdowns: clicking the BOX cycles to the next item; the
-    // drop-down ARROW still opens the full list.
-    if ((watched == m_overlayCombo || watched == m_povCombo || watched == m_dmxViewCombo)
+    /* Clicking the BOX cycles to the next item; the drop-down ARROW still opens
+       the full list. Opted into with a "cycleOnClick" property rather than by
+       naming specific combos, so the feature editors and the rig overview get
+       the same behaviour as the plot -- the whole point being that a View combo
+       works the same wherever it appears. */
+    if (watched->property("cycleOnClick").toBool()
         && event->type() == QEvent::MouseButtonPress)
     {
         QComboBox *cb = static_cast<QComboBox *>(watched);
@@ -1236,6 +1251,7 @@ void Monitor::initDMXToolbar()
     m_dmxViewCombo->addItem(tr("2D \342\200\224 Side"),  int(MonitorGraphicsView::PovSide));
     m_dmxViewCombo->setToolTip(tr("Switch to the 2D map view — click to cycle, "
                                   "arrow for the full list"));
+    m_dmxViewCombo->setProperty("cycleOnClick", true);
     m_dmxViewCombo->installEventFilter(this);   // click the box to cycle
     m_DMXToolBar->addWidget(m_dmxViewCombo);
     connect(m_dmxViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -1891,6 +1907,44 @@ void Monitor::slotToggleLayersPanel(bool show)
     }
 }
 
+void Monitor::showStageOverview()
+{
+    /* A read-only angled look at the whole rig. StructureStudioView already
+       knows how to project and paint a structure and the fixtures on it;
+       StageKind points it at every structure instead of one, so there is a
+       single renderer to keep correct rather than two that drift apart. */
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Rig Overview"));
+    dlg.resize(1100, 760);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+
+    StructureStudioView *view =
+        new StructureStudioView(m_doc, StructureStudioView::StageKind, 0, &dlg);
+    view->setPlane(StructureStudioView::Angled);
+    view->setLocked(true);
+
+    QHBoxLayout *bar = new QHBoxLayout;
+    bar->addWidget(new QLabel(tr("View:"), &dlg));
+    QComboBox *planeCombo = new QComboBox(&dlg);
+    planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side"), tr("45°") });
+    planeCombo->setCurrentIndex(int(StructureStudioView::Angled));
+    planeCombo->setProperty("cycleOnClick", true);   // same as the plot's View
+    planeCombo->installEventFilter(this);
+    planeCombo->setToolTip(tr("Click to cycle, arrow for the full list"));
+    bar->addWidget(planeCombo);
+    connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view](int i) { view->setPlane(StructureStudioView::Plane(i)); });
+    bar->addStretch();
+    bar->addWidget(new QLabel(tr("Drag to swing the view — read-only"), &dlg));
+    vl->addLayout(bar);
+    vl->addWidget(view, 1);
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    vl->addWidget(bb);
+    dlg.exec();
+}
+
 void Monitor::slotPOVChanged(int index)
 {
     if (m_graphicsView == NULL || m_povCombo == NULL)
@@ -2448,6 +2502,10 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     planeCombo->setItemData(3, tr("An angled look from above and to the side. "
                                   "For viewing only — drag in Top / Front / Side "
                                   "to move things."), Qt::ToolTipRole);
+    // Click-to-cycle, exactly as the plot's View combo behaves.
+    planeCombo->setProperty("cycleOnClick", true);
+    planeCombo->installEventFilter(this);
+    planeCombo->setToolTip(tr("Click to cycle, arrow for the full list"));
     bar->addWidget(planeCombo);
     /* Turn the view in quarter steps. Some designers read a plan with downstage
        at the TOP; 180 degrees gives them that. It is a view transform only --

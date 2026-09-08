@@ -445,6 +445,62 @@ is studio-editor only -- the main plot does not have it.
 
 `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 10: rig overview — solid geometry, correct fixture sizes, consistent controls
+
+Branson's six points after trying the overview, all addressed.
+
+**Billboarding.** "the trusses and towers are rotating in view as I rotate so
+they're always flat." The truss took its cross-section from a SCREEN-space
+perpendicular (`perp(-dir.y(), dir.x())`), so it turned to face the viewer
+however the camera swung; the tower drew an axis-aligned rect between two
+projected corners. Both now build an ORIENTED box from world axes (for a
+horizontal run: the horizontal normal and straight up; for a vertical run: X and
+Y) via the new `drawSolidBox()`, whose six faces are depth-sorted back-to-front
+and shaded by orientation. Truss webbing is drawn on whichever long face is
+nearest, so it still reads as a truss and not a girder.
+
+**See-through platforms.** They were `fill.setAlpha(70)` -- literally panes of
+glass, so stacked steps showed through each other. Now 235, and drawn as real
+boxes in the angled view. Fixtures paint after structures, so they still show on
+top of the deck they sit on.
+
+**The oversized UST beams.** Branson: "is that based off the measurements in the
+fixture def?" The definition is honest -- a Junman "Two Arm LED Beam" declares
+510 mm. `moverBaseRadius()` returned half the WHOLE fixture width, then the
+drawing gave each of its 3 heads `1.3x` that, spaced `2.6x` apart: about **3.9x
+too wide**. The comment beside that code already said each head should sit "in
+its own equal slice of the fixture's width" -- the arithmetic simply did not do
+it. New `moverWidthPx()` is the fixture's real width and `moverBaseRadius()` is
+half of ONE head's slice, so N heads fill exactly the declared width.
+`hitTestFixture()`'s mover branch was updated in the same commit, or the
+clickable area would have drifted from what is drawn.
+
+**Entry point.** "if we're gonna do a click out like this .. should be under
+view and/or a single button to open it not in the views menu." Right: every
+other View entry is a STATE the plot sits in, and this one opens a window. Now a
+`⬡ 45°` button beside View and the rotate control.
+
+**Consistent controls.** "can we have the view menu click to iterate like the
+one on the stage view? Generally i'd like the behavior between stage view and
+feature editor be consistent." Click-to-cycle is now opted into with a
+`cycleOnClick` PROPERTY instead of `eventFilter()` naming three specific combos,
+so the plot's View, the feature editor's View and the overview's View behave
+identically -- and any future combo is one line.
+
+**Also:** the flat "floor" line cut straight through the rig at an angle and
+read as a wall behind it. Replaced in the Angled plane by a ground grid over the
+rig's own footprint, which recedes with the projection.
+
+LESSON (again): the fat bars in the FIRST overview render were reported here as
+bad Physical data in Branson's fixture library. That was wrong. The test harness
+had not loaded the fixture-definition cache, so every lookup fell back to
+`Fixture::genericDimmerMode()`, which synthesises `300 * channels`. The tell was
+that physW was exactly channels*300 for every fixture. Load
+`fixtureDefCache()->load(userDefinitionDirectory())` +
+`loadMap(systemDefinitionDirectory())` in any test that opens a real workspace.
+
+`monitor_test` 34/34. `check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

@@ -29,6 +29,8 @@
 #include <QVector3D>
 #include <QList>
 #include <QSet>
+#include <QPair>
+#include <QVector>
 
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
 
@@ -44,7 +46,10 @@ class StructureStudioView : public QWidget
 
 public:
     enum Kind  { StandKind = 0, TowerKind = 1, TrussKind = 2,
-                 PlatformKind = 3, PipeKind = 4, GroupKind = 5 };
+                 PlatformKind = 3, PipeKind = 4, GroupKind = 5,
+                 /** The WHOLE rig rather than one object: every structure and
+                  *  every placed fixture, for an overview. Read-only. */
+                 StageKind = 6 };
     /** Top/Front/Side are the axis-aligned working planes -- each drops one
      *  world axis, which is exactly why a screen point can be turned back into
      *  a world one and fixtures can be DRAGGED in them.
@@ -88,6 +93,7 @@ public:
 
     /** Fixtures currently mounted on this structure (for the side tree). */
     QList<quint32> mountedFixtures() const;
+    QList<quint32> mountedFixtures(Kind kind, quint32 id) const;
 
     /** Ring-highlight a set of fixtures (driven by the tree selection). */
     void setHighlight(const QList<quint32> &ids);
@@ -150,9 +156,21 @@ private:
     bool dragFixtureTo(quint32 fid, const QPointF &px);
     void refit();                                    ///< scale/centre to fit everything
     void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame
+    void collectPointsFor(QList<QVector3D> &pts, Kind kind, quint32 id) const;
+    /** Every structure in the workspace, for StageKind. */
+    QList<QPair<Kind, quint32> > everyStructure() const;
 
     void drawGrid(QPainter &p) const;
     void drawStructure(QPainter &p) const;
+    void drawOneStructure(QPainter &p, Kind kind, quint32 id) const;
+
+    /** Distance from the eye, for back-to-front face ordering (Angled only). */
+    double viewDepth(const QVector3D &w) const;
+    /** Paint a solid box from its eight world corners, faces sorted by depth
+     *  and shaded by orientation -- what stops a structure being a billboard
+     *  that turns to face the viewer. */
+    void drawSolidBox(QPainter &p, const QVector3D corner[8],
+                      const QColor &base, const QColor &edge) const;
     void drawPipe(QPainter &p, const class Pipe *pipe) const;
     void drawFixtures(QPainter &p) const;
     void drawDimensions(QPainter &p) const;   ///< feature width/height labels (ft/m)
@@ -216,11 +234,13 @@ private:
      *  otherwise falls back to the hasFocus heuristic (a focus/zoom channel
      *  implies a physically larger lens assembly). */
     double moverBaseRadius(const struct FixtureVisualTraits &traits) const;
+    /** Total on-screen width of a mover unit (its declared Physical width). */
+    double moverWidthPx(const struct FixtureVisualTraits &traits) const;
     /** For the anchor platform: which local component the given face pins, and to
      *  what value. mount 0=Top(pin Z),1=Front(pin Y),2=Side(pin X). */
     void facePin(int mount, int &pinComp, double &pinVal) const;
 
-    QList<const class Pipe *> standPipes() const;    ///< pipes on this stand (Kind==Stand)
+    QList<const class Pipe *> standPipes(quint32 id) const;  ///< pipes on that stand
 
 private:
     Doc     *m_doc;

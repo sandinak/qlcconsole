@@ -397,15 +397,76 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
  * Structure gathering
  *********************************************************************/
 
-QList<const Pipe *> StructureStudioView::standPipes() const
+
+/* StageKind draws the WHOLE rig rather than one object.
+ *
+ * The per-object drawing, point-gathering and fixture-listing were already
+ * written and tested for the single-structure editor; they just assumed the one
+ * structure the dialog was opened on. Parameterising them on (kind, id) and
+ * looping is all a whole-stage overview needs -- no second renderer to keep in
+ * step with the first, which is the thing that would rot. */
+QList<QPair<StructureStudioView::Kind, quint32> > StructureStudioView::everyStructure() const
 {
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<QPair<Kind, quint32> > out;
+    foreach (Truss *t, props->trusses())
+        if (t != nullptr) out << qMakePair(TrussKind, t->id());
+    foreach (StagePlatform *pl, props->platforms())
+        if (pl != nullptr) out << qMakePair(PlatformKind, pl->id());
+    foreach (Tower *tw, props->towers())
+        if (tw != nullptr) out << qMakePair(TowerKind, tw->id());
+    foreach (Stand *st, props->stands())
+        if (st != nullptr) out << qMakePair(StandKind, st->id());
+    foreach (Pipe *pp, props->pipes())
+        if (pp != nullptr && !pp->isBarOnPipe()) out << qMakePair(PipeKind, pp->id());
+    return out;
+}
+
+void StructureStudioView::drawStructure(QPainter &p) const
+{
+    if (m_kind != StageKind)
+    {
+        drawOneStructure(p, m_kind, m_id);
+        return;
+    }
+    typedef QPair<Kind, quint32> KindId;
+    foreach (const KindId &ki, everyStructure())
+        drawOneStructure(p, ki.first, ki.second);
+}
+
+void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
+{
+    if (m_kind != StageKind)
+    {
+        collectPointsFor(pts, m_kind, m_id);
+        return;
+    }
+    typedef QPair<Kind, quint32> KindId;
+    foreach (const KindId &ki, everyStructure())
+        collectPointsFor(pts, ki.first, ki.second);
+    // Free-standing fixtures are part of the rig too, so the fit must frame them.
+    MonitorProperties *props = m_doc->monitorProperties();
+    foreach (quint32 fid, props->fixtureItemsID())
+        pts << props->fixtureRigPosition(fid);
+}
+
+QList<quint32> StructureStudioView::mountedFixtures() const
+{
+    if (m_kind != StageKind)
+        return mountedFixtures(m_kind, m_id);
+    // The whole rig: everything that has a place on the plot.
+    return m_doc->monitorProperties()->fixtureItemsID();
+}
+
+QList<const Pipe *> StructureStudioView::standPipes(quint32 id) const
+{
+    // No kind guard: the callers ask for a specific stand's pipes, and the
+    // whole-rig overview needs them for stands other than the one being edited.
     QList<const Pipe *> out;
-    if (m_kind != StandKind)
-        return out;
     MonitorProperties *props = m_doc->monitorProperties();
     QList<quint32> booms;
     foreach (Pipe *p, props->pipes())
-        if (p->standId() == m_id)
+        if (p->standId() == id)
         {
             out << p;
             booms << p->id();
@@ -417,22 +478,22 @@ QList<const Pipe *> StructureStudioView::standPipes() const
     return out;
 }
 
-QList<quint32> StructureStudioView::mountedFixtures() const
+QList<quint32> StructureStudioView::mountedFixtures(Kind kind, quint32 id) const
 {
     QList<quint32> out;
     MonitorProperties *props = m_doc->monitorProperties();
 
     QList<quint32> pipeIds;
-    if (m_kind == StandKind)
+    if (kind == StandKind)
     {
-        foreach (const Pipe *p, standPipes())
+        foreach (const Pipe *p, standPipes(id))
             pipeIds << p->id();
     }
-    else if (m_kind == PipeKind)
+    else if (kind == PipeKind)
     {
-        pipeIds << m_id;   // this pipe + any crossbars hung on it
+        pipeIds << id;   // this pipe + any crossbars hung on it
         foreach (Pipe *p, props->pipes())
-            if (p->isBarOnPipe() && p->parentPipeId() == m_id)
+            if (p->isBarOnPipe() && p->parentPipeId() == id)
                 pipeIds << p->id();
     }
 
@@ -442,17 +503,17 @@ QList<quint32> StructureStudioView::mountedFixtures() const
             continue;
         const FixtureRigProps &rp = props->fixtureRigProps(fx->id());
         bool on = false;
-        if (m_kind == StandKind || m_kind == PipeKind)
+        if (kind == StandKind || kind == PipeKind)
             on = (rp.pipeId != Pipe::invalidId() && pipeIds.contains(rp.pipeId));
-        else if (m_kind == TowerKind)
-            on = (rp.towerId == m_id);
-        else if (m_kind == TrussKind)
-            on = (rp.trussId == m_id);
-        else if (m_kind == GroupKind)
-            on = (props->fixtureFrameGroup(fx->id()) == m_id);
-        else if (m_kind == PlatformKind)
+        else if (kind == TowerKind)
+            on = (rp.towerId == id);
+        else if (kind == TrussKind)
+            on = (rp.trussId == id);
+        else if (kind == GroupKind)
+            on = (props->fixtureFrameGroup(fx->id()) == id);
+        else if (kind == PlatformKind)
         {
-            on = (rp.riserPlatformId == m_id || rp.deckPlatformId == m_id);
+            on = (rp.riserPlatformId == id || rp.deckPlatformId == id);
             if (!on)
             {
                 // Also include fixtures laid out via a studio FRAME group that is
@@ -462,7 +523,7 @@ QList<quint32> StructureStudioView::mountedFixtures() const
                 if (fg != 0)
                 {
                     const MonitorProperties::MonitorGroup g = props->group(fg);
-                    if (g.anchorKind == QStringLiteral("platform") && g.anchorId == m_id)
+                    if (g.anchorKind == QStringLiteral("platform") && g.anchorId == id)
                         on = true;
                 }
             }
@@ -473,13 +534,13 @@ QList<quint32> StructureStudioView::mountedFixtures() const
     return out;
 }
 
-void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
+void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, quint32 id) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
 
-    if (m_kind == StandKind)
+    if (kind == StandKind)
     {
-        if (Stand *s = props->stand(m_id))
+        if (Stand *s = props->stand(id))
         {
             pts << QVector3D(s->originX(), s->originY(), 0.0f);
             pts << s->topPos();
@@ -487,49 +548,49 @@ void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
             pts << QVector3D(s->originX() - br, s->originY() - br, 0.0f);
             pts << QVector3D(s->originX() + br, s->originY() + br, 0.0f);
         }
-        foreach (const Pipe *p, standPipes())
+        foreach (const Pipe *p, standPipes(id))
         {
             pts << p->positionAt(0.0f);
             pts << p->positionAt(p->length());
         }
     }
-    else if (m_kind == TowerKind)
+    else if (kind == TowerKind)
     {
-        if (Tower *t = props->tower(m_id))
+        if (Tower *t = props->tower(id))
         {
             pts << QVector3D(t->originX(), t->originY(), 0.0f);
             pts << QVector3D(t->originX() + t->width(), t->originY() + t->depth(), t->height());
         }
     }
-    else if (m_kind == TrussKind)
+    else if (kind == TrussKind)
     {
-        if (Truss *t = props->truss(m_id))
+        if (Truss *t = props->truss(id))
         {
             pts << t->origin();
             pts << t->positionAt(t->length());
         }
     }
-    else if (m_kind == PlatformKind)
+    else if (kind == PlatformKind)
     {
-        if (StagePlatform *pl = props->platform(m_id))
+        if (StagePlatform *pl = props->platform(id))
             for (int i = 0; i < 8; ++i)
                 pts << QVector3D(pl->originX() + ((i & 1) ? pl->width() : 0.0f),
                                  pl->originY() + ((i & 2) ? pl->depth() : 0.0f),
                                  (i & 4) ? pl->height() : 0.0f);
     }
-    else if (m_kind == PipeKind)
+    else if (kind == PipeKind)
     {
-        if (Pipe *p = props->pipe(m_id))
+        if (Pipe *p = props->pipe(id))
         {
             pts << p->positionAt(0.0f) << p->positionAt(p->length());
             foreach (Pipe *cb, props->pipes())
-                if (cb->isBarOnPipe() && cb->parentPipeId() == m_id)
+                if (cb->isBarOnPipe() && cb->parentPipeId() == id)
                     pts << cb->positionAt(0.0f) << cb->positionAt(cb->length());
         }
     }
-    else if (m_kind == GroupKind)
+    else if (kind == GroupKind)
     {
-        pts << props->group(m_id).origin;   // members added below
+        pts << props->group(id).origin;   // members added below
     }
 
     foreach (quint32 fid, mountedFixtures())
@@ -589,6 +650,40 @@ void StructureStudioView::drawGrid(QPainter &p) const
         p.drawLine(QPointF(0, o.y()), QPointF(width(), o.y()));
         p.drawLine(QPointF(o.x(), 0), QPointF(o.x(), height()));
     }
+    else if (m_plane == Angled)
+    {
+        /* At an angle the floor is a receding PLANE, not a line across the
+           canvas -- a flat horizontal rule cut straight through the rig and
+           read as a wall behind it. Draw a ground grid over the rig's own
+           footprint so the structures have something to stand on. */
+        QList<QVector3D> pts;
+        collectPoints(pts);
+        if (pts.isEmpty())
+            return;
+        double x0 = pts.first().x(), x1 = x0, y0 = pts.first().y(), y1 = y0;
+        foreach (const QVector3D &w, pts)
+        {
+            x0 = qMin(x0, double(w.x())); x1 = qMax(x1, double(w.x()));
+            y0 = qMin(y0, double(w.y())); y1 = qMax(y1, double(w.y()));
+        }
+        const double pad = qMax(0.5, qMax(x1 - x0, y1 - y0) * 0.06);
+        x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+
+        const double step = qMax(0.5, qRound((x1 - x0) / 12.0 * 2.0) / 2.0);
+        p.setPen(QPen(QColor(58, 62, 72), 1.0));
+        for (double x = x0; x <= x1 + 1e-6; x += step)
+            p.drawLine(w2s(QVector3D(float(x), float(y0), 0)),
+                       w2s(QVector3D(float(x), float(y1), 0)));
+        for (double y = y0; y <= y1 + 1e-6; y += step)
+            p.drawLine(w2s(QVector3D(float(x0), float(y), 0)),
+                       w2s(QVector3D(float(x1), float(y), 0)));
+        p.setPen(QPen(QColor(92, 96, 108), 1.4));
+        QPolygonF edge;
+        edge << w2s(QVector3D(float(x0), float(y0), 0)) << w2s(QVector3D(float(x1), float(y0), 0))
+             << w2s(QVector3D(float(x1), float(y1), 0)) << w2s(QVector3D(float(x0), float(y1), 0));
+        p.setBrush(Qt::NoBrush);
+        p.drawPolygon(edge);
+    }
     else
     {
         const double y0 = w2s(QVector3D(0, 0, 0)).y();
@@ -613,7 +708,81 @@ void StructureStudioView::drawPipe(QPainter &p, const Pipe *pipe) const
     p.drawEllipse(b, 2.5, 2.5);
 }
 
-void StructureStudioView::drawStructure(QPainter &p) const
+/* How far a world point is from the eye, for painter's-algorithm ordering.
+ * Only meaningful in the Angled plane; the flat views draw in a fixed order. */
+double StructureStudioView::viewDepth(const QVector3D &w) const
+{
+    const double A = qDegreesToRadians(m_azimuthDeg);
+    const double E = qDegreesToRadians(m_elevationDeg);
+    // The view direction derived in project(): d = (-sinA cosE, -cosA cosE, -sinE).
+    return -(double(w.x()) * -qSin(A) * qCos(E)
+             + double(w.y()) * -qCos(A) * qCos(E)
+             + double(w.z()) * -qSin(E));
+}
+
+/* Paint a solid box from its eight world corners.
+ *
+ * The flat views can draw a structure as a rectangle because one axis is
+ * dropped; at an angle that same rectangle is a BILLBOARD -- it turns to face
+ * the viewer however the camera swings, so a truss stayed edge-on flat and a
+ * platform stayed a flat pane no matter where you stood. Projecting the real
+ * corners and filling the faces back-to-front is what makes a box look like a
+ * box. Faces are shaded by orientation so the form reads without any lighting
+ * model: tops brightest, then the two side pairs.
+ *
+ * Corner order is the unit cube: 0-3 the bottom face (CCW), 4-7 the top. */
+void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
+                                       const QColor &base, const QColor &edge) const
+{
+    static const int faces[6][4] = {
+        { 4, 5, 6, 7 },   // top
+        { 0, 1, 2, 3 },   // bottom
+        { 0, 1, 5, 4 },   // side
+        { 2, 3, 7, 6 },   // side
+        { 1, 2, 6, 5 },   // end
+        { 3, 0, 4, 7 },   // end
+    };
+    static const int shade[6] = { 118, 62, 92, 78, 100, 85 };   // % brightness
+
+    // Back to front, so nearer faces cover the ones behind them.
+    QVector<QPair<double, int> > order;
+    for (int f = 0; f < 6; ++f)
+    {
+        double d = 0.0;
+        for (int k = 0; k < 4; ++k)
+            d += viewDepth(corner[faces[f][k]]);
+        order << qMakePair(d / 4.0, f);
+    }
+    std::sort(order.begin(), order.end(),
+              [](const QPair<double, int> &a, const QPair<double, int> &b)
+              { return a.first > b.first; });
+
+    foreach (const auto &o, order)
+    {
+        const int f = o.second;
+        QPolygonF poly;
+        for (int k = 0; k < 4; ++k)
+            poly << w2s(corner[faces[f][k]]);
+        QColor c = base;
+        c = (shade[f] >= 100) ? c.lighter(shade[f]) : c.darker(200 - shade[f]);
+        c.setAlpha(255);                       // solid: a deck is not a window
+        p.setBrush(c);
+        p.setPen(QPen(edge, 1.1));
+        p.drawPolygon(poly);
+    }
+}
+
+/* The eight corners of an axis-aligned world box. */
+static void boxCorners(QVector3D out[8], float x0, float y0, float z0,
+                       float x1, float y1, float z1)
+{
+    out[0] = QVector3D(x0, y0, z0); out[1] = QVector3D(x1, y0, z0);
+    out[2] = QVector3D(x1, y1, z0); out[3] = QVector3D(x0, y1, z0);
+    out[4] = QVector3D(x0, y0, z1); out[5] = QVector3D(x1, y0, z1);
+    out[6] = QVector3D(x1, y1, z1); out[7] = QVector3D(x0, y1, z1);
+}
+
+void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const QColor steel(150, 154, 165);
@@ -641,9 +810,9 @@ void StructureStudioView::drawStructure(QPainter &p) const
         }
     };
 
-    if (m_kind == StandKind)
+    if (kind == StandKind)
     {
-        Stand *s = props->stand(m_id);
+        Stand *s = props->stand(id);
         if (s == nullptr) return;
         drawFloorPlate(s->originX(), s->originY(), s->baseRadius());
         const float br = s->baseRadius();
@@ -670,7 +839,7 @@ void StructureStudioView::drawStructure(QPainter &p) const
         p.drawLine(w2s(QVector3D(s->originX(), s->originY(), 0)), w2s(s->topPos()));
         // Booms/bars on it — draw a grab handle at each boom TOP (drag = resize
         // the hangable length).
-        foreach (const Pipe *pipe, standPipes())
+        foreach (const Pipe *pipe, standPipes(id))
         {
             drawPipe(p, pipe);
             if (pipe->isVertical())
@@ -682,15 +851,30 @@ void StructureStudioView::drawStructure(QPainter &p) const
             }
         }
     }
-    else if (m_kind == TowerKind)
+    else if (kind == TowerKind)
     {
-        Tower *t = props->tower(m_id);
+        Tower *t = props->tower(id);
         if (t == nullptr) return;
         const float x0 = t->originX(), y0 = t->originY();
         const float x1 = x0 + t->width(), y1 = y0 + t->depth(), h = t->height();
         p.setPen(QPen(steel, 1.8));
         p.setBrush(QColor(90, 100, 120, 60));
-        if (m_plane == Top)
+        if (m_plane == Angled)
+        {
+            // A real box, so the tower keeps its footprint as the camera swings
+            // instead of turning to face the viewer.
+            QVector3D c[8];
+            boxCorners(c, x0, y0, 0.0f, x1, y1, h);
+            drawSolidBox(p, c, QColor(96, 106, 126), steel.lighter(150));
+            // Shelves still read as lines across the front face.
+            p.setPen(QPen(steel.lighter(140), 1.6));
+            for (int i = 0; i < t->shelfCount(); ++i)
+            {
+                const float z = t->shelfHeight(i);
+                p.drawLine(w2s(QVector3D(x0, y1, z)), w2s(QVector3D(x1, y1, z)));
+            }
+        }
+        else if (m_plane == Top)
         {
             const QPointF a = w2s(QVector3D(x0, y0, 0));
             const QPointF b = w2s(QVector3D(x1, y1, 0));
@@ -723,14 +907,80 @@ void StructureStudioView::drawStructure(QPainter &p) const
             }
         }
     }
-    else if (m_kind == TrussKind)
+    else if (kind == TrussKind)
     {
-        Truss *t = props->truss(m_id);
+        Truss *t = props->truss(id);
         if (t == nullptr) return;
         // Base plate FIRST (under the truss) so a floor-standing vertical truss
         // reads clearly; the truss body draws on top.
         if (t->type() == Truss::Vertical && t->origin().z() <= 0.05f)
             drawFloorPlate(t->origin().x(), t->origin().y(), qMax(t->width(), 0.3f));
+
+        if (m_plane == Angled)
+        {
+            /* An ORIENTED box along the run. The flat-view code below takes the
+               perpendicular in SCREEN space, which is a billboard: the truss
+               would keep its face turned to the viewer however the camera
+               swung, so it always looked flat. Build the cross-section from
+               world axes instead and it foreshortens like the solid it is. */
+            const QVector3D A = t->origin();
+            const QVector3D B = t->positionAt(t->length());
+            QVector3D L = B - A;
+            if (L.length() > 1e-6f)
+            {
+                L.normalize();
+                // Cross-section axes: for a vertical run the section lies in
+                // X/Y; otherwise it is the horizontal normal and straight up.
+                QVector3D C, U;
+                if (t->type() == Truss::Vertical)
+                {
+                    C = QVector3D(1, 0, 0);
+                    U = QVector3D(0, 1, 0);
+                }
+                else
+                {
+                    const QPointF d = t->direction();
+                    const double dl = std::hypot(d.x(), d.y());
+                    C = (dl > 1e-9) ? QVector3D(float(-d.y() / dl), float(d.x() / dl), 0.0f)
+                                    : QVector3D(0, 1, 0);
+                    U = QVector3D(0, 0, 1);
+                }
+                const float hw = qMax(0.05f, t->width()) * 0.5f;
+                const QVector3D c1 = C * hw, u1 = U * hw;
+                QVector3D corner[8];
+                corner[0] = A - c1 - u1; corner[1] = B - c1 - u1;
+                corner[2] = B + c1 - u1; corner[3] = A + c1 - u1;
+                corner[4] = A - c1 + u1; corner[5] = B - c1 + u1;
+                corner[6] = B + c1 + u1; corner[7] = A + c1 + u1;
+                drawSolidBox(p, corner, QColor(146, 150, 162), steel.lighter(150));
+
+                // Webbing on whichever long face is nearest, so it still reads
+                // as a truss rather than a plain girder.
+                const int longFaces[4][4] = { {0,1,5,4}, {2,3,7,6}, {4,5,6,7}, {0,1,2,3} };
+                int best = 0; double bestD = 1e18;
+                for (int f = 0; f < 4; ++f)
+                {
+                    double dsum = 0.0;
+                    for (int k = 0; k < 4; ++k) dsum += viewDepth(corner[longFaces[f][k]]);
+                    if (dsum / 4.0 < bestD) { bestD = dsum / 4.0; best = f; }
+                }
+                const QVector3D &p0 = corner[longFaces[best][0]];
+                const QVector3D &p1 = corner[longFaces[best][1]];
+                const QVector3D &p2 = corner[longFaces[best][2]];
+                const QVector3D &p3 = corner[longFaces[best][3]];
+                const int bays = qMax(1, int(t->length() / qMax(0.35f, t->width() * 2.0f)));
+                p.setPen(QPen(steel.lighter(135), 1.1));
+                for (int i = 0; i < bays; ++i)
+                {
+                    const float s0 = float(i) / bays, s1 = float(i + 1) / bays;
+                    const QVector3D lo0 = p0 + (p1 - p0) * s0, lo1 = p0 + (p1 - p0) * s1;
+                    const QVector3D hi0 = p3 + (p2 - p3) * s0, hi1 = p3 + (p2 - p3) * s1;
+                    if (i % 2 == 0) p.drawLine(w2s(lo0), w2s(hi1));
+                    else            p.drawLine(w2s(hi0), w2s(lo1));
+                }
+            }
+            return;
+        }
 
         const QPointF a = w2s(t->origin());
         const QPointF b = w2s(t->positionAt(t->length()));
@@ -769,15 +1019,19 @@ void StructureStudioView::drawStructure(QPainter &p) const
             }
         }
     }
-    else if (m_kind == PlatformKind)
+    else if (kind == PlatformKind)
     {
-        StagePlatform *pl = props->platform(m_id);
+        StagePlatform *pl = props->platform(id);
         if (pl == nullptr) return;
         const float x0 = pl->originX(), y0 = pl->originY();
         const float x1 = x0 + pl->width(), y1 = y0 + pl->depth(), h = pl->height();
         // Use the platform's own colour (its colour-picker value), like the 2D map.
         QColor pc = pl->color().isValid() ? pl->color() : QColor(110, 120, 140);
-        QColor fill = pc; fill.setAlpha(70);
+        /* Solid. These were alpha 70, so decks read as panes of glass: stacked
+           steps showed through each other and you could see the floor through a
+           riser. Fixtures are painted after the structures, so they still show
+           on top of the deck they sit on. */
+        QColor fill = pc; fill.setAlpha(235);
         // Crisp edge: a dark halo under a bright outline so the outline reads on
         // the dark canvas AND where platforms overlap (stacked steps).
         const QColor halo = pc.darker(230);
@@ -791,7 +1045,15 @@ void StructureStudioView::drawStructure(QPainter &p) const
             p.setPen(QPen(edge, 1.6));
             p.drawRect(r);
         };
-        if (m_plane == Top)
+        if (m_plane == Angled)
+        {
+            // A deck is a solid box, not a pane: project its real corners.
+            const float b0 = props->platformBaseZ(id);
+            QVector3D c[8];
+            boxCorners(c, x0, y0, b0, x1, y1, b0 + h);
+            drawSolidBox(p, c, pc, edge);
+        }
+        else if (m_plane == Top)
         {
             outline(QRectF(w2s(QVector3D(x0, y0, 0)), w2s(QVector3D(x1, y1, 0))).normalized());
         }
@@ -799,7 +1061,7 @@ void StructureStudioView::drawStructure(QPainter &p) const
         {
             // Riser box silhouette from its BASE (which may sit on a lower
             // platform, not the floor) up to its deck top (base + own thickness).
-            const float b0  = props->platformBaseZ(m_id);
+            const float b0  = props->platformBaseZ(id);
             const float top = b0 + h;
             const QPointF a = w2s(QVector3D(x0, y0, b0));
             const QPointF b = w2s(QVector3D(x1, y1, top));
@@ -808,9 +1070,9 @@ void StructureStudioView::drawStructure(QPainter &p) const
             p.drawLine(w2s(QVector3D(x0, y0, top)), w2s(QVector3D(x1, y1, top)));
         }
     }
-    else if (m_kind == PipeKind)
+    else if (kind == PipeKind)
     {
-        Pipe *pipe = props->pipe(m_id);
+        Pipe *pipe = props->pipe(id);
         if (pipe == nullptr) return;
         // The stand post underneath, if this pipe stands on one.
         if (pipe->isStandMounted())
@@ -822,13 +1084,13 @@ void StructureStudioView::drawStructure(QPainter &p) const
             }
         drawPipe(p, pipe);
         foreach (Pipe *cb, props->pipes())      // crossbars on this pipe
-            if (cb->isBarOnPipe() && cb->parentPipeId() == m_id)
+            if (cb->isBarOnPipe() && cb->parentPipeId() == id)
                 drawPipe(p, cb);
     }
-    else if (m_kind == GroupKind)
+    else if (kind == GroupKind)
     {
         // A studio frame group: mark its local-frame origin (fixtures draw on top).
-        const QPointF o = w2s(props->group(m_id).origin);
+        const QPointF o = w2s(props->group(id).origin);
         p.setPen(QPen(QColor(120, 160, 200, 160), 1.0, Qt::DashLine));
         p.drawLine(o - QPointF(9, 0), o + QPointF(9, 0));
         p.drawLine(o - QPointF(0, 9), o + QPointF(0, 9));
@@ -944,11 +1206,30 @@ QRectF StructureStudioView::towerFixtureBodyRect(quint32 fid) const
 // fixturevisualtraits.{h,cpp}, shared with MonitorFixtureItem's 2D plan view
 // so both renderers agree on what a fixture "is" from the same classifier.
 
-double StructureStudioView::moverBaseRadius(const FixtureVisualTraits &traits) const
+/* How wide a mover unit is on screen, in total.
+ *
+ * The declared Physical width is the width of the WHOLE fixture, heads
+ * included -- a Junman "Two Arm LED Beam" says 510 mm for the entire bar. */
+double StructureStudioView::moverWidthPx(const FixtureVisualTraits &traits) const
 {
     if (traits.physW > 0.0f)
-        return qMax(6.0, double(traits.physW) * 0.5 * m_scale);
-    return traits.hasFocus ? 9.0 : 6.5;
+        return qMax(12.0, double(traits.physW) * m_scale);
+    // Nothing declared: a sane default per head.
+    return (traits.hasFocus ? 18.0 : 13.0) * qMax(1, traits.headCount);
+}
+
+/* The radius of ONE head, which is half its slice of the fixture's width.
+ *
+ * This used to return half the whole fixture's width and then draw every head
+ * at 1.3x that, spaced 2.6x apart -- so an N-head fixture came out about 3.9*N
+ * times its real size. The comment beside the drawing code already said each
+ * head should sit "in its own equal slice of the fixture's width"; the
+ * arithmetic just did not. The eight 3-head UST beams were drawn nearly four
+ * times too big because of it. */
+double StructureStudioView::moverBaseRadius(const FixtureVisualTraits &traits) const
+{
+    const int units = qMax(1, traits.headCount);
+    return qMax(3.0, moverWidthPx(traits) / (2.0 * units));
 }
 
 /* The fixture's own box, projected into the current plane.
@@ -1019,6 +1300,11 @@ void StructureStudioView::drawFixtures(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     p.setFont(QFont("Arial", 8));
+    /* Names are useful when a handful of fixtures are on one structure; across
+       the WHOLE rig they are a wall of overlapping text that hides the thing
+       you opened the overview to look at. Show them only for what is selected
+       there. */
+    const bool nameEveryone = (m_kind != StageKind);
     foreach (quint32 fid, mountedFixtures())
     {
         Fixture *fx = m_doc->fixture(fid);
@@ -1081,7 +1367,8 @@ void StructureStudioView::drawFixtures(QPainter &p) const
             if (fx != nullptr)
             {
                 p.setPen(QColor(210, 214, 220));
-                p.drawText(QPointF(r.right() + 4, c.y() - 6), fx->name());
+                if (nameEveryone || hi)
+                    p.drawText(QPointF(r.right() + 4, c.y() - 6), fx->name());
             }
             continue;
         }
@@ -1107,12 +1394,12 @@ void StructureStudioView::drawFixtures(QPainter &p) const
                 const QPointF dir = b - a;
                 const double dlen = qSqrt(dir.x() * dir.x() + dir.y() * dir.y());
                 const QPointF unit = (dlen > 1e-6) ? dir / dlen : QPointF(1, 0);
-                const double spacing = baseR * 2.6;
+                const double spacing = baseR * 2.0;   // == one slice
                 for (int u = 0; u < units; ++u)
                 {
                     const double off = (u - (units - 1) * 0.5) * spacing;
                     const QPointF hc = c + unit * off;
-                    const double half = baseR * 1.3;
+                    const double half = baseR;
                     const QPainterPath body = moverPlanPath(QRectF(hc.x() - half, hc.y() - half, half * 2, half * 2));
                     if (hi)
                     {
@@ -1127,7 +1414,7 @@ void StructureStudioView::drawFixtures(QPainter &p) const
             }
             else
             {
-                const double halfW = baseR * 1.3 * units;
+                const double halfW = moverWidthPx(traits) * 0.5;
                 const double totalH = baseR * 3.2;
                 const QPainterPath body = moverElevationPath(
                     QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH), false, units);
@@ -1263,7 +1550,8 @@ void StructureStudioView::drawFixtures(QPainter &p) const
         if (fx != nullptr)
         {
             p.setPen(QColor(210, 214, 220));
-            p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
+            if (nameEveryone || hi)
+                p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
         }
     }
 }
@@ -1428,7 +1716,7 @@ void StructureStudioView::drawDimensions(QPainter &p) const
                                            << QVector3D(t->originX() + t->width(), t->originY() + t->depth(), t->height()); }
     else if (m_kind == StandKind)
     { if (Stand *s = props->stand(m_id)) { c << QVector3D(s->originX(), s->originY(), 0) << s->topPos();
-        foreach (const Pipe *pp, standPipes()) c << pp->positionAt(0) << pp->positionAt(pp->length()); } }
+        foreach (const Pipe *pp, standPipes(m_id)) c << pp->positionAt(0) << pp->positionAt(pp->length()); } }
     else if (m_kind == TrussKind)
     { if (Truss *t = props->truss(m_id)) c << t->origin() << t->positionAt(t->length()); }
     else if (m_kind == PipeKind)
@@ -1519,7 +1807,7 @@ double StructureStudioView::structureTopZ() const
     double z = 0.0;
     if (m_kind == StandKind)
     { if (Stand *s = props->stand(m_id)) { z = s->height();
-        foreach (const Pipe *pp, standPipes()) z = qMax(z, double(pp->positionAt(pp->length()).z())); } }
+        foreach (const Pipe *pp, standPipes(m_id)) z = qMax(z, double(pp->positionAt(pp->length()).z())); } }
     else if (m_kind == TowerKind)   { if (Tower *t = props->tower(m_id)) z = t->height(); }
     else if (m_kind == PlatformKind){ if (StagePlatform *pl = props->platform(m_id)) z = pl->height(); }
     else if (m_kind == TrussKind)   { if (Truss *t = props->truss(m_id))
@@ -1820,7 +2108,7 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         // A boom's top handle (stand view): drag it to resize — only when unlocked.
         if (!m_locked && m_kind == StandKind)
         {
-            foreach (const Pipe *pipe, standPipes())
+            foreach (const Pipe *pipe, standPipes(m_id))
             {
                 if (!pipe->isVertical()) continue;
                 if (QLineF(w2s(pipe->positionAt(pipe->length())), e->pos()).length() <= 7.0)
@@ -1993,12 +2281,12 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
                 QRectF r;
                 if (m_plane == Top)
                 {
-                    const double half = baseR * 1.3 + baseR * 2.6 * (units - 1) * 0.5;
+                    const double half = moverWidthPx(traits) * 0.5;
                     r = QRectF(c.x() - half, c.y() - half, half * 2, half * 2);
                 }
                 else
                 {
-                    const double halfW = baseR * 1.3 * units;
+                    const double halfW = moverWidthPx(traits) * 0.5;
                     const double totalH = baseR * 3.2;
                     r = QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH);
                 }
