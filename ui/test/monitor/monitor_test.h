@@ -117,6 +117,15 @@ private slots:
      *  not move, the drag must still land where the cursor is, and the edge
      *  labels must turn with the view. */
     void viewRotationIsScreenOnlyAndDragStillWorks();
+    /** The PLOT's rotation: a view transform only. The grid must still fit (the
+     *  turn swaps which viewport extent the grid is laid out along -- the same
+     *  fit code behind the "opens zoomed" regression), the zoom must survive it,
+     *  and stored positions must not move. */
+    void plotViewRotationFitsGridAndKeepsPositions();
+    /** The angled view: its projection must agree with the flat views at the
+     *  angles where they coincide, and it must REFUSE drags (there is no honest
+     *  inverse for an axonometric). */
+    void angledViewProjectsAndRefusesEdits();
 
 private:
     Doc* m_doc;

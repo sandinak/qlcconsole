@@ -377,6 +377,74 @@ stays on Top/Front/Side.
 
 `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 9: plot rotation, footer consolidation, angled view
+
+**Plot rotation.** Same 90-degree steps as the studio editor, but a different
+technique: the plot is a QGraphicsView whose items draw their own geometry, so
+the turn goes on the VIEW transform. Qt maps mouse events through the inverse,
+so dragging and hit-testing needed no changes at all. Three things had to come
+with it:
+  - `viewScale()`. Four sites read `transform().m11()` as "the current zoom",
+    which is only true upright -- at 90 degrees m11 is 0. That would have
+    clamped the zoom to its minimum and made the "a new document starts at 1:1"
+    check fire on every load. Now the row length, which is the scale at any
+    angle.
+  - The GRID FIT. The grid is built in scene coordinates and the view turns it,
+    so on a quarter turn the viewport's width is what the grid's HEIGHT must fit
+    into. This is the code behind the "STILL OPENS ZOOMED" saga, which is why it
+    landed as its own change with its own gate run.
+  - Upright labels. Nothing used `ItemIgnoresTransformations`, so every label
+    would have turned over. Most items carry names as CHILD text items and are
+    counter-rotated in one pass (`refreshLabelRotations()`, re-applied on every
+    rebuild so no path can forget); MonitorFixtureItem and PowerSourceItem paint
+    text inline and counter-rotate in their own paint().
+
+**Footer consolidation.** Branson: "that bottom row is getting fairly busy ..
+anything we can do to consolidate or simplify?" -- then, reasonably, "can I see
+examples of what those might look like .. hard to guess what menu buttons are",
+so it was built and SCREENSHOT before he judged it. 16 widgets -> 7:
+`[Grid▾] [Snap▾] [Show▾] [⌖0,0] | Overlay:[…] | View:[…][⟳] | readout`. Grid and
+Snap keep their one-click toggle (MenuButtonPopup -- only the arrow opens the
+menu); the setup behind them (stage size, units, subdivisions; snap division) is
+what moved. The four show/hide toggles became a "Show" checklist, and got real
+words while there was room ("Fixtures on the rig", "Stage centre lines"). Every
+widget kept its existing connections -- the spin boxes/combos were re-homed into
+QWidgetActions and the toggles became QActions, which take the same
+blockSignals()/setChecked() calls the restore code already used.
+
+**Angled ("45°") view.** A fourth Plane, view-only, with a general
+azimuth/elevation orthographic projection. Verified by TEST rather than by eye:
+at az=0/el=0 it reproduces Front exactly and at el=90 it reproduces Top -- an
+angled look that disagreed with the flat views at their own angles would be
+untrustworthy for judging a rig. It REFUSES drags, because an axonometric keeps
+all three axes so a screen point is a ray and there is no honest inverse; the
+badge reads "45° — view only" and selection still works. Rulers are suppressed
+there (they measure one world axis per screen edge, meaningless at an angle) and
+the edge labels give way to a corner axis TRIPOD (SL/DS/up drawn as they
+actually project), because in an axonometric no single screen edge IS one
+direction.
+
+Branson picked the gentle three-quarter (az 20 / el 30) from four rendered
+candidates, and asked for the angle to be adjustable: dragging empty canvas
+orbits (a free gesture, since fixture drags are refused there and pressing ON a
+fixture still selects), plus an `Angle▾` drop-down in the same shape as `Grid▾`.
+An orbit drag writes back into the spin boxes so they never go stale.
+
+LESSON: adding `Angled` to the Plane enum segfaulted immediately -- the plane
+badge indexed `const char *names[] = { "Top", "Front", "Side" }` with the new
+value. Growing an enum means auditing what indexes it.
+
+**Tests** (`monitor_test` now 33/33, revert-checked):
+`plotViewRotationFitsGridAndKeepsPositions` (exact cell sizes at all four turns
+in a non-square viewport; reverting the fit reports "turn 1: cellPixels 25,
+expected 15") and `angledViewProjectsAndRefusesEdits`.
+
+**Still open:** the floor annotation still draws as a flat horizontal line in the
+angled view instead of receding with the projection (cosmetic). The axonometric
+is studio-editor only -- the main plot does not have it.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

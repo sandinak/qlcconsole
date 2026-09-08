@@ -47,6 +47,7 @@
 #include <QDoubleSpinBox>
 #include <QFontDialog>
 #include <QFormLayout>
+#include <QWidgetAction>
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QListWidget>
@@ -143,6 +144,8 @@
 #define SETTINGS_CENTERLINES "monitor/centerlines"
 #define SETTINGS_MOUNTEDFIXTURES "monitor/mountedfixtures"
 #define SETTINGS_STUDIOROTATION "monitor/studiorotation"
+#define SETTINGS_PLOTROTATION "monitor/plotrotation"
+#define SETTINGS_STUDIOANGLE "monitor/studioangle"
 
 Monitor* Monitor::s_instance = NULL;
 
@@ -560,18 +563,21 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
 
     // ---- Size: [x] [y] [units] ----  (Overlay + View live on the RIGHT below)
     QVector3D gridSize = m_props->gridSize();
-    fl->addWidget(new QLabel(tr("Size:")));
+    /* One "Grid" control instead of six widgets. The button itself is the
+       show/hide toggle -- the thing actually reached for during a session --
+       and the SETUP behind it (stage size, units, subdivisions) lives in its
+       drop-down, because those are set once when a show is built and then left
+       alone. MenuButtonPopup keeps the toggle a single click; only the arrow
+       opens the menu. The widgets and their connections are unchanged, just
+       re-homed, so nothing about their behaviour moves with them. */
     m_gridWSpin = new QSpinBox();
     m_gridWSpin->setMinimum(1);
     m_gridWSpin->setValue(gridSize.x());
-    fl->addWidget(m_gridWSpin);
     connect(m_gridWSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridWidthChanged(int)));
 
-    fl->addWidget(new QLabel("x"));
     m_gridHSpin = new QSpinBox();
     m_gridHSpin->setMinimum(1);
     m_gridHSpin->setValue(gridSize.z());
-    fl->addWidget(m_gridHSpin);
     connect(m_gridHSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridHeightChanged(int)));
 
     m_unitsCombo = new QComboBox();
@@ -579,37 +585,56 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_unitsCombo->addItem(tr("Feet"), MonitorProperties::Feet);
     if (m_props->gridUnits() == MonitorProperties::Feet)
         m_unitsCombo->setCurrentIndex(1);
-    fl->addWidget(m_unitsCombo);
     connect(m_unitsCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotGridUnitsChanged(int)));
-    addSep();
 
-    // ---- (Grid) [Subdiv] ----  toggle + its modifier
-    QToolButton *gridBtn = new QToolButton(footer);
-    gridBtn->setText(tr("Grid"));
-    gridBtn->setCheckable(true);
-    gridBtn->setChecked(true);
-    gridBtn->setToolTip(tr("Show or hide the grid lines"));
-    fl->addWidget(gridBtn);
-    connect(gridBtn, &QToolButton::toggled, this, [this](bool on) {
-        m_graphicsView->setGridVisible(on);
-        QSettings().setValue(SETTINGS_GRID, on);
-    });
-    fl->addWidget(new QLabel(tr("Subdiv")));
     m_gridSubdivSpin = new QSpinBox();
     m_gridSubdivSpin->setMinimum(1);
     m_gridSubdivSpin->setMaximum(8);
     m_gridSubdivSpin->setValue(m_props->gridSubdivisions());
     m_gridSubdivSpin->setToolTip(tr("Number of sub-divisions drawn inside each grid cell"));
-    fl->addWidget(m_gridSubdivSpin);
     connect(m_gridSubdivSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridSubdivisionsChanged(int)));
-    addSep();
+
+    QToolButton *gridBtn = new QToolButton(footer);
+    gridBtn->setText(tr("Grid"));
+    gridBtn->setCheckable(true);
+    gridBtn->setChecked(true);
+    gridBtn->setToolTip(tr("Show or hide the grid lines — the arrow sets the "
+                           "stage size, units and subdivisions"));
+    gridBtn->setPopupMode(QToolButton::MenuButtonPopup);
+    {
+        QWidget *gw = new QWidget(footer);
+        QFormLayout *gfl = new QFormLayout(gw);
+        gfl->setContentsMargins(10, 8, 10, 8);
+        QWidget *sizeRow = new QWidget(gw);
+        QHBoxLayout *srl = new QHBoxLayout(sizeRow);
+        srl->setContentsMargins(0, 0, 0, 0);
+        srl->addWidget(m_gridWSpin);
+        srl->addWidget(new QLabel("x", sizeRow));
+        srl->addWidget(m_gridHSpin);
+        gfl->addRow(tr("Stage size:"), sizeRow);
+        gfl->addRow(tr("Units:"), m_unitsCombo);
+        gfl->addRow(tr("Subdivisions:"), m_gridSubdivSpin);
+
+        QMenu *gm = new QMenu(gridBtn);
+        QWidgetAction *wa = new QWidgetAction(gm);
+        wa->setDefaultWidget(gw);
+        gm->addAction(wa);
+        gridBtn->setMenu(gm);
+    }
+    fl->addWidget(gridBtn);
+    connect(gridBtn, &QToolButton::toggled, this, [this](bool on) {
+        m_graphicsView->setGridVisible(on);
+        QSettings().setValue(SETTINGS_GRID, on);
+    });
 
     // Snap: a dedicated on/off toggle, plus the division to snap to.
     m_snapToggle = new QToolButton(footer);
     m_snapToggle->setText(tr("Snap"));
     m_snapToggle->setCheckable(true);
     m_snapToggle->setChecked(m_props->snapDivisions() > 0);
-    m_snapToggle->setToolTip(tr("Snap fixtures to the grid while moving them"));
+    m_snapToggle->setToolTip(tr("Snap fixtures to the grid while moving them — "
+                                "the arrow picks the division"));
+    m_snapToggle->setPopupMode(QToolButton::MenuButtonPopup);
     fl->addWidget(m_snapToggle);
 
     m_snapCombo = new QComboBox();
@@ -624,7 +649,17 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     }
     m_snapCombo->setEnabled(m_snapToggle->isChecked());
     m_snapCombo->setToolTip(tr("Grid subdivision to snap to"));
-    fl->addWidget(m_snapCombo);
+    {
+        QWidget *sw = new QWidget(footer);
+        QFormLayout *sfl = new QFormLayout(sw);
+        sfl->setContentsMargins(10, 8, 10, 8);
+        sfl->addRow(tr("Snap to:"), m_snapCombo);
+        QMenu *sm = new QMenu(m_snapToggle);
+        QWidgetAction *wa = new QWidgetAction(sm);
+        wa->setDefaultWidget(sw);
+        sm->addAction(wa);
+        m_snapToggle->setMenu(sm);
+    }
 
     auto applySnap = [this]() {
         const int div = m_snapToggle->isChecked() ? m_snapCombo->currentData().toInt() : 0;
@@ -645,47 +680,46 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         fl->addWidget(sep);
     }
 
-    // Rulers show/hide toggle.
-    QToolButton *rulerBtn = new QToolButton(footer);
-    rulerBtn->setText(tr("Rulers"));
+    /* One "Show" menu instead of four separate toggles. They are all the same
+       kind of thing -- what gets DRAWN on the plot -- so they read better as a
+       checklist than as four competing buttons, and the row gets three slots
+       back. QActions rather than QToolButtons: the restore code below sets them
+       with the same blockSignals()/setChecked() calls either way. */
+    QToolButton *showBtn = new QToolButton(footer);
+    showBtn->setText(tr("Show"));
+    showBtn->setPopupMode(QToolButton::InstantPopup);
+    showBtn->setToolTip(tr("Choose what is drawn on the plot"));
+    QMenu *showMenu = new QMenu(showBtn);
+    showBtn->setMenu(showMenu);
+    fl->addWidget(showBtn);
+
+    QAction *rulerBtn = showMenu->addAction(tr("Rulers"));
     rulerBtn->setCheckable(true);
     rulerBtn->setToolTip(tr("Show or hide the measurement rulers"));
-    fl->addWidget(rulerBtn);
-    connect(rulerBtn, &QToolButton::toggled, this, [this](bool on) { setRulersVisible(on); });
+    connect(rulerBtn, &QAction::toggled, this, [this](bool on) { setRulersVisible(on); });
 
-    // Fixture labels show/hide toggle (moved here from the "More" menu, beside
-    // Snap / Rulers).
-    QToolButton *labelsBtn = new QToolButton(footer);
-    labelsBtn->setText(tr("Labels"));
+    QAction *labelsBtn = showMenu->addAction(tr("Fixture labels"));
     labelsBtn->setCheckable(true);
     labelsBtn->setChecked(m_props->labelsVisible());
-    labelsBtn->setToolTip(tr("Show or hide fixture labels"));
-    fl->addWidget(labelsBtn);
-    connect(labelsBtn, &QToolButton::toggled, this, [this](bool on) { slotShowLabels(on); });
+    connect(labelsBtn, &QAction::toggled, this, [this](bool on) { slotShowLabels(on); });
 
-    /* Fixtures-on-structures show/hide toggle. A truss or riser covered by its
-       own fixtures is hard to click in the top view; hiding them clears the
-       plot while structures are being placed. Free-standing fixtures are never
-       hidden -- there is nothing under them to reach. */
-    QToolButton *mountedBtn = new QToolButton(footer);
-    mountedBtn->setText(tr("On Rig"));
+    /* Fixtures-on-structures. A truss or riser covered by its own fixtures is
+       hard to click in the top view; hiding them clears the plot while
+       structures are being placed. Free-standing fixtures are never hidden --
+       there is nothing under them to reach. */
+    QAction *mountedBtn = showMenu->addAction(tr("Fixtures on the rig"));
     mountedBtn->setCheckable(true);
     mountedBtn->setToolTip(tr("Show or hide the fixtures mounted on trusses, "
                               "pipes, towers and platforms, so the structure "
                               "underneath can be clicked"));
-    fl->addWidget(mountedBtn);
-    connect(mountedBtn, &QToolButton::toggled, this, [this](bool on) {
+    connect(mountedBtn, &QAction::toggled, this, [this](bool on) {
         m_graphicsView->setMountedFixturesVisible(on);
         QSettings().setValue(SETTINGS_MOUNTEDFIXTURES, on);
     });
 
-    // Stage centre axes (the teal crosshair) show/hide toggle.
-    QToolButton *centerBtn = new QToolButton(footer);
-    centerBtn->setText(tr("Center"));
+    QAction *centerBtn = showMenu->addAction(tr("Stage centre lines"));
     centerBtn->setCheckable(true);
-    centerBtn->setToolTip(tr("Show or hide the stage centre lines"));
-    fl->addWidget(centerBtn);
-    connect(centerBtn, &QToolButton::toggled, this, [this](bool on) {
+    connect(centerBtn, &QAction::toggled, this, [this](bool on) {
         m_graphicsView->setCenterLinesVisible(on);
         QSettings().setValue(SETTINGS_CENTERLINES, on);
     });
@@ -745,6 +779,27 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_povCombo->setToolTip(tr("Point of view — click to cycle, arrow for the full list"));
     m_povCombo->installEventFilter(this);       // click the box to cycle
     fl->addWidget(m_povCombo);
+
+    /* Turn the plot in quarter steps -- beside the point-of-view control,
+       because it is the same kind of setting: how you are LOOKING at the rig,
+       not anything about the rig. Some designers read a plan with downstage at
+       the TOP; 180 degrees gives them that. Nothing in the workspace moves, and
+       quarter turns keep stage left/right truthful, with the edge labels
+       turning to match. */
+    QToolButton *plotRotBtn = new QToolButton(footer);
+    plotRotBtn->setToolTip(tr("Turn the plot 90° clockwise. A view setting "
+                              "only — nothing in the workspace moves."));
+    fl->addWidget(plotRotBtn);
+    auto applyPlotRotation = [this, plotRotBtn](int turns) {
+        m_graphicsView->setViewRotation(turns);
+        static const char *names[] = { "0°", "90°", "180°", "270°" };
+        plotRotBtn->setText(QString("⟳ %1").arg(names[m_graphicsView->viewRotation() & 3]));
+    };
+    connect(plotRotBtn, &QToolButton::clicked, this, [this, applyPlotRotation]() {
+        const int next = (m_graphicsView->viewRotation() + 1) & 3;
+        applyPlotRotation(next);
+        QSettings().setValue(SETTINGS_PLOTROTATION, next);
+    });
     addSep();
 
     // Live coordinate readout, right-aligned.
@@ -779,6 +834,9 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     centerBtn->setChecked(showCenterLines);
     centerBtn->blockSignals(false);
     m_graphicsView->setCenterLinesVisible(showCenterLines);
+
+    // Restore the plot rotation (default upright).
+    applyPlotRotation(settings.value(SETTINGS_PLOTROTATION, 0).toInt());
 
     // Restore fixtures-on-structures visibility (default on).
     const bool showMounted = settings.value(SETTINGS_MOUNTEDFIXTURES, true).toBool();
@@ -2386,13 +2444,44 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     QHBoxLayout *bar = new QHBoxLayout;
     bar->addWidget(new QLabel(tr("View:"), center));
     QComboBox *planeCombo = new QComboBox(center);
-    planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
+    planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side"), tr("45°") });
+    planeCombo->setItemData(3, tr("An angled look from above and to the side. "
+                                  "For viewing only — drag in Top / Front / Side "
+                                  "to move things."), Qt::ToolTipRole);
     bar->addWidget(planeCombo);
     /* Turn the view in quarter steps. Some designers read a plan with downstage
        at the TOP; 180 degrees gives them that. It is a view transform only --
        nothing in the workspace moves -- and quarter turns keep the handedness
        honest, so stage left/right stay truthful (the edge labels turn with it).
        Remembered across sessions, since it is a personal reading preference. */
+    /* Camera angles for the 45-degree view, in the same drop-down shape as the
+       plot's Grid button: the numbers are there when wanted, and out of the way
+       otherwise. Only meaningful in the angled view, so it enables with it.
+       Dragging the empty canvas orbits too -- these are for setting an exact
+       angle, or reading back the one a drag arrived at. */
+    QToolButton *angleBtn = new QToolButton(center);
+    angleBtn->setText(tr("Angle"));
+    angleBtn->setPopupMode(QToolButton::InstantPopup);
+    angleBtn->setToolTip(tr("Camera angles for the 45° view — or just drag the "
+                            "empty canvas to swing it"));
+    QDoubleSpinBox *azSpin = new QDoubleSpinBox(center);
+    azSpin->setRange(0.0, 359.0); azSpin->setSuffix(QString::fromUtf8("°"));
+    QDoubleSpinBox *elSpin = new QDoubleSpinBox(center);
+    elSpin->setRange(0.0, 90.0); elSpin->setSuffix(QString::fromUtf8("°"));
+    {
+        QWidget *aw = new QWidget(center);
+        QFormLayout *afl = new QFormLayout(aw);
+        afl->setContentsMargins(10, 8, 10, 8);
+        afl->addRow(tr("Around the stage:"), azSpin);
+        afl->addRow(tr("Height of eye:"), elSpin);
+        QMenu *am = new QMenu(angleBtn);
+        QWidgetAction *wa = new QWidgetAction(am);
+        wa->setDefaultWidget(aw);
+        am->addAction(wa);
+        angleBtn->setMenu(am);
+    }
+    bar->addWidget(angleBtn);
+
     QToolButton *rotBtn = new QToolButton(center);
     rotBtn->setToolTip(tr("Turn the view 90° clockwise. A view setting only — "
                           "nothing in the workspace moves."));
@@ -2420,6 +2509,33 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         m_doc, StructureStudioView::Kind(kind), id, center);
     view->setMinimumSize(320, 300);
     planeCombo->setCurrentIndex(int(view->plane()));
+
+    auto pushAngle = [view, azSpin, elSpin]() {
+        view->setAngledView(azSpin->value(), elSpin->value());
+        QSettings().setValue(SETTINGS_STUDIOANGLE,
+                             QString("%1,%2").arg(azSpin->value()).arg(elSpin->value()));
+    };
+    QObject::connect(azSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     view, [pushAngle](double) { pushAngle(); });
+    QObject::connect(elSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     view, [pushAngle](double) { pushAngle(); });
+    // An orbit drag has to write back, or the numbers would go stale the moment
+    // the canvas is used.
+    QObject::connect(view, &StructureStudioView::angledViewChanged, azSpin,
+                     [azSpin, elSpin](double az, double el) {
+        azSpin->blockSignals(true); azSpin->setValue(az); azSpin->blockSignals(false);
+        elSpin->blockSignals(true); elSpin->setValue(el); elSpin->blockSignals(false);
+        QSettings().setValue(SETTINGS_STUDIOANGLE, QString("%1,%2").arg(az).arg(el));
+    });
+    {
+        const QStringList a = QSettings().value(SETTINGS_STUDIOANGLE).toString().split(',');
+        if (a.size() == 2)
+        {
+            azSpin->setValue(a.at(0).toDouble());
+            elSpin->setValue(a.at(1).toDouble());
+        }
+    }
+
 
     auto applyRotation = [view, rotBtn](int turns) {
         view->setRotation(turns);
@@ -2727,8 +2843,12 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     });
     connect(view, &StructureStudioView::editAboutToStart, tree, [pushUndo]() { pushUndo(); });
 
+    angleBtn->setEnabled(view->plane() == StructureStudioView::Angled);
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), body,
-            [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });
+            [view, angleBtn](int i){
+        view->setPlane(StructureStudioView::Plane(i));
+        angleBtn->setEnabled(view->plane() == StructureStudioView::Angled);
+    });
     view->setLocked(true);
     connect(lockBtn, &QPushButton::toggled, view, [view, lockBtn](bool on) {
         view->setLocked(on);

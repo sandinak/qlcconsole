@@ -35,6 +35,7 @@
 
 #include <QPixmap>
 
+#include <QtMath>
 #include "monitorfixtureitem.h"
 #include <QGraphicsScene>
 #include "monitor.h"
@@ -993,12 +994,26 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
 
     if (m_labelVisibility)
     {
+        /* Undo any view rotation for the label alone: the plot can be turned in
+           quarter steps, and a name is the one thing that must stay upright
+           however the page is read. The item's own geometry SHOULD turn -- only
+           the text is pinned. */
+        const double viewTurn = qRadiansToDegrees(qAtan2(painter->transform().m12(),
+                                                         painter->transform().m11()));
+        painter->save();
+        if (qAbs(viewTurn) > 0.5)
+        {
+            painter->translate(m_labelRect.center());
+            painter->rotate(-viewTurn);
+            painter->translate(-m_labelRect.center());
+        }
         painter->setFont(m_font);
         painter->setPen(QPen(Qt::NoPen));
         painter->setBrush(QBrush(QColor(33, 33, 33)));
         painter->drawRoundedRect(m_labelRect, 2, 2);
         painter->setPen(QPen(Qt::white, 1));
         painter->drawText(m_labelRect, Qt::AlignHCenter | Qt::TextWrapAnywhere, m_name);
+        painter->restore();
     }
 }
 

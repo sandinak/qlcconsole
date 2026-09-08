@@ -67,6 +67,18 @@ public:
     /** True when the view is an elevation (Front/Side) — editing is disabled. */
     bool isElevation() const { return m_pov != PovTop; }
 
+    /** Turn the plot in 90-degree steps (0..3, clockwise). A VIEW transform
+     *  only: scene coordinates -- and so everything in the workspace -- are
+     *  untouched, and Qt maps mouse events through the inverse so dragging and
+     *  hit-testing keep working. Quarter turns preserve handedness, so a
+     *  rotated plan still tells the truth about stage left/right. */
+    void setViewRotation(int quarterTurns);
+    int  viewRotation() const { return m_viewRotation; }
+
+    /** The uniform zoom, independent of the rotation. Use this rather than
+     *  transform().m11(), which stops being the scale once the view is turned. */
+    double viewScale() const;
+
     /** Stage-direction labels (upstage/downstage/stage left/right) around the
      *  edge of the plot. On by default; the Rulers-style toggles can turn them
      *  off for a clean plot. */
@@ -919,6 +931,10 @@ public:
 
 private:
     bool m_showMountedFixtures = true;
+    int  m_viewRotation = 0;   ///< plot turn, 0..3 quarter turns clockwise
+
+    /** Counter-rotate every text item so labels stay upright while turned. */
+    void refreshLabelRotations();
 
     /** True while an update*() method is deleting+recreating items. Guards
      *  extendSelectionToGroups from dynamic_cast-ing half-deleted items when

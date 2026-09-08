@@ -24,6 +24,8 @@
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QToolButton>
+#include <QMenu>
 
 #define protected public
 #define private public
@@ -1404,4 +1406,101 @@ void Monitor_Test::viewRotationIsScreenOnlyAndDragStillWorks()
                         .arg(double(a2.z() - b2.z()))));
 
     rig.view->setRotation(0);
+}
+
+void Monitor_Test::plotViewRotationFitsGridAndKeepsPositions()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    MonitorGraphicsView *gv = rig.gv;
+
+    // A deliberately NON-square viewport, so a turn genuinely changes which
+    // extent the grid has to fit into.
+    gv->resize(1200, 600);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(40, 24));
+
+    const QVector3D before =
+        m_doc->monitorProperties()->fixtureItem(rig.fxi->id(), 0, 0).m_position;
+    const int cellUpright = gv->m_cellPixels;
+    QVERIFY(cellUpright > 0);
+
+    for (int turns = 0; turns < 4; ++turns)
+    {
+        gv->setViewRotation(turns);
+        QCOMPARE(gv->viewRotation(), turns);
+
+        // The grid must still fit the view it is actually laid out in: 40x24
+        // cells in 1200x600 upright, but in 600x1200 on a quarter turn.
+        const int fitW = (turns & 1) ? 600 : 1200;
+        const int fitH = (turns & 1) ? 1200 : 600;
+        const int expect = qMin(fitW / 40, fitH / 24);
+        QVERIFY2(gv->m_cellPixels == expect,
+                 qPrintable(QString("turn %1: cellPixels %2, expected %3 -- the "
+                                    "grid fit ignored the rotation")
+                            .arg(turns).arg(gv->m_cellPixels).arg(expect)));
+
+        // Rotating is a VIEW change; nothing in the model may move.
+        QCOMPARE(m_doc->monitorProperties()->fixtureItem(rig.fxi->id(), 0, 0).m_position,
+                 before);
+
+        // The zoom must survive the turn -- reading it off m11 would give 0 here.
+        QVERIFY2(qAbs(gv->viewScale() - 1.0) < 1e-6,
+                 qPrintable(QString("turn %1: viewScale reads %2, expected 1.0")
+                            .arg(turns).arg(gv->viewScale())));
+    }
+
+    gv->setViewRotation(0);
+    QCOMPARE(gv->m_cellPixels, cellUpright);
+}
+
+
+
+void Monitor_Test::angledViewProjectsAndRefusesEdits()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+    rig.view->setLocked(false);
+
+    const QVector3D p(2.0f, 3.0f, 4.0f);
+
+    /* The angled projection has to DEGENERATE to the flat ones at the angles
+       where they are the same camera -- an angled look that disagrees with the
+       Front view at zero tilt would make it untrustworthy for judging a rig. */
+    rig.view->setPlane(StructureStudioView::Angled);
+
+    rig.view->setAngledView(0.0, 0.0);              // == Front
+    QPointF ang = rig.view->project(p);
+    rig.view->setPlane(StructureStudioView::Front);
+    QPointF flat = rig.view->project(p);
+    QVERIFY2(qAbs(ang.x() - flat.x()) < 1e-6 && qAbs(ang.y() - flat.y()) < 1e-6,
+             qPrintable(QString("angled(0,0) gave %1,%2 but Front gives %3,%4")
+                        .arg(ang.x()).arg(ang.y()).arg(flat.x()).arg(flat.y())));
+
+    rig.view->setPlane(StructureStudioView::Angled);
+    rig.view->setAngledView(0.0, 90.0);             // straight down == Top, Y flipped
+    ang = rig.view->project(p);
+    rig.view->setPlane(StructureStudioView::Top);
+    flat = rig.view->project(p);
+    QVERIFY2(qAbs(ang.x() - flat.x()) < 1e-6 && qAbs(ang.y() + flat.y()) < 1e-6,
+             qPrintable(QString("angled(0,90) gave %1,%2, expected Top's %3,%4 "
+                                "with the vertical negated").arg(ang.x()).arg(ang.y())
+                        .arg(flat.x()).arg(flat.y())));
+
+    // View-only: a drag must change nothing, at any camera angle.
+    rig.view->setPlane(StructureStudioView::Angled);
+    rig.view->setAngledView(45.0, 45.0);
+    QVERIFY(rig.view->isViewOnly());
+    const QVector3D before = rig.pos();
+    const QPointF startPx = rig.view->w2s(before);
+    QVERIFY2(rig.view->dragFixtureTo(rig.fxi->id(), startPx + QPointF(60, 40)) == false,
+             "the angled view accepted a drag -- it has no honest inverse");
+    QCOMPARE(rig.dragTo(startPx + QPointF(60, 40)), before);
+
+    // ...but the flat views still edit normally afterwards.
+    rig.view->setPlane(StructureStudioView::Front);
+    QVERIFY(!rig.view->isViewOnly());
+    const QVector3D after = rig.dragTo(rig.view->w2s(rig.pos()) + QPointF(rig.view->m_scale * 0.5, 0.0));
+    QVERIFY2(!qFuzzyCompare(after.x(), before.x()),
+             "the flat view stopped editing after visiting the angled one");
 }

@@ -37,6 +37,7 @@
 #include <QtMath>
 #include <QScopedValueRollback>
 #include "monitorproperties.h"
+#include <cmath>
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "trussitem.h"
@@ -156,7 +157,7 @@ void MonitorGraphicsView::wheelEvent(QWheelEvent *event)
         return;
     }
     const double stepFactor = 1.15;
-    const double cur = transform().m11(); // current uniform scale
+    const double cur = viewScale();   // rotation-independent zoom
     // With Shift held, macOS reports the wheel delta on the X axis, so fall
     // back to it when Y is zero.
     int delta = event->angleDelta().y();
@@ -173,6 +174,62 @@ void MonitorGraphicsView::wheelEvent(QWheelEvent *event)
     event->accept();
 }
 
+/* The view's uniform zoom, independent of any rotation.
+ *
+ * NOT transform().m11(): once the view is turned, m11 is no longer the scale --
+ * at 90 degrees it is 0 and the scale has moved into m12. Every zoom decision
+ * used to read m11 directly, which under rotation would clamp the zoom to its
+ * minimum and make the "a newly loaded document starts at 1:1" check fire on
+ * every load. The row length is the scale whatever the angle. */
+double MonitorGraphicsView::viewScale() const
+{
+    const QTransform t = transform();
+    return std::hypot(t.m11(), t.m12());
+}
+
+/* Turn the plot in 90-degree steps. A VIEW transform: scene coordinates, and
+ * therefore everything stored in the workspace, are untouched -- Qt maps mouse
+ * events through the inverse, so dragging and hit-testing keep working with no
+ * changes to any item. Quarter turns only, so handedness is preserved and a
+ * rotated plan still tells the truth about which side of the stage something is
+ * on. Text is counter-rotated (see refreshLabelRotations) because a label is
+ * the one thing that must never turn with the page. */
+void MonitorGraphicsView::setViewRotation(int quarterTurns)
+{
+    const int r = ((quarterTurns % 4) + 4) % 4;
+    if (m_viewRotation == r)
+        return;
+    const double zoom = viewScale();
+    m_viewRotation = r;
+
+    QTransform t;
+    t.rotate(90.0 * r);
+    t.scale(zoom, zoom);
+    setTransform(t);
+
+    updateGrid();               // the fit depends on which way the grid is laid out
+    refreshLabelRotations();
+    emit rulersChanged();
+    viewport()->update();
+}
+
+/* Keep every text item upright while the view is turned. The plot's items carry
+ * their names as CHILD text items (truss/platform/tower/pipe/stand/target), so
+ * one pass over the scene covers them; the two that paint text inline
+ * (MonitorFixtureItem, PowerSourceItem) counter-rotate in their own paint(). */
+void MonitorGraphicsView::refreshLabelRotations()
+{
+    const qreal counter = -90.0 * m_viewRotation;
+    foreach (QGraphicsItem *it, m_scene->items())
+    {
+        if (it->type() == QGraphicsSimpleTextItem::Type || it->type() == QGraphicsTextItem::Type)
+        {
+            it->setTransformOriginPoint(it->boundingRect().center());
+            it->setRotation(counter);
+        }
+    }
+}
+
 bool MonitorGraphicsView::viewportEvent(QEvent *event)
 {
     // Trackpad pinch: macOS sends a native zoom gesture (no Shift needed),
@@ -182,7 +239,7 @@ bool MonitorGraphicsView::viewportEvent(QEvent *event)
         QNativeGestureEvent *g = static_cast<QNativeGestureEvent *>(event);
         if (g->gestureType() == Qt::ZoomNativeGesture)
         {
-            const double cur = transform().m11();
+            const double cur = viewScale();
             double target = cur * (1.0 + g->value());
             if (target < 0.25) target = 0.25;
             if (target > 6.0)  target = 6.0;
@@ -430,8 +487,14 @@ void MonitorGraphicsView::paintEvent(QPaintEvent *event)
             qDebug() << "[gridfit] fit" << m_fittedSize
                      << "grid" << m_gridSize << "unit" << m_unitValue
                      << "-> cellPixels" << m_cellPixels
-                     << "viewScale" << transform().m11();
+                     << "viewScale" << viewScale();
     }
+    /* Cheap and unconditional: a turned view must never show upside-down text,
+       and items appear from many paths (add/update/reload/undo). Doing it here
+       means no path can forget. It is a no-op at the default rotation. */
+    if (m_viewRotation != 0)
+        refreshLabelRotations();
+
     QGraphicsView::paintEvent(event);
     drawOrientationLabels();
 }
@@ -471,6 +534,14 @@ void MonitorGraphicsView::drawOrientationLabels()
         leftLbl  = tr("stage right");  rightLbl  = tr("stage left");
         topLbl   = tr("up");           bottomLbl = tr("floor");
         break;
+    }
+
+    // Follow the view rotation, exactly as the studio editor's labels do: after
+    // a quarter turn the edge that WAS the left is the top.
+    for (int i = 0; i < (m_viewRotation & 3); ++i)
+    {
+        const QString l = leftLbl, t = topLbl, r = rightLbl, b = bottomLbl;
+        topLbl = l; rightLbl = t; bottomLbl = r; leftLbl = b;   // 90 deg clockwise
     }
 
     QPainter p(viewport());
@@ -517,6 +588,10 @@ void MonitorGraphicsView::setMountedFixturesVisible(bool on)
 
 void MonitorGraphicsView::refreshAllItems()
 {
+    // Items rebuilt here bring fresh child text items with them, so re-pin the
+    // labels upright before anything is drawn.
+    refreshLabelRotations();
+
     QHashIterator <quint32, MonitorFixtureItem*> it(m_fixtures);
     while (it.hasNext() == true)
     {
@@ -542,7 +617,7 @@ void MonitorGraphicsView::resetViewZoom()
        zoom applied while looking at one workspace was still in force after
        loading the next, and no amount of re-fitting the grid would undo it
        (the grid maths cannot see it). A newly loaded document starts at 1:1. */
-    if (!qFuzzyCompare(transform().m11(), 1.0))
+    if (!qFuzzyCompare(viewScale(), 1.0))
     {
         resetTransform();
         emit rulersChanged();
@@ -3970,8 +4045,14 @@ void MonitorGraphicsView::updateGrid()
     {
         m_xOffset = 0;
         m_yOffset = 0;
-        const int xInc = this->width() / m_gridSize.width();
-        const int yInc = this->height() / m_gridSize.height();
+        /* The grid is built in SCENE coordinates, unrotated; the view turns it.
+           So on an odd quarter turn the viewport's width is what the grid's
+           HEIGHT has to fit into, and vice versa -- fit against the extents the
+           grid will actually be laid out along, not the raw widget ones. */
+        const int fitW = (m_viewRotation & 1) ? this->height() : this->width();
+        const int fitH = (m_viewRotation & 1) ? this->width()  : this->height();
+        const int xInc = fitW / m_gridSize.width();
+        const int yInc = fitH / m_gridSize.height();
 
         /* Fit to whichever axis runs out first -- and note the <=.
          *
@@ -3989,12 +4070,12 @@ void MonitorGraphicsView::updateGrid()
         if (yInc <= xInc)
         {
             m_cellPixels = yInc;
-            m_xOffset = (this->width() - (m_cellPixels * m_gridSize.width())) / 2;
+            m_xOffset = (fitW - (m_cellPixels * m_gridSize.width())) / 2;
         }
         else
         {
             m_cellPixels = xInc;
-            m_yOffset = (this->height() - (m_cellPixels * m_gridSize.height())) / 2;
+            m_yOffset = (fitH - (m_cellPixels * m_gridSize.height())) / 2;
         }
         int xPos = m_xOffset;
         int yPos = m_yOffset;

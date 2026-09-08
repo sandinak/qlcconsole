@@ -45,7 +45,15 @@ class StructureStudioView : public QWidget
 public:
     enum Kind  { StandKind = 0, TowerKind = 1, TrussKind = 2,
                  PlatformKind = 3, PipeKind = 4, GroupKind = 5 };
-    enum Plane { Top = 0, Front = 1, Side = 2 };
+    /** Top/Front/Side are the axis-aligned working planes -- each drops one
+     *  world axis, which is exactly why a screen point can be turned back into
+     *  a world one and fixtures can be DRAGGED in them.
+     *
+     *  Angled is an axonometric look from above and to the side. It is
+     *  VIEW-ONLY: at an angle a screen point maps to a ray rather than a point,
+     *  so there is no honest inverse and dragging is refused rather than
+     *  silently moving the wrong thing. */
+    enum Plane { Top = 0, Front = 1, Side = 2, Angled = 3 };
 
     StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent = nullptr);
 
@@ -58,6 +66,17 @@ public:
      *  Quarter turns keep the handedness honest; see planeToScreenVec(). */
     void setRotation(int quarterTurns);
     int  rotation() const { return m_rotation; }
+
+    /** Camera angles for the Angled plane, in degrees: @p azimuth swings around
+     *  the stage (0 = straight from the audience, positive toward stage left),
+     *  @p elevation lifts the eye above the floor (0 = a flat front elevation,
+     *  90 = straight down, i.e. a plan). Defaults to 45/45. */
+    void setAngledView(double azimuthDeg, double elevationDeg);
+    double angledAzimuth() const { return m_azimuthDeg; }
+    double angledElevation() const { return m_elevationDeg; }
+
+    /** True when the current plane cannot be edited in (see Plane::Angled). */
+    bool isViewOnly() const { return m_plane == Angled; }
 
     /** Locked = fixtures can be selected but not dragged (like the main plot lock);
      *  unlocked = drag a selected fixture / a boom top to move it. */
@@ -90,6 +109,9 @@ public:
     bool placeFixtureAt(quint32 fid, const QPointF &px) { return dragFixtureTo(fid, px); }
 
 signals:
+    /** The camera angles changed (an orbit drag), so a dialog can follow. */
+    void angledViewChanged(double azimuthDeg, double elevationDeg);
+
     /** A fixture on the structure was double-clicked (id passed through). */
     void fixtureActivated(quint32 fid);
     /** A fixture on the structure was single-clicked (selection). */
@@ -154,6 +176,10 @@ private:
      *  not say how the projection is oriented. */
     void drawOrientationLabels(QPainter &p) const;
 
+    /** The three stage axes as a small labelled tripod, for the angled view
+     *  where no single screen edge corresponds to one stage direction. */
+    void drawAxisTripod(QPainter &p) const;
+
     /** The fixture's own W x H x D box projected into the current plane: the
      *  screen spans of its width and height axes, plus the axis-aligned screen
      *  box containing the whole solid (depth included). See the implementation
@@ -202,6 +228,14 @@ private:
     quint32  m_id;
     Plane    m_plane = Front;
     int      m_rotation = 0;   ///< view turn, 0..3 quarter turns clockwise
+    /* A gentle three-quarter reads as a rigging drawing rather than a drafting
+       projection: the truss body shows in three-quarter, fixtures stay legible,
+       and upstage/downstage separates without a long truss sweeping steeply off
+       across the frame the way a true isometric makes it. */
+    double   m_azimuthDeg = 20.0;    ///< Angled plane: swing around the stage
+    double   m_elevationDeg = 30.0;  ///< Angled plane: eye height above the floor
+    bool     m_orbiting = false;     ///< dragging the empty canvas to swing the camera
+    QPointF  m_orbitLast;
 
     double   m_scale = 60.0;    ///< pixels per metre
     QPointF  m_originPx;        ///< where world (a=0,b=0) lands on screen

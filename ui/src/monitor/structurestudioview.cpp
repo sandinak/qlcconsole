@@ -83,9 +83,52 @@ QPointF StructureStudioView::project(const QVector3D &w) const
     {
     case Front: return QPointF(w.x(), w.z());
     case Side:  return QPointF(w.y(), w.z());
+    case Angled:
+    {
+        /* Orthographic axonometric from azimuth A and elevation E.
+         *
+         * Derived rather than eyeballed, so it degenerates to the exact Front
+         * view at A=E=0 and to the Top view at E=90 -- a projection that does
+         * not agree with the flat views at their own angles would make the
+         * angled look untrustworthy for judging a rig.
+         *
+         * The eye looks toward the origin from downstage (+Y is downstage
+         * here, see the axis note in monitorproperties.cpp), lifted by E and
+         * swung by A:
+         *     view dir  d = (-sinA cosE, -cosA cosE, -sinE)
+         *     screen right r = (cosA, -sinA, 0)        (horizontal, perp to d)
+         *     screen up    u = d x r = (-sinE sinA, -sinE cosA, cosE)
+         * and the in-plane coordinates are just the projections onto them. */
+        const double A = qDegreesToRadians(m_azimuthDeg);
+        const double E = qDegreesToRadians(m_elevationDeg);
+        const double cA = qCos(A), sA = qSin(A), cE = qCos(E), sE = qSin(E);
+        const double a = double(w.x()) * cA - double(w.y()) * sA;
+        const double b = -double(w.x()) * sE * sA
+                         - double(w.y()) * sE * cA
+                         + double(w.z()) * cE;
+        return QPointF(a, b);
+    }
     case Top:
     default:    return QPointF(w.x(), w.y());
     }
+}
+
+void StructureStudioView::setAngledView(double azimuthDeg, double elevationDeg)
+{
+    // Elevation is clamped to the quarter that actually looks AT the rig: below
+    // 0 you are under the stage, above 90 the view turns over.
+    const double az = std::fmod(std::fmod(azimuthDeg, 360.0) + 360.0, 360.0);
+    const double el = qBound(0.0, elevationDeg, 90.0);
+    if (qFuzzyCompare(az, m_azimuthDeg) && qFuzzyCompare(el, m_elevationDeg))
+        return;
+    m_azimuthDeg = az;
+    m_elevationDeg = el;
+    if (m_plane == Angled)
+    {
+        refit();
+        update();
+    }
+    emit angledViewChanged(m_azimuthDeg, m_elevationDeg);
 }
 
 /* The in-plane (a,b) -> screen OFFSET mapping, with the view rotation applied.
@@ -100,7 +143,9 @@ QPointF StructureStudioView::project(const QVector3D &w) const
  * here -- that flips the sense of every direction on the plot.) */
 QPointF StructureStudioView::planeToScreenVec(const QPointF &ab) const
 {
-    const double vSign = (m_plane == Top) ? 1.0 : -1.0;   // Top: Y screen-down; else Z up
+    // Top reads Y downward like a plan; every other view (including Angled)
+    // has "up the screen" as its b axis.
+    const double vSign = (m_plane == Top) ? 1.0 : -1.0;
     const QPointF v(ab.x() * m_scale, vSign * ab.y() * m_scale);
     switch (m_rotation & 3)
     {
@@ -147,6 +192,14 @@ void StructureStudioView::setRotation(int quarterTurns)
 
 bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
 {
+    /* The angled view has no honest inverse: screenToPlane() can only undo a
+       projection that DROPPED an axis, and an axonometric keeps all three, so a
+       screen point is a ray. Rather than pick a plausible depth and move the
+       fixture somewhere the operator did not ask for, refuse -- selection still
+       works, and Top/Front/Side are one click away for the actual edit. */
+    if (m_plane == Angled)
+        return false;
+
     MonitorProperties *props = m_doc->monitorProperties();
     FixtureRigProps rp = props->fixtureRigProps(fid);
 
@@ -1492,6 +1545,15 @@ QVector3D StructureStudioView::axisWorldPoint(bool useB, double val) const
 
 void StructureStudioView::drawRulers(QPainter &p) const
 {
+    /* The tick rulers measure ONE world axis along each screen edge, which only
+       means anything when the view is axis-aligned. In the angled view every
+       screen direction mixes two axes, so a ruler would put confident numbers
+       on a distance nobody asked about. The dimension annotations below still
+       work (they measure the drawn extent), and the axis tripod says which way
+       is which. */
+    if (m_plane == Angled)
+        return;
+
     // Match the main-window ruler bars: dark band, 9px font, a number at every
     // sensibly-spaced unit, blue axis label, blue cursor.
     MonitorProperties *props = m_doc->monitorProperties();
@@ -1626,8 +1688,48 @@ void StructureStudioView::drawCursorReadout(QPainter &p) const
    increases with the in-plane 'a' component, and the vertical one increases
    with 'b' EXCEPT in Top, where vSign flips it -- which is exactly what makes
    downstage read downward like a plan drawing. */
+/* A little corner tripod for the angled view: the three stage axes drawn as
+ * they actually project, each labelled. Edge labels would be a lie here -- in an
+ * axonometric no single screen edge IS upstage, the direction runs diagonally --
+ * so show the axes themselves and let them be read off. */
+void StructureStudioView::drawAxisTripod(QPainter &p) const
+{
+    const QPointF o(width() - 66.0, height() - 62.0);
+    const double len = 26.0;
+
+    struct { QVector3D dir; const char *name; QColor col; } axes[] = {
+        { QVector3D(1, 0, 0), "SL", QColor(232, 120, 120) },   // +X is stage left
+        { QVector3D(0, 1, 0), "DS", QColor(120, 200, 140) },   // +Y is downstage
+        { QVector3D(0, 0, 1), "up", QColor(120, 170, 235) },
+    };
+
+    QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
+    for (const auto &ax : axes)
+    {
+        // Project the axis the same way everything else is projected, so the
+        // tripod always agrees with the drawing it is describing.
+        QPointF v = planeToScreenVec(project(ax.dir));
+        const double l = std::hypot(v.x(), v.y());
+        if (l < 1e-6)
+            continue;                       // dead-on into the screen
+        v = QPointF(v.x() / l * len, v.y() / l * len);
+        p.setPen(QPen(ax.col, 1.4));
+        p.drawLine(o, o + v);
+        p.drawText(QRectF(o.x() + v.x() * 1.28 - 12, o.y() + v.y() * 1.28 - 7, 24, 14),
+                   Qt::AlignCenter, QString::fromLatin1(ax.name));
+    }
+    p.setPen(QPen(QColor(150, 155, 165), 1.0));
+    p.drawEllipse(o, 1.6, 1.6);
+}
+
 void StructureStudioView::drawOrientationLabels(QPainter &p) const
 {
+    if (m_plane == Angled)
+    {
+        drawAxisTripod(p);      // no edge of an angled view IS one direction
+        return;
+    }
+
     QString leftLbl, rightLbl, topLbl, bottomLbl;
     switch (m_plane)
     {
@@ -1680,9 +1782,13 @@ void StructureStudioView::paintEvent(QPaintEvent *)
 
     // Plane badge.
     p.setPen(QColor(160, 164, 175));
-    const char *names[] = { "Top", "Front", "Side" };
+    // One entry per Plane -- adding Angled to the enum without adding it here
+    // read off the end of the array.
+    const char *names[] = { "Top", "Front", "Side", "45°" };
+    const int idx = qBound(0, int(m_plane), int(sizeof(names) / sizeof(names[0])) - 1);
     p.drawText(rect().adjusted(0, 6, -8, 0), Qt::AlignTop | Qt::AlignRight,
-               tr("2D — %1").arg(names[int(m_plane)]));
+               (m_plane == Angled) ? tr("%1 — view only").arg(names[idx])
+                                   : tr("2D — %1").arg(names[idx]));
     drawOrientationLabels(p);
 }
 
@@ -1728,9 +1834,23 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         }
         m_dragFid = hitTestFixture(e->pos());   // invalidId() if empty space
         m_dragged = false;
+
+        /* In the angled view a drag on EMPTY canvas swings the camera. Fixture
+           dragging is refused there anyway (no honest inverse), so the gesture
+           is free -- and orbiting by hand beats reaching for a spin box when you
+           just want to see behind something. Pressing ON a fixture still selects
+           it, so nothing is lost. */
+        if (m_plane == Angled && m_dragFid == Fixture::invalidId())
+        {
+            m_orbiting = true;
+            m_orbitLast = e->pos();
+            setCursor(Qt::SizeAllCursor);
+            return;
+        }
         if (m_dragFid != Fixture::invalidId())
         {
-            setCursor(m_locked ? Qt::ArrowCursor : Qt::ClosedHandCursor);
+            setCursor((m_locked || m_plane == Angled) ? Qt::ArrowCursor
+                                                       : Qt::ClosedHandCursor);
             setHighlight({ m_dragFid });
             emit fixtureSelected(m_dragFid);   // selection always works
         }
@@ -1741,6 +1861,15 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
 {
     m_cursorPx = e->pos();   // live ruler readout
     m_hasCursor = true;
+    if (m_orbiting)
+    {
+        const QPointF d = e->pos() - m_orbitLast;
+        m_orbitLast = e->pos();
+        // The SCENE follows the hand, not the camera: drag right and the rig
+        // turns to the right, drag down and you drop toward its level.
+        setAngledView(m_azimuthDeg - d.x() * 0.4, m_elevationDeg + d.y() * 0.4);
+        return;
+    }
     if (m_panning)
     {
         m_originPx += e->pos() - m_panLast;
@@ -1776,6 +1905,12 @@ void StructureStudioView::leaveEvent(QEvent *)
 
 void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
 {
+    if (m_orbiting)
+    {
+        m_orbiting = false;
+        setCursor(Qt::ArrowCursor);
+        return;
+    }
     m_panning = false;
     if (m_resizeBoom != 0)
     {
