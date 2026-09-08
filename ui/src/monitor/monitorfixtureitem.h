@@ -24,6 +24,8 @@
 #include <QAbstractGraphicsShapeItem>
 #include <QFont>
 
+#include "fixturevisualtraits.h"
+
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
@@ -212,6 +214,14 @@ public:
      *  @param yOffset vertical grid origin offset in pixels */
     void setSnap(int divisions, qreal cellPixels, qreal xOffset, qreal yOffset);
 
+    /** Tell this item which way the canvas is currently looking at it, so a
+     *  Mover can draw the matching silhouette: Top (plan) = round head with
+     *  a flat lens edge in a square base footprint; Front/Side (elevation)
+     *  = base + yoke arms + head. Mirrors MonitorGraphicsView::isElevation();
+     *  updated whenever the view's POV changes. No effect on any other
+     *  silhouette (Par/Bar/Generic look the same from every POV). */
+    void setElevationView(bool on) { if (m_elevationView != on) { m_elevationView = on; update(); } }
+
 public slots:
     /** Update the fixture values for rendering, passing the
      *  universe array of values */
@@ -242,6 +252,14 @@ private:
     QColor computeColor(const FixtureHead *head, const QByteArray & values);
     uchar computeAlpha(const FixtureHead *head, const QByteArray & values);
     FixtureHead::ShutterState computeShutter(const FixtureHead *head, const QByteArray & values);
+
+    /** Draw the fixture's outer body outline/fill into $r, shaped by
+     *  m_traits.kind (Mover = ellipse "puck", Par = rounded can, Bar/Generic =
+     *  sharp rect) so the same silhouette classifier used by the Structure
+     *  Studio elevation editor also reads on the 2D plan view. Shared by the
+     *  background fill, selection halo, truss-bind ring and marked outline,
+     *  which all otherwise independently drew the same plain rect. */
+    void drawBody(QPainter *painter, const QRectF &r) const;
 
 signals:
     void itemDropped(MonitorFixtureItem *);
@@ -306,6 +324,14 @@ private:
     /** True if any head has a Pan channel (i.e. a moving head): only these
      *  show a facing arrow and accept Alt-drag rotation. */
     bool m_hasPan        = false;
+
+    /** Shape-family classification (Mover/Par/Bar/Generic) shared with the
+     *  Structure Studio elevation editor, computed once at construction. */
+    FixtureVisualTraits m_traits;
+
+    /** True when the canvas's current POV is Front/Side (an elevation), set
+     *  via setElevationView(); see there. */
+    bool m_elevationView = false;
 
     /** Pan-zero facing in degrees clockwise from downstage (FixtureRigProps
      *  panZeroDir). 0 = faces downstage. */

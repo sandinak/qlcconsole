@@ -347,6 +347,7 @@ void App::disableGUI()
     m_noGui = true;
 }
 
+
 void App::init()
 {
     QSettings settings;
@@ -374,20 +375,7 @@ void App::init()
         // Clamp the restored window to the current screen: a geometry saved on
         // a bigger/other display (or made too tall by an old minimum size) can
         // land partly off-screen and become impossible to grab/resize.
-        QScreen *scr = QGuiApplication::screenAt(frameGeometry().center());
-        if (scr == NULL)
-            scr = QGuiApplication::primaryScreen();
-        if (scr != NULL)
-        {
-            const QRect avail = scr->availableGeometry();
-            QRect g = geometry();
-            g.setSize(g.size().boundedTo(avail.size()));
-            if (g.right()  > avail.right())  g.moveRight(avail.right());
-            if (g.bottom() > avail.bottom()) g.moveBottom(avail.bottom());
-            if (g.left()   < avail.left())   g.moveLeft(avail.left());
-            if (g.top()    < avail.top())    g.moveTop(avail.top());
-            setGeometry(g);
-        }
+        AppUtil::ensureWindowOnScreen(this);
     }
     else
     {
@@ -2763,6 +2751,13 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
                                 dw->restoreGeometry(geo);
                             else
                                 dw->resize(800, 600);
+                            // Saved geometry can be from a different machine's
+                            // screen layout entirely (this is per-workspace-file
+                            // state, unlike the main window's local QSettings),
+                            // or restoreGeometry() above can have silently failed
+                            // outright (Qt version/format mismatch) and left a
+                            // tiny construction-time default -- fix up either way.
+                            AppUtil::ensureWindowOnScreen(dw);
                             dw->show();
                             w->show();
                             connect(dw, SIGNAL(closing()), this, SLOT(slotReattachContext()));

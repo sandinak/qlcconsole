@@ -48,7 +48,73 @@
 #include "fixtureselection.h"
 #include "fixturegroup.h"
 #include "fixture.h"
+#include "qlcfixturehead.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
 #include "doc.h"
+
+// A short tag for what THIS ONE head actually emits -- "RGB"/"RGBW"/"W"/
+// "Wheel" -- so a grid cell reads as more than just "some head of this
+// fixture" when heads of the same physical unit differ (e.g. an RGB head
+// and a separate White head split into different groups; see the per-head
+// drag feature above). Mirrors classifyFixture()'s whole-fixture RGBW/wheel
+// detection (fixturevisualtraits.cpp), scoped to one head's own channels.
+static QString headColorTag(Fixture *fxi, int headIndex)
+{
+    if (fxi == NULL || fxi->fixtureMode() == NULL)
+        return QString();
+    if (headIndex < 0 || headIndex >= fxi->heads())
+        return QString();
+
+    QLCFixtureMode *mode = fxi->fixtureMode();
+    const QLCFixtureHead head = fxi->head(headIndex);
+
+    QSet<int> colours;
+    bool hasWheel = false;
+    bool hasWhite = false;
+    bool hasAmber = false;
+    foreach (quint32 ch, head.channels())
+    {
+        QLCChannel *c = mode->channel(ch);
+        if (c == NULL)
+            continue;
+        if (c->group() == QLCChannel::Colour)
+        {
+            if (c->colour() == QLCChannel::NoColour)
+                hasWheel = true;
+            else if (c->colour() == QLCChannel::White)
+                hasWhite = true;
+            else if (c->colour() == QLCChannel::Amber)
+                hasAmber = true;
+            else
+                colours.insert(int(c->colour()));
+        }
+        else if (c->group() == QLCChannel::Intensity && c->colour() != QLCChannel::NoColour)
+        {
+            if (c->colour() == QLCChannel::White)
+                hasWhite = true;
+            else if (c->colour() == QLCChannel::Amber)
+                hasAmber = true;
+            else
+                colours.insert(int(c->colour()));
+        }
+    }
+
+    if (hasWheel)
+        return QObject::tr("Wheel");
+    if (colours.size() >= 3)
+    {
+        QString tag = QStringLiteral("RGB");
+        if (hasWhite) tag += "W";
+        if (hasAmber) tag += "A";
+        return tag;
+    }
+    if (hasWhite)
+        return QObject::tr("W");
+    if (hasAmber)
+        return QObject::tr("Amber");
+    return QString(); // plain dimmer/other -- nothing colour-specific to show
+}
 
 #define SETTINGS_GEOMETRY "fixturegroupeditor/geometry"
 
@@ -142,6 +208,7 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
     if (obj == m_table->viewport())
     {
         const char *mimeType = FixtureTreeWidget::fixtureDragMimeType();
+        const char *headMimeType = FixtureTreeWidget::headDragMimeType();
 
         // --- Selection & internal drag -------------------------------------
         // We drive selection ourselves (index-precise) so it never over-grabs:
@@ -236,6 +303,7 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
         {
             QDragEnterEvent *de = static_cast<QDragEnterEvent*>(event);
             if (de->mimeData()->hasFormat(mimeType) ||
+                de->mimeData()->hasFormat(headMimeType) ||
                 de->mimeData()->hasFormat(CELLS_DRAG_MIME)) { de->acceptProposedAction(); return true; }
         }
         else if (event->type() == QEvent::DragMove)
@@ -259,7 +327,8 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
                     dm->ignore();
                 return true;
             }
-            if (dm->mimeData()->hasFormat(mimeType)) { dm->acceptProposedAction(); return true; }
+            if (dm->mimeData()->hasFormat(mimeType) ||
+                dm->mimeData()->hasFormat(headMimeType)) { dm->acceptProposedAction(); return true; }
         }
         else if (event->type() == QEvent::DragLeave)
         {
@@ -294,7 +363,9 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
                 return true;
             }
 
-            if (dr->mimeData()->hasFormat(mimeType) == false)
+            bool hasFixtures = dr->mimeData()->hasFormat(mimeType);
+            bool hasHeads = dr->mimeData()->hasFormat(headMimeType);
+            if (hasFixtures == false && hasHeads == false)
                 return false;
 
             // Cell under the cursor (fall back to the current cell).
@@ -306,26 +377,52 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
             int col = idx.isValid() ? idx.column() : m_column;
             int row = idx.isValid() ? idx.row() : m_row;
 
-            QByteArray data = dr->mimeData()->data(mimeType);
-            QDataStream stream(&data, QIODevice::ReadOnly);
             int maxX = m_grp->size().width() - 1;
             int maxY = m_grp->size().height() - 1;
             bool added = false;
             beginEdit();
-            while (stream.atEnd() == false)
+
+            if (hasFixtures)
             {
-                quint32 fid = 0;
-                stream >> fid;
-                if (m_doc->fixture(fid) == NULL)
-                    continue;
-                // assignFixture places all of the fixture's heads from this
-                // cell; spread successive fixtures across the row.
-                if (m_grp->assignFixture(fid, QLCPoint(col, row)))
+                QByteArray data = dr->mimeData()->data(mimeType);
+                QDataStream stream(&data, QIODevice::ReadOnly);
+                while (stream.atEnd() == false)
                 {
-                    added = true;
-                    maxX = qMax(maxX, col);
-                    maxY = qMax(maxY, row);
-                    col++;
+                    quint32 fid = 0;
+                    stream >> fid;
+                    if (m_doc->fixture(fid) == NULL)
+                        continue;
+                    // assignFixture places all of the fixture's heads from this
+                    // cell; spread successive fixtures across the row.
+                    if (m_grp->assignFixture(fid, QLCPoint(col, row)))
+                    {
+                        added = true;
+                        maxX = qMax(maxX, col);
+                        maxY = qMax(maxY, row);
+                        col++;
+                    }
+                }
+            }
+
+            if (hasHeads)
+            {
+                QByteArray headData = dr->mimeData()->data(headMimeType);
+                QDataStream headStream(&headData, QIODevice::ReadOnly);
+                while (headStream.atEnd() == false)
+                {
+                    quint32 fid = 0;
+                    quint32 headIdx = 0;
+                    headStream >> fid >> headIdx;
+                    if (m_doc->fixture(fid) == NULL)
+                        continue;
+                    // One head per cell; spread successive heads across the row.
+                    if (m_grp->assignHead(QLCPoint(col, row), GroupHead(fid, int(headIdx))))
+                    {
+                        added = true;
+                        maxX = qMax(maxX, col);
+                        maxY = qMax(maxY, row);
+                        col++;
+                    }
                 }
             }
 
@@ -415,10 +512,13 @@ void FixtureGroupEditor::updateTable()
             continue;
 
         QIcon icon = fxi->getIconFromType();
+        const QString colorTag = headColorTag(fxi, head.head);
         QString str = QString("%1 H:%2\nA:%3 U:%4").arg(fxi->name())
                                                .arg(head.head + 1)
                                                .arg(fxi->address() + 1)
                                                .arg(fxi->universe() + 1);
+        if (colorTag.isEmpty() == false)
+            str += QStringLiteral("\n[%1]").arg(colorTag);
 
         QTableWidgetItem* item = new QTableWidgetItem(icon, str);
         item->setData(PROP_FIXTURE, head.fxi);

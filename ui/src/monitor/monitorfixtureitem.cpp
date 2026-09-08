@@ -120,6 +120,7 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
     Q_ASSERT(fxi != NULL);
 
     m_name = fxi->name();
+    m_traits = classifyFixture(fxi);
 
     setToolTip(baseToolTip());
 
@@ -759,6 +760,39 @@ QPainterPath MonitorFixtureItem::shape() const
     return path;
 }
 
+void MonitorFixtureItem::drawBody(QPainter *painter, const QRectF &r) const
+{
+    if (m_traits.kind == FixtureSilhouette::Mover)
+    {
+        // Shared with the Structure Studio elevation editor (fixturevisualtraits.h)
+        // so the same fixture reads as the same shape in both places, and
+        // switches with the canvas's own POV like the studio editor's plane.
+        // headCount > 1 (a genuine multi-head fixture) draws one full unit
+        // per head, each centred in its own slice of the cell width.
+        const int units = qMax(1, m_traits.headCount);
+        painter->drawPath(m_elevationView ? moverElevationPath(r, false, units)
+                                           : moverPlanPath(r, units));
+        return;
+    }
+    switch (m_traits.kind)
+    {
+        case FixtureSilhouette::Par:
+        {
+            // A can/wash unit: rounded, but still clearly rectangular.
+            const qreal rad = qMin(r.width(), r.height()) * 0.25;
+            painter->drawRoundedRect(r, rad, rad);
+            break;
+        }
+        case FixtureSilhouette::Bar:
+        case FixtureSilhouette::Generic:
+        default:
+            // Unchanged original body shape for bars/pixel strips and anything
+            // this classifier doesn't have a dedicated silhouette for.
+            painter->drawRect(r);
+            break;
+    }
+}
+
 void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
     Q_UNUSED(option);
@@ -812,13 +846,13 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setBrush(Qt::NoBrush);
         const QPen keep = painter->pen();
         painter->setPen(haloPen);
-        painter->drawRect(QRectF(-3.0, -3.0, m_width + 6.0, m_height + 6.0));
+        drawBody(painter, QRectF(-3.0, -3.0, m_width + 6.0, m_height + 6.0));
         painter->setPen(keep);
     }
 
     // draw item background
     painter->setBrush(QBrush(QColor(33, 33, 33)));
-    painter->drawRect(0, 0, m_width, m_height);
+    drawBody(painter, QRectF(0, 0, m_width, m_height));
 
     /* Truss-bind indicator, inner border ring:
          cyan  = bound to a truss and staying that way
@@ -833,7 +867,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
                                    : QColor(0, 180, 255);
         painter->setPen(QPen(ring, 2.0));
         painter->setBrush(Qt::NoBrush);
-        painter->drawRect(QRectF(1.5, 1.5, m_width - 3, m_height - 3));
+        drawBody(painter, QRectF(1.5, 1.5, m_width - 3, m_height - 3));
     }
 
     // Marked (move-in-black): a thin dashed violet outline so a pre-positioned-
@@ -846,7 +880,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         markPen.setCosmetic(true);
         painter->setPen(markPen);
         painter->setBrush(Qt::NoBrush);
-        painter->drawRect(QRectF(0.75, 0.75, m_width - 1.5, m_height - 1.5));
+        drawBody(painter, QRectF(0.75, 0.75, m_width - 1.5, m_height - 1.5));
     }
     // The pan/tilt indicators are drawn around screen-down (Qt angle 270°),
     // which represents the home/centre pointing = downstage. Rotating the

@@ -904,6 +904,25 @@ void MonitorLayersPanel::handleTreeDrop(const QList<QTreeWidgetItem *> &dragged,
         }
     }
 
+    // A bare (not-yet-grouped) truss/pipe/tower ITEM is also a valid attach
+    // target directly -- the group-anchor check below only ever fires once a
+    // truss already HAS an anchored group (i.e. already has a fixture on it,
+    // see ensureTrussGroup()), so a fresh structural feature with nothing on
+    // it yet needed this too: dropping a fixture on it did nothing but move
+    // it to that layer, not attach it, until this was added.
+    QString directAttachKind;
+    quint32 directAttachId = 0;
+    if (target != nullptr && target->data(0, NodeTypeRole).toInt() == NodeItem)
+    {
+        const QString k = target->data(0, NodeKindRole).toString();
+        if (k == QStringLiteral("truss") || k == QStringLiteral("pipe")
+            || k == QStringLiteral("tower"))
+        {
+            directAttachKind = k;
+            directAttachId = target->data(0, NodeIdRole).toUInt();
+        }
+    }
+
     // Split the drag into item leaves and group nodes.
     QList<QPair<QString, quint32> > leaves;
     QList<quint32> groups;
@@ -919,26 +938,44 @@ void MonitorLayersPanel::handleTreeDrop(const QList<QTreeWidgetItem *> &dragged,
 
     if (!leaves.isEmpty())
     {
-        // Dropping a fixture onto a TRUSS-anchored group binds it to that truss
-        // (explicit attach, since 2D drop-to-bind was removed). Non-fixture
-        // leaves just reparent into the group as usual.
+        // Dropping fixture(s) directly onto a truss/pipe/tower ITEM, or onto a
+        // truss-anchored GROUP (an already-populated truss), attaches them --
+        // explicit attach, since 2D drop-to-bind was removed. Only "truss" has
+        // an anchored-GROUP concept today (ensureTrussGroup()/
+        // ensurePlatformGroup() — no pipe/tower equivalent exists), so the
+        // group-anchor path stays truss-only; the direct-item path above
+        // covers pipe/tower (and a not-yet-grouped truss) either way. Non-
+        // fixture leaves just reparent as usual.
         const MonitorProperties::MonitorGroup g =
             intoGroup ? m_props->group(containerId) : MonitorProperties::MonitorGroup();
-        const bool trussAnchored =
-            intoGroup && g.anchorKind == QStringLiteral("truss") && g.anchorId != 0;
+        QString attachKind = directAttachKind;
+        quint32 attachId = directAttachId;
+        if (attachKind.isEmpty() && intoGroup && g.anchorId != 0
+            && g.anchorKind == QStringLiteral("truss"))
+        {
+            attachKind = g.anchorKind;
+            attachId = g.anchorId;
+        }
 
-        if (trussAnchored)
+        if (!attachKind.isEmpty())
         {
             QList<QPair<QString, quint32> > nonFixtures;
             for (const QPair<QString, quint32> &lf : leaves)
             {
-                if (lf.first == QStringLiteral("fixture"))
-                    m_view->attachFixtureToTruss(lf.second, g.anchorId);
-                else
-                    nonFixtures << lf;
+                if (lf.first != QStringLiteral("fixture"))
+                { nonFixtures << lf; continue; }
+                if (attachKind == QStringLiteral("truss"))
+                    m_view->attachFixtureToTruss(lf.second, attachId);
+                else if (attachKind == QStringLiteral("pipe"))
+                    m_view->attachFixtureToPipe(lf.second, attachId);
+                else if (attachKind == QStringLiteral("tower"))
+                    m_view->attachFixtureToTower(lf.second, attachId);
             }
             if (!nonFixtures.isEmpty())
-                m_view->reparentToGroup(nonFixtures, containerId);
+            {
+                if (intoGroup) m_view->reparentToGroup(nonFixtures, containerId);
+                else           m_view->reparentToLayer(nonFixtures, containerLayer);
+            }
         }
         else if (intoGroup)
         {
@@ -1408,6 +1445,50 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
                    the same row worked. reparentToLayer() addresses items by
                    kind and id and does not care what is selected or on screen. */
                 if (m_view) m_view->reparentToLayer(objs, lid);
+                reload();
+            });
+        }
+        // One-step version of "New layer" + "Move to layer" -- create the
+        // layer AND land the current selection on it in a single action,
+        // same as "New Folder from selection…" above does for folders.
+        menu.addAction(tr("New Layer from selection…"), this, [this, objs]() {
+            bool ok = false;
+            const QString name = QInputDialog::getText(this, tr("New Layer"),
+                tr("Layer name:"), QLineEdit::Normal,
+                tr("Layer %1").arg(m_props->layers().count()), &ok).trimmed();
+            if (!ok || name.isEmpty())
+                return;
+            const quint32 lid = m_props->addLayer(name);
+            m_props->setActiveLayerId(lid);
+            if (m_view) m_view->reparentToLayer(objs, lid);
+            m_doc->setModified();
+            m_focusLayerAfterReload = int(lid);
+            reload();
+        });
+
+        // Bulk position lock/unlock -- the per-item "Lock position" toggle
+        // (below, single-object context menus) already freezes movement AND
+        // refuses new attachments onto a locked structural feature
+        // (trussUnderFixture()'s forAttach path skips locked trusses); this
+        // just makes it reachable for a whole multi-selection at once,
+        // e.g. everything currently on a layer, instead of one item at a
+        // time. Fixtures have no per-item lock (only layer/group/global), so
+        // they're silently excluded here rather than offering an action that
+        // would do nothing for them.
+        QList<QPair<QString, quint32> > lockableObjs;
+        for (const QPair<QString, quint32> &o : objs)
+            if (kindLockable(o.first))
+                lockableObjs << o;
+        if (!lockableObjs.isEmpty())
+        {
+            menu.addAction(tr("Lock position"), this, [this, lockableObjs]() {
+                for (const QPair<QString, quint32> &o : lockableObjs)
+                    setObjectLocked(o.first, o.second, true);
+                reload();
+            });
+            menu.addAction(tr("Unlock position"), this, [this, lockableObjs]() {
+                for (const QPair<QString, quint32> &o : lockableObjs)
+                    setObjectLocked(o.first, o.second, false);
                 reload();
             });
         }

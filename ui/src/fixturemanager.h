@@ -30,6 +30,7 @@ class QLCFixtureDefCache;
 class FixtureGroupEditor;
 class FixtureTreeWidget;
 class QTreeWidgetItem;
+class QLineEdit;
 class QTextBrowser;
 class QTreeWidget;
 class QTabWidget;
@@ -182,6 +183,21 @@ private slots:
 
     void slotDisplayFixtureInfo(QString &info);
 
+    /** Filter the fixtures tree as the search box's text changes -- hides any
+     *  row (fixture, group, folder) whose own name doesn't match AND has no
+     *  matching descendant, so a folder stays visible whenever something
+     *  inside it does. */
+    void slotFixturesSearchChanged(const QString &text);
+
+private:
+    /** Recursive: hides @p item unless its own name contains @p needle or a
+     *  descendant does; auto-expands it when a descendant matches (so a
+     *  match inside a collapsed folder is still visible). Returns whether
+     *  @p item (or something under it) matched, so a parent call can decide
+     *  its own visibility. @p needle is already lowercased; empty matches
+     *  everything (the "search cleared" case). */
+    bool filterFixtureTreeItem(QTreeWidgetItem *item, const QString &needle);
+
 private:
     /** Select a fixture group */
     void selectGroup(quint32 id);
@@ -213,6 +229,7 @@ private:
 
     QSplitter* m_splitter;
     FixtureTreeWidget* m_fixtures_tree;
+    QLineEdit* m_fixturesSearch;
     QTreeWidget* m_channel_groups_tree;
     QWidget* m_rdmManager;
 

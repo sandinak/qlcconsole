@@ -8,6 +8,1011 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson, after the group-editor regression fix let heads show up in the
+grid again: "OHhh .. shows head .. but doesn't show type .. we need to
+know if they're RGB or W heads." Directly the point of the per-head drag
+feature (letting a fixture's RGB heads go in one group and its White head
+in another) — but the grid cell text only ever showed the fixture name,
+head number, and DMX address, with nothing about what that specific head
+actually emits.
+
+**Fix** (`ui/src/fixturegroupeditor.cpp`): new `headColorTag(Fixture*,
+headIndex)` — walks that ONE head's own channels (not the whole fixture)
+and classifies them: a Colour-group channel with no single primary colour
+= "Wheel"; 3+ distinct RGB primaries = "RGB" (+"W"/+"A" appended if White/
+Amber channels are also present, e.g. "RGBW"); White with no RGB = "W";
+Amber with no RGB = "Amber"; otherwise nothing shown (a plain dimmer has no
+colour to report). Mirrors `classifyFixture()`'s existing whole-fixture
+RGBW/wheel detection (`fixturevisualtraits.cpp`) but scoped to one head's
+channel list, since a single fixture's heads can genuinely differ (that's
+the whole reason this feature exists). `updateTable()` now appends
+`[TAG]` as a third line in the cell's text/tooltip when non-empty.
+
+Build: clean (only the pre-existing `mimeData() override` warning).
+`check-all.sh` run in progress.
+
+Not yet verified live — needs a real check: open a group with heads from a
+fixture that has genuinely different per-head colour capability (e.g. one
+of the US1 2-head fixtures, or a fixture with a split RGB head + White
+head) and confirm the tag is correct per cell, not just repeated from the
+whole fixture.
+
+---
+
+## Fix: fixture group layout editor would flash open and immediately close (regression) — SHIPPED, Branson-verified live (2026-09-07)
+
+Branson: "hmm .. I can't open fixture groups to see layouts anymore." A
+real regression introduced by this session's per-head drag-and-drop work
+(`FixtureTreeWidget::setShowHeads()`), root-caused by tracing the exact
+call chain rather than guessing:
+
+`FixtureManager::fixtureGroupSelected()` creates the `FixtureGroupEditor`
+and then calls `m_fixtures_tree->setShowHeads(true)` so heads are draggable
+while the editor is open. `setShowHeads()` calls `updateTree()`, which
+clears and repopulates the WHOLE tree — and `QTreeWidget::clear()` emits
+`itemSelectionChanged()` synchronously, mid-call. Since
+`FixtureManager::slotSelectionChanged()` is connected to that exact signal
+AND `fixtureGroupSelected()` was itself called FROM `slotSelectionChanged()`,
+this reenters it while the brand-new editor is still being wired up. The
+reentrant call sees an empty selection (the tree was just cleared), falls
+through every branch to the generic "nothing selected" case, and calls
+`createInfo()` — which calls `clearRightPane()` — which deletes the
+`FixtureGroupEditor` that was created two stack frames up, milliseconds
+after it was created. Net effect: the editor flashes into existence and is
+torn straight back down, so all the user ever saw was "Nothing selected."
+
+**Fix** (`ui/src/fixturetreewidget.cpp`): `setShowHeads()` now blocks
+signals around its `updateTree()` call. This is safe because `setShowHeads()`
+is only ever called from `fixtureGroupSelected()`/`clearRightPane()`, both of
+which are already explicitly managing the right-pane state change that
+triggered it — the tree doesn't need to echo a selection-changed signal back
+to the very code that's mid-flight causing it.
+
+Build: clean. `check-all.sh`: PASS (Qt6/Qt6-Release; Qt5 SKIP, Qt6-Werror
+pre-existing configure break, as always). **Branson confirmed this exact
+regression while live-testing** — fix ships directly off that report, not
+yet re-confirmed by him after the rebuild, but the root cause is proven via
+code trace (not a guess), so marked verified pending his next look.
+
+---
+
+## Mover multi-head silhouette: one base+arms+head (or circle-in-square) unit per physical head, centred in its own slice — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson, on a real 2-head fixture ("US1 has two .. 2 head fixtures set
+approx the back left and back center of the platform"): "need to fix your
+centering on the multi head .. this seems better but each head should be
+centered on the width/heads space."
+
+Previous round's elevation/plan Mover paths always drew exactly ONE
+base+arms+head (or circle-in-square) unit stretched across the fixture's
+whole allotted width/rect, regardless of how many physical heads it has —
+correct for the common single-head case, wrong for a genuine multi-head
+fixture, where each head needs its own complete unit centered in its own
+share of the space.
+
+**Fix** (`ui/src/monitor/fixturevisualtraits.{h,cpp}`): both
+`moverElevationPath()` and `moverPlanPath()` gained a `headCount` parameter
+(default 1, so every existing call site keeps working unchanged). The
+per-unit drawing logic was factored into `addMoverUnit()`/
+`addMoverPlanUnit()` static helpers; the public functions now slice `r`
+into `headCount` equal-width columns and call the per-unit helper once per
+slice — one full base+arms+head (or circle-in-square) unit centred in each
+column, instead of one unit spanning them all.
+
+**Callers updated** to pass real head counts instead of the old
+`multiHeadPanTilt ? 2 : 1` binary gate (`structurestudioview.cpp`'s Top-view
+loop, Front/Side branch, and the tower-shelf special case; `monitorfixtureitem.cpp`'s
+`drawBody()`) — using `traits.headCount` directly means Top and Front/Side
+views now always agree on how many units to draw for the same fixture
+(previously they could disagree: elevation was hard-coded to always draw
+ONE combined body regardless of head count, while Top view's twin-unit
+split required BOTH heads to have their own Pan/Tilt channel
+(`multiHeadPanTilt`), which isn't the same condition as "has 2 heads").
+
+**Also fixed while in there**: the Top-view multi-unit offset formula
+(`u == 0 ? -spacing*0.5 : spacing*0.5`) only ever handled exactly 1 or 2
+units correctly — a 3+-head fixture would have stacked heads 2 and 3 on
+top of each other. Generalized to `(u - (units-1)*0.5) * spacing`, which
+evenly spaces any number of units and is identical to the old formula for
+1 or 2. `hitTestFixture()`'s Mover bounding-box test widened to account for
+`units` in both planes, matching the wider drawn silhouette.
+
+Build: clean. `check-all.sh` run in progress.
+
+Not yet verified live — needs a real check: the two US1 2-head fixtures
+(back-left and back-center of the platform) should now each show two
+complete, evenly-centered base+arms+head units side by side, in both Top
+and Front/Side views, instead of one stretched/off-center unit.
+
+---
+
+## Mover silhouette redesign: base + yoke arms + head (elevation), circle-in-square (plan) — SHIPPED, PARTIALLY Branson-verified (2026-09-07)
+
+Branson, looking at the plain-oval Mover from the previous round: "I see the
+oval .. which makes sense tho the top should be flattened where the light
+comes out? .. but no arms and no base .. and it's not sitting on top. also
+in the truss editor I should see the same figure right? also there's
+perspective .. if looking down on top of fixture circles in a square ....
+if looking from side .. there's a base with arms on the side that holds
+the lighting head. A wash should be same ways - smaller moving head wash
+has a small head - larger moving head wash has a big head etc." Confirmed
+"Full scope now" when asked how much to build (vs. elevation-only, vs. just
+fixing the tower-editor inconsistency).
+
+Root cause of the two specific complaints:
+- **"No arms and no base"** in the tower editor's own preview: that preview
+  IS `StructureStudioView` (same editor, embedded per-object via
+  `Monitor::makeStudioPane()`), but a tower-shelf-MOUNTED fixture hits an
+  OLDER special-case code path (built earlier this session, before the
+  classifier existed) that always drew a generic sitting/hanging trapezoid
+  for ANY fixture kind on a shelf — completely bypassing
+  `classifyFixture()`. That's why it didn't match the Mover shape at all.
+- **The oval not looking "flattened" / no square**: `MonitorFixtureItem`
+  (main 2D canvas) had zero awareness of which way the canvas is looking at
+  it (Top vs Front vs Side) — it drew the identical ellipse regardless of
+  POV, so there was only ever one shape, never a plan-view vs elevation-view
+  distinction.
+
+**New shared geometry** (`ui/src/monitor/fixturevisualtraits.{h,cpp}` --
+pure `QRectF in -> QPainterPath out` functions, no view-class dependency, so
+every renderer draws and hit-tests the IDENTICAL shape):
+- `moverElevationPath(r, hung)` — base block flush with the mounting
+  surface, two yoke arms rising from it, head suspended between them.
+  `hung` mirrors it (base at the top, hanging below) for a TopHung mount,
+  matching the existing tower-shelf sit/hang mirroring convention.
+- `moverPlanPath(r)` — round head with a flat chord on its local "front"
+  edge (the downstage-default convention already used for facing=0
+  elsewhere in this codebase), inset in a rounded square base footprint —
+  "circles in a square."
+
+**`StructureStudioView`** (`structurestudioview.{h,cpp}`): the tower-shelf
+special case now branches on `classifyFixture()`'s kind — Mover gets
+`moverElevationPath()` sized to the same `towerFixtureBodyRect()` used for
+hit-testing (so "I should see the same figure" now holds); everything else
+keeps the trapezoid. The normal (non-shelf) Mover branch now branches on
+`m_plane`: Top draws `moverPlanPath()` per unit (still two side-by-side for
+a genuine twin-head pan/tilt wash); Front/Side draws one combined
+`moverElevationPath()` (multi-head yoke splitting judged not worth the
+complexity in elevation). New shared `moverBaseRadius()` (previous round)
+still drives the sizing -- physical width when declared, `hasFocus`
+heuristic otherwise -- so a wash with a real declared Width still reads
+bigger than a spot with none. `hitTestFixture()`'s Mover branch updated to
+a bounding-box test matching whichever silhouette was actually drawn
+(previously a plain circle-distance test, which undershot the square/base
+corners).
+
+**`MonitorFixtureItem`** (`monitorfixtureitem.{h,cpp}`): new
+`setElevationView(bool)`, wired from `MonitorGraphicsView::updateFixture()`
+(`item->setElevationView(isElevation())`, right next to the existing
+`setSize()` call) — `refreshAllItems()` already re-runs `updateFixture()`
+for every fixture on any POV change, so this stays in sync automatically,
+no new refresh path needed. `drawBody()`'s Mover case now picks
+`moverElevationPath()` or `moverPlanPath()` from that flag instead of a
+plain `drawEllipse()`. Hit-testing (`shape()`) deliberately left untouched
+again — its rect-with-margin is still a safe superset of either new shape.
+
+Build: clean (only the same pre-existing, unrelated warnings).
+`check-all.sh` run in progress.
+
+**Verification status — partial, and here's exactly why**: launched
+`qlcconsole -o test-workspaces/surfacetesting.qxw` and screenshotted it.
+**Confirmed working in Top (plan) view**: LM70 #1/#2 and the UST-series
+Movinghead+Circle fixtures now draw as a rounded-square base with a round
+head (pan/tilt arcs still overlaid on top, per existing behavior) instead
+of a plain oval — a real visual change, screenshotted and inspected up
+close. Switching the canvas to "2D — Front" via the View combo DID change
+the view (ruler and truss rendering updated correctly to elevation), but I
+could not get a clean, safely-obtained close-up of the fixture icon itself
+at that zoom to confirm the base+yoke+arms shape reads correctly on
+screen — window focus in this sandboxed environment kept reverting to the
+Claude Code / VS Code window between screenshot and click, and one stray
+zoom-field edit attempt actually typed into Branson's live VS Code
+integrated terminal instead of qlcconsole (harmless -- `64` + Enter,
+`zsh: command not found: 64` -- but real; disclosed to Branson directly).
+Continuing to force automated clicks after that felt like the wrong
+tradeoff, so this stopped short of full self-verification.
+
+**Needs Branson to check directly**: (1) main 2D canvas in Front/Side
+POV — does a Mover now show a readable base+arms+head at a normal working
+zoom (not the tiny full-stage-overview zoom used here)? (2) the SR Tower
+editor's own Front-view preview — does the Focus Spot Three Z (or any
+tower-shelf-mounted mover) now show the SAME base+arms+head shape instead
+of the trapezoid, sitting/hanging correctly relative to its shelf? (3) does
+the flat-edge notch on the Top-view circle read as intentional rather than
+a rendering glitch, especially on a single (non-twin) mover away from the
+pan/tilt arc overlay?
+
+---
+
+## Structure Studio's Mover icon now sizes from declared Physical width, matching Par — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson tested the classifier with two real custom fixture defs he built —
+"Branson - LED Movinghead+Circle" (photo: a 36-LED wash head, big round
+face) and "Branson - LED SPOT" (photo: a slim beam/spot head) — expecting
+the wireframes to look "relatively similar" to the real fixtures, i.e.
+visibly different sizes.
+
+Root-caused directly against both `.qxf` files in
+`~/Library/Application Support/qlcconsole/Fixtures/`: both declare
+`Type="Moving Head"`, both are single-head, **neither has ANY Beam-group
+Focus/Zoom channel, and both have `Dimensions Width="0" Height="0"
+Depth="0"`** — i.e. every trait the classifier reads is currently
+IDENTICAL between them. That's not a bug in the classifier; it's that nothing
+in either fixture definition encodes "this one has a big dish, this one has
+a small lens" yet. The main 2D canvas already sizes a fixture's whole icon
+from `QLCPhysical` width/height when declared
+(`MonitorGraphicsView::updateFixture()`, pre-existing), and the Structure
+Studio Par silhouette already did the same — but the Structure Studio
+**Mover** silhouette didn't; it only used the `hasFocus` heuristic (a
+focus/zoom channel implies a bigger lens), which is false for both of
+these fixtures, so both drew as an identical 6.5px circle.
+
+**Fix**: new shared `StructureStudioView::moverBaseRadius(const
+FixtureVisualTraits&)` (declared in `structurestudioview.h`, used by both
+`drawFixtures()` and `hitTestFixture()` so the hit area always matches what
+Branson sees) — sizes from `traits.physW` when it's declared (same formula
+Par already uses: `qMax(6.0, physW * 0.5 * m_scale)`), falling back to the
+old `hasFocus ? 9.0 : 6.5` heuristic only when Physical width is still 0.
+
+Build: clean. `check-all.sh` run in progress.
+
+**Not a code fix Branson needs to verify — an input he needs to supply**:
+populate `Dimensions/Width` (and ideally `Height`) in the Physical block of
+both `Branson-LED-Movinghead+Circle.qxf` and `Branson-LED-SPOT.qxf` (Fixture
+Editor → Physical tab) to something reflecting their real size (e.g. a wide
+dish vs. a narrow barrel), reload the fixtures, and check both the main
+Lighting Studio 2D canvas and the Structure Studio elevation editor — both
+should now show a visibly bigger icon for the Movinghead+Circle than the
+LED SPOT. Until Width is populated, both will keep drawing at the same
+default size — that's expected, not a regression.
+
+---
+
+## Fixture visual classifier now shared with the main 2D Lighting Studio canvas — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson, after the Structure Studio classifier shipped: "hard to tell what
+I am working with" (fixed there); then, asked whether to extend the same
+classifier to the main plan-view canvas: "yes .. fixture classifier .. and
+yes we'll want colors eventually" (per-head matrix-dot colouring by
+RGB/White is explicitly deferred, not built this round).
+
+`classifyFixture(Fixture*)`/`FixtureVisualTraits`/`FixtureSilhouette` were
+previously a `static` function local to `structurestudioview.cpp` — not
+reachable from `MonitorFixtureItem` (the main canvas's per-fixture render
+item), which lives in a different file with no dependency on the Structure
+Studio editor. **Extracted them to new shared files**
+`ui/src/monitor/fixturevisualtraits.{h,cpp}` (registered in
+`ui/src/CMakeLists.txt`), byte-for-byte the same classification logic;
+`structurestudioview.cpp` now `#include`s it instead of defining its own
+copy.
+
+**`MonitorFixtureItem`** (`ui/src/monitor/monitorfixtureitem.{h,cpp}`):
+classifies once at construction (`m_traits = classifyFixture(fxi);`,
+right after resolving `Fixture *fxi`). New private `drawBody(QPainter*,
+const QRectF&)` dispatches the outer body shape on `m_traits.kind`:
+- **Mover** (Moving Head/Scanner) → ellipse "puck", matching the round head
+  unit already drawn for the same fixture Type in the Structure Studio
+  elevation editor.
+- **Par** (Color Changer/Dimmer/Strobe) → rounded rect (small radius) — a
+  can/wash reads as a can, not a sharp box.
+- **Bar/Generic** (LED bars, everything else) → unchanged sharp rect —
+  preserves the existing look for the bulk of the library exactly as
+  before, since this is deliberately the default/fallback case.
+
+`drawBody()` replaces four previously-duplicated `painter->drawRect(...)`
+call sites that all drew the same rect at different insets: the selection
+halo, the item background fill, the truss-bind/attach-mode ring, and the
+marked-in-black dashed outline — all four now stay shape-consistent with
+each other and with the body automatically, instead of needing four
+matching edits if the shape ever changes again.
+
+Hit-testing (`shape()`) was deliberately left untouched: it already returns
+a rect with a few pixels of margin around the body for the movement-arc
+strokes, so a Mover's ellipse sitting inside that rect is a strict subset —
+no "looks round, but you have to click the corner" mismatch, unlike the
+tower-shelf/Structure-Studio hit-test bugs found earlier this session
+(those were genuine geometry mismatches; this one draws a smaller shape
+inside an already-generous hit rect, which only makes clicking easier, not
+harder).
+
+Build: clean (only the same pre-existing, unrelated warnings —
+`mimeData() override` and the `PreviewItem` anonymous-typedef warning).
+`check-all.sh` run in progress.
+
+Not yet verified live — needs a real check: open the main Lighting Studio
+2D view with a mix of moving heads, PARs, and LED bars patched, confirm
+movers now draw as circles, PARs as rounded cans, and bars/generic fixtures
+look exactly as they did before (no regression) — including selection
+halo, the truss-bind colour ring, and the marked-in-black outline all
+following the new shape.
+
+**Deferred, explicitly not built this round**: per-head colouring of
+matrix/bar dots by pixel type (e.g. an RGB head vs. a White head on the
+same fixture rendering as different colours) — Branson: "we'll want colors
+eventually." Depends on the per-head `FixtureGroup` membership /
+per-head-drag work (previous entry, this file) actually being used to
+build such fixture groupings first.
+
+---
+
+## Fixture Group editor grid now accepts per-head drops from the Fixture Manager tree — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "so if that's the case what's the best way to select just RGB for a
+fixture .. and just W for a fixture .. I made sub fixture defs where we can
+add them individually as separate .. but then they're not easily shown in
+the system .. so what's the right way?" Answer worked out with him: a
+`FixtureGroup`'s layout grid is already keyed by `GroupHead{fxi, head}`, not
+by whole fixture — it can already reference an arbitrary subset of one
+fixture's heads (e.g. only the RGB heads of a multi-head unit, leaving the
+White head out) — so no new fixture-def schema is needed. The gap was
+purely UI: there was no way to *drag* an individual head into the grid, only
+whole fixtures (or the existing toolbar arrow-button
+`FixtureGroupEditor::addFixtureHeads()` path via a Heads-mode
+`FixtureSelection` dialog, which already worked and is still there as an
+alternative). Branson confirmed: "yes .. build that .. then we can work on
+the visualizer."
+
+**Fix**, source side (`ui/src/fixturetreewidget.{h,cpp}`):
+- New `FixtureTreeWidget::setShowHeads(bool)` toggles per-fixture head child
+  rows on/off at runtime (rebuilds the tree) — kept off by default so the
+  tree isn't permanently bloated with head rows for every fixture; the
+  Fixture Manager only turns it on while a `FixtureGroupEditor` is the
+  active right-pane (`fixtureGroupSelected()`/`clearRightPane()` in
+  `ui/src/fixturemanager.cpp`).
+- New `HEAD_DRAG_MIME_TYPE` (`headDragMimeType()`) alongside the existing
+  fixture/group MIME types. `buildMimeData()` now inspects each dragged
+  item: one carrying `PROP_HEAD` resolves its parent's fixture id and
+  streams `(fixtureId, headIndex)` quint32 pairs into this new format
+  instead of the plain fixture-id stream.
+
+**Fix**, drop side (`ui/src/fixturegroupeditor.cpp`, `eventFilter()`):
+`DragEnter`/`DragMove` now also accept `headMimeType`. `Drop` no longer
+bails out when the plain fixture MIME is absent — it independently checks
+`hasFixtures`/`hasHeads` and runs either or both loops in the same drop:
+the existing per-fixture loop calls `assignFixture()` as before; a new
+per-head loop reads `(fid, headIdx)` pairs and calls
+`m_grp->assignHead(QLCPoint(col, row), GroupHead(fid, headIdx))`, spreading
+successive heads across the row and growing the grid exactly like the
+fixture path already did. Both loops share the same `beginEdit()`/
+`endEdit()`/`cancelEdit()` transaction and grid-resize logic.
+
+Build: clean (only pre-existing, unrelated warnings — `mimeData() override`
+and the `PreviewItem` anonymous-typedef warning, both present before this
+change). `check-all.sh` run in progress.
+
+Not yet verified live — needs a real check: open a fixture group with a
+multi-head fixture that has independently-addressable RGB/White heads
+patched, expand it in the tree (should auto-expand once a group is
+selected), and drag a single head child (not the fixture row itself) onto
+an empty grid cell — confirm only that one head lands, not the whole
+fixture, and that whole-fixture drag-drop still works unchanged.
+
+---
+
+## Fixture visual classifier: movers/PARs/bars (incl. matrix panels) now draw differently in the Structure Studio editor — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "hard to tell what I am working with so lets goto the fixture
+identification we talked about... also want to make sure that when
+looking at a light bar and there's a matrix layout .. the bar looks like
+that .. rectangle of multiple lines .. or a single long bar." First real
+build of the classifier plan from earlier — scoped to `StructureStudioView`
+(`ui/src/monitor/structurestudioview.cpp`), where the tower-shelf body shape
+already proved the pattern; the main 2D Lighting Studio canvas is a
+separate rendering system (`MonitorFixtureItem`) and deliberately NOT
+touched in this pass.
+
+**New `classifyFixture(Fixture*)`** — reads only data already present in
+every fixture definition, no schema changes, so it applies retroactively to
+the whole existing library:
+- **Shape family** from `QLCFixtureDef::type()`: Moving Head/Scanner →
+  Mover, Color Changer/Dimmer/Strobe → Par, LED Bar (Beams/Pixels) → Bar,
+  everything else → Generic (unchanged original bar+dots rendering,
+  untouched).
+- **Has-focus** from a Beam-group channel whose `QLCChannel::preset()` is
+  one of the Focus/Zoom presets (validated on real data last round: 3Z has
+  one, LM70 doesn't) — a bigger Mover head.
+- **Colour-mixing (RGBW) vs wheel**: 3+ distinct Intensity/Colour-group
+  primary colours = mixing; a Colour-group channel with no single primary
+  colour = a wheel. (Classified but not yet used to change the drawn shape
+  further — tracked in traits for a follow-up, not acted on this round.)
+- **Multi-head pan/tilt**: 2+ heads each owning their own Pan or Tilt
+  channel (`QLCFixtureMode::headForChannel()`) — a twin-head wash bar draws
+  as two head units on one body instead of one.
+- **Physical size** (`QLCPhysical` width/height/depth, mm→metres) — drives
+  Par can size and the Bar/matrix decision below. Zero today for nearly
+  every fixture Branson actually has patched (checked last round); he said
+  he'll populate it, so this reads it wherever it's there and falls back to
+  a sane default everywhere it isn't.
+
+**New shapes in `drawFixtures()`** (dispatched on `classifyFixture()`'s
+result, replacing the generic bar+dots for Mover/Par/Bar — Generic keeps
+the original code path verbatim):
+- **Mover**: a compact head unit (not a bar) — a filled circle sized bigger
+  when it has focus, with a lighter "lens" dot; two side-by-side units when
+  multi-head pan/tilt.
+- **Par**: a filled rounded rect ("can"), sized from physical W/H when
+  declared.
+- **Bar**: if the declared physical height is a meaningful fraction of the
+  width (not just a thin strip) AND there are at least 4 pixels — draws as
+  a GRID of parallel rows (row/column split derived from head count × the
+  declared aspect ratio) instead of one line, so a genuine matrix panel
+  reads as a panel. Otherwise unchanged: one line, dots spaced along it.
+  This is gated entirely on physical Width/Height being populated — a bar
+  with no declared height still renders as a single line today, which is
+  exactly why Branson populating physical sizes is the next real step here.
+
+**Hit-testing updated to match, same lesson as the tower-shelf bug two
+rounds ago**: `hitTestFixture()` now resolves the SAME shape per fixture
+(Mover → circle radius, Par → rect, Bar/matrix → widened line threshold)
+instead of always testing the old bar-line — otherwise these new shapes
+would have the exact "looks like X, but you have to click somewhere else
+entirely to grab it" bug all over again.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check: open a Moving
+Head's truss/tower editor and confirm it now draws as a head, not a bar;
+open a Color Changer/PAR and confirm a can shape; and once physical W/H is
+populated on a real multi-row bar fixture, confirm it draws as a grid
+instead of a line.
+
+## Fixtures tree: added a search box — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "can we put a text search box at top of fixtures tree." Added to
+the Fixture Manager's main "Fixtures" tab tree (`ui/src/fixturemanager.{h,cpp}`)
+— the primary/canonical fixtures tree, as opposed to the Structure Studio
+editor's narrower "Fixtures on this object" list; if this was actually
+meant for that one instead, easy to add there too.
+
+Wrapped the tree in a small container with a `QLineEdit` above it
+(placeholder "Search fixtures...", clear button). Filters by row NAME as
+you type — recursively hides any row (fixture, group, folder, Power/
+Universes node) whose own name doesn't match and has no matching
+descendant, so a folder stays visible whenever something inside it still
+matches, and auto-expands a folder that has a hidden match inside it.
+Clearing the box (or the clear-button) restores everything.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check: type a fixture
+name fragment, confirm only matching rows (and their ancestor folders)
+stay visible, and confirm Power/Universes/Fixture Groups still work
+normally once the box is cleared.
+
+## Frame-group membership silently overrode a fixture's real truss/pipe/tower/riser/deck mount — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "lets fix precedence bug now and move forward" — confirming the
+root cause traced for "saved and can't move [a fixture on T-2]." Confirmed
+against the actual saved rig data first (`FixtureRig FID="7" Truss="2" ...
+GLX="0.313" GLY="0.051" GLZ="-0.031"` — BOTH a truss binding and frame-group
+`groupLocal` coordinates set at once), then confirmed why: `attachFixtureToTruss()`
+deliberately also adds the fixture to that truss's own auto-created group
+(`ensureTrussGroup()`) purely so the Layers tree/canvas can select
+truss+fixtures together — a side effect, not a repositioning intent. But
+every place that resolves a fixture's actual position checked "is this a
+frame-group member?" **first, unconditionally** — so that harmless
+selection-convenience side effect silently became the fixture's ENTIRE
+positioning mechanism the moment it fired, permanently shadowing the real
+`trussOffset`-based position underneath. Same root shape as the SR Tower
+shelf duplicate and the crash fix earlier this session: a real, provable
+ordering mistake, not a guess.
+
+**Fix, three places, same precedence restored — structural mount (truss/
+pipe/tower/riser/deck) wins; frame-group is the fallback for a fixture with
+NO other mount at all**:
+- `MonitorProperties::fixtureRigPosition()` (`engine/src/monitorproperties.cpp`)
+  — the canonical position every renderer and the aim-solver ultimately
+  read from. Moved the frame-group branch from first to last (after every
+  structural-mount check fails to match).
+- `StructureStudioView::dragFixtureTo()` (`ui/src/monitor/structurestudioview.cpp`)
+  — duplicated the same precedence independently for dragging; same reorder.
+- `StructureStudioView::fixtureEndA()/fixtureEndB()` — same duplication for
+  the drawn bar's endpoints (and therefore `hitTestFixture()`, which hit-
+  tests against those same endpoints). New shared `static bool
+  hasStructuralMount(const FixtureRigProps&)` used by all three instead of
+  three copies of the same condition.
+
+**Left alone, now provably harmless rather than fixed**: `MonitorGraphicsView::
+slotFixtureMoved()` (main 2D canvas drag handler) still unconditionally
+writes `groupLocal` for a frame-group member regardless of its structural
+mount — but since `fixtureRigPosition()`'s READ side now always prefers the
+structural mount when one is set, that write is dead data for such a
+fixture, never read as authoritative again. Not worth a broader refactor
+pass alongside this fix; flagged rather than silently left unmentioned.
+
+Builds clean (full engine+UI rebuild — `monitorproperties.h`/`.cpp` are
+widely included). Full `check-all.sh` gate run after (see job result). Not
+yet verified live — needs a real check: open T-2's editor, drag the
+XL-450RGB fixture (FID 7) and confirm it now slides along the truss
+(`trussOffset`) instead of not visibly moving; separately confirm a genuine
+frame-group-only "Studio Group" fixture (no truss/pipe/tower/riser/deck at
+all) still drags correctly via the frame-local path, since that's the one
+case this fix must NOT have broken.
+
+## Real crash: truss editor Cancel could segfault after "Add Bar" — SHIPPED, root cause not 100% certain, needs Branson to confirm (2026-09-07)
+
+Branson: "OH and we just had a segfault! chase that too." Pulled the actual
+crash report (`~/Library/Logs/DiagnosticReports/qlcconsole-2026-09-07-
+185334.ips`) rather than guess. `EXC_BAD_ACCESS`/`SIGSEGV` at address
+`0x18` (classic dangling/near-null pointer), stack: `MonitorGraphicsView::
+mouseDoubleClickEvent → trussDoubleClicked → Monitor::slotEditTruss →
+MonitorGraphicsView::updateTrusses → refreshItemLayerState →
+QGraphicsItem::setVisible`. **Caveat on confidence**: the crashed binary's
+UUID doesn't match my current build (rebuilt several times since), so I
+could not get an exact crashing line via `atos` — the fix below is the one
+CONCRETE, provably-wrong thing found while tracing this exact call chain,
+not a certainty this is the only cause. Flagging that honestly rather than
+claiming more certainty than the evidence supports.
+
+**Found, real, and definitely wrong regardless**: `Monitor::slotEditTruss()`
+'s Cancel path (`ui/src/monitor/monitor.cpp`) — "Add Bar" while the truss
+editor is open creates a real child `Truss` (tracked in `barsCreatedHere`
+for undo); on Cancel, the code called `m_graphicsView->updateTrusses()`
+**first**, THEN removed those temp bars from the engine model
+(`m_props->removeTruss(barId)`) **after**. `updateTrusses()` rebuilds
+`MonitorGraphicsView::m_trussItems` from `props->trusses()` — which still
+included the temp bar at that point — so it built a real, live `TrussItem`
+for it, and only THEN did the temp bar's underlying `Truss` get deleted out
+from under that just-built item. That leaves a dangling `TrussItem` in
+`m_trussItems` (its `truss()` pointing at freed memory) sitting there until
+the next full rebuild — a window where any subsequent `refreshItemLayerState()`
+call (triggered by nearly anything — a selection change, another double-
+click) dereferences it. Reordered: remove the temp bars first, rebuild
+second.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). **Needs Branson to confirm this was actually the trigger** —
+best repro guess: open a truss's editor, right-click the fixture-placement
+strip to "Add bar here", then Cancel the dialog; if a crash doesn't recur
+after that sequence a few times, this was very likely it, but I don't have
+certainty from the crash report alone given the binary-version mismatch.
+
+## Tower editor: double-click a shelf to edit its height — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "how do we edit a shelf position .. can we click on the height and
+edit?" Direct answer before this: no, `Tower` only ever had `addShelf()`/
+`removeShelf()` — moving one meant delete + re-add. Built it, deliberately
+NOT via remove+re-add (which would hit the exact index-reassignment hazard
+already flagged for `removeShelf()` — a fixture "on shelf 3" silently
+ending up on a different physical shelf).
+
+**`Tower::setShelfHeight(int i, float z)`** (`engine/src/tower.{h,cpp}`)
+mutates the shelf at index `i` **in place, without re-sorting** the list —
+on purpose, so its index (and therefore anything already pointing at it via
+`FixtureRigProps::towerShelf`) stays exactly where it was. Shares the same
+1cm duplicate guard `addShelf()` just got (checked against every OTHER
+shelf, not itself). `ui/src/monitor/monitor.cpp`: double-click a row in the
+Tower editor's shelf list → a height prompt (unit-aware, ft/m) → applies via
+`setShelfHeight()`, reloads the list and the canvas. Tooltip added to the
+list itself for discoverability.
+
+**Bug caught and fixed while wiring this in, before it shipped**: the
+dialog's own Cancel-revert path (`slotEditTower()`) restores shelves by
+looping `removeShelf(0)` + `addShelf(z)` for each snapshotted height — which
+would now run every restored height through `addShelf()`'s NEW duplicate
+guard, silently dropping one shelf on Cancel if the tower already had a
+duplicate before this session's fixes (SR Tower, from the entry above,
+currently does). Added `Tower::setShelves(const QList<float>&)` — a raw,
+guard-free bulk replace, for exactly this "restore a known snapshot exactly
+as it was" case — and switched Cancel to use it instead.
+
+Builds clean (`qlcconsole` target, engine change). Full `check-all.sh` gate
+run after (see job result). Not yet verified live — needs a real check:
+double-click a shelf, change its height, OK, confirm any fixture already on
+that shelf followed it (didn't jump to a different one); separately, edit a
+shelf then Cancel and confirm the tower reverts completely, including on
+SR Tower specifically (its still-unresolved duplicate is the case that
+would have broken silently without the setShelves() fix).
+
+## Tower editor: "Add shelf" could silently create an exact duplicate — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson, on a screenshot of SR Tower's editor: "shows 4 shelves .. but only
+3 showing .. it's not clear why 3 in diagram and 4 in the side." Checked
+against the actual saved workspace rather than guessing from the rounded
+UI numbers: `test-workspaces/stage-structures-demo.qxw`'s SR Tower has
+FOUR `<Shelf>` entries, and two of them are `Z="1.000"` — genuinely,
+exactly identical, not a display-rounding coincidence (1.000 m → 3.28 ft
+both ways, matching the screenshot's "Shelf 2 — 3.28 ft" / "Shelf 3 — 3.28
+ft" exactly). Two shelves at the identical height draw as one overlapping
+line/label in the elevation view — that's the "4 in the list, 3 in the
+diagram" gap, not a rendering bug.
+
+**Root cause**: `Tower::addShelf()` (`engine/src/tower.{h,cpp}`) just
+appended and re-sorted, with no duplicate check at all — clicking "Add
+shelf" without changing the height spinbox from a value that already
+matched an existing shelf created exactly this, silently, no warning.
+
+**Fix**: `addShelf()` now rejects (no-ops) a height within 1cm of an
+existing shelf, so this specific silent-duplicate case can't be created
+going forward.
+
+**Not touched**: the existing duplicate already saved in SR Tower — didn't
+edit Branson's workspace file directly (this session's standing practice);
+he can clean it up himself now that it's visible: select one of the two
+"Shelf — 3.28 ft" rows in the Tower editor's shelf list and click "Remove
+selected."
+
+**Worth flagging again while this is fresh**: shelves have no stable
+identity — they're a plain sorted array, and a fixture's `towerShelf` is
+just an index into it. Removing the extra 3.28 ft shelf here will shift
+every shelf AFTER it down one index — SR Tower's own `FixtureRig FID="4"`
+is on `TShelf="3"` (the top shelf, 4.92 ft); after removing one of the
+duplicates it becomes index 2, and unless that fixture's rig data is
+re-pointed too it will silently read as being on the WRONG shelf after the
+cleanup. This is the same reindexing hazard flagged earlier this session
+(with `removeShelf()`) — still an open decision (give shelves a stable id
+vs. accept and work around the reindexing), not resolved by this fix.
+
+Builds clean (`qlcconsole` target, engine change). Full `check-all.sh` gate
+run after (see job result). Not yet verified live.
+
+## Tower mounting: Top-of-tower / Bottom-of-tower, as real mount positions — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "still can't put on the top or on the bottom" (repeated from
+earlier in the session) — closing out the design item discussed then:
+`towerMountSide` (Shelf/Top/Bottom), mirroring how `trussMountSide` already
+gives a truss-bound fixture a real, explicit mount position instead of
+faking it with shelf-index sentinels.
+
+**New**: `FixtureRigProps::TowerMountSide` enum (`TowerShelf`/`TowerTop`/
+`TowerBottom`, engine/src/truss.h) + `towerMountSide` field, defaulting to
+`TowerShelf` (0) so every existing saved file keeps its current meaning
+unchanged. Wired through everywhere a tower mount is read or written:
+
+- `MonitorProperties::fixtureRigPosition()` (engine/src/monitorproperties.cpp)
+  derives Z from `tower->height()` (Top) or `0` (Bottom) instead of
+  `shelfPos()` when mount side isn't Shelf — same function every renderer/
+  aim-solver already calls, so this is correct everywhere for free.
+- XML save/load: new `TSide` attribute alongside the existing `Tower`/
+  `TShelf`/`TU`/`TV` ones; absent (old file) → defaults to `TowerShelf`.
+- Canvas right-click "Mount on Tower ▶ <tower>" submenu
+  (`ui/src/monitor/monitorgraphicsview.cpp`) gained "Top of tower"/"Bottom
+  of tower" entries above the per-shelf list, both checkable/showing
+  current state like the shelf entries already do. Picking either forces
+  `mountingType` back to `FloorMounted` — "hung" has no meaning at the very
+  top or bottom of a tower (nothing above/below to hang under/from).
+- The tree-drop attach fix from earlier this session
+  (`attachFixtureToTower()`) and the Structure Studio "Add Fixtures…"
+  picker (`Monitor::mountFixtureOnStructure()`) both now explicitly reset
+  `towerMountSide` back to `TowerShelf` on a fresh/plain attach — without
+  this, a fixture previously mounted at Top/Bottom that got drag-attached
+  or picker-attached to a tower would silently keep rendering at its old
+  Top/Bottom position instead of landing on the shelf the action implied.
+- The rig Properties dialog's "Mounted on:" label now reads "Tower N ·
+  top" / "· bottom" / "· shelf N" instead of always assuming a shelf index.
+
+Builds clean (full engine+UI rebuild — `truss.h` is widely included). Full
+`check-all.sh` gate run after (see job result). Not yet verified live —
+needs a real check: right-click a fixture, Mount on Tower → Top of tower,
+confirm it renders sitting on the tower's cap (not a phantom shelf 0);
+same for Bottom; re-attach the same fixture to a shelf afterward and
+confirm it comes off Top/Bottom correctly, not stuck.
+
+## Tower editor: fixture hit-testing didn't match the new body shape — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "I can't seem to grab lights in the tower editor and move them
+consistently." Self-inflicted regression from the previous round, found by
+reading `hitTestFixture()` rather than guessing: it still measured distance
+to the OLD generic bar-line (`fixtureEndA()`→`fixtureEndB()`, which for a
+tower-shelf fixture lies flat in the XY plane and barely projects onto an
+elevation view at all) while `drawFixtures()` was, since the last round,
+drawing an entirely different trapezoid body extending 10-20px above/below
+that line. Clicking where the fixture visibly IS mostly missed; clicking
+near the old invisible line sometimes hit — exactly "can't grab... 
+consistently."
+
+**Fix**: new shared `StructureStudioView::towerFixtureBodyRect(quint32)`
+(`ui/src/monitor/structurestudioview.{h,cpp}`) computes the tower-shelf
+body's screen rect once; both `drawFixtures()` (derives its trapezoid
+corners from the rect) and `hitTestFixture()` (hit-tests against the same
+rect, padded a few px for a grab margin) now read from the identical
+geometry, so what's drawn and what's clickable can't drift apart again the
+way they just did.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check: click directly on
+a tower-shelf fixture's visible body (not just near the shelf line) in
+Front/Side view and confirm it selects/drags reliably.
+
+**Separately answered, not a code change**: "still can't put on the top or
+on the bottom" — correct, this is the `towerMountSide` (Shelf/Top/Bottom)
+field discussed earlier in the session; still not built, still awaiting a
+go-ahead. "How do I edit the tower to add/move shelves?" — **Add** already
+works (the Shelves list + spinbox + "Add shelf" button in the Tower
+editor's Geometry panel). **Move (edit an existing shelf's height) does
+not exist at all** — `Tower` only has `addShelf()`/`removeShelf()`, no
+`setShelfHeight()`; today the only way to reposition one is delete +
+re-add. Checked before promising a quick fix: shelves are stored as a
+plain sorted `QList<float>` with **no stable identity** — `addShelf()`
+re-sorts the whole list every time, and a fixture's `towerShelf` is just an
+index into it. So `removeShelf()` **already** silently reassigns which
+physical shelf every fixture at a higher index refers to today (shelf 3
+removed → whatever was shelf 4 is now shelf 3, and any fixture that was
+mounted on the OLD shelf 4 now silently reads as being on the new shelf 3,
+wrong height). Adding a "move" action the same way (edit height + re-sort)
+would extend that same pre-existing reindexing hazard rather than fix
+something clean — flagging this now rather than quietly building a "move
+shelf" feature on top of it. Worth deciding together: give shelves a
+stable id (bigger change, fixes the removeShelf hazard too) vs. accept the
+index-reassignment behavior as-is and just add the height-edit UI on top
+of it.
+
+Branson, refining the marker from the previous round: "when we have
+something on shelf .. it should have some size and show sitting on top ..
+and when hanging should show inverted from the shelf." The small triangle
+marker from the prior fix wasn't it — he wants the fixture's own drawn
+shape to read as a body resting on (or hanging from) the shelf, not a
+generic bar with a tiny separate icon next to it.
+
+**What every OTHER mount already draws vs. what a tower shelf needs**:
+every fixture, regardless of mount kind, was drawn via the same generic
+"bar" (`fixtureEndA()`→`fixtureEndB()`, a line the length of the fixture's
+real physical width, oriented by `studioMount`/`studioAngle`) plus small
+head-dots — sensible for a truss/pipe/boom mount, where a fixture really is
+"a bar running along something." A shelf-mounted fixture isn't that; it's a
+free-standing unit resting on (or hung under) a surface, so the same bar
+representation read as a floating line near the shelf regardless of
+orientation.
+
+**Fix** (`StructureStudioView::drawFixtures()`,
+`ui/src/monitor/structurestudioview.cpp`): a tower-shelf-mounted fixture,
+in Front/Side view, now skips the generic bar entirely and draws a sized
+trapezoid instead — base flush with the shelf line, real width from
+`fixtureLenM(fid)` (the fixture's actual declared physical width, same
+source the bar used) scaled to the canvas, tapering toward the free end.
+**Sitting** (`FloorMounted`): body rises above the shelf, base down — reads
+as standing on it. **Hanging** (`TopHung`): the exact same shape, mirrored
+vertically — base still flush with the shelf, body hangs below it. Same
+shape, flipped, is what actually makes "hung" look inverted rather than
+just "the same icon, a bit lower," which was the gap in the previous
+triangle-marker attempt. Selection highlight and the name label both carry
+over from the generic path. Every other mount kind (truss/pipe/platform/Top
+view) is untouched — this only replaces the bar for the specific
+tower-shelf + elevation-view case.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check: a tower-shelf
+fixture set to "On shelf (upright)" should show a body sitting above the
+shelf line; switching its Orientation to "Under shelf (hung)" should flip
+it to hang below, mirrored, not just nudge down slightly.
+
+---
+
+## Tower editor: shelf labels + a hang/sit visual marker — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson, mid-thought: "when editing a tower I can't drag a fixture to a
+different height on the tower .. need to also specify hanging from shelf or
+sitting on shelf[[typo]] sorry.. that's there.. needs to be visual" then,
+separately: "we need labels on the tower editor to identify which shelf is
+which." Investigated before building anything, since the self-correction
+made the actual ask ambiguous on its own.
+
+**Confirmed what already exists (the "sorry, that's there" part)**:
+`StructureStudioView::dragFixtureTo()` (`ui/src/monitor/
+structurestudioview.cpp`) already snaps a dragged tower-mounted fixture to
+the nearest shelf **by height** — but only registers as a height drag in
+the Front/Side plane (`m_plane`), which a tower's editor defaults to
+**Top** (footprint view, where height isn't visible at all — `m_plane =
+(kind == TowerKind) ? Top : Front;`). A `View: [Top/Front/Side]` combo
+already exists in the editor toolbar (`Monitor::makeStudioPane()`) to
+switch. Separately, "hang from shelf" vs "sit on shelf" already exists too
+— `FixtureRigProps::mountingType` (`Truss::TopHung`/`FloorMounted`), set via
+the rig Properties dialog's "Orientation" combo (`Under shelf (hung)` /
+`On shelf (upright)`), and `MonitorProperties::fixtureRigPosition()`
+already nudges a hung fixture's Z down 0.15 m from the shelf. So: none of
+the underlying mechanisms were missing — matches his own correction.
+
+**What was actually missing ("needs to be visual")**: confirmed by reading
+`drawFixtures()`/the Tower elevation-rendering block — shelves drew as
+plain unlabelled horizontal lines, and the 0.15 m hang/sit Z nudge had zero
+dedicated visual cue (easy to miss at this canvas's usual zoom level, and
+nothing to look at while STILL deciding where to drop). Two additions,
+both in `ui/src/monitor/structurestudioview.cpp`:
+1. Each shelf line in Front/Side view is now labelled "Shelf N — height"
+   (respects the workspace's ft/m unit setting) — directly answers "labels
+   ... to identify which shelf is which."
+2. `drawFixtures()` now draws a small triangle marker at every tower-shelf-
+   mounted fixture, pointing away from the shelf plane — up when sitting
+   on it (`FloorMounted`), down when hanging under it (`TopHung`) — an
+   explicit, unambiguous cue instead of relying on the subtle position
+   nudge alone.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check: open a tower with
+2+ shelves in its editor, switch to Front or Side view, confirm each shelf
+line now shows its number/height, drag a fixture between shelves and
+confirm it's obvious which one it landed on, and toggle its Orientation
+between "On shelf"/"Under shelf" to confirm the triangle marker flips.
+
+**Not done — separate, bigger design items raised in the same conversation,
+deliberately not started without Branson's sign-off**: (1) whether fixture
+attachment should move toward an explicit menu (the canvas already has one
+— "Attach to Truss"/"Mount on Boom"/"Mount on Tower" — just not surfaced in
+the Layers panel yet) instead of continuing to harden drag-and-drop; (2) a
+dedicated `towerMountSide` (Shelf/Top/Bottom) field so a tower's cap and
+base are distinct, real mount positions rather than fake shelf indices.
+Both discussed, neither built — real scope, not one-line fixes.
+
+---
+
+## Layers panel: dragging a fixture onto a tower/pipe, or a not-yet-grouped truss, didn't attach it — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "if I drag lights on a tower or truss etc in layers .. it should
+attach them." Root-caused before touching anything — two distinct, real
+gaps in `MonitorLayersPanel::handleTreeDrop()`
+(`ui/src/monitor/monitorlayerspanel.cpp`), not one.
+
+**Gap 1**: the existing attach-on-drop logic only fired when the drop
+target was a **GROUP node anchored to a truss** (`g.anchorKind ==
+"truss"`) — but a truss only GETS an anchored group once it already has at
+least one fixture on it (`ensureTrussGroup()`, called from
+`attachFixtureToTruss()` itself). A fresh, empty truss is just a plain
+tree item until then, so dropping the FIRST fixture onto it hit none of
+this — it silently fell through to "move to this layer," never attaching.
+
+**Gap 2**: pipe and tower were never handled by the group-anchor check at
+all, even though `attachFixtureToPipe()` already existed
+(`ui/src/monitor/monitorgraphicsview.{h,cpp}`) for the canvas drag-drop
+path — and there was **no `attachFixtureToTower()` at all**; a tower's only
+attach path anywhere in the app was the per-shelf right-click menu.
+Checked first — confirmed pipe/tower have no "anchored group" concept in
+this codebase at all (only `ensureTrussGroup()`/`ensurePlatformGroup()`
+exist), so generalizing the group-anchor check itself wouldn't have helped
+either kind.
+
+**Fix**:
+1. New `MonitorGraphicsView::attachFixtureToTower(quint32 fid, quint32
+   towerId)`, mirroring `attachFixtureToPipe()`'s shape — mounts on shelf 0
+   / shelf-centred by default (matching the existing per-shelf menu's own
+   default), unless the fixture is already on that exact tower, in which
+   case its current shelf is kept.
+2. `handleTreeDrop()` now resolves an attach target from the drop **item
+   itself** first (any bare truss/pipe/tower row, grouped or not — covers
+   gap 1 for all three kinds and gap 2 for pipe/tower directly), falling
+   back to the truss-anchored-GROUP check only when the direct-item check
+   comes up empty (an already-populated truss, dropped via its group
+   node — unchanged behavior, still truss-only since that's the only kind
+   with a group concept).
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check: drag a fixture
+straight onto a brand-new, empty truss's row, then onto a tower's row,
+then onto a pipe's row, and confirm all three attach (not just move to
+that layer) — plus that dragging onto an already-populated truss (via its
+group) still works as before.
+
+---
+
+## Layers panel: bulk "Lock position"/"Unlock position" on a multi-selection — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "can we add the ability to lock stage features inside a layer? So
+we can make sure they can't impact move/attach?" The underlying protection
+already existed and already covers both halves of this — a locked truss/
+platform/pipe/stand/tower/target/image/power source can't be dragged
+(`MonitorGraphicsView::refreshItemLayerState()`) **and** already refuses a
+NEW fixture attaching onto it (`trussUnderFixture(..., forAttach=true)`
+skips locked trusses, from the "locked-truss refusal" work already on this
+branch) — but the "Lock position" toggle that sets it was only reachable
+one object at a time, from each type's own single-item context menu. Ask
+was specifically about doing this for everything on/selected within a
+layer at once.
+
+Added bulk "Lock position"/"Unlock position" to the Layers panel's existing
+multi-select context menu (same block as "Move to layer" and "New Layer
+from selection…", `ui/src/monitor/monitorlayerspanel.cpp`) — two separate
+actions rather than one state-dependent toggle, since a mixed-state
+selection (some already locked, some not) makes a single toggle's "current
+state" ambiguous; "Lock position" locks every selected lockable object,
+"Unlock position" unlocks all of them, both reusing the existing
+`setObjectLocked()`/`kindLockable()` dispatch (no new per-kind logic).
+Fixtures are silently excluded from the filtered list — per the existing
+model they have no per-item lock at all (only layer/group/global lock), so
+offering an action that would silently do nothing for them would be worse
+than not offering it.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check: multi-select a
+mix of trusses/platforms/etc. (plus a fixture, to confirm it's correctly
+excluded from having any effect), "Lock position", then confirm none of
+the locked ones can be dragged AND a free fixture can no longer attach onto
+a locked truss.
+
+---
+
+## Layers panel: "New Layer from selection…" — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "in layres can we have multi select 'new layre from selection'."
+The Layers panel's multi-select context menu (`ui/src/monitor/
+monitorlayerspanel.cpp`) already had the two halves of this — "New Folder
+from selection…" (create + populate a folder in one step) right above, and
+a "Move to layer" submenu listing existing layers — just not the one-step
+combined version for layers themselves, which is what was asked for:
+select 2+ objects, get a brand-new layer with exactly that selection on it,
+without first creating an empty layer and then separately moving things
+onto it.
+
+Added "New Layer from selection…" to that same multi-select menu block,
+right after "Move to layer" — same shape as "New Folder from selection…":
+prompts for a name (`QInputDialog`, defaulting to "Layer N"), then
+`MonitorProperties::addLayer(name)` + `setActiveLayerId()` (matching
+`slotAddLayer()`'s own behavior) + `MonitorGraphicsView::reparentToLayer
+(objs, lid)` — the same call "Move to layer" already uses, which addresses
+items by kind+id rather than requiring them to be selected/visible in the
+current view — then `m_focusLayerAfterReload` so the tree opens straight to
+the new layer after `reload()`, matching "New Folder from selection…"'s own
+post-creation UX.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check: multi-select 2+
+objects in the Layers tree (or canvas), right-click → "New Layer from
+selection…", name it, confirm a new layer appears with exactly those
+objects on it and the tree scrolls/expands to show it.
+
+---
+
+## Detached tab windows (Lighting Studio) landed unusably tiny when a workspace opens on a different machine — SHIPPED, not yet Branson-verified (2026-09-07)
+
+Branson: "we need a way to redirect windows that were on a different screen
+on a different machine when last saved" — then, after the first pass below
+didn't fix it: "restarted and the window is still off screen .. we need a
+way to pop it back in to the current screen .. interestingly when I select
+lighting studio under view it opens the functions tab in the main window?"
+Root-caused for real using live evidence (System Events window inspection
+of the actual running process) rather than trusting the first theory,
+matching this session's own "stop guessing" standard.
+
+**First pass (real, but not THE bug)**: a workspace's `DetachedWindow`
+entries (`App::loadXML()`, `ui/src/app.cpp`) store each detached tab's raw
+`QWidget::saveGeometry()` blob *inside the .qxw file* — unlike the main
+window's geometry, which lives in local `QSettings` and never leaves this
+machine. The main window already clamped its own restored geometry onto
+whichever screen sits under it; detached tab windows never got the same
+treatment. Fixed that gap — necessary, but Branson's report after
+rebuilding proved it wasn't sufficient, so investigated further instead of
+declaring victory.
+
+**Actual root cause, confirmed live**: queried the real running process's
+windows directly (`osascript`/System Events, not a guess) —
+`test-workspaces/stage-structures-demo.qxw` has `CurrentWindow=
+"FunctionManager"` (so Functions correctly showing active is NOT a bug,
+that's literally what the file says) plus a `DetachedWindow class="Monitor"
+geometry="..."` entry. The live process showed the main window normally on
+screen, **plus a second, UNNAMED window at the exact same position, sized
+100×62 points** — Lighting Studio's detached window, restored to a
+practically-invisible sliver. `QWidget::restoreGeometry()` can *fail
+outright* (Qt version/format mismatch between the saving and loading
+machine, or corruption) and silently leaves the widget at whatever tiny
+size it had right after construction — my first-pass clamp only bounded
+size from ABOVE (`boundedTo`), so a too-SMALL restored/default size sailed
+right through untouched. That also explains the View-menu report:
+`Monitor::createAndShow()` (`ui/src/monitor/monitor.cpp`) correctly detects
+the tab is detached and raises that window — but raising a 100×62 sliver is
+visually indistinguishable from nothing happening, so it just looked like
+clicking "Lighting Studio" left Functions showing.
+
+**Fix**: moved the clamp logic into a proper shared utility,
+`AppUtil::ensureWindowOnScreen(QWidget*, QSize minSize = {400,300})`
+(`ui/src/apputil.{h,cpp}`) — finds the screen under the window's centre
+(falling back to primary), then **both** floors the size up to `minSize`
+**and** clamps it down to fit the screen's available area, then
+repositions so the whole rect fits inside it. Wired in three places: the
+main window's own restore (`App::init()`, was already using the old
+private version), the `DetachedWindow` restore loop (`App::loadXML()`),
+and — this is the actual "pop it back" mechanism Branson asked for —
+`Monitor::createAndShow()`'s raise-if-detached branch now calls it every
+time, unconditionally. That makes View → Lighting Studio (Ctrl+Shift+M)
+self-healing: any time it's invoked, even against a window that was
+already broken before this fix shipped, on a workspace already loaded, it
+fixes the geometry before raising rather than only fixing it at load time.
+
+Builds clean (`qlcconsole` target). Full `check-all.sh` gate run after (see
+job result). Not yet verified live — needs a real check on the SAME
+already-running process/workspace that surfaced this: choose View →
+Lighting Studio (or Ctrl+Shift+M) and confirm the detached window actually
+becomes visible and usable-sized, not just raised-but-invisible.
+
+---
+
 ## Right-click "Locate" and "Reset" directly on a fixture — SHIPPED, not yet Branson-verified (2026-09-05)
 
 Branson: "be nice to have reset as a right click option on a fixture" /

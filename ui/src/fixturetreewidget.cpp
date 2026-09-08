@@ -71,6 +71,7 @@ static QString universeDestination(Doc *doc, quint32 uniID)
 
 static const char* FIXTURE_DRAG_MIME_TYPE = "application/x-qlcplus-fixtures";
 static const char* GROUP_DRAG_MIME_TYPE = "application/x-qlcplus-fixturegroups";
+static const char* HEAD_DRAG_MIME_TYPE = "application/x-qlcplus-fixtureheads";
 
 const char* FixtureTreeWidget::fixtureDragMimeType()
 {
@@ -80,6 +81,11 @@ const char* FixtureTreeWidget::fixtureDragMimeType()
 const char* FixtureTreeWidget::groupDragMimeType()
 {
     return GROUP_DRAG_MIME_TYPE;
+}
+
+const char* FixtureTreeWidget::headDragMimeType()
+{
+    return HEAD_DRAG_MIME_TYPE;
 }
 
 QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
@@ -109,10 +115,11 @@ QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
 
 QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items) const
 {
-    QByteArray fxData, grpData;
+    QByteArray fxData, grpData, headData;
     QDataStream fxStream(&fxData, QIODevice::WriteOnly);
     QDataStream grpStream(&grpData, QIODevice::WriteOnly);
-    int fxCount = 0, grpCount = 0;
+    QDataStream headStream(&headData, QIODevice::WriteOnly);
+    int fxCount = 0, grpCount = 0, headCount = 0;
     foreach (QTreeWidgetItem *item, items)
     {
         // A group item carries its layout as a whole; drag it to move folders.
@@ -123,6 +130,25 @@ QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items
             grpCount++;
             continue;
         }
+        // A HEAD row (ShowHeads mode): carries no PROP_ID of its own -- its
+        // fixture id comes from its parent row. Encoded separately so a drop
+        // target (the Fixture Group editor's grid) can place just this head
+        // instead of the whole fixture's worth.
+        QVariant h = item->data(KColumnName, PROP_HEAD);
+        if (h.isValid())
+        {
+            QTreeWidgetItem *parentItem = item->parent();
+            QVariant pv = (parentItem != nullptr)
+                ? parentItem->data(KColumnName, PROP_ID) : QVariant();
+            bool pok = false;
+            const quint32 pfid = pv.toString().toUInt(&pok);
+            if (pok)
+            {
+                headStream << pfid << quint32(h.toInt());
+                headCount++;
+            }
+            continue;
+        }
         QVariant v = item->data(KColumnName, PROP_ID); // fixture id (string)
         if (v.isValid() == false)
             continue;
@@ -130,7 +156,7 @@ QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items
         quint32 fid = v.toString().toUInt(&ok);
         if (ok) { fxStream << fid; fxCount++; }
     }
-    if (fxCount == 0 && grpCount == 0)
+    if (fxCount == 0 && grpCount == 0 && headCount == 0)
         return QTreeWidget::mimeData(items);
 
     QMimeData *mime = new QMimeData();
@@ -138,6 +164,8 @@ QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items
         mime->setData(FIXTURE_DRAG_MIME_TYPE, fxData);
     if (grpCount > 0)
         mime->setData(GROUP_DRAG_MIME_TYPE, grpData);
+    if (headCount > 0)
+        mime->setData(HEAD_DRAG_MIME_TYPE, headData);
     return mime;
 }
 
@@ -760,6 +788,27 @@ void FixtureTreeWidget::updateSelections()
 void FixtureTreeWidget::slotItemExpanded()
 {
     header()->resizeSections(QHeaderView::ResizeToContents);
+}
+
+void FixtureTreeWidget::setShowHeads(bool on)
+{
+    if (m_showHeads == on)
+        return;
+    m_showHeads = on;
+    // updateTree() clears and repopulates the whole tree, which emits
+    // itemSelectionChanged() (nothing selected) partway through. This is
+    // always called from within FixtureManager::fixtureGroupSelected() or
+    // clearRightPane(), which are ALREADY mid-flight handling that exact
+    // signal for the fixture tree -- an unblocked emission here reenters
+    // FixtureManager::slotSelectionChanged() while the group editor is
+    // still being wired up, which falls through to its "nothing selected"
+    // branch and tears the brand-new editor right back down (regression:
+    // a fixture group's layout editor would flash open and immediately
+    // disappear). Block signals for just this rebuild -- callers already
+    // own the selection-driven state change and don't need it echoed back.
+    const bool wasBlocked = blockSignals(true);
+    updateTree();
+    blockSignals(wasBlocked);
 }
 
 void FixtureTreeWidget::updateTree()

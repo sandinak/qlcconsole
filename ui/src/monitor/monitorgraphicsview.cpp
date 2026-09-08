@@ -2094,6 +2094,7 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         ph *= s;
     }
     item->setSize(QSize(qMax(1, qRound(pw)), qMax(1, qRound(ph))));
+    item->setElevationView(isElevation());
 
     // Riser-mounted fixtures derive their position from the platform in EVERY
     // view (top too — they sit on the riser's edge/face). Free/truss fixtures
@@ -4435,7 +4436,9 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
             });
         }
 
-        // Mount on a tower shelf ▶ (tower → shelf N; sits at the shelf centre).
+        // Mount on a tower shelf ▶ (tower → shelf N; sits at the shelf centre) --
+        // or, since these are real distinct positions and not fake shelf
+        // indices, directly on the tower's own Top cap or Bottom/base.
         QMenu *towerMenu = menu.addMenu(tr("Mount on Tower"));
         const QList<Tower *> towers = props->towers();
         if (towers.isEmpty())
@@ -4446,32 +4449,85 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
                 continue;
             QMenu *shelves = towerMenu->addMenu(tw->name().isEmpty()
                                                 ? tr("Tower %1").arg(tw->id()) : tw->name());
-            if (tw->shelfCount() == 0)
-                shelves->addAction(tr("(no shelves — add in the editor)"))->setEnabled(false);
             const quint32 twid = tw->id();
-            for (int si = 0; si < tw->shelfCount(); ++si)
+            // Shared setup every "mount here" action needs before its own
+            // side/shelf-specific fields.
+            auto baseRig = [this, twid](quint32 f) {
+                MonitorProperties *p = m_doc->monitorProperties();
+                FixtureRigProps r = p->fixtureRigProps(f);
+                r.trussId = Truss::invalidId();
+                r.riserPlatformId = FixtureRigProps::invalidPlatformId();
+                r.deckPlatformId = FixtureRigProps::invalidPlatformId();
+                r.pipeId = Pipe::invalidId();
+                r.towerId = twid;
+                return r;
+            };
+
+            QAction *topAct = shelves->addAction(tr("Top of tower"));
+            topAct->setCheckable(true);
+            topAct->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerTop);
+            connect(topAct, &QAction::triggered, this, [this, fid, twid, baseRig]() {
+                MonitorProperties *p = m_doc->monitorProperties();
+                Tower *t = p->tower(twid);
+                if (t == nullptr) return;
+                FixtureRigProps r = baseRig(fid);
+                r.towerMountSide = FixtureRigProps::TowerTop;
+                r.mountingType = Truss::FloorMounted;   // sits on the cap; "hung" is meaningless here
+                r.towerU = t->width() * 0.5f;
+                r.towerV = t->depth() * 0.5f;
+                p->setFixtureRigProps(fid, r);
+                updateFixture(fid);
+                m_doc->setModified();
+                emit mapStructureChanged();
+            });
+
+            QAction *bottomAct = shelves->addAction(tr("Bottom of tower"));
+            bottomAct->setCheckable(true);
+            bottomAct->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerBottom);
+            connect(bottomAct, &QAction::triggered, this, [this, fid, twid, baseRig]() {
+                MonitorProperties *p = m_doc->monitorProperties();
+                Tower *t = p->tower(twid);
+                if (t == nullptr) return;
+                FixtureRigProps r = baseRig(fid);
+                r.towerMountSide = FixtureRigProps::TowerBottom;
+                r.mountingType = Truss::FloorMounted;   // base-mounted; "hung" is meaningless here
+                r.towerU = t->width() * 0.5f;
+                r.towerV = t->depth() * 0.5f;
+                p->setFixtureRigProps(fid, r);
+                updateFixture(fid);
+                m_doc->setModified();
+                emit mapStructureChanged();
+            });
+
+            if (tw->shelfCount() == 0)
             {
-                QAction *a = shelves->addAction(tr("Shelf %1").arg(si + 1));
-                a->setCheckable(true);
-                a->setChecked(rp.towerId == twid && rp.towerShelf == si);
-                connect(a, &QAction::triggered, this, [this, fid, twid, si]() {
-                    MonitorProperties *p = m_doc->monitorProperties();
-                    Tower *t = p->tower(twid);
-                    if (t == nullptr) return;
-                    FixtureRigProps r = p->fixtureRigProps(fid);
-                    r.trussId = Truss::invalidId();
-                    r.riserPlatformId = FixtureRigProps::invalidPlatformId();
-                    r.deckPlatformId = FixtureRigProps::invalidPlatformId();
-                    r.pipeId = Pipe::invalidId();
-                    r.towerId = twid;
-                    r.towerShelf = si;
-                    r.towerU = t->width() * 0.5f;   // shelf centre
-                    r.towerV = t->depth() * 0.5f;
-                    p->setFixtureRigProps(fid, r);
-                    updateFixture(fid);
-                    m_doc->setModified();
-                    emit mapStructureChanged();
-                });
+                shelves->addAction(tr("(no shelves — add in the editor)"))->setEnabled(false);
+            }
+            else
+            {
+                shelves->addSeparator();
+                for (int si = 0; si < tw->shelfCount(); ++si)
+                {
+                    QAction *a = shelves->addAction(tr("Shelf %1").arg(si + 1));
+                    a->setCheckable(true);
+                    a->setChecked(rp.towerId == twid
+                                  && rp.towerMountSide == FixtureRigProps::TowerShelf
+                                  && rp.towerShelf == si);
+                    connect(a, &QAction::triggered, this, [this, fid, twid, si, baseRig]() {
+                        MonitorProperties *p = m_doc->monitorProperties();
+                        Tower *t = p->tower(twid);
+                        if (t == nullptr) return;
+                        FixtureRigProps r = baseRig(fid);
+                        r.towerMountSide = FixtureRigProps::TowerShelf;
+                        r.towerShelf = si;
+                        r.towerU = t->width() * 0.5f;   // shelf centre
+                        r.towerV = t->depth() * 0.5f;
+                        p->setFixtureRigProps(fid, r);
+                        updateFixture(fid);
+                        m_doc->setModified();
+                        emit mapStructureChanged();
+                    });
+                }
             }
         }
         if (rp.towerId != Tower::invalidId())
@@ -4779,6 +4835,42 @@ void MonitorGraphicsView::attachFixtureToTruss(quint32 fid, quint32 trussId)
     ensureTrussGroup(trussId);
     if (t->groupId() != 0)
         props->setFixtureGroup(fid, t->groupId());
+    m_doc->setModified();
+    emit mapStructureChanged();
+    refreshItemLayerState();
+}
+
+void MonitorGraphicsView::attachFixtureToTower(quint32 fid, quint32 towerId)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    Tower *t = props->tower(towerId);
+    if (t == nullptr || t->shelfCount() == 0)
+        return;
+
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    // Reattaching (already shelf-mounted on this exact tower) keeps whatever
+    // shelf it was already on; a fresh attach -- from a plain drop, with no
+    // shelf to infer -- lands on the first one, matching the per-shelf
+    // right-click menu's own default assignment. A plain drop always means a
+    // SHELF (Top/Bottom are menu-only, explicit choices), so this also pulls
+    // a fixture that was previously Top/Bottom-mounted back onto a shelf.
+    const bool alreadyOnAShelf = (rp.towerId == towerId
+                                   && rp.towerMountSide == FixtureRigProps::TowerShelf
+                                   && rp.towerShelf < quint32(t->shelfCount()));
+    // Structural mounts are mutually exclusive.
+    rp.trussId = Truss::invalidId();
+    rp.pipeId = Pipe::invalidId();
+    rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+    rp.deckPlatformId = FixtureRigProps::invalidPlatformId();
+    rp.towerId = towerId;
+    rp.towerMountSide = FixtureRigProps::TowerShelf;
+    if (!alreadyOnAShelf)
+        rp.towerShelf = 0;
+    rp.towerU = t->width() * 0.5f;    // shelf centre
+    rp.towerV = t->depth() * 0.5f;
+    props->setFixtureRigProps(fid, rp);
+
+    updateFixture(fid);
     m_doc->setModified();
     emit mapStructureChanged();
     refreshItemLayerState();

@@ -1042,6 +1042,16 @@ void Monitor::createAndShow(QWidget* parent, Doc* doc)
         }
         if (QMainWindow *mw = qobject_cast<QMainWindow *>(p))
         {
+            // Belt-and-suspenders recovery: a workspace opened on a different
+            // machine/monitor layout than it was saved on can leave this
+            // window off-screen or degenerate-tiny (see AppUtil::
+            // ensureWindowOnScreen's own comment) despite the load-time fix in
+            // App::loadXML(). Re-checking here means "View -> Lighting Studio"
+            // (or its Ctrl+Shift+M shortcut) doubles as a manual "pop it back
+            // onto this screen" recovery action any time it's invoked, with no
+            // separate UI needed -- including for a window already broken
+            // before this fix existed, on a workspace already loaded.
+            AppUtil::ensureWindowOnScreen(mw);
             mw->show();
             mw->raise();
             mw->activateWindow();
@@ -2765,7 +2775,7 @@ void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32
     rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
     rp.deckPlatformId  = FixtureRigProps::invalidPlatformId();
     if (kind == 1) { if (Tower *tw = m_props->tower(id)) {
-        rp.towerId = id; rp.towerShelf = 0;
+        rp.towerId = id; rp.towerMountSide = FixtureRigProps::TowerShelf; rp.towerShelf = 0;
         rp.towerU = tw->width() * 0.5f; rp.towerV = tw->depth() * 0.5f; } }
     else if (kind == 2) { if (Truss *t = m_props->truss(id)) {
         rp.trussId = id; rp.trussOffset = t->length() * 0.5f; } }
@@ -3846,6 +3856,7 @@ void Monitor::slotEditTower(quint32 tid)
     // Shelves — a list of heights the user can add / remove.
     vl->addWidget(new QLabel(tr("Shelves (height above floor):"), &dlg));
     QListWidget *shelfList = new QListWidget(&dlg);
+    shelfList->setToolTip(tr("Double-click a shelf to edit its height."));
     auto reloadShelves = [&]() {
         shelfList->clear();
         for (int i = 0; i < t->shelfCount(); ++i)
@@ -3894,6 +3905,21 @@ void Monitor::slotEditTower(quint32 tid)
     // Shelf add/remove already mutate the tower live — also refresh the canvas.
     connect(addShelfBtn, &QPushButton::clicked, &dlg, [view]() { if (view) view->reload(); });
     connect(delShelfBtn, &QPushButton::clicked, &dlg, [view]() { if (view) view->reload(); });
+    // Double-click a shelf row to edit its height in place (Tower::
+    // setShelfHeight() -- doesn't reorder the list, so this can't reassign
+    // which shelf any already-mounted fixture is on, unlike remove+re-add).
+    connect(shelfList, &QListWidget::itemDoubleClicked, &dlg, [&, view](QListWidgetItem *) {
+        const int row = shelfList->currentRow();
+        if (row < 0) return;
+        bool ok = false;
+        const double z = QInputDialog::getDouble(&dlg, tr("Edit Shelf Height"),
+            tr("Height above floor:"), double(t->shelfHeight(row)) * toDisp,
+            0.0, hMax, 2, &ok);
+        if (!ok) return;
+        t->setShelfHeight(row, float(z * fromDisp));
+        reloadShelves();
+        if (view) view->reload();
+    });
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
@@ -3907,8 +3933,12 @@ void Monitor::slotEditTower(quint32 tid)
         // Revert geometry AND shelves (Cancel now truly cancels).
         t->setName(snapName); t->setOriginX(snapOX); t->setOriginY(snapOY);
         t->setWidth(snapW); t->setDepth(snapD); t->setHeight(snapH);
-        while (t->shelfCount()) t->removeShelf(0);
-        for (float z : snapShelves) t->addShelf(z);
+        // setShelves(), not addShelf() in a loop -- the latter's new
+        // duplicate guard (see Tower::addShelf()) could reject restoring a
+        // snapshot that already had a duplicate in it (e.g. one saved before
+        // that guard existed), silently losing a shelf on Cancel instead of
+        // actually cancelling.
+        t->setShelves(snapShelves);
         m_graphicsView->updatePlatforms();
         return;
     }
@@ -5752,9 +5782,19 @@ void Monitor::slotEditTruss(quint32 tid)
             t->setWidth(origWidth);
         }
         t->setProfile(origProfile);
-        m_graphicsView->updateTrusses();
+        // Remove any bars created during this session BEFORE rebuilding the
+        // canvas, not after -- updateTrusses() rebuilds MonitorGraphicsView's
+        // own m_trussItems from props->trusses() (which still includes these
+        // temp bars at this point), so removing them from the engine model
+        // AFTER that call would leave freshly-built TrussItems pointing at
+        // now-deleted Truss objects until the next full rebuild -- a
+        // dangling-pointer window with no obvious trigger for exactly when
+        // it'd actually crash, which is exactly the shape of bug (correct
+        // most of the time, then a SIGSEGV mid-session) reported after "Add
+        // Bar" + Cancel here.
         for (quint32 barId : barsCreatedHere)
             m_props->removeTruss(barId);
+        m_graphicsView->updateTrusses();
         m_graphicsView->followParentTrusses();
         if (m_layersPanel) m_layersPanel->reload();
         return;
@@ -6668,7 +6708,14 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     else if (rp.pipeId != Pipe::invalidId())
     { Pipe *p = m_props->pipe(rp.pipeId); mountStr = tr("Bar %1").arg(p ? p->name() : QString()); }
     else if (rp.towerId != Tower::invalidId())
-    { Tower *t = m_props->tower(rp.towerId); mountStr = tr("Tower %1 · shelf %2").arg(t ? t->name() : QString()).arg(rp.towerShelf + 1); }
+    { Tower *t = m_props->tower(rp.towerId);
+      const QString tn = t ? t->name() : QString();
+      if (rp.towerMountSide == FixtureRigProps::TowerTop)
+          mountStr = tr("Tower %1 · top").arg(tn);
+      else if (rp.towerMountSide == FixtureRigProps::TowerBottom)
+          mountStr = tr("Tower %1 · bottom").arg(tn);
+      else
+          mountStr = tr("Tower %1 · shelf %2").arg(tn).arg(rp.towerShelf + 1); }
     else if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
     { StagePlatform *pl = m_props->platform(rp.riserPlatformId); mountStr = tr("Riser %1").arg(pl ? pl->name() : QString()); }
     else if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())

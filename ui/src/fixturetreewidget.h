@@ -48,6 +48,15 @@ public:
 
     void updateTree();
 
+    /** Toggle whether each fixture row expands to show its individual heads
+     *  as draggable children (see headDragMimeType()) -- off by default even
+     *  when constructed without the ShowHeads flag baked in, and meant to be
+     *  switched on/off at runtime (e.g. only while a Fixture Group editor
+     *  that can consume per-head drops is actually open), since permanently
+     *  expanding every fixture's heads would bury the tree for anything with
+     *  a large head count (a 96-head pixel bar, say). Rebuilds the tree. */
+    void setShowHeads(bool on);
+
     /** Get a QTreeWidgetItem whose fixture ID is $id */
     QTreeWidgetItem* fixtureItem(quint32 id) const;
 
@@ -80,6 +89,12 @@ public:
     /** MIME type used when dragging fixture GROUPS within the tree (payload is
      *  a stream of group IDs). Used to drop groups onto folders. */
     static const char* groupDragMimeType();
+
+    /** MIME type used when dragging individual fixture HEADS out of the tree
+     *  (ShowHeads mode only) -- payload is a stream of (fixtureId, headIndex)
+     *  quint32 pairs. Lets a drop target (the Fixture Group editor's grid)
+     *  place just the dragged heads instead of a whole fixture's worth. */
+    static const char* headDragMimeType();
 
 signals:
     /** Emitted when one or more fixture groups are dropped onto a folder (or

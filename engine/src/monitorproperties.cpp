@@ -1377,17 +1377,8 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     if (!m_fixtureItems.contains(fid))
         return QVector3D();
 
-    // Studio frame takes precedence: if the fixture sits under a frame-bearing
-    // group, its world position is derived from that group's local frame
-    // (origin + Rz(rotation) * groupLocal). See MonitorGroup::hasFrame.
-    const quint32 frameGid = fixtureFrameGroup(fid);
-    if (frameGid != 0)
-    {
-        const FixtureRigProps &grp = m_rigProps.value(fid, FixtureRigProps());
-        return groupLocalToWorld(frameGid, grp.groupLocal);
-    }
-
     const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
+
     const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
     if (t != nullptr)
     {
@@ -1443,9 +1434,18 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     const Tower *tw = (rp.towerId != Tower::invalidId()) ? m_towers.value(rp.towerId, nullptr) : nullptr;
     if (tw != nullptr)
     {
-        QVector3D p = tw->shelfPos(rp.towerShelf, rp.towerU, rp.towerV);
+        QVector3D p;
+        if (rp.towerMountSide == FixtureRigProps::TowerTop)
+            p = QVector3D(tw->originX() + rp.towerU, tw->originY() + rp.towerV, tw->height());
+        else if (rp.towerMountSide == FixtureRigProps::TowerBottom)
+            p = QVector3D(tw->originX() + rp.towerU, tw->originY() + rp.towerV, 0.0f);
+        else
+            p = tw->shelfPos(rp.towerShelf, rp.towerU, rp.towerV);
         p.setZ(p.z() + rp.mountZOffset);
         // Hung (base on top) = hangs UNDER the shelf; drop it a little below.
+        // Meaningless for Top/Bottom (nothing to hang under/from there) --
+        // the context menu already forces mountingType back to FloorMounted
+        // when picking either, so this only ever fires for a real shelf.
         if (rp.mountingType == Truss::TopHung)
             p.setZ(qMax(0.0f, p.z() - 0.15f));
         return p;
@@ -1484,6 +1484,23 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
                              platformBaseZ(pl->id()) + rp.riserV);
         }
     }
+
+    // Studio frame: derived from the group's local frame (origin + Rz(rotation)
+    // * groupLocal, see MonitorGroup::hasFrame) -- but only as a FALLBACK, once
+    // none of the structural mounts above matched. This used to run FIRST,
+    // unconditionally, which broke every truss/pipe/tower/riser-mounted fixture
+    // silently: attaching a fixture to a truss (attachFixtureToTruss()) ALSO
+    // makes it a member of that truss's own auto-created frame group, purely so
+    // the Layers tree/canvas can select them together -- not to redefine how
+    // the fixture is positioned. With frame-group checked first, that side
+    // effect permanently overrode the real trussOffset-based position with
+    // frame-local math that was never meant to compete with it, and dragging
+    // (StructureStudioView::dragFixtureTo(), which checks frame-group first for
+    // the same historical reason) silently moved the WRONG coordinate instead
+    // of sliding it along the truss.
+    const quint32 frameGid = fixtureFrameGroup(fid);
+    if (frameGid != 0)
+        return groupLocalToWorld(frameGid, rp.groupLocal);
 
     // Free-placed: stored X/Y are in MILLIMETRES (see setFixturePosition callers,
     // which pass raw mm), but this function must return METRES to match the truss
@@ -1960,6 +1977,10 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.towerShelf = a.value("TShelf").toInt();
                 rp.towerU     = a.value("TU").toFloat();
                 rp.towerV     = a.value("TV").toFloat();
+                // Absent in a file saved before Top/Bottom mounting existed --
+                // defaults to TowerShelf (0), preserving old files' meaning.
+                rp.towerMountSide = a.hasAttribute("TSide")
+                    ? a.value("TSide").toInt() : FixtureRigProps::TowerShelf;
             }
             m_rigProps[fid] = rp;
             root.skipCurrentElement();
@@ -2377,6 +2398,7 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("TShelf"), QString::number(rp.towerShelf));
             doc->writeAttribute(QStringLiteral("TU"),     QString::number(double(rp.towerU), 'f', 3));
             doc->writeAttribute(QStringLiteral("TV"),     QString::number(double(rp.towerV), 'f', 3));
+            doc->writeAttribute(QStringLiteral("TSide"),  QString::number(rp.towerMountSide));
         }
         if (!rp.groupLocal.isNull())
         {

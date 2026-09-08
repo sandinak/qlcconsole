@@ -22,6 +22,7 @@
 
 #include <QStyledItemDelegate>
 #include <QColor>
+#include <QSize>
 
 class QWidget;
 class Doc;
@@ -45,6 +46,33 @@ namespace AppUtil
      * @param widget The widget to expose
      */
     void ensureWidgetIsVisible(QWidget* widget);
+
+    /**
+     * Make sure a top-level window's geometry actually corresponds to a
+     * currently-connected screen, with a usable size. Two distinct failure
+     * modes this guards against, both real on a workspace that travels
+     * between machines:
+     *   - Saved geometry from a completely different screen layout (a
+     *     different machine's monitors, or this one with a display since
+     *     unplugged) can restore to coordinates off every current screen.
+     *   - QWidget::restoreGeometry() can silently fail outright (a Qt
+     *     version/format mismatch between the machine that saved it and
+     *     this one, or plain corruption) and leave the widget at whatever
+     *     tiny default size it had right after construction — present,
+     *     on-screen even, but too small to see or use.
+     * Finds the screen under the window's centre (falling back to the
+     * primary screen if none), then clamps size to fit that screen's
+     * available area AND enforces a sane minimum, then repositions so the
+     * whole rect fits inside it. Safe to call unconditionally, including on
+     * a window that's already fine (a no-op in that case) — e.g. every time
+     * a "go to this window" menu action raises an already-detached window,
+     * so that action doubles as a recovery path with no separate UI needed.
+     *
+     * @param window The top-level window to fix up.
+     * @param minSize Floor below which the window is treated as unusably
+     *                small regardless of what it claims its size is.
+     */
+    void ensureWindowOnScreen(QWidget *window, QSize minSize = QSize(400, 300));
 
     /*********************************************************************
      * Sane style

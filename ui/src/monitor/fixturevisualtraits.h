@@ -1,0 +1,78 @@
+/*
+  Q Light Controller Plus
+  fixturevisualtraits.h
+
+  Copyright (c) Massimo Callegari
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#ifndef FIXTUREVISUALTRAITS_H
+#define FIXTUREVISUALTRAITS_H
+
+#include <QPainterPath>
+#include <QRectF>
+
+class Fixture;
+
+// ---------------------------------------------------------------------------
+// Fixture "what does this actually look like" classifier, shared by every
+// renderer that draws a fixture as an icon (StructureStudioView's elevation
+// editor, MonitorFixtureItem's 2D plan view). Reads only data ALREADY present
+// in every fixture definition (Type, per-channel Group/Colour/Preset, Physical
+// dimensions) -- no new fixture-def schema, so it applies retroactively to the
+// whole existing library, not just fixtures someone hand-tags going forward.
+// ---------------------------------------------------------------------------
+
+enum class FixtureSilhouette { Bar, Mover, Par, Generic };
+
+struct FixtureVisualTraits
+{
+    FixtureSilhouette kind = FixtureSilhouette::Generic;
+    bool  hasFocus = false;         ///< a Beam-group Focus/Zoom channel exists
+    bool  rgbw = false;             ///< colour-mixing (2+ of R/G/B/W) vs a wheel
+    bool  hasWheel = false;         ///< a Colour-group channel with no single primary colour
+    int   headCount = 1;
+    bool  multiHeadPanTilt = false; ///< 2+ heads, each with its own Pan or Tilt channel
+    float physW = 0.0f, physH = 0.0f, physD = 0.0f;  ///< metres; 0 = not declared
+};
+
+FixtureVisualTraits classifyFixture(Fixture *fx);
+
+// ---------------------------------------------------------------------------
+// Shared Mover silhouettes -- pure geometry (a rect in, a path out), so
+// StructureStudioView's elevation editor and MonitorFixtureItem's 2D canvas
+// draw and hit-test the IDENTICAL shape for a Mover instead of two
+// independently-drawn approximations of "what a moving head looks like".
+// ---------------------------------------------------------------------------
+
+/** A yoke-mount "compact head unit" silhouette: a base block flush with the
+ *  mounting surface, two arms rising from it, and the head suspended between
+ *  them -- what a moving head/scanner looks like from the Front or Side.
+ *  $hung mirrors it (base at the TOP, arms/head hanging below) for a
+ *  TopHung structural mount; false = sitting (base at the bottom, arms/head
+ *  rising above it). $headCount > 1 draws one full unit per head, each
+ *  centred in its own equal slice of $r's width, for a genuinely multi-head
+ *  fixture (e.g. a twin-head unit) instead of one unit stretched across the
+ *  whole footprint. */
+QPainterPath moverElevationPath(const QRectF &r, bool hung = false, int headCount = 1);
+
+/** The Mover silhouette as seen from directly above: a round head with a
+ *  flat chord on its local "front" edge (where the beam exits) inset in a
+ *  square base footprint (the yoke's footprint from above) -- "circles in a
+ *  square", not a plain oval. $headCount > 1 draws one full unit per head,
+ *  each centred in its own equal slice of $r's width -- see
+ *  moverElevationPath(). */
+QPainterPath moverPlanPath(const QRectF &r, int headCount = 1);
+
+#endif // FIXTUREVISUALTRAITS_H

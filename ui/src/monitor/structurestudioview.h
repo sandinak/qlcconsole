@@ -133,8 +133,33 @@ private:
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame
+    /** True when @p rp has a real structural mount (truss/pipe/tower/riser/
+     *  deck) set. Attaching a fixture to any of these ALSO, as a side effect,
+     *  usually makes it a member of that structure's own auto-created frame
+     *  group (purely for Layers-tree/canvas select-together convenience) --
+     *  that membership must never be treated as the fixture's actual
+     *  positioning mechanism when a more specific one is already set. Used
+     *  everywhere this class would otherwise check fixtureFrameGroup() first,
+     *  to keep that check consistent with MonitorProperties::
+     *  fixtureRigPosition()'s own precedence (structural mount wins; frame
+     *  group is the fallback for a fixture with no other mount at all). */
+    static bool hasStructuralMount(const struct FixtureRigProps &rp);
     QVector3D fixtureEndA(quint32 fid) const;          ///< world end A of the bar
     QVector3D fixtureEndB(quint32 fid) const;          ///< world end B of the bar
+    /** Screen-space bounding rect of a tower-shelf-mounted fixture's drawn
+     *  body (see drawFixtures()) in the current Front/Side plane -- the SAME
+     *  geometry drawFixtures() paints, so hitTestFixture() can hit-test the
+     *  shape actually on screen instead of the (irrelevant here) generic bar
+     *  line. Only meaningful when the fixture is tower-shelf-mounted and
+     *  m_plane is Front or Side; callers are expected to check that first. */
+    QRectF towerFixtureBodyRect(quint32 fid) const;
+    /** Radius (screen px) of a Mover's drawn head circle -- shared between
+     *  drawFixtures() and hitTestFixture() so the hit area always matches
+     *  what's on screen. Sized from the fixture's declared Physical width
+     *  when there is one (most bundled/legacy defs still leave it at 0),
+     *  otherwise falls back to the hasFocus heuristic (a focus/zoom channel
+     *  implies a physically larger lens assembly). */
+    double moverBaseRadius(const struct FixtureVisualTraits &traits) const;
     /** For the anchor platform: which local component the given face pins, and to
      *  what value. mount 0=Top(pin Z),1=Front(pin Y),2=Side(pin X). */
     void facePin(int mount, int &pinComp, double &pinVal) const;

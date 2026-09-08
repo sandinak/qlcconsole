@@ -440,6 +440,12 @@ public:
      *  was removed so assignment is now always explicit). */
     void attachFixtureToTruss(quint32 fid, quint32 trussId);
     void attachFixtureToPipe(quint32 fid, quint32 pipeId);
+    /** Same idea for a tower: mounts on its first shelf (or the shelf it's
+     *  already on, if reattaching), centred on that shelf's footprint. No
+     *  natural "along the run" position to snap to from a plain drop the way
+     *  truss/pipe have, so shelf 0 / centred is the sane default -- the
+     *  per-shelf right-click menu remains the way to pick a specific shelf. */
+    void attachFixtureToTower(quint32 fid, quint32 towerId);
 
     /** Unbind fixture @p fid from its truss (leaves it where it sits). */
     void detachFixtureFromTruss(quint32 fid);

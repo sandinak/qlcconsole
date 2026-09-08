@@ -1,42 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Workspace>
-<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FunctionManager">
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FixtureManager">
  <Creator>
   <Name>qlcconsole</Name>
-  <Version>4.14.2+qlcconsole.1213</Version>
-  <Author>Branson Matheson</Author>
+  <Version>4.14.2+qlcconsole.1230</Version>
+  <Author>branson</Author>
  </Creator>
  <Engine>
   <InputOutputMap>
    <BeatGenerator BeatType="Disabled" BPM="0"/>
-   <Universe Name="Universe 1" ID="0">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.10"/>
-    </Output>
-   </Universe>
+   <Universe Name="Universe 1" ID="0"/>
    <Universe Name="Universe 2" ID="1">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.10"/>
-    </Output>
-    <Feedback Plugin="MIDI" UID="Launchkey MK4 49 MIDI In" Line="0">
-     <PluginParameters midichannel="16"/>
-    </Feedback>
+    <Feedback Plugin="MIDI" UID="None" Line="0"/>
    </Universe>
    <Universe Name="Universe 3" ID="2">
-    <Input Plugin="MIDI" UID="Network RTP Session 1" Line="2" HIDProfile="Microsoft Xbox Controller"/>
+    <Input Plugin="MIDI" UID="None" Line="2" HIDProfile="Microsoft Xbox Controller"/>
    </Universe>
    <Universe Name="Universe 4" ID="3">
-    <Input Plugin="MIDI" UID="APC40 mkII" Line="3">
-     <PluginParameters midichannel="8"/>
-    </Input>
+    <Input Plugin="MIDI" UID="None" Line="3"/>
    </Universe>
    <Universe Name="Universe 5" ID="4">
-    <Input Plugin="MIDI" UID="Launchkey MK4 49 MIDI Out" Line="0"/>
+    <Input Plugin="MIDI" UID="None" Line="0"/>
    </Universe>
    <Universe Name="Universe 6" ID="5"/>
    <Universe Name="Universe 7" ID="6"/>
    <Universe Name="Universe 8" ID="7">
-    <Output Plugin="ArtNet" UID="192.168.21.214" Line="4">
+    <Output Plugin="ArtNet" UID="192.168.20.166" Line="2">
      <PluginParameters outputIP="192.168.20.185" outputUni="0"/>
     </Output>
    </Universe>
@@ -48,256 +37,56 @@
    <Universe Name="Universe 14" ID="13"/>
    <Universe Name="Universe 15" ID="14"/>
    <Universe Name="Universe 16" ID="15"/>
-   <Universe Name="U17-US1-1" ID="16">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.221" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U18-US1-2" ID="17">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.221" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U19-US1-3" ID="18">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.221" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U20-US1-4" ID="19">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.221" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U21-US2-1" ID="20">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.222" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U22-US2-2" ID="21">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.222" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U23-US2-3" ID="22">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.222" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U24-US2-4" ID="23">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.222" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U25-US3-1" ID="24">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.223" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U26-US3-2" ID="25">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.223" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U27-US3-3" ID="26">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.223" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U28-US3-4" ID="27">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.223" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U29-US4-1" ID="28">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.224" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U30-US4-2" ID="29">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.224" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U31-US4-3" ID="30">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.224" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U32-US4-4" ID="31">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.224" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U33-CS1-1" ID="32">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.211" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U34-CS1-2" ID="33">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.211" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U35-CS1-3" ID="34">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.211" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U36-CS1-4" ID="35">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.211" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U37-CS2-1" ID="36">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.212" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U38-CS2-2" ID="37">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.212" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U39-CS2-3" ID="38">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.212" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U40-CS2-4" ID="39">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.212" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U41-CS3-1" ID="40">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.213" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U42-CS3-2" ID="41">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.213" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U43-CS3-3" ID="42">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.213" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U44-CS3-4" ID="43">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.213" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U45-CS4-1" ID="44">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.214" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U46-CS4-2" ID="45">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.214" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U47-CS4-3" ID="46">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.214" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U48-CS4-4" ID="47">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.214" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U49-DS1-1" ID="48">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.201" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U50-DS1-2" ID="49">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.201" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U51-DS1-3" ID="50">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.201" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U52-DS1-4" ID="51">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.201" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U53-DS2-1" ID="52">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.202" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U54-DS2-2" ID="53">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.202" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U55-DS2-3" ID="54">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.202" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U56-DS2-4" ID="55">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.202" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U57-DS3-1" ID="56">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.203" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U58-DS3-2" ID="57">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.203" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U59-DS3-3" ID="58">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.203" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U60-DS3-4" ID="59">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.203" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U61-DS4-1" ID="60">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.204" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U62-DS4-2" ID="61">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.204" outputUni="1"/>
-    </Output>
-   </Universe>
-   <Universe Name="U63-DS4-3" ID="62">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.204" outputUni="2"/>
-    </Output>
-   </Universe>
-   <Universe Name="U64-DS4-4" ID="63">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.204" outputUni="3"/>
-    </Output>
-   </Universe>
-   <Universe Name="U65-StepBars-A" ID="64">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.230" outputUni="0"/>
-    </Output>
-   </Universe>
-   <Universe Name="U66-StepBars-B" ID="65">
-    <Output Plugin="ArtNet" UID="172.18.2.17" Line="1">
-     <PluginParameters outputIP="172.18.2.230" outputUni="1"/>
-    </Output>
-   </Universe>
+   <Universe Name="U17-US1-1" ID="16"/>
+   <Universe Name="U18-US1-2" ID="17"/>
+   <Universe Name="U19-US1-3" ID="18"/>
+   <Universe Name="U20-US1-4" ID="19"/>
+   <Universe Name="U21-US2-1" ID="20"/>
+   <Universe Name="U22-US2-2" ID="21"/>
+   <Universe Name="U23-US2-3" ID="22"/>
+   <Universe Name="U24-US2-4" ID="23"/>
+   <Universe Name="U25-US3-1" ID="24"/>
+   <Universe Name="U26-US3-2" ID="25"/>
+   <Universe Name="U27-US3-3" ID="26"/>
+   <Universe Name="U28-US3-4" ID="27"/>
+   <Universe Name="U29-US4-1" ID="28"/>
+   <Universe Name="U30-US4-2" ID="29"/>
+   <Universe Name="U31-US4-3" ID="30"/>
+   <Universe Name="U32-US4-4" ID="31"/>
+   <Universe Name="U33-CS1-1" ID="32"/>
+   <Universe Name="U34-CS1-2" ID="33"/>
+   <Universe Name="U35-CS1-3" ID="34"/>
+   <Universe Name="U36-CS1-4" ID="35"/>
+   <Universe Name="U37-CS2-1" ID="36"/>
+   <Universe Name="U38-CS2-2" ID="37"/>
+   <Universe Name="U39-CS2-3" ID="38"/>
+   <Universe Name="U40-CS2-4" ID="39"/>
+   <Universe Name="U41-CS3-1" ID="40"/>
+   <Universe Name="U42-CS3-2" ID="41"/>
+   <Universe Name="U43-CS3-3" ID="42"/>
+   <Universe Name="U44-CS3-4" ID="43"/>
+   <Universe Name="U45-CS4-1" ID="44"/>
+   <Universe Name="U46-CS4-2" ID="45"/>
+   <Universe Name="U47-CS4-3" ID="46"/>
+   <Universe Name="U48-CS4-4" ID="47"/>
+   <Universe Name="U49-DS1-1" ID="48"/>
+   <Universe Name="U50-DS1-2" ID="49"/>
+   <Universe Name="U51-DS1-3" ID="50"/>
+   <Universe Name="U52-DS1-4" ID="51"/>
+   <Universe Name="U53-DS2-1" ID="52"/>
+   <Universe Name="U54-DS2-2" ID="53"/>
+   <Universe Name="U55-DS2-3" ID="54"/>
+   <Universe Name="U56-DS2-4" ID="55"/>
+   <Universe Name="U57-DS3-1" ID="56"/>
+   <Universe Name="U58-DS3-2" ID="57"/>
+   <Universe Name="U59-DS3-3" ID="58"/>
+   <Universe Name="U60-DS3-4" ID="59"/>
+   <Universe Name="U61-DS4-1" ID="60"/>
+   <Universe Name="U62-DS4-2" ID="61"/>
+   <Universe Name="U63-DS4-3" ID="62"/>
+   <Universe Name="U64-DS4-4" ID="63"/>
+   <Universe Name="U65-StepBars-A" ID="64"/>
+   <Universe Name="U66-StepBars-B" ID="65"/>
    <TargetAlias Address="172.18.2.201">DS1</TargetAlias>
    <TargetAlias Address="172.18.2.202">DS2</TargetAlias>
    <TargetAlias Address="172.18.2.203">DS3</TargetAlias>
@@ -384,22 +173,12 @@
   <Fixture>
    <Manufacturer>Warmdance</Manufacturer>
    <Model>XL-450</Model>
-   <Mode>135ch RGB</Mode>
+   <Mode>165ch</Mode>
    <ID>7</ID>
-   <Name>XL-450RGB</Name>
-   <Universe>0</Universe>
-   <Address>106</Address>
-   <Channels>135</Channels>
-  </Fixture>
-  <Fixture>
-   <Manufacturer>Warmdance</Manufacturer>
-   <Model>XL-450</Model>
-   <Mode>30ch White</Mode>
-   <ID>8</ID>
    <Name>XL-450</Name>
    <Universe>0</Universe>
-   <Address>241</Address>
-   <Channels>30</Channels>
+   <Address>106</Address>
+   <Channels>165</Channels>
   </Fixture>
   <Fixture>
    <Manufacturer>Junman</Manufacturer>
@@ -1843,36 +1622,27 @@
    <Head X="12" Y="0" Fixture="7">12</Head>
    <Head X="13" Y="0" Fixture="7">13</Head>
    <Head X="14" Y="0" Fixture="7">14</Head>
-   <Head X="0" Y="1" Fixture="7">15</Head>
-   <Head X="1" Y="1" Fixture="7">16</Head>
-   <Head X="2" Y="1" Fixture="7">17</Head>
-   <Head X="3" Y="1" Fixture="7">18</Head>
-   <Head X="4" Y="1" Fixture="7">19</Head>
-   <Head X="5" Y="1" Fixture="7">20</Head>
-   <Head X="6" Y="1" Fixture="7">21</Head>
-   <Head X="7" Y="1" Fixture="7">22</Head>
-   <Head X="8" Y="1" Fixture="7">23</Head>
-   <Head X="9" Y="1" Fixture="7">24</Head>
-   <Head X="10" Y="1" Fixture="7">25</Head>
-   <Head X="11" Y="1" Fixture="7">26</Head>
-   <Head X="12" Y="1" Fixture="7">27</Head>
-   <Head X="13" Y="1" Fixture="7">28</Head>
-   <Head X="14" Y="1" Fixture="7">29</Head>
-   <Head X="0" Y="2" Fixture="7">30</Head>
-   <Head X="1" Y="2" Fixture="7">31</Head>
-   <Head X="2" Y="2" Fixture="7">32</Head>
-   <Head X="3" Y="2" Fixture="7">33</Head>
-   <Head X="4" Y="2" Fixture="7">34</Head>
-   <Head X="5" Y="2" Fixture="7">35</Head>
-   <Head X="6" Y="2" Fixture="7">36</Head>
-   <Head X="7" Y="2" Fixture="7">37</Head>
-   <Head X="8" Y="2" Fixture="7">38</Head>
-   <Head X="9" Y="2" Fixture="7">39</Head>
-   <Head X="10" Y="2" Fixture="7">40</Head>
-   <Head X="11" Y="2" Fixture="7">41</Head>
-   <Head X="12" Y="2" Fixture="7">42</Head>
-   <Head X="13" Y="2" Fixture="7">43</Head>
-   <Head X="14" Y="2" Fixture="7">44</Head>
+   <Head X="15" Y="0" Fixture="7">15</Head>
+   <Head X="0" Y="1" Fixture="7">16</Head>
+   <Head X="1" Y="1" Fixture="7">17</Head>
+   <Head X="2" Y="1" Fixture="7">18</Head>
+   <Head X="3" Y="1" Fixture="7">19</Head>
+   <Head X="4" Y="1" Fixture="7">20</Head>
+   <Head X="5" Y="1" Fixture="7">21</Head>
+   <Head X="6" Y="1" Fixture="7">22</Head>
+   <Head X="7" Y="1" Fixture="7">23</Head>
+   <Head X="8" Y="1" Fixture="7">24</Head>
+   <Head X="9" Y="1" Fixture="7">25</Head>
+   <Head X="10" Y="1" Fixture="7">26</Head>
+   <Head X="11" Y="1" Fixture="7">27</Head>
+   <Head X="12" Y="1" Fixture="7">28</Head>
+   <Head X="13" Y="1" Fixture="7">29</Head>
+   <Head X="14" Y="1" Fixture="7">30</Head>
+   <Head X="15" Y="1" Fixture="7">31</Head>
+   <Head X="0" Y="3" Fixture="7">48</Head>
+   <Head X="1" Y="3" Fixture="7">49</Head>
+   <Head X="2" Y="3" Fixture="7">50</Head>
+   <Head X="3" Y="3" Fixture="7">51</Head>
    <Head X="4" Y="3" Fixture="5">0</Head>
    <Head X="5" Y="3" Fixture="5">1</Head>
    <Head X="6" Y="3" Fixture="5">2</Head>
@@ -1881,6 +1651,14 @@
    <Head X="9" Y="3" Fixture="5">5</Head>
    <Head X="10" Y="3" Fixture="5">6</Head>
    <Head X="11" Y="3" Fixture="5">7</Head>
+   <Head X="12" Y="3" Fixture="7">52</Head>
+   <Head X="13" Y="3" Fixture="7">53</Head>
+   <Head X="14" Y="3" Fixture="7">54</Head>
+   <Head X="15" Y="3" Fixture="7">55</Head>
+   <Head X="0" Y="4" Fixture="7">56</Head>
+   <Head X="1" Y="4" Fixture="7">57</Head>
+   <Head X="2" Y="4" Fixture="7">58</Head>
+   <Head X="3" Y="4" Fixture="7">59</Head>
    <Head X="4" Y="4" Fixture="5">8</Head>
    <Head X="5" Y="4" Fixture="5">9</Head>
    <Head X="6" Y="4" Fixture="5">10</Head>
@@ -1889,40 +1667,25 @@
    <Head X="9" Y="4" Fixture="5">13</Head>
    <Head X="10" Y="4" Fixture="5">14</Head>
    <Head X="11" Y="4" Fixture="5">15</Head>
+   <Head X="12" Y="4" Fixture="7">60</Head>
+   <Head X="13" Y="4" Fixture="7">61</Head>
+   <Head X="14" Y="4" Fixture="7">62</Head>
+   <Head X="15" Y="4" Fixture="7">63</Head>
+   <Head X="0" Y="5" Fixture="7">64</Head>
+   <Head X="1" Y="5" Fixture="7">65</Head>
+   <Head X="2" Y="5" Fixture="7">66</Head>
+   <Head X="3" Y="5" Fixture="7">67</Head>
+   <Head X="4" Y="5" Fixture="7">68</Head>
+   <Head X="5" Y="5" Fixture="7">69</Head>
+   <Head X="6" Y="5" Fixture="7">70</Head>
+   <Head X="7" Y="5" Fixture="7">71</Head>
+   <Head X="8" Y="5" Fixture="7">72</Head>
+   <Head X="9" Y="5" Fixture="7">73</Head>
+   <Head X="10" Y="5" Fixture="7">74</Head>
   </FixtureGroup>
   <FixtureGroup ID="5">
    <Name>W Washes</Name>
    <Size X="15" Y="6"/>
-   <Head X="0" Y="1" Fixture="8">0</Head>
-   <Head X="1" Y="1" Fixture="8">1</Head>
-   <Head X="2" Y="1" Fixture="8">2</Head>
-   <Head X="3" Y="1" Fixture="8">3</Head>
-   <Head X="4" Y="1" Fixture="8">4</Head>
-   <Head X="5" Y="1" Fixture="8">5</Head>
-   <Head X="6" Y="1" Fixture="8">6</Head>
-   <Head X="7" Y="1" Fixture="8">7</Head>
-   <Head X="8" Y="1" Fixture="8">8</Head>
-   <Head X="9" Y="1" Fixture="8">9</Head>
-   <Head X="10" Y="1" Fixture="8">10</Head>
-   <Head X="11" Y="1" Fixture="8">11</Head>
-   <Head X="12" Y="1" Fixture="8">12</Head>
-   <Head X="13" Y="1" Fixture="8">13</Head>
-   <Head X="14" Y="1" Fixture="8">14</Head>
-   <Head X="0" Y="2" Fixture="8">15</Head>
-   <Head X="1" Y="2" Fixture="8">16</Head>
-   <Head X="2" Y="2" Fixture="8">17</Head>
-   <Head X="3" Y="2" Fixture="8">18</Head>
-   <Head X="4" Y="2" Fixture="8">19</Head>
-   <Head X="5" Y="2" Fixture="8">20</Head>
-   <Head X="6" Y="2" Fixture="8">21</Head>
-   <Head X="7" Y="2" Fixture="8">22</Head>
-   <Head X="8" Y="2" Fixture="8">23</Head>
-   <Head X="9" Y="2" Fixture="8">24</Head>
-   <Head X="10" Y="2" Fixture="8">25</Head>
-   <Head X="11" Y="2" Fixture="8">26</Head>
-   <Head X="12" Y="2" Fixture="8">27</Head>
-   <Head X="13" Y="2" Fixture="8">28</Head>
-   <Head X="14" Y="2" Fixture="8">29</Head>
    <Head X="3" Y="3" Fixture="6">0</Head>
    <Head X="4" Y="3" Fixture="6">1</Head>
    <Head X="5" Y="3" Fixture="6">2</Head>
@@ -9704,7 +9467,7 @@
   </PowerDistribution>
   <MoveInBlack Auto="0" DarkGapMs="800"/>
   <Monitor DisplayMode="1" ShowLabels="0" AimSubjectHeight="1.39903">
-   <Font>Arial,12,-1,5,50,0,0,0,0,0</Font>
+   <Font>Arial,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0</Font>
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
    <Grid Width="40" Height="3" Depth="24" Units="1" Subdivisions="3"/>
@@ -9715,7 +9478,6 @@
    <FxItem ID="4" XPos="7943.24" YPos="1319.52" LayerId="4" GroupId="17"/>
    <FxItem ID="5" XPos="1107" YPos="2743" LayerId="3" GroupId="4"/>
    <FxItem ID="6" XPos="1106" YPos="2820" LayerId="3" GroupId="4"/>
-   <FxItem ID="7" XPos="3963.85" YPos="725.33" LayerId="4" GroupId="5"/>
    <FxItem ID="9" XPos="1242.19" YPos="1526.86" LayerId="2"/>
    <FxItem ID="10" XPos="1197.04" YPos="2920.44" LayerId="3" GroupId="4"/>
    <FxItem ID="11" XPos="1197.04" YPos="2920.44" LayerId="3" GroupId="4"/>
@@ -9848,6 +9610,8 @@
    <MonitorLayer ID="4" Name="Trusses" Visible="1" Order="3"/>
    <MonitorLayer ID="3" Name="Steps" Visible="1" Locked="1" Order="4"/>
    <MonitorLayer ID="5" Name="Power" Visible="1" Order="5"/>
+   <MonitorLayer ID="6" Name="targets" Visible="1" Order="6"/>
+   <ActiveLayer ID="6"/>
    <MonitorGroup ID="1" Name="Risers" LayerId="0"/>
    <MonitorGroup ID="2" Name="T-1" LayerId="4" AnchorKind="truss" AnchorId="1" Frame="1" OX="0.000" OY="0.000" OZ="0.000" Rot="0.000"/>
    <MonitorGroup ID="3" Name="Towers" LayerId="0"/>
@@ -9865,10 +9629,10 @@
    <MonitorGroup ID="15" Name="DS-3" LayerId="3" AnchorKind="platform" AnchorId="22" Frame="1" OX="6.088" OY="5.212" OZ="0.000" Rot="0.000"/>
    <MonitorGroup ID="16" Name="DS-4" LayerId="3" AnchorKind="platform" AnchorId="23" Frame="1" OX="8.530" OY="5.211" OZ="0.000" Rot="0.000"/>
    <MonitorGroup ID="17" Name="T-3" LayerId="4" AnchorKind="truss" AnchorId="3"/>
-   <Truss ID="1" Name="T-1" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="1.669" OriginY="1.371" OriginZ="0.000" DirX="1.000000" DirY="0.000000" LayerId="4" GroupId="2"/>
-   <Truss ID="2" Name="T-2" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="3.965" OriginY="1.343" OriginZ="0.000" DirX="1.000000" DirY="0.000000" LayerId="4" GroupId="5"/>
-   <Truss ID="3" Name="T-3" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="7.943" OriginY="1.320" OriginZ="0.000" DirX="1.000000" DirY="0.000000" LayerId="4" GroupId="17"/>
-   <Truss ID="4" Name="T-4" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="10.498" OriginY="1.371" OriginZ="0.000" DirX="1.000000" DirY="0.000000" LayerId="4"/>
+   <Truss ID="1" Name="T-1" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="1.669" OriginY="1.371" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="2"/>
+   <Truss ID="2" Name="T-2" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="3.965" OriginY="1.344" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="5"/>
+   <Truss ID="3" Name="T-3" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="7.943" OriginY="1.320" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="17"/>
+   <Truss ID="4" Name="T-4" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="10.498" OriginY="1.371" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4"/>
    <StagePlatform ID="0" Name="USP1" OriginX="1.223" OriginY="1.530" Width="2.438" Depth="1.219" Height="0.610" Color="#d2132a" GroupId="1"/>
    <StagePlatform ID="1" Name="USP2" OriginX="3.661" OriginY="1.530" Width="2.438" Depth="1.219" Height="0.610" Color="#d2132a" GroupId="1"/>
    <StagePlatform ID="2" Name="USP3" OriginX="6.099" OriginY="1.530" Width="2.438" Depth="1.219" Height="0.610" Color="#d2132a" GroupId="1"/>
@@ -9899,21 +9663,22 @@
     <Shelf Z="1.800"/>
    </Tower>
    <Tower ID="1" Name="SR Tower" OriginX="0.213" OriginY="6.270" Width="0.405" Depth="0.405" Height="2.438" Color="#5a6478" GroupId="3">
+    <Shelf Z="0.091"/>
     <Shelf Z="0.600"/>
     <Shelf Z="1.000"/>
-    <Shelf Z="1.000"/>
-    <Shelf Z="1.500"/>
+    <Shelf Z="1.524"/>
+    <Shelf Z="2.438"/>
    </Tower>
-   <StageTarget ID="0" Name="Test Target" X="5.966" Y="2.292" Z="0.000" Color="#ffb400"/>
-   <StageTarget ID="1" Name="Target 2" X="7.249" Y="1.247" Z="0.000" Color="#ffb400"/>
+   <StageTarget ID="0" Name="Test Target" X="6.074" Y="3.861" Z="0.396" Color="#ffb400" LayerId="6"/>
+   <StageTarget ID="1" Name="Target 2" X="6.075" Y="2.332" Z="0.610" Color="#ffb400" LayerId="6"/>
    <FixtureRig FID="0" Truss="4294967295" Offset="0.185" Mounting="TopHung" PanZero="0.0"/>
    <FixtureRig FID="1" Truss="4294967295" Offset="0.808" Mounting="SideArm" PanZero="0.0"/>
    <FixtureRig FID="2" Truss="4294967295" Offset="0.198" Mounting="SideArm" PanZero="0.0"/>
    <FixtureRig FID="3" Truss="4294967295" Offset="0.868" Mounting="TopHung" PanZero="0.0" PanOfs="-17.00" TiltOfs="6.00"/>
-   <FixtureRig FID="4" Truss="3" Offset="2.942" Mounting="FloorMounted" PanZero="0.0" PanOfs="5.00" TrussSide="1"/>
+   <FixtureRig FID="4" Truss="4294967295" Offset="2.942" Mounting="FloorMounted" PanZero="0.0" PanOfs="5.00" TrussSide="1" Tower="1" TShelf="3" TU="0.206" TV="0.203" TSide="0"/>
    <FixtureRig FID="5" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.609" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
    <FixtureRig FID="6" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="1.829" GLY="0.102" GLZ="0.204" SM="0" SA="0.0"/>
-   <FixtureRig FID="7" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" GLX="0.312" GLY="-0.567" GLZ="-0.031" SM="1" SA="0.0"/>
+   <FixtureRig FID="7" Truss="2" Offset="2.396" Mounting="TopHung" PanZero="0.0" TrussCross="0.093" Deck="1" DeckH="0.000" GLX="0.313" GLY="0.051" GLZ="-0.031" SM="1" SA="0.0"/>
    <FixtureRig FID="9" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0" Deck="0" DeckH="0.000"/>
    <FixtureRig FID="10" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191" SM="1" SA="0.0"/>
    <FixtureRig FID="11" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166" SM="1" SA="0.0"/>
@@ -11533,7 +11298,5 @@
  <SimpleDesk>
   <Engine/>
  </SimpleDesk>
- <AppState>
-  <DetachedWindow class="Monitor" tabIndex="2" geometry="AdnQywADAAAAAAGIAAABBwAACUEAAAWNAAABiAAAAScAAAlBAAAFjQAAAAAAAAAACgAAAAGIAAABJwAACUEAAAWN"/>
- </AppState>
+ <AppState/>
 </Workspace>

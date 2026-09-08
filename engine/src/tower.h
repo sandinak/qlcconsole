@@ -70,6 +70,19 @@ public:
     float shelfHeight(int i) const { return (i >= 0 && i < m_shelves.size()) ? m_shelves.at(i) : 0.0f; }
     void  addShelf(float z);
     void  removeShelf(int i);
+    /** Change shelf @p i's height IN PLACE, without re-sorting the list --
+     *  deliberately, so its index (and therefore any FixtureRigProps::
+     *  towerShelf already pointing at it) stays exactly where it was. A
+     *  fixture mounted on "shelf 3" must still be on "shelf 3" after its
+     *  height moves; add/removeShelf don't have that guarantee (position in
+     *  the sorted list can shift), but an edit shouldn't reassign fixtures
+     *  to a DIFFERENT physical shelf as a side effect of moving this one. */
+    void  setShelfHeight(int i, float z);
+    /** Bulk-replace the whole shelf list verbatim, bypassing addShelf()'s
+     *  duplicate guard -- for restoring a known-good snapshot (e.g. Cancel
+     *  in the Tower editor) exactly as it was, even if that snapshot
+     *  happens to predate the guard and contains a duplicate itself. */
+    void  setShelves(const QList<float> &z) { m_shelves = z; }
     void  clearShelves() { m_shelves.clear(); }
 
     /** World position of a point on shelf @p i at (u,v) metres into the footprint. */

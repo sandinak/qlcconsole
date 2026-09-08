@@ -39,6 +39,17 @@ Tower::Tower(quint32 id, QObject *parent)
 
 void Tower::addShelf(float z)
 {
+    // Reject an effective duplicate (within 1cm of an existing shelf) rather
+    // than silently creating two shelves that read identically in the editor
+    // (same rounded height, same drawn line) with no visible sign a second
+    // one even exists -- confirmed as a real, reachable case: clicking
+    // "Add shelf" without changing the height spinbox from a value that
+    // already matched an existing shelf created exactly this with no warning.
+    for (float existing : m_shelves)
+    {
+        if (qAbs(existing - z) < 0.01f)
+            return;
+    }
     m_shelves.append(z);
     std::sort(m_shelves.begin(), m_shelves.end());
 }
@@ -47,6 +58,21 @@ void Tower::removeShelf(int i)
 {
     if (i >= 0 && i < m_shelves.size())
         m_shelves.removeAt(i);
+}
+
+void Tower::setShelfHeight(int i, float z)
+{
+    if (i < 0 || i >= m_shelves.size())
+        return;
+    // Same duplicate guard as addShelf(), against every OTHER shelf (not
+    // itself, or trivially "z is within 1cm of its own current value" would
+    // always block the edit).
+    for (int j = 0; j < m_shelves.size(); ++j)
+    {
+        if (j != i && qAbs(m_shelves.at(j) - z) < 0.01f)
+            return;
+    }
+    m_shelves[i] = z;   // no sort: see the header comment
 }
 
 bool Tower::loadXML(QXmlStreamReader &root)

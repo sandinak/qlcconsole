@@ -92,6 +92,35 @@ void AppUtil::ensureWidgetIsVisible(QWidget *widget)
     }
 }
 
+void AppUtil::ensureWindowOnScreen(QWidget *window, QSize minSize)
+{
+    if (window == NULL)
+        return;
+
+    QScreen *scr = QGuiApplication::screenAt(window->frameGeometry().center());
+    if (scr == NULL)
+        scr = QGuiApplication::primaryScreen();
+    if (scr == NULL)
+        return;
+
+    const QRect avail = scr->availableGeometry();
+    QRect g = window->geometry();
+
+    // Floor first: a restoreGeometry() that silently failed (Qt version/
+    // format mismatch, corruption) leaves whatever tiny default size the
+    // widget had right after construction -- present and "on screen" by
+    // coordinate, but unusable. Only widen up to what the screen can hold.
+    QSize size = g.size().expandedTo(minSize).boundedTo(avail.size());
+    g.setSize(size);
+
+    if (g.right()  > avail.right())  g.moveRight(avail.right());
+    if (g.bottom() > avail.bottom()) g.moveBottom(avail.bottom());
+    if (g.left()   < avail.left())   g.moveLeft(avail.left());
+    if (g.top()    < avail.top())    g.moveTop(avail.top());
+
+    window->setGeometry(g);
+}
+
 /*****************************************************************************
  * Sane style
  *****************************************************************************/

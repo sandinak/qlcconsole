@@ -282,11 +282,16 @@ struct FixtureRigProps
     float            pipeOffset = 0.0f;            ///< metres up the pipe from the base
     float            pipeAngle  = 0.0f;            ///< facing degrees around the pipe
 
-    /** Tower-shelf mount. When towerId is valid the fixture sits on a tower's
-     *  shelf at (towerU, towerV) metres into the footprint. Derived from the
-     *  tower geometry so it follows. */
+    /** Tower mount. When towerId is valid the fixture rides the tower at
+     *  (towerU, towerV) metres into the footprint, at a height derived from
+     *  @c towerMountSide: a numbered SHELF (towerShelf, as before), the
+     *  tower's own TOP cap, or its BOTTOM/base — real, distinct positions
+     *  rather than fake shelf indices. Derived from the tower geometry so it
+     *  follows. */
+    enum TowerMountSide { TowerShelf = 0, TowerTop = 1, TowerBottom = 2 };
     quint32          towerId    = UINT_MAX;        ///< invalid = not tower-mounted
-    int              towerShelf = 0;               ///< shelf index
+    int              towerMountSide = TowerShelf;
+    int              towerShelf = 0;               ///< shelf index (towerMountSide == TowerShelf only)
     float            towerU     = 0.0f;            ///< metres across the footprint (X)
     float            towerV     = 0.0f;            ///< metres into the footprint (Y)
 

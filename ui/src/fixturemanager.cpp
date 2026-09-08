@@ -93,6 +93,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_ctxUniverse(InputOutputMap::invalidUniverse())
     , m_splitter(NULL)
     , m_fixtures_tree(NULL)
+    , m_fixturesSearch(NULL)
     , m_channel_groups_tree(NULL)
     , m_rdmManager(NULL)
     , m_info(NULL)
@@ -463,10 +464,25 @@ void FixtureManager::initDataView()
     connect(m_fixtures_tree, SIGNAL(collapsed(QModelIndex)),
             this, SLOT(slotFixtureItemExpanded()));
 
+    // Search box above the tree — filters by row name as you type, hiding
+    // everything else (but keeping a folder/group visible whenever something
+    // inside it still matches).
+    QWidget *fixturesPane = new QWidget(this);
+    QVBoxLayout *fixturesPaneLayout = new QVBoxLayout(fixturesPane);
+    fixturesPaneLayout->setContentsMargins(0, 0, 0, 0);
+    fixturesPaneLayout->setSpacing(0);
+    m_fixturesSearch = new QLineEdit(fixturesPane);
+    m_fixturesSearch->setPlaceholderText(tr("Search fixtures..."));
+    m_fixturesSearch->setClearButtonEnabled(true);
+    connect(m_fixturesSearch, &QLineEdit::textChanged,
+            this, &FixtureManager::slotFixturesSearchChanged);
+    fixturesPaneLayout->addWidget(m_fixturesSearch);
+    fixturesPaneLayout->addWidget(m_fixtures_tree, 1);
+
     // Labeled "Fixtures" (not "Fixture Groups") -- this tree holds the whole
     // patch (fixtures, spatial groups, Power, Universes), not just groups;
     // the old label undersold what's actually in it.
-    tabs->setTabToolTip(tabs->addTab(m_fixtures_tree, tr("Fixtures")), tr(
+    tabs->setTabToolTip(tabs->addTab(fixturesPane, tr("Fixtures")), tr(
         "The full patch: fixtures, universes, power circuits, and spatial "
         "groups (fixtures arranged on a head-layout grid, used for XY-pad / "
         "per-head effects and as drag-drop dynamic targets in the "
@@ -646,6 +662,10 @@ void FixtureManager::clearRightPane()
         delete m_groupEditor;
         m_groupEditor = NULL;
         m_groupEditorId = FixtureGroup::invalidId();
+        // Only relevant while a grid that can consume per-head drops is open
+        // — see FixtureTreeWidget::setShowHeads()'s own comment for why this
+        // isn't just always on.
+        m_fixtures_tree->setShowHeads(false);
     }
     if (m_power != NULL)
     {
@@ -670,6 +690,11 @@ void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
     m_groupEditor = new FixtureGroupEditor(grp, m_doc, this);
     m_groupEditorId = grp->id();
     m_splitter->insertWidget(1, m_groupEditor);
+    // The editor's grid accepts per-head drops (see FixtureGroupEditor::
+    // eventFilter()) — show each fixture's heads as draggable children in
+    // the source tree while it's open, so a specific head (not just a whole
+    // fixture) can actually be dragged onto a cell.
+    m_fixtures_tree->setShowHeads(true);
 
     m_splitter->restoreState(state);
 }
@@ -943,6 +968,29 @@ void FixtureManager::slotFixtureItemExpanded()
 void FixtureManager::slotDisplayFixtureInfo(QString &info)
 {
     m_info->setText(info);
+}
+
+bool FixtureManager::filterFixtureTreeItem(QTreeWidgetItem *item, const QString &needle)
+{
+    bool anyChildMatch = false;
+    for (int i = 0; i < item->childCount(); ++i)
+        if (filterFixtureTreeItem(item->child(i), needle))
+            anyChildMatch = true;
+
+    const bool selfMatch = needle.isEmpty()
+        || item->text(KColumnName).toLower().contains(needle);
+    const bool visible = selfMatch || anyChildMatch;
+    item->setHidden(!visible);
+    if (!needle.isEmpty() && anyChildMatch)
+        item->setExpanded(true);   // reveal a match sitting inside a collapsed folder
+    return visible;
+}
+
+void FixtureManager::slotFixturesSearchChanged(const QString &text)
+{
+    const QString needle = text.trimmed().toLower();
+    for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); ++i)
+        filterFixtureTreeItem(m_fixtures_tree->topLevelItem(i), needle);
 }
 
 void FixtureManager::selectGroup(quint32 id)

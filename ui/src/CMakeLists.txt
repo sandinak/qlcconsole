@@ -100,6 +100,7 @@ add_library(${module_name}
     monitor/studiocomponentbrowser.cpp monitor/studiocomponentbrowser.h
     monitor/studioplaneview.cpp monitor/studioplaneview.h
     monitor/structurestudioview.cpp monitor/structurestudioview.h
+    monitor/fixturevisualtraits.cpp monitor/fixturevisualtraits.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
