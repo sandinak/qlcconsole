@@ -343,6 +343,44 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         return true;
     }
 
+    /* Standing ON (or inside) a platform deck.
+     *
+     * There was no branch for this at all: a deck-mounted fixture fell through
+     * to the free-placement fallback, which writes the stored X/Y -- while
+     * fixtureRigPosition()'s deck branch DERIVES its Z from the platform. So the
+     * horizontal worked and the vertical silently did nothing, which is what
+     * "set it to inside and still can't move it around the inside" was. */
+    if (rp.onDeck())
+    {
+        StagePlatform *pl = props->platform(rp.deckPlatformId);
+        if (pl == nullptr) return false;
+        const QPointF ab = screenToPlane(px);
+        const QVector3D cur = props->fixtureRigPosition(fid);
+
+        double xMm = double(cur.x()) * 1000.0;
+        double yMm = double(cur.y()) * 1000.0;
+        if (m_plane == Top)        { xMm = ab.x() * 1000.0; yMm = ab.y() * 1000.0; }
+        else if (m_plane == Front) { xMm = ab.x() * 1000.0; }
+        else if (m_plane == Side)  { yMm = ab.x() * 1000.0; }
+        else                       { return false; }        // Angled: no inverse
+        props->setFixturePosition(fid, 0, 0,
+                                  QVector3D(float(xMm), float(yMm), 0.0f));
+
+        /* Height. Inside a step it is measured up from the platform's floor and
+           clamped to its thickness; standing on the deck it is a lift above the
+           deck top, which is what deckHeightOffset has always meant. */
+        if (m_plane != Top)
+        {
+            const float base = props->platformBaseZ(pl->id());
+            if (rp.placement == FixtureRigProps::Inside)
+                rp.deckHeightOffset = qBound(0.0f, float(ab.y()) - base, pl->height());
+            else
+                rp.deckHeightOffset = qMax(0.0f, float(ab.y()) - (base + pl->height()));
+        }
+        props->setFixtureRigProps(fid, rp);
+        return true;
+    }
+
     // On a truss: move it in the plane, resolved onto the two freedoms a truss
     // mount actually has — ALONG the run (trussOffset) and ACROSS it
     // (trussCross, the sideways nudge that keeps a fixture bound while it hangs
@@ -1639,11 +1677,8 @@ void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTrai
      * NOT for a fixture rigged INSIDE something, though: a unit between a
      * truss's chords, or inside a clear-topped step firing up through it, is
      * meant to be within the volume. Pushing that onto the surface is exactly
-     * the wrong answer, which is why placement is a property of its own.
-     * Recessed is let INTO the surface, so it goes the other way. */
-    double seat = 0.5;
-    if (rp.placement == FixtureRigProps::Inside)   seat = 0.0;
-    else if (rp.placement == FixtureRigProps::Recessed) seat = -0.5;
+     * the wrong answer, which is why placement is a property of its own. */
+    const double seat = (rp.placement == FixtureRigProps::Inside) ? 0.0 : 0.5;
     const QVector3D c2 = c + N * float(d * seat);
 
     out[0] = c2 - l - u - n; out[1] = c2 + l - u - n;

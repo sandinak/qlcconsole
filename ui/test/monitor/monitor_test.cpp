@@ -1954,3 +1954,55 @@ void Monitor_Test::insideFixtureHeightIsDraggableInElevation()
     m_doc->deleteFixture(fxi->id());
     props->removePlatform(pl->id());
 }
+
+void Monitor_Test::deckMountedFixtureMovesVerticallyToo()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(3.0f); pl->setDepth(1.0f); pl->setHeight(0.6f);
+    pl->setTopMaterial(StagePlatform::ClearTop);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("DeckLight"); fxi->setChannels(1); fxi->setAddress(520);
+    QVERIFY(m_doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(1500, 500, 0));
+
+    FixtureRigProps rp;
+    rp.deckPlatformId = pl->id();
+    rp.placement = FixtureRigProps::Inside;
+    props->setFixtureRigProps(fxi->id(), rp);
+    QCOMPARE(props->fixtureRigPosition(fxi->id()).z(), 0.0f);   // floor of the box
+
+    StructureStudioView view(m_doc, StructureStudioView::PlatformKind, pl->id());
+    view.resize(700, 500);
+    view.reload();
+    view.setLocked(false);
+
+    // Horizontal, in plan.
+    view.setPlane(StructureStudioView::Top);
+    const QVector3D b0 = props->fixtureRigPosition(fxi->id());
+    QVERIFY(view.dragFixtureTo(fxi->id(), view.w2s(b0) + QPointF(view.m_scale * 0.4, 0.0)));
+    QVERIFY2(qAbs(double(props->fixtureRigPosition(fxi->id()).x() - b0.x()) - 0.4) < 0.05,
+             "a deck fixture would not move horizontally in plan");
+
+    /* Vertical, in an elevation. This did nothing at all before: with no deck
+       branch the drag fell through to free placement, which writes the stored
+       X/Y while the deck branch derives Z from the platform. */
+    view.setPlane(StructureStudioView::Front);
+    const QVector3D b1 = props->fixtureRigPosition(fxi->id());
+    QVERIFY(view.dragFixtureTo(fxi->id(), view.w2s(b1) - QPointF(0.0, view.m_scale * 0.25)));
+    const float z = props->fixtureRigPosition(fxi->id()).z();
+    QVERIFY2(qAbs(double(z) - 0.25) < 0.03,
+             qPrintable(QString("dragged up 0.25 m inside the step but z is %1")
+                        .arg(double(z))));
+
+    // Still cannot leave the box while it is Inside.
+    QVERIFY(view.dragFixtureTo(fxi->id(), view.w2s(b1) - QPointF(0.0, view.m_scale * 6.0)));
+    QVERIFY2(props->fixtureRigPosition(fxi->id()).z() <= pl->height(),
+             "an Inside deck fixture was pushed out through the top");
+
+    m_doc->deleteFixture(fxi->id());
+    props->removePlatform(pl->id());
+}

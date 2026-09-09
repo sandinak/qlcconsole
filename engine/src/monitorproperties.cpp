@@ -2015,7 +2015,14 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (a.hasAttribute("TrussCrossY"))
                 rp.trussCrossY = a.value("TrussCrossY").toFloat();
             if (a.hasAttribute("Placement"))
-                rp.placement = a.value("Placement").toInt();
+            {
+                // Anything not a placement we still have (the retired Recessed
+                // was 2) reads as OnSurface rather than as some other mode.
+                const int pv = a.value("Placement").toInt();
+                rp.placement = (pv == FixtureRigProps::Inside)
+                             ? int(FixtureRigProps::Inside)
+                             : int(FixtureRigProps::OnSurface);
+            }
             if (a.hasAttribute("MountZ"))
                 rp.mountZOffset = a.value("MountZ").toFloat();
             if (a.hasAttribute("Deck"))

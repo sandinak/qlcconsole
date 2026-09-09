@@ -326,10 +326,17 @@ struct FixtureRigProps
      *  Inside: within the structure's volume -- a fixture rigged between a
      *      truss's chords, or sitting inside a clear-topped step firing up
      *      through it. Drawn centred on its position rather than pushed out,
-     *      which is the whole difference: pushing an inside fixture onto the
-     *      surface is exactly wrong.
-     *  Recessed: let into the surface, flush with it (a floor pocket). */
-    enum MountPlacement { OnSurface = 0, Inside = 1, Recessed = 2 };
+     *      and its height within the volume is settable by dragging in an
+     *      elevation.
+     *
+     *  There was briefly a third, Recessed, meaning "let into the surface". It
+     *  was render-only -- it sank the drawn body by half its depth and never
+     *  touched the position -- so for a 60 mm bar on a 600 mm step it did
+     *  nothing anyone could see, and it read as broken. Removed rather than
+     *  left as a control that appears not to work. The value 2 is deliberately
+     *  NOT reused, so any file written while it existed loads as OnSurface
+     *  rather than silently meaning something else. */
+    enum MountPlacement { OnSurface = 0, Inside = 1 };
     int              placement = OnSurface;
 
     /** The structural mounts are MUTUALLY EXCLUSIVE -- a fixture is clamped to

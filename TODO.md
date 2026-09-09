@@ -820,6 +820,48 @@ was not discoverable from any one of them.
 
 `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 18: the missing DECK drag branch, and dropping Recessed
+
+Branson: "selected a step .. selected a light inside .. set it to inside .. and
+still can't move it around the inside. 'recessed' doesn't appear to do anything
+either."
+
+**Two mount kinds in one step.** In `stage-structures-demo.qxw` the DS-3 step
+carries BOTH: `DS3 #1..#8` are `Riser="22"` (fixed in Follow-on 17) and
+`DS3aB`/`DS3aW` are `Deck="22"`. `dragFixtureTo()` had branches for pipe, tower,
+riser and truss but **none for `deckPlatformId`**, so a deck-mounted fixture fell
+through to the free-placement fallback -- which writes the stored X/Y while the
+deck branch of `fixtureRigPosition()` DERIVES its Z. Horizontal worked, vertical
+silently did nothing. New deck branch handles both, with the same clamp as the
+riser case: measured from the platform floor when Inside, a lift above the deck
+top when not.
+
+**PROCESS: I nearly chased a phantom.** The first diagnostic showed the RISER
+fixture failing `hitTestFixture` in every plane, which looked like the bug --
+until I noticed the test had placed both probe fixtures at the SAME point, so the
+hit test was correctly returning the other one. Separating them cleared it and
+pointed at the real gap. Diagnostics need the same scepticism as the code.
+
+**PROCESS: this was the FOURTH round on `placement`** -- rendering, then
+position, then riser height, now deck height. Each time it looked complete. The
+honest read: I kept fixing the case in front of me instead of enumerating every
+mount kind that can carry a fixture. The missing deck branch was in plain sight
+the whole time. When adding a property that mount branches consume, walk ALL the
+branches once rather than waiting for each to be reported.
+
+**Recessed removed** (Branson chose "drop it"). It was render-only -- it sank
+the drawn body half its depth and never touched the position -- so for a 60 mm
+bar on a 600 mm step it did nothing anyone could see, and read as broken. Two
+placements remain, each doing something visible and settable. The enum value 2 is
+deliberately NOT reused, and the loader maps anything that is not Inside back to
+OnSurface, so a workspace saved while Recessed existed loads sanely instead of
+silently meaning something else.
+
+**Test** (`monitor_test` 43/43, revert-checked):
+`deckMountedFixtureMovesVerticallyToo`.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

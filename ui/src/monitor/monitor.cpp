@@ -2699,12 +2699,12 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     QComboBox *placeCombo = new QComboBox(insp);
     placeCombo->addItem(tr("On the surface"), FixtureRigProps::OnSurface);
     placeCombo->addItem(tr("Inside"),         FixtureRigProps::Inside);
-    placeCombo->addItem(tr("Recessed"),       FixtureRigProps::Recessed);
-    placeCombo->setToolTip(tr("Bolted to the outside, rigged WITHIN the structure "
-                              "(inside a step or between a truss's chords), or "
-                              "let into its surface. An inside fixture sits in "
-                              "the volume rather than on the face — pair it with "
-                              "a clear or open top to see it."));
+    placeCombo->setToolTip(tr("Bolted to the outside, or rigged WITHIN the "
+                              "structure — inside a step, or between a truss's "
+                              "chords. An inside fixture sits in the volume "
+                              "rather than on the face; drag it in Front or Side "
+                              "to set its height in there, and give the step a "
+                              "clear or open top to see it."));
     inspForm->addRow(tr("Placement:"), placeCombo);
     inspForm->addRow(tr("Angle:"), angleSpin);
     iv->addLayout(inspForm);
@@ -2748,7 +2748,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                 .arg(gel.lightness() > 128 ? "#000" : "#fff") : QString());
         faceCombo->blockSignals(true); faceCombo->setCurrentIndex(qBound(0, rp.studioMount, 2)); faceCombo->blockSignals(false);
         placeCombo->blockSignals(true);
-        placeCombo->setCurrentIndex(qBound(0, rp.placement, 2));
+        placeCombo->setCurrentIndex(qBound(0, rp.placement, 1));
         placeCombo->blockSignals(false);
         angleSpin->blockSignals(true); angleSpin->setValue(double(rp.studioAngle)); angleSpin->blockSignals(false);
         // Orientation options are constrained by the mount (shared helper).

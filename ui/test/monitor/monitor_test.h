@@ -151,6 +151,10 @@ private slots:
     /** ...and its height within the step must be settable by dragging in an
      *  elevation, or Inside just pins it to the floor. */
     void insideFixtureHeightIsDraggableInElevation();
+    /** A DECK-mounted fixture had no drag branch at all: the horizontal wrote
+     *  the stored position while its Z stayed derived, so it could never be
+     *  moved vertically inside (or above) the step. */
+    void deckMountedFixtureMovesVerticallyToo();
     /** Room light applies whether or not live output is shown, and takes the
      *  whole picture down toward a blackout. */
     void ambientLevelDimsTheWholeView();
