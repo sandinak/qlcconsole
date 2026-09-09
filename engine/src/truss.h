@@ -317,6 +317,21 @@ struct FixtureRigProps
     bool onTower() const { return towerId != UINT_MAX; }
     enum RiserFace { RiserFront = 0, RiserTop = 1 };
 
+    /** WHERE the fixture sits relative to the thing carrying it, as distinct
+     *  from WHICH thing that is.
+     *
+     *  OnSurface: bolted to the outside -- its back flush with the face, its
+     *      body proud of it. The normal case, and what a face-mounted LED bar
+     *      on a step nosing is.
+     *  Inside: within the structure's volume -- a fixture rigged between a
+     *      truss's chords, or sitting inside a clear-topped step firing up
+     *      through it. Drawn centred on its position rather than pushed out,
+     *      which is the whole difference: pushing an inside fixture onto the
+     *      surface is exactly wrong.
+     *  Recessed: let into the surface, flush with it (a floor pocket). */
+    enum MountPlacement { OnSurface = 0, Inside = 1, Recessed = 2 };
+    int              placement = OnSurface;
+
     /** The structural mounts are MUTUALLY EXCLUSIVE -- a fixture is clamped to
      *  a truss, or riding a pipe, or on a tower shelf, or standing on a deck,
      *  or bolted to a riser face, never two at once. */

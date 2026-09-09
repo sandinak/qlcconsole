@@ -1613,48 +1613,52 @@ void Monitor_Test::angledOverviewDrawsNearThingsInFront()
 {
     MonitorProperties *props = m_doc->monitorProperties();
 
-    /* viewDepth's contract, which both sorts depend on: LARGER is NEARER.
-       +Y is downstage, so with the eye downstage looking upstage, a bigger Y is
-       closer. Both sorts once ran the other way and far objects painted over
-       near ones -- a step covered the tower standing in front of it. */
+    /* viewDepth's contract, which the sort depends on: LARGER is NEARER.
+       +Y is downstage, so with the eye downstage looking upstage a bigger Y is
+       closer. The sort once ran the other way and far things painted over near
+       ones -- a step covered the tower standing in front of it. */
     StructureStudioView probe(m_doc, StructureStudioView::StageKind, 0);
     probe.setPlane(StructureStudioView::Angled);
     probe.setAngledView(0.0, 0.0);
     QVERIFY2(probe.viewDepth(QVector3D(0, 10, 0)) > probe.viewDepth(QVector3D(0, 0, 0)),
-             "viewDepth: larger must mean nearer, or the painter's sorts invert");
+             "viewDepth: larger must mean nearer, or the painter's sort inverts");
 
-    // A tower planted downstage OF a deck must be drawn over it.
-    StagePlatform *pl = props->addPlatform();
-    pl->setName("Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
-    pl->setWidth(6.0f); pl->setDepth(3.0f); pl->setHeight(0.6f);
-    pl->setColor(QColor(60, 110, 230));                 // unmistakably blue
-    Tower *tw = props->addTower();
-    tw->setName("Front Tower"); tw->setOriginX(2.5f); tw->setOriginY(4.5f);
-    tw->setWidth(0.6f); tw->setDepth(0.6f); tw->setHeight(3.0f);
+    /* Two SOLID decks, one downstage of the other and overlapping on screen.
+       Deliberately not a tower any more: towers draw as open lattice now, so
+       you can legitimately see the scenery through one and sampling its middle
+       says nothing about ordering. */
+    StagePlatform *far_ = props->addPlatform();
+    far_->setName("Far"); far_->setOriginX(0.0f); far_->setOriginY(0.0f);
+    far_->setWidth(6.0f); far_->setDepth(2.0f); far_->setHeight(2.0f);
+    far_->setColor(QColor(60, 110, 230));                // saturated blue
+
+    StagePlatform *near_ = props->addPlatform();
+    near_->setName("Near"); near_->setOriginX(1.0f); near_->setOriginY(3.0f);
+    near_->setWidth(4.0f); near_->setDepth(1.5f); near_->setHeight(2.0f);
+    near_->setColor(QColor(235, 235, 235));              // near-white, unsaturated
 
     StructureStudioView ov(m_doc, StructureStudioView::StageKind, 0);
     ov.resize(800, 560);
     ov.reload();
     ov.setPlane(StructureStudioView::Angled);
-    ov.setAngledView(10.0, 25.0);
+    ov.setAngledView(0.0, 35.0);                         // straight on, looking down
+    ov.setAmbient(1.0);                                  // full work light, no dimming
     const QImage img = ov.grab().toImage();
 
-    /* Sample where the tower crosses the deck. The tower is steel grey and the
-       deck is saturated blue, so "which one won" is readable straight off the
-       pixel rather than by eye. */
-    const QPointF mid = ov.w2s(QVector3D(tw->originX() + tw->width() / 2,
-                                         tw->originY() + tw->depth() / 2,
-                                         1.2f));
-    QVERIFY2(img.rect().contains(mid.toPoint()), "the sample point fell outside the view");
-    const QColor px = img.pixelColor(mid.toPoint());
+    /* Sample a point that both decks cover on screen: the near deck's top, which
+       from this camera sits in front of the far deck's body. Which one won is
+       readable from saturation alone. */
+    const QPointF at = ov.w2s(QVector3D(3.0f, 3.7f, 2.0f));
+    QVERIFY2(img.rect().contains(at.toPoint()), "the sample point fell outside the view");
+    const QColor px = img.pixelColor(at.toPoint());
     QVERIFY2(px.saturation() < 110,
-             qPrintable(QString("the deck painted over the tower in front of it "
+             qPrintable(QString("the far deck painted over the near one "
                                 "(sampled %1,%2,%3, saturation %4)")
                         .arg(px.red()).arg(px.green()).arg(px.blue())
                         .arg(px.saturation())));
 
-    props->removePlatform(pl->id());
-    props->removeTower(tw->id());
+    props->removePlatform(far_->id());
+    props->removePlatform(near_->id());
 }
 
 void Monitor_Test::ambientLevelDimsTheWholeView()
@@ -1694,3 +1698,72 @@ void Monitor_Test::ambientLevelDimsTheWholeView()
     props->removePlatform(pl->id());
 }
 
+
+void Monitor_Test::clearTopAndInsidePlacement()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(4.0f); pl->setDepth(2.0f); pl->setHeight(0.8f);
+    pl->setColor(QColor(220, 30, 30));
+
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 500);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 40.0);          // looking down onto the deck
+    v.setAmbient(1.0);
+
+    const QPointF onTop = v.w2s(QVector3D(2.0f, 1.0f, 0.8f));
+
+    auto lumaOnTop = [&](StagePlatform::TopMaterial m) {
+        pl->setTopMaterial(m);
+        const QImage img = v.grab().toImage();
+        const QColor c = img.pixelColor(onTop.toPoint());
+        return c.red() * 0.30 + c.green() * 0.59 + c.blue() * 0.11;
+    };
+
+    const double solid = lumaOnTop(StagePlatform::SolidTop);
+    const double clear = lumaOnTop(StagePlatform::ClearTop);
+    const double open_ = lumaOnTop(StagePlatform::OpenTop);
+
+    QVERIFY2(clear < solid,
+             qPrintable(QString("a clear top rendered as bright as a solid one "
+                                "(%1 vs %2)").arg(clear).arg(solid)));
+    QVERIFY2(open_ < clear,
+             qPrintable(QString("an open frame rendered no lighter than a clear "
+                                "top (%1 vs %2)").arg(open_).arg(clear)));
+
+    /* Placement: an Inside fixture stays within the volume instead of being
+       seated out onto the surface, which is the whole reason the flag exists. */
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("In Step"); fxi->setChannels(1); fxi->setAddress(420);
+    QVERIFY(m_doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(2000, 1000, 0));
+
+    const FixtureVisualTraits traits = classifyFixture(fxi);
+    QVector3D onSurf[8], inside[8];
+
+    FixtureRigProps rp;
+    rp.studioMount = 0;                    // lying flat: normal is up
+    rp.placement = FixtureRigProps::OnSurface;
+    props->setFixtureRigProps(fxi->id(), rp);
+    v.fixtureBoxCorners(fxi->id(), traits, onSurf);
+
+    rp.placement = FixtureRigProps::Inside;
+    props->setFixtureRigProps(fxi->id(), rp);
+    v.fixtureBoxCorners(fxi->id(), traits, inside);
+
+    const float surfMidZ = (onSurf[0].z() + onSurf[6].z()) / 2.0f;
+    const float insMidZ  = (inside[0].z() + inside[6].z()) / 2.0f;
+    QVERIFY2(insMidZ < surfMidZ,
+             qPrintable(QString("Inside was seated out like a surface mount "
+                                "(z %1 vs %2)").arg(double(insMidZ)).arg(double(surfMidZ))));
+    QVERIFY2(qAbs(double(insMidZ)) < 1e-4,
+             qPrintable(QString("Inside should sit centred on its position, got z %1")
+                        .arg(double(insMidZ))));
+
+    m_doc->deleteFixture(fxi->id());
+    props->removePlatform(pl->id());
+}

@@ -80,6 +80,18 @@ public:
 
     /** Height of the platform surface above the stage floor. */
     float height() const { return m_height; }
+
+    /** What the DECK is made of, which decides whether you can see -- and
+     *  light -- through it.
+     *
+     *  Solid: an ordinary deck. Opaque.
+     *  Clear: a glass/perspex top. Fixtures inside the step show through it and
+     *      their light broadcasts up, which is the whole point of rigging them
+     *      in there.
+     *  Open: no top at all (a frame). Fully see-through. */
+    enum TopMaterial { SolidTop = 0, ClearTop = 1, OpenTop = 2 };
+    TopMaterial topMaterial() const { return m_topMaterial; }
+    void setTopMaterial(TopMaterial m) { m_topMaterial = m; }
     void  setHeight(float h) { m_height = (h >= 0.0f) ? h : 0.0f; }
 
     /** Return true if the point (x, y) in metres falls within this platform. */
@@ -128,6 +140,7 @@ private:
     float   m_width   = 2.0f;
     float   m_depth   = 2.0f;
     float   m_height  = 0.5f;
+    TopMaterial m_topMaterial = SolidTop;
     QColor  m_color;
     bool    m_locked  = false;
     bool    m_solid     = true;    ///< occupies space: no-overlap with other solids

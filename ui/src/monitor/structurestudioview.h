@@ -220,8 +220,16 @@ private:
     /** Paint a solid box from its eight world corners, faces sorted by depth
      *  and shaded by orientation -- what stops a structure being a billboard
      *  that turns to face the viewer. */
+    /** @p topAlpha is the opacity of the TOP face (255 = solid, 0 = omitted),
+     *  so a clear-topped step shows what is rigged inside it. */
     void drawSolidBox(QPainter &p, const QVector3D corner[8],
-                      const QColor &base, const QColor &edge) const;
+                      const QColor &base, const QColor &edge,
+                      int topAlpha = 255) const;
+    /** An OPEN lattice prism -- chords, end frames and diagonal bracing, with
+     *  nothing filled. What a truss or a box-truss tower actually looks like,
+     *  and what lets you see the fixtures rigged inside one. */
+    void drawLattice(QPainter &p, const QVector3D a[4], const QVector3D b[4],
+                     const QColor &col, int bays) const;
     void drawPipe(QPainter &p, const class Pipe *pipe) const;
     void drawFixtures(QPainter &p) const;
     /** One fixture, so the overview can depth-sort fixtures and structures

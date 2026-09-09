@@ -927,7 +927,8 @@ double StructureStudioView::viewDepth(const QVector3D &w) const
  *
  * Corner order is the unit cube: 0-3 the bottom face (CCW), 4-7 the top. */
 void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
-                                       const QColor &base, const QColor &edge) const
+                                       const QColor &base, const QColor &edge,
+                                       int topAlpha) const
 {
     static const int faces[6][4] = {
         { 4, 5, 6, 7 },   // top
@@ -959,7 +960,10 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
             poly << w2s(corner[faces[f][k]]);
         QColor c = base;
         c = (shade[f] >= 100) ? c.lighter(shade[f]) : c.darker(200 - shade[f]);
-        c.setAlpha(255);                       // solid: a deck is not a window
+        // Face 0 is the top; everything else is opaque.
+        c.setAlpha((f == 0) ? qBound(0, topAlpha, 255) : 255);
+        if (f == 0 && topAlpha <= 0)
+            continue;                          // an open frame has no top at all
         /* Scenery is lit by the ROOM, so this applies whether or not live
            output is being shown: at full work light the deck colours are as
            saturated as the workspace says, and anything less takes them down.
@@ -967,8 +971,10 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
            and left the static view as vivid as a test card. */
         {
             const double af = 0.18 + 0.82 * m_ambient;
+            // Keep the alpha: building a QColor from three ints resets it to
+            // opaque, which silently threw away a clear top's transparency.
             c = QColor(qRound(c.red() * af), qRound(c.green() * af),
-                       qRound(c.blue() * af));
+                       qRound(c.blue() * af), c.alpha());
         }
         emitPoly(poly, o.first, c, edge, 1.1, p);
     }
@@ -982,6 +988,61 @@ static void boxCorners(QVector3D out[8], float x0, float y0, float z0,
     out[2] = QVector3D(x1, y1, z0); out[3] = QVector3D(x0, y1, z0);
     out[4] = QVector3D(x0, y0, z1); out[5] = QVector3D(x1, y0, z1);
     out[6] = QVector3D(x1, y1, z1); out[7] = QVector3D(x0, y1, z1);
+}
+
+/* An open lattice prism: four chords running end to end, the two end frames,
+ * and diagonal bracing across each of the four sides.
+ *
+ * Trusses and towers are mostly AIR. Drawing them as filled boxes was wrong
+ * twice over: it does not look like a truss, and it hides anything rigged
+ * inside or standing behind one. Nothing here is filled, so you see through the
+ * structure the way you do in the room -- and with no large opaque faces, the
+ * depth-sorting artefacts that only affect big filled polygons stop mattering
+ * for these at all.
+ *
+ * @p a and @p b are the two end frames, four corners each, in matching order:
+ * a[i] connects to b[i]. */
+void StructureStudioView::drawLattice(QPainter &p, const QVector3D a[4], const QVector3D b[4],
+                                      const QColor &col, int bays) const
+{
+    const QColor chord = col.lighter(140);
+    const QColor brace = col.lighter(112);
+
+    // The four chords.
+    for (int i = 0; i < 4; ++i)
+        emitLine(w2s(a[i]), w2s(b[i]), (viewDepth(a[i]) + viewDepth(b[i])) / 2.0,
+                 chord, 1.8, p);
+
+    // The end frames.
+    for (int i = 0; i < 4; ++i)
+    {
+        const int j = (i + 1) % 4;
+        emitLine(w2s(a[i]), w2s(a[j]), (viewDepth(a[i]) + viewDepth(a[j])) / 2.0,
+                 chord, 1.4, p);
+        emitLine(w2s(b[i]), w2s(b[j]), (viewDepth(b[i]) + viewDepth(b[j])) / 2.0,
+                 chord, 1.4, p);
+    }
+
+    // Bracing: a zig-zag along each side, alternating so neighbouring sides do
+    // not all lean the same way -- which is what a real truss looks like.
+    bays = qMax(1, bays);
+    for (int side = 0; side < 4; ++side)
+    {
+        const int i = side, j = (side + 1) % 4;
+        for (int k = 0; k < bays; ++k)
+        {
+            const float s0 = float(k) / bays, s1 = float(k + 1) / bays;
+            const QVector3D lo0 = a[i] + (b[i] - a[i]) * s0;
+            const QVector3D lo1 = a[i] + (b[i] - a[i]) * s1;
+            const QVector3D hi0 = a[j] + (b[j] - a[j]) * s0;
+            const QVector3D hi1 = a[j] + (b[j] - a[j]) * s1;
+            const bool up = ((k + side) % 2) == 0;
+            const QVector3D &p0 = up ? lo0 : hi0;
+            const QVector3D &p1 = up ? hi1 : lo1;
+            emitLine(w2s(p0), w2s(p1), (viewDepth(p0) + viewDepth(p1)) / 2.0,
+                     brace, 1.0, p);
+        }
+    }
 }
 
 void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) const
@@ -1065,10 +1126,14 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         {
             // A real box, so the tower keeps its footprint as the camera swings
             // instead of turning to face the viewer.
+            /* A box-truss tower, drawn as one: the bottom face is the A end
+               and the top face the B end, indices already matching. */
             QVector3D c[8];
             boxCorners(c, x0, y0, 0.0f, x1, y1, h);
-            drawSolidBox(p, c, QColor(96, 106, 126), steel.lighter(150));
-            // Shelves still read as lines across the front face.
+            const QVector3D endA[4] = { c[0], c[1], c[2], c[3] };
+            const QVector3D endB[4] = { c[4], c[5], c[6], c[7] };
+            drawLattice(p, endA, endB, steel, qMax(1, int(h / qMax(0.3f, t->width()))));
+            // Shelves read as lines across the front face.
             for (int i = 0; i < t->shelfCount(); ++i)
             {
                 const float z = t->shelfHeight(i);
@@ -1155,40 +1220,13 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 corner[2] = B + c1 - u1; corner[3] = A + c1 - u1;
                 corner[4] = A - c1 + u1; corner[5] = B - c1 + u1;
                 corner[6] = B + c1 + u1; corner[7] = A + c1 + u1;
-                drawSolidBox(p, corner, QColor(146, 150, 162), steel.lighter(150));
-
-                // Webbing on whichever long face is nearest, so it still reads
-                // as a truss rather than a plain girder.
-                const int longFaces[4][4] = { {0,1,5,4}, {2,3,7,6}, {4,5,6,7}, {0,1,2,3} };
-                int best = 0; double bestD = 1e18;
-                for (int f = 0; f < 4; ++f)
-                {
-                    double dsum = 0.0;
-                    for (int k = 0; k < 4; ++k) dsum += viewDepth(corner[longFaces[f][k]]);
-                    if (dsum / 4.0 < bestD) { bestD = dsum / 4.0; best = f; }
-                }
-                const QVector3D &p0 = corner[longFaces[best][0]];
-                const QVector3D &p1 = corner[longFaces[best][1]];
-                const QVector3D &p2 = corner[longFaces[best][2]];
-                const QVector3D &p3 = corner[longFaces[best][3]];
+                /* Open lattice: chords and bracing, nothing filled. The two
+                   end frames are (0,3,7,4) at A and (1,2,6,5) at B, in matching
+                   order so chord i runs a[i] -> b[i]. */
+                const QVector3D endA[4] = { corner[0], corner[3], corner[7], corner[4] };
+                const QVector3D endB[4] = { corner[1], corner[2], corner[6], corner[5] };
                 const int bays = qMax(1, int(t->length() / qMax(0.35f, t->width() * 2.0f)));
-                p.setPen(QPen(steel.lighter(135), 1.1));
-                for (int i = 0; i < bays; ++i)
-                {
-                    const float s0 = float(i) / bays, s1 = float(i + 1) / bays;
-                    const QVector3D lo0 = p0 + (p1 - p0) * s0, lo1 = p0 + (p1 - p0) * s1;
-                    const QVector3D hi0 = p3 + (p2 - p3) * s0, hi1 = p3 + (p2 - p3) * s1;
-                    // Queued at the webbing's own depth, so a truss in front of
-                    // a deck shows its bracing and one behind stays hidden.
-                    if (i % 2 == 0)
-                        emitLine(w2s(lo0), w2s(hi1),
-                                 (viewDepth(lo0) + viewDepth(hi1)) / 2.0,
-                                 steel.lighter(135), 1.1, p);
-                    else
-                        emitLine(w2s(hi0), w2s(lo1),
-                                 (viewDepth(hi0) + viewDepth(lo1)) / 2.0,
-                                 steel.lighter(135), 1.1, p);
-                }
+                drawLattice(p, endA, endB, steel, bays);
             }
             return;
         }
@@ -1258,11 +1296,16 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         };
         if (m_plane == Angled)
         {
-            // A deck is a solid box, not a pane: project its real corners.
+            /* A deck is a solid box, not a pane -- project its real corners.
+               Unless its TOP is clear or open: then you have to be able to see
+               (and light) through it, because that is the entire reason for
+               rigging fixtures inside a step. */
             const float b0 = props->platformBaseZ(id);
             QVector3D c[8];
             boxCorners(c, x0, y0, b0, x1, y1, b0 + h);
-            drawSolidBox(p, c, pc, edge);
+            const int topAlpha = (pl->topMaterial() == StagePlatform::SolidTop) ? 255
+                               : (pl->topMaterial() == StagePlatform::ClearTop) ? 70 : 0;
+            drawSolidBox(p, c, pc, edge, topAlpha);
         }
         else if (m_plane == Top)
         {
@@ -1553,12 +1596,20 @@ void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTrai
      * boxes stuck on the front of a step rather than strips lying on it. Push
      * the body out along the surface normal by half its own thickness so its
      * BACK is flush with the surface. */
-    /* Along its own mount normal, whatever holds it up. studioMount already
-       says which plane the fixture lies in -- flat (N = up), on a front face
-       (N = downstage) or on a side face -- so this covers riser and deck mounts
-       AND the free-placed strips that simply sit on a step edge, which a
-       riser-only version missed entirely. */
-    const QVector3D c2 = c + N * float(d * 0.5);
+    /* Seat it on its surface -- along its own mount normal, whatever holds it
+       up. studioMount says which plane the fixture lies in (flat, front face or
+       side face), so this covers riser and deck mounts AND the free-placed
+       strips that just sit on a step edge.
+     *
+     * NOT for a fixture rigged INSIDE something, though: a unit between a
+     * truss's chords, or inside a clear-topped step firing up through it, is
+     * meant to be within the volume. Pushing that onto the surface is exactly
+     * the wrong answer, which is why placement is a property of its own.
+     * Recessed is let INTO the surface, so it goes the other way. */
+    double seat = 0.5;
+    if (rp.placement == FixtureRigProps::Inside)   seat = 0.0;
+    else if (rp.placement == FixtureRigProps::Recessed) seat = -0.5;
+    const QVector3D c2 = c + N * float(d * seat);
 
     out[0] = c2 - l - u - n; out[1] = c2 + l - u - n;
     out[2] = c2 + l - u + n; out[3] = c2 - l - u + n;

@@ -135,6 +135,9 @@ private slots:
     /** Painter's algorithm across the whole rig: an object nearer the eye must
      *  cover one behind it, whatever order they sit in the workspace. */
     void angledOverviewDrawsNearThingsInFront();
+    /** A clear-topped step must let what is inside it show through, and a
+     *  fixture placed Inside must not be seated out onto the surface. */
+    void clearTopAndInsidePlacement();
     /** Room light applies whether or not live output is shown, and takes the
      *  whole picture down toward a blackout. */
     void ambientLevelDimsTheWholeView();

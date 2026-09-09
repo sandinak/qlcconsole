@@ -688,6 +688,51 @@ per-pixel depth or splitting primitives -- both materially bigger jobs.
 
 `monitor_test` 37/37. `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 15: open-lattice trusses, and modelling lights INSIDE things
+
+Branson: "trusses don't really look like trusses .. should be pipes and braces
+.. but not filled in? towers same. for the lights IN the Steps .. the steps are
+clear topped so lights INSIDE can broadcast up ... same for lights IN the
+trusses. suggestions on how to handle?" He picked open lattice, and the
+placement-flag + surface-material model.
+
+**Lattice.** `drawLattice()` draws four chords end to end, both end frames, and
+diagonal bracing alternating per side. Nothing filled -- which is right twice
+over: it is what a truss looks like, and it lets you see what is rigged inside
+or standing behind one. A bonus falls out: with no large opaque faces on these,
+the per-primitive depth artefacts (which only bite on big filled polygons) stop
+mattering for trusses and towers entirely.
+
+**Two model properties**, both persisted and both written only when NOT the
+default, so existing workspaces stay byte-identical:
+  - `FixtureRigProps::placement` (OnSurface / Inside / Recessed). The case that
+    could not be expressed before: an Inside fixture is NOT seated out onto the
+    face, it stays centred in the volume. With lattice trusses, a unit rigged
+    between the chords then works with no transparency needed at all -- which is
+    why keeping placement and material as SEPARATE properties was the right
+    call.
+  - `StagePlatform::topMaterial` (Solid / Clear / Open). A clear top draws
+    translucent so fixtures inside a step show through; an open frame omits the
+    top face outright.
+UI: `Placement:` in the studio fixture inspector, `Top:` in the platform editor.
+
+**A bug the test caught that would otherwise have shipped:** ClearTop rendered
+identically to Solid while OpenTop worked. Sampling the pixels showed why -- the
+ambient scaling immediately after builds a new `QColor` from three ints, which
+RESETS ALPHA TO OPAQUE, silently discarding the transparency just set. Invisible
+to eyeballing a render; only comparing numbers found it.
+
+**Test rewritten:** `angledOverviewDrawsNearThingsInFront` sampled the middle of
+a tower to prove a near object covers a far one. Towers are legitimately
+see-through now, so it uses two solid decks instead. Still revert-checked
+against an inverted sort.
+
+**NOT done, deliberately:** a clear top is VISUAL only -- light is not modelled
+as passing through and illuminating anything above. That is the same territory
+as beams (stage 3), and the repaint cost still has not been measured.
+
+`monitor_test` 38/38. `check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

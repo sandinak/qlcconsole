@@ -2689,6 +2689,18 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     inspForm->addRow(tr("Colour:"), gelBtn);
     inspForm->addRow(tr("Orientation:"), mountCombo);
     inspForm->addRow(tr("Face:"), faceCombo);
+
+    /* WHERE it sits relative to what carries it, as opposed to WHICH thing
+       that is. "Inside" is the case that could not be expressed before: a unit
+       between a truss's chords, or in a clear-topped step firing up through
+       it. It stops the fixture being seated out onto the surface. */
+    QComboBox *placeCombo = new QComboBox(insp);
+    placeCombo->addItem(tr("On the surface"), FixtureRigProps::OnSurface);
+    placeCombo->addItem(tr("Inside"),         FixtureRigProps::Inside);
+    placeCombo->addItem(tr("Recessed"),       FixtureRigProps::Recessed);
+    placeCombo->setToolTip(tr("Bolted to the outside, rigged within the "
+                              "structure, or let into its surface"));
+    inspForm->addRow(tr("Placement:"), placeCombo);
     inspForm->addRow(tr("Angle:"), angleSpin);
     iv->addLayout(inspForm);
     QPushButton *fullBtn = new QPushButton(tr("Full properties…"), insp);
@@ -2700,7 +2712,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     // workspace, so a 0 "nothing selected" sentinel silently dropped every
     // inspector edit made to it.
     auto curFid = QSharedPointer<quint32>::create(Fixture::invalidId());
-    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, angleSpin, mountCombo, fullBtn, inspForm]() {
+    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, mountCombo, fullBtn, inspForm]() {
         const quint32 fid = *curFid;
         Fixture *fx = (fid != Fixture::invalidId()) ? m_doc->fixture(fid) : nullptr;
         const bool have = (fx != nullptr);
@@ -2730,6 +2742,9 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             ? QString("background:%1; color:%2").arg(gel.name())
                 .arg(gel.lightness() > 128 ? "#000" : "#fff") : QString());
         faceCombo->blockSignals(true); faceCombo->setCurrentIndex(qBound(0, rp.studioMount, 2)); faceCombo->blockSignals(false);
+        placeCombo->blockSignals(true);
+        placeCombo->setCurrentIndex(qBound(0, rp.placement, 2));
+        placeCombo->blockSignals(false);
         angleSpin->blockSignals(true); angleSpin->setValue(double(rp.studioAngle)); angleSpin->blockSignals(false);
         // Orientation options are constrained by the mount (shared helper).
         fillOrientationCombo(mountCombo, rp);
@@ -2747,6 +2762,16 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         m_graphicsView->updateFixture(*curFid);
         if (view) view->reload();
         populate();
+    });
+    connect(placeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
+            [this, curFid, view, placeCombo](int) {
+        if (*curFid == Fixture::invalidId()) return;
+        FixtureRigProps rp = m_props->fixtureRigProps(*curFid);
+        rp.placement = placeCombo->currentData().toInt();
+        m_props->setFixtureRigProps(*curFid, rp);
+        m_doc->setModified();
+        m_graphicsView->updateFixture(*curFid);
+        if (view) view->reload();
     });
     connect(faceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
             [this, curFid, view, populate](int i) {
@@ -4588,6 +4613,23 @@ void Monitor::slotEditPlatform(quint32 pid)
         }
     });
     form->addRow(tr("Color:"), colorBtn);
+
+    /* What the deck is made of. A clear top is why you would rig fixtures
+       INSIDE a step at all: they show through it and their light goes up. */
+    QComboBox *topCombo = new QComboBox(&dlg);
+    topCombo->addItem(tr("Solid"), int(StagePlatform::SolidTop));
+    topCombo->addItem(tr("Clear (lights inside show through)"), int(StagePlatform::ClearTop));
+    topCombo->addItem(tr("Open frame (no top)"), int(StagePlatform::OpenTop));
+    topCombo->setCurrentIndex(topCombo->findData(int(p->topMaterial())));
+    topCombo->setToolTip(tr("A clear or open top lets fixtures rigged inside "
+                            "the step be seen, and their light broadcast up"));
+    form->addRow(tr("Top:"), topCombo);
+    connect(topCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [p, this, topCombo](int) {
+        p->setTopMaterial(StagePlatform::TopMaterial(topCombo->currentData().toInt()));
+        m_doc->setModified();
+        m_graphicsView->updatePlatforms();
+    });
 
     // No-overlap collision properties.
     QCheckBox *solidChk = new QCheckBox(tr("Solid — can't overlap other solid platforms"), &dlg);

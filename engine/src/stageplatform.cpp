@@ -22,6 +22,7 @@
 #define KXMLPlatformWidth   QStringLiteral("Width")
 #define KXMLPlatformDepth   QStringLiteral("Depth")
 #define KXMLPlatformHeight  QStringLiteral("Height")
+#define KXMLPlatformTopMat  QStringLiteral("TopMaterial")
 #define KXMLPlatformColor   QStringLiteral("Color")
 #define KXMLPlatformLocked  QStringLiteral("Locked")
 #define KXMLPlatformSolid     QStringLiteral("Solid")
@@ -57,6 +58,8 @@ bool StagePlatform::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLPlatformWidth))   setWidth(a.value(KXMLPlatformWidth).toFloat());
     if (a.hasAttribute(KXMLPlatformDepth))   setDepth(a.value(KXMLPlatformDepth).toFloat());
     if (a.hasAttribute(KXMLPlatformHeight))  setHeight(a.value(KXMLPlatformHeight).toFloat());
+    if (a.hasAttribute(KXMLPlatformTopMat))
+        setTopMaterial(TopMaterial(a.value(KXMLPlatformTopMat).toInt()));
     if (a.hasAttribute(KXMLPlatformColor))   m_color = QColor(a.value(KXMLPlatformColor).toString());
     if (a.hasAttribute(KXMLPlatformLocked))  m_locked = (a.value(KXMLPlatformLocked).toString() == "true");
     // Solid defaults ON (legacy platforms without the attribute are solid).
@@ -79,6 +82,9 @@ bool StagePlatform::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLPlatformWidth,   QString::number(double(m_width),   'f', 3));
     doc->writeAttribute(KXMLPlatformDepth,   QString::number(double(m_depth),   'f', 3));
     doc->writeAttribute(KXMLPlatformHeight,  QString::number(double(m_height),  'f', 3));
+    // Written only when it is not the default, so existing files do not churn.
+    if (m_topMaterial != SolidTop)
+        doc->writeAttribute(KXMLPlatformTopMat, QString::number(int(m_topMaterial)));
     if (m_color.isValid())
         doc->writeAttribute(KXMLPlatformColor, m_color.name());
     if (m_locked)
