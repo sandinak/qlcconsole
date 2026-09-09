@@ -1693,3 +1693,4 @@ void Monitor_Test::ambientLevelDimsTheWholeView()
 
     props->removePlatform(pl->id());
 }
+

@@ -640,6 +640,54 @@ to read the committed version.
 
 `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 14: fixtures seated on their surfaces, pixels on the near face, emitters at their own level
+
+Branson: "the led strips have depth they shouldn't / they're not on the face of
+the step .. more a whole box on the front" and "on a dim or blacked out stage ..
+the features can be dark .. but lights/leds should be at the level of their
+brightness."
+
+**Not seated.** `fixtureBoxCorners()` built the box symmetrically about the
+mount point, so half of it was buried in the scenery and half floated proud --
+which is what made a face-mounted bar read as a loose box stuck on the front of
+a step. Each fixture is now pushed out along its own mount normal by half its
+thickness so its BACK is flush with the surface. First written for riser/deck
+mounts only; measuring showed those bars report `riser false` /
+`studioMount 0` -- free-placed on a step edge -- so the rule keys off
+`studioMount`, which covers all three cases at once.
+
+**Pixels on the hidden face.** The LED grid was hardwired to the `-n` face, so
+for a strip lying flat it was painted on the UNDERSIDE and spilled out as a
+field of dots from beneath the body. Now drawn on whichever long face points at
+the viewer.
+
+**Brightness was backwards.** The live formula ADDED emission and room light
+(`0.10 + 0.20*ambient + 0.80*emit`), so a fixture at full output looked
+different depending on the ambient setting. Now `max(emission, roomLit)`: a lamp
+is as bright as it is being driven, full stop, and the room level only decides
+how visible an UNLIT fixture is. At blackout an emitter at full is at full while
+the scenery around it goes dark -- which is what Branson described.
+
+**Also found while checking:** `m_zoomed` was set by `wheelEvent()` but
+`refit()` never consulted it, so any resize still snapped back to the overview
+and the wheel zoom would have looked broken a second time. `refit()` honours it
+now; deliberate view changes (plane/rotation/reload) clear it so they still
+re-frame.
+
+**NOT a bug -- the declared data.** The "strips with depth they shouldn't have"
+are `PHS Chorus Step Row 64 Heads`, whose own definition says
+`Width="2134" Height="25" Depth="228"` (weight 80 too, which looks like a
+placeholder). Eight of them side by side is what tiles the deck. Reported to
+Branson as what the file says, explicitly NOT as a diagnosis of his library --
+see the lesson in Follow-on 10 about getting exactly that wrong.
+
+**Known limitation, stated rather than hidden:** per-primitive painter's
+algorithm compares long thin primitives (truss webbing) against large faces by
+AVERAGE depth, so webbing can poke through where it should not. Proper fixes are
+per-pixel depth or splitting primitives -- both materially bigger jobs.
+
+`monitor_test` 37/37. `check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

@@ -58,12 +58,14 @@ void StructureStudioView::setPlane(Plane p)
     if (m_plane == p)
         return;
     m_plane = p;
+    m_zoomed = false;   // re-frame: this is a deliberate view change
     refit();
     update();
 }
 
 void StructureStudioView::reload()
 {
+    m_zoomed = false;   // re-frame: this is a deliberate view change
     refit();
     update();
 }
@@ -227,6 +229,7 @@ void StructureStudioView::setRotation(int quarterTurns)
     if (m_rotation == r)
         return;
     m_rotation = r;
+    m_zoomed = false;   // re-frame: this is a deliberate view change
     refit();
     update();
 }
@@ -1541,10 +1544,26 @@ void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTrai
     const QVector3D u = H * float(h * 0.5);
     const QVector3D n = N * float(d * 0.5);
 
-    out[0] = c - l - u - n; out[1] = c + l - u - n;
-    out[2] = c + l - u + n; out[3] = c - l - u + n;
-    out[4] = c - l + u - n; out[5] = c + l + u - n;
-    out[6] = c + l + u + n; out[7] = c - l + u + n;
+    /* A surface mount sits ON its surface, not straddling it.
+     *
+     * fixtureRigPosition() returns the point on the riser face or deck top that
+     * the fixture is fastened to, and building the box symmetrically about that
+     * point buried half of it inside the scenery and left the other half
+     * floating proud -- which is what made face-mounted LED bars read as loose
+     * boxes stuck on the front of a step rather than strips lying on it. Push
+     * the body out along the surface normal by half its own thickness so its
+     * BACK is flush with the surface. */
+    /* Along its own mount normal, whatever holds it up. studioMount already
+       says which plane the fixture lies in -- flat (N = up), on a front face
+       (N = downstage) or on a side face -- so this covers riser and deck mounts
+       AND the free-placed strips that simply sit on a step edge, which a
+       riser-only version missed entirely. */
+    const QVector3D c2 = c + N * float(d * 0.5);
+
+    out[0] = c2 - l - u - n; out[1] = c2 + l - u - n;
+    out[2] = c2 + l - u + n; out[3] = c2 - l - u + n;
+    out[4] = c2 - l + u - n; out[5] = c2 + l + u - n;
+    out[6] = c2 + l + u + n; out[7] = c2 - l + u + n;
 }
 
 /* A moving head as SOLID geometry: base, two yoke arms, and the head slung
@@ -1648,13 +1667,16 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             uchar dim = 0;
             if (fixtureLiveState(fx, live, dim))
             {
-                /* What the fixture EMITS, plus what the room lends it. At a
-                   blackout only the emission shows, so a rig with three
-                   fixtures up looks like three fixtures up; under work light
-                   everything stays readable. The floor term is what stops full
-                   output rendering as a flat, over-saturated test card. */
+                /* A lamp is as bright as it is being driven, FULL STOP -- the
+                   room does not dim a light that is on. Room level only decides
+                   how visible an UNLIT fixture is: it is an object sitting in
+                   the space, faintly seen at blackout and plainly at work
+                   light. Adding the two instead of taking the greater made a
+                   fixture at full look different depending on the ambient
+                   setting, which is backwards. */
                 const double emit_ = dim / 255.0;
-                const double f = qBound(0.0, 0.10 + 0.20 * m_ambient + 0.80 * emit_, 1.0);
+                const double roomLit = 0.12 + 0.28 * m_ambient;
+                const double f = qBound(0.0, qMax(emit_, roomLit), 1.0);
                 col = QColor(qRound(live.red() * f), qRound(live.green() * f),
                              qRound(live.blue() * f));
             }
@@ -1700,8 +1722,17 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         if (traits.layout.isValid())
         {
             const int cols = traits.layout.width(), rows = traits.layout.height();
-            const QVector3D &f0 = corner[4], &f1 = corner[5];
-            const QVector3D &b0 = corner[0], &b1 = corner[1];
+            /* On whichever long face points AT us. This was hardwired to the
+               -n face, so for a strip lying flat the pixels were painted on its
+               UNDERSIDE and showed as a field of dots spilling out from beneath
+               the body. viewDepth is linear, so comparing corner sums is the
+               same as comparing face centres. */
+            const bool nearSide =
+                viewDepth(corner[2] + corner[6]) > viewDepth(corner[0] + corner[4]);
+            const QVector3D &f0 = nearSide ? corner[7] : corner[4];
+            const QVector3D &f1 = nearSide ? corner[6] : corner[5];
+            const QVector3D &b0 = nearSide ? corner[3] : corner[0];
+            const QVector3D &b1 = nearSide ? corner[2] : corner[1];
             p.setPen(Qt::NoPen);
             p.setBrush(col.lighter(135));
             int placed = 0;
@@ -2497,7 +2528,20 @@ void StructureStudioView::paintEvent(QPaintEvent *)
  * Interaction (slice 1: pan/zoom + double-click a fixture)
  *********************************************************************/
 
-void StructureStudioView::resizeEvent(QResizeEvent *) { refit(); }
+void StructureStudioView::resizeEvent(QResizeEvent *)
+{
+    /* A resize must not throw away a zoom the operator asked for. Re-fitting on
+       every resize is right while the view is still showing the whole rig, but
+       once the wheel has been used, refitting silently snaps back to the
+       overview -- which reads as the zoom not working at all. Deliberate view
+       changes (plane, rotation, reload) clear m_zoomed and refit as before. */
+    if (m_zoomed)
+    {
+        update();
+        return;
+    }
+    refit();
+}
 
 void StructureStudioView::wheelEvent(QWheelEvent *e)
 {
