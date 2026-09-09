@@ -793,15 +793,9 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
                               "only — nothing in the workspace moves."));
     fl->addWidget(plotRotBtn);
 
-    /* The rig overview opens a WINDOW, so it is an action and belongs on a
-       button -- not an entry in the View list, where every other item is a
-       state the plot can sit in. It sits beside View and the rotate control
-       because it answers the same question: how am I looking at the rig. */
-    QToolButton *overviewBtn = new QToolButton(footer);
-    overviewBtn->setText(QString::fromUtf8("\u2b21 45\u00b0"));
-    overviewBtn->setToolTip(tr("Open an angled, read-only overview of the whole rig"));
-    fl->addWidget(overviewBtn);
-    connect(overviewBtn, &QToolButton::clicked, this, [this]() { showStageOverview(); });
+    /* No overview button here: it lives in the main View menu (View > Rig
+       Overview), because it is a window onto the whole show rather than a
+       Lighting Studio tool. */
     auto applyPlotRotation = [this, plotRotBtn](int turns) {
         m_graphicsView->setViewRotation(turns);
         static const char *names[] = { "0°", "90°", "180°", "270°" };
@@ -1962,10 +1956,34 @@ void Monitor::showStageOverview()
     bar->addWidget(liveBtn);
     connect(liveBtn, &QToolButton::toggled, view,
             [view](bool on) { view->setLiveValues(on); });
-    liveBtn->setChecked(m_doc->mode() == Doc::Operate);
+    /* On by default, not only in Operate. Opening the window while a scene is
+       up and seeing nothing change is the wrong first impression -- and with
+       the room level applied, an idle rig still reads perfectly well. */
+    liveBtn->setChecked(true);
+
+    /* How much light is in the ROOM. Without it the rendered colours are as
+       vivid as a test card whatever the rig is doing, and a blackout still
+       shows bright scenery. */
+    bar->addWidget(new QLabel(tr("Room:"), &dlg));
+    QComboBox *ambientCombo = new QComboBox(&dlg);
+    ambientCombo->addItem(tr("Work light"), 1.00);
+    ambientCombo->addItem(tr("House"),      0.62);
+    ambientCombo->addItem(tr("Dim"),        0.30);
+    ambientCombo->addItem(tr("Blackout"),   0.00);
+    ambientCombo->setCurrentIndex(1);
+    ambientCombo->setProperty("cycleOnClick", true);
+    ambientCombo->installEventFilter(this);
+    ambientCombo->setToolTip(tr("Ambient light in the room, separate from what "
+                                "the rig is emitting — click to cycle"));
+    bar->addWidget(ambientCombo);
+    connect(ambientCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, ambientCombo](int) {
+        view->setAmbient(ambientCombo->currentData().toDouble());
+    });
+    view->setAmbient(ambientCombo->currentData().toDouble());
 
     bar->addStretch();
-    bar->addWidget(new QLabel(tr("Drag to swing the view — read-only"), &dlg));
+    bar->addWidget(new QLabel(tr("Drag to swing · scroll to zoom · read-only"), &dlg));
     vl->addLayout(bar);
     vl->addWidget(view, 1);
 

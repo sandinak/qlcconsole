@@ -91,6 +91,14 @@ public:
     void setLiveValues(bool on);
     bool liveValues() const { return m_liveValues; }
 
+    /** How much light there is in the room, independent of the rig. A stage at
+     *  full work-light reads very differently from a blackout with three
+     *  fixtures up, and with no ambient at all the rendered colours are as
+     *  vivid as a test card. 0 = blackout (only what the rig emits is visible),
+     *  1 = full working light. */
+    void setAmbient(double level);
+    double ambient() const { return m_ambient; }
+
     /** Locked = fixtures can be selected but not dragged (like the main plot lock);
      *  unlocked = drag a selected fixture / a boom top to move it. */
     void setLocked(bool on) { m_locked = on; setCursor(Qt::ArrowCursor); }
@@ -174,6 +182,41 @@ private:
 
     /** Distance from the eye, for back-to-front face ordering (Angled only). */
     double viewDepth(const QVector3D &w) const;
+
+    /* ---- Depth-sorted painting (Angled overview) --------------------------
+     *
+     * Sorting whole OBJECTS by their centroid does not work once they are big
+     * and overlapping: a truss spanning the rig has its centroid deep in the
+     * middle, so a nearer-centred deck covers it even where the truss really is
+     * in front, and a small step loses to a big deck outright. Every piece of
+     * geometry is therefore queued as an individual primitive with its own
+     * depth, and the whole queue is sorted once before anything is painted. */
+    struct DrawOp
+    {
+        enum Kind { Poly, Line, Dot, Label };
+        double    depth = 0.0;
+        Kind      kind = Poly;
+        QPolygonF poly;          ///< Poly/Line points, or Dot centre in poly[0]
+        QColor    fill;          ///< invalid = unfilled
+        QColor    pen;
+        double    penWidth = 1.0;
+        double    radius = 2.0;  ///< Dot
+        QString   text;          ///< Label
+    };
+    mutable QVector<DrawOp> m_ops;      ///< queue, only while m_collecting
+    mutable bool m_collecting = false;
+
+    /** Paint, or queue when collecting. */
+    void emitPoly(const QPolygonF &poly, double depth, const QColor &fill,
+                  const QColor &pen, double penW, QPainter &p) const;
+    void emitLine(const QPointF &a, const QPointF &b, double depth,
+                  const QColor &pen, double penW, QPainter &p) const;
+    void emitDot(const QPointF &c, double depth, double r,
+                 const QColor &fill, QPainter &p) const;
+    void emitLabel(const QPointF &at, double depth, const QString &text,
+                   const QColor &pen, QPainter &p) const;
+    /** Sort the queue back-to-front and paint it. */
+    void flushOps(QPainter &p) const;
     /** Paint a solid box from its eight world corners, faces sorted by depth
      *  and shaded by orientation -- what stops a structure being a billboard
      *  that turns to face the viewer. */
@@ -280,7 +323,9 @@ private:
     double   m_azimuthDeg = 20.0;    ///< Angled plane: swing around the stage
     double   m_elevationDeg = 30.0;  ///< Angled plane: eye height above the floor
     bool     m_liveValues = false;   ///< paint DMX output instead of gel colours
+    double   m_ambient = 0.62;       ///< room light, 0 = blackout .. 1 = work light
     class QTimer *m_liveTimer = nullptr;
+    bool     m_zoomed = false;       ///< wheel-zoomed: refit() must not stomp it
     bool     m_orbiting = false;     ///< dragging the empty canvas to swing the camera
     QPointF  m_orbitLast;
 

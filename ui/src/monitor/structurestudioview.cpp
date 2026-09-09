@@ -181,6 +181,15 @@ QPointF StructureStudioView::screenToPlane(const QPointF &px) const
     return screenVecToPlane(px - m_originPx);
 }
 
+void StructureStudioView::setAmbient(double level)
+{
+    const double v = qBound(0.0, level, 1.0);
+    if (qFuzzyCompare(v, m_ambient))
+        return;
+    m_ambient = v;
+    update();
+}
+
 void StructureStudioView::setLiveValues(bool on)
 {
     if (m_liveValues == on)
@@ -499,12 +508,15 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
     foreach (quint32 fid, mountedFixtures())
         items << Item{ viewDepth(props->fixtureRigPosition(fid)), true, StageKind, fid };
 
-    // Ascending: farthest first (see viewDepth's convention note).
-    std::sort(items.begin(), items.end(),
-              [](const Item &a, const Item &b) { return a.depth < b.depth; });
+    /* Deliberately NOT sorted here: ordering happens per PRIMITIVE in
+       flushOps(), so a long truss and a wide deck interleave face by face
+       instead of one winning outright on where its centre sits. */
 
     const bool nameEveryone = (m_kind != StageKind);
     p.setFont(QFont("Arial", 8));
+
+    m_ops.clear();
+    m_collecting = true;
     foreach (const Item &it, items)
     {
         if (it.isFixture)
@@ -512,6 +524,8 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
         else
             drawOneStructure(p, it.kind, it.id);
     }
+    m_collecting = false;
+    flushOps(p);
 }
 
 void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
@@ -790,6 +804,99 @@ void StructureStudioView::drawPipe(QPainter &p, const Pipe *pipe) const
 
 /* How far a world point is from the eye, for painter's-algorithm ordering.
  * Only meaningful in the Angled plane; the flat views draw in a fixed order. */
+/* Each of these paints straight away in the flat views, and QUEUES when the
+ * angled overview is collecting, so the drawing code below reads the same
+ * either way. */
+void StructureStudioView::emitPoly(const QPolygonF &poly, double depth, const QColor &fill,
+                                   const QColor &pen, double penW, QPainter &p) const
+{
+    if (m_collecting)
+    {
+        DrawOp o; o.kind = DrawOp::Poly; o.depth = depth; o.poly = poly;
+        o.fill = fill; o.pen = pen; o.penWidth = penW;
+        m_ops << o;
+        return;
+    }
+    p.setBrush(fill.isValid() ? QBrush(fill) : QBrush(Qt::NoBrush));
+    p.setPen(pen.isValid() ? QPen(pen, penW) : QPen(Qt::NoPen));
+    p.drawPolygon(poly);
+}
+
+void StructureStudioView::emitLine(const QPointF &a, const QPointF &b, double depth,
+                                   const QColor &pen, double penW, QPainter &p) const
+{
+    if (m_collecting)
+    {
+        DrawOp o; o.kind = DrawOp::Line; o.depth = depth;
+        o.poly << a << b; o.pen = pen; o.penWidth = penW;
+        m_ops << o;
+        return;
+    }
+    p.setPen(QPen(pen, penW));
+    p.drawLine(a, b);
+}
+
+void StructureStudioView::emitDot(const QPointF &c, double depth, double r,
+                                  const QColor &fill, QPainter &p) const
+{
+    if (m_collecting)
+    {
+        DrawOp o; o.kind = DrawOp::Dot; o.depth = depth;
+        o.poly << c; o.radius = r; o.fill = fill;
+        m_ops << o;
+        return;
+    }
+    p.setPen(Qt::NoPen);
+    p.setBrush(fill);
+    p.drawEllipse(c, r, r);
+}
+
+void StructureStudioView::emitLabel(const QPointF &at, double depth, const QString &text,
+                                    const QColor &pen, QPainter &p) const
+{
+    if (m_collecting)
+    {
+        DrawOp o; o.kind = DrawOp::Label; o.depth = depth;
+        o.poly << at; o.text = text; o.pen = pen;
+        m_ops << o;
+        return;
+    }
+    p.setPen(pen);
+    p.drawText(at, text);
+}
+
+void StructureStudioView::flushOps(QPainter &p) const
+{
+    // Ascending == farthest first (see viewDepth's convention note).
+    std::stable_sort(m_ops.begin(), m_ops.end(),
+                     [](const DrawOp &a, const DrawOp &b) { return a.depth < b.depth; });
+    foreach (const DrawOp &o, m_ops)
+    {
+        switch (o.kind)
+        {
+        case DrawOp::Poly:
+            p.setBrush(o.fill.isValid() ? QBrush(o.fill) : QBrush(Qt::NoBrush));
+            p.setPen(o.pen.isValid() ? QPen(o.pen, o.penWidth) : QPen(Qt::NoPen));
+            p.drawPolygon(o.poly);
+            break;
+        case DrawOp::Line:
+            p.setPen(QPen(o.pen, o.penWidth));
+            if (o.poly.size() >= 2) p.drawLine(o.poly.at(0), o.poly.at(1));
+            break;
+        case DrawOp::Dot:
+            p.setPen(Qt::NoPen);
+            p.setBrush(o.fill);
+            if (!o.poly.isEmpty()) p.drawEllipse(o.poly.at(0), o.radius, o.radius);
+            break;
+        case DrawOp::Label:
+            p.setPen(o.pen);
+            if (!o.poly.isEmpty()) p.drawText(o.poly.at(0), o.text);
+            break;
+        }
+    }
+    m_ops.clear();
+}
+
 double StructureStudioView::viewDepth(const QVector3D &w) const
 {
     /* CONVENTION: a LARGER value is NEARER the eye. Painter's algorithm
@@ -837,11 +944,10 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
             d += viewDepth(corner[faces[f][k]]);
         order << qMakePair(d / 4.0, f);
     }
-    // Ascending: farthest first, so nearer faces paint over them.
-    std::sort(order.begin(), order.end(),
-              [](const QPair<double, int> &a, const QPair<double, int> &b)
-              { return a.first < b.first; });
-
+    /* Every face carries its OWN depth into the global queue. Sorting faces per
+       box and boxes by centroid is what made a truss spanning the rig lose to a
+       deck whose centre happened to be nearer, and small steps disappear behind
+       big ones: a centroid does not describe where a long object overlaps. */
     foreach (const auto &o, order)
     {
         const int f = o.second;
@@ -851,9 +957,17 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
         QColor c = base;
         c = (shade[f] >= 100) ? c.lighter(shade[f]) : c.darker(200 - shade[f]);
         c.setAlpha(255);                       // solid: a deck is not a window
-        p.setBrush(c);
-        p.setPen(QPen(edge, 1.1));
-        p.drawPolygon(poly);
+        /* Scenery is lit by the ROOM, so this applies whether or not live
+           output is being shown: at full work light the deck colours are as
+           saturated as the workspace says, and anything less takes them down.
+           Gating it on live values left a blackout showing bright red decks,
+           and left the static view as vivid as a test card. */
+        {
+            const double af = 0.18 + 0.82 * m_ambient;
+            c = QColor(qRound(c.red() * af), qRound(c.green() * af),
+                       qRound(c.blue() * af));
+        }
+        emitPoly(poly, o.first, c, edge, 1.1, p);
     }
 }
 
@@ -952,11 +1066,12 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             boxCorners(c, x0, y0, 0.0f, x1, y1, h);
             drawSolidBox(p, c, QColor(96, 106, 126), steel.lighter(150));
             // Shelves still read as lines across the front face.
-            p.setPen(QPen(steel.lighter(140), 1.6));
             for (int i = 0; i < t->shelfCount(); ++i)
             {
                 const float z = t->shelfHeight(i);
-                p.drawLine(w2s(QVector3D(x0, y1, z)), w2s(QVector3D(x1, y1, z)));
+                const QVector3D sa(x0, y1, z), sb(x1, y1, z);
+                emitLine(w2s(sa), w2s(sb), (viewDepth(sa) + viewDepth(sb)) / 2.0,
+                         steel.lighter(140), 1.6, p);
             }
         }
         else if (m_plane == Top)
@@ -1060,8 +1175,16 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                     const float s0 = float(i) / bays, s1 = float(i + 1) / bays;
                     const QVector3D lo0 = p0 + (p1 - p0) * s0, lo1 = p0 + (p1 - p0) * s1;
                     const QVector3D hi0 = p3 + (p2 - p3) * s0, hi1 = p3 + (p2 - p3) * s1;
-                    if (i % 2 == 0) p.drawLine(w2s(lo0), w2s(hi1));
-                    else            p.drawLine(w2s(hi0), w2s(lo1));
+                    // Queued at the webbing's own depth, so a truss in front of
+                    // a deck shows its bracing and one behind stays hidden.
+                    if (i % 2 == 0)
+                        emitLine(w2s(lo0), w2s(hi1),
+                                 (viewDepth(lo0) + viewDepth(hi1)) / 2.0,
+                                 steel.lighter(135), 1.1, p);
+                    else
+                        emitLine(w2s(hi0), w2s(lo1),
+                                 (viewDepth(hi0) + viewDepth(lo1)) / 2.0,
+                                 steel.lighter(135), 1.1, p);
                 }
             }
             return;
@@ -1516,37 +1639,33 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         col = QColor(90, 160, 235);
 
 
-    /* Live output, when the rig is actually running. The gel colour above is
-
-       what a fixture looks like UNLIT; showing that while a show is playing
-
-       makes the overview a diagram rather than a picture of the rig. A
-
-       fixture at zero is dimmed toward the background rather than hidden, so
-
-       you can still see where it is. */
-
-    if (m_liveValues)
-
-    {
-
-        QColor live = col;
-
-        uchar dim = 0;
-
-        if (fixtureLiveState(fx, live, dim))
-
+        /* Live output, when the rig is actually running. The gel colour above
+           is what a fixture looks like UNLIT; showing that while a show plays
+           makes the overview a diagram rather than a picture of the rig. */
+        if (m_liveValues)
         {
-
-            const double f = 0.22 + 0.78 * (dim / 255.0);
-
-            col = QColor(qRound(live.red() * f), qRound(live.green() * f),
-
-                         qRound(live.blue() * f));
-
+            QColor live = col;
+            uchar dim = 0;
+            if (fixtureLiveState(fx, live, dim))
+            {
+                /* What the fixture EMITS, plus what the room lends it. At a
+                   blackout only the emission shows, so a rig with three
+                   fixtures up looks like three fixtures up; under work light
+                   everything stays readable. The floor term is what stops full
+                   output rendering as a flat, over-saturated test card. */
+                const double emit_ = dim / 255.0;
+                const double f = qBound(0.0, 0.10 + 0.20 * m_ambient + 0.80 * emit_, 1.0);
+                col = QColor(qRound(live.red() * f), qRound(live.green() * f),
+                             qRound(live.blue() * f));
+            }
         }
-
-    }
+        else
+        {
+            // Not showing output: the fixture is just an object in the room.
+            const double af = 0.30 + 0.70 * m_ambient;
+            col = QColor(qRound(col.red() * af), qRound(col.green() * af),
+                         qRound(col.blue() * af));
+        }
     if (drag)     col = QColor(255, 196, 64);
     else if (hi)  col = QColor(120, 220, 140);
 
@@ -1594,15 +1713,14 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                     const float fc = (cols > 1) ? float(cx) / (cols - 1) : 0.5f;
                     const QVector3D lo = b0 + (b1 - b0) * fc;
                     const QVector3D hi = f0 + (f1 - f0) * fc;
-                    p.drawEllipse(w2s(lo + (hi - lo) * fr), 1.2, 1.2);
+                    const QVector3D at = lo + (hi - lo) * fr;
+                    emitDot(w2s(at), viewDepth(at), 1.2, col.lighter(135), p);
                 }
             }
         }
         if (hi && fx != nullptr)
-        {
-            p.setPen(QColor(210, 214, 220));
-            p.drawText(w2s(corner[6]) + QPointF(6, -4), fx->name());
-        }
+            emitLabel(w2s(corner[6]) + QPointF(6, -4), viewDepth(corner[6]),
+                      fx->name(), QColor(210, 214, 220), p);
         return;
     }
 
@@ -2383,10 +2501,38 @@ void StructureStudioView::resizeEvent(QResizeEvent *) { refit(); }
 
 void StructureStudioView::wheelEvent(QWheelEvent *e)
 {
-    const double f = (e->angleDelta().y() > 0) ? 1.12 : (1.0 / 1.12);
-    m_scale = qBound(10.0, m_scale * f, 320.0);
-    refit();
+    /* This used to set m_scale and then call refit(), which RECOMPUTES m_scale
+       from the widget size -- so the zoom was thrown away on the line after it
+       was set and the wheel did nothing at all. Keep the new scale, and anchor
+       the zoom on the CURSOR so whatever is under the pointer stays under it
+       rather than drifting away while you chase it. */
+    int delta = e->angleDelta().y();
+    if (delta == 0)
+        delta = e->angleDelta().x();
+    if (delta == 0)
+    {
+        e->ignore();
+        return;
+    }
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    const QPointF anchor = e->position();
+#else
+    const QPointF anchor = e->posF();
+#endif
+    const QPointF before = screenToPlane(anchor);
+
+    const double next = qBound(4.0, m_scale * ((delta > 0) ? 1.12 : 1.0 / 1.12), 4000.0);
+    if (qFuzzyCompare(next, m_scale))
+    {
+        e->accept();
+        return;
+    }
+    m_scale = next;
+    m_originPx += anchor - (m_originPx + planeToScreenVec(before));
+    m_zoomed = true;          // refit() must not stomp a deliberate zoom
     update();
+    e->accept();
 }
 
 void StructureStudioView::mousePressEvent(QMouseEvent *e)

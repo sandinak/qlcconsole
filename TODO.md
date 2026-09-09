@@ -587,6 +587,59 @@ vector-ish part). Measure the repaint cost before committing to beams.
 
 `monitor_test` 36/36. `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 13: per-primitive depth sort, room light, wheel zoom, View-menu only
+
+Branson: "precedence is now worse than last edit .. note the truss is behind the
+steps .. and there are several steps missing in view."
+
+**The previous fix was the wrong SHAPE, not merely wrong.** Sorting whole
+objects by centroid cannot work here: a truss spanning the rig has its centroid
+deep in the middle, so a deck whose centre happens to be nearer covers it even
+where the truss really is in front, and a small step loses to a big deck
+outright. Correcting the sort DIRECTION made the ordering consistent, which is
+exactly why it looked worse -- consistently wrong instead of accidentally right
+in places.
+
+Every primitive now goes into one queue with its own depth (`DrawOp` +
+`emitPoly/emitLine/emitDot/emitLabel`, flushed by `flushOps()`), and the whole
+queue sorts once: box faces, truss webbing, tower shelf lines, fixture pixels
+and labels all interleave. The emit* helpers paint immediately in the flat views
+and queue only while the angled overview is collecting, so the drawing code
+reads the same either way.
+
+**Scroll-to-zoom already existed and was DEAD.** `wheelEvent()` set `m_scale`
+and then called `refit()`, which recomputes `m_scale` from the widget size -- so
+the zoom was thrown away on the line after it was set. It now keeps the scale
+and anchors on the cursor, with `m_zoomed` to stop a later refit stomping it.
+
+**"opened a working scene and saw no differences"** -- `Live` defaulted on only
+in Operate, so in Design it was off and the view showed gel colours. Now defaults
+ON, and with the room level applied an idle rig still reads fine.
+
+**Room light.** Branson: "the colors in the rig view are very vivid .. an option
+in that window to set ambient lighting .. full, worklights, dim, blackout." New
+`Room:` combo (Work light / House / Dim / Blackout) driving
+`StructureStudioView::setAmbient()`. Applies whether or not live output is shown
+-- the vividness complaint was about the static view too -- and dims SCENERY as
+well as fixtures, since a blackout showing bright red decks would be no better.
+
+**Overview entry point** is now the View menu only; the studio footer button is
+gone, as asked.
+
+**Tests** (`monitor_test` 37/37): `ambientLevelDimsTheWholeView` measures
+luminance at work light / dim / blackout rather than trusting a render;
+`angledOverviewDrawsNearThingsInFront` still guards the occlusion order.
+
+**PROCESS FAILURE, recorded deliberately:** partway through this round I ran
+`git checkout ui/src/monitor/structurestudioview.cpp` to look at the committed
+version of one function, and destroyed ~20 minutes of uncommitted work on that
+file. Everything was recoverable (previous rounds were committed; this round's
+edits were redone from the session history), but the lesson stands: never
+`git checkout` a file with uncommitted work in it -- use `git show HEAD:<path>`
+to read the committed version.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

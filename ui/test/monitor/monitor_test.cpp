@@ -1656,3 +1656,40 @@ void Monitor_Test::angledOverviewDrawsNearThingsInFront()
     props->removePlatform(pl->id());
     props->removeTower(tw->id());
 }
+
+void Monitor_Test::ambientLevelDimsTheWholeView()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Bright Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(5.0f); pl->setDepth(3.0f); pl->setHeight(0.6f);
+    pl->setColor(QColor(230, 40, 40));
+
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 500);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 30.0);
+
+    const QPointF mid = v.w2s(QVector3D(2.5f, 1.5f, 0.6f));
+
+    auto lumaAt = [&](double ambient) {
+        v.setAmbient(ambient);
+        const QImage img = v.grab().toImage();
+        const QColor c = img.pixelColor(mid.toPoint());
+        return c.red() * 0.30 + c.green() * 0.59 + c.blue() * 0.11;
+    };
+
+    const double work = lumaAt(1.0);
+    const double dim  = lumaAt(0.30);
+    const double dark = lumaAt(0.0);
+
+    QVERIFY2(work > dim && dim > dark,
+             qPrintable(QString("room level did not dim the view: work %1, dim %2, "
+                                "blackout %3").arg(work).arg(dim).arg(dark)));
+    QVERIFY2(work - dark > 30.0,
+             qPrintable(QString("work light and blackout are nearly identical "
+                                "(%1 vs %2)").arg(work).arg(dark)));
+
+    props->removePlatform(pl->id());
+}
