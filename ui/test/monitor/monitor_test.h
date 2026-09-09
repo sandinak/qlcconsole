@@ -142,6 +142,15 @@ private slots:
      *  simply laid on a step -- must still be draggable in the editor that
      *  lists it. */
     void freePlacedFixtureIsDraggable();
+    /** Dragging the background pans the view, and a later resize must not
+     *  silently recentre what was moved by hand. */
+    void draggingBackgroundPansAndSurvivesResize();
+    /** Placement=Inside must put a platform-mounted fixture IN the box, not on
+     *  top of it -- the flag has to move the fixture, not just how it is drawn. */
+    void insidePlacementPutsFixtureInThePlatform();
+    /** ...and its height within the step must be settable by dragging in an
+     *  elevation, or Inside just pins it to the floor. */
+    void insideFixtureHeightIsDraggableInElevation();
     /** Room light applies whether or not live output is shown, and takes the
      *  whole picture down toward a blackout. */
     void ambientLevelDimsTheWholeView();

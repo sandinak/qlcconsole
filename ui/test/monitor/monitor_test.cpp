@@ -1813,3 +1813,144 @@ void Monitor_Test::freePlacedFixtureIsDraggable()
     m_doc->deleteFixture(fxi->id());
     props->removePlatform(pl->id());
 }
+
+void Monitor_Test::draggingBackgroundPansAndSurvivesResize()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+    rig.view->setPlane(StructureStudioView::Front);
+    rig.view->setLocked(false);
+
+    // Somewhere with no fixture under it.
+    const QPointF empty(30.0, 30.0);
+    QCOMPARE(rig.view->hitTestFixture(empty), Fixture::invalidId());
+
+    const QPointF originBefore = rig.view->m_originPx;
+    const QVector3D posBefore = rig.pos();
+
+    QMouseEvent press(QEvent::MouseButtonPress, empty, Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent move(QEvent::MouseMove, empty + QPointF(60, 40), Qt::NoButton,
+                     Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent rel(QEvent::MouseButtonRelease, empty + QPointF(60, 40),
+                    Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    rig.view->mousePressEvent(&press);
+    rig.view->mouseMoveEvent(&move);
+    rig.view->mouseReleaseEvent(&rel);
+
+    const QPointF moved = rig.view->m_originPx - originBefore;
+    QVERIFY2(qAbs(moved.x() - 60.0) < 1.0 && qAbs(moved.y() - 40.0) < 1.0,
+             qPrintable(QString("dragging the background moved the view by %1,%2, "
+                                "expected 60,40").arg(moved.x()).arg(moved.y())));
+
+    // Panning is a VIEW action: nothing in the model may move.
+    QCOMPARE(rig.pos(), posBefore);
+
+    /* And a resize must not undo it. refit() recentres, which would silently
+       snap the view back and read as the pan not working. */
+    const QPointF afterPan = rig.view->m_originPx;
+    rig.view->resize(rig.view->width() + 40, rig.view->height() + 30);
+    QVERIFY2((rig.view->m_originPx - afterPan).manhattanLength() < 1.0,
+             "a resize recentred the view and threw the pan away");
+}
+
+void Monitor_Test::insidePlacementPutsFixtureInThePlatform()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Clear Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(3.0f); pl->setDepth(1.0f); pl->setHeight(0.5f);
+    pl->setTopMaterial(StagePlatform::ClearTop);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("In Step"); fxi->setChannels(1); fxi->setAddress(460);
+    QVERIFY(m_doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(1500, 500, 0));
+
+    // Mounted the way the editor's "Add Fixtures" does it: on the riser top.
+    FixtureRigProps rp;
+    rp.riserPlatformId = pl->id();
+    rp.riserFace = FixtureRigProps::RiserTop;
+    rp.riserU = pl->width() * 0.5f;
+    rp.riserV = pl->depth() * 0.5f;
+    props->setFixtureRigProps(fxi->id(), rp);
+
+    const float top = pl->height();          // base is the floor here
+    QCOMPARE(props->fixtureRigPosition(fxi->id()).z(), top);
+
+    /* Inside: it belongs IN the box. This used to change nothing but the
+       drawing, so a light "inside" a clear-topped step still sat on the glass. */
+    rp.placement = FixtureRigProps::Inside;
+    rp.mountZOffset = 0.0f;
+    props->setFixtureRigProps(fxi->id(), rp);
+    const float insideZ = props->fixtureRigPosition(fxi->id()).z();
+    QVERIFY2(insideZ < top,
+             qPrintable(QString("Inside left the fixture on the deck (z %1, deck top %2)")
+                        .arg(double(insideZ)).arg(double(top))));
+    QCOMPARE(insideZ, 0.0f);                 // resting on the floor of the box
+
+    // Raised within the box.
+    rp.mountZOffset = 0.2f;
+    props->setFixtureRigProps(fxi->id(), rp);
+    QCOMPARE(props->fixtureRigPosition(fxi->id()).z(), 0.2f);
+
+    // ...but never out through the top.
+    rp.mountZOffset = 5.0f;
+    props->setFixtureRigProps(fxi->id(), rp);
+    QVERIFY2(props->fixtureRigPosition(fxi->id()).z() <= top,
+             "an Inside fixture poked out through the top of the step");
+
+    m_doc->deleteFixture(fxi->id());
+    props->removePlatform(pl->id());
+}
+
+void Monitor_Test::insideFixtureHeightIsDraggableInElevation()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Clear Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(3.0f); pl->setDepth(1.0f); pl->setHeight(0.6f);
+    pl->setTopMaterial(StagePlatform::ClearTop);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("In Step"); fxi->setChannels(1); fxi->setAddress(480);
+    QVERIFY(m_doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(1500, 500, 0));
+
+    FixtureRigProps rp;
+    rp.riserPlatformId = pl->id();
+    rp.riserFace = FixtureRigProps::RiserTop;
+    rp.riserU = pl->width() * 0.5f;
+    rp.riserV = pl->depth() * 0.5f;
+    rp.placement = FixtureRigProps::Inside;
+    props->setFixtureRigProps(fxi->id(), rp);
+    QCOMPARE(props->fixtureRigPosition(fxi->id()).z(), 0.0f);   // on the floor of the box
+
+    StructureStudioView view(m_doc, StructureStudioView::PlatformKind, pl->id());
+    view.resize(700, 500);
+    view.reload();
+    view.setLocked(false);
+    view.setPlane(StructureStudioView::Side);
+
+    /* Drag it up 0.3 m inside the step. This did nothing before: Inside gave
+       the fixture a mountZOffset but the riser drag never wrote one, so it was
+       stuck on the floor of the box. */
+    const QVector3D before = props->fixtureRigPosition(fxi->id());
+    const QPointF startPx = view.w2s(before);
+    QVERIFY(view.dragFixtureTo(fxi->id(), startPx - QPointF(0.0, view.m_scale * 0.3)));
+
+    const float after = props->fixtureRigPosition(fxi->id()).z();
+    QVERIFY2(qAbs(double(after) - 0.3) < 0.03,
+             qPrintable(QString("dragged up 0.3 m inside the step but z is %1")
+                        .arg(double(after))));
+
+    // It still cannot leave the box.
+    QVERIFY(view.dragFixtureTo(fxi->id(), startPx - QPointF(0.0, view.m_scale * 5.0)));
+    QVERIFY2(props->fixtureRigPosition(fxi->id()).z() <= pl->height(),
+             "dragging hard upward pushed the fixture out through the top");
+
+    m_doc->deleteFixture(fxi->id());
+    props->removePlatform(pl->id());
+}

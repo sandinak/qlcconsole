@@ -770,6 +770,56 @@ available if plan-scale legibility matters more.
 
 `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 17: drag-to-pan, and finishing "Inside" properly
+
+**Drag the background to pan.** Branson: "when we zoom in .. we should be able
+to click grab and move around in that zoomed in space?" Panning existed but only
+behind shift-drag and the middle button -- gestures you have to be TOLD about --
+while a plain left-drag on empty canvas did nothing at all. Now: flat views pan,
+the angled view keeps orbiting (the more valuable gesture there, and it was going
+spare in the flat views). Shift-drag and middle-drag still pan everywhere, so
+nothing was taken away. Panning sets the same "user has positioned this view"
+flag as zooming, or the next resize would `refit()` and silently recentre --
+the pan would have looked broken exactly as the wheel zoom did earlier. Both
+hint labels updated.
+
+### "Inside" took THREE goes to actually work -- worth recording why
+
+Follow-on 15 added `FixtureRigProps::placement`. Each round it LOOKED finished
+and was not:
+
+  1. **Rendering only.** It stopped the renderer seating the fixture out onto
+     the surface, and nothing else.
+  2. **Position.** A platform fixture is mounted `RiserTop`, whose Z derives as
+     `platformBaseZ + height` -- on the deck. So a light "inside" a clear-topped
+     step still sat on the glass. Fixed by deriving Inside from the platform's
+     own FLOOR (`base + mountZOffset`, clamped to the height, because a fixture
+     inside something should not poke out of it).
+  3. **Editability.** Inside gave the fixture a `mountZOffset`, but the riser
+     drag branch only ever wrote riserU/riserV -- so nothing could set one and
+     the fixture was pinned to the floor of the box. Dragging in Front or Side
+     now sets it. On a deck mount the vertical still does nothing, correctly:
+     its height IS the deck.
+
+LESSON: a property is not implemented until the whole chain works -- the model
+derives from it, the UI can set it, and a test drives it end to end. "The flag
+exists and the renderer reads it" is a third of the job.
+
+**The `Solid` red herring.** Branson tried unchecking Solid to hollow out a
+step. It is a COLLISION rule only ("two solid platforms can't be dragged through
+each other") and can never have helped. That he reached for it is a labelling
+failure, so its tooltip now says what it is NOT and points at Placement; the Top
+and Placement tooltips cross-reference each other too, because the working
+combination (Top: Clear + Placement: Inside + drag the height in an elevation)
+was not discoverable from any one of them.
+
+**Tests** (`monitor_test` 42/42, all revert-checked):
+`draggingBackgroundPansAndSurvivesResize`,
+`insidePlacementPutsFixtureInThePlatform`,
+`insideFixtureHeightIsDraggableInElevation`.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

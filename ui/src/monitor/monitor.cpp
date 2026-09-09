@@ -1983,7 +1983,8 @@ void Monitor::showStageOverview()
     view->setAmbient(ambientCombo->currentData().toDouble());
 
     bar->addStretch();
-    bar->addWidget(new QLabel(tr("Drag to swing · scroll to zoom · read-only"), &dlg));
+    bar->addWidget(new QLabel(tr("drag to swing · shift-drag to pan · "
+                                 "wheel to zoom · read-only"), &dlg));
     vl->addLayout(bar);
     vl->addWidget(view, 1);
 
@@ -2662,7 +2663,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     });
     cv->addWidget(view, 1);
     QLabel *hint = new QLabel(tr("click a fixture to select · double-click to edit · "
-                                 "drag to reposition · wheel zoom · shift-drag pan"), center);
+                                 "drag a fixture to reposition · drag the background "
+                                 "to pan · wheel to zoom"), center);
     hint->setStyleSheet("color:#8a8e99;");
     cv->addWidget(hint);
 
@@ -2698,8 +2700,11 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     placeCombo->addItem(tr("On the surface"), FixtureRigProps::OnSurface);
     placeCombo->addItem(tr("Inside"),         FixtureRigProps::Inside);
     placeCombo->addItem(tr("Recessed"),       FixtureRigProps::Recessed);
-    placeCombo->setToolTip(tr("Bolted to the outside, rigged within the "
-                              "structure, or let into its surface"));
+    placeCombo->setToolTip(tr("Bolted to the outside, rigged WITHIN the structure "
+                              "(inside a step or between a truss's chords), or "
+                              "let into its surface. An inside fixture sits in "
+                              "the volume rather than on the face — pair it with "
+                              "a clear or open top to see it."));
     inspForm->addRow(tr("Placement:"), placeCombo);
     inspForm->addRow(tr("Angle:"), angleSpin);
     iv->addLayout(inspForm);
@@ -4621,8 +4626,10 @@ void Monitor::slotEditPlatform(quint32 pid)
     topCombo->addItem(tr("Clear (lights inside show through)"), int(StagePlatform::ClearTop));
     topCombo->addItem(tr("Open frame (no top)"), int(StagePlatform::OpenTop));
     topCombo->setCurrentIndex(topCombo->findData(int(p->topMaterial())));
-    topCombo->setToolTip(tr("A clear or open top lets fixtures rigged inside "
-                            "the step be seen, and their light broadcast up"));
+    topCombo->setToolTip(tr("A clear or open top lets fixtures rigged inside the "
+                            "step be seen, and their light broadcast up. The "
+                            "fixtures also need their Placement set to "
+                            "\"Inside\" — otherwise they sit on the deck."));
     form->addRow(tr("Top:"), topCombo);
     connect(topCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
             [p, this, topCombo](int) {
@@ -4634,6 +4641,13 @@ void Monitor::slotEditPlatform(quint32 pid)
     // No-overlap collision properties.
     QCheckBox *solidChk = new QCheckBox(tr("Solid — can't overlap other solid platforms"), &dlg);
     solidChk->setChecked(p->solid());
+    /* Say what this is NOT: it reads like "is this thing solid or hollow", and
+       it is only about whether two platforms may be dragged through each other.
+       To rig a light inside a step you set the fixture's Placement, not this. */
+    solidChk->setToolTip(tr("A layout rule only: it stops two solid platforms "
+                            "being dragged through each other. It does not make "
+                            "the step hollow — to rig a fixture inside one, set "
+                            "that fixture's Placement to \"Inside\"."));
     form->addRow(tr("Collision:"), solidChk);
     QCheckBox *stackChk = new QCheckBox(tr("Stackable — may sit on top (step / riser)"), &dlg);
     stackChk->setChecked(p->stackable());

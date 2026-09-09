@@ -1494,8 +1494,14 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         if (pl != nullptr && m_fixtureItems.contains(fid))
         {
             const QVector3D p = m_fixtureItems[fid].m_baseItem.m_position;   // mm
+            const float base = platformBaseZ(pl->id());
+            // Inside: measured up from the platform's floor, same as a riser
+            // mount above -- a deck-mounted light can be in the box too.
+            if (rp.placement == FixtureRigProps::Inside)
+                return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f,
+                                 base + qBound(0.0f, rp.deckHeightOffset, pl->height()));
             return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f,
-                             platformBaseZ(pl->id()) + pl->height() + rp.deckHeightOffset);
+                             base + pl->height() + rp.deckHeightOffset);
         }
     }
 
@@ -1507,9 +1513,26 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         if (pl != nullptr)
         {
             if (rp.riserFace == FixtureRigProps::RiserTop)
+            {
+                const float base = platformBaseZ(pl->id());
+                /* INSIDE the step, not on it.
+                 *
+                 * placement only told the RENDERER not to seat the fixture out
+                 * onto the surface; the position was still derived as
+                 * base + height, i.e. on the deck. So a light "inside" a
+                 * clear-topped step still sat on the glass. Inside measures up
+                 * from the platform's own floor instead, so 0 rests on the
+                 * bottom of the box shining up through the top, and
+                 * mountZOffset raises it within the box. Clamped, because a
+                 * fixture that is inside something should not poke out of it. */
+                if (rp.placement == FixtureRigProps::Inside)
+                    return QVector3D(pl->originX() + rp.riserU,
+                                     pl->originY() + rp.riserV,
+                                     base + qBound(0.0f, rp.mountZOffset, pl->height()));
                 return QVector3D(pl->originX() + rp.riserU,
                                  pl->originY() + rp.riserV,
-                                 platformBaseZ(pl->id()) + pl->height());
+                                 base + pl->height());
+            }
             // Front (downstage) face: Y = the DOWNSTAGE edge (originY + depth —
             // originY is the upstage edge in this plan view), X across the
             // width, Z = up the face FROM the platform base (which may sit on a

@@ -313,6 +313,18 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
                 rp.riserU = qBound(0.0f, float(ab.x() - pl->originX()), pl->width());
             else
                 rp.riserV = qBound(0.0f, float(ab.x() - pl->originY()), pl->depth());
+
+            /* An INSIDE fixture also has a height within the box, and an
+               elevation is where you would set it. Without this the fixture
+               dropped to the floor of the step and stayed there: Inside gave it
+               a mountZOffset but nothing could edit one, so the only vertical
+               position available was zero. On the deck there is nothing to set
+               -- its height IS the deck. */
+            if (rp.placement == FixtureRigProps::Inside && m_plane != Top)
+            {
+                const float base = props->platformBaseZ(pl->id());
+                rp.mountZOffset = qBound(0.0f, float(ab.y()) - base, pl->height());
+            }
         }
         else
         {
@@ -2652,16 +2664,30 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         m_dragFid = hitTestFixture(e->pos());   // invalidId() if empty space
         m_dragged = false;
 
-        /* In the angled view a drag on EMPTY canvas swings the camera. Fixture
-           dragging is refused there anyway (no honest inverse), so the gesture
-           is free -- and orbiting by hand beats reaching for a spin box when you
-           just want to see behind something. Pressing ON a fixture still selects
-           it, so nothing is lost. */
-        if (m_plane == Angled && m_dragFid == Fixture::invalidId())
+        if (m_dragFid == Fixture::invalidId())
         {
-            m_orbiting = true;
-            m_orbitLast = e->pos();
-            setCursor(Qt::SizeAllCursor);
+            /* Empty canvas. What a plain drag SHOULD do depends on the view:
+               - Angled: swing the camera. Fixture dragging is refused there
+                 anyway (no honest inverse), so the gesture is free, and
+                 orbiting by hand beats reaching for a spin box when you just
+                 want to see behind something.
+               - Flat views: PAN. Once you have zoomed in, grabbing the canvas
+                 and pulling is the obvious way to get around, and it was doing
+                 nothing at all -- panning was hidden behind shift-drag and the
+                 middle button, which you have to be told about.
+               Pressing ON a fixture still selects it either way. */
+            if (m_plane == Angled)
+            {
+                m_orbiting = true;
+                m_orbitLast = e->pos();
+                setCursor(Qt::SizeAllCursor);
+            }
+            else
+            {
+                m_panning = true;
+                m_panLast = e->pos();
+                setCursor(Qt::ClosedHandCursor);
+            }
             return;
         }
         if (m_dragFid != Fixture::invalidId())
@@ -2691,6 +2717,9 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
     {
         m_originPx += e->pos() - m_panLast;
         m_panLast = e->pos();
+        // Same reason as the wheel: having deliberately moved the view, a later
+        // refit must not silently recentre it.
+        m_zoomed = true;
         update();
         return;
     }
@@ -2728,7 +2757,12 @@ void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
         setCursor(Qt::ArrowCursor);
         return;
     }
-    m_panning = false;
+    if (m_panning)
+    {
+        m_panning = false;
+        setCursor(Qt::ArrowCursor);
+        return;
+    }
     if (m_resizeBoom != 0)
     {
         m_resizeBoom = 0;

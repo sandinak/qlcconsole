@@ -333,7 +333,7 @@ private:
     bool     m_liveValues = false;   ///< paint DMX output instead of gel colours
     double   m_ambient = 0.62;       ///< room light, 0 = blackout .. 1 = work light
     class QTimer *m_liveTimer = nullptr;
-    bool     m_zoomed = false;       ///< wheel-zoomed: refit() must not stomp it
+    bool     m_zoomed = false;       ///< zoomed or panned by hand: refit() must not stomp it
     bool     m_orbiting = false;     ///< dragging the empty canvas to swing the camera
     QPointF  m_orbitLast;
 
