@@ -138,6 +138,10 @@ private slots:
     /** A clear-topped step must let what is inside it show through, and a
      *  fixture placed Inside must not be seated out onto the surface. */
     void clearTopAndInsidePlacement();
+    /** A fixture with no structural mount and no frame group -- an LED bar
+     *  simply laid on a step -- must still be draggable in the editor that
+     *  lists it. */
+    void freePlacedFixtureIsDraggable();
     /** Room light applies whether or not live output is shown, and takes the
      *  whole picture down toward a blackout. */
     void ambientLevelDimsTheWholeView();

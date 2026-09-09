@@ -434,7 +434,30 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         props->setFixtureRigProps(fid, rp);
         return true;
     }
-    return false;
+
+    /* FREE-PLACED: no structural mount and no studio frame group.
+     *
+     * This used to `return false`, so a fixture that simply sits somewhere --
+     * an LED bar laid on a step, say -- could not be moved in this editor at
+     * all, even though the editor lists it and lets you select it. Move it the
+     * way the 2D plot does: take the two in-plane components from the mouse and
+     * keep the third.
+     *
+     * NOTE the mixed units. setFixturePosition() stores X and Y in MILLIMETRES
+     * and Z in METRES (see the free-placed branch of fixtureRigPosition, which
+     * divides x/y by 1000 and passes z straight through). Writing all three in
+     * metres here would move a fixture a thousand times too little. */
+    const QVector3D cur = props->fixtureRigPosition(fid);   // metres
+    const QPointF ab = screenToPlane(px);
+    QVector3D w = cur;
+    if (m_plane == Top)        { w.setX(float(ab.x())); w.setY(float(ab.y())); }
+    else if (m_plane == Front) { w.setX(float(ab.x())); w.setZ(float(ab.y())); }
+    else if (m_plane == Side)  { w.setY(float(ab.x())); w.setZ(float(ab.y())); }
+    else                       { return false; }            // Angled: no inverse
+
+    props->setFixturePosition(fid, 0, 0,
+                              QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z()));
+    return true;
 }
 
 /*********************************************************************
@@ -1925,78 +1948,48 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     }
     else if (traits.kind == FixtureSilhouette::Bar)
     {
-        // A genuine matrix/panel (declared height is a meaningful
-        // fraction of its width, not just a thin strip, and there are
-        // enough pixels to actually form rows) draws as a grid instead
-        // of a single line, so a panel actually looks like a panel and a
-        // long single-row bar still looks like a bar.
-        const bool isMatrix = traits.layout.isValid()
-                             || (traits.physW > 0.0f && traits.physH > traits.physW * 0.15f
-                                 && traits.headCount >= 4);
+        /* Draw the DEVICE, not a line.
+         *
+         * This used to decide between "a matrix" and "a bar" and draw the bar
+         * as a bare line with dots along it, which told you where a fixture was
+         * but nothing about what it is: a 1005 x 65 mm LED bar and a length of
+         * rope looked identical. It also meant the flat views and the angled
+         * view disagreed about the same fixture. Now every bar gets its real
+         * body -- its declared footprint, projected -- with its heads laid out
+         * inside, matching what the angled view draws. */
+        QPointF wPx, hPx; QRectF boxPx;
+        fixtureBoxPx(fid, traits, wPx, hPx, boxPx);
+
         if (hi)
         {
-            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
-            p.setPen(halo);
-            p.drawLine(a, b);
-        }
-        if (isMatrix)
-        {
-            /* Honour the definition's declared grid (an XL-450 says
-               15 x 5); only guess a grid from head count and aspect when
-               there is nothing declared. */
-            int rows, cols;
-            if (traits.layout.isValid())
-            {
-                cols = traits.layout.width();
-                rows = traits.layout.height();
-            }
-            else
-            {
-                const double aspect = double(traits.physH / traits.physW);
-                rows = qBound(2, int(qRound(qSqrt(double(traits.headCount) * aspect))),
-                              traits.headCount);
-                cols = qMax(1, (traits.headCount + rows - 1) / rows);
-            }
-
-            /* Place every pixel at its TRUE position in the fixture's box
-               and project that -- so the grid squashes correctly when an
-               axis turns away from the viewer instead of being drawn along
-               the a-b line at a fixed across-extent. */
-            QPointF wPx, hPx; QRectF boxPx;
-            fixtureBoxPx(fid, traits, wPx, hPx, boxPx);
-
-            p.setPen(QPen(col.darker(140), (drag || hi) ? 2.0 : 1.2));
+            p.setPen(QPen(QColor(120, 220, 140, 160), 3));
             p.setBrush(Qt::NoBrush);
-            p.drawRect(boxPx);                    // the body, at its real proportions
-
-            p.setPen(Qt::NoPen);
-            p.setBrush(col);
-            // A pixel's dot: its own cell, never bigger than it should be.
-            const double cellW = boxPx.width() / qMax(1, cols);
-            const double cellH = boxPx.height() / qMax(1, rows);
-            const double rad = qBound(0.8, qMin(cellW, cellH) * 0.42, 3.0);
-            int placed = 0;
-            for (int r = 0; r < rows && placed < traits.headCount; ++r)
-            {
-                const double fy = (rows > 1) ? (double(r) / (rows - 1) - 0.5) : 0.0;
-                for (int cix = 0; cix < cols && placed < traits.headCount; ++cix, ++placed)
-                {
-                    const double fx2 = (cols > 1) ? (double(cix) / (cols - 1) - 0.5) : 0.0;
-                    p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
-                }
-            }
+            p.drawRect(boxPx.adjusted(-3, -3, 3, 3));
         }
-        else
+
+        // The body.
+        p.setPen(QPen(col.darker(150), (drag || hi) ? 1.8 : 1.2));
+        p.setBrush(col.darker(230));
+        p.drawRect(boxPx);
+
+        /* The heads. A declared grid wins; otherwise a single row of however
+           many heads there are, which is what a strip actually is. */
+        const int cols = traits.layout.isValid() ? traits.layout.width()
+                                                 : qMax(1, traits.headCount);
+        const int rows = traits.layout.isValid() ? traits.layout.height() : 1;
+        const double cellW = boxPx.width() / qMax(1, cols);
+        const double cellH = boxPx.height() / qMax(1, rows);
+        const double rad = qBound(0.7, qMin(cellW, cellH) * 0.40, 3.0);
+        p.setPen(Qt::NoPen);
+        p.setBrush(col);
+        int placed = 0;
+        for (int r = 0; r < rows && placed < traits.headCount; ++r)
         {
-            QPen body(col.darker(140)); body.setWidth((drag || hi) ? 4 : 3); body.setCapStyle(Qt::RoundCap);
-            p.setPen(body);
-            p.drawLine(a, b);
-            p.setPen(Qt::NoPen);
-            p.setBrush(col);
-            for (int i = 0; i < traits.headCount; ++i)
+            const double fy = (rows > 1) ? (double(r) / (rows - 1) - 0.5) : 0.0;
+            for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
             {
-                const double t = (traits.headCount > 1) ? double(i) / (traits.headCount - 1) : 0.5;
-                p.drawEllipse(a + (b - a) * t, 2.6, 2.6);
+                const double fx2 = (cols > 1) ? (double(cx) / (cols - 1) - 0.5) : 0.0;
+                p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
             }
         }
     }

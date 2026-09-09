@@ -1767,3 +1767,49 @@ void Monitor_Test::clearTopAndInsidePlacement()
     m_doc->deleteFixture(fxi->id());
     props->removePlatform(pl->id());
 }
+
+void Monitor_Test::freePlacedFixtureIsDraggable()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("DS-3"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(4.0f); pl->setDepth(1.0f); pl->setHeight(0.2f);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("DS3aB"); fxi->setChannels(1); fxi->setAddress(440);
+    QVERIFY(m_doc->addFixture(fxi));
+    // Laid on the step: no truss, pipe, tower, riser or deck mount at all.
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(1000, 500, 0));
+    FixtureRigProps rp;
+    props->setFixtureRigProps(fxi->id(), rp);
+    QCOMPARE(rp.primaryMount(), FixtureRigProps::NoMount);
+    QCOMPARE(props->fixtureFrameGroup(fxi->id()), quint32(0));
+
+    StructureStudioView view(m_doc, StructureStudioView::PlatformKind, pl->id());
+    view.resize(700, 500);
+    view.reload();
+    view.setPlane(StructureStudioView::Top);
+    view.setLocked(false);
+
+    const QVector3D before = props->fixtureRigPosition(fxi->id());
+
+    /* Drag it half a metre downstage. This used to `return false` -- a fixture
+       with neither a structural mount nor a frame group fell off the end of
+       dragFixtureTo() and simply could not be moved, in the very editor that
+       lists it and lets you select it. */
+    const QPointF startPx = view.w2s(before);
+    QVERIFY2(view.dragFixtureTo(fxi->id(), startPx + QPointF(0.0, view.m_scale * 0.5)),
+             "the editor refused to move a free-placed fixture");
+
+    const QVector3D after = props->fixtureRigPosition(fxi->id());
+    QVERIFY2(qAbs(double(after.y() - before.y()) - 0.5) < 0.05,
+             qPrintable(QString("dragged 0.5 m but y moved %1 m — check the mixed "
+                                "mm/metre storage in setFixturePosition")
+                        .arg(double(after.y() - before.y()))));
+    QVERIFY2(qAbs(double(after.x() - before.x())) < 1e-3,
+             "a downstage drag also moved it sideways");
+
+    m_doc->deleteFixture(fxi->id());
+    props->removePlatform(pl->id());
+}

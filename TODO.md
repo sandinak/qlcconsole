@@ -733,6 +733,43 @@ as beams (stage 3), and the repaint cost still has not been measured.
 
 `monitor_test` 38/38. `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 16: free-placed fixtures were undraggable; bars drew as lines
+
+Branson, in the DS-3 platform editor: "unable to relocate these led bars in this
+step .. also can this be a representation of the device vs a line?"
+
+**Undraggable.** `dragFixtureTo()` handled truss, pipe, tower, riser, deck and
+studio-frame-group mounts and then `return false`. A fixture with NO structural
+mount and NO frame group -- which is exactly an LED bar laid on a step -- matched
+none of them, so the editor listed it, let you select it, and silently refused
+to move it. Same class as the T-2 truss bug in Follow-on 6: a branch that does
+not exist reads as "nothing happens". Added the free-placement fallback, which
+moves it the way the 2D plot does.
+
+TRAP worth remembering: `setFixturePosition()` stores X and Y in MILLIMETRES and
+Z in METRES (see the free-placed branch of `fixtureRigPosition()`, which divides
+x/y by 1000 and passes z through). Writing all three in metres moves the fixture
+a thousandth of the intended distance. The test asserts the travel is really
+0.5 m so the mismatch cannot creep back.
+
+**Line, not a device.** The Bar branch sorted fixtures into "matrix" or "not",
+and anything failing `physH > 0.15 * physW` drew as a bare line with dots along
+it. A 1005 x 65 mm LED bar fails that by a factor of two, so a real bar and a
+length of rope drew identically -- and the flat views disagreed with the angled
+view about the same fixture. Every bar now gets its real body (declared
+footprint, projected) with its heads laid out inside, matching the angled view.
+A declared grid wins where there is one; otherwise a single row of however many
+heads it has, which is what a strip actually is.
+
+**Test** (`monitor_test` 39/39, revert-checked): `freePlacedFixtureIsDraggable`.
+
+**Expected consequence, flagged to Branson:** in Top view these bars are
+genuinely thin -- 60 mm of depth against a metre of width -- so they read as
+narrow strips. Honest rather than a shortfall, but a minimum drawn thickness is
+available if plan-scale legibility matters more.
+
+`check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)
