@@ -536,6 +536,57 @@ yoke is a much larger piece of drawing. Flagged to Branson rather than assumed.
 
 `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 12: mover detail restored, View-menu entry, live values (stage 1), depth order
+
+**Mover detail back.** `drawMoverSolid()` builds base + two yoke arms + head as
+oriented boxes in the fixture's own frame, so the shape is recognisable AND
+holds its bearing as the camera orbits -- the plain slab was only ever the price
+of fixing the billboard. It already takes an `aim` vector (unused) so live
+pan/tilt can point the head later without touching the shape code.
+
+**Under View.** `View -> Rig Overview…` (Ctrl+Shift+R) in the main menu bar,
+delegating to `Monitor::showStageOverview()` so the menu entry and the studio
+footer button open the SAME window rather than two that drift apart.
+
+**Depth order -- Branson's caveat: "notice the step got put in front of the
+tower".** TWO bugs, not one:
+  1. Objects painted in list order (all trusses, then platforms, then towers,
+     then all fixtures) with no sorting between them.
+  2. **The sort direction was inverted.** Probed rather than reasoned about: a
+     LARGER `viewDepth` is NEARER, but both `drawSolidBox()`'s face sort and the
+     object sort ran DESCENDING -- nearest first -- so far things painted over
+     near things. The comment said "back to front" while the code did the
+     opposite.
+`drawRigDepthSorted()` now makes one back-to-front pass over structures AND
+fixtures together (`drawOneFixture()` was split out of `drawFixtures()` for it),
+and `viewDepth()` carries an explicit convention note so the sign cannot flip
+silently again.
+
+**Test:** `angledOverviewDrawsNearThingsInFront` asserts the convention, then
+checks occlusion in PIXELS -- a grey tower planted downstage of a saturated blue
+deck, sampled where they overlap. Revert-checked: flipping the comparator
+reports "sampled 49,90,189, saturation 189".
+
+**Live values (stage 1).** A `Live` toggle in the overview paints fixture colour
+and brightness from the DMX actually being sent, defaulting ON when the doc is
+in Operate. New shared `fixtureLiveState()` in `fixturevisualtraits`.
+DELIBERATELY not the extraction estimated earlier:
+`MonitorFixtureItem::computeColor()/computeAlpha()` work off per-head
+channel-index lists the item builds for itself, and dragging that structure
+along would be the wrong shape for a rig-wide view that wants one colour and one
+level per fixture.
+
+Repaints run off a **25 Hz timer**, not `Fixture::valuesChanged()`: this widget
+redraws the whole rig in one pass, so a per-signal repaint would mean hundreds
+of full redraws a second during a chase. It also skips while the window is
+hidden.
+
+**Still to come:** stage 2 (mover heads pointing where they are aimed -- the
+`aim` parameter is already plumbed) and stage 3 (beam cones, the genuinely
+vector-ish part). Measure the repaint cost before committing to beams.
+
+`monitor_test` 36/36. `check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

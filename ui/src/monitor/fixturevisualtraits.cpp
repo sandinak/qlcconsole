@@ -24,6 +24,7 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
+#include "qlccapability.h"
 #include "qlcphysical.h"
 
 FixtureVisualTraits classifyFixture(Fixture *fx)
@@ -215,4 +216,84 @@ QPainterPath moverPlanPath(const QRectF &r, int headCount)
         addMoverPlanUnit(path, QRectF(r.left() + slotW * i, r.top(), slotW, r.height()));
 
     return path;
+}
+
+bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer)
+{
+    if (fx == nullptr)
+        return false;
+    QLCFixtureMode *mode = fx->fixtureMode();
+    if (mode == nullptr)
+        return false;
+
+    const QByteArray v = fx->channelValues();
+    if (v.isEmpty())
+        return false;
+
+    int r = -1, g = -1, b = -1, w = -1, a = -1;
+    int master = -1;                 // a plain (colourless) Intensity channel
+    QColor wheel;                    // a colour-wheel capability, if one is set
+
+    for (quint32 c = 0; c < fx->channels() && int(c) < v.size(); ++c)
+    {
+        QLCChannel *ch = mode->channel(c);
+        if (ch == nullptr)
+            continue;
+        const int val = uchar(v.at(int(c)));
+
+        if (ch->group() == QLCChannel::Intensity && ch->colour() == QLCChannel::NoColour)
+        {
+            master = qMax(master, val);
+            continue;
+        }
+        if (ch->group() != QLCChannel::Intensity && ch->group() != QLCChannel::Colour)
+            continue;
+
+        switch (ch->colour())
+        {
+        case QLCChannel::Red:   r = qMax(r, val); break;
+        case QLCChannel::Green: g = qMax(g, val); break;
+        case QLCChannel::Blue:  b = qMax(b, val); break;
+        case QLCChannel::White: w = qMax(w, val); break;
+        case QLCChannel::Amber: a = qMax(a, val); break;
+        case QLCChannel::NoColour:
+            // A wheel: take the colour its current capability names.
+            if (ch->group() == QLCChannel::Colour)
+            {
+                if (QLCCapability *cap = ch->searchCapability(uchar(val)))
+                {
+                    const QColor c1 = cap->resource(0).value<QColor>();
+                    if (c1.isValid() && c1 != Qt::black)
+                        wheel = c1;
+                }
+            }
+            break;
+        default: break;
+        }
+    }
+
+    /* uchar casts matter: QByteArray::at() is signed, so anything over 127
+       would go negative and darken the fixture past half. */
+    if (r >= 0 || g >= 0 || b >= 0 || w >= 0 || a >= 0)
+    {
+        int rr = qMax(0, r), gg = qMax(0, g), bb = qMax(0, b);
+        if (w > 0) { rr += w; gg += w; bb += w; }
+        if (a > 0) { rr += a; gg += qRound(a * 0.494); }
+        colour = QColor(qMin(rr, 255), qMin(gg, 255), qMin(bb, 255));
+    }
+    else if (wheel.isValid())
+    {
+        colour = wheel;
+    }
+
+    /* The level: an explicit dimmer if there is one, otherwise the brightest
+       emitter -- an RGB fixture with no dimmer is as bright as its channels. */
+    if (master >= 0)
+        dimmer = uchar(master);
+    else if (colour.isValid())
+        dimmer = uchar(qMax(colour.red(), qMax(colour.green(), colour.blue())));
+    else
+        dimmer = 0;
+
+    return true;
 }

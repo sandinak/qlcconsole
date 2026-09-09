@@ -258,9 +258,13 @@ protected:
      *  any workspace) and must never be used as the sentinel. */
     void showFixtureItemEditor(quint32 onlyFid = quint32(~0u));
 
+public:
     /** A read-only angled look at the whole rig (StructureStudioView's
-     *  StageKind). Opened from the View combo's Overview entry. */
+     *  StageKind). Public so App's View menu and the studio footer button open
+     *  the SAME window; the Monitor owns it and raises the existing one. */
     void showStageOverview();
+
+protected:
 
 private:
     /** The rig-overview window, kept so a second click raises the one that is

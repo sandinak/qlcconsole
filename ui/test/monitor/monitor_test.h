@@ -132,6 +132,9 @@ private slots:
     /** In the angled view a fixture must keep its own orientation as the
      *  camera orbits, not swing round to face it. */
     void angledFixturesAreNotBillboards();
+    /** Painter's algorithm across the whole rig: an object nearer the eye must
+     *  cover one behind it, whatever order they sit in the workspace. */
+    void angledOverviewDrawsNearThingsInFront();
 
 private:
     Doc* m_doc;

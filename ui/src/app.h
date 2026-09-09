@@ -274,6 +274,9 @@ public slots:
     QFile::FileError slotFileSaveAs();
 
     void slotControlMonitor();
+    /** Open the rig overview (View menu). Delegates to the Monitor, which owns
+     *  the window, so the menu and the studio footer share one instance. */
+    void slotRigOverview();
     void slotAddressTool();
     void slotControlBlackout();
     /** Toggle global Blind (output inhibit) from the main toolbar. */
@@ -328,6 +331,7 @@ private:
     QAction* m_modeToggleAction;
     QAction* m_controlMonitorAction;
     QAction* m_addressToolAction;
+    QAction* m_rigOverviewAction;
     QAction* m_controlBlackoutAction;
     QAction* m_controlBlindAction;
     QAction* m_showLockAction;

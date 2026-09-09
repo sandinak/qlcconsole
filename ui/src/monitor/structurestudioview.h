@@ -83,6 +83,14 @@ public:
     /** True when the current plane cannot be edited in (see Plane::Angled). */
     bool isViewOnly() const { return m_plane == Angled; }
 
+    /** Show what the rig is DOING: fixture colour and brightness taken from the
+     *  DMX being sent, rather than the static gel colour. Repaints are
+     *  throttled -- see the timer in the implementation -- because this is one
+     *  widget redrawing everything, and a busy chase across a few hundred
+     *  fixtures would otherwise repaint far faster than anyone can see. */
+    void setLiveValues(bool on);
+    bool liveValues() const { return m_liveValues; }
+
     /** Locked = fixtures can be selected but not dragged (like the main plot lock);
      *  unlocked = drag a selected fixture / a boom top to move it. */
     void setLocked(bool on) { m_locked = on; setCursor(Qt::ArrowCursor); }
@@ -173,6 +181,13 @@ private:
                       const QColor &base, const QColor &edge) const;
     void drawPipe(QPainter &p, const class Pipe *pipe) const;
     void drawFixtures(QPainter &p) const;
+    /** One fixture, so the overview can depth-sort fixtures and structures
+     *  together in a single pass. */
+    void drawOneFixture(QPainter &p, quint32 fid, bool nameEveryone) const;
+    /** The whole rig in one back-to-front pass, structures and fixtures
+     *  interleaved, so nearer objects cover further ones whatever order they
+     *  happen to sit in the workspace. Angled overview only. */
+    void drawRigDepthSorted(QPainter &p) const;
     void drawDimensions(QPainter &p) const;   ///< feature width/height labels (ft/m)
     void drawRulers(QPainter &p) const;        ///< height (0=floor) + width (0=centre) rulers
     void drawCursorReadout(QPainter &p) const; ///< crosshair + live height/offset at the pointer
@@ -208,6 +223,12 @@ private:
      *  its orientation as the camera orbits, not turn to face it. */
     void fixtureBoxCorners(quint32 fid, const struct FixtureVisualTraits &traits,
                            QVector3D out[8]) const;
+    /** A moving head as base + yoke arms + head, all oriented boxes, so it
+     *  keeps both its shape and its bearing as the camera orbits. @p aim is
+     *  the head's pointing direction (null = rest). */
+    void drawMoverSolid(QPainter &p, quint32 fid,
+                        const struct FixtureVisualTraits &traits,
+                        const QColor &col, const QVector3D &aim) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame
@@ -258,6 +279,8 @@ private:
        across the frame the way a true isometric makes it. */
     double   m_azimuthDeg = 20.0;    ///< Angled plane: swing around the stage
     double   m_elevationDeg = 30.0;  ///< Angled plane: eye height above the floor
+    bool     m_liveValues = false;   ///< paint DMX output instead of gel colours
+    class QTimer *m_liveTimer = nullptr;
     bool     m_orbiting = false;     ///< dragging the empty canvas to swing the camera
     QPointF  m_orbitLast;
 

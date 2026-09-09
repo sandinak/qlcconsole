@@ -1607,3 +1607,52 @@ void Monitor_Test::angledFixturesAreNotBillboards()
     QVERIFY2(qAbs(widthPxAt(0.0) - widthPxAt(75.0)) > 1.0,
              "the fixture kept the same on-screen width at every angle");
 }
+
+
+void Monitor_Test::angledOverviewDrawsNearThingsInFront()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    /* viewDepth's contract, which both sorts depend on: LARGER is NEARER.
+       +Y is downstage, so with the eye downstage looking upstage, a bigger Y is
+       closer. Both sorts once ran the other way and far objects painted over
+       near ones -- a step covered the tower standing in front of it. */
+    StructureStudioView probe(m_doc, StructureStudioView::StageKind, 0);
+    probe.setPlane(StructureStudioView::Angled);
+    probe.setAngledView(0.0, 0.0);
+    QVERIFY2(probe.viewDepth(QVector3D(0, 10, 0)) > probe.viewDepth(QVector3D(0, 0, 0)),
+             "viewDepth: larger must mean nearer, or the painter's sorts invert");
+
+    // A tower planted downstage OF a deck must be drawn over it.
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(6.0f); pl->setDepth(3.0f); pl->setHeight(0.6f);
+    pl->setColor(QColor(60, 110, 230));                 // unmistakably blue
+    Tower *tw = props->addTower();
+    tw->setName("Front Tower"); tw->setOriginX(2.5f); tw->setOriginY(4.5f);
+    tw->setWidth(0.6f); tw->setDepth(0.6f); tw->setHeight(3.0f);
+
+    StructureStudioView ov(m_doc, StructureStudioView::StageKind, 0);
+    ov.resize(800, 560);
+    ov.reload();
+    ov.setPlane(StructureStudioView::Angled);
+    ov.setAngledView(10.0, 25.0);
+    const QImage img = ov.grab().toImage();
+
+    /* Sample where the tower crosses the deck. The tower is steel grey and the
+       deck is saturated blue, so "which one won" is readable straight off the
+       pixel rather than by eye. */
+    const QPointF mid = ov.w2s(QVector3D(tw->originX() + tw->width() / 2,
+                                         tw->originY() + tw->depth() / 2,
+                                         1.2f));
+    QVERIFY2(img.rect().contains(mid.toPoint()), "the sample point fell outside the view");
+    const QColor px = img.pixelColor(mid.toPoint());
+    QVERIFY2(px.saturation() < 110,
+             qPrintable(QString("the deck painted over the tower in front of it "
+                                "(sampled %1,%2,%3, saturation %4)")
+                        .arg(px.red()).arg(px.green()).arg(px.blue())
+                        .arg(px.saturation())));
+
+    props->removePlatform(pl->id());
+    props->removeTower(tw->id());
+}

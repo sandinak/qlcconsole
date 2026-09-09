@@ -37,6 +37,7 @@ class Fixture;
 enum class FixtureSilhouette { Bar, Mover, Par, Generic };
 
 #include <QSize>
+#include <QColor>
 
 struct FixtureVisualTraits
 {
@@ -56,6 +57,20 @@ struct FixtureVisualTraits
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);
+
+/** A fixture's LIVE look, from the DMX values it is being sent right now.
+ *
+ *  One colour and one level for the whole fixture, which is what a rig-wide
+ *  view needs -- MonitorFixtureItem's per-head computeColor()/computeAlpha()
+ *  work off channel-index lists it builds for itself, and are not reusable
+ *  without dragging that whole structure along.
+ *
+ *  @param colour  the emitted colour; untouched when the fixture has no colour
+ *                 channels at all (a plain dimmer keeps whatever it was given).
+ *  @param dimmer  0..255 overall level.
+ *  @return false when the fixture has nothing to say (no def, no channels), so
+ *          callers can fall back to their static appearance. */
+bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer);
 
 // ---------------------------------------------------------------------------
 // Shared Mover silhouettes -- pure geometry (a rect in, a path out), so

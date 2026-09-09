@@ -1524,6 +1524,16 @@ void App::initMenuBar()
     // just duplicate it. The action itself (and its shortcut) still exists
     // and still works via slotControlMonitor().
     viewMenu->addAction(m_addressToolAction);
+
+    /* The rig overview is a way of LOOKING at the show, so it belongs in the
+       View menu next to the tab jumps rather than buried in the Lighting Studio
+       footer -- it is not a studio tool, it is a window onto the whole rig. The
+       footer button stays as the in-context way to reach it. */
+    m_rigOverviewAction = viewMenu->addAction(tr("Rig Overview…"));
+    m_rigOverviewAction->setShortcut(QKeySequence("CTRL+SHIFT+R"));
+    m_rigOverviewAction->setToolTip(tr("An angled, read-only view of the whole rig"));
+    connect(m_rigOverviewAction, &QAction::triggered, this, &App::slotRigOverview);
+
     viewMenu->addSeparator();
     // Jump-to-tab entries, taken from the real tab list (m_tabOriginals keeps
     // each tab's label/icon regardless of the icon-only/text-only display mode).
@@ -2134,6 +2144,16 @@ QFile::FileError App::slotFileSaveAs()
 /*****************************************************************************
  * Control action slots
  *****************************************************************************/
+
+void App::slotRigOverview()
+{
+    /* Ask the Lighting Studio for it: the Monitor owns the window (and the
+       raise-the-existing-one behaviour), so the menu entry and the footer
+       button open the SAME window rather than two that drift apart. */
+    Monitor::createAndShow(this, m_doc);
+    if (Monitor *mon = Monitor::instance())
+        mon->showStageOverview();
+}
 
 void App::slotControlMonitor()
 {

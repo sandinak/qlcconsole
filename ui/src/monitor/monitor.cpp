@@ -1951,6 +1951,19 @@ void Monitor::showStageOverview()
     bar->addWidget(planeCombo);
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
             [view](int i) { view->setPlane(StructureStudioView::Plane(i)); });
+    /* Live output: the whole point of watching a rig rather than reading a
+       plot. Default ON when the desk is running, so opening the window during a
+       show shows the show. */
+    QToolButton *liveBtn = new QToolButton(&dlg);
+    liveBtn->setText(tr("Live"));
+    liveBtn->setCheckable(true);
+    liveBtn->setToolTip(tr("Colour and brightness from the DMX being sent, "
+                           "instead of the fixtures' gel colours"));
+    bar->addWidget(liveBtn);
+    connect(liveBtn, &QToolButton::toggled, view,
+            [view](bool on) { view->setLiveValues(on); });
+    liveBtn->setChecked(m_doc->mode() == Doc::Operate);
+
     bar->addStretch();
     bar->addWidget(new QLabel(tr("Drag to swing the view — read-only"), &dlg));
     vl->addLayout(bar);

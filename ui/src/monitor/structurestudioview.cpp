@@ -19,6 +19,7 @@
 #include <QDataStream>
 #include <QSet>
 #include <QtMath>
+#include <QTimer>
 #include <cmath>
 
 #include "structurestudioview.h"
@@ -178,6 +179,37 @@ QPointF StructureStudioView::w2s(const QVector3D &w) const
 QPointF StructureStudioView::screenToPlane(const QPointF &px) const
 {
     return screenVecToPlane(px - m_originPx);
+}
+
+void StructureStudioView::setLiveValues(bool on)
+{
+    if (m_liveValues == on)
+        return;
+    m_liveValues = on;
+
+    /* Repaint on a TIMER rather than on Fixture::valuesChanged(). This view
+       paints the whole rig in one go, so a per-signal repaint would redraw
+       every structure and fixture once per changed fixture per DMX frame --
+       hundreds of full repaints a second for a running chase. 25 Hz is past
+       what anyone can see and costs one repaint per tick regardless of how
+       busy the show is. */
+    if (on)
+    {
+        if (m_liveTimer == nullptr)
+        {
+            m_liveTimer = new QTimer(this);
+            connect(m_liveTimer, &QTimer::timeout, this, [this]() {
+                if (isVisible())        // hidden window: nothing to draw
+                    update();
+            });
+        }
+        m_liveTimer->start(40);
+    }
+    else if (m_liveTimer != nullptr)
+    {
+        m_liveTimer->stop();
+    }
+    update();
 }
 
 void StructureStudioView::setRotation(int quarterTurns)
@@ -430,8 +462,56 @@ void StructureStudioView::drawStructure(QPainter &p) const
         return;
     }
     typedef QPair<Kind, quint32> KindId;
+    if (m_plane == Angled)
+        return;                       // drawn depth-sorted with the fixtures
     foreach (const KindId &ki, everyStructure())
         drawOneStructure(p, ki.first, ki.second);
+}
+
+/* The whole rig, in one back-to-front pass.
+ *
+ * Each object already sorts its OWN faces, but the objects themselves used to
+ * paint in list order -- every truss, then every platform, then every tower,
+ * then all the fixtures. So a step drew over a tower that was nearer the eye,
+ * and a fixture behind a tower drew over it, purely because of where they sat
+ * in the list. Sorting everything by depth first is what makes the overview
+ * read as a solid scene rather than a pile of stickers. */
+void StructureStudioView::drawRigDepthSorted(QPainter &p) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    struct Item { double depth; bool isFixture; Kind kind; quint32 id; };
+    QVector<Item> items;
+
+    typedef QPair<Kind, quint32> KindId;
+    foreach (const KindId &ki, everyStructure())
+    {
+        // Depth of the object's own extent, not of some arbitrary corner.
+        QList<QVector3D> pts;
+        collectPointsFor(pts, ki.first, ki.second);
+        if (pts.isEmpty())
+            continue;
+        double d = 0.0;
+        foreach (const QVector3D &w, pts)
+            d += viewDepth(w);
+        items << Item{ d / pts.size(), false, ki.first, ki.second };
+    }
+    foreach (quint32 fid, mountedFixtures())
+        items << Item{ viewDepth(props->fixtureRigPosition(fid)), true, StageKind, fid };
+
+    // Ascending: farthest first (see viewDepth's convention note).
+    std::sort(items.begin(), items.end(),
+              [](const Item &a, const Item &b) { return a.depth < b.depth; });
+
+    const bool nameEveryone = (m_kind != StageKind);
+    p.setFont(QFont("Arial", 8));
+    foreach (const Item &it, items)
+    {
+        if (it.isFixture)
+            drawOneFixture(p, it.id, nameEveryone);
+        else
+            drawOneStructure(p, it.kind, it.id);
+    }
 }
 
 void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
@@ -712,6 +792,11 @@ void StructureStudioView::drawPipe(QPainter &p, const Pipe *pipe) const
  * Only meaningful in the Angled plane; the flat views draw in a fixed order. */
 double StructureStudioView::viewDepth(const QVector3D &w) const
 {
+    /* CONVENTION: a LARGER value is NEARER the eye. Painter's algorithm
+       therefore draws in ASCENDING order -- smallest (farthest) first. Both
+       sorts here originally ran descending while their comments said "back to
+       front", so far objects painted over near ones: a step covered the tower
+       standing in front of it. */
     const double A = qDegreesToRadians(m_azimuthDeg);
     const double E = qDegreesToRadians(m_elevationDeg);
     // The view direction derived in project(): d = (-sinA cosE, -cosA cosE, -sinE).
@@ -744,7 +829,6 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
     };
     static const int shade[6] = { 118, 62, 92, 78, 100, 85 };   // % brightness
 
-    // Back to front, so nearer faces cover the ones behind them.
     QVector<QPair<double, int> > order;
     for (int f = 0; f < 6; ++f)
     {
@@ -753,9 +837,10 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
             d += viewDepth(corner[faces[f][k]]);
         order << qMakePair(d / 4.0, f);
     }
+    // Ascending: farthest first, so nearer faces paint over them.
     std::sort(order.begin(), order.end(),
               [](const QPair<double, int> &a, const QPair<double, int> &b)
-              { return a.first > b.first; });
+              { return a.first < b.first; });
 
     foreach (const auto &o, order)
     {
@@ -1339,169 +1424,259 @@ void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTrai
     out[6] = c + l + u + n; out[7] = c - l + u + n;
 }
 
-void StructureStudioView::drawFixtures(QPainter &p) const
+/* A moving head as SOLID geometry: base, two yoke arms, and the head slung
+ * between them, each an oriented box in the fixture's own frame.
+ *
+ * The flat views draw a yoke silhouette in screen space, which is why a mover
+ * appeared to swivel toward the viewer at an angle. Boxes in the fixture's frame
+ * keep still as the camera orbits AND keep the shape recognisable, instead of
+ * the plain slab that replaced it. @p aim is the head's pointing direction in
+ * world space; a null vector leaves the head in its rest position, so this is
+ * ready to be driven by live pan/tilt without changing shape. */
+void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
+                                         const FixtureVisualTraits &traits,
+                                         const QColor &col, const QVector3D &aim) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
-    p.setFont(QFont("Arial", 8));
-    /* Names are useful when a handful of fixtures are on one structure; across
-       the WHOLE rig they are a wall of overlapping text that hides the thing
-       you opened the overview to look at. Show them only for what is selected
-       there. */
-    const bool nameEveryone = (m_kind != StageKind);
-    foreach (quint32 fid, mountedFixtures())
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const QVector3D c = props->fixtureRigPosition(fid);
+
+    const QVector3D L = fixtureAxisLocal(rp);
+    QVector3D N;
+    switch (rp.studioMount)
     {
-        Fixture *fx = m_doc->fixture(fid);
-        const QPointF c = w2s(props->fixtureRigPosition(fid));
-        const bool hi = m_highlight.contains(fid);
-        const bool drag = (fid == m_dragFid);
+    case 0:  N = QVector3D(0, 0, 1); break;
+    case 2:  N = QVector3D(1, 0, 0); break;
+    case 1:
+    default: N = QVector3D(0, 1, 0); break;
+    }
+    QVector3D H = QVector3D::crossProduct(N, L);
+    if (H.length() < 1e-6f) H = QVector3D(0, 0, 1);
+    H.normalize();
 
-        QColor col = props->fixtureGelColor(fid, 0, 0);
-        if (!col.isValid() || col == QColor(Qt::black))
-            col = QColor(90, 160, 235);
-        if (drag)     col = QColor(255, 196, 64);
-        else if (hi)  col = QColor(120, 220, 140);
+    const int units = qMax(1, traits.headCount);
+    const double wTot = (traits.physW > 0.0f) ? double(traits.physW) : 0.3;
+    const double h    = (traits.physH > 0.0f) ? double(traits.physH) : wTot * 0.6;
+    const double d    = (traits.physD > 0.0f) ? double(traits.physD) : h;
+    const double slice = wTot / units;   // one head's share of the width
 
-        // Tower-shelf mount, in an elevation: a fixture resting on (or hung
-        // under) a shelf isn't "a bar running along something" the way a
-        // truss/pipe mount is — it's a unit sitting ON a surface, or hanging
-        // FROM one, and needs to actually read as a body with real size doing
-        // that, not a floating bar. Draw a sized trapezoid instead of the
-        // generic bar+head-ticks: base flush with the shelf, body rising
-        // above it when sitting (FloorMounted), or the SAME shape mirrored —
-        // base flush with the shelf, body hanging below — when TopHung. The
-        // mirroring is what makes "hung" actually look inverted rather than
-        // just "the same icon, slightly lower."
-        const FixtureRigProps rp = props->fixtureRigProps(fid);
-        const FixtureVisualTraits traits = classifyFixture(fx);
+    // A box from a centre and three half-extents along the local axes.
+    auto box = [&](const QVector3D &mid, double hw, double hh, double hd,
+                   const QVector3D &ax, const QVector3D &up, const QVector3D &no) {
+        const QVector3D l = ax * float(hw), u = up * float(hh), n = no * float(hd);
+        QVector3D k[8];
+        k[0] = mid - l - u - n; k[1] = mid + l - u - n;
+        k[2] = mid + l - u + n; k[3] = mid - l - u + n;
+        k[4] = mid - l + u - n; k[5] = mid + l + u - n;
+        k[6] = mid + l + u + n; k[7] = mid - l + u + n;
+        drawSolidBox(p, k, col, col.lighter(150));
+    };
 
-        if (m_plane == Angled)
+    for (int u = 0; u < units; ++u)
+    {
+        const double off = (u - (units - 1) * 0.5) * slice;
+        const QVector3D uc = c + L * float(off);
+
+        // Base: the block that bolts to the truss, at the "down" end of H.
+        box(uc - H * float(h * 0.34), slice * 0.46, h * 0.16, d * 0.5, L, H, N);
+
+        // Two arms rising from it, at the outer edges of this head's slice.
+        const double armH = h * 0.30;
+        const QVector3D armMid = uc - H * float(h * 0.02);
+        box(armMid + L * float(slice * 0.36), slice * 0.10, armH, d * 0.22, L, H, N);
+        box(armMid - L * float(slice * 0.36), slice * 0.10, armH, d * 0.22, L, H, N);
+
+        // The head, slung between the arms. When an aim is given, offset it
+        // along that direction so the fixture visibly points where it is
+        // pointing rather than just changing colour.
+        QVector3D headMid = uc + H * float(h * 0.10);
+        if (!aim.isNull())
+            headMid += aim.normalized() * float(h * 0.10);
+        box(headMid, slice * 0.26, h * 0.22, d * 0.30, L, H, N);
+    }
+}
+
+/* One fixture. Split out of drawFixtures() so the whole-rig overview can
+ * interleave fixtures and structures in a single depth-sorted pass -- drawing
+ * all structures and then all fixtures put a step in front of a tower that was
+ * actually nearer the eye. */
+void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
+                                        bool nameEveryone) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    Fixture *fx = m_doc->fixture(fid);
+    const QPointF c = w2s(props->fixtureRigPosition(fid));
+    const bool hi = m_highlight.contains(fid);
+    const bool drag = (fid == m_dragFid);
+
+    QColor col = props->fixtureGelColor(fid, 0, 0);
+
+    if (!col.isValid() || col == QColor(Qt::black))
+
+        col = QColor(90, 160, 235);
+
+
+    /* Live output, when the rig is actually running. The gel colour above is
+
+       what a fixture looks like UNLIT; showing that while a show is playing
+
+       makes the overview a diagram rather than a picture of the rig. A
+
+       fixture at zero is dimmed toward the background rather than hidden, so
+
+       you can still see where it is. */
+
+    if (m_liveValues)
+
+    {
+
+        QColor live = col;
+
+        uchar dim = 0;
+
+        if (fixtureLiveState(fx, live, dim))
+
         {
-            /* One rule for every fixture kind here: a solid box in its own
-               orientation. The flat views' silhouettes (mover yokes, bar
-               tick-marks) are drawn in SCREEN space and would swing round to
-               face the camera, which is exactly what "the moving heads follow
-               me" was. */
-            QVector3D corner[8];
-            fixtureBoxCorners(fid, traits, corner);
+
+            const double f = 0.22 + 0.78 * (dim / 255.0);
+
+            col = QColor(qRound(live.red() * f), qRound(live.green() * f),
+
+                         qRound(live.blue() * f));
+
+        }
+
+    }
+    if (drag)     col = QColor(255, 196, 64);
+    else if (hi)  col = QColor(120, 220, 140);
+
+    // Tower-shelf mount, in an elevation: a fixture resting on (or hung
+    // under) a shelf isn't "a bar running along something" the way a
+    // truss/pipe mount is — it's a unit sitting ON a surface, or hanging
+    // FROM one, and needs to actually read as a body with real size doing
+    // that, not a floating bar. Draw a sized trapezoid instead of the
+    // generic bar+head-ticks: base flush with the shelf, body rising
+    // above it when sitting (FloorMounted), or the SAME shape mirrored —
+    // base flush with the shelf, body hanging below — when TopHung. The
+    // mirroring is what makes "hung" actually look inverted rather than
+    // just "the same icon, slightly lower."
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const FixtureVisualTraits traits = classifyFixture(fx);
+
+    if (m_plane == Angled)
+    {
+        /* One rule for every fixture kind here: a solid box in its own
+           orientation. The flat views' silhouettes (mover yokes, bar
+           tick-marks) are drawn in SCREEN space and would swing round to
+           face the camera, which is exactly what "the moving heads follow
+           me" was. */
+        QVector3D corner[8];
+        fixtureBoxCorners(fid, traits, corner);
+        if (traits.kind == FixtureSilhouette::Mover)
+            drawMoverSolid(p, fid, traits, col, QVector3D());
+        else
             drawSolidBox(p, corner, col, col.lighter(150));
 
-            // Pixels on the face that is pointing at us, when a grid is declared.
-            if (traits.layout.isValid())
+        // Pixels on the face that is pointing at us, when a grid is declared.
+        if (traits.layout.isValid())
+        {
+            const int cols = traits.layout.width(), rows = traits.layout.height();
+            const QVector3D &f0 = corner[4], &f1 = corner[5];
+            const QVector3D &b0 = corner[0], &b1 = corner[1];
+            p.setPen(Qt::NoPen);
+            p.setBrush(col.lighter(135));
+            int placed = 0;
+            for (int r = 0; r < rows && placed < traits.headCount; ++r)
             {
-                const int cols = traits.layout.width(), rows = traits.layout.height();
-                const QVector3D &f0 = corner[4], &f1 = corner[5];
-                const QVector3D &b0 = corner[0], &b1 = corner[1];
-                p.setPen(Qt::NoPen);
-                p.setBrush(col.lighter(135));
-                int placed = 0;
-                for (int r = 0; r < rows && placed < traits.headCount; ++r)
+                const float fr = (rows > 1) ? float(r) / (rows - 1) : 0.5f;
+                for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
                 {
-                    const float fr = (rows > 1) ? float(r) / (rows - 1) : 0.5f;
-                    for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
-                    {
-                        const float fc = (cols > 1) ? float(cx) / (cols - 1) : 0.5f;
-                        const QVector3D lo = b0 + (b1 - b0) * fc;
-                        const QVector3D hi = f0 + (f1 - f0) * fc;
-                        p.drawEllipse(w2s(lo + (hi - lo) * fr), 1.2, 1.2);
-                    }
+                    const float fc = (cols > 1) ? float(cx) / (cols - 1) : 0.5f;
+                    const QVector3D lo = b0 + (b1 - b0) * fc;
+                    const QVector3D hi = f0 + (f1 - f0) * fc;
+                    p.drawEllipse(w2s(lo + (hi - lo) * fr), 1.2, 1.2);
                 }
             }
-            if (hi && fx != nullptr)
-            {
-                p.setPen(QColor(210, 214, 220));
-                p.drawText(w2s(corner[6]) + QPointF(6, -4), fx->name());
-            }
-            continue;
         }
-
-        if (rp.towerId != Tower::invalidId() && (m_plane == Front || m_plane == Side))
+        if (hi && fx != nullptr)
         {
-            const bool hung = (rp.mountingType == Truss::TopHung);
-            const QRectF r = towerFixtureBodyRect(fid);   // shared with hitTestFixture()
-            QPainterPath bodyPath;
-            if (traits.kind == FixtureSilhouette::Mover)
-            {
-                // Same yoke silhouette as everywhere else a Mover is drawn,
-                // instead of the generic sitting/hanging trapezoid below --
-                // "I should see the same figure" in the tower/truss editor.
-                bodyPath = moverElevationPath(r, hung, traits.headCount);
-            }
-            else
-            {
-                const double inset = r.width() * 0.175;       // tapers toward the free end
-                QPolygonF bodyPoly;
-                if (!hung)   // base (full width) at the shelf line = rect bottom
-                    bodyPoly << r.bottomLeft() << r.bottomRight()
-                             << QPointF(r.right() - inset, r.top()) << QPointF(r.left() + inset, r.top());
-                else         // base (full width) at the shelf line = rect top
-                    bodyPoly << r.topLeft() << r.topRight()
-                             << QPointF(r.right() - inset, r.bottom()) << QPointF(r.left() + inset, r.bottom());
-                bodyPath.addPolygon(bodyPoly);
-                bodyPath.closeSubpath();
-            }
-            if (hi)
-            {
-                QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
-                p.setPen(halo); p.setBrush(Qt::NoBrush);
-                p.drawPath(bodyPath);
-            }
-            p.setPen(QPen(col.darker(150), 1.4));
-            p.setBrush(col);
-            p.drawPath(bodyPath);
-            if (fx != nullptr)
-            {
-                p.setPen(QColor(210, 214, 220));
-                if (nameEveryone || hi)
-                    p.drawText(QPointF(r.right() + 4, c.y() - 6), fx->name());
-            }
-            continue;
+            p.setPen(QColor(210, 214, 220));
+            p.drawText(w2s(corner[6]) + QPointF(6, -4), fx->name());
         }
+        return;
+    }
 
-        const QPointF a = w2s(fixtureEndA(fid));
-        const QPointF b = w2s(fixtureEndB(fid));
-
+    if (rp.towerId != Tower::invalidId() && (m_plane == Front || m_plane == Side))
+    {
+        const bool hung = (rp.mountingType == Truss::TopHung);
+        const QRectF r = towerFixtureBodyRect(fid);   // shared with hitTestFixture()
+        QPainterPath bodyPath;
         if (traits.kind == FixtureSilhouette::Mover)
         {
-            // A compact head unit, not a bar -- a mover isn't "a bar running
-            // along something." Sized from its declared Physical width when
-            // there is one, else the hasFocus heuristic (see
-            // moverBaseRadius()). Top plane: a round head in a square base
-            // footprint ("circles in a square"), one unit per physical head,
-            // side by side (e.g. a twin-head wash bar draws as two). Front/
-            // Side: the same base+yoke-arms+head silhouette as the
-            // tower-shelf case above, one full unit per head, each in its
-            // own equal slice of the fixture's width.
-            const double baseR = moverBaseRadius(traits);
-            const int units = qMax(1, traits.headCount);
-            if (m_plane == Top)
+            // Same yoke silhouette as everywhere else a Mover is drawn,
+            // instead of the generic sitting/hanging trapezoid below --
+            // "I should see the same figure" in the tower/truss editor.
+            bodyPath = moverElevationPath(r, hung, traits.headCount);
+        }
+        else
+        {
+            const double inset = r.width() * 0.175;       // tapers toward the free end
+            QPolygonF bodyPoly;
+            if (!hung)   // base (full width) at the shelf line = rect bottom
+                bodyPoly << r.bottomLeft() << r.bottomRight()
+                         << QPointF(r.right() - inset, r.top()) << QPointF(r.left() + inset, r.top());
+            else         // base (full width) at the shelf line = rect top
+                bodyPoly << r.topLeft() << r.topRight()
+                         << QPointF(r.right() - inset, r.bottom()) << QPointF(r.left() + inset, r.bottom());
+            bodyPath.addPolygon(bodyPoly);
+            bodyPath.closeSubpath();
+        }
+        if (hi)
+        {
+            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+            p.setPen(halo); p.setBrush(Qt::NoBrush);
+            p.drawPath(bodyPath);
+        }
+        p.setPen(QPen(col.darker(150), 1.4));
+        p.setBrush(col);
+        p.drawPath(bodyPath);
+        if (fx != nullptr)
+        {
+            p.setPen(QColor(210, 214, 220));
+            if (nameEveryone || hi)
+                p.drawText(QPointF(r.right() + 4, c.y() - 6), fx->name());
+        }
+        return;
+    }
+
+    const QPointF a = w2s(fixtureEndA(fid));
+    const QPointF b = w2s(fixtureEndB(fid));
+
+    if (traits.kind == FixtureSilhouette::Mover)
+    {
+        // A compact head unit, not a bar -- a mover isn't "a bar running
+        // along something." Sized from its declared Physical width when
+        // there is one, else the hasFocus heuristic (see
+        // moverBaseRadius()). Top plane: a round head in a square base
+        // footprint ("circles in a square"), one unit per physical head,
+        // side by side (e.g. a twin-head wash bar draws as two). Front/
+        // Side: the same base+yoke-arms+head silhouette as the
+        // tower-shelf case above, one full unit per head, each in its
+        // own equal slice of the fixture's width.
+        const double baseR = moverBaseRadius(traits);
+        const int units = qMax(1, traits.headCount);
+        if (m_plane == Top)
+        {
+            const QPointF dir = b - a;
+            const double dlen = qSqrt(dir.x() * dir.x() + dir.y() * dir.y());
+            const QPointF unit = (dlen > 1e-6) ? dir / dlen : QPointF(1, 0);
+            const double spacing = baseR * 2.0;   // == one slice
+            for (int u = 0; u < units; ++u)
             {
-                const QPointF dir = b - a;
-                const double dlen = qSqrt(dir.x() * dir.x() + dir.y() * dir.y());
-                const QPointF unit = (dlen > 1e-6) ? dir / dlen : QPointF(1, 0);
-                const double spacing = baseR * 2.0;   // == one slice
-                for (int u = 0; u < units; ++u)
-                {
-                    const double off = (u - (units - 1) * 0.5) * spacing;
-                    const QPointF hc = c + unit * off;
-                    const double half = baseR;
-                    const QPainterPath body = moverPlanPath(QRectF(hc.x() - half, hc.y() - half, half * 2, half * 2));
-                    if (hi)
-                    {
-                        QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
-                        p.setPen(halo); p.setBrush(Qt::NoBrush);
-                        p.drawPath(body);
-                    }
-                    p.setPen(QPen(col.darker(150), 1.4));
-                    p.setBrush(col);
-                    p.drawPath(body);
-                }
-            }
-            else
-            {
-                const double halfW = moverWidthPx(traits) * 0.5;
-                const double totalH = baseR * 3.2;
-                const QPainterPath body = moverElevationPath(
-                    QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH), false, units);
+                const double off = (u - (units - 1) * 0.5) * spacing;
+                const QPointF hc = c + unit * off;
+                const double half = baseR;
+                const QPainterPath body = moverPlanPath(QRectF(hc.x() - half, hc.y() - half, half * 2, half * 2));
                 if (hi)
                 {
                     QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
@@ -1513,112 +1688,106 @@ void StructureStudioView::drawFixtures(QPainter &p) const
                 p.drawPath(body);
             }
         }
-        else if (traits.kind == FixtureSilhouette::Par)
+        else
         {
-            // A can/wash unit: filled rounded rect sized from its real
-            // declared physical footprint when there is one, a sane default
-            // otherwise (most bundled defs still leave Width/Height at 0).
-            const double wPx = (traits.physW > 0.0f) ? qMax(8.0, double(traits.physW) * m_scale) : 10.0;
-            const double hPx = (traits.physH > 0.0f) ? qMax(8.0, double(traits.physH) * m_scale) : wPx * 0.85;
-            const QRectF r(c.x() - wPx * 0.5, c.y() - hPx * 0.5, wPx, hPx);
+            const double halfW = moverWidthPx(traits) * 0.5;
+            const double totalH = baseR * 3.2;
+            const QPainterPath body = moverElevationPath(
+                QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH), false, units);
             if (hi)
             {
                 QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
-                p.drawRoundedRect(r.adjusted(-3, -3, 3, 3), 3, 3);
+                p.drawPath(body);
             }
             p.setPen(QPen(col.darker(150), 1.4));
             p.setBrush(col);
-            p.drawRoundedRect(r, 2, 2);
+            p.drawPath(body);
         }
-        else if (traits.kind == FixtureSilhouette::Bar)
+    }
+    else if (traits.kind == FixtureSilhouette::Par)
+    {
+        // A can/wash unit: filled rounded rect sized from its real
+        // declared physical footprint when there is one, a sane default
+        // otherwise (most bundled defs still leave Width/Height at 0).
+        const double wPx = (traits.physW > 0.0f) ? qMax(8.0, double(traits.physW) * m_scale) : 10.0;
+        const double hPx = (traits.physH > 0.0f) ? qMax(8.0, double(traits.physH) * m_scale) : wPx * 0.85;
+        const QRectF r(c.x() - wPx * 0.5, c.y() - hPx * 0.5, wPx, hPx);
+        if (hi)
         {
-            // A genuine matrix/panel (declared height is a meaningful
-            // fraction of its width, not just a thin strip, and there are
-            // enough pixels to actually form rows) draws as a grid instead
-            // of a single line, so a panel actually looks like a panel and a
-            // long single-row bar still looks like a bar.
-            const bool isMatrix = traits.layout.isValid()
-                                 || (traits.physW > 0.0f && traits.physH > traits.physW * 0.15f
-                                     && traits.headCount >= 4);
-            if (hi)
+            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+            p.setPen(halo); p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(r.adjusted(-3, -3, 3, 3), 3, 3);
+        }
+        p.setPen(QPen(col.darker(150), 1.4));
+        p.setBrush(col);
+        p.drawRoundedRect(r, 2, 2);
+    }
+    else if (traits.kind == FixtureSilhouette::Bar)
+    {
+        // A genuine matrix/panel (declared height is a meaningful
+        // fraction of its width, not just a thin strip, and there are
+        // enough pixels to actually form rows) draws as a grid instead
+        // of a single line, so a panel actually looks like a panel and a
+        // long single-row bar still looks like a bar.
+        const bool isMatrix = traits.layout.isValid()
+                             || (traits.physW > 0.0f && traits.physH > traits.physW * 0.15f
+                                 && traits.headCount >= 4);
+        if (hi)
+        {
+            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
+            p.setPen(halo);
+            p.drawLine(a, b);
+        }
+        if (isMatrix)
+        {
+            /* Honour the definition's declared grid (an XL-450 says
+               15 x 5); only guess a grid from head count and aspect when
+               there is nothing declared. */
+            int rows, cols;
+            if (traits.layout.isValid())
             {
-                QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
-                p.setPen(halo);
-                p.drawLine(a, b);
-            }
-            if (isMatrix)
-            {
-                /* Honour the definition's declared grid (an XL-450 says
-                   15 x 5); only guess a grid from head count and aspect when
-                   there is nothing declared. */
-                int rows, cols;
-                if (traits.layout.isValid())
-                {
-                    cols = traits.layout.width();
-                    rows = traits.layout.height();
-                }
-                else
-                {
-                    const double aspect = double(traits.physH / traits.physW);
-                    rows = qBound(2, int(qRound(qSqrt(double(traits.headCount) * aspect))),
-                                  traits.headCount);
-                    cols = qMax(1, (traits.headCount + rows - 1) / rows);
-                }
-
-                /* Place every pixel at its TRUE position in the fixture's box
-                   and project that -- so the grid squashes correctly when an
-                   axis turns away from the viewer instead of being drawn along
-                   the a-b line at a fixed across-extent. */
-                QPointF wPx, hPx; QRectF boxPx;
-                fixtureBoxPx(fid, traits, wPx, hPx, boxPx);
-
-                p.setPen(QPen(col.darker(140), (drag || hi) ? 2.0 : 1.2));
-                p.setBrush(Qt::NoBrush);
-                p.drawRect(boxPx);                    // the body, at its real proportions
-
-                p.setPen(Qt::NoPen);
-                p.setBrush(col);
-                // A pixel's dot: its own cell, never bigger than it should be.
-                const double cellW = boxPx.width() / qMax(1, cols);
-                const double cellH = boxPx.height() / qMax(1, rows);
-                const double rad = qBound(0.8, qMin(cellW, cellH) * 0.42, 3.0);
-                int placed = 0;
-                for (int r = 0; r < rows && placed < traits.headCount; ++r)
-                {
-                    const double fy = (rows > 1) ? (double(r) / (rows - 1) - 0.5) : 0.0;
-                    for (int cix = 0; cix < cols && placed < traits.headCount; ++cix, ++placed)
-                    {
-                        const double fx2 = (cols > 1) ? (double(cix) / (cols - 1) - 0.5) : 0.0;
-                        p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
-                    }
-                }
+                cols = traits.layout.width();
+                rows = traits.layout.height();
             }
             else
             {
-                QPen body(col.darker(140)); body.setWidth((drag || hi) ? 4 : 3); body.setCapStyle(Qt::RoundCap);
-                p.setPen(body);
-                p.drawLine(a, b);
-                p.setPen(Qt::NoPen);
-                p.setBrush(col);
-                for (int i = 0; i < traits.headCount; ++i)
+                const double aspect = double(traits.physH / traits.physW);
+                rows = qBound(2, int(qRound(qSqrt(double(traits.headCount) * aspect))),
+                              traits.headCount);
+                cols = qMax(1, (traits.headCount + rows - 1) / rows);
+            }
+
+            /* Place every pixel at its TRUE position in the fixture's box
+               and project that -- so the grid squashes correctly when an
+               axis turns away from the viewer instead of being drawn along
+               the a-b line at a fixed across-extent. */
+            QPointF wPx, hPx; QRectF boxPx;
+            fixtureBoxPx(fid, traits, wPx, hPx, boxPx);
+
+            p.setPen(QPen(col.darker(140), (drag || hi) ? 2.0 : 1.2));
+            p.setBrush(Qt::NoBrush);
+            p.drawRect(boxPx);                    // the body, at its real proportions
+
+            p.setPen(Qt::NoPen);
+            p.setBrush(col);
+            // A pixel's dot: its own cell, never bigger than it should be.
+            const double cellW = boxPx.width() / qMax(1, cols);
+            const double cellH = boxPx.height() / qMax(1, rows);
+            const double rad = qBound(0.8, qMin(cellW, cellH) * 0.42, 3.0);
+            int placed = 0;
+            for (int r = 0; r < rows && placed < traits.headCount; ++r)
+            {
+                const double fy = (rows > 1) ? (double(r) / (rows - 1) - 0.5) : 0.0;
+                for (int cix = 0; cix < cols && placed < traits.headCount; ++cix, ++placed)
                 {
-                    const double t = (traits.headCount > 1) ? double(i) / (traits.headCount - 1) : 0.5;
-                    p.drawEllipse(a + (b - a) * t, 2.6, 2.6);
+                    const double fx2 = (cols > 1) ? (double(cix) / (cols - 1) - 0.5) : 0.0;
+                    p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
                 }
             }
         }
         else
         {
-            // Generic fallback -- unchanged original bar+dots rendering, for
-            // any fixture Type this session didn't give a dedicated shape
-            // (Laser/Hazer/Smoke/Fan/Flower/Effect/Other).
-            if (hi)
-            {
-                QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
-                p.setPen(halo);
-                p.drawLine(a, b);
-            }
             QPen body(col.darker(140)); body.setWidth((drag || hi) ? 4 : 3); body.setCapStyle(Qt::RoundCap);
             p.setPen(body);
             p.drawLine(a, b);
@@ -1630,14 +1799,49 @@ void StructureStudioView::drawFixtures(QPainter &p) const
                 p.drawEllipse(a + (b - a) * t, 2.6, 2.6);
             }
         }
-
-        if (fx != nullptr)
+    }
+    else
+    {
+        // Generic fallback -- unchanged original bar+dots rendering, for
+        // any fixture Type this session didn't give a dedicated shape
+        // (Laser/Hazer/Smoke/Fan/Flower/Effect/Other).
+        if (hi)
         {
-            p.setPen(QColor(210, 214, 220));
-            if (nameEveryone || hi)
-                p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
+            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
+            p.setPen(halo);
+            p.drawLine(a, b);
+        }
+        QPen body(col.darker(140)); body.setWidth((drag || hi) ? 4 : 3); body.setCapStyle(Qt::RoundCap);
+        p.setPen(body);
+        p.drawLine(a, b);
+        p.setPen(Qt::NoPen);
+        p.setBrush(col);
+        for (int i = 0; i < traits.headCount; ++i)
+        {
+            const double t = (traits.headCount > 1) ? double(i) / (traits.headCount - 1) : 0.5;
+            p.drawEllipse(a + (b - a) * t, 2.6, 2.6);
         }
     }
+
+    if (fx != nullptr)
+    {
+        p.setPen(QColor(210, 214, 220));
+        if (nameEveryone || hi)
+            p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
+    }
+}
+
+void StructureStudioView::drawFixtures(QPainter &p) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    p.setFont(QFont("Arial", 8));
+    /* Names are useful when a handful of fixtures are on one structure; across
+       the WHOLE rig they are a wall of overlapping text that hides the thing
+       you opened the overview to look at. Show them only for what is selected
+       there. */
+    const bool nameEveryone = (m_kind != StageKind);
+    foreach (quint32 fid, mountedFixtures())
+        drawOneFixture(p, fid, nameEveryone);
 }
 
 static qlonglong ssvTrailingNum(const QString &s)
@@ -2148,8 +2352,15 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     p.setRenderHint(QPainter::Antialiasing, true);
     drawGrid(p);
     drawRulers(p);
-    drawStructure(p);
-    drawFixtures(p);
+    if (m_kind == StageKind && m_plane == Angled)
+    {
+        drawRigDepthSorted(p);      // structures and fixtures interleaved
+    }
+    else
+    {
+        drawStructure(p);
+        drawFixtures(p);
+    }
     drawCursorReadout(p);
 
     // Plane badge.
