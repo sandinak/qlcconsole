@@ -1971,11 +1971,19 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
          * were dots under 2 px across. Culling those costs nothing visually --
          * at that size they merge into the body anyway -- and hands back most
          * of the frame time. */
-        if (traits.layout.isValid()
+        /* A declared grid wins; otherwise a single row of however many heads
+           there are, which is what a strip actually is. The elevation path has
+           always fallen back that way -- requiring a declared layout HERE left
+           every multi-head bar whose definition omits <Layout> (the wall
+           washers, for instance) as a blank dark housing in the angled view
+           while the same fixture showed its heads in the flat views. */
+        const int cols = traits.layout.isValid() ? traits.layout.width()
+                                                 : qMax(1, traits.headCount);
+        const int rows = traits.layout.isValid() ? traits.layout.height() : 1;
+        if (traits.headCount > 1
             && QLineF(w2s(corner[0]), w2s(corner[1])).length()
-                   / qMax(1, traits.layout.width()) >= 2.5)
+                   / qMax(1, cols) >= 2.5)
         {
-            const int cols = traits.layout.width(), rows = traits.layout.height();
             /* On whichever long face points AT us. This was hardwired to the
                -n face, so for a strip lying flat the pixels were painted on its
                UNDERSIDE and showed as a field of dots spilling out from beneath
@@ -1987,6 +1995,22 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             const QVector3D &f1 = nearSide ? corner[6] : corner[5];
             const QVector3D &b0 = nearSide ? corner[3] : corner[0];
             const QVector3D &b1 = nearSide ? corner[2] : corner[1];
+
+            /* The pixels are PAINTED ON that face, so they have to sort WITH
+               it, not against it.
+             *
+             * drawSolidBox() gives a face one depth -- the average of its four
+             * corners -- while each dot carried its own. Off a square-on view a
+             * strip's face spans a real depth range, so every dot beyond the
+             * face's midpoint sorted BEHIND the housing it sits on and was
+             * painted over: half of every step went blank, and the halfway line
+             * slid across as the camera came round. Sharing the face's depth
+             * (plus a hair, to land just in front of it and to avoid ties in an
+             * unstable sort) makes a pixel and the metal it is mounted in one
+             * surface, which is what they are. */
+            const double faceDepth =
+                (viewDepth(f0) + viewDepth(f1) + viewDepth(b0) + viewDepth(b1)) / 4.0
+                + 1e-4;
             p.setPen(Qt::NoPen);
             p.setBrush(col.lighter(135));
             int placed = 0;
@@ -1999,7 +2023,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                     const QVector3D lo = b0 + (b1 - b0) * fc;
                     const QVector3D hi = f0 + (f1 - f0) * fc;
                     const QVector3D at = lo + (hi - lo) * fr;
-                    emitDot(w2s(at), viewDepth(at), 1.2,
+                    emitDot(w2s(at), faceDepth, 1.2,
                             pixelColor(fx, placed, col, unlit).lighter(135), p);
                 }
             }

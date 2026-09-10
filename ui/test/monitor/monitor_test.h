@@ -190,6 +190,10 @@ private slots:
     void unlitFixturesAreStillObjectsInTheRoom();
     /** The housing of a pixel bar is a box, not a lamp: a strip with most of
      *  its pixels dark must not draw a bright line end to end. */
+    /** A pixel and the housing it is painted on are one surface: off a
+     *  square-on view the far half of a strip must not vanish behind its own
+     *  body. */
+    void pixelsSurviveOffAxisOnTheirOwnHousing();
     void aMostlyDarkPixelBarDrawsNoBrightOutline();
     void pixelBarDrawsEachPixelInItsOwnColour();
 

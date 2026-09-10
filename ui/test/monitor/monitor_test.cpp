@@ -2559,6 +2559,111 @@ void Monitor_Test::unlitFixturesAreStillObjectsInTheRoom()
     props->removePlatform(pl->id());
 }
 
+void Monitor_Test::pixelsSurviveOffAxisOnTheirOwnHousing()
+{
+    /* Half of every step went blank off a square-on view, and the halfway line
+       slid across as the camera came round.
+     *
+       drawSolidBox() gives a face ONE depth -- the average of its four corners
+       -- while each pixel carried its own. Off-axis a 2 m strip's face spans a
+       real depth range, so every pixel beyond the face's midpoint sorted behind
+       the housing it is painted on and was covered by it. A pixel and the metal
+       it sits in are one surface and have to sort as one. */
+    MonitorProperties *props = m_doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Off-axis Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(2.438f); pl->setDepth(0.204f); pl->setHeight(0.204f);
+    pl->setColor(QColor(40, 40, 44));       // neutral: never counted as lit
+
+    const int PIX = 64;
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Off-axis Tape");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("192ch");
+    for (int h = 0; h < PIX; ++h)
+    {
+        const QLCChannel::PrimaryColour pc[] = { QLCChannel::Red, QLCChannel::Green,
+                                                 QLCChannel::Blue };
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1-%2").arg(h).arg(k));
+            ch->setGroup(QLCChannel::Intensity); ch->setColour(pc[k]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, h * 3 + k);
+        }
+        QLCFixtureHead hd;
+        hd.addChannel(quint32(h * 3)); hd.addChannel(quint32(h * 3 + 1));
+        hd.addChannel(quint32(h * 3 + 2));
+        mode->insertHead(-1, hd);
+    }
+    QLCPhysical ph;
+    ph.setWidth(2134); ph.setHeight(60); ph.setDepth(20);
+    ph.setLayoutSize(QSize(PIX, 1));
+    mode->setPhysical(ph);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Off-axis Tape"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(0);
+    QVERIFY(m_doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.riserPlatformId = pl->id(); rp.riserFace = 0;
+    rp.riserU = 1.219f; rp.riserV = 0.1f;
+    props->setFixtureRigProps(fxi->id(), rp);
+
+    QByteArray u(512, char(0));
+    for (int h = 0; h < PIX; ++h)
+        u[h * 3] = char(255);               // EVERY pixel full red
+    fxi->setChannelValues(u);
+
+    /* Count lit pixels either side of the strip's own centre. Every pixel is
+       driven identically, so the two halves must come out even; a housing
+       eating one of them is exactly the asymmetry to catch. */
+    auto halves = [&](double azimuth, int &left, int &right) {
+        StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+        v.resize(1000, 640);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(azimuth, 12.0);
+        v.setLiveValues(true);
+        v.setAmbient(0.40);
+        const QPointF mid = v.w2s(props->fixtureRigPosition(fxi->id()));
+        const QImage img = v.grab().toImage();
+        left = right = 0;
+        for (int y = 0; y < img.height(); ++y)
+        {
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.red() < 110 || c.red() < c.green() * 2 || c.red() < c.blue() * 2)
+                    continue;
+                if (x < mid.x()) ++left; else ++right;
+            }
+        }
+    };
+
+    const double angles[] = { 0.0, 20.0, 35.0 };
+    for (int a = 0; a < 3; ++a)
+    {
+        int left = 0, right = 0;
+        halves(angles[a], left, right);
+        QVERIFY2(left + right > 200,
+                 qPrintable(QString("nothing lit at azimuth %1 (%2 + %3)")
+                            .arg(angles[a]).arg(left).arg(right)));
+        const int lo = qMin(left, right), hi2 = qMax(left, right);
+        QVERIFY2(lo * 100 / qMax(1, hi2) > 55,
+                 qPrintable(QString("at azimuth %1 one half of the strip lost its "
+                                    "pixels: %2 left vs %3 right")
+                            .arg(angles[a]).arg(left).arg(right)));
+    }
+
+    m_doc->deleteFixture(fxi->id());
+    props->removePlatform(pl->id());
+}
+
 void Monitor_Test::aMostlyDarkPixelBarDrawsNoBrightOutline()
 {
     /* A 25 mm LED tape is about two pixels tall on screen, so its OUTLINE is

@@ -1034,6 +1034,48 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 26: a pixel and its housing are one surface
+
+Branson: "I think the 1/2 step issue is tied to the angle from 90 that the
+viewer is. For some reason you're blanking out the 1/2 of the step on the far
+side." Right, and it was not the confetti effect after all -- follow-on 23's
+account of the split was wrong on this point.
+
+**Root cause.** `drawSolidBox()` gives a face ONE depth: the average of its
+four corners. Each pixel carried its OWN depth. Square-on those are equal, but
+off-axis a 2.1 m strip's face spans a real depth range, so every pixel beyond
+the face's midpoint sorted BEHIND the housing it is painted on and was covered
+by it. Half of every step went blank, and the halfway line slid across as the
+camera came round -- exactly as reported.
+
+Measured at azimuth 20 with every pixel driven full red: **0 lit pixels on the
+left half, 150 on the right.** At azimuth 0 it is worse in a quieter way -- the
+depths tie exactly, the sort is unstable, and the housing can take ALL of them.
+
+**Fix.** The pixels share the depth of the face they are painted on, plus 1e-4
+to land just in front of it and to break the tie. A pixel and the metal it is
+mounted in are one surface, and now sort as one.
+
+**Also fixed alongside:** the angled view required a declared `<Layout>` before
+it would draw heads at all, so a multi-head bar whose definition omits one (the
+Oppsk wall washers, for instance) rendered as a blank dark housing there while
+the SAME fixture showed its heads in the flat views. It now falls back to one
+row of `headCount` heads, which is what the elevation path has always done.
+
+**Revert-checked:** `pixelsSurviveOffAxisOnTheirOwnHousing` drives every pixel
+of a deck-mounted strip identically and compares the two halves at azimuth 0,
+20 and 35 -- driven the same, they must come out even. With the per-pixel depth
+restored it fails at "nothing lit at azimuth 20 (0 + 150)".
+
+**Still open, same class:** this is the painter's-algorithm limit noted back in
+follow-on 15 -- one depth per primitive cannot describe a large polygon. The
+same artefact remains anywhere else a big face meets small geometry lying on
+it (truss webbing vs a deck face). The general cure is subdividing large
+polygons, which also needs the fill and the outline emitted separately or every
+platform grows visible seams.
+
+`monitor_test` 53/53. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 25: the housing is not the lamp; View-menu jumps that follow the view
 
 Branson, on the rig view: "still not understanding the use of white in this
