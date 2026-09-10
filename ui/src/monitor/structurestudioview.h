@@ -232,7 +232,8 @@ private:
      *  so a clear-topped step shows what is rigged inside it. */
     void drawSolidBox(QPainter &p, const QVector3D corner[8],
                       const QColor &base, const QColor &edge,
-                      int topAlpha = 255, bool ambientLit = true) const;
+                      int topAlpha = 255, bool ambientLit = true,
+                      double depthBias = 0.0) const;
     /** An OPEN lattice prism -- chords, end frames and diagonal bracing, with
      *  nothing filled. What a truss or a box-truss tower actually looks like,
      *  and what lets you see the fixtures rigged inside one. */
@@ -245,11 +246,33 @@ private:
     /** The emit-vs-room shading rule, shared by fixture bodies and pixels. */
     /** The neutral housing colour of a fixture body, room-lit. A pixel bar's
      *  light comes from its heads, not from tinting the box around them. */
+    /** Every fixture's channel values as of the start of this frame, so one
+     *  paint shows one instant instead of tearing across the rig. */
+    void takeLiveSnapshot() const;
+    QByteArray liveValuesFor(class Fixture *fx) const;
+    mutable QHash<quint32, QByteArray> m_liveSnapshot;
+
+    /** Unit vector from the scene toward the camera, taken from viewDepth()'s
+     *  own gradient so there is no second copy of the projection to drift. */
+    QVector3D toViewer() const;
+    /** Which way a fixture throws its light: a mover's aim, or away from
+     *  whatever is holding it. False when there is no defensible answer. */
+    bool emitDirection(class Fixture *fx, const struct FixtureRigProps &rp,
+                       const struct FixtureVisualTraits &traits, QVector3D &dir) const;
+    /** How much of a fixture's output reaches the camera (0..1), from the
+     *  definition's declared beam angle. 1.0 when the lens is undeclared. */
+    double beamVisibility(class Fixture *fx, const struct FixtureRigProps &rp,
+                          const struct FixtureVisualTraits &traits) const;
+
     QColor bodyShade() const;
-    QColor shadeLive(const QColor &live, uchar dim, const QColor &unlit) const;
+    /** The depth of the nearest face of a corner-8 box. A face sorts as one
+     *  value, so this is what anything INSIDE the box has to beat. */
+    double boxNearFaceDepth(const QVector3D corner[8]) const;
+    QColor shadeLive(const QColor &live, uchar dim, const QColor &unlit,
+                     double visibility = 1.0) const;
     /** One head's own live colour, falling back to the fixture-wide colour. */
     QColor pixelColor(Fixture *fx, int head, const QColor &fallback,
-                      const QColor &unlit) const;
+                      const QColor &unlit, double visibility) const;
     void drawOneFixture(QPainter &p, quint32 fid, bool nameEveryone) const;
     /** The whole rig in one back-to-front pass, structures and fixtures
      *  interleaved, so nearer objects cover further ones whatever order they

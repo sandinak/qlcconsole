@@ -68,6 +68,9 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
     if (phys.width()  > 0) t.physW = float(phys.width())  / 1000.0f;
     if (phys.height() > 0) t.physH = float(phys.height()) / 1000.0f;
     if (phys.depth()  > 0) t.physD = float(phys.depth())  / 1000.0f;
+    /* Widest the lens goes: a zoom at its narrowest would dim the fixture from
+       angles it can plainly be seen from. 0 stays 0 = undeclared. */
+    t.beamDeg = float(qMax(phys.lensDegreesMax(), phys.lensDegreesMin()));
 
     /* The declared pixel grid, when it can actually hold this mode's heads.
        layoutSize() defaults to 1x1, and some definitions declare a layout that
@@ -305,13 +308,18 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
 
 bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer)
 {
+    return fixtureLiveState(fx, fx != nullptr ? fx->channelValues() : QByteArray(),
+                            colour, dimmer);
+}
+
+bool fixtureLiveState(Fixture *fx, const QByteArray &v, QColor &colour, uchar &dimmer)
+{
     if (fx == nullptr)
         return false;
     QLCFixtureMode *mode = fx->fixtureMode();
     if (mode == nullptr)
         return false;
 
-    const QByteArray v = fx->channelValues();
     if (v.isEmpty())
         return false;
 
@@ -325,13 +333,19 @@ bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer)
 
 bool fixtureHeadLiveState(Fixture *fx, int head, QColor &colour, uchar &dimmer)
 {
+    return fixtureHeadLiveState(fx, fx != nullptr ? fx->channelValues() : QByteArray(),
+                                head, colour, dimmer);
+}
+
+bool fixtureHeadLiveState(Fixture *fx, const QByteArray &v, int head,
+                          QColor &colour, uchar &dimmer)
+{
     if (fx == nullptr || head < 0)
         return false;
     QLCFixtureMode *mode = fx->fixtureMode();
     if (mode == nullptr || head >= mode->heads().size())
         return false;
 
-    const QByteArray v = fx->channelValues();
     if (v.isEmpty())
         return false;
 

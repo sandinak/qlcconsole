@@ -2559,6 +2559,291 @@ void Monitor_Test::unlitFixturesAreStillObjectsInTheRoom()
     props->removePlatform(pl->id());
 }
 
+void Monitor_Test::aFixedConeHeadDimsWhenAimedAway()
+{
+    /* A head with a fixed cone pointed away from you should not blaze at you.
+       Three things have to hold at once, and the last is what keeps the view
+       usable:
+         - aimed at the camera, full output;
+         - aimed away, down to a floor (lit, but clearly not pointed here);
+         - an UNDECLARED lens (0 degrees, which is what most definitions in the
+           wild say) means no falloff at all. Dimming those by viewing angle
+           would black out half a rig for no reason. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    auto makeHead = [&](double beamDeg, quint32 addr, const char *name) -> Fixture * {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(QString("Cone %1").arg(beamDeg));
+        def->setType(QLCFixtureDef::MovingHead);
+        const char *nm[] = { "Pan", "Tilt", "Dimmer" };
+        const QLCChannel::Group gp[] = { QLCChannel::Pan, QLCChannel::Tilt,
+                                         QLCChannel::Intensity };
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("3ch");
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(nm[k]); ch->setGroup(gp[k]);
+            if (k < 2) ch->setControlByte(QLCChannel::MSB);
+            def->addChannel(ch); mode->insertChannel(ch, k);
+        }
+        QLCPhysical ph;
+        ph.setWidth(300); ph.setHeight(400); ph.setDepth(300);
+        // 180 puts full tilt exactly at the horizontal, so "tilt right out"
+        // aims straight downstage -- at a Front camera, and nowhere else.
+        ph.setFocusPanMax(360); ph.setFocusTiltMax(180);
+        ph.setLensDegreesMin(beamDeg); ph.setLensDegreesMax(beamDeg);
+        mode->setPhysical(ph);
+        QLCFixtureHead hd;
+        for (int k = 0; k < 3; ++k) hd.addChannel(quint32(k));
+        mode->insertHead(-1, hd);
+        def->addMode(mode);
+
+        Fixture *f = new Fixture(doc);
+        f->setName(name); f->setFixtureDefinition(def, mode);
+        f->setUniverse(3); f->setAddress(addr);
+        if (doc->addFixture(f) == false)
+            return nullptr;
+        props->setFixturePosition(f->id(), 2000, 2000, QVector3D(0, 0, 3.0f));
+        return f;
+    };
+
+    Fixture *narrow = makeHead(12.0, 0, "Narrow");
+    Fixture *undeclared = makeHead(0.0, 10, "Undeclared");
+    QVERIFY(narrow != nullptr);
+    QVERIFY(undeclared != nullptr);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 400);
+    v.reload();
+    /* Angled at azimuth 0, elevation 0 -- which project() derives to be exactly
+       a Front view, so the camera sits downstage looking up it and a head
+       tilted right out at pan centre points straight at us. */
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(0.0, 0.0);
+    v.setLiveValues(true);
+
+    /* Tilt to one end throws along the bearing pan holds, and pan centred with
+       panZeroDir 0 faces downstage (+Y) -- straight at a Front camera. */
+    auto drive = [&](Fixture *f, int pan, int tilt) {
+        QByteArray u(512, char(0));
+        u[int(f->address()) + 0] = char(pan);
+        u[int(f->address()) + 1] = char(tilt);
+        u[int(f->address()) + 2] = char(255);
+        f->setChannelValues(u);
+    };
+
+    FixtureRigProps rp;
+    const FixtureVisualTraits tn = classifyFixture(narrow);
+    const FixtureVisualTraits tu = classifyFixture(undeclared);
+    QCOMPARE(int(tn.beamDeg), 12);
+    QCOMPARE(int(tu.beamDeg), 0);
+
+    // At the camera.
+    drive(narrow, 128, 255);
+    drive(undeclared, 128, 255);
+    const double atCamera = v.beamVisibility(narrow, rp, tn);
+    QVERIFY2(atCamera > 0.99,
+             qPrintable(QString("a head aimed at the camera was dimmed to %1")
+                        .arg(atCamera)));
+
+    // Turned right around: pan half a revolution from downstage.
+    rp.panZeroDir = 180.0f;
+    const double away = v.beamVisibility(narrow, rp, tn);
+    QVERIFY2(away < 0.25,
+             qPrintable(QString("a 12-degree head aimed straight away still read "
+                                "at %1 of full").arg(away)));
+
+    // An undeclared lens is never dimmed, whichever way it is turned.
+    QCOMPARE(v.beamVisibility(undeclared, rp, tu), 1.0);
+    FixtureRigProps rp2;
+    QCOMPARE(v.beamVisibility(undeclared, rp2, tu), 1.0);
+
+    delete doc;
+}
+
+void Monitor_Test::aFrameIsDrawnFromOneInstant()
+{
+    /* A paint walks the whole rig, and the engine keeps writing values from
+       the MasterTimer thread while it does. Asking each fixture for its values
+       as the paint reaches it means fixtures drawn early show an older moment
+       than fixtures drawn late, with the boundary moving every frame -- the rig
+       flickers in and out ACROSS the stage instead of showing one picture that
+       changes. The frame has to be drawn from a single instant. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Instant Par");
+    def->setType(QLCFixtureDef::ColorChanger);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::PrimaryColour pc[] = { QLCChannel::Red, QLCChannel::Green,
+                                             QLCChannel::Blue };
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(k));
+        ch->setGroup(QLCChannel::Intensity); ch->setColour(pc[k]);
+        def->addChannel(ch); mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(300); ph.setDepth(300);
+    mode->setPhysical(ph);
+    QLCFixtureHead hd;
+    for (int k = 0; k < 3; ++k) hd.addChannel(quint32(k));
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName("Instant"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(0);
+    QVERIFY(doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 1000, 1000, QVector3D(0, 0, 1.5f));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 400);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 20.0);
+    v.setLiveValues(true);
+
+    QByteArray red(512, char(0));
+    red[0] = char(255);
+    fxi->setChannelValues(red);
+    v.grab();                                  // paints, and snapshots
+
+    QVERIFY2(v.m_liveSnapshot.contains(fxi->id()),
+             "the frame took no snapshot at all");
+    QCOMPARE(uchar(v.liveValuesFor(fxi).at(0)), uchar(255));
+
+    /* The engine moves on mid-frame. What the CURRENT frame draws from must
+       not move with it. */
+    QByteArray blue(512, char(0));
+    blue[2] = char(255);
+    fxi->setChannelValues(blue);
+
+    QCOMPARE(uchar(fxi->channelValues().at(0)), uchar(0));      // the fixture did change
+    QVERIFY2(uchar(v.liveValuesFor(fxi).at(0)) == 255,
+             "the render path read through to live values instead of the frame's "
+             "snapshot -- fixtures drawn at different points in a frame will "
+             "show different moments");
+
+    v.grab();                                  // next frame picks the change up
+    QCOMPARE(uchar(v.liveValuesFor(fxi).at(0)), uchar(0));
+    QCOMPARE(uchar(v.liveValuesFor(fxi).at(2)), uchar(255));
+
+    delete doc;
+}
+
+void Monitor_Test::fixturesInsideAStepAreAllVisible()
+{
+    /* Same painter's-algorithm trap as the pixels, one level up: a step is a
+       solid box whose faces each carry ONE depth, so a fixture living INSIDE
+       it is covered by the near face unless it happens to sit in front of that
+       face's midpoint. Off-axis that hides all but the nearest -- which is
+       useless, since seeing what is rigged inside a clear-topped step is the
+       entire reason for putting it there. */
+    /* Its own Doc. This one measures OCCLUSION across the whole stage, so
+       any scenery another test left behind changes both the auto-fit scale and
+       what is able to cover what. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Clear Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(4.0f); pl->setDepth(1.0f); pl->setHeight(0.6f);
+    pl->setColor(QColor(40, 40, 44));
+    pl->setTopMaterial(StagePlatform::ClearTop);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Inside Par");
+    def->setType(QLCFixtureDef::ColorChanger);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::PrimaryColour pc[] = { QLCChannel::Red, QLCChannel::Green,
+                                             QLCChannel::Blue };
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(k));
+        ch->setGroup(QLCChannel::Intensity); ch->setColour(pc[k]);
+        def->addChannel(ch); mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setWidth(200); ph.setHeight(200); ph.setDepth(200);
+    mode->setPhysical(ph);
+    QLCFixtureHead hd;
+    for (int k = 0; k < 3; ++k) hd.addChannel(quint32(k));
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+
+    /* Four of them spread right across the step, every one driven full red. */
+    QList<quint32> fids;
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("Inside %1").arg(i + 1));
+        f->setFixtureDefinition(def, mode);
+        f->setUniverse(3); f->setAddress(quint32(i * 4));
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.riserPlatformId = pl->id();
+        rp.riserFace = 0;
+        rp.riserU = 0.6f + i * 0.95f;
+        rp.riserV = 0.30f;
+        rp.placement = FixtureRigProps::Inside;
+        props->setFixtureRigProps(f->id(), rp);
+        QByteArray u(512, char(0));
+        u[int(f->address())] = char(255);
+        f->setChannelValues(u);
+        fids << f->id();
+    }
+
+    auto litCount = [&](double azimuth) {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(1100, 700);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(azimuth, 18.0);
+        v.setLiveValues(true);
+        v.setAmbient(0.40);
+        const QImage img = v.grab().toImage();
+        int seen = 0;
+        foreach (quint32 fid, fids)
+        {
+            const QPointF at = v.w2s(props->fixtureRigPosition(fid));
+            bool found = false;
+            for (int dy = -9; dy <= 9 && !found; ++dy)
+            {
+                for (int dx = -9; dx <= 9 && !found; ++dx)
+                {
+                    const QPoint p(at.toPoint() + QPoint(dx, dy));
+                    if (img.rect().contains(p) == false) continue;
+                    const QColor c = img.pixelColor(p);
+                    if (c.red() > 120 && c.red() > c.green() * 2 && c.red() > c.blue() * 2)
+                        found = true;
+                }
+            }
+            if (found) ++seen;
+        }
+        return seen;
+    };
+
+    const double angles[] = { 0.0, 25.0, 40.0 };
+    for (int a = 0; a < 3; ++a)
+    {
+        const int seen = litCount(angles[a]);
+        QVERIFY2(seen == 4,
+                 qPrintable(QString("at azimuth %1 only %2 of 4 fixtures inside "
+                                    "the step were visible")
+                            .arg(angles[a]).arg(seen)));
+    }
+
+    delete doc;
+}
+
 void Monitor_Test::pixelsSurviveOffAxisOnTheirOwnHousing()
 {
     /* Half of every step went blank off a square-on view, and the halfway line

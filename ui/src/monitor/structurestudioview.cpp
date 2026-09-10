@@ -1024,18 +1024,38 @@ double StructureStudioView::viewDepth(const QVector3D &w) const
  * model: tops brightest, then the two side pairs.
  *
  * Corner order is the unit cube: 0-3 the bottom face (CCW), 4-7 the top. */
+/* The six faces of a corner-8 box, shared by everything that has to reason
+ * about one. */
+static const int BOX_FACES[6][4] = {
+    { 4, 5, 6, 7 },   // top
+    { 0, 1, 2, 3 },   // bottom
+    { 0, 1, 5, 4 },   // side
+    { 2, 3, 7, 6 },   // side
+    { 1, 2, 6, 5 },   // end
+    { 3, 0, 4, 7 },   // end
+};
+
+/* The depth of the NEAREST face of a box -- what something inside it has to
+ * beat to stay visible, given that each face sorts as a single value. */
+double StructureStudioView::boxNearFaceDepth(const QVector3D corner[8]) const
+{
+    double best = -1e30;
+    for (int f = 0; f < 6; ++f)
+    {
+        double d = 0.0;
+        for (int k = 0; k < 4; ++k)
+            d += viewDepth(corner[BOX_FACES[f][k]]);
+        best = qMax(best, d / 4.0);
+    }
+    return best;
+}
+
 void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
                                        const QColor &base, const QColor &edge,
-                                       int topAlpha, bool ambientLit) const
+                                       int topAlpha, bool ambientLit,
+                                       double depthBias) const
 {
-    static const int faces[6][4] = {
-        { 4, 5, 6, 7 },   // top
-        { 0, 1, 2, 3 },   // bottom
-        { 0, 1, 5, 4 },   // side
-        { 2, 3, 7, 6 },   // side
-        { 1, 2, 6, 5 },   // end
-        { 3, 0, 4, 7 },   // end
-    };
+    const int (*faces)[4] = BOX_FACES;
     static const int shade[6] = { 118, 62, 92, 78, 100, 85 };   // % brightness
 
     QVector<QPair<double, int> > order;
@@ -1044,7 +1064,7 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
         double d = 0.0;
         for (int k = 0; k < 4; ++k)
             d += viewDepth(corner[faces[f][k]]);
-        order << qMakePair(d / 4.0, f);
+        order << qMakePair(d / 4.0 + depthBias, f);
     }
     /* Every face carries its OWN depth into the global queue. Sorting faces per
        box and boxes by centroid is what made a truss spanning the rig lose to a
@@ -1831,6 +1851,119 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
  *
  * Room-lit like any other object in the space, on the same curve as the
  * scenery in drawSolidBox(). */
+/* The unit vector pointing from the scene TOWARD the camera.
+ *
+ * viewDepth() is affine and larger-is-nearer, so its gradient is exactly that
+ * direction. Deriving it rather than rebuilding it from the azimuth/elevation
+ * means it stays right for every plane and every rotation for free -- and
+ * there is no second copy of the projection's sign conventions to get wrong. */
+QVector3D StructureStudioView::toViewer() const
+{
+    const double d0 = viewDepth(QVector3D(0, 0, 0));
+    QVector3D g(float(viewDepth(QVector3D(1, 0, 0)) - d0),
+                float(viewDepth(QVector3D(0, 1, 0)) - d0),
+                float(viewDepth(QVector3D(0, 0, 1)) - d0));
+    if (g.length() < 1e-6f)
+        return QVector3D(0.0f, 1.0f, 0.0f);
+    g.normalize();
+    return g;
+}
+
+/* Which way a fixture actually throws its light.
+ *
+ * A mover knows: it is wherever pan and tilt are pointing it. Anything else
+ * emits AWAY from whatever is holding it, and the honest way to find that is
+ * the vector from the host structure's centre out to the fixture -- no axis
+ * convention to get backwards, which matters here because the mount-normal
+ * signs in this file are not consistent with each other (see barFaceVector's
+ * KNOWN INCONSISTENCY note).
+ *
+ * Returns false when there is no defensible answer -- a fixture rigged INSIDE
+ * a step, for one, where "out" is whatever gap it is aimed through. */
+bool StructureStudioView::emitDirection(Fixture *fx, const FixtureRigProps &rp,
+                                       const FixtureVisualTraits &traits,
+                                       QVector3D &dir) const
+{
+    if (fx == nullptr)
+        return false;
+    if (traits.kind == FixtureSilhouette::Mover && fixtureAimDirection(fx, rp, dir))
+        return true;
+    if (rp.placement == FixtureRigProps::Inside)
+        return false;
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    QVector3D hostCentre;
+    bool haveHost = false;
+
+    const quint32 plId = rp.onRiser() ? rp.riserPlatformId
+                       : rp.onDeck()  ? rp.deckPlatformId
+                                      : FixtureRigProps::invalidPlatformId();
+    if (StagePlatform *host = props->platform(plId))
+    {
+        const float b0 = props->platformBaseZ(plId);
+        hostCentre = QVector3D(host->originX() + host->width() * 0.5f,
+                               host->originY() + host->depth() * 0.5f,
+                               b0 + host->height() * 0.5f);
+        haveHost = true;
+    }
+    else if (rp.trussId != Truss::invalidId())
+    {
+        /* A truss runs along its length, so "out" across it is meaningless --
+           but a hung fixture points DOWN and a floor-mounted one points up,
+           which is the part that matters. */
+        dir = (rp.mountingType == Truss::TopHung) ? QVector3D(0.0f, 0.0f, -1.0f)
+                                                  : QVector3D(0.0f, 0.0f, 1.0f);
+        return true;
+    }
+
+    if (haveHost == false)
+        return false;
+
+    dir = props->fixtureRigPosition(fx->id()) - hostCentre;
+    if (dir.length() < 1e-4f)
+        return false;
+    dir.normalize();
+    return true;
+}
+
+/* How much of a fixture's OUTPUT reaches the camera, 0..1.
+ *
+ * Inside its declared cone, all of it. Outside, it tapers to a floor rather
+ * than to nothing: a lamp pointing away from you is not invisible, you can
+ * still see that it is lit. An undeclared lens (0) means no falloff at all --
+ * most definitions in the wild say 0, and dimming those by viewing angle would
+ * black out half a rig for no reason. */
+double StructureStudioView::beamVisibility(Fixture *fx, const FixtureRigProps &rp,
+                                          const FixtureVisualTraits &traits) const
+{
+    /* Only where "the angle you are viewing from" is a real thing. viewDepth()
+       is built from the azimuth/elevation camera and means nothing in the flat
+       planes, whose eye direction is fixed by the plane itself; dimming a
+       fixture in a Front elevation would be a surprise, not a feature. */
+    if (m_plane != Angled)
+        return 1.0;
+
+    const double beam = double(traits.beamDeg);
+    if (beam <= 0.0 || beam >= 360.0)
+        return 1.0;
+
+    QVector3D throwDir;                 // not "emit": that is a Qt keyword macro
+    if (emitDirection(fx, rp, traits, throwDir) == false)
+        return 1.0;
+
+    const double cosA = double(QVector3D::dotProduct(throwDir, toViewer()));
+    const double off = qAcos(qBound(-1.0, cosA, 1.0));
+    const double half = qDegreesToRadians(beam / 2.0);
+    // Taper over the cone's own width again, or 25 degrees, whichever is more:
+    // a 10-degree spot should not snap from full to floor over five degrees.
+    const double edge = qMin(M_PI, half + qMax(half, qDegreesToRadians(25.0)));
+
+    static const double FLOOR = 0.15;
+    if (off <= half)  return 1.0;
+    if (off >= edge)  return FLOOR;
+    return 1.0 - (1.0 - FLOOR) * ((off - half) / (edge - half));
+}
+
 QColor StructureStudioView::bodyShade() const
 {
     const double af = 0.18 + 0.82 * m_ambient;
@@ -1839,7 +1972,7 @@ QColor StructureStudioView::bodyShade() const
 }
 
 QColor StructureStudioView::shadeLive(const QColor &live, uchar dim,
-                                     const QColor &unlit) const
+                                     const QColor &unlit, double visibility) const
 {
     /* Two separate things contribute, and both have to stay true: what the
        lamp is EMITTING, and how much of its BODY the room reveals. A lamp at
@@ -1852,7 +1985,10 @@ QColor StructureStudioView::shadeLive(const QColor &live, uchar dim,
      * zero as pure BLACK, since there is nothing there to scale up: black
      * times anything is still black. That is what turned every idle fixture in
      * the overview into a black rectangle. */
-    const double emit_ = qBound(0.0, dim / 255.0, 1.0);
+    /* visibility is how much of the output actually reaches the camera. As it
+       falls the room takes over, which is right: what you are left looking at
+       is the fixture's body, not its beam. */
+    const double emit_ = qBound(0.0, dim / 255.0, 1.0) * qBound(0.0, visibility, 1.0);
     const double roomLit = 0.12 + 0.28 * m_ambient;
     auto mix = [&](int e, int u) {
         return qBound(0, qRound(e * emit_ + u * roomLit * (1.0 - emit_)), 255);
@@ -1869,15 +2005,15 @@ QColor StructureStudioView::shadeLive(const QColor &live, uchar dim,
  * did. */
 QColor StructureStudioView::pixelColor(Fixture *fx, int head,
                                       const QColor &fallback,
-                                      const QColor &unlit) const
+                                      const QColor &unlit, double visibility) const
 {
     if (!m_liveValues || fx == nullptr)
         return fallback;
     QColor hc = unlit;
     uchar hd = 0;
-    if (fixtureHeadLiveState(fx, head, hc, hd) == false)
+    if (fixtureHeadLiveState(fx, liveValuesFor(fx), head, hc, hd) == false)
         return fallback;
-    return shadeLive(hc, hd, unlit);
+    return shadeLive(hc, hd, unlit, visibility);
 }
 
 void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
@@ -1901,12 +2037,18 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     /* Live output, when the rig is actually running. The gel colour above is
        what a fixture looks like UNLIT; showing that while a show plays makes
        the overview a diagram rather than a picture of the rig. */
+    /* How much of this fixture's output can reach the camera from where we are
+       standing. A head with a fixed cone pointed away should not blaze at you. */
+    const FixtureRigProps rpEarly = props->fixtureRigProps(fid);
+    const double visibility =
+        m_liveValues ? beamVisibility(fx, rpEarly, classifyFixture(fx)) : 1.0;
+
     if (m_liveValues)
     {
         QColor live = col;
         uchar dim = 0;
-        if (fixtureLiveState(fx, live, dim))
-            col = shadeLive(live, dim, unlit);
+        if (fixtureLiveState(fx, liveValuesFor(fx), live, dim))
+            col = shadeLive(live, dim, unlit, visibility);
     }
     else
     {
@@ -1940,6 +2082,33 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
            me" was. */
         QVector3D corner[8];
         fixtureBoxCorners(fid, traits, corner);
+
+        /* A fixture rigged INSIDE a step is inside a solid box whose faces
+           each sort as a single depth, so the near face covers it unless it
+           happens to sit in front of that face's midpoint. Off-axis that left
+           only the nearest one or two visible -- and being able to see what is
+           rigged inside a clear-topped step is the entire reason for putting
+           it there. Lift it just past the container's nearest face so it is
+           visible from every angle, the way its own pixels are lifted past
+           their housing. */
+        double depthBias = 0.0;
+        if (rp.placement == FixtureRigProps::Inside)
+        {
+            const quint32 plId = rp.onRiser() ? rp.riserPlatformId
+                               : rp.onDeck()  ? rp.deckPlatformId
+                                              : FixtureRigProps::invalidPlatformId();
+            if (StagePlatform *host = props->platform(plId))
+            {
+                const float hx0 = host->originX(), hy0 = host->originY();
+                const float hb0 = props->platformBaseZ(plId);
+                QVector3D hc[8];
+                boxCorners(hc, hx0, hy0, hb0,
+                           hx0 + host->width(), hy0 + host->depth(), hb0 + host->height());
+                depthBias = qMax(0.0, boxNearFaceDepth(hc) + 1e-4
+                                      - boxNearFaceDepth(corner));
+            }
+        }
+
         if (traits.kind == FixtureSilhouette::Mover)
         {
             /* Point the head where it is actually aimed, while showing live
@@ -1958,10 +2127,11 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             const QColor body(BODY_GREY, BODY_GREY, BODY_GREY);
             drawSolidBox(p, corner, (drag || hi) ? col : body,
                          (drag || hi) ? col : body.lighter(135), 255,
-                         !(drag || hi));
+                         !(drag || hi), depthBias);
         }
         else
-            drawSolidBox(p, corner, col, col.lighter(150), 255, !m_liveValues);
+            drawSolidBox(p, corner, col, col.lighter(150), 255, !m_liveValues,
+                         depthBias);
 
         /* Pixels on the face pointing at us -- when a grid is declared AND the
            pixels are big enough to see.
@@ -2010,7 +2180,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
              * surface, which is what they are. */
             const double faceDepth =
                 (viewDepth(f0) + viewDepth(f1) + viewDepth(b0) + viewDepth(b1)) / 4.0
-                + 1e-4;
+                + 1e-4 + depthBias;
             p.setPen(Qt::NoPen);
             p.setBrush(col.lighter(135));
             int placed = 0;
@@ -2024,7 +2194,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                     const QVector3D hi = f0 + (f1 - f0) * fc;
                     const QVector3D at = lo + (hi - lo) * fr;
                     emitDot(w2s(at), faceDepth, 1.2,
-                            pixelColor(fx, placed, col, unlit).lighter(135), p);
+                            pixelColor(fx, placed, col, unlit, visibility).lighter(135), p);
                 }
             }
         }
@@ -2200,7 +2370,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
             {
                 const double fx2 = (cols > 1) ? (double(cx) / (cols - 1) - 0.5) : 0.0;
-                p.setBrush(pixelColor(fx, placed, col, unlit));
+                p.setBrush(pixelColor(fx, placed, col, unlit, visibility));
                 p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
             }
         }
@@ -2751,11 +2921,49 @@ void StructureStudioView::drawOrientationLabels(QPainter &p) const
     p.drawText(area, Qt::AlignHCenter | Qt::AlignBottom, QStringLiteral("▼ ") + bottomLbl);
 }
 
+/* The values this frame is drawn from.
+ *
+ * Falls back to reading the fixture directly if the snapshot has no entry --
+ * a fixture added between the snapshot and the draw, say. */
+QByteArray StructureStudioView::liveValuesFor(Fixture *fx) const
+{
+    if (fx == nullptr)
+        return QByteArray();
+    const QHash<quint32, QByteArray>::const_iterator it = m_liveSnapshot.constFind(fx->id());
+    return (it != m_liveSnapshot.constEnd()) ? it.value() : fx->channelValues();
+}
+
+/* One frame, one instant.
+ *
+ * A paint walks a hundred-odd fixtures and used to ask each one for its values
+ * as it reached it, while the engine kept writing them from the MasterTimer
+ * thread. Fixtures drawn early in the frame therefore showed an older moment
+ * than fixtures drawn late, and the boundary moved every frame -- the rig
+ * appeared to flicker in and out ACROSS the steps rather than showing one
+ * coherent picture that changes.
+ *
+ * QByteArray is copy-on-write, so taking the whole rig's values up front costs
+ * a refcount per fixture and gives every frame a single consistent instant. */
+void StructureStudioView::takeLiveSnapshot() const
+{
+    m_liveSnapshot.clear();
+    if (m_doc == nullptr)
+        return;
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (fx != nullptr)
+            m_liveSnapshot.insert(fx->id(), fx->channelValues());
+}
+
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
     QElapsedTimer frameTimer;
     if (m_liveValues)
+    {
         frameTimer.start();
+        takeLiveSnapshot();
+    }
+    else
+        m_liveSnapshot.clear();
 
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);

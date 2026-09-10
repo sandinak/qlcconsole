@@ -1034,6 +1034,71 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 27: one instant per frame, lights inside steps, beam angle
+
+Branson, three at once: "flickering in and out across the steps .. vs solid
+random matrix .. seems like there's a timing issue between generation and
+screen paint", "same angle/visibility issues on the lights IN the steps .. can
+only see the nearest", and "are we using visibility angle as provided in the
+Fixture def .. bigger issue with heads that have a fixed cone".
+
+**1. One instant per frame.** A paint walks a hundred-odd fixtures and asked
+each one for its values as it reached it, while the engine kept writing them
+from the MasterTimer thread. Fixtures drawn early in a frame showed an OLDER
+moment than fixtures drawn late, and the boundary moved every frame -- the rig
+flickered in and out ACROSS the stage instead of showing one picture that
+changes. `takeLiveSnapshot()` now grabs the whole rig up front;
+`fixtureLiveState()`/`fixtureHeadLiveState()` gained overloads that take the
+values rather than fetching them. QByteArray is copy-on-write, so a whole-rig
+snapshot costs a refcount per fixture.
+
+**2. Lights inside a step.** The same painter's-algorithm trap as follow-on 26,
+one level up: a step is a solid box whose faces each sort as a single depth, so
+a fixture INSIDE it is covered by the near face unless it happens to sit in
+front of that face's midpoint. Measured: 2 of 4 visible at azimuth 25, 1 of 4
+once the scene got busier. `drawSolidBox()` gained a `depthBias`, and an Inside
+fixture is lifted just past its host's nearest face (`boxNearFaceDepth()`).
+Being able to see what is rigged inside a clear-topped step is the entire
+reason for putting it there.
+
+**3. Beam angle.** New `beamVisibility()`: how much of a fixture's output can
+reach the camera, folded into `shadeLive()`'s emitted term so that as it falls
+the ROOM takes over -- what you are left looking at is the body, not the beam.
+
+- Direction comes from `fixtureAimDirection()` for a mover. For anything else
+  it is the vector from its host structure's CENTRE out to the fixture, which
+  needs no axis convention to be right -- deliberate, because the mount-normal
+  signs in this file are not consistent with each other (see `barFaceVector`'s
+  KNOWN INCONSISTENCY note) and this is exactly the kind of error that stays
+  invisible until someone looks at a real rig.
+- `toViewer()` is taken from `viewDepth()`'s own gradient rather than rebuilt
+  from azimuth/elevation, so there is no second copy of the projection to
+  drift.
+- **Undeclared lens (0 degrees) means NO falloff.** Most definitions in the
+  wild say 0 -- the Oppsk wall washers and the LM70 both do -- and dimming
+  those by viewing angle would black out half a rig for no reason. The Step
+  Rows declare 180, so they show across the whole front hemisphere and go dark
+  only from behind, which is right.
+- Outside the cone it tapers to a floor of 0.15 rather than to nothing: a lamp
+  pointed away from you is not invisible, you can still see that it is lit.
+- Angled plane only. `viewDepth()` is built from the azimuth/elevation camera
+  and means nothing in the flat planes, whose eye direction the plane itself
+  fixes; dimming a fixture in a Front elevation would be a surprise.
+
+**Test isolation, learned the hard way:** `fixturesInsideAStepAreAllVisible`
+passed alone and failed in the suite. It measures OCCLUSION across a whole
+stage, so scenery another test left behind changes both the auto-fit scale and
+what is able to cover what. Tests of that shape get their own `Doc`.
+
+**Revert-checked:** the inside-fixtures test was written failing-first (2 of 4
+at azimuth 25). `aFrameIsDrawnFromOneInstant` fails at "the render path read
+through to live values instead of the frame's snapshot".
+`aFixedConeHeadDimsWhenAimedAway` fails at "a 12-degree head aimed straight
+away still read at 1 of full", and also pins the undeclared-lens case, which is
+the one that would quietly ruin the view.
+
+`monitor_test` 56/56. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 26: a pixel and its housing are one surface
 
 Branson: "I think the 1/2 step issue is tied to the angle from 90 that the

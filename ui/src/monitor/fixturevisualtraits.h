@@ -55,6 +55,10 @@ struct FixtureVisualTraits
      *  it cannot hold this mode's heads. Columns run along the fixture's LONG
      *  axis, rows across its height. */
     QSize layout;
+    /** Beam angle in degrees from the definition's <Lens>. 0 = not declared,
+     *  which has to mean "no idea, show it from anywhere" -- most definitions
+     *  say 0 and dimming those by viewing angle would hide half a rig. */
+    float beamDeg = 0.0f;
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);
@@ -73,6 +77,13 @@ FixtureVisualTraits classifyFixture(Fixture *fx);
  *          callers can fall back to their static appearance. */
 bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer);
 
+/** The same, from a caller-supplied set of channel values rather than from the
+ *  fixture itself. A renderer walking a whole rig takes ONE snapshot up front,
+ *  so a frame shows a single instant instead of tearing across the stage as
+ *  the engine keeps writing underneath it. */
+bool fixtureLiveState(Fixture *fx, const QByteArray &values, QColor &colour,
+                      uchar &dimmer);
+
 /** The same, for ONE head of a multi-head fixture.
  *
  * A pixel bar is not one colour. Reducing all 64 heads to a single colour by
@@ -86,6 +97,9 @@ bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer);
  *
  * @return false if there is no such head, or it has no channels. */
 bool fixtureHeadLiveState(Fixture *fx, int head, QColor &colour, uchar &dimmer);
+/** Per-head, from caller-supplied values -- see the note above. */
+bool fixtureHeadLiveState(Fixture *fx, const QByteArray &values, int head,
+                          QColor &colour, uchar &dimmer);
 
 
 /** Where a moving head is currently POINTING, in world space, from the pan and

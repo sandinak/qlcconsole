@@ -193,6 +193,15 @@ private slots:
     /** A pixel and the housing it is painted on are one surface: off a
      *  square-on view the far half of a strip must not vanish behind its own
      *  body. */
+    /** Everything rigged inside a clear-topped step stays visible from any
+     *  angle -- seeing it is the whole reason for putting it there. */
+    /** One paint shows one instant: the frame draws from a snapshot taken up
+     *  front, not from values the engine keeps moving underneath it. */
+    /** A head with a fixed cone dims when it is not pointed at you -- and a
+     *  fixture whose definition declares no lens is never dimmed at all. */
+    void aFixedConeHeadDimsWhenAimedAway();
+    void aFrameIsDrawnFromOneInstant();
+    void fixturesInsideAStepAreAllVisible();
     void pixelsSurviveOffAxisOnTheirOwnHousing();
     void aMostlyDarkPixelBarDrawsNoBrightOutline();
     void pixelBarDrawsEachPixelInItsOwnColour();
