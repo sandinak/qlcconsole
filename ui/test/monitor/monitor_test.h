@@ -182,6 +182,10 @@ private slots:
      *  shot. Movers once went black here because the ambient multiplier was
      *  applied to emitters too. */
     void litFixturesKeepTheirBrightnessInABlackout();
+    /** A pixel bar shows its actual pattern, not one averaged colour: a step
+     *  front running red-and-blue drew as a pale wash because every head was
+     *  reduced to the fixture-wide per-primary maximum. */
+    void pixelBarDrawsEachPixelInItsOwnColour();
 
 private:
     Doc* m_doc;

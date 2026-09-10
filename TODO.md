@@ -1034,6 +1034,51 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 23: a pixel bar is not one colour
+
+Branson, after building a scene over all twelve step-front groups: "in the rig
+I get flashy white .. not red that it should be?"
+
+**Root cause.** `fixtureLiveState()` reduced a whole fixture to ONE colour by
+taking the per-primary maximum across every channel. For a 64-pixel step row
+that is wrong by construction: red pixels and blue pixels together report
+max-red AND max-blue, so any pattern that is not uniform collapses toward
+white. Measured on the real `PHS Chorus Step Row 64 Heads` definition --
+all-red gives `(255,0,0)`, but red/blue/orange pixels give `(255,128,141)`,
+the pale wash in the screenshot. Every one of the 64 dots was then drawn in
+that single collapsed colour.
+
+**Fix.** The colour reduction is now scoped to an arbitrary channel list
+(`channelSetLiveState()`), with two callers: `fixtureLiveState()` passes the
+whole fixture (unchanged behaviour for the body), and the new
+`fixtureHeadLiveState(fx, head, ...)` passes one head'"'"'s own channels. A head
+with no dimmer of its own is scaled by the fixture-wide master, which is the
+usual arrangement for a pixel bar -- without that, every pixel of a bar at 10%
+drew at full.
+
+Both pixel loops now use it via `StructureStudioView::pixelColor()`: the
+angled dot loop and the elevation `Bar` loop, which are separate code.
+`shadeLive()` factors out the emit-vs-room rule so the pixels and the fixture
+body cannot drift apart.
+
+**Not a bug, worth knowing:** the scene itself carries THREE colour palettes --
+Red, Blue and Candle Orange -- plus a `confetti` DIMMER effect. The confetti
+effect is the "flashy"; the three colours are what averaged to white. The rig
+view now shows them as they actually are.
+
+**Revert-checked:** with the two draw sites put back to the fixture-wide
+colour, `pixelBarDrawsEachPixelInItsOwnColour` fails with "elevation drew no
+per-pixel colour: 0 red, 1014 blue pixels". The test asserts both colours are
+present in the elevation AND the angled view; the angled thresholds are lower
+on purpose, since those pixels are 1.2 px dots.
+
+**Known, not addressed:** an RGB fixture sitting at zero now computes as pure
+black rather than "faintly seen at blackout" -- the room-level floor applies to
+the gel colour, not to a computed-black live colour. Visible as the black
+boxes in the same screenshot.
+
+`monitor_test` 50/50. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 22: stage 2 -- mover heads point where they are aimed
 
 Branson: "move forward with the rig rendering project we were working on."

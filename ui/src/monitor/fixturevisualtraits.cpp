@@ -221,24 +221,26 @@ QPainterPath moverPlanPath(const QRectF &r, int headCount)
     return path;
 }
 
-bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer)
+/* The shared core: reduce ONE set of channels to a colour and a level.
+ *
+ * Scoping this to a channel list rather than always walking the whole fixture
+ * is the whole point. Taking the per-primary maximum across a 64-pixel bar
+ * turns any pattern that is not uniform into white -- red pixels and blue
+ * pixels together report max-red AND max-blue, so a step front running a
+ * confetti effect drew as a pale wash instead of its actual colours. */
+static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
+                                const QList<quint32> &chans,
+                                QColor &colour, uchar &dimmer)
 {
-    if (fx == nullptr)
-        return false;
-    QLCFixtureMode *mode = fx->fixtureMode();
-    if (mode == nullptr)
-        return false;
-
-    const QByteArray v = fx->channelValues();
-    if (v.isEmpty())
-        return false;
 
     int r = -1, g = -1, b = -1, w = -1, a = -1;
     int master = -1;                 // a plain (colourless) Intensity channel
     QColor wheel;                    // a colour-wheel capability, if one is set
 
-    for (quint32 c = 0; c < fx->channels() && int(c) < v.size(); ++c)
+    foreach (quint32 c, chans)
     {
+        if (int(c) >= v.size())
+            continue;
         QLCChannel *ch = mode->channel(c);
         if (ch == nullptr)
             continue;
@@ -297,6 +299,76 @@ bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer)
         dimmer = uchar(qMax(colour.red(), qMax(colour.green(), colour.blue())));
     else
         dimmer = 0;
+
+    return true;
+}
+
+bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer)
+{
+    if (fx == nullptr)
+        return false;
+    QLCFixtureMode *mode = fx->fixtureMode();
+    if (mode == nullptr)
+        return false;
+
+    const QByteArray v = fx->channelValues();
+    if (v.isEmpty())
+        return false;
+
+    QList<quint32> all;
+    all.reserve(int(fx->channels()));
+    for (quint32 c = 0; c < fx->channels(); ++c)
+        all << c;
+
+    return channelSetLiveState(mode, v, all, colour, dimmer);
+}
+
+bool fixtureHeadLiveState(Fixture *fx, int head, QColor &colour, uchar &dimmer)
+{
+    if (fx == nullptr || head < 0)
+        return false;
+    QLCFixtureMode *mode = fx->fixtureMode();
+    if (mode == nullptr || head >= mode->heads().size())
+        return false;
+
+    const QByteArray v = fx->channelValues();
+    if (v.isEmpty())
+        return false;
+
+    const QList<quint32> chans = mode->heads().at(head).channels();
+    if (chans.isEmpty())
+        return false;
+
+    if (channelSetLiveState(mode, v, chans, colour, dimmer) == false)
+        return false;
+
+    /* A pixel head usually carries only its own R/G/B; the master dimmer is a
+       fixture-wide channel that belongs to no head. Without this, every pixel
+       of a bar sitting at 10% would draw at full. */
+    bool headHasMaster = false;
+    foreach (quint32 c, chans)
+    {
+        QLCChannel *ch = mode->channel(c);
+        if (ch != nullptr && ch->group() == QLCChannel::Intensity
+            && ch->colour() == QLCChannel::NoColour)
+        {
+            headHasMaster = true;
+            break;
+        }
+    }
+    if (headHasMaster == false)
+    {
+        int master = -1;
+        for (quint32 c = 0; c < quint32(mode->channels().size()) && int(c) < v.size(); ++c)
+        {
+            QLCChannel *ch = mode->channel(c);
+            if (ch != nullptr && ch->group() == QLCChannel::Intensity
+                && ch->colour() == QLCChannel::NoColour)
+                master = qMax(master, int(uchar(v.at(int(c)))));
+        }
+        if (master >= 0)
+            dimmer = uchar(qRound(dimmer * (master / 255.0)));
+    }
 
     return true;
 }

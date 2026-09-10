@@ -242,6 +242,10 @@ private:
     void drawFixtures(QPainter &p) const;
     /** One fixture, so the overview can depth-sort fixtures and structures
      *  together in a single pass. */
+    /** The emit-vs-room shading rule, shared by fixture bodies and pixels. */
+    QColor shadeLive(const QColor &live, uchar dim) const;
+    /** One head's own live colour, falling back to the fixture-wide colour. */
+    QColor pixelColor(Fixture *fx, int head, const QColor &fallback) const;
     void drawOneFixture(QPainter &p, quint32 fid, bool nameEveryone) const;
     /** The whole rig in one back-to-front pass, structures and fixtures
      *  interleaved, so nearer objects cover further ones whatever order they

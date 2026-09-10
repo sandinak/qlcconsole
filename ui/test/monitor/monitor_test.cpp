@@ -2465,3 +2465,130 @@ void Monitor_Test::moverAimFollowsPanAndTilt()
     m_doc->deleteFixture(fxi->id());
     m_doc->deleteFixture(par->id());
 }
+
+void Monitor_Test::pixelBarDrawsEachPixelInItsOwnColour()
+{
+    /* A pixel bar is not one colour. Reducing every head to a single
+       fixture-wide colour by taking the per-primary maximum turns red
+       pixels + blue pixels into a pale wash -- which is exactly what a step
+       front running a multi-colour scene drew as, instead of its content. */
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Pixel Bar 8");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("24ch");
+    const int PIX = 8;
+    for (int h = 0; h < PIX; ++h)
+    {
+        QLCChannel *r = new QLCChannel();
+        r->setName(QString("%1-Red").arg(h + 1));
+        r->setGroup(QLCChannel::Intensity); r->setColour(QLCChannel::Red);
+        QLCChannel *g = new QLCChannel();
+        g->setName(QString("%1-Green").arg(h + 1));
+        g->setGroup(QLCChannel::Intensity); g->setColour(QLCChannel::Green);
+        QLCChannel *b = new QLCChannel();
+        b->setName(QString("%1-Blue").arg(h + 1));
+        b->setGroup(QLCChannel::Intensity); b->setColour(QLCChannel::Blue);
+        def->addChannel(r); def->addChannel(g); def->addChannel(b);
+        mode->insertChannel(r, h * 3);
+        mode->insertChannel(g, h * 3 + 1);
+        mode->insertChannel(b, h * 3 + 2);
+        QLCFixtureHead head;
+        head.addChannel(quint32(h * 3));
+        head.addChannel(quint32(h * 3 + 1));
+        head.addChannel(quint32(h * 3 + 2));
+        mode->insertHead(-1, head);
+    }
+    QLCPhysical ph;
+    ph.setWidth(2000); ph.setHeight(120); ph.setDepth(120);
+    ph.setLayoutSize(QSize(PIX, 1));
+    mode->setPhysical(ph);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Pixel Bar"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(0);
+    QVERIFY(m_doc->addFixture(fxi));
+
+    const FixtureVisualTraits traits = classifyFixture(fxi);
+    QCOMPARE(traits.layout, QSize(PIX, 1));
+    QCOMPARE(traits.headCount, PIX);
+
+    /* Alternating red and blue pixels. Collapsed fixture-wide this reads as
+       magenta (max-red AND max-blue); per head it is what it is. */
+    QByteArray u(512, char(0));
+    for (int h = 0; h < PIX; ++h)
+        u[(h % 2 == 0) ? h * 3 : h * 3 + 2] = char(255);
+    fxi->setChannelValues(u);
+
+    QColor whole(90, 160, 235);
+    uchar wholeDim = 0;
+    QVERIFY(fixtureLiveState(fxi, whole, wholeDim));
+    QVERIFY2(whole.red() > 200 && whole.blue() > 200,
+             "the fixture-wide colour is expected to wash out -- that is the "
+             "reason per-head colour exists");
+
+    QColor h0(90, 160, 235), h1(90, 160, 235);
+    uchar d0 = 0, d1 = 0;
+    QVERIFY(fixtureHeadLiveState(fxi, 0, h0, d0));
+    QVERIFY(fixtureHeadLiveState(fxi, 1, h1, d1));
+    QVERIFY2(h0.red() > 200 && h0.blue() < 40,
+             qPrintable(QString("head 0 should be red, got %1").arg(h0.name())));
+    QVERIFY2(h1.blue() > 200 && h1.red() < 40,
+             qPrintable(QString("head 1 should be blue, got %1").arg(h1.name())));
+
+    /* And the drawing has to actually use them -- in both the elevation and
+       the angled view, which have separate pixel loops. */
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("Pixel Bar Truss"); t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(0.0f, 0.0f, 3.0f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(4.0f); t->setWidth(0.3f);
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t->id(); rp.trussOffset = 2.0f;
+    props->setFixtureRigProps(fxi->id(), rp);
+
+    StructureStudioView v(m_doc, StructureStudioView::TrussKind, t->id());
+    v.resize(900, 600);
+    v.reload();
+    v.setLiveValues(true);
+    v.setAmbient(0.60);
+
+    auto countDominant = [&](int &reds, int &blues) {
+        const QImage img = v.grab().toImage();
+        reds = blues = 0;
+        for (int y = 0; y < img.height(); ++y)
+        {
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.red() > 90 && c.red() > c.blue() * 2) ++reds;
+                if (c.blue() > 90 && c.blue() > c.red() * 2) ++blues;
+            }
+        }
+    };
+
+    int reds = 0, blues = 0;
+    v.setPlane(StructureStudioView::Front);
+    countDominant(reds, blues);
+    QVERIFY2(reds > 20 && blues > 20,
+             qPrintable(QString("elevation drew no per-pixel colour: %1 red, "
+                                "%2 blue pixels").arg(reds).arg(blues)));
+
+    /* The angled view draws its pixels as 1.2 px dots, so the counts here are
+       small by construction -- a handful each. What matters is that BOTH
+       colours are present at all: collapsed to the fixture-wide colour they
+       are all magenta and neither count can be non-zero. */
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 20.0);
+    countDominant(reds, blues);
+    QVERIFY2(reds > 5 && blues > 5,
+             qPrintable(QString("angled view drew no per-pixel colour: %1 red, "
+                                "%2 blue pixels").arg(reds).arg(blues)));
+
+    m_doc->deleteFixture(fxi->id());
+    props->removeTruss(t->id());
+}
+

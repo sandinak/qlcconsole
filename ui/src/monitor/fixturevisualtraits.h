@@ -73,6 +73,21 @@ FixtureVisualTraits classifyFixture(Fixture *fx);
  *          callers can fall back to their static appearance. */
 bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer);
 
+/** The same, for ONE head of a multi-head fixture.
+ *
+ * A pixel bar is not one colour. Reducing all 64 heads to a single colour by
+ * taking the per-primary maximum turns any pattern that is not uniform into a
+ * pale wash -- red pixels and blue pixels together report max-red AND
+ * max-blue. Drawing each head from its own channels is what makes a step
+ * front show what it is actually doing.
+ *
+ * A head that carries no dimmer of its own is scaled by the fixture-wide
+ * master, which is the usual arrangement for a pixel bar.
+ *
+ * @return false if there is no such head, or it has no channels. */
+bool fixtureHeadLiveState(Fixture *fx, int head, QColor &colour, uchar &dimmer);
+
+
 /** Where a moving head is currently POINTING, in world space, from the pan and
  *  tilt it is being driven with right now.
  *

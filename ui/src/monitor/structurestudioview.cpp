@@ -1812,6 +1812,34 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
  * interleave fixtures and structures in a single depth-sorted pass -- drawing
  * all structures and then all fixtures put a step in front of a tower that was
  * actually nearer the eye. */
+/* The emit-vs-room rule, in one place: a lamp is as bright as it is driven,
+   and the room level only decides how visible an UNLIT one is. Both the
+   fixture body and the individual pixels of a bar go through this. */
+QColor StructureStudioView::shadeLive(const QColor &live, uchar dim) const
+{
+    const double emit_ = dim / 255.0;
+    const double roomLit = 0.12 + 0.28 * m_ambient;
+    const double f = qBound(0.0, qMax(emit_, roomLit), 1.0);
+    return QColor(qRound(live.red() * f), qRound(live.green() * f),
+                  qRound(live.blue() * f));
+}
+
+/* One pixel of a multi-head fixture, in its own colour.
+ *
+ * Falls back to the fixture-wide colour when live output is off, or when the
+ * head has nothing of its own to say -- so a plain bar looks exactly as it
+ * did. */
+QColor StructureStudioView::pixelColor(Fixture *fx, int head, const QColor &fallback) const
+{
+    if (!m_liveValues || fx == nullptr)
+        return fallback;
+    QColor hc = fallback;
+    uchar hd = 0;
+    if (fixtureHeadLiveState(fx, head, hc, hd) == false)
+        return fallback;
+    return shadeLive(hc, hd);
+}
+
 void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                                         bool nameEveryone) const
 {
@@ -1844,11 +1872,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                    light. Adding the two instead of taking the greater made a
                    fixture at full look different depending on the ambient
                    setting, which is backwards. */
-                const double emit_ = dim / 255.0;
-                const double roomLit = 0.12 + 0.28 * m_ambient;
-                const double f = qBound(0.0, qMax(emit_, roomLit), 1.0);
-                col = QColor(qRound(live.red() * f), qRound(live.green() * f),
-                             qRound(live.blue() * f));
+                col = shadeLive(live, dim);
             }
         }
         else
@@ -1933,7 +1957,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                     const QVector3D lo = b0 + (b1 - b0) * fc;
                     const QVector3D hi = f0 + (f1 - f0) * fc;
                     const QVector3D at = lo + (hi - lo) * fr;
-                    emitDot(w2s(at), viewDepth(at), 1.2, col.lighter(135), p);
+                    emitDot(w2s(at), viewDepth(at), 1.2,
+                            pixelColor(fx, placed, col).lighter(135), p);
                 }
             }
         }
@@ -2095,7 +2120,6 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         const double cellH = boxPx.height() / qMax(1, rows);
         const double rad = qBound(0.7, qMin(cellW, cellH) * 0.40, 3.0);
         p.setPen(Qt::NoPen);
-        p.setBrush(col);
         int placed = 0;
         for (int r = 0; r < rows && placed < traits.headCount; ++r)
         {
@@ -2103,6 +2127,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
             {
                 const double fx2 = (cols > 1) ? (double(cx) / (cols - 1) - 0.5) : 0.0;
+                p.setBrush(pixelColor(fx, placed, col));
                 p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
             }
         }
