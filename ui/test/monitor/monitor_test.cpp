@@ -2466,6 +2466,99 @@ void Monitor_Test::moverAimFollowsPanAndTilt()
     m_doc->deleteFixture(par->id());
 }
 
+void Monitor_Test::unlitFixturesAreStillObjectsInTheRoom()
+{
+    /* A fixture at zero is not invisible -- it is a lump of metal hanging in
+       the space. Scaling the EMITTED colour by the room level cannot express
+       that: an RGB fixture at zero computes as black, and black times any
+       room level is still black, so every idle fixture drew as a black
+       rectangle. */
+    MonitorProperties *props = m_doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Dark Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(5.0f); pl->setDepth(3.0f); pl->setHeight(1.5f);
+    pl->setColor(QColor(0, 0, 0));      // contributes nothing to what we sample
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Idle Par");
+    def->setType(QLCFixtureDef::ColorChanger);
+    const char *nm[] = { "Red", "Green", "Blue" };
+    const QLCChannel::PrimaryColour pc[] = { QLCChannel::Red, QLCChannel::Green,
+                                             QLCChannel::Blue };
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    for (int c = 0; c < 3; ++c)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[c]); ch->setGroup(QLCChannel::Intensity);
+        ch->setColour(pc[c]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, c);
+    }
+    QLCPhysical ph;
+    ph.setWidth(600); ph.setHeight(600); ph.setDepth(600);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    for (int c = 0; c < 3; ++c) head.addChannel(c);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Idle Par"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(400);
+    QVERIFY(m_doc->addFixture(fxi));
+
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.riserPlatformId = pl->id();
+    rp.riserFace = 0;
+    rp.riserU = 2.5f;
+    rp.riserV = 0.8f;
+    props->setFixtureRigProps(fxi->id(), rp);
+
+    fxi->setChannelValues(QByteArray(512, char(0)));    // every channel at zero
+
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 500);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 25.0);
+    v.setLiveValues(true);              // showing output, and it is showing NONE
+
+    const QPointF at = v.w2s(props->fixtureRigPosition(fxi->id()));
+
+    auto peakLuma = [&](double ambient) {
+        v.setAmbient(ambient);
+        const QImage img = v.grab().toImage();
+        double best = 0.0;
+        for (int dy = -10; dy <= 10; ++dy)
+        {
+            for (int dx = -10; dx <= 10; ++dx)
+            {
+                const QPoint p(at.toPoint() + QPoint(dx, dy));
+                if (img.rect().contains(p) == false) continue;
+                const QColor c = img.pixelColor(p);
+                best = qMax(best, c.red() * 0.30 + c.green() * 0.59 + c.blue() * 0.11);
+            }
+        }
+        return best;
+    };
+
+    const double work = peakLuma(1.0);
+    const double dark = peakLuma(0.0);
+
+    QVERIFY2(work > 40.0,
+             qPrintable(QString("an unlit fixture vanished under WORK LIGHT "
+                                "(peak luma %1)").arg(work)));
+    QVERIFY2(work - dark > 20.0,
+             qPrintable(QString("room level made no difference to an unlit "
+                                "fixture (work %1, blackout %2)")
+                        .arg(work).arg(dark)));
+
+    m_doc->deleteFixture(fxi->id());
+    props->removePlatform(pl->id());
+}
+
 void Monitor_Test::pixelBarDrawsEachPixelInItsOwnColour()
 {
     /* A pixel bar is not one colour. Reducing every head to a single

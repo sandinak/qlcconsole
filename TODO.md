@@ -1034,6 +1034,42 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 24: an unlit fixture is still an object in the room
+
+Branson: "fix" -- the black rectangles disclosed at the end of follow-on 23.
+
+**Root cause.** The live shading rule scaled the EMITTED colour by
+`max(emit, room)`. That works for a lamp that is on, but an RGB fixture at zero
+computes as `(0,0,0)`, and black times any room level is still black. So every
+idle fixture in the overview drew as a black rectangle -- worse than the
+diagram it replaced, since a fixture with its lamp off is exactly the thing you
+want to see when you are looking at a rig.
+
+The comment above that code even said the right thing ("faintly seen at
+blackout and plainly at work light"); the arithmetic could not express it,
+because it only ever had ONE colour to scale.
+
+**Fix.** `shadeLive()` now takes the unlit colour as well and cross-fades:
+
+    result = live * emit + unlit * roomLit * (1 - emit)
+
+At full the lamp is purely its own colour, whatever the room is doing -- so the
+follow-on 22 blackout behaviour is untouched. At zero it is purely its body as
+the room reveals it. In between, both contribute, which is also what actually
+happens to a real fixture. `drawOneFixture()` keeps `unlit` (the gel colour, or
+the blue fallback) separate from `col` for this, and passes it down to
+`pixelColor()` so individual pixels behave the same way.
+
+Also straightened out the stray indentation in that block, left over from an
+earlier brace fix -- the live/else branches were indented as though nested
+inside the `if (!col.isValid())` above them, which they never were.
+
+**Revert-checked:** with the old `max(emit, room)` rule restored,
+`unlitFixturesAreStillObjectsInTheRoom` fails with "an unlit fixture vanished
+under WORK LIGHT (peak luma 0)" -- literally zero, which is the bug exactly.
+
+`monitor_test` 51/51. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 23: a pixel bar is not one colour
 
 Branson, after building a scene over all twelve step-front groups: "in the rig
@@ -1072,10 +1108,9 @@ per-pixel colour: 0 red, 1014 blue pixels". The test asserts both colours are
 present in the elevation AND the angled view; the angled thresholds are lower
 on purpose, since those pixels are 1.2 px dots.
 
-**Known, not addressed:** an RGB fixture sitting at zero now computes as pure
-black rather than "faintly seen at blackout" -- the room-level floor applies to
-the gel colour, not to a computed-black live colour. Visible as the black
-boxes in the same screenshot.
+**Spotted here, fixed in follow-on 24:** an RGB fixture sitting at zero
+computed as pure black rather than "faintly seen at blackout". Visible as the
+black boxes in the same screenshot.
 
 `monitor_test` 50/50. `check-all.sh`: all four legs pass, 0 failures.
 

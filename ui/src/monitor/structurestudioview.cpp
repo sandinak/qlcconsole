@@ -1815,13 +1815,28 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
 /* The emit-vs-room rule, in one place: a lamp is as bright as it is driven,
    and the room level only decides how visible an UNLIT one is. Both the
    fixture body and the individual pixels of a bar go through this. */
-QColor StructureStudioView::shadeLive(const QColor &live, uchar dim) const
+QColor StructureStudioView::shadeLive(const QColor &live, uchar dim,
+                                     const QColor &unlit) const
 {
-    const double emit_ = dim / 255.0;
+    /* Two separate things contribute, and both have to stay true: what the
+       lamp is EMITTING, and how much of its BODY the room reveals. A lamp at
+       full is its own colour whatever the room is doing; a lamp at zero is not
+       invisible -- it is an object sitting in the space, faintly seen at
+       blackout and plainly under work light.
+     *
+     * Cross-fading between the two is what holds both. Scaling the EMITTED
+     * colour by max(emit, room) -- the previous rule -- left an RGB fixture at
+     * zero as pure BLACK, since there is nothing there to scale up: black
+     * times anything is still black. That is what turned every idle fixture in
+     * the overview into a black rectangle. */
+    const double emit_ = qBound(0.0, dim / 255.0, 1.0);
     const double roomLit = 0.12 + 0.28 * m_ambient;
-    const double f = qBound(0.0, qMax(emit_, roomLit), 1.0);
-    return QColor(qRound(live.red() * f), qRound(live.green() * f),
-                  qRound(live.blue() * f));
+    auto mix = [&](int e, int u) {
+        return qBound(0, qRound(e * emit_ + u * roomLit * (1.0 - emit_)), 255);
+    };
+    return QColor(mix(live.red(), unlit.red()),
+                  mix(live.green(), unlit.green()),
+                  mix(live.blue(), unlit.blue()));
 }
 
 /* One pixel of a multi-head fixture, in its own colour.
@@ -1829,15 +1844,17 @@ QColor StructureStudioView::shadeLive(const QColor &live, uchar dim) const
  * Falls back to the fixture-wide colour when live output is off, or when the
  * head has nothing of its own to say -- so a plain bar looks exactly as it
  * did. */
-QColor StructureStudioView::pixelColor(Fixture *fx, int head, const QColor &fallback) const
+QColor StructureStudioView::pixelColor(Fixture *fx, int head,
+                                      const QColor &fallback,
+                                      const QColor &unlit) const
 {
     if (!m_liveValues || fx == nullptr)
         return fallback;
-    QColor hc = fallback;
+    QColor hc = unlit;
     uchar hd = 0;
     if (fixtureHeadLiveState(fx, head, hc, hd) == false)
         return fallback;
-    return shadeLive(hc, hd);
+    return shadeLive(hc, hd, unlit);
 }
 
 void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
@@ -1850,38 +1867,31 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     const bool drag = (fid == m_dragFid);
 
     QColor col = props->fixtureGelColor(fid, 0, 0);
-
     if (!col.isValid() || col == QColor(Qt::black))
-
         col = QColor(90, 160, 235);
 
+    /* What the fixture looks like with its lamp OFF. Kept separate from the
+       live colour below, because the room lights the body and the lamp lights
+       itself, and a fixture at zero still has a body. */
+    const QColor unlit = col;
 
-        /* Live output, when the rig is actually running. The gel colour above
-           is what a fixture looks like UNLIT; showing that while a show plays
-           makes the overview a diagram rather than a picture of the rig. */
-        if (m_liveValues)
-        {
-            QColor live = col;
-            uchar dim = 0;
-            if (fixtureLiveState(fx, live, dim))
-            {
-                /* A lamp is as bright as it is being driven, FULL STOP -- the
-                   room does not dim a light that is on. Room level only decides
-                   how visible an UNLIT fixture is: it is an object sitting in
-                   the space, faintly seen at blackout and plainly at work
-                   light. Adding the two instead of taking the greater made a
-                   fixture at full look different depending on the ambient
-                   setting, which is backwards. */
-                col = shadeLive(live, dim);
-            }
-        }
-        else
-        {
-            // Not showing output: the fixture is just an object in the room.
-            const double af = 0.30 + 0.70 * m_ambient;
-            col = QColor(qRound(col.red() * af), qRound(col.green() * af),
-                         qRound(col.blue() * af));
-        }
+    /* Live output, when the rig is actually running. The gel colour above is
+       what a fixture looks like UNLIT; showing that while a show plays makes
+       the overview a diagram rather than a picture of the rig. */
+    if (m_liveValues)
+    {
+        QColor live = col;
+        uchar dim = 0;
+        if (fixtureLiveState(fx, live, dim))
+            col = shadeLive(live, dim, unlit);
+    }
+    else
+    {
+        // Not showing output: the fixture is just an object in the room.
+        const double af = 0.30 + 0.70 * m_ambient;
+        col = QColor(qRound(col.red() * af), qRound(col.green() * af),
+                     qRound(col.blue() * af));
+    }
     if (drag)     col = QColor(255, 196, 64);
     else if (hi)  col = QColor(120, 220, 140);
 
@@ -1958,7 +1968,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                     const QVector3D hi = f0 + (f1 - f0) * fc;
                     const QVector3D at = lo + (hi - lo) * fr;
                     emitDot(w2s(at), viewDepth(at), 1.2,
-                            pixelColor(fx, placed, col).lighter(135), p);
+                            pixelColor(fx, placed, col, unlit).lighter(135), p);
                 }
             }
         }
@@ -2127,7 +2137,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
             {
                 const double fx2 = (cols > 1) ? (double(cx) / (cols - 1) - 0.5) : 0.0;
-                p.setBrush(pixelColor(fx, placed, col));
+                p.setBrush(pixelColor(fx, placed, col, unlit));
                 p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
             }
         }

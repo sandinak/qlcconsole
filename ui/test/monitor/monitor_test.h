@@ -185,6 +185,9 @@ private slots:
     /** A pixel bar shows its actual pattern, not one averaged colour: a step
      *  front running red-and-blue drew as a pale wash because every head was
      *  reduced to the fixture-wide per-primary maximum. */
+    /** A fixture at zero is an object in the room, not a black hole: the
+     *  room lights its body even while its lamp is off. */
+    void unlitFixturesAreStillObjectsInTheRoom();
     void pixelBarDrawsEachPixelInItsOwnColour();
 
 private:
