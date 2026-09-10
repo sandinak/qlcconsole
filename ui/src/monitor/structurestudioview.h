@@ -232,7 +232,7 @@ private:
      *  so a clear-topped step shows what is rigged inside it. */
     void drawSolidBox(QPainter &p, const QVector3D corner[8],
                       const QColor &base, const QColor &edge,
-                      int topAlpha = 255) const;
+                      int topAlpha = 255, bool ambientLit = true) const;
     /** An OPEN lattice prism -- chords, end frames and diagonal bracing, with
      *  nothing filled. What a truss or a box-truss tower actually looks like,
      *  and what lets you see the fixtures rigged inside one. */
@@ -287,7 +287,8 @@ private:
      *  the head's pointing direction (null = rest). */
     void drawMoverSolid(QPainter &p, quint32 fid,
                         const struct FixtureVisualTraits &traits,
-                        const QColor &col, const QVector3D &aim) const;
+                        const QColor &col, const QVector3D &aim,
+                        bool ambientLit = true) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame

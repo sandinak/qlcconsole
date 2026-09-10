@@ -619,6 +619,8 @@ hidden.
 **Still to come:** stage 2 (mover heads pointing where they are aimed -- the
 `aim` parameter is already plumbed) and stage 3 (beam cones, the genuinely
 vector-ish part). Measure the repaint cost before committing to beams.
+*(Stage 2 landed in follow-on 22; the repaint cost was measured in
+follow-on 20.)*
 
 `monitor_test` 36/36. `check-all.sh`: all four legs pass, 0 failures.
 
@@ -1032,6 +1034,67 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 22: stage 2 -- mover heads point where they are aimed
+
+Branson: "move forward with the rig rendering project we were working on."
+Stage 1 (live colour) shipped in follow-on 12; this is stage 2.
+
+**`fixtureAimDirection(Fixture*, const FixtureRigProps&, QVector3D &dir)`**
+(`ui/src/monitor/fixturevisualtraits.{h,cpp}`) turns a fixture's live pan/tilt
+DMX into a unit aim vector in stage axes. Returns false for anything with no
+pan or tilt head channel, so a PAR simply keeps its old box.
+
+Three conventions are easy to get backwards and invisible until someone looks
+at a real rig, so each is pinned by an assertion rather than a comment:
+
+- **tilt centre = straight down.** A hung mover's home is pointing at the deck,
+  not at the horizon. `dir.z() < -0.98`.
+- **pan centre = downstage (+Y)**, with `panZeroDir` rotating clockwise seen
+  from above -- so `panZeroDir = 90` faces stage right (-X).
+- **tilt runs to the horizontal** at the end of its travel, along whatever
+  bearing pan is holding.
+
+`drawMoverSolid()` already had an `aim` parameter plumbed through from when the
+silhouette was built (follow-on 12), so the shape code did not need touching:
+a non-null aim builds the head box around the beam axis and emits a short beam
+stub in the aimed direction. Only the `Angled` plane uses it -- the flat views
+draw screen-space silhouettes on purpose (that is what stopped the heads
+billboarding in follow-on 11).
+
+**Bug found on the way: the room was dimming the lamps.** With eight movers
+driven to full, they rendered BLACK. The colour computation was correct
+(probed: `colour QColor(ARGB 1,1,1,1) dim 255`) -- `drawSolidBox()` was
+applying the room-ambient multiplier (`0.18 + 0.82 * ambient`) to emitting
+fixtures as well as to scenery. At blackout that is 0.18, so a lamp at full
+white drew as near-black. The non-box path had this fixed already; the box
+path was missed. `drawSolidBox()` gained an `ambientLit` parameter (default
+true -- scenery IS lit by the room) and fixtures pass `!m_liveValues`.
+
+**Two tests, both revert-checked** -- and the checking mattered:
+
+- `moverAimFollowsPanAndTilt` pins all three conventions above. Verified by
+  swapping the sin/cos roles on tilt: fails with "centre tilt should aim
+  straight down, got -0.012,0.999,-0.006".
+- `litFixturesKeepTheirBrightnessInABlackout` drives a deck-mounted fixture to
+  full at ambient 0.0 and measures mean luma around it. **The first two
+  versions of this test were vacuous** and passed with the fix reverted: a
+  free-placed fixture never reaches the box path at all, and the box path only
+  runs when `m_plane == Angled` -- the test was in `Front`. Mounted on a deck
+  face in the `Angled` plane it finally discriminates: luma 204 with the fix,
+  60 without.
+
+**Visual check.** Eyeballing the real show file twice pointed at the wrong
+objects -- the black boxes near the tower tops were not the movers being
+driven at all (UST-1 is at z=0.61, down by the decks, not up a tower). A
+purpose-built render settled it: four heads on one truss, pan fanned across
+four values, tilt swung out, each head visibly rotated to its own bearing with
+a beam stub, colours matching the driven RGB.
+
+**Still to come:** stage 3, beam cones.
+
+`monitor_test` 49/49.
+
+
 
 ---
 

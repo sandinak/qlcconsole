@@ -1700,6 +1700,101 @@ void Monitor_Test::ambientLevelDimsTheWholeView()
     props->removePlatform(pl->id());
 }
 
+void Monitor_Test::litFixturesKeepTheirBrightnessInABlackout()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Blackout Par");
+    def->setType(QLCFixtureDef::ColorChanger);
+    const char *nm[] = { "Dimmer", "Red", "Green", "Blue" };
+    const QLCChannel::PrimaryColour pc[] = { QLCChannel::NoColour, QLCChannel::Red,
+                                             QLCChannel::Green, QLCChannel::Blue };
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("4ch");
+    for (int c = 0; c < 4; ++c)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[c]); ch->setGroup(QLCChannel::Intensity);
+        if (pc[c] != QLCChannel::NoColour) ch->setColour(pc[c]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, c);
+    }
+    QLCPhysical ph;
+    ph.setWidth(600); ph.setHeight(600); ph.setDepth(600);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    for (int c = 0; c < 4; ++c) head.addChannel(c);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Blackout Par"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(300);
+    QVERIFY(m_doc->addFixture(fxi));
+
+    /* Mounted on the front face of a plain dark deck, so the fixture is the
+       only bright thing anywhere near the pixels we sample. */
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Blackout Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(5.0f); pl->setDepth(3.0f); pl->setHeight(1.5f);
+    pl->setColor(QColor(60, 60, 60));
+
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.riserPlatformId = pl->id();
+    rp.riserFace = 0;               // downstage face
+    rp.riserU = 2.5f;
+    rp.riserV = 0.8f;
+    props->setFixtureRigProps(fxi->id(), rp);
+
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 500);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 25.0);
+    v.setLiveValues(true);
+    v.setAmbient(0.0);              // blackout: the room contributes nothing
+
+    const QPointF at = v.w2s(props->fixtureRigPosition(fxi->id()));
+
+    auto meanLuma = [&]() {
+        const QImage img = v.grab().toImage();
+        double sum = 0.0;
+        int n = 0;
+        for (int dy = -8; dy <= 8; ++dy)
+        {
+            for (int dx = -8; dx <= 8; ++dx)
+            {
+                const QPoint p(at.toPoint() + QPoint(dx, dy));
+                if (img.rect().contains(p) == false) continue;
+                const QColor c = img.pixelColor(p);
+                sum += c.red() * 0.30 + c.green() * 0.59 + c.blue() * 0.11;
+                ++n;
+            }
+        }
+        return n > 0 ? sum / n : 0.0;
+    };
+
+    QByteArray u(512, char(0));
+    u[300] = char(255); u[301] = char(255); u[302] = char(255); u[303] = char(255);
+    fxi->setChannelValues(u);
+    const double lit = meanLuma();
+
+    u[300] = char(0);
+    fxi->setChannelValues(u);
+    const double doused = meanLuma();
+
+    QVERIFY2(lit > 150.0,
+             qPrintable(QString("a fixture at full should still read bright in a "
+                                "blackout, got luma %1").arg(lit)));
+    QVERIFY2(lit - doused > 60.0,
+             qPrintable(QString("dousing the fixture made no difference in a "
+                                "blackout (lit %1 vs out %2)").arg(lit).arg(doused)));
+
+    m_doc->deleteFixture(fxi->id());
+}
+
 
 void Monitor_Test::clearTopAndInsidePlacement()
 {
@@ -2293,3 +2388,80 @@ void Monitor_Test::deletingAGroupKeepsItsFixtures()
     foreach (quint32 fid, fids) m_doc->deleteFixture(fid);
 }
 
+
+void Monitor_Test::moverAimFollowsPanAndTilt()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Aim Head");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCChannel *pan = new QLCChannel();
+    pan->setName("Pan"); pan->setGroup(QLCChannel::Pan);
+    pan->setControlByte(QLCChannel::MSB);
+    def->addChannel(pan);
+    QLCChannel *tilt = new QLCChannel();
+    tilt->setName("Tilt"); tilt->setGroup(QLCChannel::Tilt);
+    tilt->setControlByte(QLCChannel::MSB);
+    def->addChannel(tilt);
+
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(400); ph.setDepth(300);
+    ph.setFocusPanMax(360); ph.setFocusTiltMax(180);
+    mode->setPhysical(ph);
+    mode->insertChannel(pan, 0);
+    mode->insertChannel(tilt, 1);
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Aim"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(200);
+    QVERIFY(m_doc->addFixture(fxi));
+
+    FixtureRigProps rp;
+    QVector3D dir;
+
+    auto drive = [&](int panVal, int tiltVal) {
+        QByteArray u(512, char(0));
+        u[200] = char(panVal);
+        u[201] = char(tiltVal);
+        fxi->setChannelValues(u);
+    };
+
+    /* Tilt at its centre points a hung mover STRAIGHT DOWN -- its home. */
+    drive(128, 128);
+    QVERIFY(fixtureAimDirection(fxi, rp, dir));
+    QVERIFY2(dir.z() < -0.98f,
+             qPrintable(QString("centre tilt should aim straight down, got %1,%2,%3")
+                        .arg(double(dir.x())).arg(double(dir.y())).arg(double(dir.z()))));
+
+    /* Tilt to one end swings the beam up to the horizontal, along the bearing
+       pan is facing. Pan centred + panZeroDir 0 means DOWNSTAGE, which is +Y. */
+    drive(128, 255);
+    QVERIFY(fixtureAimDirection(fxi, rp, dir));
+    QVERIFY2(dir.y() > 0.9f,
+             qPrintable(QString("tilted out at pan centre should face downstage "
+                                "(+Y), got %1,%2,%3").arg(double(dir.x()))
+                        .arg(double(dir.y())).arg(double(dir.z()))));
+
+    /* A quarter turn clockwise from downstage is stage RIGHT, which is -X. */
+    rp.panZeroDir = 90.0f;
+    QVERIFY(fixtureAimDirection(fxi, rp, dir));
+    QVERIFY2(dir.x() < -0.9f,
+             qPrintable(QString("90 deg clockwise from downstage should face "
+                                "stage right (-X), got %1,%2,%3").arg(double(dir.x()))
+                        .arg(double(dir.y())).arg(double(dir.z()))));
+
+    // A fixture with no pan or tilt has nothing to point.
+    Fixture *par = new Fixture(m_doc);
+    par->setName("NoAim"); par->setChannels(1); par->setUniverse(3); par->setAddress(300);
+    QVERIFY(m_doc->addFixture(par));
+    QVERIFY2(fixtureAimDirection(par, rp, dir) == false,
+             "a fixture with no pan/tilt reported an aim direction");
+
+    m_doc->deleteFixture(fxi->id());
+    m_doc->deleteFixture(par->id());
+}

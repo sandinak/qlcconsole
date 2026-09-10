@@ -23,7 +23,10 @@
 #include "fixture.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
+#include <QtMath>
 #include "qlcchannel.h"
+#include "truss.h"
+#include "qlcfixturehead.h"
 #include "qlccapability.h"
 #include "qlcphysical.h"
 
@@ -295,5 +298,53 @@ bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer)
     else
         dimmer = 0;
 
+    return true;
+}
+
+bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir)
+{
+    if (fx == nullptr)
+        return false;
+    QLCFixtureMode *mode = fx->fixtureMode();
+    if (mode == nullptr || mode->heads().isEmpty())
+        return false;
+
+    const QLCFixtureHead &head = mode->heads().first();
+    const quint32 panCh  = head.channelNumber(QLCChannel::Pan,  QLCChannel::MSB);
+    const quint32 tiltCh = head.channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+    if (panCh == QLCChannel::invalid() && tiltCh == QLCChannel::invalid())
+        return false;                       // not a mover: nothing to point
+
+    const QByteArray v = fx->channelValues();
+
+    /* Same mapping MonitorFixtureItem uses, so the plot and the rig view agree
+       about where a head is looking: the centre DMX value is 0 degrees and the
+       range is centred on it. */
+    auto degrees = [&](quint32 ch, double maxDeg) {
+        if (ch == QLCChannel::invalid() || int(ch) >= v.size())
+            return 0.0;
+        const double val = double(uchar(v.at(int(ch))));
+        return (val * maxDeg) / 255.0 - (maxDeg / 2.0);
+    };
+    const double panMax  = (mode->physical().focusPanMax()  != 0)
+                         ? mode->physical().focusPanMax()  : 360.0;
+    const double tiltMax = (mode->physical().focusTiltMax() != 0)
+                         ? mode->physical().focusTiltMax() : 270.0;
+
+    const double yaw  = qDegreesToRadians(double(rp.panZeroDir)
+                                          + degrees(panCh, panMax)
+                                          + double(rp.panOffsetDeg));
+    const double tilt = qDegreesToRadians(degrees(tiltCh, tiltMax)
+                                          + double(rp.tiltOffsetDeg));
+
+    // Horizontal bearing: 0 = downstage (+Y), turning clockwise from above.
+    const QVector3D horiz(float(-qSin(yaw)), float(qCos(yaw)), 0.0f);
+    // Tilt lifts the beam off straight-down toward that bearing.
+    dir = QVector3D(horiz.x() * float(qSin(tilt)),
+                    horiz.y() * float(qSin(tilt)),
+                    float(-qCos(tilt)));
+    if (dir.length() < 1e-6f)
+        return false;
+    dir.normalize();
     return true;
 }

@@ -1021,7 +1021,7 @@ double StructureStudioView::viewDepth(const QVector3D &w) const
  * Corner order is the unit cube: 0-3 the bottom face (CCW), 4-7 the top. */
 void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
                                        const QColor &base, const QColor &edge,
-                                       int topAlpha) const
+                                       int topAlpha, bool ambientLit) const
 {
     static const int faces[6][4] = {
         { 4, 5, 6, 7 },   // top
@@ -1061,7 +1061,13 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
            output is being shown: at full work light the deck colours are as
            saturated as the workspace says, and anything less takes them down.
            Gating it on live values left a blackout showing bright red decks,
-           and left the static view as vivid as a test card. */
+           and left the static view as vivid as a test card.
+         *
+         * NOT for an emitting fixture, though: its colour already IS its output,
+         * and dimming a lamp by the room is backwards -- the same mistake the
+         * non-box path had, fixed there and missed here, which rendered a mover
+         * at full white as a near-black box. */
+        if (ambientLit)
         {
             const double af = 0.18 + 0.82 * m_ambient;
             // Keep the alpha: building a QColor from three ints resets it to
@@ -1718,7 +1724,8 @@ void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTrai
  * ready to be driven by live pan/tilt without changing shape. */
 void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                                          const FixtureVisualTraits &traits,
-                                         const QColor &col, const QVector3D &aim) const
+                                         const QColor &col, const QVector3D &aim,
+                                         bool ambientLit) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
@@ -1752,7 +1759,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
         k[2] = mid + l - u + n; k[3] = mid - l - u + n;
         k[4] = mid - l + u - n; k[5] = mid + l + u - n;
         k[6] = mid + l + u + n; k[7] = mid - l + u + n;
-        drawSolidBox(p, k, col, col.lighter(150));
+        drawSolidBox(p, k, col, col.lighter(150), 255, ambientLit);
     };
 
     for (int u = 0; u < units; ++u)
@@ -1769,13 +1776,35 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
         box(armMid + L * float(slice * 0.36), slice * 0.10, armH, d * 0.22, L, H, N);
         box(armMid - L * float(slice * 0.36), slice * 0.10, armH, d * 0.22, L, H, N);
 
-        // The head, slung between the arms. When an aim is given, offset it
-        // along that direction so the fixture visibly points where it is
-        // pointing rather than just changing colour.
+        /* The head, slung between the arms. Given an aim, build it around THAT
+           direction rather than the fixture's own axes, so the head visibly
+           looks where it is looking -- a box that merely shifts a little reads
+           as a glitch, not as a mover pointing somewhere. */
         QVector3D headMid = uc + H * float(h * 0.10);
         if (!aim.isNull())
-            headMid += aim.normalized() * float(h * 0.10);
-        box(headMid, slice * 0.26, h * 0.22, d * 0.30, L, H, N);
+        {
+            const QVector3D beam = aim.normalized();
+            // A frame around the beam: any two axes perpendicular to it will do.
+            QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), beam);
+            if (side.length() < 1e-3f)                 // aiming straight up/down
+                side = L;
+            side.normalize();
+            const QVector3D up = QVector3D::crossProduct(beam, side).normalized();
+
+            headMid += beam * float(h * 0.12);
+            box(headMid, slice * 0.26, h * 0.26, d * 0.26, side, beam, up);
+
+            // A stub of beam, so the direction reads at overview scale where the
+            // head itself is only a few pixels across.
+            const QVector3D tip = headMid + beam * float(qMax(0.25, h * 1.4));
+            emitLine(w2s(headMid), w2s(tip),
+                     (viewDepth(headMid) + viewDepth(tip)) / 2.0,
+                     col.lighter(150), 1.4, p);
+        }
+        else
+        {
+            box(headMid, slice * 0.26, h * 0.22, d * 0.30, L, H, N);
+        }
     }
 }
 
@@ -1855,9 +1884,18 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         QVector3D corner[8];
         fixtureBoxCorners(fid, traits, corner);
         if (traits.kind == FixtureSilhouette::Mover)
-            drawMoverSolid(p, fid, traits, col, QVector3D());
+        {
+            /* Point the head where it is actually aimed, while showing live
+               output. drawMoverSolid()'s aim parameter was plumbed through when
+               the silhouette was built, precisely so this could arrive without
+               touching the shape code. */
+            QVector3D aim;
+            if (!m_liveValues || !fixtureAimDirection(fx, rp, aim))
+                aim = QVector3D();
+            drawMoverSolid(p, fid, traits, col, aim, !m_liveValues);
+        }
         else
-            drawSolidBox(p, corner, col, col.lighter(150));
+            drawSolidBox(p, corner, col, col.lighter(150), 255, !m_liveValues);
 
         /* Pixels on the face pointing at us -- when a grid is declared AND the
            pixels are big enough to see.

@@ -170,9 +170,18 @@ private slots:
     /** Deleting a fixture group must leave its fixtures in the workspace,
      *  patched exactly as they were. */
     void deletingAGroupKeepsItsFixtures();
+    /** A mover's aim vector, from the pan/tilt it is being driven with. The
+     *  conventions are easy to get backwards and invisible until someone looks
+     *  at a rig, so pin each one. */
+    void moverAimFollowsPanAndTilt();
     /** Room light applies whether or not live output is shown, and takes the
      *  whole picture down toward a blackout. */
     void ambientLevelDimsTheWholeView();
+    /** Room light is for the room. A lamp that is lit reads at its own
+     *  brightness even in a blackout -- that is the whole point of a blackout
+     *  shot. Movers once went black here because the ambient multiplier was
+     *  applied to emitters too. */
+    void litFixturesKeepTheirBrightnessInABlackout();
 
 private:
     Doc* m_doc;

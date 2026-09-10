@@ -38,6 +38,7 @@ enum class FixtureSilhouette { Bar, Mover, Par, Generic };
 
 #include <QSize>
 #include <QColor>
+#include <QVector3D>
 
 struct FixtureVisualTraits
 {
@@ -71,6 +72,23 @@ FixtureVisualTraits classifyFixture(Fixture *fx);
  *  @return false when the fixture has nothing to say (no def, no channels), so
  *          callers can fall back to their static appearance. */
 bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer);
+
+/** Where a moving head is currently POINTING, in world space, from the pan and
+ *  tilt it is being driven with right now.
+ *
+ *  Conventions, all of them already established elsewhere and repeated here
+ *  because getting one backwards is invisible until someone looks at a rig:
+ *    - pan 0 (the centre DMX value) faces DOWNSTAGE, and @c panZeroDir turns
+ *      that clockwise seen from above -- see FixtureRigProps::panZeroDir.
+ *    - +Y is downstage and +X is stage left (see barFaceVector() in
+ *      monitorproperties.cpp), so a clockwise quarter turn from downstage
+ *      points stage right, which is -X.
+ *    - tilt 0 points straight DOWN, the home of a hung mover, and tilt swings
+ *      the beam up toward whatever pan is facing.
+ *
+ *  @return false when the fixture has no pan or tilt to read, so callers can
+ *          leave the head in its rest position. */
+bool fixtureAimDirection(Fixture *fx, const struct FixtureRigProps &rp, QVector3D &dir);
 
 // ---------------------------------------------------------------------------
 // Shared Mover silhouettes -- pure geometry (a rect in, a path out), so
