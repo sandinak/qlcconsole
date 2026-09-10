@@ -155,6 +155,14 @@ private slots:
      *  the stored position while its Z stayed derived, so it could never be
      *  moved vertically inside (or above) the step. */
     void deckMountedFixtureMovesVerticallyToo();
+    /** A studio-frame-group fixture set to Inside must be positionable within
+     *  the volume: the face PIN is what welded it to the surface. */
+    void insideFrameGroupFixtureIsNotPinnedToTheFace();
+    /** EVERY mount kind dragFixtureTo() dispatches on must actually move a
+     *  fixture. Five separate "I can't move this" reports were each a branch
+     *  that did not exist or silently declined; this walks the whole chain so a
+     *  sixth fails here instead of arriving as a bug report. */
+    void everyMountKindCanBeDragged();
     /** Room light applies whether or not live output is shown, and takes the
      *  whole picture down toward a blackout. */
     void ambientLevelDimsTheWholeView();

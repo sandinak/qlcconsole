@@ -862,6 +862,55 @@ silently meaning something else.
 
 `check-all.sh`: all four legs pass, 0 failures.
 
+### Follow-on 19: the frame-group face PIN, and a sweep over every mount kind
+
+Branson: "still can't move a fixture that's set to be inside to place its
+location inside" (DS-4, Side view).
+
+**The sixth branch.** `DS4aB` has NO structural mount -- it is a studio
+FRAME-GROUP fixture (`GLX/GLY/GLZ`, anchored to the platform). That branch ends
+by re-pinning the out-of-plane component to the assigned face:
+`facePin(studioMount=0)` pins Z to the deck TOP. So every vertical drag was
+overwritten and an Inside fixture was welded to the surface it was meant to sit
+under. Inside now CLAMPS to the structure instead of pinning to its skin.
+Verified against the real workspace before writing a test: DS4aB moved from
+z=0.204 (deck top) to 0.079, inside the 0.204 m step.
+
+**The sweep I said I would do.** `everyMountKindCanBeDragged` walks all six
+kinds -- truss, tower, riser, deck, frame group, free placed. Two things worth
+recording about building it:
+
+  1. **The first version was worse than no test.** It asserted "did it move in
+     SOME plane" and PASSED with the deck branch deleted, because a deck fixture
+     still slides sideways via the free-placement fallback. It would have given
+     false confidence over exactly the bug class it was written for. It now
+     drags PURELY horizontally and PURELY vertically and requires both;
+     re-checked against a deleted deck branch, it fails correctly.
+  2. **It reported a seventh gap that was not one.** The tower "could not move
+     vertically" -- because an `addShelf` loop had landed in the WRONG TEST via a
+     string match, leaving the sweep's tower with no shelves. A tower mount is
+     quantised to its shelves, so the drag must also cross one (0.5 m, not a
+     nudge) or it legitimately changes nothing.
+
+### Bulk edit: 24 wall-washer bars moved inside their steps
+
+Branson: "can we move all the barlights on that show file inside the step the
+same way I did DS-4". Done to `test-workspaces/stage-structures-demo.qxw` after
+a dry run and with his choices (wall washers only; "just below the top"):
+`Placement="1"` and height = 0.75 * step height (0.153 m) on the 24
+`Wall Washer Light Bar` fixtures. The 96 `Step Row 64 Heads` FACE LEDs were left
+alone -- they are the front-face lighting that already worked. DS4aB's stale
+`Placement="2"` (retired Recessed) was replaced. Backup in the session
+scratchpad.
+
+LESSON: the first verification reported "16 outside the box" and was WRONG --
+it compared heights against an absolute 0.204 m. The steps are STACKED, so US-1's
+base is 0.396 and its interior is 0.396..0.600; a correct 0.549 looked like a
+failure. Re-checked against each fixture's own `platformBaseZ()`: 24 Inside, 0 on
+the surface, 0 outside. Verify against the object's own frame, never an absolute.
+
+`monitor_test` 45/45. `check-all.sh`: all four legs pass, 0 failures.
+
 ---
 
 ## Fixture Group grid cells now show each head's colour type (RGB/RGBW/W/Wheel) — SHIPPED, not yet Branson-verified (2026-09-07)

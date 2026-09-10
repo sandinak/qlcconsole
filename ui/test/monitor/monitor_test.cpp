@@ -2006,3 +2006,167 @@ void Monitor_Test::deckMountedFixtureMovesVerticallyToo()
     m_doc->deleteFixture(fxi->id());
     props->removePlatform(pl->id());
 }
+
+void Monitor_Test::insideFrameGroupFixtureIsNotPinnedToTheFace()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("DS-4"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(2.4f); pl->setDepth(0.204f); pl->setHeight(0.204f);
+    pl->setTopMaterial(StagePlatform::ClearTop);
+
+    /* A studio FRAME group anchored to the platform -- how the step's own bars
+       are held in stage-structures-demo.qxw (GLX/GLY/GLZ, no structural mount
+       at all). This branch is the one that pins. */
+    const quint32 gid = 77;
+    props->ensureGroup(gid, 0);
+    props->setGroupHasFrame(gid, true);
+    props->setGroupAnchor(gid, QStringLiteral("platform"), pl->id());
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("DS4aB"); fxi->setChannels(1); fxi->setAddress(540);
+    QVERIFY(m_doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(600, 75, 0));
+    props->setFixtureGroup(fxi->id(), gid);
+    QCOMPARE(props->fixtureFrameGroup(fxi->id()), gid);
+
+    FixtureRigProps rp;
+    rp.studioMount = 0;                     // laid flat -> facePin pins Z
+    rp.placement = FixtureRigProps::Inside;
+    // Sitting on the deck top, exactly as the workspace stores these
+    // (GLX/GLY/GLZ with GLZ = the platform's height).
+    rp.groupLocal = QVector3D(0.6f, 0.075f, pl->height());
+    props->setFixtureRigProps(fxi->id(), rp);
+    QCOMPARE(props->fixtureRigPosition(fxi->id()).z(), pl->height());
+
+    StructureStudioView view(m_doc, StructureStudioView::PlatformKind, pl->id());
+    view.resize(900, 500);
+    view.reload();
+    view.setLocked(false);
+    view.setPlane(StructureStudioView::Side);
+
+    const QVector3D before = props->fixtureRigPosition(fxi->id());
+    const QPointF px = view.w2s(before);
+
+    /* Drag DOWN the screen, into the step. This changed nothing before:
+       facePin() re-pinned Z to the deck top on every drag, so an Inside
+       fixture was welded to the surface it was supposed to be under. */
+    QVERIFY(view.dragFixtureTo(fxi->id(), px + QPointF(0.0, view.m_scale * 0.1)));
+    const float after = props->fixtureRigPosition(fxi->id()).z();
+    QVERIFY2(after < before.z() - 1e-4,
+             qPrintable(QString("Inside is still pinned to the face (z %1 -> %2)")
+                        .arg(double(before.z())).arg(double(after))));
+    QVERIFY2(after >= 0.0f && after <= pl->height(),
+             qPrintable(QString("ended outside the step: z %1, height %2")
+                        .arg(double(after)).arg(double(pl->height()))));
+
+    m_doc->deleteFixture(fxi->id());
+    props->removePlatform(pl->id());
+}
+
+void Monitor_Test::everyMountKindCanBeDragged()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // One of everything a fixture can hang off.
+    Truss *tr = props->addTruss();
+    tr->setName("Sweep Truss"); tr->setType(Truss::Horizontal);
+    tr->setOrigin(QVector3D(0.0f, 0.0f, 3.0f)); tr->setDirection(QPointF(1.0, 0.0));
+    tr->setLength(4.0f); tr->setWidth(0.3f);
+
+    Tower *tw = props->addTower();
+    tw->setName("Sweep Tower"); tw->setOriginX(6.0f); tw->setOriginY(0.0f);
+    tw->setWidth(0.5f); tw->setDepth(0.5f); tw->setHeight(3.0f);
+    for (int i = 1; i <= 4; ++i)
+        tw->addShelf(i * 0.6f);      // a tower mount is quantised to its shelves
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Sweep Deck"); pl->setOriginX(0.0f); pl->setOriginY(4.0f);
+    pl->setWidth(3.0f); pl->setDepth(1.5f); pl->setHeight(0.5f);
+
+    const quint32 gid = 88;
+    props->ensureGroup(gid, 0);
+    props->setGroupHasFrame(gid, true);
+    props->setGroupAnchor(gid, QStringLiteral("platform"), pl->id());
+
+    struct Case { const char *name; int kind; StructureStudioView::Kind view; quint32 viewId; };
+    const Case cases[] = {
+        { "truss",       0, StructureStudioView::TrussKind,    tr->id() },
+        { "tower",       1, StructureStudioView::TowerKind,    tw->id() },
+        { "riser",       2, StructureStudioView::PlatformKind, pl->id() },
+        { "deck",        3, StructureStudioView::PlatformKind, pl->id() },
+        { "frame group", 4, StructureStudioView::PlatformKind, pl->id() },
+        { "free placed", 5, StructureStudioView::PlatformKind, pl->id() },
+    };
+
+    int addr = 300;
+    for (const Case &c : cases)
+    {
+        Fixture *fxi = new Fixture(m_doc);
+        fxi->setName(QString("Sweep %1").arg(c.name));
+        fxi->setChannels(1);
+        fxi->setAddress(addr); addr += 8;
+        QVERIFY(m_doc->addFixture(fxi));
+        const quint32 fid = fxi->id();
+        props->setFixturePosition(fid, 0, 0, QVector3D(1000, 4500, 0));
+
+        FixtureRigProps rp;
+        rp.placement = FixtureRigProps::Inside;
+        switch (c.kind)
+        {
+        case 0: rp.trussId = tr->id(); rp.trussOffset = 2.0f; break;
+        case 1: rp.towerId = tw->id(); rp.towerU = 0.25f; rp.towerV = 0.25f; break;
+        case 2: rp.riserPlatformId = pl->id(); rp.riserFace = FixtureRigProps::RiserTop;
+                rp.riserU = 1.5f; rp.riserV = 0.75f; break;
+        case 3: rp.deckPlatformId = pl->id(); break;
+        case 4: rp.groupLocal = QVector3D(1.0f, 0.5f, pl->height()); break;
+        default: break;                       // free placed: no mount at all
+        }
+        props->setFixtureRigProps(fid, rp);
+        if (c.kind == 4)
+            props->setFixtureGroup(fid, gid);
+
+        StructureStudioView view(m_doc, c.view, c.viewId);
+        view.resize(800, 560);
+        view.reload();
+        view.setLocked(false);
+
+        /* Two separate questions, because answering only the first is what let
+           the deck gap hide: a deck fixture with NO branch still slid sideways
+           via the free-placement fallback, so "did it move at all" said yes
+           while the vertical -- the thing that was broken -- was ignored.
+           Drag PURELY horizontally, then PURELY vertically, and require both. */
+        auto dragged = [&](int plane, const QPointF &delta) {
+            view.setPlane(StructureStudioView::Plane(plane));
+            const QVector3D before = props->fixtureRigPosition(fid);
+            view.dragFixtureTo(fid, view.w2s(before) + delta);
+            return (props->fixtureRigPosition(fid) - before).length() > 1e-4;
+        };
+
+        bool sideways = false, vertical = false;
+        for (int pi = 0; pi < 3 && !sideways; ++pi)
+            sideways = dragged(pi, QPointF(view.m_scale * 0.2, 0.0));
+        /* Vertical only means anything in an elevation. Half a metre, not a
+           nudge: a tower mount is QUANTISED to its shelves (0.6 m apart here),
+           so a small drag legitimately changes nothing and would make this
+           assert a fake failure. */
+        for (int pi = 1; pi < 3 && !vertical; ++pi)
+            vertical = dragged(pi, QPointF(0.0, -view.m_scale * 0.5));
+
+        QVERIFY2(sideways, qPrintable(QString("a fixture mounted \"%1\" would not "
+                                              "move sideways in any plane")
+                                      .arg(c.name)));
+        QVERIFY2(vertical, qPrintable(QString("a fixture mounted \"%1\" would not "
+                                              "move VERTICALLY in any elevation — "
+                                              "dragFixtureTo is ignoring the "
+                                              "out-of-plane axis for it")
+                                      .arg(c.name)));
+        m_doc->deleteFixture(fid);
+    }
+
+    props->removeTruss(tr->id());
+    props->removeTower(tw->id());
+    props->removePlatform(pl->id());
+}
+

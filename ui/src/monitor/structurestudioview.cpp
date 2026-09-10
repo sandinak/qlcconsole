@@ -475,9 +475,25 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         else if (m_plane == Front) { w.setX(float(ab.x())); w.setZ(float(ab.y())); }
         else                       { w.setY(float(ab.x())); w.setZ(float(ab.y())); }
         QVector3D lp = props->worldToGroupLocal(fg, w);
-        // Keep it snapped to its assigned face: re-pin the out-of-plane component.
+
+        /* Normally the out-of-plane component is re-pinned to the assigned
+           face, which is what keeps a surface-mounted fixture ON its face while
+           you slide it about.
+         *
+         * But an INSIDE fixture is meant to live in the volume, and pinning is
+         * precisely what stopped it: with studioMount 0 the pin is Z = the deck
+         * top, so every vertical drag was overwritten with the surface height
+         * and the fixture could never be positioned within the step. Clamp it
+         * to the structure instead of pinning it to the skin. */
         int pinComp; double pinVal; facePin(rp.studioMount, pinComp, pinVal);
-        if (pinComp == 0)      lp.setX(float(pinVal));
+        StagePlatform *inPl = (m_kind == PlatformKind) ? props->platform(m_id) : nullptr;
+        if (rp.placement == FixtureRigProps::Inside && inPl != nullptr)
+        {
+            if (pinComp == 0)      lp.setX(qBound(0.0f, lp.x(), inPl->width()));
+            else if (pinComp == 1) lp.setY(qBound(0.0f, lp.y(), inPl->depth()));
+            else                   lp.setZ(qBound(0.0f, lp.z(), inPl->height()));
+        }
+        else if (pinComp == 0) lp.setX(float(pinVal));
         else if (pinComp == 1) lp.setY(float(pinVal));
         else                   lp.setZ(float(pinVal));
         rp.groupLocal = lp;
