@@ -110,8 +110,17 @@ popout makes it possible, and more cleanly than expected.**
   on this machine's GPU stack. That needs the built binary to be launched and
   its 3D view opened. I have not done it: a second QLC+ instance can seize
   MIDI devices and ArtNet universes, and there is a live show file open. **Run
-  it yourself when the rig is quiet** — the binary is built and waiting at
-  `scratchpad/qmlui-qt6/qmlui/qlcconsole-qml`.
+  it yourself when the rig is quiet.** To build it (this is the durable form —
+  note the explicit Qt6 prefix, without which CMake may pick up `qt@5`):
+
+  ```sh
+  cmake -S . -B build-qmlui -Dqmlui=ON \
+        -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt6/lib/cmake
+  cmake --build build-qmlui -j"$(sysctl -n hw.perflevel0.logicalcpu)"
+  build-qmlui/qmlui/qlcconsole-qml          # plain binary, no .app bundle
+  ```
+
+  It takes about 90 seconds on this machine.
 - **Also unverified:** Qt3D's long-term support. It is shipped in 6.11.1 here,
   but Qt Quick 3D is the newer module and **is also installed**. Check
   upstream's position before committing years of work to Qt3D.
@@ -228,9 +237,8 @@ qmlui. This is a bug fix, not a port.
 1. **Now (days):** do §5.1 and §5.2. The CMY/UV/Lime/Indigo gap is a real defect
    found by this review, and fixing it needs none of the architecture above.
 2. **Next (an hour, when the rig is quiet):** finish the option-B spike. The
-   build half is done and clean; what remains is launching
-   `scratchpad/qmlui-qt6/qmlui/qlcconsole-qml`, opening its 3D view, and seeing
-   whether Qt3D renders here — plus checking upstream's Qt3D-vs-Quick3D
+   build half is done and clean; what remains is building it per §3B, opening
+   its 3D view, and seeing whether Qt3D renders here — plus checking upstream's Qt3D-vs-Quick3D
    position. That turns the last unknown into a fact.
 3. **Then decide on depth, on evidence:** cost a software z-buffer against the
    Qt3D popout. Pick one. Do not keep adding layering epsilons — that is four
