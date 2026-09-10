@@ -271,6 +271,85 @@ fallback, i.e. its live colour was never read at all.
 
 ---
 
+## 7. Costed spike: a software z-buffer (2026-09-10)
+
+Recommendation #3 said to cost a software z-buffer against the Qt3D popout
+before reaching for either. Done — a standalone prototype, same projection and
+same depth convention as `StructureStudioView`, rendering the exact failure
+case: a wide step face whose depth varies across it, with pixel quads sitting
+1 mm proud of it.
+
+### The trick that makes it cheap
+
+Depth across a **planar** polygon is an affine function of screen x,y, because
+`project()` and `viewDepth()` are both linear in world space and there is no
+perspective divide. So one plane fit per polygon is **exact**, not an
+approximation, and the inner loop is an add and a compare:
+
+```cpp
+// z = A*x + B*y + C, fitted from three vertices
+double z = A * (xa + 0.5) + B * sy + C;
+for (int x = xa; x <= xb; ++x, z += A)
+    if (float(z) > zline[x]) { zline[x] = float(z); line[x] = rgb; }
+```
+
+### Measured, 1806 primitives at 1400x850 (the real angled frame is 1786)
+
+| approach | ms/frame | strip coverage |
+| --- | --- | --- |
+| painter's algorithm, AA on — **what we do today** | 0.513 | 192 columns (~48%) |
+| painter's algorithm, AA off | 0.303 | — |
+| **software z-buffer, no AA** | **0.248** | **398 columns (100%)** |
+| software z-buffer, 2x supersampled (antialiased) | 1.33 | 100% |
+
+Two things worth staring at:
+
+- **It is faster, not slower.** The z-buffer beats the painter even with the
+  painter's antialiasing turned off. A flat fill with an add-and-compare is
+  cheaper than QPainter's polygon path machinery.
+- **It is correct with no epsilon anywhere.** 398 columns against 192 — the
+  painter shows under half the strip. This is the "half of every step blanks"
+  bug, reproduced in isolation and then simply gone.
+
+Against the real view's measured **43 ms** frame, even the antialiased variant
+is about **3%** of the budget. Note the spike only fills flat polygons, so
+these sub-millisecond numbers are the *rasteriser*, not a whole frame — the
+real 43 ms is dominated by many small primitives, pens, state changes and the
+widget paint path. What the spike establishes is that the depth machinery is
+not what would cost us.
+
+### What the port would actually touch
+
+- **Per-vertex depth.** `emitPoly()` and friends carry one depth today and would
+  carry world vertices instead. **17 call sites** in `structurestudioview.cpp`
+  (`emitPoly` 5, `emitLine` 7, `emitDot` 1, `emitDots` 2, `emitLabel` 2). Small.
+- **Translucency does not go away.** A z-buffer is order-independent only for
+  opaque geometry. Beams and clear tops (4 `setAlpha` sites) still need the
+  standard two-pass scheme: opaque first with depth write, then translucent
+  back-to-front with depth *test* but no depth *write*. So the sort survives —
+  for a handful of primitives instead of all 1800.
+- **Text stays 2D.** Labels get drawn onto the resolved image afterwards, which
+  is what you want anyway; depth-testing a label is not meaningful.
+- **Antialiasing has to be bought back** by supersampling — costed above at
+  1.33 ms, which is affordable.
+- **A bonus worth having:** with a depth buffer, hit-testing becomes reading one
+  pixel. That would replace the 5 `hitTest` geometry paths with something
+  pixel-accurate, and those have been their own source of bugs (see the
+  fixture-id-0 arc).
+- **Everything stays headless-testable.** It renders to a `QImage` either way,
+  which is how every bug in this area has actually been caught — and is exactly
+  what option B would give up.
+
+### Verdict
+
+Do it. It is cheaper than the Qt3D popout by a wide margin, it keeps the
+gesture handling Branson prefers, it keeps the headless tests, and it ends the
+artefact family rather than adding a fifth epsilon to it. The Qt3D route buys
+volumetric haze, gobos and shadows — real things, but not the thing that keeps
+breaking.
+
+---
+
 *Method note: every number here was measured in this tree — `wc -l`, `grep -c`,
 and a full `cmake -Dqmlui=ON -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt6` build
 that completed with zero errors. Two things are marked unverified rather than
