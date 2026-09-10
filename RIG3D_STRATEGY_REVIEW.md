@@ -30,8 +30,13 @@ It is a real GPU renderer, and a good one:
 - **Qt3D** (`Qt3D.Core`, `Qt3D.Render`, `Qt3D.Input`, `Qt3D.Extras`) hosted in
   QtQuick via `Scene3D`. Present and installed here — Qt 6.11.1 ships
   `Qt3DCore/Render/Extras/Input` frameworks.
-- **Requires OpenGL 3.3+**, and degrades honestly: `3DViewUnsupported.qml`
-  renders "3D View disabled" rather than something wrong.
+- **Requires OpenGL 3.3+.** There is a `3DViewUnsupported.qml` that renders a
+  polite "3D View disabled — a graphics card with support for OpenGL 3.3 or
+  higher is required", but **it is unreachable in this version**: the branch
+  that selects it tests `qlcplus.is3DSupported`, and `App::is3DSupported()`
+  (`qmlui/app.cpp:282`) is hardcoded `return true;`. So an unsupported GPU
+  gets a blank view, not the message. Worth knowing before reading a black
+  panel as "our build is broken".
 - **Volumetric beams by raymarching.** `SpotlightConeEntity.qml` feeds a shader
   `raymarchSteps`, `smokeAmount`, `coneTopRadius`, `coneBottomRadius`,
   `distCutoff`, plus a **gobo texture** and rotation, and full
@@ -110,7 +115,9 @@ popout makes it possible, and more cleanly than expected.**
   on this machine's GPU stack. That needs the built binary to be launched and
   its 3D view opened. I have not done it: a second QLC+ instance can seize
   MIDI devices and ArtNet universes, and there is a live show file open. **Run
-  it yourself when the rig is quiet.** To build it (this is the durable form —
+  it yourself when the rig is quiet** — the 3D view lives under **Fixtures &
+  Functions -> "3D View"** in that app's sub-toolbar; it is not a separate
+  binary, and there is no standalone visualiser to launch. To build it (this is the durable form —
   note the explicit Qt6 prefix, without which CMake may pick up `qt@5`):
 
   ```sh
