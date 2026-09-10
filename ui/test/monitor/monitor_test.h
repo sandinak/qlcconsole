@@ -199,6 +199,15 @@ private slots:
      *  front, not from values the engine keeps moving underneath it. */
     /** A head with a fixed cone dims when it is not pointed at you -- and a
      *  fixture whose definition declares no lens is never dimmed at all. */
+    /** A beam ends on the floor, or on the step it is thrown over -- and a
+     *  step only catches beams that actually cross its footprint. */
+    /** The rig view rules its floor in the studio's grid, not a fraction of
+     *  whatever the rig happens to measure -- and uniformly in depth. */
+    void theRigGridMatchesTheStudioGrid();
+    void aBeamStopsAtWhatItLandsOn();
+    /** A lit head puts light between itself and what it lands on; a doused one
+     *  does not; and the toggle turns them off. */
+    void aLitMoverThrowsAVisibleBeam();
     void aFixedConeHeadDimsWhenAimedAway();
     void aFrameIsDrawnFromOneInstant();
     /** House left and house right are the same room: a lit strip reads the

@@ -850,20 +850,45 @@ void StructureStudioView::drawGrid(QPainter &p) const
            canvas -- a flat horizontal rule cut straight through the rig and
            read as a wall behind it. Draw a ground grid over the rig's own
            footprint so the structures have something to stand on. */
+        /* The SAME grid the studio draws, not one invented from the rig's
+           bounding box.
+         *
+           This used to size its cells as a twelfth of however wide the rig
+           happened to be, so the floor was ruled in some arbitrary fraction of
+           a stage and the two windows disagreed about how big a metre is. The
+           studio's grid is the stage: same cell size, same extent, so a
+           distance you learn to read in one window means the same in the
+           other.
+         *
+           The spacing is uniform front to back -- this is an ORTHOGRAPHIC
+           projection, measured at 51.5 px per cell at every depth. Cells look
+           bigger toward the back because they are parallelograms, not because
+           they are. */
+        MonitorProperties *gprops = m_doc->monitorProperties();
+        const double cell = (gprops->gridUnits() == MonitorProperties::Feet)
+                            ? 0.3048 : 1.0;
+        const QVector3D cells = gprops->gridSize();
+        double x0 = 0.0, y0 = 0.0;
+        double x1 = qMax(1.0, double(cells.x())) * cell;
+        double y1 = qMax(1.0, double(cells.z())) * cell;
+
+        /* ...but never smaller than what is actually rigged. A structure
+           standing off the end of the declared stage still needs a floor. */
         QList<QVector3D> pts;
         collectPoints(pts);
-        if (pts.isEmpty())
-            return;
-        double x0 = pts.first().x(), x1 = x0, y0 = pts.first().y(), y1 = y0;
         foreach (const QVector3D &w, pts)
         {
             x0 = qMin(x0, double(w.x())); x1 = qMax(x1, double(w.x()));
             y0 = qMin(y0, double(w.y())); y1 = qMax(y1, double(w.y()));
         }
-        const double pad = qMax(0.5, qMax(x1 - x0, y1 - y0) * 0.06);
-        x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+        x0 = qFloor(x0 / cell) * cell;  y0 = qFloor(y0 / cell) * cell;
+        x1 = qCeil(x1 / cell) * cell;   y1 = qCeil(y1 / cell) * cell;
 
-        const double step = qMax(0.5, qRound((x1 - x0) / 12.0 * 2.0) / 2.0);
+        /* One line per cell, until that is more ink than floor -- past a few
+           hundred lines the grid stops being a ruler and becomes a texture. */
+        double step = cell;
+        while ((x1 - x0) / step > 80.0 || (y1 - y0) / step > 80.0)
+            step *= 2.0;
         p.setPen(QPen(QColor(58, 62, 72), 1.0));
         for (double x = x0; x <= x1 + 1e-6; x += step)
             p.drawLine(w2s(QVector3D(float(x), float(y0), 0)),
@@ -936,6 +961,26 @@ void StructureStudioView::emitLine(const QPointF &a, const QPointF &b, double de
     p.drawLine(a, b);
 }
 
+/* Many dots, one op: same depth, same colour, drawn in one state change. */
+void StructureStudioView::emitDots(const QVector<QPointF> &pts, double depth, double r,
+                                  const QColor &fill, QPainter &p) const
+{
+    if (pts.isEmpty())
+        return;
+    if (m_collecting)
+    {
+        DrawOp o; o.kind = DrawOp::Dot; o.depth = depth; o.radius = r;
+        o.fill = fill;
+        o.poly = QPolygonF(pts);
+        m_ops << o;
+        return;
+    }
+    p.setPen(Qt::NoPen);
+    p.setBrush(fill);
+    foreach (const QPointF &c, pts)
+        p.drawEllipse(c, r, r);
+}
+
 void StructureStudioView::emitDot(const QPointF &c, double depth, double r,
                                   const QColor &fill, QPainter &p) const
 {
@@ -985,9 +1030,32 @@ void StructureStudioView::flushOps(QPainter &p) const
             if (o.poly.size() >= 2) p.drawLine(o.poly.at(0), o.poly.at(1));
             break;
         case DrawOp::Dot:
+            /* One op can carry MANY dots. A 64-LED strip is one surface at one
+               depth, so its pixels never need to sort against each other --
+               and batching them cuts the queue, the sort, and the painter
+               state changes by the head count. */
             p.setPen(Qt::NoPen);
             p.setBrush(o.fill);
-            if (!o.poly.isEmpty()) p.drawEllipse(o.poly.at(0), o.radius, o.radius);
+            if (o.radius <= 1.8)
+            {
+                /* At two pixels across, an antialiased ellipse and a plain
+                   square are the same speck -- but the ellipse costs several
+                   times as much to rasterise, and this rig draws six thousand
+                   of them a frame. Measured: that rasterisation, not the queue
+                   or the sort, is where the frame time goes. */
+                const bool aa = p.testRenderHint(QPainter::Antialiasing);
+                p.setRenderHint(QPainter::Antialiasing, false);
+                const double side = o.radius * 2.0;
+                foreach (const QPointF &centre, o.poly)
+                    p.fillRect(QRectF(centre.x() - o.radius, centre.y() - o.radius,
+                                      side, side), o.fill);
+                p.setRenderHint(QPainter::Antialiasing, aa);
+            }
+            else
+            {
+                foreach (const QPointF &centre, o.poly)
+                    p.drawEllipse(centre, o.radius, o.radius);
+            }
             break;
         case DrawOp::Label:
             p.setPen(o.pen);
@@ -1747,10 +1815,153 @@ void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTrai
  * the plain slab that replaced it. @p aim is the head's pointing direction in
  * world space; a null vector leaves the head in its rest position, so this is
  * ready to be driven by live pan/tilt without changing shape. */
+/* How far a beam travels before it lands on something.
+ *
+ * The stage floor and the TOP of any platform it passes over -- which is what
+ * actually catches light on a rig built out of steps. Everything else (walls,
+ * performers, haze) is out of scope, so a beam that hits nothing gets a
+ * sensible throw rather than running to the horizon. */
+double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &dir) const
+{
+    static const double NO_HIT = 8.0;      // metres, for a beam fired into the air
+    static const double MAX_THROW = 24.0;
+    static const double MIN_THROW = 0.05;
+
+    /* Distance along dir to a horizontal plane, or -1 for "does not reach it".
+       Only downward beams land on anything here; one thrown level or upward
+       runs off into the room. */
+    auto toPlane = [&](double planeZ) -> double {
+        if (dir.z() > -1e-4f)
+            return -1.0;
+        const double t = (planeZ - double(apex.z())) / double(dir.z());
+        return (t > MIN_THROW && t <= MAX_THROW) ? t : -1.0;
+    };
+
+    double best = toPlane(0.0);            // the stage floor
+
+    // Platform tops, but only where the beam actually crosses the footprint.
+    MonitorProperties *props = m_doc->monitorProperties();
+    foreach (StagePlatform *pl, props->platforms())
+    {
+        if (pl == nullptr)
+            continue;
+        const double topZ = double(props->platformBaseZ(pl->id())) + double(pl->height());
+        if (double(apex.z()) <= topZ)      // already at or below it
+            continue;
+        const double t = toPlane(topZ);
+        if (t < 0.0 || (best > 0.0 && t >= best))
+            continue;
+        const QVector3D at = apex + dir * float(t);
+        if (at.x() < pl->originX() || at.x() > pl->originX() + pl->width())
+            continue;
+        if (at.y() < pl->originY() || at.y() > pl->originY() + pl->depth())
+            continue;
+        best = t;
+    }
+
+    return (best > 0.0) ? best : NO_HIT;
+}
+
+/* The screen silhouette of a convex point set -- Andrew's monotone chain.
+ *
+ * A cone's outline is exactly the hull of its apex plus the ring at the far
+ * end, whichever way the camera is looking at it, so there is no need to work
+ * out which two ring points are the silhouette edges. */
+static QPolygonF convexHull(QVector<QPointF> pts)
+{
+    if (pts.size() < 3)
+        return QPolygonF(pts);
+    std::sort(pts.begin(), pts.end(), [](const QPointF &a, const QPointF &b) {
+        return (a.x() != b.x()) ? (a.x() < b.x()) : (a.y() < b.y());
+    });
+    auto cross = [](const QPointF &o, const QPointF &a, const QPointF &b) {
+        return (a.x() - o.x()) * (b.y() - o.y()) - (a.y() - o.y()) * (b.x() - o.x());
+    };
+    QVector<QPointF> h(2 * pts.size());
+    int k = 0;
+    for (int i = 0; i < pts.size(); ++i)
+    {
+        while (k >= 2 && cross(h[k - 2], h[k - 1], pts[i]) <= 0) --k;
+        h[k++] = pts[i];
+    }
+    for (int i = pts.size() - 2, t = k + 1; i >= 0; --i)
+    {
+        while (k >= t && cross(h[k - 2], h[k - 1], pts[i]) <= 0) --k;
+        h[k++] = pts[i];
+    }
+    h.resize(qMax(0, k - 1));
+    return QPolygonF(h);
+}
+
+/* A beam: the cone from a head out to whatever it lands on, plus the pool
+ * where it lands.
+ *
+ * Translucent, and deliberately flat rather than gradient-shaded -- the draw
+ * queue carries one colour per primitive, and a beam that reads as "light going
+ * that way, this colour, this bright" is the whole job here. Sorted at its
+ * MIDPOINT: a beam is a volume and no single depth is right for it, but its
+ * middle behaves better than either end (an apex depth puts a long throw in
+ * front of everything it crosses; a landing depth hides it behind its own
+ * fixture). */
+void StructureStudioView::setBeams(bool on)
+{
+    if (m_beams == on)
+        return;
+    m_beams = on;
+    update();
+}
+
+void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
+                                      const QVector3D &dir, double halfAngleRad,
+                                      const QColor &colour, double level) const
+{
+    if (level <= 0.01 || dir.isNull())
+        return;
+
+    const QVector3D d = dir.normalized();
+    const double len = beamThrow(apex, d);
+    const QVector3D far_ = apex + d * float(len);
+    const double radius = len * qTan(qBound(0.005, halfAngleRad, 1.4));
+
+    QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
+    if (side.length() < 1e-3f)
+        side = QVector3D(1, 0, 0);
+    side.normalize();
+    const QVector3D up = QVector3D::crossProduct(d, side).normalized();
+
+    static const int RING = 20;
+    QVector<QPointF> pts;
+    QPolygonF pool;
+    pts.reserve(RING + 1);
+    pts << w2s(apex);
+    for (int i = 0; i < RING; ++i)
+    {
+        const double a = 2.0 * M_PI * i / RING;
+        const QVector3D r = far_ + (side * float(qCos(a)) + up * float(qSin(a)))
+                                   * float(radius);
+        const QPointF sp = w2s(r);
+        pts << sp;
+        pool << sp;
+    }
+
+    /* Brighter in a dark room, which is both true and useful: at work light you
+       want to see the rig, at blackout you want to see the light. */
+    const double room = 1.25 - 0.65 * m_ambient;
+    QColor beamCol = colour;
+    beamCol.setAlpha(qBound(0, int((22.0 + 66.0 * level) * room), 190));
+    QColor poolCol = colour;
+    poolCol.setAlpha(qBound(0, int((30.0 + 90.0 * level) * room), 220));
+
+    const double mid = (viewDepth(apex) + viewDepth(far_)) / 2.0;
+    emitPoly(convexHull(pts), mid, beamCol, QColor(), 0.0, p);
+    emitPoly(pool, mid + 1e-5, poolCol, QColor(), 0.0, p);
+}
+
 void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                                          const FixtureVisualTraits &traits,
                                          const QColor &col, const QVector3D &aim,
-                                         bool ambientLit) const
+                                         bool ambientLit, double beamLevel,
+                                         const QColor &beamColour) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
@@ -1820,11 +2031,25 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
             box(headMid, slice * 0.26, h * 0.26, d * 0.26, side, beam, up);
 
             // A stub of beam, so the direction reads at overview scale where the
-            // head itself is only a few pixels across.
+            // head itself is only a few pixels across. Kept even when the full
+            // cone is drawn: it is what makes an UNLIT head's aim readable.
             const QVector3D tip = headMid + beam * float(qMax(0.25, h * 1.4));
             emitLine(w2s(headMid), w2s(tip),
                      (viewDepth(headMid) + viewDepth(tip)) / 2.0,
                      col.lighter(150), 1.4, p);
+
+            if (m_beams && beamLevel > 0.01)
+            {
+                /* An undeclared lens has to become SOMETHING here -- a beam is
+                   the point of the exercise and most definitions in the wild
+                   declare 0. 14 degrees is an ordinary spot, narrow enough to
+                   read as a beam rather than a wash. */
+                const double deg = (traits.beamDeg > 0.0f && traits.beamDeg < 180.0f)
+                                   ? double(traits.beamDeg) : 14.0;
+                drawBeamCone(p, headMid + beam * float(h * 0.28), beam,
+                             qDegreesToRadians(deg / 2.0),
+                             beamColour.isValid() ? beamColour : col, beamLevel);
+            }
         }
         else
         {
@@ -2003,15 +2228,16 @@ QColor StructureStudioView::shadeLive(const QColor &live, uchar dim,
  * Falls back to the fixture-wide colour when live output is off, or when the
  * head has nothing of its own to say -- so a plain bar looks exactly as it
  * did. */
-QColor StructureStudioView::pixelColor(Fixture *fx, int head,
-                                      const QColor &fallback,
-                                      const QColor &unlit, double visibility) const
+QColor StructureStudioView::pixelColor(Fixture *fx, const QByteArray &values,
+                                      int head, const QColor &fallback,
+                                      const QColor &unlit, double visibility,
+                                      int masterLevel) const
 {
     if (!m_liveValues || fx == nullptr)
         return fallback;
     QColor hc = unlit;
     uchar hd = 0;
-    if (fixtureHeadLiveState(fx, liveValuesFor(fx), head, hc, hd) == false)
+    if (fixtureHeadLiveState(fx, values, head, hc, hd, masterLevel) == false)
         return fallback;
     return shadeLive(hc, hd, unlit, visibility);
 }
@@ -2034,20 +2260,31 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
        itself, and a fixture at zero still has a body. */
     const QColor unlit = col;
 
+    /* Everything below needs these, and both cost real work: classifyFixture()
+       walks the definition, and liveValuesFor() is a hash lookup. Fetch each
+       ONCE per fixture per frame -- classify was being run twice, and the
+       values were being fetched once per HEAD, which on this rig is six
+       thousand lookups a frame for no gain. */
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const FixtureVisualTraits traits = classifyFixture(fx);
+    const QByteArray vals = m_liveValues ? liveValuesFor(fx) : QByteArray();
+    /* Once per fixture, not once per head -- see fixtureMasterLevel(). */
+    const int master = m_liveValues ? fixtureMasterLevel(fx, vals) : -1;
+
     /* Live output, when the rig is actually running. The gel colour above is
        what a fixture looks like UNLIT; showing that while a show plays makes
-       the overview a diagram rather than a picture of the rig. */
-    /* How much of this fixture's output can reach the camera from where we are
-       standing. A head with a fixed cone pointed away should not blaze at you. */
-    const FixtureRigProps rpEarly = props->fixtureRigProps(fid);
-    const double visibility =
-        m_liveValues ? beamVisibility(fx, rpEarly, classifyFixture(fx)) : 1.0;
+       the overview a diagram rather than a picture of the rig.
+     *
+       visibility is how much of this fixture's output can reach the camera
+       from where we are standing: a head with a fixed cone pointed away should
+       not blaze at you. */
+    const double visibility = m_liveValues ? beamVisibility(fx, rp, traits) : 1.0;
 
     if (m_liveValues)
     {
         QColor live = col;
         uchar dim = 0;
-        if (fixtureLiveState(fx, liveValuesFor(fx), live, dim))
+        if (fixtureLiveState(fx, vals, live, dim))
             col = shadeLive(live, dim, unlit, visibility);
     }
     else
@@ -2070,9 +2307,6 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     // base flush with the shelf, body hanging below — when TopHung. The
     // mirroring is what makes "hung" actually look inverted rather than
     // just "the same icon, slightly lower."
-    const FixtureRigProps rp = props->fixtureRigProps(fid);
-    const FixtureVisualTraits traits = classifyFixture(fx);
-
     if (m_plane == Angled)
     {
         /* One rule for every fixture kind here: a solid box in its own
@@ -2124,7 +2358,32 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             QVector3D aim;
             if (!m_liveValues || !fixtureAimDirection(fx, rp, aim))
                 aim = QVector3D();
-            drawMoverSolid(p, fid, traits, col, aim, !m_liveValues);
+
+            /* The beam's strength and colour are the fixture's own OUTPUT, not
+               the shaded body colour.
+             *
+               Two things must not leak in here. Room ambient: a beam is light
+               in the air, and dimming it by the work lights is backwards --
+               drawBeamCone() handles the room itself, by making beams read
+               STRONGER as the room goes down. And beamVisibility: that says how
+               much of the lens you can see from where you are standing, which
+               is the opposite question. A head pointed away from you is
+               precisely when its beam is most worth drawing -- scaling the beam
+               by it made a head aimed at the floor throw nothing at all. */
+            double beamLevel = 0.0;
+            QColor beamColour;
+            if (m_liveValues && m_beams)
+            {
+                QColor live = unlit;
+                uchar dim = 0;
+                if (fixtureLiveState(fx, vals, live, dim))
+                {
+                    beamLevel = dim / 255.0;
+                    beamColour = live;
+                }
+            }
+            drawMoverSolid(p, fid, traits, col, aim, !m_liveValues, beamLevel,
+                           beamColour);
         }
         else if (traits.headCount > 1)
         {
@@ -2192,7 +2451,14 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 + 1e-4 + depthBias;
             if (pxPerPixel >= 2.5)
             {
-                p.setPen(Qt::NoPen);
+                /* Batched by colour. Every pixel of a strip shares one depth
+                   (they are one surface), so they never sort against each
+                   other -- and this rig has ninety-six 64-pixel strips, which
+                   as one op each was six thousand queue entries and six
+                   thousand painter state changes per frame. A solid look
+                   collapses to a single op; even a confetti pattern only has a
+                   handful of distinct colours. */
+                QHash<QRgb, QVector<QPointF> > byColour;
                 int placed = 0;
                 for (int r = 0; r < rows && placed < traits.headCount; ++r)
                 {
@@ -2203,10 +2469,14 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                         const QVector3D lo = b0 + (b1 - b0) * fc;
                         const QVector3D hi = f0 + (f1 - f0) * fc;
                         const QVector3D at = lo + (hi - lo) * fr;
-                        emitDot(w2s(at), faceDepth, 1.2,
-                                pixelColor(fx, placed, col, unlit, visibility).lighter(135), p);
+                        const QColor pxc =
+                            pixelColor(fx, vals, placed, col, unlit, visibility, master).lighter(135);
+                        byColour[pxc.rgba()].append(w2s(at));
                     }
                 }
+                for (QHash<QRgb, QVector<QPointF> >::const_iterator it = byColour.constBegin();
+                     it != byColour.constEnd(); ++it)
+                    emitDots(it.value(), faceDepth, 1.2, QColor::fromRgba(it.key()), p);
             }
             else
             {
@@ -2228,7 +2498,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 const int step = qMax(1, traits.headCount / 16);
                 for (int h = 0; h < traits.headCount; h += step)
                 {
-                    const QColor pxc = pixelColor(fx, h, col, unlit, visibility);
+                    const QColor pxc = pixelColor(fx, vals, h, col, unlit, visibility, master);
                     sr += pxc.red(); sg += pxc.green(); sb += pxc.blue();
                     ++n;
                 }
@@ -2414,7 +2684,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
             {
                 const double fx2 = (cols > 1) ? (double(cx) / (cols - 1) - 0.5) : 0.0;
-                p.setBrush(pixelColor(fx, placed, col, unlit, visibility));
+                p.setBrush(pixelColor(fx, vals, placed, col, unlit, visibility, master));
                 p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
             }
         }

@@ -98,8 +98,19 @@ bool fixtureLiveState(Fixture *fx, const QByteArray &values, QColor &colour,
  * @return false if there is no such head, or it has no channels. */
 bool fixtureHeadLiveState(Fixture *fx, int head, QColor &colour, uchar &dimmer);
 /** Per-head, from caller-supplied values -- see the note above. */
+/** The fixture-wide master intensity level, or -1 if it has none.
+ *
+ *  This is a walk of every channel the fixture has, so a caller drawing ALL of
+ *  a bar's heads must do it ONCE and hand the answer to
+ *  fixtureHeadLiveState(). Recomputing it per head cost 49 ms of a 90 ms frame
+ *  on a rig of 64-pixel bars. */
+int fixtureMasterLevel(Fixture *fx, const QByteArray &values);
+
+/** Per-head, from caller-supplied values. Pass @a masterLevel from
+ *  fixtureMasterLevel() when drawing many heads of one fixture; -2 means "work
+ *  it out", which is correct but expensive in a loop. */
 bool fixtureHeadLiveState(Fixture *fx, const QByteArray &values, int head,
-                          QColor &colour, uchar &dimmer);
+                          QColor &colour, uchar &dimmer, int masterLevel = -2);
 
 
 /** Where a moving head is currently POINTING, in world space, from the pan and

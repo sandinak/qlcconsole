@@ -97,6 +97,10 @@ public:
      *  vivid as a test card. 0 = blackout (only what the rig emits is visible),
      *  1 = full working light. */
     void setAmbient(double level);
+    /** Draw the beams moving heads are throwing. Live output only -- an unlit
+     *  rig has no beams to show. */
+    void setBeams(bool on);
+    bool beams() const { return m_beams; }
     double ambient() const { return m_ambient; }
 
     /** Locked = fixtures can be selected but not dragged (like the main plot lock);
@@ -211,6 +215,10 @@ private:
                   const QColor &pen, double penW, QPainter &p) const;
     void emitLine(const QPointF &a, const QPointF &b, double depth,
                   const QColor &pen, double penW, QPainter &p) const;
+    /** Many dots at one depth in one colour: a strip's pixels are one
+     *  surface and never sort against each other. */
+    void emitDots(const QVector<QPointF> &pts, double depth, double r,
+                  const QColor &fill, QPainter &p) const;
     void emitDot(const QPointF &c, double depth, double r,
                  const QColor &fill, QPainter &p) const;
     void emitLabel(const QPointF &at, double depth, const QString &text,
@@ -271,8 +279,9 @@ private:
     QColor shadeLive(const QColor &live, uchar dim, const QColor &unlit,
                      double visibility = 1.0) const;
     /** One head's own live colour, falling back to the fixture-wide colour. */
-    QColor pixelColor(Fixture *fx, int head, const QColor &fallback,
-                      const QColor &unlit, double visibility) const;
+    QColor pixelColor(Fixture *fx, const QByteArray &values, int head,
+                      const QColor &fallback, const QColor &unlit,
+                      double visibility, int masterLevel = -2) const;
     void drawOneFixture(QPainter &p, quint32 fid, bool nameEveryone) const;
     /** The whole rig in one back-to-front pass, structures and fixtures
      *  interleaved, so nearer objects cover further ones whatever order they
@@ -316,10 +325,18 @@ private:
     /** A moving head as base + yoke arms + head, all oriented boxes, so it
      *  keeps both its shape and its bearing as the camera orbits. @p aim is
      *  the head's pointing direction (null = rest). */
+    /** How far a beam travels before it lands: the floor, or the top of a
+     *  platform it passes over. A sensible throw when it hits nothing. */
+    double beamThrow(const QVector3D &apex, const QVector3D &dir) const;
+    /** The cone from a head out to whatever it lands on, plus the pool where
+     *  it lands. Translucent; sorted at its midpoint. */
+    void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,
+                      double halfAngleRad, const QColor &colour, double level) const;
     void drawMoverSolid(QPainter &p, quint32 fid,
                         const struct FixtureVisualTraits &traits,
                         const QColor &col, const QVector3D &aim,
-                        bool ambientLit = true) const;
+                        bool ambientLit = true, double beamLevel = 0.0,
+                        const QColor &beamColour = QColor()) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame
@@ -363,6 +380,7 @@ private:
     Kind     m_kind;
     quint32  m_id;
     Plane    m_plane = Front;
+    bool     m_beams = true;   ///< draw beam cones for lit movers
     int      m_rotation = 0;   ///< view turn, 0..3 quarter turns clockwise
     /* A gentle three-quarter reads as a rigging drawing rather than a drafting
        projection: the truss body shows in three-quarter, fixtures stay legible,

@@ -1961,6 +1961,19 @@ void Monitor::showStageOverview()
        the room level applied, an idle rig still reads perfectly well. */
     liveBtn->setChecked(true);
 
+    /* Beams. Their own switch because they are the one thing here that draws
+       over the rig rather than in it: unmissable when you want to see what a
+       look is doing in the air, in the way when you are reading the plot. */
+    QToolButton *beamBtn = new QToolButton(&dlg);
+    beamBtn->setText(tr("Beams"));
+    beamBtn->setCheckable(true);
+    beamBtn->setToolTip(tr("Draw the light moving heads are throwing, out to "
+                           "whatever it lands on"));
+    bar->addWidget(beamBtn);
+    connect(beamBtn, &QToolButton::toggled, view,
+            [view](bool on) { view->setBeams(on); });
+    beamBtn->setChecked(true);
+
     /* How much light is in the ROOM. Without it the rendered colours are as
        vivid as a test card whatever the rig is doing, and a blackout still
        shows bright scenery. */

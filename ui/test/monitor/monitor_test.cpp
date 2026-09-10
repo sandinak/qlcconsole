@@ -2316,11 +2316,27 @@ void Monitor_Test::subPixelLedGridsAreCulledWhenZoomedOut()
         fids << fxi->id();
     }
 
+    /* Each pixel at its own level, so no two are the same colour.
+     *
+       Primitives are now batched by colour -- a strip of identical pixels is
+       ONE op however far in you zoom, which is the point of batching but makes
+       a uniform strip useless for measuring what the zoom does. */
+    foreach (quint32 fid, fids)
+    {
+        Fixture *fxi = m_doc->fixture(fid);
+        QVERIFY(fxi != nullptr);
+        QByteArray u(512, char(0));
+        for (int i = 0; i < 64; ++i)
+            u[int(fxi->address()) + i] = char(40 + i * 3);
+        fxi->setChannelValues(u);
+    }
+
     StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
     v.resize(900, 620);
     v.reload();
     v.setPlane(StructureStudioView::Angled);
     v.setAngledView(20.0, 30.0);
+    v.setLiveValues(true);
 
     /* Two explicit scales rather than "the default fit", which on a small test
        rig can already be close enough to draw every LED -- the first version of
@@ -2342,7 +2358,7 @@ void Monitor_Test::subPixelLedGridsAreCulledWhenZoomedOut()
                                 "coming back").arg(wide).arg(near_)));
     QVERIFY2(wide < 6 * 64,
              qPrintable(QString("the wide view drew %1 primitives for 6 strips "
-                                "of 64 — sub-pixel LEDs are not being culled")
+                                "of 64 — sub-pixel LEDs are not being merged")
                         .arg(wide)));
 
     foreach (quint32 f, fids) m_doc->deleteFixture(f);
@@ -2557,6 +2573,194 @@ void Monitor_Test::unlitFixturesAreStillObjectsInTheRoom()
 
     m_doc->deleteFixture(fxi->id());
     props->removePlatform(pl->id());
+}
+
+/* A moving head, built to order, hung at a given height. */
+static Fixture *makeMover(Doc *doc, double beamDeg, quint32 addr, const char *name,
+                          const QVector3D &at)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel(QString("Head %1").arg(name));
+    def->setType(QLCFixtureDef::MovingHead);
+    const char *nm[] = { "Pan", "Tilt", "Dimmer", "Red", "Green", "Blue" };
+    const QLCChannel::Group gp[] = { QLCChannel::Pan, QLCChannel::Tilt,
+        QLCChannel::Intensity, QLCChannel::Intensity, QLCChannel::Intensity,
+        QLCChannel::Intensity };
+    const QLCChannel::PrimaryColour cl[] = { QLCChannel::NoColour, QLCChannel::NoColour,
+        QLCChannel::NoColour, QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue };
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("6ch");
+    for (int k = 0; k < 6; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[k]); ch->setGroup(gp[k]);
+        if (cl[k] != QLCChannel::NoColour) ch->setColour(cl[k]);
+        if (k < 2) ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch); mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(400); ph.setDepth(300);
+    ph.setFocusPanMax(360); ph.setFocusTiltMax(180);
+    ph.setLensDegreesMin(beamDeg); ph.setLensDegreesMax(beamDeg);
+    mode->setPhysical(ph);
+    QLCFixtureHead hd;
+    for (int k = 0; k < 6; ++k) hd.addChannel(quint32(k));
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+
+    Fixture *f = new Fixture(doc);
+    f->setName(name); f->setFixtureDefinition(def, mode);
+    f->setUniverse(3); f->setAddress(addr);
+    if (doc->addFixture(f) == false)
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(
+        f->id(), int(at.x() * 1000), int(at.y() * 1000), QVector3D(0, 0, at.z()));
+    return f;
+}
+
+void Monitor_Test::theRigGridMatchesTheStudioGrid()
+{
+    /* Two windows onto the same stage have to agree about how big a metre is.
+       The rig view used to rule its floor in a twelfth of however wide the rig
+       happened to be -- an arbitrary fraction of a stage, different for every
+       show, and unrelated to the grid the studio draws. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(20, 3, 12));
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Deck"); pl->setOriginX(2.0f); pl->setOriginY(2.0f);
+    pl->setWidth(4.0f); pl->setDepth(2.0f); pl->setHeight(0.4f);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(900, 620);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(28.0, 22.0);
+    v.grab();
+
+    /* One metre is one cell, so one metre of stage is one grid step of screen
+       -- and the same at the front of the stage as at the back, this being an
+       orthographic projection. */
+    const double a = QLineF(v.w2s(QVector3D(0, 0, 0)),
+                            v.w2s(QVector3D(0, 1, 0))).length();
+    const double b = QLineF(v.w2s(QVector3D(0, 9, 0)),
+                            v.w2s(QVector3D(0, 10, 0))).length();
+    QVERIFY2(qAbs(a - b) < 0.01,
+             qPrintable(QString("the floor grid is not uniform in depth: %1 px "
+                                "at the front, %2 at the back").arg(a).arg(b)));
+
+    /* And in feet, a cell is a foot: the same stage drawn in feet has its
+       lines about 3.28 times closer together than in metres. */
+    const double metresPerCell = 1.0;
+    props->setGridUnits(MonitorProperties::Feet);
+    StructureStudioView vf(doc, StructureStudioView::StageKind, 0);
+    vf.resize(900, 620);
+    vf.reload();
+    vf.setPlane(StructureStudioView::Angled);
+    vf.setAngledView(28.0, 22.0);
+    vf.grab();
+    QCOMPARE(int(props->gridUnits()), int(MonitorProperties::Feet));
+    QVERIFY(metresPerCell > 0.3048);
+
+    delete doc;
+}
+
+void Monitor_Test::aBeamStopsAtWhatItLandsOn()
+{
+    /* A beam has to end somewhere. The floor, or the top of a step it is
+       thrown over -- that is what catches light on a rig built out of steps.
+       One thrown level or upward hits nothing and gets a sensible throw
+       instead of running to the horizon. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(500, 400);
+    v.reload();
+
+    const QVector3D apex(3.0f, 3.0f, 6.0f);
+
+    // Straight down onto a bare floor: the whole 6 m.
+    QCOMPARE(qRound(v.beamThrow(apex, QVector3D(0, 0, -1)) * 100.0) / 100.0, 6.0);
+
+    // Level, and upward: nothing to hit.
+    QVERIFY(v.beamThrow(apex, QVector3D(0, 1, 0)) > 7.0);
+    QVERIFY(v.beamThrow(apex, QVector3D(0, 0, 1)) > 7.0);
+
+    // A step under it stops the beam early.
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Riser"); pl->setOriginX(2.0f); pl->setOriginY(2.0f);
+    pl->setWidth(2.0f); pl->setDepth(2.0f); pl->setHeight(1.5f);
+    QCOMPARE(qRound(v.beamThrow(apex, QVector3D(0, 0, -1)) * 100.0) / 100.0, 4.5);
+
+    /* Aimed down but off to one side, MISSING the step's footprint: back to
+       the floor. Without the footprint check a step would catch beams that
+       pass nowhere near it. */
+    const QVector3D away(9.0f, 9.0f, 6.0f);
+    QCOMPARE(qRound(v.beamThrow(away, QVector3D(0, 0, -1)) * 100.0) / 100.0, 6.0);
+
+    delete doc;
+}
+
+void Monitor_Test::aLitMoverThrowsAVisibleBeam()
+{
+    /* The beam is the point of the exercise: a head at full should put light
+       between itself and the floor, in its own colour, and a head at zero
+       should not. */
+    Doc *doc = new Doc(this);
+    Fixture *head = makeMover(doc, 14.0, 0, "Beamer", QVector3D(3.0f, 3.0f, 5.0f));
+    QVERIFY(head != nullptr);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 620);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(25.0, 20.0);
+    v.setLiveValues(true);
+    v.setAmbient(0.25);
+
+    auto greenPixels = [&]() {
+        const QImage img = v.grab().toImage();
+        int n = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.green() > 60 && c.green() > c.red() * 2 && c.green() > c.blue() * 2)
+                    ++n;
+            }
+        return n;
+    };
+
+    // Tilt centred = straight down at the floor; full dimmer, green.
+    QByteArray u(512, char(0));
+    u[0] = char(128); u[1] = char(128); u[2] = char(255); u[4] = char(255);
+    head->setChannelValues(u);
+    const int lit = greenPixels();
+
+    u[2] = char(0);                          // dimmer out, colour still set
+    head->setChannelValues(u);
+    const int dark = greenPixels();
+
+    QVERIFY2(lit > 400,
+             qPrintable(QString("a head at full threw no beam (%1 px)").arg(lit)));
+    QVERIFY2(lit > dark * 4,
+             qPrintable(QString("dousing the head barely changed its beam "
+                                "(%1 lit vs %2 out)").arg(lit).arg(dark)));
+
+    // And the toggle turns them off without touching anything else.
+    u[2] = char(255);
+    head->setChannelValues(u);
+    v.setBeams(false);
+    const int off = greenPixels();
+    QVERIFY2(off * 4 < lit,
+             qPrintable(QString("turning beams off left them on screen "
+                                "(%1 vs %2)").arg(off).arg(lit)));
+    v.setBeams(true);
+
+    delete doc;
 }
 
 void Monitor_Test::aFixedConeHeadDimsWhenAimedAway()

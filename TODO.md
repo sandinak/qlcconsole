@@ -1034,6 +1034,82 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 29: stage 3 -- beams; and the flashing was frame rate all along
+
+Branson: "lets move forward with the moving head lights and their beams",
+then "still getting some sync/flashing", and "the grid in the rig view is
+bigger behind than in front .. probably should match the size of the grid in
+the studio".
+
+**Beams (stage 3, finally).** `drawBeamCone()` draws the cone from a head out to
+whatever it lands on, plus the pool where it lands. `beamThrow()` intersects the
+stage floor and the TOP of any platform the beam crosses -- footprint-checked,
+so a step does not catch beams that pass nowhere near it -- and gives a beam
+fired into the air a sensible throw instead of running to the horizon. The
+screen silhouette is the convex hull of the apex plus a ring at the far end,
+which is exactly right from any camera angle without working out which ring
+points are the silhouette edges. Sorted at the beam's MIDPOINT: a beam is a
+volume and no single depth is right for it, but its middle behaves better than
+either end.
+
+Two things must NOT feed into a beam, and both were wrong first time:
+
+- **Room ambient.** A beam is light in the air; dimming it by the work lights
+  is backwards. `drawBeamCone()` handles the room the other way round, making
+  beams read stronger as the room goes down.
+- **beamVisibility.** That says how much of the LENS you can see from where you
+  are standing, which is the opposite question. A head pointed away from you is
+  precisely when its beam is most worth drawing. Scaling the beam by it made a
+  head aimed at the floor throw nothing at all -- caught by the test, not by
+  eye.
+
+An undeclared lens becomes 14 degrees here rather than nothing: a beam is the
+point of the exercise, and most definitions in the wild declare 0.
+
+**The flashing was frame rate.** Measured on the real workspace, not guessed:
+
+    live   96.4 ms/frame     static  42.2 ms/frame     8190 primitives
+
+The repaint self-tunes to twice the frame cost, so 96 ms meant a repaint every
+~200 ms: **about 4.5 fps**. A 50 Hz effect sampled at 4.5 fps does not animate,
+it flashes. Follow-on 27's snapshot fixed the tearing across the stage; this is
+the other half.
+
+Where it went, measured rather than assumed:
+
+- `classifyFixture()` ran TWICE per fixture per frame (1.5 ms).
+- `liveValuesFor()` was called once per HEAD -- 6000+ hash lookups a frame.
+- **`fixtureHeadLiveState()`: 49 ms of the 96.** The fixture-wide master
+  fallback walked EVERY channel for EVERY head, with `mode->channels().size()`
+  left in the loop condition where it copies the list once per iteration. On a
+  64-pixel bar that is twelve thousand list copies per fixture per frame.
+  `fixtureMasterLevel()` is now computed once per fixture and handed in.
+
+Also batched the pixel dots by colour (one op per distinct colour rather than
+per pixel: 8190 primitives -> 1786) and stopped antialiasing sub-2px specks.
+Both helped, but neither was the problem -- worth recording, because the
+obvious-looking op count was not where the time was.
+
+    live 96.4 -> 42.8 ms/frame, i.e. ~4.5 fps -> ~12 fps
+
+**The grid.** Measured before changing: spacing is uniform front to back
+(51.4958 px per cell at every depth) -- it is an orthographic projection and
+cannot do otherwise. Cells read as "bigger behind" because they are
+parallelograms. The real fault was the other half of the report: the rig view
+sized its cells as a twelfth of however wide the rig happened to be, so the two
+windows disagreed about how big a metre is. It now rules the floor in the
+studio's own grid, same cell size and extent, halving the density only when a
+stage is big enough that the lines stop being a ruler.
+
+**A test's premise expired.** `subPixelLedGridsAreCulledWhenZoomedOut` asserted
+that zooming in multiplies the primitive count. With dots batched by colour a
+strip of identical pixels is ONE op however far you zoom, so it measured 94 at
+both ends. Rewritten to drive each pixel to its own level: the intent (zoomed
+out must not pay for detail you cannot see) is unchanged, the measurement had
+to move.
+
+`monitor_test` 61/61. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 28: house left is the same room as house right
 
 Branson: "seeing correct at some angles .. notably when looking in from house
