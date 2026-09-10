@@ -201,6 +201,12 @@ private slots:
      *  fixture whose definition declares no lens is never dimmed at all. */
     void aFixedConeHeadDimsWhenAimedAway();
     void aFrameIsDrawnFromOneInstant();
+    /** House left and house right are the same room: a lit strip reads the
+     *  same from either side, and does not go dark at whole-rig zoom. */
+    void aStripStaysLitFromEitherSideOfTheHouse();
+    /** Lifting in-step fixtures clear of the step must not lift them past the
+     *  tape on the outside of that same step. */
+    void aStepsOwnTapeSitsInFrontOfWhatIsInsideIt();
     void fixturesInsideAStepAreAllVisible();
     void pixelsSurviveOffAxisOnTheirOwnHousing();
     void aMostlyDarkPixelBarDrawsNoBrightOutline();

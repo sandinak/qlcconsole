@@ -2092,19 +2092,25 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
            visible from every angle, the way its own pixels are lifted past
            their housing. */
         double depthBias = 0.0;
-        if (rp.placement == FixtureRigProps::Inside)
         {
             const quint32 plId = rp.onRiser() ? rp.riserPlatformId
                                : rp.onDeck()  ? rp.deckPlatformId
                                               : FixtureRigProps::invalidPlatformId();
             if (StagePlatform *host = props->platform(plId))
             {
+                /* Three layers, working outward from the step: its own faces,
+                   then whatever is rigged INSIDE it, then whatever is mounted
+                   ON its surface. Lifting only the inside units put them in
+                   front of the LED tape on the OUTSIDE of the same step, which
+                   is backwards -- from out here the tape is the nearer thing. */
+                const double layer =
+                    (rp.placement == FixtureRigProps::Inside) ? 1e-4 : 3e-4;
                 const float hx0 = host->originX(), hy0 = host->originY();
                 const float hb0 = props->platformBaseZ(plId);
                 QVector3D hc[8];
                 boxCorners(hc, hx0, hy0, hb0,
                            hx0 + host->width(), hy0 + host->depth(), hb0 + host->height());
-                depthBias = qMax(0.0, boxNearFaceDepth(hc) + 1e-4
+                depthBias = qMax(0.0, boxNearFaceDepth(hc) + layer
                                       - boxNearFaceDepth(corner));
             }
         }
@@ -2150,17 +2156,20 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         const int cols = traits.layout.isValid() ? traits.layout.width()
                                                  : qMax(1, traits.headCount);
         const int rows = traits.layout.isValid() ? traits.layout.height() : 1;
-        if (traits.headCount > 1
-            && QLineF(w2s(corner[0]), w2s(corner[1])).length()
-                   / qMax(1, cols) >= 2.5)
+        const double pxPerPixel = QLineF(w2s(corner[0]), w2s(corner[1])).length()
+                                  / qMax(1, cols);
+        if (traits.headCount > 1)
         {
-            /* On whichever long face points AT us. This was hardwired to the
-               -n face, so for a strip lying flat the pixels were painted on its
-               UNDERSIDE and showed as a field of dots spilling out from beneath
-               the body. viewDepth is linear, so comparing corner sums is the
-               same as comparing face centres. */
-            const bool nearSide =
-                viewDepth(corner[2] + corner[6]) > viewDepth(corner[0] + corner[4]);
+            /* Which of the two long faces points AT us -- a question about the
+               fixture's NORMAL and nothing else.
+             *
+               This used to compare the (+length,+normal) corner against the
+               (-length,-normal) one, mixing the length axis into the answer, so
+               the choice flipped with the SIGN of the azimuth: right from house
+               right, wrong from house left. viewDepth() is a pure linear form,
+               so applying it to the edge vector between the two faces asks
+               exactly "does the +normal side face the eye" and nothing more. */
+            const bool nearSide = viewDepth(corner[2] - corner[1]) > 0.0;
             const QVector3D &f0 = nearSide ? corner[7] : corner[4];
             const QVector3D &f1 = nearSide ? corner[6] : corner[5];
             const QVector3D &b0 = nearSide ? corner[3] : corner[0];
@@ -2181,20 +2190,55 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             const double faceDepth =
                 (viewDepth(f0) + viewDepth(f1) + viewDepth(b0) + viewDepth(b1)) / 4.0
                 + 1e-4 + depthBias;
-            p.setPen(Qt::NoPen);
-            p.setBrush(col.lighter(135));
-            int placed = 0;
-            for (int r = 0; r < rows && placed < traits.headCount; ++r)
+            if (pxPerPixel >= 2.5)
             {
-                const float fr = (rows > 1) ? float(r) / (rows - 1) : 0.5f;
-                for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
+                p.setPen(Qt::NoPen);
+                int placed = 0;
+                for (int r = 0; r < rows && placed < traits.headCount; ++r)
                 {
-                    const float fc = (cols > 1) ? float(cx) / (cols - 1) : 0.5f;
-                    const QVector3D lo = b0 + (b1 - b0) * fc;
-                    const QVector3D hi = f0 + (f1 - f0) * fc;
-                    const QVector3D at = lo + (hi - lo) * fr;
-                    emitDot(w2s(at), faceDepth, 1.2,
-                            pixelColor(fx, placed, col, unlit, visibility).lighter(135), p);
+                    const float fr = (rows > 1) ? float(r) / (rows - 1) : 0.5f;
+                    for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
+                    {
+                        const float fc = (cols > 1) ? float(cx) / (cols - 1) : 0.5f;
+                        const QVector3D lo = b0 + (b1 - b0) * fc;
+                        const QVector3D hi = f0 + (f1 - f0) * fc;
+                        const QVector3D at = lo + (hi - lo) * fr;
+                        emitDot(w2s(at), faceDepth, 1.2,
+                                pixelColor(fx, placed, col, unlit, visibility).lighter(135), p);
+                    }
+                }
+            }
+            else
+            {
+                /* Too small to resolve one pixel from the next -- but DROPPING
+                   them, which is what culling did, turns a lit strip into a
+                   dead grey bar. At a whole-rig zoom a 64-pixel step row is
+                   about two screen pixels per LED, so this is the normal case,
+                   not an edge case: the step fronts simply went dark until you
+                   zoomed in.
+                 *
+                   Paint the emitting face as one band in the MEAN of the head
+                   colours instead. One primitive rather than sixty-four, so the
+                   frame budget the cull was protecting is still protected, and
+                   at this size the pixels merge into exactly this band anyway.
+                   The mean, note -- not the fixture-wide per-primary maximum,
+                   which washes any mixed pattern out to near-white. */
+                double sr = 0.0, sg = 0.0, sb = 0.0;
+                int n = 0;
+                const int step = qMax(1, traits.headCount / 16);
+                for (int h = 0; h < traits.headCount; h += step)
+                {
+                    const QColor pxc = pixelColor(fx, h, col, unlit, visibility);
+                    sr += pxc.red(); sg += pxc.green(); sb += pxc.blue();
+                    ++n;
+                }
+                if (n > 0)
+                {
+                    QPolygonF band;
+                    band << w2s(b0) << w2s(b1) << w2s(f1) << w2s(f0);
+                    emitPoly(band, faceDepth,
+                             QColor(qRound(sr / n), qRound(sg / n), qRound(sb / n)),
+                             QColor(), 0.0, p);
                 }
             }
         }

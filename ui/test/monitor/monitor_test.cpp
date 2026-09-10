@@ -2737,6 +2737,184 @@ void Monitor_Test::aFrameIsDrawnFromOneInstant()
     delete doc;
 }
 
+/* A pixel bar on the front face of a step, built to order. */
+static Fixture *makeStepTape(Doc *doc, StagePlatform *pl, int pix, quint32 addr,
+                             const char *name, float riserV, float riserU = 1.219f)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel(QString("Tape %1").arg(name));
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("tape");
+    for (int h = 0; h < pix; ++h)
+    {
+        const QLCChannel::PrimaryColour pc[] = { QLCChannel::Red, QLCChannel::Green,
+                                                 QLCChannel::Blue };
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1-%2").arg(h).arg(k));
+            ch->setGroup(QLCChannel::Intensity); ch->setColour(pc[k]);
+            def->addChannel(ch); mode->insertChannel(ch, h * 3 + k);
+        }
+        QLCFixtureHead hd;
+        hd.addChannel(quint32(h * 3)); hd.addChannel(quint32(h * 3 + 1));
+        hd.addChannel(quint32(h * 3 + 2));
+        mode->insertHead(-1, hd);
+    }
+    QLCPhysical ph;
+    ph.setWidth(2134); ph.setHeight(60); ph.setDepth(20);
+    ph.setLayoutSize(QSize(pix, 1));
+    mode->setPhysical(ph);
+    def->addMode(mode);
+
+    Fixture *f = new Fixture(doc);
+    f->setName(name); f->setFixtureDefinition(def, mode);
+    f->setUniverse(3); f->setAddress(addr);
+    if (doc->addFixture(f) == false)
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.riserPlatformId = pl->id(); rp.riserFace = 0;
+    rp.riserU = riserU; rp.riserV = riserV;
+    doc->monitorProperties()->setFixtureRigProps(f->id(), rp);
+    return f;
+}
+
+void Monitor_Test::aStripStaysLitFromEitherSideOfTheHouse()
+{
+    /* Two faults made the step fronts go dark from some angles and not others.
+       The face the pixels are painted on was chosen by comparing the
+       (+length,+normal) corner against (-length,-normal), which mixes the
+       length axis into a question about the normal, so the answer flipped with
+       the SIGN of the azimuth -- right from house right, wrong from house left.
+       And the sub-pixel cull DROPPED the pixels entirely once a 64-LED strip
+       fell under 2.5 screen pixels per LED, which at any whole-rig zoom is the
+       normal case, not an edge case. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(2.438f); pl->setDepth(0.204f); pl->setHeight(0.4f);
+    pl->setColor(QColor(40, 40, 44));
+
+    Fixture *tape = makeStepTape(doc, pl, 64, 0, "Tape", 0.20f);
+    QVERIFY(tape != nullptr);
+    QByteArray u(512, char(0));
+    for (int h = 0; h < 64; ++h) u[h * 3] = char(255);      // all red
+    tape->setChannelValues(u);
+
+    auto redAcross = [&](double azimuth) {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(1000, 620);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(azimuth, 18.0);
+        v.setLiveValues(true);
+        v.setAmbient(0.40);
+        const QImage img = v.grab().toImage();
+        int red = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.red() > 110 && c.red() > c.green() * 2 && c.red() > c.blue() * 2)
+                    ++red;
+            }
+        return red;
+    };
+
+    /* House left and house right are the same room. Whatever the strip reads
+       as from +35 it has to read as from -35. */
+    const double pairs[][2] = { { -20.0, 20.0 }, { -35.0, 35.0 }, { -50.0, 50.0 } };
+    for (int i = 0; i < 3; ++i)
+    {
+        const int a = redAcross(pairs[i][0]);
+        const int b = redAcross(pairs[i][1]);
+        QVERIFY2(a > 150 && b > 150,
+                 qPrintable(QString("the strip went dark at +/-%1: %2 vs %3 red px")
+                            .arg(pairs[i][1]).arg(a).arg(b)));
+        QVERIFY2(qMin(a, b) * 100 / qMax(1, qMax(a, b)) > 55,
+                 qPrintable(QString("the strip reads very differently from the two "
+                                    "sides of the house at +/-%1: %2 vs %3")
+                            .arg(pairs[i][1]).arg(a).arg(b)));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aStepsOwnTapeSitsInFrontOfWhatIsInsideIt()
+{
+    /* Lifting in-step fixtures clear of the step's faces (so they stop being
+       swallowed by them) must not lift them past the LED tape on the OUTSIDE
+       of that same step. From out here the tape is the nearer thing. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(6.0f); pl->setDepth(0.6f); pl->setHeight(0.5f);
+    pl->setColor(QColor(40, 40, 44));
+    pl->setTopMaterial(StagePlatform::ClearTop);
+
+    /* Near one END of a long step. Dead centre, a surface-mounted fixture is
+       proud enough of the face to win on its own depth whatever the layering
+       says; out at an end, viewed off-axis, its depth falls BELOW the face's
+       average and the layering is the only thing deciding. */
+    Fixture *tape = makeStepTape(doc, pl, 64, 0, "Tape", 0.25f, 1.2f);
+    QVERIFY(tape != nullptr);
+    QByteArray red(512, char(0));
+    for (int h = 0; h < 64; ++h) red[h * 3] = char(255);
+    tape->setChannelValues(red);
+
+    /* A big green unit rigged INSIDE, right behind the tape. */
+    Fixture *inside = makeStepTape(doc, pl, 8, 300, "Inside", 0.25f, 1.2f);
+    QVERIFY(inside != nullptr);
+    FixtureRigProps irp = props->fixtureRigProps(inside->id());
+    irp.placement = FixtureRigProps::Inside;
+    props->setFixtureRigProps(inside->id(), irp);
+    QByteArray green(512, char(0));
+    for (int h = 0; h < 8; ++h) green[300 + h * 3 + 1] = char(255);
+    inside->setChannelValues(green);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(1000, 620);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    /* Azimuth +35 makes low X the FAR end, so this pair sits behind the
+       step's near-face midpoint and both get lifted -- which is precisely when
+       the layering, rather than their own geometry, decides the order. */
+    v.setAngledView(35.0, 18.0);
+    v.setLiveValues(true);
+    v.setAmbient(0.40);
+    const QImage img = v.grab().toImage();
+
+    const QPointF at = v.w2s(props->fixtureRigPosition(tape->id()));
+    int red2 = 0, green2 = 0;
+    for (int dy = -6; dy <= 6; ++dy)
+    {
+        for (int dx = -120; dx <= 120; ++dx)
+        {
+            const QPoint p(at.toPoint() + QPoint(dx, dy));
+            if (img.rect().contains(p) == false) continue;
+            const QColor c = img.pixelColor(p);
+            if (c.red() > 110 && c.red() > c.green() * 2) ++red2;
+            if (c.green() > 110 && c.green() > c.red() * 2) ++green2;
+        }
+    }
+    /* A 60 mm tape is only a few screen pixels tall at a whole-step zoom, so
+       the absolute count is small by construction -- what matters is that it is
+       THERE and that the in-step unit is not on top of it. */
+    QVERIFY2(red2 > 25,
+             qPrintable(QString("the step's own tape is not being drawn (%1 red px)")
+                        .arg(red2)));
+    QVERIFY2(red2 > green2 * 2,
+             qPrintable(QString("what is rigged INSIDE the step painted over the "
+                                "tape on its outside: %1 red vs %2 green")
+                        .arg(red2).arg(green2)));
+
+    delete doc;
+}
+
 void Monitor_Test::fixturesInsideAStepAreAllVisible()
 {
     /* Same painter's-algorithm trap as the pixels, one level up: a step is a

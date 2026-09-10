@@ -1034,6 +1034,66 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 28: house left is the same room as house right
+
+Branson: "seeing correct at some angles .. notably when looking in from house
+right .. but not house left", plus "lights INSIDE are overwriting the led
+strips OUTSIDE".
+
+**Every test in follow-ons 26 and 27 used POSITIVE azimuths.** Both faults
+below live on the other side of zero, and none of that work would have caught
+them.
+
+**1. The emitting face was chosen with the wrong axis in the question.**
+
+    nearSide = viewDepth(corner[2] + corner[6]) > viewDepth(corner[0] + corner[4])
+
+In the L/H/N corner frame those two are the (+length,+normal) and
+(-length,-normal) corners, so the test mixed the LENGTH axis into a question
+about the NORMAL -- and the answer flipped with the sign of the azimuth.
+Measured on the real rig: `nearSide` false at every negative azimuth, true at
+every positive one, for a strip whose emitting face never moved. Since
+follow-on 26 made the pixels sort with the face they are painted on, choosing
+the wrong face put them at the FAR face's depth, i.e. behind their own housing:
+not half-blank any more, entirely blank. `viewDepth()` is a pure linear form,
+so applying it to the edge vector between the two faces
+(`viewDepth(corner[2] - corner[1])`) asks exactly "does the +normal side face
+the eye" and nothing else.
+
+**2. The sub-pixel cull was eating the step fronts at ordinary zoom.**
+Measured px-per-LED on the real rig: 3.31 at azimuth 0, 2.36 at -20, 1.31 at
+-50 -- against a cull threshold of 2.5. So a 64-LED step row went dark from
+most angles, and came back when Branson zoomed in. That was never an edge
+case; it was the normal viewing distance.
+
+Culling was the right instinct (6000 of ~7800 frame ops were sub-2px dots) but
+the wrong action. Below the resolve threshold the emitting face is now painted
+as ONE band in the MEAN of the head colours: one primitive instead of
+sixty-four, so the frame budget is still protected, and at that size the pixels
+merge into exactly this band anyway. The MEAN -- not the fixture-wide
+per-primary maximum, which washes any mixed pattern out to near-white
+(follow-on 23).
+
+**3. In-step fixtures were painting over the tape on the outside.** Follow-on
+27 lifted Inside fixtures clear of their host's faces; it lifted them clear of
+the surface-mounted fixtures too. Three layers now, working outward: the step's
+own faces, then whatever is rigged INSIDE it, then whatever is mounted ON its
+surface.
+
+**Revert-checking this one took three attempts** and the first two were
+vacuous. Dead centre on a step, a surface-mounted fixture sits proud enough of
+the face to win on its own depth whatever the layering says -- so the test only
+discriminates with the pair out at an END of a long step AND viewed from the
+azimuth that makes that end the FAR one. Get either wrong and it passes with
+the layers inverted. With both right it fails at "the step's own tape is not
+being drawn (0 red px)".
+
+`aStripStaysLitFromEitherSideOfTheHouse` checks +/-20, +/-35 and +/-50 as
+pairs: whatever a lit strip reads as from one side it has to read as from the
+other, and it must not go dark at whole-rig zoom.
+
+`monitor_test` 58/58. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 27: one instant per frame, lights inside steps, beam angle
 
 Branson, three at once: "flickering in and out across the steps .. vs solid
