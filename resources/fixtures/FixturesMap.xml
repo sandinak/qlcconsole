@@ -1998,6 +1998,9 @@
     <F n="Venue-THINPAR-64" m="ThinPar 64"/>
     <F n="Venue-TriStrip3Z" m="TriStrip3Z"/>
   </M>
+  <M n="Warmdance">
+    <F n="Warmdance-ZQ06199" m="ZQ06199"/>
+  </M>
   <M n="WLED">
     <F n="WLED-Effect-Mode" m="Effect Mode"/>
   </M>
