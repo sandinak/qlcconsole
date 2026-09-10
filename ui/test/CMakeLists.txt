@@ -8,6 +8,7 @@ add_compile_definitions(QLC_TEST_RESOURCE_ROOT="${CMAKE_SOURCE_DIR}/resources/")
 
 add_subdirectory(aboutbox)
 add_subdirectory(addfixture)
+add_subdirectory(appviews)
 add_subdirectory(assignhotkey)
 add_subdirectory(audiobar)
 add_subdirectory(audiotriggerwidget)

@@ -1544,9 +1544,13 @@ void App::initMenuBar()
         // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
         // the Function Manager's "add function" shortcuts.
         jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg(i + 1)));
-        connect(jump, &QAction::triggered, this, [this, i]() {
-            if (i < m_tab->count())
-                m_tab->setCurrentIndex(i);
+        /* Resolve by LABEL, not by construction order. Detaching a view calls
+           removeTab(), so every index after it shifts and a raw
+           setCurrentIndex(i) lands on the wrong page -- or on nothing at all
+           for the detached view itself. */
+        const QString label = m_tabOriginals.at(i).first;
+        connect(jump, &QAction::triggered, this, [this, label]() {
+            showContext(label);
         });
     }
 
@@ -2451,6 +2455,42 @@ void App::slotCaptureUndoStackChanged()
     {
         m_captureUndoAction->setText(tr("Undo Last Store"));
         m_captureUndoAction->setToolTip(tr("Revert the most recent capture commit"));
+    }
+}
+
+void App::showContext(const QString &tabLabel)
+{
+    /* Still docked? Switch to it and bring the main window forward.
+       Matching on the label rather than the index is what makes this survive
+       detaching: tabData is set once in addTab() and travels with the page
+       through removeTab()/insertTab(). */
+    for (int t = 0; t < m_tab->count(); ++t)
+    {
+        if (m_tab->tabBar()->tabData(t).toString() != tabLabel)
+            continue;
+        m_tab->setCurrentIndex(t);
+        if (isMinimized())
+            showNormal();
+        raise();
+        activateWindow();
+        return;
+    }
+
+    /* Detached: the view IS open, it just lives in its own window now. Bring
+       that window to the front. Picking an already-detached view used to do
+       nothing visible, because there was no tab left here to select. */
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+    {
+        QWidget *w = dw->centralWidget();
+        if (w == NULL || w->property("tabLabel").toString() != tabLabel)
+            continue;
+        if (dw->isMinimized())
+            dw->showNormal();
+        else
+            dw->show();
+        dw->raise();
+        dw->activateWindow();
+        return;
     }
 }
 

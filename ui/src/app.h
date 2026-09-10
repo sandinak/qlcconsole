@@ -311,6 +311,11 @@ public slots:
     void slotCaptureUndo();
     void slotCapturePendingChanged();
     void slotCaptureUndoStackChanged();
+    /** Bring a view to the front by its tab label, wherever it lives: switch
+     *  to its tab if it is docked, or raise its own window if it has been
+     *  detached. */
+    void showContext(const QString &tabLabel);
+
     void slotDetachContext(int index);
     void slotReattachContext();
 

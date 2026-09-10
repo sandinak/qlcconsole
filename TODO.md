@@ -1034,6 +1034,67 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 25: the housing is not the lamp; View-menu jumps that follow the view
+
+Branson, on the rig view: "still not understanding the use of white in this
+context .. IMHO it should look VERY similar to the studio window. If it's
+because we're outlining each 'head' of the DMX tape with white .. we can
+certainly NOT do that."
+
+**Where the white came from.** Not the heads -- the BODY. The `Bar` branch drew
+the housing as `col.darker(230)` with a `col.darker(150)` outline, where `col`
+is the fixture-WIDE colour. Two things compound there: that colour washes out
+to near-white whenever the pixels differ (follow-on 23), and a 25 mm LED tape
+is about two pixels tall on screen, so the outline IS the fixture. A strip with
+eight of sixty-four pixels lit still drew a solid pale line end to end.
+Measured: **55%** of the strip's band read bright.
+
+The studio never had this problem because it draws a fixture body flat dark
+grey (`QColor(33,33,33)`) and lets the LED head items carry every bit of
+colour. The overview now makes the same division:
+
+- **Multi-head fixtures** (a pixel bar) get a neutral `bodyShade()` housing --
+  room-lit on the same curve as scenery -- and the pixels say everything.
+- **Single-head fixtures** keep their colour, because there the box really IS
+  the lamp. A PAR at full red should read as a red box.
+- Drag/highlight still tint the rim, so grabbing a strip is still visible.
+
+Same division applied in the angled view, which had its own
+`drawSolidBox(..., col.lighter(150), ...)` bright edge.
+
+After: under 12% of the band reads bright, and a rendered check against the
+real show file shows dark housings with coloured pixels -- the studio's look.
+
+**View menu: jumps now follow the view, not its construction order.** The
+jump-to-tab entries closed over the index the tab was built at and called
+`setCurrentIndex(i)`. Detaching a view calls `removeTab()`, so every index
+after it shifts down: picking a view landed on the wrong page, and picking an
+already-detached view did nothing at all -- there was no tab left to select.
+
+New `App::showContext(const QString &tabLabel)` resolves by LABEL instead
+(`tabData`, set once in `addTab()` and carried through detach/reattach): switch
+to its tab if docked, or `show()`/`raise()`/`activateWindow()` its own window
+if detached. Rig Overview already did the raise-if-open thing; this brings the
+tab views in line.
+
+**New test target `ui/test/appviews`** (App-level, in the style of
+`ui/test/autosave`), with the per-test `test.sh` launcher `unittest.sh` copies
+into the build dir -- without it the gate fails at `./test.sh: No such file or
+directory`, not with a test failure.
+
+**All three revert-checked:**
+- `aMostlyDarkPixelBarDrawsNoBrightOutline` -- fails at "painted 55% of its
+  band bright". Note the FIRST version of this test was vacuous: it lit the
+  eight pixels all red, and red's luma is under the bright threshold either
+  way. It has to light them in MIXED colours, which is what collapses the
+  fixture-wide colour to a near-white wash in the first place.
+- `jumpingToADockedViewSurvivesAnEarlierDetach` -- fails on the shifted index.
+- `jumpingToADetachedViewRaisesItsWindow` -- fails at "picking an
+  already-detached view did not bring its window forward".
+
+`monitor_test` 52/52, `appviews_test` 4/4. `check-all.sh`: all four legs pass,
+0 failures.
+
 ### Follow-on 24: an unlit fixture is still an object in the room
 
 Branson: "fix" -- the black rectangles disclosed at the end of follow-on 23.

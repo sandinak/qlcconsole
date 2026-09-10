@@ -243,6 +243,9 @@ private:
     /** One fixture, so the overview can depth-sort fixtures and structures
      *  together in a single pass. */
     /** The emit-vs-room shading rule, shared by fixture bodies and pixels. */
+    /** The neutral housing colour of a fixture body, room-lit. A pixel bar's
+     *  light comes from its heads, not from tinting the box around them. */
+    QColor bodyShade() const;
     QColor shadeLive(const QColor &live, uchar dim, const QColor &unlit) const;
     /** One head's own live colour, falling back to the fixture-wide colour. */
     QColor pixelColor(Fixture *fx, int head, const QColor &fallback,

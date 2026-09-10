@@ -2559,6 +2559,113 @@ void Monitor_Test::unlitFixturesAreStillObjectsInTheRoom()
     props->removePlatform(pl->id());
 }
 
+void Monitor_Test::aMostlyDarkPixelBarDrawsNoBrightOutline()
+{
+    /* A 25 mm LED tape is about two pixels tall on screen, so its OUTLINE is
+       most of the fixture. Drawing that outline in the fixture-wide colour put
+       a solid pale line down the full length of a strip whose pixels were
+       nearly all dark -- the "white" in the rig view. The housing is a box,
+       not a lamp: the heads carry the colour, exactly as the studio does it. */
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("Tape Bar"); t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(0.0f, 0.0f, 3.0f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(4.0f); t->setWidth(0.3f);
+
+    const int PIX = 64;
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Tape 64");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("192ch");
+    for (int h = 0; h < PIX; ++h)
+    {
+        const QLCChannel::PrimaryColour pc[] = { QLCChannel::Red, QLCChannel::Green,
+                                                 QLCChannel::Blue };
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1-%2").arg(h + 1).arg(k));
+            ch->setGroup(QLCChannel::Intensity); ch->setColour(pc[k]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, h * 3 + k);
+        }
+        QLCFixtureHead head;
+        head.addChannel(quint32(h * 3));
+        head.addChannel(quint32(h * 3 + 1));
+        head.addChannel(quint32(h * 3 + 2));
+        mode->insertHead(-1, head);
+    }
+    QLCPhysical ph;
+    ph.setWidth(2134); ph.setHeight(25); ph.setDepth(2);
+    ph.setLayoutSize(QSize(PIX, 1));
+    mode->setPhysical(ph);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Tape"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(0);
+    QVERIFY(m_doc->addFixture(fxi));
+    props->setFixturePosition(fxi->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t->id(); rp.trussOffset = 2.0f;
+    props->setFixtureRigProps(fxi->id(), rp);
+
+    /* Only the first EIGHT pixels lit, and in MIXED colours -- which is what
+       collapses the fixture-wide colour to a pale wash, and so what makes an
+       outline drawn in that colour glaringly bright. The other fifty-six
+       pixels are dark. */
+    QByteArray u(512, char(0));
+    for (int h = 0; h < 8; ++h)
+        u[h * 3 + (h % 3)] = char(255);
+    fxi->setChannelValues(u);
+
+    {
+        QColor whole(90, 160, 235);
+        uchar wholeDim = 0;
+        QVERIFY(fixtureLiveState(fxi, whole, wholeDim));
+        QVERIFY2(whole.red() > 200 && whole.green() > 200 && whole.blue() > 200,
+                 "the fixture-wide colour is expected to wash out to near-white "
+                 "here -- that is what makes this test discriminating");
+    }
+
+    StructureStudioView v(m_doc, StructureStudioView::TrussKind, t->id());
+    v.resize(900, 600);
+    v.reload();
+    v.setPlane(StructureStudioView::Front);
+    v.setLiveValues(true);
+    v.setAmbient(0.40);
+
+    const QPointF at = v.w2s(props->fixtureRigPosition(fxi->id()));
+    const QImage img = v.grab().toImage();
+
+    /* Sweep the strip's own row band and count how much of it reads bright.
+       Eight lit pixels out of sixty-four cannot legitimately light up most of
+       the width; an outline drawn in the fixture colour does exactly that. */
+    int bright = 0, sampled = 0;
+    for (int dy = -4; dy <= 4; ++dy)
+    {
+        for (int dx = -180; dx <= 180; ++dx)
+        {
+            const QPoint p(at.toPoint() + QPoint(dx, dy));
+            if (img.rect().contains(p) == false) continue;
+            ++sampled;
+            const QColor c = img.pixelColor(p);
+            if (c.red() * 0.30 + c.green() * 0.59 + c.blue() * 0.11 > 90.0)
+                ++bright;
+        }
+    }
+    QVERIFY(sampled > 500);
+    QVERIFY2(bright * 100 / sampled < 12,
+             qPrintable(QString("a bar with 8 of 64 pixels lit painted %1%% of "
+                                "its band bright -- the housing is being drawn "
+                                "as though it were the lamp")
+                        .arg(bright * 100 / sampled)));
+
+    m_doc->deleteFixture(fxi->id());
+    props->removeTruss(t->id());
+}
+
 void Monitor_Test::pixelBarDrawsEachPixelInItsOwnColour()
 {
     /* A pixel bar is not one colour. Reducing every head to a single

@@ -40,6 +40,11 @@
 #include "doc.h"
 #include "qlceventpos.h"
 
+/* The flat grey a fixture HOUSING is drawn in, before room light. Matches the
+ * studio's body fill (QColor(33,33,33)) closely enough to read as the same
+ * object in both windows, a shade up so it still separates from the deck. */
+static const int BODY_GREY = 52;
+
 StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent)
     : QWidget(parent)
     , m_doc(doc)
@@ -1815,6 +1820,24 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
 /* The emit-vs-room rule, in one place: a lamp is as bright as it is driven,
    and the room level only decides how visible an UNLIT one is. Both the
    fixture body and the individual pixels of a bar go through this. */
+/* The neutral BODY of a fixture: the housing, not the lamp.
+ *
+ * The studio paints a fixture body a flat dark grey and lets its LED heads
+ * carry every bit of colour. The overview used to tint the body -- and worse,
+ * OUTLINE it in a lightened version -- with the fixture-wide colour. On a
+ * 25 mm-tall LED tape that outline is most of the fixture on screen, so a
+ * strip whose pixels were mostly dark still drew a solid pale line end to
+ * end. That was the "white" in the rig view.
+ *
+ * Room-lit like any other object in the space, on the same curve as the
+ * scenery in drawSolidBox(). */
+QColor StructureStudioView::bodyShade() const
+{
+    const double af = 0.18 + 0.82 * m_ambient;
+    const int v = qBound(0, qRound(BODY_GREY * af), 255);
+    return QColor(v, v, v);
+}
+
 QColor StructureStudioView::shadeLive(const QColor &live, uchar dim,
                                      const QColor &unlit) const
 {
@@ -1927,6 +1950,15 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             if (!m_liveValues || !fixtureAimDirection(fx, rp, aim))
                 aim = QVector3D();
             drawMoverSolid(p, fid, traits, col, aim, !m_liveValues);
+        }
+        else if (traits.headCount > 1)
+        {
+            // A pixel bar: neutral housing, ambient-lit like any object, with
+            // the pixels below carrying the colour.
+            const QColor body(BODY_GREY, BODY_GREY, BODY_GREY);
+            drawSolidBox(p, corner, (drag || hi) ? col : body,
+                         (drag || hi) ? col : body.lighter(135), 255,
+                         !(drag || hi));
         }
         else
             drawSolidBox(p, corner, col, col.lighter(150), 255, !m_liveValues);
@@ -2116,9 +2148,16 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             p.drawRect(boxPx.adjusted(-3, -3, 3, 3));
         }
 
-        // The body.
-        p.setPen(QPen(col.darker(150), (drag || hi) ? 1.8 : 1.2));
-        p.setBrush(col.darker(230));
+        /* The body. A pixel bar's HEADS are the light; the box around them is
+           housing, so it stays neutral and lets the pixels say everything --
+           the same division the studio makes. A single-head fixture is
+           different: there the box IS the lamp, so it keeps its colour. */
+        const bool pixelBar = (traits.headCount > 1);
+        const QColor body = pixelBar ? bodyShade() : col.darker(230);
+        const QColor rim = (drag || hi) ? col
+                         : pixelBar ? bodyShade().lighter(135) : col.darker(150);
+        p.setPen(QPen(rim, (drag || hi) ? 1.8 : 1.0));
+        p.setBrush(body);
         p.drawRect(boxPx);
 
         /* The heads. A declared grid wins; otherwise a single row of however

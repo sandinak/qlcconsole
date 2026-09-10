@@ -188,6 +188,9 @@ private slots:
     /** A fixture at zero is an object in the room, not a black hole: the
      *  room lights its body even while its lamp is off. */
     void unlitFixturesAreStillObjectsInTheRoom();
+    /** The housing of a pixel bar is a box, not a lamp: a strip with most of
+     *  its pixels dark must not draw a bright line end to end. */
+    void aMostlyDarkPixelBarDrawsNoBrightOutline();
     void pixelBarDrawsEachPixelInItsOwnColour();
 
 private:
