@@ -1034,6 +1034,41 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 30: twelve colour models, not five
+
+Branson, after reading the QLC+ 5 strategy review: "so then we need to take the
+idea of the visualizer and put it into our rig visualizer."
+
+`QLCChannel::PrimaryColour` defines TWELVE primaries. `channelSetLiveState()`
+read five -- Red, Green, Blue, White, Amber -- and fell through `default:` for
+the rest. Consequences, both real:
+
+- **A subtractive (CMY) fixture never showed its live colour at all.** That is
+  every mover with colour-mixing flags. Revert-checked: flagged full cyan, one
+  reads `#5aa0eb`, which is the untouched gel fallback -- the fixture's output
+  was not being read, at all, ever.
+- UV, Lime and Indigo emitters contributed nothing.
+
+Also: White and Amber were ADDED into the RGB channels. Adding is what makes a
+white-boosted red clip to pink and then to white. They are emitters and now
+BLEND toward their own colour, which is what the fixture is doing.
+
+CMY is read subtractively -- DMX 0 on every flag passes WHITE light, not black
+-- and a colour-mixing fixture with no dimmer channel now reads as ON, because
+its flags say which colour passes and never how much.
+
+Found by reading QLC+ 5's `FixtureUtils::headColor()`, which had all of this
+right while ours had five of twelve. Written up in `RIG3D_STRATEGY_REVIEW.md`,
+which also records that their 3D view builds and renders here, that their
+camera gestures are worse than ours, and why adopting their QML UI wholesale is
+not on the table.
+
+Still open from that review: `Fixture` already exposes `rgbChannels(head)` and
+`cmyChannels(head)`, so the hand-rolled channel walk could go. That is tidy-up
+now rather than a defect.
+
+`monitor_test` 62/62. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 29: stage 3 -- beams; and the flashing was frame rate all along
 
 Branson: "lets move forward with the moving head lights and their beams",

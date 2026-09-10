@@ -219,6 +219,9 @@ private slots:
     void fixturesInsideAStepAreAllVisible();
     void pixelsSurviveOffAxisOnTheirOwnHousing();
     void aMostlyDarkPixelBarDrawsNoBrightOutline();
+    /** All twelve of QLCChannel::PrimaryColour, not the five we started with:
+     *  subtractive CMY especially, which showed no live colour at all. */
+    void everyColourModelTheEngineDefinesIsRead();
     void pixelBarDrawsEachPixelInItsOwnColour();
 
 private:

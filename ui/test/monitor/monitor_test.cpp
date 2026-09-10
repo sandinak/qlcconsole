@@ -3438,6 +3438,125 @@ void Monitor_Test::aMostlyDarkPixelBarDrawsNoBrightOutline()
     props->removeTruss(t->id());
 }
 
+void Monitor_Test::everyColourModelTheEngineDefinesIsRead()
+{
+    /* QLCChannel::PrimaryColour defines twelve primaries. This read five --
+       Red, Green, Blue, White, Amber -- and fell through `default:` for the
+       rest, so a SUBTRACTIVE fixture (every mover with CMY colour-mixing
+       flags) never showed its live colour at all, whatever it was doing, and
+       UV/Lime/Indigo emitters contributed nothing.
+     *
+       Found by reading QLC+ 5's FixtureUtils::headColor(), which had all of
+       this right. See RIG3D_STRATEGY_REVIEW.md. */
+    Doc *doc = new Doc(this);
+
+    auto build = [&](const QVector<QLCChannel::PrimaryColour> &cols,
+                     quint32 addr, const char *name) -> Fixture * {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(name);
+        def->setType(QLCFixtureDef::ColorChanger);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("mode");
+        for (int k = 0; k < cols.size(); ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("c%1").arg(k));
+            ch->setGroup(QLCChannel::Intensity);
+            ch->setColour(cols.at(k));
+            def->addChannel(ch);
+            mode->insertChannel(ch, k);
+        }
+        QLCPhysical ph; ph.setWidth(300); ph.setHeight(300); ph.setDepth(300);
+        mode->setPhysical(ph);
+        QLCFixtureHead hd;
+        for (int k = 0; k < cols.size(); ++k) hd.addChannel(quint32(k));
+        mode->insertHead(-1, hd);
+        def->addMode(mode);
+
+        Fixture *f = new Fixture(doc);
+        f->setName(name); f->setFixtureDefinition(def, mode);
+        f->setUniverse(3); f->setAddress(addr);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+
+    /* CMY, the one that was completely broken. Cyan flag full in, magenta and
+       yellow out, passes CYAN light. Subtractive: DMX 0 everywhere is white,
+       not black. */
+    Fixture *cmy = build({ QLCChannel::Cyan, QLCChannel::Magenta, QLCChannel::Yellow },
+                         0, "CMY Mover");
+    QVERIFY(cmy != nullptr);
+    QByteArray u(512, char(0));
+    u[0] = char(255);
+    cmy->setChannelValues(u);
+
+    QColor col(90, 160, 235);
+    uchar dim = 0;
+    QVERIFY(fixtureLiveState(cmy, col, dim));
+    QVERIFY2(col.green() > 150 && col.blue() > 150 && col.red() < 60,
+             qPrintable(QString("a CMY fixture flagged to cyan read as %1 -- "
+                                "subtractive colour is not being read")
+                        .arg(col.name())));
+    QVERIFY2(dim > 200,
+             qPrintable(QString("a colour-mixing fixture with no dimmer channel "
+                                "should read as ON, got %1").arg(dim)));
+
+    // All flags out = white light through.
+    cmy->setChannelValues(QByteArray(512, char(0)));
+    QVERIFY(fixtureLiveState(cmy, col, dim));
+    QVERIFY2(col.red() > 200 && col.green() > 200 && col.blue() > 200,
+             qPrintable(QString("CMY with every flag out should pass white, got %1")
+                        .arg(col.name())));
+
+    /* UV, Lime and Indigo: emitters that were silently dropped. Each should
+       pull the result toward its own colour. */
+    struct { QLCChannel::PrimaryColour c; const char *name; } extras[] = {
+        { QLCChannel::UV,     "UV" },
+        { QLCChannel::Lime,   "Lime" },
+        { QLCChannel::Indigo, "Indigo" },
+    };
+    quint32 addr = 16;
+    for (int k = 0; k < 3; ++k)
+    {
+        Fixture *f = build({ QLCChannel::Red, extras[k].c }, addr, extras[k].name);
+        QVERIFY(f != nullptr);
+        addr += 8;
+
+        QByteArray uu(512, char(0));
+        uu[int(f->address())] = char(255);          // red only
+        f->setChannelValues(uu);
+        QColor redOnly(0, 0, 0);
+        uchar d1 = 0;
+        QVERIFY(fixtureLiveState(f, redOnly, d1));
+
+        uu[int(f->address()) + 1] = char(255);      // and the extra emitter
+        f->setChannelValues(uu);
+        QColor withExtra(0, 0, 0);
+        uchar d2 = 0;
+        QVERIFY(fixtureLiveState(f, withExtra, d2));
+
+        QVERIFY2(withExtra != redOnly,
+                 qPrintable(QString("driving the %1 emitter changed nothing "
+                                    "(%2 either way)")
+                            .arg(extras[k].name).arg(redOnly.name())));
+    }
+
+    /* White BLENDS rather than adds. Half white over full red must not clip
+       the green and blue channels up in lockstep the way adding does. */
+    Fixture *rw = build({ QLCChannel::Red, QLCChannel::White }, 40, "RW");
+    QVERIFY(rw != nullptr);
+    QByteArray uw(512, char(0));
+    uw[40] = char(255); uw[41] = char(128);
+    rw->setChannelValues(uw);
+    QColor rwc(0, 0, 0);
+    uchar dw = 0;
+    QVERIFY(fixtureLiveState(rw, rwc, dw));
+    QVERIFY2(rwc.red() > rwc.green() + 40,
+             qPrintable(QString("half white over full red should still read RED, "
+                                "got %1").arg(rwc.name())));
+
+    delete doc;
+}
+
 void Monitor_Test::pixelBarDrawsEachPixelInItsOwnColour()
 {
     /* A pixel bar is not one colour. Reducing every head to a single

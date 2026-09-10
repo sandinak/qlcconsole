@@ -231,14 +231,43 @@ QPainterPath moverPlanPath(const QRectF &r, int headCount)
  * turns any pattern that is not uniform into white -- red pixels and blue
  * pixels together report max-red AND max-blue, so a step front running a
  * confetti effect drew as a pale wash instead of its actual colours. */
+/* Mix two colours. Emitters BLEND toward their own colour rather than adding
+ * into the RGB channels: adding is what makes a white-boosted red clip to pink
+ * and then to white, which is not what the fixture is doing. */
+static QColor blendColour(const QColor &a, const QColor &b, double mix)
+{
+    mix = qBound(0.0, mix, 1.0);
+    return QColor(qRound(a.red()   * (1.0 - mix) + b.red()   * mix),
+                  qRound(a.green() * (1.0 - mix) + b.green() * mix),
+                  qRound(a.blue()  * (1.0 - mix) + b.blue()  * mix));
+}
+
+/* The shared core: reduce ONE set of channels to a colour and a level.
+ *
+ * Scoping this to a channel list rather than always walking the whole fixture
+ * is the whole point. Taking the per-primary maximum across a 64-pixel bar
+ * turns any pattern that is not uniform into white -- red pixels and blue
+ * pixels together report max-red AND max-blue, so a step front running a
+ * confetti effect drew as a pale wash instead of its actual colours.
+ *
+ * Colour models covered, which is ALL of QLCChannel::PrimaryColour:
+ *   - additive RGB;
+ *   - subtractive CMY -- every mover with a colour-mixing flag system. These
+ *     were silently ignored, so such a fixture never showed its live colour at
+ *     all, whatever it was doing;
+ *   - White, Amber, UV, Lime and Indigo emitters, blended over the base;
+ *   - a colour wheel's current capability.
+ * (Modelled on QLC+ 5's FixtureUtils::headColor(), which had all of this right
+ * while this had five of the twelve.) */
 static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
                                 const QList<quint32> &chans,
                                 QColor &colour, uchar &dimmer)
 {
-
-    int r = -1, g = -1, b = -1, w = -1, a = -1;
-    int master = -1;                 // a plain (colourless) Intensity channel
-    QColor wheel;                    // a colour-wheel capability, if one is set
+    int r = -1, g = -1, b = -1;          // additive
+    int cy = -1, ma = -1, ye = -1;       // subtractive
+    int w = -1, am = -1, uv = -1, li = -1, ind = -1;
+    int master = -1;                     // a plain (colourless) Intensity channel
+    QColor wheel;                        // a colour-wheel capability, if one is set
 
     foreach (quint32 c, chans)
     {
@@ -247,6 +276,8 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
         QLCChannel *ch = mode->channel(c);
         if (ch == nullptr)
             continue;
+        /* uchar cast matters: QByteArray::at() is signed, so anything over 127
+           would go negative and darken the fixture past half. */
         const int val = uchar(v.at(int(c)));
 
         if (ch->group() == QLCChannel::Intensity && ch->colour() == QLCChannel::NoColour)
@@ -259,11 +290,17 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
 
         switch (ch->colour())
         {
-        case QLCChannel::Red:   r = qMax(r, val); break;
-        case QLCChannel::Green: g = qMax(g, val); break;
-        case QLCChannel::Blue:  b = qMax(b, val); break;
-        case QLCChannel::White: w = qMax(w, val); break;
-        case QLCChannel::Amber: a = qMax(a, val); break;
+        case QLCChannel::Red:     r   = qMax(r, val);   break;
+        case QLCChannel::Green:   g   = qMax(g, val);   break;
+        case QLCChannel::Blue:    b   = qMax(b, val);   break;
+        case QLCChannel::Cyan:    cy  = qMax(cy, val);  break;
+        case QLCChannel::Magenta: ma  = qMax(ma, val);  break;
+        case QLCChannel::Yellow:  ye  = qMax(ye, val);  break;
+        case QLCChannel::White:   w   = qMax(w, val);   break;
+        case QLCChannel::Amber:   am  = qMax(am, val);  break;
+        case QLCChannel::UV:      uv  = qMax(uv, val);  break;
+        case QLCChannel::Lime:    li  = qMax(li, val);  break;
+        case QLCChannel::Indigo:  ind = qMax(ind, val); break;
         case QLCChannel::NoColour:
             // A wheel: take the colour its current capability names.
             if (ch->group() == QLCChannel::Colour)
@@ -280,24 +317,42 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
         }
     }
 
-    /* uchar casts matter: QByteArray::at() is signed, so anything over 127
-       would go negative and darken the fixture past half. */
-    if (r >= 0 || g >= 0 || b >= 0 || w >= 0 || a >= 0)
+    QColor mixed(0, 0, 0);
+    bool found = false;
+
+    if (r >= 0 || g >= 0 || b >= 0)
     {
-        int rr = qMax(0, r), gg = qMax(0, g), bb = qMax(0, b);
-        if (w > 0) { rr += w; gg += w; bb += w; }
-        if (a > 0) { rr += a; gg += qRound(a * 0.494); }
-        colour = QColor(qMin(rr, 255), qMin(gg, 255), qMin(bb, 255));
+        mixed.setRgb(qMax(0, r), qMax(0, g), qMax(0, b));
+        found = true;
     }
+    if (cy >= 0 || ma >= 0 || ye >= 0)
+    {
+        /* Subtractive: DMX 0 on every flag is FULL WHITE light, not black. */
+        mixed.setCmyk(qMax(0, cy), qMax(0, ma), qMax(0, ye), 0);
+        found = true;
+    }
+    if (w   >= 0) { if (w   > 0) mixed = blendColour(mixed, QColor(255, 255, 255), w   / 255.0); found = true; }
+    if (am  >= 0) { if (am  > 0) mixed = blendColour(mixed, QColor(255, 126,   0), am  / 255.0); found = true; }
+    if (uv  >= 0) { if (uv  > 0) mixed = blendColour(mixed, QColor(148,   0, 211), uv  / 255.0); found = true; }
+    if (li  >= 0) { if (li  > 0) mixed = blendColour(mixed, QColor(173, 255,  47), li  / 255.0); found = true; }
+    if (ind >= 0) { if (ind > 0) mixed = blendColour(mixed, QColor( 75,   0, 130), ind / 255.0); found = true; }
+
+    if (found)
+        colour = mixed;
     else if (wheel.isValid())
-    {
         colour = wheel;
-    }
 
     /* The level: an explicit dimmer if there is one, otherwise the brightest
-       emitter -- an RGB fixture with no dimmer is as bright as its channels. */
+       emitter -- an RGB fixture with no dimmer is as bright as its channels.
+     *
+       A subtractive fixture is the exception: its flags say what COLOUR passes,
+       never how much, so with no dimmer channel the honest reading is "on". */
+    const bool subtractiveOnly = (cy >= 0 || ma >= 0 || ye >= 0)
+                                 && r < 0 && g < 0 && b < 0;
     if (master >= 0)
         dimmer = uchar(master);
+    else if (subtractiveOnly)
+        dimmer = 255;
     else if (colour.isValid())
         dimmer = uchar(qMax(colour.red(), qMax(colour.green(), colour.blue())));
     else

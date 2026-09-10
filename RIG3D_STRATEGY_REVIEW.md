@@ -111,7 +111,18 @@ popout makes it possible, and more cleanly than expected.**
   was wrong. Note also that `CLAUDE.md` still says this machine has no `qt@5`;
   it does, and `check-all.sh` builds against it.)
 
-- **Still unverified — deliberately:** whether Qt3D `Scene3D` actually *renders*
+- **VERIFIED (2026-09-10): it renders.** Branson built and ran it: the 3D view
+  comes up and draws. Qt3D works on this machine under Qt 6.11, so the last
+  technical unknown in option B is closed.
+
+  His verdict on it, which matters as much as the rendering: *"it doesn't work
+  the same way ours does with the moving capabilities — I like our gesture
+  management better."* Our drag-to-swing / shift-drag-to-pan / wheel-zoom is
+  better than theirs. That is worth recording because it inverts the usual
+  assumption: their renderer is ahead, their *interaction* is behind, and
+  option B would mean giving up the interaction to get the renderer.
+
+- ~~Still unverified — deliberately:~~ *(closed above)* whether Qt3D `Scene3D` actually *renders*
   on this machine's GPU stack. That needs the built binary to be launched and
   its 3D view opened. I have not done it: a second QLC+ instance can seize
   MIDI devices and ArtNet universes, and there is a live show file open. **Run
@@ -228,9 +239,14 @@ and the colour wheel — and falls through `default: break;` for the rest. So:
 We also *add* White/Amber into RGB; they *blend*. Blending is the better model —
 adding is what makes a white-boosted colour clip toward white.
 
-**Action:** port `headColor()`'s structure into `fixturevisualtraits.cpp`. It is
-~60 lines and depends only on `Fixture` and `QLCChannel` — no QML, no Qt3D, no
-qmlui. This is a bug fix, not a port.
+**Action:** ~~port `headColor()`'s structure into `fixturevisualtraits.cpp`.~~
+**DONE 2026-09-10.** `channelSetLiveState()` now reads all twelve primaries,
+treats CMY as subtractive (DMX 0 on every flag is white light, not black),
+blends White/Amber/UV/Lime/Indigo rather than adding them, and reads a
+colour-mixing fixture with no dimmer channel as ON rather than guessing a level
+from its flags. Revert-checked: with the CMY/UV/Lime/Indigo cases removed, a
+CMY fixture flagged full cyan renders `#5aa0eb` — which is the untouched gel
+fallback, i.e. its live colour was never read at all.
 
 ### 5.3 Small confirmations
 
