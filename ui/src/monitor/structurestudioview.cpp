@@ -20,6 +20,8 @@
 #include <QSet>
 #include <QtMath>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QDebug>
 #include <cmath>
 
 #include "structurestudioview.h"
@@ -216,6 +218,7 @@ void StructureStudioView::setLiveValues(bool on)
         }
         m_liveTimer->start(40);
     }
+    // (the interval re-tunes itself from the measured frame cost -- paintEvent)
     else if (m_liveTimer != nullptr)
     {
         m_liveTimer->stop();
@@ -959,6 +962,7 @@ void StructureStudioView::emitLabel(const QPointF &at, double depth, const QStri
 
 void StructureStudioView::flushOps(QPainter &p) const
 {
+    m_lastOpCount = m_ops.size();
     // Ascending == farthest first (see viewDepth's convention note).
     std::stable_sort(m_ops.begin(), m_ops.end(),
                      [](const DrawOp &a, const DrawOp &b) { return a.depth < b.depth; });
@@ -1855,8 +1859,17 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         else
             drawSolidBox(p, corner, col, col.lighter(150));
 
-        // Pixels on the face that is pointing at us, when a grid is declared.
-        if (traits.layout.isValid())
+        /* Pixels on the face pointing at us -- when a grid is declared AND the
+           pixels are big enough to see.
+         *
+         * A 64-pixel Step Row is one fixture but sixty-four primitives, and
+         * this rig has ninety-six of them: about 6000 of the frame's ~7800 ops
+         * were dots under 2 px across. Culling those costs nothing visually --
+         * at that size they merge into the body anyway -- and hands back most
+         * of the frame time. */
+        if (traits.layout.isValid()
+            && QLineF(w2s(corner[0]), w2s(corner[1])).length()
+                   / qMax(1, traits.layout.width()) >= 2.5)
         {
             const int cols = traits.layout.width(), rows = traits.layout.height();
             /* On whichever long face points AT us. This was hardwired to the
@@ -2604,6 +2617,10 @@ void StructureStudioView::drawOrientationLabels(QPainter &p) const
 
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
+    QElapsedTimer frameTimer;
+    if (m_liveValues)
+        frameTimer.start();
+
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     drawGrid(p);
@@ -2629,6 +2646,24 @@ void StructureStudioView::paintEvent(QPaintEvent *)
                (m_plane == Angled) ? tr("%1 — view only").arg(names[idx])
                                    : tr("2D — %1").arg(names[idx]));
     drawOrientationLabels(p);
+
+    /* Never ask for frames faster than we can draw them.
+     *
+     * A fixed 25 Hz was optimistic: measured on a 134-fixture rig the angled
+     * overview took 59 ms a frame, so the timer queued repaints faster than
+     * they completed and the backlog showed up as the picture stuttering --
+     * reported as "just sort of blinking". Culling sub-pixel LED dots brought
+     * that to ~34 ms, but a bigger rig or a slower machine would put it back.
+     * Re-tune from what a frame ACTUALLY costs here (smoothed, so one slow
+     * frame does not lurch the rate), leaving roughly half the budget spare. */
+    if (m_liveValues && m_liveTimer != nullptr && frameTimer.isValid())
+    {
+        const double ms = frameTimer.nsecsElapsed() / 1000000.0;
+        m_frameMs = (m_frameMs <= 0.0) ? ms : (m_frameMs * 0.8 + ms * 0.2);
+        const int want = int(qBound(40.0, m_frameMs * 2.0, 250.0));
+        if (qAbs(m_liveTimer->interval() - want) > 8)
+            m_liveTimer->setInterval(want);
+    }
 }
 
 /*********************************************************************

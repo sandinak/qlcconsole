@@ -2531,12 +2531,27 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
 
     // "Move to folder…" — applies to every selected group.
     QAction *moveToFolder = NULL;
+    QAction *ungroupOnly = NULL;
     if (selGroups.isEmpty() == false)
     {
         menu.addSeparator();
         moveToFolder = menu.addAction(selGroups.size() > 1
             ? tr("Move %1 groups to folder…").arg(selGroups.size())
             : tr("Move to folder…"));
+
+        /* Delete the GROUPING, keep the fixtures.
+         *
+         * Doc::deleteFixtureGroup() has always done exactly this -- groups and
+         * fixtures live in separate maps -- but the only way to reach it was
+         * the shared Delete action, whose prompt says "delete the selected
+         * items" and which also deletes any fixture rows caught in the same
+         * selection. There was no way to say "I want the group gone, not the
+         * lights", so the safe move was to leave stale groups lying about. */
+        ungroupOnly = menu.addAction(selGroups.size() > 1
+            ? tr("Remove %1 groups (keep fixtures)").arg(selGroups.size())
+            : tr("Remove group (keep fixtures)"));
+        ungroupOnly->setToolTip(tr("Deletes the grouping only — every fixture in "
+                                   "it stays in the workspace, patched as it is."));
     }
 
     QAction *copyToNew = NULL;
@@ -2750,6 +2765,26 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         const int blocks = m_doc->programmer()->rebuildCompositeGroup(selGroups.first());
         if (blocks > 0)
             updateView();
+        return;
+    }
+
+    if (chosen == ungroupOnly && selGroups.isEmpty() == false)
+    {
+        /* Name them: "Remove 3 groups" is not enough to check against when the
+           tree selection is not entirely obvious. */
+        QStringList gnames;
+        foreach (quint32 gid, selGroups)
+            if (FixtureGroup *g = m_doc->fixtureGroup(gid))
+                gnames << g->name();
+        if (QMessageBox::question(this, tr("Remove Group"),
+                tr("Remove %n group(s) — %1 — keeping every fixture in them?",
+                   "", selGroups.size()).arg(gnames.join(", ")),
+                QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+            return;
+
+        foreach (quint32 gid, selGroups)
+            m_doc->deleteFixtureGroup(gid);
+        updateView();
         return;
     }
 

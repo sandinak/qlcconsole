@@ -8,6 +8,41 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## IDEA (not started): an MCP server for qlcconsole
+
+Branson, 2026-09-10: "shower thought .. can we consider an MCP for qlcconsole ..
+so that we can do this kinda thing inline?"
+
+**The case for it, from this session.** Three rounds of bulk edits were made to
+`stage-structures-demo.qxw` by parsing and rewriting XML with regex, and the
+schema was guessed wrong in two of them:
+  - `<Head Fixture="36" Head="0"/>` looked entirely plausible and loaded as an
+    EMPTY group. The real format places every HEAD on an X/Y grid with the head
+    index as the element's text -- `US1t` is 16x2 = 32 entries for 2 fixtures.
+  - A verification pass compared fixture heights to an absolute 0.204 m and
+    reported 16 false failures, because the steps are STACKED and each has its
+    own `platformBaseZ()`.
+Both were guesses at a schema the engine already knows exactly.
+
+**Shape.** A small `tools/qlcmcp` binary linking `libqlcplusengine`, speaking
+JSON-RPC over stdio. It loads a workspace through the REAL engine and exposes
+thin wrappers -- `list_fixtures`, `list_groups`, `list_structures`,
+`create_group`, `delete_group`, `set_fixture_placement`, `assign_to_group`,
+`save`. Because saving goes through `Doc::saveXML()`, there is no format to
+guess and nothing to verify afterwards: that whole class of error disappears.
+
+Feasibility is already demonstrated -- `monitor_test` loads real workspaces
+headlessly through `Doc::loadXML()` with the fixture-definition cache, which is
+most of what the server needs.
+
+**Caveats:** a real project, not an afternoon. Needs care about editing a file
+the running app has open (or a "read-only unless told otherwise" default). Check
+whether the existing `webaccess/` module is a better host than a new binary
+before starting. Useful to Branson directly too, not just to tooling: scripted
+rig edits, bulk repatching, cross-show consistency checks.
+
+---
+
 ## Lighting Studio Editor: fixture 0 was unclickable; truss drag only had one freedom — SHIPPED, not yet Branson-verified (2026-09-08)
 
 Branson: "still cannot move this fixture on this truss even though it's bound
@@ -910,6 +945,60 @@ failure. Re-checked against each fixture's own `platformBaseZ()`: 24 Inside, 0 o
 the surface, 0 outside. Verify against the object's own frame, never an absolute.
 
 `monitor_test` 45/45. `check-all.sh`: all four legs pass, 0 failures.
+
+### Follow-on 20: the blinking WAS the perf concern — measured at last
+
+Branson: "I just tested a function on a step .. in the rig view it's just sort of
+blinking but I think you said there were concerns there." He was right, and the
+concern had been raised FIVE times without ever being measured. Measuring took
+ten minutes and would have caught this before he ever saw it.
+
+**The numbers** (his rig: 134 fixtures, 30 structures, 1100x760):
+  - angled overview **59 ms/frame = 17 fps**, while the live timer asked for a
+    frame every 40 ms. Repaints queued faster than they completed and the
+    backlog is what read as blinking.
+  - **7817 primitives/frame**, and the bulk were LED dots: a 64-pixel Step Row
+    is 64 primitives and the rig has 96 of them -- ~6000 dots under 2 px across.
+
+**Fixes.** Sub-pixel LED grids are culled (they merge into the body at that size
+anyway); zoom in and they come back. The live repaint rate now SELF-TUNES from
+the measured frame cost, keeping about half the budget spare, instead of a fixed
+25 Hz that was optimistic on a big rig.
+
+| | before | after |
+|---|---|---|
+| primitives | 7817 | 1598 |
+| angled frame | 59 ms | 34 ms |
+| flat frame | 31 ms | 15 ms |
+
+**Test lesson, the same one as the mount sweep:** the first version of
+`subPixelLedGridsAreCulledWhenZoomedOut` measured 472 primitives at BOTH ends and
+proved nothing -- on a small test rig the default fit is already close enough to
+draw every LED. It now uses two explicit scales, and is revert-checked.
+
+### Follow-on 21: step group parity, and removing a group without its fixtures
+
+**Parity.** All 12 steps now have both `Xf` (8 face LEDs) and `Xt` (2 top bars):
+12 groups created. Three redundant groups removed with Branson's agreement --
+`UD3f` (a typo'd EXACT duplicate of `US3f`, not the only copy: checked before
+renaming, which would have produced two `US3f`), the EMPTY `US2t` id 13, and one
+of two byte-identical `UST` groups.
+
+LESSON (and the direct motivation for the MCP idea above): the first attempt
+wrote `<Head Fixture="36" Head="0"/>`, which looks entirely plausible and loaded
+as an EMPTY group. The real format places every HEAD on an X/Y grid with the head
+index as the element's text -- `US1t` is 16x2 = 32 entries for 2 fixtures, `US1f`
+is 64x8 = 512. Copy the format from an existing object; never invent it.
+
+**Remove group, keep fixtures.** `Doc::deleteFixtureGroup()` has ALWAYS done
+exactly this -- groups and fixtures live in separate maps. The gap was purely UI:
+the only route was the shared Delete action, whose prompt says "delete the
+selected items" and which also deletes any fixture rows caught in the same
+selection. New context-menu action "Remove group (keep fixtures)", naming the
+groups in its confirmation. Test asserts the fixtures survive AND keep their
+patch.
+
+`monitor_test` 47/47. `check-all.sh`: all four legs pass, 0 failures.
 
 ---
 

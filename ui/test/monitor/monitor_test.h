@@ -163,6 +163,13 @@ private slots:
      *  that did not exist or silently declined; this walks the whole chain so a
      *  sixth fails here instead of arriving as a bug report. */
     void everyMountKindCanBeDragged();
+    /** Sub-pixel LED grids are culled, so a wide overview draws far fewer
+     *  primitives than a zoomed-in one. This is what lets the live repaint keep
+     *  up: unculled, a 96-strip rig was 7800 primitives and 59 ms a frame. */
+    void subPixelLedGridsAreCulledWhenZoomedOut();
+    /** Deleting a fixture group must leave its fixtures in the workspace,
+     *  patched exactly as they were. */
+    void deletingAGroupKeepsItsFixtures();
     /** Room light applies whether or not live output is shown, and takes the
      *  whole picture down toward a blackout. */
     void ambientLevelDimsTheWholeView();

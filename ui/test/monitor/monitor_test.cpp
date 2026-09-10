@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QApplication>
 #include <QLineEdit>
@@ -45,6 +46,7 @@
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "qlcpalette.h"
+#include "fixturegroup.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
@@ -2168,5 +2170,126 @@ void Monitor_Test::everyMountKindCanBeDragged()
     props->removeTruss(tr->id());
     props->removeTower(tw->id());
     props->removePlatform(pl->id());
+}
+
+
+void Monitor_Test::subPixelLedGridsAreCulledWhenZoomedOut()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    /* A pixel strip like the rig's Step Rows: 64 LEDs in a 2 m bar. One
+       fixture, sixty-four primitives -- and this rig has dozens. */
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Strip 64");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    for (int i = 0; i < 64; ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("D%1").arg(i));
+        ch->setGroup(QLCChannel::Intensity);
+        def->addChannel(ch);
+    }
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("ALL");
+    QLCPhysical ph; ph.setWidth(2134); ph.setHeight(25); ph.setDepth(60);
+    ph.setLayoutSize(QSize(64, 1));
+    mode->setPhysical(ph);
+    foreach (QLCChannel *ch, def->channels())
+    {
+        mode->insertChannel(ch, mode->channels().size());
+        QLCFixtureHead h; h.addChannel(mode->channels().size() - 1);
+        mode->insertHead(-1, h);
+    }
+    def->addMode(mode);
+
+    Truss *t = props->addTruss();
+    t->setName("Cull Truss"); t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(0.0f, 0.0f, 2.0f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f); t->setWidth(0.3f);
+
+    QList<quint32> fids;
+    for (int i = 0; i < 6; ++i)
+    {
+        Fixture *fxi = new Fixture(m_doc);
+        fxi->setName(QString("Strip %1").arg(i));
+        fxi->setFixtureDefinition(def, mode);
+        fxi->setUniverse(3); fxi->setAddress(i * 64);
+        QVERIFY(m_doc->addFixture(fxi));
+        props->setFixturePosition(fxi->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp; rp.trussId = t->id(); rp.trussOffset = 0.5f + i * 0.9f;
+        props->setFixtureRigProps(fxi->id(), rp);
+        fids << fxi->id();
+    }
+
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(900, 620);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 30.0);
+
+    /* Two explicit scales rather than "the default fit", which on a small test
+       rig can already be close enough to draw every LED -- the first version of
+       this test measured 472 primitives at both ends and proved nothing. */
+    v.m_zoomed = true;                       // stop refit() re-fitting
+    const double fitted = v.m_scale;
+
+    v.m_scale = fitted * 0.15;               // whole-stage overview
+    v.grab();
+    const int wide = v.lastPrimitiveCount();
+
+    v.m_scale = fitted * 4.0;                // close enough to see the LEDs
+    v.grab();
+    const int near_ = v.lastPrimitiveCount();
+
+    QVERIFY2(near_ > wide * 2,
+             qPrintable(QString("zoomed in should draw far more primitives "
+                                "(wide %1, near %2) — the LED grids are not "
+                                "coming back").arg(wide).arg(near_)));
+    QVERIFY2(wide < 6 * 64,
+             qPrintable(QString("the wide view drew %1 primitives for 6 strips "
+                                "of 64 — sub-pixel LEDs are not being culled")
+                        .arg(wide)));
+
+    foreach (quint32 f, fids) m_doc->deleteFixture(f);
+    props->removeTruss(t->id());
+}
+
+void Monitor_Test::deletingAGroupKeepsItsFixtures()
+{
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("US9t");
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    const quint32 gid = grp->id();
+
+    QList<quint32> fids;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *fxi = new Fixture(m_doc);
+        fxi->setName(QString("Keeper %1").arg(i));
+        fxi->setChannels(1);
+        // A universe of its own: earlier tests in this run have taken addresses
+        // in the low universes and addFixture() rejects an overlap.
+        fxi->setUniverse(3);
+        fxi->setAddress(quint32(400 + i * 4));
+        QVERIFY(m_doc->addFixture(fxi));
+        grp->assignFixture(fxi->id());
+        fids << fxi->id();
+    }
+    QCOMPARE(grp->fixtureList().size(), 3);
+
+    const int before = m_doc->fixtures().size();
+    QVERIFY(m_doc->deleteFixtureGroup(gid));
+
+    QVERIFY2(m_doc->fixtureGroup(gid) == NULL, "the group survived deletion");
+    QCOMPARE(m_doc->fixtures().size(), before);
+    foreach (quint32 fid, fids)
+    {
+        Fixture *f = m_doc->fixture(fid);
+        QVERIFY2(f != NULL, "deleting the group took its fixtures with it");
+        QVERIFY2(f->address() != QLCChannel::invalid(),
+                 "the fixture survived but lost its patch");
+    }
+
+    foreach (quint32 fid, fids) m_doc->deleteFixture(fid);
 }
 
