@@ -221,6 +221,16 @@ private slots:
     void aMostlyDarkPixelBarDrawsNoBrightOutline();
     /** All twelve of QLCChannel::PrimaryColour, not the five we started with:
      *  subtractive CMY especially, which showed no live colour at all. */
+    /** Depth decided per pixel, so a depth-ramped polygon can be partly in
+     *  front of and partly behind another -- what one depth per primitive can
+     *  never express. */
+    /** On a scene where one depth per primitive is enough, the depth buffer
+     *  and the painter it replaces must agree -- which is what keeps the
+     *  fallback path honest rather than dead. */
+    void bothRenderersAgreeOnPlainOcclusion();
+    void zRasterResolvesDepthPerPixel();
+    /** Translucent surfaces are depth-tested but do not write depth. */
+    void zRasterBlendsWithoutOccluding();
     void everyColourModelTheEngineDefinesIsRead();
     void pixelBarDrawsEachPixelInItsOwnColour();
 

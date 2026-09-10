@@ -39,6 +39,8 @@
 #include "qlcphysical.h"
 #include "doc.h"
 #include "qlceventpos.h"
+#include "zraster.h"
+#include <QVarLengthArray>
 
 /* The flat grey a fixture HOUSING is drawn in, before room light. Matches the
  * studio's body fill (QColor(33,33,33)) closely enough to read as the same
@@ -933,12 +935,15 @@ void StructureStudioView::drawPipe(QPainter &p, const Pipe *pipe) const
  * angled overview is collecting, so the drawing code below reads the same
  * either way. */
 void StructureStudioView::emitPoly(const QPolygonF &poly, double depth, const QColor &fill,
-                                   const QColor &pen, double penW, QPainter &p) const
+                                   const QColor &pen, double penW, QPainter &p,
+                                   const QVector<double> &vertexDepths) const
 {
     if (m_collecting)
     {
         DrawOp o; o.kind = DrawOp::Poly; o.depth = depth; o.poly = poly;
         o.fill = fill; o.pen = pen; o.penWidth = penW;
+        if (vertexDepths.size() == poly.size())
+            o.zs = vertexDepths;
         m_ops << o;
         return;
     }
@@ -963,7 +968,8 @@ void StructureStudioView::emitLine(const QPointF &a, const QPointF &b, double de
 
 /* Many dots, one op: same depth, same colour, drawn in one state change. */
 void StructureStudioView::emitDots(const QVector<QPointF> &pts, double depth, double r,
-                                  const QColor &fill, QPainter &p) const
+                                  const QColor &fill, QPainter &p,
+                                  const QVector<double> &pointDepths) const
 {
     if (pts.isEmpty())
         return;
@@ -972,6 +978,8 @@ void StructureStudioView::emitDots(const QVector<QPointF> &pts, double depth, do
         DrawOp o; o.kind = DrawOp::Dot; o.depth = depth; o.radius = r;
         o.fill = fill;
         o.poly = QPolygonF(pts);
+        if (pointDepths.size() == pts.size())
+            o.zs = pointDepths;
         m_ops << o;
         return;
     }
@@ -1010,59 +1018,157 @@ void StructureStudioView::emitLabel(const QPointF &at, double depth, const QStri
     p.drawText(at, text);
 }
 
+/* One queued primitive into the depth buffer. */
+void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite) const
+{
+    const int n = o.poly.size();
+    if (n == 0 || m_z == nullptr)
+        return;
+
+    // Per-vertex depth if the emitter knew it, otherwise the primitive's own.
+    QVarLengthArray<double, 32> zs(n);
+    for (int i = 0; i < n; ++i)
+        zs[i] = (o.zs.size() == n) ? o.zs.at(i) : o.depth;
+
+    switch (o.kind)
+    {
+    case DrawOp::Poly:
+        if (o.fill.isValid())
+            m_z->poly(o.poly.constData(), zs.constData(), n, o.fill, depthWrite);
+        if (o.pen.isValid() && n >= 2)
+        {
+            /* The outline, edge by edge, each carrying its own two depths. A
+               deck's bright rim has to be occluded by whatever stands in front
+               of it exactly as its fill is. */
+            for (int i = 0; i < n; ++i)
+            {
+                const int k = (i + 1) % n;
+                m_z->thickLine(o.poly.at(i), o.poly.at(k), zs[i], zs[k],
+                               qMax(1.0, o.penWidth), o.pen, depthWrite);
+            }
+        }
+        break;
+
+    case DrawOp::Line:
+        if (n >= 2 && o.pen.isValid())
+            m_z->thickLine(o.poly.at(0), o.poly.at(1), zs[0], zs[1],
+                           qMax(1.0, o.penWidth), o.pen, depthWrite);
+        break;
+
+    case DrawOp::Dot:
+    {
+        /* A pixel is a speck on a surface, so it is square and flat: at the
+           couple of pixels these actually occupy, a disc and a square are the
+           same speck and the square is far cheaper. */
+        const double r = qMax(0.5, o.radius);
+        for (int i = 0; i < n; ++i)
+        {
+            const QPointF c = o.poly.at(i);
+            const QPointF q[4] = { QPointF(c.x() - r, c.y() - r),
+                                   QPointF(c.x() + r, c.y() - r),
+                                   QPointF(c.x() + r, c.y() + r),
+                                   QPointF(c.x() - r, c.y() + r) };
+            const double qz[4] = { zs[i], zs[i], zs[i], zs[i] };
+            m_z->poly(q, qz, 4, o.fill, depthWrite);
+        }
+        break;
+    }
+
+    case DrawOp::Label:
+        break;          // drawn in screen space after the buffer is resolved
+    }
+}
+
 void StructureStudioView::flushOps(QPainter &p) const
 {
     m_lastOpCount = m_ops.size();
-    // Ascending == farthest first (see viewDepth's convention note).
-    std::stable_sort(m_ops.begin(), m_ops.end(),
-                     [](const DrawOp &a, const DrawOp &b) { return a.depth < b.depth; });
+
+    if (m_useZBuffer == false)
+    {
+        /* The old renderer: sort whole primitives by one depth and paint back
+           to front. Kept behind a switch through the changeover so the two can
+           be compared on a real rig rather than argued about, and so there is
+           somewhere to fall back to if the depth buffer turns out to have a
+           case nobody thought of. */
+        std::stable_sort(m_ops.begin(), m_ops.end(),
+                         [](const DrawOp &a, const DrawOp &b) { return a.depth < b.depth; });
+        foreach (const DrawOp &o, m_ops)
+        {
+            switch (o.kind)
+            {
+            case DrawOp::Poly:
+                p.setBrush(o.fill.isValid() ? QBrush(o.fill) : QBrush(Qt::NoBrush));
+                p.setPen(o.pen.isValid() ? QPen(o.pen, o.penWidth) : QPen(Qt::NoPen));
+                p.drawPolygon(o.poly);
+                break;
+            case DrawOp::Line:
+                p.setPen(QPen(o.pen, o.penWidth));
+                if (o.poly.size() >= 2) p.drawLine(o.poly.at(0), o.poly.at(1));
+                break;
+            case DrawOp::Dot:
+                p.setPen(Qt::NoPen);
+                p.setBrush(o.fill);
+                foreach (const QPointF &c, o.poly)
+                    p.drawEllipse(c, o.radius, o.radius);
+                break;
+            case DrawOp::Label:
+                p.setPen(o.pen);
+                if (!o.poly.isEmpty()) p.drawText(o.poly.at(0), o.text);
+                break;
+            }
+        }
+        m_ops.clear();
+        return;
+    }
+
+    if (m_z == nullptr)
+        m_z = new ZRaster();
+
+    /* Transparent, so the floor grid already painted underneath shows through
+       wherever the rig does not cover it. */
+    m_z->begin(size(), m_supersample, Qt::transparent);
+
+    /* OPAQUE GEOMETRY NEEDS NO SORT AT ALL. That is the whole reason for the
+       depth buffer: which surface wins is decided per pixel, so a polygon whose
+       depth varies across it can be partly in front of and partly behind
+       another. One depth per primitive could never express that, and every
+       artefact in this view came from pretending it could.
+     *
+       Translucency is the exception a depth buffer does NOT solve: blending is
+       order-dependent, so beams and clear tops go last, back to front among
+       themselves, depth-TESTED against the solid world but not writing depth.
+       That sort is over a handful of primitives instead of all of them. */
+    QVector<DrawOp> translucent, labels;
     foreach (const DrawOp &o, m_ops)
     {
-        switch (o.kind)
+        if (o.kind == DrawOp::Label)
         {
-        case DrawOp::Poly:
-            p.setBrush(o.fill.isValid() ? QBrush(o.fill) : QBrush(Qt::NoBrush));
-            p.setPen(o.pen.isValid() ? QPen(o.pen, o.penWidth) : QPen(Qt::NoPen));
-            p.drawPolygon(o.poly);
-            break;
-        case DrawOp::Line:
-            p.setPen(QPen(o.pen, o.penWidth));
-            if (o.poly.size() >= 2) p.drawLine(o.poly.at(0), o.poly.at(1));
-            break;
-        case DrawOp::Dot:
-            /* One op can carry MANY dots. A 64-LED strip is one surface at one
-               depth, so its pixels never need to sort against each other --
-               and batching them cuts the queue, the sort, and the painter
-               state changes by the head count. */
-            p.setPen(Qt::NoPen);
-            p.setBrush(o.fill);
-            if (o.radius <= 1.8)
-            {
-                /* At two pixels across, an antialiased ellipse and a plain
-                   square are the same speck -- but the ellipse costs several
-                   times as much to rasterise, and this rig draws six thousand
-                   of them a frame. Measured: that rasterisation, not the queue
-                   or the sort, is where the frame time goes. */
-                const bool aa = p.testRenderHint(QPainter::Antialiasing);
-                p.setRenderHint(QPainter::Antialiasing, false);
-                const double side = o.radius * 2.0;
-                foreach (const QPointF &centre, o.poly)
-                    p.fillRect(QRectF(centre.x() - o.radius, centre.y() - o.radius,
-                                      side, side), o.fill);
-                p.setRenderHint(QPainter::Antialiasing, aa);
-            }
-            else
-            {
-                foreach (const QPointF &centre, o.poly)
-                    p.drawEllipse(centre, o.radius, o.radius);
-            }
-            break;
-        case DrawOp::Label:
-            p.setPen(o.pen);
-            if (!o.poly.isEmpty()) p.drawText(o.poly.at(0), o.text);
-            break;
+            labels << o;
+            continue;
         }
+        const bool seeThrough = (o.fill.isValid() && o.fill.alpha() < 255)
+                                || (o.pen.isValid() && o.pen.alpha() < 255);
+        if (seeThrough)
+            translucent << o;
+        else
+            rasterOp(o, true);
     }
+
+    std::stable_sort(translucent.begin(), translucent.end(),
+                     [](const DrawOp &a, const DrawOp &b) { return a.depth < b.depth; });
+    foreach (const DrawOp &o, translucent)
+        rasterOp(o, false);
+
+    p.drawImage(0, 0, m_z->resolve());
+
+    // Text last, in screen space: depth-testing a label is not meaningful.
+    foreach (const DrawOp &o, labels)
+    {
+        p.setPen(o.pen);
+        if (!o.poly.isEmpty())
+            p.drawText(o.poly.at(0), o.text);
+    }
+
     m_ops.clear();
 }
 
@@ -1142,8 +1248,16 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
     {
         const int f = o.second;
         QPolygonF poly;
+        QVector<double> vz;
+        vz.reserve(4);
         for (int k = 0; k < 4; ++k)
+        {
             poly << w2s(corner[faces[f][k]]);
+            /* The face's REAL depth at each corner. A step face two metres wide
+               spans a metre of depth off-axis; describing it with one number is
+               what put half of every strip behind its own housing. */
+            vz << viewDepth(corner[faces[f][k]]) + depthBias;
+        }
         QColor c = base;
         c = (shade[f] >= 100) ? c.lighter(shade[f]) : c.darker(200 - shade[f]);
         // Face 0 is the top; everything else is opaque.
@@ -1168,7 +1282,7 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
             c = QColor(qRound(c.red() * af), qRound(c.green() * af),
                        qRound(c.blue() * af), c.alpha());
         }
-        emitPoly(poly, o.first, c, edge, 1.1, p);
+        emitPoly(poly, o.first, c, edge, 1.1, p, vz);
     }
 }
 
@@ -2459,6 +2573,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                    collapses to a single op; even a confetti pattern only has a
                    handful of distinct colours. */
                 QHash<QRgb, QVector<QPointF> > byColour;
+                QHash<QRgb, QVector<double> > byColourZ;
                 int placed = 0;
                 for (int r = 0; r < rows && placed < traits.headCount; ++r)
                 {
@@ -2472,11 +2587,23 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                         const QColor pxc =
                             pixelColor(fx, vals, placed, col, unlit, visibility, master).lighter(135);
                         byColour[pxc.rgba()].append(w2s(at));
+                        /* Each pixel's OWN depth, plus a millimetre.
+                         *
+                           The millimetre is a real offset, not an ordering
+                           fudge: an LED does sit slightly proud of the housing
+                           it is set into, and something exactly coplanar with a
+                           surface has no defined winner. That is different in
+                           kind from the layering epsilons this replaces, which
+                           had to grow to half the width of a step because they
+                           were compensating for a depth the renderer could not
+                           represent. */
+                        byColourZ[pxc.rgba()].append(viewDepth(at) + 0.001 + depthBias);
                     }
                 }
                 for (QHash<QRgb, QVector<QPointF> >::const_iterator it = byColour.constBegin();
                      it != byColour.constEnd(); ++it)
-                    emitDots(it.value(), faceDepth, 1.2, QColor::fromRgba(it.key()), p);
+                    emitDots(it.value(), faceDepth, 1.2, QColor::fromRgba(it.key()), p,
+                             byColourZ.value(it.key()));
             }
             else
             {
@@ -2504,11 +2631,21 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 }
                 if (n > 0)
                 {
+                    /* The band lies on the face, so it carries the face's own
+                       depth at each corner plus the same millimetre the
+                       individual pixels get. A flat depth here put half of it
+                       back inside the housing at wide angles -- the merged path
+                       has to be as depth-correct as the resolved one. */
                     QPolygonF band;
                     band << w2s(b0) << w2s(b1) << w2s(f1) << w2s(f0);
+                    QVector<double> bandZ;
+                    bandZ << viewDepth(b0) + 0.001 + depthBias
+                          << viewDepth(b1) + 0.001 + depthBias
+                          << viewDepth(f1) + 0.001 + depthBias
+                          << viewDepth(f0) + 0.001 + depthBias;
                     emitPoly(band, faceDepth,
                              QColor(qRound(sr / n), qRound(sg / n), qRound(sb / n)),
-                             QColor(), 0.0, p);
+                             QColor(), 0.0, p, bandZ);
                 }
             }
         }

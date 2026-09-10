@@ -293,30 +293,48 @@ for (int x = xa; x <= xb; ++x, z += A)
     if (float(z) > zline[x]) { zline[x] = float(z); line[x] = rgb; }
 ```
 
-### Measured, 1806 primitives at 1400x850 (the real angled frame is 1786)
+### Measured — and the first measurement was wrong
+
+The standalone prototype, 1806 flat polygons at 1400x850:
 
 | approach | ms/frame | strip coverage |
 | --- | --- | --- |
-| painter's algorithm, AA on — **what we do today** | 0.513 | 192 columns (~48%) |
+| painter's algorithm, AA on | 0.513 | 192 columns (~48%) |
 | painter's algorithm, AA off | 0.303 | — |
-| **software z-buffer, no AA** | **0.248** | **398 columns (100%)** |
-| software z-buffer, 2x supersampled (antialiased) | 1.33 | 100% |
+| software z-buffer, no AA | 0.248 | 398 columns (100%) |
+| software z-buffer, 2x supersampled | 1.33 | 100% |
 
-Two things worth staring at:
+That is a scene of small polygons, so it barely exercises fill rate. On the
+REAL rig the picture looked much worse — until it turned out the comparison was
+against a Debug build:
 
-- **It is faster, not slower.** The z-buffer beats the painter even with the
-  painter's antialiasing turned off. A flat fill with an add-and-compare is
-  cheaper than QPainter's polygon path machinery.
-- **It is correct with no epsilon anywhere.** 398 columns against 192 — the
-  painter shows under half the strip. This is the "half of every step blanks"
-  bug, reproduced in isolation and then simply gone.
+| build | z-buffer | old painter |
+| --- | --- | --- |
+| Debug (`build/`, `-O0`) | 52 ms | 43 ms — *looks like a regression* |
+| **Release (`build-qt6-rel/`)** | **10.3 ms** | **34.0 ms** |
 
-Against the real view's measured **43 ms** frame, even the antialiased variant
-is about **3%** of the budget. Note the spike only fills flat polygons, so
-these sub-millisecond numbers are the *rasteriser*, not a whole frame — the
-real 43 ms is dominated by many small primitives, pens, state changes and the
-widget paint path. What the spike establishes is that the depth machinery is
-not what would cost us.
+**Always measure a rasteriser optimised.** Qt's painter is a prebuilt optimised
+library; hand-written pixel loops in this tree are compiled `-O0` by default,
+and comparing the two in a Debug build flatters Qt by roughly 5x. The
+intermediate conclusion — "my scalar loop is 53x slower than QPainter, abandon
+this" — was an artefact of the build type, and was very nearly acted on.
+
+### Real numbers, real rig, Release, 1906 primitives
+
+| renderer | ms/frame |
+| --- | --- |
+| old sorted-primitive painter | 34.0 |
+| depth buffer, no antialiasing | 10.3 |
+| **depth buffer, 2x supersampled (antialiased)** | **16.5** |
+
+**Twice as fast with antialiasing, three times without, and correct.** The
+repaint self-tunes to twice the frame cost, so this takes the live view from
+about 15 fps to about 30.
+
+Per-pixel, QPainter's SIMD fill still beats a scalar loop by ~10x on large
+polygons (82 ms against 8 ms for 2000 big quads). It does not matter: the rig
+is not fill-bound, it is primitive-bound, and the depth buffer removes the sort
+and the overdraw that dominated.
 
 ### What the port would actually touch
 

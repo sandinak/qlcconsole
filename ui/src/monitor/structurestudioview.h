@@ -198,7 +198,13 @@ private:
     struct DrawOp
     {
         enum Kind { Poly, Line, Dot, Label };
-        double    depth = 0.0;
+        double    depth = 0.0;   ///< whole-primitive depth: sorting, and the
+                                 ///< fallback when per-vertex depth is unknown
+        /** Per-VERTEX depth, parallel to poly. Empty means "use depth for all
+         *  of them", which is exactly what one-depth-per-primitive did and is
+         *  still right for a dot or a label. A polygon that spans real depth
+         *  must fill this in, or it cannot be resolved per pixel. */
+        QVector<double> zs;
         Kind      kind = Poly;
         QPolygonF poly;          ///< Poly/Line points, or Dot centre in poly[0]
         QColor    fill;          ///< invalid = unfilled
@@ -207,24 +213,31 @@ private:
         double    radius = 2.0;  ///< Dot
         QString   text;          ///< Label
     };
+    mutable class ZRaster *m_z = nullptr;   ///< the depth-buffered target
+    int      m_supersample = 2;   ///< a flat rasteriser has no AA of its own
+    bool     m_useZBuffer = true; ///< false = the old sorted-primitive painter
     mutable QVector<DrawOp> m_ops;      ///< queue, only while m_collecting
     mutable bool m_collecting = false;
 
     /** Paint, or queue when collecting. */
     void emitPoly(const QPolygonF &poly, double depth, const QColor &fill,
-                  const QColor &pen, double penW, QPainter &p) const;
+                  const QColor &pen, double penW, QPainter &p,
+                  const QVector<double> &vertexDepths = QVector<double>()) const;
     void emitLine(const QPointF &a, const QPointF &b, double depth,
                   const QColor &pen, double penW, QPainter &p) const;
     /** Many dots at one depth in one colour: a strip's pixels are one
      *  surface and never sort against each other. */
     void emitDots(const QVector<QPointF> &pts, double depth, double r,
-                  const QColor &fill, QPainter &p) const;
+                  const QColor &fill, QPainter &p,
+                  const QVector<double> &pointDepths = QVector<double>()) const;
     void emitDot(const QPointF &c, double depth, double r,
                  const QColor &fill, QPainter &p) const;
     void emitLabel(const QPointF &at, double depth, const QString &text,
                    const QColor &pen, QPainter &p) const;
     /** Sort the queue back-to-front and paint it. */
     void flushOps(QPainter &p) const;
+    /** One queued primitive into the depth buffer. */
+    void rasterOp(const struct DrawOp &o, bool depthWrite) const;
 
 public:
     /** How many primitives the last angled frame drew. Sub-pixel LED grids are

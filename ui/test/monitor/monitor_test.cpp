@@ -35,6 +35,7 @@
 #include "monitorfixtureitem.h"
 #include "structurestudioview.h"
 #include "fixturevisualtraits.h"
+#include "zraster.h"
 #include <QtMath>
 #include "trussitem.h"
 #undef protected
@@ -3436,6 +3437,173 @@ void Monitor_Test::aMostlyDarkPixelBarDrawsNoBrightOutline()
 
     m_doc->deleteFixture(fxi->id());
     props->removeTruss(t->id());
+}
+
+void Monitor_Test::bothRenderersAgreeOnPlainOcclusion()
+{
+    /* The old sorted-primitive painter is kept behind m_useZBuffer as a
+       fallback for the changeover. This is what stops it being dead code: on a
+       scene simple enough that one depth per primitive is ENOUGH -- two
+       separated boxes, no coplanar surfaces, nothing spanning depth -- the two
+       renderers must agree. Where they disagree is exactly the set of cases the
+       depth buffer exists for, and those are covered by their own tests. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StagePlatform *back = props->addPlatform();
+    back->setName("Back"); back->setOriginX(0.0f); back->setOriginY(4.0f);
+    back->setWidth(3.0f); back->setDepth(1.0f); back->setHeight(2.0f);
+    back->setColor(QColor(200, 60, 60));
+
+    StagePlatform *front = props->addPlatform();
+    front->setName("Front"); front->setOriginX(0.5f); front->setOriginY(0.0f);
+    front->setWidth(2.0f); front->setDepth(1.0f); front->setHeight(1.2f);
+    front->setColor(QColor(60, 200, 60));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 420);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 25.0);
+
+    v.m_useZBuffer = false;
+    const QImage oldImg = v.grab().toImage();
+    v.m_useZBuffer = true;
+    const QImage newImg = v.grab().toImage();
+
+    /* Compare which SURFACE won per pixel, not exact colours: the two paths
+       antialias differently and always will. */
+    auto classify = [](const QColor &c) {
+        if (c.red() > c.green() + 30) return 1;      // the back (red) deck
+        if (c.green() > c.red() + 30) return 2;      // the front (green) deck
+        return 0;
+    };
+    int same = 0, differ = 0, subject = 0;
+    for (int y = 0; y < oldImg.height(); y += 2)
+    {
+        for (int x = 0; x < oldImg.width(); x += 2)
+        {
+            const int a = classify(oldImg.pixelColor(x, y));
+            const int b = classify(newImg.pixelColor(x, y));
+            if (a == 0 && b == 0)
+                continue;
+            ++subject;
+            if (a == b) ++same; else ++differ;
+        }
+    }
+    QVERIFY2(subject > 500,
+             qPrintable(QString("the test scene barely drew anything (%1 px)")
+                        .arg(subject)));
+    QVERIFY2(same * 100 / qMax(1, subject) > 92,
+             qPrintable(QString("the two renderers disagree on plain occlusion: "
+                                "%1 of %2 sampled pixels differ")
+                        .arg(differ).arg(subject)));
+
+    delete doc;
+}
+
+void Monitor_Test::zRasterResolvesDepthPerPixel()
+{
+    /* The whole point of the rasteriser: depth is decided per PIXEL, so a
+       polygon whose depth varies across it can be partly in front of and partly
+       behind something else -- which one depth per primitive can never express,
+       and which is where every artefact in this view came from. */
+    ZRaster z;
+    const QSize sz(200, 100);
+
+    auto quad = [](double x0, double y0, double x1, double y1, QPointF *out) {
+        out[0] = QPointF(x0, y0); out[1] = QPointF(x1, y0);
+        out[2] = QPointF(x1, y1); out[3] = QPointF(x0, y1);
+    };
+
+    QPointF far_[4], near_[4];
+    quad(0, 0, 200, 100, far_);
+    quad(50, 25, 150, 75, near_);
+    const double farZ[4]  = { 0.0, 0.0, 0.0, 0.0 };
+    const double nearZ[4] = { 1.0, 1.0, 1.0, 1.0 };
+
+    /* Order must not matter for opaque geometry. That is the property the old
+       sorted queue had to work for, and this one gets for free. */
+    for (int order = 0; order < 2; ++order)
+    {
+        z.begin(sz, 1, QColor(0, 0, 0));
+        if (order == 0)
+        {
+            z.poly(far_, farZ, 4, QColor(255, 0, 0));
+            z.poly(near_, nearZ, 4, QColor(0, 255, 0));
+        }
+        else
+        {
+            z.poly(near_, nearZ, 4, QColor(0, 255, 0));
+            z.poly(far_, farZ, 4, QColor(255, 0, 0));
+        }
+        const QImage img = z.resolve();
+        QCOMPARE(img.pixelColor(100, 50), QColor(0, 255, 0));     // near wins
+        QCOMPARE(img.pixelColor(10, 50), QColor(255, 0, 0));      // far shows around it
+    }
+
+    /* The real case. A wide face whose depth RAMPS across its width, and a
+       narrow bar at constant depth lying over it. The bar must be visible along
+       its whole length: in front where the face is deeper, and equally in front
+       where it is shallower, because the comparison happens per pixel. Sorting
+       by the face's average depth is what made half of it disappear. */
+    z.begin(sz, 1, QColor(0, 0, 0));
+    QPointF face[4];
+    quad(0, 0, 200, 100, face);
+    const double ramp[4] = { -1.0, 1.0, 1.0, -1.0 };   // far at x=0, near at x=200
+    z.poly(face, ramp, 4, QColor(80, 80, 80));
+
+    QPointF bar[4];
+    quad(10, 40, 190, 60, bar);
+    const double barZ[4] = { 1.5, 1.5, 1.5, 1.5 };     // in front of ALL of it
+    z.poly(bar, barZ, 4, QColor(255, 0, 0));
+
+    const QImage img = z.resolve();
+    int red = 0;
+    for (int x = 12; x < 188; ++x)
+        if (img.pixelColor(x, 50) == QColor(255, 0, 0))
+            ++red;
+    QVERIFY2(red > 170,
+             qPrintable(QString("a bar in front of a depth-ramped face survived "
+                                "only %1 of 176 columns").arg(red)));
+
+    // And depth is readable back, which is what hit-testing and volumetrics need.
+    QVERIFY(z.depthAt(QPoint(100, 50)) > 1.4);
+    QVERIFY(z.depthAt(QPoint(100, 5)) < 1.0);          // face only up there
+}
+
+void Monitor_Test::zRasterBlendsWithoutOccluding()
+{
+    /* A depth buffer is order-independent only for OPAQUE geometry. Translucent
+       surfaces -- beams, clear tops -- must still be depth-TESTED against the
+       solid world, but must not write depth, or they would hide each other. */
+    ZRaster z;
+    const QSize sz(100, 100);
+    QPointF full[4] = { QPointF(0, 0), QPointF(100, 0), QPointF(100, 100), QPointF(0, 100) };
+    const double back[4] = { 0.0, 0.0, 0.0, 0.0 };
+    const double front[4] = { 1.0, 1.0, 1.0, 1.0 };
+
+    z.begin(sz, 1, QColor(0, 0, 0));
+    z.poly(full, back, 4, QColor(0, 0, 200));                       // solid ground
+    z.poly(full, front, 4, QColor(255, 0, 0, 128), false);          // a beam over it
+
+    const QColor c = z.resolve().pixelColor(50, 50);
+    QVERIFY2(c.red() > 100 && c.blue() > 80,
+             qPrintable(QString("a translucent surface did not blend with what is "
+                                "behind it: %1").arg(c.name())));
+
+    // No depth written, so a second translucent layer also blends.
+    z.poly(full, front, 4, QColor(0, 255, 0, 128), false);
+    const QColor c2 = z.resolve().pixelColor(50, 50);
+    QVERIFY2(c2.green() > 100,
+             qPrintable(QString("a translucent surface occluded another at the "
+                                "same depth: %1").arg(c2.name())));
+
+    // But it IS depth-tested: behind the solid ground, it must not appear.
+    z.begin(sz, 1, QColor(0, 0, 0));
+    z.poly(full, front, 4, QColor(0, 0, 200));                      // solid, near
+    z.poly(full, back, 4, QColor(255, 0, 0, 200), false);           // beam, behind
+    QCOMPARE(z.resolve().pixelColor(50, 50), QColor(0, 0, 200));
 }
 
 void Monitor_Test::everyColourModelTheEngineDefinesIsRead()

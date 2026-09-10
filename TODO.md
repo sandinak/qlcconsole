@@ -1034,6 +1034,75 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 31: a depth buffer, and the end of the layering epsilons
+
+Branson: "lets build it .. but FTR I really DO want haze, gobos and shadows
+eventually .. so keep that real."
+
+`ZRaster` (`ui/src/monitor/zraster.{h,cpp}`) is a depth-buffered software
+rasteriser. `flushOps()` now resolves the angled view through it instead of
+sorting whole primitives and painting back to front.
+
+**Why it is cheap.** Depth across a PLANAR polygon is an affine function of
+screen x,y -- the projection is orthographic and `viewDepth()` is linear in
+world space, so there is no perspective divide anywhere. One plane fit per
+polygon is therefore EXACT, and the inner loop is an add and a compare.
+
+**Measured on the real rig, Release, 1906 primitives:**
+
+    old sorted-primitive painter    34.0 ms/frame
+    depth buffer, no AA             10.3 ms/frame
+    depth buffer, 2x supersampled   16.5 ms/frame
+
+Twice as fast WITH antialiasing, and correct. The repaint self-tunes to twice
+the frame cost, so the live view goes from about 15 fps to about 30.
+
+**The measurement trap that nearly killed this.** In the Debug build the depth
+buffer measured 52 ms against the old path's 43 -- a regression -- and a
+micro-benchmark said a scalar fill was 53x slower than QPainter. Both were
+artefacts of `-O0`: Qt ships optimised, this tree builds Debug by default.
+Release inverted the result. **Always measure a rasteriser optimised.**
+
+**What changed in the draw code:**
+
+- `DrawOp` carries per-VERTEX depth (`zs`), empty meaning "use the primitive's
+  own depth" -- which is still right for a dot or a label. `drawSolidBox()`
+  supplies real corner depths; so do the pixel dots and the merged band.
+- Opaque geometry needs NO SORT AT ALL. Translucency still does: blending is
+  order-dependent, so beams and clear tops go last, back to front among
+  themselves, depth-TESTED but not depth-WRITING. That sort is over a handful
+  of primitives instead of all 1900.
+- Outlines are rasterised edge by edge, each carrying its two vertex depths, so
+  a deck's bright rim is occluded exactly as its fill is.
+- Labels are drawn in screen space after the buffer resolves -- depth-testing
+  text is not meaningful.
+- 2x supersampling, because a flat rasteriser has no antialiasing of its own.
+
+**The layer offsets did NOT all go away, and it is worth being precise about
+why.** The depth buffer removes the need to fudge ORDER, and everything that
+spans depth is now resolved per pixel. What remains is the deliberate x-ray:
+lifting a fixture rigged INSIDE a step clear of the step's own faces, because
+being able to see what is rigged in there is the whole point of putting it
+there. That is a product decision, not a rendering workaround -- and the
+difference shows in the code, because the offset now has to be applied to every
+primitive of that fixture (box, pixels and band alike) or the fixture fights
+itself.
+
+**Keeping haze, gobos and shadows real.** This is the prerequisite for all
+three, not a detour: screen-space volumetrics integrate along a view ray up to
+the scene depth at each pixel, a shadow map is this same rasteriser run from a
+light's point of view, and a gobo is a texture projected through the transform
+that shadow map establishes. `ZRaster::depthAt()` and the from-any-projection
+design are the hooks those need.
+
+**The fallback is kept and is not dead code.** `m_useZBuffer=false` restores the
+old painter, and `bothRenderersAgreeOnPlainOcclusion` holds them to agreement on
+a scene where one depth per primitive is enough -- two separated boxes, nothing
+coplanar. Where they disagree is exactly the set of cases the depth buffer
+exists for, and those have their own tests.
+
+`monitor_test` 65/65. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 30: twelve colour models, not five
 
 Branson, after reading the QLC+ 5 strategy review: "so then we need to take the
