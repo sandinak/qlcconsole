@@ -2827,6 +2827,39 @@ void Monitor_Test::editingALookUpdatesTheRigView()
              qPrintable(QString("editing back to white did not take: %1")
                         .arg(back.name())));
 
+    /* And what the view actually DRAWS follows live output first.
+     *
+       While live preview is on, the DMX is the look being edited and it updates
+       on every twitch of the colour picker. The scene resolution is cached and
+       refreshes only when the scene announces a change -- which editing a
+       PALETTE does not do. Cached-first therefore showed the colour the look had
+       when it was selected. Live-first is what makes the picker feel connected. */
+    v.setLiveValues(true);
+    QByteArray drivenGreen(512, char(0));
+    drivenGreen[2] = char(255);                      // dimmer
+    drivenGreen[4] = char(255);                      // green
+    head->setChannelValues(drivenGreen);
+
+    QColor shown(0, 0, 0);
+    uchar shownDim = 0;
+    /* The VIEW's own choice, not a copy of it made here -- the first version of
+       this test reimplemented the preference in the test body and so passed
+       whatever the view did. */
+    QVERIFY(fixtureLiveState(head, v.valuesForDrawing(head), shown, shownDim));
+    QVERIFY2(shown.green() > 200 && shown.red() < 80,
+             qPrintable(QString("live output did not outrank the cached look: "
+                                "%1").arg(shown.name())));
+
+    /* Nothing driving it: fall back to the look rather than reading an
+       all-zero universe as a blackout. */
+    head->setChannelValues(QByteArray(512, char(0)));
+    QColor fallback(0, 0, 0);
+    uchar fbDim = 0;
+    QVERIFY(fixtureLiveState(head, v.valuesForDrawing(head), fallback, fbDim));
+    QVERIFY2(fallback.red() > 200 && fallback.green() > 200,
+             qPrintable(QString("an undriven fixture should fall back to the "
+                                "selected look, got %1").arg(fallback.name())));
+
     delete doc;
 }
 

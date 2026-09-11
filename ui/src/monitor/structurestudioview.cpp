@@ -2782,12 +2782,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
        thousand lookups a frame for no gain. */
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     const FixtureVisualTraits traits = classifyFixture(fx);
-    /* The SELECTED SCENE wins, for the same reason its aim does: you asked to
-       see that look. Live DMX is the fallback -- and when the scene is actually
-       running the two agree anyway. */
-    QByteArray vals = m_sceneValues.value(fid);
-    if (vals.isEmpty() && m_liveValues)
-        vals = liveValuesFor(fx);
+    const QByteArray vals = valuesForDrawing(fx);
     const bool showingOutput = (vals.isEmpty() == false);
     /* Once per fixture, not once per head -- see fixtureMasterLevel(). */
     const int master = showingOutput ? fixtureMasterLevel(fx, vals) : -1;
@@ -3825,6 +3820,35 @@ void StructureStudioView::drawOrientationLabels(QPainter &p) const
  *
  * Falls back to reading the fixture directly if the snapshot has no entry --
  * a fixture added between the snapshot and the draw, say. */
+/* The values this fixture is drawn from, and in what order of preference.
+ *
+ * LIVE OUTPUT WINS, when there is any. The scene resolution exists for design
+ * with nothing running: select a look, see what it does. But while live preview
+ * is on, the DMX IS that look, updating as it is edited -- and a cached
+ * resolution sitting in front of it showed the colour the look had when it was
+ * SELECTED, not the one being dragged around the picker. Editing a palette does
+ * not announce itself as a scene change, so the cache had no way to know.
+ *
+ * "Any" means any non-zero channel. All zeros is not "this fixture is off", it
+ * is "nothing is driving this fixture", and the two are indistinguishable from
+ * the values alone -- so an undriven rig falls through to the selected look
+ * rather than reading as a blackout.
+ */
+QByteArray StructureStudioView::valuesForDrawing(Fixture *fx) const
+{
+    if (fx == nullptr)
+        return QByteArray();
+
+    if (m_liveValues)
+    {
+        const QByteArray live = liveValuesFor(fx);
+        for (int i = 0; i < live.size(); ++i)
+            if (live.at(i) != 0)
+                return live;
+    }
+    return m_sceneValues.value(fx->id());
+}
+
 QByteArray StructureStudioView::liveValuesFor(Fixture *fx) const
 {
     if (fx == nullptr)

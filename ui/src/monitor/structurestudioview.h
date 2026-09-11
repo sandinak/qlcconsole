@@ -280,6 +280,9 @@ private:
      *  paint shows one instant instead of tearing across the rig. */
     void takeLiveSnapshot() const;
     QByteArray liveValuesFor(class Fixture *fx) const;
+    /** What a fixture is DRAWN from: live output when anything is driving
+     *  it, otherwise the selected look. */
+    QByteArray valuesForDrawing(class Fixture *fx) const;
     mutable QHash<quint32, QByteArray> m_liveSnapshot;
 
     /** Unit vector from the scene toward the camera, taken from viewDepth()'s

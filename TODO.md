@@ -1034,6 +1034,40 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 38: live output outranks the cached look
+
+Branson: "still not following color change" -- after follow-on 37 supposedly
+fixed exactly that.
+
+**What was wrong.** Follow-on 35 made the selected scene's resolved palettes
+outrank live DMX, so that a look would show in Design with nothing running.
+Follow-on 37 then refreshed that cache on `Doc::functionChanged`. But editing a
+PALETTE is not a scene change and does not emit it -- so the cache kept serving
+the colour the look had when it was selected, while live preview was updating
+the real DMX on every twitch of the colour picker.
+
+**The precedence was simply backwards.** Live output wins when there is any; the
+scene resolution is the fallback for design with nothing running. Both readings
+are then true at the same time and neither needs a signal: with live preview on
+the DMX *is* the look, updating instantly, and with nothing driving the rig the
+look still shows.
+
+"Any" means any non-zero channel. All zeros is not "this fixture is off", it is
+"nothing is driving this fixture", and the two are indistinguishable from the
+values alone -- so an undriven rig falls through to the look rather than reading
+as a blackout.
+
+**The first test for this was worthless**, and in a way worth naming: it
+reimplemented the preference *in the test body* and then asserted on its own
+copy, so it passed whatever the view actually did. The revert-check caught it --
+put the old order back and the test still passed. Pulling the decision into
+`valuesForDrawing()` and asserting on THAT gives "live output did not outrank
+the cached look: #ffffff".
+
+Testing a reimplementation of the logic tests nothing.
+
+`monitor_test` 73/73. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 37: first-run guidance, live look edits, and one smooth cone
 
 **1. The Programming tab stopped explaining itself forever.** Branson: "can we
