@@ -340,7 +340,10 @@ private:
      *  the head's pointing direction (null = rest). */
     /** How far a beam travels before it lands: the floor, or the top of a
      *  platform it passes over. A sensible throw when it hits nothing. */
-    double beamThrow(const QVector3D &apex, const QVector3D &dir) const;
+    double beamThrow(const QVector3D &apex, const QVector3D &dir,
+                     bool *hit = nullptr) const;
+    /** Whether a beam lands on anything, or is thrown into the room. */
+    bool beamHitsSomething(const QVector3D &apex, const QVector3D &dir) const;
     /** The cone from a head out to whatever it lands on, plus the pool where
      *  it lands. Translucent; sorted at its midpoint. */
     void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,

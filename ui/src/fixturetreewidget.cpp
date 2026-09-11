@@ -811,8 +811,65 @@ void FixtureTreeWidget::setShowHeads(bool on)
     blockSignals(wasBlocked);
 }
 
+/* Which item is selected, in terms that survive the tree being thrown away and
+   rebuilt. Pointers do not; a group id or a fixture id does. */
+FixtureTreeWidget::Selection FixtureTreeWidget::currentSelection() const
+{
+    Selection sel;
+    const QList<QTreeWidgetItem *> items = selectedItems();
+    if (items.isEmpty())
+        return sel;
+    QTreeWidgetItem *it = items.first();
+    const QVariant grp = it->data(KColumnName, PROP_GROUP);
+    const QVariant uni = it->data(KColumnName, PROP_UNIVERSE);
+    const QVariant fid = it->data(KColumnName, PROP_ID);
+    if (grp.isValid())      { sel.kind = Selection::Group;    sel.id = grp.toUInt(); }
+    else if (uni.isValid()) { sel.kind = Selection::Universe; sel.id = uni.toUInt(); }
+    else if (fid.isValid() && it->data(KColumnName, PROP_HEAD).isValid() == false)
+                            { sel.kind = Selection::Fixture;  sel.id = fid.toUInt(); }
+    return sel;
+}
+
+/* Put the selection back after a rebuild, WITHOUT telling anyone.
+ *
+ * updateTree() throws the whole tree away, so whatever was selected is gone and
+ * the widget comes back with nothing selected. Callers that rebuild for their
+ * own reasons -- setShowHeads() opening a group's layout editor, say -- then sit
+ * on a tree whose selection contradicts the pane they just opened, and the next
+ * selection signal from ANY source tears that pane down. Blocking the signal
+ * during the rebuild (which this file already does) only defers that: it hides
+ * the reentry, it does not fix the state. Restoring the selection does.
+ */
+void FixtureTreeWidget::restoreSelection(const Selection &sel)
+{
+    if (sel.kind == Selection::None)
+        return;
+
+    const int role = (sel.kind == Selection::Group)    ? PROP_GROUP
+                   : (sel.kind == Selection::Universe) ? PROP_UNIVERSE
+                                                       : PROP_ID;
+    QTreeWidgetItemIterator it(this);
+    while (*it != nullptr)
+    {
+        QTreeWidgetItem *item = *it;
+        const QVariant v = item->data(KColumnName, role);
+        const bool isHead = item->data(KColumnName, PROP_HEAD).isValid();
+        if (v.isValid() && v.toUInt() == sel.id
+            && (sel.kind != Selection::Fixture || isHead == false))
+        {
+            const bool was = blockSignals(true);
+            setCurrentItem(item);
+            item->setSelected(true);
+            blockSignals(was);
+            return;
+        }
+        ++it;
+    }
+}
+
 void FixtureTreeWidget::updateTree()
 {
+    const Selection keep = currentSelection();
     clear();
     m_groupFolders.clear();
     m_universesCount = 0;
@@ -1026,6 +1083,8 @@ void FixtureTreeWidget::updateTree()
     }
 
     header()->resizeSections(QHeaderView::ResizeToContents);
+
+    restoreSelection(keep);
 }
 
 

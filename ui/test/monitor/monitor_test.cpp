@@ -2668,6 +2668,71 @@ void Monitor_Test::theRigGridMatchesTheStudioGrid()
     delete doc;
 }
 
+void Monitor_Test::aBeamFadesAllTheWayOutWithTheDimmer()
+{
+    /* "Dimming doesn't really work .. it never fades out." Measured, and quite
+       right: the beam's alpha had a constant 22 under it, so a head at 3% threw
+       a beam measuring 40 against a full beam's 78 -- barely dimmer -- and then
+       snapped to nothing at zero. Alpha is now strictly proportional to the
+       level, with no floor. */
+    Doc *doc = new Doc(this);
+    Fixture *head = makeMover(doc, 14.0, 0, "Fader", QVector3D(3.0f, 3.0f, 5.0f));
+    QVERIFY(head != nullptr);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 560);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(25.0, 20.0);
+    v.setLiveValues(true);
+    v.setAmbient(0.0);
+
+    auto beamLumaAt = [&](int level) {
+        QByteArray u(512, char(0));
+        u[0] = char(128); u[1] = char(128);          // straight down
+        u[2] = char(level);
+        u[3] = char(255); u[4] = char(255); u[5] = char(255);
+        head->setChannelValues(u);
+        const QImage img = v.grab().toImage();
+        const QPointF at = v.w2s(doc->monitorProperties()->fixtureRigPosition(head->id()));
+        const QPointF probe(at.x(), at.y() + 120);   // into the throw
+        double sum = 0; int n = 0;
+        for (int dy = -14; dy <= 14; ++dy)
+            for (int dx = -14; dx <= 14; ++dx)
+            {
+                const QPoint q(probe.toPoint() + QPoint(dx, dy));
+                if (!img.rect().contains(q)) continue;
+                const QColor c = img.pixelColor(q);
+                sum += c.red() * 0.3 + c.green() * 0.59 + c.blue() * 0.11;
+                ++n;
+            }
+        return n ? sum / n : 0.0;
+    };
+
+    const double out  = beamLumaAt(0);      // the empty room, for reference
+    const double full = beamLumaAt(255);
+    const double half = beamLumaAt(128);
+    const double low  = beamLumaAt(8);
+
+    QVERIFY2(full - out > 35.0,
+             qPrintable(QString("a head at full threw almost nothing (%1 against "
+                                "an empty room's %2)").arg(full).arg(out)));
+
+    /* The real complaint: at 3% the beam has to be nearly gone. Anything above
+       about a fifth of full here is the old constant floor coming back. */
+    QVERIFY2((low - out) < (full - out) * 0.2,
+             qPrintable(QString("a head at 3%% still threw %1 of a full beam's "
+                                "%2 over an empty room's %3 -- it is not fading "
+                                "out").arg(low - out).arg(full - out).arg(out)));
+
+    // And it is monotonic in between, not a step.
+    QVERIFY2(half > low && full > half,
+             qPrintable(QString("beam brightness is not monotonic in the dimmer: "
+                                "%1 / %2 / %3").arg(low).arg(half).arg(full)));
+
+    delete doc;
+}
+
 void Monitor_Test::aBeamStopsAtWhatItLandsOn()
 {
     /* A beam has to end somewhere. The floor, or the top of a step it is
@@ -3437,6 +3502,65 @@ void Monitor_Test::aMostlyDarkPixelBarDrawsNoBrightOutline()
 
     m_doc->deleteFixture(fxi->id());
     props->removeTruss(t->id());
+}
+
+void Monitor_Test::aSolidBoxHidesItsOwnFarEdges()
+{
+    /* "If that's a solid why do I see the inside lines?" -- the platform and
+       truss EDITORS painted their 45-degree view with the old unsorted path
+       while only the whole-rig view used the depth buffer, so a solid deck drew
+       its own far edges straight through itself. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Solid"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(3.0f); pl->setDepth(1.6f); pl->setHeight(1.0f);
+    pl->setColor(QColor(190, 40, 40));
+    pl->setTopMaterial(StagePlatform::SolidTop);
+
+    StructureStudioView v(doc, StructureStudioView::PlatformKind, pl->id());
+    v.resize(700, 500);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(28.0, 22.0);
+    const QImage img = v.grab().toImage();
+
+    /* Walk a horizontal line across the box and count how many times the colour
+       changes materially. A solid box crossed at one height has a handful of
+       genuine boundaries -- its own silhouette and the seam between two faces.
+       Its hidden far edges showing through add several more. */
+    int bestRow = -1, bestSpan = 0;
+    for (int y = 0; y < img.height(); ++y)
+    {
+        int span = 0;
+        for (int x = 0; x < img.width(); ++x)
+        {
+            const QColor c = img.pixelColor(x, y);
+            if (c.red() > 60 && c.red() > c.blue() + 25) ++span;
+        }
+        if (span > bestSpan) { bestSpan = span; bestRow = y; }
+    }
+    QVERIFY2(bestSpan > 100,
+             qPrintable(QString("the box barely drew (%1 px on its widest row)")
+                        .arg(bestSpan)));
+
+    int transitions = 0;
+    QColor prev = img.pixelColor(0, bestRow);
+    for (int x = 1; x < img.width(); ++x)
+    {
+        const QColor c = img.pixelColor(x, bestRow);
+        const int d = qAbs(c.red() - prev.red()) + qAbs(c.green() - prev.green())
+                      + qAbs(c.blue() - prev.blue());
+        if (d > 45)
+            ++transitions;
+        prev = c;
+    }
+    QVERIFY2(transitions <= 8,
+             qPrintable(QString("a solid box shows %1 colour transitions across "
+                                "its widest row -- its own hidden edges are "
+                                "drawing through it").arg(transitions)));
+
+    delete doc;
 }
 
 void Monitor_Test::bothRenderersAgreeOnPlainOcclusion()

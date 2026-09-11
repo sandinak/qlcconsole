@@ -32,6 +32,9 @@ private slots:
     void cleanup();
 
     void treeCounts();
+    /** A rebuild must not silently drop the selection: the Fixture Manager's
+     *  group layout editor depends on the tree still agreeing with it. */
+    void selectionSurvivesARebuild();
 
 private:
     Doc* m_doc;

@@ -46,6 +46,18 @@ public:
 
     FixtureTreeWidget(Doc* doc, quint32 flags, QWidget *parent = 0);
 
+    /** A selection expressed in terms that survive a rebuild. */
+    struct Selection
+    {
+        enum Kind { None, Group, Universe, Fixture };
+        Kind   kind = None;
+        quint32 id = 0;
+    };
+    Selection currentSelection() const;
+    /** Re-select after a rebuild, without emitting -- callers own the state
+     *  change that prompted the rebuild. */
+    void restoreSelection(const Selection &sel);
+
     void updateTree();
 
     /** Toggle whether each fixture row expands to show its individual heads

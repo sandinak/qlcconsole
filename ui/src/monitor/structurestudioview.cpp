@@ -567,14 +567,14 @@ QList<QPair<StructureStudioView::Kind, quint32> > StructureStudioView::everyStru
 
 void StructureStudioView::drawStructure(QPainter &p) const
 {
+    if (m_plane == Angled)
+        return;                       // drawn depth-sorted with the fixtures
     if (m_kind != StageKind)
     {
         drawOneStructure(p, m_kind, m_id);
         return;
     }
     typedef QPair<Kind, quint32> KindId;
-    if (m_plane == Angled)
-        return;                       // drawn depth-sorted with the fixtures
     foreach (const KindId &ki, everyStructure())
         drawOneStructure(p, ki.first, ki.second);
 }
@@ -594,8 +594,16 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
     struct Item { double depth; bool isFixture; Kind kind; quint32 id; };
     QVector<Item> items;
 
+    /* The whole rig, or just the one thing an editor is editing. Without this
+       scope, opening a truss editor drew the entire stage into it. */
     typedef QPair<Kind, quint32> KindId;
-    foreach (const KindId &ki, everyStructure())
+    QList<KindId> structures;
+    if (m_kind == StageKind)
+        structures = everyStructure();
+    else
+        structures << qMakePair(m_kind, m_id);
+
+    foreach (const KindId &ki, structures)
     {
         // Depth of the object's own extent, not of some arbitrary corner.
         QList<QVector3D> pts;
@@ -1935,7 +1943,17 @@ void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTrai
  * actually catches light on a rig built out of steps. Everything else (walls,
  * performers, haze) is out of scope, so a beam that hits nothing gets a
  * sensible throw rather than running to the horizon. */
-double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &dir) const
+/* Does the beam land on anything at all, or is it thrown into the room? */
+bool StructureStudioView::beamHitsSomething(const QVector3D &apex,
+                                           const QVector3D &dir) const
+{
+    bool hit = false;
+    beamThrow(apex, dir, &hit);
+    return hit;
+}
+
+double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &dir,
+                                     bool *hit) const
 {
     static const double NO_HIT = 8.0;      // metres, for a beam fired into the air
     static const double MAX_THROW = 24.0;
@@ -1973,6 +1991,8 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
         best = t;
     }
 
+    if (hit != nullptr)
+        *hit = (best > 0.0);
     return (best > 0.0) ? best : NO_HIT;
 }
 
@@ -2029,13 +2049,19 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                                       const QVector3D &dir, double halfAngleRad,
                                       const QColor &colour, double level) const
 {
-    if (level <= 0.01 || dir.isNull())
+    if (level <= 0.004 || dir.isNull())
         return;
 
     const QVector3D d = dir.normalized();
     const double len = beamThrow(apex, d);
-    const QVector3D far_ = apex + d * float(len);
     const double radius = len * qTan(qBound(0.005, halfAngleRad, 1.4));
+
+    /* Did it land on something, or is it thrown into the room? A beam that
+       lands keeps its strength to the surface -- a few metres of air takes
+       very little out of it -- and puts a pool where it arrives. One thrown
+       into the air has nothing to stop it, so it has to fade out on its own,
+       or it ends in a hard disc hanging in space. */
+    const bool lands = beamHitsSomething(apex, d);
 
     QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
     if (side.length() < 1e-3f)
@@ -2043,32 +2069,67 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     side.normalize();
     const QVector3D up = QVector3D::crossProduct(d, side).normalized();
 
-    static const int RING = 20;
-    QVector<QPointF> pts;
-    QPolygonF pool;
-    pts.reserve(RING + 1);
-    pts << w2s(apex);
-    for (int i = 0; i < RING; ++i)
-    {
-        const double a = 2.0 * M_PI * i / RING;
-        const QVector3D r = far_ + (side * float(qCos(a)) + up * float(qSin(a)))
-                                   * float(radius);
-        const QPointF sp = w2s(r);
-        pts << sp;
-        pool << sp;
-    }
-
     /* Brighter in a dark room, which is both true and useful: at work light you
        want to see the rig, at blackout you want to see the light. */
     const double room = 1.25 - 0.65 * m_ambient;
-    QColor beamCol = colour;
-    beamCol.setAlpha(qBound(0, int((22.0 + 66.0 * level) * room), 190));
-    QColor poolCol = colour;
-    poolCol.setAlpha(qBound(0, int((30.0 + 90.0 * level) * room), 220));
 
-    const double mid = (viewDepth(apex) + viewDepth(far_)) / 2.0;
-    emitPoly(convexHull(pts), mid, beamCol, QColor(), 0.0, p);
-    emitPoly(pool, mid + 1e-5, poolCol, QColor(), 0.0, p);
+    /* Strictly PROPORTIONAL to the level, with no floor under it. There used
+       to be a constant 22 in here, which meant a head at 3% threw a beam that
+       measured 40 against a full beam's 78 -- it barely dimmed at all and then
+       snapped off at zero. */
+    const double baseA = 95.0 * level * room;
+    const double poolA = 130.0 * level * room;
+
+    static const int RING = 20;
+    static const int SEG = 5;
+
+    auto ringAt = [&](double t, QVector<QPointF> &out) {
+        const QVector3D c = apex + d * float(len * t);
+        const double r = radius * t;
+        out.clear();
+        for (int i = 0; i < RING; ++i)
+        {
+            const double a = 2.0 * M_PI * i / RING;
+            out << w2s(c + (side * float(qCos(a)) + up * float(qSin(a))) * float(r));
+        }
+    };
+
+    QVector<QPointF> a0, a1;
+    for (int seg = 0; seg < SEG; ++seg)
+    {
+        const double t0 = double(seg) / SEG, t1 = double(seg + 1) / SEG;
+        ringAt(t0, a0);
+        ringAt(t1, a1);
+
+        QVector<QPointF> pts;
+        pts.reserve(a0.size() + a1.size() + 1);
+        if (seg == 0)
+            pts << w2s(apex);
+        pts << a0 << a1;
+
+        /* Falloff along the throw. Light spreads, so even a beam that lands
+           thins out a little; one going nowhere has to reach zero by the end
+           or it terminates in mid-air. */
+        const double f = lands ? (1.0 - 0.35 * t1)
+                               : qMax(0.0, 1.0 - t1 * t1);
+        QColor c = colour;
+        c.setAlpha(qBound(0, int(baseA * f), 190));
+        if (c.alpha() <= 1)
+            continue;
+
+        const QVector3D mid3 = apex + d * float(len * (t0 + t1) * 0.5);
+        emitPoly(convexHull(pts), viewDepth(mid3), c, QColor(), 0.0, p);
+    }
+
+    /* The pool, only where the beam actually arrives on something. */
+    if (lands)
+    {
+        ringAt(1.0, a1);
+        QColor poolCol = colour;
+        poolCol.setAlpha(qBound(0, int(poolA), 220));
+        const QVector3D far_ = apex + d * float(len);
+        emitPoly(QPolygonF(a1), viewDepth(far_) + 1e-5, poolCol, QColor(), 0.0, p);
+    }
 }
 
 void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
@@ -3420,8 +3481,12 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     p.setRenderHint(QPainter::Antialiasing, true);
     drawGrid(p);
     drawRulers(p);
-    if (m_kind == StageKind && m_plane == Angled)
+    if (m_plane == Angled)
     {
+        /* Every angled view, not just the whole-rig one. The editors used to
+           paint their 45-degree view with the old unsorted path, which is why a
+           SOLID deck showed its own far edges through itself: nothing was
+           deciding which face was in front. */
         drawRigDepthSorted(p);      // structures and fixtures interleaved
     }
     else

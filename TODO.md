@@ -1034,6 +1034,64 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 32: a batch of live-use reports
+
+Branson, from a session with the rig: seven things. Four fixed here, three
+still open and listed at the end.
+
+**1. Opening a fixture group for layout jumped straight back to the tree.**
+A regression of the flash-open-and-close fix, and the earlier fix was only half
+of it. `setShowHeads()` blocks signals while `updateTree()` rebuilds, which
+stops the IMMEDIATE reentry -- but the rebuild still leaves the tree with
+NOTHING selected, contradicting the editor that was just opened. The next
+selection signal from any source then falls through `slotSelectionChanged()`'s
+"nothing selected" branch and tears the editor down. That is why it was
+intermittent: it needed a second, unrelated event to land.
+
+Blocking a signal hides a reentry; it does not make the state right.
+`updateTree()` now records the selection in terms that survive a rebuild (a
+group/fixture/universe id, not a pointer) and restores it silently afterwards.
+Test lives in `ui/test/fixturetreewidget`.
+
+**2. A solid box showed its own inside lines.** Only the whole-rig view was
+depth-buffered -- `m_kind == StageKind && m_plane == Angled`. The platform and
+truss EDITORS painted their 45-degree view with the old unsorted path, so a
+solid deck drew its own far edges through itself. Every angled view now goes
+through the depth buffer, with the structure list scoped to the one thing an
+editor is editing. Measured: 13 colour transitions across the box's widest row
+before, 8 or fewer after.
+
+**3. "Dimming doesn't really work .. it never fades out."** Quite right, and
+measured: the beam's alpha had a constant **22** under it, so a head at 3% threw
+a beam measuring 40 against a full beam's 78 -- barely dimmer -- and then
+snapped to nothing at zero. Alpha is now strictly proportional to the level with
+no floor: 3% now measures 1.4 over an empty room, against 13 before.
+
+**4. Beams thrown into the air now fade with distance.** They used to run a flat
+8 m and stop in a hard disc hanging in space. The cone is drawn as five
+segments: one that LANDS on something keeps its strength to the surface (a few
+metres of air takes little out of it) and puts a pool where it arrives; one
+thrown into the room falls off quadratically and reaches zero on its own.
+
+**Still open from that batch**, in the order they are worth doing:
+
+- **A target set on a position is not reflected in the rig view.** The studio
+  draws the aim lines; the rig view reads live pan/tilt DMX, so with nothing
+  driving the fixture it has nothing to show. It should fall back to the
+  target's own geometry -- that is the INTENT, and it is what the studio is
+  showing.
+- **Light positions on the stage look wrong relative to the riser.** Needs
+  reproducing against the real file before guessing.
+- **Beam angle uses the lens MAXIMUM, not the zoom position.** Confirmed:
+  `traits.beamDeg` takes `qMax(lensDegreesMax, lensDegreesMin)` and defaults to
+  14 when a definition declares 0. For a zoom fixture the declared min and max
+  are a RANGE, and the zoom channel says where in it the head currently sits --
+  `QLCChannel::BeamZoomSmallBig`/`BeamZoomBigSmall` are already recognised
+  elsewhere in this file.
+
+`monitor_test` 67/67, `fixturetreewidget_test` 4/4. `check-all.sh`: all four
+legs pass, 0 failures.
+
 ### Follow-on 31: a depth buffer, and the end of the layering epsilons
 
 Branson: "lets build it .. but FTR I really DO want haze, gobos and shadows

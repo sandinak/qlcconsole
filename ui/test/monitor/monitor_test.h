@@ -204,6 +204,9 @@ private slots:
     /** The rig view rules its floor in the studio's grid, not a fraction of
      *  whatever the rig happens to measure -- and uniformly in depth. */
     void theRigGridMatchesTheStudioGrid();
+    /** A beam is as bright as it is driven, all the way down to nothing --
+     *  no constant floor holding it half-lit at 3%. */
+    void aBeamFadesAllTheWayOutWithTheDimmer();
     void aBeamStopsAtWhatItLandsOn();
     /** A lit head puts light between itself and what it lands on; a doused one
      *  does not; and the toggle turns them off. */
@@ -227,6 +230,9 @@ private slots:
     /** On a scene where one depth per primitive is enough, the depth buffer
      *  and the painter it replaces must agree -- which is what keeps the
      *  fallback path honest rather than dead. */
+    /** A solid box does not show its own far edges -- which the structure
+     *  editors did, because only the whole-rig view was depth-buffered. */
+    void aSolidBoxHidesItsOwnFarEdges();
     void bothRenderersAgreeOnPlainOcclusion();
     void zRasterResolvesDepthPerPixel();
     /** Translucent surfaces are depth-tested but do not write depth. */

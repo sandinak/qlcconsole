@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QTreeWidgetItemIterator>
 
 #define protected public
 #define private public
@@ -54,3 +55,64 @@ void FixtureTreeWidget_Test::treeCounts()
 }
 
 QTEST_MAIN(FixtureTreeWidget_Test)
+
+void FixtureTreeWidget_Test::selectionSurvivesARebuild()
+{
+    /* updateTree() throws the whole tree away and builds it again. Anything
+       that rebuilds for its own reasons -- setShowHeads(), which the Fixture
+       Manager calls when it opens a group's LAYOUT EDITOR -- used to come back
+       with nothing selected. The manager then sat on a tree whose selection
+       contradicted the pane it had just opened, and the next selection signal
+       from any source fell through to "nothing selected" and tore the editor
+       down. That is the "open a group for layout and it jumps straight back to
+       the tree" report, and it was intermittent precisely because it needed a
+       second, unrelated event to land.
+
+       Blocking signals during the rebuild (which the widget also does) only
+       hides the immediate reentry. The state still has to be right afterwards. */
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Probe");
+    fxi->setChannels(4);
+    QVERIFY(m_doc->addFixture(fxi));
+
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Layout Group");
+    grp->assignFixture(fxi->id());
+    m_doc->addFixtureGroup(grp);
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber
+                                  | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+
+    // Find and select the group's row.
+    QTreeWidgetItem *groupItem = nullptr;
+    QTreeWidgetItemIterator it(&tree);
+    while (*it != nullptr)
+    {
+        if ((*it)->data(0, PROP_GROUP).isValid()
+            && (*it)->data(0, PROP_GROUP).toUInt() == grp->id())
+        {
+            groupItem = *it;
+            break;
+        }
+        ++it;
+    }
+    QVERIFY2(groupItem != nullptr, "the group never appeared in the tree");
+    groupItem->setSelected(true);
+    QCOMPARE(tree.selectedItems().size(), 1);
+
+    /* Exactly what opening a layout editor does. */
+    tree.setShowHeads(true);
+
+    QCOMPARE(tree.selectedItems().size(), 1);
+    const QVariant still = tree.selectedItems().first()->data(0, PROP_GROUP);
+    QVERIFY2(still.isValid() && still.toUInt() == grp->id(),
+             "the group stopped being selected when the tree rebuilt -- the "
+             "Fixture Manager will tear its layout editor down on the next "
+             "selection signal from anywhere");
+
+    // And back again, which is what closing the editor does.
+    tree.setShowHeads(false);
+    QCOMPARE(tree.selectedItems().size(), 1);
+    QCOMPARE(tree.selectedItems().first()->data(0, PROP_GROUP).toUInt(), grp->id());
+}
