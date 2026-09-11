@@ -39,6 +39,10 @@
 #include "qlcphysical.h"
 #include "doc.h"
 #include "qlceventpos.h"
+#include "scene.h"
+#include "qlcpalette.h"
+#include "fixturegroup.h"
+#include "function.h"
 #include "zraster.h"
 #include <QVarLengthArray>
 
@@ -77,6 +81,10 @@ void StructureStudioView::reload()
     m_zoomed = false;   // re-frame: this is a deliberate view change
     refit();
     update();
+
+    /* The aim association depends on the rig's geometry and on which
+       fixtures exist, so it is rebuilt with everything else. */
+    rebuildAimTargets();
 }
 
 void StructureStudioView::setHighlight(const QList<quint32> &ids)
@@ -2037,6 +2045,84 @@ static QPolygonF convexHull(QVector<QPointF> pts)
  * middle behaves better than either end (an apex depth puts a long throw in
  * front of everything it crosses; a landing depth hides it behind its own
  * fixture). */
+/* Which fixtures are aimed at which point, from the active scene's Aim
+ * palettes.
+ *
+ * This is the same association the studio draws as dashed lines: the scene
+ * names a StageTarget, and every AIMABLE fixture the scene touches is pointed
+ * at it. The rig view was reading live pan/tilt DMX and nothing else, so with
+ * nothing driving the rig it had nothing to show -- you could set a target,
+ * watch the studio draw the lines, and see the heads in the rig view still
+ * pointing wherever they were left. The target is the INTENT; show it. */
+void StructureStudioView::rebuildAimTargets()
+{
+    m_aimTarget.clear();
+    if (m_doc == nullptr || m_activeSceneId == Function::invalidId())
+        return;
+
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(m_activeSceneId));
+    if (scene == nullptr)
+        return;
+
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // Where the scene is aiming. More than one Aim palette is legal; the first
+    // that resolves wins, which is what a single head can actually do.
+    QVector3D aimPoint;
+    bool haveAim = false;
+    foreach (quint32 pid, scene->palettes())
+    {
+        QLCPalette *pal = m_doc->palette(pid);
+        if (pal == nullptr || pal->type() != QLCPalette::Aim)
+            continue;
+        StageTarget *t = props->stageTarget(pal->stageTargetId());
+        if (t == nullptr)
+            continue;
+        aimPoint = QVector3D(t->x(), t->y(), t->z());
+        haveAim = true;
+        break;
+    }
+    if (haveAim == false)
+        return;
+
+    // Everything the scene touches, directly or through a group.
+    QSet<quint32> candidates;
+    foreach (quint32 fid, scene->fixtures())
+        candidates.insert(fid);
+    foreach (quint32 gid, scene->fixtureGroups())
+    {
+        FixtureGroup *fg = m_doc->fixtureGroup(gid);
+        if (fg == nullptr)
+            continue;
+        foreach (quint32 fid, fg->fixtureList())
+            candidates.insert(fid);
+    }
+
+    foreach (quint32 fid, candidates)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (fx == nullptr)
+            continue;
+        /* Only fixtures that can actually aim. A wash or a pixel panel has
+           nothing to point, and an Aim palette is a no-op on it -- the studio
+           makes the same check before drawing a line. */
+        const bool canAim =
+            fx->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) != QLCChannel::invalid()
+            || fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) != QLCChannel::invalid();
+        if (canAim)
+            m_aimTarget.insert(fid, aimPoint);
+    }
+}
+
+void StructureStudioView::setActiveScene(quint32 sceneId)
+{
+    if (m_activeSceneId == sceneId)
+        return;
+    m_activeSceneId = sceneId;
+    rebuildAimTargets();
+    update();
+}
+
 void StructureStudioView::setBeams(bool on)
 {
     if (m_beams == on)
@@ -2136,7 +2222,8 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                                          const FixtureVisualTraits &traits,
                                          const QColor &col, const QVector3D &aim,
                                          bool ambientLit, double beamLevel,
-                                         const QColor &beamColour) const
+                                         const QColor &beamColour,
+                                         double beamAngle) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
@@ -2218,9 +2305,10 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                 /* An undeclared lens has to become SOMETHING here -- a beam is
                    the point of the exercise and most definitions in the wild
                    declare 0. 14 degrees is an ordinary spot, narrow enough to
-                   read as a beam rather than a wash. */
-                const double deg = (traits.beamDeg > 0.0f && traits.beamDeg < 180.0f)
-                                   ? double(traits.beamDeg) : 14.0;
+                   read as a beam rather than a wash. beamAngle comes from the
+                   caller because it is a LIVE value on a zoom head. */
+                const double deg = (beamAngle > 0.0 && beamAngle < 180.0)
+                                   ? beamAngle : 14.0;
                 drawBeamCone(p, headMid + beam * float(h * 0.28), beam,
                              qDegreesToRadians(deg / 2.0),
                              beamColour.isValid() ? beamColour : col, beamLevel);
@@ -2334,7 +2422,8 @@ bool StructureStudioView::emitDirection(Fixture *fx, const FixtureRigProps &rp,
  * most definitions in the wild say 0, and dimming those by viewing angle would
  * black out half a rig for no reason. */
 double StructureStudioView::beamVisibility(Fixture *fx, const FixtureRigProps &rp,
-                                          const FixtureVisualTraits &traits) const
+                                          const FixtureVisualTraits &traits,
+                                          double beamDeg) const
 {
     /* Only where "the angle you are viewing from" is a real thing. viewDepth()
        is built from the azimuth/elevation camera and means nothing in the flat
@@ -2343,9 +2432,9 @@ double StructureStudioView::beamVisibility(Fixture *fx, const FixtureRigProps &r
     if (m_plane != Angled)
         return 1.0;
 
-    const double beam = double(traits.beamDeg);
-    if (beam <= 0.0 || beam >= 360.0)
+    if (beamDeg <= 0.0 || beamDeg >= 360.0)
         return 1.0;
+    const double beam = beamDeg;
 
     QVector3D throwDir;                 // not "emit": that is a Qt keyword macro
     if (emitDirection(fx, rp, traits, throwDir) == false)
@@ -2453,7 +2542,12 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
        visibility is how much of this fixture's output can reach the camera
        from where we are standing: a head with a fixed cone pointed away should
        not blaze at you. */
-    const double visibility = m_liveValues ? beamVisibility(fx, rp, traits) : 1.0;
+    /* What this fixture is throwing RIGHT NOW: a zoom head's cone is a live
+       value, not a property of its definition. */
+    const double beamNow = m_liveValues ? fixtureBeamAngle(fx, vals, traits)
+                                        : double(traits.beamMaxDeg);
+    const double visibility =
+        m_liveValues ? beamVisibility(fx, rp, traits, beamNow) : 1.0;
 
     if (m_liveValues)
     {
@@ -2534,6 +2628,22 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             if (!m_liveValues || !fixtureAimDirection(fx, rp, aim))
                 aim = QVector3D();
 
+            /* Nothing driving it? Then point it where the scene SAYS to point
+               it. Live DMX still wins when there is any -- that is what the rig
+               is actually doing -- but an undriven head should show the aim you
+               set rather than wherever it was last left. */
+            if (aim.isNull())
+            {
+                const QHash<quint32, QVector3D>::const_iterator t =
+                    m_aimTarget.constFind(fid);
+                if (t != m_aimTarget.constEnd())
+                {
+                    QVector3D toTarget = t.value() - props->fixtureRigPosition(fid);
+                    if (toTarget.length() > 1e-3f)
+                        aim = toTarget.normalized();
+                }
+            }
+
             /* The beam's strength and colour are the fixture's own OUTPUT, not
                the shaded body colour.
              *
@@ -2558,7 +2668,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 }
             }
             drawMoverSolid(p, fid, traits, col, aim, !m_liveValues, beamLevel,
-                           beamColour);
+                           beamColour, beamNow);
         }
         else if (traits.headCount > 1)
         {

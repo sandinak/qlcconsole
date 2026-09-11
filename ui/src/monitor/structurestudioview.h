@@ -100,6 +100,10 @@ public:
     /** Draw the beams moving heads are throwing. Live output only -- an unlit
      *  rig has no beams to show. */
     void setBeams(bool on);
+    /** The scene whose Aim palettes decide where movers are POINTED when there
+     *  is no live DMX saying otherwise. The studio draws these as dashed lines;
+     *  this is the same association, shown as the direction it actually means. */
+    void setActiveScene(quint32 sceneId);
     bool beams() const { return m_beams; }
     double ambient() const { return m_ambient; }
 
@@ -283,7 +287,8 @@ private:
     /** How much of a fixture's output reaches the camera (0..1), from the
      *  definition's declared beam angle. 1.0 when the lens is undeclared. */
     double beamVisibility(class Fixture *fx, const struct FixtureRigProps &rp,
-                          const struct FixtureVisualTraits &traits) const;
+                          const struct FixtureVisualTraits &traits,
+                          double beamDeg) const;
 
     QColor bodyShade() const;
     /** The depth of the nearest face of a corner-8 box. A face sorts as one
@@ -352,7 +357,8 @@ private:
                         const struct FixtureVisualTraits &traits,
                         const QColor &col, const QVector3D &aim,
                         bool ambientLit = true, double beamLevel = 0.0,
-                        const QColor &beamColour = QColor()) const;
+                        const QColor &beamColour = QColor(),
+                        double beamAngle = 0.0) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame
@@ -397,6 +403,12 @@ private:
     quint32  m_id;
     Plane    m_plane = Front;
     bool     m_beams = true;   ///< draw beam cones for lit movers
+    quint32  m_activeSceneId = 0xFFFFFFFF;
+    /** fixture id -> the world point it is aimed at, from the active scene's
+     *  Aim palettes. Rebuilt when the scene or the rig changes, NOT per frame:
+     *  resolving it per fixture per frame would be quadratic in the rig. */
+    QHash<quint32, QVector3D> m_aimTarget;
+    void rebuildAimTargets();
     int      m_rotation = 0;   ///< view turn, 0..3 quarter turns clockwise
     /* A gentle three-quarter reads as a rigging drawing rather than a drafting
        projection: the truss body shows in three-quarter, fixtures stay legible,

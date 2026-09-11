@@ -57,8 +57,12 @@ struct FixtureVisualTraits
     QSize layout;
     /** Beam angle in degrees from the definition's <Lens>. 0 = not declared,
      *  which has to mean "no idea, show it from anywhere" -- most definitions
-     *  say 0 and dimming those by viewing angle would hide half a rig. */
-    float beamDeg = 0.0f;
+     *  say 0 and dimming those by viewing angle would hide half a rig.
+     *
+     *  On a ZOOM fixture these are a RANGE, and where the head currently sits
+     *  in it is a live DMX question -- see fixtureBeamAngle(). */
+    float beamMinDeg = 0.0f;
+    float beamMaxDeg = 0.0f;
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);
@@ -105,6 +109,18 @@ bool fixtureHeadLiveState(Fixture *fx, int head, QColor &colour, uchar &dimmer);
  *  fixtureHeadLiveState(). Recomputing it per head cost 49 ms of a 90 ms frame
  *  on a rig of 64-pixel bars. */
 int fixtureMasterLevel(Fixture *fx, const QByteArray &values);
+
+/** The beam angle a fixture is CURRENTLY throwing, in degrees.
+ *
+ *  A fixed-lens head declares one angle and that is the answer. A ZOOM head
+ *  declares a min and a max, and its zoom channel says where between them it
+ *  is sitting right now -- taking the maximum regardless drew every zoom
+ *  fixture at its widest whatever the desk was telling it to do.
+ *
+ *  Returns 0 when the definition declares no lens at all, which callers must
+ *  read as "unknown", never as "zero degrees". */
+double fixtureBeamAngle(Fixture *fx, const QByteArray &values,
+                        const struct FixtureVisualTraits &traits);
 
 /** Per-head, from caller-supplied values. Pass @a masterLevel from
  *  fixtureMasterLevel() when drawing many heads of one fixture; -2 means "work

@@ -206,6 +206,12 @@ private slots:
     void theRigGridMatchesTheStudioGrid();
     /** A beam is as bright as it is driven, all the way down to nothing --
      *  no constant floor holding it half-lit at 3%. */
+    /** An undriven head points where the scene's Aim palette says -- the same
+     *  association the studio draws as dashed lines. */
+    /** A zoom head's cone follows its zoom channel across the declared
+     *  min..max, in whichever direction the definition says. */
+    void aZoomHeadsConeFollowsItsZoomChannel();
+    void anUndrivenHeadPointsAtTheScenesTarget();
     void aBeamFadesAllTheWayOutWithTheDimmer();
     void aBeamStopsAtWhatItLandsOn();
     /** A lit head puts light between itself and what it lands on; a doused one

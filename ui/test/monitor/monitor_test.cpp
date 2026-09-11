@@ -35,6 +35,7 @@
 #include "monitorfixtureitem.h"
 #include "structurestudioview.h"
 #include "fixturevisualtraits.h"
+#include "scene.h"
 #include "zraster.h"
 #include <QtMath>
 #include "trussitem.h"
@@ -2614,8 +2615,11 @@ static Fixture *makeMover(Doc *doc, double beamDeg, quint32 addr, const char *na
     f->setUniverse(3); f->setAddress(addr);
     if (doc->addFixture(f) == false)
         return nullptr;
+    /* (fid, head, linked, pos) -- and pos carries X/Y in MILLIMETRES with Z in
+       metres. Passing the coordinates as the head/linked arguments left every
+       head built by this helper sitting at the origin. */
     doc->monitorProperties()->setFixturePosition(
-        f->id(), int(at.x() * 1000), int(at.y() * 1000), QVector3D(0, 0, at.z()));
+        f->id(), 0, 0, QVector3D(at.x() * 1000.0f, at.y() * 1000.0f, at.z()));
     return f;
 }
 
@@ -2664,6 +2668,166 @@ void Monitor_Test::theRigGridMatchesTheStudioGrid()
     vf.grab();
     QCOMPARE(int(props->gridUnits()), int(MonitorProperties::Feet));
     QVERIFY(metresPerCell > 0.3048);
+
+    delete doc;
+}
+
+void Monitor_Test::aZoomHeadsConeFollowsItsZoomChannel()
+{
+    /* "Are we keying the cone of light off the info in the fixture def for min
+       and max?" -- we were taking the MAXIMUM and nothing else, so every zoom
+       head drew at its widest whatever the desk was telling it. The declared
+       min and max are a RANGE; the zoom channel says where in it the head is
+       currently sitting. Which way that channel runs is part of the definition
+       and both directions are common, so it is read, not assumed. */
+    Doc *doc = new Doc(this);
+
+    auto build = [&](QLCChannel::Preset zoomPreset, double lo, double hi,
+                     quint32 addr, const char *name) -> Fixture * {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(name);
+        def->setType(QLCFixtureDef::MovingHead);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("2ch");
+
+        QLCChannel *dim = new QLCChannel();
+        dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
+        def->addChannel(dim); mode->insertChannel(dim, 0);
+
+        QLCChannel *zoom = new QLCChannel();
+        zoom->setName("Zoom");
+        zoom->setPreset(zoomPreset);            // sets its group/behaviour
+        def->addChannel(zoom); mode->insertChannel(zoom, 1);
+
+        QLCPhysical ph;
+        ph.setWidth(300); ph.setHeight(400); ph.setDepth(300);
+        ph.setLensDegreesMin(lo); ph.setLensDegreesMax(hi);
+        mode->setPhysical(ph);
+        QLCFixtureHead hd; hd.addChannel(0); hd.addChannel(1);
+        mode->insertHead(-1, hd);
+        def->addMode(mode);
+
+        Fixture *f = new Fixture(doc);
+        f->setName(name); f->setFixtureDefinition(def, mode);
+        f->setUniverse(3); f->setAddress(addr);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+
+    Fixture *up = build(QLCChannel::BeamZoomSmallBig, 8.0, 40.0, 0, "Zoom S->B");
+    Fixture *down = build(QLCChannel::BeamZoomBigSmall, 8.0, 40.0, 8, "Zoom B->S");
+    QVERIFY(up != nullptr);
+    QVERIFY(down != nullptr);
+
+    const FixtureVisualTraits tUp = classifyFixture(up);
+    QCOMPARE(int(tUp.beamMinDeg), 8);
+    QCOMPARE(int(tUp.beamMaxDeg), 40);
+
+    auto angleAt = [&](Fixture *f, int zoomVal) {
+        QByteArray u(512, char(0));
+        u[int(f->address())] = char(255);              // dimmer up
+        u[int(f->address()) + 1] = char(zoomVal);
+        f->setChannelValues(u);
+        return fixtureBeamAngle(f, f->channelValues(), classifyFixture(f));
+    };
+
+    // Small->Big: 0 is the narrow end, 255 the wide one.
+    QVERIFY2(qAbs(angleAt(up, 0) - 8.0) < 0.6,
+             qPrintable(QString("zoom at 0 should be the narrow end, got %1")
+                        .arg(angleAt(up, 0))));
+    QVERIFY2(qAbs(angleAt(up, 255) - 40.0) < 0.6,
+             qPrintable(QString("zoom at full should be the wide end, got %1")
+                        .arg(angleAt(up, 255))));
+    const double mid = angleAt(up, 128);
+    QVERIFY2(mid > 20.0 && mid < 28.0,
+             qPrintable(QString("zoom halfway should be mid-range, got %1").arg(mid)));
+
+    // Big->Small runs the other way, and that has to be read from the preset.
+    QVERIFY2(qAbs(angleAt(down, 0) - 40.0) < 0.6,
+             qPrintable(QString("a big->small zoom at 0 should be WIDE, got %1")
+                        .arg(angleAt(down, 0))));
+    QVERIFY2(qAbs(angleAt(down, 255) - 8.0) < 0.6,
+             qPrintable(QString("a big->small zoom at full should be NARROW, got %1")
+                        .arg(angleAt(down, 255))));
+
+    /* A fixed lens ignores all of this, and an undeclared one still reports 0
+       so callers can tell "unknown" from "zero degrees". */
+    Fixture *fixed = build(QLCChannel::Custom, 15.0, 15.0, 16, "Fixed");
+    QVERIFY(fixed != nullptr);
+    QCOMPARE(qRound(fixtureBeamAngle(fixed, QByteArray(512, char(0)),
+                                     classifyFixture(fixed))), 15);
+    Fixture *none = build(QLCChannel::Custom, 0.0, 0.0, 24, "No Lens");
+    QVERIFY(none != nullptr);
+    QCOMPARE(fixtureBeamAngle(none, QByteArray(512, char(0)),
+                              classifyFixture(none)), 0.0);
+
+    delete doc;
+}
+
+void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
+{
+    /* "When I set a target on a position I don't see that reflected in the rig
+       view, but I see the lines in the studio."
+     *
+       The studio draws a dashed line from every aimable fixture the scene
+       touches to the StageTarget the scene's Aim palette names. The rig view
+       read live pan/tilt DMX and nothing else, so with nothing driving the rig
+       it had nothing to show and left the heads wherever they were last
+       pointed. The target IS the intent -- and live DMX still wins over it when
+       there is any, because that is what the rig is actually doing. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Fixture *head = makeMover(doc, 14.0, 0, "Aimed", QVector3D(1.0f, 1.0f, 5.0f));
+    QVERIFY(head != nullptr);
+
+    StageTarget *tgt = props->addStageTarget();
+    QVERIFY(tgt != nullptr);
+    tgt->setX(6.0f); tgt->setY(1.0f); tgt->setZ(0.0f);   // well off to one side
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("At Target");
+    aim->setStageTargetId(tgt->id());
+    QVERIFY(doc->addPalette(aim));
+
+    Scene *scene = new Scene(doc);
+    scene->setName("Aim Scene");
+    scene->addFixture(head->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 520);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 20.0);
+
+    // No active scene yet: nothing to aim at.
+    QVERIFY(v.m_aimTarget.isEmpty());
+
+    v.setActiveScene(scene->id());
+    QVERIFY2(v.m_aimTarget.contains(head->id()),
+             "the scene's Aim palette did not reach the rig view");
+
+    /* The direction it should be pointing: from the head, off toward +X and
+       down. Pulled from the same association the studio draws. */
+    const QVector3D at = v.m_aimTarget.value(head->id());
+    const QVector3D want = (at - props->fixtureRigPosition(head->id())).normalized();
+    QVERIFY2(want.x() > 0.5f && want.z() < -0.5f,
+             qPrintable(QString("the aim direction is not toward the target: "
+                                "%1,%2,%3").arg(double(want.x()))
+                        .arg(double(want.y())).arg(double(want.z()))));
+
+    /* A fixture that CANNOT aim is left out -- a wash has nothing to point, and
+       the studio makes the same check before drawing it a line. */
+    Fixture *par = new Fixture(doc);
+    par->setName("Wash");
+    par->setChannels(3);
+    QVERIFY(doc->addFixture(par));
+    scene->addFixture(par->id());
+    v.setActiveScene(Function::invalidId());
+    v.setActiveScene(scene->id());
+    QVERIFY2(v.m_aimTarget.contains(par->id()) == false,
+             "a fixture with no pan or tilt was given an aim direction");
 
     delete doc;
 }
@@ -2907,28 +3071,28 @@ void Monitor_Test::aFixedConeHeadDimsWhenAimedAway()
     FixtureRigProps rp;
     const FixtureVisualTraits tn = classifyFixture(narrow);
     const FixtureVisualTraits tu = classifyFixture(undeclared);
-    QCOMPARE(int(tn.beamDeg), 12);
-    QCOMPARE(int(tu.beamDeg), 0);
+    QCOMPARE(int(tn.beamMaxDeg), 12);
+    QCOMPARE(int(tu.beamMaxDeg), 0);
 
     // At the camera.
     drive(narrow, 128, 255);
     drive(undeclared, 128, 255);
-    const double atCamera = v.beamVisibility(narrow, rp, tn);
+    const double atCamera = v.beamVisibility(narrow, rp, tn, double(tn.beamMaxDeg));
     QVERIFY2(atCamera > 0.99,
              qPrintable(QString("a head aimed at the camera was dimmed to %1")
                         .arg(atCamera)));
 
     // Turned right around: pan half a revolution from downstage.
     rp.panZeroDir = 180.0f;
-    const double away = v.beamVisibility(narrow, rp, tn);
+    const double away = v.beamVisibility(narrow, rp, tn, double(tn.beamMaxDeg));
     QVERIFY2(away < 0.25,
              qPrintable(QString("a 12-degree head aimed straight away still read "
                                 "at %1 of full").arg(away)));
 
     // An undeclared lens is never dimmed, whichever way it is turned.
-    QCOMPARE(v.beamVisibility(undeclared, rp, tu), 1.0);
+    QCOMPARE(v.beamVisibility(undeclared, rp, tu, double(tu.beamMaxDeg)), 1.0);
     FixtureRigProps rp2;
-    QCOMPARE(v.beamVisibility(undeclared, rp2, tu), 1.0);
+    QCOMPARE(v.beamVisibility(undeclared, rp2, tu, double(tu.beamMaxDeg)), 1.0);
 
     delete doc;
 }

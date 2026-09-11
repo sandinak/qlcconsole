@@ -68,9 +68,11 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
     if (phys.width()  > 0) t.physW = float(phys.width())  / 1000.0f;
     if (phys.height() > 0) t.physH = float(phys.height()) / 1000.0f;
     if (phys.depth()  > 0) t.physD = float(phys.depth())  / 1000.0f;
-    /* Widest the lens goes: a zoom at its narrowest would dim the fixture from
-       angles it can plainly be seen from. 0 stays 0 = undeclared. */
-    t.beamDeg = float(qMax(phys.lensDegreesMax(), phys.lensDegreesMin()));
+    /* The declared lens RANGE. A fixed head has these equal (or only one set);
+       a zoom head has both, and where it currently sits between them is a live
+       question -- see fixtureBeamAngle(). 0 stays 0 = undeclared. */
+    t.beamMinDeg = float(qMin(phys.lensDegreesMin(), phys.lensDegreesMax()));
+    t.beamMaxDeg = float(qMax(phys.lensDegreesMin(), phys.lensDegreesMax()));
 
     /* The declared pixel grid, when it can actually hold this mode's heads.
        layoutSize() defaults to 1x1, and some definitions declare a layout that
@@ -507,4 +509,44 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir)
         return false;
     dir.normalize();
     return true;
+}
+
+double fixtureBeamAngle(Fixture *fx, const QByteArray &v,
+                        const FixtureVisualTraits &traits)
+{
+    const double lo = double(traits.beamMinDeg);
+    const double hi = double(traits.beamMaxDeg);
+
+    if (hi <= 0.0)
+        return 0.0;                       // no lens declared at all
+    if (lo <= 0.0 || qAbs(hi - lo) < 0.51)
+        return hi;                        // a fixed cone
+
+    if (fx == nullptr)
+        return hi;
+    QLCFixtureMode *mode = fx->fixtureMode();
+    if (mode == nullptr || v.isEmpty())
+        return hi;
+
+    /* Where the zoom is sitting. Which way the channel runs is part of the
+       definition and both directions are common, so it has to be read rather
+       than assumed. */
+    const int count = qMin(mode->channels().size(), v.size());
+    for (int c = 0; c < count; ++c)
+    {
+        QLCChannel *ch = mode->channel(quint32(c));
+        if (ch == nullptr)
+            continue;
+        double frac = -1.0;
+        if (ch->preset() == QLCChannel::BeamZoomSmallBig)
+            frac = uchar(v.at(c)) / 255.0;
+        else if (ch->preset() == QLCChannel::BeamZoomBigSmall)
+            frac = 1.0 - uchar(v.at(c)) / 255.0;
+        if (frac >= 0.0)
+            return lo + (hi - lo) * qBound(0.0, frac, 1.0);
+    }
+
+    /* A range declared but no zoom channel to drive it: the widest is the safer
+       read, since a narrow cone hides a fixture that is plainly visible. */
+    return hi;
 }

@@ -1034,6 +1034,50 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 33: targets reach the rig view; zoom drives the cone
+
+Two of the three left over from follow-on 32.
+
+**1. A target set on a position now shows in the rig view.** The studio draws a
+dashed line from every aimable fixture a scene touches to the StageTarget that
+scene's Aim palette names. The rig view read live pan/tilt DMX and nothing
+else, so with nothing driving the rig it had nothing to show and left the heads
+pointing wherever they were last put -- you could set a target, watch the
+studio draw the lines, and see no change at all.
+
+`StructureStudioView::setActiveScene()` takes the same scene id the graphics
+view already gets, and `rebuildAimTargets()` resolves the association once --
+on reload or when the scene changes, NOT per frame, since doing it per fixture
+per frame is quadratic in the rig. An undriven head points at the target; live
+DMX still wins when there is any, because that is what the rig is actually
+doing. Fixtures with no pan or tilt are left out, which is the same check the
+studio makes before drawing a line.
+
+**2. A zoom head's cone follows its zoom channel.** Confirmed as reported: we
+took `qMax(lensDegreesMin, lensDegreesMax)` and nothing else, so every zoom
+fixture drew at its widest whatever the desk was telling it. The declared min
+and max are a RANGE; traits now carries both, and `fixtureBeamAngle()`
+interpolates using the zoom channel. Which way that channel runs is part of the
+definition -- `BeamZoomSmallBig` and `BeamZoomBigSmall` are both common -- so it
+is read from the preset, not assumed. A fixed lens is unaffected; an undeclared
+one still reports 0 so callers can tell "unknown" from "zero degrees".
+
+The angle is now a LIVE value, so it is computed per fixture per frame next to
+the channel values and passed into both the cone and `beamVisibility()` --
+which previously judged whether you could see a head using a cone width the
+head might not currently have.
+
+**A bug in the test helper, found on the way:** `makeMover()` was calling
+`setFixturePosition(fid, x*1000, y*1000, pos)` -- but the signature is
+`(fid, head, linked, pos)` and the POSITION carries X/Y in millimetres. Every
+head that helper built was sitting at the origin. The beam tests still passed
+because they only needed a fixture somewhere with height; this one did not.
+
+**Still open:** light positions on the stage relative to the riser. Wants
+reproducing against the real file rather than guessing from a screenshot.
+
+`monitor_test` 69/69. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 32: a batch of live-use reports
 
 Branson, from a session with the rig: seven things. Four fixed here, three

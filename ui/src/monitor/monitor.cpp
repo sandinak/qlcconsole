@@ -1073,8 +1073,14 @@ void Monitor::highlightFixtures(const QList<quint32> &ids)
 
 void Monitor::setActiveScene(quint32 sceneId)
 {
+    m_activeSceneId = sceneId;
     if (m_graphicsView != NULL)
         m_graphicsView->setActiveScene(sceneId);
+    /* The overview shows the same aim, so it needs the same scene. Without
+       this you could set a target, watch the studio draw its dashed lines, and
+       find the rig view's heads still pointing wherever they were left. */
+    if (m_overviewView != NULL)
+        m_overviewView->setActiveScene(sceneId);
 }
 
 void Monitor::setFollowSpotPin(bool visible, float xMeters, float yMeters)
@@ -1914,6 +1920,8 @@ void Monitor::showStageOverview()
        window you already have instead of stacking another. */
     if (m_overviewDlg != NULL)
     {
+        if (m_overviewView != NULL)
+            m_overviewView->setActiveScene(m_activeSceneId);
         m_overviewDlg->show();
         m_overviewDlg->raise();
         m_overviewDlg->activateWindow();
@@ -1923,7 +1931,10 @@ void Monitor::showStageOverview()
     QDialog *dlgPtr = new QDialog(this);
     QDialog &dlg = *dlgPtr;
     m_overviewDlg = dlgPtr;
-    connect(dlgPtr, &QObject::destroyed, this, [this]() { m_overviewDlg = NULL; });
+    connect(dlgPtr, &QObject::destroyed, this, [this]() {
+        m_overviewDlg = NULL;
+        m_overviewView = NULL;
+    });
     dlg.setAttribute(Qt::WA_DeleteOnClose);
     dlg.setWindowTitle(tr("Rig Overview"));
     dlg.resize(1100, 760);
@@ -1933,6 +1944,8 @@ void Monitor::showStageOverview()
         new StructureStudioView(m_doc, StructureStudioView::StageKind, 0, &dlg);
     view->setPlane(StructureStudioView::Angled);
     view->setLocked(true);
+    m_overviewView = view;
+    view->setActiveScene(m_activeSceneId);
 
     QHBoxLayout *bar = new QHBoxLayout;
     bar->addWidget(new QLabel(tr("View:"), &dlg));
