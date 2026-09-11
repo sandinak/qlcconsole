@@ -259,6 +259,8 @@ private slots:
     void zRasterBlendsWithoutOccluding();
     /** There is no such thing as black light: every emitter at zero is not
      *  emitting, however far up the dimmer is. */
+    /** A closed shutter emits nothing; a strobing one is still emitting. */
+    void aClosedShutterEmitsNothingAStrobeStillDoes();
     void aLampWithNoColourEmitsNothingNotBlack();
     void everyColourModelTheEngineDefinesIsRead();
     void pixelBarDrawsEachPixelInItsOwnColour();

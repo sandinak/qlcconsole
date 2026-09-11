@@ -54,6 +54,7 @@
 #include "qlcfixturehead.h"
 #include "qlcphysical.h"
 #include "qlcchannel.h"
+#include "qlccapability.h"
 #include "doc.h"
 #include "qlcfile.h"
 #include "qlcfixturedefcache.h"
@@ -4378,6 +4379,87 @@ void Monitor_Test::zRasterBlendsWithoutOccluding()
     z.poly(full, front, 4, QColor(0, 0, 200));                      // solid, near
     z.poly(full, back, 4, QColor(255, 0, 0, 200), false);           // beam, behind
     QCOMPARE(z.resolve().pixelColor(50, 50), QColor(0, 0, 200));
+}
+
+void Monitor_Test::aClosedShutterEmitsNothingAStrobeStillDoes()
+{
+    /* A shutter is a piece of metal in front of the lamp: closed, nothing gets
+       out, whatever the dimmer says. This was ignored entirely -- the Shutter
+       group was skipped along with everything that is not Intensity or Colour.
+     *
+       The opposite case matters just as much: a STROBE is emitting, just
+       intermittently, and reading it as dark would blank every strobe look in
+       the rig. Only an explicit ShutterClose closes it. */
+    Doc *doc = new Doc(this);
+
+    auto build = [&](QLCCapability::Preset capPreset, quint32 addr,
+                     const char *name) -> Fixture * {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(name);
+        def->setType(QLCFixtureDef::MovingHead);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("3ch");
+
+        QLCChannel *dim = new QLCChannel();
+        dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
+        def->addChannel(dim); mode->insertChannel(dim, 0);
+
+        QLCChannel *red = new QLCChannel();
+        red->setName("Red"); red->setGroup(QLCChannel::Intensity);
+        red->setColour(QLCChannel::Red);
+        def->addChannel(red); mode->insertChannel(red, 1);
+
+        QLCChannel *sh = new QLCChannel();
+        sh->setName("Shutter"); sh->setGroup(QLCChannel::Shutter);
+        QLCCapability *cap = new QLCCapability(0, 255);
+        cap->setName("state");
+        cap->setPreset(capPreset);
+        sh->addCapability(cap);
+        def->addChannel(sh); mode->insertChannel(sh, 2);
+
+        QLCPhysical ph; ph.setWidth(300); ph.setHeight(300); ph.setDepth(300);
+        mode->setPhysical(ph);
+        QLCFixtureHead hd; hd.addChannel(0); hd.addChannel(1); hd.addChannel(2);
+        mode->insertHead(-1, hd);
+        def->addMode(mode);
+
+        Fixture *f = new Fixture(doc);
+        f->setName(name); f->setFixtureDefinition(def, mode);
+        f->setUniverse(3); f->setAddress(addr);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+
+    Fixture *shut = build(QLCCapability::ShutterClose, 0, "Shut");
+    Fixture *strobing = build(QLCCapability::StrobeSlowToFast, 8, "Strobing");
+    Fixture *open = build(QLCCapability::ShutterOpen, 16, "Open");
+    QVERIFY(shut != nullptr);
+    QVERIFY(strobing != nullptr);
+    QVERIFY(open != nullptr);
+
+    auto levelOf = [&](Fixture *f) {
+        QByteArray u(512, char(0));
+        u[int(f->address())] = char(255);          // dimmer full
+        u[int(f->address()) + 1] = char(255);      // red full
+        u[int(f->address()) + 2] = char(128);      // the shutter's one capability
+        f->setChannelValues(u);
+        QColor c(90, 160, 235);
+        uchar d = 0;
+        fixtureLiveState(f, f->channelValues(), c, d);
+        return int(d);
+    };
+
+    QVERIFY2(levelOf(shut) == 0,
+             qPrintable(QString("a closed shutter still emitted at level %1")
+                        .arg(levelOf(shut))));
+    QVERIFY2(levelOf(open) == 255,
+             qPrintable(QString("an open shutter was dimmed to %1")
+                        .arg(levelOf(open))));
+    QVERIFY2(levelOf(strobing) == 255,
+             qPrintable(QString("a STROBING fixture was read as dark (%1) -- it "
+                                "is emitting, just intermittently")
+                        .arg(levelOf(strobing))));
+
+    delete doc;
 }
 
 void Monitor_Test::aLampWithNoColourEmitsNothingNotBlack()

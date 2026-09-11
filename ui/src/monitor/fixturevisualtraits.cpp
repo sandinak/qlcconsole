@@ -270,6 +270,7 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
     int w = -1, am = -1, uv = -1, li = -1, ind = -1;
     int master = -1;                     // a plain (colourless) Intensity channel
     QColor wheel;                        // a colour-wheel capability, if one is set
+    bool shutterClosed = false;          // a shut shutter emits nothing at all
 
     foreach (quint32 c, chans)
     {
@@ -287,6 +288,19 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
             master = qMax(master, val);
             continue;
         }
+        /* A CLOSED SHUTTER emits nothing, whatever the dimmer says -- it is a
+           piece of metal in front of the lamp. Strobe capabilities are the
+           opposite case and must NOT count: a strobing fixture is emitting,
+           just intermittently, and reading it as dark would blank every strobe
+           look in the rig. Only an explicit ShutterClose closes it. */
+        if (ch->group() == QLCChannel::Shutter)
+        {
+            if (QLCCapability *cap = ch->searchCapability(uchar(val)))
+                if (cap->preset() == QLCCapability::ShutterClose)
+                    shutterClosed = true;
+            continue;
+        }
+
         if (ch->group() != QLCChannel::Intensity && ch->group() != QLCChannel::Colour)
             continue;
 
@@ -374,6 +388,10 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
        a dimmer-only fixture never gets here (it has no colour to be black), and
        a subtractive fixture with every flag out is passing WHITE, not black. */
     if (found && mixed.red() == 0 && mixed.green() == 0 && mixed.blue() == 0)
+        dimmer = 0;
+
+    /* And nothing gets past a shut shutter. */
+    if (shutterClosed)
         dimmer = 0;
 
     return true;

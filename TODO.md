@@ -1034,6 +1034,44 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 41: a closed shutter emits nothing -- and the wheel that stayed lit
+
+Branson: "removed the color and one spot stuck with it .. it has a shutter and
+the others don't, not sure if that makes a difference."
+
+**The shutter was not why, but pulling that thread found a real gap.**
+
+Why that one stayed lit: the Focus Spot Three Z has **no RGB channels at all**.
+Checked its definition -- its colour is channel 2, a `ColorMacro` WHEEL. So
+`channelSetLiveState()`'s `found` flag (set only by RGB/CMY/W/A/UV/Lime/Indigo)
+stays false, follow-on 40's no-black-light rule is correctly skipped, and the
+fixture reports whatever colour its wheel is parked on. Its master dimmer is
+still up, so it is still lit.
+
+That is arguably CORRECT and the real rig would do the same: removing an
+RGB colour palette does not move a colour wheel. The wheel sits where it was
+left. Worth knowing rather than "fixing".
+
+**What WAS wrong: the shutter was ignored entirely.** The Shutter group was
+skipped along with everything that is not Intensity or Colour, so a fixture with
+its shutter shut rendered as fully lit. It is a piece of metal in front of the
+lamp -- closed, nothing gets out, whatever the dimmer says.
+
+The opposite case matters as much and is the reason this needs the capability
+PRESET rather than "has a shutter value": a **strobing** fixture is emitting,
+just intermittently, and treating any shutter capability as closed would blank
+every strobe look in the rig. Only an explicit `ShutterClose` closes it.
+Revert-checked both ways -- ignoring the shutter gives "a closed shutter still
+emitted at level 255", and treating any capability as closed gives "an open
+shutter was dimmed to 0".
+
+**Known limitation:** this reads the capability's PRESET. A definition that
+declares a closed-shutter capability without tagging it `ShutterClose` will
+still read as open. Matching on capability names would catch more of them and
+be wrong in other languages, so preset only, for now.
+
+`monitor_test` 76/76. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 40: there is no such thing as black light
 
 Branson: "if I remove all colors from a running function the rig display tries
