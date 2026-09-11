@@ -2763,6 +2763,165 @@ void Monitor_Test::aZoomHeadsConeFollowsItsZoomChannel()
     delete doc;
 }
 
+void Monitor_Test::aFollowSpotAimsAtTheSubjectNotTheFloor()
+{
+    /* "The lights aren't pointing at the HEIGHT of the target subject, which is
+       ~5ft." Right: a follow-spot aims at a PERSON. The target's XY says where
+       they are standing; the height is aimSubjectHeight() above whatever they
+       are standing ON, so the beam lands on a chest rather than a pair of feet.
+       QLCPalette already did exactly this when resolving an Aim palette -- the
+       rig view was using the target's own Z and so pointed somewhere the rig
+       does not. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setAimSubjectHeight(1.4f);
+
+    StagePlatform *deck = props->addPlatform();
+    deck->setName("Deck"); deck->setOriginX(2.0f); deck->setOriginY(2.0f);
+    deck->setWidth(3.0f); deck->setDepth(3.0f); deck->setHeight(0.5f);
+
+    Fixture *head = makeMover(doc, 10.0, 0, "Spot", QVector3D(3.5f, 8.0f, 6.0f));
+    QVERIFY(head != nullptr);
+
+    StageTarget *tgt = props->addStageTarget();
+    tgt->setX(3.5f); tgt->setY(3.5f); tgt->setZ(0.0f);      // on the deck
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("At"); aim->setStageTargetId(tgt->id());
+    QVERIFY(doc->addPalette(aim));
+
+    Scene *scene = new Scene(doc);
+    scene->setName("Plain Aim");
+    scene->addFixture(head->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 460);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setActiveScene(scene->id());
+
+    /* No follow-spot effect: the target means exactly where it says. */
+    QVector3D pt;
+    QVERIFY(v.aimPointFor(head->id(), pt));
+    QVERIFY2(qAbs(double(pt.z())) < 0.01,
+             qPrintable(QString("a plain aim should use the target's own Z, got %1")
+                        .arg(double(pt.z()))));
+
+    /* Add a follow-spot effect and it becomes a SUBJECT: standing on a 0.5 m
+       deck, chest at 0.5 + 1.4. */
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, doc);
+    fx->setName("followspot");
+    fx->setScriptPath("Palettes/Effect/Position/Followspot/");
+    QVERIFY(doc->addPalette(fx));
+    scene->addPalette(fx->id());
+    v.setActiveScene(Function::invalidId());
+    v.setActiveScene(scene->id());
+
+    QVERIFY(v.aimPointFor(head->id(), pt));
+    QVERIFY2(qAbs(double(pt.z()) - 1.9) < 0.05,
+             qPrintable(QString("a follow-spot should aim at deck + subject "
+                                "height (0.5 + 1.4 = 1.9), got %1")
+                        .arg(double(pt.z()))));
+
+    /* And the aim FOLLOWS the target: it gets dragged about with a mouse or a
+       joystick, so caching where it was is caching the wrong thing. */
+    tgt->setX(6.0f); tgt->setY(7.0f);
+    QVERIFY(v.aimPointFor(head->id(), pt));
+    QVERIFY2(qAbs(double(pt.x()) - 6.0) < 0.01 && qAbs(double(pt.y()) - 7.0) < 0.01,
+             qPrintable(QString("the aim did not follow the target when it moved "
+                                "(%1,%2)").arg(double(pt.x())).arg(double(pt.y()))));
+    /* Moved off the deck, so the subject is now standing on the floor. */
+    QVERIFY2(qAbs(double(pt.z()) - 1.4) < 0.05,
+             qPrintable(QString("subject height did not re-resolve against what "
+                                "the target now stands on, got %1")
+                        .arg(double(pt.z()))));
+
+    delete doc;
+}
+
+void Monitor_Test::aBeamStopsAtWhatItIsAimedAt()
+{
+    /* A beam aimed at something ends there. The throw used to come only from
+       the floor and the platform tops, so a follow-spot aimed at chest height
+       -- which points slightly UPWARD from a low fixture -- hit nothing, ran
+       the full no-hit default, and sailed straight past the person it was
+       pointed at. Eight metres of overshoot from eight heads is what turned a
+       set of tight beams into one broad wash. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    // Low fixture, target above it: nothing below to stop the beam.
+    Fixture *head = makeMover(doc, 10.0, 0, "Low Spot", QVector3D(1.0f, 1.0f, 0.6f));
+    QVERIFY(head != nullptr);
+
+    StageTarget *tgt = props->addStageTarget();
+    tgt->setX(4.0f); tgt->setY(1.0f); tgt->setZ(1.8f);
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("Up"); aim->setStageTargetId(tgt->id());
+    QVERIFY(doc->addPalette(aim));
+
+    Scene *scene = new Scene(doc);
+    scene->setName("Upward");
+    scene->addFixture(head->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(1000, 800);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setActiveScene(scene->id());
+
+    /* Pull back far enough that the OVERSHOOT is on screen. With one fixture
+       the auto-fit frames the fixture, and the first version of this test
+       sampled a point at (1620,-16) on a 600x460 canvas -- off the edge, so
+       nothing was lit either way and it passed with the fix reverted. */
+    v.m_zoomed = true;
+    v.m_scale *= 0.25;
+
+    QVector3D pt;
+    QVERIFY(v.aimPointFor(head->id(), pt));
+    const QVector3D org = props->fixtureRigPosition(head->id());
+    const QVector3D dir = (pt - org).normalized();
+    QVERIFY2(dir.z() > 0.05f, "this test needs an UPWARD beam to be meaningful");
+
+    const double toTarget = double((pt - org).length());
+    const double floorThrow = v.beamThrow(org, dir);
+    QVERIFY2(floorThrow > toTarget + 1.0,
+             qPrintable(QString("the no-hit throw (%1) must overshoot the target "
+                                "(%2) or this proves nothing")
+                        .arg(floorThrow).arg(toTarget)));
+
+    /* What the cone actually uses. Rendered, the beam has to stop about where
+       the subject is rather than carrying on past them. */
+    v.setBeams(true);
+    v.setLiveValues(false);
+    QByteArray u(512, char(0));
+    u[2] = char(255); u[3] = char(255); u[4] = char(255); u[5] = char(255);
+    head->setChannelValues(u);
+    v.setLiveValues(true);
+
+    const QImage img = v.grab().toImage();
+    const QPointF beyond = v.w2s(org + dir * float(toTarget + 1.5));
+    int lit = 0;
+    for (int dy = -8; dy <= 8; ++dy)
+        for (int dx = -8; dx <= 8; ++dx)
+        {
+            const QPoint q(beyond.toPoint() + QPoint(dx, dy));
+            if (!img.rect().contains(q)) continue;
+            const QColor c = img.pixelColor(q);
+            if (c.red() * 0.3 + c.green() * 0.59 + c.blue() * 0.11 > 55)
+                ++lit;
+        }
+    QVERIFY2(lit < 12,
+             qPrintable(QString("the beam is still lit %1 px well past what it "
+                                "is aimed at -- it is overshooting the subject")
+                        .arg(lit)));
+
+    delete doc;
+}
+
 void Monitor_Test::aSelectedLookLightsTheRigInDesign()
 {
     /* "Why does it need to be live? It should work in design."
@@ -2901,7 +3060,8 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
 
     /* The direction it should be pointing: from the head, off toward +X and
        down. Pulled from the same association the studio draws. */
-    const QVector3D at = v.m_aimTarget.value(head->id()).pos;
+    QVector3D at;
+    QVERIFY(v.aimPointFor(head->id(), at));
     const QVector3D want = (at - props->fixtureRigPosition(head->id())).normalized();
     QVERIFY2(want.x() > 0.5f && want.z() < -0.5f,
              qPrintable(QString("the aim direction is not toward the target: "
@@ -2931,9 +3091,9 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
     /* What the view actually draws. */
     QVector3D drawn;
     {
-        const auto it2 = v.m_aimTarget.constFind(head->id());
-        QVERIFY(it2 != v.m_aimTarget.constEnd());
-        drawn = (it2.value().pos - props->fixtureRigPosition(head->id())).normalized();
+        QVector3D pt;
+        QVERIFY(v.aimPointFor(head->id(), pt));
+        drawn = (pt - props->fixtureRigPosition(head->id())).normalized();
     }
     QVERIFY2(QVector3D::dotProduct(drawn, want) > 0.99f,
              "with a scene selected, the head must point at that scene's target "
@@ -2966,7 +3126,9 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
            target on the floor, so the run passes INSIDE this 3 m deck around
            three-fifths of the way along. */
         const QVector3D head3 = props->fixtureRigPosition(head->id());
-        const QVector3D buried = head3 + (v.m_aimTarget.value(head->id()).pos - head3) * 0.55f;
+        QVector3D aimPt2;
+        QVERIFY(v.aimPointFor(head->id(), aimPt2));
+        const QVector3D buried = head3 + (aimPt2 - head3) * 0.55f;
         const QPointF probe = v.w2s(buried);
 
         int traced = 0;

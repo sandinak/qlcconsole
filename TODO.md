@@ -1034,6 +1034,49 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 36: follow-spots aim at a person, and beams stop where they land
+
+Branson, three from one look at the rendered Followspot.
+
+**1. "The lights aren't pointing at the HEIGHT of the target subject, ~5ft."**
+A follow-spot aims at a PERSON. The target's XY says where they are standing;
+the height is `aimSubjectHeight()` (1.4 m default) above whatever they are
+standing ON, so the beam lands on a chest rather than a pair of feet.
+`QLCPalette` already did exactly this -- it checks whether the scene carries a
+follow-spot effect and, if so, replaces the target's Z with
+`platformHeightAt(x,y) + aimSubjectHeight()`. The rig view used the target's
+own Z and so pointed somewhere the rig does not. Same rule now in both.
+
+Measured on the real file: UST-1 aims at z = 1.795 = deck 0.396 + subject
+1.399, against the target's own Z of 0.4.
+
+**2. "If I move the target the lights don't follow."** The cache held the
+target's POSITION. A target gets dragged about with a mouse or a joystick, so
+that is precisely the wrong thing to cache. It holds the target's ID now, and
+the position is resolved fresh every frame -- a hash lookup. The expensive part
+(which fixtures a scene aims, what it sends them) is what the cache is for.
+
+**3. "The lights are not single cone."** Two causes, both real:
+
+- **Overshoot.** The throw came only from the floor and the platform tops. A
+  follow-spot aimed at chest height points slightly UPWARD from a low fixture,
+  so it hit nothing, ran the full 8 m no-hit default, and sailed straight past
+  the person it was pointed at. Eight metres of overshoot from eight heads is
+  what turned a set of tight 8-degree beams into one broad wash. A beam aimed at
+  something now ENDS there.
+- **Banding.** The distance falloff was five segments, and each step in alpha
+  read as a visible ring across the beam. Sixteen now, with the falloff taken at
+  each segment's midpoint rather than its far edge, so the seams land where the
+  gradient already is.
+
+**The revert-check for the overshoot fix was vacuous first time**, and in a way
+worth remembering: it sampled a point 1.5 m past the target, which on a
+600x460 canvas framed around a single fixture landed at (1620, -16) -- off the
+edge. Nothing was lit there with OR without the fix. Pulling the camera back so
+the overshoot is actually on screen: 0 px against 289.
+
+`monitor_test` 72/72. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 35: a look lights the rig in DESIGN -- and why Followspot looked dark
 
 Branson: "rig shouldn't show lines .. should show the actual beams", then "why

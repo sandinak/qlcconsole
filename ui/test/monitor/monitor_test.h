@@ -213,6 +213,11 @@ private slots:
     void aZoomHeadsConeFollowsItsZoomChannel();
     /** A look selected in Design lights the rig -- dimmer, colour and beam --
      *  without waiting for a desk to output it. */
+    /** A follow-spot aims at a person: the target's XY, at subject height above
+     *  whatever they stand on -- and it follows the target as it moves. */
+    void aFollowSpotAimsAtTheSubjectNotTheFloor();
+    /** A beam aimed at something ends there instead of sailing past it. */
+    void aBeamStopsAtWhatItIsAimedAt();
     void aSelectedLookLightsTheRigInDesign();
     void anUndrivenHeadPointsAtTheScenesTarget();
     void aBeamFadesAllTheWayOutWithTheDimmer();

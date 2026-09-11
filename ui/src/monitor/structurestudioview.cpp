@@ -2087,9 +2087,26 @@ void StructureStudioView::rebuildAimTargets()
 
     // Where the scene is aiming. More than one Aim palette is legal; the first
     // that resolves wins, which is what a single head can actually do.
-    QVector3D aimPoint;
+    quint32 aimTargetId = 0xFFFFFFFF;
     QColor aimColour(255, 180, 0);
     bool haveAim = false;
+
+    /* A follow-spot scene aims at a SUBJECT, not at a mark on the floor: the
+       target's XY says where the person is, and the height comes from
+       aimSubjectHeight() above whatever they are standing on. QLCPalette does
+       exactly this when it resolves an Aim palette, and if the two disagree the
+       rig view points somewhere the rig does not. */
+    bool subjectMode = false;
+    foreach (quint32 pid, scene->palettes())
+    {
+        QLCPalette *p2 = m_doc->palette(pid);
+        if (p2 != nullptr && p2->type() == QLCPalette::Effect
+            && p2->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
+        {
+            subjectMode = true;
+            break;
+        }
+    }
     foreach (quint32 pid, scene->palettes())
     {
         QLCPalette *pal = m_doc->palette(pid);
@@ -2098,7 +2115,7 @@ void StructureStudioView::rebuildAimTargets()
         StageTarget *t = props->stageTarget(pal->stageTargetId());
         if (t == nullptr)
             continue;
-        aimPoint = QVector3D(t->x(), t->y(), t->z());
+        aimTargetId = t->id();
         if (t->color().isValid())
             aimColour = t->color();
         haveAim = true;
@@ -2177,11 +2194,31 @@ void StructureStudioView::rebuildAimTargets()
         if (canAim)
         {
             AimSpec spec;
-            spec.pos = aimPoint;
+            spec.targetId = aimTargetId;
             spec.colour = aimColour;
+            spec.subjectHeight = subjectMode;
             m_aimTarget.insert(fid, spec);
         }
     }
+}
+
+/* The point a fixture is currently aimed at, read FRESH: the target may have
+ * been dragged since the cache was built. */
+bool StructureStudioView::aimPointFor(quint32 fid, QVector3D &out) const
+{
+    const QHash<quint32, AimSpec>::const_iterator it = m_aimTarget.constFind(fid);
+    if (it == m_aimTarget.constEnd())
+        return false;
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    StageTarget *t = props->stageTarget(it.value().targetId);
+    if (t == nullptr)
+        return false;
+
+    out = QVector3D(t->x(), t->y(), t->z());
+    if (it.value().subjectHeight)
+        out.setZ(props->platformHeightAt(out.x(), out.y()) + props->aimSubjectHeight());
+    return true;
 }
 
 void StructureStudioView::setActiveScene(quint32 sceneId)
@@ -2252,13 +2289,33 @@ void StructureStudioView::setBeams(bool on)
 
 void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                                       const QVector3D &dir, double halfAngleRad,
-                                      const QColor &colour, double level) const
+                                      const QColor &colour, double level,
+                                      const QVector3D *landsAt) const
 {
     if (level <= 0.004 || dir.isNull())
         return;
 
     const QVector3D d = dir.normalized();
-    const double len = beamThrow(apex, d);
+    double len = beamThrow(apex, d);
+    bool hitsSubject = false;
+
+    /* A beam aimed AT something ends there.
+     *
+       Without this the throw came only from the floor and the platform tops,
+       and a followspot aimed at chest height points slightly UPWARD -- so it
+       hit nothing, ran the full no-hit default, and sailed on past the person
+       it was pointed at. Eight metres of overshoot from eight heads is what
+       turned a set of tight 8-degree beams into one broad wash. */
+    if (landsAt != nullptr)
+    {
+        const double toSubject = double((*landsAt - apex).length());
+        if (toSubject > 0.05 && toSubject < len)
+        {
+            len = toSubject;
+            hitsSubject = true;
+        }
+    }
+
     const double radius = len * qTan(qBound(0.005, halfAngleRad, 1.4));
 
     /* Did it land on something, or is it thrown into the room? A beam that
@@ -2266,7 +2323,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
        very little out of it -- and puts a pool where it arrives. One thrown
        into the air has nothing to stop it, so it has to fade out on its own,
        or it ends in a hard disc hanging in space. */
-    const bool lands = beamHitsSomething(apex, d);
+    const bool lands = hitsSubject || beamHitsSomething(apex, d);
 
     QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
     if (side.length() < 1e-3f)
@@ -2286,7 +2343,11 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     const double poolA = 130.0 * level * room;
 
     static const int RING = 20;
-    static const int SEG = 5;
+    /* Enough segments that the falloff reads as a gradient rather than as
+       banding. At five, each step in alpha was a visible ring across the beam
+       -- "the lights are not single cone". These are cheap: one convex hull
+       each, and a beam is one fixture. */
+    static const int SEG = 16;
 
     auto ringAt = [&](double t, QVector<QPointF> &out) {
         const QVector3D c = apex + d * float(len * t);
@@ -2314,11 +2375,19 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
 
         /* Falloff along the throw. Light spreads, so even a beam that lands
            thins out a little; one going nowhere has to reach zero by the end
-           or it terminates in mid-air. */
-        const double f = lands ? (1.0 - 0.35 * t1)
-                               : qMax(0.0, 1.0 - t1 * t1);
+           or it terminates in mid-air.
+         *
+           Evaluated at the segment's MIDPOINT rather than its far edge, so
+           consecutive segments step by half as much and the seam between them
+           lands where the gradient already is. */
+        const double tm = (t0 + t1) * 0.5;
+        const double f = lands ? (1.0 - 0.35 * tm)
+                               : qMax(0.0, 1.0 - tm * tm);
         QColor c = colour;
         c.setAlpha(qBound(0, int(baseA * f), 190));
+        /* Segments abut rather than overlap, so this is not a compositing
+           correction -- it is only that a 16-step ramp wants finer steps than a
+           5-step one to read as smooth. */
         if (c.alpha() <= 1)
             continue;
 
@@ -2342,7 +2411,8 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                                          const QColor &col, const QVector3D &aim,
                                          bool ambientLit, double beamLevel,
                                          const QColor &beamColour,
-                                         double beamAngle) const
+                                         double beamAngle,
+                                         const QVector3D *beamLandsAt) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
@@ -2430,7 +2500,8 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                                    ? beamAngle : 14.0;
                 drawBeamCone(p, headMid + beam * float(h * 0.28), beam,
                              qDegreesToRadians(deg / 2.0),
-                             beamColour.isValid() ? beamColour : col, beamLevel);
+                             beamColour.isValid() ? beamColour : col, beamLevel,
+                             beamLandsAt);
             }
         }
         else
@@ -2767,12 +2838,11 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                is actually running, the DMX aims at the target anyway and the
                two agree. */
             QVector3D aim;
-            const QHash<quint32, AimSpec>::const_iterator tIt =
-                m_aimTarget.constFind(fid);
-            if (tIt != m_aimTarget.constEnd())
+            QVector3D aimPt;
+            const bool aimed = aimPointFor(fid, aimPt);
+            if (aimed)
             {
-                const QVector3D toTarget = tIt.value().pos
-                                           - props->fixtureRigPosition(fid);
+                const QVector3D toTarget = aimPt - props->fixtureRigPosition(fid);
                 if (toTarget.length() > 1e-3f)
                     aim = toTarget.normalized();
             }
@@ -2802,7 +2872,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 }
             }
             drawMoverSolid(p, fid, traits, col, aim, !showingOutput, beamLevel,
-                           beamColour, beamNow);
+                           beamColour, beamNow, aimed ? &aimPt : nullptr);
 
             /* Say where it is aimed -- but ONLY when the beam is not already
                saying it.
@@ -2813,9 +2883,9 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                show at all, though: at whole-rig zoom a mover is a few pixels
                across, so turning its box toward the target is invisible. That
                is the case the trace is for, and it is what the studio draws. */
-            if (tIt != m_aimTarget.constEnd() && (!m_beams || beamLevel <= 0.01))
-                drawAimTrace(p, props->fixtureRigPosition(fid), tIt.value().pos,
-                             tIt.value().colour);
+            if (aimed && (!m_beams || beamLevel <= 0.01))
+                drawAimTrace(p, props->fixtureRigPosition(fid), aimPt,
+                             m_aimTarget.value(fid).colour);
         }
         else if (traits.headCount > 1)
         {

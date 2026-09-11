@@ -352,13 +352,15 @@ private:
     /** The cone from a head out to whatever it lands on, plus the pool where
      *  it lands. Translucent; sorted at its midpoint. */
     void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,
-                      double halfAngleRad, const QColor &colour, double level) const;
+                      double halfAngleRad, const QColor &colour, double level,
+                      const QVector3D *landsAt = nullptr) const;
     void drawMoverSolid(QPainter &p, quint32 fid,
                         const struct FixtureVisualTraits &traits,
                         const QColor &col, const QVector3D &aim,
                         bool ambientLit = true, double beamLevel = 0.0,
                         const QColor &beamColour = QColor(),
-                        double beamAngle = 0.0) const;
+                        double beamAngle = 0.0,
+                        const QVector3D *beamLandsAt = nullptr) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame
@@ -404,12 +406,27 @@ private:
     Plane    m_plane = Front;
     bool     m_beams = true;   ///< draw beam cones for lit movers
     quint32  m_activeSceneId = 0xFFFFFFFF;
-    /** Where a fixture is aimed, and in whose colour to say so. */
+    /** Where a fixture is aimed, and in whose colour to say so.
+     *
+     *  The target's ID rather than its position, deliberately: a target gets
+     *  dragged about with a mouse or a joystick, and caching where it WAS meant
+     *  the rig view kept pointing there. The expensive part -- which fixtures a
+     *  scene aims, and what it sends them -- is what the cache is for; a
+     *  position is a hash lookup away and is read fresh every frame. */
     struct AimSpec
     {
-        QVector3D pos;
-        QColor    colour;
+        quint32 targetId = 0xFFFFFFFF;
+        QColor  colour;
+        /** A follow-spot scene aims at the SUBJECT -- deck height plus
+         *  MonitorProperties::aimSubjectHeight() -- not at the target's own Z,
+         *  so the beam lands on someone's chest rather than their feet. This is
+         *  QLCPalette's rule; the two have to agree or Edit and the rig view
+         *  point different ways. */
+        bool    subjectHeight = false;
     };
+    /** The live world point a fixture is aimed at, or false if it aims at
+     *  nothing. Resolved per frame from the target's CURRENT position. */
+    bool aimPointFor(quint32 fid, QVector3D &out) const;
     /** fixture id -> the target it is aimed at, from the active scene's Aim
      *  palettes. Rebuilt when the scene or the rig changes, NOT per frame:
      *  resolving it per fixture per frame would be quadratic in the rig. */
