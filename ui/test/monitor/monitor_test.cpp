@@ -2810,7 +2810,7 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
 
     /* The direction it should be pointing: from the head, off toward +X and
        down. Pulled from the same association the studio draws. */
-    const QVector3D at = v.m_aimTarget.value(head->id());
+    const QVector3D at = v.m_aimTarget.value(head->id()).pos;
     const QVector3D want = (at - props->fixtureRigPosition(head->id())).normalized();
     QVERIFY2(want.x() > 0.5f && want.z() < -0.5f,
              qPrintable(QString("the aim direction is not toward the target: "
@@ -2840,14 +2840,62 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
     /* What the view actually draws. */
     QVector3D drawn;
     {
-        const QHash<quint32, QVector3D>::const_iterator it2 =
-            v.m_aimTarget.constFind(head->id());
+        const auto it2 = v.m_aimTarget.constFind(head->id());
         QVERIFY(it2 != v.m_aimTarget.constEnd());
-        drawn = (it2.value() - props->fixtureRigPosition(head->id())).normalized();
+        drawn = (it2.value().pos - props->fixtureRigPosition(head->id())).normalized();
     }
     QVERIFY2(QVector3D::dotProduct(drawn, want) > 0.99f,
              "with a scene selected, the head must point at that scene's target "
              "even while live output is on and nothing is driving it");
+
+    /* And it has to be VISIBLE, which turning the head box quietly toward the
+       target is not: at whole-rig zoom a mover is a few pixels across, and a
+       scene that is merely selected sends no DMX, so there is no beam either.
+       The studio answers this with a dashed line; so does this now -- drawn as
+       an ANNOTATION over the scene rather than depth-tested into it, because on
+       a real rig the run between a head and a floor target skims horizontally
+       through the decks and would be almost entirely (and correctly) hidden. */
+    {
+        StagePlatform *wall = props->addPlatform();
+        wall->setName("In The Way");
+        wall->setOriginX(2.0f); wall->setOriginY(0.0f);
+        wall->setWidth(2.5f); wall->setDepth(2.5f); wall->setHeight(3.0f);
+        wall->setColor(QColor(30, 30, 30));
+
+        tgt->setColor(QColor(255, 0, 255));      // unmistakable
+        v.setActiveScene(Function::invalidId());
+        v.setActiveScene(scene->id());
+        v.reload();
+
+        const QImage img = v.grab().toImage();
+
+        /* Sample where the deck is actually IN THE WAY, not just anywhere along
+           the run -- most of the line is in clear air, so counting the whole
+           image proves nothing about occlusion. The head is 5 m up and the
+           target on the floor, so the run passes INSIDE this 3 m deck around
+           three-fifths of the way along. */
+        const QVector3D head3 = props->fixtureRigPosition(head->id());
+        const QVector3D buried = head3 + (v.m_aimTarget.value(head->id()).pos - head3) * 0.55f;
+        const QPointF probe = v.w2s(buried);
+
+        int traced = 0;
+        for (int dy = -22; dy <= 22; ++dy)
+            for (int dx = -22; dx <= 22; ++dx)
+            {
+                const QPoint q(probe.toPoint() + QPoint(dx, dy));
+                if (!img.rect().contains(q)) continue;
+                const QColor c = img.pixelColor(q);
+                if (c.red() > 140 && c.blue() > 140 && c.green() < 90)
+                    ++traced;
+            }
+        QVERIFY2(traced > 4,
+                 qPrintable(QString("the aim trace is not visible where a solid "
+                                    "deck stands between head and target (%1 px "
+                                    "there) -- depth-tested, it vanishes into "
+                                    "the scenery and the aim is unreadable again")
+                            .arg(traced)));
+        props->removePlatform(wall->id());
+    }
 
     /* A fixture that CANNOT aim is left out -- a wash has nothing to point, and
        the studio makes the same check before drawing it a line. */

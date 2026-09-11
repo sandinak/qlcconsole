@@ -1034,6 +1034,42 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 34: the aim had to be VISIBLE, not merely correct
+
+Branson: "still not seeing it."
+
+Two fixes had already landed for this and the logic was right -- traced against
+the real file, `Followspot` resolved all 8 UST movers onto Target 2. The heads
+were being turned. You could not tell.
+
+**Why nothing showed.** Turning a head box toward a target is invisible in
+practice: at whole-rig zoom a mover is a few pixels across, and a scene that is
+merely SELECTED sends no DMX, so `beamLevel` is 0 and there is no beam to see
+either. The change was real and undetectable, which is the same as not working.
+
+The studio answers this with a dashed line to the target. The rig view now
+draws the same thing, in the target's own colour, so the two views say it the
+same way.
+
+**And it has to be an ANNOTATION, not geometry.** The first attempt
+depth-tested the trace like everything else, which is physically right and
+practically useless: on this rig the movers sit about 0.6 m up and the target
+about 0.4 m, so the run between them skims horizontally THROUGH a stack of
+solid decks and almost all of it is correctly hidden. Rendered, it showed a few
+dashes near the target and nothing else. Traces are now drawn over the resolved
+image with the labels, which is what the studio does.
+
+Dashed rather than solid on purpose: a beam is what the rig is EMITTING, a
+trace is where a look says to POINT, and those want telling apart.
+
+**The revert-check needed two goes, and the first one was worthless.** Counting
+trace-coloured pixels anywhere in the frame passes whether the trace is
+depth-tested or not -- most of the run is in clear air. It only discriminates
+when it samples the span that a deck is actually standing in front of: 0 px
+there when depth-tested, and that is the whole point.
+
+`monitor_test` 69/69. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 33: targets reach the rig view; zoom drives the cone
 
 Two of the three left over from follow-on 32.

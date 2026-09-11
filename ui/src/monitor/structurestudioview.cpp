@@ -1091,6 +1091,7 @@ void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite) const
     }
 
     case DrawOp::Label:
+    case DrawOp::Trace:
         break;          // drawn in screen space after the buffer is resolved
     }
 }
@@ -1131,6 +1132,13 @@ void StructureStudioView::flushOps(QPainter &p) const
                 p.setPen(o.pen);
                 if (!o.poly.isEmpty()) p.drawText(o.poly.at(0), o.text);
                 break;
+            case DrawOp::Trace:
+                if (o.poly.size() >= 2)
+                {
+                    p.setPen(QPen(o.pen, o.penWidth));
+                    p.drawLine(o.poly.at(0), o.poly.at(1));
+                }
+                break;
             }
         }
         m_ops.clear();
@@ -1157,9 +1165,9 @@ void StructureStudioView::flushOps(QPainter &p) const
     QVector<DrawOp> translucent, labels;
     foreach (const DrawOp &o, m_ops)
     {
-        if (o.kind == DrawOp::Label)
+        if (o.kind == DrawOp::Label || o.kind == DrawOp::Trace)
         {
-            labels << o;
+            labels << o;        // annotation: screen space, after the resolve
             continue;
         }
         const bool seeThrough = (o.fill.isValid() && o.fill.alpha() < 255)
@@ -1180,6 +1188,15 @@ void StructureStudioView::flushOps(QPainter &p) const
     // Text last, in screen space: depth-testing a label is not meaningful.
     foreach (const DrawOp &o, labels)
     {
+        if (o.kind == DrawOp::Trace)
+        {
+            if (o.poly.size() >= 2)
+            {
+                p.setPen(QPen(o.pen, o.penWidth));
+                p.drawLine(o.poly.at(0), o.poly.at(1));
+            }
+            continue;
+        }
         p.setPen(o.pen);
         if (!o.poly.isEmpty())
             p.drawText(o.poly.at(0), o.text);
@@ -2069,6 +2086,7 @@ void StructureStudioView::rebuildAimTargets()
     // Where the scene is aiming. More than one Aim palette is legal; the first
     // that resolves wins, which is what a single head can actually do.
     QVector3D aimPoint;
+    QColor aimColour(255, 180, 0);
     bool haveAim = false;
     foreach (quint32 pid, scene->palettes())
     {
@@ -2079,6 +2097,8 @@ void StructureStudioView::rebuildAimTargets()
         if (t == nullptr)
             continue;
         aimPoint = QVector3D(t->x(), t->y(), t->z());
+        if (t->color().isValid())
+            aimColour = t->color();
         haveAim = true;
         break;
     }
@@ -2110,7 +2130,12 @@ void StructureStudioView::rebuildAimTargets()
             fx->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) != QLCChannel::invalid()
             || fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) != QLCChannel::invalid();
         if (canAim)
-            m_aimTarget.insert(fid, aimPoint);
+        {
+            AimSpec spec;
+            spec.pos = aimPoint;
+            spec.colour = aimColour;
+            m_aimTarget.insert(fid, spec);
+        }
     }
 }
 
@@ -2121,6 +2146,55 @@ void StructureStudioView::setActiveScene(quint32 sceneId)
     m_activeSceneId = sceneId;
     rebuildAimTargets();
     update();
+}
+
+/* A dashed run from a head to the point it is aimed at.
+ *
+ * Dashed on purpose: this is an INTENTION, not light. A beam is what the rig is
+ * emitting; this is where a look says to point, and the two want telling apart.
+ * Segment by segment, because the draw queue carries no pen style.
+ *
+ * Drawn ON TOP rather than depth-tested, which is deliberate and was NOT the
+ * first attempt. Depth-tested is physically right and practically useless: on
+ * this rig the movers sit about 0.6 m up and the target about 0.4 m, so the run
+ * between them skims horizontally THROUGH a stack of solid decks and almost all
+ * of it is correctly hidden. An annotation is not an object in the room -- the
+ * studio draws the same lines over everything, and the two views have to agree. */
+void StructureStudioView::drawAimTrace(QPainter &p, const QVector3D &from,
+                                      const QVector3D &to, const QColor &colour) const
+{
+    const QVector3D run = to - from;
+    const double len = double(run.length());
+    if (len < 0.05)
+        return;
+
+    QColor c = colour;
+    c.setAlpha(150);
+
+    // About a dash every 200 mm, capped so a long throw is not a thousand ops.
+    const int dashes = qBound(4, int(len / 0.2), 60);
+    for (int i = 0; i < dashes; ++i)
+    {
+        const double t0 = double(i) / dashes;
+        const double t1 = t0 + (0.55 / dashes);      // gap between each
+        const QVector3D a = from + run * float(t0);
+        const QVector3D b = from + run * float(t1);
+        if (m_collecting)
+        {
+            DrawOp o;
+            o.kind = DrawOp::Trace;
+            o.depth = (viewDepth(a) + viewDepth(b)) / 2.0;
+            o.poly << w2s(a) << w2s(b);
+            o.pen = c;
+            o.penWidth = 1.6;
+            m_ops << o;
+        }
+        else
+        {
+            p.setPen(QPen(c, 1.6));
+            p.drawLine(w2s(a), w2s(b));
+        }
+    }
 }
 
 void StructureStudioView::setBeams(bool on)
@@ -2642,11 +2716,12 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                is actually running, the DMX aims at the target anyway and the
                two agree. */
             QVector3D aim;
-            const QHash<quint32, QVector3D>::const_iterator tIt =
+            const QHash<quint32, AimSpec>::const_iterator tIt =
                 m_aimTarget.constFind(fid);
             if (tIt != m_aimTarget.constEnd())
             {
-                const QVector3D toTarget = tIt.value() - props->fixtureRigPosition(fid);
+                const QVector3D toTarget = tIt.value().pos
+                                           - props->fixtureRigPosition(fid);
                 if (toTarget.length() > 1e-3f)
                     aim = toTarget.normalized();
             }
@@ -2677,6 +2752,19 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             }
             drawMoverSolid(p, fid, traits, col, aim, !m_liveValues, beamLevel,
                            beamColour, beamNow);
+
+            /* Say where it is aimed, in a way you can actually SEE.
+             *
+               Turning the head box toward the target is correct and invisible:
+               at whole-rig zoom a mover is a few pixels across, and a scene that
+               is merely SELECTED is not sending DMX, so there is no beam either.
+               The result was a change nobody could find. The studio answers this
+               with a dashed line to the target; draw the same thing here, in the
+               target's own colour, so the two views say the same thing the same
+               way. */
+            if (tIt != m_aimTarget.constEnd())
+                drawAimTrace(p, props->fixtureRigPosition(fid), tIt.value().pos,
+                             tIt.value().colour);
         }
         else if (traits.headCount > 1)
         {

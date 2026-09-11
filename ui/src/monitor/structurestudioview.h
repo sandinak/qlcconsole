@@ -201,7 +201,7 @@ private:
      * depth, and the whole queue is sorted once before anything is painted. */
     struct DrawOp
     {
-        enum Kind { Poly, Line, Dot, Label };
+        enum Kind { Poly, Line, Dot, Label, Trace };
         double    depth = 0.0;   ///< whole-primitive depth: sorting, and the
                                  ///< fallback when per-vertex depth is unknown
         /** Per-VERTEX depth, parallel to poly. Empty means "use depth for all
@@ -404,11 +404,21 @@ private:
     Plane    m_plane = Front;
     bool     m_beams = true;   ///< draw beam cones for lit movers
     quint32  m_activeSceneId = 0xFFFFFFFF;
-    /** fixture id -> the world point it is aimed at, from the active scene's
-     *  Aim palettes. Rebuilt when the scene or the rig changes, NOT per frame:
+    /** Where a fixture is aimed, and in whose colour to say so. */
+    struct AimSpec
+    {
+        QVector3D pos;
+        QColor    colour;
+    };
+    /** fixture id -> the target it is aimed at, from the active scene's Aim
+     *  palettes. Rebuilt when the scene or the rig changes, NOT per frame:
      *  resolving it per fixture per frame would be quadratic in the rig. */
-    QHash<quint32, QVector3D> m_aimTarget;
+    QHash<quint32, AimSpec> m_aimTarget;
     void rebuildAimTargets();
+    /** A dashed run from a head to where it is aimed -- the same thing the
+     *  studio draws, so the two views say it the same way. */
+    void drawAimTrace(QPainter &p, const QVector3D &from, const QVector3D &to,
+                      const QColor &colour) const;
     int      m_rotation = 0;   ///< view turn, 0..3 quarter turns clockwise
     /* A gentle three-quarter reads as a rigging drawing rather than a drafting
        projection: the truss body shows in three-quarter, fixtures stay legible,
