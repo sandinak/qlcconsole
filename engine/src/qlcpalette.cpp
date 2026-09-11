@@ -720,10 +720,11 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     }
                 }
 
-                QVector3D tgtPos = tgt->position();
-                if (subjectMode)
-                    tgtPos.setZ(mProps->platformHeightAt(tgtPos.x(), tgtPos.y())
-                                + mProps->aimSubjectHeight());
+                /* One rule, in MonitorProperties, shared with the rig view.
+                   This used to be written out here AND again in the renderer,
+                   and the two disagreed: a follow-spot aimed at chest height in
+                   Edit while the rig view pointed at the target's own Z. */
+                const QVector3D tgtPos = mProps->targetAimPoint(tgt, subjectMode);
 
                 // Shared aim geometry — identical to the follow-spot effect's, so
                 // a fixture points the same way in Edit and Run.

@@ -684,3 +684,151 @@ void MonitorProperties_Test::stageStructuresXmlRoundTrip()
 }
 
 QTEST_APPLESS_MAIN(MonitorProperties_Test)
+
+void MonitorProperties_Test::targetKindsAndAimPoint()
+{
+    /* A target kind only earns its place if it changes where light is aimed or
+       what is drawn. These test the first. */
+    QCOMPARE(StageTarget::defaultAimHeight(StageTarget::Kind::None), 0.0f);
+    QVERIFY(StageTarget::defaultAimHeight(StageTarget::Kind::Person) > 1.2f);
+    QVERIFY(StageTarget::defaultAimHeight(StageTarget::Kind::DrumKit)
+            < StageTarget::defaultAimHeight(StageTarget::Kind::Person));
+
+    MonitorProperties mp;
+    mp.setAimSubjectHeight(1.4f);
+
+    StagePlatform *deck = mp.addPlatform();
+    deck->setOriginX(2.0f); deck->setOriginY(2.0f);
+    deck->setWidth(4.0f); deck->setDepth(2.0f); deck->setHeight(0.5f);
+
+    StageTarget *t = mp.addStageTarget();
+    t->setPosition(QVector3D(3.0f, 3.0f, 0.0f));        // standing on the deck
+
+    /* A plain target is exactly where it says it is... */
+    QCOMPARE(double(mp.targetAimPoint(t).z()), 0.0);
+
+    /* ...unless the caller says this is a follow-spot aim, which is how every
+       show built before kinds existed behaves. */
+    QVERIFY(qAbs(double(mp.targetAimPoint(t, true).z()) - 1.9) < 0.01);
+
+    /* A target that knows what it is does not need telling. */
+    t->setKind(StageTarget::Kind::Person);
+    QVERIFY2(qAbs(double(mp.targetAimPoint(t).z()) - 1.9) < 0.01,
+             "a Person should be aimed at chest height above what it stands on "
+             "without the caller having to ask");
+
+    /* A drum kit is lower than a vocalist -- the whole point of having kinds
+       rather than one global height for everything on the stage. */
+    t->setKind(StageTarget::Kind::DrumKit);
+    const double kit = double(mp.targetAimPoint(t).z());
+    t->setKind(StageTarget::Kind::Person);
+    QVERIFY2(kit < double(mp.targetAimPoint(t).z()),
+             "a drum kit is being aimed at the same height as a person");
+
+    /* And one override beats any kind, which is what stops the kind list
+       growing a new entry for every one-off. */
+    t->setAimHeightOverride(0.25f);
+    QVERIFY(qAbs(double(mp.targetAimPoint(t).z()) - 0.75) < 0.01);
+}
+
+void MonitorProperties_Test::targetFollowsWhatItIsBoundTo()
+{
+    /* A bound target is a RELATIONSHIP, not a coordinate. Steps get moved,
+       restacked and re-heighted between load-ins, and a target that remembers
+       where the step used to be is worse than no target at all. */
+    MonitorProperties mp;
+
+    StagePlatform *deck = mp.addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(2.0f); deck->setDepth(2.0f); deck->setHeight(0.4f);
+
+    StageTarget *t = mp.addStageTarget();
+    t->setPosition(QVector3D(99.0f, 99.0f, 99.0f));     // deliberately nonsense
+    t->setKind(StageTarget::Kind::Structure);
+    t->setBinding(QStringLiteral("platform"), deck->id());
+    QVERIFY(t->isBound());
+
+    QVector3D p = mp.targetAimPoint(t);
+    QVERIFY2(qAbs(double(p.x()) - 2.0) < 0.01 && qAbs(double(p.y()) - 2.0) < 0.01,
+             "a bound target should sit on the structure, not at its own stored "
+             "position");
+    QVERIFY(qAbs(double(p.z()) - 0.4) < 0.01);          // the deck's top
+
+    // Move the step: the target goes with it, with no re-binding.
+    deck->setOriginX(6.0f);
+    deck->setHeight(1.2f);
+    p = mp.targetAimPoint(t);
+    QVERIFY2(qAbs(double(p.x()) - 7.0) < 0.01,
+             "the target did not follow the step when it moved");
+    QVERIFY2(qAbs(double(p.z()) - 1.2) < 0.01,
+             "the target did not follow the step when its height changed");
+
+    // A binding to something that no longer exists falls back to its own position.
+    t->setBinding(QStringLiteral("platform"), 4242);
+    p = mp.targetAimPoint(t);
+    QVERIFY2(qAbs(double(p.x()) - 99.0) < 0.01,
+             "a dangling binding should fall back to the stored position, not "
+             "collapse to the origin");
+}
+
+void MonitorProperties_Test::targetXmlRoundTrip()
+{
+    /* Kinds are persisted by NAME. An ordinal can never be reordered or removed
+       without silently re-meaning every saved file -- and an unknown name from
+       a newer build has to degrade to None rather than becoming whatever now
+       sits at that index. */
+    QByteArray buf;
+    quint32 savedId = 0;
+    {
+        MonitorProperties mp;
+        StageTarget *t = mp.addStageTarget();
+        savedId = t->id();
+        t->setName("Lead Vocal");
+        t->setPosition(QVector3D(1.5f, 2.5f, 0.0f));
+        t->setKind(StageTarget::Kind::DrumKit);
+        t->setAimHeightOverride(0.85f);
+        t->setBinding(QStringLiteral("truss"), 7);
+        t->setFootprint(QSizeF(1.6, 1.2));
+
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        t->saveXML(&w);
+        w.writeEndDocument();
+    }
+
+    MonitorProperties mp2;
+    StageTarget *t2 = mp2.addStageTarget();
+    QXmlStreamReader r(buf);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(t2->loadXML(r));
+
+    QCOMPARE(t2->id(), savedId);
+    QCOMPARE(t2->name(), QString("Lead Vocal"));
+    QCOMPARE(int(t2->kind()), int(StageTarget::Kind::DrumKit));
+    QVERIFY(qAbs(double(t2->aimHeightOverride()) - 0.85) < 0.001);
+    QCOMPARE(t2->boundType(), QString("truss"));
+    QCOMPARE(t2->boundId(), quint32(7));
+    QVERIFY(qAbs(t2->footprint().width() - 1.6) < 0.001);
+    QVERIFY(qAbs(t2->footprint().height() - 1.2) < 0.001);
+
+    /* A kind this build has never heard of must not become one it has. */
+    QCOMPARE(int(StageTarget::stringToKind("holographic-unicorn")),
+             int(StageTarget::Kind::None));
+    QCOMPARE(int(StageTarget::stringToKind("PERSON")),
+             int(StageTarget::Kind::Person));
+
+    /* And a plain target writes none of this, so an older build sees exactly
+       the target it always did. */
+    QByteArray plainBuf;
+    {
+        MonitorProperties mp3;
+        StageTarget *p = mp3.addStageTarget();
+        p->setPosition(QVector3D(1, 2, 0));
+        QXmlStreamWriter w(&plainBuf);
+        p->saveXML(&w);
+    }
+    QVERIFY2(plainBuf.contains("Kind=") == false,
+             "a target with no kind is writing Kind= into every show file");
+    QVERIFY2(plainBuf.contains("BoundType=") == false,
+             "an unbound target is writing a binding into every show file");
+}

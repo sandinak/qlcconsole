@@ -2280,9 +2280,9 @@ bool StructureStudioView::aimPointFor(quint32 fid, QVector3D &out) const
     if (t == nullptr)
         return false;
 
-    out = QVector3D(t->x(), t->y(), t->z());
-    if (it.value().subjectHeight)
-        out.setZ(props->platformHeightAt(out.x(), out.y()) + props->aimSubjectHeight());
+    /* The shared rule -- binding, kind and height all resolved in one place, so
+       this view and QLCPalette cannot drift apart again. */
+    out = props->targetAimPoint(t, it.value().subjectHeight);
     return true;
 }
 

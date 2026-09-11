@@ -24,6 +24,12 @@
 #define KXMLStageTargetLocked  QStringLiteral("Locked")
 #define KXMLStageTargetLayerId QStringLiteral("LayerId")
 #define KXMLStageTargetGroupId QStringLiteral("GroupId")
+#define KXMLStageTargetKind      QStringLiteral("Kind")
+#define KXMLStageTargetAimHeight QStringLiteral("AimHeight")
+#define KXMLStageTargetBoundType QStringLiteral("BoundType")
+#define KXMLStageTargetBoundId   QStringLiteral("BoundId")
+#define KXMLStageTargetW         QStringLiteral("W")
+#define KXMLStageTargetD         QStringLiteral("D")
 
 StageTarget::StageTarget(quint32 id, QObject *parent)
     : QObject(parent)
@@ -53,9 +59,60 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLStageTargetLocked)) m_locked = (a.value(KXMLStageTargetLocked).toString() == "true");
     if (a.hasAttribute(KXMLStageTargetLayerId)) m_layerId = a.value(KXMLStageTargetLayerId).toUInt();
     if (a.hasAttribute(KXMLStageTargetGroupId)) m_groupId = a.value(KXMLStageTargetGroupId).toUInt();
+    if (a.hasAttribute(KXMLStageTargetKind))
+        m_kind = stringToKind(a.value(KXMLStageTargetKind).toString());
+    if (a.hasAttribute(KXMLStageTargetAimHeight))
+        m_aimHeightOverride = a.value(KXMLStageTargetAimHeight).toFloat();
+    if (a.hasAttribute(KXMLStageTargetBoundType))
+        m_boundType = a.value(KXMLStageTargetBoundType).toString();
+    if (a.hasAttribute(KXMLStageTargetBoundId))
+        m_boundId = a.value(KXMLStageTargetBoundId).toUInt();
+    if (a.hasAttribute(KXMLStageTargetW) || a.hasAttribute(KXMLStageTargetD))
+        m_footprint = QSizeF(a.value(KXMLStageTargetW).toDouble(),
+                             a.value(KXMLStageTargetD).toDouble());
 
     root.skipCurrentElement();
     return true;
+}
+
+QString StageTarget::kindToString(Kind k)
+{
+    switch (k)
+    {
+    case Kind::Person:    return QStringLiteral("person");
+    case Kind::DrumKit:   return QStringLiteral("drumkit");
+    case Kind::Structure: return QStringLiteral("structure");
+    case Kind::Area:      return QStringLiteral("area");
+    case Kind::None:
+    default:              return QStringLiteral("none");
+    }
+}
+
+StageTarget::Kind StageTarget::stringToKind(const QString &s, Kind fallback)
+{
+    const QString k = s.trimmed().toLower();
+    if (k == QLatin1String("person"))    return Kind::Person;
+    if (k == QLatin1String("drumkit"))   return Kind::DrumKit;
+    if (k == QLatin1String("structure")) return Kind::Structure;
+    if (k == QLatin1String("area"))      return Kind::Area;
+    if (k == QLatin1String("none"))      return Kind::None;
+    /* Anything else came from a newer file than this build. Degrade to the
+       fallback rather than guessing -- the whole reason these are names and not
+       ordinals is so an unknown one is recognisably unknown. */
+    return fallback;
+}
+
+float StageTarget::defaultAimHeight(Kind k)
+{
+    switch (k)
+    {
+    case Kind::Person:  return 1.4f;    ///< chest, not feet
+    case Kind::DrumKit: return 1.0f;    ///< around the rims and cymbals
+    case Kind::None:
+    case Kind::Structure:
+    case Kind::Area:
+    default:            return 0.0f;    ///< the surface itself
+    }
 }
 
 bool StageTarget::saveXML(QXmlStreamWriter *doc) const
@@ -74,6 +131,26 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLStageTargetLayerId, QString::number(m_layerId));
     if (m_groupId != 0)
         doc->writeAttribute(KXMLStageTargetGroupId, QString::number(m_groupId));
+    /* Only written when they say something. A file full of Kind="none" and
+       zero footprints is noise, and an older build reading this one should see
+       exactly the target it used to. */
+    if (m_kind != Kind::None)
+        doc->writeAttribute(KXMLStageTargetKind, kindToString(m_kind));
+    if (hasAimHeightOverride())
+        doc->writeAttribute(KXMLStageTargetAimHeight,
+                            QString::number(double(m_aimHeightOverride), 'f', 3));
+    if (isBound())
+    {
+        doc->writeAttribute(KXMLStageTargetBoundType, m_boundType);
+        doc->writeAttribute(KXMLStageTargetBoundId, QString::number(m_boundId));
+    }
+    if (m_footprint.isEmpty() == false)
+    {
+        doc->writeAttribute(KXMLStageTargetW,
+                            QString::number(m_footprint.width(), 'f', 3));
+        doc->writeAttribute(KXMLStageTargetD,
+                            QString::number(m_footprint.height(), 'f', 3));
+    }
     doc->writeEndElement();
     return true;
 }

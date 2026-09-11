@@ -39,6 +39,15 @@ private slots:
     void imagesXmlRoundTrip();
     void childBarFollowsParent();
     void studioFrameDerivation();
+    /** A target kind changes where light is aimed -- a drum kit is not a
+     *  vocalist, and one global subject height made them the same. */
+    void targetKindsAndAimPoint();
+    /** A bound target follows its structure rather than remembering where it
+     *  used to be. */
+    void targetFollowsWhatItIsBoundTo();
+    /** Kinds persist by name, so an unknown one degrades instead of becoming
+     *  whatever now sits at that index. */
+    void targetXmlRoundTrip();
     void studioFrameXmlRoundTrip();
     void studioFrameSlavedToPlatform();
     void reset();

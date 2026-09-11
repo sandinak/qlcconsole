@@ -1283,6 +1283,59 @@ float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
     return h;
 }
 
+QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMode) const
+{
+    if (t == nullptr)
+        return QVector3D();
+
+    QVector3D p = t->position();
+
+    /* A BOUND target is a relationship, not a coordinate. Read the structure
+       every time rather than copying its position at bind time: a step gets
+       moved, restacked and re-heighted between load-ins, and a target that
+       remembers where the step USED to be is worse than no target at all. */
+    if (t->isBound())
+    {
+        const QString type = t->boundType();
+        if (type == QLatin1String("platform"))
+        {
+            if (StagePlatform *pl = platform(t->boundId()))
+                p = QVector3D(pl->originX() + pl->width() * 0.5f,
+                              pl->originY() + pl->depth() * 0.5f,
+                              platformBaseZ(pl->id()) + pl->height());
+        }
+        else if (type == QLatin1String("truss"))
+        {
+            if (Truss *tr = truss(t->boundId()))
+            {
+                const QVector3D o = tr->origin();
+                const QPointF d = tr->direction();
+                p = QVector3D(o.x() + float(d.x()) * tr->length() * 0.5f,
+                              o.y() + float(d.y()) * tr->length() * 0.5f,
+                              o.z());
+            }
+        }
+        else if (type == QLatin1String("tower"))
+        {
+            if (Tower *tw = tower(t->boundId()))
+                p = QVector3D(tw->originX(), tw->originY(), tw->height() * 0.5f);
+        }
+    }
+
+    /* How far above its footing to aim. A target that knows what it is says so
+       itself; a plain one falls back to the global subject height, but only
+       when the caller says this is a follow-spot aim -- which is what every
+       show built before target kinds existed relies on. */
+    float above = t->effectiveAimHeight();
+    if (above <= 0.0f && subjectMode && t->kind() == StageTarget::Kind::None)
+        above = m_aimSubjectHeight;
+
+    if (above > 0.0f)
+        p.setZ(platformHeightAt(p.x(), p.y()) + above);
+
+    return p;
+}
+
 float MonitorProperties::platformBaseZ(quint32 id) const
 {
     const StagePlatform *b = m_platforms.value(id, nullptr);

@@ -1034,6 +1034,57 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 43: targets get a KIND, and can be bound to a structure
+
+Branson wanted target types. The design conversation landed on a test worth
+keeping: **a kind earns its place only if it changes where light is aimed or
+what is drawn.** Anything else is a label, and a label in a file format is a
+liability.
+
+**`StageTarget::Kind`**: None, Person, DrumKit, Structure, Area.
+
+- **Persisted by NAME, not ordinal.** An ordinal can never be reordered or
+  removed without silently re-meaning every saved file -- exactly the trap
+  `StagePlatform::TopMaterial` fell into, where value 2 is permanently burned
+  because Recessed was withdrawn. An unknown name from a newer build degrades
+  to None instead of becoming whatever now sits at that index.
+- **A per-target aim-height override**, which is what stops the kind list
+  growing an entry for every one-off. A drum kit aims lower than a vocalist by
+  default; anything unusual just says its own number.
+- **A footprint** (width x depth), because a drum kit is not a point. Knowing a
+  target is 1.6 m across is what lets you see whether an 8-degree beam covers
+  it, which is the question this view is opened to answer.
+- Nothing is written to the file unless it says something, so a plain target
+  still round-trips exactly as it always did.
+
+**Structure binding** is the part that matters most. A bound target takes its
+position from the truss, platform or tower it follows, resolved EVERY time
+rather than copied at bind time -- steps get moved, restacked and re-heighted
+between load-ins, and a target that remembers where the step used to be is
+worse than no target at all. A dangling binding falls back to the stored
+position rather than collapsing to the origin.
+
+**And one rule, in one place.** `MonitorProperties::targetAimPoint()` now
+resolves binding, kind and height together, and both `QLCPalette` and the rig
+view call it. Those two had each written this logic separately and had already
+drifted: the palette aimed at chest height while the renderer aimed at the
+target's own Z (follow-on 36). Two copies of a rule is how that happens.
+
+Both behaviours revert-checked: ignoring the binding gives "a bound target
+should sit on the structure, not at its own stored position", and ignoring the
+kind's height gives "a Person should be aimed at chest height without the
+caller having to ask".
+
+**Next, in order:** the Kind selector in the target editor; drawing the kinds
+(figure, kit, area) in the rig view; then **area targets** -- and Branson's
+audience **keep-out zone**, which is the same geometry with the opposite rule:
+a region beams must NOT enter, flagged when one does. "Don't blind the front
+row" is a standing complaint against lighting designers and nothing in the tool
+currently helps with it.
+
+`monitorproperties_test` 22/22, `monitor_test` 76/76. `check-all.sh`: all four
+legs pass, 0 failures.
+
 ### Follow-on 42: an unset channel is unknown, not zero -- and the OTHER paragraph
 
 **1. The 3Z became a line instead of a beam -- a regression from follow-on 41.**

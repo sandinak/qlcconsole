@@ -531,6 +531,27 @@ public:
      *  Returns 0 if the point is not on any platform. */
     float platformHeightAt(float xMetres, float yMetres) const;
 
+    /** Where a target actually IS, and where light aimed at it should land.
+     *
+     *  One rule, in one place, because there are now two views drawing it and a
+     *  palette resolving it -- and every time that logic has been written twice
+     *  the two copies have disagreed (the rig view pointed at a target's own Z
+     *  while QLCPalette pointed at chest height above it).
+     *
+     *  Resolves, in order:
+     *    - a BOUND target takes its position from the structure it follows, so
+     *      moving or restacking the step moves the target with it;
+     *    - a target with an aim height is raised that far above whatever it is
+     *      standing on -- a deck if there is one under it, else the floor;
+     *    - anything else is exactly where it says it is.
+     *
+     *  @param subjectMode  the caller knows this is a follow-spot aim. A target
+     *                      with its own Kind no longer needs telling, but a
+     *                      plain one still takes the global aimSubjectHeight()
+     *                      this way, which is how every existing show behaves.
+     */
+    QVector3D targetAimPoint(const class StageTarget *t, bool subjectMode = false) const;
+
     /** Base (bottom) height of a platform: the deck height of the tallest LOWER
      *  platform whose footprint it sits within (0 = on the floor). Lets steps
      *  stack — a platform on top of another rises from that one's deck. */
