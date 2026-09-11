@@ -2624,25 +2624,34 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                output. drawMoverSolid()'s aim parameter was plumbed through when
                the silhouette was built, precisely so this could arrive without
                touching the shape code. */
+            /* Where this head is pointed.
+             *
+               The SELECTED SCENE wins. If it carries an Aim palette naming a
+               target, that is where the head is being told to go, and it is
+               what the studio is drawing dashed lines to -- the two views have
+               to agree or the aim is unreadable.
+             *
+               This used to prefer live DMX, on the reasoning that the rig's
+               actual output beats an intention. That is wrong in the case that
+               matters: a head that nothing is driving reads as pan 0, tilt 0,
+               and fixtureAimDirection() reports that perfectly happily as a
+               real direction. So merely SELECTING a followspot scene left every
+               head pointing downstage, because all-zero DMX is not "aimed
+               there", it is "nothing is driving this" -- and the two are
+               indistinguishable from the channel values alone. When the scene
+               is actually running, the DMX aims at the target anyway and the
+               two agree. */
             QVector3D aim;
-            if (!m_liveValues || !fixtureAimDirection(fx, rp, aim))
-                aim = QVector3D();
-
-            /* Nothing driving it? Then point it where the scene SAYS to point
-               it. Live DMX still wins when there is any -- that is what the rig
-               is actually doing -- but an undriven head should show the aim you
-               set rather than wherever it was last left. */
-            if (aim.isNull())
+            const QHash<quint32, QVector3D>::const_iterator tIt =
+                m_aimTarget.constFind(fid);
+            if (tIt != m_aimTarget.constEnd())
             {
-                const QHash<quint32, QVector3D>::const_iterator t =
-                    m_aimTarget.constFind(fid);
-                if (t != m_aimTarget.constEnd())
-                {
-                    QVector3D toTarget = t.value() - props->fixtureRigPosition(fid);
-                    if (toTarget.length() > 1e-3f)
-                        aim = toTarget.normalized();
-                }
+                const QVector3D toTarget = tIt.value() - props->fixtureRigPosition(fid);
+                if (toTarget.length() > 1e-3f)
+                    aim = toTarget.normalized();
             }
+            if (aim.isNull() && m_liveValues && !fixtureAimDirection(fx, rp, aim))
+                aim = QVector3D();
 
             /* The beam's strength and colour are the fixture's own OUTPUT, not
                the shaded body colour.
@@ -2653,8 +2662,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                STRONGER as the room goes down. And beamVisibility: that says how
                much of the lens you can see from where you are standing, which
                is the opposite question. A head pointed away from you is
-               precisely when its beam is most worth drawing -- scaling the beam
-               by it made a head aimed at the floor throw nothing at all. */
+               precisely when its beam is most worth drawing. */
             double beamLevel = 0.0;
             QColor beamColour;
             if (m_liveValues && m_beams)

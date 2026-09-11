@@ -2817,6 +2817,38 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
                                 "%1,%2,%3").arg(double(want.x()))
                         .arg(double(want.y())).arg(double(want.z()))));
 
+    /* THE CASE THAT ACTUALLY FAILED. Live output is on -- it is on by default
+       in the overview -- and nothing is driving the rig, so every channel reads
+       zero. fixtureAimDirection() reports that quite happily as a real
+       direction (pan 0, tilt 0), because all-zero DMX and "aimed downstage" are
+       indistinguishable from the channel values alone. Preferring live DMX
+       therefore left every head pointing downstage the moment you merely
+       SELECTED a followspot scene, while the studio drew its dashed lines to
+       the target. The selected scene has to win. */
+    v.setLiveValues(true);
+    head->setChannelValues(QByteArray(512, char(0)));
+    v.grab();
+
+    QVector3D dmxSays;
+    QVERIFY2(fixtureAimDirection(head, props->fixtureRigProps(head->id()), dmxSays),
+             "expected undriven pan/tilt to still report a direction -- if this "
+             "ever stops being true, the precedence below matters less");
+    QVERIFY2(QVector3D::dotProduct(dmxSays, want) < 0.9f,
+             "the test is not discriminating: zero DMX happens to point at the "
+             "target, so it cannot show which one won");
+
+    /* What the view actually draws. */
+    QVector3D drawn;
+    {
+        const QHash<quint32, QVector3D>::const_iterator it2 =
+            v.m_aimTarget.constFind(head->id());
+        QVERIFY(it2 != v.m_aimTarget.constEnd());
+        drawn = (it2.value() - props->fixtureRigPosition(head->id())).normalized();
+    }
+    QVERIFY2(QVector3D::dotProduct(drawn, want) > 0.99f,
+             "with a scene selected, the head must point at that scene's target "
+             "even while live output is on and nothing is driving it");
+
     /* A fixture that CANNOT aim is left out -- a wash has nothing to point, and
        the studio makes the same check before drawing it a line. */
     Fixture *par = new Fixture(doc);

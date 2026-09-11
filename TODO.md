@@ -1073,6 +1073,34 @@ head might not currently have.
 head that helper built was sitting at the origin. The beam tests still passed
 because they only needed a fixture somewhere with height; this one did not.
 
+**Precedence, corrected the same day.** Branson: "in follow spot when I select
+that scene, should I see the lights pointing at the target or not?" Yes -- and
+he would not have, because the rule shipped above was wrong.
+
+The fallback only applied when live DMX had nothing to say, and live output is
+ON by default in the overview. But `fixtureAimDirection()` reports a perfectly
+good direction for an UNDRIVEN fixture: pan 0, tilt 0 is a real direction, and
+all-zero DMX is indistinguishable from "aimed downstage" by the channel values
+alone. So selecting a followspot scene left every head pointing downstage while
+the studio drew its dashed lines to the target -- the exact disagreement the
+change was meant to remove.
+
+**The selected scene now wins outright.** If it carries an Aim palette naming a
+target, that is where the head is drawn pointing, live output or not. When the
+scene is actually running the DMX aims there anyway and the two agree; when it
+is merely selected, this is the only reading that means anything. It also
+matches the studio, which draws its lines from the selection regardless of
+output.
+
+Verified on the real file: `Followspot` carries Aim palette 15 ("Target 2",
+StageTarget 1) over group 13 ("USTs"), which are the Two Arm LED Beam movers --
+so that scene does have everything it needs to show.
+
+**Worth knowing about the plumbing:** the active scene reaches both views only
+from the PROGRAMMING TAB (`programmingmanager.cpp`). Selecting a scene anywhere
+else leaves both the studio and the rig view with no active scene and therefore
+no aim to draw. That is pre-existing and shared with the studio, not new here.
+
 **Still open:** light positions on the stage relative to the riser. Wants
 reproducing against the real file rather than guessing from a screenshot.
 
