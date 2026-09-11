@@ -86,7 +86,7 @@ bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer);
  *  so a frame shows a single instant instead of tearing across the stage as
  *  the engine keeps writing underneath it. */
 bool fixtureLiveState(Fixture *fx, const QByteArray &values, QColor &colour,
-                      uchar &dimmer);
+                      uchar &dimmer, bool valuesAreComplete = true);
 
 /** The same, for ONE head of a multi-head fixture.
  *

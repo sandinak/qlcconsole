@@ -2784,7 +2784,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
        thousand lookups a frame for no gain. */
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     const FixtureVisualTraits traits = classifyFixture(fx);
-    const QByteArray vals = valuesForDrawing(fx);
+    bool valsComplete = true;
+    const QByteArray vals = valuesForDrawing(fx, &valsComplete);
     const bool showingOutput = (vals.isEmpty() == false);
     /* Once per fixture, not once per head -- see fixtureMasterLevel(). */
     const int master = showingOutput ? fixtureMasterLevel(fx, vals) : -1;
@@ -2807,7 +2808,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     {
         QColor live = col;
         uchar dim = 0;
-        if (fixtureLiveState(fx, vals, live, dim))
+        if (fixtureLiveState(fx, vals, live, dim, valsComplete))
             col = shadeLive(live, dim, unlit, visibility);
     }
     else
@@ -2923,7 +2924,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             {
                 QColor live = unlit;
                 uchar dim = 0;
-                if (fixtureLiveState(fx, vals, live, dim))
+                if (fixtureLiveState(fx, vals, live, dim, valsComplete))
                 {
                     beamLevel = dim / 255.0;
                     beamColour = live;
@@ -3836,8 +3837,10 @@ void StructureStudioView::drawOrientationLabels(QPainter &p) const
  * the values alone -- so an undriven rig falls through to the selected look
  * rather than reading as a blackout.
  */
-QByteArray StructureStudioView::valuesForDrawing(Fixture *fx) const
+QByteArray StructureStudioView::valuesForDrawing(Fixture *fx, bool *complete) const
 {
+    if (complete != nullptr)
+        *complete = true;
     if (fx == nullptr)
         return QByteArray();
 
@@ -3846,8 +3849,14 @@ QByteArray StructureStudioView::valuesForDrawing(Fixture *fx) const
         const QByteArray live = liveValuesFor(fx);
         for (int i = 0; i < live.size(); ++i)
             if (live.at(i) != 0)
-                return live;
+                return live;          // the whole universe: it means what it says
     }
+    /* A look resolved from palettes only fills in the channels it SETS. The
+       rest are zero because nothing wrote them, not because the look asked for
+       zero -- which matters for any channel whose zero is meaningful, a shutter
+       above all. */
+    if (complete != nullptr)
+        *complete = false;
     return m_sceneValues.value(fx->id());
 }
 

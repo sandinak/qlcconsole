@@ -4459,6 +4459,33 @@ void Monitor_Test::aClosedShutterEmitsNothingAStrobeStillDoes()
                                 "is emitting, just intermittently")
                         .arg(levelOf(strobing))));
 
+    /* And a shutter the caller never set is UNKNOWN, not closed.
+     *
+       A look resolved from palettes fills in the channels it sets and leaves
+       the rest at zero; zero on a shutter channel is usually its "closed"
+       capability. Believing that turned off every fixture whose look does not
+       happen to mention a shutter -- a spot went from a beam to a bare aim
+       line. Live DMX is the whole universe and does mean what it says; a
+       resolved look is partial and does not. */
+    QByteArray partial(512, char(0));
+    partial[int(shut->address())] = char(255);        // dimmer
+    partial[int(shut->address()) + 1] = char(255);    // red
+    // shutter channel deliberately left at zero, i.e. never written
+    QColor pc2(90, 160, 235);
+    uchar pd = 0;
+    QVERIFY(fixtureLiveState(shut, partial, pc2, pd, false));
+    QVERIFY2(pd == 255,
+             qPrintable(QString("an unwritten shutter channel was read as CLOSED "
+                                "(level %1) -- a look that does not mention a "
+                                "shutter must not switch the fixture off")
+                        .arg(pd)));
+
+    // The same bytes, declared complete, genuinely are a closed shutter.
+    QColor pc3(90, 160, 235);
+    uchar pd3 = 0;
+    QVERIFY(fixtureLiveState(shut, partial, pc3, pd3, true));
+    QCOMPARE(int(pd3), 0);
+
     delete doc;
 }
 

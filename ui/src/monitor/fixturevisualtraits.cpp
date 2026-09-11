@@ -263,7 +263,8 @@ static QColor blendColour(const QColor &a, const QColor &b, double mix)
  * while this had five of the twelve.) */
 static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
                                 const QList<quint32> &chans,
-                                QColor &colour, uchar &dimmer)
+                                QColor &colour, uchar &dimmer,
+                                bool valuesAreComplete = true)
 {
     int r = -1, g = -1, b = -1;          // additive
     int cy = -1, ma = -1, ye = -1;       // subtractive
@@ -295,9 +296,21 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
            look in the rig. Only an explicit ShutterClose closes it. */
         if (ch->group() == QLCChannel::Shutter)
         {
-            if (QLCCapability *cap = ch->searchCapability(uchar(val)))
-                if (cap->preset() == QLCCapability::ShutterClose)
-                    shutterClosed = true;
+            /* Only when the values are the WHOLE picture.
+             *
+               A look resolved from palettes fills in the channels it sets and
+               leaves the rest at zero -- and zero on a shutter channel is
+               usually the "closed" capability. Reading that as a shut shutter
+               turned off every fixture whose look does not happen to mention
+               one: a spot went from a beam to a bare aim line. An unset channel
+               is UNKNOWN, not closed. Live DMX is a complete picture and does
+               mean what it says. */
+            if (valuesAreComplete)
+            {
+                if (QLCCapability *cap = ch->searchCapability(uchar(val)))
+                    if (cap->preset() == QLCCapability::ShutterClose)
+                        shutterClosed = true;
+            }
             continue;
         }
 
@@ -403,7 +416,8 @@ bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer)
                             colour, dimmer);
 }
 
-bool fixtureLiveState(Fixture *fx, const QByteArray &v, QColor &colour, uchar &dimmer)
+bool fixtureLiveState(Fixture *fx, const QByteArray &v, QColor &colour, uchar &dimmer,
+                      bool valuesAreComplete)
 {
     if (fx == nullptr)
         return false;
@@ -419,7 +433,7 @@ bool fixtureLiveState(Fixture *fx, const QByteArray &v, QColor &colour, uchar &d
     for (quint32 c = 0; c < fx->channels(); ++c)
         all << c;
 
-    return channelSetLiveState(mode, v, all, colour, dimmer);
+    return channelSetLiveState(mode, v, all, colour, dimmer, valuesAreComplete);
 }
 
 bool fixtureHeadLiveState(Fixture *fx, int head, QColor &colour, uchar &dimmer)

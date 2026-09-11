@@ -285,7 +285,7 @@ private:
     QByteArray liveValuesFor(class Fixture *fx) const;
     /** What a fixture is DRAWN from: live output when anything is driving
      *  it, otherwise the selected look. */
-    QByteArray valuesForDrawing(class Fixture *fx) const;
+    QByteArray valuesForDrawing(class Fixture *fx, bool *complete = nullptr) const;
     mutable QHash<quint32, QByteArray> m_liveSnapshot;
 
     /** Unit vector from the scene toward the camera, taken from viewDepth()'s

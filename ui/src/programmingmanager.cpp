@@ -2873,7 +2873,12 @@ bool ProgrammingManager::takeFirstRunGuideFlag()
  * not permanently carrying text nobody is reading any more. */
 void ProgrammingManager::showProgrammingGuide()
 {
-    QMessageBox box(this);
+    showGuide(this);
+}
+
+void ProgrammingManager::showGuide(QWidget *parent)
+{
+    QMessageBox box(parent);
     box.setWindowTitle(tr("Building a look"));
     box.setIcon(QMessageBox::NoIcon);
     box.setTextFormat(Qt::RichText);
@@ -2888,8 +2893,11 @@ void ProgrammingManager::showProgrammingGuide()
         "<li>No palettes yet? Right-click the <b>Palettes</b> tab on the right "
         "to create your first one.</li>"
         "</ul>"
-        "<p>You can reopen this from <i>How this works</i> whenever the canvas "
-        "is empty.</p>"));
+        "<p><b>Looks and Targets.</b> Every look in a scene applies to every "
+        "target. Drop <b>palettes</b> into Looks; drop <b>fixture groups</b> "
+        "into Targets to follow their membership as it changes, or individual "
+        "<b>fixtures</b> to pin them.</p>"
+        "<p>Reopen this any time from <i>How this works</i>.</p>"));
     box.exec();
 }
 

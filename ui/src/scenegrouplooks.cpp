@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <functional>
 
+#include "programmingmanager.h"
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"   // palette MIME type
 #include "fixturegroupsource.h"    // fixture-group / fixture MIME types
@@ -135,14 +136,22 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 6, 0, 0);
 
-    QLabel *header = new QLabel(
-        tr("<b>Looks</b> (palettes) are applied to this look's <b>Targets</b>. "
-           "Every look applies to every target.<br>"
-           "Drag here to add: <b>palettes</b> &rarr; looks; "
-           "<b>fixture groups</b> &rarr; Targets (dynamic — follow membership); "
-           "individual <b>fixtures</b> &rarr; Targets (fixed)."), this);
-    header->setWordWrap(true);
-    root->addWidget(header);
+    /* One button, not three lines of prose.
+     *
+       This paragraph explained Looks and Targets permanently, at the top of the
+       panel, every time a scene was opened -- read once on the first day and
+       looked past forever after. Its content now lives in the Programming
+       guide, which this reaches; the explanation is still one click away
+       without standing in front of the work. */
+    QHBoxLayout *helpRow = new QHBoxLayout();
+    helpRow->addStretch();
+    QPushButton *guideBtn = new QPushButton(tr("How this works"), this);
+    guideBtn->setFlat(true);
+    guideBtn->setCursor(Qt::PointingHandCursor);
+    connect(guideBtn, &QPushButton::clicked, this,
+            [this]() { ProgrammingManager::showGuide(this); });
+    helpRow->addWidget(guideBtn);
+    root->addLayout(helpRow);
 
     QHBoxLayout *cols = new QHBoxLayout();
     root->addLayout(cols);

@@ -1034,6 +1034,44 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 42: an unset channel is unknown, not zero -- and the OTHER paragraph
+
+**1. The 3Z became a line instead of a beam -- a regression from follow-on 41.**
+Branson: "the 3z is now a line not a light beam."
+
+The shutter rule was firing on a channel nothing had written. A look resolved
+from palettes fills in the channels it SETS and leaves the rest at zero, and
+zero on a shutter channel is usually its "closed" capability -- so every
+fixture whose look does not happen to mention a shutter switched itself off,
+and all that was left was the aim trace. An unset channel is UNKNOWN, not
+closed.
+
+Live DMX is the whole universe and does mean what it says; a resolved look is
+partial and does not. `valuesForDrawing()` now reports which it handed back and
+`fixtureLiveState()` only trusts a shutter when the values are complete.
+Verified on the real file: the Focus Spot Three Z goes from level 0 back to
+`#0000ff` at 255.
+
+This is the second time a distinction between "the whole picture" and "part of
+it" has mattered here -- the first was follow-on 38's all-zero test for whether
+anything is driving a fixture. Values arriving from two different sources want
+saying which they are.
+
+**2. The OTHER instructional paragraph.** Branson: "all this came back .. it
+should not have." It had not come back -- follow-on 37 replaced the empty-state
+placeholder in `programmingmanager.cpp`, and this was a second, separate label
+in `scenegrouplooks.cpp` that had never been touched: three permanent lines
+explaining Looks and Targets at the top of the panel, every time a scene is
+opened.
+
+Its content moved into the Programming guide, which is now reachable from
+`ProgrammingManager::showGuide()` anywhere that needs a way back to it, and the
+paragraph became one right-aligned "How this works" button. The empty state
+already had one; while EDITING there was no way to reach the guide at all,
+which is why the text could not simply be deleted.
+
+`monitor_test` 76/76. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 41: a closed shutter emits nothing -- and the wheel that stayed lit
 
 Branson: "removed the color and one spot stuck with it .. it has a shutter and

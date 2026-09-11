@@ -151,6 +151,11 @@ private slots:
     /** The full 'how a look is built' explanation. Shown once on a first
      *  run, and on demand after that. */
     void showProgrammingGuide();
+public:
+    /** The full 'how a look is built' explanation, from anywhere that needs
+     *  a way back to it. */
+    static void showGuide(QWidget *parent);
+private:
     /** True exactly once, ever -- and records that it has answered. */
     static bool takeFirstRunGuideFlag();
 
