@@ -49,7 +49,7 @@ void ZRaster::begin(const QSize &size, int supersample, const QColor &background
 }
 
 void ZRaster::poly(const QPointF *pts, const double *zs, int n,
-                   const QColor &fill, bool depthWrite)
+                   const QColor &fill, bool depthWrite, const double *alphaScale)
 {
     if (m_colour.isNull() || pts == nullptr || zs == nullptr || n < 3)
         return;
@@ -87,6 +87,29 @@ void ZRaster::poly(const QPointF *pts, const double *zs, int n,
             C = zs[0] - A * x0 - B * y0;
         }
         // Degenerate (a polygon edge-on to the eye): flat depth is right.
+    }
+
+    /* Per-vertex alpha, fitted the same way and for the same reason: it is
+       affine across a planar polygon, so one plane fit is exact. */
+    double aA = 0.0, aB = 0.0, aC = 1.0;
+    if (alphaScale != nullptr)
+    {
+        const double x0 = pts[0].x() * S, y0 = pts[0].y() * S;
+        aC = alphaScale[0];
+        for (int k = 2; k < n; ++k)
+        {
+            const double x1 = pts[1].x() * S - x0, y1 = pts[1].y() * S - y0;
+            const double x2 = pts[k].x() * S - x0, y2 = pts[k].y() * S - y0;
+            const double det = x1 * y2 - x2 * y1;
+            if (qAbs(det) <= 1e-9)
+                continue;
+            const double d1 = alphaScale[1] - alphaScale[0];
+            const double d2 = alphaScale[k] - alphaScale[0];
+            aA = (d1 * y2 - d2 * y1) / det;
+            aB = (x1 * d2 - x2 * d1) / det;
+            aC = alphaScale[0] - aA * x0 - aB * y0;
+            break;
+        }
     }
 
     double minY = pts[0].y() * S, maxY = minY;
@@ -143,7 +166,30 @@ void ZRaster::poly(const QPointF *pts, const double *zs, int n,
             const float zStart = float(A * (xa + 0.5) + B * sy + C);
             const float dz = float(A);
 
-            if (alpha >= 255 && depthWrite)
+            if (alphaScale != nullptr)
+            {
+                /* Faded: alpha varies per pixel, so the flat-span shortcuts
+                   below do not apply. */
+                float z = zStart;
+                double av = aA * (xa + 0.5) + aB * sy + aC;
+                for (int x = xa; x <= xb; ++x, z += dz, av += aA)
+                {
+                    if (z <= zline[x])
+                        continue;
+                    const int a2 = qBound(0, int(alpha * av), 255);
+                    if (a2 <= 0)
+                        continue;
+                    const QRgb d = line[x];
+                    const int i2 = 255 - a2;
+                    line[x] = qRgba(fill.red()   * a2 / 255 + qRed(d)   * i2 / 255,
+                                    fill.green() * a2 / 255 + qGreen(d) * i2 / 255,
+                                    fill.blue()  * a2 / 255 + qBlue(d)  * i2 / 255,
+                                    a2 + qAlpha(d) * i2 / 255);
+                    if (depthWrite)
+                        zline[x] = z;
+                }
+            }
+            else if (alpha >= 255 && depthWrite)
             {
                 float z = zStart;
                 for (int x = xa; x <= xb; ++x, z += dz)

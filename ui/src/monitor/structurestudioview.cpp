@@ -62,6 +62,30 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
     setAcceptDrops(true);   // fixtures dragged in from the source tree
+
+    /* Re-resolve the selected look when it changes underneath us.
+     *
+       What a scene SENDS is cached, because resolving palettes per fixture per
+       frame is far too expensive -- but a cache of something the user is
+       actively editing goes stale the moment they edit it. Changing a look's
+       colour from white to blue left the rig view showing white, for exactly
+       the same reason dragging a target left the beams pointing at where it
+       used to be.
+     *
+       COALESCED, and for the same reason the studio coalesces its aim lines: a
+       single joystick tick emits one functionChanged per fixture per channel,
+       and a full re-resolve for each would be dozens of rebuilds for one
+       visible change. */
+    connect(m_doc, &Doc::functionChanged, this, [this](quint32 fid) {
+        if (fid != m_activeSceneId || m_lookRefreshPending)
+            return;
+        m_lookRefreshPending = true;
+        QTimer::singleShot(0, this, [this]() {
+            m_lookRefreshPending = false;
+            rebuildAimTargets();
+            update();
+        });
+    });
     // Top plane reads best for a tower/platform footprint; a boom/truss reads
     // best in a vertical elevation. Default Front for the rest.
     m_plane = (kind == TowerKind) ? Top : Front;
@@ -953,7 +977,8 @@ void StructureStudioView::drawPipe(QPainter &p, const Pipe *pipe) const
  * either way. */
 void StructureStudioView::emitPoly(const QPolygonF &poly, double depth, const QColor &fill,
                                    const QColor &pen, double penW, QPainter &p,
-                                   const QVector<double> &vertexDepths) const
+                                   const QVector<double> &vertexDepths,
+                                   const QVector<double> &vertexAlphas) const
 {
     if (m_collecting)
     {
@@ -961,6 +986,8 @@ void StructureStudioView::emitPoly(const QPolygonF &poly, double depth, const QC
         o.fill = fill; o.pen = pen; o.penWidth = penW;
         if (vertexDepths.size() == poly.size())
             o.zs = vertexDepths;
+        if (vertexAlphas.size() == poly.size())
+            o.alphas = vertexAlphas;
         m_ops << o;
         return;
     }
@@ -1051,7 +1078,8 @@ void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite) const
     {
     case DrawOp::Poly:
         if (o.fill.isValid())
-            m_z->poly(o.poly.constData(), zs.constData(), n, o.fill, depthWrite);
+            m_z->poly(o.poly.constData(), zs.constData(), n, o.fill, depthWrite,
+                      (o.alphas.size() == n) ? o.alphas.constData() : nullptr);
         if (o.pen.isValid() && n >= 2)
         {
             /* The outline, edge by edge, each carrying its own two depths. A
@@ -2027,6 +2055,41 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
  * A cone's outline is exactly the hull of its apex plus the ring at the far
  * end, whichever way the camera is looking at it, so there is no need to work
  * out which two ring points are the silhouette edges. */
+/* A point plus whatever travels with it -- alpha, here. The hull reorders its
+ * input, so anything per-vertex has to be reordered with it. */
+struct HullPt
+{
+    QPointF p;
+    double  a;
+};
+
+static QVector<HullPt> convexHullWith(QVector<HullPt> pts)
+{
+    if (pts.size() < 3)
+        return pts;
+    std::sort(pts.begin(), pts.end(), [](const HullPt &a, const HullPt &b) {
+        return (a.p.x() != b.p.x()) ? (a.p.x() < b.p.x()) : (a.p.y() < b.p.y());
+    });
+    auto cross = [](const HullPt &o, const HullPt &a, const HullPt &b) {
+        return (a.p.x() - o.p.x()) * (b.p.y() - o.p.y())
+             - (a.p.y() - o.p.y()) * (b.p.x() - o.p.x());
+    };
+    QVector<HullPt> h(2 * pts.size());
+    int k = 0;
+    for (int i = 0; i < pts.size(); ++i)
+    {
+        while (k >= 2 && cross(h[k - 2], h[k - 1], pts[i]) <= 0) --k;
+        h[k++] = pts[i];
+    }
+    for (int i = pts.size() - 2, t = k + 1; i >= 0; --i)
+    {
+        while (k >= t && cross(h[k - 2], h[k - 1], pts[i]) <= 0) --k;
+        h[k++] = pts[i];
+    }
+    h.resize(qMax(0, k - 1));
+    return h;
+}
+
 static QPolygonF convexHull(QVector<QPointF> pts)
 {
     if (pts.size() < 3)
@@ -2343,11 +2406,6 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     const double poolA = 130.0 * level * room;
 
     static const int RING = 20;
-    /* Enough segments that the falloff reads as a gradient rather than as
-       banding. At five, each step in alpha was a visible ring across the beam
-       -- "the lights are not single cone". These are cheap: one convex hull
-       each, and a beam is one fixture. */
-    static const int SEG = 16;
 
     auto ringAt = [&](double t, QVector<QPointF> &out) {
         const QVector3D c = apex + d * float(len * t);
@@ -2360,44 +2418,47 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
         }
     };
 
-    QVector<QPointF> a0, a1;
-    for (int seg = 0; seg < SEG; ++seg)
+    /* ONE polygon, faded along its length by per-vertex alpha.
+     *
+       This was sixteen constant-alpha slices stacked end to end, and every seam
+       between them read as a ring drawn across the beam -- "the light cone
+       looks kinda weird with the multiple circles on a cone". Alpha interpolates
+       across a polygon exactly as depth does, so the whole cone is one
+       primitive with a smooth gradient and no seams to see. */
+    QVector<QPointF> far;
+    ringAt(1.0, far);
+
+    QVector<HullPt> pts;
+    pts.reserve(far.size() + 1);
+    pts << HullPt{ w2s(apex), 1.0 };
+
+    /* Light spreads, so even a beam that lands thins out along the way; one
+       going nowhere has to reach zero by the end or it terminates in mid-air. */
+    const double farA = lands ? 0.65 : 0.0;
+    foreach (const QPointF &q, far)
+        pts << HullPt{ q, farA };
+
+    const QVector<HullPt> hull = convexHullWith(pts);
+    if (hull.size() >= 3)
     {
-        const double t0 = double(seg) / SEG, t1 = double(seg + 1) / SEG;
-        ringAt(t0, a0);
-        ringAt(t1, a1);
-
-        QVector<QPointF> pts;
-        pts.reserve(a0.size() + a1.size() + 1);
-        if (seg == 0)
-            pts << w2s(apex);
-        pts << a0 << a1;
-
-        /* Falloff along the throw. Light spreads, so even a beam that lands
-           thins out a little; one going nowhere has to reach zero by the end
-           or it terminates in mid-air.
-         *
-           Evaluated at the segment's MIDPOINT rather than its far edge, so
-           consecutive segments step by half as much and the seam between them
-           lands where the gradient already is. */
-        const double tm = (t0 + t1) * 0.5;
-        const double f = lands ? (1.0 - 0.35 * tm)
-                               : qMax(0.0, 1.0 - tm * tm);
+        QPolygonF poly;
+        QVector<double> alphas, zs;
+        const double midZ = viewDepth(apex + d * float(len * 0.5));
+        foreach (const HullPt &hp, hull)
+        {
+            poly << hp.p;
+            alphas << hp.a;
+            zs << midZ;          // a beam is a volume; sort it at its middle
+        }
         QColor c = colour;
-        c.setAlpha(qBound(0, int(baseA * f), 190));
-        /* Segments abut rather than overlap, so this is not a compositing
-           correction -- it is only that a 16-step ramp wants finer steps than a
-           5-step one to read as smooth. */
-        if (c.alpha() <= 1)
-            continue;
-
-        const QVector3D mid3 = apex + d * float(len * (t0 + t1) * 0.5);
-        emitPoly(convexHull(pts), viewDepth(mid3), c, QColor(), 0.0, p);
+        c.setAlpha(qBound(0, int(baseA), 190));
+        emitPoly(poly, midZ, c, QColor(), 0.0, p, zs, alphas);
     }
 
     /* The pool, only where the beam actually arrives on something. */
     if (lands)
     {
+        QVector<QPointF> a1;
         ringAt(1.0, a1);
         QColor poolCol = colour;
         poolCol.setAlpha(qBound(0, int(poolA), 220));

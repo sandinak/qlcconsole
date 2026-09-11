@@ -54,6 +54,17 @@
  * and a compare. Measured against the old queue at 1806 primitives: 0.248 ms
  * against 0.513 ms, and correct where the old one dropped half the strip.
  *
+ * PER-VERTEX ALPHA
+ *
+ * poly() will interpolate an alpha multiplier across a polygon the same way it
+ * interpolates depth, and for the same reason it is exact: it is an affine
+ * function of screen position. That turns a beam into ONE polygon that fades
+ * along its length, instead of a stack of constant-alpha slices whose seams
+ * read as rings drawn across the light.
+ *
+ * It is also the shape the volumetrics below want: integrating along a view ray
+ * is per-pixel work, and this is the first piece of it.
+ *
  * WHAT IT DELIBERATELY LEAVES ROOM FOR
  *
  * Haze, gobos and shadows all need exactly this and cannot be done without it:
@@ -91,7 +102,8 @@ public:
      *                   for opaque geometry.
      */
     void poly(const QPointF *pts, const double *zs, int n,
-              const QColor &fill, bool depthWrite = true);
+              const QColor &fill, bool depthWrite = true,
+              const double *alphaScale = nullptr);
 
     /** A line of finite width, as a quad with depth down its length. */
     void thickLine(const QPointF &a, const QPointF &b, double za, double zb,

@@ -303,7 +303,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Empty page
     QWidget *empty = new QWidget(this);
     QVBoxLayout *el = new QVBoxLayout(empty);
-    el->addWidget(new QLabel(tr("Select a look above to edit it."), empty));
+    /* No label here. The title bar immediately above this already reads
+       "Select a look to edit it", and the two said the same thing one line
+       apart -- which is how an empty panel ends up carrying more text than a
+       full one. */
+    el->addStretch();
     m_pageEmpty = m_stack->addWidget(empty);
 
     // Color page: RGB picker on the LEFT, vertical numbered sliders (R G B,

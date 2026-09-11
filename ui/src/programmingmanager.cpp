@@ -422,14 +422,39 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_canvasTitle->setStyleSheet("font-weight: bold;");
     m_canvasTitle->setWordWrap(true);
     m_canvasLayout->addWidget(m_canvasTitle);
-    m_canvasPlaceholder = new QLabel(
-        tr("Select or create a scene on the left, then drag palettes, "
-           "fixture groups and fixtures from the right onto it. No "
-           "palettes yet? Right-click the Palettes tab on the right to "
-           "create your first one."), this);
-    m_canvasPlaceholder->setWordWrap(true);
-    m_canvasPlaceholder->setAlignment(Qt::AlignCenter);
+    /* The empty state says ONE line. The full explanation lives behind the
+       button beside it, and shows itself once on a first run.
+     *
+       It used to be the whole paragraph, permanently, stretched across the
+       canvas -- four lines of text that a user reads once and then looks past
+       forever, in the middle of the panel they actually work in. Instructions
+       that have been read are just furniture. */
+    m_canvasPlaceholder = new QWidget(this);
+    QVBoxLayout *phl = new QVBoxLayout(m_canvasPlaceholder);
+    phl->addStretch();
+    m_canvasHint = new QLabel(tr("Select or create a scene on the left to begin."),
+                              m_canvasPlaceholder);
+    m_canvasHint->setWordWrap(true);
+    m_canvasHint->setAlignment(Qt::AlignCenter);
+    phl->addWidget(m_canvasHint);
+    QPushButton *guideBtn = new QPushButton(tr("How this works"), m_canvasPlaceholder);
+    guideBtn->setFlat(true);
+    guideBtn->setCursor(Qt::PointingHandCursor);
+    connect(guideBtn, &QPushButton::clicked,
+            this, [this]() { showProgrammingGuide(); });
+    QHBoxLayout *bl = new QHBoxLayout;
+    bl->addStretch();
+    bl->addWidget(guideBtn);
+    bl->addStretch();
+    phl->addLayout(bl);
+    phl->addStretch();
     m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
+
+    /* Once, on a first run -- queued, so it lands after the window is up rather
+       than during construction. */
+    if (takeFirstRunGuideFlag())
+        QMetaObject::invokeMethod(this, [this]() { showProgrammingGuide(); },
+                                  Qt::QueuedConnection);
     // Inline look editor pinned to the bottom of the center panel. It is NOT
     // scrolled: it always renders fully at its preferred height (Fixed
     // vertical), and the canvas above (stretch) shrinks to make room.
@@ -724,11 +749,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
         m_doc->setFocusedScene(Function::invalidId());
         if (ProgrammerController *pc = m_doc->programmer())
             pc->seedStageAimFromScene(Function::invalidId());
-        m_canvasPlaceholder->setText(
-            tr("Select or create a scene on the left, then drag palettes, "
-               "fixture groups and fixtures from the right onto it. No "
-               "palettes yet? Right-click the Palettes tab on the right to "
-               "create your first one."));
+        m_canvasHint->setText(tr("Select or create a scene on the left to begin."));
         m_canvasPlaceholder->show();
         updateTitle();
         return;
@@ -853,7 +874,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
 
     if (ed == NULL)
     {
-        m_canvasPlaceholder->setText(
+        m_canvasHint->setText(
             tr("\"%1\" (%2) — open it in the Functions tab to edit.")
             .arg(f->name()).arg(Function::typeToString(f->type())));
         m_canvasPlaceholder->show();
@@ -2830,6 +2851,46 @@ void ProgrammingManager::slotTapBeat()
     int bpm = qRound(60000.0 / (double)elapsed);
     bpm = qBound(20, bpm, 400);
     m_bpmSpin->setValue(bpm);  // triggers slotBpmChanged via valueChanged
+}
+
+/* True exactly once, ever: the first time anybody asks. Consuming the flag as
+ * it answers is the whole point -- a first-run hint that forgets to record
+ * itself is a hint that nags on every launch, and that failure is invisible to
+ * whoever wrote it because their own flag is already set. */
+bool ProgrammingManager::takeFirstRunGuideFlag()
+{
+    static const QString key = QStringLiteral("programming/guideSeen");
+    QSettings s;
+    if (s.value(key, false).toBool())
+        return false;
+    s.setValue(key, true);
+    return true;
+}
+
+/* The full explanation, on demand.
+ *
+ * Shown once on a first run and thereafter only when asked for, so the panel is
+ * not permanently carrying text nobody is reading any more. */
+void ProgrammingManager::showProgrammingGuide()
+{
+    QMessageBox box(this);
+    box.setWindowTitle(tr("Building a look"));
+    box.setIcon(QMessageBox::NoIcon);
+    box.setTextFormat(Qt::RichText);
+    box.setText(tr(
+        "<b>Scenes hold looks. Looks are made of palettes.</b>"
+        "<ul>"
+        "<li>Pick or create a <b>scene</b> on the left.</li>"
+        "<li>Drag <b>palettes</b> from the right onto it to build the look — "
+        "a colour, a dimmer level, a position, an effect.</li>"
+        "<li>Drag <b>fixture groups</b> on as targets to follow their "
+        "membership, or individual <b>fixtures</b> to fix them in place.</li>"
+        "<li>No palettes yet? Right-click the <b>Palettes</b> tab on the right "
+        "to create your first one.</li>"
+        "</ul>"
+        "<p>You can reopen this from <i>How this works</i> whenever the canvas "
+        "is empty.</p>"));
+    box.exec();
 }
 
 void ProgrammingManager::slotButtonAction(const QString &action)

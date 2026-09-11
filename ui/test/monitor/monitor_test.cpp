@@ -2763,6 +2763,73 @@ void Monitor_Test::aZoomHeadsConeFollowsItsZoomChannel()
     delete doc;
 }
 
+void Monitor_Test::editingALookUpdatesTheRigView()
+{
+    /* "Didn't change colour when colour was changed in program from white to
+       blue." What a scene SENDS is cached, because resolving palettes per
+       fixture per frame is far too expensive -- but a cache of something the
+       user is actively editing goes stale the moment they edit it. Exactly the
+       same mistake as caching a target's position while someone drags it. */
+    Doc *doc = new Doc(this);
+
+    Fixture *head = makeMover(doc, 14.0, 0, "Edited", QVector3D(3.0f, 3.0f, 5.0f));
+    QVERIFY(head != nullptr);
+
+    QLCPalette *dim = new QLCPalette(QLCPalette::Dimmer, doc);
+    dim->setName("Full"); dim->setValue(255);
+    QVERIFY(doc->addPalette(dim));
+    QLCPalette *col = new QLCPalette(QLCPalette::Color, doc);
+    col->setName("White"); col->setValue(QColor(255, 255, 255));
+    QVERIFY(doc->addPalette(col));
+
+    Scene *scene = new Scene(doc);
+    scene->setName("Edited Look");
+    scene->addFixture(head->id());
+    scene->addPalette(dim->id());
+    scene->addPalette(col->id());
+    QVERIFY(doc->addFunction(scene));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 480);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setActiveScene(scene->id());
+
+    auto resolved = [&]() {
+        QColor c(0, 0, 0);
+        uchar dm = 0;
+        fixtureLiveState(head, v.m_sceneValues.value(head->id()), c, dm);
+        return c;
+    };
+
+    QColor before = resolved();
+    QVERIFY2(before.red() > 200 && before.green() > 200 && before.blue() > 200,
+             qPrintable(QString("expected the look to start white, got %1")
+                        .arg(before.name())));
+
+    /* Edit it, exactly as the Programming tab does: change the palette and let
+       the scene announce it. */
+    col->setValue(QColor(0, 0, 255));
+    QMetaObject::invokeMethod(doc, "functionChanged", Q_ARG(quint32, scene->id()));
+    QTest::qWait(30);                  // the refresh is coalesced to the event loop
+
+    const QColor after = resolved();
+    QVERIFY2(after.blue() > 200 && after.red() < 80,
+             qPrintable(QString("the rig view is still showing the old colour "
+                                "after the look was edited: %1").arg(after.name())));
+
+    // And back again -- blue to white, which is the other half of the report.
+    col->setValue(QColor(255, 255, 255));
+    QMetaObject::invokeMethod(doc, "functionChanged", Q_ARG(quint32, scene->id()));
+    QTest::qWait(30);
+    const QColor back = resolved();
+    QVERIFY2(back.red() > 200 && back.green() > 200,
+             qPrintable(QString("editing back to white did not take: %1")
+                        .arg(back.name())));
+
+    delete doc;
+}
+
 void Monitor_Test::aFollowSpotAimsAtTheSubjectNotTheFloor()
 {
     /* "The lights aren't pointing at the HEIGHT of the target subject, which is

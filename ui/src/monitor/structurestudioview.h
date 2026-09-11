@@ -209,6 +209,10 @@ private:
          *  still right for a dot or a label. A polygon that spans real depth
          *  must fill this in, or it cannot be resolved per pixel. */
         QVector<double> zs;
+        /** Per-VERTEX alpha multiplier, parallel to poly. Empty = flat. This is
+         *  what lets a beam be one polygon that fades along its length rather
+         *  than a stack of slices whose seams read as rings across the light. */
+        QVector<double> alphas;
         Kind      kind = Poly;
         QPolygonF poly;          ///< Poly/Line points, or Dot centre in poly[0]
         QColor    fill;          ///< invalid = unfilled
@@ -226,7 +230,8 @@ private:
     /** Paint, or queue when collecting. */
     void emitPoly(const QPolygonF &poly, double depth, const QColor &fill,
                   const QColor &pen, double penW, QPainter &p,
-                  const QVector<double> &vertexDepths = QVector<double>()) const;
+                  const QVector<double> &vertexDepths = QVector<double>(),
+                  const QVector<double> &vertexAlphas = QVector<double>()) const;
     void emitLine(const QPointF &a, const QPointF &b, double depth,
                   const QColor &pen, double penW, QPainter &p) const;
     /** Many dots at one depth in one colour: a strip's pixels are one
@@ -406,6 +411,7 @@ private:
     Plane    m_plane = Front;
     bool     m_beams = true;   ///< draw beam cones for lit movers
     quint32  m_activeSceneId = 0xFFFFFFFF;
+    bool     m_lookRefreshPending = false;   ///< coalesces re-resolves
     /** Where a fixture is aimed, and in whose colour to say so.
      *
      *  The target's ID rather than its position, deliberately: a target gets

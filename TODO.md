@@ -1034,6 +1034,60 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 37: first-run guidance, live look edits, and one smooth cone
+
+**1. The Programming tab stopped explaining itself forever.** Branson: "can we
+make these instructions first time use popup or something so we're not wasting
+real-estate." The canvas carried a four-line paragraph permanently, plus the
+look editor said "Select a look to edit it" in its title AND "Select a look
+above to edit it" one line below -- an empty panel carrying more text than a
+full one. Now: one line, a "How this works" button beside it, and the full
+explanation shown once on a first run. The duplicate line is gone.
+
+`takeFirstRunGuideFlag()` is deliberately its own function with its own test.
+A first-run hint that forgets to record itself nags on every launch, and the
+person who wrote it never sees that, because their own flag is already set.
+Revert-checked against the classic version of that mistake -- a `static bool`
+instead of a setting -- which passes a "called twice" test and still nags
+forever.
+
+**2. Editing a look updates the rig view.** "Didn't change colour when colour
+was changed in program from white to blue." What a scene sends is cached,
+because resolving palettes per fixture per frame is far too expensive -- but a
+cache of something the user is actively editing goes stale the moment they edit
+it. The same mistake as caching a target's position while someone drags it.
+Now re-resolved on `Doc::functionChanged` for the active scene, coalesced to
+the end of the event-loop turn for the same reason the studio coalesces its aim
+lines: one joystick tick emits one signal per fixture per channel.
+
+**3. One cone, faded per pixel.** "The light cone looks kinda weird with the
+multiple circles on a cone." It was sixteen constant-alpha slices stacked end to
+end, and every seam between them read as a ring drawn across the beam --
+follow-on 36 went from five slices to sixteen to hide that, which was treating
+the symptom. `ZRaster::poly()` now interpolates a per-vertex ALPHA across a
+polygon exactly as it interpolates depth, and for the same reason it is exact:
+it is affine in screen position. So a beam is ONE primitive with a smooth
+gradient and no seams at all.
+
+That per-pixel alpha is also the first real piece of the volumetrics below, not
+just a cosmetic fix.
+
+**The long-term plan for haze, gobos and shadows**, since it was asked
+directly. All three are now reachable and in dependency order:
+
+- **Haze.** Screen-space: for each pixel the beam covers, integrate along the
+  view ray up to the SCENE depth already in the buffer. That is what turns a
+  flat wedge into light hanging in air, and it is why `depthAt()` exists. The
+  per-vertex alpha just added is the degenerate one-sample case of it.
+- **Shadows.** A shadow map is this same rasteriser run from the light's point
+  of view, depth only. `ZRaster` takes any projection precisely so that is a
+  parameter, not a rewrite.
+- **Gobos.** A texture projected through the light-space transform the shadow
+  map already establishes. Last, because it depends on the other two.
+
+`monitor_test` 73/73, `programmingguide_test` 3/3. `check-all.sh`: all four
+legs pass, 0 failures.
+
 ### Follow-on 36: follow-spots aim at a person, and beams stop where they land
 
 Branson, three from one look at the rendered Followspot.

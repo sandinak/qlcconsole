@@ -148,6 +148,12 @@ private slots:
     void slotFollowSpotBindingChanged();
     void slotJoystickUpdated(float pan, float tilt);
     /** Dispatches controller button actions from ProgrammerController. */
+    /** The full 'how a look is built' explanation. Shown once on a first
+     *  run, and on demand after that. */
+    void showProgrammingGuide();
+    /** True exactly once, ever -- and records that it has answered. */
+    static bool takeFirstRunGuideFlag();
+
     void slotButtonAction(const QString &action);
 
     // BPM / internal beat generator
@@ -273,7 +279,8 @@ private:
 
     QVBoxLayout *m_canvasLayout;
     QLabel *m_canvasTitle;
-    QLabel *m_canvasPlaceholder;
+    QWidget *m_canvasPlaceholder;   ///< empty-state: one line plus a way in
+    QLabel  *m_canvasHint;          ///< the one line
     SceneGroupLooks *m_canvas;
     QWidget *m_funcEditor;     //!< stock editor for non-scene functions
     LookEditor *m_lookEditor;      //!< bottom pane; sizes to content (no scroll)

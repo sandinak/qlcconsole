@@ -215,6 +215,9 @@ private slots:
      *  without waiting for a desk to output it. */
     /** A follow-spot aims at a person: the target's XY, at subject height above
      *  whatever they stand on -- and it follows the target as it moves. */
+    /** Editing a look updates the rig view: a cache of something the user is
+     *  actively editing goes stale the moment they edit it. */
+    void editingALookUpdatesTheRigView();
     void aFollowSpotAimsAtTheSubjectNotTheFloor();
     /** A beam aimed at something ends there instead of sailing past it. */
     void aBeamStopsAtWhatItIsAimedAt();
