@@ -4101,6 +4101,59 @@ void Monitor_Test::aMostlyDarkPixelBarDrawsNoBrightOutline()
     props->removeTruss(t->id());
 }
 
+void Monitor_Test::aLongTrussSortsAlongItsLength()
+{
+    /* A truss chord spans the whole rig. Described with ONE averaged depth it
+       can only be wholly in front of a deck or wholly behind it, never
+       crossing -- the same mistake a face with one depth was, and the last
+       place it lived. It survived the depth buffer because emitLine() was still
+       averaging its two ends before handing them over.
+     *
+       Asserted on the EMITTER, deliberately. Two pixel-level attempts at this
+       both passed with the averaging put back: contriving a scene where an
+       average lands on the wrong side of something is fiddly, and a test that
+       cannot fail is worse than no test. What has to be true is simple -- a
+       line whose ends are at different depths carries both of them into the
+       rasteriser, which resolves per pixel and has its own test for that. */
+    Doc *doc = new Doc(this);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 600);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 18.0);
+
+    // Ten metres of chord, running upstage: a real depth range end to end.
+    const QVector3D a(0.0f, -5.0f, 3.0f);
+    const QVector3D b(0.0f,  5.0f, 3.0f);
+    const double za = v.viewDepth(a), zb = v.viewDepth(b);
+    QVERIFY2(qAbs(za - zb) > 1.0,
+             qPrintable(QString("the test's own chord does not span depth "
+                                "(%1 vs %2)").arg(za).arg(zb)));
+
+    QImage scratch(v.size(), QImage::Format_ARGB32_Premultiplied);
+    scratch.fill(Qt::transparent);
+    QPainter p(&scratch);
+
+    v.m_ops.clear();
+    v.m_collecting = true;
+    v.emitLine(v.w2s(a), v.w2s(b), za, zb, QColor(255, 255, 255), 1.2, p);
+    v.m_collecting = false;
+
+    QCOMPARE(v.m_ops.size(), 1);
+    const StructureStudioView::DrawOp &o = v.m_ops.first();
+    QCOMPARE(int(o.kind), int(StructureStudioView::DrawOp::Line));
+    QVERIFY2(o.zs.size() == 2,
+             "the line reached the queue with no per-end depth at all -- it can "
+             "only be wholly in front of something or wholly behind it");
+    QVERIFY2(qAbs(o.zs.at(0) - o.zs.at(1)) > 1.0,
+             qPrintable(QString("both ends arrived at the same depth (%1, %2) -- "
+                                "they are being averaged")
+                        .arg(o.zs.at(0)).arg(o.zs.at(1))));
+
+    delete doc;
+}
+
 void Monitor_Test::aSolidBoxHidesItsOwnFarEdges()
 {
     /* "If that's a solid why do I see the inside lines?" -- the platform and

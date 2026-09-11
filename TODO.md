@@ -1034,6 +1034,33 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 39: lines get a depth at each end -- the last of the artefact family
+
+Found while answering "what's left in this visualizer": `emitLine()` still took
+ONE depth and averaged its two ends. A truss chord spans the whole rig, so an
+averaged depth can only put it wholly in front of a deck or wholly behind it,
+never crossing -- the same mistake a face with one depth was. It survived the
+depth buffer (follow-on 31) because the rasteriser was resolving per pixel
+correctly and being handed one value to resolve.
+
+`rasterOp()` already read `o.zs` for lines; the emitter simply was not filling
+it in. Six call sites now pass both endpoint depths instead of their mean.
+
+That closes the family: faces (follow-on 26), pixels (26), in-step fixtures
+(27), and now lines. Nothing left in this view describes a thing that spans
+depth with a single number.
+
+**Two pixel-level tests for this were vacuous before one worked.** Both passed
+with the averaging put back. Contriving a scene where an average lands on the
+wrong side of something is fiddly, and a test that cannot fail is worse than
+none -- the revert-check is the only reason either was caught. What finally
+discriminates is asserting on the EMITTER: a line whose ends differ in depth
+must carry both into the queue. The rasteriser resolving them per pixel is
+already covered by its own test, so the chain is complete without staging a
+scene to prove it.
+
+`monitor_test` 74/74. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 38: live output outranks the cached look
 
 Branson: "still not following color change" -- after follow-on 37 supposedly

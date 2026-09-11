@@ -996,12 +996,14 @@ void StructureStudioView::emitPoly(const QPolygonF &poly, double depth, const QC
     p.drawPolygon(poly);
 }
 
-void StructureStudioView::emitLine(const QPointF &a, const QPointF &b, double depth,
+void StructureStudioView::emitLine(const QPointF &a, const QPointF &b,
+                                   double za, double zb,
                                    const QColor &pen, double penW, QPainter &p) const
 {
     if (m_collecting)
     {
-        DrawOp o; o.kind = DrawOp::Line; o.depth = depth;
+        DrawOp o; o.kind = DrawOp::Line; o.depth = (za + zb) / 2.0;
+        o.zs << za << zb;
         o.poly << a << b; o.pen = pen; o.penWidth = penW;
         m_ops << o;
         return;
@@ -1378,16 +1380,16 @@ void StructureStudioView::drawLattice(QPainter &p, const QVector3D a[4], const Q
 
     // The four chords.
     for (int i = 0; i < 4; ++i)
-        emitLine(w2s(a[i]), w2s(b[i]), (viewDepth(a[i]) + viewDepth(b[i])) / 2.0,
+        emitLine(w2s(a[i]), w2s(b[i]), viewDepth(a[i]), viewDepth(b[i]),
                  chord, 1.8, p);
 
     // The end frames.
     for (int i = 0; i < 4; ++i)
     {
         const int j = (i + 1) % 4;
-        emitLine(w2s(a[i]), w2s(a[j]), (viewDepth(a[i]) + viewDepth(a[j])) / 2.0,
+        emitLine(w2s(a[i]), w2s(a[j]), viewDepth(a[i]), viewDepth(a[j]),
                  chord, 1.4, p);
-        emitLine(w2s(b[i]), w2s(b[j]), (viewDepth(b[i]) + viewDepth(b[j])) / 2.0,
+        emitLine(w2s(b[i]), w2s(b[j]), viewDepth(b[i]), viewDepth(b[j]),
                  chord, 1.4, p);
     }
 
@@ -1407,7 +1409,7 @@ void StructureStudioView::drawLattice(QPainter &p, const QVector3D a[4], const Q
             const bool up = ((k + side) % 2) == 0;
             const QVector3D &p0 = up ? lo0 : hi0;
             const QVector3D &p1 = up ? hi1 : lo1;
-            emitLine(w2s(p0), w2s(p1), (viewDepth(p0) + viewDepth(p1)) / 2.0,
+            emitLine(w2s(p0), w2s(p1), viewDepth(p0), viewDepth(p1),
                      brace, 1.0, p);
         }
     }
@@ -1506,7 +1508,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             {
                 const float z = t->shelfHeight(i);
                 const QVector3D sa(x0, y1, z), sb(x1, y1, z);
-                emitLine(w2s(sa), w2s(sb), (viewDepth(sa) + viewDepth(sb)) / 2.0,
+                emitLine(w2s(sa), w2s(sb), viewDepth(sa), viewDepth(sb),
                          steel.lighter(140), 1.6, p);
             }
         }
@@ -2547,7 +2549,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
             // cone is drawn: it is what makes an UNLIT head's aim readable.
             const QVector3D tip = headMid + beam * float(qMax(0.25, h * 1.4));
             emitLine(w2s(headMid), w2s(tip),
-                     (viewDepth(headMid) + viewDepth(tip)) / 2.0,
+                     viewDepth(headMid), viewDepth(tip),
                      col.lighter(150), 1.4, p);
 
             if (m_beams && beamLevel > 0.01)

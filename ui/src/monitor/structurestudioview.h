@@ -232,7 +232,10 @@ private:
                   const QColor &pen, double penW, QPainter &p,
                   const QVector<double> &vertexDepths = QVector<double>(),
                   const QVector<double> &vertexAlphas = QVector<double>()) const;
-    void emitLine(const QPointF &a, const QPointF &b, double depth,
+    /** A line with a depth at EACH end. A truss chord spans the whole rig;
+     *  describing it with one averaged depth is the same mistake a face
+     *  with one depth was, and leaves webbing punching through a deck. */
+    void emitLine(const QPointF &a, const QPointF &b, double za, double zb,
                   const QColor &pen, double penW, QPainter &p) const;
     /** Many dots at one depth in one colour: a strip's pixels are one
      *  surface and never sort against each other. */

@@ -249,6 +249,9 @@ private slots:
      *  fallback path honest rather than dead. */
     /** A solid box does not show its own far edges -- which the structure
      *  editors did, because only the whole-rig view was depth-buffered. */
+    /** A truss chord spans the rig: it must be able to be in front of a deck
+     *  at one end and behind it at the other. */
+    void aLongTrussSortsAlongItsLength();
     void aSolidBoxHidesItsOwnFarEdges();
     void bothRenderersAgreeOnPlainOcclusion();
     void zRasterResolvesDepthPerPixel();
