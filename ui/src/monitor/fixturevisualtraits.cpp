@@ -360,6 +360,22 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
     else
         dimmer = 0;
 
+    /* THERE IS NO SUCH THING AS BLACK LIGHT.
+     *
+       A fixture whose emitters are all at zero is not emitting black -- it is
+       not emitting. The dimmer channel says how much of the mix leaves the
+       lamp, and there is no mix, so the answer is nothing however far up that
+       dimmer is pushed.
+     *
+       Taken literally the other way round, a look with its colours stripped out
+       but its dimmer still up produced a full-strength BLACK beam, which the
+       renderer then dutifully painted over the stage as a dark cone. Note the
+       test is on the MIXED colour and only when emitters were actually found:
+       a dimmer-only fixture never gets here (it has no colour to be black), and
+       a subtractive fixture with every flag out is passing WHITE, not black. */
+    if (found && mixed.red() == 0 && mixed.green() == 0 && mixed.blue() == 0)
+        dimmer = 0;
+
     return true;
 }
 

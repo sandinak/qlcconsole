@@ -257,6 +257,9 @@ private slots:
     void zRasterResolvesDepthPerPixel();
     /** Translucent surfaces are depth-tested but do not write depth. */
     void zRasterBlendsWithoutOccluding();
+    /** There is no such thing as black light: every emitter at zero is not
+     *  emitting, however far up the dimmer is. */
+    void aLampWithNoColourEmitsNothingNotBlack();
     void everyColourModelTheEngineDefinesIsRead();
     void pixelBarDrawsEachPixelInItsOwnColour();
 

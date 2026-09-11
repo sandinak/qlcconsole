@@ -4380,6 +4380,106 @@ void Monitor_Test::zRasterBlendsWithoutOccluding()
     QCOMPARE(z.resolve().pixelColor(50, 50), QColor(0, 0, 200));
 }
 
+void Monitor_Test::aLampWithNoColourEmitsNothingNotBlack()
+{
+    /* Strip the colours out of a look but leave its dimmer up, and the fixture
+       reports colour #000000 at full level. Taken literally that is a
+       full-strength BLACK beam, and the renderer painted one -- a dark cone
+       laid over the stage, subtracting light that was never there.
+     *
+       A lamp whose emitters are all at zero is not emitting black. It is not
+       emitting. The dimmer says how much of the mix leaves the lamp, and there
+       is no mix. */
+    Doc *doc = new Doc(this);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Dimmer+RGB");
+    def->setType(QLCFixtureDef::ColorChanger);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("4ch");
+    const char *nm[] = { "Dimmer", "Red", "Green", "Blue" };
+    const QLCChannel::PrimaryColour pc[] = { QLCChannel::NoColour, QLCChannel::Red,
+                                             QLCChannel::Green, QLCChannel::Blue };
+    for (int k = 0; k < 4; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[k]); ch->setGroup(QLCChannel::Intensity);
+        if (pc[k] != QLCChannel::NoColour) ch->setColour(pc[k]);
+        def->addChannel(ch); mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph; ph.setWidth(300); ph.setHeight(300); ph.setDepth(300);
+    mode->setPhysical(ph);
+    QLCFixtureHead hd;
+    for (int k = 0; k < 4; ++k) hd.addChannel(quint32(k));
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName("Stripped"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(0);
+    QVERIFY(doc->addFixture(fxi));
+
+    /* Dimmer at FULL, every colour channel at zero -- a look with its colours
+       removed while it is still running. */
+    QByteArray u(512, char(0));
+    u[0] = char(255);
+    fxi->setChannelValues(u);
+
+    QColor col(90, 160, 235);
+    uchar dim = 200;
+    QVERIFY(fixtureLiveState(fxi, fxi->channelValues(), col, dim));
+    QVERIFY2(dim == 0,
+             qPrintable(QString("a lamp with every emitter at zero reported level "
+                                "%1 -- that is a full-strength black beam")
+                        .arg(dim)));
+
+    // Put one emitter up and it is a light again, at the dimmer's level.
+    u[2] = char(255);                      // green
+    fxi->setChannelValues(u);
+    QVERIFY(fixtureLiveState(fxi, fxi->channelValues(), col, dim));
+    QCOMPARE(int(dim), 255);
+    QVERIFY(col.green() > 200 && col.red() < 60);
+
+    // Dimmer down, colour still up: a real level, not zero.
+    u[0] = char(96);
+    fxi->setChannelValues(u);
+    QVERIFY(fixtureLiveState(fxi, fxi->channelValues(), col, dim));
+    QCOMPARE(int(dim), 96);
+
+    /* A DIMMER-ONLY fixture must be unaffected: it has no colour to be black,
+       and its level is the whole of what it says. */
+    QLCFixtureDef *ddef = new QLCFixtureDef();
+    ddef->setManufacturer("Test"); ddef->setModel("Plain Dimmer");
+    ddef->setType(QLCFixtureDef::Dimmer);
+    QLCFixtureMode *dmode = new QLCFixtureMode(ddef);
+    dmode->setName("1ch");
+    QLCChannel *dch = new QLCChannel();
+    dch->setName("Dimmer"); dch->setGroup(QLCChannel::Intensity);
+    ddef->addChannel(dch); dmode->insertChannel(dch, 0);
+    QLCPhysical dph; dph.setWidth(200); dph.setHeight(200); dph.setDepth(200);
+    dmode->setPhysical(dph);
+    QLCFixtureHead dhd; dhd.addChannel(0);
+    dmode->insertHead(-1, dhd);
+    ddef->addMode(dmode);
+
+    Fixture *plain = new Fixture(doc);
+    plain->setName("Plain"); plain->setFixtureDefinition(ddef, dmode);
+    plain->setUniverse(3); plain->setAddress(16);
+    QVERIFY(doc->addFixture(plain));
+
+    QByteArray pu(512, char(0));
+    pu[16] = char(180);
+    plain->setChannelValues(pu);
+    QColor pcol(90, 160, 235);
+    uchar pdim = 0;
+    QVERIFY(fixtureLiveState(plain, plain->channelValues(), pcol, pdim));
+    QVERIFY2(pdim == 180,
+             qPrintable(QString("a dimmer-only fixture lost its level (%1) -- it "
+                                "has no colour to be black").arg(pdim)));
+
+    delete doc;
+}
+
 void Monitor_Test::everyColourModelTheEngineDefinesIsRead()
 {
     /* QLCChannel::PrimaryColour defines twelve primaries. This read five --

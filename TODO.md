@@ -1034,6 +1034,40 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 40: there is no such thing as black light
+
+Branson: "if I remove all colors from a running function the rig display tries
+to send 'black' lighting .. that's obviously not right .. your dimmer curve
+should note that the lack of light is just that .. not black."
+
+Exactly right, and the screenshot showed it literally: a dark cone laid over
+the stage, subtracting light that was never there.
+
+`fixtureLiveState()` reported colour `#000000` at whatever the dimmer said. Taken
+literally that is a full-strength BLACK beam, and every stage downstream
+believed it -- the cone was drawn at full alpha in black, and the fixture body
+shaded as though it were emitting.
+
+A lamp whose emitters are all at zero is not emitting black. It is not
+emitting. The dimmer says how much of the mix leaves the lamp; there is no mix,
+so the answer is nothing however far up the dimmer is pushed. The level is now
+zero in that case.
+
+**Scoped narrowly on purpose**, because two neighbouring cases are not the same
+thing and would be wrong if swept in:
+
+- A **dimmer-only** fixture never reaches the test -- it has no colour that
+  could be black, and its level is the whole of what it says.
+- A **subtractive** fixture with every flag out is passing WHITE, not black.
+  That is handled earlier and separately.
+
+Deliberately NOT done: scaling the level by the colour's brightness in general.
+That double-dims, because the mixed colour already carries the intensity of the
+mix -- half-red at full dimmer is `(128,0,0)` at level 255, and rendering that
+at level 128 would halve it twice. Only the exact-zero case is a special case.
+
+`monitor_test` 75/75. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 39: lines get a depth at each end -- the last of the artefact family
 
 Found while answering "what's left in this visualizer": `emitLine()` still took
