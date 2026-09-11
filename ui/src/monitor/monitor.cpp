@@ -1961,11 +1961,24 @@ void Monitor::showStageOverview()
     /* Live output: the whole point of watching a rig rather than reading a
        plot. Default ON when the desk is running, so opening the window during a
        show shows the show. */
+    /* Checked state has to be UNMISTAKABLE. A checkable QToolButton on macOS
+       renders its on state as a barely-different grey, and "why can't I see the
+       beams" turned out to be exactly that: beam brightness comes from DMX, so
+       with Live off there is nothing to draw, and nothing on screen said Live
+       was off. */
+    const QString toggleStyle =
+        "QToolButton { padding: 2px 8px; border: 1px solid #4a4f5a;"
+        " border-radius: 3px; }"
+        "QToolButton:checked { background: #2d6cdf; color: white;"
+        " border: 1px solid #5b8ee8; }";
+
     QToolButton *liveBtn = new QToolButton(&dlg);
     liveBtn->setText(tr("Live"));
     liveBtn->setCheckable(true);
+    liveBtn->setStyleSheet(toggleStyle);
     liveBtn->setToolTip(tr("Colour and brightness from the DMX being sent, "
-                           "instead of the fixtures' gel colours"));
+                           "instead of the fixtures' gel colours. Beams need "
+                           "this: how bright a beam is comes from the DMX."));
     bar->addWidget(liveBtn);
     connect(liveBtn, &QToolButton::toggled, view,
             [view](bool on) { view->setLiveValues(on); });
@@ -1980,6 +1993,7 @@ void Monitor::showStageOverview()
     QToolButton *beamBtn = new QToolButton(&dlg);
     beamBtn->setText(tr("Beams"));
     beamBtn->setCheckable(true);
+    beamBtn->setStyleSheet(toggleStyle);
     beamBtn->setToolTip(tr("Draw the light moving heads are throwing, out to "
                            "whatever it lands on"));
     bar->addWidget(beamBtn);

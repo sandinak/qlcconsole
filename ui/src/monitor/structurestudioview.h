@@ -415,6 +415,10 @@ private:
      *  resolving it per fixture per frame would be quadratic in the rig. */
     QHash<quint32, AimSpec> m_aimTarget;
     void rebuildAimTargets();
+    /** What the selected scene would SEND, per fixture, as a channel-value
+     *  array shaped exactly like live DMX -- so every colour, level and beam
+     *  rule downstream reads it without knowing the difference. */
+    QHash<quint32, QByteArray> m_sceneValues;
     /** A dashed run from a head to where it is aimed -- the same thing the
      *  studio draws, so the two views say it the same way. */
     void drawAimTrace(QPainter &p, const QVector3D &from, const QVector3D &to,

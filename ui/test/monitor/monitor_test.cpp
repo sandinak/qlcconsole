@@ -2763,6 +2763,97 @@ void Monitor_Test::aZoomHeadsConeFollowsItsZoomChannel()
     delete doc;
 }
 
+void Monitor_Test::aSelectedLookLightsTheRigInDesign()
+{
+    /* "Why does it need to be live? It should work in design."
+     *
+       Quite right. A look is a design-time thing: you build it from a dimmer, a
+       colour and an aim, and the rig view's job is to show what it does --
+       whether or not a desk is currently outputting it. Beam brightness used to
+       come from live DMX alone, so the whole thing was conditional on a toggle
+       that is really about something else.
+     *
+       The selected scene's palettes are now resolved into channel values shaped
+       exactly like live DMX, so colour, level, beam and visibility all read it
+       without knowing the difference. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Fixture *head = makeMover(doc, 14.0, 0, "Design Head", QVector3D(3.0f, 3.0f, 5.0f));
+    QVERIFY(head != nullptr);
+
+    StageTarget *tgt = props->addStageTarget();
+    tgt->setX(3.0f); tgt->setY(3.0f); tgt->setZ(0.0f);          // straight below
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("Down"); aim->setStageTargetId(tgt->id());
+    QVERIFY(doc->addPalette(aim));
+
+    QLCPalette *dim = new QLCPalette(QLCPalette::Dimmer, doc);
+    dim->setName("Full"); dim->setValue(255);
+    QVERIFY(doc->addPalette(dim));
+
+    QLCPalette *col = new QLCPalette(QLCPalette::Color, doc);
+    col->setName("Green"); col->setValue(QColor(0, 255, 0));
+    QVERIFY(doc->addPalette(col));
+
+    Scene *scene = new Scene(doc);
+    scene->setName("Design Look");
+    scene->addFixture(head->id());
+    scene->addPalette(dim->id());
+    scene->addPalette(col->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 560);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(25.0, 20.0);
+    v.setAmbient(0.0);
+    v.setBeams(true);
+    v.setLiveValues(false);            // DESIGN. No DMX anywhere.
+
+    // Nothing driving it and no scene selected: nothing to show.
+    head->setChannelValues(QByteArray(512, char(0)));
+    auto greenPixels = [&]() {
+        const QImage img = v.grab().toImage();
+        int n = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.green() > 55 && c.green() > c.red() * 2 && c.green() > c.blue() * 2)
+                    ++n;
+            }
+        return n;
+    };
+    const int unselected = greenPixels();
+
+    v.setActiveScene(scene->id());
+    QVERIFY2(v.m_sceneValues.contains(head->id()),
+             "the selected scene resolved no output for a fixture it drives");
+
+    const int selected = greenPixels();
+    QVERIFY2(selected > 400,
+             qPrintable(QString("selecting a look with a dimmer and a colour lit "
+                                "nothing in design (%1 px)").arg(selected)));
+    QVERIFY2(selected > unselected * 4,
+             qPrintable(QString("selecting the look changed almost nothing "
+                                "(%1 -> %2)").arg(unselected).arg(selected)));
+
+    /* And it follows the look's actual level rather than assuming full -- the
+       reason a rig can look dark is often that the look IS dark. */
+    dim->setValue(14);                                   // about 5%
+    v.setActiveScene(Function::invalidId());
+    v.setActiveScene(scene->id());
+    const int dimmed = greenPixels();
+    QVERIFY2(dimmed * 3 < selected,
+             qPrintable(QString("a look at 5%% drew nearly as much as one at "
+                                "full (%1 against %2)").arg(dimmed).arg(selected)));
+
+    delete doc;
+}
+
 void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
 {
     /* "When I set a target on a position I don't see that reflected in the rig

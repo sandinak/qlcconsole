@@ -211,6 +211,9 @@ private slots:
     /** A zoom head's cone follows its zoom channel across the declared
      *  min..max, in whichever direction the definition says. */
     void aZoomHeadsConeFollowsItsZoomChannel();
+    /** A look selected in Design lights the rig -- dimmer, colour and beam --
+     *  without waiting for a desk to output it. */
+    void aSelectedLookLightsTheRigInDesign();
     void anUndrivenHeadPointsAtTheScenesTarget();
     void aBeamFadesAllTheWayOutWithTheDimmer();
     void aBeamStopsAtWhatItLandsOn();

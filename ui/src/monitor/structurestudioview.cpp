@@ -40,6 +40,7 @@
 #include "doc.h"
 #include "qlceventpos.h"
 #include "scene.h"
+#include "scenevalue.h"
 #include "qlcpalette.h"
 #include "fixturegroup.h"
 #include "function.h"
@@ -2074,6 +2075,7 @@ static QPolygonF convexHull(QVector<QPointF> pts)
 void StructureStudioView::rebuildAimTargets()
 {
     m_aimTarget.clear();
+    m_sceneValues.clear();
     if (m_doc == nullptr || m_activeSceneId == Function::invalidId())
         return;
 
@@ -2102,6 +2104,49 @@ void StructureStudioView::rebuildAimTargets()
         haveAim = true;
         break;
     }
+    /* What the scene would SEND. A look is a design-time thing: you build it
+       with a dimmer, a colour and an aim, and the rig view's job is to show you
+       what it does -- whether or not a desk is currently outputting it. Waiting
+       for live DMX made the whole thing conditional on a toggle that is really
+       about something else ("why does it need to be live? it should work in
+       design").
+     *
+       Resolved into channel-value arrays shaped exactly like live DMX, so
+       everything downstream -- colour, level, beam, visibility -- reads it
+       without knowing the difference.
+     *
+       Effect palettes are skipped, and so is anything an effect has taken over
+       (a Colour or Dimmer palette listed AFTER an Effect feeds that effect
+       rather than painting a static base), which is the same rule Scene::write
+       applies. An effect's output is a running thing, not a static look, and
+       guessing at it here would be worse than saying nothing. */
+    foreach (quint32 pid, scene->palettes())
+    {
+        QLCPalette *pal = m_doc->palette(pid);
+        if (pal == nullptr)
+            continue;
+        if (pal->type() == QLCPalette::Effect || pal->type() == QLCPalette::Aim)
+            continue;
+        if (QLCPalette::isEffectScoped(m_doc, scene->palettes(), pid))
+            continue;
+
+        const int cOff = QLCPalette::colorSetOffset(m_doc, scene->palettes(), pid);
+        QList<SceneValue> vals =
+            pal->valuesFromFixtureGroups(m_doc, scene->fixtureGroups(), scene, cOff);
+        vals += pal->valuesFromFixtures(m_doc, scene->fixtures(), scene, cOff);
+
+        foreach (const SceneValue &scv, vals)
+        {
+            Fixture *fx = m_doc->fixture(scv.fxi);
+            if (fx == nullptr || scv.channel >= fx->channels())
+                continue;
+            QByteArray &arr = m_sceneValues[scv.fxi];
+            if (arr.size() < int(fx->channels()))
+                arr.resize(int(fx->channels()));
+            arr[int(scv.channel)] = char(scv.value);
+        }
+    }
+
     if (haveAim == false)
         return;
 
@@ -2605,9 +2650,15 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
        thousand lookups a frame for no gain. */
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     const FixtureVisualTraits traits = classifyFixture(fx);
-    const QByteArray vals = m_liveValues ? liveValuesFor(fx) : QByteArray();
+    /* The SELECTED SCENE wins, for the same reason its aim does: you asked to
+       see that look. Live DMX is the fallback -- and when the scene is actually
+       running the two agree anyway. */
+    QByteArray vals = m_sceneValues.value(fid);
+    if (vals.isEmpty() && m_liveValues)
+        vals = liveValuesFor(fx);
+    const bool showingOutput = (vals.isEmpty() == false);
     /* Once per fixture, not once per head -- see fixtureMasterLevel(). */
-    const int master = m_liveValues ? fixtureMasterLevel(fx, vals) : -1;
+    const int master = showingOutput ? fixtureMasterLevel(fx, vals) : -1;
 
     /* Live output, when the rig is actually running. The gel colour above is
        what a fixture looks like UNLIT; showing that while a show plays makes
@@ -2618,12 +2669,12 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
        not blaze at you. */
     /* What this fixture is throwing RIGHT NOW: a zoom head's cone is a live
        value, not a property of its definition. */
-    const double beamNow = m_liveValues ? fixtureBeamAngle(fx, vals, traits)
-                                        : double(traits.beamMaxDeg);
+    const double beamNow = showingOutput ? fixtureBeamAngle(fx, vals, traits)
+                                         : double(traits.beamMaxDeg);
     const double visibility =
-        m_liveValues ? beamVisibility(fx, rp, traits, beamNow) : 1.0;
+        showingOutput ? beamVisibility(fx, rp, traits, beamNow) : 1.0;
 
-    if (m_liveValues)
+    if (showingOutput)
     {
         QColor live = col;
         uchar dim = 0;
@@ -2740,7 +2791,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                precisely when its beam is most worth drawing. */
             double beamLevel = 0.0;
             QColor beamColour;
-            if (m_liveValues && m_beams)
+            if (showingOutput && m_beams)
             {
                 QColor live = unlit;
                 uchar dim = 0;
@@ -2750,19 +2801,19 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                     beamColour = live;
                 }
             }
-            drawMoverSolid(p, fid, traits, col, aim, !m_liveValues, beamLevel,
+            drawMoverSolid(p, fid, traits, col, aim, !showingOutput, beamLevel,
                            beamColour, beamNow);
 
-            /* Say where it is aimed, in a way you can actually SEE.
+            /* Say where it is aimed -- but ONLY when the beam is not already
+               saying it.
              *
-               Turning the head box toward the target is correct and invisible:
-               at whole-rig zoom a mover is a few pixels across, and a scene that
-               is merely SELECTED is not sending DMX, so there is no beam either.
-               The result was a change nobody could find. The studio answers this
-               with a dashed line to the target; draw the same thing here, in the
-               target's own colour, so the two views say the same thing the same
-               way. */
-            if (tIt != m_aimTarget.constEnd())
+               A lit head throws a beam, and the beam IS the answer; a dashed
+               line beside it is clutter ("rig shouldn't show lines, should show
+               the actual beams"). A head that is aimed but dark has nothing to
+               show at all, though: at whole-rig zoom a mover is a few pixels
+               across, so turning its box toward the target is invisible. That
+               is the case the trace is for, and it is what the studio draws. */
+            if (tIt != m_aimTarget.constEnd() && (!m_beams || beamLevel <= 0.01))
                 drawAimTrace(p, props->fixtureRigPosition(fid), tIt.value().pos,
                              tIt.value().colour);
         }
@@ -2776,7 +2827,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                          !(drag || hi), depthBias);
         }
         else
-            drawSolidBox(p, corner, col, col.lighter(150), 255, !m_liveValues,
+            drawSolidBox(p, corner, col, col.lighter(150), 255, !showingOutput,
                          depthBias);
 
         /* Pixels on the face pointing at us -- when a grid is declared AND the

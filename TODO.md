@@ -1034,6 +1034,49 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 35: a look lights the rig in DESIGN -- and why Followspot looked dark
+
+Branson: "rig shouldn't show lines .. should show the actual beams", then "why
+does it need to be live? it should work in design?"
+
+Both right.
+
+**1. The selected scene now drives OUTPUT, not just aim.** A look is a
+design-time thing: you build it from a dimmer, a colour and an aim, and this
+view's job is to show what it does -- whether or not a desk is outputting it.
+Beam brightness came from live DMX alone, so the whole thing hung on a toggle
+that is really about something else.
+
+`rebuildAimTargets()` now also resolves the scene's Colour and Dimmer palettes
+into per-fixture channel-value arrays shaped exactly like live DMX, so colour,
+level, beam angle and visibility all read them without knowing the difference.
+Effect palettes are skipped, and so is anything an effect has taken over (a
+Colour or Dimmer listed AFTER an Effect feeds that effect rather than painting
+a static base) -- the same rule `Scene::write()` applies. An effect's output is
+a running thing; guessing at it statically would be worse than saying nothing.
+
+**2. Traces only when there is no beam.** A lit head throws a beam and the beam
+IS the answer; a dashed line beside it is clutter. A head that is aimed but
+dark has nothing to show at all, and that is what the trace is for.
+
+**3. Why Followspot looked dark, which was not a rendering bug at all.**
+Traced through the real file:
+
+    PAL 2 "Full" type Dimmer  value 14      <- five percent
+    PAL 1 "White"             -> UST-1 White1/White2 = 255
+    PAL 15 "Target 2"         effectScoped = true
+
+The look's dimmer palette is NAMED "Full" and set to **14 of 255**. There is a
+second Dimmer palette, also named "Full", at 255 (id 10) -- so there are two
+palettes with the same name and the look is using the dark one.
+
+Worth noting what made this newly visible: follow-on 32 removed a constant 22
+from beam alpha, because a beam that held half its brightness at 3% "never
+faded out". With that floor gone a 5% look correctly renders as almost nothing.
+The earlier bug was hiding this one.
+
+`monitor_test` 70/70. `check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 34: the aim had to be VISIBLE, not merely correct
 
 Branson: "still not seeing it."
