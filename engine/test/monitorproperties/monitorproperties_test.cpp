@@ -273,6 +273,115 @@ void MonitorProperties_Test::riserMount()
     QVERIFY(!mp.fixtureRigProps(5).onRiser());
 }
 
+/* DS3's eight strips in stage-structures-demo.qxw were positioned along the
+   step's front nosing (RiserFace = front) while being DRAWN flat on its tread
+   (studioMount = top), which is why that one step looked unlike its ten
+   identical neighbours. Nothing in the renderer was wrong; the fixture was
+   telling the position resolver and the geometry builder two different things. */
+void MonitorProperties_Test::riserFaceAndDrawingPlaneCannotDisagree()
+{
+    MonitorProperties mp;
+    StagePlatform *p = mp.addPlatform();
+    p->setOriginX(2); p->setOriginY(3); p->setWidth(4); p->setDepth(1); p->setHeight(0.8f);
+
+    // 5: the DS3 shape -- bolted to the front face, drawn lying on the top.
+    mp.setFixturePosition(5, 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps bad;
+    bad.riserPlatformId = p->id();
+    bad.riserFace = FixtureRigProps::RiserFront;
+    bad.studioMount = 0;                       // Top -- contradicts the face
+    mp.setFixtureRigProps(5, bad);
+
+    // 6: on a riser's top, drawn on its SIDE. Not a contradiction the riser
+    // model can resolve (it has no side), so it must be left exactly as it is.
+    mp.setFixturePosition(6, 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps side;
+    side.riserPlatformId = p->id();
+    side.riserFace = FixtureRigProps::RiserTop;
+    side.studioMount = 2;
+    mp.setFixtureRigProps(6, side);
+
+    // 7: NOT riser-mounted. A bar standing on a deck may legitimately lie in
+    // any plane -- riserFace means nothing here and must not drive anything.
+    mp.setFixturePosition(7, 0, 0, QVector3D(1000, 1000, 0));
+    FixtureRigProps deck;
+    deck.deckPlatformId = p->id();
+    deck.riserFace = FixtureRigProps::RiserFront;  // leftover, meaningless
+    deck.studioMount = 0;                          // deliberately Top
+    mp.setFixtureRigProps(7, deck);
+
+    // 8: on nothing at all, running vertically. The face and run angle are
+    // properties of the fixture; they used to be written only for fixtures in
+    // a studio frame, so for everything else both controls silently did
+    // nothing -- set them, save, reopen, back to Front at 0 degrees.
+    mp.setFixturePosition(8, 0, 0, QVector3D(2000, 2000, 0));
+    FixtureRigProps loose;
+    loose.studioMount = 2;
+    loose.studioAngle = 90.0f;
+    mp.setFixtureRigProps(8, loose);
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            mp2.loadXML(reader, nullptr);
+
+    // The contradiction is gone, and the face -- the half the position is
+    // derived from, and the half that was observably right -- is what won.
+    QCOMPARE(mp2.fixtureRigProps(5).studioMount, 1);
+    QCOMPARE(mp2.fixtureRigProps(5).riserFace, int(FixtureRigProps::RiserFront));
+    // Front face → (originX+U, originY+depth, V), i.e. it did not move.
+    QCOMPARE(mp2.fixtureRigPosition(5), mp.fixtureRigPosition(5));
+
+    QCOMPARE(mp2.fixtureRigProps(6).studioMount, 2);        // Side: untouched
+    QCOMPARE(mp2.fixtureRigProps(7).studioMount, 0);        // not on a riser: untouched
+    QCOMPARE(mp2.fixtureRigProps(8).studioMount, 2);        // survives the file
+    QCOMPARE(mp2.fixtureRigProps(8).studioAngle, 90.0f);
+}
+
+void MonitorProperties_Test::settingAFaceTakesTheRiserFaceWithIt()
+{
+    MonitorProperties mp;
+    StagePlatform *p = mp.addPlatform();
+    p->setOriginX(2); p->setOriginY(3); p->setWidth(4); p->setDepth(1); p->setHeight(0.8f);
+
+    mp.setFixturePosition(5, 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.riserPlatformId = p->id();
+    rp.riserFace = FixtureRigProps::RiserFront;
+    rp.riserU = 1.0f; rp.riserV = 0.5f;
+    mp.setFixtureRigProps(5, rp);
+    QCOMPARE(mp.fixtureRigPosition(5), QVector3D(3.0f, 4.0f, 0.5f));   // front face
+
+    /* Laying it on the top plane must MOVE it onto the top, not just redraw it
+       there -- otherwise the load-time repair would spend its life undoing a
+       perfectly deliberate edit. */
+    rp = mp.fixtureRigProps(5);
+    rp.setStudioMount(0);
+    QCOMPARE(rp.riserFace, int(FixtureRigProps::RiserTop));
+    mp.setFixtureRigProps(5, rp);
+    QCOMPARE(mp.fixtureRigPosition(5), QVector3D(3.0f, 3.5f, 0.8f));   // top surface
+
+    // Side has no riser equivalent: leave the face as it was rather than
+    // inventing one and teleporting the fixture.
+    rp.setStudioMount(2);
+    QCOMPARE(rp.studioMount, 2);
+    QCOMPARE(rp.riserFace, int(FixtureRigProps::RiserTop));
+
+    // Off a riser the face is inert, so the plane is free.
+    FixtureRigProps free_;
+    free_.riserFace = FixtureRigProps::RiserFront;
+    free_.setStudioMount(0);
+    QCOMPARE(free_.studioMount, 0);
+    QCOMPARE(free_.riserFace, int(FixtureRigProps::RiserFront));
+}
+
 void MonitorProperties_Test::stageOrigin()
 {
     MonitorProperties mp;

@@ -2624,6 +2624,185 @@ static Fixture *makeMover(Doc *doc, double beamDeg, quint32 addr, const char *na
     return f;
 }
 
+/* "The 3Z on the SR tower shows upright in the editor and inverted in the rig
+   view." The elevation path asks mountingType which way up the fixture is; the
+   ANGLED path never did. It built the body's up-axis as (mount normal) x
+   (length axis), whose sign just falls out of the cross product -- for the
+   default front-facing plane that is (0,0,-1), so every mover in the rig view
+   was assembled base-up and head-down however it was actually rigged. */
+void Monitor_Test::aMoverStandingOnAShelfIsNotDrawnHanging()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Tower *tw = props->addTower();
+    tw->setName("SR Tower"); tw->setOriginX(7.0f); tw->setOriginY(1.0f);
+    tw->setWidth(0.5f); tw->setDepth(0.5f); tw->setHeight(3.0f);
+    tw->addShelf(2.4f);
+
+    Fixture *head = makeMover(doc, 14.0, 0, "Shelf Spot", QVector3D(7.25f, 1.25f, 2.4f));
+    QVERIFY(head != nullptr);
+
+    auto rigAs = [&](int mounting) {
+        FixtureRigProps rp;
+        rp.towerId = tw->id();
+        rp.towerMountSide = FixtureRigProps::TowerShelf;
+        rp.towerShelf = 0;
+        rp.towerU = 0.25f; rp.towerV = 0.25f;
+        rp.mountingType = Truss::MountingType(mounting);
+        props->setFixtureRigProps(head->id(), rp);
+        return rp;
+    };
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(760, 600);
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 20.0);
+    v.setAmbient(1.0);
+    rigAs(Truss::FloorMounted);
+    /* Hold the framing still. resizeEvent() refits the view to whatever is in
+       the rig, and grab() on a widget that has never been shown delivers one --
+       so the two frames below were rendered through DIFFERENT transforms and
+       their "difference" was the whole scene shifting by 26 px. m_zoomed is
+       what tells a refit to leave a deliberate view alone. */
+    v.grab();                        // flush the first layout
+    v.reload();                      // fit once, with the fixture present
+    v.m_zoomed = true;               // ...and then stop refitting
+
+    /* The fixture's own pixels, isolated by differencing against a render with
+       it taken away -- the tower fills the window either side of the shelf, so
+       a raw count there just measures lattice.
+     *
+       Rig props are read at paint time, so changing them and grabbing again is
+       enough; no reload, which would refit and put the two frames out of
+       register with each other. */
+    const PreviewItem saved = props->m_fixtureItems.value(head->id()).m_baseItem;
+    props->removeFixture(head->id());
+    const QImage base = v.grab().toImage();
+    props->m_fixtureItems[head->id()].m_baseItem = saved;
+
+    auto fixtureRows = [&](int mounting, QVector<int> &rowCount, int &top, int &bottom) {
+        rigAs(mounting);
+        const QImage img = v.grab().toImage();
+        rowCount.fill(0, img.height());
+        top = img.height(); bottom = -1;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor a = img.pixelColor(x, y), b = base.pixelColor(x, y);
+                if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                    + qAbs(a.blue() - b.blue()) <= 24)
+                    continue;
+                ++rowCount[y];
+                top = qMin(top, y); bottom = qMax(bottom, y);
+            }
+    };
+
+    /* WHERE IN ITS OWN OUTLINE the widest part of the fixture falls: 0 = its
+       top edge, 1 = its bottom.
+     *
+       The base is much the widest block on a mover -- wider than the head, far
+       wider than the two yoke arms -- so this asks "is the base at the bottom
+       or the top", which is the whole question and nothing else. Measured
+       against the fixture's own outline rather than its mount point, so that
+       SEATING the body on its shelf (a separate fix in the same function)
+       cannot move it. */
+    auto baseEnd = [&](int mounting) {
+        QVector<int> rows; int top = 0, bottom = 0;
+        fixtureRows(mounting, rows, top, bottom);
+        if (bottom - top < 4)
+            return -1.0;
+        int widest = top, best = -1;
+        for (int y = top; y <= bottom; ++y)
+            if (rows[y] > best) { best = rows[y]; widest = y; }
+        return double(widest - top) / double(bottom - top);
+    };
+
+    const double upright = baseEnd(Truss::FloorMounted);
+    const double hung    = baseEnd(Truss::TopHung);
+
+    QVERIFY2(upright > 0.6,
+             qPrintable(QString("a mover set upright on a shelf is drawn with its "
+                                "base in the air and its head slung underneath "
+                                "(widest part %1 of the way down its own outline; "
+                                "1 = base at the bottom)").arg(upright)));
+    QVERIFY2(hung < 0.4,
+             qPrintable(QString("a mover hung under a shelf is drawn standing on it "
+                                "(widest part %1 of the way down its own outline; "
+                                "0 = base at the top)").arg(hung)));
+    delete doc;
+}
+
+/* "Now it's in the tower vs on top of it where I have it set in the editor."
+   The body was built symmetrically about the point it is fastened to, so half
+   of it was inside the structure holding it up. The elevation has always put
+   the base flush with the shelf line -- the two views disagreed about seating
+   in exactly the way they disagreed about which way up it goes. */
+void Monitor_Test::aMoverOnAShelfSitsOnItRatherThanInIt()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Tower *tw = props->addTower();
+    tw->setName("Seat Tower"); tw->setOriginX(7.0f); tw->setOriginY(1.0f);
+    tw->setWidth(0.5f); tw->setDepth(0.5f); tw->setHeight(2.4f);
+
+    // The TOP cap: clear air above the mount point, solid tower below it. That
+    // is the geometry of the report, and it means everything painted above the
+    // cap is the fixture and nothing else.
+    Fixture *head = makeMover(doc, 14.0, 0, "Cap Spot", QVector3D(7.25f, 1.25f, 2.4f));
+    QVERIFY(head != nullptr);
+    FixtureRigProps rp;
+    rp.towerId = tw->id();
+    rp.towerMountSide = FixtureRigProps::TowerTop;
+    rp.towerU = 0.25f; rp.towerV = 0.25f;
+    rp.mountingType = Truss::FloorMounted;             // "on shelf (upright)"
+    props->setFixtureRigProps(head->id(), rp);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(760, 600);
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 20.0);
+    v.setAmbient(1.0);
+    /* Hold the framing still. resizeEvent() refits the view to whatever is in
+       the rig, and grab() on a widget that has never been shown delivers one --
+       so the two frames below were rendered through DIFFERENT transforms and
+       their "difference" was the whole scene shifting by 26 px. m_zoomed is
+       what tells a refit to leave a deliberate view alone. */
+    v.grab();                        // flush the first layout
+    v.reload();                      // fit once, with the fixture present
+    v.m_zoomed = true;               // ...and then stop refitting
+    const QImage img = v.grab().toImage();
+
+    const PreviewItem saved = props->m_fixtureItems.value(head->id()).m_baseItem;
+    props->removeFixture(head->id());                  // tower alone, same framing
+    const QImage base = v.grab().toImage();
+    props->m_fixtureItems[head->id()].m_baseItem = saved;
+
+    /* How much of the fixture is drawn BELOW the surface it stands on. A few
+       pixels are inevitable -- the cap has thickness on screen and the body is
+       projected, not flat -- but half of it is the bug. */
+    const QPointF at = v.w2s(props->fixtureRigPosition(head->id()));
+    int above = 0, below = 0;
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+        {
+            const QColor a = img.pixelColor(x, y), b = base.pixelColor(x, y);
+            if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                + qAbs(a.blue() - b.blue()) <= 24)
+                continue;
+            if (double(y) < at.y()) ++above; else ++below;
+        }
+
+    QVERIFY2(above + below > 50, "the fixture drew almost nothing");
+    const double sunk = double(below) / double(above + below);
+    QVERIFY2(sunk < 0.25,
+             qPrintable(QString("a mover standing on the tower cap is drawn sunk "
+                                "into it -- %1% of its body is below the surface "
+                                "it is standing on").arg(sunk * 100.0, 0, 'f', 1)));
+    delete doc;
+}
+
 void Monitor_Test::theRigGridMatchesTheStudioGrid()
 {
     /* Two windows onto the same stage have to agree about how big a metre is.

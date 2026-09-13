@@ -505,6 +505,15 @@ public:
      *  load. */
     void repairOrphanedMounts();
 
+    /** Put back the agreement between a riser-mounted fixture's face and the
+     *  plane it is drawn on. See FixtureRigProps::setStudioMount(): the two are
+     *  one fact stored twice, numbered in opposite directions, and until that
+     *  setter existed any UI that offered a "Face" control could set the plane
+     *  and leave the face behind. Files written in that window are still out
+     *  there, so they are corrected on the way in rather than left to render as
+     *  a step that does not match its neighbours. */
+    void repairMountPlanes();
+
 private:
     QMap<quint32, Truss*> m_trusses;
 

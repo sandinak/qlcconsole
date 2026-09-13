@@ -135,6 +135,12 @@ private slots:
     /** Painter's algorithm across the whole rig: an object nearer the eye must
      *  cover one behind it, whatever order they sit in the workspace. */
     void angledOverviewDrawsNearThingsInFront();
+    /** A mover set upright on a tower shelf must not be drawn hanging in the
+     *  rig view -- the elevation and the 3D view have to agree about which way
+     *  up a fixture is. */
+    void aMoverStandingOnAShelfIsNotDrawnHanging();
+    /** ...and it stands ON the shelf rather than sunk halfway through it. */
+    void aMoverOnAShelfSitsOnItRatherThanInIt();
     /** A clear-topped step must let what is inside it show through, and a
      *  fixture placed Inside must not be seated out onto the surface. */
     void clearTopAndInsidePlacement();

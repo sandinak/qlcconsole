@@ -7685,7 +7685,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());
     newRp.panInvert     = panInvertCb->isChecked();
     newRp.tiltInvert    = tiltInvertCb->isChecked();
-    if (faceCbDetail)    newRp.studioMount = faceCbDetail->currentIndex();
+    if (faceCbDetail)    newRp.setStudioMount(faceCbDetail->currentIndex());
     if (angleSpinDetail) newRp.studioAngle = float(angleSpinDetail->value());
     // Deck-mounting: default the fixture's Z to the platform top on first
     // assignment so it "sits on" the deck (the editor height is an offset above).

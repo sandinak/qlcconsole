@@ -1459,7 +1459,9 @@ void MonitorGraphicsView::openStudioGroupForGroup(quint32 groupId)
                 if (rp.riserPlatformId == g0.anchorId)
                 {
                     // Preserve the fixture's face as its studio mount plane.
-                    rp.studioMount = (rp.riserFace == FixtureRigProps::RiserTop) ? 0 : 1;
+                    // (The two are numbered oppositely; the mapping lives in
+                    // FixtureRigProps so no caller has to remember that.)
+                    rp.studioMount = FixtureRigProps::studioMountForRiserFace(rp.riserFace);
                     rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
                 }
                 if (rp.deckPlatformId == g0.anchorId)

@@ -451,7 +451,7 @@ void StudioPlaneView::assignToFace(const QList<quint32> &ids)
     foreach (quint32 fid, ids)
     {
         FixtureRigProps rp = props->fixtureRigProps(fid);
-        rp.studioMount = mount;
+        rp.setStudioMount(mount);
         QVector3D lp = rp.groupLocal;               // keep its in-plane position
         if (pinComp == 0)      lp.setX(float(pinVal));
         else if (pinComp == 1) lp.setY(float(pinVal));
@@ -555,7 +555,7 @@ void StudioPlaneView::distributeEvenly(const QList<quint32> &sel)
             b = bOff + H * 0.5;                                   // centred vertically
         }
         FixtureRigProps rp = props->fixtureRigProps(ids.at(i));
-        rp.studioMount = mount;                                   // lay it on this face
+        rp.setStudioMount(mount);                                 // lay it on this face
         QVector3D local = unproject(QPointF(a, b), rp.groupLocal);
         if (pinComp == 0)      local.setX(float(pinVal));         // pin to the face surface
         else if (pinComp == 1) local.setY(float(pinVal));

@@ -361,6 +361,38 @@ struct FixtureRigProps
         return NoMount;
     }
 
+    /** riserFace and studioMount are two answers to ONE question -- which
+     *  surface of the step a fixture is on -- and they are numbered OPPOSITELY
+     *  (RiserFront = 0, but the front DRAWING plane is 1). Nothing enforced the
+     *  pairing and every caller inlined the inversion for itself, so a strip
+     *  could end up claiming the front face for its position and the tread for
+     *  its geometry: correctly placed along the step nosing, yet drawn lying
+     *  flat on top of the step and firing upwards. stage-structures-demo.qxw
+     *  shipped with exactly that on all eight of DS3's strips, which is what
+     *  made that one step look unlike its ten identical neighbours.
+     *
+     *  So the mapping lives here, once, and the plane is set through
+     *  setStudioMount() so the two cannot drift apart again. */
+    static int studioMountForRiserFace(int face)
+    { return face == RiserTop ? 0 : 1; }
+
+    /** Lay the fixture on a drawing plane (0 = top, 1 = front, 2 = side) and
+     *  take a riser mount's own face with it -- on a riser the face is not
+     *  decoration, it is what fixtureRigPosition() derives the position from,
+     *  so changing one without the other leaves the fixture drawn somewhere it
+     *  is not.
+     *
+     *  Side is deliberately exempt: a strip running along a step's END is a
+     *  position the riser model cannot express at all (it has a front and a
+     *  top, and nothing else), so the face is left alone rather than forced to
+     *  a wrong one. */
+    void setStudioMount(int face)
+    {
+        studioMount = face;
+        if (onRiser() && face != 2)
+            riserFace = (face == 0) ? RiserTop : RiserFront;
+    }
+
     /** Unrig it from every structure. Call before setting a new mount so the
      *  kinds stay exclusive -- attachFixtureToTruss()/...ToTower() used to set
      *  their own id and leave any previous one in place. */

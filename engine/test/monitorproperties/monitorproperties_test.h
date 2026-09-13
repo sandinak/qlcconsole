@@ -35,6 +35,12 @@ private slots:
     void groupRegistry();
     void groupsXmlRoundTrip();
     void riserMount();
+    /** A riser fixture's face and the plane it is drawn on are one fact stored
+     *  twice; a file carrying them in disagreement is reconciled on load. */
+    void riserFaceAndDrawingPlaneCannotDisagree();
+    /** ...and setting the plane carries the face with it, so the repair above
+     *  never has a legitimate edit to undo. */
+    void settingAFaceTakesTheRiserFaceWithIt();
     void stageOrigin();
     void imagesXmlRoundTrip();
     void childBarFollowsParent();

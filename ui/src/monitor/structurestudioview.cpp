@@ -1748,6 +1748,47 @@ QVector3D StructureStudioView::fixtureAxisLocal(const FixtureRigProps &rp) const
     }
 }
 
+void StructureStudioView::fixtureFrame(const FixtureRigProps &rp,
+                                       QVector3D &L, QVector3D &N, QVector3D &H) const
+{
+    L = fixtureAxisLocal(rp);
+    switch (rp.studioMount)
+    {
+    case 0:  N = QVector3D(0, 0, 1); break;            // laid flat: depth is up
+    case 2:  N = QVector3D(1, 0, 0); break;            // side face: depth across stage
+    case 1:
+    default: N = QVector3D(0, 1, 0); break;            // front face: depth upstage
+    }
+    H = QVector3D::crossProduct(N, L);
+    if (H.length() < 1e-6f)
+        H = QVector3D(0, 0, 1);
+    H.normalize();
+}
+
+QVector3D StructureStudioView::fixtureBodyUp(const FixtureRigProps &rp) const
+{
+    /* fixtureFrame()'s H is an AXIS. Its sign is an accident of the cross
+       product: for the default front-facing plane with a fixture running along
+       X it comes out (0,0,-1), pointing at the floor. A box does not care --
+       it is symmetric about H either way -- but a moving head is base at one
+       end and lens at the other, so the whole rig drew its movers assembled
+       upside down, base in the air and head slung underneath, whatever they
+       were actually rigged as. The elevations never had this: they take the
+       same question to mountingType and get a real answer.
+     *
+       So: ask mountingType here too, and only flip a sign. Hung means the body
+       hangs below what holds it; anything else means it stands on it. A
+       side-arm clamp has no up or down of its own and reads as standing, which
+       is what it did before and is the better of the two guesses. When H is
+       horizontal there is nothing to choose and the frame is left alone. */
+    QVector3D L, N, H;
+    fixtureFrame(rp, L, N, H);
+    const float want = (rp.mountingType == Truss::TopHung) ? -1.0f : 1.0f;
+    if (H.z() * want < 0.0f)
+        H = -H;
+    return H;
+}
+
 bool StructureStudioView::hasStructuralMount(const FixtureRigProps &rp)
 {
     return rp.trussId != Truss::invalidId() || rp.onPipe() || rp.onTower()
@@ -1883,19 +1924,8 @@ void StructureStudioView::fixtureBoxPx(quint32 fid, const FixtureVisualTraits &t
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     const QPointF c = w2s(props->fixtureRigPosition(fid));
 
-    const QVector3D L = fixtureAxisLocal(rp);          // along the length
-    QVector3D N;                                       // the mount plane's normal = depth
-    switch (rp.studioMount)
-    {
-    case 0:  N = QVector3D(0, 0, 1); break;            // laid flat: depth is up
-    case 2:  N = QVector3D(1, 0, 0); break;            // side face: depth across stage
-    case 1:
-    default: N = QVector3D(0, 1, 0); break;            // front face: depth upstage
-    }
-    QVector3D H = QVector3D::crossProduct(N, L);       // the remaining in-face axis
-    if (H.length() < 1e-6f)
-        H = QVector3D(0, 0, 1);
-    H.normalize();
+    QVector3D L, N, H;                                 // length / mount normal / the rest
+    fixtureFrame(rp, L, N, H);
 
     const double w = (traits.physW > 0.0f) ? double(traits.physW) : qMax(0.05, fixtureLenM(fid));
     const double h = (traits.physH > 0.0f) ? double(traits.physH) : w * 0.2;
@@ -1935,19 +1965,8 @@ void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTrai
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     const QVector3D c = props->fixtureRigPosition(fid);
 
-    const QVector3D L = fixtureAxisLocal(rp);
-    QVector3D N;
-    switch (rp.studioMount)
-    {
-    case 0:  N = QVector3D(0, 0, 1); break;
-    case 2:  N = QVector3D(1, 0, 0); break;
-    case 1:
-    default: N = QVector3D(0, 1, 0); break;
-    }
-    QVector3D H = QVector3D::crossProduct(N, L);
-    if (H.length() < 1e-6f)
-        H = QVector3D(0, 0, 1);
-    H.normalize();
+    QVector3D L, N, H;
+    fixtureFrame(rp, L, N, H);
 
     const double w = (traits.physW > 0.0f) ? double(traits.physW) : qMax(0.05, fixtureLenM(fid));
     const double h = (traits.physH > 0.0f) ? double(traits.physH) : w * 0.2;
@@ -2481,18 +2500,11 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     const QVector3D c = props->fixtureRigPosition(fid);
 
-    const QVector3D L = fixtureAxisLocal(rp);
-    QVector3D N;
-    switch (rp.studioMount)
-    {
-    case 0:  N = QVector3D(0, 0, 1); break;
-    case 2:  N = QVector3D(1, 0, 0); break;
-    case 1:
-    default: N = QVector3D(0, 1, 0); break;
-    }
-    QVector3D H = QVector3D::crossProduct(N, L);
-    if (H.length() < 1e-6f) H = QVector3D(0, 0, 1);
-    H.normalize();
+    QVector3D L, N, H;
+    fixtureFrame(rp, L, N, H);
+    // Base at the bottom, head on top -- which requires knowing which way up
+    // the thing is rigged, not just which plane it lies in.
+    H = fixtureBodyUp(rp);
 
     const int units = qMax(1, traits.headCount);
     const double wTot = (traits.physW > 0.0f) ? double(traits.physW) : 0.3;
@@ -2512,10 +2524,37 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
         drawSolidBox(p, k, col, col.lighter(150), 255, ambientLit);
     };
 
+    /* Stand it ON what holds it, not THROUGH it.
+     *
+       fixtureRigPosition() returns the point the fixture is fastened to -- the
+       shelf surface, the truss chord -- and building the body symmetrically
+       about that point buried the bottom half of it inside the structure, so a
+       followspot set on top of a tower was drawn sunk into the tower's top bay
+       ("now it's in the tower vs on top of it where I have it set in the
+       editor"). The elevations never did this: towerFixtureBodyRect() has
+       always put the base flush with the shelf line, which is the other half of
+       the same disagreement.
+
+       Along the BODY's own up axis, not the mount plane normal: what "down"
+       means for a fixture standing on a shelf is its base, and for one hung
+       under a truss it is its lens. fixtureBodyUp() already resolved which.
+
+       Not for a fixture rigged INSIDE something, though -- between a truss's
+       chords, or within a clear-topped step firing up through it. That is meant
+       to be inside the volume, which is why placement is a property of its own.
+
+       And not for a free-placed fixture either: there is no surface under it to
+       stand on, and its plotted position is its CENTRE -- which is what the 2D
+       plot, the hit test and every other view already agree it is. Seating one
+       just shifts it half a body off the spot it was put on. */
+    const double seat = (rp.placement == FixtureRigProps::Inside
+                         || hasStructuralMount(rp) == false) ? 0.0 : 0.5;
+    const QVector3D seated = c + H * float(h * seat);
+
     for (int u = 0; u < units; ++u)
     {
         const double off = (u - (units - 1) * 0.5) * slice;
-        const QVector3D uc = c + L * float(off);
+        const QVector3D uc = seated + L * float(off);
 
         // Base: the block that bolts to the truss, at the "down" end of H.
         box(uc - H * float(h * 0.34), slice * 0.46, h * 0.16, d * 0.5, L, H, N);
@@ -3377,7 +3416,7 @@ void StructureStudioView::distributeOnFace(const QList<quint32> &sel)
                 b = H * 0.5;                                        // centred vertically
             }
             FixtureRigProps rp = props->fixtureRigProps(ids[i]);
-            rp.studioMount = mount;
+            rp.setStudioMount(mount);
             QVector3D lp;
             if (m_plane == Front)     lp = QVector3D(float(a), 0.0f, float(b));
             else if (m_plane == Side) lp = QVector3D(0.0f, float(a), float(b));
@@ -3413,7 +3452,10 @@ void StructureStudioView::setFixtureFace(quint32 fid, int face)
 {
     MonitorProperties *props = m_doc->monitorProperties();
     FixtureRigProps rp = props->fixtureRigProps(fid);
-    rp.studioMount = face;
+    /* setStudioMount(), not the member: on a RISER the face is what the
+       position is derived from, so writing the drawing plane alone would leave
+       the strip drawn on one surface of the step and placed on another. */
+    rp.setStudioMount(face);
     // A frame-group fixture also re-pins to the face surface; a plain (truss/
     // riser) strip just changes which plane its bar lies in.
     if (props->fixtureFrameGroup(fid) != 0)
@@ -3452,7 +3494,7 @@ void StructureStudioView::putOnFace(const QList<quint32> &ids)
         const quint32 fg = props->fixtureFrameGroup(fid);
         if (fg == 0) continue;                 // only frame-group fixtures have a face
         FixtureRigProps rp = props->fixtureRigProps(fid);
-        rp.studioMount = mount;
+        rp.setStudioMount(mount);
         QVector3D lp = rp.groupLocal;
         if (pinComp == 0)      lp.setX(float(pinVal));
         else if (pinComp == 1) lp.setY(float(pinVal));

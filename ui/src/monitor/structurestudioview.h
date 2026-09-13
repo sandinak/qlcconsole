@@ -375,6 +375,20 @@ private:
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame
+
+    /** The fixture's own orthonormal frame: @p L along its length, @p N out of
+     *  the surface it is mounted on, @p H the remaining in-face axis. Three
+     *  places built this by hand from the same studioMount switch. */
+    void fixtureFrame(const struct FixtureRigProps &rp,
+                      QVector3D &L, QVector3D &N, QVector3D &H) const;
+
+    /** Which way is UP for a fixture's BODY -- the direction its head sits from
+     *  its base. fixtureFrame()'s H is an axis, not a direction: its sign is
+     *  whatever the cross product happened to produce, which is fine for the
+     *  symmetric boxes most fixtures draw as and wrong for anything with a top
+     *  and a bottom. Only the mover silhouette can tell the difference, and it
+     *  is the one thing in the rig view that visibly has. */
+    QVector3D fixtureBodyUp(const struct FixtureRigProps &rp) const;
     /** True when @p rp has a real structural mount (truss/pipe/tower/riser/
      *  deck) set. Attaching a fixture to any of these ALSO, as a side effect,
      *  usually makes it a member of that structure's own auto-created frame

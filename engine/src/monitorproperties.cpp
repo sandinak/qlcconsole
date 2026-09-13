@@ -2146,6 +2146,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
     // Give any structurally-mounted fixture that lost its plot item one back,
     // and drop any second mount left behind by an earlier attach.
     repairOrphanedMounts();
+    // Re-agree riser faces with the planes their fixtures are drawn on.
+    repairMountPlanes();
 
     return true;
 }
@@ -2218,6 +2220,48 @@ void MonitorProperties::repairOrphanedMounts()
         m_fixtureItems[fid].m_baseItem = item;
         qDebug() << "[Monitor] rebuilt the missing plot item for mounted fixture"
                  << fid << "at" << w;
+    }
+}
+
+void MonitorProperties::repairMountPlanes()
+{
+    /* A riser mount stores which surface of the step it is on TWICE: riserFace
+       decides where fixtureRigPosition() puts it, studioMount decides which
+       plane it is drawn in. They are numbered oppositely and, before
+       FixtureRigProps::setStudioMount() existed, every "Face" control in the UI
+       wrote one and left the other -- so a strip could be positioned along a
+       step's front nosing while being drawn flat on its tread, firing up.
+
+       That is not a rendering bug and no amount of looking at the renderer
+       finds it: both halves do exactly what they are told by a fixture that is
+       telling them two different things. Reconcile it here, on load, so every
+       file already carrying the contradiction comes right.
+
+       riserFace wins, because it is the half with consequences beyond drawing:
+       it is what the position is derived from, and the position is the half
+       that was observably correct.
+
+       studioMount 2 (Side) is left alone. The riser model has a front and a
+       top and no third surface, so a strip run along a step's END is not a
+       contradiction to resolve -- it is something this model cannot say. */
+    QMutableMapIterator<quint32, FixtureRigProps> it(m_rigProps);
+    while (it.hasNext())
+    {
+        it.next();
+        FixtureRigProps rp = it.value();
+        if (rp.onRiser() == false || rp.studioMount == 2)
+            continue;
+
+        const int plane = FixtureRigProps::studioMountForRiserFace(rp.riserFace);
+        if (rp.studioMount == plane)
+            continue;
+
+        qDebug() << "[Monitor] fixture" << it.key() << "is bolted to a riser's"
+                 << (rp.riserFace == FixtureRigProps::RiserTop ? "top" : "front face")
+                 << "but was drawn on plane" << rp.studioMount
+                 << "-- corrected to" << plane;
+        rp.studioMount = plane;
+        it.setValue(rp);
     }
 }
 
@@ -2608,9 +2652,22 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("GLX"), QString::number(double(rp.groupLocal.x()), 'f', 3));
             doc->writeAttribute(QStringLiteral("GLY"), QString::number(double(rp.groupLocal.y()), 'f', 3));
             doc->writeAttribute(QStringLiteral("GLZ"), QString::number(double(rp.groupLocal.z()), 'f', 3));
-            doc->writeAttribute(QStringLiteral("SM"), QString::number(rp.studioMount));
-            doc->writeAttribute(QStringLiteral("SA"), QString::number(double(rp.studioAngle), 'f', 1));
         }
+        /* NOT part of the groupLocal branch, though they lived inside it for a
+           long time. The plane a linear fixture lies in and the angle it runs
+           at are properties of the FIXTURE, not of studio-frame membership: a
+           bar clamped to a truss and set to run vertically is saying something
+           about itself. Tying them to groupLocal meant those two controls did
+           nothing at all for every fixture outside a frame -- set the face,
+           save, reopen, and it is back on the front plane at 0 degrees, with no
+           hint as to why. The loader has always read them unconditionally.
+
+           Written only when they differ from the default so no existing file
+           gains attributes it did not have. */
+        if (rp.studioMount != 1)
+            doc->writeAttribute(QStringLiteral("SM"), QString::number(rp.studioMount));
+        if (!qFuzzyIsNull(rp.studioAngle))
+            doc->writeAttribute(QStringLiteral("SA"), QString::number(double(rp.studioAngle), 'f', 1));
         doc->writeEndElement();
     }
 
