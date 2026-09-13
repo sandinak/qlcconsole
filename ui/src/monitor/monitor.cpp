@@ -3985,6 +3985,97 @@ void Monitor::slotEditTarget(quint32 tid)
                             "fixture). ~1.4 m hits the chest."));
     form->addRow(tr("Follow-spot subject height:"), subjSpin);
 
+    /* WHAT this target is. A kind changes where light is aimed and what is
+       drawn at the point -- a drum kit is not a vocalist, and neither is a
+       mark on the deck. */
+    QComboBox *kindCombo = new QComboBox(&dlg);
+    kindCombo->addItem(tr("None — a mark on the deck"),
+                       int(StageTarget::Kind::None));
+    kindCombo->addItem(tr("Person"),        int(StageTarget::Kind::Person));
+    kindCombo->addItem(tr("Drum kit"),      int(StageTarget::Kind::DrumKit));
+    kindCombo->addItem(tr("Bound to a structure"),
+                       int(StageTarget::Kind::Structure));
+    kindCombo->addItem(tr("Area"),          int(StageTarget::Kind::Area));
+    kindCombo->setCurrentIndex(kindCombo->findData(int(t->kind())));
+    kindCombo->setToolTip(tr("What is standing here. Decides the height light "
+                             "is aimed at and what is drawn in the rig view."));
+    form->addRow(tr("Subject:"), kindCombo);
+
+    /* What it FOLLOWS. A bound target takes its position from the structure
+       every time it is read, so moving or restacking the step takes the target
+       with it -- which is what actually happens between load-ins. */
+    QComboBox *boundCombo = new QComboBox(&dlg);
+    boundCombo->addItem(tr("(not bound)"), QString());
+    foreach (StagePlatform *pl, m_props->platforms())
+        if (pl != nullptr)
+            boundCombo->addItem(tr("Platform — %1").arg(pl->name()),
+                                QString("platform:%1").arg(pl->id()));
+    foreach (Truss *tr_ , m_props->trusses())
+        if (tr_ != nullptr)
+            boundCombo->addItem(tr("Truss — %1").arg(tr_->name()),
+                                QString("truss:%1").arg(tr_->id()));
+    foreach (Tower *tw, m_props->towers())
+        if (tw != nullptr)
+            boundCombo->addItem(tr("Tower — %1").arg(tw->name()),
+                                QString("tower:%1").arg(tw->id()));
+    if (t->isBound())
+    {
+        const int ix = boundCombo->findData(QString("%1:%2")
+                                            .arg(t->boundType()).arg(t->boundId()));
+        if (ix >= 0)
+            boundCombo->setCurrentIndex(ix);
+    }
+    form->addRow(tr("Follows:"), boundCombo);
+
+    /* Per-target aim height. One override is what stops the Subject list
+       needing a new entry for every one-off. */
+    QCheckBox *ovrChk = new QCheckBox(tr("Override aim height"), &dlg);
+    ovrChk->setChecked(t->hasAimHeightOverride());
+    QDoubleSpinBox *ovrSpin = new QDoubleSpinBox(&dlg);
+    ovrSpin->setRange(0, isFeet_t ? 32.8 : 10.0);
+    ovrSpin->setSuffix(unitSfx_t); ovrSpin->setDecimals(2);
+    ovrSpin->setValue(double(t->effectiveAimHeight()) * toDisp_t);
+    ovrSpin->setEnabled(ovrChk->isChecked());
+    connect(ovrChk, &QCheckBox::toggled, ovrSpin, &QWidget::setEnabled);
+    ovrSpin->setToolTip(tr("How far above whatever it is standing on to aim. "
+                           "Unticked, the Subject decides."));
+    QHBoxLayout *ovrRow = new QHBoxLayout;
+    ovrRow->addWidget(ovrChk);
+    ovrRow->addWidget(ovrSpin);
+    form->addRow(tr("Aim height:"), ovrRow);
+
+    /* Footprint. A drum kit is not a point, and neither is an area: this is
+       what lets the view show whether a beam actually COVERS the thing. */
+    QDoubleSpinBox *wSpin = new QDoubleSpinBox(&dlg);
+    wSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
+    wSpin->setSuffix(unitSfx_t); wSpin->setDecimals(2);
+    wSpin->setValue(t->footprint().width() * toDisp_t);
+    QDoubleSpinBox *dSpin = new QDoubleSpinBox(&dlg);
+    dSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
+    dSpin->setSuffix(unitSfx_t); dSpin->setDecimals(2);
+    dSpin->setValue(t->footprint().height() * toDisp_t);
+    QHBoxLayout *sizeRow = new QHBoxLayout;
+    sizeRow->addWidget(wSpin);
+    sizeRow->addWidget(new QLabel(tr("x"), &dlg));
+    sizeRow->addWidget(dSpin);
+    form->addRow(tr("Size (W x D):"), sizeRow);
+
+    /* Only the rows that mean something for the chosen Subject. */
+    auto syncRows = [&]() {
+        const StageTarget::Kind k =
+            StageTarget::Kind(kindCombo->currentData().toInt());
+        boundCombo->setEnabled(k == StageTarget::Kind::Structure);
+        const bool sized = (k == StageTarget::Kind::DrumKit
+                            || k == StageTarget::Kind::Area);
+        wSpin->setEnabled(sized);
+        dSpin->setEnabled(sized);
+        if (ovrChk->isChecked() == false)
+            ovrSpin->setValue(double(StageTarget::defaultAimHeight(k)) * toDisp_t);
+    };
+    connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            &dlg, [&](int) { syncRows(); });
+    syncRows();
+
     QColor curColor = t->color().isValid() ? t->color() : QColor(255, 180, 0);
     QPushButton *colorBtn = new QPushButton(&dlg);
     colorBtn->setStyleSheet(QString("background-color: %1").arg(curColor.name()));
@@ -4015,6 +4106,23 @@ void Monitor::slotEditTarget(quint32 tid)
     t->setZ(float(zSpin->value() * fromDisp_t));
     t->setColor(chosenColor);
     m_props->setAimSubjectHeight(float(subjSpin->value() * fromDisp_t));
+
+    t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
+    const QString bound = boundCombo->currentData().toString();
+    if (t->kind() == StageTarget::Kind::Structure && bound.isEmpty() == false)
+    {
+        const QStringList parts = bound.split(QLatin1Char(':'));
+        if (parts.size() == 2)
+            t->setBinding(parts.at(0), parts.at(1).toUInt());
+    }
+    else
+    {
+        t->clearBinding();
+    }
+    t->setAimHeightOverride(ovrChk->isChecked()
+                            ? float(ovrSpin->value() * fromDisp_t) : -1.0f);
+    t->setFootprint(QSizeF(wSpin->value() * fromDisp_t,
+                           dSpin->value() * fromDisp_t));
 
     m_graphicsView->updateTargets();
     m_doc->setModified();
