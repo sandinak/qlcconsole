@@ -1034,6 +1034,50 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+### Follow-on 44: the Subject selector, a drop that lands where you aimed it
+
+**1. The Subject selector.** Follow-on 43 shipped the model with no way to set
+any of it. Edit Target now carries Subject (None / Person / Drum kit / Bound to
+a structure / Area), a Follows list of every platform, truss and tower, a
+per-target aim-height override, and a footprint. Rows that mean nothing for the
+chosen Subject are disabled rather than hidden, so the dialog does not change
+shape while it is being used, and the aim-height spin tracks the Subject's
+default while the override is unticked -- it always shows the height that will
+actually be used.
+
+**2. A dropped look landed inside the effect, wherever you aimed it.** Branson:
+"when I drag things in the programmer page to a scene that has a function, it
+puts the option under the function rather than under the scene, even if I put
+it above the function in the tree."
+
+The palette ORDER decides nesting here -- a Colour or Dimmer listed after an
+Effect belongs to that effect and feeds it rather than painting the scene (see
+`QLCPalette::isEffectScoped`, and follow-on 23, where this was what made a
+"red" look never send red). `Scene::addPalette()` APPENDS. So every drop landed
+at the end, which is after any effect, which means inside it -- regardless of
+where it was aimed.
+
+**Appending is not a neutral default when position carries meaning.** Two rules
+now: dropped ON a row it goes where it was dropped; dropped anywhere else it
+becomes a BASE look, placed before the first effect, because "I dragged a
+colour onto this scene" means colour the scene. Feeding an effect stays the
+deliberate act -- it already has its own gesture, dropping onto the effect
+itself -- so it should not also be the accident.
+
+Revert-checked: appending gives "a dropped colour landed at 2, after the effect
+at 1 -- it has been swallowed by the effect instead of colouring the scene".
+New test target `ui/test/looksdrop`.
+
+**3. Patched devices are tinted in Connections.** A device row that carries
+universes is wired up; it now gets a very faint green wash. The question that
+page is usually asked is "is that thing actually patched", and answering it
+should not need reading the third column of every line. Deliberately faint: a
+strong fill would fight the foreground colours already used for things that
+matter more, like the red that marks two universes colliding on one port.
+
+`monitor_test` 76/76, `monitorproperties_test` 22/22, `looksdrop_test` 3/3.
+`check-all.sh`: all four legs pass, 0 failures.
+
 ### Follow-on 43: targets get a KIND, and can be bound to a structure
 
 Branson wanted target types. The design conversation landed on a test worth

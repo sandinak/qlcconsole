@@ -74,6 +74,10 @@ protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+    /** Place just-dropped looks where they were aimed -- and, failing that,
+     *  as a BASE look rather than inside whatever effect happens to be
+     *  last. Order decides nesting here, so appending is not neutral. */
+    void placeDroppedLooks(const QList<quint32> &pids, const QPoint &dropPos);
     /** Catch the look-list's internal drag-drop drop so we can sync the palette
      *  order afterwards — QTreeWidget's internal move emits rowsRemoved/Inserted,
      *  not rowsMoved, so we can't rely on a model signal for this. */

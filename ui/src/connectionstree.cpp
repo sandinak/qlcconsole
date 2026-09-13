@@ -1489,6 +1489,26 @@ void ConnectionsTree::refresh()
                                 ? tr("%1 universes").arg(names.count())
                                 : names.join(", "));
 
+                    /* A DEVICE that carries something is wired up. Tint it, very
+                       gently, so a patched node reads at a glance in a tree that
+                       is otherwise a wall of identical rows -- the question being
+                       asked of this page is usually "is that thing actually
+                       patched", and answering it should not need reading the
+                       third column of every line.
+                     *
+                       Deliberately faint: a strong fill would fight the
+                       foreground colours this tree already uses to say things
+                       that matter more (a red CARRIES means two universes are
+                       colliding on one port). Subtle enough to scan, quiet
+                       enough not to compete. */
+                    if (k == KIND_DEVICE)
+                    {
+                        const QBrush wired(QColor(70, 150, 110, 34));
+                        it->setBackground(COL_NAME, wired);
+                        it->setBackground(COL_DETAIL, wired);
+                        it->setBackground(COL_CARRIES, wired);
+                    }
+
                     /* Two universes aimed at one physical DMX port is a fault,
                        not a layout: both streams arrive at the same socket and
                        whichever the node merges or drops is arbitrary. It is

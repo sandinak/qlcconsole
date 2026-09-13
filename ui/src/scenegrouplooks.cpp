@@ -650,6 +650,77 @@ void SceneGroupLooks::dragMoveEvent(QDragMoveEvent *event)
         event->acceptProposedAction();
 }
 
+/* Where a dropped look actually lands.
+ *
+ * Scene::addPalette() APPENDS, and in this model the palette ORDER is what
+ * decides nesting: a Colour or Dimmer listed after an Effect belongs to that
+ * effect rather than painting the scene. So every drop landed at the end, which
+ * is after any effect, which means inside it -- whatever the user did, and
+ * wherever they aimed. Dropping a colour above the effect in the list put it
+ * under the effect anyway.
+ *
+ * Two rules, in order:
+ *   - dropped ON a row, it goes where it was dropped;
+ *   - dropped anywhere else, it becomes a BASE look -- before the first effect
+ *     -- because "I dragged a colour onto this scene" means colour the scene.
+ *     Feeding an effect is the deliberate act, and it has its own gesture
+ *     (drop onto the effect), so it should not also be the accident.
+ */
+void SceneGroupLooks::placeDroppedLooks(const QList<quint32> &pids,
+                                        const QPoint &dropPos)
+{
+    if (m_scene == NULL || pids.isEmpty())
+        return;
+
+    QList<quint32> order = m_scene->palettes();
+
+    // Where the user aimed, if they aimed at a row.
+    int at = -1;
+    const QPoint lp = m_lookList->viewport()->mapFrom(this, dropPos);
+    if (QTreeWidgetItem *it = m_lookList->itemAt(lp))
+    {
+        const quint32 pid = it->data(LookColName, Qt::UserRole).toUInt();
+        const int ix = order.indexOf(pid);
+        if (ix >= 0)
+            at = ix;
+    }
+
+    if (at < 0)
+    {
+        // Before the first effect: a base look.
+        at = order.size();
+        for (int i = 0; i < order.size(); ++i)
+        {
+            QLCPalette *p = m_doc->palette(order.at(i));
+            if (p != NULL && p->type() == QLCPalette::Effect)
+            {
+                at = i;
+                break;
+            }
+        }
+    }
+
+    // Lift the new ones out and reinsert them together at the chosen point.
+    foreach (quint32 pid, pids)
+    {
+        const int cur = order.indexOf(pid);
+        if (cur >= 0)
+        {
+            order.removeAt(cur);
+            if (cur < at)
+                --at;
+        }
+    }
+    at = qBound(0, at, order.size());
+    for (int i = 0; i < pids.size(); ++i)
+        order.insert(at + i, pids.at(i));
+
+    m_scene->reorderPalettes(order);
+    m_doc->setModified();
+    reload();
+    emit sceneModified();
+}
+
 void SceneGroupLooks::dropEvent(QDropEvent *event)
 {
     const QMimeData *mime = event->mimeData();
@@ -821,6 +892,10 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
     const bool nested = (dropEffectPid != QLCPalette::invalidId() && !addedPalettePids.isEmpty());
     if (nested)
         moveLooksToTarget(addedPalettePids, dropEffectPid);
+    else if (addedPalettePids.isEmpty() == false)
+    {
+        placeDroppedLooks(addedPalettePids, dropPos);
+    }
     else if (changed)
     {
         m_doc->setModified();
