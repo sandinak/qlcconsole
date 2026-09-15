@@ -486,6 +486,7 @@ protected:
     class MonitorRuler *m_vRuler = nullptr;  ///< left ruler
     QWidget   *m_rulerCorner = nullptr;      ///< top-left corner filler
     QLabel    *m_readoutLabel = nullptr;     ///< live X/Y coordinate readout
+    class QToolButton *m_offStageBtn = nullptr;  ///< footer "N off stage" warning
     QLabel    *m_modeLabel = nullptr;        ///< prominent current-mode chip
     /** Refresh the footer mode chip from the POV / overlay / Build state. */
     void updateModeIndicator();

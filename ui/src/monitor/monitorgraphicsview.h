@@ -211,6 +211,9 @@ public:
     /** Clear the scene selection and select just this fixture. */
     void selectFixtureExclusive(quint32 fxId);
 
+    /** Select exactly these fixtures and scroll the first into view. */
+    void selectFixtures(const QList<quint32> &ids);
+
     /** Set the gel color of the fixture with the given ID */
     void setFixtureGelColor(quint32 id, QColor col);
 
@@ -261,6 +264,30 @@ public:
      *  the given ID
      */
     void updateFixture(quint32 id);
+
+    /** Widen the scene rect to cover every item, never narrower than the
+     *  viewport. A QGraphicsView cannot scroll past its scene rect, so without
+     *  this anything placed off the grid is not merely off-screen but
+     *  unreachable -- unselectable, undraggable, editable only in the file. */
+    void growSceneRectToItems();
+
+    /** Fixtures whose stored position lies outside the stage grid.
+     *
+     *  Off the grid is not off by a little: it means the fixture is nowhere the
+     *  plan normally shows, contributes nothing to the show, and -- because the
+     *  rig view frames itself around every fixture -- silently shrinks the
+     *  whole 3-D view around empty space. Worth being told about rather than
+     *  discovering in an overview that looks inexplicably zoomed out. */
+    QList<quint32> fixturesOffGrid() const;
+
+    /** Recount off-grid fixtures and emit offGridFixturesChanged() if it moved.
+     *
+     *  Must be called AFTER a move is persisted, which is not always where the
+     *  move happens: a plan drag emits fixtureMoved and it is
+     *  Monitor::slotFixtureMoved() that writes the new position, so recounting
+     *  inside the view's own drag handling reads the OLD one and the warning
+     *  never clears. */
+    void refreshOffGridTally();
 
     /** Reposition every riser-mounted fixture from its platform geometry. Call
      *  after a platform is moved/resized so its mounted fixtures follow. */
@@ -685,6 +712,9 @@ private:
     void captureMoveUndo();
 
 signals:
+    /** How many fixtures are sitting outside the stage grid (0 = none). */
+    void offGridFixturesChanged(int count);
+
     /** Signal emitted after fixture point -> metrics conversion */
     void fixtureMoved(quint32 id, QPointF pos);
 
@@ -940,6 +970,7 @@ private:
      *  extendSelectionToGroups from dynamic_cast-ing half-deleted items when
      *  QGraphicsScene::removeItem fires selectionChanged mid-teardown. */
     bool m_itemsRebuilding = false;
+    int  m_offGridCount = -1;      ///< last emitted off-grid tally (-1 = never)
 
     /** True while a "click to place 0,0" pick is armed (beginPickOrigin). */
     bool m_pickingOrigin = false;

@@ -808,6 +808,37 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     });
     addSep();
 
+    /* "N off stage" -- hidden unless it is true.
+     *
+       stage-structures-demo.qxw carries two fixtures stranded 13.8 m upstage,
+       detached from a truss years ago and never seen since: absent from the
+       plan, absent from the rig as anything you would notice, and quietly
+       stretching the 3-D overview's framing around empty floor. Nothing in the
+       app said so. Clicking selects them and scrolls them into view, which is
+       only possible now the scene rect reaches that far. */
+    m_offStageBtn = new QToolButton(footer);
+    m_offStageBtn->setAutoRaise(true);
+    m_offStageBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_offStageBtn->setVisible(false);
+    m_offStageBtn->setStyleSheet("QToolButton { color: #e0a030; }");
+    connect(m_offStageBtn, &QToolButton::clicked, this, [this]() {
+        if (m_graphicsView != NULL)
+            m_graphicsView->selectFixtures(m_graphicsView->fixturesOffGrid());
+    });
+    fl->addWidget(m_offStageBtn);
+    connect(m_graphicsView, &MonitorGraphicsView::offGridFixturesChanged,
+            this, [this](int n) {
+        if (m_offStageBtn == NULL)
+            return;
+        m_offStageBtn->setVisible(n > 0);
+        m_offStageBtn->setText(tr("%n fixture(s) off stage", "", n));
+        m_offStageBtn->setToolTip(tr("%n fixture(s) sit outside the stage grid, so "
+                                     "they are not where the plan normally shows "
+                                     "anything and they stretch the rig view's "
+                                     "framing. Click to select them.", "", n));
+    });
+    addSep();
+
     // Live coordinate readout, right-aligned.
     m_readoutLabel = new QLabel(tr("—"));
     m_readoutLabel->setMinimumWidth(160);
@@ -6528,6 +6559,9 @@ void Monitor::slotFixtureMoved(quint32 fid, QPointF pos)
     const float z = m_props->fixturePosition(fid, 0, 0).z();
     m_props->setFixturePosition(fid, 0, 0, QVector3D(pos.x(), pos.y(), z));
     m_doc->setModified();
+    // The position is only now what the tally should be counting -- the view
+    // emitted this before the store had it.
+    m_graphicsView->refreshOffGridTally();
 }
 
 void Monitor::slotViewClicked()

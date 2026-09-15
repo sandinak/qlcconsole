@@ -782,6 +782,7 @@ int MonitorGraphicsView::alignSelectedFixtures(int mode)
         emit fixtureMoved(it.first, p);
     }
     m_doc->setModified();
+    refreshOffGridTally();      // aligning can push a fixture off the grid
     return items.size();
 }
 
@@ -816,6 +817,7 @@ int MonitorGraphicsView::distributeSelectedFixtures(bool horizontal)
         emit fixtureMoved(items[i].first, p);
     }
     m_doc->setModified();
+    refreshOffGridTally();
     return items.size();
 }
 
@@ -2090,6 +2092,69 @@ QColor MonitorGraphicsView::fixtureGelColor(quint32 id)
     return item->getColor();
 }
 
+void MonitorGraphicsView::growSceneRectToItems()
+{
+    if (m_scene == NULL || width() <= 0 || height() <= 0)
+        return;
+
+    QRectF r(0, 0, this->width(), this->height());
+    r |= m_scene->itemsBoundingRect();
+    if (r != m_scene->sceneRect())
+        m_scene->setSceneRect(r);
+
+    refreshOffGridTally();
+}
+
+void MonitorGraphicsView::refreshOffGridTally()
+{
+    const int off = fixturesOffGrid().count();
+    if (off == m_offGridCount)
+        return;
+    m_offGridCount = off;
+    emit offGridFixturesChanged(off);
+}
+
+QList<quint32> MonitorGraphicsView::fixturesOffGrid() const
+{
+    QList<quint32> out;
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : NULL;
+    if (props == NULL || m_unitValue <= 0)
+        return out;
+
+    // The grid runs from the origin: gridSize is in CELLS, m_unitValue the mm
+    // each cell spans.
+    const double w = double(m_gridSize.width())  * double(m_unitValue);
+    const double d = double(m_gridSize.height()) * double(m_unitValue);
+
+    foreach (quint32 fid, props->fixtureItemsID())
+    {
+        const QVector3D p = props->fixturePosition(fid, 0, 0);   // mm
+        if (p.x() < 0.0f || p.y() < 0.0f || double(p.x()) > w || double(p.y()) > d)
+            out << fid;
+    }
+    return out;
+}
+
+void MonitorGraphicsView::selectFixtures(const QList<quint32> &ids)
+{
+    if (m_scene == NULL)
+        return;
+    m_scene->clearSelection();
+    MonitorFixtureItem *first = NULL;
+    foreach (quint32 fid, ids)
+    {
+        MonitorFixtureItem *item = m_fixtures.value(fid, NULL);
+        if (item == NULL)
+            continue;
+        item->setSelected(true);
+        if (first == NULL)
+            first = item;
+    }
+    // Scrolling to it is the point: these are the fixtures you cannot find.
+    if (first != NULL)
+        ensureVisible(first);
+}
+
 QPointF MonitorGraphicsView::realPositionToPixels(qreal xpos, qreal ypos)
 {
     qreal realX = m_xOffset + ((xpos * m_cellPixels) / m_unitValue);
@@ -2314,6 +2379,11 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         else
             item->setPos(onTruss ? (p - halfIcon(item)) : p);
     }
+
+    /* The grid layout unions this too, but it runs before any item exists (and
+       again on resize), so a fixture placed OUTSIDE the grid afterwards would
+       still fall beyond the scroll range and be unreachable. */
+    growSceneRectToItems();
 }
 
 void MonitorGraphicsView::refreshRiserFixtures()
@@ -4163,11 +4233,20 @@ void MonitorGraphicsView::updateGrid()
             gi->setVisible(m_gridVisible);
     }
 
-    // Match the scene rect to the viewport so that, once zoomed in, the view
-    // has scroll range — which is what makes wheel-zoom anchor under the cursor
-    // and Shift-drag panning work.
-    if (width() > 0 && height() > 0)
-        m_scene->setSceneRect(0, 0, this->width(), this->height());
+    /* Match the scene rect to the viewport so that, once zoomed in, the view
+       has scroll range — which is what makes wheel-zoom anchor under the cursor
+       and Shift-drag panning work.
+     *
+       UNIONED with whatever the items actually occupy, because a QGraphicsView
+       cannot scroll past its scene rect: anything placed outside the grid was
+       not merely off-screen, it was unreachable — impossible to see, select or
+       drag back, recoverable only by editing the .qxw by hand.
+       stage-structures-demo.qxw has two fixtures stranded 13.8 m upstage
+       exactly like that, left behind when they were detached from a truss.
+
+       Costs nothing in the ordinary case: with everything on the grid the
+       items' bounds sit inside the viewport and the union is the viewport. */
+    growSceneRectToItems();
 
     updateImages();
     updateTrusses();
