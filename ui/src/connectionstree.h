@@ -171,6 +171,17 @@ private:
     /** Universes selected in the tree, in row order, deduplicated. */
     QList<quint32> selectedUniverses(QString &pluginName, QList<quint32> &lines) const;
     /** Write outputIP / outputUni onto the patch of this universe on this line. */
+    /** Which universe already sends to a node port, or invalidUniverse().
+     *
+     *  The destination is NOT the plugin line. For Art-Net and sACN a line is a
+     *  network INTERFACE, and one interface carries as many universes as you
+     *  like -- what distinguishes them is the node address plus the port
+     *  address. Two universes on one NIC is ordinary; two universes on the same
+     *  node port is a genuine fault, and the one worth refusing. */
+    quint32 universeOnTarget(const QString &pluginName, quint32 line,
+                             const QString &address, quint32 portAddress,
+                             quint32 exceptUniverse) const;
+
     bool applyTarget(quint32 universe, const QString &pluginName, quint32 line,
                      const QString &address, quint32 portAddress);
 
@@ -181,8 +192,13 @@ private:
     /** Patch a universe to a target typed in by hand. */
     void patchToNewTarget(const QString &pluginName, quint32 line);
 
-    /** Declare a target this console cannot discover for itself. */
-    void addManualTarget(const QString &pluginName, quint32 line);
+    /** Declare a target this console cannot discover for itself. Returns
+        the address that was declared, or an empty string if the user
+        cancelled or it was already declared. */
+    QString addManualTarget(const QString &pluginName, quint32 line);
+    /** Same as addManualTarget(), but its ports come from a picked
+        DeviceProfile instead of being typed in one at a time afterward. */
+    void addTargetFromLibrary(const QString &pluginName, quint32 line);
     /** Add a port (net:sub:universe) to a hand-declared target. */
     void addManualPort(const QString &address);
     /** Drop a hand-declared target. Patches aimed at it are left alone. */

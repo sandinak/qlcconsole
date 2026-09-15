@@ -722,6 +722,48 @@ void ConnectionsTree_Test::selectedUniversesDeduplicatesFannedOutUniverses()
     QCOMPARE(lines.count(), 1);
 }
 
+/* Two universes pointed at the same node AND port both write it every tick, so
+   the fixture shows whichever arrived last: a patch that reads as correct on
+   every screen and is wrong on the floor. Nothing stopped it.
+
+   The rule is keyed on the destination, not the plugin line -- for Art-Net a
+   line is a network interface and sharing one is normal, which is what the
+   first half of this test pins down. */
+void ConnectionsTree_Test::twoUniversesCannotTargetTheSameNodePort()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < 3; u++)
+        QVERIFY(iom->setOutputPatch(u, stub->name(), "", 0, false, 0) == true);
+
+    ConnectionsTree tree(m_doc);
+
+    // Universe 0 takes 172.18.2.10 port 0x011.
+    QVERIFY(tree.applyTarget(0, stub->name(), 0, "172.18.2.10", 0x011) == true);
+
+    // Same NIC, DIFFERENT port: ordinary Art-Net, and it must keep working.
+    QVERIFY(tree.applyTarget(1, stub->name(), 0, "172.18.2.10", 0x012) == true);
+
+    // Same NIC, same node, SAME port: refused.
+    QVERIFY(tree.applyTarget(2, stub->name(), 0, "172.18.2.10", 0x011) == false);
+
+    // ...and the refusal left universe 2 alone rather than half-applying it.
+    QString a;
+    quint32 p = 0;
+    if (tree.patchTarget(2, stub->name(), 0, a, p) == true)
+        QVERIFY2(!(a == QString("172.18.2.10") && p == 0x011),
+                 "the refused target was written anyway");
+
+    // A different NODE on the same port address is a different destination.
+    QVERIFY(tree.applyTarget(2, stub->name(), 0, "172.18.2.99", 0x011) == true);
+
+    // Re-applying a universe's OWN target is not a self-collision.
+    QVERIFY(tree.applyTarget(0, stub->name(), 0, "172.18.2.10", 0x011) == true);
+
+    // And the owner is reported for the message the UI shows.
+    QCOMPARE(tree.universeOnTarget(stub->name(), 0, "172.18.2.10", 0x011, 2), quint32(0));
+}
+
 void ConnectionsTree_Test::bulkRetargetNumbersPortsUpwardAndIsOneUndoStep()
 {
     IOPluginStub *stub = stubOf(m_doc);

@@ -78,6 +78,8 @@ private slots:
     void selectedUniversesRejectsAMixedPluginSelection();
     void selectedUniversesDeduplicatesFannedOutUniverses();
     void bulkRetargetNumbersPortsUpwardAndIsOneUndoStep();
+    /** Two universes may share a NIC, but not a node port. */
+    void twoUniversesCannotTargetTheSameNodePort();
 
     /* Reachability probing */
     void rescanProbesUnheardTargetsOnly();

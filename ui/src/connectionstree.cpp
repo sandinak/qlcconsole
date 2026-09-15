@@ -36,6 +36,7 @@
 #include <QSysInfo>
 
 #include "connectionstree.h"
+#include "deviceprofile.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
@@ -1027,6 +1028,7 @@ void ConnectionsTree::refresh()
                 QTreeWidgetItem *fitem = new QTreeWidgetItem(litem);
                 fitem->setText(COL_NAME, tr("%1: %2").arg(fu->id() + 1).arg(fu->name()));
                 fitem->setText(COL_DETAIL, tr("feedback"));
+                fitem->setFlags(fitem->flags() | Qt::ItemIsEditable);
                 fitem->setData(COL_NAME, ROLE_KIND, KIND_UNIVERSE);
                 fitem->setData(COL_NAME, ROLE_UNIVERSE, fbId);
                 fitem->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
@@ -1136,6 +1138,7 @@ void ConnectionsTree::refresh()
                     }
 
                     QTreeWidgetItem *uitem = new QTreeWidgetItem(parentItem);
+                    uitem->setFlags(uitem->flags() | Qt::ItemIsEditable);
                     /* Name plus id: names are free-form and duplicated across
                        shows, and when someone is checking a patch against a
                        plot they need the authoritative number. */
@@ -1377,6 +1380,7 @@ void ConnectionsTree::refresh()
                     }
 
                     QTreeWidgetItem *uitem = new QTreeWidgetItem(parentForUniverse);
+                    uitem->setFlags(uitem->flags() | Qt::ItemIsEditable);
                     uitem->setText(COL_NAME, tr("%1: %2").arg(u->id() + 1).arg(u->name()));
                     uitem->setText(COL_DETAIL, targetAddr.isEmpty() ? tr("output · broadcast")
                                                                      : tr("output"));
@@ -1632,6 +1636,7 @@ void ConnectionsTree::refresh()
             foreach (Universe *u, unpatched)
             {
                 QTreeWidgetItem *uitem = new QTreeWidgetItem(folder);
+                uitem->setFlags(uitem->flags() | Qt::ItemIsEditable);
                 uitem->setText(COL_NAME, tr("%1: %2").arg(u->id() + 1).arg(u->name()));
                 uitem->setText(COL_DETAIL, tr("not patched"));
                 uitem->setData(COL_NAME, ROLE_KIND, KIND_UNPATCHED_UNIVERSE);
@@ -2111,6 +2116,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            this IS the bottom of the hierarchy. */
         QAction *addTgt = targets
             ? menu.addAction(tr("Add a target on this interface…")) : NULL;
+        QAction *addTgtLib = targets
+            ? menu.addAction(tr("Add a target from device library…")) : NULL;
         QAction *pOut = (canOut && targets == false)
             ? menu.addAction(tr("Patch a universe here (output)…")) : NULL;
         QAction *pIn = (canIn && targets == false)
@@ -2160,6 +2167,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         }
         else if (addTgt != NULL && chosen == addTgt)
             addManualTarget(plugin, line);
+        else if (addTgtLib != NULL && chosen == addTgtLib)
+            addTargetFromLibrary(plugin, line);
         else if (pOut != NULL && chosen == pOut)
             patchUniverseTo(plugin, line, true);
         else if (pIn != NULL && chosen == pIn)
@@ -2733,11 +2742,16 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
     bool done = false;
     if (output)
     {
-        /* Append rather than replace: a universe may legitimately fan out to
-           several nodes, and patching here should add this interface, not
-           silently drop the ones already set. */
-        done = iomap->setOutputPatch(uniId, pluginName, QString(), line, false,
-                                     iomap->outputPatchesCount(uniId));
+        /* Replace, not append.
+         *
+           This used to add a patch at outputPatchesCount(), on the reasoning
+           that a universe may legitimately fan out to several nodes. It can, in
+           the engine -- but every other surface shows and edits ONE output per
+           universe, so a universe quietly grew a second interface here and
+           nothing else in the app ever mentioned it again. A universe now sends
+           to one line, which is also what the engine enforces, so appending
+           would simply be refused. */
+        done = iomap->setOutputPatch(uniId, pluginName, QString(), line, false, 0);
     }
     else
     {
@@ -3484,6 +3498,28 @@ void ConnectionsTree::retargetFeedback(quint32 universe)
  *  (retargetPatch) so a patch made by one and changed by the other cannot end
  *  up describing itself differently.
  */
+quint32 ConnectionsTree::universeOnTarget(const QString &pluginName, quint32 line,
+                                          const QString &address, quint32 portAddress,
+                                          quint32 exceptUniverse) const
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL || address.isEmpty())
+        return InputOutputMap::invalidUniverse();
+
+    for (quint32 u = 0; u < iomap->universesCount(); u++)
+    {
+        if (u == exceptUniverse)
+            continue;
+        QString a;
+        quint32 p = 0;
+        if (patchTarget(u, pluginName, line, a, p) == false)
+            continue;
+        if (a == address && p == portAddress)
+            return u;
+    }
+    return InputOutputMap::invalidUniverse();
+}
+
 bool ConnectionsTree::applyTarget(quint32 universe, const QString &pluginName,
                                   quint32 line, const QString &address,
                                   quint32 portAddress)
@@ -3500,6 +3536,28 @@ bool ConnectionsTree::applyTarget(quint32 universe, const QString &pluginName,
             continue;
         if (op->plugin()->name() != pluginName || op->output() != line)
             continue;
+
+        /* One node port, one universe.
+         *
+           Nothing used to stop two universes being pointed at the same node
+           and port. Both then write it every tick and the fixture shows
+           whichever arrived last -- a patch that reads as correct everywhere on
+           screen and is wrong on the floor, which is the hardest kind of fault
+           to find in a dark room.
+
+           Keyed on the DESTINATION, deliberately, not on the plugin line: a
+           line here is a network interface, and universes sharing one NIC is
+           how Art-Net normally works. Refusing per line would have made the
+           second universe on a node unpatchable. */
+        const quint32 owner = universeOnTarget(pluginName, line, address,
+                                               portAddress, universe);
+        if (owner != InputOutputMap::invalidUniverse())
+        {
+            qWarning() << "[Connections] refusing to target universe" << universe
+                       << "at" << address << "port" << portAddress
+                       << "-- universe" << owner << "already sends there";
+            return false;
+        }
 
         op->setPluginParameter("outputIP", address);
         op->setPluginParameter("outputUni", portAddress);
@@ -3593,12 +3651,26 @@ void ConnectionsTree::retargetPatch(quint32 universe, const QString &pluginName,
         return;
     }
 
-    if (applyTarget(universe, pluginName, line, addr,
-                    quint32((net << 8) | (sub << 4) | uni)) == false)
+    const quint32 wanted = quint32((net << 8) | (sub << 4) | uni);
+    if (applyTarget(universe, pluginName, line, addr, wanted) == false)
     {
-        QMessageBox::warning(this, tr("Retarget patch"),
-                             tr("That universe is no longer patched to %1.")
-                                 .arg(pluginName));
+        /* Two reasons it can fail, and they need opposite fixes: the port is
+           spoken for, or the patch this was invoked on has gone. Reporting the
+           second for both sent people looking for a patch that was fine. */
+        const quint32 owner = universeOnTarget(pluginName, line, addr, wanted, universe);
+        if (owner != InputOutputMap::invalidUniverse())
+            QMessageBox::warning(this, tr("Retarget patch"),
+                tr("Universe %1 already sends to %2 port %3:%4:%5.\n\nOne port "
+                   "carries one universe: pointing this one there too would "
+                   "leave both writing to it, and the fixtures showing "
+                   "whichever arrived last. Move universe %1 first, or pick "
+                   "another port.")
+                    .arg(owner + 1).arg(addr)
+                    .arg(net).arg(sub).arg(uni));
+        else
+            QMessageBox::warning(this, tr("Retarget patch"),
+                                 tr("That universe is no longer patched to %1.")
+                                     .arg(pluginName));
         return;
     }
     m_doc->setModified();
@@ -3728,11 +3800,15 @@ void ConnectionsTree::retargetSelection(const QString &pluginName)
         iomap->patchUndo()->capture(unis, tr("retarget %1 universes to %2")
                                               .arg(unis.count()).arg(addr));
 
-    int applied = 0;
+    int applied = 0, taken = 0;
     for (int i = 0; i < unis.count(); i++)
     {
-        if (applyTarget(unis.at(i), plug, lines.at(i), addr, first + quint32(i)))
+        const quint32 port = first + quint32(i);
+        if (applyTarget(unis.at(i), plug, lines.at(i), addr, port))
             applied++;
+        else if (universeOnTarget(plug, lines.at(i), addr, port, unis.at(i))
+                 != InputOutputMap::invalidUniverse())
+            taken++;
     }
 
     m_doc->setModified();
@@ -3740,9 +3816,20 @@ void ConnectionsTree::retargetSelection(const QString &pluginName)
 
     if (applied != unis.count())
     {
-        QMessageBox::warning(this, tr("Retarget %1 universes").arg(unis.count()),
-            tr("%1 of %2 were repointed; the rest are no longer patched to %3.")
-                .arg(applied).arg(unis.count()).arg(plug));
+        /* A run that collides part-way is the common case -- numbering upward
+           from a start that overlaps universes already on the node -- and it is
+           worth saying so, because the fix is to start somewhere else rather
+           than to go hunting for an unpatched universe. */
+        if (taken > 0)
+            QMessageBox::warning(this, tr("Retarget %1 universes").arg(unis.count()),
+                tr("%1 of %2 were repointed. %3 stopped because another universe "
+                   "already sends to that port on %4 -- start the numbering "
+                   "somewhere clear of what is already there.")
+                    .arg(applied).arg(unis.count()).arg(taken).arg(addr));
+        else
+            QMessageBox::warning(this, tr("Retarget %1 universes").arg(unis.count()),
+                tr("%1 of %2 were repointed; the rest are no longer patched to %3.")
+                    .arg(applied).arg(unis.count()).arg(plug));
     }
 }
 
@@ -3754,25 +3841,34 @@ void ConnectionsTree::retargetSelection(const QString &pluginName)
  *  same field the inline rename writes, so when the real node does show up it
  *  arrives already labelled instead of reverting to a bare IP.
  */
-void ConnectionsTree::addManualTarget(const QString &pluginName, quint32 line)
+QString ConnectionsTree::addManualTarget(const QString &pluginName, quint32 line)
 {
     InputOutputMap *iomap = m_doc->inputOutputMap();
     if (iomap == NULL)
-        return;
+        return QString();
 
     bool ok = false;
     const QString addr = QInputDialog::getText(
         this, tr("Add target"),
         tr("Address of the target (an IP, or a hostname this console can "
-           "resolve):"), QLineEdit::Normal, QString(), &ok).trimmed();
-    if (ok == false || addr.isEmpty())
-        return;
+           "resolve). If the real address isn't known yet, any placeholder "
+           "text works too -- retarget the universe once it is:"),
+        QLineEdit::Normal, QString(), &ok).trimmed();
+    if (ok == false)
+        return QString();
+    if (addr.isEmpty())
+    {
+        QMessageBox::information(this, tr("Add target"),
+            tr("A target needs some address or placeholder text to be known "
+               "by -- nothing was declared."));
+        return QString();
+    }
 
     if (iomap->isManualTarget(addr))
     {
         QMessageBox::information(this, tr("Add target"),
             tr("%1 is already declared.").arg(addr));
-        return;
+        return QString();
     }
 
     const QString name = QInputDialog::getText(
@@ -3794,6 +3890,56 @@ void ConnectionsTree::addManualTarget(const QString &pluginName, quint32 line)
             if (p != NULL && p->name() == pluginName && p->supportsOutputTargets())
                 p->probeTarget(addr);
     }
+
+    m_doc->setModified();
+    refresh();
+    return addr;
+}
+
+/** Same target-declaration flow as addManualTarget(), except the ports come
+ *  from a device profile someone picked instead of "Add port..." typed by
+ *  hand once per port -- the two calls a profile saves are exactly the ones
+ *  a manual patch-ahead already needed, just batched. */
+void ConnectionsTree::addTargetFromLibrary(const QString &pluginName, quint32 line)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    QList<DeviceProfile> matching;
+    foreach (const DeviceProfile &dp, loadDeviceProfiles())
+        if (dp.protocol == pluginName)
+            matching << dp;
+
+    if (matching.isEmpty())
+    {
+        QMessageBox::information(this, tr("Add target from library"),
+            tr("No device profiles are available for %1.").arg(pluginName));
+        return;
+    }
+
+    QStringList labels;
+    foreach (const DeviceProfile &dp, matching)
+        labels << tr("%1 %2 (%3 port%4)").arg(dp.manufacturer, dp.model)
+                      .arg(dp.ports.count()).arg(dp.ports.count() == 1 ? QString() : QString("s"));
+
+    bool ok = false;
+    const QString picked = QInputDialog::getItem(this, tr("Add target from library"),
+        tr("Device:"), labels, 0, false, &ok);
+    if (ok == false)
+        return;
+
+    const int idx = labels.indexOf(picked);
+    if (idx < 0)
+        return;
+    const DeviceProfile &dp = matching.at(idx);
+
+    const QString addr = addManualTarget(pluginName, line);
+    if (addr.isEmpty())
+        return;
+
+    foreach (quint32 portAddr, dp.ports)
+        iomap->addManualPort(addr, portAddr);
 
     m_doc->setModified();
     refresh();
@@ -4000,12 +4146,40 @@ void ConnectionsTree::slotItemChanged(QTreeWidgetItem *item, int column)
     if (m_rebuilding || item == NULL || column != COL_NAME)
         return;
     const int ekind = item->data(COL_NAME, ROLE_KIND).toInt();
-    if (ekind != KIND_DEVICE && ekind != KIND_LINE)
+    if (ekind != KIND_DEVICE && ekind != KIND_LINE && ekind != KIND_UNIVERSE
+            && ekind != KIND_PENDING_UNIVERSE && ekind != KIND_UNPATCHED_UNIVERSE)
         return;
 
     InputOutputMap *iomap = m_doc->inputOutputMap();
     if (iomap == NULL)
         return;
+
+    /* Universe rows (patched, pending, or unpatched -- same "Rename
+       universe..." offered on all three from the context menu) show as
+       "<id+1>: <name>", the one authoritative-number-plus-free-form-name
+       shape used everywhere in the tree. Strip the number back off rather
+       than storing it into the name, which would otherwise bake a stale id
+       into the name the moment universes are reordered. */
+    if (ekind == KIND_UNIVERSE || ekind == KIND_PENDING_UNIVERSE || ekind == KIND_UNPATCHED_UNIVERSE)
+    {
+        const quint32 uniId = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
+        Universe *uni = iomap->universe(uniId);
+        if (uni == NULL)
+            return;
+
+        QString name = item->text(COL_NAME).trimmed();
+        const QString prefix = QString("%1: ").arg(uni->id() + 1);
+        if (name.startsWith(prefix))
+            name.remove(0, prefix.length());
+        name = name.trimmed();
+        if (name.isEmpty() || name == uni->name())
+            return;
+
+        iomap->setUniverseName(int(uniId), name);
+        m_doc->setModified();
+        refresh();
+        return;
+    }
 
     /* Interfaces are named the same way targets are -- same decorated
        "Name (identity)" display, same need to strip the identity back off
