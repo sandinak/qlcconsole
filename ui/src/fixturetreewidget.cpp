@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QTimer>
 #include <QDebug>
 #include <QHeaderView>
 #include <QMimeData>
@@ -181,6 +182,22 @@ void FixtureTreeWidget::keyPressEvent(QKeyEvent* event)
             editItem(it, KColumnName);
             return;
         }
+        // Rename a universe folder in place ("Universe N" under Universes).
+        // A universe row carries PROP_UNIVERSE and nothing else identifying;
+        // fixtures never set it, so this alone is enough to pick it out.
+        if (it && it->data(KColumnName, PROP_UNIVERSE).isValid())
+        {
+            const quint32 uni = it->data(KColumnName, PROP_UNIVERSE).toUInt();
+            blockSignals(true);
+            it->setFlags(it->flags() | Qt::ItemIsEditable);
+            // Show the plain name for editing -- the displayed label can
+            // carry a "  —  destination" suffix (see universeDestination())
+            // that must not round-trip into the stored name.
+            it->setText(KColumnName, m_doc->inputOutputMap()->getUniverseNameByID(uni));
+            blockSignals(false);
+            editItem(it, KColumnName);
+            return;
+        }
         // Rename a fixture in place. Only in a plain (non-checkable) tree, and
         // only for a real fixture row (has a fixture id, not a head/channel).
         if (it && m_channelSelection == false
@@ -206,6 +223,35 @@ void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
 {
     if (column != KColumnName || !item)
         return;
+
+    // Commit an in-place universe rename (armed in keyPressEvent()).
+    if ((item->flags() & Qt::ItemIsEditable) && item->data(KColumnName, PROP_UNIVERSE).isValid())
+    {
+        item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+
+        const quint32 uni = item->data(KColumnName, PROP_UNIVERSE).toUInt();
+        InputOutputMap *iomap = m_doc->inputOutputMap();
+        const QString oldName = iomap ? iomap->getUniverseNameByID(uni) : QString();
+        const QString newName = item->text(KColumnName).trimmed();
+        // Universe::nameChanged() has no UI-side listener that would refresh
+        // this row on its own, unlike a fixture rename (which some other
+        // Doc signal already redraws elsewhere) -- so both the applied and
+        // the rejected case set the row's text back explicitly, rather than
+        // leaving the bare plain name shown in keyPressEvent() behind.
+        QString shownName = oldName;
+        if (iomap != NULL && newName.isEmpty() == false && newName != oldName)
+        {
+            iomap->setUniverseName(int(uni), newName);
+            m_doc->setModified();
+            shownName = newName;
+        }
+        QString uniLabel = shownName;
+        const QString dest = universeDestination(m_doc, uni);
+        if (!dest.isEmpty())
+            uniLabel += QString("   —   %1").arg(dest);
+        item->setText(KColumnName, uniLabel);
+        return;
+    }
 
     // In-place fixture rename (Return / F2 on a fixture row). We only act when
     // the row is ARMED (ItemIsEditable set in keyPressEvent) — fixture items are
@@ -806,9 +852,27 @@ void FixtureTreeWidget::setShowHeads(bool on)
     // a fixture group's layout editor would flash open and immediately
     // disappear). Block signals for just this rebuild -- callers already
     // own the selection-driven state change and don't need it echoed back.
-    const bool wasBlocked = blockSignals(true);
-    updateTree();
-    blockSignals(wasBlocked);
+    /* DEFERRED, not immediate.
+     *
+       updateTree() destroys and rebuilds every row. Both callers reach here
+       from inside FixtureManager::slotSelectionChanged(), i.e. from inside
+       QTreeWidget's own itemSelectionChanged emission -- so the item the user
+       just clicked is deleted while Qt is still part-way through handling that
+       click. Qt does not crash, it simply carries on with a current-item that
+       no longer exists and reassigns selection to whatever now sits in that
+       position: "when I click on a fixture group it's not displaying the
+       layout .. just jumping around in the tree."
+
+       Running it on the next turn of the event loop lets the click finish
+       first. updateTree() restores the selection by id afterwards (see
+       currentSelection()/restoreSelection()), so the group stays selected and
+       its editor stays open. Signals stay blocked for the rebuild itself for
+       the reason described above. */
+    QTimer::singleShot(0, this, [this]() {
+        const bool wasBlocked = blockSignals(true);
+        updateTree();
+        blockSignals(wasBlocked);
+    });
 }
 
 /* Which item is selected, in terms that survive the tree being thrown away and
