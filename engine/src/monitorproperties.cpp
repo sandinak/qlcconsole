@@ -2621,11 +2621,17 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("TrussSide"), QString::number(rp.trussMountSide));
         if (rp.trussCross != 0.0f)
             doc->writeAttribute(QStringLiteral("TrussCross"), QString::number(double(rp.trussCross), 'f', 3));
-            if (!qFuzzyIsNull(rp.trussCrossY))
-                doc->writeAttribute(QStringLiteral("TrussCrossY"), QString::number(double(rp.trussCrossY), 'f', 3));
-            // Only when it is not the default, so existing files stay byte-identical.
-            if (rp.placement != FixtureRigProps::OnSurface)
-                doc->writeAttribute(QStringLiteral("Placement"), QString::number(rp.placement));
+        /* NOT inside the TrussCross branch above, though they were indented as
+           if they were -- the same trap as KXMLQLCMonitorAimSubjectHeight
+           further up this function. A tower's cross-Y offset and a fixture's
+           placement are properties of the mount in their own right; tying
+           either to a non-zero trussCross would drop them from most files.
+           Indentation corrected, behaviour deliberately unchanged. */
+        if (!qFuzzyIsNull(rp.trussCrossY))
+            doc->writeAttribute(QStringLiteral("TrussCrossY"), QString::number(double(rp.trussCrossY), 'f', 3));
+        // Only when it is not the default, so existing files stay byte-identical.
+        if (rp.placement != FixtureRigProps::OnSurface)
+            doc->writeAttribute(QStringLiteral("Placement"), QString::number(rp.placement));
         if (rp.mountZOffset != 0.0f)
             doc->writeAttribute(QStringLiteral("MountZ"), QString::number(double(rp.mountZOffset), 'f', 3));
         if (rp.onDeck())

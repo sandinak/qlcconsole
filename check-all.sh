@@ -40,7 +40,12 @@ run_gate() { # <label> <build-dir> <qt-prefix-or-empty>
 
     local args=(-S "$REPO" -B "$REPO/$dir")
     [ -n "$prefix" ] && args+=(-DCMAKE_PREFIX_PATH="$prefix/lib/cmake")
-    [ -n "$extra" ] && args+=($extra)
+    # QUOTED. Unquoted, the shell split "-DCMAKE_CXX_FLAGS=-Werror=a -Werror=b"
+    # into separate words and cmake saw "-Werror=b" as its OWN option -- a -W
+    # category it does not know. Harmless until CMake 4.4 started treating an
+    # unknown -W category as an error, at which point the Werror leg stopped
+    # configuring at all. The whole string is one argument by design.
+    [ -n "$extra" ] && args+=("$extra")
 
     if ! QTDIR="$prefix" cmake "${args[@]}"; then
         FAILED="$FAILED $label(configure)"; return 1
