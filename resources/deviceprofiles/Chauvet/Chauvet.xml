@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DMX-AN2: verified against the manufacturer's own product page
+  (chauvetdj.com/products/dmx-an2) and cross-checked against several
+  retailers' spec sheets (B&H, PitBull Audio, AVShop): 2 universes,
+  3-pin XLR outputs, Art-Net/sACN selectable per port.
+-->
+<DeviceProfiles>
+ <Profile Manufacturer="Chauvet DJ" Model="DMX-AN2" Protocol="ArtNet" Ports="2"/>
+</DeviceProfiles>

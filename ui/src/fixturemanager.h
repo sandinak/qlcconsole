@@ -129,6 +129,11 @@ private:
     /** Remove a previously created fixture */
     void removeFixture();
 
+    /** Delete a universe outright (only the last one can go -- see the
+     *  implementation). Reached from the Universe row's context menu;
+     *  renaming that same row is inline (Enter/F2/double-click) instead. */
+    void deleteUniverse(quint32 universe);
+
     /** Remove a previously created channels group */
     void removeChannelsGroup();
 

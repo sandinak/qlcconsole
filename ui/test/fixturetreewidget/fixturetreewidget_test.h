@@ -36,6 +36,12 @@ private slots:
      *  group layout editor depends on the tree still agreeing with it. */
     void selectionSurvivesARebuild();
 
+    /** Enter on a "Universe N" row arms it editable and renames the
+     *  universe once the edit commits. */
+    void enterOnAUniverseRowRenamesIt();
+    /** An empty or unchanged edit must not blank the universe's name. */
+    void emptyUniverseEditIsRejected();
+
 private:
     Doc* m_doc;
 };

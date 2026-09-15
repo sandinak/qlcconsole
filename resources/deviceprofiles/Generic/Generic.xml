@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Generic device profiles: protocol-shaped templates rather than real named
+  products, for the common case of cheap/unbranded Art-Net nodes that all
+  lay their ports out the same simple way. See resources/deviceprofiles/
+  itself for the format and what a profile actually does.
+-->
+<DeviceProfiles>
+ <Profile Manufacturer="Generic" Model="1-port Art-Net node" Protocol="ArtNet" Ports="1"/>
+ <Profile Manufacturer="Generic" Model="2-port Art-Net node" Protocol="ArtNet" Ports="2"/>
+ <Profile Manufacturer="Generic" Model="4-port Art-Net node" Protocol="ArtNet" Ports="4"/>
+ <Profile Manufacturer="Generic" Model="8-port Art-Net node" Protocol="ArtNet" Ports="8"/>
+ <Profile Manufacturer="Generic" Model="16-port Art-Net node" Protocol="ArtNet" Ports="16"/>
+</DeviceProfiles>

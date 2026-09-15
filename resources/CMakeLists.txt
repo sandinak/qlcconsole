@@ -1,5 +1,6 @@
 project(resources)
 
+add_subdirectory(deviceprofiles)
 add_subdirectory(fixtures)
 add_subdirectory(gobos)
 add_subdirectory(inputprofiles)

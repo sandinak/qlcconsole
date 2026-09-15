@@ -25,6 +25,7 @@
 #include <QLabel>
 #include <QFont>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QScrollArea>
 #include <QMessageBox>
 #include <QToolButton>
@@ -65,6 +66,7 @@
 #include "addfixture.h"
 #include "rdmmanager.h"
 #include "universe.h"
+#include "patchundo.h"
 #include "fixture.h"
 #include "apputil.h"
 #include "doc.h"
@@ -205,23 +207,39 @@ FixtureManager* FixtureManager::instance()
 
 void FixtureManager::slotFixtureRemoved(quint32 id)
 {
-    QList<QTreeWidgetItem*> groupsToDelete;
+    /* Find and drop the fixture's own row wherever it actually lives. It
+       used to be a direct child of a top-level folder -- true for a
+       fixture group, still -- but a universe's fixtures now sit one level
+       further down (Universes -> Universe N -> fixture, see updateTree()'s
+       "always present" universesRoot), and this only ever looked at direct
+       children. Doc::deleteFixture() had already succeeded by the time this
+       runs; the row was simply never found, so it sat there looking exactly
+       like the delete had silently done nothing. QTreeWidgetItemIterator
+       finds it regardless of how deep the tree's own grouping goes. */
+    QTreeWidgetItemIterator treeIt(m_fixtures_tree);
+    while (*treeIt != NULL)
+    {
+        QTreeWidgetItem* fxiItem = *treeIt;
+        QVariant fxiVar = fxiItem->data(KColumnName, PROP_ID);
+        if (fxiVar.isValid() == true && fxiVar.toUInt() == id)
+        {
+            delete fxiItem;
+            break;
+        }
+        ++treeIt;
+    }
 
+    /* A top-level folder that just lost its last child: a fixture group
+       with nothing left in it. A universe folder is pre-seeded for every
+       universe regardless of fixture count (see updateTree()), so this is
+       naturally a no-op for those -- its own children are per-universe
+       folders, not fixtures, and removing one fixture two levels down
+       never empties it. */
+    QList<QTreeWidgetItem*> groupsToDelete;
     for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); i++)
     {
         QTreeWidgetItem* grpItem = m_fixtures_tree->topLevelItem(i);
         Q_ASSERT(grpItem != NULL);
-        for (int j = 0; j < grpItem->childCount(); j++)
-        {
-            QTreeWidgetItem* fxiItem = grpItem->child(j);
-            Q_ASSERT(fxiItem != NULL);
-            QVariant var = fxiItem->data(KColumnName, PROP_ID);
-            if (var.isValid() == true && var.toUInt() == id)
-            {
-                delete fxiItem;
-                break;
-            }
-        }
         if (grpItem->childCount() == 0)
             groupsToDelete << grpItem;
     }
@@ -1871,7 +1889,19 @@ void FixtureManager::removeFixture()
             this. However, FixtureManager is the only place to destroy fixtures,
             so it's rather safe to reset the fixture's address space here. */
         Fixture* fxi = m_doc->fixture(id);
-        Q_ASSERT(fxi != NULL);
+        if (fxi == NULL)
+        {
+            /* A selected row's id no longer matching a live fixture means
+               something else removed it (or the selection went stale)
+               between building this set and getting here -- there is
+               nothing left to reset or delete for it, so this used to be a
+               hard Q_ASSERT that took the whole app down over one already-
+               gone fixture. Skip it and keep going; the others in this same
+               batch are still real. */
+            qWarning() << Q_FUNC_INFO << "Selected fixture" << id
+                       << "no longer exists; skipping its deletion";
+            continue;
+        }
         QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
         int universe = fxi->universe();
         if (universe < ua.count())
@@ -2471,13 +2501,17 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     // Which universe was the click in? A universe row carries PROP_UNIVERSE; a
     // fixture row inherits its fixture's universe. "Add fixture" (fired from the
     // menu below) reads m_ctxUniverse to default the dialog to that universe.
+    // ctxIsUniverseRow distinguishes the direct hit (offer "Delete universe…")
+    // from a fixture merely living in that universe (don't).
     m_ctxUniverse = InputOutputMap::invalidUniverse();
+    bool ctxIsUniverseRow = false;
     if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
     {
         const QVariant uniVar = clicked->data(KColumnName, PROP_UNIVERSE);
         if (uniVar.isValid())
         {
             m_ctxUniverse = uniVar.toUInt();
+            ctxIsUniverseRow = true;
         }
         else
         {
@@ -2614,6 +2648,19 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             none->setEnabled(false);
         }
         removeFromCircuit = menu.addAction(tr("Remove from power circuit"));
+    }
+
+    // A universe row itself (not a fixture living in it): the only action
+    // this tree offers on it directly is deleting it outright. Renaming is
+    // already inline (Enter/F2/double-click, see FixtureTreeWidget), and
+    // patching/retargeting stays exclusively the Connections tab's job — this
+    // tree only shows where a universe's fixtures live, not how it reaches
+    // hardware.
+    QAction *deleteUni = NULL;
+    if (ctxIsUniverseRow)
+    {
+        menu.addSeparator();
+        deleteUni = menu.addAction(tr("Delete universe…"));
     }
 
     // Build out the Power section itself: a new source from the "Power" folder
@@ -2867,6 +2914,10 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (m_power != NULL)
             m_power->refresh();
     }
+    else if (chosen == deleteUni)
+    {
+        deleteUniverse(m_ctxUniverse);
+    }
     else if (chosen == addPowerSource)
     {
         // Same defaults slotAddSource() uses in the Power pane itself.
@@ -2899,6 +2950,61 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                 m_power->refresh();
         }
     }
+}
+
+/** Mirrors ConnectionsTree::deleteUniverse() -- same rule, same messages,
+ *  since this is the same operation reached from a second tree. Not shared
+ *  code because the two classes don't share a base to hang it off of; keep
+ *  them in sync by hand if the rule ever changes. */
+void FixtureManager::deleteUniverse(quint32 universe)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    Universe *uni = iomap ? iomap->universe(universe) : NULL;
+    if (uni == NULL)
+        return;
+
+    // Only the LAST universe can go: removeUniverse() refuses anything else
+    // rather than leave a gap in the numbering, which the whole patch API
+    // depends on. Say so BEFORE asking, rather than asking a question that
+    // cannot be honoured.
+    if (universe + 1 != iomap->universesCount())
+    {
+        QMessageBox::information(this, tr("Delete universe"),
+            tr("Only the last universe can be deleted — removing one from the "
+               "middle would renumber the others and repoint every patch after "
+               "it.\n\nDelete universe %1 first, and work back.")
+                .arg(iomap->universesCount()));
+        return;
+    }
+
+    // Deleting a universe orphans every fixture patched into it -- they keep
+    // their universe id and simply lose output -- so this IS undoable, and
+    // the warning says which part is recoverable.
+    if (QMessageBox::question(
+            this, tr("Delete universe"),
+            tr("Delete \"%1\" completely?\n\nAny fixtures patched into it will "
+               "lose their output until it is restored.").arg(uni->name()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->captureUniverses(tr("delete universe \"%1\"")
+                                                 .arg(uni->name()));
+
+    if (iomap->removeUniverse(int(universe)) == false)
+    {
+        // Guarded above, so reaching here means the rule changed underneath
+        // us. Do not leave a spent undo step and a modified flag behind for
+        // a deletion that did not happen.
+        if (iomap->patchUndo() != NULL)
+            iomap->patchUndo()->clear();
+        QMessageBox::warning(this, tr("Delete universe"),
+                             tr("\"%1\" could not be deleted.").arg(uni->name()));
+        return;
+    }
+
+    m_doc->setModified();
+    updateView();
 }
 
 void FixtureManager::slotChannelGroupContextMenuRequested(const QPoint &pos)

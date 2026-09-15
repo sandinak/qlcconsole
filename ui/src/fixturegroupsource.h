@@ -42,7 +42,7 @@ public:
     enum { IdRole = Qt::UserRole, KindRole = Qt::UserRole + 1,
            PathRole = Qt::UserRole + 2, /*!< folder path (string) */
            NameRole = Qt::UserRole + 3  /*!< plain group name (no count suffix) */ };
-    enum NodeKind { CategoryNode = 0, GroupNode = 1, FixtureNode = 2 };
+    enum NodeKind { CategoryNode = 0, GroupNode = 1, FixtureNode = 2, UniverseNode = 3 };
 
 public slots:
     /** Rebuild the tree from the Doc's fixtures and groups. */
@@ -58,20 +58,20 @@ protected:
         { return buildMimeData(items); }
     QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const
         { return buildMimeData(items); }
-    /** Enter/Return/F2 on a selected group row starts an inline rename. */
+    /** Enter/Return/F2 on a selected group or universe row starts an inline rename. */
     void keyPressEvent(QKeyEvent *event) override;
 private:
     QMimeData* buildMimeData(const QList<QTreeWidgetItem*> &items) const;
 
-    /** Start an inline rename on a group row: arm it editable (showing the plain
-     *  name without the "(N fixtures)" suffix) and open the editor. Shared by
-     *  Enter/F2 and the context menu. */
+    /** Start an inline rename on a group or universe row: arm it editable
+     *  (showing the plain name without the "(N fixtures)" suffix, for a
+     *  group) and open the editor. Shared by Enter/F2 and the context menu. */
     void beginRename(QTreeWidgetItem *item);
     /** The GroupNode tree item for a group id, or nullptr. */
     QTreeWidgetItem *groupItemById(quint32 id) const;
 
 private slots:
-    /** Commit an inline group rename (fires on editor close). */
+    /** Commit an inline group or universe rename (fires on editor close). */
     void slotItemChanged(QTreeWidgetItem *item, int column);
 
     /** Accept group drops onto folders (re-file groups); ignore otherwise. */

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Verified against the manufacturer's Amazon listings, both plain sequential-
+  port Art-Net/DMX512 nodes:
+   - 1-Universe: https://www.amazon.com/dp/B0B1YRTYB7
+   - 4-Universe (PoE): https://www.amazon.com/dp/B0BJKWWG84
+-->
+<DeviceProfiles>
+ <Profile Manufacturer="Pknight" Model="1-Universe ArtNet/DMX512 Node" Protocol="ArtNet" Ports="1"/>
+ <Profile Manufacturer="Pknight" Model="4-Universe ArtNet/DMX512 Node (PoE)" Protocol="ArtNet" Ports="4"/>
+</DeviceProfiles>

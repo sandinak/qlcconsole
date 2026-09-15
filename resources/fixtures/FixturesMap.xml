@@ -2007,4 +2007,7 @@
   <M n="XStatic">
     <F n="XStatic-X-240Bar-RGB" m="X-240Bar RGB"/>
   </M>
+  <M n="YeeSite">
+    <F n="YeeSite-60W-RGB-Pixel-Light-Bar" m="60W RGB Pixel Light Bar"/>
+  </M>
 </FixturesMap>

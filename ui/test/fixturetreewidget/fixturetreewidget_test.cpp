@@ -19,12 +19,14 @@
 
 #include <QtTest>
 #include <QTreeWidgetItemIterator>
+#include <QKeyEvent>
 
 #define protected public
 #define private public
 #include "fixturetreewidget.h"
 #include "fixture.h"
 #include "fixturegroup.h"
+#include "inputoutputmap.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -115,4 +117,72 @@ void FixtureTreeWidget_Test::selectionSurvivesARebuild()
     tree.setShowHeads(false);
     QCOMPARE(tree.selectedItems().size(), 1);
     QCOMPARE(tree.selectedItems().first()->data(0, PROP_GROUP).toUInt(), grp->id());
+}
+
+/** Find the "Universe N" row for the given universe id, or nullptr. */
+static QTreeWidgetItem *findUniverseItem(FixtureTreeWidget &tree, quint32 uni)
+{
+    QTreeWidgetItemIterator it(&tree);
+    while (*it != nullptr)
+    {
+        if ((*it)->data(0, PROP_UNIVERSE).isValid()
+            && (*it)->data(0, PROP_UNIVERSE).toUInt() == uni)
+            return *it;
+        ++it;
+    }
+    return nullptr;
+}
+
+void FixtureTreeWidget_Test::enterOnAUniverseRowRenamesIt()
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    QVERIFY(iomap->addUniverse());
+    const quint32 uni = 0;
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber
+                                  | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+
+    QTreeWidgetItem *uniItem = findUniverseItem(tree, uni);
+    QVERIFY2(uniItem != nullptr, "the universe never appeared in the tree");
+
+    tree.setCurrentItem(uniItem);
+    QKeyEvent enterEvent(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    tree.keyPressEvent(&enterEvent);
+
+    QVERIFY2((uniItem->flags() & Qt::ItemIsEditable) != 0,
+             "Enter did not arm the universe row for editing");
+    QCOMPARE(uniItem->text(0), iomap->getUniverseNameByID(uni));
+
+    // What the real inline editor does on commit: change the text, which
+    // fires itemChanged(), wired to slotItemChanged() in the constructor.
+    uniItem->setText(0, "Renamed Universe");
+
+    QCOMPARE(iomap->getUniverseNameByID(uni), QString("Renamed Universe"));
+    QVERIFY2((uniItem->flags() & Qt::ItemIsEditable) == 0,
+             "the row stayed armed after the edit committed");
+}
+
+void FixtureTreeWidget_Test::emptyUniverseEditIsRejected()
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    QVERIFY(iomap->addUniverse());
+    const quint32 uni = 0;
+    iomap->setUniverseName(int(uni), "Original Name");
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber
+                                  | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+
+    QTreeWidgetItem *uniItem = findUniverseItem(tree, uni);
+    QVERIFY2(uniItem != nullptr, "the universe never appeared in the tree");
+
+    tree.setCurrentItem(uniItem);
+    QKeyEvent enterEvent(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    tree.keyPressEvent(&enterEvent);
+
+    uniItem->setText(0, "");   // cleared the field, then committed
+
+    QCOMPARE(iomap->getUniverseNameByID(uni), QString("Original Name"));
+    QCOMPARE(uniItem->text(0), QString("Original Name"));
 }
