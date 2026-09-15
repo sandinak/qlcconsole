@@ -398,7 +398,7 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         StagePlatform *pl = props->platform(rp.deckPlatformId);
         if (pl == nullptr) return false;
         const QPointF ab = screenToPlane(px);
-        const QVector3D cur = props->fixtureRigPosition(fid);
+        const QVector3D cur = fixtureCentre(fid);
 
         double xMm = double(cur.x()) * 1000.0;
         double yMm = double(cur.y()) * 1000.0;
@@ -447,7 +447,7 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         Truss *t = props->truss(rp.trussId);
         if (t == nullptr) return false;
 
-        const QVector3D cur = props->fixtureRigPosition(fid);
+        const QVector3D cur = fixtureCentre(fid);
         const QPointF ab = screenToPlane(px);
         QVector3D w = cur;
         if (m_plane == Top)        { w.setX(float(ab.x())); w.setY(float(ab.y())); }
@@ -511,7 +511,7 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
     const quint32 fg = hasStructuralMount(rp) ? 0 : props->fixtureFrameGroup(fid);
     if (fg != 0)
     {
-        const QVector3D cur = props->fixtureRigPosition(fid);
+        const QVector3D cur = fixtureCentre(fid);
         const QPointF ab = screenToPlane(px);
         QVector3D w = cur;
         if (m_plane == Top)        { w.setX(float(ab.x())); w.setY(float(ab.y())); }
@@ -556,7 +556,7 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
      * and Z in METRES (see the free-placed branch of fixtureRigPosition, which
      * divides x/y by 1000 and passes z straight through). Writing all three in
      * metres here would move a fixture a thousand times too little. */
-    const QVector3D cur = props->fixtureRigPosition(fid);   // metres
+    const QVector3D cur = fixtureCentre(fid);   // metres
     const QPointF ab = screenToPlane(px);
     QVector3D w = cur;
     if (m_plane == Top)        { w.setX(float(ab.x())); w.setY(float(ab.y())); }
@@ -622,8 +622,6 @@ void StructureStudioView::drawStructure(QPainter &p) const
  * read as a solid scene rather than a pile of stickers. */
 void StructureStudioView::drawRigDepthSorted(QPainter &p) const
 {
-    MonitorProperties *props = m_doc->monitorProperties();
-
     struct Item { double depth; bool isFixture; Kind kind; quint32 id; };
     QVector<Item> items;
 
@@ -649,7 +647,7 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
         items << Item{ d / pts.size(), false, ki.first, ki.second };
     }
     foreach (quint32 fid, mountedFixtures())
-        items << Item{ viewDepth(props->fixtureRigPosition(fid)), true, StageKind, fid };
+        items << Item{ viewDepth(fixtureCentre(fid)), true, StageKind, fid };
 
     /* Deliberately NOT sorted here: ordering happens per PRIMITIVE in
        flushOps(), so a long truss and a wide deck interleave face by face
@@ -684,7 +682,7 @@ void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
     // Free-standing fixtures are part of the rig too, so the fit must frame them.
     MonitorProperties *props = m_doc->monitorProperties();
     foreach (quint32 fid, props->fixtureItemsID())
-        pts << props->fixtureRigPosition(fid);
+        pts << fixtureCentre(fid);
 }
 
 QList<quint32> StructureStudioView::mountedFixtures() const
@@ -831,7 +829,7 @@ void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, qui
     }
 
     foreach (quint32 fid, mountedFixtures())
-        pts << props->fixtureRigPosition(fid);
+        pts << fixtureCentre(fid);
 }
 
 void StructureStudioView::refit()
@@ -1783,10 +1781,74 @@ QVector3D StructureStudioView::fixtureBodyUp(const FixtureRigProps &rp) const
        horizontal there is nothing to choose and the frame is left alone. */
     QVector3D L, N, H;
     fixtureFrame(rp, L, N, H);
-    const float want = (rp.mountingType == Truss::TopHung) ? -1.0f : 1.0f;
+
+    /* You cannot hang from the top of something you are standing on.
+     *
+       mountingType defaults to TopHung, so a fixture dropped onto a deck and
+       never given an orientation claims to be hanging. fixtureRigPosition()
+       ignores that and rightly puts it on the platform TOP -- but seating the
+       body along its own up axis then pushed it DOWNWARD from there, into the
+       solid platform holding it up. Two fixtures out of eight in one rig looked
+       right, and they were exactly the two someone had set to FloorMounted by
+       hand.
+
+       So where the mount is a surface with nothing above it, upright is the
+       only answer the geometry allows and mountingType does not get a vote. A
+       tower SHELF is excluded on purpose: you really can hang under one of
+       those, which is why the option exists there at all. */
+    const bool standsOnTop =
+           rp.onDeck()
+        || (rp.onRiser() && rp.riserFace == FixtureRigProps::RiserTop)
+        || (rp.onTower() && rp.towerMountSide != FixtureRigProps::TowerShelf);
+
+    const float want = (rp.mountingType == Truss::TopHung && standsOnTop == false)
+                       ? -1.0f : 1.0f;
     if (H.z() * want < 0.0f)
         H = -H;
     return H;
+}
+
+QVector3D StructureStudioView::fixtureCentre(quint32 fid) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QVector3D w = props->fixtureRigPosition(fid);
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+
+    /* The plot stores a free fixture's XY as the TOP-LEFT of its footprint, not
+       its centre -- setPos(realPositionToPixels(realPosition)) puts the corner
+       on the stored point, and the drop code says as much ("persist the drop as
+       a free position (top-left anchor)"). Everything three-dimensional here
+       builds a body centred on the point it is given, so handing it the corner
+       drew every free and deck-mounted fixture half a footprint to the left and
+       upstage of where the plan shows it: a 510 mm bar sitting 19 mm inside a
+       platform edge was drawn 236 mm off the end of it.
+
+       A DERIVED position is already a centre -- a truss, pipe, tower or riser
+       mount computes the point from the structure, and the plan centres its
+       icon on it to match -- so only the two cases that read the stored XY
+       straight back need the half-footprint added: free placement, and a deck
+       mount (which keeps the free XY and derives only Z). */
+    if (props->fixtureFrameGroup(fid) != 0)
+        return w;
+    if (hasStructuralMount(rp) && rp.onDeck() == false)
+        return w;
+
+    Fixture *fx = m_doc->fixture(fid);
+    if (fx == nullptr)
+        return w;
+    const FixtureVisualTraits traits = classifyFixture(fx);
+    if (traits.physW <= 0.0f && traits.physH <= 0.0f)
+        return w;
+
+    /* Width and HEIGHT, not width and depth, however odd that reads for a
+       top-down view: MonitorGraphicsView::updateFixture() sizes its icon from
+       physical().width() x physical().height() in every view, plan included, so
+       the corner the plot anchored is the corner of a W x H box. Recovering the
+       centre means undoing exactly that, not the box a plan view arguably
+       should have used. */
+    return QVector3D(w.x() + traits.physW * 0.5f,
+                     w.y() + traits.physH * 0.5f,
+                     w.z());
 }
 
 bool StructureStudioView::hasStructuralMount(const FixtureRigProps &rp)
@@ -1805,7 +1867,7 @@ QVector3D StructureStudioView::fixtureEndA(quint32 fid) const
         return props->groupLocalToWorld(fg, rp.groupLocal - fixtureAxisLocal(rp) * float(half));
     // Non-frame fixture: orient the bar by its studioMount/angle in world too, so
     // Face + Angle work for a truss/riser strip ("which way it runs").
-    return props->fixtureRigPosition(fid) - fixtureAxisLocal(rp) * float(half);
+    return fixtureCentre(fid) - fixtureAxisLocal(rp) * float(half);
 }
 
 QVector3D StructureStudioView::fixtureEndB(quint32 fid) const
@@ -1816,7 +1878,7 @@ QVector3D StructureStudioView::fixtureEndB(quint32 fid) const
     const quint32 fg = hasStructuralMount(rp) ? 0 : props->fixtureFrameGroup(fid);
     if (fg != 0)
         return props->groupLocalToWorld(fg, rp.groupLocal + fixtureAxisLocal(rp) * float(half));
-    return props->fixtureRigPosition(fid) + fixtureAxisLocal(rp) * float(half);
+    return fixtureCentre(fid) + fixtureAxisLocal(rp) * float(half);
 }
 
 void StructureStudioView::facePin(int mount, int &pinComp, double &pinVal) const
@@ -1847,7 +1909,7 @@ QRectF StructureStudioView::towerFixtureBodyRect(quint32 fid) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
-    const QPointF c = w2s(props->fixtureRigPosition(fid));
+    const QPointF c = w2s(fixtureCentre(fid));
     const double halfBase = qMax(6.0, fixtureLenM(fid) * 0.5 * m_scale);
     const double bodyH = halfBase * 1.4;
     const bool hung = (rp.mountingType == Truss::TopHung);
@@ -1922,7 +1984,7 @@ void StructureStudioView::fixtureBoxPx(quint32 fid, const FixtureVisualTraits &t
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
-    const QPointF c = w2s(props->fixtureRigPosition(fid));
+    const QPointF c = w2s(fixtureCentre(fid));
 
     QVector3D L, N, H;                                 // length / mount normal / the rest
     fixtureFrame(rp, L, N, H);
@@ -1933,7 +1995,7 @@ void StructureStudioView::fixtureBoxPx(quint32 fid, const FixtureVisualTraits &t
 
     // A world vector's screen delta: w2s() is affine, so the offset from the
     // centre is enough and the origin cancels.
-    const QVector3D worldC = props->fixtureRigPosition(fid);
+    const QVector3D worldC = fixtureCentre(fid);
     auto span = [&](const QVector3D &axis, double len) {
         return w2s(worldC + axis * float(len)) - c;
     };
@@ -1963,7 +2025,7 @@ void StructureStudioView::fixtureBoxCorners(quint32 fid, const FixtureVisualTrai
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
-    const QVector3D c = props->fixtureRigPosition(fid);
+    const QVector3D c = fixtureCentre(fid);
 
     QVector3D L, N, H;
     fixtureFrame(rp, L, N, H);
@@ -2109,32 +2171,6 @@ static QVector<HullPt> convexHullWith(QVector<HullPt> pts)
     }
     h.resize(qMax(0, k - 1));
     return h;
-}
-
-static QPolygonF convexHull(QVector<QPointF> pts)
-{
-    if (pts.size() < 3)
-        return QPolygonF(pts);
-    std::sort(pts.begin(), pts.end(), [](const QPointF &a, const QPointF &b) {
-        return (a.x() != b.x()) ? (a.x() < b.x()) : (a.y() < b.y());
-    });
-    auto cross = [](const QPointF &o, const QPointF &a, const QPointF &b) {
-        return (a.x() - o.x()) * (b.y() - o.y()) - (a.y() - o.y()) * (b.x() - o.x());
-    };
-    QVector<QPointF> h(2 * pts.size());
-    int k = 0;
-    for (int i = 0; i < pts.size(); ++i)
-    {
-        while (k >= 2 && cross(h[k - 2], h[k - 1], pts[i]) <= 0) --k;
-        h[k++] = pts[i];
-    }
-    for (int i = pts.size() - 2, t = k + 1; i >= 0; --i)
-    {
-        while (k >= t && cross(h[k - 2], h[k - 1], pts[i]) <= 0) --k;
-        h[k++] = pts[i];
-    }
-    h.resize(qMax(0, k - 1));
-    return QPolygonF(h);
 }
 
 /* A beam: the cone from a head out to whatever it lands on, plus the pool
@@ -2498,7 +2534,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
-    const QVector3D c = props->fixtureRigPosition(fid);
+    const QVector3D c = fixtureCentre(fid);
 
     QVector3D L, N, H;
     fixtureFrame(rp, L, N, H);
@@ -2699,7 +2735,7 @@ bool StructureStudioView::emitDirection(Fixture *fx, const FixtureRigProps &rp,
     if (haveHost == false)
         return false;
 
-    dir = props->fixtureRigPosition(fx->id()) - hostCentre;
+    dir = fixtureCentre(fx->id()) - hostCentre;
     if (dir.length() < 1e-4f)
         return false;
     dir.normalize();
@@ -2803,7 +2839,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
 {
     MonitorProperties *props = m_doc->monitorProperties();
     Fixture *fx = m_doc->fixture(fid);
-    const QPointF c = w2s(props->fixtureRigPosition(fid));
+    const QPointF c = w2s(fixtureCentre(fid));
     const bool hi = m_highlight.contains(fid);
     const bool drag = (fid == m_dragFid);
 
@@ -2940,7 +2976,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             const bool aimed = aimPointFor(fid, aimPt);
             if (aimed)
             {
-                const QVector3D toTarget = aimPt - props->fixtureRigPosition(fid);
+                const QVector3D toTarget = aimPt - fixtureCentre(fid);
                 if (toTarget.length() > 1e-3f)
                     aim = toTarget.normalized();
             }
@@ -2982,7 +3018,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                across, so turning its box toward the target is invisible. That
                is the case the trace is for, and it is what the studio draws. */
             if (aimed && (!m_beams || beamLevel <= 0.01))
-                drawAimTrace(p, props->fixtureRigPosition(fid), aimPt,
+                drawAimTrace(p, fixtureCentre(fid), aimPt,
                              m_aimTarget.value(fid).colour);
         }
         else if (traits.headCount > 1)
@@ -3345,7 +3381,6 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
 
 void StructureStudioView::drawFixtures(QPainter &p) const
 {
-    MonitorProperties *props = m_doc->monitorProperties();
     p.setFont(QFont("Arial", 8));
     /* Names are useful when a handful of fixtures are on one structure; across
        the WHOLE rig they are a wall of overlapping text that hides the thing
@@ -3590,7 +3625,7 @@ double StructureStudioView::structureCentreA() const
     else if (m_kind == PipeKind)
     { if (Pipe *pp = props->pipe(m_id)) c << pp->positionAt(0) << pp->positionAt(pp->length()); }
     else if (m_kind == GroupKind)
-    { foreach (quint32 fid, mountedFixtures()) c << props->fixtureRigPosition(fid);
+    { foreach (quint32 fid, mountedFixtures()) c << fixtureCentre(fid);
       if (c.isEmpty()) c << props->group(m_id).origin; }
     if (c.isEmpty()) return 0.0;
     /* Along whichever in-plane axis the horizontal ruler is measuring: an odd
@@ -3618,7 +3653,7 @@ double StructureStudioView::structureTopZ() const
     else if (m_kind == PipeKind)    { if (Pipe *pp = props->pipe(m_id))
         z = qMax(double(pp->positionAt(0).z()), double(pp->positionAt(pp->length()).z())); }
     else if (m_kind == GroupKind)
-    { foreach (quint32 fid, mountedFixtures()) z = qMax(z, double(props->fixtureRigPosition(fid).z())); }
+    { foreach (quint32 fid, mountedFixtures()) z = qMax(z, double(fixtureCentre(fid).z())); }
     return z;
 }
 
@@ -3725,7 +3760,7 @@ void StructureStudioView::drawRulers(QPainter &p) const
     }
     if (!m_highlight.isEmpty())
     {
-        const QPointF s = w2s(props->fixtureRigPosition(*m_highlight.begin()));
+        const QPointF s = w2s(fixtureCentre(*m_highlight.begin()));
         p.setPen(QPen(QColor(120, 220, 140), 1.0)); p.setBrush(QColor(120, 220, 140));
         if (vert) { QPolygonF t; t << QPointF(GW + 1, s.y()) << QPointF(GW + 7, s.y() - 4) << QPointF(GW + 7, s.y() + 4); p.drawPolygon(t); }
         QPolygonF t2; t2 << QPointF(s.x(), by) << QPointF(s.x() - 4, by + 7) << QPointF(s.x() + 4, by + 7); p.drawPolygon(t2);
@@ -4249,9 +4284,8 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
                 // drawFixtures() drew for this plane (square-ish for Top,
                 // taller for the Front/Side base+arms+head body) -- a plain
                 // circle test undershot the square/base corners.
-                const QPointF c = w2s(props->fixtureRigPosition(fid));
+                const QPointF c = w2s(fixtureCentre(fid));
                 const double baseR = moverBaseRadius(traits);
-                const int units = qMax(1, traits.headCount);
                 QRectF r;
                 if (m_plane == Top)
                 {
@@ -4278,7 +4312,7 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
             }
             else if (traits.kind == FixtureSilhouette::Par)
             {
-                const QPointF c = w2s(props->fixtureRigPosition(fid));
+                const QPointF c = w2s(fixtureCentre(fid));
                 const double wPx = (traits.physW > 0.0f) ? qMax(8.0, double(traits.physW) * m_scale) : 10.0;
                 const double hPx = (traits.physH > 0.0f) ? qMax(8.0, double(traits.physH) * m_scale) : wPx * 0.85;
                 QRectF r(c.x() - wPx * 0.5, c.y() - hPx * 0.5, wPx, hPx);

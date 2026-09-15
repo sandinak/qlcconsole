@@ -374,6 +374,10 @@ private:
                         const QVector3D *beamLandsAt = nullptr) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
+    /** A fixture's world CENTRE, correcting the plot's top-left anchor for
+     *  positions that come straight from the stored XY. See the definition. */
+    QVector3D fixtureCentre(quint32 fid) const;
+
     QVector3D fixtureAxisLocal(const struct FixtureRigProps &rp) const; ///< unit long axis in the frame
 
     /** The fixture's own orthonormal frame: @p L along its length, @p N out of

@@ -678,8 +678,12 @@ struct StudioRig
         if (doc != nullptr && fxi != nullptr)
             doc->deleteFixture(fxi->id());
         if (doc != nullptr)
+        {
+            // Braces required: foreach expands to an if/else, so a braceless
+            // if around one is a dangling else.
             foreach (quint32 sid, spares)
                 doc->deleteFixture(sid);
+        }
         if (doc != nullptr && truss != nullptr)
             doc->monitorProperties()->removeTruss(truss->id());
     }
@@ -735,13 +739,13 @@ struct StudioRig
        position the fixture ended up at. */
     QVector3D dragTo(const QPointF &px)
     {
-        QMouseEvent press(QEvent::MouseButtonPress, view->w2s(pos()),
+        QMouseEvent press(QEvent::MouseButtonPress, view->w2s(pos()), view->w2s(pos()),
                           Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
         view->mousePressEvent(&press);
-        QMouseEvent move(QEvent::MouseMove, px, Qt::NoButton,
+        QMouseEvent move(QEvent::MouseMove, px, px, Qt::NoButton,
                          Qt::LeftButton, Qt::NoModifier);
         view->mouseMoveEvent(&move);
-        QMouseEvent rel(QEvent::MouseButtonRelease, px,
+        QMouseEvent rel(QEvent::MouseButtonRelease, px, px,
                         Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
         view->mouseReleaseEvent(&rel);
         return pos();
@@ -995,11 +999,11 @@ void Monitor_Test::studioEditorDialogDragDoesNotCrash()
                     const QPointF start =
                         view->w2s(view->m_doc->monitorProperties()->fixtureRigPosition(fid));
                     const QPointF end = start + QPointF(0.0, 40.0);
-                    QMouseEvent press(QEvent::MouseButtonPress, start, Qt::LeftButton,
+                    QMouseEvent press(QEvent::MouseButtonPress, start, start, Qt::LeftButton,
                                       Qt::LeftButton, Qt::NoModifier);
-                    QMouseEvent move(QEvent::MouseMove, end, Qt::NoButton,
+                    QMouseEvent move(QEvent::MouseMove, end, end, Qt::NoButton,
                                      Qt::LeftButton, Qt::NoModifier);
-                    QMouseEvent rel(QEvent::MouseButtonRelease, end, Qt::LeftButton,
+                    QMouseEvent rel(QEvent::MouseButtonRelease, end, end, Qt::LeftButton,
                                     Qt::NoButton, Qt::NoModifier);
                     // The release is the one that emits fixtureMoved().
                     view->mousePressEvent(&press);
@@ -1069,10 +1073,10 @@ void Monitor_Test::mountedFixtureWithoutPlotItemIsPositionedAndMovable()
     const QPointF startPx = view.w2s(w);
     QCOMPARE(view.hitTestFixture(startPx), fid);
     const QPointF endPx = startPx + QPointF(0.0, view.m_scale * 0.5);
-    QMouseEvent press(QEvent::MouseButtonPress, startPx, Qt::LeftButton,
+    QMouseEvent press(QEvent::MouseButtonPress, startPx, startPx, Qt::LeftButton,
                       Qt::LeftButton, Qt::NoModifier);
-    QMouseEvent move(QEvent::MouseMove, endPx, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
-    QMouseEvent rel(QEvent::MouseButtonRelease, endPx, Qt::LeftButton,
+    QMouseEvent move(QEvent::MouseMove, endPx, endPx, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent rel(QEvent::MouseButtonRelease, endPx, endPx, Qt::LeftButton,
                     Qt::NoButton, Qt::NoModifier);
     view.mousePressEvent(&press);
     view.mouseMoveEvent(&move);
@@ -1928,11 +1932,11 @@ void Monitor_Test::draggingBackgroundPansAndSurvivesResize()
     const QPointF originBefore = rig.view->m_originPx;
     const QVector3D posBefore = rig.pos();
 
-    QMouseEvent press(QEvent::MouseButtonPress, empty, Qt::LeftButton,
+    QMouseEvent press(QEvent::MouseButtonPress, empty, empty, Qt::LeftButton,
                       Qt::LeftButton, Qt::NoModifier);
-    QMouseEvent move(QEvent::MouseMove, empty + QPointF(60, 40), Qt::NoButton,
+    QMouseEvent move(QEvent::MouseMove, empty + QPointF(60, 40), empty + QPointF(60, 40), Qt::NoButton,
                      Qt::LeftButton, Qt::NoModifier);
-    QMouseEvent rel(QEvent::MouseButtonRelease, empty + QPointF(60, 40),
+    QMouseEvent rel(QEvent::MouseButtonRelease, empty + QPointF(60, 40), empty + QPointF(60, 40),
                     Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     rig.view->mousePressEvent(&press);
     rig.view->mouseMoveEvent(&move);
@@ -2803,6 +2807,225 @@ void Monitor_Test::aMoverOnAShelfSitsOnItRatherThanInIt()
     delete doc;
 }
 
+/* "UST2-6 are in the platform .. and those are solid platforms?"
+   They were, and the cause is a default. FixtureRigProps::mountingType starts
+   life as Truss::TopHung, so any fixture dropped onto a deck and never given an
+   orientation claims to be hanging -- and once the body is seated along its own
+   up axis, "hanging" from the TOP of a platform means seated downward, i.e.
+   inside the solid thing it is standing on. The two fixtures in that rig that
+   someone HAD set to FloorMounted sat on top correctly, which is the tell. */
+void Monitor_Test::aMoverOnADeckIsNotBuriedInIt()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("USP"); pl->setOriginX(1.0f); pl->setOriginY(1.0f);
+    pl->setWidth(2.4f); pl->setDepth(1.2f); pl->setHeight(0.61f);
+
+    // Well inside the footprint, so nothing here is about overhang.
+    Fixture *head = makeMover(doc, 14.0, 0, "Deck Beam", QVector3D(2.2f, 1.6f, 0.61f));
+    QVERIFY(head != nullptr);
+
+    FixtureRigProps rp;
+    rp.deckPlatformId = pl->id();
+    rp.deckHeightOffset = 0.0f;
+    // Deliberately NOT set: mountingType keeps its default, which is TopHung.
+    QCOMPARE(rp.mountingType, Truss::TopHung);
+    props->setFixtureRigProps(head->id(), rp);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(760, 600);
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 20.0);
+    v.setAmbient(1.0);
+    v.grab();
+    v.reload();
+    v.m_zoomed = true;              // hold the framing, see the shelf test
+    const QImage img = v.grab().toImage();
+
+    const PreviewItem saved = props->m_fixtureItems.value(head->id()).m_baseItem;
+    props->removeFixture(head->id());
+    const QImage base = v.grab().toImage();
+    props->m_fixtureItems[head->id()].m_baseItem = saved;
+    props->setFixtureRigProps(head->id(), rp);
+
+    /* A deck mount stands ON the platform: fixtureRigPosition() already returns
+       the platform TOP for it, so the body belongs above that line. */
+    /* fixtureCentre(), not fixtureRigPosition(): the plot anchors a free/deck
+       fixture by its top-left corner and the rig view undoes that, so the raw
+       stored point is half a footprint away from where the body is drawn. */
+    const QPointF at = v.w2s(v.fixtureCentre(head->id()));
+    int above = 0, below = 0;
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+        {
+            const QColor a = img.pixelColor(x, y), b = base.pixelColor(x, y);
+            if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                + qAbs(a.blue() - b.blue()) <= 24)
+                continue;
+            if (double(y) < at.y()) ++above; else ++below;
+        }
+
+    QVERIFY2(above + below > 50, "the fixture drew almost nothing");
+    const double sunk = double(below) / double(above + below);
+    QVERIFY2(sunk < 0.25,
+             qPrintable(QString("a mover standing on a deck is drawn sunk into it "
+                                "-- %1% of its body is below the platform top it "
+                                "is standing on").arg(sunk * 100.0, 0, 'f', 1)));
+
+    /* And the rule itself: you cannot hang from a deck, so which way is up must
+       not depend on a mountingType nobody set. */
+    QVERIFY2(v.fixtureBodyUp(rp).z() > 0.0f,
+             "a deck-mounted fixture's body points down");
+    delete doc;
+}
+
+/* "Why are these lights showing not in the right places in rig view relative to
+   what the studio view has?" Because the two disagreed about what the stored
+   number MEANS. The plot anchors a free fixture by the TOP-LEFT of its
+   footprint; everything 3-D builds a body centred on the point it is handed.
+   Measured, the gap was exactly half the footprint on each axis. */
+void Monitor_Test::planAndRigAgreeOnAFixturesPosition()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("USP"); pl->setOriginX(1.0f); pl->setOriginY(1.0f);
+    pl->setWidth(2.438f); pl->setDepth(1.219f); pl->setHeight(0.61f);
+
+    // A fixture that DECLARES its size: the plot falls back to a minimum-area
+    // icon for one that does not, and an invented footprint has no world-space
+    // half to agree about.
+    Fixture *fx = makeMover(doc, 14.0, 0, "Deck Beam", QVector3D(1.5f, 1.2f, 0.0f));
+    QVERIFY(fx != nullptr);
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+
+    gv->resize(1230, 760);
+    gv->setSnapDivisions(0);
+    gv->setGridMetrics(1000.0);
+    // Big cells on purpose: at 30 px/m a 300 mm fixture is 9 px and the plot's
+    // 16x16 minimum-AREA clamp inflates the icon, so its footprint stops being
+    // the fixture's real size and there is no world-space half to agree about.
+    gv->setGridSize(QSize(10, 6));
+    QVERIFY(gv->m_cellPixels > 0);
+
+    FixtureRigProps rp;
+    rp.deckPlatformId = pl->id();
+    props->setFixtureRigProps(fx->id(), rp);
+
+    gv->addFixture(fx->id(), QPointF(1500.0, 1200.0));
+    MonitorFixtureItem *item = gv->m_fixtures.value(fx->id(), nullptr);
+    QVERIFY(item != nullptr);
+    gv->updateFixture(fx->id());
+
+    /* Where the PLAN draws the fixture's centre, in mm. The ICON size, not
+       boundingRect() -- that includes the name label hanging below and would
+       measure the wrong box entirely. */
+    const QPointF centrePx = item->pos()
+                           + QPointF(item->m_width / 2.0, item->m_height / 2.0);
+    const QPointF planMm = gv->pixelsToRealPosition(centrePx.x(), centrePx.y());
+
+    // Where the RIG view centres its body, in mm.
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    const QVector3D w = v.fixtureCentre(fx->id());
+    const QPointF rigMm(double(w.x()) * 1000.0, double(w.y()) * 1000.0);
+
+    const double gap = QLineF(planMm, rigMm).length();
+    QVERIFY2(gap < 30.0,
+             qPrintable(QString("the plan and the rig disagree about where this "
+                                "fixture is by %1 mm (plan %2,%3 vs rig %4,%5)")
+                        .arg(gap).arg(planMm.x()).arg(planMm.y())
+                        .arg(rigMm.x()).arg(rigMm.y())));
+    delete mon;
+    doc->deleteFixture(fx->id());
+    delete doc;
+}
+
+/* Two fixtures in stage-structures-demo.qxw sit 13.8 m UPSTAGE of the origin,
+   left there when they were detached from a truss. The plan's scene rect began
+   at (0,0), and a QGraphicsView cannot scroll past its scene rect -- so they
+   could not be seen, selected or dragged back at all. The only way to recover
+   one was to edit the .qxw by hand. */
+void Monitor_Test::theStudioPlanCanReachAFixturePlacedOffTheGrid()
+{
+    Doc *doc = new Doc(this);
+
+    /* Scoped: DropRig's destructor talks to the Doc (it deletes its fixture and
+       the Monitor), so the rig has to be gone BEFORE the Doc is. Deleting the
+       Doc first left the destructor calling doc->fixture() through a dangling
+       pointer -- a SIGSEGV inside QHash, nothing to do with what is under
+       test. */
+    {
+        DropRig rig;
+        QVERIFY(rig.build(doc, QVector3D(792.0f, -13778.0f, 0.0f)));   // 13.8 m upstage
+
+        const QPointF px = rig.gv->realPositionToPixels(792.0, -13778.0);
+        const QRectF scene = rig.gv->m_scene->sceneRect();
+
+        QVERIFY2(scene.contains(px),
+                 qPrintable(QString("a fixture at (0.79, -13.78) m maps to (%1,%2) px, "
+                                    "outside the scene rect (%3,%4 %5x%6) -- the plan "
+                                    "cannot scroll to it, so it cannot be recovered")
+                            .arg(px.x()).arg(px.y())
+                            .arg(scene.x()).arg(scene.y())
+                            .arg(scene.width()).arg(scene.height())));
+    }
+    delete doc;
+}
+
+/* A stranded fixture that nothing mentions is how two of them sat 13.8 m
+   upstage of stage-structures-demo for months. The tally is the mention. */
+void Monitor_Test::theFooterCountsAndSelectsOffStageFixtures()
+{
+    Doc *doc = new Doc(this);
+    {
+        DropRig rig;
+        QVERIFY(rig.build(doc, QVector3D(2000.0f, 2000.0f, 0.0f)));   // on the grid
+
+        int reported = -1;
+        QObject::connect(rig.gv, &MonitorGraphicsView::offGridFixturesChanged,
+                         [&reported](int n) { reported = n; });
+
+        QVERIFY2(rig.gv->fixturesOffGrid().isEmpty(),
+                 "a fixture on the grid was counted as off it");
+
+        // Send it 13.8 m upstage, the way detaching from a truss did.
+        doc->monitorProperties()->setFixturePosition(rig.fxi->id(), 0, 0,
+                                                     QVector3D(792.0f, -13778.0f, 0.0f));
+        rig.item->setRealPosition(QPointF(792.0, -13778.0));
+        rig.gv->updateFixture(rig.fxi->id());
+
+        const QList<quint32> off = rig.gv->fixturesOffGrid();
+        QCOMPARE(off.count(), 1);
+        QCOMPARE(off.first(), rig.fxi->id());
+        QCOMPARE(reported, 1);        // ...and the footer was told
+
+        // Clicking the tally selects them -- the only way back to one of these.
+        rig.gv->selectFixtures(off);
+        QVERIFY2(rig.item->isSelected(),
+                 "selecting the off-stage fixtures did not select it");
+
+        /* Bring it home the way a DRAG does -- which is the case that was
+           broken. The view emits fixtureMoved and Monitor::slotFixtureMoved()
+           writes the position, so a recount done inside the view's own drag
+           handling still sees the old one and the warning never clears:
+           "I grabbed them and moved them onstage but the error condition
+           persisted." Going through the Monitor slot is the real path. */
+        rig.mon->slotFixtureMoved(rig.fxi->id(), QPointF(2000.0, 2000.0));
+
+        QVERIFY2(rig.gv->fixturesOffGrid().isEmpty(),
+                 "the fixture is back on the grid but is still counted as off it");
+        QCOMPARE(reported, 0);
+    }
+    delete doc;
+}
+
 void Monitor_Test::theRigGridMatchesTheStudioGrid()
 {
     /* Two windows onto the same stage have to agree about how big a metre is.
@@ -3471,7 +3694,7 @@ void Monitor_Test::aBeamFadesAllTheWayOutWithTheDimmer()
         u[3] = char(255); u[4] = char(255); u[5] = char(255);
         head->setChannelValues(u);
         const QImage img = v.grab().toImage();
-        const QPointF at = v.w2s(doc->monitorProperties()->fixtureRigPosition(head->id()));
+        const QPointF at = v.w2s(v.fixtureCentre(head->id()));
         const QPointF probe(at.x(), at.y() + 120);   // into the throw
         double sum = 0; int n = 0;
         for (int dy = -14; dy <= 14; ++dy)

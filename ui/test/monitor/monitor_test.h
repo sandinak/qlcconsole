@@ -141,6 +141,16 @@ private slots:
     void aMoverStandingOnAShelfIsNotDrawnHanging();
     /** ...and it stands ON the shelf rather than sunk halfway through it. */
     void aMoverOnAShelfSitsOnItRatherThanInIt();
+    /** ...and one standing on a DECK is not buried in it by a mountingType
+     *  that defaults to "hung" when nothing set it. */
+    void aMoverOnADeckIsNotBuriedInIt();
+    /** The plan and the rig must agree about WHERE a fixture is. */
+    void planAndRigAgreeOnAFixturesPosition();
+    /** A fixture placed outside the grid must stay reachable in the plan --
+     *  otherwise it cannot be selected or dragged back without editing XML. */
+    void theStudioPlanCanReachAFixturePlacedOffTheGrid();
+    /** ...and the plan says so, and can select them for you. */
+    void theFooterCountsAndSelectsOffStageFixtures();
     /** A clear-topped step must let what is inside it show through, and a
      *  fixture placed Inside must not be seated out onto the surface. */
     void clearTopAndInsidePlacement();
