@@ -112,6 +112,17 @@ void TrussItem::setHighlighted(bool highlighted)
     }
 }
 
+QRectF TrussItem::footprintRect() const
+{
+    if (m_truss->type() == Truss::Vertical && !m_elevation)
+    {
+        // Seen from above a tower is its cross-section, not its base plate.
+        const qreal h = m_pxWid / 2.0;
+        return QRectF(-h, -h, m_pxWid, m_pxWid);
+    }
+    return QRectF(0, -m_pxWid / 2.0, m_pxLen, m_pxWid);
+}
+
 QRectF TrussItem::boundingRect() const
 {
     const qreal pad = 2.0;

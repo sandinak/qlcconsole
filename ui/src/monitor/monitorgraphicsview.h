@@ -271,6 +271,34 @@ public:
      *  unreachable -- unselectable, undraggable, editable only in the file. */
     void growSceneRectToItems();
 
+    /** Whether a fixture's item should be on screen right now.
+     *
+     *  ONE answer, because there were three: the layer refresh, item creation
+     *  and the "Fixtures on the rig" toggle each decided it separately, and the
+     *  two that did not know about the toggle put hidden fixtures straight back
+     *  on the next refresh. */
+    bool fixtureItemShouldBeVisible(quint32 fid) const;
+
+    /** Hide a structure's own fixtures when they bury it, and say how many.
+     *
+     *  A vertical truss seen from ABOVE is a small square, and the fixtures on
+     *  it cover the thing you are trying to click; the same truss from the
+     *  front is tall and they cover almost none of it. So the decision is per
+     *  STRUCTURE, per VIEW, and all-or-nothing: measure what fraction of the
+     *  structure its own fixtures cover on screen, and above the threshold
+     *  replace them with a count. All-or-nothing matters -- deciding fixture by
+     *  fixture would make them blink in and out as things move.
+     *
+     *  With "Fixtures on the rig" unchecked the badge always appears on any
+     *  structure carrying fixtures, so the rig never silently loses them. */
+    void refreshFixtureCountBadges();
+
+    /** Fraction of @p kind / @p id covered on screen by its own fixtures, 0..1.
+     *  Unioned, so overlapping fixtures are not counted twice. */
+    double structureCoverageByItsFixtures(const QString &kind, quint32 id,
+                                          QList<quint32> *fixturesOut = nullptr,
+                                          double *stackFactorOut = nullptr) const;
+
     /** Fixtures whose stored position lies outside the stage grid.
      *
      *  Off the grid is not off by a little: it means the fixture is nowhere the
@@ -971,6 +999,22 @@ private:
      *  QGraphicsScene::removeItem fires selectionChanged mid-teardown. */
     bool m_itemsRebuilding = false;
     int  m_offGridCount = -1;      ///< last emitted off-grid tally (-1 = never)
+
+    /** Fixtures hidden because they bury the structure they are mounted on.
+     *  Consulted by fixtureItemShouldBeVisible(); rebuilt per view change. */
+    QSet<quint32> m_buriedByOwnFixtures;
+    /** Count badges, keyed "kind:id". */
+    QHash<QString, class QGraphicsItemGroup *> m_countBadges;
+
+    /** Above this fraction, a structure's fixtures are replaced by a count. */
+    static constexpr double kBuryThreshold = 0.40;
+
+    /** ...or this many fixtures deep on the same footprint. Eight strips up a
+     *  step's face land on ONE spot from above: their union is a single strip,
+     *  so coverage alone can never speak for them, while their summed area is
+     *  13x that. Piled up they are unreadable individually anyway, which is the
+     *  same reason for replacing them with a count. */
+    static constexpr double kStackFactor = 2.0;
 
     /** True while a "click to place 0,0" pick is armed (beginPickOrigin). */
     bool m_pickingOrigin = false;

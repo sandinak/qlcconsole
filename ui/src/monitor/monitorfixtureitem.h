@@ -178,6 +178,11 @@ public:
     }
     bool isGhosted() const { return m_ghosted; }
 
+    /** The icon's own rectangle in ITEM coordinates -- the body, without the
+     *  name label or the selection halo that boundingRect() has to include.
+     *  What actually covers something underneath is this, not the text. */
+    QRectF iconRect() const { return QRectF(0, 0, m_width, m_height); }
+
     /** "Isolated" = drilled into its group to select this ONE fixture (double-
      *  click). Draws a distinct bright dashed border so it's obvious the sub-
      *  unit is selected, not the whole group. Cleared when deselected. */

@@ -578,11 +578,13 @@ void MonitorGraphicsView::setMountedFixturesVisible(bool on)
                              != FixtureRigProps::NoMount;
         if (!mounted)
             continue;
-        // Never override a layer that is itself hidden.
-        const MonitorProperties::MonitorLayer lyr =
-            props->layer(props->fixtureLayer(it.key()));
-        item->setVisible(on && lyr.visible);
+        item->setVisible(fixtureItemShouldBeVisible(it.key()));
     }
+    refreshFixtureCountBadges();
+    // The badge decides what is buried, so visibility is settled afterwards.
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (it.value() != nullptr)
+            it.value()->setVisible(fixtureItemShouldBeVisible(it.key()));
     m_scene->update();
 }
 
@@ -1833,7 +1835,7 @@ void MonitorGraphicsView::refreshItemLayerState()
     {
         const MonitorProperties::MonitorLayer lyr = props->layer(props->fixtureLayer(it.key()));
         const bool grpLock = props->groupChainLocked(props->fixtureGroup(it.key()));
-        it.value()->setVisible(lyr.visible && !m_stageOnly);   // hidden in stage view
+        it.value()->setVisible(fixtureItemShouldBeVisible(it.key()));
         // Ghosted (faint) exactly when it's actually non-interactive — a
         // locked layer already makes it unselectable/click-through below;
         // this just makes that visible instead of a silent trap.
@@ -1982,6 +1984,13 @@ void MonitorGraphicsView::refreshItemLayerState()
     }
 
     updateTrussAnchorLines();
+    /* Badges last: they decide which fixtures are buried, so run them after the
+       layer pass and settle fixture visibility once more. */
+    refreshFixtureCountBadges();
+    for (auto fit = m_fixtures.constBegin(); fit != m_fixtures.constEnd(); ++fit)
+        if (fit.value() != nullptr)
+            fit.value()->setVisible(fixtureItemShouldBeVisible(fit.key()));
+
 }
 
 void MonitorGraphicsView::setSnapDivisions(int divisions)
@@ -2090,6 +2099,253 @@ QColor MonitorGraphicsView::fixtureGelColor(quint32 id)
         return QColor();
 
     return item->getColor();
+}
+
+/* Which structure a fixture is mounted on, as a "kind:id" key ("" = none). */
+static QString mountKeyFor(const FixtureRigProps &rp)
+{
+    if (rp.trussId != Truss::invalidId())
+        return QStringLiteral("truss:%1").arg(rp.trussId);
+    if (rp.onTower())
+        return QStringLiteral("tower:%1").arg(rp.towerId);
+    if (rp.onPipe())
+        return QStringLiteral("pipe:%1").arg(rp.pipeId);
+    if (rp.onRiser())
+        return QStringLiteral("platform:%1").arg(rp.riserPlatformId);
+    if (rp.onDeck())
+        return QStringLiteral("platform:%1").arg(rp.deckPlatformId);
+    return QString();
+}
+
+/* Scene-space centre of a structure's item, where its count badge sits. */
+static QPointF centreOf(const QGraphicsItem *it)
+{
+    return it ? it->sceneBoundingRect().center() : QPointF();
+}
+
+double MonitorGraphicsView::structureCoverageByItsFixtures(const QString &kind, quint32 id,
+                                                           QList<quint32> *fixturesOut,
+                                                           double *stackFactorOut) const
+{
+    const QGraphicsItem *host = nullptr;
+    QRectF hostRect;
+    if (kind == QStringLiteral("truss"))
+    {
+        TrussItem *ti = m_trussItems.value(id, nullptr);
+        host = ti;
+        // The BODY, not boundingRect(): a vertical truss pads its rect out to
+        // cover the base plate, which is ~4x its real area and made a tower
+        // buried in its own fixtures measure 31%.
+        if (ti != nullptr)
+            hostRect = ti->mapRectToScene(ti->footprintRect());
+    }
+    else if (kind == QStringLiteral("tower"))    host = m_towerItems.value(id, nullptr);
+    else if (kind == QStringLiteral("pipe"))     host = m_pipeItems.value(id, nullptr);
+    else if (kind == QStringLiteral("platform")) host = m_platformItems.value(id, nullptr);
+    if (host == nullptr)
+        return 0.0;
+    if (hostRect.isNull())
+        hostRect = host->sceneBoundingRect();
+    const double hostArea = hostRect.width() * hostRect.height();
+    if (hostArea <= 0.0)
+        return 0.0;
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QString key = QStringLiteral("%1:%2").arg(kind).arg(id);
+
+    /* Union, not a sum: two fixtures side by side on a truss cover twice as
+       much as one, but two stacked on the same spot do not. */
+    QRegion covered;
+    double summed = 0.0;      // areas added up, overlaps counted every time
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+    {
+        if (it.value() == nullptr)
+            continue;
+        if (mountKeyFor(props->fixtureRigProps(it.key())) != key)
+            continue;
+        if (fixturesOut != nullptr)
+            *fixturesOut << it.key();
+        /* The ICON, not sceneBoundingRect(): that includes the name label and
+           the selection halo, so a fixture with a long name would "bury" a
+           truss it barely touches. Measured at 129 px wide for a 300 mm
+           fixture whose body is about 29 -- almost all of it text. */
+        const QRectF icon = it.value()->mapRectToScene(it.value()->iconRect());
+        const QRectF r = icon.intersected(hostRect);
+        if (r.isEmpty() == false)
+        {
+            covered += r.toAlignedRect();
+            summed += double(r.width()) * double(r.height());
+        }
+    }
+
+    /* Range-for, not foreach: QRegion is not implicitly shared, so Q_FOREACH
+       copies the whole region to walk it -- what Qt deprecates it for. */
+    double coveredArea = 0.0;
+    const QRegion coveredRects = covered;
+    for (const QRect &r : coveredRects)
+        coveredArea += double(r.width()) * double(r.height());
+
+    /* How many fixtures deep, on average, the covered part is. 1.0 = laid out
+       side by side; 8.0 = eight of them on one spot. */
+    if (stackFactorOut != nullptr)
+        *stackFactorOut = (coveredArea > 0.0) ? (summed / coveredArea) : 0.0;
+
+    return qBound(0.0, coveredArea / hostArea, 1.0);
+}
+
+void MonitorGraphicsView::refreshFixtureCountBadges()
+{
+    if (m_doc == nullptr || m_doc->monitorProperties() == nullptr)
+        return;
+
+    QList<QPair<QString, quint32> > structures;
+    foreach (quint32 id, m_trussItems.keys())    structures << qMakePair(QStringLiteral("truss"), id);
+    foreach (quint32 id, m_towerItems.keys())    structures << qMakePair(QStringLiteral("tower"), id);
+    foreach (quint32 id, m_pipeItems.keys())     structures << qMakePair(QStringLiteral("pipe"), id);
+    foreach (quint32 id, m_platformItems.keys()) structures << qMakePair(QStringLiteral("platform"), id);
+
+    m_buriedByOwnFixtures.clear();
+    QSet<QString> wanted;
+
+    for (const QPair<QString, quint32> &sk : structures)
+    {
+        QList<quint32> fids;
+        double stack = 0.0;
+        const double cover = structureCoverageByItsFixtures(sk.first, sk.second, &fids, &stack);
+        if (fids.isEmpty())
+            continue;
+
+        /* Unchecked: always badge, so hiding the rig never loses the count.
+           Checked: badge only where the fixtures actually bury the structure. */
+        /* Two different reasons to show a count, and they must not look alike.
+           BURIED: the fixtures really do cover the structure in this view, so
+           they are hidden whatever the toggle says. HIDDEN BY CHOICE: you
+           unchecked "Fixtures on the rig", which hides every mounted fixture
+           regardless of how much it covers. Drawn identically, the second reads
+           as the first misfiring -- "the lights on the platforms do NOT cover
+           more than 40% .. so that's a fail" -- when nothing had misfired. */
+        /* AREA only, as specified. A "stacked" trigger (fixtures piled on one
+           footprint, union tiny but summed area large) was tried and removed:
+           it fired on the LED tape up a step's face, which is precisely the
+           case that should stay visible. Stacking is still measured -- see
+           stack below -- but it does not hide anything on its own. */
+        const bool buries = (cover > kBuryThreshold);
+        Q_UNUSED(stack)
+        const bool byChoice = (m_showMountedFixtures == false);
+        if (!buries && !byChoice)
+            continue;
+
+        if (m_showMountedFixtures)
+        {
+            // Braces: foreach expands to an if/else, so a braceless if around
+            // one is a dangling else.
+            foreach (quint32 fid, fids)
+                m_buriedByOwnFixtures.insert(fid);
+        }
+
+        const QString key = QStringLiteral("%1:%2").arg(sk.first).arg(sk.second);
+        wanted.insert(key);
+
+        QGraphicsItemGroup *badge = m_countBadges.value(key, nullptr);
+        QGraphicsEllipseItem *disc = nullptr;
+        QGraphicsSimpleTextItem *num = nullptr;
+        if (badge == nullptr)
+        {
+            badge = new QGraphicsItemGroup;
+            disc = new QGraphicsEllipseItem(badge);
+            num  = new QGraphicsSimpleTextItem(badge);
+            badge->addToGroup(disc);
+            badge->addToGroup(num);
+            badge->setZValue(3.0);                    // above fixtures (2) and their halo
+            badge->setAcceptedMouseButtons(Qt::NoButton);   // never steal the click
+            m_scene->addItem(badge);
+            m_countBadges.insert(key, badge);
+        }
+        else
+        {
+            disc = dynamic_cast<QGraphicsEllipseItem *>(badge->childItems().value(0));
+            num  = dynamic_cast<QGraphicsSimpleTextItem *>(badge->childItems().value(1));
+        }
+        if (disc == nullptr || num == nullptr)
+            continue;
+
+        const int n = fids.count();
+        QFont f = font();
+        f.setBold(true);
+        f.setPointSizeF(9.0);
+        num->setFont(f);
+        num->setText(QString::number(n));
+        num->setPen(Qt::NoPen);
+
+        const QRectF tb = num->boundingRect();
+        const double d = qMax(16.0, qMax(tb.width(), tb.height()) + 8.0);
+        disc->setRect(0, 0, d, d);
+        /* Filled blue = these fixtures bury their structure (the mandated
+           look). Hollow = they are hidden because "Fixtures on the rig" is
+           off. Keyed on the MODE, not on the individual structure: with the
+           toggle off every badge means the same thing, and mixing filled and
+           hollow in that one view just reads as inconsistency. */
+        if (m_showMountedFixtures)
+        {
+            disc->setBrush(QBrush(QColor(40, 110, 220)));
+            disc->setPen(QPen(QColor(230, 240, 255), 1.0));
+            num->setBrush(QBrush(Qt::white));
+        }
+        else
+        {
+            disc->setBrush(Qt::NoBrush);
+            disc->setPen(QPen(QColor(90, 150, 230), 1.5));
+            num->setBrush(QBrush(QColor(150, 195, 245)));
+        }
+        badge->setToolTip(m_showMountedFixtures
+            ? tr("%n fixture(s) here cover this and are hidden in this view", "", n)
+            : tr("%n fixture(s) here, hidden by “Fixtures on the rig”", "", n));
+        num->setPos((d - tb.width()) * 0.5, (d - tb.height()) * 0.5);
+
+        const QGraphicsItem *hostItem =
+              (sk.first == QStringLiteral("truss"))    ? (QGraphicsItem *)m_trussItems.value(sk.second, nullptr)
+            : (sk.first == QStringLiteral("tower"))    ? (QGraphicsItem *)m_towerItems.value(sk.second, nullptr)
+            : (sk.first == QStringLiteral("pipe"))     ? (QGraphicsItem *)m_pipeItems.value(sk.second, nullptr)
+            : (QGraphicsItem *)m_platformItems.value(sk.second, nullptr);
+        const QPointF c = centreOf(hostItem);
+        badge->setPos(c.x() - d * 0.5, c.y() - d * 0.5);
+        badge->setVisible(true);
+    }
+
+    // Drop badges for structures that no longer need one.
+    foreach (const QString &key, m_countBadges.keys())
+    {
+        if (wanted.contains(key))
+            continue;
+        QGraphicsItemGroup *g = m_countBadges.take(key);
+        if (g != nullptr) { m_scene->removeItem(g); delete g; }
+    }
+}
+
+bool MonitorGraphicsView::fixtureItemShouldBeVisible(quint32 fid) const
+{
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : NULL;
+    if (props == NULL)
+        return true;
+
+    if (props->layer(props->fixtureLayer(fid)).visible == false)
+        return false;
+    if (m_stageOnly)
+        return false;
+
+    /* "Fixtures on the rig", unchecked: a structure covered by its own fixtures
+       cannot be clicked, so they are hidden while it is being placed. Only
+       MOUNTED ones -- there is nothing under a free-standing fixture to reach. */
+    const bool mounted = props->fixtureRigProps(fid).primaryMount()
+                         != FixtureRigProps::NoMount;
+    if (mounted && !m_showMountedFixtures)
+        return false;
+
+    // Buried by its own kind: the structure shows a count instead.
+    if (m_buriedByOwnFixtures.contains(fid))
+        return false;
+
+    return true;
 }
 
 void MonitorGraphicsView::growSceneRectToItems()
@@ -2481,7 +2737,7 @@ void MonitorGraphicsView::addFixture(quint32 id, QPointF pos)
     const MonitorProperties::MonitorLayer lyr =
         m_doc->monitorProperties()->layer(m_doc->monitorProperties()->fixtureLayer(id));
     item->setMovable(!m_layoutLocked && !lyr.locked);
-    item->setVisible(lyr.visible);
+    item->setVisible(fixtureItemShouldBeVisible(id));
     // Reflect any existing truss binding (e.g. on workspace load)
     FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(id);
     item->setBoundToTruss(rp.trussId != Truss::invalidId());
