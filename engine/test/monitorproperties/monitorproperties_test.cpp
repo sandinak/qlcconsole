@@ -278,6 +278,48 @@ void MonitorProperties_Test::riserMount()
    (studioMount = top), which is why that one step looked unlike its ten
    identical neighbours. Nothing in the renderer was wrong; the fixture was
    telling the position resolver and the geometry builder two different things. */
+/* A fixture can be given a structural mount without ever having had a position
+   on the plot -- mount it from a structure editor and nothing creates one. Both
+   the rig view and the Layers tree enumerate fixtureItemsID(), so such a
+   fixture is listed by the editor that mounted it and invisible everywhere
+   else: "put bars in T1 .. they're not visible on the rig display" and "the
+   added fixtures aren't showing up in the tree under the truss".
+
+   repairOrphanedMounts() has always fixed this, but only on LOAD -- which is no
+   help in the session where you are building the rig. */
+void MonitorProperties_Test::mountingAFixtureGivesItAPlotItem()
+{
+    MonitorProperties mp;
+    Truss *t = mp.addTruss();
+    t->setType(Truss::Vertical);
+    t->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    t->setLength(3.0f);
+
+    // No setFixturePosition(): this fixture has never been on the plot.
+    QVERIFY(mp.fixtureItemsID().contains(7) == false);
+
+    FixtureRigProps rp;
+    rp.trussId = t->id();
+    rp.trussOffset = 1.5f;
+    mp.setFixtureRigProps(7, rp);
+
+    QVERIFY2(mp.fixtureItemsID().contains(7),
+             "a mounted fixture has no plot item, so it is invisible in the rig "
+             "view and absent from the Layers tree");
+
+    // ...and it is placed where the mount says, not at the origin.
+    const QVector3D w = mp.fixtureRigPosition(7);
+    QVERIFY2(w.z() > 1.0f,
+             qPrintable(QString("the rebuilt item sits at z=%1, not on the truss")
+                        .arg(double(w.z()))));
+
+    // An UNMOUNTED fixture must not gain an item -- nothing to derive from.
+    FixtureRigProps none;
+    mp.setFixtureRigProps(8, none);
+    QVERIFY2(mp.fixtureItemsID().contains(8) == false,
+             "an unmounted fixture was given a plot item out of nowhere");
+}
+
 void MonitorProperties_Test::riserFaceAndDrawingPlaneCannotDisagree()
 {
     MonitorProperties mp;

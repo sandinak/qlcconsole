@@ -290,6 +290,22 @@ struct FixtureRigProps
     int              studioMount = 1;              ///< default: front face
     float            studioAngle = 0.0f;
 
+    /** ROLL about the fixture's own long axis, degrees.
+     *
+     *  studioAngle turns a fixture WITHIN its mounting face -- on a step's top
+     *  that spins it flat, like a compass bearing. This tips it instead: the
+     *  emitting face rotates about the length of the bar, so a unit lying in a
+     *  step can be angled up toward the cast rather than straight up, which is
+     *  how they are actually built (bar light on a diagonal inside the box,
+     *  firing up through the plexi at an angle).
+     *
+     *  Positive tips the face AWAY from the in-face axis: for a bar lying on a
+     *  TOP face and running stage left-right that is UPSTAGE, away from the
+     *  audience (+Y is downstage).
+     *  0 = flat in its mounting face, which is every fixture that predates
+     *  this, so old files are unchanged. */
+    float            studioTilt = 0.0f;
+
     /** Boom mount. When pipeId is valid the fixture rides a pipe's pipe at
      *  pipeOffset metres up from the base, facing pipeAngle degrees around it.
      *  Its world position is DERIVED from the pipe so it follows it. */

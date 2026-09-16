@@ -151,6 +151,29 @@ private slots:
     void theStudioPlanCanReachAFixturePlacedOffTheGrid();
     /** ...and the plan says so, and can select them for you. */
     void theFooterCountsAndSelectsOffStageFixtures();
+    /** A Layers row that reads "on truss" opens the TRUSS -- including when
+     *  its auto-group carries a studio frame, which is the case that broke. */
+    void aTrussRowInLayersOpensTheTrussNotItsGroup();
+    /** Lay a step out once, save it as a component, stamp it onto the next
+     *  step's fixtures: the arrangement must arrive intact. */
+    void aSavedComponentStampsItsLayoutOntoOtherFixtures();
+    /** "Fixtures on the rig" unchecked must STAY unchecked across a refresh. */
+    void hidingMountedFixturesSurvivesARefresh();
+    /** Fixtures that bury their structure in THIS view are replaced by a count;
+     *  in a view where they do not bury it, they stay. */
+    void fixturesThatBuryTheirStructureBecomeACount();
+    /** Fixtures stacked on one spot but covering little must STAY visible --
+     *  a step's face tape is the case that must not be hidden. */
+    void stackedFixturesOnAStepBecomeACount();
+    /** studioTilt rolls a fixture about its own length, so a bar in a step can
+     *  fire up toward the cast instead of straight up. */
+    void studioTiltRollsAFixtureAboutItsLength();
+    /** ...and the flat views DRAW it rolled, rather than as an upright box. */
+    void aTiltedBarIsDrawnTiltedInTheSideView();
+    /** A bar hung on a tower must actually be drawn in the rig view. */
+    void aBarOnATowerIsDrawnInTheRigView();
+    /** A bar rigged INSIDE a tower is still drawn in the rig view. */
+    void aFixtureInsideATrussIsStillDrawn();
     /** A clear-topped step must let what is inside it show through, and a
      *  fixture placed Inside must not be seated out onto the surface. */
     void clearTopAndInsidePlacement();

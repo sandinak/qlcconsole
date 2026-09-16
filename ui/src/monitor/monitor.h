@@ -409,6 +409,11 @@ protected slots:
     void studioAddFixture(int kind, quint32 id, class StructureStudioView *view);
     void studioAddGroup(int kind, quint32 id, class StructureStudioView *view);
     void studioAddBar(int kind, quint32 id, class StructureStudioView *view);
+
+    /** What a fixture is mounted on, in words -- shared by the Fixture
+     *  Properties dialog and the Lighting Studio inspector so they cannot
+     *  describe the same fixture differently. */
+    QString mountDescription(const struct FixtureRigProps &rp, quint32 fid) const;
     /** Mount one fixture on the structure (clears its other mounts). */
     void mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32 boomId);
     /** The pipe id to hang fixtures on for a stand/pipe kind (invalid if none). */

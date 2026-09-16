@@ -1447,6 +1447,29 @@ FixtureRigProps MonitorProperties::fixtureRigProps(quint32 fid) const
 void MonitorProperties::setFixtureRigProps(quint32 fid, const FixtureRigProps &props)
 {
     m_rigProps[fid] = props;
+
+    /* A mount implies a place on the plot.
+     *
+       Both the rig view and the Layers tree enumerate fixtureItemsID(), so a
+       fixture that has a structural mount but no PreviewItem is listed only by
+       whichever structure editor mounted it, and is invisible everywhere else --
+       on the truss, absent from the tree beneath it, absent from the rig.
+
+       repairOrphanedMounts() has always rebuilt these, but only when a workspace
+       is LOADED, which is no use during the session that creates them. The mount
+       already says where the fixture is, so build the item now, the same way.
+
+       Only for a REAL mount: an unmounted fixture has nothing to derive a
+       position from, and inventing one would put it at the origin. */
+    if (m_fixtureItems.contains(fid) == false
+        && props.primaryMount() != FixtureRigProps::NoMount)
+    {
+        const QVector3D w = fixtureRigPosition(fid);   // metres, from the mount
+        PreviewItem item;
+        item.m_position = QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z());
+        m_fixtureItems[fid].m_baseItem = item;
+    }
+
     emit rigPropsChanged(fid);
 }
 
@@ -2089,6 +2112,7 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                                           a.value("GLZ").toFloat());
             if (a.hasAttribute("SM")) rp.studioMount = a.value("SM").toInt();
             if (a.hasAttribute("SA")) rp.studioAngle = a.value("SA").toFloat();
+            if (a.hasAttribute("ST")) rp.studioTilt = a.value("ST").toFloat();
             if (a.hasAttribute("Boom"))
             {
                 rp.pipeId     = a.value("Boom").toUInt();
@@ -2674,6 +2698,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("SM"), QString::number(rp.studioMount));
         if (!qFuzzyIsNull(rp.studioAngle))
             doc->writeAttribute(QStringLiteral("SA"), QString::number(double(rp.studioAngle), 'f', 1));
+        if (!qFuzzyIsNull(rp.studioTilt))
+            doc->writeAttribute(QStringLiteral("ST"), QString::number(double(rp.studioTilt), 'f', 1));
         doc->writeEndElement();
     }
 

@@ -49,6 +49,7 @@
 #include <QFormLayout>
 #include <QWidgetAction>
 #include <QInputDialog>
+#include "studiotemplate.h"
 #include <QLineEdit>
 #include <QListWidget>
 #include <QTreeWidget>
@@ -2759,6 +2760,13 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     mountCombo->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
     mountCombo->setToolTip(tr("Base direction relative to the stage floor (gravity), "
                               "not the mounting face."));
+    /* WHAT it is mounted on. The inspector described how a fixture sits --
+       "Top", "Inside" -- without ever saying what it sits on, so a fixture
+       decked on a riser gave no hint that a riser was involved at all. */
+    QLabel *mountOnLbl = new QLabel(insp);
+    mountOnLbl->setStyleSheet("color:#b0b4c0;");
+    mountOnLbl->setWordWrap(true);
+    inspForm->addRow(tr("Mounted on:"), mountOnLbl);
     inspForm->addRow(tr("Colour:"), gelBtn);
     inspForm->addRow(tr("Orientation:"), mountCombo);
     inspForm->addRow(tr("Face:"), faceCombo);
@@ -2778,6 +2786,19 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                               "clear or open top to see it."));
     inspForm->addRow(tr("Placement:"), placeCombo);
     inspForm->addRow(tr("Angle:"), angleSpin);
+
+    /* ROLL about the fixture's own length, as distinct from Angle, which turns
+       it within its face. A bar lying in a step is built on a diagonal so it
+       fires up toward the cast rather than straight up; nothing here could say
+       that before. */
+    QDoubleSpinBox *tiltSpin = new QDoubleSpinBox(insp);
+    tiltSpin->setRange(-90, 90); tiltSpin->setDecimals(0);
+    tiltSpin->setSuffix(QStringLiteral("°"));
+    tiltSpin->setToolTip(tr("Tip the fixture about its own length — a bar lying "
+                            "in a step angled up toward the cast. Positive tips "
+                            "it upstage. Angle above turns it flat within its "
+                            "face instead."));
+    inspForm->addRow(tr("Tilt:"), tiltSpin);
     iv->addLayout(inspForm);
     QPushButton *fullBtn = new QPushButton(tr("Full properties…"), insp);
     iv->addWidget(fullBtn);
@@ -2788,13 +2809,15 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     // workspace, so a 0 "nothing selected" sentinel silently dropped every
     // inspector edit made to it.
     auto curFid = QSharedPointer<quint32>::create(Fixture::invalidId());
-    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, mountCombo, fullBtn, inspForm]() {
+    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, tiltSpin, mountCombo, fullBtn, inspForm, mountOnLbl]() {
         const quint32 fid = *curFid;
         Fixture *fx = (fid != Fixture::invalidId()) ? m_doc->fixture(fid) : nullptr;
         const bool have = (fx != nullptr);
         const bool frame = have && (m_props->fixtureFrameGroup(fid) != 0);
         const bool linear = have && isLinearFixture(fx);   // strip / bar / tape
         inspTitle->setText(have ? fx->name() : tr("(no fixture selected)"));
+        mountOnLbl->setText(have ? mountDescription(m_props->fixtureRigProps(fid), fid)
+                                 : QString("—"));
         gelBtn->setEnabled(have); fullBtn->setEnabled(have);
         // Show the RELEVANT controls per fixture type: Orientation for a body with
         // a base (movers, pars); Face + Angle ("which way it runs") for a linear
@@ -2822,6 +2845,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         placeCombo->setCurrentIndex(qBound(0, rp.placement, 1));
         placeCombo->blockSignals(false);
         angleSpin->blockSignals(true); angleSpin->setValue(double(rp.studioAngle)); angleSpin->blockSignals(false);
+        tiltSpin->blockSignals(true);  tiltSpin->setValue(double(rp.studioTilt));   tiltSpin->blockSignals(false);
         // Orientation options are constrained by the mount (shared helper).
         fillOrientationCombo(mountCombo, rp);
     };
@@ -2860,6 +2884,16 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             [this, curFid, view](double v) {
         if (*curFid == Fixture::invalidId()) return;
         if (view) view->setFixtureAngle(*curFid, float(v));
+        m_graphicsView->updateFixture(*curFid);
+    });
+    connect(tiltSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
+            [this, curFid, view](double v) {
+        if (*curFid == Fixture::invalidId()) return;
+        FixtureRigProps rp = m_props->fixtureRigProps(*curFid);
+        rp.studioTilt = float(v);
+        m_props->setFixtureRigProps(*curFid, rp);
+        m_doc->setModified();
+        if (view) view->reload();
         m_graphicsView->updateFixture(*curFid);
     });
     connect(mountCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
@@ -3176,6 +3210,22 @@ void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32
         rp.riserPlatformId = id; rp.riserFace = FixtureRigProps::RiserTop;
         rp.riserU = pl->width() * 0.5f; rp.riserV = pl->depth() * 0.5f; } }
     m_props->setFixtureRigProps(fid, rp);
+
+    /* Join the structure's auto-group as well as its mount.
+     *
+       The Layers tree nests a fixture under a structure by GROUP, not by mount,
+       so a fixture attached here but left ungrouped is on the truss and absent
+       from the tree underneath it -- "the added fixtures aren't showing up in
+       the tree under the truss". The plot's own attachFixtureToTruss() has
+       always done this; dropping onto the structure canvas did not, so which
+       route you used decided whether the fixture appeared. */
+    quint32 gid = 0;
+    if (kind == 1)      { if (Tower *tw = m_props->tower(id))         gid = tw->groupId(); }
+    else if (kind == 2) { if (Truss *t = m_props->truss(id))          gid = t->groupId(); }
+    else if (kind == 3) { if (StagePlatform *pl = m_props->platform(id)) gid = pl->groupId(); }
+    if (gid != 0)
+        m_props->setFixtureGroup(fid, gid);
+
     m_graphicsView->updateFixture(fid);
 }
 
@@ -3254,7 +3304,7 @@ void Monitor::openGroupStudio(quint32 gid)
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(g.name));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — Group %1").arg(g.name));
 
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
@@ -3271,6 +3321,33 @@ void Monitor::openGroupStudio(quint32 gid)
     form->addRow(tr("Frame origin Z:"), oz);
     form->addRow(tr("Rotation:"), rot);
     vl->addLayout(form);
+    /* Saving the arrangement you have just built is the POINT of laying one
+       out -- lay a step out once, stamp it onto the other eleven -- and it was
+       two levels down, behind a button whose label does not even fit. Direct,
+       where the work happens. */
+    QPushButton *saveCompBtn = new QPushButton(tr("Save as Component…"), geomW);
+    saveCompBtn->setToolTip(tr("Store this arrangement in the component library, "
+                               "then stamp it onto another set of fixtures from "
+                               "the canvas (right-click → Studio Components)."));
+    vl->addWidget(saveCompBtn);
+    connect(saveCompBtn, &QPushButton::clicked, &dlg, [this, gid, nameEdit, &dlg]() {
+        bool ok = false;
+        const QString name = QInputDialog::getText(&dlg, tr("Save as Component"),
+            tr("Component name:"), QLineEdit::Normal, nameEdit->text(), &ok);
+        if (!ok || name.trimmed().isEmpty())
+            return;
+        QString err;
+        const QString path = StudioTemplate::saveToLibrary(m_doc, gid, name.trimmed(), &err);
+        if (path.isEmpty())
+            QMessageBox::warning(&dlg, tr("Save as Component"),
+                                 tr("Could not save component: %1").arg(err));
+        else
+            QMessageBox::information(&dlg, tr("Save as Component"),
+                tr("Saved “%1”.\n\nSelect another set of fixtures on the canvas, "
+                   "then right-click → Studio Components → Stamp onto selection.")
+                    .arg(name.trimmed()));
+    });
+
     QPushButton *setBtn = new QPushButton(tr("Group settings… (bind · seed · component)"), geomW);
     vl->addWidget(setBtn);
     vl->addStretch();
@@ -3439,6 +3516,54 @@ void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
         mountFixtureOnStructure(fid, kind, id, boomId);
     if (view) view->reload();
     m_doc->setModified();
+}
+
+/* What a fixture is mounted ON, in words.
+ *
+   ONE wording, because the Lighting Studio inspector needs to say it too. That
+   inspector showed Face and Placement -- "Top", "Inside" -- but never WHICH
+   thing those were relative to, so a fixture decked on a riser read as
+   "Top / Inside" with no riser in sight, and the same fixture described two
+   different ways in two different panels. */
+QString Monitor::mountDescription(const FixtureRigProps &rp, quint32 fid) const
+{
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp = isFeet ? 3.28084 : 1.0;
+
+    if (rp.trussId != Truss::invalidId())
+    {
+        Truss *t = m_props->truss(rp.trussId);
+        return tr("Truss %1 · %2%3 along").arg(t ? t->name() : QString())
+               .arg(double(rp.trussOffset) * toDisp, 0, 'f', 1).arg(sfx);
+    }
+    if (rp.pipeId != Pipe::invalidId())
+    {
+        Pipe *p = m_props->pipe(rp.pipeId);
+        return tr("Bar %1").arg(p ? p->name() : QString());
+    }
+    if (rp.towerId != Tower::invalidId())
+    {
+        Tower *t = m_props->tower(rp.towerId);
+        const QString tn = t ? t->name() : QString();
+        if (rp.towerMountSide == FixtureRigProps::TowerTop)    return tr("Tower %1 · top").arg(tn);
+        if (rp.towerMountSide == FixtureRigProps::TowerBottom) return tr("Tower %1 · bottom").arg(tn);
+        return tr("Tower %1 · shelf %2").arg(tn).arg(rp.towerShelf + 1);
+    }
+    if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
+    {
+        StagePlatform *pl = m_props->platform(rp.riserPlatformId);
+        return tr("Riser %1 · %2").arg(pl ? pl->name() : QString())
+               .arg(rp.riserFace == FixtureRigProps::RiserTop ? tr("top") : tr("front face"));
+    }
+    if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())
+    {
+        StagePlatform *pl = m_props->platform(rp.deckPlatformId);
+        return tr("On deck %1").arg(pl ? pl->name() : QString());
+    }
+    if (m_props->fixtureFrameGroup(fid) != 0)
+        return tr("Studio group");
+    return tr("free / on the floor");
 }
 
 void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
@@ -4210,7 +4335,7 @@ void Monitor::slotEditStand(quint32 sid)
     const QString snapName = s->name();
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(s->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — Stand %1").arg(s->name()));
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
@@ -4330,7 +4455,7 @@ void Monitor::slotEditTower(quint32 tid)
     for (int i = 0; i < t->shelfCount(); ++i) snapShelves << t->shelfHeight(i);
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(t->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — Tower %1").arg(t->name()));
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
@@ -4520,7 +4645,7 @@ void Monitor::slotEditPipe(quint32 bid)
 
     QDialog dlg(this);
     const bool horiz = (b->orientation() == Pipe::Horizontal);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(b->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — Boom %1").arg(b->name()));
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
@@ -4732,7 +4857,7 @@ void Monitor::slotEditPlatform(quint32 pid)
     const QColor snapColor = p->color();
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(p->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — Riser %1").arg(p->name()));
 
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl   = new QVBoxLayout(geomW);
@@ -5986,7 +6111,9 @@ void Monitor::slotEditTruss(quint32 tid)
     const float     origWidth  = t->width();
 
     QDialog editDlg(this);
-    editDlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(t->name()));
+    // Named by KIND: a truss and its auto-group share a name, and both used to
+    // open a window titled identically, with no way to tell which you had.
+    editDlg.setWindowTitle(tr("Lighting Studio Editor — Truss %1").arg(t->name()));
     editDlg.setMinimumWidth(420);
 
     QVBoxLayout *vl   = new QVBoxLayout(&editDlg);
@@ -7230,29 +7357,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         if (QWidget *l = rigForm->labelForField(w)) l->setVisible(false);
     };
 
-    QString mountStr = tr("free / on the floor");
-    if (rp.trussId != Truss::invalidId())
-    { Truss *t = m_props->truss(rp.trussId);
-      mountStr = tr("Truss %1 · %2%3 along").arg(t ? t->name() : QString())
-                 .arg(double(rp.trussOffset) * toDisp_fx, 0, 'f', 1).arg(unitSfx_fx); }
-    else if (rp.pipeId != Pipe::invalidId())
-    { Pipe *p = m_props->pipe(rp.pipeId); mountStr = tr("Bar %1").arg(p ? p->name() : QString()); }
-    else if (rp.towerId != Tower::invalidId())
-    { Tower *t = m_props->tower(rp.towerId);
-      const QString tn = t ? t->name() : QString();
-      if (rp.towerMountSide == FixtureRigProps::TowerTop)
-          mountStr = tr("Tower %1 · top").arg(tn);
-      else if (rp.towerMountSide == FixtureRigProps::TowerBottom)
-          mountStr = tr("Tower %1 · bottom").arg(tn);
-      else
-          mountStr = tr("Tower %1 · shelf %2").arg(tn).arg(rp.towerShelf + 1); }
-    else if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
-    { StagePlatform *pl = m_props->platform(rp.riserPlatformId); mountStr = tr("Riser %1").arg(pl ? pl->name() : QString()); }
-    else if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())
-    { StagePlatform *pl = m_props->platform(rp.deckPlatformId); mountStr = tr("On deck %1").arg(pl ? pl->name() : QString()); }
-    else if (m_props->fixtureFrameGroup(fxItem->fixtureID()) != 0)
-        mountStr = tr("Studio group");
-    QLabel *mountLbl = new QLabel(mountStr);
+    QLabel *mountLbl = new QLabel(mountDescription(rp, fxItem->fixtureID()));
     mountLbl->setStyleSheet("color:#b0b4c0;");
     rigForm->insertRow(0, tr("Mounted on:"), mountLbl);
 
@@ -7414,6 +7519,10 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
 
     // Live-update: when rig orientation params change, write to MonitorProperties
     // immediately so running scenes recompute geometry on the next tick.
+    /* Declared ahead of liveRigUpdate so it can call it; the Position block that
+       defines it is built further down. */
+    std::function<void()> refreshStagePos;
+
     auto liveRigUpdate = [&]() {
         FixtureRigProps live = m_props->fixtureRigProps(fxId_dlg);
         live.panZeroDir    = float(panZeroSpin->value());
@@ -7427,6 +7536,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
             fi->setFacing(live.panZeroDir);
         flushSceneCaches();
         refreshTest();
+        if (refreshStagePos) refreshStagePos();   // a mount change moves it
     };
     connect(testModeCb,   QOverload<int>::of(&QComboBox::currentIndexChanged),  [&](int)   { refreshTest(); });
     connect(testTargetCb, QOverload<int>::of(&QComboBox::currentIndexChanged),  [&](int)   { refreshTest(); });
@@ -7462,10 +7572,34 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     rotSpin->setValue(int(fxItem->rotation()));
     posForm->addRow(tr("Icon rotation (visual):"), rotSpin);
 
+    /* Where the fixture actually ENDS UP, in stage coordinates.
+     *
+       Horizontal/Vertical above are the fixture's own plot XY, which for a
+       MOUNTED fixture is not where it is: the position is derived from the
+       structure, and the only hint of the height was "10.0 ft along" buried in
+       the Rig Assignment text -- an offset along a tower, not a height you
+       could read. Nothing in this dialog answered "so where is it?".
+
+       Read-only on purpose: for a mounted fixture the answer belongs to the
+       mount, and editing it here would just be overwritten. */
+    QLabel *stagePosLbl = new QLabel(&dlg);
+    stagePosLbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    refreshStagePos = [this, stagePosLbl, fxId_dlg, toDisp_fx, unit]() {
+        const QVector3D w = fixtureWorldCentre(m_doc, fxId_dlg);
+        stagePosLbl->setText(tr("X %1%4   Y %2%4   Z %3%4")
+                             .arg(double(w.x()) * toDisp_fx, 0, 'f', 2)
+                             .arg(double(w.y()) * toDisp_fx, 0, 'f', 2)
+                             .arg(double(w.z()) * toDisp_fx, 0, 'f', 2)
+                             .arg(unit));
+    };
+    refreshStagePos();
+    posForm->addRow(tr("Stage position:"), stagePosLbl);
+
     // A linear fixture (strip / bar / tape) is oriented by its FACE (which surface
     // it lies on) and run ANGLE — not an icon rotation. Show those instead.
     QComboBox *faceCbDetail = nullptr;
     QSpinBox  *angleSpinDetail = nullptr;
+    QSpinBox  *tiltSpinDetail = nullptr;
     if (isStrip)
     {
         rotSpin->setVisible(false);
@@ -7480,6 +7614,19 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         angleSpinDetail->setToolTip(tr("Run direction ON that face: 0° = along the "
                                        "face's horizontal axis (flat/level); 90° = vertical."));
         posForm->addRow(tr("Angle (run):"), angleSpinDetail);
+
+        /* Roll about the bar's own length -- the same field the Lighting Studio
+           inspector sets. Without it here, a bar tipped toward the cast showed
+           no sign of it in the one dialog that claims to describe the fixture. */
+        tiltSpinDetail = new QSpinBox;
+        tiltSpinDetail->setRange(-90, 90);
+        tiltSpinDetail->setSuffix(QString::fromUtf8("°"));
+        tiltSpinDetail->setValue(qRound(rp.studioTilt));
+        tiltSpinDetail->setToolTip(tr("Tip the bar about its own length — e.g. a bar "
+                                      "lying in a step angled up toward the cast. "
+                                      "Positive tips it upstage. Angle (run) turns it "
+                                      "flat within its face instead."));
+        posForm->addRow(tr("Tilt:"), tiltSpinDetail);
     }
 
     // Live facing preview: how this fixture's orientation reads on the 2D stage
@@ -7721,6 +7868,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     newRp.tiltInvert    = tiltInvertCb->isChecked();
     if (faceCbDetail)    newRp.setStudioMount(faceCbDetail->currentIndex());
     if (angleSpinDetail) newRp.studioAngle = float(angleSpinDetail->value());
+    if (tiltSpinDetail)  newRp.studioTilt  = float(tiltSpinDetail->value());
     // Deck-mounting: default the fixture's Z to the platform top on first
     // assignment so it "sits on" the deck (the editor height is an offset above).
     m_props->setFixtureRigProps(fxItem->fixtureID(), newRp);

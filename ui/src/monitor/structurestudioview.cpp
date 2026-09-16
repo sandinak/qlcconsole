@@ -1761,6 +1761,24 @@ void StructureStudioView::fixtureFrame(const FixtureRigProps &rp,
     if (H.length() < 1e-6f)
         H = QVector3D(0, 0, 1);
     H.normalize();
+
+    /* ROLL about the fixture's own length. A bar lying in a step is built on a
+       diagonal inside the box so it fires up through the plexi toward the cast,
+       not straight up -- studioAngle cannot say that, because it turns the
+       fixture WITHIN its face rather than tipping the face. Rotating N and H
+       about L keeps the frame orthonormal, so everything downstream (body,
+       pixels, beam direction) follows without knowing this exists. */
+    if (!qFuzzyIsNull(rp.studioTilt))
+    {
+        const double t = qDegreesToRadians(double(rp.studioTilt));
+        const double c = qCos(t), sn = qSin(t);
+        const QVector3D n0 = N, h0 = H;
+        // Positive tips the face AWAY from H. For a bar lying on a top face
+        // and running stage left-right, H is downstage, so +20 tips it upstage
+        // -- which is the direction you would describe it in.
+        N = (n0 * float(c) - h0 * float(sn)).normalized();
+        H = (h0 * float(c) + n0 * float(sn)).normalized();
+    }
 }
 
 QVector3D StructureStudioView::fixtureBodyUp(const FixtureRigProps &rp) const
@@ -1810,45 +1828,9 @@ QVector3D StructureStudioView::fixtureBodyUp(const FixtureRigProps &rp) const
 
 QVector3D StructureStudioView::fixtureCentre(quint32 fid) const
 {
-    MonitorProperties *props = m_doc->monitorProperties();
-    const QVector3D w = props->fixtureRigPosition(fid);
-    const FixtureRigProps rp = props->fixtureRigProps(fid);
-
-    /* The plot stores a free fixture's XY as the TOP-LEFT of its footprint, not
-       its centre -- setPos(realPositionToPixels(realPosition)) puts the corner
-       on the stored point, and the drop code says as much ("persist the drop as
-       a free position (top-left anchor)"). Everything three-dimensional here
-       builds a body centred on the point it is given, so handing it the corner
-       drew every free and deck-mounted fixture half a footprint to the left and
-       upstage of where the plan shows it: a 510 mm bar sitting 19 mm inside a
-       platform edge was drawn 236 mm off the end of it.
-
-       A DERIVED position is already a centre -- a truss, pipe, tower or riser
-       mount computes the point from the structure, and the plan centres its
-       icon on it to match -- so only the two cases that read the stored XY
-       straight back need the half-footprint added: free placement, and a deck
-       mount (which keeps the free XY and derives only Z). */
-    if (props->fixtureFrameGroup(fid) != 0)
-        return w;
-    if (hasStructuralMount(rp) && rp.onDeck() == false)
-        return w;
-
-    Fixture *fx = m_doc->fixture(fid);
-    if (fx == nullptr)
-        return w;
-    const FixtureVisualTraits traits = classifyFixture(fx);
-    if (traits.physW <= 0.0f && traits.physH <= 0.0f)
-        return w;
-
-    /* Width and HEIGHT, not width and depth, however odd that reads for a
-       top-down view: MonitorGraphicsView::updateFixture() sizes its icon from
-       physical().width() x physical().height() in every view, plan included, so
-       the corner the plot anchored is the corner of a W x H box. Recovering the
-       centre means undoing exactly that, not the box a plan view arguably
-       should have used. */
-    return QVector3D(w.x() + traits.physW * 0.5f,
-                     w.y() + traits.physH * 0.5f,
-                     w.z());
+    // The rule itself lives in fixturevisualtraits, so the properties dialog
+    // and anything else that reports a position give the same answer.
+    return fixtureWorldCentre(m_doc, fid);
 }
 
 bool StructureStudioView::hasStructuralMount(const FixtureRigProps &rp)
@@ -3308,11 +3290,40 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         QPointF wPx, hPx; QRectF boxPx;
         fixtureBoxPx(fid, traits, wPx, hPx, boxPx);
 
+        /* The body's true SILHOUETTE: the convex hull of its eight corners as
+           projected into this view. boxPx is the axis-aligned box that CONTAINS
+           that silhouette -- right for hit-testing, wrong for drawing, because a
+           fixture rolled about its length (studioTilt) then drew as a slightly
+           larger upright rectangle and the roll was invisible in every flat
+           view ("I don't see the tilt here .. how would I know?"). An unrolled
+           fixture's hull IS its box, so nothing that was already right moves. */
+        QPolygonF silhouette;
+        {
+            QVector3D corner[8];
+            fixtureBoxCorners(fid, traits, corner);
+            QVector<HullPt> pts;
+            for (int k = 0; k < 8; ++k)
+                pts << HullPt{ w2s(corner[k]), 0.0 };
+            foreach (const HullPt &hp, convexHullWith(pts))
+                silhouette << hp.p;
+        }
+        if (silhouette.size() < 3)
+            silhouette = QPolygonF(boxPx);
+
         if (hi)
         {
+            // Outline the silhouette itself, offset outward from its centre.
+            const QPointF mid = silhouette.boundingRect().center();
+            QPolygonF halo;
+            foreach (const QPointF &q, silhouette)
+            {
+                QPointF d = q - mid;
+                const double len = qSqrt(d.x() * d.x() + d.y() * d.y());
+                halo << (len > 1e-6 ? q + d * (3.0 / len) : q);
+            }
             p.setPen(QPen(QColor(120, 220, 140, 160), 3));
             p.setBrush(Qt::NoBrush);
-            p.drawRect(boxPx.adjusted(-3, -3, 3, 3));
+            p.drawPolygon(halo);
         }
 
         /* The body. A pixel bar's HEADS are the light; the box around them is
@@ -3325,7 +3336,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                          : pixelBar ? bodyShade().lighter(135) : col.darker(150);
         p.setPen(QPen(rim, (drag || hi) ? 1.8 : 1.0));
         p.setBrush(body);
-        p.drawRect(boxPx);
+        p.drawPolygon(silhouette);
 
         /* The heads. A declared grid wins; otherwise a single row of however
            many heads there are, which is what a strip actually is. */

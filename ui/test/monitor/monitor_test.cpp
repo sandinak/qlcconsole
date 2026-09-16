@@ -34,6 +34,10 @@
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "structurestudioview.h"
+#include "monitorlayerspanel.h"
+#include "platformitem.h"
+#include "studiotemplate.h"
+#include <QTreeWidgetItemIterator>
 #include "fixturevisualtraits.h"
 #include "scene.h"
 #include "zraster.h"
@@ -1050,6 +1054,17 @@ void Monitor_Test::mountedFixtureWithoutPlotItemIsPositionedAndMovable()
     rp.trussOffset = 2.396f;
     rp.trussCross  = 0.093f;
     props->setFixtureRigProps(fid, rp);
+
+    /* Setting a mount now CREATES the plot item (a mounted fixture with none is
+       invisible in both the rig view and the Layers tree), so the orphan has to
+       be built directly: drop the ITEM and keep the rig props. removeFixture()
+       is no good here -- it deliberately clears the rig props too, precisely so
+       a reused fixture id cannot inherit a stale mount.
+
+       This is the state stage-structures-demo.qxw shipped with, and what this
+       test is for: the position must still come from the mount rather than
+       reading (0,0,0), and the fixture must still be draggable. */
+    props->m_fixtureItems.remove(fid);
     QVERIFY2(props->fixtureItemsID().contains(fid) == false,
              "rig meant to model a fixture with NO monitor item");
 
@@ -1362,14 +1377,24 @@ void Monitor_Test::mountedFixturesToggleHidesOnlyMountedOnes()
     MonitorFixtureItem *freeItem = gv->m_fixtures.value(free_->id(), nullptr);
     QVERIFY(rigItem != nullptr && freeItem != nullptr);
     QVERIFY(gv->mountedFixturesVisible());
-    QVERIFY(rigItem->isVisible());
+
+    /* This fixture may BURY its truss from above -- a wide icon on a thin 3 m
+       truss -- and burial hides it regardless of the toggle, standing in a
+       count badge instead. Measure rather than assume, so the test keeps
+       checking what it is about (mounted hidden, free never hidden) whatever
+       the geometry works out to. */
+    const bool buries =
+        gv->structureCoverageByItsFixtures(QStringLiteral("truss"), t->id()) > 0.40;
+    QCOMPARE(rigItem->isVisible(), !buries);
 
     gv->setMountedFixturesVisible(false);
     QVERIFY2(rigItem->isVisible() == false, "the truss-mounted fixture stayed visible");
     QVERIFY2(freeItem->isVisible(), "a free-standing fixture must never be hidden");
 
     gv->setMountedFixturesVisible(true);
-    QVERIFY2(rigItem->isVisible(), "the mounted fixture did not come back");
+    QVERIFY2(rigItem->isVisible() == !buries,
+             "the mounted fixture did not come back (and is not buried)");
+    QVERIFY2(freeItem->isVisible(), "a free-standing fixture must never be hidden");
 
     m_doc->deleteFixture(onRig->id());
     m_doc->deleteFixture(free_->id());
@@ -3026,6 +3051,583 @@ void Monitor_Test::theFooterCountsAndSelectsOffStageFixtures()
     delete doc;
 }
 
+/* "Whyyyyy when I click on T-1 .. which has a truss glyph .. am I NOT getting
+   the truss editor." Because the gate asked hasFrame, and an auto-group for a
+   truss may well HAVE a frame -- T-1 and T-2 in stage-structures-demo both do.
+   The row's identity is its ANCHOR; the frame is incidental. */
+void Monitor_Test::aTrussRowInLayersOpensTheTrussNotItsGroup()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t = props->addTruss();
+    t->setName("T-1");
+    t->setType(Truss::Vertical);
+    t->setOrigin(QVector3D(1.6f, 1.3f, 0.0f)); t->setLength(3.0f);
+
+    // The auto-group that stands for it -- WITH a frame, the broken case.
+    const quint32 gid = props->nextGroupId();
+    props->createGroup(gid, "T-1", 0, 0);
+    props->setGroupAnchor(gid, QStringLiteral("truss"), t->id());
+    props->setGroupHasFrame(gid, true);
+    /* The truss must be a MEMBER of its own auto-group. The panel only treats a
+       row as anchored when it can resolve the anchor's NAME from the group's
+       items, so without this the row silently stops reading as a truss. */
+    t->setGroupId(gid);
+    QVERIFY(props->group(gid).hasFrame);
+    QCOMPARE(props->group(gid).anchorKind, QStringLiteral("truss"));
+
+    /* The view and the panel directly, not a whole Monitor. Monitor's teardown
+       crashes on Qt5 AFTER the test body has finished -- nothing to do with
+       what is under test here, which is purely the panel's routing decision,
+       and the leaner harness is the honest scope for that anyway. */
+        /* Scoped: the view outlives nothing. A MonitorGraphicsView on the stack
+       destructs AFTER the statements below, so deleting the Doc first leaves
+       its destructor talking to freed memory -- a Qt5-only SIGSEGV that Qt6
+       happens to survive. */
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(800, 600);
+        view.updateTrusses();     // so the map has an item to select
+        MonitorLayersPanel panel(doc, &view);
+
+        /* Watch what activating the row asks for. Both routes are observed, so the
+           wrong one is a failure rather than an assumption. */
+        quint32 trussAsked = Truss::invalidId();
+        QObject::connect(&view, &MonitorGraphicsView::trussDoubleClicked,
+                         [&trussAsked](quint32 tid) { trussAsked = tid; });
+        bool studioOpened = false;
+        QObject::connect(&view, &MonitorGraphicsView::studioGroupEditRequested,
+                         [&studioOpened](quint32) { studioOpened = true; });
+
+        /* Find the REAL row the panel built -- not a synthetic one -- so this
+           exercises the tree the user actually clicks, badge and all. */
+        panel.reload();
+        QTreeWidgetItem *row = nullptr;
+        QTreeWidgetItemIterator it(panel.m_tree);
+        while (*it != nullptr)
+        {
+            if ((*it)->data(0, Qt::UserRole).toInt() == int(MonitorLayersPanel::NodeGroup)
+                && (*it)->data(0, Qt::UserRole + 1).toUInt() == gid)
+            { row = *it; break; }
+            ++it;
+        }
+        QVERIFY2(row != nullptr, "the truss's group never got a row in the Layers tree");
+        QVERIFY2(row->text(0).contains(QStringLiteral("on truss")),
+                 qPrintable(QString("the row does not read as a truss: \"%1\"").arg(row->text(0))));
+
+        panel.slotItemDoubleClicked(row, 0);
+
+        QVERIFY2(!studioOpened,
+                 "activating a truss row opened the group's Fixture Studio instead");
+        QVERIFY2(trussAsked == t->id(),
+                 qPrintable(QString("activating a row labelled \"%1\" did not open truss %2 "
+                                    "(asked for %3)").arg(row->text(0)).arg(t->id())
+                            .arg(trussAsked == Truss::invalidId() ? QStringLiteral("nothing")
+                                                                  : QString::number(trussAsked))));
+
+    }
+    props->removeTruss(t->id());
+    delete doc;
+}
+
+/* The component workflow, end to end: 12 steps x 8 strips is 96 placements by
+   hand, and hand-placement is exactly how DS-3's eight ended up on a different
+   plane from the other 88. Lay one out, save it, stamp the rest. */
+void Monitor_Test::aSavedComponentStampsItsLayoutOntoOtherFixtures()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    auto makeBar = [&](const char *name, quint32 addr) -> Fixture * {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setChannels(3);
+        f->setUniverse(0);
+        f->setAddress(addr);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+
+    // --- the master: three bars in a row, laid out in a frame -------------
+    QList<quint32> master;
+    for (int i = 0; i < 3; i++)
+    {
+        Fixture *f = makeBar(qPrintable(QString("MasterBar%1").arg(i)), quint32(i * 3));
+        QVERIFY(f != nullptr);
+        master << f->id();
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(1000.0f * (i + 1), 2000.0f, 0.0f));
+    }
+
+    const quint32 gid = props->nextGroupId();
+    props->createGroup(gid, "Step Master", 0, 0);
+    props->setGroupHasFrame(gid, true);
+    props->setGroupOrigin(gid, QVector3D(1.0f, 2.0f, 0.0f));
+
+    // Distinct local offsets, so a stamp that loses the arrangement is visible.
+    const QVector3D locals[3] = { QVector3D(0.0f, 0.0f, 0.0f),
+                                  QVector3D(0.4f, 0.0f, 0.1f),
+                                  QVector3D(0.8f, 0.0f, 0.2f) };
+    for (int i = 0; i < 3; i++)
+    {
+        props->setFixtureGroup(master.at(i), gid);
+        FixtureRigProps rp = props->fixtureRigProps(master.at(i));
+        rp.groupLocal = locals[i];
+        props->setFixtureRigProps(master.at(i), rp);
+    }
+
+    // --- save it as a component ------------------------------------------
+    QString err;
+    const QString path = StudioTemplate::saveToLibrary(doc, gid, "UnitTest Step", &err);
+    QVERIFY2(!path.isEmpty(), qPrintable(QString("saveToLibrary failed: %1").arg(err)));
+
+    const StudioTemplate::Info info = StudioTemplate::info(path);
+    QVERIFY(info.isValid());
+    QCOMPARE(info.roleCount(), 3);
+
+    // --- stamp onto three DIFFERENT fixtures ------------------------------
+    QList<quint32> target;
+    for (int i = 0; i < 3; i++)
+    {
+        Fixture *f = makeBar(qPrintable(QString("TargetBar%1").arg(i)), quint32(100 + i * 3));
+        QVERIFY(f != nullptr);
+        target << f->id();
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(5000.0f, 6000.0f + 100.0f * i, 0.0f));
+    }
+
+    const quint32 newGid = StudioTemplate::stamp(doc, path, target, &err);
+    QVERIFY2(newGid != 0, qPrintable(QString("stamp failed: %1").arg(err)));
+    QVERIFY2(newGid != gid, "stamping reused the master group instead of making one");
+
+    // The arrangement arrived: each target holds its role's local offset, and
+    // they are members of the new group.
+    for (int i = 0; i < 3; i++)
+    {
+        QCOMPARE(props->fixtureFrameGroup(target.at(i)), newGid);
+        const QVector3D got = props->fixtureRigProps(target.at(i)).groupLocal;
+        QVERIFY2((got - locals[i]).length() < 0.001f,
+                 qPrintable(QString("role %1 landed at (%2,%3,%4), expected (%5,%6,%7)")
+                            .arg(i).arg(got.x()).arg(got.y()).arg(got.z())
+                            .arg(locals[i].x()).arg(locals[i].y()).arg(locals[i].z())));
+    }
+
+    // The master is untouched -- a stamp copies, it does not move the original.
+    for (int i = 0; i < 3; i++)
+        QCOMPARE(props->fixtureFrameGroup(master.at(i)), gid);
+
+    QVERIFY(StudioTemplate::removeFile(path));   // don't leave it in the library
+    delete doc;
+}
+
+/* "If I have fixtures on the rig unchecked .. still seeing fixtures on
+   repaint." setMountedFixturesVisible() set visibility once; every other path
+   that touches a fixture item recomputed it from the LAYER alone and put them
+   all back. */
+void Monitor_Test::hidingMountedFixturesSurvivesARefresh()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t = props->addTruss();
+    t->setName("Bar");
+    t->setOrigin(QVector3D(1.0f, 2.0f, 3.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(4.0f);
+
+    Fixture *fx = new Fixture(doc);
+    fx->setName("Hung"); fx->setChannels(4);
+    QVERIFY(doc->addFixture(fx));
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(2000.0f, 2000.0f, 0.0f));
+    FixtureRigProps rp;
+    rp.trussId = t->id();
+    rp.trussOffset = 1.0f;
+    props->setFixtureRigProps(fx->id(), rp);
+
+        /* Scoped: the view outlives nothing. A MonitorGraphicsView on the stack
+       destructs AFTER the statements below, so deleting the Doc first leaves
+       its destructor talking to freed memory -- a Qt5-only SIGSEGV that Qt6
+       happens to survive. */
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 640);
+        view.addFixture(fx->id(), QPointF(2000.0, 2000.0));
+        view.updateFixture(fx->id());   // sizes the icon from physical dims, as the app does
+        MonitorFixtureItem *item = view.m_fixtures.value(fx->id(), nullptr);
+        QVERIFY(item != nullptr);
+
+        view.setMountedFixturesVisible(false);
+        QVERIFY2(!item->isVisible(), "unchecking did not hide a mounted fixture");
+
+        // Anything that refreshes item state must not undo it.
+        view.refreshAllItems();
+        QVERIFY2(!item->isVisible(),
+                 "a refresh put the mounted fixture back after it was unchecked");
+
+        view.updateFixture(fx->id());
+        QVERIFY2(!item->isVisible(),
+                 "updating the fixture put it back after it was unchecked");
+
+        // ...and a fixture ADDED while unchecked must not appear either.
+        Fixture *fx2 = new Fixture(doc);
+        fx2->setName("Hung2"); fx2->setChannels(4); fx2->setAddress(10);
+        QVERIFY(doc->addFixture(fx2));
+        props->setFixturePosition(fx2->id(), 0, 0, QVector3D(2500.0f, 2000.0f, 0.0f));
+        FixtureRigProps rp2;
+        rp2.trussId = t->id();
+        rp2.trussOffset = 2.0f;
+        props->setFixtureRigProps(fx2->id(), rp2);
+        view.addFixture(fx2->id(), QPointF(2500.0, 2000.0));
+        view.updateFixture(fx2->id());
+        MonitorFixtureItem *item2 = view.m_fixtures.value(fx2->id(), nullptr);
+        QVERIFY(item2 != nullptr);
+        QVERIFY2(!item2->isVisible(),
+                 "a mounted fixture added while unchecked appeared anyway");
+
+        /* Re-checking restores them -- UNLESS they bury the structure, which
+           these two do (two wide icons on a thin 4 m truss cover about half of
+           it from above). Burial is "not shown ever", so the count badge is
+           what comes back instead. Asserted against the measurement rather than
+           hard-coded, so this keeps testing the TOGGLE either way. */
+        view.setMountedFixturesVisible(true);
+        const bool buries =
+            view.structureCoverageByItsFixtures(QStringLiteral("truss"), t->id()) > 0.40;
+        if (buries)
+        {
+            QVERIFY2(view.m_countBadges.contains(QStringLiteral("truss:%1").arg(t->id())),
+                     "buried fixtures came back with no count badge to stand for them");
+        }
+        else
+        {
+            QVERIFY(item->isVisible());
+            QVERIFY(item2->isVisible());
+        }
+
+    }
+    props->removeTruss(t->id());
+    delete doc;
+}
+
+/* "Put bars in T1 .. and they're not visible on the rig display." */
+void Monitor_Test::aBarOnATowerIsDrawnInTheRigView()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(3.0f);
+    tower->setWidth(0.29f);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 640);
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 20.0);
+    v.setAmbient(1.0);
+    v.grab();
+    v.reload();
+    v.m_zoomed = true;                       // hold the framing
+    const QImage before = v.grab().toImage();
+
+    // Hang a crossbar off it, the way the truss editor's "Bar on truss" does.
+    Truss *bar = props->addTruss();
+    bar->setName("Bar-1");
+    bar->setParentTrussId(tower->id());
+    bar->setParentOffset(2.0f);              // 2 m up the tower
+    bar->setBarFace(Truss::FaceDownstage);
+    bar->setBarStandoff(0.0f);
+    bar->setBarRun(Truss::RunAcross);
+    bar->setLength(2.0f);
+    bar->setWidth(0.29f);
+    props->recomputeChildTrusses();          // derive its world geometry
+
+    QVERIFY2(bar->isChildBar(), "the bar did not register as a child bar");
+
+    v.reload();
+    v.m_zoomed = true;
+    const QImage after = v.grab().toImage();
+
+    int changed = 0;
+    for (int y = 0; y < after.height(); ++y)
+        for (int x = 0; x < after.width(); ++x)
+        {
+            const QColor a = after.pixelColor(x, y), b = before.pixelColor(x, y);
+            if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                + qAbs(a.blue() - b.blue()) > 24)
+                ++changed;
+        }
+
+    QVERIFY2(changed > 50,
+             qPrintable(QString("hanging a bar on the tower changed %1 pixels -- "
+                                "it is not being drawn (bar origin %2,%3,%4 len %5)")
+                        .arg(changed)
+                        .arg(bar->origin().x()).arg(bar->origin().y())
+                        .arg(bar->origin().z()).arg(bar->length())));
+
+    props->removeTruss(bar->id());
+    props->removeTruss(tower->id());
+    delete doc;
+}
+
+/* "Put bars in T1 .. and they're not visible on the rig display." The bars are
+   FIXTURES on the tower, and the inspector shows them as Placement = Inside --
+   rigged within the structure's volume rather than bolted to its face. */
+void Monitor_Test::aFixtureInsideATrussIsStillDrawn()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(3.0f);
+    tower->setWidth(0.29f);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 640);
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(20.0, 20.0);
+    v.setAmbient(1.0);
+    v.grab();
+    v.reload();
+    v.m_zoomed = true;
+    const QImage before = v.grab().toImage();
+
+    Fixture *fx = makeMover(doc, 14.0, 0, "T1-B1", QVector3D(3.0f, 3.0f, 1.5f));
+    QVERIFY(fx != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = tower->id();
+    rp.trussOffset = 1.5f;                       // half way up
+    rp.placement = FixtureRigProps::Inside;      // what the inspector shows
+    props->setFixtureRigProps(fx->id(), rp);
+
+    v.reload();
+    v.m_zoomed = true;
+    const QImage after = v.grab().toImage();
+
+    int changed = 0;
+    for (int y = 0; y < after.height(); ++y)
+        for (int x = 0; x < after.width(); ++x)
+        {
+            const QColor a = after.pixelColor(x, y), b = before.pixelColor(x, y);
+            if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                + qAbs(a.blue() - b.blue()) > 24)
+                ++changed;
+        }
+
+    QVERIFY2(changed > 50,
+             qPrintable(QString("a fixture rigged inside the tower changed %1 pixels "
+                                "-- it is not visible in the rig view").arg(changed)));
+
+    doc->deleteFixture(fx->id());
+    props->removeTruss(tower->id());
+    delete doc;
+}
+
+/* A vertical truss seen from ABOVE is a small square and its own fixtures bury
+   it; the same truss from the FRONT is tall and they cover very little. So the
+   rule is per structure, per view, and all-or-nothing. */
+void Monitor_Test::fixturesThatBuryTheirStructureBecomeACount()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(3.0f);
+    /* An ordinary 0.29 m truss -- the width a real tower is. It only failed to
+       qualify while coverage was measured against boundingRect(), which pads a
+       vertical truss out to cover its base plate: four times the real area, so
+       a tower buried in its own fixtures reported 31%. */
+    tower->setWidth(0.29f);
+
+    QList<quint32> bars;
+    for (int i = 0; i < 2; i++)
+    {
+        Fixture *f = makeMover(doc, 14.0, quint32(i * 8), qPrintable(QString("T1-B%1").arg(i + 1)),
+                               QVector3D(3.0f, 3.0f, 1.0f + i));
+        QVERIFY(f != nullptr);
+        bars << f->id();
+        FixtureRigProps rp;
+        rp.trussId = tower->id();
+        rp.trussOffset = 1.0f + i;
+        props->setFixtureRigProps(f->id(), rp);
+    }
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));        // big cells: no minimum-area clamp
+        view.updateTrusses();
+        foreach (quint32 fid, bars)
+            view.addFixture(fid, QPointF(3000.0, 3000.0));
+
+        // TOP view: the tower is a small square, the fixtures sit on it.
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.refreshItemLayerState();
+        const double topCover =
+            view.structureCoverageByItsFixtures(QStringLiteral("truss"), tower->id());
+        QVERIFY2(topCover > 0.40,
+                 qPrintable(QString("from above the fixtures cover only %1 of the "
+                                    "tower -- the test rig is not modelling burial")
+                            .arg(topCover)));
+
+        foreach (quint32 fid, bars)
+        {
+            MonitorFixtureItem *it = view.m_fixtures.value(fid, nullptr);
+            QVERIFY(it != nullptr);
+            QVERIFY2(!it->isVisible(),
+                     "a fixture burying its truss from above is still drawn");
+        }
+        QVERIFY2(view.m_countBadges.contains(QStringLiteral("truss:%1").arg(tower->id())),
+                 "no count badge appeared on the buried truss");
+
+        // FRONT view: the tower is tall; the same fixtures cover little of it.
+        view.setViewPOV(MonitorGraphicsView::PovFront);
+        view.refreshItemLayerState();
+        const double frontCover =
+            view.structureCoverageByItsFixtures(QStringLiteral("truss"), tower->id());
+        QVERIFY2(frontCover < topCover,
+                 qPrintable(QString("front coverage %1 should be less than top %2")
+                            .arg(frontCover).arg(topCover)));
+    }
+
+    foreach (quint32 fid, bars)
+        doc->deleteFixture(fid);
+    props->removeTruss(tower->id());
+    delete doc;
+}
+
+/* Eight strips up a step's FACE sit at eight heights and one footprint, so from
+   above they land on the same spot: union 2.4% of the step, summed areas 30.6%
+   -- thirteen times the union.
+ *
+   They must STAY VISIBLE. A "stacked" trigger was tried -- badge when the
+   summed area greatly exceeds the union -- and it hid exactly this, the LED
+   tape up a step's face, which is the one thing you want to see on a step. The
+   rule is area only: fixtures are replaced by a count when they COVER their
+   structure, not when they merely pile onto one spot. */
+void Monitor_Test::stackedFixturesOnAStepBecomeACount()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("US1");
+    pl->setOriginX(1.2f); pl->setOriginY(1.5f);
+    pl->setWidth(2.438f); pl->setDepth(1.219f); pl->setHeight(0.396f);
+
+    QList<quint32> fids;
+    for (int i = 0; i < 8; i++)
+    {
+        Fixture *f = makeMover(doc, 14.0, quint32(i * 8),
+                               qPrintable(QString("US1 #%1").arg(i + 1)),
+                               QVector3D(2.4f, 2.7f, 0.05f * i));
+        QVERIFY(f != nullptr);
+        fids << f->id();
+        FixtureRigProps rp;
+        rp.riserPlatformId = pl->id();
+        rp.riserFace = FixtureRigProps::RiserFront;
+        rp.riserU = 1.2f;
+        rp.riserV = 0.04f * i;          // up the face: same spot from above
+        props->setFixtureRigProps(f->id(), rp);
+    }
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.updatePlatforms();
+        foreach (quint32 fid, fids)
+        {
+            view.addFixture(fid, QPointF(2400.0, 2700.0));
+            view.updateFixture(fid);
+        }
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.refreshItemLayerState();
+
+        double stack = 0.0;
+        const double cover = view.structureCoverageByItsFixtures(
+            QStringLiteral("platform"), pl->id(), nullptr, &stack);
+
+        // Piled up, but covering very little -- and that is NOT enough to hide.
+        QVERIFY2(cover < 0.40,
+                 qPrintable(QString("expected stacked strips to cover little by AREA, got %1")
+                            .arg(cover)));
+        QVERIFY2(stack >= 2.0,
+                 qPrintable(QString("expected them piled up, got a stack factor of %1")
+                            .arg(stack)));
+
+        QVERIFY2(!view.m_countBadges.contains(QStringLiteral("platform:%1").arg(pl->id())),
+                 "stacked-but-not-covering strips were replaced by a count");
+        foreach (quint32 fid, fids)
+        {
+            MonitorFixtureItem *it = view.m_fixtures.value(fid, nullptr);
+            QVERIFY(it != nullptr);
+            QVERIFY2(it->isVisible(), "a step's face tape was hidden without covering the step");
+        }
+    }
+
+    foreach (quint32 fid, fids) doc->deleteFixture(fid);
+    props->removePlatform(pl->id());
+    delete doc;
+}
+
+/* A bar lying in a step is built on a diagonal inside the box, firing up
+   through the plexi toward the cast rather than straight up. studioAngle turns
+   a fixture WITHIN its face (flat, like a bearing) and cannot say that;
+   studioTilt tips the face itself. */
+void Monitor_Test::studioTiltRollsAFixtureAboutItsLength()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Fixture *fx = makeMover(doc, 14.0, 0, "Step Bar", QVector3D(2.0f, 2.0f, 0.2f));
+    QVERIFY(fx != nullptr);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 560);
+
+    FixtureRigProps rp;
+    rp.studioMount = 0;            // lying on a top face
+    rp.studioAngle = 0.0f;         // running stage left-right
+    rp.studioTilt  = 0.0f;
+    props->setFixtureRigProps(fx->id(), rp);
+
+    QVector3D L0, N0, H0;
+    v.fixtureFrame(props->fixtureRigProps(fx->id()), L0, N0, H0);
+    QVERIFY2(qAbs(double(N0.z()) - 1.0) < 1e-3,
+             "a flat top-face fixture should face straight up");
+
+    // Tip it 20 degrees.
+    rp.studioTilt = 20.0f;
+    props->setFixtureRigProps(fx->id(), rp);
+    QVector3D L1, N1, H1;
+    v.fixtureFrame(props->fixtureRigProps(fx->id()), L1, N1, H1);
+
+    // The length is untouched -- it is the axis we rolled about.
+    QVERIFY2((L1 - L0).length() < 1e-4f, "the roll moved the fixture's long axis");
+
+    // The face has tipped by exactly 20 degrees, and tipped UPSTAGE (-Y).
+    const double tipped = qRadiansToDegrees(qAcos(qBound(-1.0, double(QVector3D::dotProduct(N0, N1)), 1.0)));
+    QVERIFY2(qAbs(tipped - 20.0) < 0.5,
+             qPrintable(QString("expected a 20 degree tip, got %1").arg(tipped)));
+    QVERIFY2(N1.y() < -0.01f,
+             qPrintable(QString("expected the face to tip UPSTAGE (-Y), got y=%1")
+                        .arg(double(N1.y()))));
+
+    // Still an orthonormal frame, or everything downstream skews.
+    QVERIFY(qAbs(double(QVector3D::dotProduct(N1, L1))) < 1e-4);
+    QVERIFY(qAbs(double(QVector3D::dotProduct(N1, H1))) < 1e-4);
+    QVERIFY(qAbs(double(N1.length()) - 1.0) < 1e-4);
+
+    doc->deleteFixture(fx->id());
+    delete doc;
+}
+
 void Monitor_Test::theRigGridMatchesTheStudioGrid()
 {
     /* Two windows onto the same stage have to agree about how big a metre is.
@@ -4049,6 +4651,105 @@ static Fixture *makeStepTape(Doc *doc, StagePlatform *pl, int pix, quint32 addr,
     rp.riserU = riserU; rp.riserV = riserV;
     doc->monitorProperties()->setFixtureRigProps(f->id(), rp);
     return f;
+}
+
+/* A bar with a SQUARE cross-section, so a roll about its length is visible in
+   the Side view as a square turning into a diamond. */
+static Fixture *makeChunkyBar(Doc *doc, quint32 addr, const char *name)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel(QString("Chunky %1").arg(name));
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("bar");
+    const QLCChannel::PrimaryColour pc[] = { QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue };
+    QLCFixtureHead hd;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(k));
+        ch->setGroup(QLCChannel::Intensity); ch->setColour(pc[k]);
+        def->addChannel(ch); mode->insertChannel(ch, k);
+        hd.addChannel(quint32(k));
+    }
+    mode->insertHead(-1, hd);
+    QLCPhysical ph;
+    ph.setWidth(1000); ph.setHeight(300); ph.setDepth(300);   // square section
+    mode->setPhysical(ph);
+    def->addMode(mode);
+
+    Fixture *f = new Fixture(doc);
+    f->setName(name); f->setFixtureDefinition(def, mode);
+    f->setUniverse(3); f->setAddress(addr);
+    if (doc->addFixture(f) == false)
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(2000, 2000, 1.0f));
+    return f;
+}
+
+/* "I don't see the tilt here .. or here .. how would I know?" The flat views
+   drew a fixture's housing with drawRect(boxPx) -- its AXIS-ALIGNED bounding
+   box -- so a rolled bar was drawn as a slightly bigger upright rectangle and
+   the roll was invisible in Top, Front and Side alike. */
+void Monitor_Test::aTiltedBarIsDrawnTiltedInTheSideView()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Fixture *bar = makeChunkyBar(doc, 0, "Rolled");
+    QVERIFY(bar != nullptr);
+
+    /* Fraction of its own bounding box the drawn body fills: ~1.0 for a square
+       seen square-on, 1/(cos t + sin t)^2 for one rolled by t (0.54 at 30). */
+    auto fillRatio = [&](float tiltDeg) -> double {
+        FixtureRigProps rp;
+        rp.studioMount = 0;       // lying on a top face
+        rp.studioAngle = 0.0f;    // running along X -- end-on in the Side view
+        rp.studioTilt  = tiltDeg;
+        props->setFixtureRigProps(bar->id(), rp);
+
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(700, 560);
+        v.setPlane(StructureStudioView::Side);
+        v.grab();
+        v.reload();
+        v.m_zoomed = true;
+        const QImage with = v.grab().toImage();
+
+        const PreviewItem saved = props->m_fixtureItems.value(bar->id()).m_baseItem;
+        props->m_fixtureItems.remove(bar->id());
+        const QImage without = v.grab().toImage();
+        props->m_fixtureItems[bar->id()].m_baseItem = saved;
+
+        int n = 0, x0 = with.width(), y0 = with.height(), x1 = -1, y1 = -1;
+        for (int y = 0; y < with.height(); ++y)
+            for (int x = 0; x < with.width(); ++x)
+            {
+                const QColor a = with.pixelColor(x, y), b = without.pixelColor(x, y);
+                if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                    + qAbs(a.blue() - b.blue()) <= 24)
+                    continue;
+                ++n;
+                x0 = qMin(x0, x); y0 = qMin(y0, y); x1 = qMax(x1, x); y1 = qMax(y1, y);
+            }
+        if (n < 30 || x1 <= x0 || y1 <= y0)
+            return -1.0;
+        return double(n) / double((x1 - x0 + 1) * (y1 - y0 + 1));
+    };
+
+    const double flat   = fillRatio(0.0f);
+    const double rolled = fillRatio(30.0f);
+
+    QVERIFY2(flat > 0.85,
+             qPrintable(QString("an unrolled square section should fill its box, "
+                                "got %1 -- the measurement is not sound").arg(flat)));
+    QVERIFY2(rolled > 0.0 && rolled < 0.75,
+             qPrintable(QString("a bar rolled 30 degrees still fills %1 of its bounding "
+                                "box -- it is being drawn as an upright rectangle")
+                        .arg(rolled)));
+
+    doc->deleteFixture(bar->id());
+    delete doc;
 }
 
 void Monitor_Test::aStripStaysLitFromEitherSideOfTheHouse()

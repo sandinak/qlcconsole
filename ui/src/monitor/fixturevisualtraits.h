@@ -24,6 +24,8 @@
 #include <QRectF>
 
 class Fixture;
+class Doc;
+class QVector3D;
 
 // ---------------------------------------------------------------------------
 // Fixture "what does this actually look like" classifier, shared by every
@@ -66,6 +68,21 @@ struct FixtureVisualTraits
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);
+
+/**
+ * Where a fixture actually IS, in world metres.
+ *
+ * NOT simply MonitorProperties::fixtureRigPosition(). The 2D plot stores a
+ * free or deck-mounted fixture's XY as the TOP-LEFT of its icon, so handing
+ * that straight to anything that means "the fixture's position" puts it half a
+ * footprint left and upstage. A DERIVED position (truss, pipe, tower, riser,
+ * studio frame) is already a centre and is returned unchanged.
+ *
+ * One definition, because there were nearly two: the rig view corrects the
+ * anchor, and anything else that reports a position has to agree with it or the
+ * views disagree about where the same fixture is all over again.
+ */
+QVector3D fixtureWorldCentre(Doc *doc, quint32 fid);
 
 /** A fixture's LIVE look, from the DMX values it is being sent right now.
  *

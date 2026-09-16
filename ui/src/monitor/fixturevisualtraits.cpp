@@ -28,6 +28,9 @@
 #include "truss.h"
 #include "qlcfixturehead.h"
 #include "qlccapability.h"
+#include "monitorproperties.h"
+#include "doc.h"
+#include <QVector3D>
 #include "qlcphysical.h"
 
 FixtureVisualTraits classifyFixture(Fixture *fx)
@@ -597,4 +600,41 @@ double fixtureBeamAngle(Fixture *fx, const QByteArray &v,
     /* A range declared but no zoom channel to drive it: the widest is the safer
        read, since a narrow cone hides a fixture that is plainly visible. */
     return hi;
+}
+
+QVector3D fixtureWorldCentre(Doc *doc, quint32 fid)
+{
+    if (doc == nullptr || doc->monitorProperties() == nullptr)
+        return QVector3D();
+
+    MonitorProperties *props = doc->monitorProperties();
+    const QVector3D w = props->fixtureRigPosition(fid);
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+
+    /* A DERIVED position is already a centre: a truss, pipe, tower or riser
+       mount computes the point from the structure, and the 2D plot centres its
+       icon on it to match. Only the two cases that read the stored plot XY
+       straight back need the anchor undone -- free placement, and a deck mount
+       (which keeps the free XY and derives only Z). */
+    if (props->fixtureFrameGroup(fid) != 0)
+        return w;
+    const bool derived = rp.trussId != Truss::invalidId() || rp.onPipe()
+                      || rp.onTower() || rp.onRiser();
+    if (derived)
+        return w;
+
+    Fixture *fx = doc->fixture(fid);
+    if (fx == nullptr)
+        return w;
+    const FixtureVisualTraits traits = classifyFixture(fx);
+    if (traits.physW <= 0.0f && traits.physH <= 0.0f)
+        return w;
+
+    /* Width and HEIGHT, not width and depth, however odd that reads for a
+       top-down view: MonitorGraphicsView::updateFixture() sizes its icon
+       physical().width() x physical().height() in every view, plan included,
+       so the corner the plot anchored is the corner of a W x H box. */
+    return QVector3D(w.x() + traits.physW * 0.5f,
+                     w.y() + traits.physH * 0.5f,
+                     w.z());
 }

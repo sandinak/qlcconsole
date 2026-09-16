@@ -35,6 +35,9 @@ private slots:
     void groupRegistry();
     void groupsXmlRoundTrip();
     void riserMount();
+    /** Mounting a fixture must give it a plot item there and then -- without
+     *  one it is invisible in the rig view AND the Layers tree. */
+    void mountingAFixtureGivesItAPlotItem();
     /** A riser fixture's face and the plane it is drawn on are one fact stored
      *  twice; a file carrying them in disagreement is reconciled on load. */
     void riserFaceAndDrawingPlaneCannotDisagree();
