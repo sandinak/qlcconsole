@@ -146,6 +146,10 @@ private:
     /** Handle fixture group selection */
     void fixtureGroupSelected(FixtureGroup* grp);
 
+    /** Never leave the right pane collapsed after swapping its contents --
+     *  an editor restored to 0 px wide looks like nothing happened. */
+    void ensureRightPaneVisible();
+
     /** Copy the given fixtures (whole, all heads) and whole fixture groups
      *  (as sub-group blocks, preserving their relative layout) into $target,
      *  appending below whatever it already contains and growing the grid. */

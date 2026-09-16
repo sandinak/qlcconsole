@@ -17,6 +17,7 @@
 
 #include <QtTest>
 #include <QTreeWidgetItemIterator>
+#include <QSplitter>
 
 #define KColumnName 0
 
@@ -27,6 +28,7 @@
 #include "fixture.h"
 #include "inputoutputmap.h"
 #include "fixturegroup.h"
+#include "fixturegroupeditor.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -128,6 +130,65 @@ void FixtureManager_Test::selectingAGroupOpensItsLayoutEditor()
 
     QVERIFY2(mgr.m_groupEditor != nullptr,
              "selecting a fixture group did not open its layout editor");
+
+    /* And it must SURVIVE the deferred tree rebuild. fixtureGroupSelected()
+       calls setShowHeads(true), whose updateTree() is deferred to the next turn
+       of the event loop (rebuilding mid-click deletes the row Qt is still
+       handling). Nothing in this test ran that timer before, so the window
+       after it fires was never covered -- which is where the app lives. */
+    QCoreApplication::processEvents();
+    QVERIFY2(mgr.m_groupEditor != nullptr,
+             "the group's layout editor vanished once the deferred tree rebuild ran");
+
+    /* Created is not the same as VISIBLE. fixtureGroupSelected() restores a
+       splitter state captured BEFORE the editor existed, so the pane can come
+       back with zero width -- the editor is there and you cannot see it, which
+       reads exactly like clicking the group doing nothing. */
+    /* Measured on the SPLITTER's allotment, not the editor's width(): a widget
+       only has a width once something has laid it out, which depends on the
+       platform and the window manager -- it held locally and was 0 under the
+       gate on all four configurations. The splitter's sizes are what the guard
+       actually controls, and they are deterministic. */
+    mgr.resize(1100, 700);
+    mgr.m_splitter->setSizes(QList<int>() << 700 << 400);
+    QCoreApplication::processEvents();
+    QVERIFY2(mgr.m_splitter->sizes().value(1) > 20,
+             qPrintable(QString("the layout editor's pane is %1 px wide -- invisible")
+                        .arg(mgr.m_splitter->sizes().value(1))));
+
+    /* And it must survive the pane having been COLLAPSED beforehand -- by a
+       drag, or by a splitter state persisted from an earlier session. That is
+       the state a fresh test never reproduces on its own, and the one where
+       "clicking the group does nothing" comes from. */
+    QList<int> collapsed = mgr.m_splitter->sizes();
+    QVERIFY(collapsed.size() >= 2);
+    collapsed[0] = collapsed.at(0) + collapsed.at(1);
+    collapsed[1] = 0;
+    mgr.m_splitter->setSizes(collapsed);
+    QCoreApplication::processEvents();
+
+    mgr.m_fixtures_tree->clearSelection();
+    mgr.slotSelectionChanged();          // away from the group
+
+    // Re-find the row: the rebuild replaced it, and the old pointer is dead.
+    QTreeWidgetItem *again = nullptr;
+    QTreeWidgetItemIterator it2(mgr.m_fixtures_tree);
+    while (*it2 != nullptr)
+    {
+        const QVariant g = (*it2)->data(KColumnName, PROP_GROUP);
+        if (g.isValid() && g.toUInt() == gid) { again = *it2; break; }
+        ++it2;
+    }
+    QVERIFY(again != nullptr);
+    again->setSelected(true);
+    mgr.slotSelectionChanged();          // and back to it
+    QCoreApplication::processEvents();
+
+    QVERIFY(mgr.m_groupEditor != nullptr);
+    QVERIFY2(mgr.m_splitter->sizes().value(1) > 20,
+             qPrintable(QString("with the pane collapsed the editor came back in a "
+                                "%1 px pane -- indistinguishable from doing nothing")
+                        .arg(mgr.m_splitter->sizes().value(1))));
 
     // ...and the selection is still on the group afterwards, rather than the
     // tree having rebuilt underneath the click and moved it somewhere else.

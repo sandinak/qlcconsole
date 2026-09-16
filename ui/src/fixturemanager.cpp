@@ -700,7 +700,14 @@ void FixtureManager::clearRightPane()
 void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
 {
     if (m_groupEditor != NULL && m_groupEditorId == grp->id())
-        return; // already editing this group's layout
+    {
+        /* Already editing it -- but make sure it can be SEEN. Returning early
+           with a collapsed right pane means clicking the group again does
+           nothing at all, forever: the editor exists, so this path is taken,
+           and nothing ever widens the pane back. */
+        ensureRightPaneVisible();
+        return;
+    }
 
     QByteArray state = m_splitter->saveState();
     clearRightPane();
@@ -715,6 +722,48 @@ void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
     m_fixtures_tree->setShowHeads(true);
 
     m_splitter->restoreState(state);
+    ensureRightPaneVisible();
+}
+
+/* A right pane restored to zero width is the same thing as no right pane.
+ *
+   fixtureGroupSelected() (and the other pane-swappers) save the splitter state
+   BEFORE the new widget exists and restore it after inserting, so the sizes
+   being restored describe a different set of widgets. Where the pane was
+   collapsed -- by a drag, or by a state persisted from an earlier session --
+   the editor comes back 0 px wide: built, correct, and invisible, which reads
+   exactly like clicking the group doing nothing at all.
+ *
+   Only ever widens, and only from collapsed, so a pane the operator has
+   deliberately made narrow is left alone. */
+void FixtureManager::ensureRightPaneVisible()
+{
+    if (m_splitter == NULL || m_splitter->count() < 2)
+        return;
+
+    QList<int> sizes = m_splitter->sizes();
+    if (sizes.size() < 2)
+        return;
+
+    const int total = sizes.at(0) + sizes.at(1);
+    if (total <= 0)
+        return;                       // not laid out yet; nothing to fix
+    if (sizes.at(1) > 24)
+        return;                       // already visible
+
+    /* Leave the tree something, but scale that reserve to what there IS: a
+       fixed 120 px floor goes NEGATIVE on a narrow splitter, and the guard then
+       rejected its own result and silently did nothing -- which is how this
+       first looked like the guard not running at all. */
+    const int minTree = qMin(120, total / 2);
+    int right = qMax(240, total / 3);
+    right = qMin(right, total - minTree);
+    if (right <= 0)
+        return;
+
+    sizes[1] = right;
+    sizes[0] = total - right;
+    m_splitter->setSizes(sizes);
 }
 
 void FixtureManager::showPower()
