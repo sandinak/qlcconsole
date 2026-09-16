@@ -3,7 +3,7 @@
 <Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FixtureManager">
  <Creator>
   <Name>qlcconsole</Name>
-  <Version>4.14.2+qlcconsole.1278</Version>
+  <Version>4.14.2+qlcconsole.1285</Version>
   <Author>Branson Matheson</Author>
  </Creator>
  <Engine>
@@ -157,7 +157,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>5</ID>
-   <Name>US1aB</Name>
+   <Name>US1t1</Name>
    <Universe>64</Universe>
    <Address>0</Address>
    <Channels>48</Channels>
@@ -167,7 +167,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>6</ID>
-   <Name>US1aW</Name>
+   <Name>US1t2</Name>
    <Universe>64</Universe>
    <Address>48</Address>
    <Channels>16</Channels>
@@ -181,6 +181,16 @@
    <Universe>0</Universe>
    <Address>106</Address>
    <Channels>165</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>YeeSite</Manufacturer>
+   <Model>60W RGB Pixel Light Bar</Model>
+   <Mode>90ch</Mode>
+   <ID>8</ID>
+   <Name>T1-B1</Name>
+   <Universe>5</Universe>
+   <Address>0</Address>
+   <Channels>90</Channels>
   </Fixture>
   <Fixture>
    <Manufacturer>Junman</Manufacturer>
@@ -343,11 +353,21 @@
    <Channels>15</Channels>
   </Fixture>
   <Fixture>
+   <Manufacturer>YeeSite</Manufacturer>
+   <Model>60W RGB Pixel Light Bar</Model>
+   <Mode>90ch</Mode>
+   <ID>25</ID>
+   <Name>T1-B2</Name>
+   <Universe>5</Universe>
+   <Address>90</Address>
+   <Channels>90</Channels>
+  </Fixture>
+  <Fixture>
    <Manufacturer>Oppsk</Manufacturer>
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>26</ID>
-   <Name>US2aB</Name>
+   <Name>US2t1</Name>
    <Universe>64</Universe>
    <Address>64</Address>
    <Channels>48</Channels>
@@ -357,7 +377,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>27</ID>
-   <Name>US2aW</Name>
+   <Name>US2t2</Name>
    <Universe>64</Universe>
    <Address>112</Address>
    <Channels>16</Channels>
@@ -447,7 +467,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>36</ID>
-   <Name>US3aB</Name>
+   <Name>US3t1</Name>
    <Universe>64</Universe>
    <Address>128</Address>
    <Channels>48</Channels>
@@ -457,7 +477,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>37</ID>
-   <Name>US3aW</Name>
+   <Name>US3t2</Name>
    <Universe>64</Universe>
    <Address>176</Address>
    <Channels>16</Channels>
@@ -547,7 +567,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>46</ID>
-   <Name>US4aB</Name>
+   <Name>US4t1</Name>
    <Universe>64</Universe>
    <Address>192</Address>
    <Channels>48</Channels>
@@ -557,7 +577,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>47</ID>
-   <Name>US4aW</Name>
+   <Name>US4t2</Name>
    <Universe>64</Universe>
    <Address>240</Address>
    <Channels>16</Channels>
@@ -647,7 +667,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>56</ID>
-   <Name>CS1aB</Name>
+   <Name>CS1t1</Name>
    <Universe>64</Universe>
    <Address>256</Address>
    <Channels>48</Channels>
@@ -657,7 +677,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>57</ID>
-   <Name>CS1aW</Name>
+   <Name>CS1t2</Name>
    <Universe>64</Universe>
    <Address>304</Address>
    <Channels>16</Channels>
@@ -747,7 +767,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>66</ID>
-   <Name>CS2aB</Name>
+   <Name>CS2t1</Name>
    <Universe>64</Universe>
    <Address>320</Address>
    <Channels>48</Channels>
@@ -757,7 +777,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>67</ID>
-   <Name>CS2aW</Name>
+   <Name>CS2t2</Name>
    <Universe>64</Universe>
    <Address>368</Address>
    <Channels>16</Channels>
@@ -847,7 +867,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>76</ID>
-   <Name>CS3aB</Name>
+   <Name>CS3t1</Name>
    <Universe>64</Universe>
    <Address>384</Address>
    <Channels>48</Channels>
@@ -857,7 +877,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>77</ID>
-   <Name>CS3aW</Name>
+   <Name>CS3t2</Name>
    <Universe>64</Universe>
    <Address>432</Address>
    <Channels>16</Channels>
@@ -947,7 +967,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>86</ID>
-   <Name>CS4aB</Name>
+   <Name>CS4t1</Name>
    <Universe>64</Universe>
    <Address>448</Address>
    <Channels>48</Channels>
@@ -957,7 +977,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>87</ID>
-   <Name>CS4aW</Name>
+   <Name>CS4t2</Name>
    <Universe>64</Universe>
    <Address>496</Address>
    <Channels>16</Channels>
@@ -1047,7 +1067,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>96</ID>
-   <Name>DS1aB</Name>
+   <Name>DS1t1</Name>
    <Universe>65</Universe>
    <Address>0</Address>
    <Channels>48</Channels>
@@ -1057,7 +1077,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>97</ID>
-   <Name>DS1aW</Name>
+   <Name>DS1t2</Name>
    <Universe>65</Universe>
    <Address>48</Address>
    <Channels>16</Channels>
@@ -1147,7 +1167,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>106</ID>
-   <Name>DS2aB</Name>
+   <Name>DS2t1</Name>
    <Universe>65</Universe>
    <Address>64</Address>
    <Channels>48</Channels>
@@ -1157,7 +1177,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>107</ID>
-   <Name>DS2aW</Name>
+   <Name>DS2t2</Name>
    <Universe>65</Universe>
    <Address>112</Address>
    <Channels>16</Channels>
@@ -1247,7 +1267,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>116</ID>
-   <Name>DS3aB</Name>
+   <Name>DS3t1</Name>
    <Universe>65</Universe>
    <Address>128</Address>
    <Channels>48</Channels>
@@ -1257,7 +1277,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>117</ID>
-   <Name>DS3aW</Name>
+   <Name>DS3t2</Name>
    <Universe>65</Universe>
    <Address>176</Address>
    <Channels>16</Channels>
@@ -1347,7 +1367,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>48ch RGB</Mode>
    <ID>126</ID>
-   <Name>DS4aB</Name>
+   <Name>DS4t1</Name>
    <Universe>65</Universe>
    <Address>192</Address>
    <Channels>48</Channels>
@@ -1357,7 +1377,7 @@
    <Model>Wall Washer Light Bar</Model>
    <Mode>16ch White</Mode>
    <ID>127</ID>
-   <Name>DS4aW</Name>
+   <Name>DS4t2</Name>
    <Universe>65</Universe>
    <Address>240</Address>
    <Channels>16</Channels>
@@ -12816,7 +12836,7 @@
    </Source>
   </PowerDistribution>
   <MoveInBlack Auto="0" DarkGapMs="800"/>
-  <Monitor DisplayMode="1" ShowLabels="0" AimSubjectHeight="1.39903">
+  <Monitor DisplayMode="1" ShowLabels="1" AimSubjectHeight="1.39903">
    <Font>.AppleSystemUIFont,13,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0</Font>
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
@@ -12829,6 +12849,7 @@
    <FxItem ID="5" XPos="1107" YPos="2743" LayerId="3" GroupId="4"/>
    <FxItem ID="6" XPos="1106" YPos="2820" LayerId="3" GroupId="4"/>
    <FxItem ID="7" Hidden="True" XPos="4058" YPos="1344" ZPos="2.251" FixedZoom="1091074785" LayerId="4" GroupId="5"/>
+   <FxItem ID="8" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1661" YPos="1372" ZPos="2.312" LayerId="4" GroupId="2"/>
    <FxItem ID="9" XPos="1242.19" YPos="1526.86" LayerId="2"/>
    <FxItem ID="10" XPos="1197.04" YPos="2920.44" LayerId="3" GroupId="4"/>
    <FxItem ID="11" XPos="1197.04" YPos="2920.44" LayerId="3" GroupId="4"/>
@@ -12845,6 +12866,7 @@
    <FxItem ID="22" XPos="8033.15" YPos="1512.76" LayerId="2"/>
    <FxItem ID="23" XPos="9263.57" YPos="1529.24" LayerId="2"/>
    <FxItem ID="24" XPos="10455.2" YPos="1530.34" LayerId="2"/>
+   <FxItem ID="25" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1674" YPos="1372" ZPos="0.889" LayerId="4" GroupId="2"/>
    <FxItem ID="26" XPos="3565" YPos="2742" LayerId="3" GroupId="6"/>
    <FxItem ID="27" XPos="3564" YPos="2819" LayerId="3" GroupId="6"/>
    <FxItem ID="28" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
@@ -12980,7 +13002,7 @@
    <MonitorGroup ID="15" Name="DS-3" LayerId="3" AnchorKind="platform" AnchorId="22" Frame="1" OX="6.087" OY="5.212" OZ="0.000" Rot="0.000"/>
    <MonitorGroup ID="16" Name="DS-4" LayerId="3" AnchorKind="platform" AnchorId="23" Frame="1" OX="8.531" OY="5.212" OZ="0.000" Rot="0.000"/>
    <MonitorGroup ID="17" Name="T-3" LayerId="4" AnchorKind="truss" AnchorId="3"/>
-   <Truss ID="1" Name="T-1" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="1.669" OriginY="1.371" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="2"/>
+   <Truss ID="1" Name="T-1" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="1.670" OriginY="1.372" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="2"/>
    <Truss ID="2" Name="T-2" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="3.965" OriginY="1.344" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="5"/>
    <Truss ID="3" Name="T-3" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="7.943" OriginY="1.320" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="17"/>
    <Truss ID="4" Name="T-4" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="10.498" OriginY="1.371" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4"/>
@@ -13022,14 +13044,15 @@
    </Tower>
    <StageTarget ID="0" Name="Test Target" X="6.074" Y="3.861" Z="0.396" Color="#ffb400" LayerId="6"/>
    <StageTarget ID="1" Name="Target 2" X="6.072" Y="2.718" Z="0.610" Color="#ffb400" LayerId="6"/>
-   <FixtureRig FID="0" Truss="1" Offset="0.185" Mounting="TopHung" PanZero="0.0"/>
+   <FixtureRig FID="0" Truss="1" Offset="3.048" Mounting="FloorMounted" PanZero="0.0" TrussSide="1"/>
    <FixtureRig FID="1" Truss="4294967295" Offset="0.808" Mounting="SideArm" PanZero="0.0"/>
    <FixtureRig FID="2" Truss="4294967295" Offset="0.198" Mounting="SideArm" PanZero="0.0"/>
    <FixtureRig FID="3" Truss="4294967295" Offset="0.868" Mounting="TopHung" PanZero="0.0" PanOfs="-17.00" TiltOfs="6.00"/>
    <FixtureRig FID="4" Truss="4294967295" Offset="2.942" Mounting="FloorMounted" PanZero="0.0" PanOfs="5.00" TrussSide="1" Tower="1" TShelf="4" TU="0.199" TV="0.203" TSide="0"/>
-   <FixtureRig FID="5" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="6" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="5" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="6" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="7" Truss="2" Offset="2.668" Mounting="TopHung" PanZero="0.0" TrussCross="-0.003" GLX="0.313" GLY="0.051" GLZ="-0.031"/>
+   <FixtureRig FID="8" Truss="1" Offset="2.457" Mounting="TopHung" PanZero="0.0" TrussCross="-0.009" Placement="1" SA="90.0"/>
    <FixtureRig FID="9" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0" Deck="0" DeckH="0.000"/>
    <FixtureRig FID="10" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="11" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
@@ -13046,8 +13069,9 @@
    <FixtureRig FID="22" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Deck="2" DeckH="0.000"/>
    <FixtureRig FID="23" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Deck="3" DeckH="0.000"/>
    <FixtureRig FID="24" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0" Deck="3" DeckH="0.000"/>
-   <FixtureRig FID="26" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="27" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="25" Truss="1" Offset="1.034" Mounting="TopHung" PanZero="0.0" TrussCross="0.004" Placement="1" SA="90.0"/>
+   <FixtureRig FID="26" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="27" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="28" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="29" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="30" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -13056,8 +13080,8 @@
    <FixtureRig FID="33" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="34" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="35" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
-   <FixtureRig FID="36" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="37" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="36" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="37" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="38" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="39" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="40" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -13066,8 +13090,8 @@
    <FixtureRig FID="43" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="44" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="45" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="14" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
-   <FixtureRig FID="46" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="47" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="46" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="47" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="48" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="49" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="50" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -13076,8 +13100,8 @@
    <FixtureRig FID="53" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="54" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="55" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="15" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
-   <FixtureRig FID="56" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="57" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="56" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="57" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="58" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="59" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="60" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -13086,8 +13110,8 @@
    <FixtureRig FID="63" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="64" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="65" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="16" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
-   <FixtureRig FID="66" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="67" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="66" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="67" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="68" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="69" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="70" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -13096,8 +13120,8 @@
    <FixtureRig FID="73" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="74" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="75" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="17" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
-   <FixtureRig FID="76" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="77" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="76" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="77" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="78" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="79" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="80" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -13106,8 +13130,8 @@
    <FixtureRig FID="83" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="84" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="85" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="18" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
-   <FixtureRig FID="86" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="87" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="86" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="87" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="88" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="89" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="90" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -13116,8 +13140,8 @@
    <FixtureRig FID="93" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="94" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="95" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="19" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
-   <FixtureRig FID="96" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="97" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="96" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="97" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="98" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="99" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="100" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -13126,8 +13150,8 @@
    <FixtureRig FID="103" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="104" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="105" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="20" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
-   <FixtureRig FID="106" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="107" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="106" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="107" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="108" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="109" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="110" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -13136,8 +13160,8 @@
    <FixtureRig FID="113" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="114" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="115" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="21" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
-   <FixtureRig FID="116" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" Deck="22" DeckH="0.153" GLX="1.219" GLY="0.173" GLZ="0.204" SM="0"/>
-   <FixtureRig FID="117" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" Deck="22" DeckH="0.153" GLX="1.219" GLY="0.194" GLZ="0.204" SM="0"/>
+   <FixtureRig FID="116" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.219" GLY="0.173" GLZ="0.204" SM="0" ST="20.0"/>
+   <FixtureRig FID="117" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.219" GLY="0.194" GLZ="0.204" SM="0" ST="20.0"/>
    <FixtureRig FID="118" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.010" GLZ="0.204"/>
    <FixtureRig FID="119" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.031" GLZ="0.204"/>
    <FixtureRig FID="120" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.051" GLZ="0.204"/>
@@ -13146,8 +13170,8 @@
    <FixtureRig FID="123" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.112" GLZ="0.204"/>
    <FixtureRig FID="124" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.133" GLZ="0.204"/>
    <FixtureRig FID="125" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="22" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.153" GLZ="0.204"/>
-   <FixtureRig FID="126" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="0.609" GLY="0.075" GLZ="0.153" SM="0"/>
-   <FixtureRig FID="127" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Placement="1" GLX="1.829" GLY="0.091" GLZ="0.153" SM="0"/>
+   <FixtureRig FID="126" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.075" GLZ="0.153" SM="0" ST="20.0"/>
+   <FixtureRig FID="127" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.091" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="128" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="129" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
    <FixtureRig FID="130" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.115" GLX="1.219" GLY="0.204" GLZ="0.140"/>
@@ -14650,6 +14674,6 @@
   <Engine/>
  </SimpleDesk>
  <AppState>
-  <DetachedWindow class="Monitor" tabIndex="2" geometry="AdnQywADAAAAAACNAAAAHwAABZoAAARvAAAAjQAAAD8AAAWaAAAEbwAAAAAAAAAACgAAAACNAAAAPwAABZoAAARv"/>
+  <DetachedWindow class="Monitor" tabIndex="2" geometry="AdnQywADAAAAAAHBAAAAKwAACVgAAAVEAAABwQAAAEsAAAlYAAAFRAAAAAAAAAAACgAAAAHBAAAASwAACVgAAAVE"/>
  </AppState>
 </Workspace>
