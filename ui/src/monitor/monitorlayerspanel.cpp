@@ -92,6 +92,25 @@ static const char *kLockOff   = "\xF0\x9F\x94\x93";   // 🔓
 static const int NodeTypeRole = Qt::UserRole;       // MonitorLayersPanel::NodeType
 static const int NodeIdRole   = Qt::UserRole + 1;   // layer / group / item id
 static const int NodeKindRole = Qt::UserRole + 2;   // item kind (QString)
+static const int NodeBadgeRole = Qt::UserRole + 3;  // trailing "what kind of grouping" badge
+
+/* A folder in this tree can be any of four unrelated things -- the fixtures on
+   a truss, the fixtures on a riser, a studio frame, or a plain folder -- and
+   until now they all looked alike. Worse, ":/group.png" was set BOTH on a
+   truss-anchored group ("truss glyph") and on an engine FixtureGroup ("the
+   app's Fixture Group icon"), so the two most easily confused kinds wore the
+   same picture.
+
+   The badge says which, in words, on the row. It is appended to the display
+   text rather than painted by a delegate because this tree already works that
+   way (fixture rows carry a lighting badge), and it is remembered in
+   NodeBadgeRole so an inline rename can strip exactly what was added instead
+   of guessing at a separator. */
+static void setNodeLabel(QTreeWidgetItem *node, const QString &name, const QString &badge)
+{
+    node->setData(0, NodeBadgeRole, badge);
+    node->setText(0, badge.isEmpty() ? name : name + badge);
+}
 
 MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWidget *parent)
     : QWidget(parent)
@@ -431,7 +450,7 @@ void MonitorLayersPanel::addLocalFixtureGroups(QTreeWidgetItem *host,
             continue;   // spans a wider scope → not local here
 
         QTreeWidgetItem *fgNode = new QTreeWidgetItem(host);
-        fgNode->setText(0, fg->name());
+        setNodeLabel(fgNode, fg->name(), QObject::tr("  \xc2\xb7 fixture group"));
         fgNode->setIcon(0, QIcon(":/group.png"));   // the app's Fixture Group icon
         fgNode->setFirstColumnSpanned(true);
         fgNode->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
@@ -476,7 +495,9 @@ void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
 QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) const
 {
     if (kind == QStringLiteral("fixture"))  return QIcon(":/fixture.png");
-    if (kind == QStringLiteral("truss"))    return QIcon(":/group.png");
+    // NOT :/group.png -- that is the Fixture Group icon, and a truss wearing it
+    // made the two kinds indistinguishable in the tree.
+    if (kind == QStringLiteral("truss"))    return glyphIcon(QStringLiteral("\xF0\x9F\x8F\x97"), QColor(150, 200, 235)); // ð truss
     if (kind == QStringLiteral("platform")) return swatchIcon(color);           // colour-coded riser
     if (kind == QStringLiteral("pipe"))     return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xA4"), QColor(150, 200, 235)); // 🎤 boom
     if (kind == QStringLiteral("stand"))    return glyphIcon(QStringLiteral("\xF0\x9F\x93\x8D"), QColor(150, 200, 235)); // 📍 stand
@@ -528,17 +549,25 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
     QTreeWidgetItem *node = new QTreeWidgetItem(parent);
     if (anchored && anchorKind == QStringLiteral("truss"))
     {
-        node->setText(0, anchorName);
-        node->setIcon(0, QIcon(":/group.png"));         // truss glyph
+        setNodeLabel(node, anchorName, tr("  \xc2\xb7 on truss"));
+        node->setIcon(0, kindIcon(anchorKind, anchorColor));
     }
     else if (anchored && anchorKind == QStringLiteral("platform"))
     {
-        node->setText(0, anchorName);
+        setNodeLabel(node, anchorName, tr("  \xc2\xb7 on riser"));
         node->setIcon(0, swatchIcon(anchorColor));      // riser colour swatch
+    }
+    else if (g.hasFrame)
+    {
+        /* The only group kind with real editing behaviour -- a rigid body with
+           its own origin and rotation, whose members hold group-local offsets --
+           and until now the only one with no visual identity at all. */
+        setNodeLabel(node, g.name, tr("  \xc2\xb7 frame"));
+        node->setIcon(0, glyphIcon(QStringLiteral("\xF0\x9F\x93\xA6"), QColor(200, 175, 235))); // ð¦ rigid body
     }
     else
     {
-        node->setText(0, g.name);
+        setNodeLabel(node, g.name, QString());   // a plain folder needs no badge
         // A manual group whose direct members are all ONE kind wears that kind's
         // icon (a group of trusses reads as trusses, not a bare folder); mixed or
         // empty groups keep the folder.
@@ -1032,10 +1061,33 @@ void MonitorLayersPanel::slotItemDoubleClicked(QTreeWidgetItem *item, int)
     }
     else if (type == NodeGroup && m_view)
     {
-        // A group's primary action is Edit… → open the Fixture Studio for it
-        // (matches the right-click "Edit…"; plain groups are promoted in place).
-        // Rename stays on the right-click "Rename group…" / F2.
-        m_view->openStudioGroupForGroup(item->data(0, NodeIdRole).toUInt());
+        /* Same rule as the right-click menu, and it has to be the same or the
+           two gestures disagree: an auto-group for a truss or riser has no
+           studio frame, so the Fixture Studio has nothing in it to change.
+           Double-click goes to the STRUCTURE it stands for -- which is what a
+           row wearing a truss glyph and reading "on truss" promises.
+
+           Only the menu was gated at first, and double-click is the gesture
+           people actually use: "whyyyyy when I click on T-1 .. which has a
+           truss glyph .. am I NOT getting the truss editor". */
+        const quint32 gid = item->data(0, NodeIdRole).toUInt();
+        const MonitorProperties::MonitorGroup g = m_props->group(gid);
+
+        /* An ANCHORED row is the structure. It takes the structure's name, wears
+           its glyph and reads "on truss" / "on riser", so activating it has to
+           open the structure -- whatever else the group happens to carry.
+           hasFrame is NOT the test: an auto-group may well have a frame (T-1 and
+           T-2 in stage-structures-demo do), and gating on it sent exactly the
+           rows that look most like a truss to the Fixture Studio instead. The
+           frame, where there is one, is reachable from the right-click menu as
+           "Fixture layout...". */
+        if (!g.anchorKind.isEmpty())
+        {
+            m_view->requestEditItem(g.anchorKind, g.anchorId);
+            return;
+        }
+        // Unanchored: a frame, or a plain folder promoted in place.
+        m_view->openStudioGroupForGroup(gid);
         reload();
     }
     else if (m_editable)
@@ -1052,6 +1104,12 @@ void MonitorLayersPanel::slotItemChanged(QTreeWidgetItem *item, int column)
     const int type = item->data(0, NodeTypeRole).toInt();
     const quint32 id = item->data(0, NodeIdRole).toUInt();
     QString name = item->text(0).trimmed();
+    /* Strip the "what kind of grouping" badge before it is baked into the name.
+       Exact suffix match on what setNodeLabel() actually appended -- no
+       guessing at a separator that a real name might contain. */
+    const QString badge = item->data(0, NodeBadgeRole).toString().trimmed();
+    if (!badge.isEmpty() && name.endsWith(badge))
+        name = name.left(name.size() - badge.size()).trimmed();
     // A fixture row may carry a "  💡 <group>" lighting badge in its text — strip
     // it so an inline rename doesn't bake the badge into the fixture's name.
     const int bulb = name.indexOf(QStringLiteral("\xF0\x9F\x92\xA1"));
@@ -1502,12 +1560,41 @@ void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
         // — layout, faces, orientation). Editing the physical feature it rides
         // (riser size/colour, truss) is a separate, clearly-named entry.
         const MonitorProperties::MonitorGroup g = m_props->group(id);
+        /* The Fixture Studio edits a studio FRAME -- origin, rotation, faces,
+           group-local offsets. An auto-group created for a truss or riser has
+           no frame; it exists so the Layers tree can present the structure's
+           fixtures under it. Offering "Edit..." there opened an editor with
+           nothing in it to change, and did so ABOVE the entry that leads to
+           the thing you actually meant ("I see nothing in this editor that's
+           useful"). Only offer it where it does something. */
         if (m_editable)
         {
-            menu.addAction(tr("Edit…"), this, [this, id]() {
-                if (m_view) m_view->openStudioGroupForGroup(id);
-                reload();
-            });
+            /* Unanchored, the group IS the thing being edited, so "Edit..." is
+               its primary action. Anchored, the structure is primary (added
+               just below) and the frame -- if it has one -- is a secondary,
+               named for what it actually does rather than a bare verb. */
+            if (g.anchorKind.isEmpty())
+            {
+                menu.addAction(tr("Edit…"), this, [this, id]() {
+                    if (m_view) m_view->openStudioGroupForGroup(id);
+                    reload();
+                });
+            }
+            else
+            {
+                /* Anchored. The layout entry is still needed -- and needed MOST
+                   when there is no frame yet, because openStudioGroupForGroup()
+                   is what promotes a plain group into one. Gating it on hasFrame
+                   left the twelve step groups with no way to become frames at
+                   all, which is precisely what the component workflow needs
+                   them to be. Named for what it will do. */
+                menu.addAction(g.hasFrame ? tr("Fixture layout…")
+                                          : tr("Create fixture layout…"),
+                               this, [this, id]() {
+                    if (m_view) m_view->openStudioGroupForGroup(id);
+                    reload();
+                });
+            }
         }
         if (!g.anchorKind.isEmpty())
         {
