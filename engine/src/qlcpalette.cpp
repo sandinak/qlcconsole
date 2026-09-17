@@ -308,17 +308,7 @@ void QLCPalette::resetValues()
  *  an Aim look in that scene track a subject rather than a static point. */
 static bool sceneHasFollowSpot(Doc *doc, const Scene *scene)
 {
-    if (doc == NULL || scene == NULL)
-        return false;
-
-    foreach (quint32 pid, scene->palettes())
-    {
-        QLCPalette *p = doc->palette(pid);
-        if (p != NULL && p->type() == QLCPalette::Effect &&
-            p->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
-            return true;
-    }
-    return false;
+    return AimSolver::sceneFollowsSubject(doc, scene);
 }
 
 QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtures,

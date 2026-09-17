@@ -40,8 +40,11 @@
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
+#include "monitorproperties.h"
 #include "fixturegroup.h"
+#include "stagetarget.h"
 #include "qlcpalette.h"
+#include "aimsolver.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
@@ -152,6 +155,22 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
             [this]() { ProgrammingManager::showGuide(this); });
     helpRow->addWidget(guideBtn);
     root->addLayout(helpRow);
+
+    /* Re-rigging a head changes what it can reach. Re-check when the rig
+       changes, but rebuild only if the answer did: this panel is where looks
+       are edited, and a rebuild for nothing would pull the rug out. */
+    if (m_doc != nullptr && m_doc->monitorProperties() != nullptr)
+        connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged, this,
+                [this](quint32) {
+            if (m_reachCheckPending)
+                return;
+            m_reachCheckPending = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_reachCheckPending = false;
+                if (m_scene != nullptr && headsThatCannotReach() != m_cannotReach)
+                    reload();
+            });
+        });
 
     QHBoxLayout *cols = new QHBoxLayout();
     root->addLayout(cols);
@@ -371,6 +390,22 @@ static QString capCoverageHint(Fixture *fxi, const QSet<QLCPalette::PaletteType>
 }
 
 
+QHash<quint32, QStringList> SceneGroupLooks::headsThatCannotReach() const
+{
+    QHash<quint32, QStringList> out;
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
+    if (props == nullptr || m_scene == nullptr)
+        return out;
+    foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, m_scene))
+    {
+        if (a.solution.reachable())
+            continue;
+        if (StageTarget *t = props->stageTarget(a.targetId))
+            out[a.fixtureId] << t->name();
+    }
+    return out;
+}
+
 void SceneGroupLooks::reload()
 {
     // Preserve the effective selection across the rebuild (a type folder is
@@ -391,6 +426,12 @@ void SceneGroupLooks::reload()
 
     m_targetList->blockSignals(true);
     m_targetList->clear();
+
+    /* Aimed at something they cannot reach. Worse than a missing look: the
+       head is not idle, it is stuck at its limit pointing somewhere else. So it
+       is red, where the missing-look hint is amber, and it wins the colour. */
+    m_cannotReach = headsThatCannotReach();
+    const QColor cannotReachColour(220, 60, 50);
 
     // Which palette types does the current look cover?
     QSet<QLCPalette::PaletteType> coveredTypes;
@@ -438,6 +479,15 @@ void SceneGroupLooks::reload()
             label += tr("  ⚠ no look for: %1").arg(ml.join(", "));
             it->setForeground(0, QColor(200, 130, 0));
         }
+        int groupShort = 0;
+        foreach (quint32 fid, g->fixtureList())
+            if (m_cannotReach.contains(fid))
+                ++groupShort;
+        if (groupShort > 0)
+        {
+            label += tr("  ⚠ %n can't reach their aim target", "", groupShort);
+            it->setForeground(0, cannotReachColour);
+        }
         it->setText(0, label);
         it->setData(0, Qt::UserRole, g->id());
         it->setData(0, TARGET_KIND_ROLE, TargetGroup);
@@ -473,9 +523,17 @@ void SceneGroupLooks::reload()
             {
                 QTreeWidgetItem *it = new QTreeWidgetItem(folder);
                 const QString hint = capCoverageHint(f, coveredTypes);
-                it->setText(0, hint.isEmpty() ? f->name() : f->name() + hint);
+                QString text = hint.isEmpty() ? f->name() : f->name() + hint;
                 if (!hint.isEmpty())
                     it->setForeground(0, QColor(200, 130, 0));
+                if (m_cannotReach.contains(f->id()))
+                {
+                    QStringList names = m_cannotReach.value(f->id());
+                    names.removeDuplicates();
+                    text += tr("  ⚠ can't reach: %1").arg(names.join(", "));
+                    it->setForeground(0, cannotReachColour);
+                }
+                it->setText(0, text);
                 it->setData(0, Qt::UserRole, f->id());
                 it->setData(0, TARGET_KIND_ROLE, TargetFixture);
             }
@@ -512,7 +570,12 @@ void SceneGroupLooks::reload()
     foreach (FixtureGroup *g, groups)
         foreach (quint32 fid, g->fixtureList())
             allFixtures.insert(fid);
-    m_targetsLabel->setText(tr("Targets (%n fixture(s))", "", allFixtures.count()));
+    QString targetsText = tr("Targets (%n fixture(s))", "", allFixtures.count());
+    if (!m_cannotReach.isEmpty())
+        targetsText += tr("  —  ⚠ %n can't reach their aim target", "", m_cannotReach.size());
+    m_targetsLabel->setText(targetsText);
+    m_targetsLabel->setStyleSheet(m_cannotReach.isEmpty()
+                                  ? QString() : QStringLiteral("color: rgb(220,60,50);"));
 
     // Declared scope: (re)populate from every group in the doc (not just this
     // scene's own targets — scope is a statement of intent, independent of

@@ -36,6 +36,9 @@ private slots:
      *  child — because order decides nesting here, so appending is not
      *  neutral. */
     void aDroppedLookLandsOnTheSceneNotInsideTheEffect();
+    /** A scene that aims a head at a target it cannot reach says so on that
+     *  head, and stops saying so when the head is re-rigged to reach. */
+    void aHeadAimedOutOfReachIsFlagged();
 
 private:
     Doc *m_doc;

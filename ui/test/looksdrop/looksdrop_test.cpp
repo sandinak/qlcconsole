@@ -25,7 +25,18 @@
 #undef private
 #undef protected
 
+#include <QTreeWidget>
+#include <QLabel>
+#include "monitorproperties.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
+#include "stagetarget.h"
 #include "qlcpalette.h"
+#include "fixture.h"
+#include "truss.h"
 #include "scene.h"
 #include "doc.h"
 
@@ -111,6 +122,104 @@ void LooksDrop_Test::aDroppedLookLandsOnTheSceneNotInsideTheEffect()
     looks2.placeDroppedLooks(QList<quint32>() << col->id(), QPoint(-500, -500));
     QCOMPARE(plain->palettes().size(), 2);
     QCOMPARE(plain->palettes().last(), col->id());
+}
+
+
+/* A 540/270 moving head: the UKing 100W spot's ranges. */
+static Fixture *makeSpot(Doc *doc, const QString &name)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    for (int k = 0; k < 2; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(k == 0 ? "Pan" : "Tilt");
+        ch->setGroup(k == 0 ? QLCChannel::Pan : QLCChannel::Tilt);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(quint32(doc->fixtures().size() * 2));
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+void LooksDrop_Test::aHeadAimedOutOfReachIsFlagged()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *tower = props->addTruss();
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(1.67f, 1.372f, 0.0f));
+    tower->setLength(3.048f);
+    tower->setWidth(0.29f);
+
+    Fixture *onTop = makeSpot(m_doc, "On top");
+    Fixture *hung  = makeSpot(m_doc, "Hung");
+    QVERIFY(onTop != nullptr && hung != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = tower->id();
+    rp.trussOffset = 3.048f;
+    rp.mountingType = Truss::FloorMounted;
+    props->setFixtureRigProps(onTop->id(), rp);
+    rp.trussOffset = 2.8f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(hung->id(), rp);
+
+    StageTarget *who = props->addStageTarget();
+    who->setName("Vocalist");
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(1.67f, 1.872f, 0.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setName("At the vocalist");
+    aim->setStageTargetId(who->id());
+    QVERIFY(m_doc->addPalette(aim));
+
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Solo");
+    scene->addFixture(onTop->id());
+    scene->addFixture(hung->id());
+    scene->addPalette(aim->id());
+    QVERIFY(m_doc->addFunction(scene));
+
+    SceneGroupLooks *looks = new SceneGroupLooks(scene, m_doc, nullptr, true);
+    looks->reload();
+
+    auto rowText = [&](const QString &name) {
+        QTreeWidgetItemIterator it(looks->m_targetList);
+        for (; *it != nullptr; ++it)
+            if ((*it)->text(0).startsWith(name))
+                return (*it)->text(0);
+        return QString();
+    };
+
+    QVERIFY2(rowText("On top").contains("can't reach: Vocalist"),
+             qPrintable("the head standing on the tower is not flagged: " + rowText("On top")));
+    QVERIFY2(!rowText("Hung").contains("can't reach"),
+             qPrintable("the hung head is flagged: " + rowText("Hung")));
+    QVERIFY(looks->m_targetsLabel->text().contains("1 can't reach"));
+
+    // Re-rig the one on top to hang: the warning clears on its own.
+    props->setFixtureRigProps(onTop->id(), rp);
+    QCoreApplication::processEvents();
+    QVERIFY2(!rowText("On top").contains("can't reach"),
+             qPrintable("still flagged after being hung: " + rowText("On top")));
+    QVERIFY(!looks->m_targetsLabel->text().contains("can't reach"));
+
+    delete looks;
 }
 
 QTEST_MAIN(LooksDrop_Test)

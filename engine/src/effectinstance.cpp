@@ -659,6 +659,9 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
 
         float panRange  = 360.0f;
         float tiltRange = 270.0f;
+        float lensMin   = 0.0f;
+        float lensMax   = 0.0f;
+        bool  hasZoom   = false;
         bool  hasPT     = false;
         bool  hasRGB    = false;
         bool  hasColorWheel = false;
@@ -671,6 +674,8 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             const QLCPhysical &phy = fxi->fixtureMode()->physical();
             if (phy.focusPanMax() > 0)  panRange  = (float)phy.focusPanMax();
             if (phy.focusTiltMax() > 0) tiltRange = (float)phy.focusTiltMax();
+            lensMin = float(qMin(phy.lensDegreesMin(), phy.lensDegreesMax()));
+            lensMax = float(qMax(phy.lensDegreesMin(), phy.lensDegreesMax()));
         }
 
         bool hasR = false, hasG = false, hasB = false;
@@ -699,6 +704,11 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                     else if (ch->colour() == QLCChannel::Blue)   hasB = true;
                     else hasDimmer = true;
                     break;
+                case QLCChannel::Beam:
+                    if (ch->preset() == QLCChannel::BeamZoomSmallBig
+                        || ch->preset() == QLCChannel::BeamZoomBigSmall)
+                        hasZoom = true;
+                    break;
                 case QLCChannel::Gobo:
                     hasGobo = true; break;
                 case QLCChannel::Shutter:
@@ -716,6 +726,10 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         obj.setProperty("hasDimmer",     hasDimmer);
         obj.setProperty("hasGobo",       hasGobo);
         obj.setProperty("hasShutter",    hasShutt);
+        // The lens a zoom channel sweeps: its intent 0..1 runs lensMin..lensMax.
+        obj.setProperty("hasZoom",       hasZoom && lensMax > lensMin);
+        obj.setProperty("lensMin",       double(lensMin));
+        obj.setProperty("lensMax",       double(lensMax));
 
         // 3D rig position from MonitorProperties (0,0,0 if not set)
         QVector3D pos(0, 0, 0);
@@ -752,20 +766,21 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                     continue;
                 }
                 // Follow spot: aim at the SUBJECT's body, not the target's
-                // configured Z — subject height above the platform/deck.
-                QVector3D tgtPos = tgt->position();
-                tgtPos.setZ(mp->platformHeightAt(tgtPos.x(), tgtPos.y()) + mp->aimSubjectHeight());
+                // configured Z — through the shared rule, so a bound target
+                // follows its structure and a Person is aimed at its own height.
+                const QVector3D tgtPos = mp->targetAimPoint(tgt, true);
 
                 // Use the SHARED aim solver — the exact same geometry the Aim
                 // palette uses in Edit — so the beam doesn't jump on Edit→Run.
                 // aimAt.pan/tilt are fixture degrees; the host converts via
                 // positionToValues (see parseIntents).
-                float panDeg = 0.0f, tiltDeg = 0.0f;
+                AimSolver::Solution sol;
                 QJSValue aimObj = m_script.engine()->newObject();
-                if (AimSolver::aimDegrees(m_doc, fid, tgtPos, panDeg, tiltDeg))
+                if (AimSolver::reach(m_doc, fid, tgtPos, sol))
                 {
-                    aimObj.setProperty("pan",  (double)panDeg);
-                    aimObj.setProperty("tilt", (double)tiltDeg);
+                    aimObj.setProperty("pan",  (double)sol.panDeg);
+                    aimObj.setProperty("tilt", (double)sol.tiltDeg);
+                    aimObj.setProperty("reachMargin", (double)sol.marginDeg);
                 }
                 aimAt.setProperty(td.name, aimObj);
             }
@@ -803,13 +818,20 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                     // Convenience aim angles at the SUBJECT's body (not the
                     // target's configured Z), present only when this fixture has
                     // usable rig geometry.  The followspot defers on these.
-                    QVector3D tp = raw;
-                    tp.setZ(mp->platformHeightAt(tp.x(), tp.y()) + mp->aimSubjectHeight());
-                    float pd = 0.0f, td = 0.0f;
-                    if (AimSolver::aimDegrees(m_doc, fid, tp, pd, td))
+                    // reachMargin: degrees to spare before the head's pan/tilt
+                    // limit (negative = it cannot point there), so a script can
+                    // fade a head out before it sticks.
+                    // distance: metres from the head to that point, so a script can
+                    // size the beam on the subject rather than at the lens.
+                    const QVector3D tp = mp->targetAimPoint(st, true);
+                    AimSolver::Frame frame;
+                    if (AimSolver::frameFor(m_doc, fid, frame))
                     {
-                        so.setProperty("pan",  double(pd));
-                        so.setProperty("tilt", double(td));
+                        const AimSolver::Solution sol = AimSolver::solve(frame, tp);
+                        so.setProperty("pan",  double(sol.panDeg));
+                        so.setProperty("tilt", double(sol.tiltDeg));
+                        so.setProperty("reachMargin", double(sol.marginDeg));
+                        so.setProperty("distance", double((tp - frame.position).length()));
                     }
                     obj.setProperty("sceneTarget", so);
                     break; // first Aim look wins

@@ -36,6 +36,13 @@ private slots:
     /** A multi-head fixture yields one cell PER HEAD (pixel addressing), not one
      *  cell for the whole fixture. */
     void multiHeadYieldsPerHeadCells();
+    /** A follow-spot with Fade Near Limit takes a head's dimmer down when its
+     *  target is out of that head's reach, and leaves the dimmer to the scene
+     *  when it is comfortably within it. */
+    void followSpotFadesAHeadThatCannotReach();
+    /** Size On Subject zooms a head so its beam is that wide where it lands,
+     *  whatever the throw, within the lens's range. */
+    void followSpotZoomsToHoldSizeOnSubject();
 
 private:
     Doc          *m_doc = nullptr;

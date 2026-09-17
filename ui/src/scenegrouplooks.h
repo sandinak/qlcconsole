@@ -124,9 +124,15 @@ private:
     void reconcileAfterPaletteApply();
 
 private:
+    /** Heads the scene's Aim looks point at a target they cannot reach:
+     *  fixture id -> the names of those targets. */
+    QHash<quint32, QStringList> headsThatCannotReach() const;
+
     Scene *m_scene;
     Doc *m_doc;
     bool m_includeFixtureTargets;
+    QHash<quint32, QStringList> m_cannotReach;   //!< as shown by the last reload()
+    bool m_reachCheckPending = false;
 
     QLabel *m_targetsLabel;     //!< "Targets (N fixtures)"
     QComboBox *m_scopeCombo;    //!< declared look scope — see Scene::LookScope

@@ -6,6 +6,7 @@ project(test)
 # build/resources/ dir). Applies to every test target added below.
 add_compile_definitions(QLC_TEST_RESOURCE_ROOT="${CMAKE_SOURCE_DIR}/resources/")
 
+add_subdirectory(aimsolver)
 add_subdirectory(bus)
 add_subdirectory(channelsgroup)
 add_subdirectory(channelmodifier)
