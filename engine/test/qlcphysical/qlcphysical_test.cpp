@@ -97,6 +97,17 @@ void QLCPhysical_Test::lensDegreesMax()
     QVERIFY(p.lensDegreesMax() == 40.5);
 }
 
+void QLCPhysical_Test::lensBeamsPerHead()
+{
+    QCOMPARE(p.lensBeamsPerHead(), 1);
+    p.setLensBeamsPerHead(3);
+    QCOMPARE(p.lensBeamsPerHead(), 3);
+    // A head throws at least the one beam it is.
+    p.setLensBeamsPerHead(0);
+    QCOMPARE(p.lensBeamsPerHead(), 1);
+    p.setLensBeamsPerHead(3);
+}
+
 void QLCPhysical_Test::focusType()
 {
     QVERIFY(p.focusType() == "Fixed");
@@ -151,6 +162,7 @@ void QLCPhysical_Test::copy()
     QVERIFY(c.lensName() == p.lensName());
     QVERIFY(c.lensDegreesMin() == p.lensDegreesMin());
     QVERIFY(c.lensDegreesMax() == p.lensDegreesMax());
+    QCOMPARE(c.lensBeamsPerHead(), 3);
     QVERIFY(c.focusType() == p.focusType());
     QVERIFY(c.focusPanMax() == p.focusPanMax());
     QVERIFY(c.focusTiltMax() == p.focusTiltMax());
@@ -226,6 +238,8 @@ void QLCPhysical_Test::load()
     QVERIFY(p.lensName() == "Fresnel");
     QVERIFY(p.lensDegreesMin() == 8);
     QVERIFY(p.lensDegreesMax() == 38);
+    // No BeamsPerHead attribute, as in every stock definition: back to one.
+    QCOMPARE(p.lensBeamsPerHead(), 1);
     QVERIFY(p.focusType() == "Head");
     QVERIFY(p.focusPanMax() == 520);
     QVERIFY(p.focusTiltMax() == 270);
@@ -330,6 +344,8 @@ void QLCPhysical_Test::save()
             QVERIFY(xmlReader.attributes().value("Name").toString() == "Fresnel");
             QVERIFY(xmlReader.attributes().value("DegreesMin").toString() == "8");
             QVERIFY(xmlReader.attributes().value("DegreesMax").toString() == "38");
+            // One beam per head is the default and is never written.
+            QVERIFY(xmlReader.attributes().hasAttribute("BeamsPerHead") == false);
         }
         else if (xmlReader.name().toString() == "Focus")
         {
@@ -364,6 +380,31 @@ void QLCPhysical_Test::save()
     QVERIFY(focus == true);
     QVERIFY(layout == true);
     QVERIFY(technical == true);
+}
+
+void QLCPhysical_Test::beamsPerHeadRoundTrip()
+{
+    /* A two-arm beam fixture: each arm is one head carrying three emitters. */
+    QLCPhysical out;
+    out.setLensDegreesMin(8);
+    out.setLensDegreesMax(8);
+    out.setLensBeamsPerHead(3);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(out.saveXML(&xmlWriter) == true);
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+    QVERIFY(buffer.data().contains("BeamsPerHead=\"3\""));
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+    QLCPhysical in;
+    QVERIFY(in.loadXML(xmlReader) == true);
+    QCOMPARE(in.lensBeamsPerHead(), 3);
+    QCOMPARE(in.lensDegreesMax(), 8.0);
 }
 
 QTEST_MAIN(QLCPhysical_Test)

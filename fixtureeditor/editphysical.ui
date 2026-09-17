@@ -699,6 +699,26 @@
         </property>
        </widget>
       </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="m_lensBeamsPerHeadLabel">
+        <property name="text">
+         <string>Beams per head</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QSpinBox" name="m_lensBeamsPerHeadSpin">
+        <property name="toolTip">
+         <string>How many separate beams each head throws, e.g. 3 for an arm carrying three emitters that share one colour. Only changes how the fixture is drawn.</string>
+        </property>
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>64</number>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -814,6 +834,7 @@
   <tabstop>m_lensNameCombo</tabstop>
   <tabstop>m_lensDegreesMinSpin</tabstop>
   <tabstop>m_lensDegreesMaxSpin</tabstop>
+  <tabstop>m_lensBeamsPerHeadSpin</tabstop>
   <tabstop>m_focusTypeCombo</tabstop>
   <tabstop>m_panMaxSpin</tabstop>
   <tabstop>m_tiltMaxSpin</tabstop>

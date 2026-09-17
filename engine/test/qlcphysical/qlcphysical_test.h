@@ -40,6 +40,7 @@ private slots:
     void lensName();
     void lensDegreesMin();
     void lensDegreesMax();
+    void lensBeamsPerHead();
 
     void focusType();
     void focusPanMax();
@@ -53,6 +54,7 @@ private slots:
     void load();
     void loadWrongRoot();
     void save();
+    void beamsPerHeadRoundTrip();
 
 private:
     QLCPhysical p;

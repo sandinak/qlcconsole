@@ -42,6 +42,7 @@ class QXmlStreamWriter;
 #define KXMLQLCPhysicalLensName         QStringLiteral("Name")
 #define KXMLQLCPhysicalLensDegreesMin   QStringLiteral("DegreesMin")
 #define KXMLQLCPhysicalLensDegreesMax   QStringLiteral("DegreesMax")
+#define KXMLQLCPhysicalLensBeamsPerHead QStringLiteral("BeamsPerHead")
 
 #define KXMLQLCPhysicalDimensions       QStringLiteral("Dimensions")
 #define KXMLQLCPhysicalDimensionsWeight QStringLiteral("Weight")
@@ -115,6 +116,15 @@ public:
     void setLensDegreesMax(double degrees);
     double lensDegreesMax() const;
 
+    /** How many separate beams each head throws through this lens. A head is
+     *  a set of channels controlled together, so a fixture whose arm carries
+     *  three emitters sharing one colour is ONE head with three beams -- a
+     *  fact the channels cannot express. Visual only; 1 (the default) is
+     *  never written, so existing definitions stay byte-identical and
+     *  applications that do not know the attribute simply ignore it. */
+    void setLensBeamsPerHead(int beams);
+    int lensBeamsPerHead() const;
+
     void setFocusType(const QString& type);
     QString focusType() const;
 
@@ -146,6 +156,7 @@ protected:
     QString m_lensName;
     double m_lensDegreesMin;
     double m_lensDegreesMax;
+    int m_lensBeamsPerHead;
 
     QString m_focusType;
     int m_focusPanMax;

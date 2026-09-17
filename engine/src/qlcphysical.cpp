@@ -40,6 +40,7 @@ QLCPhysical::QLCPhysical()
     , m_lensName("Other")
     , m_lensDegreesMin(0)
     , m_lensDegreesMax(0)
+    , m_lensBeamsPerHead(1)
     , m_focusType("Fixed")
     , m_focusPanMax(0)
     , m_focusTiltMax(0)
@@ -74,6 +75,7 @@ QLCPhysical& QLCPhysical::operator=(const QLCPhysical& physical)
         m_lensName = physical.lensName();
         m_lensDegreesMin = physical.lensDegreesMin();
         m_lensDegreesMax = physical.lensDegreesMax();
+        m_lensBeamsPerHead = physical.lensBeamsPerHead();
 
         m_focusType = physical.focusType();
         m_focusPanMax = physical.focusPanMax();
@@ -97,6 +99,7 @@ bool QLCPhysical::isEmpty() const
         m_depth == 0 &&
         m_lensDegreesMin == 0 &&
         m_lensDegreesMax == 0 &&
+        m_lensBeamsPerHead == 1 &&
         m_focusPanMax == 0 &&
         m_focusTiltMax == 0 &&
         m_powerConsumption == 0)
@@ -209,6 +212,16 @@ double QLCPhysical::lensDegreesMax() const
     return m_lensDegreesMax;
 }
 
+void QLCPhysical::setLensBeamsPerHead(int beams)
+{
+    m_lensBeamsPerHead = qMax(1, beams);
+}
+
+int QLCPhysical::lensBeamsPerHead() const
+{
+    return m_lensBeamsPerHead;
+}
+
 void QLCPhysical::setFocusType(const QString& type)
 {
     m_focusType = type;
@@ -317,6 +330,8 @@ bool QLCPhysical::loadXML(QXmlStreamReader &doc)
             m_lensName = attrs.value(KXMLQLCPhysicalLensName).toString();
             m_lensDegreesMin = QLocale::c().toDouble(attrs.value(KXMLQLCPhysicalLensDegreesMin).toString());
             m_lensDegreesMax = QLocale::c().toDouble(attrs.value(KXMLQLCPhysicalLensDegreesMax).toString());
+            // Absent (every stock definition) reads as 0, which clamps to 1.
+            setLensBeamsPerHead(attrs.value(KXMLQLCPhysicalLensBeamsPerHead).toString().toInt());
         }
         else if (doc.name() == KXMLQLCPhysicalFocus)
         {
@@ -375,6 +390,8 @@ bool QLCPhysical::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLQLCPhysicalLensName, m_lensName);
     doc->writeAttribute(KXMLQLCPhysicalLensDegreesMin, QLocale::c().toString(m_lensDegreesMin));
     doc->writeAttribute(KXMLQLCPhysicalLensDegreesMax, QLocale::c().toString(m_lensDegreesMax));
+    if (m_lensBeamsPerHead > 1)
+        doc->writeAttribute(KXMLQLCPhysicalLensBeamsPerHead, QString::number(m_lensBeamsPerHead));
     doc->writeEndElement();
 
     /* Focus */
