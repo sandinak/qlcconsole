@@ -33,6 +33,22 @@
 #include "truss.h"
 #include "doc.h"
 
+bool AimSolver::floorMounted(const FixtureRigProps &rp)
+{
+    /* What it is BOLTED to decides, not what it is missing. This used to read
+       "no truss, therefore standing on the deck", which is wrong for every
+       fixture hung from something we do not model yet -- and, worse, the views
+       never applied it, so a free-placed head was solved standing and drawn
+       hanging. A head standing on a truss top is recorded as FloorMounted by
+       the mount itself (that is what "Mounting=FloorMounted" on a truss
+       means), and a head on the TOP face of a riser stands on it. */
+    if (rp.mountingType == Truss::FloorMounted)
+        return true;
+    if (rp.riserPlatformId != UINT_MAX && rp.riserFace == 1)
+        return true;
+    return false;
+}
+
 bool AimSolver::frameFor(Doc *doc, quint32 fixtureId, Frame &frame)
 {
     if (doc == NULL)
@@ -45,10 +61,7 @@ bool AimSolver::frameFor(Doc *doc, quint32 fixtureId, Frame &frame)
         return false;
 
     const FixtureRigProps rp = mProps->fixtureRigProps(fixtureId);
-    // A free-placed fixture stands on the floor/deck → floor-mounted (the
-    // rig-props default is TopHung, which leaks in when an entry is auto-created).
-    frame.floorMounted = (rp.trussId == Truss::invalidId())
-                         || rp.mountingType == Truss::FloorMounted;
+    frame.floorMounted = floorMounted(rp);
 
     // Fixture world position in metres; a free-placed fixture on a platform sits
     // at the deck height (mirror the target's platform handling).
@@ -76,8 +89,15 @@ AimSolver::Solution AimSolver::solve(const Frame &frame, const QVector3D &target
     const float dz = targetWorld.z() - frame.position.z();
     const float horizDist = qSqrt(dx * dx + dy * dy);
 
-    // Horizontal azimuth: clockwise degrees from downstage (Y+ = upstage).
-    float azimuthDeg = float(qRadiansToDegrees(qAtan2(double(dx), double(-dy))));
+    /* Horizontal bearing of the target, in the SAME terms as a head's pan zero:
+       0 = downstage (+Y), 90 = stage right (-X), turning the way the "Facing
+       (pan zero)" menu names them. It used to measure from upstage, which put
+       every solved pan exactly 180 degrees out from the direction the plot and
+       the rig view then drew the beam -- aim a head at a mark and its beam
+       went to the mirror image of that mark through the head. Nothing else in
+       the app used the old sense; MonitorFixtureItem, fixtureAimDirection and
+       the facing menu all agree on this one. */
+    float azimuthDeg = float(qRadiansToDegrees(qAtan2(double(-dx), double(dy))));
     if (azimuthDeg < 0.0f) azimuthDeg += 360.0f;
 
     float relativePan = azimuthDeg - frame.panZeroDir;

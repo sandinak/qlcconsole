@@ -20,6 +20,7 @@
 #include <QSet>
 
 #include "fixturevisualtraits.h"
+#include "aimsolver.h"
 #include "fixture.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -589,18 +590,43 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
     const double tiltMax = (mode->physical().focusTiltMax() != 0)
                          ? mode->physical().focusTiltMax() : 270.0;
 
-    const double yaw  = qDegreesToRadians(double(rp.panZeroDir)
-                                          + degrees(panCh, panMax)
-                                          + double(rp.panOffsetDeg));
-    const double tilt = qDegreesToRadians(degrees(tiltCh, tiltMax)
-                                          + double(rp.tiltOffsetDeg));
+    /* Exactly the inverse of AimSolver::solve, step for step, because these
+       two are the same model read in opposite directions: the solver turns
+       "point there" into these DMX values and this turns them back into the
+       ray every view draws. Anything the solver applies on the way in has to
+       be undone here on the way out, in reverse order -- the mirrors first,
+       then the offsets, then the way up the head is rigged. */
+    const bool standing = AimSolver::floorMounted(rp);
+
+    double panDeg = degrees(panCh, panMax);
+    double tiltDeg = degrees(tiltCh, tiltMax);
+
+    // Flipping a head over reverses its pan sense; the invert flag toggles
+    // from there. Mirroring about the centre is negation in centred degrees.
+    bool invertPan = rp.panInvert;
+    if (standing)
+        invertPan = !invertPan;
+    if (invertPan)
+        panDeg = -panDeg;
+    if (rp.tiltInvert)
+        tiltDeg = -tiltDeg;
+
+    const double yaw = qDegreesToRadians(double(rp.panZeroDir) + panDeg
+                                         - double(rp.panOffsetDeg));
+    /* Elevation of the beam above the horizon. A hanging head is centred on
+       straight down, a standing one on straight up -- which is why a head
+       standing on a truss top cannot point at its own feet however much tilt
+       it has. */
+    const double elevDeg = standing
+        ? (tiltDeg - double(rp.tiltOffsetDeg) + 90.0)
+        : (tiltDeg - double(rp.tiltOffsetDeg) - 90.0);
+    const double elev = qDegreesToRadians(elevDeg);
 
     // Horizontal bearing: 0 = downstage (+Y), turning clockwise from above.
     const QVector3D horiz(float(-qSin(yaw)), float(qCos(yaw)), 0.0f);
-    // Tilt lifts the beam off straight-down toward that bearing.
-    dir = QVector3D(horiz.x() * float(qSin(tilt)),
-                    horiz.y() * float(qSin(tilt)),
-                    float(-qCos(tilt)));
+    dir = QVector3D(horiz.x() * float(qCos(elev)),
+                    horiz.y() * float(qCos(elev)),
+                    float(qSin(elev)));
     if (dir.length() < 1e-6f)
         return false;
     dir.normalize();

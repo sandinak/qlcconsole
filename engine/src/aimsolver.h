@@ -36,6 +36,8 @@ class Scene;
  * pre-computed aim use this, so a fixture points the same way in Edit and Run —
  * previously they had two divergent formulas and the beam jumped on handoff.
  */
+struct FixtureRigProps;
+
 namespace AimSolver
 {
     /** Everything the aim geometry needs about one rigged fixture, looked up
@@ -54,6 +56,14 @@ namespace AimSolver
         float panMax = 360.0f;
         float tiltMax = 270.0f;
     };
+
+    /** Which way up a head is rigged: standing (home points UP) or hanging.
+     *  One rule, because the solver writing pan/tilt and the views drawing the
+     *  beam from those same numbers must never disagree about it -- and they
+     *  did: a standing head's DMX was drawn as though it hung. A fixture with
+     *  no structure under it is standing on the deck, whatever the rig-props
+     *  default says (TopHung leaks in whenever an entry is auto-created). */
+    bool floorMounted(const ::FixtureRigProps &rp);
 
     /** Where a head has to point for a world point, and whether it can. */
     struct Solution

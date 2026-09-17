@@ -34,7 +34,9 @@
 #include "doc.h"
 
 /* The solver as it stood before reach was added, verbatim apart from reading
-   a Frame: the reference the new one must still agree with. */
+   a Frame and from the corrected bearing (it measured pan from upstage, 180
+   degrees away from where every view then drew the beam): the reference the
+   new one must still agree with. */
 static void legacyAim(const AimSolver::Frame &f, const QVector3D &target,
                       float &panDeg, float &tiltDeg)
 {
@@ -42,7 +44,7 @@ static void legacyAim(const AimSolver::Frame &f, const QVector3D &target,
     const float dy = target.y() - f.position.y();
     const float dz = target.z() - f.position.z();
     const float horizDist = qSqrt(dx * dx + dy * dy);
-    float azimuthDeg = float(qRadiansToDegrees(qAtan2(double(dx), double(-dy))));
+    float azimuthDeg = float(qRadiansToDegrees(qAtan2(double(-dx), double(dy))));
     if (azimuthDeg < 0.0f) azimuthDeg += 360.0f;
     float relativePan = azimuthDeg - f.panZeroDir;
     while (relativePan >  180.0f) relativePan -= 360.0f;
@@ -157,8 +159,11 @@ void AimSolver_Test::aShortPanReachesBehindByTiltingBack()
     f.panMax = 180.0f;
     f.tiltMax = 270.0f;
 
-    // Directly "behind" the pan zero: relative pan 180, beyond +/-90.
-    const QVector3D behind(0.0f, 3.0f, 0.0f);
+    /* Directly "behind" the pan zero: relative pan 180, beyond +/-90. Pan zero
+       faces DOWNSTAGE (+Y), so behind it is upstage -- this read +Y while the
+       solver measured its bearing from upstage, which was the same mistake
+       that pointed every drawn beam at the mirror image of its target. */
+    const QVector3D behind(0.0f, -3.0f, 0.0f);
     float lp = 0.0f, lt = 0.0f;
     legacyAim(f, behind, lp, lt);
     const AimSolver::Solution s = AimSolver::solve(f, behind);
