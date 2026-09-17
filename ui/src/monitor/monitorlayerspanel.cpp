@@ -1375,6 +1375,18 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
         menu.addAction(tr("Show on Map"), this, [this, id]() {
             if (m_view) m_view->selectItemsInGroup(id);
         });
+        const QList<quint32> folderFixtures = m_view->fixturesInGroup(id);
+        if (!folderFixtures.isEmpty())
+        {
+            QAction *fp = menu.addAction(tr("Show Light Footprints"), this,
+                                         [this, folderFixtures]() {
+                if (m_view)
+                    m_view->setFootprintsShown(folderFixtures,
+                                               !m_view->footprintsShown(folderFixtures));
+            });
+            fp->setCheckable(true);
+            fp->setChecked(m_view->footprintsShown(folderFixtures));
+        }
         if (m_editable)
         {
             const bool locked = g.locked;

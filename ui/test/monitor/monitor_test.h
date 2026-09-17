@@ -157,6 +157,13 @@ private slots:
     void theLayersListOffersEverythingThePlotDoes();
     void doubleClickingAnywhereOnATowerTopOpensIt();
     void doubleClickingABubbleShowsWhatItHides();
+    /** Stacked fixtures get one named tag each, and a tag picks its own. */
+    void aRevealedFixtureCanBePickedOnItsOwn();
+    /** A footprint names the head that casts it, and can be asked for from
+     *  the menu without selecting anything. */
+    void aLightFootprintSaysWhoseItIs();
+    /** "Add Person here" stands a Person target at the click. */
+    void addingAPersonStandsOneWhereYouClicked();
     /** Lay a step out once, save it as a component, stamp it onto the next
      *  step's fixtures: the arrangement must arrive intact. */
     void aSavedComponentStampsItsLayoutOntoOtherFixtures();

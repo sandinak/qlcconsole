@@ -1073,10 +1073,43 @@ public:
     void setProjectionOverlayVisible(bool on);
     bool projectionOverlayVisible() const { return m_projectionVisible; }
 
-    /** Show what a structure's count bubble stands for: select the fixtures it
-     *  hides, draw them over their structure, and put their projections on the
-     *  deck. Cleared by the next selection. */
+    /** Show what a structure's count bubble stands for: draw the fixtures it
+     *  hides, and stand a named tag beside the stack for each one. The
+     *  fixtures themselves sit on top of each other -- "I can't select which
+     *  one I want" -- so the TAG is the thing you click. Cleared by the next
+     *  selection. */
     void revealBuriedFixtures(const QString &kind, quint32 id);
+
+    /** Pick one of the fixtures a bubble revealed: it alone is selected, and
+     *  it alone keeps its footprint drawn. */
+    void focusRevealedFixture(quint32 fid);
+
+    /** The fixtures a bubble is currently showing, in the order their tags are
+     *  drawn, and which one is picked (-1 = none yet). */
+    QList<quint32> revealedFixtures() const;
+
+    /** Where one revealed fixture's tag sits, in scene coordinates: the click
+     *  target that stands in for a fixture buried under the others. Empty when
+     *  that fixture has no tag on show. */
+    QRectF revealTagRect(quint32 fid) const;
+    qint64 revealedFocus() const { return m_revealFocus; }
+
+    /** Draw where ONE fixture's light lands, independently of the selection --
+     *  the per-fixture entry behind "Show Light Footprint". */
+    void setFixtureFootprintShown(quint32 fid, bool on);
+    bool fixtureFootprintShown(quint32 fid) const { return m_footprintFixtures.contains(fid); }
+
+    /** The same, for every fixture a structure carries. */
+    void setStructureFootprintsShown(const QString &kind, quint32 id, bool on);
+    bool structureFootprintsShown(const QString &kind, quint32 id) const;
+
+    /** And for any set of heads at all -- a folder in the Layers list, a
+     *  selection, whatever asked. */
+    void setFootprintsShown(const QList<quint32> &fids, bool on);
+    bool footprintsShown(const QList<quint32> &fids) const;
+
+    /** The fixtures filed under a Layers folder or studio group. */
+    QList<quint32> fixturesInGroup(quint32 gid) const;
 
     /** Where a fixture's beam lands, in scene pixels (top view): its cone's
      *  edge rays followed down to the floor or the deck they meet. Empty when
@@ -1088,9 +1121,17 @@ private:
     void scheduleReachOverlay();
     void rebuildReachOverlay();
     void rebuildProjectionOverlay();
+    void rebuildRevealTags();
+    void clearRevealState();
     bool m_projectionVisible = false;
     QSet<quint32> m_revealedFixtures;      ///< shown despite being buried
+    QList<quint32> m_revealOrder;          ///< the same, in tag order
+    QString m_revealKind;                  ///< the structure whose bubble did it
+    quint32 m_revealId = 0;
+    qint64 m_revealFocus = -1;             ///< picked fixture, -1 = none (id 0 is real)
+    QSet<quint32> m_footprintFixtures;     ///< asked for by name, not by selection
     bool m_settingRevealSelection = false;
+    QList<class QGraphicsItem *> m_revealTags;
     QList<class QGraphicsPathItem *> m_projectionItems;
     class QGraphicsPixmapItem *m_reachItem = nullptr;
     bool m_reachVisible = false;

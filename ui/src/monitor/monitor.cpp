@@ -744,7 +744,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        fixture covering", and what a count bubble shows when you double-click
        it. Top view, and not remembered -- it is a question you ask, not a way
        you leave the plot. */
-    QAction *projectionBtn = showMenu->addAction(tr("Projection of selected heads"));
+    QAction *projectionBtn = showMenu->addAction(tr("Light footprint of selected heads"));
     projectionBtn->setCheckable(true);
     projectionBtn->setToolTip(tr("Shade where the selected moving heads' beams "
                                  "land, on the floor or the deck below them"));
@@ -1422,6 +1422,8 @@ void Monitor::initGraphicsToolbar()
         addMenu->addSeparator();
         addMenu->addAction(tr("Add Target Position"),
                            this, SLOT(slotAddTarget()));
+        addMenu->addAction(tr("Add Person"),
+                           this, SLOT(slotAddPerson()));
         addBtn->setMenu(addMenu);
     }
     m_graphicsToolBar->addWidget(addBtn);
@@ -4161,6 +4163,31 @@ void Monitor::slotAddTarget()
     }
 }
 
+void Monitor::slotAddPerson()
+{
+    StageTarget *t = m_props->addStageTarget();
+    t->setKind(StageTarget::Kind::Person);
+
+    /* Numbered among the people, not among the targets: "Person 1" next to
+       "Target 4" is how a choir ends up impossible to read. */
+    int n = 0;
+    foreach (StageTarget *other, m_props->stageTargets())
+        if (other != nullptr && other->kind() == StageTarget::Kind::Person)
+            n++;
+    t->setName(tr("Person %1").arg(n));
+
+    QPointF mm = m_graphicsView->pixelsToRealPosition(
+        m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    t->setX(float(mm.x() / 1000.0));
+    t->setY(float(mm.y() / 1000.0));
+    t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));   // stand on the deck
+    t->setLayerId(m_props->activeLayerId());
+
+    m_graphicsView->updateTargets();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
 void Monitor::slotEditTarget(quint32 tid)
 {
     StageTarget *t = m_props->stageTarget(tid);
@@ -5122,6 +5149,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     menu.addSeparator();
     menu.addAction(tr("Add Target Position here"),
                    this, SLOT(slotAddTarget()));
+    menu.addAction(tr("Add Person here"),
+                   this, SLOT(slotAddPerson()));
 
     menu.addSeparator();
     QAction *groupAct = menu.addAction(QIcon(":/group.png"), tr("Group selected (Ctrl+G)"),

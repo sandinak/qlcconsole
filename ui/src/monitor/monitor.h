@@ -439,6 +439,12 @@ protected slots:
     /** Add a new stage target and open its editor. */
     void slotAddTarget();
 
+    /** Stand a person where the click was: a Person target, named and placed
+     *  in one step, with no dialog in the way. Whoever it is, its height comes
+     *  from the follow-spot subject height, so the views draw it at the size
+     *  the lighting is aimed for. */
+    void slotAddPerson();
+
     /** Open the target edit dialog for the given target ID. */
     void slotEditTarget(quint32 tid);
 

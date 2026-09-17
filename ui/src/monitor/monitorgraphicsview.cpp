@@ -33,6 +33,7 @@
 #include <QMessageBox>
 
 #include <QGraphicsRectItem>
+#include <QGraphicsSceneMouseEvent>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsTextItem>
 #include <QGraphicsItemGroup>
@@ -152,13 +153,13 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     connect(m_scene, &QGraphicsScene::selectionChanged,
             this, &MonitorGraphicsView::scheduleReachOverlay);
     /* A reveal lasts until you select something else: the fixtures a bubble
-       stands for go back under it, and their projections with them. */
+       stands for go back under it, and their tags and footprints with them. */
     connect(m_scene, &QGraphicsScene::selectionChanged, this, [this]() {
         if (m_settingRevealSelection)
             return;
         if (!m_revealedFixtures.isEmpty())
         {
-            m_revealedFixtures.clear();
+            clearRevealState();
             refreshItemLayerState();
         }
         rebuildProjectionOverlay();
@@ -288,6 +289,35 @@ bool MonitorGraphicsView::viewportEvent(QEvent *event)
     return QGraphicsView::viewportEvent(event);
 }
 
+/* One revealed fixture's tag. The fixtures a bubble hides are stacked on the
+   same spot -- clicking the pile can only ever reach the top one -- so each
+   gets a named tag fanned out beside the stack, and the tag is the click
+   target. It is a view decoration: nothing about the fixture moves. */
+class RevealTagItem : public QGraphicsPathItem
+{
+public:
+    RevealTagItem(quint32 fid, MonitorGraphicsView *view)
+        : m_fid(fid)
+        , m_view(view)
+    {
+        setAcceptedMouseButtons(Qt::LeftButton);
+        setCursor(Qt::PointingHandCursor);
+    }
+
+    quint32 fixtureID() const { return m_fid; }
+
+protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override
+    {
+        m_view->focusRevealedFixture(m_fid);
+        event->accept();
+    }
+
+private:
+    quint32 m_fid;
+    MonitorGraphicsView *m_view;
+};
+
 void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
 {
     // Recorded unconditionally, regardless of which branch below actually
@@ -297,6 +327,34 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
     // via its private m_dragMoved before deciding whether to emit
     // itemDropped() at all.
     m_pressViewPos = event->pos();
+
+    /* A reveal is a question about one stack -- "which of these is it?" -- and
+       it ends the moment you look somewhere else. Selecting another item ends
+       it too (see the selectionChanged handler), but a click on bare deck
+       changes no selection at all, so it has to end here or the fixtures stay
+       out over their structure for good. */
+    if (!m_revealedFixtures.isEmpty() && event->button() == Qt::LeftButton)
+    {
+        const QPointF sp = mapToScene(event->pos());
+        bool onReveal = false;
+        foreach (QGraphicsItem *gi, m_revealTags)
+        {
+            if (dynamic_cast<RevealTagItem *>(gi) != nullptr
+                && gi->mapRectToScene(gi->boundingRect()).contains(sp))
+            { onReveal = true; break; }
+        }
+        if (!onReveal)
+        {
+            if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(topPickableAt(sp)))
+                onReveal = m_revealedFixtures.contains(mfi->fixtureID());
+        }
+        if (!onReveal)
+        {
+            clearRevealState();
+            refreshItemLayerState();
+            rebuildProjectionOverlay();
+        }
+    }
 
     // Triple-click on a fixture that mouseDoubleClickEvent just isolated (drilled
     // into) rather than opened an editor for: Qt has no native triple-click event,
@@ -5543,6 +5601,24 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             }
         }
 
+        /* What the things ON it light. Asking a truss is how you compare its
+           heads' coverage without picking them out of the pile first. */
+        QList<quint32> carried;
+        structureCoverageByItsFixtures(kind, id, &carried);
+        if (!carried.isEmpty())
+        {
+            menu->addSeparator();
+            const bool on = structureFootprintsShown(kind, id);
+            QAction *fp = menu->addAction(tr("Show Light Footprints"), this,
+                                          [this, kind, id]() {
+                setStructureFootprintsShown(kind, id, !structureFootprintsShown(kind, id));
+            });
+            fp->setCheckable(true);
+            fp->setChecked(on);
+            fp->setToolTip(tr("Draw where the light from each of the %n head(s) "
+                              "on this lands", "", carried.count()));
+        }
+
         menu->addSeparator();
         const bool locked = itemLocked(kind, id);
         menu->addAction(locked ? tr("Unlock Position") : tr("Lock Position"),
@@ -5577,6 +5653,17 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         if (Monitor::instance() != nullptr)
             Monitor::instance()->locateFixtures(ids);
     });
+    /* Where this one lands, on its own -- no need to select it first, and it
+       stays drawn while you look at something else. */
+    {
+        const bool fpOn = fixtureFootprintShown(fid);
+        QAction *fp = menu->addAction(tr("Show Light Footprint"), this, [this, fid]() {
+            setFixtureFootprintShown(fid, !fixtureFootprintShown(fid));
+        });
+        fp->setCheckable(true);
+        fp->setChecked(fpOn);
+        fp->setToolTip(tr("Draw where this head's beam lands, in Top view"));
+    }
 
     // Mounting.
     menu->addSeparator();
@@ -6031,7 +6118,15 @@ void MonitorGraphicsView::revealBuriedFixtures(const QString &kind, quint32 id)
     if (fids.isEmpty())
         return;
 
+    m_revealOrder = fids;
     m_revealedFixtures = QSet<quint32>(fids.begin(), fids.end());
+    m_revealKind = kind;
+    m_revealId = id;
+    /* Nothing picked yet: every one of them is on show, with its own tag, and
+       the first click on a tag narrows it down. Selecting them ALL was the
+       first cut, and it is what made this useless -- one blur of overlapping
+       cones and no way to ask about a single head. */
+    m_revealFocus = -1;
 
     // Drawn FIRST: Qt will not select an item that is not visible, and these
     // are hidden until this moment.
@@ -6039,21 +6134,200 @@ void MonitorGraphicsView::revealBuriedFixtures(const QString &kind, quint32 id)
         if (it.value() != nullptr)
             it.value()->setVisible(fixtureItemShouldBeVisible(it.key()));
 
-    /* Then selected, so the Layers list and the inspector follow, and so the
-       projections below have something to draw for. */
-    QList<QPair<QString, quint32> > items;
-    for (quint32 fid : fids)
-        items << qMakePair(QStringLiteral("fixture"), fid);
-    m_settingRevealSelection = true;
-    selectMapItems(items);
-    m_settingRevealSelection = false;
-
     // The bubble stands for what is now on show: it would only cover it.
     if (QGraphicsItemGroup *badge =
             m_countBadges.value(QStringLiteral("%1:%2").arg(kind).arg(id), nullptr))
         badge->setVisible(false);
+    rebuildRevealTags();
     rebuildProjectionOverlay();
     m_scene->update();
+}
+
+QList<quint32> MonitorGraphicsView::revealedFixtures() const
+{
+    return m_revealOrder;
+}
+
+QRectF MonitorGraphicsView::revealTagRect(quint32 fid) const
+{
+    foreach (QGraphicsItem *gi, m_revealTags)
+    {
+        RevealTagItem *tag = dynamic_cast<RevealTagItem *>(gi);
+        if (tag != nullptr && tag->fixtureID() == fid)
+            return tag->mapRectToScene(tag->boundingRect());
+    }
+    return QRectF();
+}
+
+void MonitorGraphicsView::focusRevealedFixture(quint32 fid)
+{
+    if (!m_revealedFixtures.contains(fid))
+        return;
+
+    m_revealFocus = qint64(fid);
+    /* Selected on its own, so the Layers list, the inspector and every "the
+       selected heads" action mean this one head. */
+    m_settingRevealSelection = true;
+    selectMapItem(QStringLiteral("fixture"), fid);
+    m_settingRevealSelection = false;
+    rebuildRevealTags();
+    rebuildProjectionOverlay();
+    m_scene->update();
+}
+
+void MonitorGraphicsView::clearRevealState()
+{
+    m_revealedFixtures.clear();
+    m_revealOrder.clear();
+    m_revealKind.clear();
+    m_revealId = 0;
+    m_revealFocus = -1;
+    rebuildRevealTags();
+}
+
+/* The tags: one per revealed fixture, fanned down the side of the stack they
+   came out of, each on a leader line back to it. */
+void MonitorGraphicsView::rebuildRevealTags()
+{
+    foreach (QGraphicsItem *gi, m_revealTags)
+    {
+        m_scene->removeItem(gi);
+        delete gi;
+    }
+    m_revealTags.clear();
+
+    if (m_revealOrder.isEmpty())
+        return;
+
+    const QGraphicsItem *host =
+          (m_revealKind == QStringLiteral("truss"))    ? (QGraphicsItem *)m_trussItems.value(m_revealId, nullptr)
+        : (m_revealKind == QStringLiteral("tower"))    ? (QGraphicsItem *)m_towerItems.value(m_revealId, nullptr)
+        : (m_revealKind == QStringLiteral("pipe"))     ? (QGraphicsItem *)m_pipeItems.value(m_revealId, nullptr)
+        : (QGraphicsItem *)m_platformItems.value(m_revealId, nullptr);
+    if (host == nullptr)
+        return;
+
+    const QPointF anchor = centreOf(host);
+    QFont f = font();
+    f.setPointSizeF(8.5);
+    const QFontMetricsF fm(f);
+
+    const double rowH = fm.height() + 6.0;
+    const double gap = 3.0;
+    const double totalH = m_revealOrder.count() * (rowH + gap) - gap;
+    double y = anchor.y() - totalH * 0.5;
+    const double x = anchor.x() + 18.0;
+
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
+
+    foreach (quint32 fid, m_revealOrder)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        const QString name = fx ? fx->name() : tr("Fixture %1").arg(fid);
+        const bool picked = (m_revealFocus == qint64(fid));
+
+        const double swatch = 8.0;
+        const double w = fm.horizontalAdvance(name) + swatch + 16.0;
+        QPainterPath p;
+        p.addRoundedRect(QRectF(0, 0, w, rowH), 3.0, 3.0);
+
+        RevealTagItem *tag = new RevealTagItem(fid, this);
+        tag->setPath(p);
+        tag->setPos(x, y);
+        tag->setZValue(3.1);                  // above the fixtures it points at
+        tag->setBrush(QBrush(picked ? QColor(40, 110, 220) : QColor(24, 32, 44, 235)));
+        tag->setPen(QPen(picked ? QColor(235, 244, 255) : QColor(120, 160, 215), 1.0));
+        tag->setToolTip(tr("Show where %1 lands").arg(name));
+
+        QColor gel = props ? props->fixtureGelColor(fid, 0, 0) : QColor();
+        if (!gel.isValid() || gel == QColor(Qt::black))
+            gel = QColor(200, 210, 225);
+        QGraphicsRectItem *chip = new QGraphicsRectItem(
+            QRectF(5.0, (rowH - swatch) * 0.5, swatch, swatch), tag);
+        chip->setBrush(QBrush(gel));
+        chip->setPen(QPen(QColor(15, 20, 28), 0.8));
+        chip->setAcceptedMouseButtons(Qt::NoButton);
+
+        QGraphicsSimpleTextItem *label = new QGraphicsSimpleTextItem(name, tag);
+        label->setFont(f);
+        label->setBrush(QBrush(picked ? Qt::white : QColor(225, 234, 245)));
+        label->setPos(5.0 + swatch + 5.0, (rowH - fm.height()) * 0.5);
+        label->setAcceptedMouseButtons(Qt::NoButton);
+
+        // The leader: this tag belongs to THAT stack, not to the deck under it.
+        QGraphicsLineItem *lead = new QGraphicsLineItem(
+            QLineF(anchor, QPointF(x, y + rowH * 0.5)));
+        lead->setPen(QPen(QColor(120, 160, 215, 170), 0.8, Qt::DotLine));
+        lead->setZValue(3.05);
+        lead->setAcceptedMouseButtons(Qt::NoButton);
+        m_scene->addItem(lead);
+        m_revealTags << lead;
+
+        m_scene->addItem(tag);
+        m_revealTags << tag;
+        y += rowH + gap;
+    }
+}
+
+void MonitorGraphicsView::setFixtureFootprintShown(quint32 fid, bool on)
+{
+    if (on)
+        m_footprintFixtures.insert(fid);
+    else
+        m_footprintFixtures.remove(fid);
+    rebuildProjectionOverlay();
+}
+
+void MonitorGraphicsView::setFootprintsShown(const QList<quint32> &fids, bool on)
+{
+    foreach (quint32 fid, fids)
+    {
+        if (on)
+            m_footprintFixtures.insert(fid);
+        else
+            m_footprintFixtures.remove(fid);
+    }
+    rebuildProjectionOverlay();
+}
+
+bool MonitorGraphicsView::footprintsShown(const QList<quint32> &fids) const
+{
+    if (fids.isEmpty())
+        return false;
+    foreach (quint32 fid, fids)
+    {
+        if (!m_footprintFixtures.contains(fid))
+            return false;
+    }
+    return true;
+}
+
+QList<quint32> MonitorGraphicsView::fixturesInGroup(quint32 gid) const
+{
+    QList<quint32> out;
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
+    if (props == nullptr || gid == 0)
+        return out;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+    {
+        if (props->fixtureGroup(it.key()) == gid)
+            out << it.key();
+    }
+    return out;
+}
+
+void MonitorGraphicsView::setStructureFootprintsShown(const QString &kind, quint32 id, bool on)
+{
+    QList<quint32> fids;
+    structureCoverageByItsFixtures(kind, id, &fids);
+    setFootprintsShown(fids, on);
+}
+
+bool MonitorGraphicsView::structureFootprintsShown(const QString &kind, quint32 id) const
+{
+    QList<quint32> fids;
+    const_cast<MonitorGraphicsView *>(this)->structureCoverageByItsFixtures(kind, id, &fids);
+    return footprintsShown(fids);
 }
 
 QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
@@ -6129,8 +6403,14 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
     if (props == nullptr || m_pov != PovTop)
         return;
 
-    // The selection, or whatever a count bubble was asked to show.
-    QSet<quint32> fids = m_revealedFixtures;
+    /* Three ways to ask for a footprint, and they add up: named one at a time
+       from a menu, everything a bubble revealed (narrowed to the one tag you
+       picked), and -- while the Show toggle is on -- whatever is selected. */
+    QSet<quint32> fids = m_footprintFixtures;
+    if (m_revealFocus >= 0)
+        fids.insert(quint32(m_revealFocus));
+    else
+        fids.unite(m_revealedFixtures);
     if (m_projectionVisible)
     {
         foreach (QGraphicsItem *gi, m_scene->selectedItems())
@@ -6154,14 +6434,42 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
         path.addPolygon(poly);
         path.closeSubpath();
         QGraphicsPathItem *item = new QGraphicsPathItem(path);
+        /* Hatched, not a flat wash. Flat translucent shapes piled on each other
+           read as one unexplained blob -- "it's not clear to me what these cones
+           represent .. if they're the blackout area" -- and hatching says
+           "region", tells overlapping ones apart, and leaves the deck legible
+           underneath. Light, so it is never mistaken for a no-light zone: that
+           warning, when it lands, is the red one. */
         QColor fill = col;
-        fill.setAlpha(70);
-        item->setBrush(fill);
+        fill.setAlpha(150);
+        QBrush brush(fill, Qt::BDiagPattern);
+        item->setBrush(brush);
         item->setPen(QPen(col, 1.2));
         item->setZValue(1.7);             // over the decks, under the fixtures
         item->setAcceptedMouseButtons(Qt::NoButton);
         Fixture *fx = m_doc->fixture(fid);
-        item->setToolTip(tr("Where %1 lands").arg(fx ? fx->name() : QString::number(fid)));
+        const QString name = fx ? fx->name() : QString::number(fid);
+        item->setToolTip(tr("Light footprint: where %1 lands").arg(name));
+
+        /* Named on the plot, because a shape with no name answers "where does
+           light land" but not "whose light is this". */
+        QFont lf = font();
+        lf.setPointSizeF(8.0);
+        const QFontMetricsF lfm(lf);
+        const QPointF c = poly.boundingRect().center();
+        const double tw = lfm.horizontalAdvance(name) + 8.0;
+        const double th = lfm.height() + 2.0;
+        QGraphicsRectItem *back = new QGraphicsRectItem(
+            QRectF(c.x() - tw * 0.5, c.y() - th * 0.5, tw, th), item);
+        back->setBrush(QBrush(QColor(12, 18, 26, 190)));
+        back->setPen(QPen(col, 0.8));
+        back->setAcceptedMouseButtons(Qt::NoButton);
+        QGraphicsSimpleTextItem *tag = new QGraphicsSimpleTextItem(name, back);
+        tag->setFont(lf);
+        tag->setBrush(QBrush(QColor(235, 242, 250)));
+        tag->setPos(c.x() - tw * 0.5 + 4.0, c.y() - th * 0.5 + 1.0);
+        tag->setAcceptedMouseButtons(Qt::NoButton);
+
         m_scene->addItem(item);
         m_projectionItems << item;
     }

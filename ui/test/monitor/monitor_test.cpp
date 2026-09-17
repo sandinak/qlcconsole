@@ -3119,9 +3119,14 @@ void Monitor_Test::doubleClickingABubbleShowsWhatItHides()
         {
             QVERIFY2(view.m_fixtures.value(fid)->isVisible(),
                      "double-clicking the bubble did not show what it hides");
-            QVERIFY2(view.m_fixtures.value(fid)->isSelected(),
-                     "the fixtures the bubble stands for were not selected");
+            QVERIFY2(!view.revealTagRect(fid).isEmpty(),
+                     "a revealed fixture has no tag to click");
         }
+        /* Nothing picked yet, so all of them are on show: the first cut
+           selected every one of them at once, which is what made the result
+           unreadable. */
+        QCOMPARE(view.revealedFixtures().size(), fids.size());
+        QCOMPARE(view.revealedFocus(), qint64(-1));
         QCOMPARE(view.m_projectionItems.size(), fids.size());
         QVERIFY2(!badge->isVisible(), "the bubble still covers what it just revealed");
 
@@ -3134,8 +3139,12 @@ void Monitor_Test::doubleClickingABubbleShowsWhatItHides()
                  qPrintable(QString("the landing area is %1x%2 px, expected about %3")
                             .arg(pool.width()).arg(pool.height()).arg(want)));
 
-        // Selecting anything else puts them back under the bubble.
-        view.m_scene->clearSelection();
+        // Looking somewhere else puts them back under the bubble.
+        const QPoint away = view.mapFromScene(view.realPositionToPixels(9000.0, 6500.0));
+        QMouseEvent elsewhere(QEvent::MouseButtonPress, away,
+                              view.viewport()->mapToGlobal(away),
+                              Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(view.viewport(), &elsewhere);
         QCoreApplication::processEvents();
         foreach (quint32 fid, fids)
             QVERIFY2(!view.m_fixtures.value(fid)->isVisible(),
@@ -3214,8 +3223,13 @@ void Monitor_Test::doubleClickingAnywhereOnATowerTopOpensIt()
             QCOMPARE(opened, 0);
             QVERIFY2(!view.m_revealedFixtures.isEmpty(), "the bubble showed nothing");
             QVERIFY2(!badge->isVisible(), "the bubble stayed over what it revealed");
-            // Back under the bubble for the walk below.
-            view.m_scene->clearSelection();
+            // Back under the bubble for the walk below: a click off the stack
+            // ends the reveal, which is the gesture a user makes next.
+            const QPoint away = view.mapFromScene(view.realPositionToPixels(9000.0, 6500.0));
+            QMouseEvent elsewhere(QEvent::MouseButtonPress, away,
+                                  view.viewport()->mapToGlobal(away),
+                                  Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(view.viewport(), &elsewhere);
             QCoreApplication::processEvents();
             QVERIFY(badge->isVisible());
         }
@@ -7575,3 +7589,196 @@ void Monitor_Test::pixelBarDrawsEachPixelInItsOwnColour()
     props->removeTruss(t->id());
 }
 
+
+void Monitor_Test::aRevealedFixtureCanBePickedOnItsOwn()
+{
+    /* "So when double clicking i get ALL the lights .. stacked .. I can't
+       select which one i want to check the visibility area." Fixtures buried
+       under one another are all at the same point, so the pile can only ever
+       be clicked once. Each revealed fixture gets a named tag beside the
+       stack, and clicking a tag picks that fixture alone. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(4.0f);
+    tower->setWidth(0.29f);
+
+    QList<quint32> fids;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = makeMover(doc, 14.0, quint32(i * 8), qPrintable(QString("Head %1").arg(i + 1)),
+                               QVector3D(3.0f, 3.0f, 4.0f));
+        QVERIFY(f != nullptr);
+        FixtureRigProps rp;
+        rp.trussId = tower->id();
+        rp.trussOffset = 4.0f;
+        props->setFixtureRigProps(f->id(), rp);
+        fids << f->id();
+        QByteArray u(512, char(0));
+        u[int(f->address())] = char(128);
+        u[int(f->address()) + 1] = char(128);
+        f->setChannelValues(u);
+    }
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        foreach (quint32 fid, fids)
+            view.addFixture(fid, QPointF(3000.0, 3000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.refreshItemLayerState();
+
+        view.revealBuriedFixtures(QStringLiteral("truss"), tower->id());
+
+        // A tag each, and no two on top of each other: that is the whole point.
+        QList<QRectF> tags;
+        foreach (quint32 fid, fids)
+        {
+            const QRectF r = view.revealTagRect(fid);
+            QVERIFY2(!r.isEmpty(), "a revealed fixture has no tag");
+            foreach (const QRectF &other, tags)
+                QVERIFY2(!other.intersects(r), "two tags sit on top of each other");
+            tags << r;
+        }
+
+        // Click the middle one, the way a user would.
+        const quint32 wanted = fids.at(1);
+        const QPointF sp = view.revealTagRect(wanted).center();
+        const QPoint vp = view.mapFromScene(sp);
+        QMouseEvent press(QEvent::MouseButtonPress, vp, view.viewport()->mapToGlobal(vp),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(view.viewport(), &press);
+
+        QCOMPARE(view.revealedFocus(), qint64(wanted));
+        foreach (quint32 fid, fids)
+            QCOMPARE(view.m_fixtures.value(fid)->isSelected(), fid == wanted);
+        QVERIFY2(view.m_projectionItems.size() == 1,
+                 qPrintable(QString("picking one head drew %1 footprints")
+                            .arg(view.m_projectionItems.size())));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aLightFootprintSaysWhoseItIs()
+{
+    /* "Selecting them all .. it's not clear to me what these cones represent."
+       A footprint carries the name of the head that casts it, and can be asked
+       for by name from the right-click menu -- on one head, or on everything a
+       truss carries -- without selecting anything first. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setName("T-A");
+    bar->setOrigin(QVector3D(1.0f, 3.0f, 4.0f));
+    bar->setLength(4.0f);
+
+    Fixture *spot = makeMover(doc, 14.0, 0, "Front Spot", QVector3D(2.0f, 3.0f, 4.0f));
+    QVERIFY(spot != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 1.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+    QByteArray u(512, char(0));
+    u[int(spot->address())] = char(128);
+    u[int(spot->address()) + 1] = char(128);
+    spot->setChannelValues(u);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        view.addFixture(spot->id(), QPointF(2000.0, 3000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+
+        QCOMPARE(view.m_projectionItems.size(), 0);
+
+        // The fixture's own entry, with nothing selected.
+        QMenu fixMenu;
+        view.populateItemMenu(&fixMenu, QStringLiteral("fixture"), spot->id(), QPointF(), false);
+        QAction *act = nullptr;
+        foreach (QAction *a, fixMenu.actions())
+            if (a->text().contains(QStringLiteral("Light Footprint")))
+                act = a;
+        QVERIFY2(act != nullptr, "a fixture offers no way to show where its light lands");
+        QVERIFY(act->isCheckable() && !act->isChecked());
+        act->trigger();
+
+        QCOMPARE(view.m_projectionItems.size(), 1);
+        QVERIFY(view.fixtureFootprintShown(spot->id()));
+
+        // It says whose it is, on the plot and in the tooltip.
+        bool named = false;
+        foreach (QGraphicsItem *child, view.m_projectionItems.first()->childItems())
+        {
+            foreach (QGraphicsItem *gc, child->childItems())
+                if (QGraphicsSimpleTextItem *t = dynamic_cast<QGraphicsSimpleTextItem *>(gc))
+                    if (t->text() == spot->name())
+                        named = true;
+        }
+        QVERIFY2(named, "a footprint does not say which head casts it");
+        QVERIFY2(view.m_projectionItems.first()->toolTip().contains(spot->name()),
+                 qPrintable(view.m_projectionItems.first()->toolTip()));
+        // Hatched, so overlapping ones stay tellable apart and nothing reads
+        // as a solid no-light zone.
+        QCOMPARE(view.m_projectionItems.first()->brush().style(), Qt::BDiagPattern);
+
+        // And the same question asked of the truss covers what it carries.
+        act->trigger();                       // off again
+        QCOMPARE(view.m_projectionItems.size(), 0);
+        QMenu trussMenu;
+        view.populateItemMenu(&trussMenu, QStringLiteral("truss"), bar->id(), QPointF(), false);
+        QAction *tact = nullptr;
+        foreach (QAction *a, trussMenu.actions())
+            if (a->text().contains(QStringLiteral("Light Footprint")))
+                tact = a;
+        QVERIFY2(tact != nullptr, "a truss offers no way to show what its heads light");
+        tact->trigger();
+        QCOMPARE(view.m_projectionItems.size(), 1);
+        QVERIFY(view.structureFootprintsShown(QStringLiteral("truss"), bar->id()));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::addingAPersonStandsOneWhereYouClicked()
+{
+    /* "Did we have the 'Add person here'?" No -- only "Add Target Position",
+       which makes a bare mark you then have to open and re-type as a Person.
+       One step now, and the figure stands where the click was. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->resize(1000, 700);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(10, 7));
+
+    const QPointF where = gv->realPositionToPixels(4000.0, 2000.0);
+    mon->m_pendingAddScenePos = where;
+    mon->slotAddPerson();
+
+    QCOMPARE(props->stageTargets().count(), 1);
+    StageTarget *person = props->stageTargets().first();
+    QCOMPARE(person->kind(), StageTarget::Kind::Person);
+    QVERIFY2(qAbs(person->x() - 4.0f) < 0.05f && qAbs(person->y() - 2.0f) < 0.05f,
+             qPrintable(QString("stood at %1,%2 instead of 4,2")
+                        .arg(double(person->x())).arg(double(person->y()))));
+    // Named as a person, and drawn as one: its height follows the subject.
+    QVERIFY2(person->name().contains(QStringLiteral("Person")), qPrintable(person->name()));
+    QCOMPARE(props->targetAimHeight(person, true), props->aimSubjectHeight());
+
+    delete mon;
+    delete doc;
+}
