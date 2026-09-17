@@ -8,6 +8,90 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## IDEA (not started): no-light zones -- warn when a look lights the audience
+
+Branson, 2026-09-17: "if we create a scene with lights that point an area that
+the light SHOULDN'T be in .. audience faces .. that should be a warning. The
+latter thing can be time gated.. so sweeps or strobes for blinders can be ok."
+
+**Shape.** A zone is an AREA of the room rather than a surface: a footprint on
+the plot plus an eye height (1.2 m sitting, 1.7 m standing). Drawn like an Area
+target -- outline from above, a band in the elevations -- on its own layer.
+
+**The warning.** A scene warns when a beam RESTS on the zone. Everything that
+crosses it in passing is fine: a sweep, a strobe, a blinder hit. The proposed
+rule is a dwell time -- a beam on the zone for more than about half a second
+warns -- which needs the aim to be evaluated over the look's own movement
+(effects included) rather than at a single instant. Where it lands lives with
+the reach work: AimSolver::sceneAims() already resolves aim per fixture, and
+StructureStudioView::beamFootprint() already cuts a cone against a surface.
+
+**Open questions.** The dwell threshold (0.5 s a guess, not measured against a
+real cue). Whether a zone is a new object or StageTarget::Kind::Area with a
+"no light" flag. Whether the warning belongs on the scene row in Programming
+(next to "can't reach"), on the plot, or both. Whether house lights and
+audience blinders are exempt by fixture group.
+
+---
+
+## IDEA (not started): stage scenery -- back wall, cyclorama, drapes
+
+Branson, 2026-09-17: "stage features .. like back wall .. cyclorama .. front
+drapes ..etc. how do we visualize and manage them"
+
+**What exists.** Structures today are things you rig ON -- trusses, towers,
+pipes, stands, platforms/steps -- plus targets. Nothing models a SURFACE that
+light lands on or that blocks a sightline: a back wall, a cyc, legs and borders,
+a main curtain, a scrim.
+
+**Questions to settle before building.**
+  - One "scenery" kind with a subtype (wall / cyc / drape / scrim / border), or
+    separate kinds? Most share geometry: a vertical (or hung) rectangle with a
+    height, a position and a facing, optionally a curve for a cyc.
+  - Hung from a pipe/truss (follows it, like a bar) vs free-standing (a wall).
+  - Open/closed state for drapes -- a design-time toggle only, or cueable?
+  - Material: opaque (wall, drape), translucent (scrim), light-receiving (cyc).
+
+**What it would buy in the views.**
+  - Rig view: beams land ON them (beamThrow only knows floor and platform tops
+    today), so a cyc wash or a gobo on the back wall shows where it really is;
+    closed drapes stop light and hide what is behind them.
+  - Plot: drawn as lines/bands in Top, rectangles in Front/Side; on their own
+    layer so they can be hidden while rigging.
+  - Reach/aim: a head whose beam is blocked by a border before it reaches its
+    target is the same class of warning as "cannot reach".
+  - The audience no-light zone proposed on 2026-09-17 (area + eye height,
+    warn on a HELD aim, not on sweeps/strobes) is a sibling of this: a region
+    of the room rather than a surface, but managed the same way.
+
+---
+
+## IDEA (not started): people as a stage feature -- whole choirs on a layer
+
+Branson, 2026-09-17: "multiple people on the stage .. can we create "people" as
+a feature type so that we can have a layer with say the entire choir in
+different positions on the stage for visualization."
+
+**What exists.** A StageTarget of kind Person already draws a lofted figure in
+the rig view (lit by the beams on it) and a silhouette in the plot, stands on
+the deck under it, and is sized by the follow-spot subject height. But a target
+is an AIM POINT: making forty of them to show a choir clutters the target list,
+the Aim palette picker and the aim warnings.
+
+**Shape.**
+  - A "people" feature separate from targets: position, height (or child /
+    adult / seated presets), optional name/part (S/A/T/B), facing.
+  - Placed in bulk: a grid or arc across a riser row, snapping to decks the way
+    fixtures deck-mount; drag as a block.
+  - On layers, so "Choir -- concert", "Choir -- processional" and "Band" can be
+    swapped for visualization without touching the rig.
+  - Any person can be promoted to (or linked with) a target when a follow-spot
+    needs to track them.
+  - Lit like the Person figure is today; worth measuring rig-view frame time
+    with 40+ figures (each is ~300 shaded faces).
+
+---
+
 ## IDEA (not started): an MCP server for qlcconsole
 
 Branson, 2026-09-10: "shower thought .. can we consider an MCP for qlcconsole ..
