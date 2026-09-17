@@ -22,6 +22,7 @@
 
 #include <QVector>
 #include <QImage>
+#include <climits>
 #include <QColor>
 #include <QPointF>
 #include <QSize>
@@ -103,11 +104,47 @@ public:
      */
     void poly(const QPointF *pts, const double *zs, int n,
               const QColor &fill, bool depthWrite = true,
-              const double *alphaScale = nullptr);
+              const double *alphaScale = nullptr,
+              int rowFrom = 0, int rowTo = INT_MAX);
+
+    /**
+     * Light -- a beam in the air, a pool where it lands -- ADDED, not layered.
+     *
+     * Translucent layers of one colour converge on that colour, and white is
+     * the brightest one the screen has: fifty white beams became a solid white
+     * mass while fifty blue ones settled at a deep, readable blue. Light
+     * instead accumulates in its own buffer, depth-tested against everything
+     * opaque so walls and bodies still stop it, without writing depth and in
+     * any order. lightImage() rolls the total off toward a ceiling below white.
+     */
+    void light(const QPointF *pts, const double *zs, int n, const QColor &colour,
+               const double *alphaScale = nullptr,
+               int rowFrom = 0, int rowTo = INT_MAX, QRect *lit = nullptr);
+
+    /* BANDS, for filling a frame on several threads.
+     *
+     * Every fill writes only the buffer rows in [rowFrom, rowTo) -- SUPERSAMPLED
+     * rows for poly()/thickLine(), final-image rows for light(). Threads given
+     * disjoint bands never touch the same pixel, and within a band the ops run
+     * in the same order as they would on one thread, so the frame comes out
+     * identical. A band's light() reports where it lit through @p lit instead
+     * of recording it, and the caller hands the union to addLit() afterwards. */
+    void addLit(const QRect &lit);
+
+    /** The accumulated light, rolled off and downsampled, for adding over the
+     *  resolved frame (QPainter::CompositionMode_Screen) with its top-left at
+     *  @p topLeft. Only the part of the frame light actually reached, so a few
+     *  beams cost a few beams' worth. Null when no light was drawn. */
+    QImage lightImage(QPoint *topLeft) const;
 
     /** A line of finite width, as a quad with depth down its length. */
     void thickLine(const QPointF &a, const QPointF &b, double za, double zb,
-                   double width, const QColor &colour, bool depthWrite = true);
+                   double width, const QColor &colour, bool depthWrite = true,
+                   int rowFrom = 0, int rowTo = INT_MAX);
+
+    /** Supersampled rows in the buffer (what poly() bands are counted in). */
+    int bufferHeight() const { return m_colour.height(); }
+    int supersample() const { return m_ss; }
 
     /** The finished image, downsampled if supersampling was asked for. */
     QImage resolve() const;
@@ -121,8 +158,21 @@ public:
     bool isValid() const { return m_colour.isNull() == false; }
 
 private:
+    void scan(const QPointF *pts, const double *zs, int n, const QColor &fill,
+              bool depthWrite, const double *alphaScale, bool additive,
+              int rowFrom, int rowTo, QRect *lit);
+
     QImage         m_colour;
     QVector<float> m_depth;
+    QVector<float> m_light;          ///< RGB per pixel, parallel to m_depth
+    bool           m_anyLight = false;
+    QRect          m_lit;            ///< buffer pixels light touched this frame
+    /* Raw pointers taken once per frame in begin(). Asking the containers for
+       them inside a fill would detach-check from several threads at once. */
+    uchar         *m_bits = nullptr;
+    qsizetype      m_bpl = 0;
+    float         *m_depthPtr = nullptr;
+    float         *m_lightPtr = nullptr;
     int            m_ss;
     QSize          m_size;
 };

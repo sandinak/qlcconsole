@@ -103,6 +103,7 @@ add_library(${module_name}
     monitor/structurestudioview.cpp monitor/structurestudioview.h
     monitor/zraster.cpp monitor/zraster.h
     monitor/fixturevisualtraits.cpp monitor/fixturevisualtraits.h
+    monitor/humanfigure.cpp monitor/humanfigure.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h

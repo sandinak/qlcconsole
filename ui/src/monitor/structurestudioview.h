@@ -27,10 +27,12 @@
 
 #include <QWidget>
 #include <QVector3D>
+#include <QColor>
 #include <QList>
 #include <QSet>
 #include <QPair>
 #include <QVector>
+#include <climits>
 
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
 
@@ -100,6 +102,19 @@ public:
     /** Draw the beams moving heads are throwing. Live output only -- an unlit
      *  rig has no beams to show. */
     void setBeams(bool on);
+
+    /* Render fidelity and speed, remembered between sessions.
+     *
+     * Supersample 1 is the fastest and jagged, 2 the default, 3 and 4 sharper
+     * at up to four times the fill. Threads 0 = one per core. The frame rate is
+     * a ceiling for live output: the view still slows down on its own when a
+     * frame costs more than the rate allows. */
+    void setSupersample(int factor);
+    int supersample() const { return m_supersample; }
+    void setRenderThreads(int threads);
+    int renderThreads() const { return m_renderThreads; }
+    void setMaxFrameRate(int fps);
+    int maxFrameRate() const { return m_maxFps; }
     /** The scene whose Aim palettes decide where movers are POINTED when there
      *  is no live DMX saying otherwise. The studio draws these as dashed lines;
      *  this is the same association, shown as the direction it actually means. */
@@ -118,6 +133,16 @@ public:
     /** Fixtures currently mounted on this structure (for the side tree). */
     QList<quint32> mountedFixtures() const;
     QList<quint32> mountedFixtures(Kind kind, quint32 id) const;
+
+    /** mountedFixtures() in the order a FLAT view paints them, back to front.
+     *
+     *  Grouped by the structure each is mounted on, nearer structures later;
+     *  within one structure, what is rigged INSIDE it before what is on its
+     *  surface, then by depth. A fixture on a truss face and one inside the
+     *  same truss share a centre line, so position alone cannot say which is
+     *  in front -- and whichever one is drawn on top is the one a click must
+     *  pick, so hitTestFixture() walks the same list. */
+    QList<quint32> fixturesInDrawOrder() const;
 
     /** Ring-highlight a set of fixtures (driven by the tree selection). */
     void setHighlight(const QList<quint32> &ids);
@@ -220,9 +245,13 @@ private:
         double    penWidth = 1.0;
         double    radius = 2.0;  ///< Dot
         QString   text;          ///< Label
+        bool      light = false; ///< Poly of LIGHT: added, not layered (see ZRaster::light)
     };
     mutable class ZRaster *m_z = nullptr;   ///< the depth-buffered target
     int      m_supersample = 2;   ///< a flat rasteriser has no AA of its own
+    int      m_renderThreads = 0; ///< 0 = one per core
+    int      m_maxFps = 30;       ///< ceiling on the live repaint rate
+    mutable class QThreadPool *m_renderPool = nullptr;
     bool     m_useZBuffer = true; ///< false = the old sorted-primitive painter
     mutable QVector<DrawOp> m_ops;      ///< queue, only while m_collecting
     mutable bool m_collecting = false;
@@ -232,6 +261,11 @@ private:
                   const QColor &pen, double penW, QPainter &p,
                   const QVector<double> &vertexDepths = QVector<double>(),
                   const QVector<double> &vertexAlphas = QVector<double>()) const;
+    /** Light rather than a surface: a beam in the air or a pool where it
+     *  lands, added to what is behind it instead of layered over it. */
+    void emitLight(const QPolygonF &poly, double depth, const QColor &colour, QPainter &p,
+                   const QVector<double> &vertexDepths,
+                   const QVector<double> &vertexAlphas = QVector<double>()) const;
     /** A line with a depth at EACH end. A truss chord spans the whole rig;
      *  describing it with one averaged depth is the same mistake a face
      *  with one depth was, and leaves webbing punching through a deck. */
@@ -249,7 +283,8 @@ private:
     /** Sort the queue back-to-front and paint it. */
     void flushOps(QPainter &p) const;
     /** One queued primitive into the depth buffer. */
-    void rasterOp(const struct DrawOp &o, bool depthWrite) const;
+    void rasterOp(const struct DrawOp &o, bool depthWrite,
+                  int rowFrom = 0, int rowTo = INT_MAX) const;
 
 public:
     /** How many primitives the last angled frame drew. Sub-pixel LED grids are
@@ -362,16 +397,53 @@ private:
     bool beamHitsSomething(const QVector3D &apex, const QVector3D &dir) const;
     /** The cone from a head out to whatever it lands on, plus the pool where
      *  it lands. Translucent; sorted at its midpoint. */
+    /** @p haze scales how visible the beam is in the air only -- not how
+     *  much it lights what it lands on -- for beams that share their air,
+     *  like the several emitters of one head. */
     void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,
                       double halfAngleRad, const QColor &colour, double level,
-                      const QVector3D *landsAt = nullptr) const;
+                      double haze = 1.0) const;
+    /** Where a beam ends, as a ring of world points: on the surface it lands
+     *  on, the cone's own edge rays cut by that surface -- a circle straight
+     *  down, an oval stretched along the beam when it arrives at an angle.
+     *  A beam that lands on nothing ends square across its axis at @p length. */
+    QVector<QVector3D> beamFootprint(const QVector3D &apex, const QVector3D &dir,
+                                     double halfAngleRad, double length,
+                                     bool lands) const;
+    /** What one head of a mover is doing: where it points (null = rest) and
+     *  the beam it throws. A two-arm fixture has two, and they differ. */
+    struct MoverHeadLook
+    {
+        QVector3D aim;
+        double beamLevel = 0.0;
+        QColor beamColour;
+    };
+    /** The people targets stand for, as figures in the rig -- on the deck
+     *  under them, chest at the aim height, facing downstage, and LIT: each
+     *  face takes the colour of every beam passing through it that it faces,
+     *  added up, over the room light. Only Person targets: every other kind is
+     *  a point the light is aimed at, and a point has nothing to draw. */
+    void drawStageFigures(QPainter &p) const;
+
+    /** A beam drawn this frame, kept so the figures it passes through can be
+     *  lit by it. Filled by drawMoverSolid() during the depth-sorted pass,
+     *  which draws fixtures before figures. */
+    struct FrameBeam
+    {
+        QVector3D apex;
+        QVector3D dir;
+        double    halfAngle;
+        double    length;
+        QColor    colour;
+        double    level;
+    };
+    mutable QVector<FrameBeam> m_frameBeams;
+    /** @p heads holds one look per physical head; a shorter list reuses its
+     *  last entry, so a single look drives every head alike. */
     void drawMoverSolid(QPainter &p, quint32 fid,
                         const struct FixtureVisualTraits &traits,
-                        const QColor &col, const QVector3D &aim,
-                        bool ambientLit = true, double beamLevel = 0.0,
-                        const QColor &beamColour = QColor(),
-                        double beamAngle = 0.0,
-                        const QVector3D *beamLandsAt = nullptr) const;
+                        const QColor &col, const QVector<MoverHeadLook> &heads,
+                        bool ambientLit = true, double beamAngle = 0.0) const;
 
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     /** A fixture's world CENTRE, correcting the plot's top-left anchor for

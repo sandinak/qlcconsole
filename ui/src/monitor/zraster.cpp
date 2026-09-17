@@ -46,18 +46,70 @@ void ZRaster::begin(const QSize &size, int supersample, const QColor &background
     if (m_depth.size() != px)
         m_depth.resize(int(px));
     m_depth.fill(Z_FAR);
+    /* Cleared only where last frame put light: most frames draw no beams at
+       all, and the rest light part of the view. */
+    // Light is at the FINAL resolution -- see scan().
+    const qsizetype lightPx = qsizetype(m_size.width()) * m_size.height();
+    if (m_light.size() != lightPx * 3)
+    {
+        m_light.resize(int(lightPx * 3));
+        m_light.fill(0.0f);
+    }
+    else if (m_anyLight && m_lit.isValid())
+    {
+        const QRect r = m_lit.intersected(QRect(QPoint(0, 0), m_size));
+        for (int y = r.top(); y <= r.bottom(); ++y)
+            std::fill_n(m_light.data() + (qsizetype(y) * m_size.width() + r.left()) * 3,
+                        r.width() * 3, 0.0f);
+    }
+    m_anyLight = false;
+    m_lit = QRect();
+
+    m_bits = m_colour.bits();
+    m_bpl = m_colour.bytesPerLine();
+    m_depthPtr = m_depth.data();
+    m_lightPtr = m_light.data();
 }
 
 void ZRaster::poly(const QPointF *pts, const double *zs, int n,
-                   const QColor &fill, bool depthWrite, const double *alphaScale)
+                   const QColor &fill, bool depthWrite, const double *alphaScale,
+                   int rowFrom, int rowTo)
+{
+    scan(pts, zs, n, fill, depthWrite, alphaScale, false, rowFrom, rowTo, nullptr);
+}
+
+void ZRaster::light(const QPointF *pts, const double *zs, int n, const QColor &colour,
+                    const double *alphaScale, int rowFrom, int rowTo, QRect *lit)
+{
+    scan(pts, zs, n, colour, false, alphaScale, true, rowFrom, rowTo, lit);
+}
+
+void ZRaster::addLit(const QRect &lit)
+{
+    if (lit.isValid() == false)
+        return;
+    m_lit |= lit;
+    m_anyLight = true;
+}
+
+void ZRaster::scan(const QPointF *pts, const double *zs, int n, const QColor &fill,
+                   bool depthWrite, const double *alphaScale, bool additive,
+                   int rowFrom, int rowTo, QRect *lit)
 {
     if (m_colour.isNull() || pts == nullptr || zs == nullptr || n < 3)
         return;
     if (fill.isValid() == false || fill.alpha() == 0)
         return;
 
-    const int W = m_colour.width(), H = m_colour.height();
-    const double S = double(m_ss);
+    /* Light is soft: it gains nothing from supersampling, and at four times
+       the pixels it was most of a beam-lit frame (16 ms of 39 on the demo
+       rig). It is rasterised at the final resolution and depth-tested against
+       the centre sample of each supersampled pixel. */
+    const int W = additive ? m_size.width()  : m_colour.width();
+    const int H = additive ? m_size.height() : m_colour.height();
+    const double S = additive ? 1.0 : double(m_ss);
+    const int ssW = m_colour.width();
+    const int half = m_ss / 2;
 
     /* Fit z = A*x + B*y + C from three vertices.
      *
@@ -118,8 +170,8 @@ void ZRaster::poly(const QPointF *pts, const double *zs, int n,
         minY = qMin(minY, pts[i].y() * S);
         maxY = qMax(maxY, pts[i].y() * S);
     }
-    const int y0 = qMax(0, int(qFloor(minY)));
-    const int y1 = qMin(H - 1, int(qCeil(maxY)));
+    const int y0 = qMax(qMax(0, rowFrom), int(qFloor(minY)));
+    const int y1 = qMin(qMin(H - 1, rowTo - 1), int(qCeil(maxY)));
     if (y1 < y0)
         return;
 
@@ -148,8 +200,9 @@ void ZRaster::poly(const QPointF *pts, const double *zs, int n,
             continue;
         std::sort(xs.begin(), xs.end());
 
-        QRgb *line = reinterpret_cast<QRgb *>(m_colour.scanLine(y));
-        float *zline = m_depth.data() + qsizetype(y) * W;
+        QRgb *line = additive ? nullptr : reinterpret_cast<QRgb *>(m_bits + qsizetype(y) * m_bpl);
+        float *zline = m_depthPtr + (additive ? qsizetype(y * m_ss + half) * ssW
+                                              : qsizetype(y) * W);
 
         for (int k = 0; k + 1 < xs.size(); k += 2)
         {
@@ -157,6 +210,38 @@ void ZRaster::poly(const QPointF *pts, const double *zs, int n,
             const int xb = qMin(W - 1, int(qFloor(xs.at(k + 1) - 0.5)));
             if (xb < xa)
                 continue;
+
+            if (additive)
+            {
+                /* Light: add this much of the colour, wherever nothing opaque
+                   stands in front of it. No depth write, so order is free. */
+                const float fr = float(fill.red()), fg = float(fill.green()),
+                            fb = float(fill.blue());
+                const double a0 = alpha / 255.0;
+                float z = float(A * (xa + 0.5) + B * sy + C);
+                double av = (alphaScale != nullptr) ? aA * (xa + 0.5) + aB * sy + aC : 1.0;
+                const double dav = (alphaScale != nullptr) ? aA : 0.0;
+                float *lrow = m_lightPtr + qsizetype(y) * W * 3;
+                if (lit != nullptr)
+                    *lit |= QRect(xa, y, xb - xa + 1, 1);
+                else
+                {
+                    m_lit |= QRect(xa, y, xb - xa + 1, 1);
+                    m_anyLight = true;
+                }
+                for (int x = xa; x <= xb; ++x, z += float(A), av += dav)
+                {
+                    if (z <= zline[x * m_ss + half])
+                        continue;
+                    const float w = float(a0 * qBound(0.0, av, 1.0));
+                    if (w <= 0.0f)
+                        continue;
+                    lrow[x * 3]     += fr * w;
+                    lrow[x * 3 + 1] += fg * w;
+                    lrow[x * 3 + 2] += fb * w;
+                }
+                continue;
+            }
             /* Two loops, not one with a branch in it. The alpha test and the
                depth-write test are constant for the whole span, and leaving
                them inside cost more than the work they guard: hoisting them
@@ -222,7 +307,8 @@ void ZRaster::poly(const QPointF *pts, const double *zs, int n,
 }
 
 void ZRaster::thickLine(const QPointF &a, const QPointF &b, double za, double zb,
-                        double width, const QColor &colour, bool depthWrite)
+                        double width, const QColor &colour, bool depthWrite,
+                        int rowFrom, int rowTo)
 {
     QPointF d = b - a;
     const double len = qSqrt(d.x() * d.x() + d.y() * d.y());
@@ -235,7 +321,54 @@ void ZRaster::thickLine(const QPointF &a, const QPointF &b, double za, double zb
        edge share that end's depth, so the plane fit describes it exactly. */
     const QPointF pts[4] = { a + nrm, b + nrm, b - nrm, a - nrm };
     const double  zs[4]  = { za, zb, zb, za };
-    poly(pts, zs, 4, colour, depthWrite);
+    poly(pts, zs, 4, colour, depthWrite, nullptr, rowFrom, rowTo);
+}
+
+QImage ZRaster::lightImage(QPoint *topLeft) const
+{
+    if (m_anyLight == false || m_colour.isNull() || m_lit.isEmpty())
+        return QImage();
+
+    /* Roll-off: linear for a lone beam, easing toward a ceiling short of white
+       as light piles up, so a crowd of beams is bright without being solid.
+       A table, because this runs over every lit pixel of every frame. */
+    static const float CEILING = 225.0f;
+    static const int STEPS = 4096;
+    static const QVector<float> curve = []() {
+        QVector<float> t(STEPS + 1);
+        for (int i = 0; i <= STEPS; ++i)
+            t[i] = CEILING * (1.0f - float(qExp(-double(i) / double(CEILING))));
+        return t;
+    }();
+    auto roll = [](float v) {
+        return curve.at(qBound(0, int(v), STEPS));
+    };
+
+    // Just the lit rectangle; already at the final resolution.
+    const int W = m_size.width();
+    const QRect r = m_lit.intersected(QRect(QPoint(0, 0), m_size));
+    if (r.isEmpty())
+        return QImage();
+
+    QImage out(r.size(), QImage::Format_ARGB32_Premultiplied);
+    out.fill(Qt::transparent);
+    for (int y = r.top(); y <= r.bottom(); ++y)
+    {
+        const float *lrow = m_light.constData() + qsizetype(y) * W * 3;
+        QRgb *line = reinterpret_cast<QRgb *>(out.scanLine(y - r.top()));
+        for (int x = r.left(); x <= r.right(); ++x)
+        {
+            const float lr = lrow[x * 3], lg = lrow[x * 3 + 1], lb = lrow[x * 3 + 2];
+            if (lr <= 0.0f && lg <= 0.0f && lb <= 0.0f)
+                continue;
+            const int ir = int(roll(lr)), ig = int(roll(lg)), ib = int(roll(lb));
+            // Premultiplied: alpha must cover the brightest channel.
+            line[x - r.left()] = qRgba(ir, ig, ib, qMax(ir, qMax(ig, ib)));
+        }
+    }
+    if (topLeft != nullptr)
+        *topLeft = r.topLeft();
+    return out;
 }
 
 QImage ZRaster::resolve() const

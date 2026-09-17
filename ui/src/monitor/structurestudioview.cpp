@@ -21,10 +21,15 @@
 #include <QtMath>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <QSettings>
+#include <QThread>
+#include <QSemaphore>
+#include <QThreadPool>
 #include <QDebug>
 #include <cmath>
 
 #include "structurestudioview.h"
+#include "humanfigure.h"
 #include "fixturevisualtraits.h"
 #include "monitorproperties.h"
 #include "pipe.h"
@@ -62,6 +67,13 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
     setAcceptDrops(true);   // fixtures dragged in from the source tree
+
+    {
+        QSettings s;
+        m_supersample = qBound(1, s.value(QStringLiteral("monitor/rig/supersample"), 2).toInt(), 4);
+        m_renderThreads = qMax(0, s.value(QStringLiteral("monitor/rig/threads"), 0).toInt());
+        m_maxFps = qBound(10, s.value(QStringLiteral("monitor/rig/maxfps"), 30).toInt(), 120);
+    }
 
     /* Re-resolve the selected look when it changes underneath us.
      *
@@ -256,7 +268,7 @@ void StructureStudioView::setLiveValues(bool on)
                     update();
             });
         }
-        m_liveTimer->start(40);
+        m_liveTimer->start(1000 / m_maxFps);
     }
     // (the interval re-tunes itself from the measured frame cost -- paintEvent)
     else if (m_liveTimer != nullptr)
@@ -264,6 +276,31 @@ void StructureStudioView::setLiveValues(bool on)
         m_liveTimer->stop();
     }
     update();
+}
+
+void StructureStudioView::setSupersample(int factor)
+{
+    const int f = qBound(1, factor, 4);
+    if (f == m_supersample)
+        return;
+    m_supersample = f;
+    QSettings().setValue(QStringLiteral("monitor/rig/supersample"), f);
+    update();
+}
+
+void StructureStudioView::setRenderThreads(int threads)
+{
+    m_renderThreads = qMax(0, threads);
+    QSettings().setValue(QStringLiteral("monitor/rig/threads"), m_renderThreads);
+    update();
+}
+
+void StructureStudioView::setMaxFrameRate(int fps)
+{
+    m_maxFps = qBound(10, fps, 120);
+    QSettings().setValue(QStringLiteral("monitor/rig/maxfps"), m_maxFps);
+    if (m_liveTimer != nullptr)
+        m_liveTimer->setInterval(1000 / m_maxFps);
 }
 
 void StructureStudioView::setRotation(int quarterTurns)
@@ -657,6 +694,7 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
     p.setFont(QFont("Arial", 8));
 
     m_ops.clear();
+    m_frameBeams.clear();
     m_collecting = true;
     foreach (const Item &it, items)
     {
@@ -665,8 +703,200 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
         else
             drawOneStructure(p, it.kind, it.id);
     }
+    if (m_kind == StageKind)
+        drawStageFigures(p);
     m_collecting = false;
     flushOps(p);
+}
+
+void StructureStudioView::drawStageFigures(QPainter &p) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QVector3D eye = toViewer();
+    /* The room lights the body from above and in front of the stage, which is
+       what gives it form; the beams add their colour on top. */
+    const QVector3D roomDir = QVector3D(0.25f, 0.55f, 0.80f).normalized();
+    const double roomLevel = 0.18 + 0.82 * m_ambient;
+    static const int SEG = 12;
+
+    foreach (StageTarget *t, props->stageTargets())
+    {
+        if (t == nullptr)
+            continue;
+
+        /* An Area or a drum kit: its outline on the deck, in its colour, at
+           its real size -- where a beam lands relative to it is the point. */
+        if ((t->kind() == StageTarget::Kind::Area || t->kind() == StageTarget::Kind::DrumKit)
+            && t->footprint().isEmpty() == false)
+        {
+            const QVector3D at = props->targetAimPoint(t, true);
+            const float ground = props->platformHeightAt(at.x(), at.y()) + 0.004f;
+            const float hw = float(t->footprint().width()) * 0.5f;
+            const float hd = float(t->footprint().height()) * 0.5f;
+            const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
+            const QVector3D c[4] = {
+                QVector3D(at.x() - hw, at.y() - hd, ground), QVector3D(at.x() + hw, at.y() - hd, ground),
+                QVector3D(at.x() + hw, at.y() + hd, ground), QVector3D(at.x() - hw, at.y() + hd, ground) };
+            for (int k = 0; k < 4; ++k)
+                emitLine(w2s(c[k]), w2s(c[(k + 1) % 4]), viewDepth(c[k]), viewDepth(c[(k + 1) % 4]),
+                         mark, 2.0, p);
+            continue;
+        }
+
+        if (t->kind() != StageTarget::Kind::Person)
+            continue;
+        const float tall = props->targetFigureHeight(t);
+        if (tall <= 0.0f)
+            continue;
+
+        /* Stood where the aim rule stands it, so the beams meet the chest: the
+           aim point less the aim height is the deck under the person. */
+        const QVector3D aim = props->targetAimPoint(t, true);
+        const QVector3D foot(aim.x(), aim.y(), aim.z() - props->targetAimHeight(t, true));
+        const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
+
+        /* The target's own mark on the deck, in the target's colour: which
+           target this is. The body itself is neutral, so what colour it shows
+           is the light on it. */
+        {
+            static const int MARK_SEG = 24;
+            const double r = 0.34 * double(tall) / 1.75;
+            QVector3D prev;
+            for (int k = 0; k <= MARK_SEG; ++k)
+            {
+                const double a = 2.0 * M_PI * k / MARK_SEG;
+                const QVector3D q = foot + QVector3D(float(r * qCos(a)), float(r * qSin(a)), 0.004f);
+                if (k > 0)
+                    emitLine(w2s(prev), w2s(q), viewDepth(prev), viewDepth(q), mark, 2.0, p);
+                prev = q;
+            }
+        }
+
+        /* How a beam falls on a point of the body: 1 inside its cone, rolling
+           off over a soft edge, 0 outside or past where it lands. */
+        auto coverage = [](const FrameBeam &fb, const QVector3D &at) {
+            const QVector3D rel = at - fb.apex;
+            const double along = double(QVector3D::dotProduct(rel, fb.dir));
+            if (along <= 0.0 || along > fb.length + 0.25)
+                return 0.0;
+            const double off = double((rel - fb.dir * float(along)).length());
+            const double radius = along * qTan(fb.halfAngle);
+            const double soft = qMax(0.03, radius * 0.25);
+            return (off <= radius) ? 1.0
+                 : (off >= radius + soft) ? 0.0
+                 : 1.0 - (off - radius) / soft;
+        };
+
+        /* Exposure, the way a camera exposes for the subject. Twelve white
+           heads on one chest add up to twelve times the light of one, and
+           added straight the body clipped to a flat white blob -- no form, and
+           no colour once every channel was full.
+         *
+           Measured by how bright the arriving light LOOKS, not by how many
+           beams there are: a crowd of deep blue beams is not bright and adds
+           up to a vivid blue body, which is right and was never the problem.
+           Past about a white beam and a third of brightness it scales back, so
+           white stays bright but keeps its shading. */
+        const QVector3D chest = foot + QVector3D(0.0f, 0.0f, 0.72f * tall);
+        double arrivingLuma = 0.0;
+        for (const FrameBeam &fb : m_frameBeams)
+        {
+            const double luma = 0.30 * fb.colour.redF() + 0.59 * fb.colour.greenF()
+                              + 0.11 * fb.colour.blueF();
+            arrivingLuma += fb.level * coverage(fb, chest) * luma;
+        }
+        const double exposure = 1.1 / qMax(1.1, arrivingLuma);
+
+        /* Past a knee, approach full brightness instead of hitting it: what
+           is lit hard stays bright without flattening into one value. */
+        auto knee = [](double v) {
+            const double k = 180.0;
+            return (v <= k) ? v : k + 75.0 * (1.0 - qExp(-(v - k) / 75.0));
+        };
+
+        auto shade = [&](const QVector3D &at, const QVector3D &n) {
+            const double diffuse =
+                roomLevel * (0.50 + 0.50 * double(qMax(0.0f, QVector3D::dotProduct(n, roomDir))));
+            double r = 150.0 * diffuse, g = 146.0 * diffuse, b = 140.0 * diffuse;
+            /* Every beam that passes through this part of the body and falls
+               on the side facing it, added: a red spot from the front and a
+               blue one from the side leave a red front and a blue side, and a
+               face both reach shows the mix. */
+            for (const FrameBeam &fb : m_frameBeams)
+            {
+                const double cover = coverage(fb, at);
+                if (cover <= 0.0)
+                    continue;
+                const double facing = double(qMax(0.0f, -QVector3D::dotProduct(n, fb.dir)));
+                const double k = fb.level * cover * facing * 1.15 * exposure;
+                r += fb.colour.red() * k;
+                g += fb.colour.green() * k;
+                b += fb.colour.blue() * k;
+            }
+            return QColor(qBound(0, qRound(knee(r)), 255), qBound(0, qRound(knee(g)), 255),
+                          qBound(0, qRound(knee(b)), 255));
+        };
+
+        auto face = [&](const QVector<QVector3D> &pts, const QVector3D &normal) {
+            QVector3D n = normal;
+            if (n.lengthSquared() < 1e-12f)
+                return;
+            n.normalize();
+            if (QVector3D::dotProduct(n, eye) <= 0.0f)
+                return;                          // facing away: hidden anyway
+            QPolygonF poly;
+            QVector<double> vz;
+            QVector3D centre;
+            double depth = 0.0;
+            for (const QVector3D &q : pts)
+            {
+                poly << w2s(q);
+                const double d = viewDepth(q);
+                vz << d;
+                depth += d;
+                centre += q;
+            }
+            centre /= float(pts.size());
+            emitPoly(poly, depth / pts.size(), shade(centre, n), QColor(), 0.0, p, vz);
+        };
+
+        foreach (const FigureLoft &loft, humanFigureLofts())
+        {
+            QVector<QVector<QVector3D> > rings;
+            for (const FigureRing &fr : loft)
+            {
+                QVector<QVector3D> ring;
+                for (int s = 0; s < SEG; ++s)
+                {
+                    const double a = 2.0 * M_PI * s / SEG;
+                    ring << foot + QVector3D((fr.cx + fr.rx * float(qCos(a))) * tall,
+                                             (fr.cy + fr.ry * float(qSin(a))) * tall,
+                                             fr.z * tall);
+                }
+                rings << ring;
+            }
+            for (int i = 0; i + 1 < rings.size(); ++i)
+                for (int s = 0; s < SEG; ++s)
+                {
+                    const QVector3D &a = rings[i][s];
+                    const QVector3D &b = rings[i][(s + 1) % SEG];
+                    const QVector3D &c2 = rings[i + 1][(s + 1) % SEG];
+                    const QVector3D &d = rings[i + 1][s];
+                    // Counter-clockwise from above, so this points outward.
+                    QVector3D n = QVector3D::crossProduct(b - a, d - a)
+                                + QVector3D::crossProduct(c2 - d, c2 - b);
+                    face({ a, b, c2, d }, n);
+                }
+            // Close the ends.
+            if (rings.isEmpty() == false)
+            {
+                QVector<QVector3D> bottom = rings.first();
+                std::reverse(bottom.begin(), bottom.end());
+                face(bottom, QVector3D(0.0f, 0.0f, -1.0f));
+                face(rings.last(), QVector3D(0.0f, 0.0f, 1.0f));
+            }
+        }
+    }
 }
 
 void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
@@ -683,6 +913,18 @@ void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
     MonitorProperties *props = m_doc->monitorProperties();
     foreach (quint32 fid, props->fixtureItemsID())
         pts << fixtureCentre(fid);
+    /* And the people standing on it, feet to crown: a figure is drawn, so a
+       fit that ignores it cuts off the head of anyone on a deck. */
+    foreach (StageTarget *t, props->stageTargets())
+    {
+        const float tall = props->targetFigureHeight(t);
+        if (tall <= 0.0f)
+            continue;
+        const QVector3D aim = props->targetAimPoint(t, true);
+        const float foot = aim.z() - props->targetAimHeight(t, true);
+        pts << QVector3D(aim.x(), aim.y(), foot)
+            << QVector3D(aim.x(), aim.y(), foot + tall);
+    }
 }
 
 QList<quint32> StructureStudioView::mountedFixtures() const
@@ -994,6 +1236,25 @@ void StructureStudioView::emitPoly(const QPolygonF &poly, double depth, const QC
     p.drawPolygon(poly);
 }
 
+void StructureStudioView::emitLight(const QPolygonF &poly, double depth, const QColor &colour,
+                                    QPainter &p, const QVector<double> &vertexDepths,
+                                    const QVector<double> &vertexAlphas) const
+{
+    if (m_collecting)
+    {
+        DrawOp o; o.kind = DrawOp::Poly; o.depth = depth; o.poly = poly;
+        o.fill = colour; o.light = true;
+        if (vertexDepths.size() == poly.size())
+            o.zs = vertexDepths;
+        if (vertexAlphas.size() == poly.size())
+            o.alphas = vertexAlphas;
+        m_ops << o;
+        return;
+    }
+    // The painter path has no light buffer: layer it, as it always did.
+    emitPoly(poly, depth, colour, QColor(), 0.0, p, vertexDepths, vertexAlphas);
+}
+
 void StructureStudioView::emitLine(const QPointF &a, const QPointF &b,
                                    double za, double zb,
                                    const QColor &pen, double penW, QPainter &p) const
@@ -1063,7 +1324,8 @@ void StructureStudioView::emitLabel(const QPointF &at, double depth, const QStri
 }
 
 /* One queued primitive into the depth buffer. */
-void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite) const
+void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite,
+                                   int rowFrom, int rowTo) const
 {
     const int n = o.poly.size();
     if (n == 0 || m_z == nullptr)
@@ -1079,7 +1341,8 @@ void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite) const
     case DrawOp::Poly:
         if (o.fill.isValid())
             m_z->poly(o.poly.constData(), zs.constData(), n, o.fill, depthWrite,
-                      (o.alphas.size() == n) ? o.alphas.constData() : nullptr);
+                      (o.alphas.size() == n) ? o.alphas.constData() : nullptr,
+                      rowFrom, rowTo);
         if (o.pen.isValid() && n >= 2)
         {
             /* The outline, edge by edge, each carrying its own two depths. A
@@ -1089,7 +1352,7 @@ void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite) const
             {
                 const int k = (i + 1) % n;
                 m_z->thickLine(o.poly.at(i), o.poly.at(k), zs[i], zs[k],
-                               qMax(1.0, o.penWidth), o.pen, depthWrite);
+                               qMax(1.0, o.penWidth), o.pen, depthWrite, rowFrom, rowTo);
             }
         }
         break;
@@ -1097,7 +1360,7 @@ void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite) const
     case DrawOp::Line:
         if (n >= 2 && o.pen.isValid())
             m_z->thickLine(o.poly.at(0), o.poly.at(1), zs[0], zs[1],
-                           qMax(1.0, o.penWidth), o.pen, depthWrite);
+                           qMax(1.0, o.penWidth), o.pen, depthWrite, rowFrom, rowTo);
         break;
 
     case DrawOp::Dot:
@@ -1114,7 +1377,7 @@ void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite) const
                                    QPointF(c.x() + r, c.y() + r),
                                    QPointF(c.x() - r, c.y() + r) };
             const double qz[4] = { zs[i], zs[i], zs[i], zs[i] };
-            m_z->poly(q, qz, 4, o.fill, depthWrite);
+            m_z->poly(q, qz, 4, o.fill, depthWrite, nullptr, rowFrom, rowTo);
         }
         break;
     }
@@ -1191,7 +1454,8 @@ void StructureStudioView::flushOps(QPainter &p) const
        order-dependent, so beams and clear tops go last, back to front among
        themselves, depth-TESTED against the solid world but not writing depth.
        That sort is over a handful of primitives instead of all of them. */
-    QVector<DrawOp> translucent, labels;
+    QVector<DrawOp> opaque, translucent, labels, lights;
+    opaque.reserve(m_ops.size());
     foreach (const DrawOp &o, m_ops)
     {
         if (o.kind == DrawOp::Label || o.kind == DrawOp::Trace)
@@ -1199,20 +1463,104 @@ void StructureStudioView::flushOps(QPainter &p) const
             labels << o;        // annotation: screen space, after the resolve
             continue;
         }
+        if (o.light)
+        {
+            lights << o;        // added after the solids are in, in any order
+            continue;
+        }
         const bool seeThrough = (o.fill.isValid() && o.fill.alpha() < 255)
                                 || (o.pen.isValid() && o.pen.alpha() < 255);
         if (seeThrough)
             translucent << o;
         else
-            rasterOp(o, true);
+            opaque << o;
     }
-
     std::stable_sort(translucent.begin(), translucent.end(),
                      [](const DrawOp &a, const DrawOp &b) { return a.depth < b.depth; });
-    foreach (const DrawOp &o, translucent)
-        rasterOp(o, false);
 
+    /* One band of the frame: solids, then light -- after every solid is in, so
+       it is stopped by what stands in front of it, and before the translucent
+       surfaces, which do not stop it -- then the translucent surfaces back to
+       front. Rows are supersampled; light rows are the final image's. */
+    const int ss = m_z->supersample();
+    auto fillBand = [&](int rowFrom, int rowTo, QRect *lit) {
+        for (const DrawOp &o : opaque)
+            rasterOp(o, true, rowFrom, rowTo);
+        const int lightFrom = rowFrom / ss;
+        const int lightTo = (rowTo == INT_MAX) ? INT_MAX : rowTo / ss;
+        for (const DrawOp &o : lights)
+        {
+            const int n = o.poly.size();
+            if (n < 3 || !o.fill.isValid())
+                continue;
+            QVarLengthArray<double, 8> zs(n);
+            for (int i = 0; i < n; ++i)
+                zs[i] = (o.zs.size() == n) ? o.zs.at(i) : o.depth;
+            m_z->light(o.poly.constData(), zs.constData(), n, o.fill,
+                       (o.alphas.size() == n) ? o.alphas.constData() : nullptr,
+                       lightFrom, lightTo, lit);
+        }
+        for (const DrawOp &o : translucent)
+            rasterOp(o, false, rowFrom, rowTo);
+    };
+
+    /* ACROSS THE CORES. The fill is most of a frame and it used one core.
+       Bands of rows never share a pixel, and each band runs the same ops in
+       the same order as the whole frame would, so splitting it changes the
+       speed and nothing else. Band edges fall on whole final-image rows, so a
+       band's light rows and its supersampled rows cover the same stripe. */
+    int threads = (m_renderThreads > 0) ? m_renderThreads : QThread::idealThreadCount();
+    const int rows = m_z->bufferHeight();
+    threads = qBound(1, threads, qMax(1, rows / (8 * ss)));
+    if (threads <= 1)
+    {
+        QRect lit;
+        fillBand(0, INT_MAX, &lit);
+        m_z->addLit(lit);
+    }
+    else
+    {
+        if (m_renderPool == nullptr)
+            m_renderPool = new QThreadPool(const_cast<StructureStudioView *>(this));
+        if (m_renderPool->maxThreadCount() < threads)
+            m_renderPool->setMaxThreadCount(threads);
+
+        const int perBand = ((rows / threads + ss - 1) / ss) * ss;
+        QVector<QRect> lit(threads);
+        QSemaphore done;
+        int started = 0;
+        for (int b = 0; b < threads; ++b)
+        {
+            const int from = b * perBand;
+            if (from >= rows)
+                break;
+            const int to = (b == threads - 1) ? rows : qMin(rows, from + perBand);
+            ++started;
+            m_renderPool->start([&, b, from, to]() {
+                fillBand(from, to, &lit[b]);
+                done.release();
+            });
+        }
+        done.acquire(started);
+        for (const QRect &r : lit)
+            m_z->addLit(r);
+    }
     p.drawImage(0, 0, m_z->resolve());
+    {
+        /* SCREEN, not plus: light over a dark background adds nearly in full,
+           over something already bright it closes in on white without
+           reaching it. Plus clipped the air behind a crowd of beams, and the
+           glow in front of a lit body, straight to white. */
+        QPoint at;
+        const QImage light = m_z->lightImage(&at);
+        if (!light.isNull())
+        {
+            p.save();
+            p.setCompositionMode(QPainter::CompositionMode_Screen);
+            p.drawImage(at, light);
+            p.restore();
+        }
+    }
 
     // Text last, in screen space: depth-testing a label is not meaningful.
     foreach (const DrawOp &o, labels)
@@ -2126,6 +2474,7 @@ struct HullPt
 {
     QPointF p;
     double  a;
+    double  z = 0.0;     ///< depth, for callers that need it carried along
 };
 
 static QVector<HullPt> convexHullWith(QVector<HullPt> pts)
@@ -2392,46 +2741,27 @@ void StructureStudioView::setBeams(bool on)
 void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                                       const QVector3D &dir, double halfAngleRad,
                                       const QColor &colour, double level,
-                                      const QVector3D *landsAt) const
+                                      double haze) const
 {
     if (level <= 0.004 || dir.isNull())
         return;
 
     const QVector3D d = dir.normalized();
-    double len = beamThrow(apex, d);
-    bool hitsSubject = false;
-
-    /* A beam aimed AT something ends there.
+    /* Out to whatever it actually lands on -- NOT to what it is aimed at.
      *
-       Without this the throw came only from the floor and the platform tops,
-       and a followspot aimed at chest height points slightly UPWARD -- so it
-       hit nothing, ran the full no-hit default, and sailed on past the person
-       it was pointed at. Eight metres of overshoot from eight heads is what
-       turned a set of tight 8-degree beams into one broad wash. */
-    if (landsAt != nullptr)
-    {
-        const double toSubject = double((*landsAt - apex).length());
-        if (toSubject > 0.05 && toSubject < len)
-        {
-            len = toSubject;
-            hitsSubject = true;
-        }
-    }
-
-    const double radius = len * qTan(qBound(0.005, halfAngleRad, 1.4));
-
+       A target is a point in the air, not a surface. This used to end the cone
+       at the subject, to stop follow-spots aimed up at chest height sailing
+       eight metres on into a wash; but light does not stop where it is
+       pointed ("why does the beam end on the target .. it won't in reality").
+       A beam through a subject carries on to the floor, the set, or into the
+       room, and fades out on its own when it meets nothing. */
     /* Did it land on something, or is it thrown into the room? A beam that
        lands keeps its strength to the surface -- a few metres of air takes
        very little out of it -- and puts a pool where it arrives. One thrown
        into the air has nothing to stop it, so it has to fade out on its own,
        or it ends in a hard disc hanging in space. */
-    const bool lands = hitsSubject || beamHitsSomething(apex, d);
-
-    QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
-    if (side.length() < 1e-3f)
-        side = QVector3D(1, 0, 0);
-    side.normalize();
-    const QVector3D up = QVector3D::crossProduct(d, side).normalized();
+    bool lands = false;
+    const double len = beamThrow(apex, d, &lands);
 
     /* Brighter in a dark room, which is both true and useful: at work light you
        want to see the rig, at blackout you want to see the light. */
@@ -2441,21 +2771,16 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
        to be a constant 22 in here, which meant a head at 3% threw a beam that
        measured 40 against a full beam's 78 -- it barely dimmed at all and then
        snapped off at zero. */
-    const double baseA = 95.0 * level * room;
+    /* Emitted as LIGHT (see ZRaster::light), which adds up and rolls off short
+       of white: layered instead, stacked beams converged on their colour, and
+       for white that was a solid glare ("blue worked great .. white .. does
+       not .. it's too overdriven"). @p haze shares the glow of beams that
+       share their air. */
+    const double baseA = 95.0 * level * room * qBound(0.0, haze, 1.0);
     const double poolA = 130.0 * level * room;
 
-    static const int RING = 20;
-
-    auto ringAt = [&](double t, QVector<QPointF> &out) {
-        const QVector3D c = apex + d * float(len * t);
-        const double r = radius * t;
-        out.clear();
-        for (int i = 0; i < RING; ++i)
-        {
-            const double a = 2.0 * M_PI * i / RING;
-            out << w2s(c + (side * float(qCos(a)) + up * float(qSin(a))) * float(r));
-        }
-    };
+    // Where it ends: the pool's shape, and the far end of the cone's outline.
+    const QVector<QVector3D> footprint = beamFootprint(apex, d, halfAngleRad, len, lands);
 
     /* ONE polygon, faded along its length by per-vertex alpha.
      *
@@ -2464,55 +2789,151 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
        looks kinda weird with the multiple circles on a cone". Alpha interpolates
        across a polygon exactly as depth does, so the whole cone is one
        primitive with a smooth gradient and no seams to see. */
-    QVector<QPointF> far;
-    ringAt(1.0, far);
-
     QVector<HullPt> pts;
-    pts.reserve(far.size() + 1);
-    pts << HullPt{ w2s(apex), 1.0 };
+    pts.reserve(footprint.size() + 1);
+    pts << HullPt{ w2s(apex), 1.0, viewDepth(apex) };
 
     /* Light spreads, so even a beam that lands thins out along the way; one
        going nowhere has to reach zero by the end or it terminates in mid-air. */
     const double farA = lands ? 0.65 : 0.0;
-    foreach (const QPointF &q, far)
-        pts << HullPt{ q, farA };
+    foreach (const QVector3D &q, footprint)
+        pts << HullPt{ w2s(q), farA, viewDepth(q) };
 
     const QVector<HullPt> hull = convexHullWith(pts);
     if (hull.size() >= 3)
     {
-        QPolygonF poly;
-        QVector<double> alphas, zs;
-        const double midZ = viewDepth(apex + d * float(len * 0.5));
-        foreach (const HullPt &hp, hull)
+        /* Triangles fanned out from the lens, not one polygon.
+         *
+           The rasteriser fits a polygon's alpha as a PLANE through its first
+           three corners. That is exact for a triangle and wrong for a cone:
+           when those corners were all far-end points the fade came out flat,
+           and when they straddled the lens it tilted sideways and overshot to
+           solid -- which one depended only on which way the beam pointed on
+           screen ("some lights are right, some are solid"). Every triangle
+           here has the lens at one corner, so each one's fade is exact.
+         *
+           The lens is either a corner of the outline or inside it (a beam
+           pointed at or away from the eye), and a fan from it covers the
+           outline exactly once either way. */
+        const QPointF lensPx = w2s(apex);
+        int lensAt = -1;
+        for (int i = 0; i < hull.size(); ++i)
+            if (hull.at(i).a >= 1.0 && QLineF(hull.at(i).p, lensPx).length() < 1e-6)
+            {
+                lensAt = i;
+                break;
+            }
+        QVector<HullPt> rim;
+        for (int i = 1; i <= hull.size(); ++i)
         {
-            poly << hp.p;
-            alphas << hp.a;
-            zs << midZ;          // a beam is a volume; sort it at its middle
+            const int k = (lensAt < 0) ? (i - 1) : (lensAt + i) % hull.size();
+            if (k != lensAt)
+                rim << hull.at(k);
         }
+        // Round the far end only when the lens is inside; as a corner, the two
+        // outline edges through it close the fan and must not be bridged.
+        const int spans = (lensAt < 0) ? rim.size() : rim.size() - 1;
+
         QColor c = colour;
         c.setAlpha(qBound(0, int(baseA), 190));
-        emitPoly(poly, midZ, c, QColor(), 0.0, p, zs, alphas);
+        /* Each corner at its own depth. One depth for the whole beam -- its
+           middle -- put a beam thrown away from the eye BEHIND the deck it
+           starts on, so the first metre of it vanished. A triangle's depth is
+           exactly a plane, so the lens and each far point can carry their
+           real depths. The nudge toward the eye keeps a beam's far end from
+           losing a tie with the surface it lands on. */
+        const double lift = 2e-4;
+        const double lensZ = viewDepth(apex) + lift;
+        const double sortZ = viewDepth(apex + d * float(len * 0.5));
+        for (int i = 0; i < spans; ++i)
+        {
+            const HullPt &a = rim.at(i);
+            const HullPt &b = rim.at((i + 1) % rim.size());
+            QPolygonF tri;
+            tri << lensPx << a.p << b.p;
+            emitLight(tri, sortZ, c, p,
+                      QVector<double>({ lensZ, a.z + lift, b.z + lift }),
+                      QVector<double>({ 1.0, a.a, b.a }));
+        }
     }
 
-    /* The pool, only where the beam actually arrives on something. */
+    /* The pool, only where the beam actually arrives on something -- lying ON
+       that surface, so each point carries its own depth: an oval a couple of
+       metres long spans real depth, and one number for all of it sank the far
+       end into the deck. */
     if (lands)
     {
-        QVector<QPointF> a1;
-        ringAt(1.0, a1);
+        QPolygonF poolPoly;
+        QVector<double> poolZ;
+        double sum = 0.0;
+        foreach (const QVector3D &q, footprint)
+        {
+            poolPoly << w2s(q);
+            const double z = viewDepth(q) + 1e-4;
+            poolZ << z;
+            sum += z;
+        }
         QColor poolCol = colour;
         poolCol.setAlpha(qBound(0, int(poolA), 220));
-        const QVector3D far_ = apex + d * float(len);
-        emitPoly(QPolygonF(a1), viewDepth(far_) + 1e-5, poolCol, QColor(), 0.0, p);
+        emitLight(poolPoly, sum / qMax(1, footprint.size()), poolCol, p, poolZ);
     }
+}
+
+QVector<QVector3D> StructureStudioView::beamFootprint(const QVector3D &apex, const QVector3D &dir,
+                                                     double halfAngleRad, double length,
+                                                     bool lands) const
+{
+    /* Sixteen points round the end of a beam. It is a soft glow, and every
+       point is another triangle of light to fill: 24 were indistinguishable
+       and cost a third more of the frame's beam work. */
+    static const int RING = 16;
+    const QVector3D d = dir.normalized();
+    const double half = qBound(0.005, halfAngleRad, 1.4);
+
+    QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
+    if (side.length() < 1e-3f)
+        side = QVector3D(1, 0, 0);
+    side.normalize();
+    const QVector3D up = QVector3D::crossProduct(d, side).normalized();
+
+    const QVector3D axisEnd = apex + d * float(length);
+    const double landZ = double(axisEnd.z());
+    /* A beam arriving nearly edge-on to the deck has edge rays that run on for
+       tens of metres before they come down, or never do. Cap them: past a few
+       times the axis throw the pool is too faint to matter and the polygon
+       would swamp the view. */
+    const double maxRun = qMin(24.0, length * 4.0);
+
+    QVector<QVector3D> out;
+    out.reserve(RING);
+    for (int i = 0; i < RING; ++i)
+    {
+        const double a = 2.0 * M_PI * i / RING;
+        const QVector3D across = side * float(qCos(a)) + up * float(qSin(a));
+        if (!lands)
+        {
+            // Nothing to land on: square across the axis, as far as it goes.
+            out << axisEnd + across * float(length * qTan(half));
+            continue;
+        }
+        /* One of the cone's edge rays, followed down to the plane the axis
+           landed on. The set of them is the conic section the beam makes on
+           that surface -- a circle when it arrives square, an oval stretched
+           along the beam when it arrives at an angle. */
+        const QVector3D ray = (d * float(qCos(half)) + across * float(qSin(half))).normalized();
+        double run = maxRun;
+        if (ray.z() < -1e-4f)
+            run = qMin(maxRun, (landZ - double(apex.z())) / double(ray.z()));
+        out << apex + ray * float(qMax(0.0, run));
+    }
+    return out;
 }
 
 void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                                          const FixtureVisualTraits &traits,
-                                         const QColor &col, const QVector3D &aim,
-                                         bool ambientLit, double beamLevel,
-                                         const QColor &beamColour,
-                                         double beamAngle,
-                                         const QVector3D *beamLandsAt) const
+                                         const QColor &col,
+                                         const QVector<MoverHeadLook> &heads,
+                                         bool ambientLit, double beamAngle) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
@@ -2573,6 +2994,9 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
     {
         const double off = (u - (units - 1) * 0.5) * slice;
         const QVector3D uc = seated + L * float(off);
+        const MoverHeadLook look = heads.isEmpty() ? MoverHeadLook()
+                                                   : heads.at(qMin(u, heads.size() - 1));
+        const QVector3D &aim = look.aim;
 
         // Base: the block that bolts to the truss, at the "down" end of H.
         box(uc - H * float(h * 0.34), slice * 0.46, h * 0.16, d * 0.5, L, H, N);
@@ -2609,7 +3033,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                      viewDepth(headMid), viewDepth(tip),
                      col.lighter(150), 1.4, p);
 
-            if (m_beams && beamLevel > 0.01)
+            if (m_beams && look.beamLevel > 0.01)
             {
                 /* An undeclared lens has to become SOMETHING here -- a beam is
                    the point of the exercise and most definitions in the wild
@@ -2618,10 +3042,30 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                    caller because it is a LIVE value on a zoom head. */
                 const double deg = (beamAngle > 0.0 && beamAngle < 180.0)
                                    ? beamAngle : 14.0;
-                drawBeamCone(p, headMid + beam * float(h * 0.28), beam,
-                             qDegreesToRadians(deg / 2.0),
-                             beamColour.isValid() ? beamColour : col, beamLevel,
-                             beamLandsAt);
+                /* Every emitter the head carries, in a row across its face on
+                   the same axis the head box was just built along. Each is a
+                   whole beam in the head's colour: three LEDs behind three
+                   lenses are three shafts of light near the fixture, and only
+                   merge into one further out. */
+                const int beams = qMax(1, traits.beamsPerHead);
+                const double pitch = (slice * 0.52) / beams;
+                const QVector3D lens = headMid + beam * float(h * 0.28);
+                const QColor lightColour = look.beamColour.isValid() ? look.beamColour : col;
+                /* One head's beams share almost all of their air: three
+                   overlapping cones at full haze read as three times the beam.
+                   Each lights what it lands on in full; only the glow in the
+                   air is shared out. */
+                const double haze = qPow(double(beams), -0.35);
+                for (int b = 0; b < beams; ++b)
+                {
+                    const QVector3D apex = lens + side * float((b - (beams - 1) * 0.5) * pitch);
+                    drawBeamCone(p, apex, beam, qDegreesToRadians(deg / 2.0),
+                                 lightColour, look.beamLevel, haze);
+                    m_frameBeams << FrameBeam{ apex, beam.normalized(),
+                                               qDegreesToRadians(deg / 2.0),
+                                               beamThrow(apex, beam.normalized()),
+                                               lightColour, look.beamLevel };
+                }
             }
         }
         else
@@ -2962,8 +3406,20 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 if (toTarget.length() > 1e-3f)
                     aim = toTarget.normalized();
             }
-            if (aim.isNull() && m_liveValues && !fixtureAimDirection(fx, rp, aim))
-                aim = QVector3D();
+
+            /* One look per head. A two-arm fixture's arms pan, tilt and colour
+               on their own channels, so reading the first head for both drew
+               them as twins whatever the desk was doing. A scene target still
+               aims every head at it. */
+            const int units = qMax(1, traits.headCount);
+            QVector<MoverHeadLook> looks(units);
+            for (int u = 0; u < units; ++u)
+            {
+                looks[u].aim = aim;
+                if (aim.isNull() && m_liveValues
+                    && !fixtureAimDirection(fx, rp, looks[u].aim, u))
+                    looks[u].aim = QVector3D();
+            }
 
             /* The beam's strength and colour are the fixture's own OUTPUT, not
                the shaded body colour.
@@ -2976,19 +3432,25 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                is the opposite question. A head pointed away from you is
                precisely when its beam is most worth drawing. */
             double beamLevel = 0.0;
-            QColor beamColour;
             if (showingOutput && m_beams)
             {
-                QColor live = unlit;
-                uchar dim = 0;
-                if (fixtureLiveState(fx, vals, live, dim, valsComplete))
+                for (int u = 0; u < units; ++u)
                 {
-                    beamLevel = dim / 255.0;
-                    beamColour = live;
+                    QColor live = unlit;
+                    uchar dim = 0;
+                    const bool got = (units > 1)
+                        ? fixtureHeadBeamState(fx, vals, u, live, dim, valsComplete)
+                        : fixtureLiveState(fx, vals, live, dim, valsComplete);
+                    if (got)
+                    {
+                        looks[u].beamLevel = dim / 255.0;
+                        looks[u].beamColour = live;
+                        beamLevel = qMax(beamLevel, looks[u].beamLevel);
+                    }
                 }
             }
-            drawMoverSolid(p, fid, traits, col, aim, !showingOutput, beamLevel,
-                           beamColour, beamNow, aimed ? &aimPt : nullptr);
+            drawMoverSolid(p, fid, traits, col, looks, !showingOutput,
+                           beamNow);
 
             /* Say where it is aimed -- but ONLY when the beam is not already
                saying it.
@@ -3390,6 +3852,69 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     }
 }
 
+QList<quint32> StructureStudioView::fixturesInDrawOrder() const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    /* Depth toward the eye of a flat view, larger = nearer: Front looks
+       upstage from downstage (+Y), Side looks from stage right (-X), Top looks
+       down (+Z). The same conventions the angled projection degenerates to. */
+    auto depthOf = [this](const QVector3D &w) -> double {
+        switch (m_plane)
+        {
+        case Front: return double(w.y());
+        case Side:  return -double(w.x());
+        case Top:   return double(w.z());
+        default:    return viewDepth(w);
+        }
+    };
+    auto hostOf = [](const FixtureRigProps &rp, quint32 fid) -> QString {
+        if (rp.trussId != Truss::invalidId())  return QStringLiteral("truss:%1").arg(rp.trussId);
+        if (rp.towerId != Tower::invalidId())  return QStringLiteral("tower:%1").arg(rp.towerId);
+        if (rp.pipeId != Pipe::invalidId())    return QStringLiteral("pipe:%1").arg(rp.pipeId);
+        if (rp.onRiser()) return QStringLiteral("platform:%1").arg(rp.riserPlatformId);
+        if (rp.onDeck())  return QStringLiteral("platform:%1").arg(rp.deckPlatformId);
+        return QStringLiteral("fixture:%1").arg(fid);
+    };
+
+    struct Entry { quint32 fid; QString host; int layer; double depth; };
+    QVector<Entry> entries;
+    QHash<QString, QPair<double, int> > hostDepth;   // summed depth, count
+    foreach (quint32 fid, mountedFixtures())
+    {
+        const FixtureRigProps rp = props->fixtureRigProps(fid);
+        const Entry e{ fid, hostOf(rp, fid),
+                       (rp.placement == FixtureRigProps::Inside) ? 0 : 1,
+                       depthOf(fixtureCentre(fid)) };
+        entries << e;
+        QPair<double, int> &hd = hostDepth[e.host];
+        hd.first += e.depth;
+        hd.second += 1;
+    }
+
+    std::stable_sort(entries.begin(), entries.end(), [&](const Entry &a, const Entry &b) {
+        if (a.host != b.host)
+        {
+            const QPair<double, int> ha = hostDepth.value(a.host);
+            const QPair<double, int> hb = hostDepth.value(b.host);
+            const double da = ha.first / qMax(1, ha.second);
+            const double db = hb.first / qMax(1, hb.second);
+            if (da != db)
+                return da < db;
+            return a.host < b.host;
+        }
+        if (a.layer != b.layer)
+            return a.layer < b.layer;
+        return a.depth < b.depth;
+    });
+
+    QList<quint32> out;
+    out.reserve(entries.size());
+    foreach (const Entry &e, entries)
+        out << e.fid;
+    return out;
+}
+
 void StructureStudioView::drawFixtures(QPainter &p) const
 {
     p.setFont(QFont("Arial", 8));
@@ -3398,7 +3923,7 @@ void StructureStudioView::drawFixtures(QPainter &p) const
        you opened the overview to look at. Show them only for what is selected
        there. */
     const bool nameEveryone = (m_kind != StageKind);
-    foreach (quint32 fid, mountedFixtures())
+    foreach (quint32 fid, fixturesInDrawOrder())
         drawOneFixture(p, fid, nameEveryone);
 }
 
@@ -4031,7 +4556,10 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     {
         const double ms = frameTimer.nsecsElapsed() / 1000000.0;
         m_frameMs = (m_frameMs <= 0.0) ? ms : (m_frameMs * 0.8 + ms * 0.2);
-        const int want = int(qBound(40.0, m_frameMs * 2.0, 250.0));
+        /* At the chosen rate when frames are cheap enough to allow it, slower
+           when they are not -- a quarter of the interval spare, so the event
+           loop still breathes between repaints. */
+        const int want = int(qBound(1000.0 / m_maxFps, m_frameMs * 1.25, 250.0));
         if (qAbs(m_liveTimer->interval() - want) > 8)
             m_liveTimer->setInterval(want);
     }
@@ -4259,7 +4787,7 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
     // dragged, double-clicked or right-clicked in this editor. The real
     // "no fixture" marker is Fixture::invalidId().
     quint32 best = Fixture::invalidId(); double bestD = 9.0;
-    foreach (quint32 fid, mountedFixtures())
+    foreach (quint32 fid, fixturesInDrawOrder())
     {
         double d;
         const FixtureRigProps rp = props->fixtureRigProps(fid);
@@ -4360,7 +4888,8 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
                 }
             }
         }
-        if (d < bestD) { bestD = d; best = fid; }
+        // <=, walking back to front: of two equally close, the one on top wins.
+        if (d <= bestD) { bestD = d; best = fid; }
     }
     return best;
 }

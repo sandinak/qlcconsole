@@ -65,6 +65,11 @@ struct FixtureVisualTraits
      *  in it is a live DMX question -- see fixtureBeamAngle(). */
     float beamMinDeg = 0.0f;
     float beamMaxDeg = 0.0f;
+    /** Separate beams each head throws (the definition's Lens BeamsPerHead).
+     *  A two-arm beam fixture is two heads of three beams: the channels only
+     *  ever say "two things are controlled", never how many emitters each
+     *  one lights. */
+    int   beamsPerHead = 1;
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);
@@ -145,6 +150,21 @@ double fixtureBeamAngle(Fixture *fx, const QByteArray &values,
 bool fixtureHeadLiveState(Fixture *fx, const QByteArray &values, int head,
                           QColor &colour, uchar &dimmer, int masterLevel = -2);
 
+/** What ONE head of a multi-head mover is throwing: its own channels PLUS
+ *  every channel that belongs to no head.
+ *
+ *  A mover's arms share the fixture-wide channels -- master dimmer, strobe,
+ *  often a colour wheel -- and those are deliberately left out of every head
+ *  (the engine only recognises a master dimmer that sits in no head). Reading
+ *  a head's channels alone, as a pixel bar can, would miss a shut shutter and
+ *  a wheel. A dimmer inside the head wins over the fixture master, the same
+ *  rule fixtureHeadLiveState() applies.
+ *
+ *  @return false if there is no such head. */
+bool fixtureHeadBeamState(Fixture *fx, const QByteArray &values, int head,
+                          QColor &colour, uchar &dimmer,
+                          bool valuesAreComplete = true);
+
 
 /** Where a moving head is currently POINTING, in world space, from the pan and
  *  tilt it is being driven with right now.
@@ -159,9 +179,14 @@ bool fixtureHeadLiveState(Fixture *fx, const QByteArray &values, int head,
  *    - tilt 0 points straight DOWN, the home of a hung mover, and tilt swings
  *      the beam up toward whatever pan is facing.
  *
+ *  @p head picks which head's pan and tilt to read; arms that move on their
+ *  own point different ways. A head with no pan or tilt of its own (a shared
+ *  yoke) falls back to the first head.
+ *
  *  @return false when the fixture has no pan or tilt to read, so callers can
  *          leave the head in its rest position. */
-bool fixtureAimDirection(Fixture *fx, const struct FixtureRigProps &rp, QVector3D &dir);
+bool fixtureAimDirection(Fixture *fx, const struct FixtureRigProps &rp, QVector3D &dir,
+                         int head = 0);
 
 // ---------------------------------------------------------------------------
 // Shared Mover silhouettes -- pure geometry (a rect in, a path out), so

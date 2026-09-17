@@ -76,6 +76,7 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
        question -- see fixtureBeamAngle(). 0 stays 0 = undeclared. */
     t.beamMinDeg = float(qMin(phys.lensDegreesMin(), phys.lensDegreesMax()));
     t.beamMaxDeg = float(qMax(phys.lensDegreesMin(), phys.lensDegreesMax()));
+    t.beamsPerHead = phys.lensBeamsPerHead();
 
     /* The declared pixel grid, when it can actually hold this mode's heads.
        layoutSize() defaults to 1x1, and some definitions declare a layout that
@@ -514,7 +515,47 @@ int fixtureMasterLevel(Fixture *fx, const QByteArray &v)
     return master;
 }
 
-bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir)
+bool fixtureHeadBeamState(Fixture *fx, const QByteArray &v, int head,
+                          QColor &colour, uchar &dimmer, bool valuesAreComplete)
+{
+    if (fx == nullptr || head < 0)
+        return false;
+    QLCFixtureMode *mode = fx->fixtureMode();
+    if (mode == nullptr || head >= mode->heads().size() || v.isEmpty())
+        return false;
+
+    auto isMaster = [&](quint32 c) {
+        QLCChannel *ch = mode->channel(c);
+        return ch != nullptr && ch->group() == QLCChannel::Intensity
+               && ch->colour() == QLCChannel::NoColour;
+    };
+
+    QList<quint32> chans = mode->heads().at(head).channels();
+    bool headHasMaster = false;
+    foreach (quint32 c, chans)
+        headHasMaster = headHasMaster || isMaster(c);
+
+    const int count = qMin(mode->channels().size(), v.size());
+    int master = -1;
+    for (int c = 0; c < count; ++c)
+    {
+        if (mode->headForChannel(quint32(c)) != -1)
+            continue;
+        if (isMaster(quint32(c)))
+            master = qMax(master, int(uchar(v.at(c))));
+        else
+            chans << quint32(c);        // shutter, wheel, shared colour
+    }
+
+    if (channelSetLiveState(mode, v, chans, colour, dimmer, valuesAreComplete) == false)
+        return false;
+    if (headHasMaster == false && master >= 0)
+        dimmer = uchar(qRound(dimmer * (master / 255.0)));
+    return true;
+}
+
+bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
+                         int headIndex)
 {
     if (fx == nullptr)
         return false;
@@ -522,9 +563,13 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir)
     if (mode == nullptr || mode->heads().isEmpty())
         return false;
 
-    const QLCFixtureHead &head = mode->heads().first();
-    const quint32 panCh  = head.channelNumber(QLCChannel::Pan,  QLCChannel::MSB);
-    const quint32 tiltCh = head.channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+    const QLCFixtureHead *head = &mode->heads().at(
+        (headIndex >= 0 && headIndex < mode->heads().size()) ? headIndex : 0);
+    if (head->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
+        && head->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
+        head = &mode->heads().first();
+    const quint32 panCh  = head->channelNumber(QLCChannel::Pan,  QLCChannel::MSB);
+    const quint32 tiltCh = head->channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
     if (panCh == QLCChannel::invalid() && tiltCh == QLCChannel::invalid())
         return false;                       // not a mover: nothing to point
 
