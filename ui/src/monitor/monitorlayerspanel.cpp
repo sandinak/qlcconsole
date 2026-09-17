@@ -1203,57 +1203,8 @@ void MonitorLayersPanel::setObjectLocked(const QString &kind, quint32 id, bool l
 
 void MonitorLayersPanel::renameMapItem(const QString &kind, quint32 id, const QString &name)
 {
-    if (kind == QStringLiteral("fixture"))
-    {
-        if (Fixture *f = m_doc->fixture(id)) f->setName(name);
-        if (m_view) m_view->updateFixture(id);
-    }
-    else if (kind == QStringLiteral("truss"))
-    {
-        if (Truss *t = m_props->truss(id)) t->setName(name);
-        if (m_view) m_view->updateTrusses();
-    }
-    else if (kind == QStringLiteral("platform"))
-    {
-        if (StagePlatform *p = m_props->platform(id)) p->setName(name);
-        if (m_view) m_view->updatePlatforms();
-    }
-    else if (kind == QStringLiteral("power"))
-    {
-        PowerDistribution *pd = m_doc->powerDistribution();
-        if (int(id) < pd->sources().size()) pd->sources()[int(id)].name = name;
-        if (m_view) m_view->updatePowerSources();
-    }
-    else if (kind == QStringLiteral("image"))
-    {
-        if (m_props->hasImage(id))
-        {
-            MonitorProperties::MonitorImage img = m_props->image(id);
-            img.name = name;
-            m_props->setImage(img);
-        }
-        if (m_view) m_view->updateImages();
-    }
-    else if (kind == QStringLiteral("pipe"))
-    {
-        if (Pipe *b = m_props->pipe(id)) b->setName(name);
-        if (m_view) m_view->updatePlatforms();   // pipes/stands/towers redraw here
-    }
-    else if (kind == QStringLiteral("stand"))
-    {
-        if (Stand *s = m_props->stand(id)) s->setName(name);
-        if (m_view) m_view->updatePlatforms();
-    }
-    else if (kind == QStringLiteral("tower"))
-    {
-        if (Tower *t = m_props->tower(id)) t->setName(name);
-        if (m_view) m_view->updatePlatforms();
-    }
-    else if (kind == QStringLiteral("target"))
-    {
-        if (StageTarget *t = m_props->stageTarget(id)) t->setName(name);
-        if (m_view) m_view->updateTargets();
-    }
+    if (m_view != nullptr)
+        m_view->renameItem(kind, id, name);
 }
 
 void MonitorLayersPanel::collectLeaves(QTreeWidgetItem *node,
@@ -1294,52 +1245,9 @@ QList<QPair<QString, quint32> > MonitorLayersPanel::selectedObjects() const
 
 void MonitorLayersPanel::removeLeavesFromGroup(const QList<QPair<QString, quint32> > &targets)
 {
-    if (targets.isEmpty())
+    if (targets.isEmpty() || m_view == nullptr)
         return;
-
-    QList<quint32> refreshFixtures;
-    for (const QPair<QString, quint32> &t : targets)
-    {
-        const QString kind = t.first;
-        const quint32 id   = t.second;
-
-        if (kind == QStringLiteral("fixture"))
-        {
-            // Keep the fixture exactly where it is: read its current world
-            // position, then store it as a free position after we strip the
-            // frame / mount so nothing teleports.
-            const QVector3D w = m_props->fixtureRigPosition(id);        // metres
-            FixtureRigProps rp = m_props->fixtureRigProps(id);
-
-            // Detach ANY structure mount so the auto-grouping cannot re-add the
-            // fixture (riser/deck-mounted fixtures are force-grouped with their
-            // platform on every refresh — the cause of "remove doesn't stick").
-            // The world position is preserved below, so nothing moves.
-            rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
-            rp.deckPlatformId  = FixtureRigProps::invalidPlatformId();
-            rp.trussId         = Truss::invalidId();
-            rp.groupLocal      = QVector3D();   // no longer studio-frame derived
-            m_props->setFixtureRigProps(id, rp);
-            m_props->setFixtureGroup(id, 0);
-            m_props->setFixturePosition(id, 0, 0,
-                QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z()));
-            refreshFixtures << id;
-        }
-        else if (m_view != nullptr)
-        {
-            QList<QPair<QString, quint32> > one;
-            one.append(t);
-            m_view->reparentToLayer(one, m_props->activeLayerId());
-        }
-    }
-
-    m_doc->setModified();
-    if (m_view != nullptr)
-    {
-        foreach (quint32 fid, refreshFixtures)
-            m_view->updateFixture(fid);
-        m_view->refreshItemLayerState();
-    }
+    m_view->removeFromFolder(targets);
     reload();
 }
 
@@ -1410,350 +1318,122 @@ void MonitorLayersPanel::slotItemClicked(QTreeWidgetItem *item, int)
 
 void MonitorLayersPanel::slotContextMenu(const QPoint &pos)
 {
-    QTreeWidgetItem *item = m_tree->itemAt(pos);
     QMenu menu(this);
+    buildContextMenu(&menu, m_tree->itemAt(pos));
+    if (!menu.isEmpty())
+        menu.exec(m_tree->viewport()->mapToGlobal(pos));
+}
 
+/* A row that IS an item -- a fixture, a truss, a riser shown as its group --
+   gets exactly the menu that item has on the plot, built by the plot, down to
+   the order; only "Show on Map" stands where the plot says "Show in Layers".
+   Rows that are not one item (a plain folder, a layer, a fixture group) have
+   their own few actions, then the same organising section for the selection. */
+void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
+{
+    QMenu &menu = *out;
     if (item == nullptr)
     {
         // Blank space: offer to create a new layer.
         if (m_editable)
-            menu.addAction(tr("New layer"), this, &MonitorLayersPanel::slotAddLayer);
-        if (!menu.isEmpty())
-            menu.exec(m_tree->viewport()->mapToGlobal(pos));
+            menu.addAction(tr("New Layer"), this, &MonitorLayersPanel::slotAddLayer);
         return;
     }
+    if (m_view == nullptr)
+        return;
 
     const int type = item->data(0, NodeTypeRole).toInt();
     const quint32 id = item->data(0, NodeIdRole).toUInt();
 
-    // Selection-based Group / Move to layer (needs editing + real objects).
-    const QList<QPair<QString, quint32> > objs = selectedObjects();
-    if (m_editable && objs.size() >= 2)
-    {
-        menu.addAction(tr("New Folder from selection…"), this, [this, objs, item]() {
-            // If every selected leaf already sits under the SAME group, the new
-            // group nests INSIDE it (a sub-group) rather than becoming a top-level
-            // sibling. Otherwise it's a top-level group on the selection's layer.
-            quint32 parentGroup = 0;
-            bool commonParent = true, first = true;
-            foreach (QTreeWidgetItem *sel, m_tree->selectedItems())
-            {
-                if (sel->data(0, NodeTypeRole).toInt() != NodeItem)
-                    continue;
-                QTreeWidgetItem *p = sel->parent();
-                const quint32 pg = (p && p->data(0, NodeTypeRole).toInt() == NodeGroup)
-                                       ? p->data(0, NodeIdRole).toUInt() : 0;
-                if (first) { parentGroup = pg; first = false; }
-                else if (pg != parentGroup) { commonParent = false; break; }
-            }
-            if (!commonParent)
-                parentGroup = 0;
+    MonitorGraphicsView::MenuPlace place;
+    place.inList = true;
+    place.selection = selectedObjects();
+    place.renameInPlace = [this, item]() { m_tree->editItem(item, 0); };
 
-            quint32 layer = m_props->activeLayerId();
-            if (parentGroup != 0)
-                layer = m_props->group(parentGroup).layerId;   // sub-group rides parent's layer
-            else
-                for (QTreeWidgetItem *up = item; up != nullptr; up = up->parent())
-                    if (up->data(0, NodeTypeRole).toInt() == NodeLayer)
-                    { layer = up->data(0, NodeIdRole).toUInt(); break; }
-
-            bool ok = false;
-            const quint32 gid = m_props->nextGroupId();
-            const QString name = QInputDialog::getText(this, tr("New Folder"),
-                tr("Folder name:"), QLineEdit::Normal,
-                tr("Folder %1").arg(gid), &ok).trimmed();
-            if (!ok || name.isEmpty())
-                return;
-            // Create the folder (nested under parentGroup when the selection shares
-            // one) and move the selected objects into it directly.
-            m_props->createGroup(gid, name, layer, parentGroup);
-            if (m_view)
-                m_view->reparentToGroup(objs, gid);
-            m_doc->setModified();
-            m_focusLayerAfterReload = int(layer);
-            reload();
-        });
-    }
-    // All-fixture selection → offer the explicit lighting Fixture Group (distinct
-    // from a map Folder). Grouping stays a Folder; THIS makes a control group.
-    if (m_editable && !objs.isEmpty())
+    if (type == NodeItem)
     {
-        QList<quint32> fixIds; bool allFixtures = true;
-        for (const QPair<QString, quint32> &o : objs)
-        {
-            if (o.first != QStringLiteral("fixture")) { allFixtures = false; break; }
-            fixIds << o.second;
-        }
-        if (allFixtures && !fixIds.isEmpty())
-            menu.addAction(tr("Create Fixture Group from these…"), this,
-                           [this, fixIds]() { createFixtureGroupFrom(fixIds); });
+        m_view->buildItemMenu(&menu, item->data(0, NodeKindRole).toString(), id, place);
+        return;
     }
-    if (m_editable && !objs.isEmpty())
-    {
-        QMenu *moveMenu = menu.addMenu(tr("Move to layer"));
-        foreach (const MonitorProperties::MonitorLayer &lyr, m_props->layers())
-        {
-            const quint32 lid = lyr.id;
-            moveMenu->addAction(lyr.name, this, [this, objs, lid]() {
-                /* Same call the drag-and-drop path uses. This went via
-                   selectMapItems() + setSelectedItemsLayer(), which only moves
-                   what it manages to SELECT first -- and an item that is
-                   hidden or non-selectable in the current view cannot be
-                   selected, so the menu silently moved nothing while dragging
-                   the same row worked. reparentToLayer() addresses items by
-                   kind and id and does not care what is selected or on screen. */
-                if (m_view) m_view->reparentToLayer(objs, lid);
-                reload();
-            });
-        }
-        // One-step version of "New layer" + "Move to layer" -- create the
-        // layer AND land the current selection on it in a single action,
-        // same as "New Folder from selection…" above does for folders.
-        menu.addAction(tr("New Layer from selection…"), this, [this, objs]() {
-            bool ok = false;
-            const QString name = QInputDialog::getText(this, tr("New Layer"),
-                tr("Layer name:"), QLineEdit::Normal,
-                tr("Layer %1").arg(m_props->layers().count()), &ok).trimmed();
-            if (!ok || name.isEmpty())
-                return;
-            const quint32 lid = m_props->addLayer(name);
-            m_props->setActiveLayerId(lid);
-            if (m_view) m_view->reparentToLayer(objs, lid);
-            m_doc->setModified();
-            m_focusLayerAfterReload = int(lid);
-            reload();
-        });
-
-        // Bulk position lock/unlock -- the per-item "Lock position" toggle
-        // (below, single-object context menus) already freezes movement AND
-        // refuses new attachments onto a locked structural feature
-        // (trussUnderFixture()'s forAttach path skips locked trusses); this
-        // just makes it reachable for a whole multi-selection at once,
-        // e.g. everything currently on a layer, instead of one item at a
-        // time. Fixtures have no per-item lock (only layer/group/global), so
-        // they're silently excluded here rather than offering an action that
-        // would do nothing for them.
-        QList<QPair<QString, quint32> > lockableObjs;
-        for (const QPair<QString, quint32> &o : objs)
-            if (kindLockable(o.first))
-                lockableObjs << o;
-        if (!lockableObjs.isEmpty())
-        {
-            menu.addAction(tr("Lock position"), this, [this, lockableObjs]() {
-                for (const QPair<QString, quint32> &o : lockableObjs)
-                    setObjectLocked(o.first, o.second, true);
-                reload();
-            });
-            menu.addAction(tr("Unlock position"), this, [this, lockableObjs]() {
-                for (const QPair<QString, quint32> &o : lockableObjs)
-                    setObjectLocked(o.first, o.second, false);
-                reload();
-            });
-        }
-    }
-    if (!menu.isEmpty())
-        menu.addSeparator();
 
     if (type == NodeGroup)
     {
-        // Primary "Edit…" opens the Fixture Studio (the group's editing surface
-        // — layout, faces, orientation). Editing the physical feature it rides
-        // (riser size/colour, truss) is a separate, clearly-named entry.
         const MonitorProperties::MonitorGroup g = m_props->group(id);
-        /* The Fixture Studio edits a studio FRAME -- origin, rotation, faces,
-           group-local offsets. An auto-group created for a truss or riser has
-           no frame; it exists so the Layers tree can present the structure's
-           fixtures under it. Offering "Edit..." there opened an editor with
-           nothing in it to change, and did so ABOVE the entry that leads to
-           the thing you actually meant ("I see nothing in this editor that's
-           useful"). Only offer it where it does something. */
-        if (m_editable)
-        {
-            /* Unanchored, the group IS the thing being edited, so "Edit..." is
-               its primary action. Anchored, the structure is primary (added
-               just below) and the frame -- if it has one -- is a secondary,
-               named for what it actually does rather than a bare verb. */
-            if (g.anchorKind.isEmpty())
-            {
-                menu.addAction(tr("Edit…"), this, [this, id]() {
-                    if (m_view) m_view->openStudioGroupForGroup(id);
-                    reload();
-                });
-            }
-            else
-            {
-                /* Anchored. The layout entry is still needed -- and needed MOST
-                   when there is no frame yet, because openStudioGroupForGroup()
-                   is what promotes a plain group into one. Gating it on hasFrame
-                   left the twelve step groups with no way to become frames at
-                   all, which is precisely what the component workflow needs
-                   them to be. Named for what it will do. */
-                menu.addAction(g.hasFrame ? tr("Fixture layout…")
-                                          : tr("Create fixture layout…"),
-                               this, [this, id]() {
-                    if (m_view) m_view->openStudioGroupForGroup(id);
-                    reload();
-                });
-            }
-        }
         if (!g.anchorKind.isEmpty())
         {
-            const QString ak = g.anchorKind; const quint32 aid = g.anchorId;
-            const QString label = (ak == QStringLiteral("platform"))
-                ? tr("Riser properties…") : tr("Truss properties…");
-            menu.addAction(label, this, [this, ak, aid]() {
-                if (m_view) m_view->requestEditItem(ak, aid);
-            });
+            // A truss or riser carrying fixtures: it is still that truss or riser.
+            m_view->buildItemMenu(&menu, g.anchorKind, g.anchorId, place);
+            return;
         }
-        menu.addAction(tr("Select on map"), this, [this, id]() {
+
+        // A plain folder.
+        if (m_editable)
+            menu.addAction(tr("Edit Layout…"), this, [this, id]() {
+                if (m_view) m_view->openStudioGroupForGroup(id);
+                reload();
+            });
+        menu.addAction(tr("Show on Map"), this, [this, id]() {
             if (m_view) m_view->selectItemsInGroup(id);
         });
         if (m_editable)
         {
-            // Position lock. For an anchored group (truss/platform) this locks
-            // the ANCHOR object itself — same as the leaf node when the truss has
-            // no fixtures, and same as the canvas right-click. For a plain folder
-            // it locks the whole group.
-            if (!g.anchorKind.isEmpty() && kindLockable(g.anchorKind))
-            {
-                const QString ak = g.anchorKind; const quint32 aid = g.anchorId;
-                const bool lk = objectLocked(ak, aid);
-                menu.addAction(lk ? tr("Unlock position") : tr("Lock position"),
-                               this, [this, ak, aid, lk]() {
-                    setObjectLocked(ak, aid, !lk);
-                });
-            }
-            else
-            {
-                const bool locked = g.locked;
-                menu.addAction(locked ? tr("Unlock position") : tr("Lock position"),
-                               this, [this, id, locked]() {
-                    m_props->setGroupLocked(id, !locked);
-                    m_doc->setModified();
-                    if (m_view) m_view->refreshItemLayerState();
-                    reload();
-                });
-            }
-            // A plain group is a Folder; an anchored/framed one is an Assembly
-            // (fixtures mounted on an object) — label accordingly.
-            const bool isAssembly = g.hasFrame || !g.anchorKind.isEmpty();
-            menu.addAction(isAssembly ? tr("Rename…") : tr("Rename folder…"),
+            const bool locked = g.locked;
+            menu.addAction(locked ? tr("Unlock Folder Position") : tr("Lock Folder Position"),
+                           this, [this, id, locked]() {
+                m_props->setGroupLocked(id, !locked);
+                m_doc->setModified();
+                if (m_view) m_view->refreshItemLayerState();
+                reload();
+            });
+            menu.addAction(g.hasFrame ? tr("Rename…") : tr("Rename Folder…"),
                            this, [this, item]() {
                 m_tree->editItem(item, 0);
             });
-            menu.addAction(isAssembly ? tr("Ungroup") : tr("Dissolve folder"),
+            menu.addAction(g.hasFrame ? tr("Ungroup") : tr("Dissolve Folder"),
                            this, [this, id]() {
                 if (m_view) m_view->ungroupById(id);
             });
         }
     }
-    else if (type == NodeItem)
+    else if (type == NodeLayer && m_editable)
     {
-        // Any object leaf (fixture / platform / image / power) → Edit + Select.
-        const QString kind = item->data(0, NodeKindRole).toString();
-        menu.addAction(tr("Edit…"), this, [this, kind, id]() {
-            if (m_view) m_view->requestEditItem(kind, id);
+        menu.addAction(tr("Rename Layer…"), this, [this, item]() {
+            m_tree->editItem(item, 0);
         });
-        menu.addAction(tr("Select on map"), this, [this, kind, id]() {
-            if (m_view) m_view->selectMapItem(kind, id);
-        });
-        if (m_editable && kindLockable(kind))
-        {
-            const bool lk = objectLocked(kind, id);
-            menu.addAction(lk ? tr("Unlock position") : tr("Lock position"),
-                           this, [this, kind, id, lk]() {
-                setObjectLocked(kind, id, !lk);
-            });
-        }
-        if (m_editable)
-            menu.addAction(tr("Rename…"), this, [this, item]() {
-                m_tree->editItem(item, 0);
-            });
-        // Remove from group — operates on the whole selection (all in-group
-        // leaves), plus the clicked leaf. Handles anchor groups: a fixture
-        // mounted on the group's platform/truss is also detached so the
-        // auto-grouping can't immediately re-add it.
-        if (m_editable)
-        {
-            QList<QPair<QString, quint32> > targets;
-            QSet<QString> seen;
-            auto add = [&](const QString &k, quint32 i) {
-                const QString key = k + QLatin1Char(':') + QString::number(i);
-                if (!seen.contains(key)) { seen.insert(key); targets.append(qMakePair(k, i)); }
-            };
-            auto inGroup = [](QTreeWidgetItem *leaf) -> bool {
-                QTreeWidgetItem *pp = leaf->parent();
-                return pp != nullptr && pp->data(0, NodeTypeRole).toInt() == NodeGroup;
-            };
-            if (inGroup(item))
-                add(kind, id);
-            foreach (QTreeWidgetItem *sel, m_tree->selectedItems())
-                if (sel->data(0, NodeTypeRole).toInt() == NodeItem && inGroup(sel))
-                    add(sel->data(0, NodeKindRole).toString(), sel->data(0, NodeIdRole).toUInt());
-
-            if (!targets.isEmpty())
-            {
-                const QString label = targets.size() > 1
-                    ? tr("Remove %1 items from folder").arg(targets.size())
-                    : tr("Remove from folder");
-                menu.addAction(label, this, [this, targets]() {
-                    removeLeavesFromGroup(targets);
-                });
-            }
-        }
-
-        // Remove from Fixture Group — for selected fixtures nested under a 💡 node,
-        // resign them from THAT lighting group (works on the whole selection).
-        if (m_editable && kind == QStringLiteral("fixture"))
-        {
-            QList<QPair<quint32, quint32> > fgRemovals;   // (fixtureGroupId, fixtureId)
-            QSet<QString> seenFg;
-            auto addFix = [&](QTreeWidgetItem *leaf) {
-                if (leaf == nullptr || leaf->data(0, NodeTypeRole).toInt() != NodeItem
-                    || leaf->data(0, NodeKindRole).toString() != QStringLiteral("fixture"))
-                    return;
-                QTreeWidgetItem *pp = leaf->parent();
-                if (pp == nullptr || pp->data(0, NodeTypeRole).toInt() != NodeFixtureGroup)
-                    return;
-                const quint32 fgId = pp->data(0, NodeIdRole).toUInt();
-                const quint32 fid  = leaf->data(0, NodeIdRole).toUInt();
-                const QString key  = QString::number(fgId) + ':' + QString::number(fid);
-                if (!seenFg.contains(key)) { seenFg.insert(key); fgRemovals << qMakePair(fgId, fid); }
-            };
-            addFix(item);
-            foreach (QTreeWidgetItem *sel, m_tree->selectedItems())
-                addFix(sel);
-
-            if (!fgRemovals.isEmpty())
-            {
-                const QString label = fgRemovals.size() > 1
-                    ? tr("Remove %1 fixtures from Fixture Group").arg(fgRemovals.size())
-                    : tr("Remove from Fixture Group");
-                menu.addAction(label, this, [this, fgRemovals]() {
-                    foreach (const auto &pr, fgRemovals)
-                        if (FixtureGroup *fg = m_doc->fixtureGroup(pr.first))
-                            fg->resignFixture(pr.second);
-                    m_doc->setModified();
-                    reload();
-                });
-            }
-        }
-    }
-    else if (type == NodeLayer)
-    {
-        if (m_editable)
-        {
-            menu.addAction(tr("Rename layer…"), this, [this, item]() {
-                m_tree->editItem(item, 0);
-            });
-            menu.addAction(tr("New layer"), this, &MonitorLayersPanel::slotAddLayer);
-            if (id != MonitorProperties::defaultLayerId)
-                menu.addAction(tr("Delete layer"), this, &MonitorLayersPanel::slotRemoveLayer);
-        }
+        menu.addAction(tr("New Layer"), this, &MonitorLayersPanel::slotAddLayer);
+        if (id != MonitorProperties::defaultLayerId)
+            menu.addAction(tr("Delete Layer"), this, &MonitorLayersPanel::slotRemoveLayer);
     }
 
-    if (!menu.isEmpty())
-        menu.exec(m_tree->viewport()->mapToGlobal(pos));
+    m_view->populateOrganiseMenu(&menu, place.selection);
+}
+
+bool MonitorLayersPanel::revealItem(const QString &kind, quint32 id)
+{
+    QTreeWidgetItemIterator it(m_tree);
+    for (; *it != nullptr; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        const int type = row->data(0, NodeTypeRole).toInt();
+        const quint32 rid = row->data(0, NodeIdRole).toUInt();
+        bool match = (type == NodeItem && rid == id
+                      && row->data(0, NodeKindRole).toString() == kind);
+        if (!match && type == NodeGroup)
+        {
+            const MonitorProperties::MonitorGroup g = m_props->group(rid);
+            match = (g.anchorKind == kind && g.anchorId == id);
+        }
+        if (!match)
+            continue;
+        for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
+            up->setExpanded(true);
+        m_tree->clearSelection();
+        row->setSelected(true);
+        m_tree->setCurrentItem(row);
+        m_tree->scrollToItem(row, QAbstractItemView::PositionAtCenter);
+        return true;
+    }
+    return false;
 }
 
 void MonitorLayersPanel::slotAddLayer()

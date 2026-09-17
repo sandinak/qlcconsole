@@ -396,6 +396,17 @@ void Monitor::initGraphicsView()
             m_layersAction->setChecked(false);
     });
     // Double-clicking a Fixture Group node in the panel opens its head-layout editor.
+    /* "Show in Layers" from the plot's menu: open the list if it is hidden,
+       then bring the row into view. */
+    connect(m_graphicsView, &MonitorGraphicsView::revealInLayersRequested, this,
+            [this](const QString &kind, quint32 id) {
+        if (m_layersPanel == nullptr)
+            return;
+        if (!m_layersPanel->isVisible())
+            m_layersPanel->setVisible(true);
+        m_layersPanel->reload();
+        m_layersPanel->revealItem(kind, id);
+    });
     connect(m_layersPanel, &MonitorLayersPanel::editFixtureGroupRequested,
             this, [this](quint32 fgId) { openGroupLayout(fgId); if (m_layersPanel) m_layersPanel->reload(); });
 
@@ -716,6 +727,29 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     connect(mountedBtn, &QAction::toggled, this, [this](bool on) {
         m_graphicsView->setMountedFixturesVisible(on);
         QSettings().setValue(SETTINGS_MOUNTEDFIXTURES, on);
+    });
+
+    /* Where the selected moving heads cannot aim: a design aid for deciding
+       how to rig them (on top of a tower, or hung under a bar) before the
+       load-in, so not remembered between sessions. */
+    QAction *reachBtn = showMenu->addAction(tr("Reach of selected heads"));
+    reachBtn->setCheckable(true);
+    reachBtn->setToolTip(tr("Shade, in the top view, where the selected moving "
+                            "heads cannot point at subject height"));
+    connect(reachBtn, &QAction::toggled, this, [this](bool on) {
+        m_graphicsView->setReachOverlayVisible(on);
+    });
+
+    /* Where the selected heads' light lands: the answer to "what is this
+       fixture covering", and what a count bubble shows when you double-click
+       it. Top view, and not remembered -- it is a question you ask, not a way
+       you leave the plot. */
+    QAction *projectionBtn = showMenu->addAction(tr("Projection of selected heads"));
+    projectionBtn->setCheckable(true);
+    projectionBtn->setToolTip(tr("Shade where the selected moving heads' beams "
+                                 "land, on the floor or the deck below them"));
+    connect(projectionBtn, &QAction::toggled, this, [this](bool on) {
+        m_graphicsView->setProjectionOverlayVisible(on);
     });
 
     QAction *centerBtn = showMenu->addAction(tr("Stage centre lines"));
@@ -2054,6 +2088,37 @@ void Monitor::showStageOverview()
     });
     view->setAmbient(ambientCombo->currentData().toDouble());
 
+    /* Fidelity against speed, for the machine this is running on: sharper
+       edges cost fill, and the rate is only a ceiling -- a frame that takes
+       longer than the rate allows still slows the view down on its own. Both
+       are remembered. */
+    bar->addWidget(new QLabel(tr("Quality:"), &dlg));
+    QComboBox *qualityCombo = new QComboBox(&dlg);
+    qualityCombo->addItem(tr("Fast"),     1);
+    qualityCombo->addItem(tr("Smooth"),   2);
+    qualityCombo->addItem(tr("Sharp"),    3);
+    qualityCombo->addItem(tr("Sharpest"), 4);
+    qualityCombo->setCurrentIndex(qMax(0, qualityCombo->findData(view->supersample())));
+    qualityCombo->setToolTip(tr("Edge smoothing: Fast draws at screen resolution, "
+                                "Sharpest at four times it in each direction"));
+    bar->addWidget(qualityCombo);
+    connect(qualityCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, qualityCombo](int) {
+        view->setSupersample(qualityCombo->currentData().toInt());
+    });
+
+    QComboBox *rateCombo = new QComboBox(&dlg);
+    for (int fps : { 25, 30, 60, 120 })
+        rateCombo->addItem(tr("%1 fps").arg(fps), fps);
+    rateCombo->setCurrentIndex(qMax(0, rateCombo->findData(view->maxFrameRate())));
+    rateCombo->setToolTip(tr("Most live repaints per second. A heavy frame "
+                             "still slows the view below this on its own."));
+    bar->addWidget(rateCombo);
+    connect(rateCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, rateCombo](int) {
+        view->setMaxFrameRate(rateCombo->currentData().toInt());
+    });
+
     bar->addStretch();
     bar->addWidget(new QLabel(tr("drag to swing · shift-drag to pan · "
                                  "wheel to zoom · read-only"), &dlg));
@@ -3226,6 +3291,10 @@ void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32
     if (gid != 0)
         m_props->setFixtureGroup(fid, gid);
 
+    /* A fixture picked from the editor's list may never have been placed on
+       the plot: give it an icon where its new mount puts it, or it is rigged
+       and invisible -- and uncounted by the structure's bubble. */
+    m_graphicsView->ensureFixtureOnPlot(fid);
     m_graphicsView->updateFixture(fid);
 }
 
@@ -4190,7 +4259,7 @@ void Monitor::slotEditTarget(quint32 tid)
     QDoubleSpinBox *ovrSpin = new QDoubleSpinBox(&dlg);
     ovrSpin->setRange(0, isFeet_t ? 32.8 : 10.0);
     ovrSpin->setSuffix(unitSfx_t); ovrSpin->setDecimals(2);
-    ovrSpin->setValue(double(t->effectiveAimHeight()) * toDisp_t);
+    ovrSpin->setValue(double(m_props->targetAimHeight(t, true)) * toDisp_t);
     ovrSpin->setEnabled(ovrChk->isChecked());
     connect(ovrChk, &QCheckBox::toggled, ovrSpin, &QWidget::setEnabled);
     ovrSpin->setToolTip(tr("How far above whatever it is standing on to aim. "
@@ -4225,11 +4294,17 @@ void Monitor::slotEditTarget(quint32 tid)
                             || k == StageTarget::Kind::Area);
         wSpin->setEnabled(sized);
         dSpin->setEnabled(sized);
+        /* Unticked, show what the Subject gives -- which for a Person is the
+           follow-spot subject height above, not a number of its own. */
         if (ovrChk->isChecked() == false)
-            ovrSpin->setValue(double(StageTarget::defaultAimHeight(k)) * toDisp_t);
+            ovrSpin->setValue(k == StageTarget::Kind::Person
+                              ? subjSpin->value()
+                              : double(StageTarget::defaultAimHeight(k)) * toDisp_t);
     };
     connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             &dlg, [&](int) { syncRows(); });
+    connect(subjSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            &dlg, [&](double) { syncRows(); });
     syncRows();
 
     QColor curColor = t->color().isValid() ? t->color() : QColor(255, 180, 0);

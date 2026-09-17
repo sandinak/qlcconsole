@@ -106,6 +106,15 @@ public:
      *  items may have changed (e.g. after a workspace load or a group op). */
     void reload();
 
+    /** The right-click menu for @p item (null = blank space), built but not
+     *  shown: the item's own section comes from the plot, so the list offers
+     *  everything the plot does. */
+    void buildContextMenu(class QMenu *menu, QTreeWidgetItem *item);
+
+    /** Select and scroll to the row for @p kind / @p id ("Show in Layers").
+     *  False when the list has no such row. */
+    bool revealItem(const QString &kind, quint32 id);
+
 signals:
     /** Emitted when the in-panel close/hide button is clicked. */
     void closeRequested();

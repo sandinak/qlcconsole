@@ -22,6 +22,7 @@
 
 #include <QElapsedTimer>
 #include <QGraphicsView>
+#include <functional>
 #include <QHash>
 #include <QList>
 #include <QSet>
@@ -249,7 +250,7 @@ public:
 
     /** Support function to convert a position in millimeters
      *  to a position in pixels */
-    QPointF realPositionToPixels(qreal xpos, qreal ypos);
+    QPointF realPositionToPixels(qreal xpos, qreal ypos) const;
 
     /** Project a world point (millimetres, X=stage-right, Y=upstage, Z=height)
      *  to scene pixels for the current POV. Top: (X,Y); Front: (X,Z↑);
@@ -495,6 +496,72 @@ public:
     /** Open the editor for a map item (emits the matching *DoubleClicked signal
      *  the Monitor already handles). Used by a Layers-tree double-click. */
     void requestEditItem(const QString &kind, quint32 id);
+
+    /** Everything you can do to one item, built in ONE place.
+     *
+     *  The plot's right-click and the Layers list both fill their menus here,
+     *  so an action on a feature cannot exist in one and be missing from the
+     *  other. Every kind is laid out the same way: edit; what to build on it;
+     *  how it is mounted or positioned; its grouping; removing it last.
+     *  @p scenePos, when known, puts "here" actions at the click. */
+    void populateItemMenu(class QMenu *menu, const QString &kind, quint32 id,
+                          const QPointF &scenePos = QPointF(), bool withRemoval = true);
+    /** The item's removing action on its own ("Delete Truss", "Remove from
+     *  View"), for a menu that has more to add before it: removing always
+     *  comes last. */
+    void addItemRemoval(class QMenu *menu, const QString &kind, quint32 id);
+
+    /** Where a menu was opened: the plot or the Layers list. The menu is the
+     *  same in both; only these differ. */
+    struct MenuPlace
+    {
+        bool inList = false;                            ///< opened in the Layers list
+        QList<QPair<QString, quint32> > selection;      ///< what is selected THERE
+        std::function<void()> renameInPlace;            ///< the list edits its row; unset = ask
+    };
+
+    /** The WHOLE right-click menu for one item, identical in the plot and in
+     *  the Layers list apart from the one action that says where it is:
+     *    1. the thing (populateItemMenu);
+     *    2. where it is and its name -- Show in Layers / Show on Map, Rename,
+     *       and a truss or riser's fixture layout;
+     *    3. organising the selection -- folders, fixture groups, layers;
+     *    4. removing it, last. */
+    void buildItemMenu(class QMenu *menu, const QString &kind, quint32 id,
+                       const MenuPlace &place, const QPointF &scenePos = QPointF());
+
+    /** Section 3 on its own, for rows with no single item (a folder, a layer). */
+    void populateOrganiseMenu(class QMenu *menu, const QList<QPair<QString, quint32> > &objects);
+
+    /** What is selected on the plot, as kind/id pairs. */
+    QList<QPair<QString, quint32> > selectedMapObjects() const;
+
+    void renameItem(const QString &kind, quint32 id, const QString &name);
+    /** Take objects out of the folder they are in, leaving them where they are. */
+    void removeFromFolder(const QList<QPair<QString, quint32> > &objects);
+
+    /** Whether @p kind / @p id is held in place, for any kind with a position. */
+    bool itemLocked(const QString &kind, quint32 id) const;
+    void setItemLocked(const QString &kind, quint32 id, bool locked);
+
+    /** Delete an item the way its own menu does, asking first where it asks. */
+    void requestDeleteItem(const QString &kind, quint32 id);
+
+    /** Mount a fixture on a tower's top, bottom, or one of its shelves
+     *  (FixtureRigProps::TowerTop / TowerBottom / TowerShelf). */
+    void mountFixtureOnTower(quint32 fid, quint32 towerId, int side, int shelf = 0);
+    /** Take a fixture off whatever truss, boom or tower it is mounted on. */
+    void unmountFixture(quint32 fid);
+
+    /** Give a fixture an icon on the plot if it has none, placed where its
+     *  mount puts it.
+     *
+     *  A fixture patched in the Fixture Manager and never dragged onto the plot
+     *  has no item here. Mounting it from a structure editor only updated the
+     *  item it did not have, so it was on the truss and nowhere on the plot --
+     *  and the truss's count bubble, which counts the fixtures it can see,
+     *  never changed. */
+    void ensureFixtureOnPlot(quint32 fid);
 
     /** Reparent a set of (kind,id) items to a layer (loose, ungrouped). */
     void reparentToLayer(const QList<QPair<QString, quint32> > &items, quint32 layerId);
@@ -766,6 +833,8 @@ signals:
 
     /** Emitted from the truss context menu — Monitor confirms + removes it. */
     void trussRemoveRequested(quint32 tid);
+    /** "Show in Layers": select and reveal this item's row in the Layers list. */
+    void revealInLayersRequested(const QString &kind, quint32 id);
 
     /** Emitted from the truss context menu / strip — add a bar hung on this
      *  truss. @p offset < 0 means "use a sensible default (mid-span)". */
@@ -987,7 +1056,46 @@ public:
     void setMountedFixturesVisible(bool on);
     bool mountedFixturesVisible() const { return m_showMountedFixtures; }
 
+    /** Shade, in the top view, where the SELECTED moving heads cannot aim.
+     *
+     *  Measured at subject height -- aimSubjectHeight() above whatever deck is
+     *  there -- because that is where a follow-spot is pointed. With several
+     *  heads selected, only what NONE of them can reach is shaded: the gap in
+     *  coverage, not the union of every blind spot. Rebuilt whenever the
+     *  selection, a mount or the stage changes, so re-rigging a head (standing
+     *  on a tower vs hung under a bar) shows its effect immediately. */
+    void setReachOverlayVisible(bool on);
+    bool reachOverlayVisible() const { return m_reachVisible; }
+
+    /** Draw where the SELECTED heads' beams land -- the cone cut by the floor
+     *  or the deck under it, in the head's own colour. Top view only: it is a
+     *  question about ground you are looking down on. */
+    void setProjectionOverlayVisible(bool on);
+    bool projectionOverlayVisible() const { return m_projectionVisible; }
+
+    /** Show what a structure's count bubble stands for: select the fixtures it
+     *  hides, draw them over their structure, and put their projections on the
+     *  deck. Cleared by the next selection. */
+    void revealBuriedFixtures(const QString &kind, quint32 id);
+
+    /** Where a fixture's beam lands, in scene pixels (top view): its cone's
+     *  edge rays followed down to the floor or the deck they meet. Empty when
+     *  nothing lands -- a head pointed level or up, or a fixture with no
+     *  declared beam at all. */
+    QPolygonF fixtureProjection(quint32 fid) const;
+
 private:
+    void scheduleReachOverlay();
+    void rebuildReachOverlay();
+    void rebuildProjectionOverlay();
+    bool m_projectionVisible = false;
+    QSet<quint32> m_revealedFixtures;      ///< shown despite being buried
+    bool m_settingRevealSelection = false;
+    QList<class QGraphicsPathItem *> m_projectionItems;
+    class QGraphicsPixmapItem *m_reachItem = nullptr;
+    bool m_reachVisible = false;
+    bool m_reachUpdatePending = false;
+
     bool m_showMountedFixtures = true;
     int  m_viewRotation = 0;   ///< plot turn, 0..3 quarter turns clockwise
 

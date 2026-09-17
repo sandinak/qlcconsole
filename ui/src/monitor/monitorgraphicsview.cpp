@@ -27,6 +27,8 @@
 #include <QScrollBar>
 #include <QShortcut>
 #include <QMenu>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QFileDialog>
 #include <QMessageBox>
 
@@ -58,10 +60,13 @@
 #include "truss.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
+#include "monitor.h"
+#include "aimsolver.h"
 #include "qlcfixturemode.h"
 #include "qlcpalette.h"
 #include "scene.h"
 #include "fixturegroup.h"
+#include "createfixturegroup.h"
 #include "function.h"
 #include "programmercontroller.h"
 #include "doc.h"
@@ -141,6 +146,35 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
             updateAimLines();
         });
     });
+    /* Re-rigging a head changes what it can reach -- flipping a spot from
+       standing on a tower to hanging under a bar is exactly the what-if the
+       warnings exist for -- so a rig change re-checks, coalesced the same way. */
+    connect(m_scene, &QGraphicsScene::selectionChanged,
+            this, &MonitorGraphicsView::scheduleReachOverlay);
+    /* A reveal lasts until you select something else: the fixtures a bubble
+       stands for go back under it, and their projections with them. */
+    connect(m_scene, &QGraphicsScene::selectionChanged, this, [this]() {
+        if (m_settingRevealSelection)
+            return;
+        if (!m_revealedFixtures.isEmpty())
+        {
+            m_revealedFixtures.clear();
+            refreshItemLayerState();
+        }
+        rebuildProjectionOverlay();
+    });
+    if (m_doc->monitorProperties() != nullptr)
+        connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged, this,
+                [this](quint32) {
+            scheduleReachOverlay();
+            if (m_aimLinesUpdatePending)
+                return;
+            m_aimLinesUpdatePending = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_aimLinesUpdatePending = false;
+                updateAimLines();
+            });
+        });
 
     m_gridSize = QSize(5, 5);
 
@@ -1606,6 +1640,7 @@ void MonitorGraphicsView::requestEditItem(const QString &kind, quint32 id)
     else if (kind == QStringLiteral("tower"))    emit towerDoubleClicked(id);
     else if (kind == QStringLiteral("image"))    emit imageDoubleClicked(id);
     else if (kind == QStringLiteral("power"))    emit powerDoubleClicked(id);
+    else if (kind == QStringLiteral("target"))   emit targetDoubleClicked(id);
 }
 
 void MonitorGraphicsView::selectMapItems(const QList<QPair<QString, quint32> > &items)
@@ -1806,6 +1841,15 @@ QGraphicsItem *MonitorGraphicsView::topPickableAt(const QPointF &scenePos) const
         if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(top))
             if (mfi->isGhosted())
                 continue;   // see through the ghost to the structure below
+        /* Nor anything that takes no clicks at all: the count bubble on a
+           buried structure, aim and anchor lines, the reach overlay. A single
+           click already passes through them -- Qt skips an item that accepts
+           no buttons -- but this picked them anyway, so double-clicking the
+           top of a tower mostly landed on its bubble or on an anchor line and
+           opened nothing ("if I move around the top and keep double clicking
+           I eventually open it"). */
+        if (top->acceptedMouseButtons() == Qt::NoButton)
+            continue;
         return top;
     }
     return nullptr;
@@ -1984,6 +2028,8 @@ void MonitorGraphicsView::refreshItemLayerState()
     }
 
     updateTrussAnchorLines();
+    scheduleReachOverlay();
+    rebuildProjectionOverlay();
     /* Badges last: they decide which fixtures are buried, so run them after the
        layer pass and settle fixture visibility once more. */
     refreshFixtureCountBadges();
@@ -2341,6 +2387,10 @@ bool MonitorGraphicsView::fixtureItemShouldBeVisible(quint32 fid) const
     if (mounted && !m_showMountedFixtures)
         return false;
 
+    // ...unless its bubble was asked to show what it stands for.
+    if (m_revealedFixtures.contains(fid))
+        return true;
+
     // Buried by its own kind: the structure shows a count instead.
     if (m_buriedByOwnFixtures.contains(fid))
         return false;
@@ -2411,7 +2461,7 @@ void MonitorGraphicsView::selectFixtures(const QList<quint32> &ids)
         ensureVisible(first);
 }
 
-QPointF MonitorGraphicsView::realPositionToPixels(qreal xpos, qreal ypos)
+QPointF MonitorGraphicsView::realPositionToPixels(qreal xpos, qreal ypos) const
 {
     qreal realX = m_xOffset + ((xpos * m_cellPixels) / m_unitValue);
     qreal realY = m_yOffset + ((ypos * m_cellPixels) / m_unitValue);
@@ -3791,6 +3841,35 @@ void MonitorGraphicsView::updateTargets()
         float pxY = float(tp.y());
 
         TargetItem *ti = new TargetItem(t, m_doc, pxX, pxY);
+        /* A Person is drawn standing where the aim rule stands it: on the deck
+           under it, with its chest at the aim height. Taking both from
+           targetAimPoint() keeps the figure and the beams on one answer. */
+        /* An Area or a drum kit at its real size: width across the stage,
+           depth up and down it. From the front only the width shows, from the
+           side only the depth. */
+        if ((t->kind() == StageTarget::Kind::Area || t->kind() == StageTarget::Kind::DrumKit)
+            && t->footprint().isEmpty() == false)
+        {
+            const double ppm = 1000.0 * m_cellPixels / m_unitValue;
+            const QSizeF fp = t->footprint();
+            if (m_pov == PovTop)
+                ti->setFootprintPx(QSizeF(fp.width() * ppm, fp.height() * ppm));
+            else if (m_pov == PovFront)
+                ti->setFootprintPx(QSizeF(fp.width() * ppm, 0.0));
+            else
+                ti->setFootprintPx(QSizeF(fp.height() * ppm, 0.0));
+        }
+        if (props->targetFigureHeight(t) > 0.0f)
+        {
+            const QVector3D aimAt = props->targetAimPoint(t, true);
+            const double footMm = double(aimAt.z() - props->targetAimHeight(t, true)) * 1000.0;
+            const double tallMm = double(props->targetFigureHeight(t)) * 1000.0;
+            const QPointF feet  = projectMm(aimAt.x() * 1000.0, aimAt.y() * 1000.0, footMm) - tp;
+            const QPointF crown = projectMm(aimAt.x() * 1000.0, aimAt.y() * 1000.0,
+                                            footMm + tallMm) - tp;
+            ti->setFigure(feet, crown, 1000.0 * m_cellPixels / m_unitValue,
+                          m_pov == PovSide);
+        }
         // Targets are a DESIGN-time aim point: draggable while editing (even when
         // the rig layout is locked), but frozen in Run/Operate — in a show the
         // operator drives the follow-spot pin, not the target.
@@ -3906,6 +3985,10 @@ void MonitorGraphicsView::updateAimLines()
     }
     m_aimLines.clear();
 
+    // No scene, no aim: nothing is short of reach either.
+    foreach (TargetItem *ti, m_targetItems)
+        ti->setReachShortfall(0, 0, QStringList());
+
     if (m_cellPixels == 0)
         return;
 
@@ -3916,6 +3999,30 @@ void MonitorGraphicsView::updateAimLines()
     Scene *activeScene = qobject_cast<Scene *>(m_doc->function(m_activeSceneId));
     if (!activeScene)
         return;
+
+    /* Which heads can actually get to what they are aimed at -- solved against
+       the same point, by the same geometry, the Aim palette uses. A head that
+       cannot reach is not pointed at the target; it is stuck at its limit
+       somewhere short of it, and a line drawn as if it arrived says otherwise. */
+    QHash<QPair<quint32, quint32>, AimSolver::Solution> reach;
+    QHash<quint32, QPair<int, int> > shortfall;        // target -> (short, aimed)
+    QHash<quint32, QStringList> shortNames;
+    foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, activeScene))
+    {
+        reach.insert(qMakePair(a.fixtureId, a.targetId), a.solution);
+        QPair<int, int> &sf = shortfall[a.targetId];
+        sf.second += 1;
+        if (a.solution.reachable() == false)
+        {
+            sf.first += 1;
+            if (Fixture *fx = m_doc->fixture(a.fixtureId))
+                shortNames[a.targetId] << fx->name();
+        }
+    }
+    for (auto it = shortfall.constBegin(); it != shortfall.constEnd(); ++it)
+        if (TargetItem *ti = m_targetItems.value(it.key(), nullptr))
+            ti->setReachShortfall(it.value().first, it.value().second,
+                                  shortNames.value(it.key()));
 
     // Build the set of fixtures in the active scene.
     QSet<quint32> candidates;
@@ -3979,9 +4086,24 @@ void MonitorGraphicsView::updateAimLines()
 
             QPointF fixPx = mfi->sceneBoundingRect().center();
 
+            /* Out of reach: solid red, and it says by how much. */
+            QPen pen = aimPen;
+            const auto rit = reach.constFind(qMakePair(fid, tgt->id()));
+            const bool cannot = (rit != reach.constEnd() && !rit.value().reachable());
+            if (cannot)
+            {
+                pen = QPen(QColor(235, 70, 60), 2.0);
+                pen.setStyle(Qt::SolidLine);
+            }
+
             QGraphicsLineItem *line = m_scene->addLine(
-                fixPx.x(), fixPx.y(), tgtPx.x(), tgtPx.y(), aimPen);
+                fixPx.x(), fixPx.y(), tgtPx.x(), tgtPx.y(), pen);
             line->setZValue(2.5);
+            line->setAcceptedMouseButtons(Qt::NoButton);   // a trace, not a target
+            if (cannot)
+                line->setToolTip(tr("%1 cannot reach %2: %3° past its pan/tilt limit")
+                                     .arg(fxi->name(), tgt->name())
+                                     .arg(-rit.value().marginDeg, 0, 'f', 0));
             m_aimLines.append(line);
 
             // Arrow head at the target end
@@ -3995,10 +4117,12 @@ void MonitorGraphicsView::updateAimLines()
                 QPointF left  = tip + norm * 4.0;
                 QPointF right = tip - norm * 4.0;
                 QGraphicsLineItem *al = m_scene->addLine(
-                    tgtPx.x(), tgtPx.y(), left.x(),  left.y(),  aimPen);
+                    tgtPx.x(), tgtPx.y(), left.x(),  left.y(),  pen);
                 QGraphicsLineItem *ar = m_scene->addLine(
-                    tgtPx.x(), tgtPx.y(), right.x(), right.y(), aimPen);
+                    tgtPx.x(), tgtPx.y(), right.x(), right.y(), pen);
                 al->setZValue(2.5); ar->setZValue(2.5);
+                al->setAcceptedMouseButtons(Qt::NoButton);
+                ar->setAcceptedMouseButtons(Qt::NoButton);
                 m_aimLines.append(al); m_aimLines.append(ar);
             }
         }
@@ -4103,6 +4227,7 @@ void MonitorGraphicsView::updateTrussAnchorLines()
         QGraphicsLineItem *line = m_scene->addLine(
             fixPx.x(), fixPx.y(), anchorPx.x(), anchorPx.y(), tetherPen);
         line->setZValue(1.5);   // above the truss (-0.5), below fixtures (2)
+        line->setAcceptedMouseButtons(Qt::NoButton);   // a tether, not a target
         m_trussAnchorLines.append(line);
     }
 }
@@ -4147,16 +4272,20 @@ void MonitorGraphicsView::setFollowSpotPin(bool visible, float xMeters, float yM
         m_fsPinCircle->setFlag(QGraphicsItem::ItemIsMovable, false);
         m_scene->addItem(m_fsPinCircle);
 
+        m_fsPinCircle->setAcceptedMouseButtons(Qt::NoButton);
         m_fsPinH = new QGraphicsLineItem();
         m_fsPinH->setZValue(101);
+        m_fsPinH->setAcceptedMouseButtons(Qt::NoButton);
         m_scene->addItem(m_fsPinH);
 
         m_fsPinV = new QGraphicsLineItem();
         m_fsPinV->setZValue(101);
+        m_fsPinV->setAcceptedMouseButtons(Qt::NoButton);
         m_scene->addItem(m_fsPinV);
 
         m_fsPinLabel = new QGraphicsSimpleTextItem();
         m_fsPinLabel->setZValue(102);
+        m_fsPinLabel->setAcceptedMouseButtons(Qt::NoButton);
         QFont lf("Arial", 9, QFont::Bold);
         m_fsPinLabel->setFont(lf);
         m_scene->addItem(m_fsPinLabel);
@@ -4460,6 +4589,12 @@ void MonitorGraphicsView::updateGrid()
             m_gridItems.append(item);
         }
 
+        /* The grid is drawn over trusses (z 1 against -0.5), so it must take no
+           clicks: double-clicking a tower that stands on a grid line landed on
+           the line and opened nothing. */
+        foreach (QGraphicsLineItem *gl, m_gridItems)
+            gl->setAcceptedMouseButtons(Qt::NoButton);
+
         // Highlight the centre vertical & horizontal axes so the stage centre
         // is obvious. Kept out of m_gridItems (and rebuilt separately below)
         // so their visibility toggles independently of the grid lines.
@@ -4471,9 +4606,11 @@ void MonitorGraphicsView::updateGrid()
         const qreal cy = m_yOffset + gridH / 2.0;
         m_centerLineV = m_scene->addLine(cx, m_yOffset, cx, m_yOffset + gridH, centerPen);
         m_centerLineV->setZValue(2);
+        m_centerLineV->setAcceptedMouseButtons(Qt::NoButton);   // above trusses, but not in their way
         m_centerLineV->setVisible(m_centerLinesVisible);
         m_centerLineH = m_scene->addLine(m_xOffset, cy, m_xOffset + gridW, cy, centerPen);
         m_centerLineH->setZValue(2);
+        m_centerLineH->setAcceptedMouseButtons(Qt::NoButton);
         m_centerLineH->setVisible(m_centerLinesVisible);
 
         if (m_bgItem != NULL)
@@ -4727,6 +4864,30 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
     m_suppressNextViewClick = true;
 
     QPointF sp = mapToScene(event->pos());
+
+    /* A count bubble stands for the fixtures hidden under its structure, so
+       double-clicking it shows them: selected, drawn over the structure, and
+       with their beams' landing areas on the deck. Clicks pass THROUGH it
+       otherwise (it takes no buttons), which is what lets the structure's own
+       editor open from anywhere else on it. */
+    for (auto bit = m_countBadges.constBegin(); bit != m_countBadges.constEnd(); ++bit)
+    {
+        QGraphicsItemGroup *badge = bit.value();
+        /* childrenBoundingRect(), not sceneBoundingRect(): a group caches its
+           bounds when items are added, and the disc is sized afterwards, so
+           the cached rect is empty. */
+        if (badge == nullptr || !badge->isVisible()
+            || !badge->mapRectToScene(badge->childrenBoundingRect()).contains(sp))
+            continue;
+        const QStringList key = bit.key().split(QLatin1Char(':'));
+        if (key.size() == 2)
+        {
+            revealBuriedFixtures(key.at(0), key.at(1).toUInt());
+            event->accept();
+            return;
+        }
+    }
+
     QGraphicsItem *it = topPickableAt(sp);
 
     // Walk up to the top-level item (e.g. from a label child to TrussItem).
@@ -4877,420 +5038,844 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
     while (it && it->parentItem())
         it = it->parentItem();
 
+    /* Which item was hit, as a kind and an id -- the same key the Layers list
+       uses -- so both build the one menu. */
+    QString kind;
+    quint32 id = 0;
+    if (auto *fi = dynamic_cast<MonitorFixtureItem *>(it))    { kind = QStringLiteral("fixture");  id = fi->fixtureID(); }
+    else if (auto *ti = dynamic_cast<TrussItem *>(it))        { kind = QStringLiteral("truss");    id = ti->trussId(); }
+    else if (auto *pi = dynamic_cast<PlatformItem *>(it))     { kind = QStringLiteral("platform"); id = pi->platformId(); }
+    else if (auto *ii = dynamic_cast<MonitorImageItem *>(it)) { kind = QStringLiteral("image");    id = ii->imageId(); }
+    else if (auto *bi = dynamic_cast<PipeItem *>(it))         { kind = QStringLiteral("pipe");     id = bi->pipeId(); }
+    else if (auto *si = dynamic_cast<StandItem *>(it))        { kind = QStringLiteral("stand");    id = si->standId(); }
+    else if (auto *twi = dynamic_cast<TowerItem *>(it))       { kind = QStringLiteral("tower");    id = twi->towerId(); }
+    else if (auto *tgi = dynamic_cast<TargetItem *>(it))      { kind = QStringLiteral("target");   id = tgi->targetId(); }
+    else if (auto *psi = dynamic_cast<PowerSourceItem *>(it)) { kind = QStringLiteral("power");    id = quint32(psi->sourceIndex()); }
+
+    if (kind.isEmpty())
+    {
+        // Empty canvas → the generic add/paste menu.
+        emit contextMenuRequested(sp);
+        return;
+    }
+
+    MenuPlace place;
+    place.selection = selectedMapObjects();
+    QMenu menu(this);
+    buildItemMenu(&menu, kind, id, place, sp);
+    if (!menu.isEmpty())
+        menu.exec(event->globalPos());
+}
+
+/* The graphics item standing for kind/id, if the plot has one. */
+static QGraphicsItem *mapItemFor(const QString &kind, quint32 id,
+                                 const QHash<quint32, MonitorFixtureItem *> &fixtures,
+                                 const QHash<quint32, TrussItem *> &trusses,
+                                 const QHash<quint32, PlatformItem *> &platforms,
+                                 const QHash<quint32, PipeItem *> &pipes,
+                                 const QHash<quint32, StandItem *> &stands,
+                                 const QHash<quint32, TowerItem *> &towers,
+                                 const QHash<quint32, TargetItem *> &targets)
+{
+    if (kind == QLatin1String("fixture"))  return fixtures.value(id, nullptr);
+    if (kind == QLatin1String("truss"))    return trusses.value(id, nullptr);
+    if (kind == QLatin1String("platform")) return platforms.value(id, nullptr);
+    if (kind == QLatin1String("pipe"))     return pipes.value(id, nullptr);
+    if (kind == QLatin1String("stand"))    return stands.value(id, nullptr);
+    if (kind == QLatin1String("tower"))    return towers.value(id, nullptr);
+    if (kind == QLatin1String("target"))   return targets.value(id, nullptr);
+    return nullptr;
+}
+
+static QString itemNameOf(Doc *doc, const QString &kind, quint32 id);
+
+QList<QPair<QString, quint32> > MonitorGraphicsView::selectedMapObjects() const
+{
+    QList<QPair<QString, quint32> > out;
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+    {
+        if (auto *fi = dynamic_cast<MonitorFixtureItem *>(gi))     out << qMakePair(QStringLiteral("fixture"), fi->fixtureID());
+        else if (auto *ti = dynamic_cast<TrussItem *>(gi))         out << qMakePair(QStringLiteral("truss"), ti->trussId());
+        else if (auto *pi = dynamic_cast<PlatformItem *>(gi))      out << qMakePair(QStringLiteral("platform"), pi->platformId());
+        else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))  out << qMakePair(QStringLiteral("image"), ii->imageId());
+        else if (auto *bi = dynamic_cast<PipeItem *>(gi))          out << qMakePair(QStringLiteral("pipe"), bi->pipeId());
+        else if (auto *si = dynamic_cast<StandItem *>(gi))         out << qMakePair(QStringLiteral("stand"), si->standId());
+        else if (auto *twi = dynamic_cast<TowerItem *>(gi))        out << qMakePair(QStringLiteral("tower"), twi->towerId());
+        else if (auto *tgi = dynamic_cast<TargetItem *>(gi))       out << qMakePair(QStringLiteral("target"), tgi->targetId());
+        else if (auto *psi = dynamic_cast<PowerSourceItem *>(gi))  out << qMakePair(QStringLiteral("power"), quint32(psi->sourceIndex()));
+    }
+    return out;
+}
+
+void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint32 id,
+                                        const MenuPlace &place, const QPointF &scenePos)
+{
+    if (menu == nullptr)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    const bool design = (m_doc->mode() == Doc::Design);
+
+    // 1. The thing.
+    populateItemMenu(menu, kind, id, scenePos, false);
+
+    // 2. Where it is, and its name.
+    if (!menu->isEmpty())
+        menu->addSeparator();
+    if (place.inList)
+        menu->addAction(tr("Show on Map"), this, [this, kind, id]() {
+            selectMapItem(kind, id);
+        });
+    else
+        menu->addAction(tr("Show in Layers"), this, [this, kind, id]() {
+            emit revealInLayersRequested(kind, id);
+        });
+    if (design)
+    {
+        const std::function<void()> inPlace = place.renameInPlace;
+        menu->addAction(tr("Rename…"), this, [this, kind, id, inPlace]() {
+            if (inPlace)
+            {
+                inPlace();
+                return;
+            }
+            bool ok = false;
+            const QString name = QInputDialog::getText(this, tr("Rename"), tr("Name:"),
+                                                       QLineEdit::Normal, itemNameOf(m_doc, kind, id), &ok).trimmed();
+            if (ok && !name.isEmpty())
+            {
+                renameItem(kind, id, name);
+                m_doc->setModified();
+                emit mapStructureChanged();
+            }
+        });
+
+        /* A truss or riser carrying fixtures has an auto-group, and with it a
+           fixture layout and the option to break the group up. */
+        quint32 anchorGroup = 0;
+        foreach (const MonitorProperties::MonitorGroup &g, props->groups())
+            if (g.anchorKind == kind && g.anchorId == id)
+            {
+                anchorGroup = g.id;
+                break;
+            }
+        if (anchorGroup != 0)
+        {
+            const bool framed = props->group(anchorGroup).hasFrame;
+            menu->addAction(framed ? tr("Fixture Layout…") : tr("Create Fixture Layout…"),
+                            this, [this, anchorGroup]() {
+                openStudioGroupForGroup(anchorGroup);
+                emit mapStructureChanged();
+            });
+            menu->addAction(tr("Ungroup"), this, [this, anchorGroup]() {
+                ungroupById(anchorGroup);
+            });
+        }
+    }
+
+    // 3. Organising: the selection where the menu was opened, and this item.
+    QList<QPair<QString, quint32> > objects = place.selection;
+    if (!objects.contains(qMakePair(kind, id)))
+        objects.prepend(qMakePair(kind, id));
+    populateOrganiseMenu(menu, objects);
+
+    // 4. Removing, last.
+    addItemRemoval(menu, kind, id);
+}
+
+/* An item's name, for prefilling Rename. */
+static QString itemNameOf(Doc *doc, const QString &kind, quint32 id)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    if (kind == QLatin1String("fixture"))  { Fixture *f = doc->fixture(id);          return f ? f->name() : QString(); }
+    if (kind == QLatin1String("truss"))    { Truss *t = props->truss(id);            return t ? t->name() : QString(); }
+    if (kind == QLatin1String("platform")) { StagePlatform *p = props->platform(id); return p ? p->name() : QString(); }
+    if (kind == QLatin1String("pipe"))     { Pipe *b = props->pipe(id);              return b ? b->name() : QString(); }
+    if (kind == QLatin1String("stand"))    { Stand *st = props->stand(id);           return st ? st->name() : QString(); }
+    if (kind == QLatin1String("tower"))    { Tower *t = props->tower(id);            return t ? t->name() : QString(); }
+    if (kind == QLatin1String("target"))   { StageTarget *t = props->stageTarget(id); return t ? t->name() : QString(); }
+    if (kind == QLatin1String("image"))    return props->hasImage(id) ? props->image(id).name : QString();
+    if (kind == QLatin1String("power"))
+    {
+        PowerDistribution *pd = doc->powerDistribution();
+        return (pd != nullptr && int(id) < pd->sources().size()) ? pd->sources().at(int(id)).name : QString();
+    }
+    return QString();
+}
+
+void MonitorGraphicsView::renameItem(const QString &kind, quint32 id, const QString &name)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (kind == QLatin1String("fixture"))
+    {
+        if (Fixture *f = m_doc->fixture(id)) f->setName(name);
+        updateFixture(id);
+    }
+    else if (kind == QLatin1String("truss"))
+    {
+        if (Truss *t = props->truss(id)) t->setName(name);
+        updateTrusses();
+    }
+    else if (kind == QLatin1String("platform"))
+    {
+        if (StagePlatform *p = props->platform(id)) p->setName(name);
+        updatePlatforms();
+    }
+    else if (kind == QLatin1String("power"))
+    {
+        PowerDistribution *pd = m_doc->powerDistribution();
+        if (pd != nullptr && int(id) < pd->sources().size()) pd->sources()[int(id)].name = name;
+        updatePowerSources();
+    }
+    else if (kind == QLatin1String("image"))
+    {
+        if (props->hasImage(id))
+        {
+            MonitorProperties::MonitorImage img = props->image(id);
+            img.name = name;
+            props->setImage(img);
+        }
+        updateImages();
+    }
+    else if (kind == QLatin1String("pipe"))
+    {
+        if (Pipe *b = props->pipe(id)) b->setName(name);
+        updatePlatforms();   // pipes/stands/towers redraw here
+    }
+    else if (kind == QLatin1String("stand"))
+    {
+        if (Stand *st = props->stand(id)) st->setName(name);
+        updatePlatforms();
+    }
+    else if (kind == QLatin1String("tower"))
+    {
+        if (Tower *t = props->tower(id)) t->setName(name);
+        updatePlatforms();
+    }
+    else if (kind == QLatin1String("target"))
+    {
+        if (StageTarget *t = props->stageTarget(id)) t->setName(name);
+        updateTargets();
+    }
+}
+
+void MonitorGraphicsView::removeFromFolder(const QList<QPair<QString, quint32> > &objects)
+{
+    if (objects.isEmpty())
+        return;
     MonitorProperties *props = m_doc->monitorProperties();
 
-    if (auto *fi = dynamic_cast<MonitorFixtureItem *>(it))
+    for (const QPair<QString, quint32> &o : objects)
     {
-        const quint32 fid = fi->fixtureID();
-        const FixtureRigProps rp = props->fixtureRigProps(fid);
-        QMenu menu(this);
-
-        QAction *editAct = menu.addAction(tr("Edit Fixture…"));
-
-        // When the fixture sits ON a truss (and hides it), offer a way to reach
-        // the truss underneath — click-through to its editor.
-        QAction *editTrussAct = nullptr;
-        if (rp.trussId != Truss::invalidId())
+        if (o.first == QLatin1String("fixture"))
         {
-            Truss *t = props->truss(rp.trussId);
-            const QString tn = (t && !t->name().isEmpty()) ? t->name()
-                                                           : tr("Truss %1").arg(rp.trussId);
-            editTrussAct = menu.addAction(tr("Edit Truss “%1”…").arg(tn));
+            /* Keep the fixture exactly where it is: read its world position,
+               then store it as a free position once the frame and mount are
+               stripped, so nothing teleports. Any structure mount goes too, so
+               auto-grouping cannot put it straight back -- riser and deck
+               fixtures are re-grouped with their platform on every refresh,
+               which is what "remove doesn't stick" was. */
+            const quint32 id = o.second;
+            const QVector3D w = props->fixtureRigPosition(id);          // metres
+            FixtureRigProps rp = props->fixtureRigProps(id);
+            rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+            rp.deckPlatformId  = FixtureRigProps::invalidPlatformId();
+            rp.trussId         = Truss::invalidId();
+            rp.groupLocal      = QVector3D();
+            props->setFixtureRigProps(id, rp);
+            props->setFixtureGroup(id, 0);
+            props->setFixturePosition(id, 0, 0, QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z()));
+            updateFixture(id);
         }
-        menu.addSeparator();
+        else
+        {
+            QList<QPair<QString, quint32> > one;
+            one << o;
+            reparentToLayer(one, props->activeLayerId());
+        }
+    }
+    m_doc->setModified();
+    refreshItemLayerState();
+    emit mapStructureChanged();
+}
 
-        // Attach to truss ▶ (explicit — 2D drop-to-bind was removed).
-        QMenu *attach = menu.addMenu(tr("Attach to Truss"));
+void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
+                                               const QList<QPair<QString, quint32> > &objects)
+{
+    if (menu == nullptr || objects.isEmpty() || m_doc->mode() != Doc::Design)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (!menu->isEmpty())
+        menu->addSeparator();
+
+    auto groupOf = [this](const QString &kind, quint32 id) -> quint32 {
+        QGraphicsItem *gi = mapItemFor(kind, id, m_fixtures, m_trussItems, m_platformItems,
+                                       m_pipeItems, m_standItems, m_towerItems, m_targetItems);
+        if (gi != nullptr)
+            return itemGroupId(gi);
+        return (kind == QLatin1String("fixture")) ? m_doc->monitorProperties()->fixtureGroup(id) : 0;
+    };
+
+    // Folders.
+    QList<QPair<QString, quint32> > inFolder;
+    for (const auto &o : objects)
+        if (groupOf(o.first, o.second) != 0)
+            inFolder << o;
+    if (!inFolder.isEmpty())
+        menu->addAction(inFolder.size() > 1 ? tr("Remove %1 Items from Folder").arg(inFolder.size())
+                                            : tr("Remove from Folder"),
+                        this, [this, inFolder]() {
+            removeFromFolder(inFolder);
+        });
+    if (objects.size() >= 2)
+        menu->addAction(tr("New Folder from Selection…"), this, [this, objects, groupOf]() {
+            /* Nested inside the folder they already share, if they share one;
+               otherwise a folder of its own on the first object's layer. */
+            quint32 parent = groupOf(objects.first().first, objects.first().second);
+            for (const auto &o : objects)
+                if (groupOf(o.first, o.second) != parent)
+                {
+                    parent = 0;
+                    break;
+                }
+            MonitorProperties *p = m_doc->monitorProperties();
+            quint32 layer = p->activeLayerId();
+            if (parent != 0)
+                layer = p->group(parent).layerId;
+            else if (QGraphicsItem *gi = mapItemFor(objects.first().first, objects.first().second,
+                                                    m_fixtures, m_trussItems, m_platformItems,
+                                                    m_pipeItems, m_standItems, m_towerItems,
+                                                    m_targetItems))
+                layer = itemLayerId(gi);
+            const quint32 gid = p->nextGroupId();
+            bool ok = false;
+            const QString name = QInputDialog::getText(this, tr("New Folder"), tr("Folder name:"),
+                                                       QLineEdit::Normal, tr("Folder %1").arg(gid),
+                                                       &ok).trimmed();
+            if (!ok || name.isEmpty())
+                return;
+            p->createGroup(gid, name, layer, parent);
+            reparentToGroup(objects, gid);
+            m_doc->setModified();
+            emit mapStructureChanged();
+        });
+
+    // Fixture Groups: the lighting control groups, not folders.
+    QList<quint32> fixtures;
+    bool allFixtures = true;
+    for (const auto &o : objects)
+    {
+        if (o.first == QLatin1String("fixture"))
+            fixtures << o.second;
+        else
+            allFixtures = false;
+    }
+    if (!fixtures.isEmpty())
+    {
+        QList<FixtureGroup *> holding;
+        foreach (FixtureGroup *fg, m_doc->fixtureGroups())
+            for (quint32 fid : fixtures)
+                if (fg != nullptr && fg->fixtureList().contains(fid))
+                {
+                    holding << fg;
+                    break;
+                }
+        auto removeFrom = [this, fixtures](quint32 fgId) {
+            if (FixtureGroup *fg = m_doc->fixtureGroup(fgId))
+                for (quint32 fid : fixtures)
+                    fg->resignFixture(fid);
+            m_doc->setModified();
+            emit mapStructureChanged();
+        };
+        if (holding.size() == 1)
+        {
+            const quint32 fgId = holding.first()->id();
+            menu->addAction(tr("Remove from Fixture Group “%1”").arg(holding.first()->name()),
+                            this, [removeFrom, fgId]() { removeFrom(fgId); });
+        }
+        else if (holding.size() > 1)
+        {
+            QMenu *from = menu->addMenu(tr("Remove from Fixture Group"));
+            for (FixtureGroup *fg : holding)
+            {
+                const quint32 fgId = fg->id();
+                from->addAction(fg->name(), this, [removeFrom, fgId]() { removeFrom(fgId); });
+            }
+        }
+        if (allFixtures)
+            menu->addAction(tr("Create Fixture Group from Selection…"), this, [this, fixtures]() {
+                if (CreateFixtureGroup::createFromFixtures(m_doc, fixtures, this) != nullptr)
+                    emit mapStructureChanged();
+            });
+    }
+
+    // Layers.
+    QMenu *moveMenu = menu->addMenu(tr("Move to Layer"));
+    foreach (const MonitorProperties::MonitorLayer &lyr, props->layers())
+    {
+        const quint32 lid = lyr.id;
+        moveMenu->addAction(lyr.name, this, [this, objects, lid]() {
+            reparentToLayer(objects, lid);
+            emit mapStructureChanged();
+        });
+    }
+    menu->addAction(tr("New Layer from Selection…"), this, [this, objects]() {
+        MonitorProperties *p = m_doc->monitorProperties();
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, tr("New Layer"), tr("Layer name:"),
+                                                   QLineEdit::Normal,
+                                                   tr("Layer %1").arg(p->layers().count()), &ok).trimmed();
+        if (!ok || name.isEmpty())
+            return;
+        const quint32 lid = p->addLayer(name);
+        p->setActiveLayerId(lid);
+        reparentToLayer(objects, lid);
+        m_doc->setModified();
+        emit mapStructureChanged();
+    });
+
+    // Several at once: one object's lock is in its own section.
+    QList<QPair<QString, quint32> > lockable;
+    for (const auto &o : objects)
+        if (o.first != QLatin1String("fixture"))
+            lockable << o;
+    if (lockable.size() >= 2)
+    {
+        menu->addAction(tr("Lock Selected"), this, [this, lockable]() {
+            for (const auto &o : lockable)
+                setItemLocked(o.first, o.second, true);
+            emit mapStructureChanged();
+        });
+        menu->addAction(tr("Unlock Selected"), this, [this, lockable]() {
+            for (const auto &o : lockable)
+                setItemLocked(o.first, o.second, false);
+            emit mapStructureChanged();
+        });
+    }
+}
+
+static QString itemNoun(const QString &kind)
+{
+    if (kind == QLatin1String("truss"))    return MonitorGraphicsView::tr("Truss");
+    if (kind == QLatin1String("platform")) return MonitorGraphicsView::tr("Platform");
+    if (kind == QLatin1String("image"))    return MonitorGraphicsView::tr("Image");
+    if (kind == QLatin1String("pipe"))     return MonitorGraphicsView::tr("Boom");
+    if (kind == QLatin1String("stand"))    return MonitorGraphicsView::tr("Stand");
+    if (kind == QLatin1String("tower"))    return MonitorGraphicsView::tr("Tower");
+    if (kind == QLatin1String("target"))   return MonitorGraphicsView::tr("Target");
+    if (kind == QLatin1String("power"))    return MonitorGraphicsView::tr("Power Source");
+    return MonitorGraphicsView::tr("Fixture");
+}
+
+void MonitorGraphicsView::addItemRemoval(QMenu *menu, const QString &kind, quint32 id)
+{
+    if (menu == nullptr || kind == QLatin1String("power"))
+        return;
+    if (!menu->isEmpty())
+        menu->addSeparator();
+    if (kind == QLatin1String("fixture"))
+    {
+        menu->addAction(tr("Remove from View"), this, [this, id]() {
+            requestDeleteItem(QStringLiteral("fixture"), id);
+        });
+        return;
+    }
+    const QString noun = itemNoun(kind);
+    // A target asks first: aim palettes and scenes may depend on it.
+    menu->addAction(kind == QLatin1String("target")
+                        ? tr("Delete %1…").arg(noun) : tr("Delete %1").arg(noun),
+                    this, [this, kind, id]() {
+        requestDeleteItem(kind, id);
+    });
+}
+
+void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, quint32 id,
+                                           const QPointF &scenePos, bool withRemoval)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (menu == nullptr || props == nullptr)
+        return;
+
+    if (kind != QLatin1String("fixture"))
+    {
+        /* A structure or a mark: edit it, build on it, hold it in place,
+           delete it. */
+        const QString noun = itemNoun(kind);
+        menu->addAction(tr("Edit %1…").arg(noun), this, [this, kind, id]() {
+            requestEditItem(kind, id);
+        });
+
+        if (kind == QLatin1String("truss"))
+        {
+            Truss *t = props->truss(id);
+            if (t == nullptr)
+                return;
+            menu->addSeparator();
+            /* At the click when there is one, else mid-span: from the list
+               there is no "here". */
+            float offset = t->length() * 0.5f;
+            if (TrussItem *ti = m_trussItems.value(id, nullptr))
+            {
+                if (!scenePos.isNull() && t->type() != Truss::Vertical && ti->pxLen() > 0.0f)
+                {
+                    const QPointF delta = scenePos - ti->pos();
+                    const double a = qDegreesToRadians(ti->rotation());
+                    const double along = delta.x() * qCos(a) + delta.y() * qSin(a);
+                    offset = float(qBound(0.0, along, double(ti->pxLen())) * t->length()
+                                   / ti->pxLen());
+                }
+            }
+            menu->addAction(tr("Add Fixture…"), this, [this, id, offset]() {
+                emit addFixtureToTrussRequested(id, offset);
+            });
+            menu->addAction(tr("Add Bar…"), this, [this, id]() {
+                emit addBarToTrussRequested(id, -1.0f);   // -1 = mid-span default
+            });
+        }
+        else if (kind == QLatin1String("pipe"))
+        {
+            Pipe *b = props->pipe(id);
+            if (b != nullptr && b->isVertical())
+            {
+                menu->addSeparator();
+                menu->addAction(tr("Add Crossbar…"), this, [this, id]() {
+                    emit addBarToPipeRequested(id);
+                });
+            }
+        }
+
+        menu->addSeparator();
+        const bool locked = itemLocked(kind, id);
+        menu->addAction(locked ? tr("Unlock Position") : tr("Lock Position"),
+                        this, [this, kind, id, locked]() {
+            setItemLocked(kind, id, !locked);
+        });
+
+        if (withRemoval)
+            addItemRemoval(menu, kind, id);
+        return;
+    }
+
+    /* ---- A fixture: edit and find it; mount it; point and place it; group
+       it; take it off the plot. ---- */
+    const quint32 fid = id;
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    Fixture *fxi = m_doc->fixture(fid);
+
+    menu->addAction(tr("Edit Fixture…"), this, [this, fid]() {
+        emit fixtureDoubleClicked(fid);
+    });
+    menu->addAction(tr("Locate"), this, [this, fid]() {
+        /* The selected fixtures on the plot and this one: selecting a truss's
+           worth of heads and asking where they are lights all of them. */
+        QList<quint32> ids;
+        foreach (QGraphicsItem *gi, m_scene->selectedItems())
+            if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+                if (!ids.contains(mfi->fixtureID()))
+                    ids << mfi->fixtureID();
+        if (!ids.contains(fid))
+            ids << fid;
+        if (Monitor::instance() != nullptr)
+            Monitor::instance()->locateFixtures(ids);
+    });
+
+    // Mounting.
+    menu->addSeparator();
+    QMenu *mountMenu = menu->addMenu(tr("Mount on"));
+    {
+        QMenu *trussMenu = mountMenu->addMenu(tr("Truss"));
         const QList<Truss *> trusses = props->trusses();
-        if (trusses.isEmpty())
-            attach->setEnabled(false);
+        trussMenu->setEnabled(!trusses.isEmpty());
         for (Truss *t : trusses)
         {
             if (t == nullptr)
                 continue;
             const quint32 tid = t->id();
-            QAction *a = attach->addAction(t->name().isEmpty()
-                                           ? tr("Truss %1").arg(tid) : t->name());
-            a->setCheckable(true);
-            a->setChecked(rp.trussId == tid);
-            connect(a, &QAction::triggered, this, [this, fid, tid]() {
+            QAction *a = trussMenu->addAction(t->name().isEmpty() ? tr("Truss %1").arg(tid) : t->name(),
+                                              this, [this, fid, tid]() {
                 attachFixtureToTruss(fid, tid);
             });
+            a->setCheckable(true);
+            a->setChecked(rp.trussId == tid);
         }
 
-        QAction *detachAct = menu.addAction(tr("Remove from Truss"));
-        detachAct->setEnabled(rp.trussId != Truss::invalidId());
-        connect(detachAct, &QAction::triggered, this, [this, fid]() {
-            detachFixtureFromTruss(fid);
-        });
-
-        // Mount on a pipe ▶ (rides the pipe; height is set in the pipe editor).
-        QMenu *boomMenu = menu.addMenu(tr("Mount on Boom"));
+        QMenu *boomMenu = mountMenu->addMenu(tr("Boom"));
         const QList<Pipe *> pipes = props->pipes();
-        if (pipes.isEmpty())
-            boomMenu->setEnabled(false);
+        boomMenu->setEnabled(!pipes.isEmpty());
         for (Pipe *b : pipes)
         {
             if (b == nullptr)
                 continue;
             const quint32 bid = b->id();
-            QAction *a = boomMenu->addAction(b->name().isEmpty()
-                                             ? tr("Boom %1").arg(bid) : b->name());
-            a->setCheckable(true);
-            a->setChecked(rp.pipeId == bid);
-            connect(a, &QAction::triggered, this, [this, fid, bid]() {
+            QAction *a = boomMenu->addAction(b->name().isEmpty() ? tr("Boom %1").arg(bid) : b->name(),
+                                             this, [this, fid, bid]() {
                 attachFixtureToPipe(fid, bid);
             });
-        }
-        if (rp.pipeId != Pipe::invalidId())
-        {
-            QAction *detachBoom = menu.addAction(tr("Remove from Boom"));
-            connect(detachBoom, &QAction::triggered, this, [this, fid]() {
-                MonitorProperties *p = m_doc->monitorProperties();
-                FixtureRigProps r = p->fixtureRigProps(fid);
-                r.pipeId = Pipe::invalidId();
-                p->setFixtureRigProps(fid, r);
-                updateFixture(fid);
-                m_doc->setModified();
-                emit mapStructureChanged();
-            });
+            a->setCheckable(true);
+            a->setChecked(rp.pipeId == bid);
         }
 
-        // Mount on a tower shelf ▶ (tower → shelf N; sits at the shelf centre) --
-        // or, since these are real distinct positions and not fake shelf
-        // indices, directly on the tower's own Top cap or Bottom/base.
-        QMenu *towerMenu = menu.addMenu(tr("Mount on Tower"));
+        QMenu *towerMenu = mountMenu->addMenu(tr("Tower"));
         const QList<Tower *> towers = props->towers();
-        if (towers.isEmpty())
-            towerMenu->setEnabled(false);
+        towerMenu->setEnabled(!towers.isEmpty());
         for (Tower *tw : towers)
         {
             if (tw == nullptr)
                 continue;
-            QMenu *shelves = towerMenu->addMenu(tw->name().isEmpty()
-                                                ? tr("Tower %1").arg(tw->id()) : tw->name());
             const quint32 twid = tw->id();
-            // Shared setup every "mount here" action needs before its own
-            // side/shelf-specific fields.
-            auto baseRig = [this, twid](quint32 f) {
-                MonitorProperties *p = m_doc->monitorProperties();
-                FixtureRigProps r = p->fixtureRigProps(f);
-                r.trussId = Truss::invalidId();
-                r.riserPlatformId = FixtureRigProps::invalidPlatformId();
-                r.deckPlatformId = FixtureRigProps::invalidPlatformId();
-                r.pipeId = Pipe::invalidId();
-                r.towerId = twid;
-                return r;
-            };
-
-            QAction *topAct = shelves->addAction(tr("Top of tower"));
-            topAct->setCheckable(true);
-            topAct->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerTop);
-            connect(topAct, &QAction::triggered, this, [this, fid, twid, baseRig]() {
-                MonitorProperties *p = m_doc->monitorProperties();
-                Tower *t = p->tower(twid);
-                if (t == nullptr) return;
-                FixtureRigProps r = baseRig(fid);
-                r.towerMountSide = FixtureRigProps::TowerTop;
-                r.mountingType = Truss::FloorMounted;   // sits on the cap; "hung" is meaningless here
-                r.towerU = t->width() * 0.5f;
-                r.towerV = t->depth() * 0.5f;
-                p->setFixtureRigProps(fid, r);
-                updateFixture(fid);
-                m_doc->setModified();
-                emit mapStructureChanged();
+            QMenu *spots = towerMenu->addMenu(tw->name().isEmpty() ? tr("Tower %1").arg(twid) : tw->name());
+            QAction *top = spots->addAction(tr("Top of tower"), this, [this, fid, twid]() {
+                mountFixtureOnTower(fid, twid, FixtureRigProps::TowerTop);
             });
-
-            QAction *bottomAct = shelves->addAction(tr("Bottom of tower"));
-            bottomAct->setCheckable(true);
-            bottomAct->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerBottom);
-            connect(bottomAct, &QAction::triggered, this, [this, fid, twid, baseRig]() {
-                MonitorProperties *p = m_doc->monitorProperties();
-                Tower *t = p->tower(twid);
-                if (t == nullptr) return;
-                FixtureRigProps r = baseRig(fid);
-                r.towerMountSide = FixtureRigProps::TowerBottom;
-                r.mountingType = Truss::FloorMounted;   // base-mounted; "hung" is meaningless here
-                r.towerU = t->width() * 0.5f;
-                r.towerV = t->depth() * 0.5f;
-                p->setFixtureRigProps(fid, r);
-                updateFixture(fid);
-                m_doc->setModified();
-                emit mapStructureChanged();
+            top->setCheckable(true);
+            top->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerTop);
+            QAction *bottom = spots->addAction(tr("Bottom of tower"), this, [this, fid, twid]() {
+                mountFixtureOnTower(fid, twid, FixtureRigProps::TowerBottom);
             });
-
+            bottom->setCheckable(true);
+            bottom->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerBottom);
+            spots->addSeparator();
             if (tw->shelfCount() == 0)
+                spots->addAction(tr("(no shelves — add in the tower editor)"))->setEnabled(false);
+            for (int si = 0; si < tw->shelfCount(); ++si)
             {
-                shelves->addAction(tr("(no shelves — add in the editor)"))->setEnabled(false);
-            }
-            else
-            {
-                shelves->addSeparator();
-                for (int si = 0; si < tw->shelfCount(); ++si)
-                {
-                    QAction *a = shelves->addAction(tr("Shelf %1").arg(si + 1));
-                    a->setCheckable(true);
-                    a->setChecked(rp.towerId == twid
-                                  && rp.towerMountSide == FixtureRigProps::TowerShelf
-                                  && rp.towerShelf == si);
-                    connect(a, &QAction::triggered, this, [this, fid, twid, si, baseRig]() {
-                        MonitorProperties *p = m_doc->monitorProperties();
-                        Tower *t = p->tower(twid);
-                        if (t == nullptr) return;
-                        FixtureRigProps r = baseRig(fid);
-                        r.towerMountSide = FixtureRigProps::TowerShelf;
-                        r.towerShelf = si;
-                        r.towerU = t->width() * 0.5f;   // shelf centre
-                        r.towerV = t->depth() * 0.5f;
-                        p->setFixtureRigProps(fid, r);
-                        updateFixture(fid);
-                        m_doc->setModified();
-                        emit mapStructureChanged();
-                    });
-                }
+                QAction *a = spots->addAction(tr("Shelf %1").arg(si + 1), this, [this, fid, twid, si]() {
+                    mountFixtureOnTower(fid, twid, FixtureRigProps::TowerShelf, si);
+                });
+                a->setCheckable(true);
+                a->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerShelf
+                              && rp.towerShelf == si);
             }
         }
-        if (rp.towerId != Tower::invalidId())
+    }
+
+    // What it is mounted on: reach that, or come off it.
+    QString mountKind, mountName;
+    quint32 mountId = 0;
+    if (Truss *t = (rp.trussId != Truss::invalidId()) ? props->truss(rp.trussId) : nullptr)
+    { mountKind = QStringLiteral("truss"); mountId = t->id(); mountName = t->name(); }
+    else if (Pipe *b = (rp.pipeId != Pipe::invalidId()) ? props->pipe(rp.pipeId) : nullptr)
+    { mountKind = QStringLiteral("pipe"); mountId = b->id(); mountName = b->name(); }
+    else if (Tower *tw = (rp.towerId != Tower::invalidId()) ? props->tower(rp.towerId) : nullptr)
+    { mountKind = QStringLiteral("tower"); mountId = tw->id(); mountName = tw->name(); }
+    if (!mountKind.isEmpty())
+    {
+        const QString label = mountName.isEmpty() ? itemNoun(mountKind) : mountName;
+        menu->addAction(tr("Edit %1 “%2”…").arg(itemNoun(mountKind), label),
+                        this, [this, mountKind, mountId]() {
+            requestEditItem(mountKind, mountId);
+        });
+        menu->addAction(tr("Unmount from “%1”").arg(label), this, [this, fid]() {
+            unmountFixture(fid);
+        });
+    }
+
+    // Pointing and placing.
+    menu->addSeparator();
+    if (fxi != nullptr && fxi->channelNumber(QLCChannel::Pan, QLCChannel::MSB) != QLCChannel::invalid())
+    {
+        QMenu *facing = menu->addMenu(tr("Facing (pan zero)"));
+        const QList<QPair<QString, float> > dirs = {
+            { tr("Downstage (0°)"), 0.0f }, { tr("Stage Right (90°)"), 90.0f },
+            { tr("Upstage (180°)"), 180.0f }, { tr("Stage Left (270°)"), 270.0f } };
+        for (const auto &d : dirs)
         {
-            QAction *detachTower = menu.addAction(tr("Remove from Tower"));
-            connect(detachTower, &QAction::triggered, this, [this, fid]() {
+            const float deg = d.second;
+            QAction *a = facing->addAction(d.first, this, [this, fid, deg]() {
                 MonitorProperties *p = m_doc->monitorProperties();
                 FixtureRigProps r = p->fixtureRigProps(fid);
-                r.towerId = Tower::invalidId();
+                r.panZeroDir = deg;
                 p->setFixtureRigProps(fid, r);
-                updateFixture(fid);
+                if (MonitorFixtureItem *mfi = m_fixtures.value(fid, nullptr))
+                    mfi->setFacing(deg);
                 m_doc->setModified();
-                emit mapStructureChanged();
             });
+            a->setCheckable(true);
+            a->setChecked(qAbs(rp.panZeroDir - deg) < 0.5f);
         }
+    }
+    const QVector3D fp = props->fixturePosition(fid, 0, 0);
+    menu->addAction(tr("Set Mounting Height… (%1 m)").arg(double(fp.z()) / 1000.0, 0, 'f', 2),
+                    this, [this, fid]() {
+        MonitorProperties *p = m_doc->monitorProperties();
+        const QVector3D cur = p->fixturePosition(fid, 0, 0);
+        bool ok = false;
+        const double h = QInputDialog::getDouble(this, tr("Mounting Height"),
+                             tr("Height above the floor (metres):"),
+                             double(cur.z()) / 1000.0, 0.0, 100.0, 2, &ok);
+        if (!ok)
+            return;
+        QVector3D np = cur;
+        np.setZ(float(h * 1000.0));
+        p->setFixturePosition(fid, 0, 0, np);
+        m_doc->setModified();
+        updateFixture(fid);
+    });
 
-        // Group position lock (when this fixture belongs to a group).
-        const quint32 gid = itemGroupId(fi);
-        QAction *grpLockAct = nullptr;
-        if (gid != 0)
-        {
-            const bool gl = props->group(gid).locked;
-            grpLockAct = menu.addAction(gl ? tr("Unlock Group Position")
-                                           : tr("Lock Group Position"));
-        }
-
-        // Fixture Studio: build a studio group (rigid unit with a local frame)
-        // from the current multi-selection, or edit the one this fixture is in.
-        menu.addSeparator();
-        const quint32 frameGid = props->fixtureFrameGroup(fid);
-        QAction *makeStudioAct = nullptr;
-        QAction *editStudioAct = nullptr;
-        if (frameGid != 0)
-            editStudioAct = menu.addAction(tr("Edit Studio Group…"));
-        if (selectedFixtureCount() >= 2)
-            makeStudioAct = menu.addAction(tr("Create Studio Group from Selection"));
-        QAction *stampTplAct = nullptr;
-        if (selectedFixtureCount() >= 1)
-            stampTplAct = menu.addAction(tr("Stamp Studio Component…"));
-
-        menu.addSeparator();
-        QAction *removeAct = menu.addAction(tr("Remove from View"));
-
-        QAction *chosen = menu.exec(event->globalPos());
-        if (chosen == editAct)
-            emit fixtureDoubleClicked(fid);
-        else if (editTrussAct && chosen == editTrussAct)
-            emit trussDoubleClicked(rp.trussId);
-        else if (makeStudioAct && chosen == makeStudioAct)
-        {
+    // Grouping.
+    menu->addSeparator();
+    const quint32 frameGid = props->fixtureFrameGroup(fid);
+    if (frameGid != 0)
+        menu->addAction(tr("Edit Studio Group…"), this, [this, frameGid]() {
+            openStudioGroupEditor(frameGid);
+        });
+    if (selectedFixtureCount() >= 2)
+        menu->addAction(tr("Create Studio Group from Selection"), this, [this]() {
             const quint32 ng = createStudioGroupFromSelection();
             if (ng != 0)
                 openStudioGroupEditor(ng);
-        }
-        else if (editStudioAct && chosen == editStudioAct)
-            openStudioGroupEditor(frameGid);
-        else if (stampTplAct && chosen == stampTplAct)
-            browseStudioComponents();
-        else if (chosen == removeAct)
-        {
-            removeFixture(fid);
-            m_doc->setModified();
-            emit mapStructureChanged();
-        }
-        else if (grpLockAct && chosen == grpLockAct)
-        {
-            props->setGroupLocked(gid, !props->group(gid).locked);
-            m_doc->setModified();
-            refreshItemLayerState();
-        }
-        return;
-    }
-
-    if (auto *ti = dynamic_cast<TrussItem *>(it))
+        });
+    menu->addAction(tr("Stamp Studio Component…"), this, [this, fid]() {
+        if (selectedFixtureCount() == 0)
+            selectMapItem(QStringLiteral("fixture"), fid);
+        browseStudioComponents();
+    });
+    const quint32 gid = props->fixtureGroup(fid);
+    if (gid != 0)
     {
-        Truss *t = ti->truss();
-        const quint32 tid = ti->trussId();
-        const bool locked = (t && t->locked());
-        QMenu menu(this);
-        QAction *editAct   = menu.addAction(tr("Edit Truss…"));
-        QAction *addBarAct = menu.addAction(tr("Add Bar…"));
-        addBarAct->setToolTip(tr("Hang a cross-bar on this truss (mid-span); "
-                                 "edit it to set run, position and drop"));
-        QAction *deleteAct = menu.addAction(tr("Delete Truss"));
-        menu.addSeparator();
-        QAction *lockAct = menu.addAction(locked ? tr("Unlock Position")
-                                                 : tr("Lock Position"));
-        lockAct->setToolTip(tr("Freeze this truss in place — overrides the layer lock"));
-        QAction *chosen = menu.exec(event->globalPos());
-        if (chosen == editAct)
-            emit trussDoubleClicked(tid);
-        else if (chosen == addBarAct)
-            emit addBarToTrussRequested(tid, -1.0f);   // -1 = mid-span default
-        else if (chosen == deleteAct)
-            emit trussRemoveRequested(tid);
-        else if (chosen == lockAct && t)
-        {
-            t->setLocked(!t->locked());
+        const bool gl = props->group(gid).locked;
+        menu->addAction(gl ? tr("Unlock Group Position") : tr("Lock Group Position"),
+                        this, [this, gid, gl]() {
+            m_doc->monitorProperties()->setGroupLocked(gid, !gl);
             m_doc->setModified();
             refreshItemLayerState();
-            ti->update();
-        }
-        return;
+        });
     }
 
-    if (auto *pi = dynamic_cast<PlatformItem *>(it))
+    // Removing, last.
+    if (withRemoval)
+        addItemRemoval(menu, kind, fid);
+}
+
+bool MonitorGraphicsView::itemLocked(const QString &kind, quint32 id) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (kind == QLatin1String("truss"))    { Truss *t = props->truss(id);        return t && t->locked(); }
+    if (kind == QLatin1String("platform")) { StagePlatform *p = props->platform(id); return p && p->locked(); }
+    if (kind == QLatin1String("pipe"))     { Pipe *b = props->pipe(id);          return b && b->locked(); }
+    if (kind == QLatin1String("stand"))    { Stand *s = props->stand(id);        return s && s->locked(); }
+    if (kind == QLatin1String("tower"))    { Tower *t = props->tower(id);        return t && t->locked(); }
+    if (kind == QLatin1String("target"))   { StageTarget *t = props->stageTarget(id); return t && t->locked(); }
+    if (kind == QLatin1String("image"))    return props->image(id).locked;
+    if (kind == QLatin1String("power"))
     {
-        StagePlatform *p = pi->platform();
-        const quint32 pid = pi->platformId();
-        const bool locked = (p && p->locked());
-        QMenu menu(this);
-        QAction *editAct   = menu.addAction(tr("Edit Platform…"));
-        QAction *deleteAct = menu.addAction(tr("Delete Platform"));
-        menu.addSeparator();
-        QAction *lockAct = menu.addAction(locked ? tr("Unlock Position")
-                                                 : tr("Lock Position"));
-        lockAct->setToolTip(tr("Freeze this platform in place — overrides the layer lock"));
-        QAction *chosen = menu.exec(event->globalPos());
-        if (chosen == editAct)
-            emit platformDoubleClicked(pid);
-        else if (chosen == deleteAct)
-            emit platformRemoveRequested(pid);
-        else if (chosen == lockAct && p)
-        {
-            p->setLocked(!p->locked());
-            m_doc->setModified();
-            refreshItemLayerState();
-            pi->update();
-        }
-        return;
+        PowerDistribution *pd = m_doc->powerDistribution();
+        return pd != nullptr && int(id) < pd->sources().size() && pd->sources().at(int(id)).locked;
     }
+    return false;
+}
 
-    if (auto *ii = dynamic_cast<MonitorImageItem *>(it))
+void MonitorGraphicsView::setItemLocked(const QString &kind, quint32 id, bool locked)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (kind == QLatin1String("truss"))         { if (Truss *t = props->truss(id)) t->setLocked(locked); }
+    else if (kind == QLatin1String("platform")) { if (StagePlatform *p = props->platform(id)) p->setLocked(locked); }
+    else if (kind == QLatin1String("pipe"))     { if (Pipe *b = props->pipe(id)) b->setLocked(locked); }
+    else if (kind == QLatin1String("stand"))    { if (Stand *s = props->stand(id)) s->setLocked(locked); }
+    else if (kind == QLatin1String("tower"))    { if (Tower *t = props->tower(id)) t->setLocked(locked); }
+    else if (kind == QLatin1String("target"))   { if (StageTarget *t = props->stageTarget(id)) t->setLocked(locked); }
+    else if (kind == QLatin1String("image"))
     {
-        const quint32 iid = ii->imageId();
-        const bool locked = props->image(iid).locked;
-        QMenu menu(this);
-        QAction *editAct   = menu.addAction(tr("Edit Image…"));
-        QAction *deleteAct = menu.addAction(tr("Delete Image"));
-        menu.addSeparator();
-        QAction *lockAct = menu.addAction(locked ? tr("Unlock Position")
-                                                 : tr("Lock Position"));
-        QAction *chosen = menu.exec(event->globalPos());
-        if (chosen == editAct)
-            emit imageDoubleClicked(iid);
-        else if (chosen == deleteAct)
-            emit imageRemoveRequested(iid);
-        else if (chosen == lockAct)
-        {
-            MonitorProperties::MonitorImage img = props->image(iid);
-            img.locked = !img.locked;
-            props->setImage(img);
-            m_doc->setModified();
-            refreshItemLayerState();
-            ii->update();
-        }
-        return;
+        MonitorProperties::MonitorImage img = props->image(id);
+        img.locked = locked;
+        props->setImage(img);
     }
-
-    if (auto *bi = dynamic_cast<PipeItem *>(it))
+    else if (kind == QLatin1String("power"))
     {
-        Pipe *b = bi->pipe();
-        const quint32 pid = bi->pipeId();
-        const bool locked = (b && b->locked());
-        QMenu menu(this);
-        QAction *editAct   = menu.addAction(tr("Edit Boom…"));
-        QAction *deleteAct = menu.addAction(tr("Delete Boom"));
-        menu.addSeparator();
-        QAction *lockAct = menu.addAction(locked ? tr("Unlock Position")
-                                                 : tr("Lock Position"));
-        QAction *chosen = menu.exec(event->globalPos());
-        if (chosen == editAct)
-            emit pipeDoubleClicked(pid);
-        else if (chosen == deleteAct)
-            emit pipeRemoveRequested(pid);
-        else if (chosen == lockAct && b)
-        {
-            b->setLocked(!b->locked());
-            m_doc->setModified();
-            refreshItemLayerState();
-            bi->update();
-        }
-        return;
+        PowerDistribution *pd = m_doc->powerDistribution();
+        if (pd == nullptr || int(id) >= pd->sources().size())
+            return;
+        pd->sources()[int(id)].locked = locked;
     }
+    else
+        return;
+    m_doc->setModified();
+    refreshItemLayerState();
+    if (kind == QLatin1String("target"))
+        updateTargets();
+    else if (kind == QLatin1String("power"))
+        updatePowerSources();
+    m_scene->update();
+}
 
-    if (auto *si = dynamic_cast<StandItem *>(it))
+void MonitorGraphicsView::requestDeleteItem(const QString &kind, quint32 id)
+{
+    if (kind == QLatin1String("truss"))         emit trussRemoveRequested(id);
+    else if (kind == QLatin1String("platform")) emit platformRemoveRequested(id);
+    else if (kind == QLatin1String("image"))    emit imageRemoveRequested(id);
+    else if (kind == QLatin1String("pipe"))     emit pipeRemoveRequested(id);
+    else if (kind == QLatin1String("stand"))    emit standRemoveRequested(id);
+    else if (kind == QLatin1String("tower"))    emit towerRemoveRequested(id);
+    else if (kind == QLatin1String("target"))
     {
-        Stand *s = si->stand();
-        const quint32 sid = si->standId();
-        const bool locked = (s && s->locked());
-        QMenu menu(this);
-        QAction *editAct   = menu.addAction(tr("Edit Stand…"));
-        QAction *deleteAct = menu.addAction(tr("Delete Stand"));
-        menu.addSeparator();
-        QAction *lockAct = menu.addAction(locked ? tr("Unlock Position")
-                                                 : tr("Lock Position"));
-        QAction *chosen = menu.exec(event->globalPos());
-        if (chosen == editAct)
-            emit standDoubleClicked(sid);
-        else if (chosen == deleteAct)
-            emit standRemoveRequested(sid);
-        else if (chosen == lockAct && s)
-        {
-            s->setLocked(!s->locked());
-            m_doc->setModified();
-            refreshItemLayerState();
-            si->update();
-        }
-        return;
+        if (TargetItem *ti = m_targetItems.value(id, nullptr))
+            ti->confirmAndDelete();
     }
-
-    if (auto *twi = dynamic_cast<TowerItem *>(it))
+    else if (kind == QLatin1String("fixture"))
     {
-        Tower *tw = twi->tower();
-        const quint32 twid = twi->towerId();
-        const bool locked = (tw && tw->locked());
-        QMenu menu(this);
-        QAction *editAct   = menu.addAction(tr("Edit Tower…"));
-        QAction *deleteAct = menu.addAction(tr("Delete Tower"));
-        menu.addSeparator();
-        QAction *lockAct = menu.addAction(locked ? tr("Unlock Position")
-                                                 : tr("Lock Position"));
-        QAction *chosen = menu.exec(event->globalPos());
-        if (chosen == editAct)
-            emit towerDoubleClicked(twid);
-        else if (chosen == deleteAct)
-            emit towerRemoveRequested(twid);
-        else if (chosen == lockAct && tw)
-        {
-            tw->setLocked(!tw->locked());
-            m_doc->setModified();
-            refreshItemLayerState();
-            twi->update();
-        }
+        removeFixture(id);
+        m_doc->setModified();
+        emit mapStructureChanged();
+    }
+}
+
+void MonitorGraphicsView::mountFixtureOnTower(quint32 fid, quint32 towerId, int side, int shelf)
+{
+    ensureFixtureOnPlot(fid);
+    MonitorProperties *p = m_doc->monitorProperties();
+    Tower *t = p->tower(towerId);
+    if (t == nullptr)
+        return;
+    FixtureRigProps r = p->fixtureRigProps(fid);
+    r.clearMounts();
+    r.towerId = towerId;
+    r.towerMountSide = side;
+    if (side == FixtureRigProps::TowerShelf)
+        r.towerShelf = shelf;
+    else
+        r.mountingType = Truss::FloorMounted;   // on the cap or the base; "hung" means nothing here
+    r.towerU = t->width() * 0.5f;               // centred
+    r.towerV = t->depth() * 0.5f;
+    p->setFixtureRigProps(fid, r);
+    updateFixture(fid);
+    m_doc->setModified();
+    emit mapStructureChanged();
+}
+
+void MonitorGraphicsView::ensureFixtureOnPlot(quint32 fid)
+{
+    if (m_fixtures.contains(fid) || m_doc->fixture(fid) == nullptr)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QVector3D w = props->fixtureRigPosition(fid);          // metres
+    const QPointF mm(double(w.x()) * 1000.0, double(w.y()) * 1000.0);
+    addFixture(fid, mm);
+    props->setFixturePosition(fid, 0, 0, QVector3D(float(mm.x()), float(mm.y()), w.z()));
+    props->setFixtureLayer(fid, props->activeLayerId());
+    refreshFixtureLabels();
+    m_doc->setModified();
+}
+
+void MonitorGraphicsView::unmountFixture(quint32 fid)
+{
+    MonitorProperties *p = m_doc->monitorProperties();
+    const FixtureRigProps rp = p->fixtureRigProps(fid);
+    if (rp.trussId != Truss::invalidId())
+    {
+        detachFixtureFromTruss(fid);
         return;
     }
-
-    // Empty canvas (or any other item) → the generic add/paste menu.
-    emit contextMenuRequested(sp);
+    FixtureRigProps r = rp;
+    r.pipeId = Pipe::invalidId();
+    r.towerId = Tower::invalidId();
+    p->setFixtureRigProps(fid, r);
+    updateFixture(fid);
+    m_doc->setModified();
+    emit mapStructureChanged();
 }
 
 void MonitorGraphicsView::attachFixtureToPipe(quint32 fid, quint32 pipeId)
 {
+    ensureFixtureOnPlot(fid);
     MonitorProperties *props = m_doc->monitorProperties();
     Pipe *b = props->pipe(pipeId);
     if (b == nullptr)
@@ -5315,6 +5900,8 @@ void MonitorGraphicsView::attachFixtureToPipe(quint32 fid, quint32 pipeId)
 
 void MonitorGraphicsView::attachFixtureToTruss(quint32 fid, quint32 trussId)
 {
+    // A fixture that has never been placed has no icon to snap; give it one.
+    ensureFixtureOnPlot(fid);
     MonitorProperties *props = m_doc->monitorProperties();
     Truss *t = props->truss(trussId);
     MonitorFixtureItem *mfi = m_fixtures.value(fid, nullptr);
@@ -5419,6 +6006,255 @@ void MonitorGraphicsView::detachFixtureFromTruss(quint32 fid)
     leaveDedicatedTrussGroup(fid, wasTrussId);
     m_doc->setModified();
     emit mapStructureChanged();
+}
+
+void MonitorGraphicsView::setReachOverlayVisible(bool on)
+{
+    if (m_reachVisible == on)
+        return;
+    m_reachVisible = on;
+    rebuildReachOverlay();
+}
+
+void MonitorGraphicsView::setProjectionOverlayVisible(bool on)
+{
+    if (m_projectionVisible == on)
+        return;
+    m_projectionVisible = on;
+    rebuildProjectionOverlay();
+}
+
+void MonitorGraphicsView::revealBuriedFixtures(const QString &kind, quint32 id)
+{
+    QList<quint32> fids;
+    structureCoverageByItsFixtures(kind, id, &fids);
+    if (fids.isEmpty())
+        return;
+
+    m_revealedFixtures = QSet<quint32>(fids.begin(), fids.end());
+
+    // Drawn FIRST: Qt will not select an item that is not visible, and these
+    // are hidden until this moment.
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (it.value() != nullptr)
+            it.value()->setVisible(fixtureItemShouldBeVisible(it.key()));
+
+    /* Then selected, so the Layers list and the inspector follow, and so the
+       projections below have something to draw for. */
+    QList<QPair<QString, quint32> > items;
+    for (quint32 fid : fids)
+        items << qMakePair(QStringLiteral("fixture"), fid);
+    m_settingRevealSelection = true;
+    selectMapItems(items);
+    m_settingRevealSelection = false;
+
+    // The bubble stands for what is now on show: it would only cover it.
+    if (QGraphicsItemGroup *badge =
+            m_countBadges.value(QStringLiteral("%1:%2").arg(kind).arg(id), nullptr))
+        badge->setVisible(false);
+    rebuildProjectionOverlay();
+    m_scene->update();
+}
+
+QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
+{
+    QPolygonF out;
+    Fixture *fx = m_doc->fixture(fid);
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (fx == nullptr || props == nullptr || m_cellPixels == 0)
+        return out;
+
+    const FixtureVisualTraits traits = classifyFixture(fx);
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const QVector3D apex = fixtureWorldCentre(m_doc, fid);
+
+    /* Where it points: a mover says so itself through its pan and tilt;
+       anything else throws straight down, which is what a fixture hung over a
+       stage does. */
+    QVector3D dir;
+    if (!fixtureAimDirection(fx, rp, dir) || dir.isNull())
+        dir = QVector3D(0.0f, 0.0f, -1.0f);
+    if (dir.z() > -0.02f)
+        return out;                       // level or upward: nothing lands
+
+    double deg = fixtureBeamAngle(fx, fx->channelValues(), traits);
+    if (deg <= 0.0 || deg >= 180.0)
+        deg = 14.0;                       // undeclared: an ordinary spot
+    const double half = qDegreesToRadians(deg / 2.0);
+
+    QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), dir);
+    if (side.length() < 1e-3f)
+        side = QVector3D(1, 0, 0);
+    side.normalize();
+    const QVector3D up = QVector3D::crossProduct(dir, side).normalized();
+
+    /* Follow each edge ray down until it meets the floor or a deck. Marched
+       rather than solved: the stage is a height field of stacked platforms,
+       not one plane. */
+    auto land = [&](const QVector3D &ray) {
+        QVector3D p = apex;
+        for (double t = 0.05; t <= 40.0; t += 0.1)
+        {
+            p = apex + ray * float(t);
+            if (double(p.z()) <= double(props->platformHeightAt(p.x(), p.y())))
+                break;
+        }
+        return p;
+    };
+
+    static const int RING = 20;
+    for (int i = 0; i < RING; ++i)
+    {
+        const double a = 2.0 * M_PI * i / RING;
+        const QVector3D across = side * float(qCos(a)) + up * float(qSin(a));
+        const QVector3D ray = (dir * float(qCos(half)) + across * float(qSin(half))).normalized();
+        if (ray.z() > -0.02f)
+            return QPolygonF();           // part of the cone never comes down
+        const QVector3D at = land(ray);
+        out << realPositionToPixels(double(at.x()) * 1000.0, double(at.y()) * 1000.0);
+    }
+    return out;
+}
+
+void MonitorGraphicsView::rebuildProjectionOverlay()
+{
+    foreach (QGraphicsPathItem *pi, m_projectionItems)
+    {
+        m_scene->removeItem(pi);
+        delete pi;
+    }
+    m_projectionItems.clear();
+
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
+    if (props == nullptr || m_pov != PovTop)
+        return;
+
+    // The selection, or whatever a count bubble was asked to show.
+    QSet<quint32> fids = m_revealedFixtures;
+    if (m_projectionVisible)
+    {
+        foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        {
+            if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+                fids.insert(mfi->fixtureID());
+        }
+    }
+    if (fids.isEmpty())
+        return;
+
+    foreach (quint32 fid, fids)
+    {
+        const QPolygonF poly = fixtureProjection(fid);
+        if (poly.size() < 3)
+            continue;
+        QColor col = props->fixtureGelColor(fid, 0, 0);
+        if (!col.isValid() || col == QColor(Qt::black))
+            col = QColor(90, 160, 235);
+        QPainterPath path;
+        path.addPolygon(poly);
+        path.closeSubpath();
+        QGraphicsPathItem *item = new QGraphicsPathItem(path);
+        QColor fill = col;
+        fill.setAlpha(70);
+        item->setBrush(fill);
+        item->setPen(QPen(col, 1.2));
+        item->setZValue(1.7);             // over the decks, under the fixtures
+        item->setAcceptedMouseButtons(Qt::NoButton);
+        Fixture *fx = m_doc->fixture(fid);
+        item->setToolTip(tr("Where %1 lands").arg(fx ? fx->name() : QString::number(fid)));
+        m_scene->addItem(item);
+        m_projectionItems << item;
+    }
+}
+
+void MonitorGraphicsView::scheduleReachOverlay()
+{
+    if (m_reachVisible == false || m_reachUpdatePending)
+        return;
+    m_reachUpdatePending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_reachUpdatePending = false;
+        rebuildReachOverlay();
+    });
+}
+
+void MonitorGraphicsView::rebuildReachOverlay()
+{
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
+
+    // The heads: selected, aimable, with rig geometry to answer from.
+    QList<AimSolver::Frame> frames;
+    if (m_reachVisible && props != nullptr && m_pov == PovTop && m_cellPixels > 0)
+    {
+        foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        {
+            MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi);
+            if (mfi == nullptr)
+                continue;
+            Fixture *fxi = m_doc->fixture(mfi->fixtureID());
+            if (fxi == nullptr)
+                continue;
+            if (fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
+                && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
+                continue;
+            AimSolver::Frame f;
+            if (AimSolver::frameFor(m_doc, fxi->id(), f))
+                frames << f;
+        }
+    }
+
+    if (frames.isEmpty())
+    {
+        if (m_reachItem != nullptr)
+            m_reachItem->setVisible(false);
+        return;
+    }
+
+    /* The stage the grid covers, sampled finely enough to show a blind circle a
+       metre across but capped, so a big grid does not cost a big image. */
+    const double stageW = double(m_gridSize.width())  * m_unitValue / 1000.0;
+    const double stageD = double(m_gridSize.height()) * m_unitValue / 1000.0;
+    const double cell = qMax(0.05, qSqrt(stageW * stageD / 160000.0));
+    const int cols = qMax(1, int(qCeil(stageW / cell)));
+    const int rows = qMax(1, int(qCeil(stageD / cell)));
+    const float above = props->aimSubjectHeight();
+
+    QImage img(cols, rows, QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::transparent);
+    const QRgb blind = qPremultiply(qRgba(235, 70, 60, 90));
+    for (int r = 0; r < rows; ++r)
+    {
+        const float y = float((r + 0.5) * cell);
+        for (int c = 0; c < cols; ++c)
+        {
+            const float x = float((c + 0.5) * cell);
+            const QVector3D at(x, y, props->platformHeightAt(x, y) + above);
+            bool anyReaches = false;
+            for (const AimSolver::Frame &f : frames)
+                if (AimSolver::solve(f, at).reachable())
+                {
+                    anyReaches = true;
+                    break;
+                }
+            if (!anyReaches)
+                img.setPixel(c, r, blind);
+        }
+    }
+
+    if (m_reachItem == nullptr)
+    {
+        m_reachItem = new QGraphicsPixmapItem;
+        m_reachItem->setZValue(1.6);          // over the decks, under fixtures (2)
+        m_reachItem->setAcceptedMouseButtons(Qt::NoButton);
+        m_reachItem->setTransformationMode(Qt::FastTransformation);
+        m_scene->addItem(m_reachItem);
+    }
+    m_reachItem->setPixmap(QPixmap::fromImage(img));
+    m_reachItem->setPos(realPositionToPixels(0.0, 0.0));
+    m_reachItem->setScale(cell * 1000.0 * m_cellPixels / m_unitValue);
+    m_reachItem->setToolTip(tr("Shaded: where none of the selected heads can aim, "
+                               "%1 m above the deck").arg(double(above), 0, 'f', 1));
+    m_reachItem->setVisible(true);
 }
 
 void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)

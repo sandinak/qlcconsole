@@ -1245,6 +1245,9 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
                 .arg(angle2.arg(physical.lensDegreesMin())
                 .arg(physical.lensDegreesMax()));
         }
+        if (physical.lensBeamsPerHead() > 1)
+            info += genInfo.arg(tr("Beams per Head"))
+                .arg(physical.lensBeamsPerHead());
 
         // Focus
         QString frange("%1&deg;");
