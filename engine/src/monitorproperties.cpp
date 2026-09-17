@@ -1322,18 +1322,42 @@ QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMo
         }
     }
 
-    /* How far above its footing to aim. A target that knows what it is says so
-       itself; a plain one falls back to the global subject height, but only
-       when the caller says this is a follow-spot aim -- which is what every
-       show built before target kinds existed relies on. */
-    float above = t->effectiveAimHeight();
-    if (above <= 0.0f && subjectMode && t->kind() == StageTarget::Kind::None)
-        above = m_aimSubjectHeight;
-
+    const float above = targetAimHeight(t, subjectMode);
     if (above > 0.0f)
         p.setZ(platformHeightAt(p.x(), p.y()) + above);
 
     return p;
+}
+
+float MonitorProperties::targetAimHeight(const StageTarget *t, bool subjectMode) const
+{
+    if (t == nullptr)
+        return 0.0f;
+    if (t->hasAimHeightOverride())
+        return t->aimHeightOverride();
+
+    /* A Person IS a follow-spot subject: its height is the subject height the
+       target dialog shows right above the Subject field. It used to take a
+       fixed 1.4 m of its own, so changing the subject height moved plain
+       marks and left every person where it was. A plain mark falls back to
+       the same height, but only when the caller says this is a follow-spot
+       aim -- which is what every show built before target kinds relies on. */
+    switch (t->kind())
+    {
+    case StageTarget::Kind::Person:
+        return m_aimSubjectHeight;
+    case StageTarget::Kind::None:
+        return subjectMode ? m_aimSubjectHeight : 0.0f;
+    default:
+        return StageTarget::defaultAimHeight(t->kind());
+    }
+}
+
+float MonitorProperties::targetFigureHeight(const StageTarget *t) const
+{
+    if (t == nullptr || t->kind() != StageTarget::Kind::Person)
+        return 0.0f;
+    return targetAimHeight(t, true) / 0.8f;
 }
 
 float MonitorProperties::platformBaseZ(quint32 id) const
@@ -1490,12 +1514,23 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     if (t != nullptr)
     {
         QVector3D p = t->positionAt(rp.trussOffset);
-        // Offset Z by the mount side (elevation only). Half the truss thickness.
+        /* Offset Z by the mount side: half the truss thickness, so a fixture
+           sits on the top chord or hangs from the bottom one.
+         *
+           Horizontal runs only. A tower's width is HORIZONTAL -- its run is
+           the Z axis, and the offset along it already is the height. Nudging
+           it anyway put a followspot set on top of a 3.048 m tower at 3.193 m,
+           floating a truss-width above it ("T1 shows above the truss"), and
+           left every tower fixture on the default side 0.145 m below the
+           offset its own properties showed. */
         const float half = t->width() * 0.5f;
-        if (rp.trussMountSide == FixtureRigProps::TopMounted)
-            p.setZ(p.z() + half);
-        else if (rp.trussMountSide == FixtureRigProps::UnderHung)
-            p.setZ(p.z() - half);
+        if (t->type() != Truss::Vertical)
+        {
+            if (rp.trussMountSide == FixtureRigProps::TopMounted)
+                p.setZ(p.z() + half);
+            else if (rp.trussMountSide == FixtureRigProps::UnderHung)
+                p.setZ(p.z() - half);
+        }
         // Centered: leave on the chord.
         // Horizontal cross-position: slide across the truss width, perpendicular
         // to the run in the horizontal plane (Left/Right chord vs centred).

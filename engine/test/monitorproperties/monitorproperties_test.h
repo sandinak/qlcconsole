@@ -47,6 +47,10 @@ private slots:
     void stageOrigin();
     void imagesXmlRoundTrip();
     void childBarFollowsParent();
+    /** A tower's offset IS the height: on top of a 3 m tower is 3 m, whatever
+     *  side the fixture was attached with. The half-width side nudge belongs
+     *  to horizontal runs, where the width is vertical. */
+    void aTowerOffsetIsTheHeight();
     void studioFrameDerivation();
     /** A target kind changes where light is aimed -- a drum kit is not a
      *  vocalist, and one global subject height made them the same. */

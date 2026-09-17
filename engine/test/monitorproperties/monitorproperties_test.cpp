@@ -836,6 +836,50 @@ void MonitorProperties_Test::stageStructuresXmlRoundTrip()
 
 QTEST_APPLESS_MAIN(MonitorProperties_Test)
 
+void MonitorProperties_Test::aTowerOffsetIsTheHeight()
+{
+    MonitorProperties mp;
+
+    Truss *tower = mp.addTruss();
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(1.67f, 1.372f, 0.0f));
+    tower->setLength(3.048f);
+    tower->setWidth(0.29f);
+
+    Truss *pipe = mp.addTruss();
+    pipe->setType(Truss::Horizontal);
+    pipe->setOrigin(QVector3D(0.0f, 2.0f, 5.0f));
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+    pipe->setWidth(0.29f);
+
+    /* T1-Spot from the show: on top of T-1, attached top-mounted. */
+    FixtureRigProps rp;
+    rp.trussId = tower->id();
+    rp.trussOffset = 3.048f;
+    rp.trussMountSide = FixtureRigProps::TopMounted;
+    mp.setFixtureRigProps(0, rp);
+    QVERIFY2(qAbs(double(mp.fixtureRigPosition(0).z()) - 3.048) < 1e-4,
+             qPrintable(QString("a fixture on top of a 3.048 m tower sits at %1 m")
+                        .arg(double(mp.fixtureRigPosition(0).z()))));
+
+    // The default side, part way up: the height its properties show.
+    rp.trussOffset = 2.654f;
+    rp.trussMountSide = FixtureRigProps::UnderHung;
+    mp.setFixtureRigProps(1, rp);
+    QVERIFY(qAbs(double(mp.fixtureRigPosition(1).z()) - 2.654) < 1e-4);
+
+    // A horizontal run still takes the nudge: top chord above, bottom below.
+    rp.trussId = pipe->id();
+    rp.trussOffset = 3.0f;
+    rp.trussMountSide = FixtureRigProps::TopMounted;
+    mp.setFixtureRigProps(2, rp);
+    QVERIFY(qAbs(double(mp.fixtureRigPosition(2).z()) - 5.145) < 1e-4);
+    rp.trussMountSide = FixtureRigProps::UnderHung;
+    mp.setFixtureRigProps(3, rp);
+    QVERIFY(qAbs(double(mp.fixtureRigPosition(3).z()) - 4.855) < 1e-4);
+}
+
 void MonitorProperties_Test::targetKindsAndAimPoint()
 {
     /* A target kind only earns its place if it changes where light is aimed or
@@ -867,6 +911,14 @@ void MonitorProperties_Test::targetKindsAndAimPoint()
     QVERIFY2(qAbs(double(mp.targetAimPoint(t).z()) - 1.9) < 0.01,
              "a Person should be aimed at chest height above what it stands on "
              "without the caller having to ask");
+
+    /* ...and that chest height is the follow-spot subject height: change it
+       and the person moves with it, figure and all. */
+    mp.setAimSubjectHeight(1.6f);
+    QVERIFY2(qAbs(double(mp.targetAimPoint(t).z()) - 2.1) < 0.01,
+             "a Person ignored a change to the follow-spot subject height");
+    QVERIFY(qAbs(double(mp.targetFigureHeight(t)) - 2.0) < 0.01);
+    mp.setAimSubjectHeight(1.4f);
 
     /* A drum kit is lower than a vocalist -- the whole point of having kinds
        rather than one global height for everything on the stage. */

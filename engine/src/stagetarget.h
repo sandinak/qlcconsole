@@ -133,6 +133,7 @@ public:
     float effectiveAimHeight() const
     { return hasAimHeightOverride() ? m_aimHeightOverride : defaultAimHeight(m_kind); }
 
+
     /********************************************************************
      * Structure binding (Kind::Structure)
      ********************************************************************/

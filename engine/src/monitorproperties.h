@@ -561,6 +561,18 @@ public:
      */
     QVector3D targetAimPoint(const class StageTarget *t, bool subjectMode = false) const;
 
+    /** How far above its footing @p t is aimed. A per-target override wins;
+     *  otherwise a Person is aimed at the follow-spot subject height -- the
+     *  one setting that says how high a subject's chest is, so changing it
+     *  moves every person with it -- and a plain mark takes that height only
+     *  for a follow-spot aim (@p subjectMode). Other kinds use their own. */
+    float targetAimHeight(const class StageTarget *t, bool subjectMode = false) const;
+
+    /** How tall the figure drawn for @p t is, in metres; 0 when it is not a
+     *  Person. The aim height is a chest, about four fifths of the way up a
+     *  standing person, so the figure grows and shrinks with it. */
+    float targetFigureHeight(const class StageTarget *t) const;
+
     /** Base (bottom) height of a platform: the deck height of the tallest LOWER
      *  platform whose footprint it sits within (0 = on the floor). Lets steps
      *  stack — a platform on top of another rises from that one's deck. */
