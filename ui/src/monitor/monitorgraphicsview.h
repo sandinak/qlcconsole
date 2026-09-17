@@ -868,6 +868,10 @@ signals:
 
     /** Signal emitted when the user right-clicks empty canvas space */
     void contextMenuRequested(QPointF scenePos);
+    /** "Add one of these, here": what ("fixture", "target", "person") and the
+     *  scene point it was asked for. The menus live here, the adding lives in
+     *  Monitor, and this is the seam. */
+    void addItemRequested(const QString &what, QPointF scenePos);
 
     /** Emitted whenever the canvas selection changes, so the toolbar can update
      *  the enabled state of the Group / Ungroup actions. */

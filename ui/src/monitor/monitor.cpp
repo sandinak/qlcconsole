@@ -455,6 +455,15 @@ void Monitor::initGraphicsView()
     });
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
+    connect(m_graphicsView, &MonitorGraphicsView::addItemRequested, this,
+            [this](const QString &what, QPointF scenePos) {
+        /* The menus ask, this places: one path for "add one of these here",
+           whether the click was on bare deck or on a platform. */
+        m_pendingAddScenePos = scenePos;
+        if (what == QLatin1String("fixture"))     slotAddFixture();
+        else if (what == QLatin1String("target")) slotAddTarget();
+        else if (what == QLatin1String("person")) slotAddPerson();
+    });
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
             this, &Monitor::slotCanvasContextMenu);
     connect(m_graphicsView, &MonitorGraphicsView::addFixtureToTrussRequested,
@@ -5130,27 +5139,34 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
 {
     m_pendingAddScenePos = scenePos;
     QMenu menu(this);
-    menu.addAction(QIcon(":/fixture.png"), tr("Add Fixture here"),
-                   this, SLOT(slotAddFixture()));
-    menu.addAction(QIcon(":/group.png"), tr("Add Truss here"),
-                   this, SLOT(slotAddTruss()));
-    menu.addAction(tr("Add Platform/Riser here"),
-                   this, SLOT(slotAddPlatform()));
-    menu.addAction(tr("Add Boom here"),
-                   this, SLOT(slotAddPipe()));
-    menu.addAction(tr("Add Electric here"),
-                   this, SLOT(slotAddElectric()));
-    menu.addAction(tr("Add Stand here"),
-                   this, SLOT(slotAddStand()));
-    menu.addAction(tr("Add Tower here"),
-                   this, SLOT(slotAddTower()));
-    menu.addAction(QIcon(":/image.png"), tr("Add Image here"),
-                   this, SLOT(slotAddImage()));
-    menu.addSeparator();
-    menu.addAction(tr("Add Target Position here"),
-                   this, SLOT(slotAddTarget()));
-    menu.addAction(tr("Add Person here"),
-                   this, SLOT(slotAddPerson()));
+    /* Everything you can add, under one "Add here" -- the list had grown to
+       ten entries at the top level and buried the things you do to what is
+       already there. Grouped the way the plot is built: lights, then what
+       holds them, then what they point at. */
+    QMenu *addMenu = menu.addMenu(tr("Add Here"));
+    addMenu->addAction(QIcon(":/fixture.png"), tr("Fixture…"),
+                       this, SLOT(slotAddFixture()));
+    addMenu->addSeparator();
+    addMenu->addAction(QIcon(":/group.png"), tr("Truss"),
+                       this, SLOT(slotAddTruss()));
+    addMenu->addAction(tr("Platform/Riser"),
+                       this, SLOT(slotAddPlatform()));
+    addMenu->addAction(tr("Boom"),
+                       this, SLOT(slotAddPipe()));
+    addMenu->addAction(tr("Electric"),
+                       this, SLOT(slotAddElectric()));
+    addMenu->addAction(tr("Stand"),
+                       this, SLOT(slotAddStand()));
+    addMenu->addAction(tr("Tower"),
+                       this, SLOT(slotAddTower()));
+    addMenu->addSeparator();
+    addMenu->addAction(tr("Target Position"),
+                       this, SLOT(slotAddTarget()));
+    addMenu->addAction(tr("Person"),
+                       this, SLOT(slotAddPerson()));
+    addMenu->addSeparator();
+    addMenu->addAction(QIcon(":/image.png"), tr("Image"),
+                       this, SLOT(slotAddImage()));
 
     menu.addSeparator();
     QAction *groupAct = menu.addAction(QIcon(":/group.png"), tr("Group selected (Ctrl+G)"),

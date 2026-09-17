@@ -5562,12 +5562,25 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             requestEditItem(kind, id);
         });
 
+        /* One "Add" submenu per structure, rather than a handful of loose
+           "Add X" entries at the top level: "the add section should probably
+           have a sub menu of what can be added to keep things clean". What
+           goes in it is whatever this kind of thing can actually carry. */
+        QMenu *addMenu = nullptr;
+        auto adds = [&]() -> QMenu * {
+            if (addMenu == nullptr)
+            {
+                menu->addSeparator();
+                addMenu = menu->addMenu(tr("Add"));
+            }
+            return addMenu;
+        };
+
         if (kind == QLatin1String("truss"))
         {
             Truss *t = props->truss(id);
             if (t == nullptr)
                 return;
-            menu->addSeparator();
             /* At the click when there is one, else mid-span: from the list
                there is no "here". */
             float offset = t->length() * 0.5f;
@@ -5582,10 +5595,10 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
                                    / ti->pxLen());
                 }
             }
-            menu->addAction(tr("Add Fixture…"), this, [this, id, offset]() {
+            adds()->addAction(tr("Fixture…"), this, [this, id, offset]() {
                 emit addFixtureToTrussRequested(id, offset);
             });
-            menu->addAction(tr("Add Bar…"), this, [this, id]() {
+            adds()->addAction(tr("Bar…"), this, [this, id]() {
                 emit addBarToTrussRequested(id, -1.0f);   // -1 = mid-span default
             });
         }
@@ -5594,11 +5607,30 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             Pipe *b = props->pipe(id);
             if (b != nullptr && b->isVertical())
             {
-                menu->addSeparator();
-                menu->addAction(tr("Add Crossbar…"), this, [this, id]() {
+                adds()->addAction(tr("Crossbar…"), this, [this, id]() {
                     emit addBarToPipeRequested(id);
                 });
             }
+        }
+
+        /* Anything you can stand on can have things put on it -- "when I right
+           click on a platform I get most of the platform type options .. but no
+           menu to add anything like a fixture or target". The point clicked is
+           the point they land on, so its deck height is theirs. */
+        if (kind == QLatin1String("platform") || kind == QLatin1String("truss")
+            || kind == QLatin1String("stand") || kind == QLatin1String("tower"))
+        {
+            const QPointF at = scenePos;
+            adds()->addAction(tr("Fixture Here…"), this, [this, at]() {
+                emit addItemRequested(QStringLiteral("fixture"), at);
+            });
+            adds()->addSeparator();
+            adds()->addAction(tr("Target Here"), this, [this, at]() {
+                emit addItemRequested(QStringLiteral("target"), at);
+            });
+            adds()->addAction(tr("Person Here"), this, [this, at]() {
+                emit addItemRequested(QStringLiteral("person"), at);
+            });
         }
 
         /* What the things ON it light. Asking a truss is how you compare its
@@ -6426,7 +6458,40 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
     {
         const QPolygonF poly = fixtureProjection(fid);
         if (poly.size() < 3)
+        {
+            /* Nothing lands: the head is pointed level or above the horizon,
+               or it has no lens declared. Silence reads as a broken feature
+               ("clicked on T1-Spot to see its area and didn't get anything"),
+               so say which it is, at the fixture. */
+            MonitorFixtureItem *mfi = m_fixtures.value(fid, nullptr);
+            if (mfi == nullptr)
+                continue;
+            Fixture *fx = m_doc->fixture(fid);
+            QFont nf = font();
+            nf.setPointSizeF(8.0);
+            const QFontMetricsF nfm(nf);
+            const QString note = tr("%1: nothing lands — aimed level or up")
+                                 .arg(fx ? fx->name() : QString::number(fid));
+            const QPointF c = mfi->sceneBoundingRect().center();
+            const double nw = nfm.horizontalAdvance(note) + 8.0;
+            const double nh = nfm.height() + 2.0;
+            QGraphicsPathItem *holder = new QGraphicsPathItem;
+            QPainterPath pp;
+            pp.addRoundedRect(QRectF(c.x() - nw * 0.5, c.y() + 10.0, nw, nh), 3.0, 3.0);
+            holder->setPath(pp);
+            holder->setBrush(QBrush(QColor(12, 18, 26, 205)));
+            holder->setPen(QPen(QColor(190, 160, 80), 1.0));
+            holder->setZValue(1.75);
+            holder->setAcceptedMouseButtons(Qt::NoButton);
+            QGraphicsSimpleTextItem *nt = new QGraphicsSimpleTextItem(note, holder);
+            nt->setFont(nf);
+            nt->setBrush(QBrush(QColor(240, 224, 190)));
+            nt->setPos(c.x() - nw * 0.5 + 4.0, c.y() + 11.0);
+            nt->setAcceptedMouseButtons(Qt::NoButton);
+            m_scene->addItem(holder);
+            m_projectionItems << holder;
             continue;
+        }
         QColor col = props->fixtureGelColor(fid, 0, 0);
         if (!col.isValid() || col == QColor(Qt::black))
             col = QColor(90, 160, 235);

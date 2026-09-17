@@ -3478,6 +3478,41 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             drawSolidBox(p, corner, col, col.lighter(150), 255, !showingOutput,
                          depthBias);
 
+        /* Washes, pars and bars throw light too. Only movers did -- the whole
+           beam pass lived inside drawMoverSolid -- so "mounted T1-W, set it to
+           white wash, don't see any light from it" was the model saying that a
+           fixture which cannot move cannot shine, which is nonsense on a stage
+           where most of the light comes from things bolted in one direction.
+
+           One cone per fixture, not one per head: a 64-pixel bar is one
+           luminaire washing one area, and sixty-four cones of it would cost the
+           frame everything the threading just bought. Where it points is
+           emitDirection()'s answer -- down off a truss, out from the riser it
+           is buried in -- which is the same vector the view already uses to
+           decide how much of the lens you can see. */
+        if (traits.kind != FixtureSilhouette::Mover && m_beams && showingOutput)
+        {
+            QColor live = col;
+            uchar dim = 0;
+            QVector3D dir;
+            if (fixtureLiveState(fx, vals, live, dim, valsComplete)
+                && dim > 2
+                && emitDirection(fx, rp, traits, dir))
+            {
+                /* A declared lens wins. Without one, a fixture that cannot
+                   move is a wash, not a spot: 40 degrees reads as a spread of
+                   light rather than the 14-degree shaft a mover falls back to. */
+                const double declared = fixtureBeamAngle(fx, vals, traits);
+                const double deg = (declared > 0.0 && declared < 180.0) ? declared : 40.0;
+                const QVector3D apex = fixtureCentre(fid);
+                const double half = qDegreesToRadians(deg / 2.0);
+                drawBeamCone(p, apex, dir, half, live, dim / 255.0, 1.0);
+                m_frameBeams << FrameBeam{ apex, dir.normalized(), half,
+                                           beamThrow(apex, dir.normalized()),
+                                           live, dim / 255.0 };
+            }
+        }
+
         /* Pixels on the face pointing at us -- when a grid is declared AND the
            pixels are big enough to see.
          *

@@ -40,6 +40,7 @@
 #include "studiotemplate.h"
 #include <QTreeWidgetItemIterator>
 #include "fixturevisualtraits.h"
+#include "aimsolver.h"
 #include "scene.h"
 #include "zraster.h"
 #include <QtMath>
@@ -4867,7 +4868,9 @@ void Monitor_Test::aFrameFilledAcrossCoresIsTheSameFrame()
             v.setSupersample(ss);
             v.setRenderThreads(1);
             const QImage one = v.grab().toImage();
-            QVERIFY(v.m_frameBeams.size() == 6);
+            QVERIFY2(v.m_frameBeams.size() == 6,
+                     qPrintable(QString("%1 beams in the frame, expected 6")
+                                .arg(v.m_frameBeams.size())));
             for (int threads : { 2, 5, 16 })
             {
                 v.setRenderThreads(threads);
@@ -5365,7 +5368,9 @@ void Monitor_Test::aBeamFadesAlongItsLengthWhicheverWayItPoints()
         {
             v.setAngledView(az, 4.0);
             const QImage img = v.grab().toImage();
-            QVERIFY(v.m_frameBeams.size() == 1);
+            QVERIFY2(v.m_frameBeams.size() == 1,
+                     qPrintable(QString("%1 beams in the frame, expected 1")
+                                .arg(v.m_frameBeams.size())));
             const StructureStudioView::FrameBeam b = v.m_frameBeams.first();
             const QVector3D axis = b.dir.normalized();
             const QPointF nearPx = v.w2s(b.apex + axis * float(b.length * 0.12));
@@ -7778,6 +7783,253 @@ void Monitor_Test::addingAPersonStandsOneWhereYouClicked()
     // Named as a person, and drawn as one: its height follows the subject.
     QVERIFY2(person->name().contains(QStringLiteral("Person")), qPrintable(person->name()));
     QCOMPARE(props->targetAimHeight(person, true), props->aimSubjectHeight());
+
+    delete mon;
+    delete doc;
+}
+
+void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
+{
+    /* "I clicked on T1-Spot to see its area and didn't get anything."
+
+       Two halves of one model that have to agree: AimSolver turns "point at
+       this" into DMX, and fixtureAimDirection turns DMX back into the ray the
+       beams, the aim lines and the footprint are drawn from. Aim a head at a
+       mark, feed it its own answer, and the ray must arrive at that mark --
+       hung or standing, inverted or not.
+
+       They did not. The solver measured its bearing from UPSTAGE while every
+       view measured from downstage, so a head aimed at a mark drew its beam at
+       the mirror image of that mark through the head: 180 degrees out, every
+       time, for every fixture. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *bar = props->addTruss();
+    bar->setName("T-1");
+    bar->setOrigin(QVector3D(0.0f, 3.0f, 3.0f));
+    bar->setLength(6.0f);
+
+    struct Case { const char *what; Truss::MountingType mount; bool panInv; bool tiltInv; QVector3D mark; };
+    /* A standing head's tilt is centred straight UP, so with this fixture's
+       180 degrees of travel it works the sky, not the deck -- which is the
+       whole of Branson's point about a 270 degree head on a truss top. */
+    const QList<Case> cases = {
+        { "hung under the bar",      Truss::TopHung,      false, false, QVector3D(4.0f, 1.5f, 0.0f) },
+        { "hung, facing stage left", Truss::TopHung,      false, false, QVector3D(-1.0f, 4.5f, 0.0f) },
+        { "standing on the bar",     Truss::FloorMounted, false, false, QVector3D(4.0f, 1.5f, 5.0f) },
+        { "hung, pan inverted",      Truss::TopHung,      true,  false, QVector3D(4.0f, 1.5f, 0.0f) },
+        { "standing, tilt inverted", Truss::FloorMounted, false, true,  QVector3D(4.0f, 1.5f, 5.0f) },
+    };
+
+    int addr = 0;
+    foreach (const Case &c, cases)
+    {
+        Fixture *fx = makeMover(doc, 14.0, quint32(addr), c.what, QVector3D(2.0f, 3.0f, 3.0f));
+        QVERIFY(fx != nullptr);
+        addr += 16;
+        FixtureRigProps rp;
+        rp.trussId = bar->id();
+        rp.trussOffset = 2.0f;
+        rp.mountingType = c.mount;
+        rp.panInvert = c.panInv;
+        rp.tiltInvert = c.tiltInv;
+        props->setFixtureRigProps(fx->id(), rp);
+
+        AimSolver::Solution sol;
+        QVERIFY2(AimSolver::reach(doc, fx->id(), c.mark, sol),
+                 qPrintable(QString("no frame for the head %1").arg(c.what)));
+        QVERIFY2(sol.reachable(),
+                 qPrintable(QString("a head %1 says it cannot reach its mark (margin %2)")
+                            .arg(c.what).arg(double(sol.marginDeg))));
+
+        // Its own answer, written back as DMX the way a scene would.
+        QLCFixtureMode *mode = fx->fixtureMode();
+        const quint32 panCh = mode->heads().first().channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+        const quint32 tiltCh = mode->heads().first().channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+        const QLCPhysical phy = mode->physical();
+        const float panMax = phy.focusPanMax() ? float(phy.focusPanMax()) : 360.0f;
+        const float tiltMax = phy.focusTiltMax() ? float(phy.focusTiltMax()) : 270.0f;
+        QByteArray v(512, char(0));
+        v[int(fx->address() + panCh)] = char(uchar(qRound(sol.panDeg * 255.0f / panMax)));
+        v[int(fx->address() + tiltCh)] = char(uchar(qRound(sol.tiltDeg * 255.0f / tiltMax)));
+        fx->setChannelValues(v);
+
+        QVector3D dir;
+        QVERIFY(fixtureAimDirection(fx, rp, dir));
+        const QVector3D from = props->fixtureRigPosition(fx->id());
+        QVector3D want = c.mark - from;
+        want.normalize();
+        const float offBy = float(qRadiansToDegrees(qAcos(double(qBound(-1.0f,
+                                    QVector3D::dotProduct(dir, want), 1.0f)))));
+        QVERIFY2(offBy < 2.0f,
+                 qPrintable(QString("a head %1 aimed at (%2,%3,%4) draws its beam %5 degrees away "
+                                    "(ray %6,%7,%8)")
+                            .arg(c.what).arg(double(c.mark.x())).arg(double(c.mark.y()))
+                            .arg(double(c.mark.z())).arg(double(offBy))
+                            .arg(double(dir.x())).arg(double(dir.y())).arg(double(dir.z()))));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::anUprightHeadCannotPointBesideItself()
+{
+    /* Branson's physics: a head standing upright on top of a truss has its
+       tilt centred straight UP, so 270 degrees of travel reaches 45 degrees
+       past the horizon -- nowhere near the floor at its own feet. The model
+       has to say so rather than quietly aiming it there. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setOrigin(QVector3D(0.0f, 3.0f, 3.0f));
+    bar->setLength(6.0f);
+
+    Fixture *fx = makeMover(doc, 14.0, 0, "Upright", QVector3D(2.0f, 3.0f, 3.0f));
+    QVERIFY(fx != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 2.0f;
+    rp.mountingType = Truss::FloorMounted;
+    props->setFixtureRigProps(fx->id(), rp);
+
+    const QVector3D position = props->fixtureRigPosition(fx->id());
+    AimSolver::Solution atMyFeet;
+    QVERIFY(AimSolver::reach(doc, fx->id(), QVector3D(position.x(), position.y(), 0.0f), atMyFeet));
+    QVERIFY2(!atMyFeet.reachable(), "an upright head claims it can point straight down");
+
+    // The same head hung from the same bar has no trouble at all.
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(fx->id(), rp);
+    AimSolver::Solution hung;
+    QVERIFY(AimSolver::reach(doc, fx->id(), QVector3D(position.x(), position.y(), 0.0f), hung));
+    QVERIFY2(hung.reachable(), "a hung head cannot point straight down");
+
+    delete doc;
+}
+
+void Monitor_Test::aWashOnATrussThrowsLightToo()
+{
+    /* "Mounted T1-W and set it to white wash .. don't see any light from it in
+       the rig view .. did we add washes or just spots?" Just spots: the whole
+       beam pass lived inside drawMoverSolid, so a fixture that cannot move
+       could not shine -- which on a real stage is most of the light. A par or
+       bar hung on a truss now throws a cone down the way it faces. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *bar = props->addTruss();
+    bar->setName("T-1");
+    bar->setOrigin(QVector3D(0.0f, 3.0f, 5.0f));
+    bar->setLength(6.0f);
+
+    Fixture *wash = makeChunkyBar(doc, 0, "T1-W");
+    QVERIFY(wash != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;            // hanging: it points down
+    props->setFixtureRigProps(wash->id(), rp);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 560);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(25.0, 20.0);
+    v.setLiveValues(true);
+    v.setAmbient(0.0);
+
+    auto lumaBelow = [&](int level) {
+        QByteArray u(512, char(0));
+        u[0] = char(level); u[1] = char(level); u[2] = char(level);   // white
+        wash->setChannelValues(u);
+        const QImage img = v.grab().toImage();
+        const QPointF at = v.w2s(v.fixtureCentre(wash->id()));
+        const QPointF probe(at.x(), at.y() + 110);      // into the throw
+        double sum = 0; int n = 0;
+        for (int dy = -12; dy <= 12; ++dy)
+            for (int dx = -12; dx <= 12; ++dx)
+            {
+                const QPoint q(probe.toPoint() + QPoint(dx, dy));
+                if (!img.rect().contains(q)) continue;
+                const QColor c = img.pixelColor(q);
+                sum += c.red() * 0.3 + c.green() * 0.59 + c.blue() * 0.11;
+                ++n;
+            }
+        return n ? sum / n : 0.0;
+    };
+
+    const double dark = lumaBelow(0);
+    const double lit  = lumaBelow(255);
+    QVERIFY2(lit - dark > 10.0,
+             qPrintable(QString("a lit wash threw nothing below it (%1 against a "
+                                "dark room's %2)").arg(lit).arg(dark)));
+
+    delete doc;
+}
+
+void Monitor_Test::aPlatformOffersToPutSomethingOnIt()
+{
+    /* "When I right click on a platform I get most of the platform type options
+       in the menu .. but no menu to add anything like a fixture or target." A
+       riser is a place things stand on, so its menu offers to put them there --
+       under one Add submenu, not loose entries. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StagePlatform *deck = props->addPlatform();
+    deck->setName("Riser");
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(4.0f); deck->setDepth(3.0f); deck->setHeight(0.6f);
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->resize(1000, 700);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(10, 7));
+    gv->updatePlatforms();
+
+    // On the riser, a metre in from its downstage-left corner.
+    const QPointF where = gv->realPositionToPixels(2000.0, 2000.0);
+    QMenu menu;
+    gv->populateItemMenu(&menu, QStringLiteral("platform"), deck->id(), where, false);
+
+    QMenu *addMenu = nullptr;
+    foreach (QAction *a, menu.actions())
+        if (a->menu() != nullptr && a->text() == QStringLiteral("Add"))
+            addMenu = a->menu();
+    QVERIFY2(addMenu != nullptr, "a platform offers no way to add anything to it");
+
+    QStringList offered;
+    QAction *person = nullptr;
+    foreach (QAction *a, addMenu->actions())
+    {
+        if (a->isSeparator())
+            continue;
+        offered << a->text();
+        if (a->text().contains(QStringLiteral("Person")))
+            person = a;
+    }
+    QVERIFY2(offered.filter(QStringLiteral("Fixture")).count() == 1,
+             qPrintable(QString("Add offers: %1").arg(offered.join(", "))));
+    QVERIFY2(offered.filter(QStringLiteral("Target")).count() == 1,
+             qPrintable(QString("Add offers: %1").arg(offered.join(", "))));
+    QVERIFY2(person != nullptr,
+             qPrintable(QString("Add offers: %1").arg(offered.join(", "))));
+
+    // And it actually puts one there, standing ON the riser, not under it.
+    person->trigger();
+    QCOMPARE(props->stageTargets().count(), 1);
+    StageTarget *stood = props->stageTargets().first();
+    QCOMPARE(stood->kind(), StageTarget::Kind::Person);
+    QVERIFY2(qAbs(stood->x() - 2.0f) < 0.05f && qAbs(stood->y() - 2.0f) < 0.05f,
+             qPrintable(QString("stood at %1,%2 instead of 2,2")
+                        .arg(double(stood->x())).arg(double(stood->y()))));
+    QVERIFY2(qAbs(stood->z() - 0.6f) < 0.01f,
+             qPrintable(QString("stood at %1 m, not on the 0.6 m riser")
+                        .arg(double(stood->z()))));
 
     delete mon;
     delete doc;
