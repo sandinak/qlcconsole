@@ -3,7 +3,7 @@
 <Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FixtureManager">
  <Creator>
   <Name>qlcconsole</Name>
-  <Version>4.14.2+qlcconsole.1285</Version>
+  <Version>4.14.2+qlcconsole.1290</Version>
   <Author>Branson Matheson</Author>
  </Creator>
  <Engine>
@@ -107,7 +107,7 @@
    <Model>LED Movinghead+Circle</Model>
    <Mode>12 Channel</Mode>
    <ID>0</ID>
-   <Name>LED Movinghead+Circle</Name>
+   <Name>T1-Spot</Name>
    <Universe>0</Universe>
    <Address>0</Address>
    <Channels>12</Channels>
@@ -1461,6 +1461,26 @@
    <Universe>63</Universe>
    <Address>192</Address>
    <Channels>192</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>YeeSite</Manufacturer>
+   <Model>60W RGB Pixel Light Bar</Model>
+   <Mode>90ch</Mode>
+   <ID>136</ID>
+   <Name>T2-B1</Name>
+   <Universe>7</Universe>
+   <Address>0</Address>
+   <Channels>90</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>YeeSite</Manufacturer>
+   <Model>60W RGB Pixel Light Bar</Model>
+   <Mode>90ch</Mode>
+   <ID>137</ID>
+   <Name>T2-B2</Name>
+   <Universe>7</Universe>
+   <Address>90</Address>
+   <Channels>90</Channels>
   </Fixture>
   <FixtureGroup ID="0">
    <Name>spots</Name>
@@ -12702,6 +12722,7 @@
   <Function ID="19" Type="Scene" Name="Followspot">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <FixtureVal ID="4"/>
+   <FixtureVal ID="0"/>
    <FixtureGroup ID="13"/>
    <Palette ID="2"/>
    <Palette ID="4"/>
@@ -12841,15 +12862,15 @@
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
    <Grid Width="40" Height="3" Depth="24" Units="1" Subdivisions="3"/>
-   <FxItem ID="0" XPos="1669" YPos="1371" Rotation="180" LayerId="4" GroupId="2"/>
+   <FxItem ID="0" XPos="1670" YPos="1372" Rotation="180" LayerId="4" GroupId="2"/>
    <FxItem ID="1" XPos="4874.24" YPos="6107.67" Rotation="180" LayerId="1"/>
    <FxItem ID="2" XPos="8421.24" YPos="5553.5" Rotation="180" LayerId="1"/>
    <FxItem ID="3" XPos="5287.8" YPos="869.799" Rotation="180" LayerId="4"/>
    <FxItem ID="4" XPos="7943.24" YPos="1319.52" LayerId="4" GroupId="17"/>
    <FxItem ID="5" XPos="1107" YPos="2743" LayerId="3" GroupId="4"/>
    <FxItem ID="6" XPos="1106" YPos="2820" LayerId="3" GroupId="4"/>
-   <FxItem ID="7" Hidden="True" XPos="4058" YPos="1344" ZPos="2.251" FixedZoom="1091074785" LayerId="4" GroupId="5"/>
-   <FxItem ID="8" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1661" YPos="1372" ZPos="2.312" LayerId="4" GroupId="2"/>
+   <FxItem ID="7" Hidden="True" XPos="1649" YPos="1372" ZPos="2.445" FixedZoom="1091074785" LayerId="4" GroupId="2"/>
+   <FxItem ID="8" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1664" YPos="1372" ZPos="2.312" LayerId="4" GroupId="2"/>
    <FxItem ID="9" XPos="1242.19" YPos="1526.86" LayerId="2"/>
    <FxItem ID="10" XPos="1197.04" YPos="2920.44" LayerId="3" GroupId="4"/>
    <FxItem ID="11" XPos="1197.04" YPos="2920.44" LayerId="3" GroupId="4"/>
@@ -12861,12 +12882,12 @@
    <FxItem ID="17" XPos="0" YPos="0" LayerId="3" GroupId="4"/>
    <FxItem ID="18" XPos="2445.64" YPos="1519" LayerId="2"/>
    <FxItem ID="19" XPos="3631.4" YPos="1522" LayerId="2"/>
-   <FxItem ID="20" XPos="4859.33" YPos="1505.52" LayerId="2"/>
+   <FxItem ID="20" XPos="4859.33" YPos="1497.9" LayerId="2"/>
    <FxItem ID="21" XPos="6822.43" YPos="1520" LayerId="2"/>
    <FxItem ID="22" XPos="8033.15" YPos="1512.76" LayerId="2"/>
    <FxItem ID="23" XPos="9263.57" YPos="1529.24" LayerId="2"/>
    <FxItem ID="24" XPos="10455.2" YPos="1530.34" LayerId="2"/>
-   <FxItem ID="25" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1674" YPos="1372" ZPos="0.889" LayerId="4" GroupId="2"/>
+   <FxItem ID="25" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1672" YPos="1372" ZPos="0.889" LayerId="4" GroupId="2"/>
    <FxItem ID="26" XPos="3565" YPos="2742" LayerId="3" GroupId="6"/>
    <FxItem ID="27" XPos="3564" YPos="2819" LayerId="3" GroupId="6"/>
    <FxItem ID="28" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
@@ -12977,6 +12998,8 @@
    <FxItem ID="133" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
    <FxItem ID="134" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
    <FxItem ID="135" XPos="8528.04" YPos="5360.44" LayerId="3" GroupId="16"/>
+   <FxItem ID="136" Hidden="True" XPos="3965" YPos="1344" ZPos="1.524" FixedZoom="1808820020" GroupId="5"/>
+   <FxItem ID="137" Hidden="True" XPos="3965" YPos="1344" ZPos="1.524" FixedZoom="1808820020" GroupId="5"/>
    <MonitorLayer ID="1" Name="Fly" Visible="1" Order="0"/>
    <MonitorLayer ID="0" Name="Stage" Visible="1" Locked="1" Order="1"/>
    <MonitorLayer ID="2" Name="Stage Lights" Visible="1" Order="2"/>
@@ -13043,7 +13066,7 @@
     <Shelf Z="2.438"/>
    </Tower>
    <StageTarget ID="0" Name="Test Target" X="6.074" Y="3.861" Z="0.396" Color="#ffb400" LayerId="6"/>
-   <StageTarget ID="1" Name="Target 2" X="6.072" Y="2.718" Z="0.610" Color="#ffb400" LayerId="6"/>
+   <StageTarget ID="1" Name="Witch" X="5.026" Y="2.390" Z="0.610" Color="#ff140e" LayerId="6" Kind="person"/>
    <FixtureRig FID="0" Truss="1" Offset="3.048" Mounting="FloorMounted" PanZero="0.0" TrussSide="1"/>
    <FixtureRig FID="1" Truss="4294967295" Offset="0.808" Mounting="SideArm" PanZero="0.0"/>
    <FixtureRig FID="2" Truss="4294967295" Offset="0.198" Mounting="SideArm" PanZero="0.0"/>
@@ -13051,8 +13074,8 @@
    <FixtureRig FID="4" Truss="4294967295" Offset="2.942" Mounting="FloorMounted" PanZero="0.0" PanOfs="5.00" TrussSide="1" Tower="1" TShelf="4" TU="0.199" TV="0.203" TSide="0"/>
    <FixtureRig FID="5" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="6" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
-   <FixtureRig FID="7" Truss="2" Offset="2.668" Mounting="TopHung" PanZero="0.0" TrussCross="-0.003" GLX="0.313" GLY="0.051" GLZ="-0.031"/>
-   <FixtureRig FID="8" Truss="1" Offset="2.457" Mounting="TopHung" PanZero="0.0" TrussCross="-0.009" Placement="1" SA="90.0"/>
+   <FixtureRig FID="7" Truss="1" Offset="3.048" Mounting="TopHung" PanZero="0.0" TrussCross="-0.021"/>
+   <FixtureRig FID="8" Truss="1" Offset="2.654" Mounting="TopHung" PanZero="0.0" TrussCross="-0.006" Placement="1" SA="90.0"/>
    <FixtureRig FID="9" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0" Deck="0" DeckH="0.000"/>
    <FixtureRig FID="10" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
    <FixtureRig FID="11" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="0" RiserU="1.219" RiserV="0.140" GLX="1.219" GLY="0.204" GLZ="0.166"/>
@@ -13069,7 +13092,7 @@
    <FixtureRig FID="22" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Deck="2" DeckH="0.000"/>
    <FixtureRig FID="23" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Deck="3" DeckH="0.000"/>
    <FixtureRig FID="24" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0" Deck="3" DeckH="0.000"/>
-   <FixtureRig FID="25" Truss="1" Offset="1.034" Mounting="TopHung" PanZero="0.0" TrussCross="0.004" Placement="1" SA="90.0"/>
+   <FixtureRig FID="25" Truss="1" Offset="1.619" Mounting="TopHung" PanZero="0.0" TrussCross="0.002" Placement="1" SA="90.0"/>
    <FixtureRig FID="26" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.609" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="27" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.829" GLY="0.102" GLZ="0.153" SM="0" ST="20.0"/>
    <FixtureRig FID="28" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="13" RiserFace="0" RiserU="1.219" RiserV="0.166" GLX="1.219" GLY="0.204" GLZ="0.191"/>
@@ -13180,6 +13203,8 @@
    <FixtureRig FID="133" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.038" GLX="1.219" GLY="0.204" GLZ="0.064"/>
    <FixtureRig FID="134" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.013" GLX="1.219" GLY="0.204" GLZ="0.038"/>
    <FixtureRig FID="135" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="1.219" GLY="0.204" GLZ="0.013"/>
+   <FixtureRig FID="136" Truss="2" Offset="2.471" Mounting="TopHung" PanZero="0.0" TrussCross="0.009" Placement="1" SA="90.0"/>
+   <FixtureRig FID="137" Truss="2" Offset="1.410" Mounting="TopHung" PanZero="0.0" TrussCross="0.007" SA="90.0"/>
   </Monitor>
  </Engine>
  <VirtualConsole>
