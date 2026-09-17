@@ -154,6 +154,9 @@ private slots:
     /** A Layers row that reads "on truss" opens the TRUSS -- including when
      *  its auto-group carries a studio frame, which is the case that broke. */
     void aTrussRowInLayersOpensTheTrussNotItsGroup();
+    void theLayersListOffersEverythingThePlotDoes();
+    void doubleClickingAnywhereOnATowerTopOpensIt();
+    void doubleClickingABubbleShowsWhatItHides();
     /** Lay a step out once, save it as a component, stamp it onto the next
      *  step's fixtures: the arrangement must arrive intact. */
     void aSavedComponentStampsItsLayoutOntoOtherFixtures();
@@ -162,6 +165,8 @@ private slots:
     /** Fixtures that bury their structure in THIS view are replaced by a count;
      *  in a view where they do not bury it, they stay. */
     void fixturesThatBuryTheirStructureBecomeACount();
+    void anEditedStructureRecountsItsFixtures();
+    void aFixtureMountedFromAnEditorLandsOnThePlot();
     /** Fixtures stacked on one spot but covering little must STAY visible --
      *  a step's face tape is the case that must not be hidden. */
     void stackedFixturesOnAStepBecomeACount();
@@ -259,7 +264,17 @@ private slots:
     void editingALookUpdatesTheRigView();
     void aFollowSpotAimsAtTheSubjectNotTheFloor();
     /** A beam aimed at something ends there instead of sailing past it. */
-    void aBeamStopsAtWhatItIsAimedAt();
+    void aBeamCarriesOnPastWhatItIsAimedAt();
+    void aBeamLandsAsAnOvalAtAnAngle();
+    void aBeamFadesAlongItsLengthWhicheverWayItPoints();
+    void aPersonTargetIsDrawnAsAPerson();
+    void anAreaTargetShowsItsSize();
+    void aPersonTakesTheColourOfTheLightOnIt();
+    void manyWhiteBeamsDoNotBlowOut();
+    void aFrameFilledAcrossCoresIsTheSameFrame();
+    void aFaceFixtureDrawsOverWhatIsInside();
+    void aTargetSaysWhichHeadsCannotReachIt();
+    void theReachOverlayShadesWhereASpotCannotAim();
     void aSelectedLookLightsTheRigInDesign();
     void anUndrivenHeadPointsAtTheScenesTarget();
     void aBeamFadesAllTheWayOutWithTheDimmer();
@@ -267,6 +282,7 @@ private slots:
     /** A lit head puts light between itself and what it lands on; a doused one
      *  does not; and the toggle turns them off. */
     void aLitMoverThrowsAVisibleBeam();
+    void aTwoArmHeadDrawsEachArmOnItsOwn();
     void aFixedConeHeadDimsWhenAimedAway();
     void aFrameIsDrawnFromOneInstant();
     /** House left and house right are the same room: a lit strip reads the

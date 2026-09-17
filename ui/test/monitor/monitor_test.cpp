@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QGraphicsItem>
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QApplication>
@@ -43,6 +44,7 @@
 #include "zraster.h"
 #include <QtMath>
 #include "trussitem.h"
+#include "targetitem.h"
 #undef protected
 #undef private
 
@@ -62,7 +64,6 @@
 #include "doc.h"
 #include "qlcfile.h"
 #include "qlcfixturedefcache.h"
-#include <QXmlStreamReader>
 
 // Find a visible QPushButton by its exact text anywhere under a widget —
 // QMessageBox's extra buttons (confirmFeatureDelete's "Delete"/"Detach &&
@@ -350,6 +351,9 @@ void Monitor_Test::removeSelectedCancelled()
 
     m_doc->monitorProperties()->removeTruss(addedId);
 }
+
+
+
 
 QTEST_MAIN(Monitor_Test)
 
@@ -3055,6 +3059,430 @@ void Monitor_Test::theFooterCountsAndSelectsOffStageFixtures()
    the truss editor." Because the gate asked hasFrame, and an auto-group for a
    truss may well HAVE a frame -- T-1 and T-2 in stage-structures-demo both do.
    The row's identity is its ANCHOR; the frame is incidental. */
+void Monitor_Test::doubleClickingABubbleShowsWhatItHides()
+{
+    /* "If I double click bubble I get nothing .. no overlay." A bubble stands
+       for fixtures hidden under their structure; double-clicking it has to
+       show them -- drawn, selected, and with the ground their beams land on
+       shaded -- and the next selection puts them back under it. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(4.0f);
+    tower->setWidth(0.29f);
+
+    QList<quint32> fids;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = makeMover(doc, 14.0, quint32(i * 8), qPrintable(QString("Head %1").arg(i + 1)),
+                               QVector3D(3.0f, 3.0f, 4.0f));
+        QVERIFY(f != nullptr);
+        FixtureRigProps rp;
+        rp.trussId = tower->id();
+        rp.trussOffset = 4.0f;             // all at the top, so they bury it
+        props->setFixtureRigProps(f->id(), rp);
+        fids << f->id();
+        // Pan and tilt centred: a hung head points straight down.
+        QByteArray u(512, char(0));
+        u[int(f->address())] = char(128);
+        u[int(f->address()) + 1] = char(128);
+        f->setChannelValues(u);
+    }
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        foreach (quint32 fid, fids)
+            view.addFixture(fid, QPointF(3000.0, 3000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.refreshItemLayerState();
+
+        QGraphicsItemGroup *badge =
+            view.m_countBadges.value(QStringLiteral("truss:%1").arg(tower->id()), nullptr);
+        QVERIFY2(badge != nullptr, "the fixtures should have buried the tower under a bubble");
+        foreach (quint32 fid, fids)
+            QVERIFY2(!view.m_fixtures.value(fid)->isVisible(), "buried fixtures start hidden");
+
+        const QPointF sp = badge->sceneBoundingRect().center();
+        const QPoint vp = view.mapFromScene(sp);
+        QMouseEvent dbl(QEvent::MouseButtonDblClick, vp, view.viewport()->mapToGlobal(vp),
+                        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        view.mouseDoubleClickEvent(&dbl);
+
+        foreach (quint32 fid, fids)
+        {
+            QVERIFY2(view.m_fixtures.value(fid)->isVisible(),
+                     "double-clicking the bubble did not show what it hides");
+            QVERIFY2(view.m_fixtures.value(fid)->isSelected(),
+                     "the fixtures the bubble stands for were not selected");
+        }
+        QCOMPARE(view.m_projectionItems.size(), fids.size());
+        QVERIFY2(!badge->isVisible(), "the bubble still covers what it just revealed");
+
+        /* Straight down from 4 m with a 14 degree beam: about a metre across
+           where it lands. */
+        const double ppm = 1000.0 * view.m_cellPixels / view.m_unitValue;
+        const double want = 2.0 * 4.0 * qTan(qDegreesToRadians(7.0)) * ppm;
+        const QRectF pool = view.m_projectionItems.first()->path().boundingRect();
+        QVERIFY2(qAbs(pool.width() - want) < 0.15 * want && qAbs(pool.height() - want) < 0.15 * want,
+                 qPrintable(QString("the landing area is %1x%2 px, expected about %3")
+                            .arg(pool.width()).arg(pool.height()).arg(want)));
+
+        // Selecting anything else puts them back under the bubble.
+        view.m_scene->clearSelection();
+        QCoreApplication::processEvents();
+        foreach (quint32 fid, fids)
+            QVERIFY2(!view.m_fixtures.value(fid)->isVisible(),
+                     "the fixtures stayed out after the reveal ended");
+        QCOMPARE(view.m_projectionItems.size(), 0);
+        QVERIFY2(badge->isVisible(), "the bubble did not come back");
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::doubleClickingAnywhereOnATowerTopOpensIt()
+{
+    /* "Sometimes when I double click on the top of a truss it doesn't open the
+       editor .. if I move around the top and keep double clicking I eventually
+       open it." The pick took whatever was highest under the cursor, and on a
+       tower seen from above that was mostly NOT the tower: its own count bubble
+       over the middle, the grid and anchor lines across it. Measured on a 29 px
+       tower top: 24 of 49 points found the tower. Every point has to. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    // On whole metres, so grid lines cross it the way they do in a real plot.
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(3.048f);
+    tower->setWidth(0.29f);
+    QList<quint32> fids;
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *f = makeMover(doc, 14.0, quint32(i * 8), qPrintable(QString("F%1").arg(i)),
+                               QVector3D(3.0f, 3.0f, 1.0f + i * 0.5f));
+        QVERIFY(f != nullptr);
+        FixtureRigProps rp;
+        rp.trussId = tower->id();
+        rp.trussOffset = 1.0f + i * 0.5f;
+        props->setFixtureRigProps(f->id(), rp);
+        fids << f->id();
+    }
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        // Zoomed in, so the bubble covers the middle of the top rather than
+        // all of it -- as on a real plot, where a tower is bigger than its badge.
+        view.setGridMetrics(250.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        foreach (quint32 fid, fids)
+            view.addFixture(fid, QPointF(3000.0, 3000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.refreshItemLayerState();
+        QVERIFY2(view.m_countBadges.contains(QStringLiteral("truss:%1").arg(tower->id())),
+                 "the fixtures should bury the tower top under a count bubble");
+
+        int opened = 0;
+        QObject::connect(&view, &MonitorGraphicsView::trussDoubleClicked,
+                         [&](quint32 tid) { if (tid == tower->id()) ++opened; });
+
+        TrussItem *ti = view.m_trussItems.value(tower->id(), nullptr);
+        QVERIFY(ti != nullptr);
+        QGraphicsItemGroup *badge =
+            view.m_countBadges.value(QStringLiteral("truss:%1").arg(tower->id()), nullptr);
+        QVERIFY(badge != nullptr);
+
+        /* Its own bubble is the one thing on a tower top that means something
+           else: double-clicking THAT shows the fixtures it stands for, rather
+           than opening the tower. Everywhere else on the top opens the tower.  */
+        const QRectF bubble = badge->mapRectToScene(badge->childrenBoundingRect());
+        {
+            const QPoint bp = view.mapFromScene(bubble.center());
+            QMouseEvent dbl(QEvent::MouseButtonDblClick, bp, view.viewport()->mapToGlobal(bp),
+                            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            view.mouseDoubleClickEvent(&dbl);
+            QCOMPARE(opened, 0);
+            QVERIFY2(!view.m_revealedFixtures.isEmpty(), "the bubble showed nothing");
+            QVERIFY2(!badge->isVisible(), "the bubble stayed over what it revealed");
+            // Back under the bubble for the walk below.
+            view.m_scene->clearSelection();
+            QCoreApplication::processEvents();
+            QVERIFY(badge->isVisible());
+        }
+
+        const QRectF top = ti->mapRectToScene(ti->footprintRect());
+        const int n = 7;
+        int tried = 0;
+        QStringList missed;
+        QVERIFY(top.width() > bubble.width() * 1.5);
+        for (int yy = 0; yy < n; ++yy)
+            for (int xx = 0; xx < n; ++xx)
+            {
+                const QPointF sp(top.left() + top.width() * (xx + 0.5) / n,
+                                 top.top() + top.height() * (yy + 0.5) / n);
+                if (bubble.contains(sp))
+                    continue;                      // the bubble's own job, above
+                const QPoint vp = view.mapFromScene(sp);
+                const int before = opened;
+                QMouseEvent dbl(QEvent::MouseButtonDblClick, vp, view.viewport()->mapToGlobal(vp),
+                                Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                view.mouseDoubleClickEvent(&dbl);
+                ++tried;
+                if (opened == before)
+                    missed << QString("(%1,%2)").arg(xx).arg(yy);
+            }
+        QVERIFY2(missed.isEmpty(),
+                 qPrintable(QString("double-clicking the tower top opened nothing at %1 of %2 "
+                                    "points: %3").arg(missed.size()).arg(tried)
+                            .arg(missed.join(" "))));
+    }
+
+    delete doc;
+}
+
+/* Every action as a path through its submenus: "Mount on > Tower > T-A > Top of
+   tower". Separators are layout, not actions. */
+static QStringList menuPaths(const QMenu *menu, const QString &prefix = QString())
+{
+    QStringList out;
+    foreach (QAction *a, menu->actions())
+    {
+        if (a->isSeparator())
+            continue;
+        const QString path = prefix.isEmpty() ? a->text() : prefix + QStringLiteral(" > ") + a->text();
+        if (a->menu() != nullptr)
+            out << menuPaths(a->menu(), path);
+        else
+            out << path;
+    }
+    return out;
+}
+
+static QAction *menuAction(const QMenu *menu, const QString &path)
+{
+    const QStringList parts = path.split(QStringLiteral(" > "));
+    const QMenu *m = menu;
+    for (int i = 0; i < parts.size(); ++i)
+    {
+        QAction *hit = nullptr;
+        foreach (QAction *a, m->actions())
+            if (!a->isSeparator() && a->text() == parts.at(i))
+                hit = a;
+        if (hit == nullptr)
+            return nullptr;
+        if (i == parts.size() - 1)
+            return hit;
+        if (hit->menu() == nullptr)
+            return nullptr;
+        m = hit->menu();
+    }
+    return nullptr;
+}
+
+void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
+{
+    /* "Any option I have when right clicking a feature in the vis window should
+       work when I right click the same feature in the layers list." The plot and
+       the list built their menus separately: the list had no way to delete a
+       truss, add a bar, or mount a fixture, and Edit on a target did nothing.
+       Now both come from one builder. Every row the list shows, of every kind,
+       must offer each action the plot offers for the same thing -- and actions
+       taken from the list must actually happen. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *truss = props->addTruss();
+    truss->setName("T-A");
+    truss->setOrigin(QVector3D(1.0f, 1.0f, 4.0f)); truss->setLength(4.0f);
+    StagePlatform *deck = props->addPlatform();
+    deck->setName("Deck"); deck->setOriginX(1.0f); deck->setOriginY(3.0f);
+    deck->setWidth(2.0f); deck->setDepth(1.0f); deck->setHeight(0.4f);
+    Pipe *boom = props->addPipe();
+    boom->setName("Boom"); boom->setOrientation(Pipe::Vertical);
+    Stand *stand = props->addStand();
+    stand->setName("Stand");
+    Tower *tower = props->addTower();
+    tower->setName("Tower");
+    tower->addShelf(1.0f);
+    StageTarget *target = props->addStageTarget();
+    target->setName("Mark");
+    target->setPosition(QVector3D(3.0f, 4.0f, 0.0f));
+
+    Fixture *spot = makeMover(doc, 14.0, 0, "Spot", QVector3D(2.0f, 1.0f, 4.0f));
+    QVERIFY(spot != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = truss->id();
+    rp.trussOffset = 1.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    // The truss carries a fixture, so the list shows it AS its group row.
+    const quint32 gid = props->nextGroupId();
+    props->createGroup(gid, "T-A", 0, 0);
+    props->setGroupAnchor(gid, QStringLiteral("truss"), truss->id());
+    truss->setGroupId(gid);
+    props->setFixtureGroup(spot->id(), gid);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updateTrusses();
+        view.updatePlatforms();
+        view.updateTargets();
+        view.addFixture(spot->id(), QPointF(2000.0, 1000.0));
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
+
+        QSet<QString> kindsChecked;
+        QTreeWidgetItemIterator it(panel.m_tree);
+        for (; *it != nullptr; ++it)
+        {
+            QTreeWidgetItem *row = *it;
+            const int type = row->data(0, Qt::UserRole).toInt();
+            QString kind;
+            quint32 id = 0;
+            if (type == int(MonitorLayersPanel::NodeItem))
+            {
+                kind = row->data(0, Qt::UserRole + 2).toString();
+                id = row->data(0, Qt::UserRole + 1).toUInt();
+            }
+            else if (type == int(MonitorLayersPanel::NodeGroup))
+            {
+                const MonitorProperties::MonitorGroup g = props->group(row->data(0, Qt::UserRole + 1).toUInt());
+                kind = g.anchorKind;
+                id = g.anchorId;
+            }
+            if (kind.isEmpty())
+                continue;
+
+            QMenu plot, list;
+            view.buildItemMenu(&plot, kind, id, MonitorGraphicsView::MenuPlace());
+            panel.buildContextMenu(&list, row);
+            /* Not a subset: the SAME menu, in the same order, with the one
+               action that says where you are swapped. */
+            QStringList plotPaths = menuPaths(&plot);
+            plotPaths.replaceInStrings(QStringLiteral("Show in Layers"), QStringLiteral("Show on Map"));
+            QVERIFY2(!plotPaths.isEmpty(), qPrintable(kind + " has no menu at all"));
+            QVERIFY2(plotPaths == menuPaths(&list),
+                     qPrintable(QString("%1 %2: the plot offers\n  %3\nbut the Layers list offers\n  %4")
+                                .arg(kind).arg(id).arg(plotPaths.join(" | "))
+                                .arg(menuPaths(&list).join(" | "))));
+            kindsChecked.insert(kind);
+        }
+        foreach (const QString &k, QStringList({ "fixture", "truss", "platform", "pipe",
+                                                "stand", "tower", "target" }))
+            QVERIFY2(kindsChecked.contains(k),
+                     qPrintable(QString("no Layers row for a %1 was checked").arg(k)));
+
+        auto rowFor = [&](const QString &kind, quint32 id) -> QTreeWidgetItem * {
+            QTreeWidgetItemIterator r(panel.m_tree);
+            for (; *r != nullptr; ++r)
+            {
+                const int type = (*r)->data(0, Qt::UserRole).toInt();
+                const quint32 rid = (*r)->data(0, Qt::UserRole + 1).toUInt();
+                if (type == int(MonitorLayersPanel::NodeItem)
+                    && (*r)->data(0, Qt::UserRole + 2).toString() == kind && rid == id)
+                    return *r;
+                if (type == int(MonitorLayersPanel::NodeGroup)
+                    && props->group(rid).anchorKind == kind && props->group(rid).anchorId == id)
+                    return *r;
+            }
+            return nullptr;
+        };
+
+        // "Show in Layers" on the plot brings the fixture's row up in the list.
+        QObject::connect(&view, &MonitorGraphicsView::revealInLayersRequested,
+                         [&](const QString &k, quint32 i) { panel.revealItem(k, i); });
+        {
+            QMenu m;
+            view.buildItemMenu(&m, QStringLiteral("fixture"), spot->id(), MonitorGraphicsView::MenuPlace());
+            QAction *a = menuAction(&m, QStringLiteral("Show in Layers"));
+            QVERIFY(a != nullptr);
+            a->trigger();
+            QVERIFY(panel.m_tree->currentItem() == rowFor(QStringLiteral("fixture"), spot->id()));
+        }
+
+        // Laid out the same way every time: the item's own action first.
+        {
+            QMenu m;
+            view.buildItemMenu(&m, QStringLiteral("fixture"), spot->id(), MonitorGraphicsView::MenuPlace());
+            const QStringList top = menuPaths(&m);
+            QCOMPARE(top.first(), QStringLiteral("Edit Fixture…"));
+            QCOMPARE(top.last(), QStringLiteral("Remove from View"));
+        }
+
+        // ...and removing comes last in the list too, after its own sections.
+        {
+            QMenu m;
+            panel.buildContextMenu(&m, rowFor(QStringLiteral("truss"), truss->id()));
+            QCOMPARE(menuPaths(&m).last(), QStringLiteral("Delete Truss"));
+            QMenu f;
+            panel.buildContextMenu(&f, rowFor(QStringLiteral("fixture"), spot->id()));
+            QCOMPARE(menuPaths(&f).first(), QStringLiteral("Edit Fixture…"));
+            QCOMPARE(menuPaths(&f).last(), QStringLiteral("Remove from View"));
+        }
+
+        // Edit on a target, from the list, reaches its editor.
+        quint32 editedTarget = StageTarget::invalidId();
+        QObject::connect(&view, &MonitorGraphicsView::targetDoubleClicked,
+                         [&](quint32 tid) { editedTarget = tid; });
+        {
+            QMenu m;
+            panel.buildContextMenu(&m, rowFor(QStringLiteral("target"), target->id()));
+            QAction *a = menuAction(&m, QStringLiteral("Edit Target…"));
+            QVERIFY(a != nullptr);
+            a->trigger();
+            QCOMPARE(editedTarget, target->id());
+        }
+
+        // Delete a truss from its row in the list.
+        quint32 deleted = Truss::invalidId();
+        QObject::connect(&view, &MonitorGraphicsView::trussRemoveRequested,
+                         [&](quint32 tid) { deleted = tid; });
+        {
+            QMenu m;
+            panel.buildContextMenu(&m, rowFor(QStringLiteral("truss"), truss->id()));
+            QAction *a = menuAction(&m, QStringLiteral("Delete Truss"));
+            QVERIFY2(a != nullptr, "the truss's row cannot delete it");
+            a->trigger();
+            QCOMPARE(deleted, truss->id());
+        }
+
+        // Mount the fixture on the tower from the list, then take it off.
+        {
+            QMenu m;
+            panel.buildContextMenu(&m, rowFor(QStringLiteral("fixture"), spot->id()));
+            QAction *a = menuAction(&m, QStringLiteral("Mount on > Tower > Tower > Top of tower"));
+            QVERIFY2(a != nullptr, "the fixture's row cannot mount it on a tower");
+            a->trigger();
+            QCOMPARE(props->fixtureRigProps(spot->id()).towerId, tower->id());
+            QCOMPARE(props->fixtureRigProps(spot->id()).trussId, Truss::invalidId());
+        }
+        {
+            panel.reload();
+            QMenu m;
+            panel.buildContextMenu(&m, rowFor(QStringLiteral("fixture"), spot->id()));
+            QAction *a = menuAction(&m, QStringLiteral("Unmount from “Tower”"));
+            QVERIFY2(a != nullptr, "the fixture's row cannot unmount it");
+            a->trigger();
+            QCOMPARE(props->fixtureRigProps(spot->id()).towerId, Tower::invalidId());
+        }
+    }
+
+    delete doc;
+}
+
 void Monitor_Test::aTrussRowInLayersOpensTheTrussNotItsGroup()
 {
     Doc *doc = new Doc(this);
@@ -3497,6 +3925,186 @@ void Monitor_Test::fixturesThatBuryTheirStructureBecomeACount()
     }
 
     foreach (quint32 fid, bars)
+        doc->deleteFixture(fid);
+    props->removeTruss(tower->id());
+    delete doc;
+}
+
+/* Branson's steps: "added T2-B1 and 2 .. to universe 8; opened T2; added two
+   fixtures and placed; closed editor; bubble not updated". The fixtures were
+   patched in the Fixture Manager and never dragged onto the plot, so they had
+   no icon there. Mounting them from the editor only updated an icon that did
+   not exist: they were on the truss, absent from the plot, and uncounted by
+   its bubble. */
+void Monitor_Test::aFixtureMountedFromAnEditorLandsOnThePlot()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *tower = props->addTruss();
+    tower->setName("T-2");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(3.0f);
+    tower->setWidth(0.29f);
+
+    auto mountOnTower = [&](quint32 fid, float offset) {
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.trussId = tower->id();
+        rp.trussOffset = offset;
+        props->setFixtureRigProps(fid, rp);
+    };
+
+    // Two already on the plot, burying the tower from above.
+    QList<quint32> placed;
+    for (int i = 0; i < 2; i++)
+    {
+        Fixture *f = makeMover(doc, 14.0, quint32(i * 8), qPrintable(QString("T2-B%1").arg(i + 1)),
+                               QVector3D(3.0f, 3.0f, 1.0f + i));
+        QVERIFY(f != nullptr);
+        mountOnTower(f->id(), 1.0f + i);
+        placed << f->id();
+    }
+    // Two just patched: in the workspace, with no place on the plot at all.
+    QList<quint32> fresh;
+    for (int i = 0; i < 2; i++)
+    {
+        Fixture *f = makeMover(doc, 14.0, quint32(100 + i * 8), qPrintable(QString("New %1").arg(i + 1)),
+                               QVector3D(0.0f, 0.0f, 0.0f));
+        QVERIFY(f != nullptr);
+        props->removeFixture(f->id());          // patched, never placed
+        fresh << f->id();
+    }
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        foreach (quint32 fid, placed)
+            view.addFixture(fid, QPointF(3000.0, 3000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.refreshItemLayerState();
+
+        const QString key = QStringLiteral("truss:%1").arg(tower->id());
+        auto badgeCount = [&]() -> int {
+            QGraphicsItemGroup *g = view.m_countBadges.value(key, nullptr);
+            if (g == nullptr)
+                return 0;
+            foreach (QGraphicsItem *c, g->childItems())
+                if (QGraphicsSimpleTextItem *t = dynamic_cast<QGraphicsSimpleTextItem *>(c))
+                    return t->text().toInt();
+            return 0;
+        };
+        QCOMPARE(badgeCount(), 2);
+
+        // The editor mounts them and tells the plot, exactly as Monitor does.
+        foreach (quint32 fid, fresh)
+        {
+            mountOnTower(fid, 2.0f);
+            view.ensureFixtureOnPlot(fid);
+            view.updateFixture(fid);
+        }
+        view.followParentTrusses();
+        QCoreApplication::processEvents();
+
+        foreach (quint32 fid, fresh)
+        {
+            QVERIFY2(view.m_fixtures.contains(fid),
+                     "a fixture mounted from the editor never appeared on the plot");
+            const QVector3D w = props->fixtureRigPosition(fid);
+            QVERIFY2(qAbs(double(w.x()) - 3.0) < 0.05 && qAbs(double(w.y()) - 3.0) < 0.05,
+                     qPrintable(QString("it landed at %1,%2 rather than on the tower")
+                                .arg(double(w.x())).arg(double(w.y()))));
+        }
+        QVERIFY2(badgeCount() == 4,
+                 qPrintable(QString("the tower now carries four fixtures; its bubble says %1")
+                            .arg(badgeCount())));
+    }
+
+    foreach (quint32 fid, placed + fresh)
+        doc->deleteFixture(fid);
+    props->removeTruss(tower->id());
+    delete doc;
+}
+
+/* The truss editor's path, end to end at the plot: it mounts through
+   MonitorProperties and hands the plot an updateFixture(); accepting calls
+   followParentTrusses(), whose updateTrusses() ends in the layer pass that
+   recounts. A tower that gains a fixture has to say so, and hide the newcomer
+   with the rest. */
+void Monitor_Test::anEditedStructureRecountsItsFixtures()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(3.0f);
+    tower->setWidth(0.29f);
+
+    auto mountOnTower = [&](quint32 fid, float offset) {
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.trussId = tower->id();
+        rp.trussOffset = offset;
+        props->setFixtureRigProps(fid, rp);
+    };
+
+    QList<quint32> fids;
+    for (int i = 0; i < 3; i++)
+    {
+        Fixture *f = makeMover(doc, 14.0, quint32(i * 8), qPrintable(QString("T1-S%1").arg(i + 1)),
+                               QVector3D(3.0f, 3.0f, 1.0f));
+        QVERIFY(f != nullptr);
+        fids << f->id();
+    }
+    mountOnTower(fids[0], 1.0f);
+    mountOnTower(fids[1], 2.0f);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        view.addFixture(fids[0], QPointF(3000.0, 3000.0));
+        view.addFixture(fids[1], QPointF(3000.0, 3000.0));
+        // The third is on the plot but free-standing, off the tower.
+        view.addFixture(fids[2], QPointF(7000.0, 5000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.refreshItemLayerState();
+
+        const QString key = QStringLiteral("truss:%1").arg(tower->id());
+        auto badgeCount = [&]() -> int {
+            QGraphicsItemGroup *g = view.m_countBadges.value(key, nullptr);
+            if (g == nullptr)
+                return 0;
+            foreach (QGraphicsItem *c, g->childItems())
+                if (QGraphicsSimpleTextItem *t = dynamic_cast<QGraphicsSimpleTextItem *>(c))
+                    return t->text().toInt();
+            return 0;
+        };
+        QCOMPARE(badgeCount(), 2);
+
+        // The editor: mount it, tell the plot, then accept.
+        mountOnTower(fids[2], 2.5f);
+        view.updateFixture(fids[2]);
+        view.followParentTrusses();
+        QCoreApplication::processEvents();
+
+        QVERIFY2(badgeCount() == 3,
+                 qPrintable(QString("the tower now carries three fixtures and its "
+                                    "badge still says %1").arg(badgeCount())));
+        MonitorFixtureItem *third = view.m_fixtures.value(fids[2], nullptr);
+        QVERIFY(third != nullptr);
+        QVERIFY2(!third->isVisible(),
+                 "the fixture just added to a buried tower is still drawn over it");
+    }
+
+    foreach (quint32 fid, fids)
         doc->deleteFixture(fid);
     props->removeTruss(tower->id());
     delete doc;
@@ -3945,14 +4553,902 @@ void Monitor_Test::aFollowSpotAimsAtTheSubjectNotTheFloor()
     delete doc;
 }
 
-void Monitor_Test::aBeamStopsAtWhatItIsAimedAt()
+void Monitor_Test::theReachOverlayShadesWhereASpotCannotAim()
 {
-    /* A beam aimed at something ends there. The throw used to come only from
-       the floor and the platform tops, so a follow-spot aimed at chest height
-       -- which points slightly UPWARD from a low fixture -- hit nothing, ran
-       the full no-hit default, and sailed straight past the person it was
-       pointed at. Eight metres of overshoot from eight heads is what turned a
-       set of tight beams into one broad wash. */
+    /* "Can we predict the areas the spot WON'T be able to cover?" A 540/270
+       spot standing on a 10 ft tower cannot tilt within 45 degrees of straight
+       down, so at chest height it is blind in a circle around the tower about
+       as wide as it is high above the chest. The overlay has to shade that
+       circle and nothing far from it, and clear when the spot is hung. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(3.048f);
+    tower->setWidth(0.29f);
+
+    Fixture *spot = makeMover(doc, 14.0, 0, "UKing", QVector3D(3.0f, 3.0f, 3.0f));
+    QVERIFY(spot != nullptr);
+    {
+        QLCFixtureMode *mode = spot->fixtureMode();
+        QLCPhysical ph = mode->physical();
+        ph.setFocusPanMax(540);
+        ph.setFocusTiltMax(270);
+        mode->setPhysical(ph);
+    }
+    FixtureRigProps rp;
+    rp.trussId = tower->id();
+    rp.trussOffset = 3.048f;
+    rp.mountingType = Truss::FloorMounted;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.updateTrusses();
+        view.addFixture(spot->id(), QPointF(3000.0, 3000.0));
+        MonitorFixtureItem *item = view.m_fixtures.value(spot->id(), nullptr);
+        QVERIFY(item != nullptr);
+
+        const double subject = double(props->aimSubjectHeight());
+        const double blindRadius = 3.048 - subject;          // 45 deg: drop == distance
+        auto shaded = [&](double x, double y) {
+            if (view.m_reachItem == nullptr || !view.m_reachItem->isVisible())
+                return false;
+            const QImage img = view.m_reachItem->pixmap().toImage();
+            const double cell = view.m_reachItem->scale() * view.m_unitValue
+                                / (1000.0 * view.m_cellPixels);
+            const QPoint px(int(x / cell), int(y / cell));
+            return img.rect().contains(px) && qAlpha(img.pixel(px)) > 0;
+        };
+
+        // Nothing selected: nothing to show.
+        view.setReachOverlayVisible(true);
+        QVERIFY(!shaded(3.0, 3.3));
+
+        item->setSelected(true);
+        QCoreApplication::processEvents();
+        QVERIFY2(shaded(3.0, 3.0 + blindRadius * 0.5),
+                 "half-way out from the tower is inside the blind circle and not shaded");
+        QVERIFY2(shaded(3.0 - blindRadius * 0.7, 3.0),
+                 "the blind circle is not round: stage right of the tower is not shaded");
+        QVERIFY2(!shaded(3.0, 3.0 + blindRadius * 1.4),
+                 "well outside the blind circle is shaded");
+        QVERIFY2(!shaded(8.0, 6.0), "the far corner of the stage is shaded");
+
+        // Hang it: nothing on the stage is out of its reach any more.
+        rp.mountingType = Truss::TopHung;
+        rp.trussOffset = 2.8f;
+        props->setFixtureRigProps(spot->id(), rp);
+        QCoreApplication::processEvents();
+        QVERIFY2(!shaded(3.0, 3.0 + blindRadius * 0.5),
+                 "hung under the tower the spot can reach its base, but it is still shaded");
+
+        // Deselect: gone.
+        item->setSelected(false);
+        QCoreApplication::processEvents();
+        QVERIFY(view.m_reachItem == nullptr || !view.m_reachItem->isVisible());
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aTargetSaysWhichHeadsCannotReachIt()
+{
+    /* A scene aims two spots at a vocalist half a metre in front of a tower:
+       one standing on top of the tower, one hung from it. The one on top
+       cannot tilt that far down. The plot has to say so -- on the target, and
+       on that head's aim line -- and stop saying so the moment the head is
+       re-rigged to hang, which is the decision the warning is there for. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(3.048f);
+    tower->setWidth(0.29f);
+
+    Fixture *onTop = makeMover(doc, 14.0, 0, "On top", QVector3D(3.0f, 3.0f, 3.0f));
+    Fixture *hung  = makeMover(doc, 14.0, 8, "Hung",   QVector3D(3.0f, 3.0f, 2.8f));
+    QVERIFY(onTop != nullptr && hung != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = tower->id();
+    rp.trussOffset = 3.048f;
+    rp.mountingType = Truss::FloorMounted;
+    props->setFixtureRigProps(onTop->id(), rp);
+    rp.trussOffset = 2.8f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(hung->id(), rp);
+
+    StageTarget *who = props->addStageTarget();
+    who->setName("Vocalist");
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(3.0f, 3.5f, 0.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("At the vocalist");
+    aim->setStageTargetId(who->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Solo");
+    scene->addFixture(onTop->id());
+    scene->addFixture(hung->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        view.addFixture(onTop->id(), QPointF(3000.0, 3000.0));
+        view.addFixture(hung->id(), QPointF(3000.0, 3000.0));
+        view.setActiveScene(scene->id());
+
+        auto redLines = [&]() {
+            int n = 0;
+            foreach (QGraphicsLineItem *li, view.m_aimLines)
+                if (li->pen().color() == QColor(235, 70, 60))
+                    ++n;
+            return n;
+        };
+
+        TargetItem *ti = view.m_targetItems.value(who->id(), nullptr);
+        QVERIFY(ti != nullptr);
+        QVERIFY2(ti->unreachableCount() == 1,
+                 qPrintable(QString("the target should report one head that cannot "
+                                    "reach it, reports %1").arg(ti->unreachableCount())));
+        QVERIFY(ti->toolTip().contains("On top"));
+        // One line and its two arrowhead strokes, for the one head.
+        QCOMPARE(redLines(), 3);
+        QCOMPARE(view.m_aimLines.size(), 6);
+
+        // Hang it instead: the warning goes, without anything else prodding it.
+        rp.trussOffset = 3.0f;
+        props->setFixtureRigProps(onTop->id(), rp);
+        QCoreApplication::processEvents();
+        ti = view.m_targetItems.value(who->id(), nullptr);
+        QVERIFY(ti != nullptr);
+        QCOMPARE(ti->unreachableCount(), 0);
+        QCOMPARE(redLines(), 0);
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aFaceFixtureDrawsOverWhatIsInside()
+{
+    /* "I put this XL-450 on the front of the truss and it's showing under
+       what's inside." The flat views painted a structure's fixtures in id
+       order, so whichever was created first went underneath -- and a fixture
+       on the face and one inside the truss at the same height sit on the same
+       centre line, so nothing about their positions said which is nearer. On
+       the face is nearer than inside, from any side; the one drawn on top is
+       also the one a click has to pick. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *tower = props->addTruss();
+    tower->setName("T-1");
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    tower->setLength(3.048f);
+    tower->setWidth(0.29f);
+
+    // Created FIRST, so the lower id: exactly the order that buried it.
+    auto rigged = [&](const char *name, int placement, const QColor &gel) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setChannels(1);
+        f->setAddress(quint32(doc->fixtures().size()));
+        doc->addFixture(f);
+        FixtureRigProps rp;
+        rp.trussId = tower->id();
+        rp.trussOffset = 2.6f;
+        rp.placement = placement;
+        props->setFixtureRigProps(f->id(), rp);
+        props->setFixtureGelColor(f->id(), 0, 0, gel);
+        return f;
+    };
+    Fixture *face   = rigged("XL-450", FixtureRigProps::OnSurface, QColor(230, 0, 0));
+    Fixture *inside = rigged("T1-B1",  FixtureRigProps::Inside,    QColor(0, 0, 230));
+    QVERIFY(face->id() < inside->id());
+
+    {
+        StructureStudioView v(doc, StructureStudioView::TrussKind, tower->id());
+        v.resize(600, 500);
+        v.reload();
+
+        const StructureStudioView::Plane planes[] = {
+            StructureStudioView::Front, StructureStudioView::Side, StructureStudioView::Top };
+        const char *names[] = { "Front", "Side", "Top" };
+        for (int k = 0; k < 3; ++k)
+        {
+            v.setPlane(planes[k]);
+            const QImage img = v.grab().toImage();
+            const QPoint c = v.w2s(v.fixtureCentre(face->id())).toPoint();
+            int red = 0, blue = 0;
+            for (int dy = -6; dy <= 6; ++dy)
+                for (int dx = -6; dx <= 6; ++dx)
+                {
+                    const QPoint q = c + QPoint(dx, dy);
+                    if (!img.rect().contains(q))
+                        continue;
+                    const QColor px = img.pixelColor(q);
+                    if (px.red() > 90 && px.red() > px.blue() * 2)  ++red;
+                    if (px.blue() > 90 && px.blue() > px.red() * 2) ++blue;
+                }
+            QVERIFY2(red > 0 && red > blue,
+                     qPrintable(QString("%1: the face fixture is under the one inside "
+                                        "(%2 face px, %3 inside px)")
+                                .arg(names[k]).arg(red).arg(blue)));
+            QVERIFY2(v.hitTestFixture(QPointF(c)) == face->id(),
+                     qPrintable(QString("%1: clicking where the face fixture is drawn "
+                                        "picked the one hidden under it").arg(names[k])));
+        }
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aFrameFilledAcrossCoresIsTheSameFrame()
+{
+    /* Filling the rig on several threads splits the frame into bands of rows
+       that never share a pixel, each running the same ops in the same order.
+       That has to change the speed and nothing else: the picture must be the
+       same bit for bit, with solids, light and translucent tops all in it,
+       whatever the supersampling. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(8.0f); deck->setDepth(3.0f); deck->setHeight(0.6f);
+    StagePlatform *clear = props->addPlatform();
+    clear->setOriginX(2.0f); clear->setOriginY(4.2f);
+    clear->setWidth(4.0f); clear->setDepth(1.0f); clear->setHeight(0.4f);
+    clear->setColor(QColor(80, 120, 200, 140));             // see-through
+
+    StageTarget *who = props->addStageTarget();
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(5.0f, 2.5f, 0.6f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->addPalette(aim->id());
+    for (int i = 0; i < 6; ++i)
+    {
+        Fixture *f = makeMover(doc, 12.0, quint32(i * 8), qPrintable(QString("H%1").arg(i)),
+                               QVector3D(1.5f + 1.4f * i, 7.0f, 4.0f));
+        QVERIFY(f != nullptr);
+        scene->addFixture(f->id());
+        QByteArray u(512, char(0));
+        const int a = int(f->address());
+        u[a + 2] = char(255); u[a + 3] = char(i * 40); u[a + 4] = char(255 - i * 30); u[a + 5] = char(200);
+        f->setChannelValues(u);
+    }
+    QVERIFY(doc->addFunction(scene));
+
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(900, 640);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(-25.0, 28.0);
+        v.setBeams(true);
+        v.setLiveValues(true);
+        v.setActiveScene(scene->id());
+
+        for (int ss : { 1, 2, 3 })
+        {
+            v.setSupersample(ss);
+            v.setRenderThreads(1);
+            const QImage one = v.grab().toImage();
+            QVERIFY(v.m_frameBeams.size() == 6);
+            for (int threads : { 2, 5, 16 })
+            {
+                v.setRenderThreads(threads);
+                const QImage many = v.grab().toImage();
+                QVERIFY2(many == one,
+                         qPrintable(QString("supersample %1: %2 threads drew a different "
+                                            "frame from one").arg(ss).arg(threads)));
+            }
+        }
+        v.setRenderThreads(0);
+        v.setSupersample(2);
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::manyWhiteBeamsDoNotBlowOut()
+{
+    /* "Blue worked great .. white .. does not .. it's too overdriven." Ten
+       white heads on one vocalist. Stacked translucent layers converge on
+       their colour, and white is the brightest one there is: the beams
+       merged into a glare and the body clipped to a flat white blob. Lit,
+       the body must still be short of clipping and still show which parts
+       the light is on; the air must not be a solid white mass. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StageTarget *who = props->addStageTarget();
+    who->setName("Vocalist");
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(5.0f, 3.0f, 0.0f));
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Ten on one");
+    scene->addPalette(aim->id());
+
+    QList<Fixture *> heads;
+    for (int i = 0; i < 10; ++i)
+    {
+        // An arc downstage of the subject, four metres up.
+        const double a = qDegreesToRadians(-70.0 + 140.0 * i / 9.0);
+        const QVector3D at(5.0f + 4.0f * float(qSin(a)), 3.0f + 4.0f * float(qCos(a)), 4.0f);
+        Fixture *f = makeMover(doc, 14.0, quint32(i * 8),
+                               qPrintable(QString("Front %1").arg(i + 1)), at);
+        QVERIFY(f != nullptr);
+        scene->addFixture(f->id());
+        heads << f;
+    }
+    QVERIFY(doc->addFunction(scene));
+    foreach (Fixture *f, heads)
+    {
+        QByteArray u(512, char(0));
+        const int a = int(f->address());
+        u[a + 2] = char(255); u[a + 3] = char(255); u[a + 4] = char(255); u[a + 5] = char(255);
+        f->setChannelValues(u);
+    }
+
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(900, 640);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(0.0, 12.0);
+        v.setAmbient(0.25);
+        v.setBeams(true);
+        v.setLiveValues(true);
+        v.setActiveScene(scene->id());
+        const QImage img = v.grab().toImage();
+        QCOMPARE(v.m_frameBeams.size(), 10);
+
+        const float foot = props->targetAimPoint(who, true).z() - props->targetAimHeight(who, true);
+        const float tall = props->targetFigureHeight(who);
+        auto sample = [&](const QVector3D &w) {
+            const QPoint c = v.w2s(w).toPoint();
+            int r = 0, g = 0, b = 0, n = 0;
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dx = -1; dx <= 1; ++dx)
+                {
+                    const QColor px = img.pixelColor(c + QPoint(dx, dy));
+                    r += px.red(); g += px.green(); b += px.blue(); ++n;
+                }
+            return QColor(r / n, g / n, b / n);
+        };
+        const QColor chest = sample(QVector3D(5.0f + 0.06f * tall / 1.75f,
+                                              3.0f + 0.13f * tall / 1.75f, foot + 0.70f * tall));
+        const QColor shin  = sample(QVector3D(5.09f * tall / 1.75f + 5.0f * (1.0f - tall / 1.75f),
+                                              3.06f, foot + 0.25f * tall));
+
+        // Pure white anywhere but on the figure itself.
+        const QPointF headPx = v.w2s(QVector3D(5.0f, 3.0f, foot + tall));
+        const QPointF feetPx = v.w2s(QVector3D(5.0f, 3.0f, foot));
+        const QRectF figureBox(QPointF(headPx.x() - 0.4 * v.m_scale, headPx.y()),
+                               QPointF(feetPx.x() + 0.4 * v.m_scale, feetPx.y()));
+        /* Below the row of heads: a lamp at full is white and should be, so
+           the heads themselves are not what is being measured. */
+        double belowHeads = 0.0;
+        foreach (Fixture *f, heads)
+            belowHeads = qMax(belowHeads, v.w2s(props->fixtureRigPosition(f->id())).y());
+        belowHeads += 40.0;
+        int clipped = 0;
+        for (int y = int(belowHeads); y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                if (figureBox.contains(QPointF(x, y)))
+                    continue;
+                const QColor c = img.pixelColor(x, y);
+                if (c.red() >= 250 && c.green() >= 250 && c.blue() >= 250)
+                    ++clipped;
+            }
+
+        const QString report = QString("chest %1, shin %2, clipped air %3 px")
+                               .arg(chest.name(), shin.name()).arg(clipped);
+
+        QVERIFY2(chest.red() < 250 || chest.green() < 250 || chest.blue() < 250,
+                 qPrintable("the lit chest clipped to white: " + report));
+        QVERIFY2(chest.green() > shin.green() + 60,
+                 qPrintable("the lit chest does not stand out from the unlit legs: " + report));
+        QVERIFY2(clipped < 150,
+                 qPrintable("the beams merged into solid white: " + report));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aPersonTakesTheColourOfTheLightOnIt()
+{
+    /* "The person should reflect the colour of the lights pointed at it and
+       summarize the colours as they're applied." Two heads downstage of a
+       vocalist, both aimed at them by the scene. With a red one lit the chest
+       reads red, with a blue one blue, with both the mix; with both dark it
+       is the neutral body. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StageTarget *who = props->addStageTarget();
+    who->setName("Vocalist");
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(3.0f, 3.0f, 0.0f));
+    who->setColor(QColor(255, 180, 0));
+
+    Fixture *left  = makeMover(doc, 20.0, 0, "Front L", QVector3D(2.4f, 6.0f, 3.5f));
+    Fixture *right = makeMover(doc, 20.0, 8, "Front R", QVector3D(3.6f, 6.0f, 3.5f));
+    QVERIFY(left != nullptr && right != nullptr);
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("At the vocalist");
+    aim->setStageTargetId(who->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Solo");
+    scene->addFixture(left->id());
+    scene->addFixture(right->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    // 6ch movers: Pan, Tilt, Dimmer, Red, Green, Blue.
+    auto drive = [&](Fixture *f, int dim, int r, int b) {
+        QByteArray u(512, char(0));
+        const int a = int(f->address());
+        u[a + 2] = char(dim);
+        u[a + 3] = char(r);
+        u[a + 5] = char(b);
+        f->setChannelValues(u);
+    };
+
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 620);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(0.0, 12.0);          // from the house, a little above
+        v.setAmbient(0.25);
+        v.setBeams(true);
+        v.setLiveValues(true);
+        v.setActiveScene(scene->id());
+
+        /* The front of the chest, a hand's width off centre so the sample is
+           on the body and not on the one line where both beams' own cones
+           overlap it on screen. */
+        const float foot = props->targetAimPoint(who, true).z()
+                           - props->targetAimHeight(who, true);
+        const float tall = props->targetFigureHeight(who);
+        const QVector3D chest(3.0f, 3.0f + 0.13f * tall / 1.75f, foot + 0.72f * tall);
+        auto chestColour = [&]() {
+            const QImage img = v.grab().toImage();
+            const QPoint c = v.w2s(chest).toPoint();
+            int r = 0, g = 0, b = 0, n = 0;
+            for (int dy = -2; dy <= 2; ++dy)
+                for (int dx = -2; dx <= 2; ++dx)
+                {
+                    const QColor px = img.pixelColor(c + QPoint(dx, dy));
+                    r += px.red(); g += px.green(); b += px.blue(); ++n;
+                }
+            return QColor(r / n, g / n, b / n);
+        };
+
+        drive(left, 0, 255, 0);
+        drive(right, 0, 0, 255);
+        const QColor dark = chestColour();
+
+        drive(left, 255, 255, 0);
+        const QColor red = chestColour();
+
+        drive(left, 0, 255, 0);
+        drive(right, 255, 0, 255);
+        const QColor blue = chestColour();
+
+        drive(left, 255, 255, 0);
+        const QColor both = chestColour();
+
+        const QString report = QString("dark %1, red %2, blue %3, both %4")
+            .arg(dark.name(), red.name(), blue.name(), both.name());
+        QVERIFY2(qAbs(dark.red() - dark.blue()) < 30, qPrintable("unlit body is not neutral: " + report));
+        QVERIFY2(red.red() > dark.red() + 60 && red.red() > red.blue() + 60,
+                 qPrintable("a red light on the chest did not make it red: " + report));
+        QVERIFY2(blue.blue() > dark.blue() + 60 && blue.blue() > blue.red() + 60,
+                 qPrintable("a blue light on the chest did not make it blue: " + report));
+        QVERIFY2(both.red() > dark.red() + 60 && both.blue() > dark.blue() + 60,
+                 qPrintable("red and blue together did not add up: " + report));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::anAreaTargetShowsItsSize()
+{
+    /* "When having an area target, that should be visible on the studio." An
+       Area was drawn as the same crosshair as a point, so its size -- the
+       whole reason to make one -- showed nowhere. 3 m across and 1.5 m deep
+       has to read as that, from above and edge on. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StageTarget *area = props->addStageTarget();
+    area->setName("Downstage centre");
+    area->setKind(StageTarget::Kind::Area);
+    area->setPosition(QVector3D(5.0f, 3.0f, 0.0f));
+    area->setFootprint(QSizeF(3.0, 1.5));
+    area->setColor(QColor(0, 255, 0));
+
+    // yFrom/yTo: an elevation strip is measured along its lower rows only,
+    // clear of the name label, whose bottom edge overlaps the strip's top.
+    auto extent = [](const QImage &img, int yFrom = 0, int yTo = INT_MAX) {
+        int x0 = INT_MAX, x1 = -1, y0 = INT_MAX, y1 = -1;
+        for (int y = qMax(0, yFrom); y < qMin(img.height(), yTo); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.green() > c.red() + 40 && c.green() > c.blue() + 40)
+                {
+                    x0 = qMin(x0, x); x1 = qMax(x1, x);
+                    y0 = qMin(y0, y); y1 = qMax(y1, y);
+                }
+            }
+        return QRect(QPoint(x0, y0), QPoint(x1, y1));
+    };
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 5));
+        const double ppm = 1000.0 * view.m_cellPixels / view.m_unitValue;
+
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.updateTargets();
+        QRect top = extent(view.grab().toImage());
+        QVERIFY2(qAbs(top.width() - 3.0 * ppm) < 12 && qAbs(top.height() - 1.5 * ppm) < 12,
+                 qPrintable(QString("from above the area is %1 x %2 px, expected %3 x %4")
+                            .arg(top.width()).arg(top.height()).arg(3.0 * ppm).arg(1.5 * ppm)));
+
+        auto stripRow = [&]() {
+            TargetItem *ti = view.m_targetItems.value(area->id(), nullptr);
+            return ti ? view.mapFromScene(ti->pos()).y() : 0;
+        };
+        view.setViewPOV(MonitorGraphicsView::PovFront);
+        view.updateTargets();
+        QRect front = extent(view.grab().toImage(), stripRow() + 1, stripRow() + 3);
+        QVERIFY2(qAbs(front.width() - 3.0 * ppm) < 12,
+                 qPrintable(QString("from the front the area is %1 px wide, expected %2")
+                            .arg(front.width()).arg(3.0 * ppm)));
+
+        view.setViewPOV(MonitorGraphicsView::PovSide);
+        view.updateTargets();
+        QRect side = extent(view.grab().toImage(), stripRow() + 1, stripRow() + 3);
+        QVERIFY2(qAbs(side.width() - 1.5 * ppm) < 12,
+                 qPrintable(QString("from the side the area is %1 px wide, expected %2")
+                            .arg(side.width()).arg(1.5 * ppm)));
+
+        // A plain mark is still just the mark.
+        area->setKind(StageTarget::Kind::None);
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.updateTargets();
+        QRect mark = extent(view.grab().toImage());
+        // The mark and its name label, nowhere near 3 m of ground.
+        QVERIFY2(mark.width() < 1.5 * ppm,
+                 qPrintable(QString("a plain target drew %1 px wide").arg(mark.width())));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aPersonTargetIsDrawnAsAPerson()
+{
+    /* "Changed target to a person and it's not visualized." The kind already
+       moved the aim to chest height; nothing drew it. A Person has to read as
+       one in the plot and in the rig, standing on the deck under it rather
+       than at the target's own Z, and tall enough that its chest is the aim
+       point. Measured against the same target as a plain mark. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(2.0f); deck->setOriginY(2.0f);
+    deck->setWidth(4.0f); deck->setDepth(2.0f); deck->setHeight(0.5f);
+
+    StageTarget *who = props->addStageTarget();
+    who->setName("Vocalist");
+    // Z left at the floor on purpose: a person stands on the deck regardless.
+    who->setPosition(QVector3D(3.0f, 3.0f, 0.0f));
+    who->setColor(QColor(0, 255, 0));
+
+    const QColor bg(0, 0, 0);
+    auto isFigure = [](const QColor &c) {
+        return c.green() > c.red() + 60 && c.green() > c.blue() + 60;
+    };
+    struct Extent { int n = 0; int top = INT_MAX; int bottom = -1; };
+    auto measure = [&](const QImage &img) {
+        Extent e;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+                if (isFigure(img.pixelColor(x, y)))
+                {
+                    ++e.n;
+                    e.top = qMin(e.top, y);
+                    e.bottom = qMax(e.bottom, y);
+                }
+        return e;
+    };
+
+    /* ---- The plot, from the front ---- */
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        /* Five rows, not seven: the elevation's floor line is the bottom of
+           the grid, and at seven it sat under the scrollbar -- a target at
+           floor height was clipped out of the grab entirely. */
+        view.setGridSize(QSize(10, 5));
+        view.setViewPOV(MonitorGraphicsView::PovFront);
+        const double pxPerMetre = 1000.0 * view.m_cellPixels / view.m_unitValue;
+
+        who->setKind(StageTarget::Kind::None);
+        view.updatePlatforms();
+        view.updateTargets();
+        const Extent mark = measure(view.grab().toImage());
+
+        who->setKind(StageTarget::Kind::Person);
+        view.updateTargets();
+        const Extent person = measure(view.grab().toImage());
+
+        const int markH = mark.bottom - mark.top;
+        const int personH = person.bottom - person.top;
+        QVERIFY2(mark.n > 0 && person.n > 0, "the target was not drawn at all");
+        QVERIFY2(personH > 1.5 * pxPerMetre && markH < 0.8 * pxPerMetre,
+                 qPrintable(QString("from the front a person should stand about "
+                                    "1.75 m tall (%1 px/m): got %2 px, and %3 px "
+                                    "for the plain mark").arg(pxPerMetre)
+                            .arg(personH).arg(markH)));
+
+        /* Feet on the deck top, not at the target's own Z on the floor. Read
+           off the figure's outline: the lowest lit pixel is the crosshair,
+           which stays at the target's stored Z because that is what dragging
+           it in an elevation edits. */
+        TargetItem *ti = view.m_targetItems.value(who->id(), nullptr);
+        QVERIFY(ti != nullptr);
+        const double feetY = ti->mapToScene(ti->figurePath().boundingRect().bottomLeft()).y();
+        const double deckTopY = view.projectMm(3000.0, 3000.0, 500.0).y();
+        QVERIFY2(qAbs(feetY - deckTopY) <= 2.0,
+                 qPrintable(QString("the person's feet are at scene y=%1, the deck "
+                                    "top is at y=%2").arg(feetY).arg(deckTopY)));
+
+        // From above it is shoulders and a head: more than the bare mark.
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.updateTargets();
+        const Extent above = measure(view.grab().toImage());
+        who->setKind(StageTarget::Kind::None);
+        view.updateTargets();
+        const Extent aboveMark = measure(view.grab().toImage());
+        QVERIFY2(above.n > aboveMark.n + 200,
+                 qPrintable(QString("from above a person drew %1 px against the "
+                                    "plain mark's %2").arg(above.n).arg(aboveMark.n)));
+    }
+
+    /* ---- The rig ---- */
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 620);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(25.0, 20.0);
+
+        who->setKind(StageTarget::Kind::None);
+        const Extent bare = measure(v.grab().toImage());
+        who->setKind(StageTarget::Kind::Person);
+        v.update();
+        const Extent figure = measure(v.grab().toImage());
+        QVERIFY2(bare.n == 0,
+                 qPrintable(QString("a plain target drew %1 px in the rig").arg(bare.n)));
+        QVERIFY2(figure.n > 300,
+                 qPrintable(QString("a person target drew only %1 px in the rig")
+                            .arg(figure.n)));
+    }
+    Q_UNUSED(bg)
+
+    delete doc;
+}
+
+void Monitor_Test::aBeamFadesAlongItsLengthWhicheverWayItPoints()
+{
+    /* "Some lights are right, some are solid." The cone is one polygon whose
+       alpha fades from the lens to the far end, and the rasteriser fitted that
+       fade as a plane through the polygon's first three corners. A cone is not
+       a plane: when those three were all far-end points the fade came out flat,
+       and when they straddled the lens it overshot to solid. Which happened
+       depended only on which way the beam pointed on screen. This is the LED
+       SPOT from the Targets scene: on the floor, thrown up and toward a camera
+       in the house, where it drew as a hard disc hanging in the air. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    /* A stage-sized low deck, so the view frames the stage the way the show
+       does rather than zooming in on one small fixture and throwing the beam
+       off the edge. */
+    StagePlatform *stage = props->addPlatform();
+    stage->setOriginX(0.0f); stage->setOriginY(-4.0f);
+    stage->setWidth(11.0f); stage->setDepth(14.0f); stage->setHeight(0.01f);
+    // Opaque, like a real deck: a see-through one is a translucent shape of its
+    // own, and ordering two of those is a different question from this one.
+    stage->setColor(QColor(60, 60, 70));
+
+    const QVector3D apexAt(5.30f, 0.93f, 0.02f);
+    const QVector3D dir = QVector3D(0.22f, 0.84f, 0.50f).normalized();
+    Fixture *spot = makeMover(doc, 14.0, 0, "LED SPOT", apexAt);
+    QVERIFY(spot != nullptr);
+
+    StageTarget *up = props->addStageTarget();
+    up->setName("Up and out");
+    up->setPosition(apexAt + dir * 4.0f);
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(up->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Targets");
+    scene->addFixture(spot->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    // Full white: Pan, Tilt, Dimmer, R, G, B.
+    QByteArray u(512, char(0));
+    u[2] = char(255); u[3] = char(255); u[4] = char(255); u[5] = char(255);
+    spot->setChannelValues(u);
+
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(1190, 660);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAmbient(0.0);
+        v.setBeams(true);
+        v.setLiveValues(true);
+        v.setActiveScene(scene->id());
+
+        auto luminance = [](const QImage &img, const QPointF &at) {
+            double sum = 0.0;
+            int n = 0;
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dx = -1; dx <= 1; ++dx)
+                {
+                    const QPoint q = at.toPoint() + QPoint(dx, dy);
+                    if (!img.rect().contains(q)) continue;
+                    const QColor c = img.pixelColor(q);
+                    sum += 0.3 * c.red() + 0.59 * c.green() + 0.11 * c.blue();
+                    ++n;
+                }
+            return n > 0 ? sum / n : 0.0;
+        };
+
+        /* From the front as in the report, and from a few other places, so
+           the answer cannot depend on which corner of the cone comes first. */
+        for (double az : { 0.0, 30.0, -40.0, 160.0 })
+        {
+            v.setAngledView(az, 4.0);
+            const QImage img = v.grab().toImage();
+            QVERIFY(v.m_frameBeams.size() == 1);
+            const StructureStudioView::FrameBeam b = v.m_frameBeams.first();
+            const QVector3D axis = b.dir.normalized();
+            const QPointF nearPx = v.w2s(b.apex + axis * float(b.length * 0.12));
+            const QPointF farPx  = v.w2s(b.apex + axis * float(b.length * 0.55));
+            QVERIFY2(img.rect().contains(nearPx.toPoint()) && img.rect().contains(farPx.toPoint()),
+                     qPrintable(QString("az %1: a sample point is off screen").arg(az)));
+            const double nearL = luminance(img, nearPx);
+            const double farL  = luminance(img, farPx);
+            const double bg    = luminance(img, QPointF(5, 5));
+            QVERIFY2(nearL > bg + 20.0,
+                     qPrintable(QString("az %1: the beam is not visible near the lens "
+                                        "(%2 against background %3)").arg(az).arg(nearL).arg(bg)));
+            // Linear from the lens to nothing at 8 m: 0.55 of the way is well under 0.88.
+            QVERIFY2(farL - bg < (nearL - bg) * 0.75,
+                     qPrintable(QString("az %1: the beam is as bright at its far end (%2) "
+                                        "as near the lens (%3) -- it is not fading")
+                                .arg(az).arg(farL).arg(nearL)));
+        }
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aBeamLandsAsAnOvalAtAnAngle()
+{
+    /* "Shouldn't the end of the beam be relative to the feature it's projected
+       on -- an oval on the floor?" A cone cut by the floor is a circle only
+       when it arrives straight down. At 30 degrees below the horizontal its
+       footprint is about twice as long, along the beam, as it is wide -- and
+       it lies ON the floor, not square across the beam in mid-air. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(-2.0f); deck->setOriginY(-2.0f);
+    deck->setWidth(4.0f); deck->setDepth(4.0f); deck->setHeight(0.6f);
+
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.reload();
+
+        const double half = qDegreesToRadians(5.0);
+        auto extents = [](const QVector<QVector3D> &pts, double &along, double &across,
+                          double &zMin, double &zMax) {
+            float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
+            zMin = 1e9; zMax = -1e9;
+            for (const QVector3D &q : pts)
+            {
+                x0 = qMin(x0, q.x()); x1 = qMax(x1, q.x());
+                y0 = qMin(y0, q.y()); y1 = qMax(y1, q.y());
+                zMin = qMin(zMin, double(q.z())); zMax = qMax(zMax, double(q.z()));
+            }
+            along = double(y1 - y0);
+            across = double(x1 - x0);
+        };
+
+        // Off the deck, 30 degrees down toward downstage, onto the floor.
+        const QVector3D apex(0.0f, 3.0f, 4.0f);
+        const QVector3D down30(0.0f, float(qCos(qDegreesToRadians(30.0))),
+                               -float(qSin(qDegreesToRadians(30.0))));
+        bool hit = false;
+        const double len = v.beamThrow(apex, down30, &hit);
+        QVERIFY(hit);
+        double along, across, zMin, zMax;
+        extents(v.beamFootprint(apex, down30, half, len, true), along, across, zMin, zMax);
+        QVERIFY2(zMin > -1e-3 && zMax < 1e-3,
+                 qPrintable(QString("the pool is not on the floor: z %1..%2").arg(zMin).arg(zMax)));
+        QVERIFY2(along / across > 1.7 && along / across < 2.5,
+                 qPrintable(QString("at 30 degrees the pool should be about twice as long "
+                                    "as wide, got %1 x %2").arg(along).arg(across)));
+
+        // Straight down it is round.
+        const QVector3D straight(0.0f, 0.0f, -1.0f);
+        const double lenDown = v.beamThrow(apex, straight);
+        extents(v.beamFootprint(apex, straight, half, lenDown, true), along, across, zMin, zMax);
+        QVERIFY2(qAbs(along / across - 1.0) < 0.05,
+                 qPrintable(QString("straight down the pool is %1 x %2").arg(along).arg(across)));
+
+        // Landing on the deck, it lies on the deck top.
+        const QVector3D overDeck(0.0f, 0.5f, 4.0f);
+        const QVector3D toDeck = QVector3D(0.0f, 1.0f, -3.0f).normalized();
+        const double lenDeck = v.beamThrow(overDeck, toDeck, &hit);
+        QVERIFY(hit);
+        extents(v.beamFootprint(overDeck, toDeck, half, lenDeck, true), along, across, zMin, zMax);
+        QVERIFY2(qAbs(zMin - 0.6) < 1e-3 && qAbs(zMax - 0.6) < 1e-3,
+                 qPrintable(QString("the pool on the deck is at z %1..%2").arg(zMin).arg(zMax)));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aBeamCarriesOnPastWhatItIsAimedAt()
+{
+    /* "Why does the beam end on the target .. it won't in reality." A target
+       is a point in the air, not a surface: light aimed at a subject carries
+       on past them. This test used to assert the opposite -- the cone was cut
+       at the subject so follow-spots aimed up at chest height did not sail on
+       -- and it is kept, inverted, so the cut cannot quietly come back. */
     Doc *doc = new Doc(this);
     MonitorProperties *props = doc->monitorProperties();
 
@@ -3998,8 +5494,8 @@ void Monitor_Test::aBeamStopsAtWhatItIsAimedAt()
                                 "(%2) or this proves nothing")
                         .arg(floorThrow).arg(toTarget)));
 
-    /* What the cone actually uses. Rendered, the beam has to stop about where
-       the subject is rather than carrying on past them. */
+    /* Rendered, the beam is still there a metre and a half beyond the
+       subject, on its way to wherever it really ends. */
     v.setBeams(true);
     v.setLiveValues(false);
     QByteArray u(512, char(0));
@@ -4019,9 +5515,9 @@ void Monitor_Test::aBeamStopsAtWhatItIsAimedAt()
             if (c.red() * 0.3 + c.green() * 0.59 + c.blue() * 0.11 > 55)
                 ++lit;
         }
-    QVERIFY2(lit < 12,
-             qPrintable(QString("the beam is still lit %1 px well past what it "
-                                "is aimed at -- it is overshooting the subject")
+    QVERIFY2(lit > 60,
+             qPrintable(QString("only %1 px lit 1.5 m past the subject -- the "
+                                "beam is stopping at what it is aimed at")
                         .arg(lit)));
 
     delete doc;
@@ -4427,6 +5923,148 @@ void Monitor_Test::aLitMoverThrowsAVisibleBeam()
              qPrintable(QString("turning beams off left them on screen "
                                 "(%1 vs %2)").arg(off).arg(lit)));
     v.setBeams(true);
+
+    delete doc;
+}
+
+void Monitor_Test::aTwoArmHeadDrawsEachArmOnItsOwn()
+{
+    /* "They are three beams on one head": a two-arm beam fixture, channelled
+       the way the real one is -- X1 X2 Y1 Y2, a shared dimmer and strobe that
+       belong to no head, then each arm's RGBW. Each arm is one head, and each
+       head throws three beams in its own colour. Three things have to show:
+         - each arm in ITS colour, not both in the mix of the two;
+         - each arm pointing where ITS tilt says;
+         - three beams per arm when the lens says three. */
+    Doc *doc = new Doc(this);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Two Arm Beam");
+    def->setType(QLCFixtureDef::MovingHead);
+    struct Spec { const char *name; QLCChannel::Group group; QLCChannel::PrimaryColour colour; };
+    const Spec spec[15] = {
+        { "Pan 1",  QLCChannel::Pan,  QLCChannel::NoColour },
+        { "Pan 2",  QLCChannel::Pan,  QLCChannel::NoColour },
+        { "Tilt 1", QLCChannel::Tilt, QLCChannel::NoColour },
+        { "Tilt 2", QLCChannel::Tilt, QLCChannel::NoColour },
+        { "Intensity", QLCChannel::Intensity, QLCChannel::NoColour },
+        { "Strobe", QLCChannel::Shutter, QLCChannel::NoColour },
+        { "Red 1",   QLCChannel::Intensity, QLCChannel::Red },
+        { "Green 1", QLCChannel::Intensity, QLCChannel::Green },
+        { "Blue 1",  QLCChannel::Intensity, QLCChannel::Blue },
+        { "White 1", QLCChannel::Intensity, QLCChannel::White },
+        { "Red 2",   QLCChannel::Intensity, QLCChannel::Red },
+        { "Green 2", QLCChannel::Intensity, QLCChannel::Green },
+        { "Blue 2",  QLCChannel::Intensity, QLCChannel::Blue },
+        { "White 2", QLCChannel::Intensity, QLCChannel::White },
+        { "Macro",  QLCChannel::Maintenance, QLCChannel::NoColour } };
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("15 Channel");
+    for (int k = 0; k < 15; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(spec[k].name); ch->setGroup(spec[k].group);
+        ch->setControlByte(QLCChannel::MSB);
+        if (spec[k].colour != QLCChannel::NoColour) ch->setColour(spec[k].colour);
+        def->addChannel(ch); mode->insertChannel(ch, k);
+    }
+    QLCFixtureHead arm1, arm2;
+    for (quint32 c : { 0u, 2u, 6u, 7u, 8u, 9u })    arm1.addChannel(c);
+    for (quint32 c : { 1u, 3u, 10u, 11u, 12u, 13u }) arm2.addChannel(c);
+    mode->insertHead(-1, arm1);
+    mode->insertHead(-1, arm2);
+
+    /* Wide and narrow, so the beams of one arm land clear of each other and
+       can be counted by their area: a metre per arm, 2-degree lenses. */
+    auto setBeams = [&](int beams) {
+        QLCPhysical ph;
+        ph.setWidth(2000); ph.setHeight(300); ph.setDepth(300);
+        ph.setFocusPanMax(360); ph.setFocusTiltMax(180);
+        ph.setLensDegreesMin(2); ph.setLensDegreesMax(2);
+        ph.setLensBeamsPerHead(beams);
+        mode->setPhysical(ph);
+    };
+    setBeams(3);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName("UST"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(0);
+    QVERIFY(doc->addFixture(fxi));
+    QCOMPARE(fxi->heads(), 2);
+    doc->monitorProperties()->setFixturePosition(
+        fxi->id(), 0, 0, QVector3D(3000.0f, 3000.0f, 4.0f));
+
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 620);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(25.0, 20.0);
+        v.setLiveValues(true);
+        v.setAmbient(0.25);
+
+        struct Tally { int n = 0; double x = 0.0, y = 0.0; };
+        auto measure = [&](Tally &red, Tally &blue) {
+            const QImage img = v.grab().toImage();
+            red = Tally(); blue = Tally();
+            for (int y = 0; y < img.height(); ++y)
+                for (int x = 0; x < img.width(); ++x)
+                {
+                    const QColor c = img.pixelColor(x, y);
+                    Tally *t = nullptr;
+                    if (c.red() > 60 && c.red() > c.green() * 2 && c.red() > c.blue() * 2)
+                        t = &red;
+                    else if (c.blue() > 60 && c.blue() > c.red() * 2 && c.blue() > c.green() * 2)
+                        t = &blue;
+                    if (t != nullptr) { ++t->n; t->x += x; t->y += y; }
+                }
+            for (Tally *t : { &red, &blue })
+                if (t->n > 0) { t->x /= t->n; t->y /= t->n; }
+        };
+        auto drive = [&](int tilt1, int tilt2) {
+            QByteArray u(512, char(0));
+            u[0] = char(128); u[1] = char(128);
+            u[2] = char(tilt1); u[3] = char(tilt2);
+            u[4] = char(255);                 // the shared dimmer
+            u[6] = char(255);                 // arm 1 red
+            u[12] = char(255);                // arm 2 blue
+            fxi->setChannelValues(u);
+        };
+
+        // Both arms straight down: one red, one blue -- not two magentas.
+        drive(128, 128);
+        Tally red, blue;
+        measure(red, blue);
+        QVERIFY2(red.n > 300 && blue.n > 300,
+                 qPrintable(QString("each arm should throw its own colour, got "
+                                    "%1 red px and %2 blue px").arg(red.n).arg(blue.n)));
+
+        /* Tilt arm 2 about 30 degrees downstage -- far enough to move, not so
+           far that its beams leave the frame, so the shift is measured on real
+           beams rather than on the handful of pixels a beam thrown straight at
+           the camera leaves behind. Its beams swing; arm 1's stay put. */
+        drive(128, 170);
+        Tally red2, blue2;
+        measure(red2, blue2);
+        const double redMoved  = QLineF(red.x, red.y, red2.x, red2.y).length();
+        const double blueMoved = QLineF(blue.x, blue.y, blue2.x, blue2.y).length();
+        QVERIFY2(blue2.n > 300 && blueMoved > 20.0 && redMoved < 3.0,
+                 qPrintable(QString("tilting arm 2 moved its beams %1 px (%2 px of "
+                                    "them) and arm 1's %3 px").arg(blueMoved)
+                            .arg(blue2.n).arg(redMoved)));
+
+        // Three beams per arm against one.
+        drive(128, 128);
+        measure(red, blue);
+        const int threeBeams = red.n;
+        setBeams(1);
+        measure(red, blue);
+        const int oneBeam = red.n;
+        QVERIFY2(threeBeams > oneBeam * 2,
+                 qPrintable(QString("three beams per head drew %1 px against one "
+                                    "beam's %2").arg(threeBeams).arg(oneBeam)));
+    }
 
     delete doc;
 }
