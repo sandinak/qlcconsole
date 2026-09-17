@@ -70,6 +70,10 @@ private slots:
     // Tower/StageTarget had none at all.
     void stageStructureAddRemove();
     void stageStructuresXmlRoundTrip();
+
+    /** A fixture that has only ever been placed on the plot saves nothing it
+     *  was never given: no fixed zoom, and not hidden. */
+    void aNewlyPlacedFixtureSavesNoJunk();
 };
 
 #endif

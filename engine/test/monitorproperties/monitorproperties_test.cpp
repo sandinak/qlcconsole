@@ -834,6 +834,24 @@ void MonitorProperties_Test::stageStructuresXmlRoundTrip()
     QCOMPARE(mp2.stageTargets().first()->position(), QVector3D(1.0f, 2.0f, 0.0f));
 }
 
+void MonitorProperties_Test::aNewlyPlacedFixtureSavesNoJunk()
+{
+    MonitorProperties mp;
+
+    // Exactly what placing a fixture on the plot does: a position, nothing else.
+    mp.setFixturePosition(42, 0, 0, QVector3D(1, 2, 0));
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+
+    const QString xml = QString::fromUtf8(buf);
+    QVERIFY2(xml.contains("FixedZoom") == false, qPrintable(xml));
+    QVERIFY2(xml.contains("Hidden") == false, qPrintable(xml));
+}
+
 QTEST_APPLESS_MAIN(MonitorProperties_Test)
 
 void MonitorProperties_Test::aTowerOffsetIsTheHeight()
