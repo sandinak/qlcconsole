@@ -760,6 +760,14 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     connect(projectionBtn, &QAction::toggled, this, [this](bool on) {
         m_graphicsView->setProjectionOverlayVisible(on);
     });
+    /* Asking for one head's footprint from its own menu switches the overlay
+       on; the tick here has to say so, or the next click on it turns them OFF
+       by "turning them on". */
+    connect(m_graphicsView, &MonitorGraphicsView::projectionOverlayChanged,
+            projectionBtn, [projectionBtn](bool on) {
+        QSignalBlocker block(projectionBtn);
+        projectionBtn->setChecked(on);
+    });
 
     QAction *centerBtn = showMenu->addAction(tr("Stage centre lines"));
     centerBtn->setCheckable(true);

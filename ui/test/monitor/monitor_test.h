@@ -173,6 +173,11 @@ private slots:
     void aWashOnATrussThrowsLightToo();
     /** A riser's menu offers to put a fixture, a target or a person on it. */
     void aPlatformOffersToPutSomethingOnIt();
+    /** Unticking "Light footprint" takes every footprint away. */
+    void theFootprintToggleTurnsThemOff();
+    /** A footprint is drawn where the SCENE aims the head, not where its
+     *  resting DMX happens to point. */
+    void aFootprintFollowsTheSceneAim();
     /** Lay a step out once, save it as a component, stamp it onto the next
      *  step's fixtures: the arrangement must arrive intact. */
     void aSavedComponentStampsItsLayoutOntoOtherFixtures();

@@ -872,6 +872,10 @@ signals:
      *  scene point it was asked for. The menus live here, the adding lives in
      *  Monitor, and this is the seam. */
     void addItemRequested(const QString &what, QPointF scenePos);
+    /** The footprint overlay went on or off from somewhere other than the Show
+     *  menu -- a per-fixture "Show Light Footprint", say -- so the menu's own
+     *  tick can follow it. */
+    void projectionOverlayChanged(bool on);
 
     /** Emitted whenever the canvas selection changes, so the toolbar can update
      *  the enabled state of the Group / Ungroup actions. */

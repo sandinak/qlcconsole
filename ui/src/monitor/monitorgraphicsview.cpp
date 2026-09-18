@@ -2445,8 +2445,13 @@ bool MonitorGraphicsView::fixtureItemShouldBeVisible(quint32 fid) const
     if (mounted && !m_showMountedFixtures)
         return false;
 
-    // ...unless its bubble was asked to show what it stands for.
-    if (m_revealedFixtures.contains(fid))
+    /* ...unless its bubble was asked to show what it stands for, and THIS is
+       the one picked out of the pile. Showing all of them was the first cut:
+       "we don't have to show the actual fixture(s), just the label you have,
+       that works better" -- a stack of icons on one spot tells you nothing the
+       tags do not, and buries the structure again. The picked one is drawn
+       because it is the one being selected, inspected and measured. */
+    if (m_revealFocus >= 0 && quint32(m_revealFocus) == fid)
         return true;
 
     // Buried by its own kind: the structure shows a count instead.
@@ -6140,7 +6145,10 @@ void MonitorGraphicsView::setProjectionOverlayVisible(bool on)
     if (m_projectionVisible == on)
         return;
     m_projectionVisible = on;
+    if (!on)
+        m_footprintFixtures.clear();   // off means off: nothing lingers
     rebuildProjectionOverlay();
+    emit projectionOverlayChanged(on);
 }
 
 void MonitorGraphicsView::revealBuriedFixtures(const QString &kind, quint32 id)
@@ -6159,12 +6167,6 @@ void MonitorGraphicsView::revealBuriedFixtures(const QString &kind, quint32 id)
        first cut, and it is what made this useless -- one blur of overlapping
        cones and no way to ask about a single head. */
     m_revealFocus = -1;
-
-    // Drawn FIRST: Qt will not select an item that is not visible, and these
-    // are hidden until this moment.
-    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
-        if (it.value() != nullptr)
-            it.value()->setVisible(fixtureItemShouldBeVisible(it.key()));
 
     // The bubble stands for what is now on show: it would only cover it.
     if (QGraphicsItemGroup *badge =
@@ -6197,6 +6199,12 @@ void MonitorGraphicsView::focusRevealedFixture(quint32 fid)
         return;
 
     m_revealFocus = qint64(fid);
+    /* Drawn FIRST: Qt will not select an item that is not visible, and every
+       fixture in the pile is hidden until one is picked. */
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (it.value() != nullptr)
+            it.value()->setVisible(fixtureItemShouldBeVisible(it.key()));
+
     /* Selected on its own, so the Layers list, the inspector and every "the
        selected heads" action mean this one head. */
     m_settingRevealSelection = true;
@@ -6307,7 +6315,10 @@ void MonitorGraphicsView::setFixtureFootprintShown(quint32 fid, bool on)
         m_footprintFixtures.insert(fid);
     else
         m_footprintFixtures.remove(fid);
-    rebuildProjectionOverlay();
+    if (on && !m_projectionVisible)
+        setProjectionOverlayVisible(true);   // asking for one turns them on
+    else
+        rebuildProjectionOverlay();
 }
 
 void MonitorGraphicsView::setFootprintsShown(const QList<quint32> &fids, bool on)
@@ -6319,7 +6330,10 @@ void MonitorGraphicsView::setFootprintsShown(const QList<quint32> &fids, bool on
         else
             m_footprintFixtures.remove(fid);
     }
-    rebuildProjectionOverlay();
+    if (on && !fids.isEmpty() && !m_projectionVisible)
+        setProjectionOverlayVisible(true);
+    else
+        rebuildProjectionOverlay();
 }
 
 bool MonitorGraphicsView::footprintsShown(const QList<quint32> &fids) const
@@ -6374,11 +6388,42 @@ QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     const QVector3D apex = fixtureWorldCentre(m_doc, fid);
 
-    /* Where it points: a mover says so itself through its pan and tilt;
-       anything else throws straight down, which is what a fixture hung over a
-       stage does. */
+    /* Where it points.
+     *
+       THE SELECTED SCENE WINS, as it does in the rig view. A head that nothing
+       is driving reads as pan 0, tilt 0 -- which for a head standing upright on
+       a truss is the horizon exactly, so it landed nothing and said so, while
+       the scene beside it was aiming that same head at a mark on the deck. An
+       aim it cannot reach is NOT used: it is stuck at its limit somewhere
+       short, and its resting DMX is the honest answer there (the red aim line
+       says the rest).
+
+       Otherwise the fixture says so itself through its pan and tilt, and
+       anything that cannot move throws straight down -- what a fixture hung
+       over a stage does. */
     QVector3D dir;
-    if (!fixtureAimDirection(fx, rp, dir) || dir.isNull())
+    bool aimed = false;
+    if (Scene *active = qobject_cast<Scene *>(m_doc->function(m_activeSceneId)))
+    {
+        foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, active))
+        {
+            if (a.fixtureId != fid || !a.solution.reachable())
+                continue;
+            /* The point the SCENE resolved, not one recomputed here: it
+               already decided whether this scene follows a subject, and
+               forcing subject height on a plain deck mark threw the pool four
+               metres past it (the beam runs on through the aim point, which is
+               right -- it just has to be the right point). */
+            const QVector3D to = a.point - apex;
+            if (to.length() > 1e-3f)
+            {
+                dir = to.normalized();
+                aimed = true;
+            }
+            break;
+        }
+    }
+    if (!aimed && (!fixtureAimDirection(fx, rp, dir) || dir.isNull()))
         dir = QVector3D(0.0f, 0.0f, -1.0f);
     if (dir.z() > -0.02f)
         return out;                       // level or upward: nothing lands
@@ -6435,21 +6480,21 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
     if (props == nullptr || m_pov != PovTop)
         return;
 
-    /* Three ways to ask for a footprint, and they add up: named one at a time
-       from a menu, everything a bubble revealed (narrowed to the one tag you
-       picked), and -- while the Show toggle is on -- whatever is selected. */
+    /* "Light footprint checkbox in Show isn't working -- I see it when
+       unchecked." It gated the SELECTION only, while a reveal and the
+       per-fixture menu drew regardless, so unticking it left footprints on
+       screen. It is the master switch now: off draws nothing at all, whoever
+       asked for it. On, it draws what is selected plus anything named by name
+       from a menu -- and the menu entries switch it on, so asking for a
+       footprint always produces one. */
+    if (!m_projectionVisible)
+        return;
+
     QSet<quint32> fids = m_footprintFixtures;
-    if (m_revealFocus >= 0)
-        fids.insert(quint32(m_revealFocus));
-    else
-        fids.unite(m_revealedFixtures);
-    if (m_projectionVisible)
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
     {
-        foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        {
-            if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
-                fids.insert(mfi->fixtureID());
-        }
+        if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+            fids.insert(mfi->fixtureID());
     }
     if (fids.isEmpty())
         return;

@@ -3116,29 +3116,35 @@ void Monitor_Test::doubleClickingABubbleShowsWhatItHides()
                         Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
         view.mouseDoubleClickEvent(&dbl);
 
+        /* What a bubble shows is the NAMES of what it hides, one tag each --
+           "we don't have to show the actual fixture(s), just the label you
+           have, that works better". The icons stay under the bubble, where
+           they were only ever a pile on one spot. */
         foreach (quint32 fid, fids)
         {
-            QVERIFY2(view.m_fixtures.value(fid)->isVisible(),
-                     "double-clicking the bubble did not show what it hides");
             QVERIFY2(!view.revealTagRect(fid).isEmpty(),
                      "a revealed fixture has no tag to click");
+            QVERIFY2(!view.m_fixtures.value(fid)->isVisible(),
+                     "the bubble dumped the whole stack of icons on the plot");
         }
-        /* Nothing picked yet, so all of them are on show: the first cut
-           selected every one of them at once, which is what made the result
-           unreadable. */
         QCOMPARE(view.revealedFixtures().size(), fids.size());
         QCOMPARE(view.revealedFocus(), qint64(-1));
-        QCOMPARE(view.m_projectionItems.size(), fids.size());
+        // Footprints are the Show toggle's business, and it is off.
+        QCOMPARE(view.m_projectionItems.size(), 0);
         QVERIFY2(!badge->isVisible(), "the bubble still covers what it just revealed");
 
         /* Straight down from 4 m with a 14 degree beam: about a metre across
            where it lands. */
         const double ppm = 1000.0 * view.m_cellPixels / view.m_unitValue;
         const double want = 2.0 * 4.0 * qTan(qDegreesToRadians(7.0)) * ppm;
+        view.setProjectionOverlayVisible(true);
+        view.focusRevealedFixture(fids.first());
+        QCOMPARE(view.m_projectionItems.size(), 1);
         const QRectF pool = view.m_projectionItems.first()->path().boundingRect();
         QVERIFY2(qAbs(pool.width() - want) < 0.15 * want && qAbs(pool.height() - want) < 0.15 * want,
                  qPrintable(QString("the landing area is %1x%2 px, expected about %3")
                             .arg(pool.width()).arg(pool.height()).arg(want)));
+        view.setProjectionOverlayVisible(false);
 
         // Looking somewhere else puts them back under the bubble.
         const QPoint away = view.mapFromScene(view.realPositionToPixels(9000.0, 6500.0));
@@ -7652,7 +7658,8 @@ void Monitor_Test::aRevealedFixtureCanBePickedOnItsOwn()
             tags << r;
         }
 
-        // Click the middle one, the way a user would.
+        // Click the middle one, the way a user would, with footprints asked for.
+        view.setProjectionOverlayVisible(true);
         const quint32 wanted = fids.at(1);
         const QPointF sp = view.revealTagRect(wanted).center();
         const QPoint vp = view.mapFromScene(sp);
@@ -7662,7 +7669,11 @@ void Monitor_Test::aRevealedFixtureCanBePickedOnItsOwn()
 
         QCOMPARE(view.revealedFocus(), qint64(wanted));
         foreach (quint32 fid, fids)
+        {
             QCOMPARE(view.m_fixtures.value(fid)->isSelected(), fid == wanted);
+            // Only the one picked is drawn; the rest stay tags.
+            QCOMPARE(view.m_fixtures.value(fid)->isVisible(), fid == wanted);
+        }
         QVERIFY2(view.m_projectionItems.size() == 1,
                  qPrintable(QString("picking one head drew %1 footprints")
                             .arg(view.m_projectionItems.size())));
@@ -8032,5 +8043,145 @@ void Monitor_Test::aPlatformOffersToPutSomethingOnIt()
                         .arg(double(stood->z()))));
 
     delete mon;
+    delete doc;
+}
+
+void Monitor_Test::theFootprintToggleTurnsThemOff()
+{
+    /* "Light footprint checkbox in Show isn't working .. I see it when
+       unchecked." It gated only the selection, so a footprint asked for by
+       name -- from a fixture's own menu, or by a bubble -- ignored it. The
+       toggle is the master switch: unticked, nothing is drawn, whoever asked. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setOrigin(QVector3D(1.0f, 3.0f, 4.0f));
+    bar->setLength(4.0f);
+
+    Fixture *spot = makeMover(doc, 14.0, 0, "Front Spot", QVector3D(2.0f, 3.0f, 4.0f));
+    QVERIFY(spot != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 1.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+    QByteArray u(512, char(0));
+    u[int(spot->address())] = char(128);
+    u[int(spot->address()) + 1] = char(128);      // straight down
+    spot->setChannelValues(u);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        view.addFixture(spot->id(), QPointF(2000.0, 3000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+
+        // Asked for by name: it appears, and the toggle now says so.
+        view.setFixtureFootprintShown(spot->id(), true);
+        QCOMPARE(view.m_projectionItems.size(), 1);
+        QVERIFY2(view.projectionOverlayVisible(),
+                 "asking for a footprint left the Show toggle saying they are off");
+
+        // Unticked: gone, and it stays gone when the selection changes.
+        view.setProjectionOverlayVisible(false);
+        QCOMPARE(view.m_projectionItems.size(), 0);
+        view.selectMapItem(QStringLiteral("fixture"), spot->id());
+        QCoreApplication::processEvents();
+        QVERIFY2(view.m_projectionItems.isEmpty(),
+                 "footprints came back while the toggle was unticked");
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aFootprintFollowsTheSceneAim()
+{
+    /* T1-Spot stands upright on a truss top, so at rest its tilt centre is the
+       horizon exactly and nothing lands -- while the scene beside it is aiming
+       that same head at a mark on the deck. The footprint asks the same
+       question the rig view does: where is this head POINTED, scene first. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *tower = props->addTruss();
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(2.0f, 3.0f, 0.0f));
+    tower->setLength(4.0f);
+    tower->setWidth(0.29f);
+
+    Fixture *spot = makeMover(doc, 14.0, 0, "T1-Spot", QVector3D(2.0f, 3.0f, 4.0f));
+    QVERIFY(spot != nullptr);
+    /* A real 270-degree head, like the one on T-1: standing upright its tilt
+       is centred on the sky, so it works the deck from 45 degrees below the
+       horizon outward -- near its own feet is exactly what it cannot do. */
+    QLCPhysical phy = spot->fixtureMode()->physical();
+    phy.setFocusTiltMax(270);
+    spot->fixtureMode()->setPhysical(phy);
+
+    FixtureRigProps rp;
+    rp.trussId = tower->id();
+    rp.trussOffset = 4.0f;
+    rp.mountingType = Truss::FloorMounted;        // standing on the truss top
+    props->setFixtureRigProps(spot->id(), rp);
+
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(8.0f, 3.0f, 0.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(mark->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Spot on the mark");
+    scene->addFixture(spot->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        view.updateTargets();
+        view.addFixture(spot->id(), QPointF(2000.0, 3000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.setProjectionOverlayVisible(true);
+        view.setActiveScene(scene->id());
+        view.setFixtureFootprintShown(spot->id(), true);
+
+        // Where the two ends of the aim actually are.
+        const QVector3D apex = fixtureWorldCentre(doc, spot->id());
+        const QVector3D at = props->targetAimPoint(mark, true);
+        QVERIFY2(qAbs(apex.z() - 4.0f) < 0.2f,
+                 qPrintable(QString("the head sits at z=%1, not on the 4 m tower top")
+                            .arg(double(apex.z()))));
+        QVERIFY2(at.z() < apex.z(),
+                 qPrintable(QString("the mark (z=%1) is not below the head (z=%2)")
+                            .arg(double(at.z())).arg(double(apex.z()))));
+
+        // The scene really does aim it, and it really can get there.
+        const QList<AimSolver::SceneAim> aims = AimSolver::sceneAims(doc, scene);
+        QCOMPARE(aims.size(), 1);
+        QVERIFY2(aims.first().solution.reachable(),
+                 qPrintable(QString("the head cannot reach its own mark (margin %1)")
+                            .arg(double(aims.first().solution.marginDeg))));
+
+        QVERIFY2(view.m_projectionItems.size() == 1,
+                 qPrintable(QString("%1 footprints drawn for an aimed head")
+                            .arg(view.m_projectionItems.size())));
+        const QPolygonF poly = view.fixtureProjection(spot->id());
+        QVERIFY2(poly.size() >= 3,
+                 "the head is aimed at a mark it can reach, and nothing was projected");
+        const QPointF pool = poly.boundingRect().center();
+        const QPointF want = view.realPositionToPixels(8000.0, 3000.0);
+        const double off = QLineF(pool, want).length();
+        const QPointF poolMm = view.pixelsToRealPosition(pool.x(), pool.y());
+        QVERIFY2(off < view.m_cellPixels * 0.75,
+                 qPrintable(QString("the pool landed at (%1, %2) m, %3 px from the "
+                                    "mark at (8, 3) it is aimed at")
+                            .arg(poolMm.x() / 1000.0).arg(poolMm.y() / 1000.0).arg(off)));
+    }
+
     delete doc;
 }
