@@ -178,6 +178,13 @@ private slots:
     /** A footprint is drawn where the SCENE aims the head, not where its
      *  resting DMX happens to point. */
     void aFootprintFollowsTheSceneAim();
+    /** Selecting a head shows every part of the deck it can put light on --
+     *  including the hole under a head standing on a truss top. */
+    void aSelectedHeadShowsEverywhereItCanHit();
+    /** The same head hung covers the deck beneath it. */
+    void aHungHeadCoversWhatIsUnderIt();
+    /** A head that can genuinely light nothing says why, with numbers. */
+    void aHeadThatCanLightNothingSaysWhy();
     /** Lay a step out once, save it as a component, stamp it onto the next
      *  step's fixtures: the arrangement must arrive intact. */
     void aSavedComponentStampsItsLayoutOntoOtherFixtures();

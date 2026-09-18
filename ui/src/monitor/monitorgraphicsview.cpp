@@ -6376,6 +6376,67 @@ bool MonitorGraphicsView::structureFootprintsShown(const QString &kind, quint32 
     return footprintsShown(fids);
 }
 
+QImage MonitorGraphicsView::fixtureCoverage(quint32 fid, double *cellMetres) const
+{
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
+    Fixture *fx = m_doc ? m_doc->fixture(fid) : nullptr;
+    if (props == nullptr || fx == nullptr || m_cellPixels == 0)
+        return QImage();
+
+    /* Only a head that MOVES has coverage worth the name. A par throws one
+       cone wherever it is bolted, and that cone is already drawn. */
+    if (fx->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
+        && fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
+        return QImage();
+
+    AimSolver::Frame frame;
+    if (!AimSolver::frameFor(m_doc, fid, frame))
+        return QImage();
+
+    /* The stage, sampled finely enough to show the hole under an upright head
+       -- "it can't display next to the truss on the floor" is exactly the
+       shape this has to get right -- and capped so a big grid stays cheap.
+       Solving is arithmetic against one Frame, so this is thousands of
+       multiply-adds, not thousands of Doc lookups. */
+    const double stageW = double(m_gridSize.width())  * m_unitValue / 1000.0;
+    const double stageD = double(m_gridSize.height()) * m_unitValue / 1000.0;
+    if (stageW <= 0.0 || stageD <= 0.0)
+        return QImage();
+    const double cell = qMax(0.05, qSqrt(stageW * stageD / 160000.0));
+    const int cols = qMax(1, int(qCeil(stageW / cell)));
+    const int rows = qMax(1, int(qCeil(stageD / cell)));
+
+    QImage img(cols, rows, QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::transparent);
+
+    QColor col = props->fixtureGelColor(fid, 0, 0);
+    if (!col.isValid() || col == QColor(Qt::black))
+        col = QColor(90, 160, 235);
+    const QRgb lit = qPremultiply(qRgba(col.red(), col.green(), col.blue(), 64));
+
+    bool any = false;
+    for (int r = 0; r < rows; ++r)
+    {
+        const float y = float((r + 0.5) * cell);
+        for (int c = 0; c < cols; ++c)
+        {
+            const float x = float((c + 0.5) * cell);
+            // The surface itself: light lands ON the deck, not above it.
+            const QVector3D at(x, y, props->platformHeightAt(x, y));
+            if (!AimSolver::solve(frame, at).reachable())
+                continue;
+            img.setPixel(c, r, lit);
+            any = true;
+        }
+    }
+
+    if (!any)
+        return QImage();
+    if (cellMetres != nullptr)
+        *cellMetres = cell;
+    return img;
+}
+
 QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
 {
     QPolygonF out;
@@ -6475,6 +6536,12 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
         delete pi;
     }
     m_projectionItems.clear();
+    foreach (QGraphicsPixmapItem *ci, m_coverageItems)
+    {
+        m_scene->removeItem(ci);
+        delete ci;
+    }
+    m_coverageItems.clear();
 
     MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
     if (props == nullptr || m_pov != PovTop)
@@ -6501,13 +6568,44 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
 
     foreach (quint32 fid, fids)
     {
+        /* EVERYTHING IT CAN HIT, first and underneath: "if I select T1-Spot
+           and I have footprint enabled I should see ALL THE AREA THAT THE SPOT
+           CAN HIT". A moving head's footprint is the reach of its pan and tilt
+           over the deck, and the cone below is only where it happens to point
+           inside that. The hole in the middle of it, under a head standing on
+           a truss top, is the answer to "it can't display next to the truss". */
+        double cell = 0.0;
+        const QImage cov = fixtureCoverage(fid, &cell);
+        if (!cov.isNull() && cell > 0.0)
+        {
+            QGraphicsPixmapItem *ci = new QGraphicsPixmapItem(QPixmap::fromImage(cov));
+            ci->setZValue(1.65);              // over the decks, under the pool
+            ci->setAcceptedMouseButtons(Qt::NoButton);
+            ci->setTransformationMode(Qt::FastTransformation);
+            ci->setPos(realPositionToPixels(0.0, 0.0));
+            ci->setScale(cell * 1000.0 * m_cellPixels / m_unitValue);
+            Fixture *cfx = m_doc->fixture(fid);
+            ci->setToolTip(tr("Everywhere %1 can put light, on the deck and the "
+                              "platforms")
+                           .arg(cfx ? cfx->name() : QString::number(fid)));
+            m_scene->addItem(ci);
+            m_coverageItems << ci;
+        }
+
         const QPolygonF poly = fixtureProjection(fid);
         if (poly.size() < 3)
         {
-            /* Nothing lands: the head is pointed level or above the horizon,
-               or it has no lens declared. Silence reads as a broken feature
-               ("clicked on T1-Spot to see its area and didn't get anything"),
-               so say which it is, at the fixture. */
+            /* Coverage on its own is a complete answer for a head that is
+               simply not pointed anywhere useful right now. */
+            if (!m_coverageItems.isEmpty() && !cov.isNull())
+                continue;
+            /* Nothing lands, and silence reads as a broken feature. Say WHY,
+               with the numbers -- because the answer is usually about how the
+               head is rigged, and vague is useless. T1-Spot is the case that
+               forced this: standing upright on a 3 m truss with 190 degrees of
+               tilt, it reaches 5 degrees below level, so the nearest thing it
+               could light is 35 m away. It is not that the view is broken; it
+               is that the head cannot light this stage. */
             MonitorFixtureItem *mfi = m_fixtures.value(fid, nullptr);
             if (mfi == nullptr)
                 continue;
@@ -6515,8 +6613,25 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
             QFont nf = font();
             nf.setPointSizeF(8.0);
             const QFontMetricsF nfm(nf);
-            const QString note = tr("%1: nothing lands — aimed level or up")
-                                 .arg(fx ? fx->name() : QString::number(fid));
+            const QString who = fx ? fx->name() : QString::number(fid);
+            QString note = tr("%1: nothing lands — aimed level or up").arg(who);
+            AimSolver::Frame nfr;
+            if (cov.isNull() && AimSolver::frameFor(m_doc, fid, nfr) && nfr.floorMounted)
+            {
+                const double below = double(nfr.tiltMax) / 2.0 - 90.0;
+                const double up = double(nfr.position.z());
+                if (below <= 0.01)
+                    note = tr("%1 can light nothing: standing upright, its %2° of "
+                              "tilt never reaches below level")
+                           .arg(who).arg(double(nfr.tiltMax), 0, 'f', 0);
+                else
+                    note = tr("%1 can light nothing here: standing upright, %2° of "
+                              "tilt reaches %3° below level — %4 m out from %5 m up")
+                           .arg(who).arg(double(nfr.tiltMax), 0, 'f', 0)
+                           .arg(below, 0, 'f', 0)
+                           .arg(up / qTan(qDegreesToRadians(below)), 0, 'f', 0)
+                           .arg(up, 0, 'f', 1);
+            }
             const QPointF c = mfi->sceneBoundingRect().center();
             const double nw = nfm.horizontalAdvance(note) + 8.0;
             const double nh = nfm.height() + 2.0;

@@ -741,7 +741,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     /* Where the selected moving heads cannot aim: a design aid for deciding
        how to rig them (on top of a tower, or hung under a bar) before the
        load-in, so not remembered between sessions. */
-    QAction *reachBtn = showMenu->addAction(tr("Reach of selected heads"));
+    QAction *reachBtn = showMenu->addAction(tr("Where selected heads CANNOT reach"));
     reachBtn->setCheckable(true);
     reachBtn->setToolTip(tr("Shade, in the top view, where the selected moving "
                             "heads cannot point at subject height"));
@@ -753,10 +753,11 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        fixture covering", and what a count bubble shows when you double-click
        it. Top view, and not remembered -- it is a question you ask, not a way
        you leave the plot. */
-    QAction *projectionBtn = showMenu->addAction(tr("Light footprint of selected heads"));
+    QAction *projectionBtn = showMenu->addAction(tr("Light footprint: everywhere selected heads CAN light"));
     projectionBtn->setCheckable(true);
-    projectionBtn->setToolTip(tr("Shade where the selected moving heads' beams "
-                                 "land, on the floor or the deck below them"));
+    projectionBtn->setToolTip(tr("Shade every part of the deck the selected heads "
+                                 "can put light on, with where each is pointed "
+                                 "now drawn on top"));
     connect(projectionBtn, &QAction::toggled, this, [this](bool on) {
         m_graphicsView->setProjectionOverlayVisible(on);
     });

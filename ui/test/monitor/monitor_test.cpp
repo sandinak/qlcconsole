@@ -65,6 +65,7 @@
 #include "doc.h"
 #include "qlcfile.h"
 #include "qlcfixturedefcache.h"
+#include <QFileInfo>
 
 // Find a visible QPushButton by its exact text anywhere under a widget —
 // QMessageBox's extra buttons (confirmFeatureDelete's "Delete"/"Detach &&
@@ -8181,6 +8182,218 @@ void Monitor_Test::aFootprintFollowsTheSceneAim()
                  qPrintable(QString("the pool landed at (%1, %2) m, %3 px from the "
                                     "mark at (8, 3) it is aimed at")
                             .arg(poolMm.x() / 1000.0).arg(poolMm.y() / 1000.0).arg(off)));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aSelectedHeadShowsEverywhereItCanHit()
+{
+    /* "If I select T1-Spot and I have footprint enabled I should see ALL THE
+       AREA THAT THE SPOT CAN HIT." The footprint drew the instantaneous cone,
+       which answers "where is it pointed" -- a different and much smaller
+       question, and for a head resting at its tilt centre, no shape at all.
+
+       T1-Spot as rigged in the demo show: a 270-degree head standing UPRIGHT on
+       top of a horizontal truss. Its tilt is centred on the sky, so it reaches
+       45 degrees below the horizon at best -- which on a 4.5 m truss means it
+       cannot light anything closer to its own feet than about 4.5 m, and can
+       light the deck everywhere beyond that. Both halves are asserted: the
+       hole, and the ring around it. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *bar = props->addTruss();
+    bar->setName("T-1");
+    bar->setOrigin(QVector3D(1.0f, 6.0f, 4.5f));
+    bar->setLength(8.0f);
+
+    Fixture *spot = makeMover(doc, 14.0, 0, "T1-Spot", QVector3D(5.0f, 6.0f, 4.5f));
+    QVERIFY(spot != nullptr);
+    QLCPhysical phy = spot->fixtureMode()->physical();
+    phy.setFocusTiltMax(270);
+    spot->fixtureMode()->setPhysical(phy);
+
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 4.0f;                        // 4 m along: x = 5
+    rp.mountingType = Truss::FloorMounted;        // standing on the truss top
+    props->setFixtureRigProps(spot->id(), rp);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1100, 800);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 12));
+        view.updateTrusses();
+        view.addFixture(spot->id(), QPointF(5000.0, 6000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+
+        const QVector3D at = fixtureWorldCentre(doc, spot->id());
+        QVERIFY2(qAbs(at.z() - 4.5f) < 0.2f,
+                 qPrintable(QString("the head is at z=%1, not on the 4.5 m truss")
+                            .arg(double(at.z()))));
+
+        double cell = 0.0;
+        const QImage cov = view.fixtureCoverage(spot->id(), &cell);
+        QVERIFY2(!cov.isNull(), "a moving head covers nothing at all");
+        QVERIFY(cell > 0.0);
+
+        auto covered = [&](double x, double y) {
+            const int c = int(x / cell);
+            const int r = int(y / cell);
+            if (c < 0 || r < 0 || c >= cov.width() || r >= cov.height())
+                return false;
+            return qAlpha(cov.pixel(c, r)) > 0;
+        };
+
+        // Its own feet: 4.5 m up with 45 degrees of reach below the horizon
+        // cannot be pointed at anything nearer than 4.5 m away.
+        QVERIFY2(!covered(5.0, 6.0),
+                 "the head claims it can light the deck directly under itself");
+        QVERIFY2(!covered(6.5, 6.0),
+                 "the head claims it can light 1.5 m from its own feet");
+
+        // And the deck well out from it, which is what it is FOR.
+        QVERIFY2(covered(5.0, 0.5),
+                 "the head cannot light the deck 5.5 m downstage of it");
+        QVERIFY2(covered(11.0, 6.0),
+                 "the head cannot light the deck 6 m to its side");
+
+        /* The whole point of the complaint: selecting it with footprints on
+           draws that area, not nothing. */
+        view.setProjectionOverlayVisible(true);
+        view.selectMapItem(QStringLiteral("fixture"), spot->id());
+        QCoreApplication::processEvents();
+        QVERIFY2(view.m_coverageItems.size() == 1,
+                 qPrintable(QString("selecting the head drew %1 coverage areas")
+                            .arg(view.m_coverageItems.size())));
+        const QPixmap drawn = view.m_coverageItems.first()->pixmap();
+        QVERIFY(!drawn.isNull());
+
+        // It covers a real part of the stage -- not a stray pixel, not all of it.
+        int litCells = 0;
+        for (int r = 0; r < cov.height(); ++r)
+            for (int c = 0; c < cov.width(); ++c)
+                if (qAlpha(cov.pixel(c, r)) > 0)
+                    ++litCells;
+        const double share = double(litCells) / double(cov.width() * cov.height());
+        QVERIFY2(share > 0.3 && share < 0.95,
+                 qPrintable(QString("the head covers %1%% of the stage, which is "
+                                    "not a ring around a 4.5 m hole")
+                            .arg(share * 100.0, 0, 'f', 1)));
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aHungHeadCoversWhatIsUnderIt()
+{
+    /* The same head hung from the same bar is centred on straight DOWN, so the
+       deck under it is the easiest thing it can light -- the exact opposite of
+       the upright case, and the check that the coverage is reading the mount
+       rather than drawing a doughnut for everything. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *bar = props->addTruss();
+    bar->setOrigin(QVector3D(1.0f, 6.0f, 4.5f));
+    bar->setLength(8.0f);
+
+    Fixture *spot = makeMover(doc, 14.0, 0, "Hung", QVector3D(5.0f, 6.0f, 4.5f));
+    QVERIFY(spot != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 4.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1100, 800);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 12));
+        view.updateTrusses();
+        view.addFixture(spot->id(), QPointF(5000.0, 6000.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+
+        double cell = 0.0;
+        const QImage cov = view.fixtureCoverage(spot->id(), &cell);
+        QVERIFY2(!cov.isNull(), "a hung head covers nothing at all");
+        const int c = int(5.0 / cell), r = int(6.0 / cell);
+        QVERIFY2(qAlpha(cov.pixel(c, r)) > 0,
+                 "a hung head cannot light the deck directly under itself");
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::aHeadThatCanLightNothingSaysWhy()
+{
+    /* T1-Spot, as the demo show actually has it: a 190-degree head standing
+       UPRIGHT on top of a truss 3.048 m up. Standing, its tilt centres on the
+       sky, so it reaches 5 degrees below level -- the nearest deck it could
+       light is 35 m away, well off any stage. Its coverage is therefore
+       genuinely empty, and an empty overlay is indistinguishable from a broken
+       one unless it says why. Measured against the real workspace before this
+       was written: coverage null as rigged, the whole stage once hung. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *bar = props->addTruss();
+    bar->setName("T-1");
+    bar->setOrigin(QVector3D(1.0f, 1.372f, 3.048f));
+    bar->setLength(8.0f);
+
+    Fixture *spot = makeMover(doc, 14.0, 0, "T1-Spot", QVector3D(1.67f, 1.372f, 3.048f));
+    QVERIFY(spot != nullptr);
+    QLCPhysical phy = spot->fixtureMode()->physical();
+    phy.setFocusTiltMax(190);                     // what its 12-channel mode declares
+    spot->fixtureMode()->setPhysical(phy);
+
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 0.67f;
+    rp.mountingType = Truss::FloorMounted;        // standing on the truss top
+    props->setFixtureRigProps(spot->id(), rp);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1100, 800);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.updateTrusses();
+        view.addFixture(spot->id(), QPointF(1670.0, 1372.0));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.setProjectionOverlayVisible(true);
+        view.selectMapItem(QStringLiteral("fixture"), spot->id());
+        QCoreApplication::processEvents();
+
+        double cell = 0.0;
+        QVERIFY2(view.fixtureCoverage(spot->id(), &cell).isNull(),
+                 "an upright 190-degree head on a 3 m truss claims it can light the stage");
+        QCOMPARE(view.m_coverageItems.size(), 0);
+
+        // ...and it says so, with the numbers that explain it.
+        QVERIFY2(view.m_projectionItems.size() == 1,
+                 qPrintable(QString("%1 notes drawn for a head that can light nothing")
+                            .arg(view.m_projectionItems.size())));
+        QString said;
+        foreach (QGraphicsItem *child, view.m_projectionItems.first()->childItems())
+            if (QGraphicsSimpleTextItem *t = dynamic_cast<QGraphicsSimpleTextItem *>(child))
+                said = t->text();
+        QVERIFY2(said.contains("T1-Spot") && said.contains("upright")
+                 && said.contains("190") && said.contains("5°"),
+                 qPrintable(QString("the note says: \"%1\"").arg(said)));
+
+        // Hung from the same bar, it lights the stage -- the mount is the whole
+        // difference, which is what the note is pointing at.
+        FixtureRigProps hung = rp;
+        hung.mountingType = Truss::TopHung;
+        props->setFixtureRigProps(spot->id(), hung);
+        double hcell = 0.0;
+        QVERIFY2(!view.fixtureCoverage(spot->id(), &hcell).isNull(),
+                 "hung from the same bar it still covers nothing");
     }
 
     delete doc;

@@ -1119,11 +1119,21 @@ public:
     /** The fixtures filed under a Layers folder or studio group. */
     QList<quint32> fixturesInGroup(quint32 gid) const;
 
-    /** Where a fixture's beam lands, in scene pixels (top view): its cone's
-     *  edge rays followed down to the floor or the deck they meet. Empty when
-     *  nothing lands -- a head pointed level or up, or a fixture with no
+    /** Where a fixture's beam lands RIGHT NOW, in scene pixels (top view): its
+     *  cone's edge rays followed down to the floor or the deck they meet. Empty
+     *  when nothing lands -- a head pointed level or up, or a fixture with no
      *  declared beam at all. */
     QPolygonF fixtureProjection(quint32 fid) const;
+
+    /** Every part of the stage this head can put light on: the deck and the
+     *  platform tops, sampled, keeping the points its pan and tilt can actually
+     *  reach. This is what "show me its footprint" means for a head that moves
+     *  -- the instantaneous cone answers "where is it pointed", which is a
+     *  different question and a much smaller shape. Null when the fixture
+     *  cannot move (its cone IS its coverage) or cannot reach anything.
+     *
+     *  @param cellMetres  size of one sample square, for scaling the image. */
+    QImage fixtureCoverage(quint32 fid, double *cellMetres) const;
 
 private:
     void scheduleReachOverlay();
@@ -1141,6 +1151,7 @@ private:
     bool m_settingRevealSelection = false;
     QList<class QGraphicsItem *> m_revealTags;
     QList<class QGraphicsPathItem *> m_projectionItems;
+    QList<class QGraphicsPixmapItem *> m_coverageItems;
     class QGraphicsPixmapItem *m_reachItem = nullptr;
     bool m_reachVisible = false;
     bool m_reachUpdatePending = false;
