@@ -49,7 +49,11 @@ through one consistent startup window — name/version, a live log of what's
 loading, a progress bar — instead of a bare, platform-inconsistent dialog.
 See [CHANGELOG.md](CHANGELOG.md) for a user-facing summary of what's
 changed, or [DONE.md](DONE.md)/[TODO.md](TODO.md) for the detailed
-development log.
+development log. For a guided tour of the fork's features — the rig-design
+**Lighting Studio** view, the palette-driven **Programming** tab, the
+**Fixture Manager**'s group folders and head-layout grid, and **Stage
+Targets**/aim-solving — with screenshots and step-by-step workflows, see the
+[feature guide](docs/features/README.md).
 
 **Platform support:** macOS first. The upstream QLC+ codebase this is forked
 from supports Linux and Windows too, but qlcconsole's own testing, packaging,
