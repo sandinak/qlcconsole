@@ -514,6 +514,13 @@ public:
      *  a step that does not match its neighbours. */
     void repairMountPlanes();
 
+    /** The single-fixture correction repairMountPlanes() applies to every
+     *  entry in m_rigProps on load, exposed so a dialog committing a fresh
+     *  mount/orientation choice for ONE fixture (no reload in between) can
+     *  apply the same fix immediately instead of waiting for the next file
+     *  load to catch it. */
+    void repairMountPlane(FixtureRigProps &rp) const;
+
 private:
     QMap<quint32, Truss*> m_trusses;
 

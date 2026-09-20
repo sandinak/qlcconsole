@@ -2611,6 +2611,15 @@ static quint32 studioRowFid(const QTreeWidgetItem *it)
     return v.isValid() ? v.toUInt() : Fixture::invalidId();
 }
 
+/* A studio tree row's BAR (child truss) id, for a truss editor's "Fixtures
+   and bars on this object" tree -- see studioRowFid()'s note above for why
+   an unset role has to read back as invalid rather than 0. */
+static quint32 studioRowBarId(const QTreeWidgetItem *it)
+{
+    const QVariant v = it->data(0, Qt::UserRole + 2);
+    return v.isValid() ? v.toUInt() : Truss::invalidId();
+}
+
 void Monitor::editFixtureProperties(quint32 fid)
 {
     // The studio's single-fixture path (inspector 'Full properties…', canvas
@@ -2678,9 +2687,19 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         connect(geoBox, &QGroupBox::toggled, geometryForm, &QWidget::setVisible);
         lv->addWidget(geoBox);
     }
-    lv->addWidget(new QLabel(tr("Fixtures on this object:"), left));
+    lv->addWidget(new QLabel(kind == 2 ? tr("Fixtures and bars on this object:")
+                                       : tr("Fixtures on this object:"), left));
     QTreeWidget *tree = new QTreeWidget(left);
     tree->setHeaderHidden(true);
+    // Sharing the column with the (often ten-plus-row) Geometry form above it,
+    // this tree had no floor: on a modestly sized window it could be squeezed
+    // down to one or two visible rows, silently scrolling anything past the
+    // first few fixtures -- including a truss's own "Bars" section -- out of
+    // view with no visual hint that there was more below the fold ("still no
+    // truss .. this time iterate until you can prove its on that screen": it
+    // was there, just scrolled off). A floor forces the SPLITTER/dialog to
+    // give up space instead of the list quietly disappearing.
+    tree->setMinimumHeight(160);
     tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     tree->setContextMenuPolicy(Qt::CustomContextMenu);
     // F2 renames a group folder (double-click is taken by open-head-layout).
@@ -2884,6 +2903,16 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                             "it upstage. Angle above turns it flat within its "
                             "face instead."));
     inspForm->addRow(tr("Tilt:"), tiltSpin);
+
+    /* A bar's own quick field: everything else it has (Face/Standoff/Run/
+     * Lock) is one click away via fullBtn below, same division of labour as
+     * a fixture's own mini-fields + Full-properties button. Range set once
+     * real bar data arrives (populateBar()) — a parent truss's length isn't
+     * known yet here. */
+    QDoubleSpinBox *barAlongSpin = new QDoubleSpinBox(insp);
+    barAlongSpin->setDecimals(2);
+    inspForm->addRow(tr("Along truss:"), barAlongSpin);
+
     iv->addLayout(inspForm);
     QPushButton *fullBtn = new QPushButton(tr("Full properties…"), insp);
     iv->addWidget(fullBtn);
@@ -2894,23 +2923,35 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     // workspace, so a 0 "nothing selected" sentinel silently dropped every
     // inspector edit made to it.
     auto curFid = QSharedPointer<quint32>::create(Fixture::invalidId());
-    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, tiltSpin, mountCombo, fullBtn, inspForm, mountOnLbl]() {
+    // Truss::invalidId() (UINT_MAX) — a bar is a Truss, not a Fixture, so it
+    // needs its own "nothing selected" slot alongside curFid, not to share it.
+    auto curBarId = QSharedPointer<quint32>::create(UINT_MAX);
+    // Shared by every field in this panel, fixture or bar: show/hide a row
+    // (and its label) as one unit, so the panel only ever displays what is
+    // actually relevant to whichever of curFid/curBarId is currently set.
+    auto row = [inspForm](QWidget *w, bool vis) {
+        w->setVisible(vis);
+        if (QWidget *l = inspForm->labelForField(w)) l->setVisible(vis);
+    };
+    auto populate = [this, curFid, curBarId, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, tiltSpin, mountCombo, fullBtn, mountOnLbl, barAlongSpin, row]() {
+        row(barAlongSpin, false);   // this panel is never showing a bar AND a fixture
         const quint32 fid = *curFid;
         Fixture *fx = (fid != Fixture::invalidId()) ? m_doc->fixture(fid) : nullptr;
         const bool have = (fx != nullptr);
         const bool frame = have && (m_props->fixtureFrameGroup(fid) != 0);
         const bool linear = have && isLinearFixture(fx);   // strip / bar / tape
-        inspTitle->setText(have ? fx->name() : tr("(no fixture selected)"));
+        inspTitle->setText(have ? fx->name()
+                           : (*curBarId != UINT_MAX) ? QString()   // populateBar() sets it
+                           : tr("(no fixture selected)"));
+        if (*curBarId != UINT_MAX)
+            return;   // a bar is selected instead — populateBar() owns the panel
         mountOnLbl->setText(have ? mountDescription(m_props->fixtureRigProps(fid), fid)
                                  : QString("—"));
+        row(gelBtn, true); row(placeCombo, true); row(tiltSpin, true);
         gelBtn->setEnabled(have); fullBtn->setEnabled(have);
         // Show the RELEVANT controls per fixture type: Orientation for a body with
         // a base (movers, pars); Face + Angle ("which way it runs") for a linear
         // strip/bar, and for any frame-group member.
-        auto row = [inspForm](QWidget *w, bool vis) {
-            w->setVisible(vis);
-            if (QWidget *l = inspForm->labelForField(w)) l->setVisible(vis);
-        };
         // A tower-shelf fixture is oriented ON the shelf (upright) or UNDER it
         // (hung) — Orientation, not Face/Angle, regardless of head count.
         const bool onTower = have && (m_props->fixtureRigProps(fid).towerId != Tower::invalidId());
@@ -2936,8 +2977,77 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     };
     populate();
 
+    /* The bar half of the same panel: "when I select it .. it doesn't
+       hilight nor does the right side change to the bar data." A bar is a
+       Truss, not a Fixture — none of the fixture-specific fields above mean
+       anything for one, so this hides all of them and shows just the one
+       field a bar actually has that's worth editing inline (its position
+       along the parent); everything else (Face/Standoff/Run/Lock/rename)
+       is one click away via fullBtn, same division of labour as a fixture's
+       own mini-fields + Full-properties button. */
+    auto populateBar = [this, curFid, curBarId, inspTitle, mountOnLbl, fullBtn, barAlongSpin, row,
+                        gelBtn, mountCombo, faceCombo, placeCombo, angleSpin, tiltSpin]() {
+        const quint32 barId = *curBarId;
+        Truss *bar = (barId != UINT_MAX) ? m_props->truss(barId) : nullptr;
+        const bool have = (bar != nullptr);
+        row(gelBtn, false); row(mountCombo, false); row(faceCombo, false);
+        row(placeCombo, false); row(angleSpin, false); row(tiltSpin, false);
+        row(barAlongSpin, have);
+        fullBtn->setEnabled(have);
+        if (!have)
+        {
+            if (*curFid == Fixture::invalidId())
+            {
+                inspTitle->setText(tr("(no fixture selected)"));
+                mountOnLbl->setText(QString("—"));
+            }
+            return;
+        }
+        inspTitle->setText(bar->name());
+        Truss *parent = m_props->truss(bar->parentTrussId());
+        const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+        const double toDisp = isFeet ? 3.28084 : 1.0;
+        mountOnLbl->setText(parent ? tr("Truss %1").arg(parent->name()) : QString("—"));
+        barAlongSpin->blockSignals(true);
+        barAlongSpin->setSuffix(isFeet ? tr(" ft") : tr(" m"));
+        barAlongSpin->setRange(0.0, parent ? double(parent->length()) * toDisp : 100.0);
+        barAlongSpin->setValue(double(bar->parentOffset()) * toDisp);
+        // The bar's OWN lock only, same reasoning as dragBarTo() -- a bar is
+        // its own structural object, not a fixture attached to one; the main
+        // 2D plot already evaluates a bar's drag-lock this way, never off
+        // its parent's.
+        barAlongSpin->setEnabled(!bar->locked());
+        barAlongSpin->blockSignals(false);
+    };
+    populateBar();
+
     connect(view, &StructureStudioView::fixtureSelected, insp,
-            [curFid, populate](quint32 fid){ *curFid = fid; populate(); });
+            [curFid, curBarId, populate, populateBar](quint32 fid){
+                *curFid = fid; *curBarId = UINT_MAX; populate(); populateBar();
+            });
+    connect(view, &StructureStudioView::barSelected, insp,
+            [curFid, curBarId, populate, populateBar](quint32 barId){
+                // populate() FIRST: it unconditionally hides barAlongSpin's row
+                // as its very first line (the two panels must never show
+                // together), so populateBar() has to run LAST to be the one
+                // that actually leaves it showing.
+                *curBarId = barId; *curFid = Fixture::invalidId(); populate(); populateBar();
+            });
+    connect(barAlongSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
+            [this, curBarId, view](double v) {
+        if (*curBarId == UINT_MAX) return;
+        Truss *bar = m_props->truss(*curBarId);
+        if (bar == nullptr) return;
+        Truss *parent = m_props->truss(bar->parentTrussId());
+        if (parent == nullptr || bar->locked()) return;
+        const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+        const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+        bar->setParentOffset(qBound(0.0f, float(v * fromDisp), parent->length()));
+        m_props->recomputeChildTrusses();
+        m_doc->setModified();
+        if (view) view->reload();
+        m_graphicsView->updateTrusses();
+    });
     connect(gelBtn, &QPushButton::clicked, insp, [this, curFid, view, populate]() {
         if (*curFid == Fixture::invalidId()) return;
         const QColor c = QColorDialog::getColor(m_props->fixtureGelColor(*curFid, 0, 0),
@@ -2988,12 +3098,22 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         rp.mountingType = static_cast<Truss::MountingType>(mountCombo->currentData(Qt::UserRole).toInt());
         const int side = mountCombo->currentData(Qt::UserRole + 1).toInt();
         if (side >= 0) rp.trussMountSide = side;   // on-top / under / centred on a bar
+        // Same stray-default fix as the full properties dialog: a mover/PAR
+        // has no Face control here either, so nothing else ever moves
+        // studioMount off Front/face for it.
+        m_props->repairMountPlane(rp);
         m_props->setFixtureRigProps(*curFid, rp);
         m_graphicsView->updateFixture(*curFid);
         if (view) view->reload();
     });
     connect(fullBtn, &QPushButton::clicked, insp,
-            [this, curFid]() { if (*curFid) editFixtureProperties(*curFid); });
+            [this, curFid, curBarId]() {
+        // *curFid alone was wrong for fixture id 0 (a real, valid id — see
+        // the Fixture::invalidId() note above) — it silently did nothing for
+        // the very first fixture in any workspace.
+        if (*curBarId != UINT_MAX) slotEditTruss(*curBarId);
+        else if (*curFid != Fixture::invalidId()) editFixtureProperties(*curFid);
+    });
 
     body->addWidget(left);
     body->addWidget(center);
@@ -3003,7 +3123,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     body->setStretchFactor(2, 0);
 
     // ---- Fixture tree: group folders → fixtures, with selection sync -------
-    auto rebuildTree = [this, tree, view]() {
+    auto rebuildTree = [this, tree, view, kind, id]() {
         tree->blockSignals(true);
         tree->clear();
         // The fixtures on THIS object — a fixture group counts as "local" only if
@@ -3053,6 +3173,30 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             QTreeWidgetItem *it = new QTreeWidgetItem(parent, QStringList(fx ? fx->name() : QString::number(fid)));
             it->setData(0, Qt::UserRole, fid);
         }
+        /* A bar hung on THIS truss is a child Truss, not a fixture, so it never
+           shows up above -- mountedFixtures() only walks m_doc->fixtures(). Left
+           out entirely, a bar just added here had nowhere in this editor to
+           appear or be positioned ("truss on T1 is STILL not part of T1 .. it
+           should show up in the truss editor as something I can place"), even
+           though the data model already has it correctly parented. List it here
+           too, under its own heading, double-click opening its own editor
+           (slotEditTruss) where its face/along-truss/lock fields actually live. */
+        if (kind == 2)
+        {
+            QTreeWidgetItem *barsNode = nullptr;
+            foreach (Truss *t, m_props->trusses())
+            {
+                if (t == nullptr || t->parentTrussId() != id)
+                    continue;
+                if (!barsNode)
+                {
+                    barsNode = new QTreeWidgetItem(tree, QStringList(tr("Bars")));
+                    barsNode->setExpanded(true);
+                }
+                QTreeWidgetItem *it = new QTreeWidgetItem(barsNode, QStringList(t->name()));
+                it->setData(0, Qt::UserRole + 2, t->id());
+            }
+        }
         tree->blockSignals(false);
     };
     rebuildTree();
@@ -3060,16 +3204,23 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     auto rebuildSource = []() {};   // drag-source panel retired (right-click adds)
 
     // Tree selection → highlight on the canvas + populate the inspector.
-    connect(tree, &QTreeWidget::itemSelectionChanged, tree, [tree, view, curFid, populate]() {
+    connect(tree, &QTreeWidget::itemSelectionChanged, tree,
+            [tree, view, curFid, curBarId, populate, populateBar]() {
         QList<quint32> ids;
+        quint32 barId = UINT_MAX;
         foreach (QTreeWidgetItem *it, tree->selectedItems())
         {
             const quint32 fid = studioRowFid(it);
-            if (fid != Fixture::invalidId()) ids << fid;
+            if (fid != Fixture::invalidId()) { ids << fid; continue; }
+            if (barId == UINT_MAX)   // first bar row wins; a bar has no multi-select drag
+                barId = studioRowBarId(it);
         }
         view->setHighlight(ids);
+        view->setBarHighlight(ids.isEmpty() ? barId : UINT_MAX);
         *curFid = ids.isEmpty() ? Fixture::invalidId() : ids.first();
+        *curBarId = ids.isEmpty() ? barId : UINT_MAX;
         populate();
+        populateBar();
     });
     // Canvas click → select the matching tree row.
     connect(view, &StructureStudioView::fixtureSelected, tree, [tree](quint32 fid) {
@@ -3077,6 +3228,14 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         tree->clearSelection();
         QTreeWidgetItemIterator it(tree);
         while (*it) { if (studioRowFid(*it) == fid) { (*it)->setSelected(true); } ++it; }
+        tree->blockSignals(false);
+    });
+    // Same, for a bar clicked on the canvas.
+    connect(view, &StructureStudioView::barSelected, tree, [tree](quint32 barId) {
+        tree->blockSignals(true);
+        tree->clearSelection();
+        QTreeWidgetItemIterator it(tree);
+        while (*it) { if (studioRowBarId(*it) == barId) { (*it)->setSelected(true); } ++it; }
         tree->blockSignals(false);
     });
     // Rename a group folder (F2 or right-click Rename) → update the fixture group.
@@ -3092,10 +3251,14 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             m_doc->setModified();
         }
     });
-    // Double-click a tree fixture → edit it; a GROUP folder → its head-layout grid.
+    // Double-click a tree fixture → edit it; a bar → its own truss editor
+    // (face/along-truss/lock live there, not in this one); a GROUP folder →
+    // its head-layout grid.
     connect(tree, &QTreeWidget::itemDoubleClicked, tree, [this](QTreeWidgetItem *it, int) {
         const quint32 fid = studioRowFid(it);
         if (fid != Fixture::invalidId()) { editFixtureProperties(fid); return; }
+        const quint32 barId = studioRowBarId(it);
+        if (barId != Truss::invalidId()) { slotEditTruss(barId); return; }
         const quint32 gid = it->data(0, Qt::UserRole + 1).toUInt();
         if (gid != 0) openGroupLayout(gid);
     });
@@ -3190,10 +3353,19 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             [this](quint32 fid){ editFixtureProperties(fid); });
     connect(view, &StructureStudioView::fixtureMoved, body,
             [this](quint32 fid){ m_graphicsView->updateFixture(fid); });
+    // Double-click a bar on the canvas → its own editor (Along truss/Face/Lock
+    // live there, not in this one) — same target slotEditTruss() already
+    // reaches from the sidebar tree's own double-click.
+    connect(view, &StructureStudioView::barActivated, body,
+            [this](quint32 barId){ slotEditTruss(barId); });
+    // Dragged a bar on the canvas → sync the main 2D plot's truss item.
+    connect(view, &StructureStudioView::barMoved, body,
+            [this](quint32){ m_graphicsView->updateTrusses(); });
     connect(addBarBtn, &QPushButton::clicked, body,
             [this, kind, id, view, rebuildSource]() { studioAddBar(kind, id, view); rebuildSource(); });
     // Keep the trees in sync after canvas-side edits.
     connect(view, &StructureStudioView::fixtureMoved, body, [rebuildTree](quint32){ rebuildTree(); });
+    connect(view, &StructureStudioView::barMoved, body, [rebuildTree](quint32){ rebuildTree(); });
     // A boom resized on the canvas → redraw it (and its fixtures) on the 2D map.
     connect(view, &StructureStudioView::structureChanged, body,
             [this, refreshMap]() { m_graphicsView->updatePlatforms(); refreshMap(); });
@@ -3700,6 +3872,14 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
             if (m_layersPanel) m_layersPanel->reload();
             m_doc->setModified();
             if (view) view->reload();
+            /* A bar is a child Truss, not a fixture -- this Structure Studio
+               editor's tree/canvas only knows about mounted fixtures
+               (StructureStudioView::mountedFixtures() walks m_doc->fixtures(),
+               never Truss::parentTrussId()), so a bar just added here has
+               nowhere in THIS editor to appear or be positioned. Open the
+               truss editor on it directly, exactly as slotAddBarToTruss()
+               already does for the tree's own "Add bar" action. */
+            slotEditTruss(barId);
         }
         return;
     }
@@ -6534,7 +6714,9 @@ void Monitor::slotEditTruss(quint32 tid)
 
     Q_UNUSED(isVertical)
     vl->addWidget(bodyPane, 1);
-    editDlg.resize(960, 580);
+    // Tall enough that the Geometry form's ten-plus rows and the fixtures/bars
+    // list below it don't have to fight each other for space by default.
+    editDlg.resize(960, 700);
 
     QDialogButtonBox *btns = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &editDlg);
@@ -6618,19 +6800,19 @@ void Monitor::slotEditTruss(quint32 tid)
         m_props->recomputeStandMounts();
     }
 
-    // Child-bar positions (from any bars added via the canvas) still round-trip
-    // through the strip's slots; fixtures are placed in the canvas now, so we no
-    // longer write fixture offsets here (that would clobber a canvas drag).
-    for (const TrussStripWidget::Slot &s : strip->placements())
-    {
-        if (s.barTrussId != Truss::invalidId())
-            if (Truss *bar = m_props->truss(s.barTrussId))
-            {
-                bar->setParentOffset(s.offset);
-                bar->setBarCrossShift(s.barCross);
-            }
-    }
-    m_props->recomputeChildTrusses();   // bars re-derive origin
+    /* Child-bar positions used to round-trip through the strip's slots on OK
+       -- fine while the (now permanently hidden) strip was the only way to
+       move one. It is not anymore: a bar dragged on the canvas
+       (StructureStudioView::dragBarTo()) already writes straight to the live
+       Truss the moment you drag it, same as a fixture always has. Reading
+       strip->placements() here unconditionally OVERWROTE that with
+       whatever offset the bar had when this dialog first opened -- so a
+       canvas drag looked like it worked (it moved on screen immediately)
+       right up until OK silently put it back ("moving the bar to the top of
+       the truss didn't save its vertical position"). recomputeChildTrusses()
+       still runs, in case this dialog's OWN fields (Length/Width/Origin —
+       T-1's own geometry, which a bar's derived position depends on) changed. */
+    m_props->recomputeChildTrusses();   // bars re-derive origin from THIS truss's own edits
 
     // followParentTrusses() redraws trusses AND re-derives/repositions any child
     // bars (and their fixtures) — needed when the edited truss is a bar's parent.
@@ -7995,6 +8177,14 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());
     newRp.panInvert     = panInvertCb->isChecked();
     newRp.tiltInvert    = tiltInvertCb->isChecked();
+    // A mover/PAR has no Face control (only a linear fixture does, below) to
+    // ever move studioMount off its stray Front/face default, so a fixture
+    // just mounted here onto a horizontal truss/pipe/deck renders standing
+    // upright no matter what Orientation says ("fixture set as underhung ..
+    // visually upright"). Apply the same correction the load path applies,
+    // right now, so the canvas reflects THIS mount immediately; an explicit
+    // Face choice below (linear fixtures only) still overrides it.
+    m_props->repairMountPlane(newRp);
     if (faceCbDetail)    newRp.setStudioMount(faceCbDetail->currentIndex());
     if (angleSpinDetail) newRp.studioAngle = float(angleSpinDetail->value());
     if (tiltSpinDetail)  newRp.studioTilt  = float(tiltSpinDetail->value());

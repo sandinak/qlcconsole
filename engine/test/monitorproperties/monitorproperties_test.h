@@ -44,6 +44,19 @@ private slots:
     /** ...and setting the plane carries the face with it, so the repair above
      *  never has a legitimate edit to undo. */
     void settingAFaceTakesTheRiserFaceWithIt();
+    /** A deck mount has exactly one surface, the platform's top -- unlike a
+     *  riser it has no second face to legitimately disagree with, so a stray
+     *  default (studioMount left at 1, "front face") is always wrong and is
+     *  always corrected to 0 on load. */
+    void deckMountAlwaysDrawsOnTop();
+    /** A truss/pipe mount has the same stray Front/face default a deck mount
+     *  does, but which plane is actually correct depends on which way the
+     *  thing runs -- a fixture on a HORIZONTAL truss/bar gets the same Top
+     *  correction a deck fixture does; one on a VERTICAL truss/tower is
+     *  already right at the default and must be left alone. Also covers the
+     *  live, no-reload path: a dialog committing a fresh mount must apply
+     *  the same correction immediately, not only on the next file load. */
+    void trussMountPlaneMatchesWhichWayItRuns();
     void stageOrigin();
     void imagesXmlRoundTrip();
     void childBarFollowsParent();

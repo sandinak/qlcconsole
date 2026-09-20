@@ -146,6 +146,8 @@ public:
 
     /** Ring-highlight a set of fixtures (driven by the tree selection). */
     void setHighlight(const QList<quint32> &ids);
+    /** Ring-highlight a single bar (or clear it with UINT_MAX == Truss::invalidId()). */
+    void setBarHighlight(quint32 barId);
 
     /** Assign @p ids to the CURRENT view's face (Top/Front/Side): set their
      *  studioMount and pin them to that face surface. Empty = all mounted. */
@@ -183,7 +185,16 @@ signals:
      *  should refresh the 2D map. */
     void structureChanged();
 
+    /** A bar hung on this truss was double-clicked -- its own editor (Along
+     *  truss / Face / Lock) lives elsewhere, this just says which bar. */
+    void barActivated(quint32 barId);
+    /** A bar was single-clicked (selection, for tree-highlight sync). */
+    void barSelected(quint32 barId);
+    /** A bar was dragged to a new offset along its parent. */
+    void barMoved(quint32 barId);
+
 protected:
+    bool event(QEvent *) override;
     void paintEvent(QPaintEvent *) override;
     void resizeEvent(QResizeEvent *) override;
     void wheelEvent(QWheelEvent *) override;
@@ -200,9 +211,20 @@ private:
     QPointF project(const QVector3D &w) const;      ///< world → in-plane (a,b) metres
     QPointF w2s(const QVector3D &w) const;           ///< world → screen pixels
     QPointF screenToPlane(const QPointF &px) const;  ///< screen pixels → in-plane (a,b) metres
+    /** Rescale to targetScale, keeping the plane point under `anchor` (screen
+     *  pixels) fixed on screen -- the one anchor-at-cursor zoom math, shared by
+     *  the scroll wheel and native trackpad pinch so the two can never drift
+     *  out of step with each other. Clamped to the same [4, 4000] range either
+     *  caller already enforced individually. */
+    void zoomAt(const QPointF &anchor, double targetScale);
     /** Remap a dragged fixture's mount param from a screen point (edits pipe
      *  offset / tower U-V-shelf / truss offset in place). Returns true if moved. */
     bool dragFixtureTo(quint32 fid, const QPointF &px);
+    /** Same idea as dragFixtureTo(), but for a bar hung on this truss: the
+     *  drag's component along the PARENT truss's own run becomes the bar's
+     *  new parentOffset. Refuses on a locked parent/bar or in Angled, same
+     *  reasoning as the fixture path. */
+    bool dragBarTo(quint32 barId, const QPointF &px);
     void refit();                                    ///< scale/centre to fit everything
     void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame
     void collectPointsFor(QList<QVector3D> &pts, Kind kind, quint32 id) const;
@@ -212,6 +234,13 @@ private:
     void drawGrid(QPainter &p) const;
     void drawStructure(QPainter &p) const;
     void drawOneStructure(QPainter &p, Kind kind, quint32 id) const;
+    /** Every bar hung on @p parentId, each just another drawOneStructure(Truss)
+     *  call. In Angled this is called from inside drawOneStructure() itself
+     *  (depth-sorted, so call order doesn't matter); in a flat plane it is
+     *  called separately, AFTER fixtures, so a bar is never hidden behind one
+     *  ("truss visible .. but behind fixtures .. shouldn't be the case") --
+     *  flat planes are plain painter's-algorithm, last drawn wins. */
+    void drawChildBars(QPainter &p, quint32 parentId) const;
 
     /** Distance from the eye, for back-to-front face ordering (Angled only). */
     double viewDepth(const QVector3D &w) const;
@@ -323,6 +352,31 @@ private:
     QByteArray valuesForDrawing(class Fixture *fx, bool *complete = nullptr) const;
     mutable QHash<quint32, QByteArray> m_liveSnapshot;
 
+    /** Fixtures whose physical body overlaps another fixture's -- rigged in
+     *  the same physical space, whether that is two heads stacked on the same
+     *  truss offset or a deck fixture dragged into another one's footprint.
+     *  Recomputed every frame (see rebuildOverlapWarnings()): cheap, since it
+     *  is N^2 simple box comparisons, not the per-fixture palette resolution
+     *  that per-frame work elsewhere in this view has to avoid. */
+    void rebuildOverlapWarnings() const;
+    mutable QSet<quint32> m_overlappingFixtures;
+    /** The edge colour a fixture body/beam-stub draws with: the usual
+     *  contrast-safe tint, or a flat warning colour when it overlaps another
+     *  fixture's -- unmistakable and independent of either fixture's own
+     *  colour, which an overlap warning has to be to read as a warning at
+     *  all rather than as an odd shade of whatever the fixture already is. */
+    QColor overlapAwareEdgeColor(quint32 fid, const QColor &base) const;
+
+    /** Whether fid's PERSISTED locks -- layout, its layer, its group chain, or
+     *  the truss/pipe/tower/platform it is mounted on -- forbid moving it.
+     *  This is separate from m_locked (this dialog's own throwaway 🔒/🔓
+     *  toggle): a fixture tied to a truss that was locked in the Layers panel
+     *  or the truss's own context menu used to stay draggable here regardless,
+     *  because dragFixtureTo() never looked past m_locked at any of the real,
+     *  saved lock state ("if I have a fixture tied to a truss and the truss
+     *  is locked .. I can still move it from the studio view"). */
+    bool fixtureMovementLocked(quint32 fid) const;
+
     /** Unit vector from the scene toward the camera, taken from viewDepth()'s
      *  own gradient so there is no second copy of the projection to drift. */
     QVector3D toViewer() const;
@@ -357,6 +411,9 @@ private:
     double structureCentreA() const;           ///< plane-horizontal centre of the structure (metres)
     double structureTopZ() const;              ///< highest point of the structure (metres, for the max marker)
     quint32 hitTestFixture(const QPointF &px) const;
+    /** Nearest bar hung on THIS truss (Truss::invalidId() if none/not close
+     *  enough), same "distance to the drawn shape" reasoning as hitTestFixture(). */
+    quint32 hitTestBar(const QPointF &px) const;
 
     /** In-plane (a,b) -> screen offset, and back, with the view rotation
      *  applied. Every world<->pixel path goes through these two. */
@@ -563,12 +620,14 @@ private:
     bool     m_panning = false;
     QPointF  m_panLast;
     quint32  m_dragFid = Fixture::invalidId();   ///< fixture being dragged
+    quint32  m_dragBarId = UINT_MAX;             ///< bar being dragged (== Truss::invalidId())
     bool     m_dragged = false;
     quint32  m_resizeBoom = 0; ///< +1 boom id whose top is being dragged (0 = none)
     QPointF  m_cursorPx;       ///< last pointer position (for the ruler readout)
     bool     m_hasCursor = false;
     bool     m_locked = true;   ///< movement prevented until unlocked
     QSet<quint32> m_highlight;  ///< ring-highlighted fixtures (tree selection)
+    quint32  m_selectedBarId = UINT_MAX;  ///< highlighted bar (canvas/tree selection)
 };
 
 /** @} */

@@ -387,6 +387,124 @@ void MonitorProperties_Test::riserFaceAndDrawingPlaneCannotDisagree()
     QCOMPARE(mp2.fixtureRigProps(8).studioAngle, 90.0f);
 }
 
+void MonitorProperties_Test::deckMountAlwaysDrawsOnTop()
+{
+    /* "front view of UST1 is STILL putting it off the platform .. when the
+       top view shows it's clearly entirely on the platform." Deck mounting
+       (deckPlatformId, not the riser's face+U/V) never gets a repair pass the
+       way riser mounts do, so a fixture dropped onto a deck through any path
+       that does not touch the Face combo keeps studioMount at its general
+       default of 1 (Front/face). fixtureBoxCorners() then builds its box on
+       the front-face axes -- seated along world Y, not lifted along Z -- so
+       Top (X-Y) still looks right while Front (X-Z) shows it straddling the
+       deck instead of standing on it. */
+    MonitorProperties mp;
+    StagePlatform *p = mp.addPlatform();
+    p->setOriginX(2); p->setOriginY(3); p->setWidth(4); p->setDepth(1); p->setHeight(0.8f);
+
+    // UST1: dropped on the deck, never walked through the Face combo -- left
+    // at FixtureRigProps' general default (1, Front/face).
+    mp.setFixturePosition(10, 0, 0, QVector3D(3000, 3000, 0));
+    FixtureRigProps ust1;
+    ust1.deckPlatformId = p->id();
+    QCOMPARE(ust1.studioMount, 1);              // the default this bug relies on
+    mp.setFixtureRigProps(10, ust1);
+
+    // A second deck fixture, deliberately drawn on its Side (2) -- a genuine
+    // choice, not the stray default, and must survive unlike Top vs Front.
+    mp.setFixturePosition(11, 0, 0, QVector3D(3200, 3000, 0));
+    FixtureRigProps sideDeck;
+    sideDeck.deckPlatformId = p->id();
+    sideDeck.studioMount = 2;
+    mp.setFixtureRigProps(11, sideDeck);
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            mp2.loadXML(reader, nullptr);
+
+    QCOMPARE(mp2.fixtureRigProps(10).studioMount, 0);   // corrected to Top
+    QCOMPARE(mp2.fixtureRigProps(11).studioMount, 2);   // a real choice: untouched
+}
+
+void MonitorProperties_Test::trussMountPlaneMatchesWhichWayItRuns()
+{
+    /* "fixture set as underhung .. visually upright": a mover/PAR mounted on
+       a horizontal bar has no Face control anywhere in the UI to ever move
+       studioMount off its stray default of 1 (Front/face), so
+       fixtureFrame() keeps building it on the front-face axes no matter
+       what Orientation (mountingType) says -- the sign-flip that
+       Underhung/On-top apply on top of that frame can't fix an already
+       wrong base frame. */
+    MonitorProperties mp;
+    Truss *bar = mp.addTruss();
+    bar->setType(Truss::Horizontal);
+
+    Truss *tower = mp.addTruss();
+    tower->setType(Truss::Vertical);
+
+    // Underhung on the bar, never walked through a Face combo -- left at the
+    // general default.
+    mp.setFixturePosition(20, 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps hung;
+    hung.trussId = bar->id();
+    hung.mountingType = Truss::TopHung;
+    QCOMPARE(hung.studioMount, 1);              // the default this bug relies on
+    mp.setFixtureRigProps(20, hung);
+
+    // A second bar fixture, deliberately drawn on its Side (2) -- a genuine
+    // choice, must survive.
+    mp.setFixturePosition(21, 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps sideBar;
+    sideBar.trussId = bar->id();
+    sideBar.studioMount = 2;
+    mp.setFixtureRigProps(21, sideBar);
+
+    // Mounted straight on a VERTICAL tower/truss instead: the default is
+    // already the right plane (this is why T1-B1/T1-B2-style direct tower
+    // mounts render correctly with no repair at all) -- must be untouched.
+    mp.setFixturePosition(22, 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps onTower;
+    onTower.trussId = tower->id();
+    onTower.mountingType = Truss::SideArm;
+    QCOMPARE(onTower.studioMount, 1);
+    mp.setFixtureRigProps(22, onTower);
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            mp2.loadXML(reader, nullptr);
+
+    QCOMPARE(mp2.fixtureRigProps(20).studioMount, 0);   // corrected to Top
+    QCOMPARE(mp2.fixtureRigProps(21).studioMount, 2);   // a real choice: untouched
+    QCOMPARE(mp2.fixtureRigProps(22).studioMount, 1);   // vertical: already right
+
+    // The live, no-reload path: a dialog committing a fresh mount onto the
+    // horizontal bar must get the same correction applied immediately
+    // (repairMountPlane(), the single-fixture half of the load-time pass),
+    // not only after the next save/load round-trip.
+    FixtureRigProps live;
+    live.trussId = bar->id();
+    live.mountingType = Truss::TopHung;
+    QCOMPARE(live.studioMount, 1);
+    mp.repairMountPlane(live);
+    QCOMPARE(live.studioMount, 0);
+}
+
 void MonitorProperties_Test::settingAFaceTakesTheRiserFaceWithIt()
 {
     MonitorProperties mp;

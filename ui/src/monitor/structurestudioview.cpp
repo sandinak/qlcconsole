@@ -12,6 +12,7 @@
 #include <QPainter>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QNativeGestureEvent>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QContextMenuEvent>
@@ -127,6 +128,12 @@ void StructureStudioView::reload()
 void StructureStudioView::setHighlight(const QList<quint32> &ids)
 {
     m_highlight = QSet<quint32>(ids.begin(), ids.end());
+    update();
+}
+
+void StructureStudioView::setBarHighlight(quint32 barId)
+{
+    m_selectedBarId = barId;
     update();
 }
 
@@ -322,6 +329,13 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
        fixture somewhere the operator did not ask for, refuse -- selection still
        works, and Top/Front/Side are one click away for the actual edit. */
     if (m_plane == Angled)
+        return false;
+
+    /* A saved lock -- the truss/pipe/tower/platform this fixture rides, its
+       layer, its group, or the whole layout -- has to win here and not just
+       at the mouse handler, or any other caller (and any other test) gets to
+       ignore it too. See fixtureMovementLocked(). */
+    if (fixtureMovementLocked(fid))
         return false;
 
     MonitorProperties *props = m_doc->monitorProperties();
@@ -603,6 +617,86 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
 
     props->setFixturePosition(fid, 0, 0,
                               QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z()));
+    return true;
+}
+
+bool StructureStudioView::dragBarTo(quint32 barId, const QPointF &px)
+{
+    if (m_plane == Angled)
+        return false;                    // same "no honest inverse" as fixtures
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *bar = props->truss(barId);
+    if (bar == nullptr || !bar->isChildBar())
+        return false;
+    Truss *parent = props->truss(bar->parentTrussId());
+    if (parent == nullptr)
+        return false;
+    /* The bar's OWN lock only -- NOT its parent's. A bar is a structural
+       object in its own right, not a simple attachment like a fixture: the
+       main 2D plot already treats a bar's own TrussItem::locked() as the
+       whole story for whether IT drags (monitorgraphicsview.cpp's
+       refreshItemLayerState(), the Trusses block), never consulting its
+       parent. Locking T-1 protects T-1's own geometry; it says nothing about
+       whether a bar hung on it can still be repositioned, and inheriting the
+       parent's lock here made every bar on this rig's four (deliberately
+       locked) main trusses permanently unmovable regardless of the bar's
+       own, unlocked state. */
+    if (bar->locked())
+        return false;
+
+    const QVector3D cur = bar->origin();
+    const QPointF ab = screenToPlane(px);
+    QVector3D w = cur;
+    if (m_plane == Top)        { w.setX(float(ab.x())); w.setY(float(ab.y())); }
+    else if (m_plane == Front) { w.setX(float(ab.x())); w.setZ(float(ab.y())); }
+    else                       { w.setY(float(ab.x())); w.setZ(float(ab.y())); }
+    const QVector3D dw = w - cur;
+
+    // Along the PARENT's own run -- same axis convention as a fixture's own
+    // trussOffset drag (structurestudioview.cpp, dragFixtureTo()'s truss
+    // branch): vertical run -> Z, horizontal run -> its own direction().
+    QVector3D axis;
+    if (parent->type() == Truss::Vertical)
+    {
+        axis = QVector3D(0.0f, 0.0f, 1.0f);
+    }
+    else
+    {
+        const QPointF d = parent->direction();
+        const double dl = std::hypot(d.x(), d.y());
+        if (dl < 1e-9)
+            return false;
+        axis = QVector3D(float(d.x() / dl), float(d.y() / dl), 0.0f);
+    }
+    bar->setParentOffset(qBound(0.0f, bar->parentOffset() + QVector3D::dotProduct(dw, axis),
+                                parent->length()));
+
+    /* Across the run -- "more on one side than the other" (barCrossShift,
+       "shift along the run (0 = centred)", see
+       MonitorProperties::recomputeChildTrusses(): newOrigin = base - runVec *
+       (length/2 - barCrossShift), so +runVec is +barCrossShift). Only means
+       anything for a bar that actually lies across a face (Along/Across);
+       one that drops straight down a face (RunDrop) has no "side" to shift
+       along -- recomputeChildTrusses() never reads barCrossShift for that
+       case either, so applying it there would silently do nothing anyway.
+       bar->direction() is already this bar's own current world run
+       direction (recomputeChildTrusses() sets it), so there is no need to
+       re-derive it from barFace/barRun by hand here. */
+    if (bar->barRun() != Truss::RunDrop)
+    {
+        const QPointF d = bar->direction();
+        const double dl = std::hypot(d.x(), d.y());
+        if (dl > 1e-9)
+        {
+            const QVector3D cross(float(d.x() / dl), float(d.y() / dl), 0.0f);
+            const float span = qMax(0.05f, bar->length());
+            bar->setBarCrossShift(qBound(-span, bar->barCrossShift() + QVector3D::dotProduct(dw, cross),
+                                         span));
+        }
+    }
+
+    props->recomputeChildTrusses();
     return true;
 }
 
@@ -1634,6 +1728,76 @@ double StructureStudioView::boxNearFaceDepth(const QVector3D corner[8]) const
     return best;
 }
 
+/* A fixture body's edge/highlight colour, readable against the dark canvas
+ * regardless of how dark the fixture's own gel/body colour is.
+ *
+ * QColor::lighter() scales multiplicatively, which does nothing useful
+ * starting from near-black -- and a black housing is exactly the fixture
+ * body colour most likely to be set, since plenty of real fixtures ARE
+ * black. col.lighter(150) on near-black stays near-black, and a mover
+ * rendered in its own near-invisible outline was unreadable against the
+ * canvas ("hard to see some fixtures on the dark background"). Adding a
+ * fixed offset instead of a multiplier brightens a dark colour by a
+ * meaningful, visible amount while still tracking the base colour's hue for
+ * an already-bright fixture. */
+static QColor fixtureEdgeColor(const QColor &base)
+{
+    return QColor(qMin(255, base.red() + 140),
+                  qMin(255, base.green() + 140),
+                  qMin(255, base.blue() + 140),
+                  base.alpha());
+}
+
+QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &base) const
+{
+    static const QColor kOverlapWarning(255, 70, 40);
+    return m_overlappingFixtures.contains(fid) ? kOverlapWarning : fixtureEdgeColor(base);
+}
+
+bool StructureStudioView::fixtureMovementLocked(quint32 fid) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr)
+        return false;
+    if (props->layoutLocked())
+        return true;
+    if (props->layer(props->fixtureLayer(fid)).locked)
+        return true;
+    if (props->groupChainLocked(props->fixtureGroup(fid)))
+        return true;
+
+    // The thing it's actually bolted to -- a truss lock has to reach the
+    // fixture riding it, the same way it already reaches the truss itself
+    // on the main plot.
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    if (rp.trussId != Truss::invalidId())
+    {
+        if (Truss *t = props->truss(rp.trussId))
+            return t->locked();
+    }
+    if (rp.onPipe())
+    {
+        if (Pipe *p = props->pipe(rp.pipeId))
+            return p->locked();
+    }
+    if (rp.onTower())
+    {
+        if (Tower *t = props->tower(rp.towerId))
+            return t->locked();
+    }
+    if (rp.onRiser())
+    {
+        if (StagePlatform *pl = props->platform(rp.riserPlatformId))
+            return pl->locked();
+    }
+    if (rp.onDeck())
+    {
+        if (StagePlatform *pl = props->platform(rp.deckPlatformId))
+            return pl->locked();
+    }
+    return false;
+}
+
 void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
                                        const QColor &base, const QColor &edge,
                                        int topAlpha, bool ambientLit,
@@ -1761,10 +1925,26 @@ void StructureStudioView::drawLattice(QPainter &p, const QVector3D a[4], const Q
     }
 }
 
+void StructureStudioView::drawChildBars(QPainter &p, quint32 parentId) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    foreach (Truss *bar, props->trusses())
+        if (bar != nullptr && bar->parentTrussId() == parentId)
+            drawOneStructure(p, TrussKind, bar->id());
+}
+
 void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
-    const QColor steel(150, 154, 165);
+    /* A selected/dragged bar reads distinctly from an ordinary truss chord --
+     * otherwise clicking one gave no feedback at all that anything had
+     * happened ("when I select it .. it doesn't hilight"). Amber matches the
+     * rest of this view's "something is selected/active" colour (aim traces,
+     * the cursor readout), not any fixture's own colour, so it can never be
+     * mistaken for the bar's actual gel. */
+    const bool barSelected = (kind == TrussKind)
+                            && (id == m_selectedBarId || id == m_dragBarId);
+    const QColor steel = barSelected ? QColor(255, 190, 60) : QColor(150, 154, 165);
     const QColor plate(120, 126, 140);
 
     // A clear steel base plate on the floor: a filled disc in Top, a low solid
@@ -1944,6 +2124,19 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 const int bays = qMax(1, int(t->length() / qMax(0.35f, t->width() * 2.0f)));
                 drawLattice(p, endA, endB, steel, bays);
             }
+            /* A bar hung on this truss is a child Truss (its own world origin
+               already derived by recomputeChildTrusses()), never drawn before
+               now -- present in the "Fixtures and bars" list, selectable there,
+               reachable via double-click, but invisible on the very canvas that
+               list sits beside, with nothing to click, drag, or even see where
+               it actually sits ("still not visible .. how do you keep missing
+               this"). Safe to draw right here in Angled: everything in this
+               branch is deferred into m_ops for a real depth-sorted flush (see
+               drawRigDepthSorted()), so draw ORDER doesn't decide what is in
+               front of what -- real depth does. Flat planes are different; see
+               paintEvent(), which calls drawChildBars() itself, separately,
+               after fixtures. */
+            drawChildBars(p, id);
             return;
         }
 
@@ -1983,6 +2176,16 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 else            p.drawLine(p0 - off, p1 + off);
             }
         }
+        /* Bars hung on this truss are NOT drawn here. A flat plane is plain
+           painter's-algorithm (see paintEvent()): whatever paints later sits
+           in front. drawStructure() -- which is what calls drawOneStructure(),
+           and therefore this whole function -- runs BEFORE drawFixtures(), so
+           a bar drawn at this point would always end up hidden behind any
+           fixture whose icon happened to overlap it on screen ("truss visible
+           .. but behind fixtures that are in the truss .. that shouldn't be
+           the case"). paintEvent() calls drawChildBars() itself, separately,
+           AFTER fixtures, so a bar reads on top the way something you are
+           meant to click and drag has to. */
     }
     else if (kind == PlatformKind)
     {
@@ -2960,7 +3163,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
         k[2] = mid + l - u + n; k[3] = mid - l - u + n;
         k[4] = mid - l + u - n; k[5] = mid + l + u - n;
         k[6] = mid + l + u + n; k[7] = mid - l + u + n;
-        drawSolidBox(p, k, col, col.lighter(150), 255, ambientLit);
+        drawSolidBox(p, k, col, overlapAwareEdgeColor(fid, col), 255, ambientLit);
     };
 
     /* Stand it ON what holds it, not THROUGH it.
@@ -2989,6 +3192,9 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
     const double seat = (rp.placement == FixtureRigProps::Inside
                          || hasStructuralMount(rp) == false) ? 0.0 : 0.5;
     const QVector3D seated = c + H * float(h * seat);
+    qDebug() << "DRAWDIAG c=" << c << "H=" << H << "h=" << h << "seat=" << seat
+             << "hasStructuralMount=" << hasStructuralMount(rp)
+             << "seated=" << seated;
 
     for (int u = 0; u < units; ++u)
     {
@@ -3031,7 +3237,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
             const QVector3D tip = headMid + beam * float(qMax(0.25, h * 1.4));
             emitLine(w2s(headMid), w2s(tip),
                      viewDepth(headMid), viewDepth(tip),
-                     col.lighter(150), 1.4, p);
+                     overlapAwareEdgeColor(fid, col), 1.4, p);
 
             if (m_beams && look.beamLevel > 0.01)
             {
@@ -3471,11 +3677,11 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             // the pixels below carrying the colour.
             const QColor body(BODY_GREY, BODY_GREY, BODY_GREY);
             drawSolidBox(p, corner, (drag || hi) ? col : body,
-                         (drag || hi) ? col : body.lighter(135), 255,
+                         overlapAwareEdgeColor(fid, (drag || hi) ? col : body), 255,
                          !(drag || hi), depthBias);
         }
         else
-            drawSolidBox(p, corner, col, col.lighter(150), 255, !showingOutput,
+            drawSolidBox(p, corner, col, overlapAwareEdgeColor(fid, col), 255, !showingOutput,
                          depthBias);
 
         /* Washes, pars and bars throw light too. Only movers did -- the whole
@@ -3742,8 +3948,17 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         {
             const double halfW = moverWidthPx(traits) * 0.5;
             const double totalH = baseR * 3.2;
+            // "fixture set as underhung .. visually upright": this is the
+            // generic (non-tower) Mover elevation, drawn for anything mounted
+            // on a truss/pipe or free-placed. The tower-shelf branch above
+            // already reads mountingType to flip the silhouette (base at the
+            // top of the rect vs the bottom -- see addMoverUnit()); this one
+            // hardcoded `false`, so a fixture set to Underhung on a bar
+            // rendered identically to one set to On-top in every flat
+            // (Front/Side) view.
+            const bool hung = (rp.mountingType == Truss::TopHung);
             const QPainterPath body = moverElevationPath(
-                QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH), false, units);
+                QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH), hung, units);
             if (hi)
             {
                 QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
@@ -4461,7 +4676,29 @@ void StructureStudioView::drawOrientationLabels(QPainter &p) const
 
     QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
     p.setPen(QColor(120, 160, 220, 190));      // the rulers' axis blue
-    p.drawText(area, Qt::AlignVCenter | Qt::AlignLeft,  QStringLiteral("◀ ") + leftLbl);
+
+    /* The LEFT label sits vertical-centred right next to the height ruler's
+       own "max H ft" callout (drawRulers(), same corner, same GW+.. x) --
+       when the view is framed tight around one short structure (a per-bar
+       editor is exactly this: the whole visible Z range is a couple of
+       feet), the structure's top and the view's vertical centre land
+       within a few pixels of each other and the two texts print on top of
+       one another ("scale isn't right" -- what actually made it unreadable
+       was this, not the numbers themselves). Nudge the left label clear of
+       that line when they would collide; nothing else in this frame sits
+       in that corner, so nothing else needs to move. */
+    QRectF leftArea = area;
+    if (m_plane != Top)
+    {
+        const double topZ = structureTopZ();
+        if (topZ > 0.01)
+        {
+            const double maxY = w2s(axisWorldPoint(!(m_rotation & 1), topZ)).y();
+            if (qAbs(area.center().y() - maxY) < 16.0)
+                leftArea.translate(0.0, 16.0);
+        }
+    }
+    p.drawText(leftArea, Qt::AlignVCenter | Qt::AlignLeft, QStringLiteral("◀ ") + leftLbl);
     p.drawText(area, Qt::AlignVCenter | Qt::AlignRight, rightLbl + QStringLiteral(" ▶"));
     p.drawText(area, Qt::AlignHCenter | Qt::AlignTop,    QStringLiteral("▲ ") + topLbl);
     p.drawText(area, Qt::AlignHCenter | Qt::AlignBottom, QStringLiteral("▼ ") + bottomLbl);
@@ -4537,6 +4774,68 @@ void StructureStudioView::takeLiveSnapshot() const
             m_liveSnapshot.insert(fx->id(), fx->channelValues());
 }
 
+/* Which fixtures physically overlap another fixture's body -- a rough,
+ * axis-aligned check, not a true oriented-box intersection: the horizontal
+ * half-extent is the LARGER of the fixture's declared width and depth, used
+ * for both X and Y, so a truss-mounted bar running across the rig at some
+ * arbitrary angle is never under-counted just because its width and depth
+ * were declared for a different orientation than it happens to be rigged
+ * in. Conservative (can over-warn on a long fixture end-on to another) is
+ * the right side to err on for a warning, unlike a hard constraint.
+ *
+ * O(fixtures^2), but that is a few hundred simple box comparisons, not the
+ * per-fixture palette resolution the rest of this view has to be careful
+ * about -- cheap enough to redo every frame rather than invalidate on
+ * whatever subset of rig-geometry changes might move a fixture. */
+void StructureStudioView::rebuildOverlapWarnings() const
+{
+    m_overlappingFixtures.clear();
+    if (m_doc == nullptr)
+        return;
+
+    struct Box { quint32 fid; QVector3D lo, hi; };
+    QVector<Box> boxes;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == nullptr)
+            continue;
+        const FixtureVisualTraits traits = classifyFixture(fx);
+        if (traits.physW <= 0.0f && traits.physH <= 0.0f && traits.physD <= 0.0f)
+            continue;   // nothing declared to compare against
+        const double horiz = qMax(0.03, qMax(double(traits.physW), double(traits.physD)) * 0.5);
+        const double vert  = qMax(0.03, double(traits.physH) * 0.5);
+        const QVector3D c = fixtureCentre(fx->id());
+        Box b;
+        b.fid = fx->id();
+        b.lo = QVector3D(c.x() - float(horiz), c.y() - float(horiz), c.z() - float(vert));
+        b.hi = QVector3D(c.x() + float(horiz), c.y() + float(horiz), c.z() + float(vert));
+        boxes << b;
+    }
+
+    /* A small tolerance, not zero: two bars butted end to end (or side by
+     * side, the ordinary way to build a continuous run) touch at a shared
+     * face. That is not "in the same space" -- only genuine penetration
+     * past the touching faces is. */
+    const float eps = 0.01f;
+    for (int i = 0; i < boxes.size(); ++i)
+    {
+        for (int j = i + 1; j < boxes.size(); ++j)
+        {
+            const Box &a = boxes.at(i);
+            const Box &b = boxes.at(j);
+            const bool overlap =
+                   a.lo.x() + eps < b.hi.x() && b.lo.x() + eps < a.hi.x()
+                && a.lo.y() + eps < b.hi.y() && b.lo.y() + eps < a.hi.y()
+                && a.lo.z() + eps < b.hi.z() && b.lo.z() + eps < a.hi.z();
+            if (overlap)
+            {
+                m_overlappingFixtures.insert(a.fid);
+                m_overlappingFixtures.insert(b.fid);
+            }
+        }
+    }
+}
+
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
     QElapsedTimer frameTimer;
@@ -4547,6 +4846,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     }
     else
         m_liveSnapshot.clear();
+    rebuildOverlapWarnings();
 
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
@@ -4564,6 +4864,15 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     {
         drawStructure(p);
         drawFixtures(p);
+        // Bars hung on THIS truss, drawn last so painter's-algorithm order
+        // never buries a selectable, draggable bar behind a fixture icon
+        // that happens to overlap it on screen. StageKind's flat view needs
+        // no equivalent call: everyStructure() already lists every bar as
+        // its own top-level entry there, drawn (and thus hidden behind
+        // fixtures the same as any other structure) by drawStructure() above
+        // -- unchanged, existing behaviour, not this report's complaint.
+        if (m_kind == TrussKind)
+            drawChildBars(p, m_id);
     }
     drawCursorReadout(p);
 
@@ -4619,6 +4928,41 @@ void StructureStudioView::resizeEvent(QResizeEvent *)
     refit();
 }
 
+void StructureStudioView::zoomAt(const QPointF &anchor, double targetScale)
+{
+    const double next = qBound(4.0, targetScale, 4000.0);
+    if (qFuzzyCompare(next, m_scale))
+        return;
+    const QPointF before = screenToPlane(anchor);
+    m_scale = next;
+    m_originPx += anchor - (m_originPx + planeToScreenVec(before));
+    m_zoomed = true;          // refit() must not stomp a deliberate zoom
+    update();
+}
+
+bool StructureStudioView::event(QEvent *e)
+{
+    /* Trackpad pinch: macOS delivers this as a native gesture, not a wheel
+       event, and a QWidget (this is one, not a QGraphicsView) is handed
+       nothing at all unless it asks -- there is no fallback translation to a
+       wheelEvent() to silently catch it. Left unhandled, pinch zoom on this
+       view worked only by accident, whichever way the platform happened to
+       be routing it that day ("pinch to zoom .. isn't working consistently").
+       Same zoomAt() anchor-at-cursor math as the scroll wheel below, driven
+       by the gesture's own delta instead of a fixed step, so the two can
+       never disagree with each other. */
+    if (e->type() == QEvent::NativeGesture)
+    {
+        QNativeGestureEvent *g = static_cast<QNativeGestureEvent *>(e);
+        if (g->gestureType() == Qt::ZoomNativeGesture)
+        {
+            zoomAt(g->position(), m_scale * (1.0 + g->value()));
+            return true;
+        }
+    }
+    return QWidget::event(e);
+}
+
 void StructureStudioView::wheelEvent(QWheelEvent *e)
 {
     /* This used to set m_scale and then call refit(), which RECOMPUTES m_scale
@@ -4640,18 +4984,7 @@ void StructureStudioView::wheelEvent(QWheelEvent *e)
 #else
     const QPointF anchor = e->posF();
 #endif
-    const QPointF before = screenToPlane(anchor);
-
-    const double next = qBound(4.0, m_scale * ((delta > 0) ? 1.12 : 1.0 / 1.12), 4000.0);
-    if (qFuzzyCompare(next, m_scale))
-    {
-        e->accept();
-        return;
-    }
-    m_scale = next;
-    m_originPx += anchor - (m_originPx + planeToScreenVec(before));
-    m_zoomed = true;          // refit() must not stomp a deliberate zoom
-    update();
+    zoomAt(anchor, m_scale * ((delta > 0) ? 1.12 : 1.0 / 1.12));
     e->accept();
 }
 
@@ -4686,6 +5019,38 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
 
         if (m_dragFid == Fixture::invalidId())
         {
+            // Nothing on this truss to click, drag, or even see, before this
+            // was wired up ("not selectable at all with mouse to move it in
+            // position") -- same press-to-select-and-arm-a-drag treatment as
+            // a fixture, just onto m_dragBarId instead of m_dragFid.
+            m_dragBarId = hitTestBar(e->pos());
+            if (m_dragBarId != UINT_MAX)
+            {
+                setCursor((m_locked || m_plane == Angled
+                           || m_doc->monitorProperties()->truss(m_dragBarId)->locked())
+                              ? Qt::ArrowCursor : Qt::ClosedHandCursor);
+                setBarHighlight(m_dragBarId);
+                setHighlight({});   // a bar and a fixture are never selected together
+                emit barSelected(m_dragBarId);
+                return;
+            }
+
+            /* Neither a fixture nor a bar: the truss's own body, or genuinely
+               empty space. Whatever was selected before is stale now and
+               nothing was clearing it -- the highlight stayed on screen and
+               the tree/inspector kept showing the old selection with no way
+               to tell it was stale, which is what actually made "click the
+               truss to select just the truss" read as needing "2 or 3
+               clicks" (each click that also missed left the same leftover
+               state, so only a click that happened to hit something NEW
+               ever visibly changed anything). Clear and say so. */
+            if (!m_highlight.isEmpty() || m_selectedBarId != UINT_MAX)
+            {
+                setHighlight({});
+                setBarHighlight(UINT_MAX);
+                emit fixtureSelected(Fixture::invalidId());
+            }
+
             /* Empty canvas. What a plain drag SHOULD do depends on the view:
                - Angled: swing the camera. Fixture dragging is refused there
                  anyway (no honest inverse), so the gesture is free, and
@@ -4712,9 +5077,10 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         }
         if (m_dragFid != Fixture::invalidId())
         {
-            setCursor((m_locked || m_plane == Angled) ? Qt::ArrowCursor
-                                                       : Qt::ClosedHandCursor);
+            setCursor((m_locked || m_plane == Angled || fixtureMovementLocked(m_dragFid))
+                          ? Qt::ArrowCursor : Qt::ClosedHandCursor);
             setHighlight({ m_dragFid });
+            setBarHighlight(UINT_MAX);   // a bar and a fixture are never selected together
             emit fixtureSelected(m_dragFid);   // selection always works
         }
     }
@@ -4753,11 +5119,18 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
         update();
         return;
     }
-    if (m_dragFid != Fixture::invalidId() && !m_locked)   // move only when unlocked
+    if (m_dragFid != Fixture::invalidId() && !m_locked && !fixtureMovementLocked(m_dragFid))
     {
         if (!m_dragged)
             emit editAboutToStart();   // snapshot for undo before the first change
         if (dragFixtureTo(m_dragFid, e->pos()))
+            m_dragged = true;
+    }
+    else if (m_dragBarId != UINT_MAX && !m_locked)
+    {
+        if (!m_dragged)
+            emit editAboutToStart();
+        if (dragBarTo(m_dragBarId, e->pos()))
             m_dragged = true;
     }
     update();   // keep the ruler crosshair/readout live on hover
@@ -4801,6 +5174,17 @@ void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
             emit fixtureMoved(m_dragFid);
         }
         m_dragFid = Fixture::invalidId();
+        m_dragged = false;
+    }
+    else if (m_dragBarId != UINT_MAX)
+    {
+        setCursor(Qt::ArrowCursor);
+        if (m_dragged)
+        {
+            m_doc->setModified();
+            emit barMoved(m_dragBarId);
+        }
+        m_dragBarId = UINT_MAX;
         m_dragged = false;
     }
 }
@@ -4929,11 +5313,50 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
     return best;
 }
 
+quint32 StructureStudioView::hitTestBar(const QPointF &px) const
+{
+    if (m_kind != TrussKind)
+        return UINT_MAX;                 // == Truss::invalidId(); only a truss has bars
+    MonitorProperties *props = m_doc->monitorProperties();
+    quint32 best = UINT_MAX; double bestD = 1e9;
+    foreach (Truss *bar, props->trusses())
+    {
+        if (bar == nullptr || bar->parentTrussId() != m_id)
+            continue;
+        // Same point-to-segment test as hitTestFixture()'s Bar/Generic case:
+        // nearest point on the drawn run, not just its centre or an endpoint.
+        const QPointF a = w2s(bar->origin());
+        const QPointF b = w2s(bar->positionAt(bar->length()));
+        const QPointF ab = b - a;
+        const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+        double t = (len2 > 1e-6) ? ((px.x() - a.x()) * ab.x() + (px.y() - a.y()) * ab.y()) / len2 : 0.0;
+        t = qBound(0.0, t, 1.0);
+        const double d = QLineF(a + ab * t, px).length();
+        /* The acceptance radius has to match how WIDE this bar actually
+           draws (drawOneStructure()'s TrussKind flat-view branch, same
+           wpx formula) -- a flat ~9 px missed almost every click inside a
+           bar's own drawn rectangle whenever it rendered wider than that
+           (any real truss profile at a normal zoom), which is exactly what
+           made it look undraggable ("I canNOT move it along the truss").
+           A point-to-CENTRELINE distance still has to clear half that width
+           to land inside the rectangle at all. */
+        const double halfWidthPx = qMax(6.0, double(bar->width()) * m_scale) / 2.0 + 3.0;
+        if (d <= halfWidthPx && d < bestD) { bestD = d; best = bar->id(); }
+    }
+    return best;
+}
+
 void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)
 {
     const quint32 fid = hitTestFixture(e->pos());
     if (fid != Fixture::invalidId())
+    {
         emit fixtureActivated(fid);
+        return;
+    }
+    const quint32 barId = hitTestBar(e->pos());
+    if (barId != UINT_MAX)
+        emit barActivated(barId);
 }
 
 void StructureStudioView::contextMenuEvent(QContextMenuEvent *e)

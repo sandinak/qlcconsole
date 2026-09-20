@@ -2302,26 +2302,81 @@ void MonitorProperties::repairMountPlanes()
 
        studioMount 2 (Side) is left alone. The riser model has a front and a
        top and no third surface, so a strip run along a step's END is not a
-       contradiction to resolve -- it is something this model cannot say. */
+       contradiction to resolve -- it is something this model cannot say.
+
+       A deck mount has no face to disagree about, but it has the same stray
+       default a riser does: studioMount is 1 ("front face") unless something
+       set it otherwise, because that is FixtureRigProps' general default, not
+       anything chosen for a deck. A fixture never walked through the Face
+       combo (drag to a platform is the common path, not the properties
+       dialog) keeps that wrong default forever: fixtureBoxCorners() builds
+       its box on the Front/face axes -- seats it along world Y instead of
+       lifting it along Z, and swaps Height for Depth as the vertical extent
+       -- so Top (X-Y) still looks right while Front (X-Z) shows it
+       straddling the deck surface instead of standing on it ("front view of
+       UST1 is STILL putting it off the platform .. when the top view shows
+       it's clearly entirely on the platform"). Correct that specific stray
+       default to 0 (Top); Side (2) is left alone exactly as a riser's is --
+       a fixture deliberately lying on its side on the deck is a real fixture,
+       not the accident 1 always is.
+
+       A truss or pipe mount has the same stray default again, but the
+       correct plane now depends on which way the thing it's mounted to
+       runs: fillOrientationCombo() already treats a HORIZONTAL truss/pipe
+       like a deck -- "On top" / "Underhung" -- because a fixture riding a
+       horizontal bar lifts or hangs along Z exactly as one sitting on a
+       platform does, so studioMount needs the same Top correction there.
+       A VERTICAL truss/pipe is different: fillOrientationCombo() offers
+       "Sideways (clamped)" / "Upright (on top)", the fixture's free axis
+       is Z, and the default Front/face plane (1) is already the right one
+       -- that is why fixtures mounted straight onto a tower or vertical
+       truss render correctly with no correction at all. Only the
+       horizontal case is stray; Side (2) is, again, left alone. */
     QMutableMapIterator<quint32, FixtureRigProps> it(m_rigProps);
     while (it.hasNext())
     {
         it.next();
         FixtureRigProps rp = it.value();
-        if (rp.onRiser() == false || rp.studioMount == 2)
-            continue;
-
-        const int plane = FixtureRigProps::studioMountForRiserFace(rp.riserFace);
-        if (rp.studioMount == plane)
-            continue;
-
-        qDebug() << "[Monitor] fixture" << it.key() << "is bolted to a riser's"
-                 << (rp.riserFace == FixtureRigProps::RiserTop ? "top" : "front face")
-                 << "but was drawn on plane" << rp.studioMount
-                 << "-- corrected to" << plane;
-        rp.studioMount = plane;
+        repairMountPlane(rp);
         it.setValue(rp);
     }
+}
+
+void MonitorProperties::repairMountPlane(FixtureRigProps &rp) const
+{
+    if (rp.onDeck() && rp.studioMount == 1)
+    {
+        qDebug() << "[Monitor] fixture is standing on a deck"
+                 << "but was left on the default Front/face plane"
+                 << "-- corrected to 0 (Top)";
+        rp.studioMount = 0;
+        return;
+    }
+
+    if (rp.studioMount == 1 &&
+        ((rp.trussId != Truss::invalidId() && truss(rp.trussId) &&
+          truss(rp.trussId)->type() != Truss::Vertical) ||
+         (rp.onPipe() && pipe(rp.pipeId) && !pipe(rp.pipeId)->isVertical())))
+    {
+        qDebug() << "[Monitor] fixture rides a horizontal truss/pipe"
+                 << "but was left on the default Front/face plane"
+                 << "-- corrected to 0 (Top)";
+        rp.studioMount = 0;
+        return;
+    }
+
+    if (rp.onRiser() == false || rp.studioMount == 2)
+        return;
+
+    const int plane = FixtureRigProps::studioMountForRiserFace(rp.riserFace);
+    if (rp.studioMount == plane)
+        return;
+
+    qDebug() << "[Monitor] fixture is bolted to a riser's"
+             << (rp.riserFace == FixtureRigProps::RiserTop ? "top" : "front face")
+             << "but was drawn on plane" << rp.studioMount
+             << "-- corrected to" << plane;
+    rp.studioMount = plane;
 }
 
 bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) const

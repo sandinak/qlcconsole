@@ -815,6 +815,35 @@ void Monitor_Test::studioTrussDragBlockedWhenLocked()
     QCOMPARE(after, before);
 }
 
+void Monitor_Test::studioTrussDragBlockedWhenTrussLocked()
+{
+    /* "if I have a fixture tied to a truss and the truss is locked in the
+       editor .. I can still move it from the studio view." The dialog's own
+       lock (above) is a throwaway UI toggle; a truss LOCKED (Layers panel,
+       or the truss's own context menu) is saved state, and has to stop a
+       drag here too, even with this view's own lock off. */
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.view->setLocked(false);
+    rig.truss->setLocked(true);
+
+    const QVector3D before = rig.pos();
+    const QPointF startPx = rig.view->w2s(before);
+    QVERIFY2(rig.view->dragFixtureTo(rig.fxi->id(), startPx + QPointF(0.0, rig.view->m_scale)) == false,
+             "dragFixtureTo() moved a fixture mounted on a locked truss");
+    const QVector3D afterDirect = rig.pos();
+    QCOMPARE(afterDirect, before);
+
+    const QVector3D afterMouse = rig.dragTo(startPx + QPointF(0.0, rig.view->m_scale));
+    QCOMPARE(afterMouse, before);
+
+    // Unlocking the truss (not this view) lets the same drag through.
+    rig.truss->setLocked(false);
+    const QVector3D afterUnlocked = rig.dragTo(startPx + QPointF(0.0, rig.view->m_scale));
+    QVERIFY2(!qFuzzyCompare(afterUnlocked.z(), before.z()),
+             "unlocking the truss did not free the fixture it carries");
+}
+
 void Monitor_Test::studioTrussDragInEveryPlane()
 {
     StudioRig rig;
@@ -914,6 +943,53 @@ void Monitor_Test::studioTrussDragSetsDropInElevation()
              "a purely vertical drag slid it along the bar too");
     QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(rig.fxi->id()).trussId,
              rig.truss->id());
+}
+
+void Monitor_Test::studioZoomAtKeepsCursorPointFixed()
+{
+    /* "pinch to zoom out and reverse to zoom out isn't working consistently."
+       StructureStudioView is a plain QWidget, not a QGraphicsView, so unlike
+       the main 2D plot it never got a NativeGesture/ZoomNativeGesture handler
+       -- real trackpad pinch here worked only by whatever accident of
+       platform wheel-event translation was happening that day. zoomAt() is
+       the one anchor-math both the scroll wheel and the new pinch handler now
+       call, so proving it here proves both callers at once without having to
+       construct a QNativeGestureEvent (its constructor is platform/Qt-version
+       shaped and not worth fighting for a test). */
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+
+    const double before = rig.view->m_scale;
+    const QPointF anchor(137.0, 219.0);              // arbitrary on-canvas point
+    const QPointF planeBefore = rig.view->screenToPlane(anchor);
+
+    // Zoom IN: scale grows, and the plane point under the anchor is unmoved.
+    rig.view->zoomAt(anchor, before * 1.5);
+    QVERIFY2(rig.view->m_scale > before,
+             qPrintable(QString("zoom in did not grow scale: %1 -> %2")
+                        .arg(before).arg(rig.view->m_scale)));
+    const QPointF planeAfterIn = rig.view->screenToPlane(anchor);
+    QVERIFY2((planeAfterIn - planeBefore).manhattanLength() < 1e-6,
+             "zooming in moved the point under the cursor");
+
+    // Zoom back OUT past the start: scale shrinks, anchor still fixed. This is
+    // the exact "reverse to zoom out" direction the report named explicitly.
+    const double afterIn = rig.view->m_scale;
+    rig.view->zoomAt(anchor, afterIn / 3.0);
+    QVERIFY2(rig.view->m_scale < afterIn,
+             qPrintable(QString("zoom out did not shrink scale: %1 -> %2")
+                        .arg(afterIn).arg(rig.view->m_scale)));
+    const QPointF planeAfterOut = rig.view->screenToPlane(anchor);
+    QVERIFY2((planeAfterOut - planeBefore).manhattanLength() < 1e-6,
+             "zooming out moved the point under the cursor");
+
+    // Clamped, not merely bounded silently wrong: asking for an absurd target
+    // lands exactly on the documented [4, 4000] ends, not somewhere short of
+    // them or unbounded.
+    rig.view->zoomAt(anchor, 1.0);
+    QCOMPARE(rig.view->m_scale, 4.0);
+    rig.view->zoomAt(anchor, 1.0e9);
+    QCOMPARE(rig.view->m_scale, 4000.0);
 }
 
 void Monitor_Test::updateFixtureSurvivesUnplacedFixture()
@@ -1687,8 +1763,11 @@ void Monitor_Test::angledOverviewDrawsNearThingsInFront()
 
     /* Sample a point that both decks cover on screen: the near deck's top, which
        from this camera sits in front of the far deck's body. Which one won is
-       readable from saturation alone. */
-    const QPointF at = ov.w2s(QVector3D(3.0f, 3.7f, 2.0f));
+       readable from saturation alone.
+     *
+     * w2s() is logical pixels; grab() on a HiDPI screen returns device pixels
+     * (devicePixelRatio() times as many) -- scale up to match img's indexing. */
+    const QPointF at = ov.w2s(QVector3D(3.0f, 3.7f, 2.0f)) * img.devicePixelRatio();
     QVERIFY2(img.rect().contains(at.toPoint()), "the sample point fell outside the view");
     const QColor px = img.pixelColor(at.toPoint());
     QVERIFY2(px.saturation() < 110,
@@ -1794,7 +1873,11 @@ void Monitor_Test::litFixturesKeepTheirBrightnessInABlackout()
     v.setLiveValues(true);
     v.setAmbient(0.0);              // blackout: the room contributes nothing
 
-    const QPointF at = v.w2s(props->fixtureRigPosition(fxi->id()));
+    // w2s() is logical pixels; grab() on a HiDPI screen returns device pixels
+    // (devicePixelRatio() times as many). Scale the sample point (and the
+    // logical-pixel search window around it) up to match.
+    const double dpr = v.devicePixelRatioF();
+    const QPointF at = v.w2s(props->fixtureRigPosition(fxi->id())) * dpr;
 
     auto meanLuma = [&]() {
         const QImage img = v.grab().toImage();
@@ -1804,7 +1887,7 @@ void Monitor_Test::litFixturesKeepTheirBrightnessInABlackout()
         {
             for (int dx = -8; dx <= 8; ++dx)
             {
-                const QPoint p(at.toPoint() + QPoint(dx, dy));
+                const QPoint p(at.toPoint() + QPoint(int(dx * dpr), int(dy * dpr)));
                 if (img.rect().contains(p) == false) continue;
                 const QColor c = img.pixelColor(p);
                 sum += c.red() * 0.30 + c.green() * 0.59 + c.blue() * 0.11;
@@ -2768,6 +2851,111 @@ void Monitor_Test::aMoverStandingOnAShelfIsNotDrawnHanging()
     delete doc;
 }
 
+/* "fixture set as underhung .. visually upright": aMoverStandingOnAShelfIsNot-
+   DrawnHanging() above fixed this for a TOWER shelf mount in the Angled 3D
+   view. A mover mounted on a horizontal TRUSS/bar instead -- the reported
+   repro -- goes through a different branch entirely in its own flat
+   (Front/Side) elevation: drawOneFixture()'s tower-shelf special case only
+   fires when rp.towerId is valid, so a truss mount fell through to the
+   generic Mover elevation, which hardcoded "not hung" no matter what
+   mountingType said. */
+void Monitor_Test::aMoverOnATrussElevationIsNotDrawnUpright()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1"); bar->setType(Truss::Horizontal);
+    bar->setOrigin(QVector3D(7.0f, 1.0f, 3.0f));
+    bar->setDirection(QPointF(1.0, 0.0));
+    bar->setLength(3.0f);
+    bar->setWidth(0.29f);
+
+    Fixture *head = makeMover(doc, 14.0, 0, "Bar Spot", QVector3D(8.5f, 1.0f, 3.0f));
+    QVERIFY(head != nullptr);
+
+    auto rigAs = [&](int mounting) {
+        FixtureRigProps rp;
+        rp.trussId = bar->id();
+        rp.trussOffset = 1.5f;
+        rp.mountingType = Truss::MountingType(mounting);
+        props->setFixtureRigProps(head->id(), rp);
+        return rp;
+    };
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(760, 600);
+    v.setPlane(StructureStudioView::Front);       // the reported view: an elevation
+    v.setAmbient(1.0);
+    rigAs(Truss::FloorMounted);
+    v.grab();                        // flush the first layout, see the shelf test
+    v.reload();
+    v.m_zoomed = true;
+
+    const PreviewItem saved = props->m_fixtureItems.value(head->id()).m_baseItem;
+    props->removeFixture(head->id());
+    const QImage base = v.grab().toImage();
+    props->m_fixtureItems[head->id()].m_baseItem = saved;
+
+    auto fixtureRows = [&](int mounting, QVector<int> &rowCount, int &top, int &bottom) {
+        rigAs(mounting);
+        const QImage img = v.grab().toImage();
+        rowCount.fill(0, img.height());
+        top = img.height(); bottom = -1;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor a = img.pixelColor(x, y), b = base.pixelColor(x, y);
+                if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                    + qAbs(a.blue() - b.blue()) <= 24)
+                    continue;
+                ++rowCount[y];
+                top = qMin(top, y); bottom = qMax(bottom, y);
+            }
+    };
+
+    /* Unlike the tower-shelf test's single-widest-row measure, this
+       fixture's yoke+head OVAL happens to reach the same peak width as the
+       base rect (see addMoverUnit(): the ellipse spans headW = r.width() -
+       armW*2.2, close enough to the base's full r.width() at this size that
+       the two tie) -- so "the first/last row at the max width" lands in
+       whichever plateau the scan meets first, not reliably in the base
+       band. The base is still unambiguous by a different measure: it is
+       the only feature flush against ONE edge of the outline, while the
+       oval/arms taper to a point at the other -- so the edge with the
+       fuller band (summed over a slice near each end) IS the base end.
+       0 = base at the top edge, 1 = base at the bottom edge. */
+    auto baseEnd = [&](int mounting) {
+        QVector<int> rows; int top = 0, bottom = 0;
+        fixtureRows(mounting, rows, top, bottom);
+        const int span = bottom - top + 1;
+        if (span < 8)
+            return -1.0;
+        const int edge = qMax(2, span / 20);
+        double topSum = 0.0, bottomSum = 0.0;
+        for (int i = 0; i < edge; ++i)
+        {
+            topSum    += rows[top + i];
+            bottomSum += rows[bottom - i];
+        }
+        return bottomSum / qMax(1.0, topSum + bottomSum);
+    };
+
+    const double upright = baseEnd(Truss::FloorMounted);
+    const double hung    = baseEnd(Truss::TopHung);
+
+    QVERIFY2(upright > 0.58,
+             qPrintable(QString("a mover set On-top on a bar is drawn with its "
+                                "base in the air (widest part %1 of the way down "
+                                "its own outline; 1 = base at the bottom)").arg(upright)));
+    QVERIFY2(hung < 0.42,
+             qPrintable(QString("a mover set Underhung on a bar is drawn standing "
+                                "upright instead of hanging (widest part %1 of the "
+                                "way down its own outline; 0 = base at the top)")
+                        .arg(hung)));
+    delete doc;
+}
+
 /* "Now it's in the tower vs on top of it where I have it set in the editor."
    The body was built symmetrically about the point it is fastened to, so half
    of it was inside the structure holding it up. The elevation has always put
@@ -2816,8 +3004,14 @@ void Monitor_Test::aMoverOnAShelfSitsOnItRatherThanInIt()
 
     /* How much of the fixture is drawn BELOW the surface it stands on. A few
        pixels are inevitable -- the cap has thickness on screen and the body is
-       projected, not flat -- but half of it is the bug. */
-    const QPointF at = v.w2s(props->fixtureRigPosition(head->id()));
+       projected, not flat -- but half of it is the bug.
+     *
+     * w2s() is logical pixels; grab() on a HiDPI screen returns device pixels
+     * (devicePixelRatio() times as many). Scale the comparison point up to
+     * match the image's own indexing, or a Retina run counts almost the whole
+     * frame as "below" a dividing line sitting near the top of it. */
+    const double dpr = img.devicePixelRatio();
+    const QPointF at = v.w2s(props->fixtureRigPosition(head->id())) * dpr;
     int above = 0, below = 0;
     for (int y = 0; y < img.height(); ++y)
         for (int x = 0; x < img.width(); ++x)
@@ -2885,8 +3079,16 @@ void Monitor_Test::aMoverOnADeckIsNotBuriedInIt()
        the platform TOP for it, so the body belongs above that line. */
     /* fixtureCentre(), not fixtureRigPosition(): the plot anchors a free/deck
        fixture by its top-left corner and the rig view undoes that, so the raw
-       stored point is half a footprint away from where the body is drawn. */
-    const QPointF at = v.w2s(v.fixtureCentre(head->id()));
+       stored point is half a footprint away from where the body is drawn.
+     *
+     * w2s() answers in LOGICAL pixels; grab() on a HiDPI screen returns an
+     * image in DEVICE pixels (devicePixelRatio() times as many), and the loop
+     * below indexes img by device pixel. Comparing a bare logical Y against a
+     * device row index is off by that ratio -- 2x on a Retina display -- which
+     * put the real dividing line in the top fifth of the frame and counted
+     * everything below it, including the correctly-seated fixture, as "sunk". */
+    const double dpr = img.devicePixelRatio();
+    const QPointF at = v.w2s(v.fixtureCentre(head->id())) * dpr;
     int above = 0, below = 0;
     for (int y = 0; y < img.height(); ++y)
         for (int x = 0; x < img.width(); ++x)
@@ -2899,6 +3101,10 @@ void Monitor_Test::aMoverOnADeckIsNotBuriedInIt()
         }
 
     QVERIFY2(above + below > 50, "the fixture drew almost nothing");
+    qDebug() << "DIAG at=" << at << "above=" << above << "below=" << below
+             << "fixtureBodyUp().z()=" << v.fixtureBodyUp(rp).z()
+             << "fixtureCentre=" << v.fixtureCentre(head->id())
+             << "fixtureRigPosition=" << props->fixtureRigPosition(head->id());
     const double sunk = double(below) / double(above + below);
     QVERIFY2(sunk < 0.25,
              qPrintable(QString("a mover standing on a deck is drawn sunk into it "
@@ -3819,6 +4025,358 @@ void Monitor_Test::aBarOnATowerIsDrawnInTheRigView()
     delete doc;
 }
 
+/* "Truss on T1 is STILL not part of T1 .. even tho if I double click it on
+   the studio view it thinks it is. It should show up in the truss editor as
+   something I can place." aBarOnATowerIsDrawnInTheRigView() (above) proved
+   bars draw in the whole-rig StageKind overview -- but that view loops over
+   every Truss in the doc independently, so a bar was ALWAYS going to be
+   drawn there as just another entry in that loop, proving nothing about
+   whether ITS OWN PARENT's per-object editor (StructureStudioView opened at
+   Kind::TrussKind, id = the parent) draws it. That is the dialog the report
+   actually points at ("the truss editor"), a completely separate code path
+   (drawOneStructure()'s TrussKind branch draws only props->truss(id) itself)
+   that had never been taught to recurse into its own children. */
+void Monitor_Test::aBarShowsInItsParentTrusssOwnEditor()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setType(Truss::Vertical);
+    t1->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    t1->setLength(3.0f);
+    t1->setWidth(0.29f);
+
+    // Opened the same way double-clicking T-1 does: Kind::TrussKind, id=T-1.
+    StructureStudioView v(doc, StructureStudioView::TrussKind, t1->id());
+    v.resize(800, 640);
+    v.setPlane(StructureStudioView::Front);
+    v.setAmbient(1.0);
+    v.grab();
+    v.reload();
+    v.m_zoomed = true;                       // hold the framing
+    const QImage before = v.grab().toImage();
+
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1");
+    bar->setParentTrussId(t1->id());
+    bar->setParentOffset(1.5f);
+    bar->setBarFace(Truss::FaceDownstage);
+    bar->setBarStandoff(0.0f);
+    bar->setBarRun(Truss::RunAcross);
+    bar->setLength(1.0f);
+    bar->setWidth(0.29f);
+    props->recomputeChildTrusses();
+
+    v.reload();
+    v.m_zoomed = true;
+    const QImage after = v.grab().toImage();
+
+    int changed = 0;
+    for (int y = 0; y < after.height(); ++y)
+        for (int x = 0; x < after.width(); ++x)
+        {
+            const QColor a = after.pixelColor(x, y), b = before.pixelColor(x, y);
+            if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                + qAbs(a.blue() - b.blue()) > 24)
+                ++changed;
+        }
+
+    QVERIFY2(changed > 50,
+             qPrintable(QString("T-1's own editor changed only %1 pixels when a "
+                                "bar was hung on it -- the bar is not drawn there, "
+                                "just listed beside a blank canvas").arg(changed)));
+
+    props->removeTruss(bar->id());
+    props->removeTruss(t1->id());
+    delete doc;
+}
+
+/* "not selectable at all with mouse to move it in position." Half of the
+   same report that got the bar drawn (aBarShowsInItsParentTrusssOwnEditor,
+   above) -- visible is not the same as clickable, and nothing hit-tested a
+   bar at all before this. */
+void Monitor_Test::hitTestBarFindsANearbyBar()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setType(Truss::Vertical);
+    t1->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    t1->setLength(3.0f);
+    t1->setWidth(0.29f);
+
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1");
+    bar->setParentTrussId(t1->id());
+    bar->setParentOffset(1.5f);
+    bar->setBarFace(Truss::FaceDownstage);
+    bar->setBarStandoff(0.0f);
+    bar->setBarRun(Truss::RunAcross);
+    bar->setLength(1.0f);
+    bar->setWidth(0.29f);
+    props->recomputeChildTrusses();
+
+    StructureStudioView v(doc, StructureStudioView::TrussKind, t1->id());
+    v.resize(800, 640);
+    v.setPlane(StructureStudioView::Front);
+    v.reload();
+    v.m_zoomed = true;
+
+    const QPointF onBar = v.w2s(bar->positionAt(bar->length() * 0.5f));
+    QCOMPARE(v.hitTestBar(onBar), bar->id());
+
+    /* The actual reported bug: "I canNOT move it along the truss." A fixed
+       ~9 px radius around the CENTRELINE missed a click anywhere else in the
+       bar's own drawn rectangle once it rendered wider than that at a normal
+       zoom -- which a real truss profile does. Click near the EDGE of the
+       drawn width, not the centreline, and confirm it still finds it: the
+       width this asserts against is read from the same m_scale the paint
+       code itself uses, so this fails honestly if the two ever disagree
+       again rather than passing by coincidence. */
+    const double halfWidthPx = qMax(6.0, double(bar->width()) * v.m_scale) / 2.0;
+    QVERIFY2(halfWidthPx > 9.0,
+             "test rig's bar isn't drawn wide enough to exercise the old bug -- "
+             "widen bar->width() or the view size");
+    const QPointF nearEdge = onBar + QPointF(0.0, halfWidthPx * 0.8);
+    QCOMPARE(v.hitTestBar(nearEdge), bar->id());
+
+    // ...but it does not become infinitely wide either.
+    const QPointF wellPast = onBar + QPointF(0.0, halfWidthPx + 40.0);
+    QCOMPARE(v.hitTestBar(wellPast), quint32(Truss::invalidId()));
+
+    // Nowhere near anything drawn: no false hit.
+    QCOMPARE(v.hitTestBar(QPointF(-500.0, -500.0)), quint32(Truss::invalidId()));
+
+    // Only THIS truss's own bars are hit-testable from its own editor — a bar
+    // hanging off some other truss must not answer here.
+    Truss *elsewhere = props->addTruss();
+    elsewhere->setName("T-2");
+    elsewhere->setType(Truss::Vertical);
+    elsewhere->setOrigin(QVector3D(9.0f, 3.0f, 0.0f));
+    elsewhere->setLength(3.0f);
+    Truss *otherBar = props->addTruss();
+    otherBar->setParentTrussId(elsewhere->id());
+    otherBar->setParentOffset(1.5f);
+    otherBar->setBarFace(Truss::FaceDownstage);
+    otherBar->setBarRun(Truss::RunAcross);
+    otherBar->setLength(1.0f);
+    props->recomputeChildTrusses();
+    QCOMPARE(v.hitTestBar(v.w2s(otherBar->positionAt(otherBar->length() * 0.5f))),
+             quint32(Truss::invalidId()));
+
+    props->removeTruss(otherBar->id());
+    props->removeTruss(elsewhere->id());
+    props->removeTruss(bar->id());
+    props->removeTruss(t1->id());
+    delete doc;
+}
+
+/* "when I select it .. it does't hilight nor does the right side change to
+   the bar data." The canvas half of that: a real mouse press on the bar has
+   to leave the view in a state a highlight-drawing pass and an inspector
+   panel can both actually read back -- m_selectedBarId/m_dragBarId (the
+   drawing side, see drawOneStructure()'s amber-vs-steel check) and the
+   barSelected signal (what monitor.cpp's inspector panel connects to). The
+   panel wiring itself lives in Monitor and isn't reachable from here; this
+   is the view-level contract that wiring depends on. */
+void Monitor_Test::clickingABarSelectsAndHighlightsIt()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setType(Truss::Vertical);
+    t1->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    t1->setLength(3.0f);
+    t1->setWidth(0.29f);
+
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1");
+    bar->setParentTrussId(t1->id());
+    bar->setParentOffset(1.5f);
+    bar->setBarFace(Truss::FaceDownstage);
+    bar->setBarRun(Truss::RunAcross);
+    bar->setLength(1.0f);
+    bar->setWidth(0.29f);
+    props->recomputeChildTrusses();
+
+    StructureStudioView v(doc, StructureStudioView::TrussKind, t1->id());
+    v.resize(800, 640);
+    v.setPlane(StructureStudioView::Front);
+    v.setLocked(false);
+    v.reload();
+    v.m_zoomed = true;
+
+    QSignalSpy spy(&v, &StructureStudioView::barSelected);
+    const QPointF onBar = v.w2s(bar->positionAt(bar->length() * 0.5f));
+    QMouseEvent press(QEvent::MouseButtonPress, onBar, onBar,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    v.mousePressEvent(&press);
+
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.takeFirst().at(0).toUInt(), bar->id());
+    QCOMPARE(v.m_selectedBarId, bar->id());
+    QCOMPARE(v.m_dragBarId, bar->id());
+    // A bar and a fixture are never highlighted together.
+    QVERIFY(v.m_highlight.isEmpty());
+
+    QMouseEvent release(QEvent::MouseButtonRelease, onBar, onBar,
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    v.mouseReleaseEvent(&release);
+    // Selection (the highlight) survives release; only the DRAG state ends.
+    QCOMPARE(v.m_selectedBarId, bar->id());
+    QCOMPARE(v.m_dragBarId, quint32(Truss::invalidId()));
+
+    props->removeTruss(bar->id());
+    props->removeTruss(t1->id());
+    delete doc;
+}
+
+void Monitor_Test::doubleClickingABarActivatesIt()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setType(Truss::Vertical);
+    t1->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    t1->setLength(3.0f);
+    t1->setWidth(0.29f);
+
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1");
+    bar->setParentTrussId(t1->id());
+    bar->setParentOffset(1.5f);
+    bar->setBarFace(Truss::FaceDownstage);
+    bar->setBarRun(Truss::RunAcross);
+    bar->setLength(1.0f);
+    bar->setWidth(0.29f);
+    props->recomputeChildTrusses();
+
+    StructureStudioView v(doc, StructureStudioView::TrussKind, t1->id());
+    v.resize(800, 640);
+    v.setPlane(StructureStudioView::Front);
+    v.setLocked(false);
+    v.reload();
+    v.m_zoomed = true;
+
+    QSignalSpy spy(&v, &StructureStudioView::barActivated);
+    const QPointF onBar = v.w2s(bar->positionAt(bar->length() * 0.5f));
+
+    // Full real event sequence a double-click actually generates.
+    QMouseEvent press1(QEvent::MouseButtonPress, onBar, onBar,
+                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    v.mousePressEvent(&press1);
+    QMouseEvent release1(QEvent::MouseButtonRelease, onBar, onBar,
+                         Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    v.mouseReleaseEvent(&release1);
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, onBar, onBar,
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    v.mouseDoubleClickEvent(&dbl);
+    QMouseEvent release2(QEvent::MouseButtonRelease, onBar, onBar,
+                         Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    v.mouseReleaseEvent(&release2);
+
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.takeFirst().at(0).toUInt(), bar->id());
+
+    props->removeTruss(bar->id());
+    props->removeTruss(t1->id());
+    delete doc;
+}
+
+void Monitor_Test::draggingABarChangesItsPositionAlongTheParent()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setType(Truss::Vertical);
+    t1->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    t1->setLength(3.0f);
+    t1->setWidth(0.29f);
+
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1");
+    bar->setParentTrussId(t1->id());
+    bar->setParentOffset(1.0f);
+    bar->setBarFace(Truss::FaceDownstage);
+    bar->setBarStandoff(0.0f);
+    bar->setBarRun(Truss::RunAcross);
+    bar->setLength(1.0f);
+    bar->setWidth(0.29f);
+    props->recomputeChildTrusses();
+
+    StructureStudioView v(doc, StructureStudioView::TrussKind, t1->id());
+    v.resize(800, 640);
+    v.setPlane(StructureStudioView::Front);
+    v.reload();
+    v.m_zoomed = true;
+
+    // T-1 is Vertical, so its run is Z: drag half a metre UP ("it must be
+    // vertically movable").
+    const QPointF target = v.w2s(bar->origin() + QVector3D(0.0f, 0.0f, 0.5f));
+    QVERIFY(v.dragBarTo(bar->id(), target));
+    QVERIFY2(qAbs(double(bar->parentOffset()) - 1.5) < 0.05,
+             qPrintable(QString("expected ~1.5 m along the run after a 0.5 m drag, "
+                                "got %1").arg(double(bar->parentOffset()))));
+
+    /* "horizontally .. so it can be more on one side than the other" --
+       barCrossShift, applied along the bar's OWN run direction (already
+       computed and stored by recomputeChildTrusses() as bar->direction()),
+       not the parent's. Bar 1 is RunAcross on a Vertical parent, so its own
+       run is horizontal (X here) -- drag sideways and confirm the shift
+       actually lands where recomputeChildTrusses()'s own formula
+       (newOrigin = base - runVec * (length/2 - crossShift)) says it will:
+       the origin moves by the SAME delta along bar->direction(). */
+    const QVector3D beforeOrigin = bar->origin();
+    const float beforeCross = bar->barCrossShift();
+    const QPointF sideways = v.w2s(bar->origin() + QVector3D(0.3f, 0.0f, 0.0f));
+    QVERIFY(v.dragBarTo(bar->id(), sideways));
+    QVERIFY2(!qFuzzyCompare(bar->barCrossShift(), beforeCross),
+             "a sideways drag did not change barCrossShift at all");
+    const QPointF d = bar->direction();
+    const QVector3D expectedOrigin = beforeOrigin
+        + QVector3D(float(d.x()), float(d.y()), 0.0f) * (bar->barCrossShift() - beforeCross);
+    QVERIFY2((bar->origin() - expectedOrigin).length() < 0.05f,
+             qPrintable(QString("origin %1,%2,%3 doesn't match recomputeChildTrusses()'s "
+                                "own cross-shift formula (expected %4,%5,%6)")
+                        .arg(double(bar->origin().x())).arg(double(bar->origin().y()))
+                        .arg(double(bar->origin().z()))
+                        .arg(double(expectedOrigin.x())).arg(double(expectedOrigin.y()))
+                        .arg(double(expectedOrigin.z()))));
+
+    /* The PARENT truss's lock must NOT block this -- a bar is its own
+       structural object, not a fixture riding one; the main 2D plot already
+       evaluates a bar's own drag-lock independently of its parent
+       (monitorgraphicsview.cpp's Trusses block), and inheriting the
+       parent's lock here made every bar on this rig's four (deliberately
+       locked) main trusses permanently unmovable regardless of the bar's
+       own state. */
+    t1->setLocked(true);
+    QVERIFY2(v.dragBarTo(bar->id(), v.w2s(bar->origin() + QVector3D(0.0f, 0.0f, 0.3f))),
+             "a bar on an unlocked bar but a locked PARENT truss should still drag");
+    t1->setLocked(false);
+
+    // The bar's OWN lock is what actually has to stop it.
+    bar->setLocked(true);
+    const float beforeLockedBar = bar->parentOffset();
+    QVERIFY2(v.dragBarTo(bar->id(), v.w2s(bar->origin() + QVector3D(0.0f, 0.0f, 1.0f))) == false,
+             "a locked bar was still draggable");
+    QCOMPARE(bar->parentOffset(), beforeLockedBar);
+
+    props->removeTruss(bar->id());
+    props->removeTruss(t1->id());
+    delete doc;
+}
+
 /* "Put bars in T1 .. and they're not visible on the rig display." The bars are
    FIXTURES on the tower, and the inspector shows them as Placement = Inside --
    rigged within the structure's volume rather than bolted to its face. */
@@ -3949,6 +4507,86 @@ void Monitor_Test::fixturesThatBuryTheirStructureBecomeACount()
     foreach (quint32 fid, bars)
         doc->deleteFixture(fid);
     props->removeTruss(tower->id());
+    delete doc;
+}
+
+/* "t1 is now giving me the numbercircle combo on a side view when the
+   fixtures are not obscuring the truss." T1 runs along X; a Side view drops
+   X, so updateTrusses() clamps its near-zero projected length up to pxWid
+   ("end-on trusses stay visible") -- correct for DRAWING it, but that left a
+   tiny pxWid-square footprint for coverage math to measure against, and any
+   fixture on the real run (spread along X, which Side also collapses)
+   trivially "covered" more than 40% of a square that was never the truss's
+   real on-screen size. Front, which keeps X, must not be fooled the same way. */
+void Monitor_Test::endOnTrussIsNotBuriedByItsOwnFixtures()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t1 = props->addTruss();
+    t1->setName("T1");
+    t1->setType(Truss::Horizontal);
+    t1->setOrigin(QVector3D(3.0f, 3.0f, 3.0f));
+    t1->setDirection(QPointF(1.0, 0.0));         // runs along X
+    t1->setLength(3.0f);
+    t1->setWidth(0.05f);
+
+    QList<quint32> heads;
+    for (int i = 0; i < 2; i++)
+    {
+        Fixture *f = makeMover(doc, 14.0, quint32(i * 8), qPrintable(QString("T1-B%1").arg(i + 1)),
+                               QVector3D(3.0f + float(i), 3.0f, 3.0f));
+        QVERIFY(f != nullptr);
+        heads << f->id();
+        FixtureRigProps rp;
+        rp.trussId = t1->id();
+        rp.trussOffset = 0.5f + float(i) * 2.0f;   // well apart along the 3 m run
+        props->setFixtureRigProps(f->id(), rp);
+    }
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.updateTrusses();
+        foreach (quint32 fid, heads)
+            view.addFixture(fid, QPointF(3000.0, 3000.0));
+
+        // FRONT keeps X: the truss draws at its real length, nowhere near buried.
+        view.setViewPOV(MonitorGraphicsView::PovFront);
+        view.refreshItemLayerState();
+        const double frontCover =
+            view.structureCoverageByItsFixtures(QStringLiteral("truss"), t1->id());
+        QVERIFY2(frontCover < 0.40,
+                 qPrintable(QString("front (real length) coverage %1 -- test rig "
+                                    "is not modelling this truss correctly").arg(frontCover)));
+
+        // SIDE drops X: T1 draws end-on, but that is a drawing fallback, not a
+        // real footprint -- its two heads (apart along the run Side just
+        // collapsed) must not read as burying it.
+        view.setViewPOV(MonitorGraphicsView::PovSide);
+        view.refreshItemLayerState();
+        const double sideCover =
+            view.structureCoverageByItsFixtures(QStringLiteral("truss"), t1->id());
+        QVERIFY2(sideCover < 0.40,
+                 qPrintable(QString("side (end-on) coverage %1 -- an end-on truss "
+                                    "reads as buried by fixtures that do not "
+                                    "actually obscure it").arg(sideCover)));
+        QVERIFY2(!view.m_countBadges.contains(QStringLiteral("truss:%1").arg(t1->id())),
+                 "a spurious count badge covered an end-on truss's own fixtures");
+        foreach (quint32 fid, heads)
+        {
+            MonitorFixtureItem *it = view.m_fixtures.value(fid, nullptr);
+            QVERIFY(it != nullptr);
+            QVERIFY2(it->isVisible(),
+                     "an end-on truss's fixtures were hidden behind a false bury");
+        }
+    }
+
+    foreach (quint32 fid, heads)
+        doc->deleteFixture(fid);
+    props->removeTruss(t1->id());
     delete doc;
 }
 
@@ -4498,6 +5136,30 @@ void Monitor_Test::editingALookUpdatesTheRigView()
     delete doc;
 }
 
+void Monitor_Test::overlappingFixturesAreFlagged()
+{
+    Doc *doc = new Doc(this);
+
+    Fixture *a = makeMover(doc, 14.0, 0, "A", QVector3D(3.0f, 3.0f, 1.0f));
+    Fixture *b = makeMover(doc, 14.0, 10, "B", QVector3D(3.0f, 3.0f, 1.0f));  // same spot
+    Fixture *c = makeMover(doc, 14.0, 20, "C", QVector3D(9.0f, 3.0f, 1.0f));  // well clear
+    QVERIFY(a != nullptr && b != nullptr && c != nullptr);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 480);
+    v.reload();
+    v.rebuildOverlapWarnings();
+
+    QVERIFY2(v.m_overlappingFixtures.contains(a->id()),
+             "fixture A, rigged into the same space as B, was not flagged");
+    QVERIFY2(v.m_overlappingFixtures.contains(b->id()),
+             "fixture B, rigged into the same space as A, was not flagged");
+    QVERIFY2(v.m_overlappingFixtures.contains(c->id()) == false,
+             "fixture C, rigged well clear of the others, was flagged anyway");
+
+    delete doc;
+}
+
 void Monitor_Test::aFollowSpotAimsAtTheSubjectNotTheFloor()
 {
     /* "The lights aren't pointing at the HEIGHT of the target subject, which is
@@ -4796,12 +5458,18 @@ void Monitor_Test::aFaceFixtureDrawsOverWhatIsInside()
         {
             v.setPlane(planes[k]);
             const QImage img = v.grab().toImage();
-            const QPoint c = v.w2s(v.fixtureCentre(face->id())).toPoint();
+            // w2s() is logical pixels; grab() on a HiDPI screen returns
+            // device pixels (devicePixelRatio() times as many) -- scale the
+            // IMAGE-sampling point to match, but keep the LOGICAL point for
+            // hitTestFixture(), which takes real widget/mouse coordinates.
+            const double dpr = img.devicePixelRatio();
+            const QPointF cLogical = v.w2s(v.fixtureCentre(face->id()));
+            const QPoint c = (cLogical * dpr).toPoint();
             int red = 0, blue = 0;
             for (int dy = -6; dy <= 6; ++dy)
                 for (int dx = -6; dx <= 6; ++dx)
                 {
-                    const QPoint q = c + QPoint(dx, dy);
+                    const QPoint q = c + QPoint(int(dx * dpr), int(dy * dpr));
                     if (!img.rect().contains(q))
                         continue;
                     const QColor px = img.pixelColor(q);
@@ -4812,7 +5480,7 @@ void Monitor_Test::aFaceFixtureDrawsOverWhatIsInside()
                      qPrintable(QString("%1: the face fixture is under the one inside "
                                         "(%2 face px, %3 inside px)")
                                 .arg(names[k]).arg(red).arg(blue)));
-            QVERIFY2(v.hitTestFixture(QPointF(c)) == face->id(),
+            QVERIFY2(v.hitTestFixture(cLogical) == face->id(),
                      qPrintable(QString("%1: clicking where the face fixture is drawn "
                                         "picked the one hidden under it").arg(names[k])));
         }
@@ -4953,11 +5621,15 @@ void Monitor_Test::manyWhiteBeamsDoNotBlowOut()
 
         const float foot = props->targetAimPoint(who, true).z() - props->targetAimHeight(who, true);
         const float tall = props->targetFigureHeight(who);
+        // w2s() is logical pixels; grab() on a HiDPI screen returns device
+        // pixels (devicePixelRatio() times as many) -- scale to match.
+        const double dpr = img.devicePixelRatio();
         auto sample = [&](const QVector3D &w) {
-            const QPoint c = v.w2s(w).toPoint();
+            const QPoint c = (v.w2s(w) * dpr).toPoint();
+            const int r2 = qMax(1, int(dpr));
             int r = 0, g = 0, b = 0, n = 0;
-            for (int dy = -1; dy <= 1; ++dy)
-                for (int dx = -1; dx <= 1; ++dx)
+            for (int dy = -r2; dy <= r2; ++dy)
+                for (int dx = -r2; dx <= r2; ++dx)
                 {
                     const QColor px = img.pixelColor(c + QPoint(dx, dy));
                     r += px.red(); g += px.green(); b += px.blue(); ++n;
@@ -4970,16 +5642,21 @@ void Monitor_Test::manyWhiteBeamsDoNotBlowOut()
                                               3.06f, foot + 0.25f * tall));
 
         // Pure white anywhere but on the figure itself.
-        const QPointF headPx = v.w2s(QVector3D(5.0f, 3.0f, foot + tall));
-        const QPointF feetPx = v.w2s(QVector3D(5.0f, 3.0f, foot));
-        const QRectF figureBox(QPointF(headPx.x() - 0.4 * v.m_scale, headPx.y()),
-                               QPointF(feetPx.x() + 0.4 * v.m_scale, feetPx.y()));
+        // w2s() is logical pixels; grab() on a HiDPI screen returns device
+        // pixels (devicePixelRatio() times as many) -- scale the figure box,
+        // the scan's start row, and the logical-pixel margins to match, or
+        // the exclusion zone lands nowhere near the figure and the scan
+        // starts far too early, sweeping the beam cones themselves in.
+        const QPointF headPx = v.w2s(QVector3D(5.0f, 3.0f, foot + tall)) * dpr;
+        const QPointF feetPx = v.w2s(QVector3D(5.0f, 3.0f, foot)) * dpr;
+        const QRectF figureBox(QPointF(headPx.x() - 0.4 * v.m_scale * dpr, headPx.y()),
+                               QPointF(feetPx.x() + 0.4 * v.m_scale * dpr, feetPx.y()));
         /* Below the row of heads: a lamp at full is white and should be, so
            the heads themselves are not what is being measured. */
         double belowHeads = 0.0;
         foreach (Fixture *f, heads)
             belowHeads = qMax(belowHeads, v.w2s(props->fixtureRigPosition(f->id())).y());
-        belowHeads += 40.0;
+        belowHeads = belowHeads * dpr + 40.0 * dpr;
         int clipped = 0;
         for (int y = int(belowHeads); y < img.height(); ++y)
             for (int x = 0; x < img.width(); ++x)
@@ -5066,10 +5743,14 @@ void Monitor_Test::aPersonTakesTheColourOfTheLightOnIt()
         const QVector3D chest(3.0f, 3.0f + 0.13f * tall / 1.75f, foot + 0.72f * tall);
         auto chestColour = [&]() {
             const QImage img = v.grab().toImage();
-            const QPoint c = v.w2s(chest).toPoint();
+            // w2s() is logical pixels; grab() on a HiDPI screen returns
+            // device pixels (devicePixelRatio() times as many).
+            const double dpr = img.devicePixelRatio();
+            const QPoint c = (v.w2s(chest) * dpr).toPoint();
+            const int r2 = qMax(1, int(2 * dpr));
             int r = 0, g = 0, b = 0, n = 0;
-            for (int dy = -2; dy <= 2; ++dy)
-                for (int dx = -2; dx <= 2; ++dx)
+            for (int dy = -r2; dy <= r2; ++dy)
+                for (int dx = -r2; dx <= r2; ++dx)
                 {
                     const QColor px = img.pixelColor(c + QPoint(dx, dy));
                     r += px.red(); g += px.green(); b += px.blue(); ++n;
@@ -5143,7 +5824,10 @@ void Monitor_Test::anAreaTargetShowsItsSize()
         view.resize(1000, 700);
         view.setGridMetrics(1000.0);
         view.setGridSize(QSize(10, 5));
-        const double ppm = 1000.0 * view.m_cellPixels / view.m_unitValue;
+        // grab() on a HiDPI screen returns device pixels, devicePixelRatio()
+        // times as many as m_cellPixels/m_unitValue describe -- scale to match.
+        const double ppm = 1000.0 * view.m_cellPixels / view.m_unitValue
+                          * view.devicePixelRatioF();
 
         view.setViewPOV(MonitorGraphicsView::PovTop);
         view.updateTargets();
@@ -5152,20 +5836,24 @@ void Monitor_Test::anAreaTargetShowsItsSize()
                  qPrintable(QString("from above the area is %1 x %2 px, expected %3 x %4")
                             .arg(top.width()).arg(top.height()).arg(3.0 * ppm).arg(1.5 * ppm)));
 
+        // mapFromScene() is logical widget pixels; the strip window below
+        // has to move to device pixels along with the image it indexes.
         auto stripRow = [&]() {
             TargetItem *ti = view.m_targetItems.value(area->id(), nullptr);
-            return ti ? view.mapFromScene(ti->pos()).y() : 0;
+            const double y = ti ? view.mapFromScene(ti->pos()).y() : 0;
+            return int(y * view.devicePixelRatioF());
         };
+        const int rowSpan = qMax(1, int(view.devicePixelRatioF()));
         view.setViewPOV(MonitorGraphicsView::PovFront);
         view.updateTargets();
-        QRect front = extent(view.grab().toImage(), stripRow() + 1, stripRow() + 3);
+        QRect front = extent(view.grab().toImage(), stripRow() + rowSpan, stripRow() + 3 * rowSpan);
         QVERIFY2(qAbs(front.width() - 3.0 * ppm) < 12,
                  qPrintable(QString("from the front the area is %1 px wide, expected %2")
                             .arg(front.width()).arg(3.0 * ppm)));
 
         view.setViewPOV(MonitorGraphicsView::PovSide);
         view.updateTargets();
-        QRect side = extent(view.grab().toImage(), stripRow() + 1, stripRow() + 3);
+        QRect side = extent(view.grab().toImage(), stripRow() + rowSpan, stripRow() + 3 * rowSpan);
         QVERIFY2(qAbs(side.width() - 1.5 * ppm) < 12,
                  qPrintable(QString("from the side the area is %1 px wide, expected %2")
                             .arg(side.width()).arg(1.5 * ppm)));
@@ -5354,13 +6042,20 @@ void Monitor_Test::aBeamFadesAlongItsLengthWhicheverWayItPoints()
         v.setLiveValues(true);
         v.setActiveScene(scene->id());
 
+        // w2s() answers in logical pixels; grab() on a HiDPI screen returns
+        // device pixels (devicePixelRatio() times as many). luminance()'s
+        // sample point (and its own +/-1 logical-pixel window) both need
+        // scaling up to match img's own indexing.
         auto luminance = [](const QImage &img, const QPointF &at) {
+            const double dpr = img.devicePixelRatio();
+            const QPoint atPx = (at * dpr).toPoint();
+            const int r = qMax(1, int(dpr));
             double sum = 0.0;
             int n = 0;
-            for (int dy = -1; dy <= 1; ++dy)
-                for (int dx = -1; dx <= 1; ++dx)
+            for (int dy = -r; dy <= r; ++dy)
+                for (int dx = -r; dx <= r; ++dx)
                 {
-                    const QPoint q = at.toPoint() + QPoint(dx, dy);
+                    const QPoint q = atPx + QPoint(dx, dy);
                     if (!img.rect().contains(q)) continue;
                     const QColor c = img.pixelColor(q);
                     sum += 0.3 * c.red() + 0.59 * c.green() + 0.11 * c.blue();
@@ -5530,12 +6225,16 @@ void Monitor_Test::aBeamCarriesOnPastWhatItIsAimedAt()
     v.setLiveValues(true);
 
     const QImage img = v.grab().toImage();
-    const QPointF beyond = v.w2s(org + dir * float(toTarget + 1.5));
+    // w2s() is logical pixels; grab() on a HiDPI screen returns device pixels
+    // (devicePixelRatio() times as many) -- scale the sample point and its
+    // logical-pixel search window to match.
+    const double dpr = img.devicePixelRatio();
+    const QPointF beyond = v.w2s(org + dir * float(toTarget + 1.5)) * dpr;
     int lit = 0;
     for (int dy = -8; dy <= 8; ++dy)
         for (int dx = -8; dx <= 8; ++dx)
         {
-            const QPoint q(beyond.toPoint() + QPoint(dx, dy));
+            const QPoint q(beyond.toPoint() + QPoint(int(dx * dpr), int(dy * dpr)));
             if (!img.rect().contains(q)) continue;
             const QColor c = img.pixelColor(q);
             if (c.red() * 0.3 + c.green() * 0.59 + c.blue() * 0.11 > 55)
@@ -5756,13 +6455,17 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
         QVector3D aimPt2;
         QVERIFY(v.aimPointFor(head->id(), aimPt2));
         const QVector3D buried = head3 + (aimPt2 - head3) * 0.55f;
-        const QPointF probe = v.w2s(buried);
+        // w2s() is logical pixels; grab() on a HiDPI screen returns device
+        // pixels (devicePixelRatio() times as many) -- scale the probe and
+        // its logical-pixel search window to match.
+        const double dpr = img.devicePixelRatio();
+        const QPointF probe = v.w2s(buried) * dpr;
 
         int traced = 0;
         for (int dy = -22; dy <= 22; ++dy)
             for (int dx = -22; dx <= 22; ++dx)
             {
-                const QPoint q(probe.toPoint() + QPoint(dx, dy));
+                const QPoint q(probe.toPoint() + QPoint(int(dx * dpr), int(dy * dpr)));
                 if (!img.rect().contains(q)) continue;
                 const QColor c = img.pixelColor(q);
                 if (c.red() > 140 && c.blue() > 140 && c.green() < 90)
@@ -5818,13 +6521,16 @@ void Monitor_Test::aBeamFadesAllTheWayOutWithTheDimmer()
         u[3] = char(255); u[4] = char(255); u[5] = char(255);
         head->setChannelValues(u);
         const QImage img = v.grab().toImage();
-        const QPointF at = v.w2s(v.fixtureCentre(head->id()));
-        const QPointF probe(at.x(), at.y() + 120);   // into the throw
+        // w2s() is logical pixels; grab() on a HiDPI screen returns device
+        // pixels (devicePixelRatio() times as many) -- scale accordingly.
+        const double dpr = img.devicePixelRatio();
+        const QPointF at = v.w2s(v.fixtureCentre(head->id())) * dpr;
+        const QPointF probe(at.x(), at.y() + 120 * dpr);   // into the throw
         double sum = 0; int n = 0;
         for (int dy = -14; dy <= 14; ++dy)
             for (int dx = -14; dx <= 14; ++dx)
             {
-                const QPoint q(probe.toPoint() + QPoint(dx, dy));
+                const QPoint q(probe.toPoint() + QPoint(int(dx * dpr), int(dy * dpr)));
                 if (!img.rect().contains(q)) continue;
                 const QColor c = img.pixelColor(q);
                 sum += c.red() * 0.3 + c.green() * 0.59 + c.blue() * 0.11;
@@ -6523,13 +7229,16 @@ void Monitor_Test::aStepsOwnTapeSitsInFrontOfWhatIsInsideIt()
     v.setAmbient(0.40);
     const QImage img = v.grab().toImage();
 
-    const QPointF at = v.w2s(props->fixtureRigPosition(tape->id()));
+    // w2s() is logical pixels; grab() on a HiDPI screen returns device
+    // pixels (devicePixelRatio() times as many) -- scale to match.
+    const double dpr = img.devicePixelRatio();
+    const QPointF at = v.w2s(props->fixtureRigPosition(tape->id())) * dpr;
     int red2 = 0, green2 = 0;
     for (int dy = -6; dy <= 6; ++dy)
     {
         for (int dx = -120; dx <= 120; ++dx)
         {
-            const QPoint p(at.toPoint() + QPoint(dx, dy));
+            const QPoint p(at.toPoint() + QPoint(int(dx * dpr), int(dy * dpr)));
             if (img.rect().contains(p) == false) continue;
             const QColor c = img.pixelColor(p);
             if (c.red() > 110 && c.red() > c.green() * 2) ++red2;
@@ -6623,16 +7332,19 @@ void Monitor_Test::fixturesInsideAStepAreAllVisible()
         v.setLiveValues(true);
         v.setAmbient(0.40);
         const QImage img = v.grab().toImage();
+        // w2s() is logical pixels; grab() on a HiDPI screen returns device
+        // pixels (devicePixelRatio() times as many) -- scale to match.
+        const double dpr = img.devicePixelRatio();
         int seen = 0;
         foreach (quint32 fid, fids)
         {
-            const QPointF at = v.w2s(props->fixtureRigPosition(fid));
+            const QPointF at = v.w2s(props->fixtureRigPosition(fid)) * dpr;
             bool found = false;
             for (int dy = -9; dy <= 9 && !found; ++dy)
             {
                 for (int dx = -9; dx <= 9 && !found; ++dx)
                 {
-                    const QPoint p(at.toPoint() + QPoint(dx, dy));
+                    const QPoint p(at.toPoint() + QPoint(int(dx * dpr), int(dy * dpr)));
                     if (img.rect().contains(p) == false) continue;
                     const QColor c = img.pixelColor(p);
                     if (c.red() > 120 && c.red() > c.green() * 2 && c.red() > c.blue() * 2)
@@ -6728,8 +7440,17 @@ void Monitor_Test::pixelsSurviveOffAxisOnTheirOwnHousing()
         v.setAngledView(azimuth, 12.0);
         v.setLiveValues(true);
         v.setAmbient(0.40);
-        const QPointF mid = v.w2s(props->fixtureRigPosition(fxi->id()));
+        /* This is a housing/depth-sort test, not a beam test -- but washes
+           throw light now, and a riser-mounted strip's "out from the riser"
+           direction here runs nearly straight down the camera's own sightline.
+           Edge-on, the wash's far-end disc balloons to cover most of the frame
+           and swamps the per-pixel count this test is actually measuring. */
+        v.setBeams(false);
         const QImage img = v.grab().toImage();
+        // w2s() is logical pixels; grab() on a HiDPI screen returns device
+        // pixels (devicePixelRatio() times as many) -- scale to match, or
+        // the dividing line lands nowhere near the strip's actual centre.
+        const QPointF mid = v.w2s(props->fixtureRigPosition(fxi->id())) * img.devicePixelRatio();
         left = right = 0;
         for (int y = 0; y < img.height(); ++y)
         {
@@ -7956,13 +8677,18 @@ void Monitor_Test::aWashOnATrussThrowsLightToo()
         u[0] = char(level); u[1] = char(level); u[2] = char(level);   // white
         wash->setChannelValues(u);
         const QImage img = v.grab().toImage();
-        const QPointF at = v.w2s(v.fixtureCentre(wash->id()));
-        const QPointF probe(at.x(), at.y() + 110);      // into the throw
+        // w2s() is logical pixels; grab() on a HiDPI screen returns device
+        // pixels (devicePixelRatio() times as many). Scale the probe (and the
+        // logical-pixel offsets that build it) up to match, or the sample
+        // point lands nowhere near the beam on a Retina display.
+        const double dpr = img.devicePixelRatio();
+        const QPointF at = v.w2s(v.fixtureCentre(wash->id())) * dpr;
+        const QPointF probe(at.x(), at.y() + 110 * dpr);      // into the throw
         double sum = 0; int n = 0;
         for (int dy = -12; dy <= 12; ++dy)
             for (int dx = -12; dx <= 12; ++dx)
             {
-                const QPoint q(probe.toPoint() + QPoint(dx, dy));
+                const QPoint q(probe.toPoint() + QPoint(int(dx * dpr), int(dy * dpr)));
                 if (!img.rect().contains(q)) continue;
                 const QColor c = img.pixelColor(q);
                 sum += c.red() * 0.3 + c.green() * 0.59 + c.blue() * 0.11;

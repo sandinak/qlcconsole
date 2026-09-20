@@ -1119,6 +1119,86 @@ of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
 
+### Follow-on 46: a bar becomes a first-class object in its parent's editor
+
+Branson, working a real show file (`stage-structures-demo.qxw`), reported a
+run of bugs in one sitting against a truss's child "bar" (a Truss with
+`parentTrussId()` set): not visible in the bar's own editor at all; when
+visible, drawn behind fixtures overlapping it; not selectable with the
+mouse; once selectable, not draggable either vertically (along the parent)
+or horizontally (its cross/off-centre position); a fixture explicitly set
+to "Underhung" still rendered standing upright. Each was chased down and
+fixed in turn, all offscreen-verified (`QT_QPA_PLATFORM=offscreen`) per the
+standing rule against driving the real screen to test this app:
+
+- **Not listed at all.** `mountedFixtures()` only walks `Doc::fixtures()`,
+  never child-bar trusses, so the editor's own tree never had a "Bars"
+  section. Added one; also bumped the tree/dialog height so it isn't
+  scrolled out of view.
+- **Drawn behind fixtures.** The flat-view bar-drawing loop ran before
+  `drawFixtures()`; moved it after, so a bar is never hidden behind
+  something mounted on it.
+- **Unselectable / narrow hit-test.** No `hitTestBar()` existed at all.
+  Added one, width-aware (the old flat-9px version — found while building
+  it — would have missed most clicks inside a wide bar).
+- **Selected but not draggable.** `dragBarTo()` only ever moved the ALONG
+  axis. Extended it to also apply `barCrossShift` along the bar's own
+  direction, so a bar can sit off-centre on its run, not just centred.
+- **"Still not movable" even after that.** The real rig's main trusses are
+  genuinely locked, and `dragBarTo()`/the inspector's "Along truss" field
+  were checking the PARENT's lock, not just the bar's own — so every bar on
+  a locked truss was permanently stuck regardless of its own lock state.
+  The main 2D plot never made this mistake (`TrussItem::locked()` is
+  evaluated independently there); brought the Studio editor in line with
+  it.
+- **Edits silently reverting on OK.** `slotEditTruss()`'s OK handler still
+  had a leftover write-back from the old `TrussStripWidget` 1D-strip UI,
+  unconditionally overwriting a bar's `parentOffset`/`barCrossShift` with
+  stale dialog-open-time values on every OK click — this is very likely
+  what "moving the bar to the top of the truss didn't save its vertical
+  position" actually was. Removed the dead write-back.
+- **"Underhung .. visually upright."** Two separate bugs, not one:
+  (1) `FixtureRigProps::studioMount` (which plane a fixture's 3D body is
+  built on) has a general stray default of 1 (Front/face) that nothing
+  ever corrected for a truss/pipe mount the way `repairMountPlanes()`
+  already corrects it for riser and deck mounts — extended that repair
+  with a truss/pipe branch (horizontal → Top, matching how a horizontal
+  mount is already treated like a deck everywhere else; vertical → leave
+  the default alone, which is why a fixture mounted straight onto a
+  vertical truss/tower was never seen doing this). Also applied live, via
+  a new `MonitorProperties::repairMountPlane(FixtureRigProps&)`, from both
+  places a mount/orientation gets committed without a reload in between.
+  (2) Separately, and this is what the FIRST attempt at this fix missed —
+  reported back with "STILL not showing underhung .. check it before you
+  report success" — the bar's own flat Front/Side elevation goes through a
+  DIFFERENT code path in `drawOneFixture()` than the Angled 3D view: the
+  tower-shelf special case correctly reads `mountingType`, but the generic
+  (non-tower) mover-elevation branch used for anything on a truss/bar
+  hardcoded `moverElevationPath(rect, false, units)` — "not hung", always,
+  regardless of what Orientation said. Fixed by reading `mountingType`
+  there too.
+- **Also found along the way, unrelated to bars:** no native pinch-to-zoom
+  on the Studio canvas (only the main 2D plot had it); clicking empty
+  canvas/the truss body didn't clear a stale fixture/bar selection (the
+  "takes 2-3 clicks" symptom); a compass label ("◀ stage right") and the
+  height ruler's "max H ft" callout land in the same corner and print on
+  top of each other when a per-object editor is framed tight around one
+  short structure ("scale isn't right" — the numbers themselves were
+  fine, they were just unreadable).
+
+Verified this time by writing a regression test for the underhung bug,
+reverting the fix, confirming the test FAILS, then restoring it — not just
+building and reporting green. `monitor_test` 129/129, `monitorproperties_test`
+29/29, full `check-all.sh` (Qt5/Qt6/Qt6-Release/Qt6-Werror) clean.
+
+Still queued, not yet started: show the parent truss as an unselectable
+background reference when editing a bar; show fixture width/height
+dimension labels on selection in the bar/truss editor, matching the parent
+editor; the ruler's "centering" display for a selected truss; and making
+the ruler show only the truss when the truss is selected, only the bar when
+the bar is selected (right now it's ambiguous about which one it's
+describing).
+
 ### Follow-on 45: the real colour picker still didn't reach the rig view
 
 Branson, 2026-09-18: "I changes the color on the scene I have .. and the rig

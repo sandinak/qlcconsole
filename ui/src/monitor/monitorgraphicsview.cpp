@@ -2233,6 +2233,18 @@ double MonitorGraphicsView::structureCoverageByItsFixtures(const QString &kind, 
 {
     const QGraphicsItem *host = nullptr;
     QRectF hostRect;
+    /* An end-on truss in an elevation: updateTrusses() clamps a run that
+       projects to near nothing (pxLen < pxWid) up to pxWid so it stays
+       visible ("end-on trusses stay visible") -- but that leaves footprintRect()
+       a tiny pxWid-square with no relation to how much of the truss is
+       actually on screen. Fixtures spread along the real run still project
+       close together there and trivially "cover" that fake square, so a
+       truss running along the axis this view has collapsed reported buried
+       when nothing about it is actually obscured ("t1 .. on a side view when
+       the fixtures are not obscuring the truss"). Horizontal only: a Top-view
+       tower's own pxLen==pxWid circle IS its real cross-section, not an
+       artefact, and must still bury normally. */
+    bool endOnElevation = false;
     if (kind == QStringLiteral("truss"))
     {
         TrussItem *ti = m_trussItems.value(id, nullptr);
@@ -2241,7 +2253,12 @@ double MonitorGraphicsView::structureCoverageByItsFixtures(const QString &kind, 
         // cover the base plate, which is ~4x its real area and made a tower
         // buried in its own fixtures measure 31%.
         if (ti != nullptr)
+        {
             hostRect = ti->mapRectToScene(ti->footprintRect());
+            endOnElevation = (ti->truss() != nullptr
+                               && ti->truss()->type() != Truss::Vertical
+                               && ti->pxLen() <= ti->pxWid());
+        }
     }
     else if (kind == QStringLiteral("tower"))    host = m_towerItems.value(id, nullptr);
     else if (kind == QStringLiteral("pipe"))     host = m_pipeItems.value(id, nullptr);
@@ -2293,6 +2310,10 @@ double MonitorGraphicsView::structureCoverageByItsFixtures(const QString &kind, 
        side by side; 8.0 = eight of them on one spot. */
     if (stackFactorOut != nullptr)
         *stackFactorOut = (coveredArea > 0.0) ? (summed / coveredArea) : 0.0;
+
+    // Foreshortened to a fake square, not really covered -- see endOnElevation above.
+    if (endOnElevation)
+        return 0.0;
 
     return qBound(0.0, coveredArea / hostArea, 1.0);
 }

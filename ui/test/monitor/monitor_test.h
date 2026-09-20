@@ -65,6 +65,7 @@ private slots:
        VERTICAL truss (the T-2 case) in every plane. */
     void studioTrussDragMovesFixture();
     void studioTrussDragBlockedWhenLocked();
+    void studioTrussDragBlockedWhenTrussLocked();
     void studioTrussDragInEveryPlane();
     /** Every plane moves a truss-mounted fixture in SOME direction -- including
      *  the top view of a vertical run, where there is no axis to slide along
@@ -76,6 +77,9 @@ private slots:
     /** Vertical drag in an elevation on a horizontal run = the drop length
      *  (mountZOffset), so a bar-hung fixture can be raised/lowered there. */
     void studioTrussDragSetsDropInElevation();
+    /** Scroll-wheel and native trackpad pinch zoom share one anchor-at-cursor
+     *  math (zoomAt()) -- both directions, and the clamp at each end. */
+    void studioZoomAtKeepsCursorPointFixed();
     /** A fixture that is NOT on the 2D plot must not be able to poison
      *  MonitorGraphicsView::m_fixtures with a null entry -- QHash::operator[]
      *  INSERTS on a miss, and updateFixture()'s contains() guard then waves the
@@ -144,6 +148,11 @@ private slots:
     /** ...and one standing on a DECK is not buried in it by a mountingType
      *  that defaults to "hung" when nothing set it. */
     void aMoverOnADeckIsNotBuriedInIt();
+    /** "fixture set as underhung .. visually upright": a mover mounted on a
+     *  horizontal TRUSS/bar (not a tower shelf) must also flip in its own
+     *  Front/Side elevation -- the generic (non-tower) mover branch used to
+     *  hardcode "not hung" regardless of mountingType. */
+    void aMoverOnATrussElevationIsNotDrawnUpright();
     /** The plan and the rig must agree about WHERE a fixture is. */
     void planAndRigAgreeOnAFixturesPosition();
     /** A fixture placed outside the grid must stay reachable in the plan --
@@ -193,6 +202,7 @@ private slots:
     /** Fixtures that bury their structure in THIS view are replaced by a count;
      *  in a view where they do not bury it, they stay. */
     void fixturesThatBuryTheirStructureBecomeACount();
+    void endOnTrussIsNotBuriedByItsOwnFixtures();
     void anEditedStructureRecountsItsFixtures();
     void aFixtureMountedFromAnEditorLandsOnThePlot();
     /** Fixtures stacked on one spot but covering little must STAY visible --
@@ -205,6 +215,15 @@ private slots:
     void aTiltedBarIsDrawnTiltedInTheSideView();
     /** A bar hung on a tower must actually be drawn in the rig view. */
     void aBarOnATowerIsDrawnInTheRigView();
+    /** ...and specifically in ITS OWN PARENT's per-object editor too -- a
+     *  separate code path from the whole-rig StageKind view above, which
+     *  proves nothing about this one. */
+    void aBarShowsInItsParentTrusssOwnEditor();
+    /** Visible is not the same as clickable -- hit-test and drag it too. */
+    void hitTestBarFindsANearbyBar();
+    void clickingABarSelectsAndHighlightsIt();
+    void doubleClickingABarActivatesIt();
+    void draggingABarChangesItsPositionAlongTheParent();
     /** A bar rigged INSIDE a tower is still drawn in the rig view. */
     void aFixtureInsideATrussIsStillDrawn();
     /** A clear-topped step must let what is inside it show through, and a
@@ -290,6 +309,9 @@ private slots:
     /** Editing a look updates the rig view: a cache of something the user is
      *  actively editing goes stale the moment they edit it. */
     void editingALookUpdatesTheRigView();
+    /** Two fixtures rigged into the same physical space get flagged; two
+     *  well apart don't. */
+    void overlappingFixturesAreFlagged();
     void aFollowSpotAimsAtTheSubjectNotTheFloor();
     /** A beam aimed at something ends there instead of sailing past it. */
     void aBeamCarriesOnPastWhatItIsAimedAt();
