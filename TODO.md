@@ -1118,6 +1118,50 @@ fixture that has genuinely different per-head colour capability (e.g. one
 of the US1 2-head fixtures, or a fixture with a split RGB head + White
 head) and confirm the tag is correct per cell, not just repeated from the
 whole fixture.
+
+### Follow-on 45: the real colour picker still didn't reach the rig view
+
+Branson, 2026-09-18: "I changes the color on the scene I have .. and the rig
+view didnt' follow" -- after follow-on 38 supposedly fixed exactly this, and
+`editingALookUpdatesTheRigView` (monitor_test) passing the whole time.
+
+**Why the test lied.** It drove the fix from the wrong side: it manually
+called `QMetaObject::invokeMethod(doc, "functionChanged", ...)` to simulate
+"the scene announced a change," then checked the rig view reacted correctly.
+That's real, but it assumes the announcement happens. Nothing had ever
+checked that a real edit through the real colour picker actually produces
+one.
+
+**What was wrong.** `LookEditor::commitColor()` (and ten sibling commit
+paths -- dimmer, gobo, position, every palette type) only ever
+`emit paletteChanged(m_paletteId)`. `ProgrammingManager::slotLookEdited()`,
+the one place that signal is connected, used it to refresh the Programming
+tab's own preview and tree/canvas -- and dropped the palette id on the floor,
+since its slot took no arguments. Nothing there ever told Doc a FUNCTION had
+changed. A palette isn't a Function; editing one is invisible to
+`Doc::functionChanged()`, which is what the rig view (and anything else
+caching a resolved look) actually listens for. Two different, unconnected
+notions of "changed."
+
+**Fix.** `slotLookEdited(quint32 paletteId)` now walks `m_doc->functions()`,
+and for every `Scene` whose `palettes()` contains the edited palette, calls a
+new `Doc::notifyFunctionChanged(fid)` -- public, since `functionChanged` and
+its natural relay slot are both private to `Doc` and a plain `emit` from
+outside doesn't compile. One palette can back several looks, so every scene
+using it gets told, not just whichever one happened to be focused.
+
+**The new test drives the real slot.** `programmingmanager_test`
+(`editingALookColourNotifiesItsScene`) constructs a real `ProgrammingManager`,
+focuses its `LookEditor` on a Color palette a Scene actually uses, calls
+`LookEditor::slotColorChanged()` -- the literal slot the colour picker fires
+-- and asserts `Doc::functionChanged` fires for that scene via `QSignalSpy`.
+Revert-checked: reverting `slotLookEdited()`'s body fails it with "Doc::
+functionChanged never fired," and `editingALookUpdatesTheRigView` keeps
+passing throughout, unbothered, exactly because it never exercised this path.
+
+`programmingmanager_test` 3/3 (new). `monitor_test`'s existing colour test
+unaffected. Not yet run through a full rebuild-and-click by Branson.
+
 ### Follow-on 44: the Subject selector, a drop that lands where you aimed it
 
 **1. The Subject selector.** Follow-on 43 shipped the model with no way to set

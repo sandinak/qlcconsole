@@ -968,6 +968,15 @@ public:
      */
     QList<quint32> getUsage(quint32 fid);
 
+    /**
+     * Announce that a function changed for a reason external to the function
+     * itself -- a palette it references being edited, for example, which is
+     * not a Function and so has no changed() signal of its own to relay.
+     * Marks the doc modified and emits functionChanged(fid), same as a
+     * function announcing its own edit would.
+     */
+    void notifyFunctionChanged(quint32 fid);
+
 protected:
     /**
      * Create a new function Id

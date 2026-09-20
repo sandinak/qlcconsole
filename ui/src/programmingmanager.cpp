@@ -648,7 +648,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
     connect(m_lookEditor, SIGNAL(paletteChanged(quint32)),
-            this, SLOT(slotLookEdited()));
+            this, SLOT(slotLookEdited(quint32)));
     connect(m_lookEditor, &LookEditor::lookFocusChanged,
             this, &ProgrammingManager::currentPaletteIdChanged);
     // Lightweight live-value change (effect params, etc.) — only refresh the
@@ -984,7 +984,7 @@ bool ProgrammingManager::containerHas(quint32 containerId, quint32 fid,
     return false;
 }
 
-void ProgrammingManager::slotLookEdited()
+void ProgrammingManager::slotLookEdited(quint32 paletteId)
 {
     // A look's value changed (including name edits) in the editor:
     // refresh the preview and update any tree/canvas items that show the name.
@@ -994,6 +994,21 @@ void ProgrammingManager::slotLookEdited()
     // Update the canvas's looks list (tiles show palette name).
     if (m_canvas)
         m_canvas->reload();
+
+    /* "Didn't change colour when colour was changed in program from white to
+       blue." This refreshed the Programming tab's OWN preview, but nothing
+       here ever told the rest of the app the SCENE changed -- a palette is
+       not a Function, so editing one is invisible to anything listening for
+       Doc::functionChanged(), which is exactly what the rig view (and
+       anything else caching a resolved look, e.g. StructureStudioView) waits
+       for. Every scene that actually uses this palette gets told, since one
+       palette can be shared across several looks. */
+    foreach (Function *f, m_doc->functions())
+    {
+        Scene *s = qobject_cast<Scene*>(f);
+        if (s != nullptr && s->palettes().contains(paletteId))
+            m_doc->notifyFunctionChanged(s->id());
+    }
 }
 
 bool ProgrammingManager::organizeEffectPalettes()

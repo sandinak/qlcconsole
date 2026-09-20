@@ -1859,6 +1859,11 @@ void Doc::slotFunctionChanged(quint32 fid)
     emit functionChanged(fid);
 }
 
+void Doc::notifyFunctionChanged(quint32 fid)
+{
+    slotFunctionChanged(fid);
+}
+
 void Doc::slotFunctionNameChanged(quint32 fid)
 {
     setModified();

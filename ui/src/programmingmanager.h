@@ -99,7 +99,7 @@ private slots:
     void slotPaletteTreeMenu(const QPoint &pos);
     void slotCanvasModified();
     void slotModeChanged();
-    void slotLookEdited();
+    void slotLookEdited(quint32 paletteId);
     void slotCopy();
     void slotPaste();
     void slotPaletteDoubleClicked(QTreeWidgetItem *item);
