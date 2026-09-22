@@ -137,6 +137,12 @@ void StructureStudioView::setBarHighlight(quint32 barId)
     update();
 }
 
+void StructureStudioView::setPipeBarHighlight(quint32 barId)
+{
+    m_selectedPipeBarId = barId;
+    update();
+}
+
 /*********************************************************************
  * Projection
  *********************************************************************/
@@ -697,6 +703,53 @@ bool StructureStudioView::dragBarTo(quint32 barId, const QPointF &px)
     }
 
     props->recomputeChildTrusses();
+    return true;
+}
+
+bool StructureStudioView::dragPipeBarTo(quint32 barId, const QPointF &px)
+{
+    if (m_plane == Angled)
+        return false;                    // same "no honest inverse" as fixtures/bars
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    Pipe *bar = props->pipe(barId);
+    if (bar == nullptr || !bar->isBarOnPipe())
+        return false;
+    Pipe *parent = props->pipe(bar->parentPipeId());
+    if (parent == nullptr)
+        return false;
+    // The crossbar's OWN lock only, same reasoning as dragBarTo() for a
+    // truss bar -- a crossbar is its own structural object, not simply
+    // attached to its boom.
+    if (bar->locked())
+        return false;
+
+    const QVector3D cur = bar->positionAt(0.0f);   // == its own origin
+    const QPointF ab = screenToPlane(px);
+    QVector3D w = cur;
+    if (m_plane == Top)        { w.setX(float(ab.x())); w.setY(float(ab.y())); }
+    else if (m_plane == Front) { w.setX(float(ab.x())); w.setZ(float(ab.y())); }
+    else                       { w.setY(float(ab.x())); w.setZ(float(ab.y())); }
+    const QVector3D dw = w - cur;
+
+    // Along the PARENT boom's own run -- same axis convention as dragBarTo().
+    // Unlike a truss bar, a pipe crossbar has no cross-shift: its origin is
+    // derived from parentPipeOffset alone (recomputePipeAnchors()), so this
+    // is the crossbar's only degree of freedom.
+    QVector3D axis;
+    if (parent->isVertical())
+    {
+        axis = QVector3D(0.0f, 0.0f, 1.0f);
+    }
+    else
+    {
+        const double a = qDegreesToRadians(double(parent->runAngle()));
+        axis = QVector3D(float(qCos(a)), float(qSin(a)), 0.0f);
+    }
+    bar->setParentPipeOffset(qBound(0.0f, bar->parentPipeOffset() + QVector3D::dotProduct(dw, axis),
+                                    parent->length()));
+
+    props->recomputePipeAnchors();
     return true;
 }
 
@@ -1294,7 +1347,12 @@ void StructureStudioView::drawPipe(QPainter &p, const Pipe *pipe) const
 {
     const QPointF a = w2s(pipe->positionAt(0.0f));
     const QPointF b = w2s(pipe->positionAt(pipe->length()));
-    QColor c = pipe->color();
+    // Same "selected/dragged reads distinctly" amber drawOneStructure() uses
+    // for a truss bar -- only a crossbar (isBarOnPipe()) is ever
+    // selected/dragged this way, a plain boom never is.
+    const bool selected = pipe->isBarOnPipe()
+                         && (pipe->id() == m_selectedPipeBarId || pipe->id() == m_dragPipeBarId);
+    QColor c = selected ? QColor(255, 190, 60) : pipe->color();
     if (!c.isValid()) c = QColor(150, 200, 220);
     p.setPen(QPen(c, pipe->isVertical() ? 3.0 : 2.5, Qt::SolidLine, Qt::RoundCap));
     p.drawLine(a, b);
@@ -5075,8 +5133,25 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
                            || m_doc->monitorProperties()->truss(m_dragBarId)->locked())
                               ? Qt::ArrowCursor : Qt::ClosedHandCursor);
                 setBarHighlight(m_dragBarId);
+                setPipeBarHighlight(Pipe::invalidId());
                 setHighlight({});   // a bar and a fixture are never selected together
                 emit barSelected(m_dragBarId);
+                return;
+            }
+
+            // Same press-to-select-and-arm-a-drag treatment, for a crossbar
+            // hung on a Pipe instead of a Truss (a stand's boom, or a boom
+            // viewed directly).
+            m_dragPipeBarId = hitTestPipeBar(e->pos());
+            if (m_dragPipeBarId != Pipe::invalidId())
+            {
+                setCursor((m_locked || m_plane == Angled
+                           || m_doc->monitorProperties()->pipe(m_dragPipeBarId)->locked())
+                              ? Qt::ArrowCursor : Qt::ClosedHandCursor);
+                setPipeBarHighlight(m_dragPipeBarId);
+                setBarHighlight(UINT_MAX);
+                setHighlight({});   // a bar and a fixture are never selected together
+                emit pipeBarSelected(m_dragPipeBarId);
                 return;
             }
 
@@ -5089,10 +5164,11 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
                clicks" (each click that also missed left the same leftover
                state, so only a click that happened to hit something NEW
                ever visibly changed anything). Clear and say so. */
-            if (!m_highlight.isEmpty() || m_selectedBarId != UINT_MAX)
+            if (!m_highlight.isEmpty() || m_selectedBarId != UINT_MAX || m_selectedPipeBarId != Pipe::invalidId())
             {
                 setHighlight({});
                 setBarHighlight(UINT_MAX);
+                setPipeBarHighlight(Pipe::invalidId());
                 emit fixtureSelected(Fixture::invalidId());
             }
 
@@ -5126,6 +5202,7 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
                           ? Qt::ArrowCursor : Qt::ClosedHandCursor);
             setHighlight({ m_dragFid });
             setBarHighlight(UINT_MAX);   // a bar and a fixture are never selected together
+            setPipeBarHighlight(Pipe::invalidId());
             emit fixtureSelected(m_dragFid);   // selection always works
         }
     }
@@ -5176,6 +5253,13 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
         if (!m_dragged)
             emit editAboutToStart();
         if (dragBarTo(m_dragBarId, e->pos()))
+            m_dragged = true;
+    }
+    else if (m_dragPipeBarId != Pipe::invalidId() && !m_locked)
+    {
+        if (!m_dragged)
+            emit editAboutToStart();
+        if (dragPipeBarTo(m_dragPipeBarId, e->pos()))
             m_dragged = true;
     }
     update();   // keep the ruler crosshair/readout live on hover
@@ -5230,6 +5314,17 @@ void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
             emit barMoved(m_dragBarId);
         }
         m_dragBarId = UINT_MAX;
+        m_dragged = false;
+    }
+    else if (m_dragPipeBarId != Pipe::invalidId())
+    {
+        setCursor(Qt::ArrowCursor);
+        if (m_dragged)
+        {
+            m_doc->setModified();
+            emit pipeBarMoved(m_dragPipeBarId);
+        }
+        m_dragPipeBarId = Pipe::invalidId();
         m_dragged = false;
     }
 }
@@ -5391,6 +5486,43 @@ quint32 StructureStudioView::hitTestBar(const QPointF &px) const
     return best;
 }
 
+quint32 StructureStudioView::hitTestPipeBar(const QPointF &px) const
+{
+    if (m_kind != StandKind && m_kind != PipeKind)
+        return Pipe::invalidId();
+    MonitorProperties *props = m_doc->monitorProperties();
+    quint32 best = Pipe::invalidId(); double bestD = 1e9;
+    foreach (Pipe *bar, props->pipes())
+    {
+        if (bar == nullptr || !bar->isBarOnPipe())
+            continue;
+        // Only crossbars belonging to what THIS editor is showing: a
+        // stand's own booms (standPipes() already includes their
+        // crossbars), or, if opened directly on a boom, that boom's own.
+        bool belongsHere = false;
+        if (m_kind == StandKind)
+            belongsHere = standPipes(m_id).contains(bar);
+        else
+            belongsHere = (bar->parentPipeId() == m_id);
+        if (!belongsHere)
+            continue;
+
+        // Same point-to-segment test as hitTestBar().
+        const QPointF a = w2s(bar->positionAt(0.0f));
+        const QPointF b = w2s(bar->positionAt(bar->length()));
+        const QPointF ab = b - a;
+        const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+        double t = (len2 > 1e-6) ? ((px.x() - a.x()) * ab.x() + (px.y() - a.y()) * ab.y()) / len2 : 0.0;
+        t = qBound(0.0, t, 1.0);
+        const double d = QLineF(a + ab * t, px).length();
+        // Same acceptance-radius reasoning as hitTestBar(), using the pipe's
+        // own physical diameter instead of a truss's width.
+        const double halfWidthPx = qMax(6.0, double(bar->diameter()) * m_scale) / 2.0 + 3.0;
+        if (d <= halfWidthPx && d < bestD) { bestD = d; best = bar->id(); }
+    }
+    return best;
+}
+
 void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)
 {
     const quint32 fid = hitTestFixture(e->pos());
@@ -5401,7 +5533,13 @@ void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)
     }
     const quint32 barId = hitTestBar(e->pos());
     if (barId != UINT_MAX)
+    {
         emit barActivated(barId);
+        return;
+    }
+    const quint32 pipeBarId = hitTestPipeBar(e->pos());
+    if (pipeBarId != Pipe::invalidId())
+        emit pipeBarActivated(pipeBarId);
 }
 
 void StructureStudioView::contextMenuEvent(QContextMenuEvent *e)

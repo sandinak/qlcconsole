@@ -3204,6 +3204,54 @@ TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi,
     return best;
 }
 
+PipeItem *MonitorGraphicsView::pipeUnderFixture(MonitorFixtureItem *mfi,
+                                                float widths, bool forAttach) const
+{
+    if (mfi == nullptr || m_cellPixels <= 0)
+        return nullptr;
+
+    const QPointF centre = mfi->sceneBoundingRect().center();
+    PipeItem *best = nullptr;
+    float bestDist = 0.0f;
+
+    foreach (PipeItem *pi, m_pipeItems)
+    {
+        Pipe *b = pi->pipe();
+        if (b == nullptr || !pi->isVisible())
+            continue;
+        if (forAttach && b->locked())
+            continue;   // a locked structure does not acquire new members
+
+        // PipeItem keeps its own screen geometry private; derive it the same
+        // way updatePlatforms() built the item in the first place, straight
+        // from the Pipe's own metres fields and this view's scale.
+        const float pxWid = float(qMax(6.0, double(b->diameter()) * 1000.0 * m_cellPixels
+                                             / m_unitValue));
+        const QPointF local = pi->mapFromScene(centre);
+        float dist;
+        if (b->isVertical())
+            dist = float(qSqrt(local.x() * local.x() + local.y() * local.y()));
+        else
+        {
+            const float pxLen = float(double(b->length()) * 1000.0 * m_cellPixels / m_unitValue);
+            // Off the ends of the run is not "on the pipe", however close the
+            // perpendicular distance happens to be.
+            if (local.x() < -pxWid || local.x() > pxLen + pxWid)
+                continue;
+            dist = qAbs(float(local.y()));
+        }
+
+        if (dist > pxWid * widths)
+            continue;
+        if (best == nullptr || dist < bestDist)
+        {
+            best = pi;
+            bestDist = dist;
+        }
+    }
+    return best;
+}
+
 void MonitorGraphicsView::attachFixtureToTrussAt(quint32 fid, TrussItem *trussItem,
                                                  MonitorFixtureItem *mfi)
 {
@@ -7179,12 +7227,49 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                 mmPos = QPointF(nw.x() * 1000.0, nw.y() * 1000.0);
             }
         }
+
+        /* Same auto-attach, for a Pipe (boom or crossbar) -- previously the
+           only ways to mount a fixture on a boom were the context-menu
+           "Mount on > Boom" action or dropping it on the Stand's own
+           Structure Studio canvas, never a plain drag here. */
+        if (rp.trussId == Truss::invalidId() && rp.pipeId == Pipe::invalidId() && m_cellPixels > 0)
+        {
+            if (PipeItem *over = pipeUnderFixture(mfi, 1.0f, true))
+            {
+                attachFixtureToPipe(fid, over->pipeId());
+                rp = props->fixtureRigProps(fid);
+                Pipe *pipe = props->pipe(over->pipeId());
+                if (pipe != nullptr && !pipe->isVertical())
+                {
+                    /* attachFixtureToPipe() has no drop point of its own to
+                       work from (the context-menu "Mount on" action doesn't
+                       have one either), so it only fills a DEFAULT offset.
+                       A horizontal pipe (house electric) has a real ALONG
+                       position to read from a Top-view drop, the same as a
+                       Horizontal truss -- refine it here. A vertical boom's
+                       height cannot be read from a Top-view point at all
+                       (the same reason a Vertical truss's own drag-attach
+                       leaves its offset alone too), so this only applies to
+                       the horizontal case. */
+                    const QPointF local = over->mapFromScene(mfi->sceneBoundingRect().center());
+                    const double mmPerPx = double(m_unitValue) / double(m_cellPixels);
+                    const double alongM = qBound(0.0, local.x() * mmPerPx / 1000.0,
+                                                 double(pipe->length()));
+                    rp.pipeOffset = float(alongM);
+                    props->setFixtureRigProps(fid, rp);
+                }
+                const QVector3D nw = props->fixtureRigPosition(fid);
+                mmPos = QPointF(nw.x() * 1000.0, nw.y() * 1000.0);
+            }
+        }
         mfi->setAttachMode(false);
 
         // Auto DECK-MOUNT: unlike trusses, a fixture dropped over a PLATFORM
         // stands on its deck (Z = deck top) — the user asked for this. Dragging
-        // it off the platform un-decks it. Riser-face and truss mounts opt out.
-        if (rp.trussId == Truss::invalidId() && !rp.onRiser() && m_cellPixels > 0)
+        // it off the platform un-decks it. Riser-face, truss and pipe mounts
+        // opt out.
+        if (rp.trussId == Truss::invalidId() && rp.pipeId == Pipe::invalidId()
+                && !rp.onRiser() && m_cellPixels > 0)
         {
             const QPointF cPx = mfi->pos() + halfIcon(mfi);
             const QPointF cMm = pixelsToRealPosition(cPx.x(), cPx.y());

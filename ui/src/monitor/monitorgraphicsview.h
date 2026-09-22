@@ -122,6 +122,15 @@ public:
     void attachFixtureToTrussAt(quint32 fid, class TrussItem *trussItem,
                                 class MonitorFixtureItem *mfi);
 
+    /** Same idea as trussUnderFixture(), for a Pipe (boom or crossbar) --
+     *  the main plot's own attach path for one, which previously did not
+     *  exist at all (only the context-menu "Mount on > Boom" action or
+     *  dropping on the Stand's own Structure Studio canvas could mount a
+     *  fixture on a boom). */
+    class PipeItem *pipeUnderFixture(class MonitorFixtureItem *mfi,
+                                     float widths = 2.0f,
+                                     bool forAttach = false) const;
+
     /** "Stage view": hide everything except the scenic/structural features
      *  (trusses, platforms, images) so the bare stage can be seen. Fixtures,
      *  targets and power sources are hidden while on. */

@@ -18,24 +18,27 @@ entries stay unmarked.
 
 | # | Entry | Domain |
 |---|---|---|
-| [1](#1-a-horizontal-trusss-default-crossbar-is-visually-coincident-with-the-truss-itself) | Horizontal truss's default bar is visually coincident with the truss | Truss/bar |
-| [2](#2-a-plain-drag-drop-attach-never-forms-a-group--only-the-explicit-attach-to-truss-action-or-a-file-reload-does) | Plain drag-drop attach never forms a group | Truss/bar |
-| [3](#3-mousepresseventss-hit-test-always-prefers-a-fixture-over-a-bar) | Fixture hit-test always wins over a bar underneath it | Truss/bar |
-| [4](#4-structurestudioviews-bar-drag-arm-is-gated-by-the-views-own-m_locked-separately-from-the-bar-objects-own-locked-flag) | View lock vs. object lock are two different checks | Truss/bar |
-| [5](#5-addtargetaccepteds-own-comment-says-pantilt-palette-the-code-links-an-aim-palette) | Stale comment: says PanTilt, code links Aim | Target/aim |
-| [6](#6-assigning-a-fixture-to-aim-at-a-target-has-no-test-for-the-real-drag-drop-path) | No test for the real palette-onto-Look drag | Target/aim |
-| [7](#7-a-failed-qverifyqcompare-inside-the-dialog-driving-lambda-hangs-the-whole-test-binary-not-just-that-one-test) | A failed assertion inside a dialog lambda hangs the binary | Test technique (all dialogs) |
-| [8](#8-findchildqlineedit-can-silently-grab-a-spin-box-own-internal-editor) | `findChild<QLineEdit*>()` can grab a spin box's own editor | Test technique (all dialogs) |
-| [9](#9-deck-mounted-and-riser-mounted-fixtures-follow-a-moved-platform-through-two-different-mechanisms) | Deck vs. riser fixtures follow a moved platform two different ways | Platform/riser |
-| [10](#10-a-dropped-items-screen-centre-means-two-different-things-depending-on-which-attach-check-reads-it) | Two attach paths disagree on what an item's "centre" is | Platform/riser |
-| [11](#11-a-crossbar-has-none-of-a-truss-bars-drag-machinery----and-the-main-plot-has-no-pipe-attach-at-all) | Crossbars have no drag machinery; main plot has no pipe attach | Stand/boom |
-| [12](#12-a-sub-group-move-through-the-real-ui-is-a-drag----and-a-drag-here-is-a-genuine-internal-qdragqdropevent-cycle-not-just-mouse-events) | Untested: the real internal `QDrag` cycle for moving a sub-group | Fixture Manager |
-| [13](#13-assignheads-collision-behavior-at-an-already-occupied-cell-is-untested-here) | Untested: pasting a block onto an occupied cell | Fixture Manager |
+| # | Entry | Domain | Status |
+|---|---|---|---|
+| [1](#1-a-horizontal-trusss-default-crossbar-is-visually-coincident-with-the-truss-itself) | Horizontal truss's default bar is visually coincident with the truss | Truss/bar | |
+| [2](#2-a-plain-drag-drop-attach-never-forms-a-group--only-the-explicit-attach-to-truss-action-or-a-file-reload-does) | Plain drag-drop attach never forms a group | Truss/bar | Fixed |
+| [3](#3-mousepresseventss-hit-test-always-prefers-a-fixture-over-a-bar) | Fixture hit-test always wins over a bar underneath it | Truss/bar | |
+| [4](#4-structurestudioviews-bar-drag-arm-is-gated-by-the-views-own-m_locked-separately-from-the-bar-objects-own-locked-flag) | View lock vs. object lock are two different checks | Truss/bar | |
+| [5](#5-addtargetaccepteds-own-comment-says-pantilt-palette-the-code-links-an-aim-palette) | Stale comment: says PanTilt, code links Aim | Target/aim | |
+| [6](#6-assigning-a-fixture-to-aim-at-a-target-has-no-test-for-the-real-drag-drop-path) | No test for the real palette-onto-Look drag | Target/aim | |
+| [7](#7-a-failed-qverifyqcompare-inside-the-dialog-driving-lambda-hangs-the-whole-test-binary-not-just-that-one-test) | A failed assertion inside a dialog lambda hangs the binary | Test technique (all dialogs) | Fixed |
+| [8](#8-findchildqlineedit-can-silently-grab-a-spin-box-own-internal-editor) | `findChild<QLineEdit*>()` can grab a spin box's own editor | Test technique (all dialogs) | |
+| [9](#9-deck-mounted-and-riser-mounted-fixtures-follow-a-moved-platform-through-two-different-mechanisms) | Deck vs. riser fixtures follow a moved platform two different ways | Platform/riser | |
+| [10](#10-a-dropped-items-screen-centre-means-two-different-things-depending-on-which-attach-check-reads-it) | Two attach paths disagree on what an item's "centre" is | Platform/riser | |
+| [11](#11-a-crossbar-has-none-of-a-truss-bars-drag-machinery----and-the-main-plot-has-no-pipe-attach-at-all) | Crossbars have no drag machinery; main plot has no pipe attach | Stand/boom | Fixed |
+| [12](#12-a-sub-group-move-through-the-real-ui-is-a-drag----and-a-drag-here-is-a-genuine-internal-qdragqdropevent-cycle-not-just-mouse-events) | Untested: the real internal `QDrag` cycle for moving a sub-group | Fixture Manager | |
+| [13](#13-assignheads-collision-behavior-at-an-already-occupied-cell-is-untested-here) | Untested: pasting a block onto an occupied cell | Fixture Manager | |
+| [14](#14-a-pipe-crossbar-has-no-standoff-field-so-it-is-always-exactly-coincident-with-its-parent-boom-in-top-view) | A pipe crossbar has no standoff field, unlike a truss bar | Stand/boom | |
 
-Highest-signal to look at first: **#7** (a real risk to CI/test reliability,
-not just app behavior), **#2** and **#11** (both read as real product
-decisions worth making on purpose rather than by accident), **#12** (the
-biggest actual coverage gap this effort left behind).
+**#7, #2 and #11 are fixed** (see their entries for what changed and what
+each deliberately left out). Of what's left, **#12** is the biggest actual
+coverage gap this effort left behind; **#1**, **#14** and **#3**/**#4** are
+real product/test-technique decisions worth a deliberate look.
 
 ---
 
@@ -316,14 +319,74 @@ own Structure Studio canvas -- never a plain drag on the main plot the way
 a fixture auto-decks onto a platform or auto-attaches to a truss just by
 being dropped near one.
 
-*Status:* unmarked -- this reads as a real feature-completeness gap between
-the truss/bar/platform family (all of which get main-plot drag-drop and,
-for bars, a dedicated drag machinery) and the stand/boom/crossbar family
-(neither). Worth a decision: is stand rigging meant to stay a
-Structure-Studio-only workflow permanently (booms are less commonly
-repositioned once rigged, maybe intentionally more deliberate), or is this
-simply the newer/less-developed corner of the structural model and due for
-the same main-plot treatment trusses and platforms already have?
+*Status:* **Fixed**, both halves:
+
+- `MonitorGraphicsView::pipeUnderFixture()` (mirrors `trussUnderFixture()`)
+  plus a matching auto-attach branch in `slotFixtureMoved()` give the main
+  plot a real drop-to-attach path for a pipe, the same as a truss or a
+  platform. A dropped fixture attaches to whichever boom/crossbar it lands
+  on; a horizontal pipe additionally derives its ALONG position from the
+  drop point (a vertical boom's height can't be read from a Top-view point
+  at all, the same reason a Vertical truss's own drag-attach leaves its
+  offset alone too — see `attachFixtureToTruss()`'s own comment on that).
+  The deck-mount auto-attach's guard now also excludes an already
+  pipe-mounted fixture, so the two auto-attach paths can't fight over the
+  same drop.
+- `StructureStudioView` gained a parallel bar-drag mechanism for a Pipe
+  crossbar — `hitTestPipeBar()`/`dragPipeBarTo()`,
+  `m_dragPipeBarId`/`m_selectedPipeBarId`, `setPipeBarHighlight()`, and
+  `pipeBarSelected`/`pipeBarActivated`/`pipeBarMoved` signals — wired into
+  `mousePressEvent`/`mouseMoveEvent`/`mouseReleaseEvent`/
+  `mouseDoubleClickEvent` alongside the existing truss-bar branches, plus
+  the same amber "selected" colour `drawPipe()` now applies to a crossbar.
+  A crossbar's own lock is respected the same way a truss bar's is; a pipe
+  crossbar has no cross-shift concept (`recomputePipeAnchors()` derives its
+  origin from `parentPipeOffset` alone), so `dragPipeBarTo()` is a single
+  degree of freedom, unlike `dragBarTo()`.
+
+**Scope not attempted here** (disclosed, not silently dropped): the new
+`pipeBarSelected`/`pipeBarMoved` signals are emitted but not wired into a
+per-object inspector panel the way `barSelected`/`barMoved` already are in
+`makeStudioPane()` — a crossbar's "Height up boom" field only exists in its
+own "Edit Pipe" dialog, unaffected by this fix, not in an inline strip next
+to the canvas the way a truss bar's "Along truss" field is. That's a
+separate, appreciably sized feature (a whole second inspector layout), not
+literally "give a crossbar the drag capability a truss bar already has,"
+which is what this entry asked for.
+
+`buildingAStandStepByStepThroughRealUiStaysConsistent()` now exercises both
+through real UI: a plot drop attaches the fixture to the boom, and a real
+mouse drag moves the crossbar. Building the test surfaced a THIRD, related
+finding (logged separately below as #14): a crossbar's origin is always
+exactly coincident with its parent boom's own point in Top view, with no
+way to separate them, unlike a truss bar's `barStandoff`.
+
+### 14. A pipe crossbar has no standoff field, so it is always exactly coincident with its parent boom in Top view
+
+`MonitorProperties::recomputePipeAnchors()`'s bar-on-pipe pass derives a
+crossbar's origin as `parent->positionAt(parentPipeOffset)` with nothing
+added — no analogue of a `Truss` bar's `barStandoff`, which is what keeps
+a truss bar visually separated from its own parent (see #1, which is the
+*absence* of a nonzero default for that field; this is the absence of the
+field's entire concept for a `Pipe`). A vertical boom draws as a single
+"disc" point in Top view regardless of height (there is no way to pick
+"where up the boom" from directly above), so a crossbar hung anywhere on
+it — at the default top offset or anywhere else — always starts at that
+exact same point. `buildingAStandStepByStepThroughRealUiStaysConsistent()`
+originally tried to attach a fixture to the boom AFTER the crossbar already
+existed and got the crossbar instead, a tie broken only by `QHash`
+iteration order over `m_pipeItems` — silently wrong roughly half the time.
+The test now creates the crossbar AFTER attaching to the boom, sidestepping
+the ambiguity rather than resolving it.
+
+*Status:* unmarked. A `Pipe` gaining its own standoff field (offset along
+the parent's *width*, perpendicular to its run, the same role
+`barStandoff` plays for a `Truss`) would fix this at the data-model level
+and let a crossbar draw visibly apart from its boom the way a truss bar
+already does — worth doing if pipe crossbars are meant to be a first-class
+peer of truss bars going forward (which this whole #11 fix pushes them
+toward), rather than a permanent, disclosed limitation of the simpler
+`Pipe` geometry model.
 
 ---
 

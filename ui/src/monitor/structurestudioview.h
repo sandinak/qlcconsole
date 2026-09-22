@@ -148,6 +148,8 @@ public:
     void setHighlight(const QList<quint32> &ids);
     /** Ring-highlight a single bar (or clear it with UINT_MAX == Truss::invalidId()). */
     void setBarHighlight(quint32 barId);
+    /** Same idea as setBarHighlight(), for a Pipe crossbar. */
+    void setPipeBarHighlight(quint32 barId);
 
     /** Assign @p ids to the CURRENT view's face (Top/Front/Side): set their
      *  studioMount and pin them to that face surface. Empty = all mounted. */
@@ -193,6 +195,12 @@ signals:
     /** A bar was dragged to a new offset along its parent. */
     void barMoved(quint32 barId);
 
+    /** Same three signals as barActivated/barSelected/barMoved, for a Pipe
+     *  crossbar instead of a Truss bar. */
+    void pipeBarActivated(quint32 barId);
+    void pipeBarSelected(quint32 barId);
+    void pipeBarMoved(quint32 barId);
+
 protected:
     bool event(QEvent *) override;
     void paintEvent(QPaintEvent *) override;
@@ -225,6 +233,13 @@ private:
      *  new parentOffset. Refuses on a locked parent/bar or in Angled, same
      *  reasoning as the fixture path. */
     bool dragBarTo(quint32 barId, const QPointF &px);
+    /** Same idea as dragBarTo(), but for a crossbar hung on a Pipe (a boom's
+     *  own bar, not a Truss's): the drag's component along the PARENT
+     *  pipe's own run becomes the crossbar's new parentPipeOffset. A pipe
+     *  crossbar has no cross-shift concept (recomputePipeAnchors() derives
+     *  its origin from parentPipeOffset alone), so unlike dragBarTo() this
+     *  is a single degree of freedom. Refuses on a locked bar or in Angled. */
+    bool dragPipeBarTo(quint32 barId, const QPointF &px);
     void refit();                                    ///< scale/centre to fit everything
     void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame
     void collectPointsFor(QList<QVector3D> &pts, Kind kind, quint32 id) const;
@@ -414,6 +429,11 @@ private:
     /** Nearest bar hung on THIS truss (Truss::invalidId() if none/not close
      *  enough), same "distance to the drawn shape" reasoning as hitTestFixture(). */
     quint32 hitTestBar(const QPointF &px) const;
+    /** Nearest crossbar hung on the Pipe this editor is showing (a StandKind
+     *  editor's own booms, or a PipeKind editor's own boom) -- Pipe::invalidId()
+     *  if none/not close enough/wrong kind. Same shape as hitTestBar(), for
+     *  a Pipe bar instead of a Truss one. */
+    quint32 hitTestPipeBar(const QPointF &px) const;
 
     /** In-plane (a,b) -> screen offset, and back, with the view rotation
      *  applied. Every world<->pixel path goes through these two. */
@@ -621,6 +641,7 @@ private:
     QPointF  m_panLast;
     quint32  m_dragFid = Fixture::invalidId();   ///< fixture being dragged
     quint32  m_dragBarId = UINT_MAX;             ///< bar being dragged (== Truss::invalidId())
+    quint32  m_dragPipeBarId = UINT_MAX;         ///< crossbar being dragged (== Pipe::invalidId())
     bool     m_dragged = false;
     quint32  m_resizeBoom = 0; ///< +1 boom id whose top is being dragged (0 = none)
     QPointF  m_cursorPx;       ///< last pointer position (for the ruler readout)
@@ -628,6 +649,7 @@ private:
     bool     m_locked = true;   ///< movement prevented until unlocked
     QSet<quint32> m_highlight;  ///< ring-highlighted fixtures (tree selection)
     quint32  m_selectedBarId = UINT_MAX;  ///< highlighted bar (canvas/tree selection)
+    quint32  m_selectedPipeBarId = UINT_MAX;  ///< highlighted crossbar (canvas/tree selection)
 };
 
 /** @} */

@@ -26,8 +26,6 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QAbstractSpinBox>
-#include <QFormLayout>
-#include <QLabel>
 #include <functional>
 #include <QDialogButtonBox>
 #include <QMessageBox>
@@ -95,31 +93,6 @@ static QLineEdit *findRealLineEdit(QWidget *modal)
     foreach (QLineEdit *le, modal->findChildren<QLineEdit *>())
         if (qobject_cast<QAbstractSpinBox *>(le->parentWidget()) == nullptr)
             return le;
-    return nullptr;
-}
-
-/* Finds a QDoubleSpinBox by its QFormLayout row label (substring match) --
- * for a dialog with too many same-typed fields for index-based lookup to
- * mean anything reliable (position/run/base/truss/stand fields, plus a
- * canvas's own). Searches every QFormLayout under `pane` since a dialog
- * embedding a Structure Studio canvas may have more than one. */
-static QDoubleSpinBox *findSpinByLabel(QWidget *pane, const QString &labelSubstr)
-{
-    if (pane == nullptr)
-        return nullptr;
-    foreach (QFormLayout *form, pane->findChildren<QFormLayout *>())
-    {
-        for (int row = 0; row < form->rowCount(); ++row)
-        {
-            QLayoutItem *li = form->itemAt(row, QFormLayout::LabelRole);
-            QLabel *lbl = li ? qobject_cast<QLabel *>(li->widget()) : nullptr;
-            if (lbl != nullptr && lbl->text().contains(labelSubstr))
-            {
-                QLayoutItem *fi = form->itemAt(row, QFormLayout::FieldRole);
-                return fi ? qobject_cast<QDoubleSpinBox *>(fi->widget()) : nullptr;
-            }
-        }
-    }
     return nullptr;
 }
 
@@ -4724,13 +4697,13 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
     delete doc;
 }
 
-/* Chains the stand/boom/crossbar workflow. Genuinely different shape from
- * the truss/bar case, not just a rename -- see the subtleties list: there
- * is no plot drop for a pipe at all (only an explicit context-menu-style
- * attach), and a crossbar (a Pipe, not a Truss) has NONE of the bar-drag
- * machinery -- hitTestBar()/dragBarTo() are Truss-only. Its one real-UI
- * edit is a spin box in its own "Edit Pipe" dialog. The fixture, by
- * contrast, drags along the boom exactly the way it drags along a truss.
+/* Chains the stand/boom/crossbar workflow through the SAME real-UI
+ * mechanisms the truss/bar test uses: a plot drop attaches the fixture to
+ * the boom (MonitorGraphicsView::pipeUnderFixture()), and a real mouse
+ * drag moves the crossbar (StructureStudioView::hitTestPipeBar()/
+ * dragPipeBarTo()) -- both built to fix WORKFLOW-SUBTLETIES.md #11 (there
+ * was no plot attach for a pipe at all, and a crossbar had none of a truss
+ * bar's drag machinery; only its own "Edit Pipe" dialog could move it).
  */
 void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
 {
@@ -4791,11 +4764,15 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
              qPrintable(QString("the dialog's Top height field did not reach the new stand "
                                 "(height=%1)").arg(double(stand->height()))));
 
-    // 3. Add a boom, then a crossbar on it -- both through
-    //    Monitor::studioAddBar(kind=0, standId, ...), the exact function
-    //    the Stand editor's own "Add Bar" button calls: the FIRST call (no
-    //    vertical boom yet) creates the boom; the SECOND (boom now found)
-    //    creates a horizontal crossbar hung on its top.
+    // 3. Add a boom -- Monitor::studioAddBar(kind=0, standId, ...), the
+    //    exact function the Stand editor's own "Add Bar" button calls: the
+    //    FIRST call (no vertical boom yet) creates the boom. The crossbar
+    //    (a second studioAddBar() call) comes LATER, in step 5 -- not here
+    //    -- because a crossbar's origin is always exactly the boom's own
+    //    point in Top view (recomputePipeAnchors() derives it from
+    //    parentPipeOffset alone; unlike a Truss bar, there is no standoff
+    //    field to separate the two), so attaching to the boom has to
+    //    happen before anything else could tie with it for the same drop.
     mon->studioAddBar(0, stand->id(), nullptr);
     Pipe *boom = nullptr;
     foreach (Pipe *p, props->pipes())
@@ -4803,6 +4780,30 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
             boom = p;
     QVERIFY2(boom != nullptr, "studioAddBar(kind=0) did not create a boom on the stand");
 
+    // 4. Mount the fixture on the boom -- the plot's real drop-attach path
+    //    (MonitorGraphicsView::pipeUnderFixture()/slotFixtureMoved()), the
+    //    pipe equivalent of the truss/bar test's own drop-attach step.
+    gv->updateFixture(fx->id());
+    MonitorFixtureItem *item = gv->m_fixtures.value(fx->id(), nullptr);
+    QVERIFY(item != nullptr);
+    const QPointF onBoomPx = gv->realPositionToPixels(double(boom->originX()) * 1000.0,
+                                                       double(boom->originY()) * 1000.0);
+    item->setPos(item->pos() + (onBoomPx - item->sceneBoundingRect().center()));
+    gv->slotFixtureMoved(item);
+
+    QVERIFY2(props->fixtureRigProps(fx->id()).pipeId == boom->id(),
+             "dropping the fixture on the boom's plan disc did not attach it");
+    const float offsetAfterAttach = props->fixtureRigProps(fx->id()).pipeOffset;
+    QVERIFY2(qAbs(double(offsetAfterAttach) - double(boom->height()) * 0.85) < 0.01,
+             qPrintable(QString("a fresh boom mount should default to 85%% up the boom "
+                                "(%1), got %2 -- a Top-view drop cannot say WHERE up a "
+                                "vertical boom, so this stays at attachFixtureToPipe()'s "
+                                "own default")
+                        .arg(double(boom->height()) * 0.85)
+                        .arg(double(offsetAfterAttach))));
+
+    // 5. NOW add the crossbar (the second studioAddBar() call -- the boom
+    //    already exists, so this hangs a horizontal crossbar on its top).
     mon->studioAddBar(0, stand->id(), nullptr);
     Pipe *crossbar = nullptr;
     foreach (Pipe *p, props->pipes())
@@ -4810,19 +4811,7 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
             crossbar = p;
     QVERIFY2(crossbar != nullptr, "the second studioAddBar(kind=0) call did not add a crossbar");
 
-    // 4. Mount the fixture on the boom -- the real "Mount on > Boom > name"
-    //    context-menu action's own target function
-    //    (MonitorGraphicsView::attachFixtureToPipe()).
-    gv->attachFixtureToPipe(fx->id(), boom->id());
-    QVERIFY2(props->fixtureRigProps(fx->id()).pipeId == boom->id(),
-             "attachFixtureToPipe() did not mount the fixture on the boom");
-    const float offsetAfterAttach = props->fixtureRigProps(fx->id()).pipeOffset;
-    QVERIFY2(qAbs(double(offsetAfterAttach) - double(boom->height()) * 0.85) < 0.01,
-             qPrintable(QString("a fresh boom mount should default to 85%% up the boom "
-                                "(%1), got %2").arg(double(boom->height()) * 0.85)
-                        .arg(double(offsetAfterAttach))));
-
-    // 5. Drag the fixture along the boom -- a real mousePress/Move/Release
+    // 6. Drag the fixture along the boom -- a real mousePress/Move/Release
     //    sequence on the Stand's own Structure Studio editor, the pipe
     //    equivalent of studioTrussDragMovesFixture(). No test anywhere in
     //    this file drags a pipe-mounted fixture with real mouse events yet.
@@ -4850,36 +4839,42 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
              qPrintable(QString("dragging the fixture toward %1 up the boom landed it at %2")
                         .arg(double(targetOffset)).arg(double(offsetAfterDrag))));
 
-    // 6. Adjust the crossbar -- NOT a drag: no bar-drag machinery exists
-    //    for a Pipe. Its only real-UI edit is the "Height up boom" field in
-    //    its own "Edit Pipe" dialog -- found by its LABEL, not by index:
-    //    this dialog has far more spin boxes (position/run/base/truss/stand
-    //    fields, plus the canvas's own) than a fixed index could track.
+    // 7. Drag the crossbar -- a real mousePress/Move/Release sequence on the
+    //    Stand's own Structure Studio editor, the pipe-bar equivalent of
+    //    draggingABarChangesItsPositionAlongTheParent(). Press ON THE
+    //    CROSSBAR's own midpoint (not the boom, and not where the fixture
+    //    now sits at 50% up -- the crossbar itself is still at the boom's
+    //    default top, a different height, so there is no ambiguity between
+    //    the two the way there was pressing at a bar's exact midpoint in
+    //    the truss/bar test).
     const float upBoomBefore = crossbar->parentPipeOffset();
-    // This dialog ALSO embeds a Structure Studio canvas, which may have its
-    // own QFormLayout(s) elsewhere in the inspector -- scope the search to
-    // nameEdit's own container the same way the platform and stand dialogs
-    // do, rather than trusting the first QFormLayout found anywhere in the
-    // whole dialog to be the geometry form.
-    driveDialog([boom](QWidget *modal) {
-        QLineEdit *nameEdit = findRealLineEdit(modal);
-        QDoubleSpinBox *upBoomSpin = findSpinByLabel(nameEdit ? nameEdit->parentWidget() : nullptr,
-                                                     "Height up boom");
-        if (upBoomSpin == nullptr)
-            return false;
-        upBoomSpin->setValue(double(boom->height()) * 0.5);
-        return true;
-    });
-    mon->slotEditPipe(crossbar->id());
+    const QVector3D crossbarMid = crossbar->positionAt(crossbar->length() * 0.5f);
+    const float targetUpBoom = boom->length() * 0.5f;
+    const QPointF pressPt3 = sv.w2s(crossbarMid);
+    // Only the RELEASE point's height matters to dragPipeBarTo() for a
+    // vertical parent boom (it projects the drag onto the boom's own Z
+    // axis) -- keep the same X/Y as the press so this reads as "drag this
+    // exact point straight up/down", not a sideways jump.
+    const QPointF releasePt3 = sv.w2s(QVector3D(crossbarMid.x(), crossbarMid.y(),
+                                                boom->positionAt(targetUpBoom).z()));
+    QMouseEvent press3(QEvent::MouseButtonPress, pressPt3, pressPt3,
+                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mousePressEvent(&press3);
+    QMouseEvent move3(QEvent::MouseMove, releasePt3, releasePt3,
+                      Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mouseMoveEvent(&move3);
+    QMouseEvent release3(QEvent::MouseButtonRelease, releasePt3, releasePt3,
+                         Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    sv.mouseReleaseEvent(&release3);
 
     QVERIFY2(!qFuzzyCompare(crossbar->parentPipeOffset(), upBoomBefore),
-             "editing the crossbar's Height up boom field did not move it");
-    QVERIFY2(qAbs(double(crossbar->parentPipeOffset()) - double(boom->height()) * 0.5) < 0.01,
+             "dragging the crossbar on its own editor did not move it");
+    QVERIFY2(qAbs(double(crossbar->parentPipeOffset()) - double(targetUpBoom)) < 0.05,
              qPrintable(QString("expected the crossbar ~%1 up the boom, got %2")
-                        .arg(double(boom->height()) * 0.5)
+                        .arg(double(targetUpBoom))
                         .arg(double(crossbar->parentPipeOffset()))));
 
-    // 7. Relocate the fixture -- another real drag on the boom, to a
+    // 8. Relocate the fixture -- another real drag on the boom, to a
     //    different offset again.
     sv.reload();
     const QPointF pressPt2 = sv.w2s(boom->positionAt(offsetAfterDrag));
