@@ -13164,15 +13164,15 @@
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
    <Grid Width="40" Height="3" Depth="24" Units="1" Subdivisions="3"/>
-   <FxItem ID="0" XPos="1139.58" YPos="1517" Rotation="180" LayerId="4" GroupId="2"/>
+   <FxItem ID="0" XPos="1177" YPos="1517" Rotation="180" LayerId="4" GroupId="2"/>
    <FxItem ID="1" XPos="4874.24" YPos="6107.67" Rotation="180" LayerId="1"/>
    <FxItem ID="2" XPos="8421.24" YPos="5553.5" Rotation="180" LayerId="1"/>
    <FxItem ID="3" XPos="5287.8" YPos="869.799" Rotation="180" LayerId="4"/>
    <FxItem ID="4" XPos="270" YPos="1319.52" ZPos="2.6825" LayerId="4" GroupId="17"/>
    <FxItem ID="5" XPos="1107" YPos="2743" LayerId="3" GroupId="4"/>
    <FxItem ID="6" XPos="1106" YPos="2820" LayerId="3" GroupId="4"/>
-   <FxItem ID="7" Hidden="True" XPos="1667" YPos="1552" ZPos="2.535" FixedZoom="1091074785" LayerId="4" GroupId="2"/>
-   <FxItem ID="8" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1670" YPos="1372" ZPos="2.94743" LayerId="4" GroupId="2"/>
+   <FxItem ID="7" Hidden="True" XPos="1670.3" YPos="1371.6" ZPos="2.535" FixedZoom="1091074785" LayerId="4" GroupId="2"/>
+   <FxItem ID="8" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1670.3" YPos="1371.6" ZPos="2.94743" LayerId="4" GroupId="2"/>
    <FxItem ID="9" XPos="1242.19" YPos="1526.86" LayerId="2"/>
    <FxItem ID="10" XPos="1197.04" YPos="2920.44" LayerId="3" GroupId="4"/>
    <FxItem ID="11" XPos="1197.04" YPos="2920.44" LayerId="3" GroupId="4"/>
@@ -13189,7 +13189,7 @@
    <FxItem ID="22" XPos="8033.15" YPos="1512.76" LayerId="2"/>
    <FxItem ID="23" XPos="9263.57" YPos="1529.24" LayerId="2"/>
    <FxItem ID="24" XPos="10455.2" YPos="1530.34" LayerId="2"/>
-   <FxItem ID="25" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1661" YPos="1372" ZPos="1.89009" LayerId="4" GroupId="2"/>
+   <FxItem ID="25" Hidden="True" InvertedPan="True" InvertedTilt="True" XPos="1670.3" YPos="1371.6" ZPos="1.89009" LayerId="4" GroupId="2"/>
    <FxItem ID="26" XPos="3565" YPos="2742" LayerId="3" GroupId="6"/>
    <FxItem ID="27" XPos="3564" YPos="2819" LayerId="3" GroupId="6"/>
    <FxItem ID="28" XPos="3655.04" YPos="2919.44" LayerId="3" GroupId="6"/>
@@ -13315,7 +13315,7 @@
    <MonitorLayer ID="6" Name="targets" Visible="1" Order="6"/>
    <ActiveLayer ID="6"/>
    <MonitorGroup ID="1" Name="Risers" LayerId="0"/>
-   <MonitorGroup ID="2" Name="T-1" LayerId="4" Frame="1" OX="0.000" OY="0.000" OZ="0.000" Rot="0.000"/>
+   <MonitorGroup ID="2" Name="T-1" LayerId="4" AnchorKind="truss" AnchorId="1" Frame="1" OX="0.000" OY="0.000" OZ="0.000" Rot="0.000"/>
    <MonitorGroup ID="3" Name="Towers" LayerId="0"/>
    <MonitorGroup ID="4" Name="US-1" LayerId="3" AnchorKind="platform" AnchorId="12" Frame="1" OX="1.231" OY="2.780" OZ="0.396" Rot="0.000"/>
    <MonitorGroup ID="5" Name="T-2" LayerId="4" AnchorKind="truss" AnchorId="2" Frame="1" OX="3.652" OY="1.292" OZ="2.476" Rot="0.000"/>
@@ -13332,7 +13332,7 @@
    <MonitorGroup ID="16" Name="DS-4" LayerId="3" AnchorKind="platform" AnchorId="23" Frame="1" OX="8.531" OY="5.212" OZ="0.000" Rot="0.000"/>
    <MonitorGroup ID="17" Name="T-3" LayerId="4" AnchorKind="truss" AnchorId="3"/>
    <MonitorGroup ID="18" Name="T-4" LayerId="4" AnchorKind="truss" AnchorId="4"/>
-   <Truss ID="0" Name="Bar 1" Type="Horizontal" Profile="Square" Length="1.000" Width="0.049" OriginX="2.045" OriginY="1.517" OriginZ="2.981" DirX="-1.000000" DirY="0.000000" LayerId="4" GroupId="2" ParentTruss="1" ParentOffset="2.981" BarFace="2" BarStandoff="0.000" BarRun="1" BarCross="0.125"/>
+   <Truss ID="0" Name="Bar 1" Type="Horizontal" Profile="Square" Length="1.000" Width="0.049" OriginX="2.111" OriginY="1.517" OriginZ="3.002" DirX="-1.000000" DirY="0.000000" LayerId="4" GroupId="2" ParentTruss="1" ParentOffset="3.002" BarFace="2" BarStandoff="0.000" BarRun="1" BarCross="0.059"/>
    <Truss ID="1" Name="T-1" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="1.670" OriginY="1.372" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="2"/>
    <Truss ID="2" Name="T-2" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="3.965" OriginY="1.344" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="5"/>
    <Truss ID="3" Name="T-3" Type="Vertical" Profile="Square" Length="3.048" Width="0.290" OriginX="7.943" OriginY="1.320" OriginZ="0.000" DirX="1.000000" DirY="0.000000" Locked="true" LayerId="4" GroupId="17"/>
@@ -13375,7 +13375,7 @@
    </Tower>
    <StageTarget ID="0" Name="Test Target" X="6.074" Y="3.861" Z="0.396" Color="#ffb400" LayerId="6"/>
    <StageTarget ID="1" Name="Target 2" X="4.993" Y="5.180" Z="0.183" Color="#ffb400" LayerId="6"/>
-   <FixtureRig FID="0" Truss="0" Offset="0.905" Mounting="TopHung" PanZero="0.0" TrussCross="-0.005" MountZ="0.003" SM="0"/>
+   <FixtureRig FID="0" Truss="0" Offset="0.934" Mounting="TopHung" PanZero="0.0" TrussCross="-0.005" MountZ="-0.041" SM="0"/>
    <FixtureRig FID="1" Truss="4294967295" Offset="0.808" Mounting="SideArm" PanZero="0.0"/>
    <FixtureRig FID="2" Truss="4294967295" Offset="0.198" Mounting="SideArm" PanZero="0.0"/>
    <FixtureRig FID="3" Truss="4294967295" Offset="0.868" Mounting="TopHung" PanZero="0.0" PanOfs="-17.00" TiltOfs="6.00"/>

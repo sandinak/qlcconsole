@@ -3118,6 +3118,153 @@ void Monitor_Test::aMoverOnADeckIsNotBuriedInIt()
     delete doc;
 }
 
+/* "when selecting a feature on the bar.truss editor .. should show the
+   fixture width on the horizontal .. and the fixture height on the
+   vertical like it does on the studio editor." drawDimensions() already
+   existed for the STRUCTURE, but nothing called it, and it never took a
+   selected fixture's own size into account at all. */
+void Monitor_Test::selectingAFixtureShowsItsOwnDimensionCallouts()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1"); bar->setType(Truss::Horizontal);
+    bar->setOrigin(QVector3D(7.0f, 1.0f, 3.0f));
+    bar->setDirection(QPointF(1.0, 0.0));
+    bar->setLength(3.0f);
+
+    Fixture *head = makeMover(doc, 14.0, 0, "Dim Test", QVector3D(8.5f, 1.0f, 3.0f));
+    QVERIFY(head != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.mountingType = Truss::FloorMounted;
+    props->setFixtureRigProps(head->id(), rp);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(760, 600);
+    v.setPlane(StructureStudioView::Front);
+    v.setAmbient(1.0);
+    v.grab();                        // flush the first layout, see the shelf test
+    v.reload();
+    v.m_zoomed = true;               // hold the framing steady between grabs
+
+    const QImage unselected = v.grab().toImage();
+    v.setHighlight({ head->id() });
+    const QImage selected = v.grab().toImage();
+
+    /* Exactly where drawDimensions() draws its horizontal callout: sMaxY+18,
+       computed the same way production code does (fixtureBoxCorners() ->
+       screen projection). Starting the diff band there instead of at some
+       guessed offset from the fixture's CENTRE is what keeps this clear of
+       the body itself.
+
+       fixtureBoxCorners() is the ANGLED-view body, seated along a different
+       axis than the flat elevation actually drawn here (the generic mover
+       branch in drawOneFixture(), the exact thing that was fixed for
+       "underhung .. visually upright" earlier this session) -- using it to
+       predict where THIS view's fixture bottom edge falls under-measured
+       it and left the band sitting inside the real silhouette, which made
+       an earlier version of this assertion pass even with the feature's
+       own call site reverted. Replicate the flat elevation's OWN geometry
+       instead: a box of height baseR*3.2 centred on the fixture's screen
+       point, the same numbers drawOneFixture() itself computes. */
+    const FixtureVisualTraits traits = classifyFixture(head);
+    const double totalH = v.moverBaseRadius(traits) * 3.2;
+    const double sMaxY = v.w2s(v.fixtureCentre(head->id())).y() + totalH / 2.0;
+
+    const double dpr = selected.devicePixelRatio();
+    const int bandTop = int((sMaxY + 10.0) * dpr);
+    const int bandBottom = qMin(selected.height(), int((sMaxY + 30.0) * dpr));
+    QVERIFY2(bandBottom > bandTop, "band is empty -- test geometry is wrong");
+
+    int changed = 0;
+    for (int y = qMax(0, bandTop); y < bandBottom; ++y)
+        for (int x = 0; x < selected.width(); ++x)
+        {
+            const QColor a = selected.pixelColor(x, y), b = unselected.pixelColor(x, y);
+            if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                + qAbs(a.blue() - b.blue()) > 24)
+                ++changed;
+        }
+
+    QVERIFY2(changed > 10,
+             qPrintable(QString("selecting the fixture drew nothing in the "
+                                "dimension-callout band right below its own "
+                                "box (%1 pixels changed) -- no width/height "
+                                "label appeared").arg(changed)));
+    delete doc;
+}
+
+/* "when selecing the bar .. should just show the bar on the rulers" / "when
+   selecting the truss and bar it should show the truss on the rulers": a
+   parent truss's own Lighting Studio editor draws BOTH the truss and any
+   bars hung on it, and the two rulers (structureCentreA()/structureTopZ())
+   always measured the editor's OWN object (the parent) no matter what was
+   actually selected on the canvas -- so selecting a bar left the ruler
+   describing a structure that wasn't even the one highlighted. */
+void Monitor_Test::rulersFollowWhicheverOfTrussOrBarIsSelected()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setType(Truss::Horizontal);
+    t1->setOrigin(QVector3D(1.0f, 2.0f, 4.0f));
+    t1->setDirection(QPointF(1.0, 0.0));
+    t1->setLength(6.0f);
+    t1->setWidth(0.0f);                        // zero half-thickness -> clean numbers
+
+    Truss *bar = props->addTruss();
+    bar->setParentTrussId(t1->id());
+    bar->setParentOffset(1.0f);                // NOT the parent's midpoint (3.0)
+    bar->setBarFace(Truss::FaceBottom);
+    bar->setBarStandoff(1.0f);
+    bar->setBarRun(Truss::RunAlong);
+    bar->setLength(2.0f);
+    bar->setWidth(0.0f);
+    props->recomputeChildTrusses();
+    // attach (2,2,4); Bottom standoff 1 -> base (2,2,3); Along, centred on a
+    // length-2 bar -> origin (1,2,3), far end (3,2,3) -- same derivation as
+    // MonitorProperties_Test::childBarFollowsParent, offset changed so the
+    // bar's own span (X 1..3) is NOT centred the same as the parent's
+    // (X 1..7): the two numbers below have to differ for this test to mean
+    // anything.
+    QCOMPARE(bar->origin(), QVector3D(1, 2, 3));
+
+    StructureStudioView v(doc, StructureStudioView::TrussKind, t1->id());
+    v.resize(800, 640);
+    v.setPlane(StructureStudioView::Front);
+
+    QCOMPARE(v.m_selectedBarId, Truss::invalidId());
+    QVERIFY2(qFuzzyCompare(v.structureCentreA(), 4.0),
+             qPrintable(QString("nothing selected: ruler should measure the "
+                                "parent (centre 4.0) but got %1").arg(v.structureCentreA())));
+    QVERIFY2(qFuzzyCompare(v.structureTopZ(), 4.0),
+             qPrintable(QString("nothing selected: ruler should measure the "
+                                "parent (top 4.0) but got %1").arg(v.structureTopZ())));
+
+    v.setBarHighlight(bar->id());
+    QVERIFY2(qFuzzyCompare(v.structureCentreA(), 2.0),
+             qPrintable(QString("bar selected: ruler should measure the BAR "
+                                "(centre 2.0) but got %1 -- still the parent")
+                        .arg(v.structureCentreA())));
+    QVERIFY2(qFuzzyCompare(v.structureTopZ(), 3.0),
+             qPrintable(QString("bar selected: ruler should measure the BAR "
+                                "(top 3.0) but got %1 -- still the parent")
+                        .arg(v.structureTopZ())));
+
+    // Selecting the truss again (clearing the bar) goes back to the parent.
+    v.setBarHighlight(Truss::invalidId());
+    QVERIFY(qFuzzyCompare(v.structureCentreA(), 4.0));
+    QVERIFY(qFuzzyCompare(v.structureTopZ(), 4.0));
+
+    props->removeTruss(bar->id());
+    props->removeTruss(t1->id());
+    delete doc;
+}
+
 /* "Why are these lights showing not in the right places in rig view relative to
    what the studio view has?" Because the two disagreed about what the stored
    number MEANS. The plot anchors a free fixture by the TOP-LEFT of its
@@ -3707,6 +3854,132 @@ void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
             QCOMPARE(props->fixtureRigProps(spot->id()).towerId, Tower::invalidId());
         }
     }
+
+    delete doc;
+}
+
+/* "if I add a bar to a truss .. that becomes it's own container for lights
+   like the truss does .. it should have subentries for the fixtures
+   attached to the bar" -- plus the puzzle that came with it in the real
+   show file: "whats the difference between the T-1 Frame and the T-1
+   Truss?" There wasn't supposed to be one. structuralMembersOf() counted a
+   bar sharing its parent's group as a SECOND structural item, so
+   ensureTrussGroup() saw "2 structural items" for a plain truss with one
+   bar on it and refused to anchor the group -- it fell back to a bare
+   "T-1 · frame" folder with the truss itself as a redundant leaf inside
+   it, instead of "T-1 · on truss" the way a bar-less truss (T-2, T-3 in
+   the same file) always has. */
+void Monitor_Test::aBarBecomesItsOwnContainerInTheLayersList()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setType(Truss::Vertical);
+    t1->setOrigin(QVector3D(3.0f, 3.0f, 0.0f));
+    t1->setLength(3.0f);
+
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1");
+    bar->setParentTrussId(t1->id());
+    bar->setParentOffset(1.5f);
+    bar->setBarFace(Truss::FaceDownstage);
+    bar->setBarRun(Truss::RunAcross);
+    bar->setLength(1.0f);
+    props->recomputeChildTrusses();
+
+    Fixture *onTruss = makeMover(doc, 14.0, 0, "On Truss", QVector3D(3.0f, 3.0f, 1.0f));
+    QVERIFY(onTruss != nullptr);
+    FixtureRigProps rpTruss;
+    rpTruss.trussId = t1->id();
+    rpTruss.trussOffset = 1.0f;
+    props->setFixtureRigProps(onTruss->id(), rpTruss);
+
+    Fixture *onBar = makeMover(doc, 14.0, 8, "On Bar", QVector3D(2.5f, 3.145f, 1.5f));
+    QVERIFY(onBar != nullptr);
+    FixtureRigProps rpBar;
+    rpBar.trussId = bar->id();
+    props->setFixtureRigProps(onBar->id(), rpBar);
+
+    /* A loaded FILE (the actual repro, stage-structures-demo.qxw) doesn't
+       arrive at ensureGroupRegistry() with any of this ungrouped -- the
+       truss, the bar and both fixtures already carry the SAME persisted
+       GroupId from when the bar was created (createBarOnTruss() syncs
+       bar->groupId() to the parent's right away, and each fixture's own
+       group membership is saved independently of trussId matching). Set
+       the scene up the way XML load leaves it, so this exercises the
+       repair ensureGroupRegistry() is actually responsible for -- fixing
+       the anchor -- not the separate (and here irrelevant) fresh-mount
+       auto-grouping fallback. */
+    const quint32 gid = props->nextGroupId();
+    props->createGroup(gid, "T-1", t1->layerId(), 0);
+    t1->setGroupId(gid);
+    bar->setGroupId(gid);
+    props->setFixtureGroup(onTruss->id(), gid);
+    props->setFixtureGroup(onBar->id(), gid);
+
+    MonitorGraphicsView view(doc);
+    view.resize(900, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 8));
+    view.updateTrusses();
+    view.addFixture(onTruss->id(), QPointF(3000.0, 3000.0));
+    view.addFixture(onBar->id(), QPointF(2500.0, 3145.0));
+    view.ensureGroupRegistry();      // the exact pass that runs on file load
+
+    // The group must still be anchored to the TRUSS -- not fallen back to
+    // an unanchored "frame" folder just because a bar shares its group.
+    QCOMPARE(t1->groupId(), gid);
+    const MonitorProperties::MonitorGroup g = props->group(gid);
+    QVERIFY2(g.anchorKind == QStringLiteral("truss") && g.anchorId == t1->id(),
+             qPrintable(QString("T-1's group anchored to kind=\"%1\" id=%2 "
+                                "(expected truss/%3) -- it fell back to a "
+                                "plain frame folder")
+                        .arg(g.anchorKind).arg(g.anchorId).arg(t1->id())));
+
+    MonitorLayersPanel panel(doc, &view);
+    panel.reload();
+
+    QTreeWidgetItem *groupRow = nullptr, *barRow = nullptr;
+    QTreeWidgetItem *onTrussRow = nullptr, *onBarRow = nullptr;
+    QTreeWidgetItemIterator it(panel.m_tree);
+    for (; *it != nullptr; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        const int type = row->data(0, Qt::UserRole).toInt();
+        if (type == int(MonitorLayersPanel::NodeGroup)
+            && row->data(0, Qt::UserRole + 1).toUInt() == gid)
+            groupRow = row;
+        else if (type == int(MonitorLayersPanel::NodeItem)
+                 && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("truss")
+                 && row->data(0, Qt::UserRole + 1).toUInt() == bar->id())
+            barRow = row;
+        else if (type == int(MonitorLayersPanel::NodeItem)
+                 && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("fixture")
+                 && row->data(0, Qt::UserRole + 1).toUInt() == onTruss->id())
+            onTrussRow = row;
+        else if (type == int(MonitorLayersPanel::NodeItem)
+                 && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("fixture")
+                 && row->data(0, Qt::UserRole + 1).toUInt() == onBar->id())
+            onBarRow = row;
+    }
+
+    QVERIFY2(groupRow != nullptr, "T-1's group has no row at all");
+    QVERIFY2(groupRow->text(0).contains(QStringLiteral("on truss")),
+             qPrintable(QString("T-1's row does not read as a truss: \"%1\"")
+                        .arg(groupRow->text(0))));
+    QVERIFY2(barRow != nullptr, "Bar 1 has no row of its own under T-1");
+    QVERIFY2(onTrussRow != nullptr && onBarRow != nullptr,
+             "one of the two fixtures has no row at all");
+
+    QVERIFY2(onTrussRow->parent() == groupRow,
+             "the fixture mounted directly on T-1 is not a direct child of T-1's row");
+    QVERIFY2(onBarRow->parent() == barRow,
+             qPrintable(QString("the fixture mounted on Bar 1 sits under \"%1\", not "
+                                "under Bar 1's own row -- it's a flat sibling instead "
+                                "of nested under the bar")
+                        .arg(onBarRow->parent() ? onBarRow->parent()->text(0) : QStringLiteral("(no parent)"))));
 
     delete doc;
 }

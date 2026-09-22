@@ -4329,9 +4329,35 @@ void StructureStudioView::putOnFace(const QList<quint32> &ids)
 
 void StructureStudioView::drawDimensions(QPainter &p) const
 {
+    // Screen-space min/max only means a true physical width/height in a
+    // plane that isn't foreshortening anything -- same reason drawRulers()
+    // excludes Angled.
+    if (m_plane == Angled)
+        return;
+
     MonitorProperties *props = m_doc->monitorProperties();
     QList<QVector3D> c;   // structure-only corners (no fixtures)
-    if (m_kind == PlatformKind)
+
+    /* "when selecting a feature on the bar.truss editor .. should show the
+       fixture width on the horizontal .. and the fixture height on the
+       vertical like it does on the studio editor." A selected fixture takes
+       over these callouts entirely -- its own real footprint (the same box
+       fixtureBoxCorners() builds for the Angled 3D body) is what's actually
+       useful once something specific is picked, not the whole structure it
+       happens to be sitting on. */
+    if (!m_highlight.isEmpty())
+    {
+        const quint32 fid = *m_highlight.begin();
+        Fixture *fx = m_doc->fixture(fid);
+        if (fx != nullptr)
+        {
+            const FixtureVisualTraits traits = classifyFixture(fx);
+            QVector3D corner[8];
+            fixtureBoxCorners(fid, traits, corner);
+            for (int i = 0; i < 8; ++i) c << corner[i];
+        }
+    }
+    else if (m_kind == PlatformKind)
     { if (StagePlatform *pl = props->platform(m_id)) for (int i = 0; i < 8; ++i)
         c << QVector3D(pl->originX() + ((i & 1) ? pl->width() : 0.0f),
                        pl->originY() + ((i & 2) ? pl->depth() : 0.0f), (i & 4) ? pl->height() : 0.0f); }
@@ -4407,7 +4433,19 @@ double StructureStudioView::structureCentreA() const
     else if (m_kind == StandKind)
     { if (Stand *s = props->stand(m_id)) c << QVector3D(s->originX(), s->originY(), 0) << s->topPos(); }
     else if (m_kind == TrussKind)
-    { if (Truss *t = props->truss(m_id)) c << t->origin() << t->positionAt(t->length()); }
+    {
+        // "when selecing the bar .. should just show the bar on the rulers":
+        // this editor's OWN object (m_id) is what the ruler describes by
+        // default, but with a bar selected on the canvas the ruler was still
+        // silently measuring the PARENT underneath it, so the centre line
+        // and the width numbers described a structure that wasn't even the
+        // one highlighted. Selecting a bar clears back to no selection
+        // (mousePressEvent's empty-canvas/truss-body click), so "a bar is
+        // selected" and "the truss itself is" are the only two states here.
+        const quint32 rulerTrussId = (m_selectedBarId != Truss::invalidId())
+                                     ? m_selectedBarId : m_id;
+        if (Truss *t = props->truss(rulerTrussId)) c << t->origin() << t->positionAt(t->length());
+    }
     else if (m_kind == PipeKind)
     { if (Pipe *pp = props->pipe(m_id)) c << pp->positionAt(0) << pp->positionAt(pp->length()); }
     else if (m_kind == GroupKind)
@@ -4434,8 +4472,14 @@ double StructureStudioView::structureTopZ() const
         foreach (const Pipe *pp, standPipes(m_id)) z = qMax(z, double(pp->positionAt(pp->length()).z())); } }
     else if (m_kind == TowerKind)   { if (Tower *t = props->tower(m_id)) z = t->height(); }
     else if (m_kind == PlatformKind){ if (StagePlatform *pl = props->platform(m_id)) z = pl->height(); }
-    else if (m_kind == TrussKind)   { if (Truss *t = props->truss(m_id))
-        z = qMax(double(t->origin().z()), double(t->positionAt(t->length()).z())); }
+    else if (m_kind == TrussKind)
+    {
+        // Same "whichever is actually selected" rule as structureCentreA().
+        const quint32 rulerTrussId = (m_selectedBarId != Truss::invalidId())
+                                     ? m_selectedBarId : m_id;
+        if (Truss *t = props->truss(rulerTrussId))
+            z = qMax(double(t->origin().z()), double(t->positionAt(t->length()).z()));
+    }
     else if (m_kind == PipeKind)    { if (Pipe *pp = props->pipe(m_id))
         z = qMax(double(pp->positionAt(0).z()), double(pp->positionAt(pp->length()).z())); }
     else if (m_kind == GroupKind)
@@ -4875,6 +4919,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
             drawChildBars(p, m_id);
     }
     drawCursorReadout(p);
+    drawDimensions(p);   // selected fixture's own W/H, or the structure's
 
     // Plane badge.
     p.setPen(QColor(160, 164, 175));

@@ -613,16 +613,66 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
             myFixtures.insert(d.id);
     }
 
-    // LOCAL Fixture Groups whose members are all within this group's fixtures show
-    // as 💡 nodes, with those fixtures nested under them.
-    QHash<quint32, QTreeWidgetItem *> fixtureFGNode;   // fid → the FG node it lives under
-    addLocalFixtureGroups(node, myFixtures, fixtureFGNode);
+    /* A bar (a child Truss hung on this one) becomes its own container here,
+       the same way the truss itself does one level up -- "if I add a bar to
+       a truss .. that becomes it's own container for lights like the truss
+       does". Without this a bar was just another flat leaf beside its own
+       fixtures: T1-B1 sat next to Bar 1 as siblings instead of under it. */
+    QHash<quint32, QTreeWidgetItem *> barNode;    // bar truss id → its container
+    QHash<quint32, quint32> fixtureBar;           // fid → the bar it's mounted on
+    foreach (const ItemDesc &d, myItems)
+    {
+        if (d.kind != QStringLiteral("truss"))
+            continue;
+        Truss *bt = m_props->truss(d.id);
+        if (bt == nullptr || bt->isChildBar() == false)
+            continue;
+        QTreeWidgetItem *bn = new QTreeWidgetItem(node);
+        setNodeLabel(bn, d.name, tr("  \xc2\xb7 bar"));
+        bn->setIcon(0, kindIcon(QStringLiteral("truss"), QColor()));
+        bn->setToolTip(0, bn->text(0));
+        bn->setFirstColumnSpanned(true);
+        bn->setData(0, NodeTypeRole, int(NodeItem));
+        bn->setData(0, NodeIdRole, d.id);
+        bn->setData(0, NodeKindRole, d.kind);
+        bn->setExpanded(!wasNodeCollapsed(NodeGroup, d.id));
+        barNode.insert(d.id, bn);
+    }
+    if (!barNode.isEmpty())
+    {
+        foreach (quint32 fid, myFixtures)
+        {
+            const quint32 tid = m_props->fixtureRigProps(fid).trussId;
+            if (barNode.contains(tid))
+                fixtureBar.insert(fid, tid);
+        }
+    }
 
-    // Members: a fixture that belongs to a local FG nests under it; everything else
+    // LOCAL Fixture Groups whose members are all within this group's fixtures show
+    // as 💡 nodes, with those fixtures nested under them -- scoped per bar (so an
+    // FG entirely on one bar nests under it) plus once more for whatever is left
+    // directly on this truss.
+    QHash<quint32, QTreeWidgetItem *> fixtureFGNode;   // fid → the FG node it lives under
+    QSet<quint32> onNoBar = myFixtures;
+    foreach (quint32 barId, barNode.keys())
+    {
+        QSet<quint32> onThisBar;
+        foreach (quint32 fid, fixtureBar.keys(barId)) { onThisBar.insert(fid); onNoBar.remove(fid); }
+        addLocalFixtureGroups(barNode.value(barId), onThisBar, fixtureFGNode);
+    }
+    addLocalFixtureGroups(node, onNoBar, fixtureFGNode);
+
+    // Members: a bar's own row is replaced by the container built above; a
+    // fixture nests under its bar, then under a local FG if it belongs to
+    // one (FG is the more specific choice, so it wins); everything else
     // (loose fixtures, non-fixture objects) stays directly under this group.
     foreach (const ItemDesc &d, myItems)
     {
+        if (d.kind == QStringLiteral("truss") && barNode.contains(d.id))
+            continue;       // this bar is a container now, not a leaf
         QTreeWidgetItem *host = node;
+        if (d.kind == QStringLiteral("fixture") && fixtureBar.contains(d.id))
+            host = barNode.value(fixtureBar.value(d.id));
         if (d.kind == QStringLiteral("fixture") && fixtureFGNode.contains(d.id))
             host = fixtureFGNode.value(d.id);
         addItemLeaf(host, d);

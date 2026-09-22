@@ -64,6 +64,12 @@ private slots:
        bound to the truss", so these drive the real press/move/release on a
        VERTICAL truss (the T-2 case) in every plane. */
     void studioTrussDragMovesFixture();
+    /** "when selecting a feature on the bar.truss editor .. should show the
+     *  fixture width on the horizontal .. and the fixture height on the
+     *  vertical like it does on the studio editor" -- drawDimensions() was
+     *  written for the structure only and never fed a selected fixture at
+     *  all (nor even called from paintEvent()). */
+    void selectingAFixtureShowsItsOwnDimensionCallouts();
     void studioTrussDragBlockedWhenLocked();
     void studioTrussDragBlockedWhenTrussLocked();
     void studioTrussDragInEveryPlane();
@@ -153,6 +159,11 @@ private slots:
      *  Front/Side elevation -- the generic (non-tower) mover branch used to
      *  hardcode "not hung" regardless of mountingType. */
     void aMoverOnATrussElevationIsNotDrawnUpright();
+    /** "when selecing the bar .. should just show the bar on the rulers":
+     *  a parent truss's own editor's rulers always measured the PARENT,
+     *  even with a bar selected on the canvas -- switch to the selected
+     *  bar's own extent, back to the parent's when nothing is selected. */
+    void rulersFollowWhicheverOfTrussOrBarIsSelected();
     /** The plan and the rig must agree about WHERE a fixture is. */
     void planAndRigAgreeOnAFixturesPosition();
     /** A fixture placed outside the grid must stay reachable in the plan --
@@ -164,6 +175,11 @@ private slots:
      *  its auto-group carries a studio frame, which is the case that broke. */
     void aTrussRowInLayersOpensTheTrussNotItsGroup();
     void theLayersListOffersEverythingThePlotDoes();
+    /** "if I add a bar to a truss .. that becomes it's own container for
+     *  lights like the truss does": a bar gets its own row with its own
+     *  fixtures nested under it, and the truss's group stays anchored (not
+     *  a bare "frame" folder) even though the bar shares its group. */
+    void aBarBecomesItsOwnContainerInTheLayersList();
     void doubleClickingAnywhereOnATowerTopOpensIt();
     void doubleClickingABubbleShowsWhatItHides();
     /** Stacked fixtures get one named tag each, and a tag picks its own. */

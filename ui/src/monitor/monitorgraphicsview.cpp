@@ -1172,10 +1172,19 @@ void MonitorGraphicsView::ensureGroupRegistry()
     for (int s = 0; s < pd->sources().size(); s++)
         props->ensureGroup(pd->sources().at(s).groupId, pd->sources().at(s).layerId);
 
-    // Auto-group each truss with the fixtures rigged on it.
+    // Auto-group each truss with the fixtures rigged on it. Not for a bar:
+    // it always joins its PARENT's group (see the explicit ensureTrussGroup
+    // (parentId) calls where a bar is created/reassigned) -- calling this
+    // for a bar's own id too raced the parent's own call for the SAME
+    // group's anchor (both share one groupId), landing on whichever of the
+    // two ran last and sometimes anchoring the group to the bar instead of
+    // the truss.
     foreach (TrussItem *i, m_trussItems)
-        if (Truss *t = i->truss())
+    {
+        Truss *t = i->truss();
+        if (t != nullptr && t->isChildBar() == false)
             ensureTrussGroup(t->id());
+    }
 
     // Auto-group each riser with the fixtures mounted on it.
     foreach (PlatformItem *i, m_platformItems)
@@ -1317,8 +1326,16 @@ int MonitorGraphicsView::structuralMembersOf(quint32 gid) const
     if (gid == 0)
         return 0;
     int n = 0;
+    // A bar hung on a truss shares that truss's group but is not a SEPARATE
+    // structural item for this count -- it belongs to the truss, the way its
+    // own fixtures do. Counting it as one made ensureTrussGroup() see "2
+    // structural items" for a plain truss carrying one bar and treat it as a
+    // multi-truss manual group, clearing the anchor that made the truss
+    // render as "T-1 · on truss" -- it fell back to a bare "· frame" folder
+    // instead, with the truss itself showing up as a redundant leaf inside
+    // it ("what's the difference between the T-1 Frame and the T-1 Truss?").
     foreach (TrussItem *i, m_trussItems)
-        if (i->truss() && i->truss()->groupId() == gid) n++;
+        if (i->truss() && i->truss()->groupId() == gid && i->truss()->isChildBar() == false) n++;
     foreach (PlatformItem *i, m_platformItems)
         if (i->platform() && i->platform()->groupId() == gid) n++;
     return n;
