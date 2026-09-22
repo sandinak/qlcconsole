@@ -23,6 +23,8 @@
 #include <QTimer>
 #include <QApplication>
 #include <QLineEdit>
+#include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QPushButton>
@@ -3981,6 +3983,262 @@ void Monitor_Test::aBarBecomesItsOwnContainerInTheLayersList()
                                 "of nested under the bar")
                         .arg(onBarRow->parent() ? onBarRow->parent()->text(0) : QStringLiteral("(no parent)"))));
 
+    delete doc;
+}
+
+/* Chains six independent user actions in one session -- add a fixture, add a
+ * truss, add a bar to it, drop the fixture on the bar, drag the bar, drag the
+ * fixture back onto the truss -- through the SAME production code each one's
+ * real UI runs: the "Add Truss" dialog, the bar context-menu action's slot,
+ * the plot's drop-attach path (dropOnTrussAttachesAndStays' own technique),
+ * and a real mousePress/Move/Release sequence on the truss's own Structure
+ * Studio editor. A narrow test can pass while two features still disagree
+ * about state the moment they're used back to back -- this is the class of
+ * bug "T-1 Frame vs T-1 Truss" (aBarBecomesItsOwnContainerInTheLayersList,
+ * above) actually was: correct in isolation, wrong once a bar and a group
+ * anchor had both been touched in the same session.
+ */
+void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    // 1. Add a fixture. No test anywhere drives the AddFixture dialog to
+    //    completion (addfixture_test.cpp only probes it in isolation), so
+    //    this step uses the same direct construction every other test in
+    //    this file relies on to get a fixture into the Doc.
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName("Workflow Mover");
+    fxi->setChannels(1);
+    QVERIFY(doc->addFixture(fxi));
+    const quint32 fid = fxi->id();
+    props->setFixturePosition(fid, 0, 0, QVector3D(0, 0, 0));
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    MonitorLayersPanel *layers = mon->findChild<MonitorLayersPanel *>();
+    QVERIFY(layers != nullptr);
+
+    gv->resize(1230, 760);
+    gv->setSnapDivisions(0);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(40, 24));
+    QVERIFY(gv->m_cellPixels > 0);
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+    gv->addFixture(fid, QPointF(0, 0));
+    MonitorFixtureItem *item = gv->m_fixtures.value(fid, nullptr);
+    QVERIFY(item != nullptr);
+
+    // 2. Add a truss -- the real, blocking "Add Truss" dialog (slotAddTruss()),
+    //    filled in and accepted the way addTrussAccepted() already proved this
+    //    QTimer::singleShot technique can drive under offscreen QTest.
+    const int trussesBefore = props->trusses().count();
+    QTimer::singleShot(0, []() {
+        QWidget *modal = QApplication::activeModalWidget();
+        QVERIFY(modal != nullptr);
+        QCOMPARE(modal->windowTitle(), QString("Add Truss"));
+
+        QLineEdit *nameEdit = modal->findChild<QLineEdit *>();
+        QVERIFY(nameEdit != nullptr);
+        nameEdit->setText("Workflow Truss");
+
+        QComboBox *typeCb = modal->findChild<QComboBox *>();
+        QVERIFY(typeCb != nullptr);
+        typeCb->setCurrentIndex(1);   // Vertical -- a tower, like every other
+                                      // bar-focused test in this file (a
+                                      // Horizontal truss's default crossbar
+                                      // runs ALONG the same line as the truss
+                                      // itself in Top view, which is a real
+                                      // "which one did I actually hit"
+                                      // ambiguity, not a test artefact --
+                                      // Vertical keeps the two visually apart:
+                                      // the tower is a point, the crossbar a
+                                      // short line off to its side).
+
+        // originX, originY, originZ, dirAngle, length, width -- in the order
+        // slotAddTruss() adds them to the form.
+        const QList<QDoubleSpinBox *> spins = modal->findChildren<QDoubleSpinBox *>();
+        QCOMPARE(spins.count(), 6);
+        spins[0]->setValue(3.0);   // origin X
+        spins[1]->setValue(3.0);   // origin Y
+        spins[2]->setValue(0.0);   // origin Z (base of the tower)
+        spins[3]->setValue(0.0);   // direction: unused for a Vertical truss
+        spins[4]->setValue(3.0);   // length (tower height)
+        spins[5]->setValue(0.29);  // width
+
+        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox *>();
+        QVERIFY(btns != nullptr);
+        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
+        QVERIFY(okBtn != nullptr);
+        okBtn->click();
+    });
+    mon->slotAddTruss();
+
+    QCOMPARE(props->trusses().count(), trussesBefore + 1);
+    Truss *t = props->trusses().last();
+    QCOMPARE(t->name(), QString("Workflow Truss"));
+    QCOMPARE(t->type(), Truss::Vertical);
+    QVERIFY2(qAbs(double(t->length()) - 3.0) < 0.01,
+             "the dialog's Length field did not reach the new truss");
+
+    // 3. Add a bar to it -- the exact slot the truss's "Add > Bar..." context-
+    //    menu action calls (Monitor::slotAddBarToTruss(), wired from
+    //    MonitorGraphicsView::addBarToTrussRequested()). It opens the truss/
+    //    bar editor on the new bar; accept it, the same as a user clicking OK.
+    const int trussesBeforeBar = props->trusses().count();
+    QTimer::singleShot(0, mon, []() {
+        QWidget *modal = QApplication::activeModalWidget();
+        QVERIFY(modal != nullptr);
+        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox *>();
+        QVERIFY(btns != nullptr);
+        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
+        QVERIFY(okBtn != nullptr);
+        okBtn->click();
+    });
+    mon->slotAddBarToTruss(t->id(), -1.0f);   // -1 = mid-span, same as the menu action
+
+    QCOMPARE(props->trusses().count(), trussesBeforeBar + 1);
+    Truss *bar = nullptr;
+    foreach (Truss *cand, props->trusses())
+        if (cand->parentTrussId() == t->id())
+            bar = cand;
+    QVERIFY2(bar != nullptr, "slotAddBarToTruss() did not create a child bar");
+    // Nothing is rigged on either object yet -- ensureTrussGroup() forms a
+    // group only once something attaches (checked after step 4, below).
+    QCOMPARE(t->groupId(), quint32(0));
+
+    // Stand the crossbar well clear of the tower's own on-screen "circle" --
+    // createBarOnTruss()'s default standoff (0) puts it barely past the
+    // tower's own hit radius, close enough that a Top-view drop could land
+    // on either object depending on rounding. A real user would see this
+    // as two clearly separate things to click; give the test the same
+    // separation instead of chasing a coin-flip.
+    bar->setBarStandoff(0.5f);
+    props->recomputeChildTrusses();
+    gv->updateTrusses();   // rebuild the plot's TrussItems at the new geometry
+
+    // 4. Put the fixture on the bar -- the plot's real drop-attach path:
+    //    reposition the item over the bar's own line and call the same slot
+    //    a real mouse release invokes, as dropOnTrussAttachesAndStays() does.
+    gv->updateFixture(fid);
+    const QVector3D barMid = bar->positionAt(bar->length() * 0.5f);
+    const QPointF onBarPx = gv->realPositionToPixels(double(barMid.x()) * 1000.0,
+                                                      double(barMid.y()) * 1000.0);
+    item->setPos(item->pos() + (onBarPx - item->sceneBoundingRect().center()));
+    gv->slotFixtureMoved(item);
+
+    QVERIFY2(props->fixtureRigProps(fid).trussId == bar->id(),
+             "dropping the fixture on the bar's line did not attach it to the bar");
+    // A plain drop attaches the RIG PROPS only -- it deliberately does not
+    // form a group (that's the explicit "Attach to Truss" action's job, or
+    // ensureGroupRegistry() on the next load; see the final check below).
+
+    // 5. Move the bar -- a real mousePress/Move/Release sequence on the
+    //    truss's own Structure Studio editor, the sequence
+    //    draggingABarChangesItsPositionAlongTheParent() already proved drives
+    //    dragBarTo() the same way a real drag does.
+    StructureStudioView sv(doc, StructureStudioView::TrussKind, t->id());
+    sv.resize(800, 640);
+    sv.setPlane(StructureStudioView::Front);
+    sv.setLocked(false);   // mousePressEvent()'s bar-drag arm is gated on this
+    sv.reload();
+    sv.m_zoomed = true;
+
+    const float offsetBeforeDrag = bar->parentOffset();
+    const QVector3D fixturePosBeforeDrag = props->fixtureRigPosition(fid);
+
+    // T's Vertical, so its run is Z -- drag the crossbar half a metre up,
+    // the same axis draggingABarChangesItsPositionAlongTheParent() drives.
+    // Press near one END of the bar, not its midpoint: the fixture attached
+    // in step 4 sits exactly at the midpoint, and mousePressEvent() hit-tests
+    // a fixture BEFORE a bar -- pressing there would grab the fixture (and
+    // slide it along the bar) instead of arming the bar's own drag.
+    const QPointF pressPt = sv.w2s(bar->positionAt(bar->length() * 0.1f));
+    const QPointF releasePt = sv.w2s(bar->origin() + QVector3D(0.0f, 0.0f, 0.5f));
+    QMouseEvent press(QEvent::MouseButtonPress, pressPt, pressPt,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mousePressEvent(&press);
+    QMouseEvent move(QEvent::MouseMove, releasePt, releasePt,
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mouseMoveEvent(&move);
+    QMouseEvent release(QEvent::MouseButtonRelease, releasePt, releasePt,
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    sv.mouseReleaseEvent(&release);
+
+    QVERIFY2(!qFuzzyCompare(bar->parentOffset(), offsetBeforeDrag),
+             "dragging the bar on its own editor did not move it");
+
+    // The fixture rides the bar -- it must have moved WITH it.
+    const QVector3D fixturePosAfterDrag = props->fixtureRigPosition(fid);
+    QVERIFY2((fixturePosAfterDrag - fixturePosBeforeDrag).length() > 0.05f,
+             "moving the bar did not carry its own fixture along with it");
+
+    // 6. Relocate the fixture off the bar and directly onto the truss --
+    //    another real plot drop. A Vertical truss reads as a point in Top
+    //    view (MonitorGraphicsView::snapToTruss()'s Vertical branch pins
+    //    ANY drop near it to the tower's own X/Y), so landing on the
+    //    tower's own origin -- well clear of the crossbar's standoff --
+    //    can only read as "on the truss".
+    gv->updateFixture(fid);
+    MonitorFixtureItem *itemNow = gv->m_fixtures.value(fid, nullptr);
+    QVERIFY(itemNow != nullptr);
+    const QPointF onTrussPx = gv->realPositionToPixels(double(t->origin().x()) * 1000.0,
+                                                        double(t->origin().y()) * 1000.0);
+    itemNow->setPos(itemNow->pos() + (onTrussPx - itemNow->sceneBoundingRect().center()));
+    gv->slotFixtureMoved(itemNow);
+
+    const FixtureRigProps rpAfter = props->fixtureRigProps(fid);
+    QVERIFY2(rpAfter.trussId == t->id(),
+             qPrintable(QString("relocating onto the tower left trussId=%1 "
+                                "(expected the truss %2, not still the bar %3)")
+                        .arg(rpAfter.trussId).arg(t->id()).arg(bar->id())));
+
+    /* Settle the session the way the next file load would --
+       ensureGroupRegistry() (called on load, see aBarBecomesItsOwnContainer-
+       InTheLayersList's own comment on this) forms/re-anchors a group for
+       any truss with something actually rigged on it. Our fixture ended
+       step 6 on the TRUSS itself, so this is where "does a plain drag-drop
+       leave something a reload will read correctly" actually gets checked --
+       the drop path itself only ever wrote rig props, deliberately, per the
+       comment after step 4. */
+    gv->ensureGroupRegistry();
+    QVERIFY2(t->groupId() != 0, "the truss ended the session with no group at all");
+    const MonitorProperties::MonitorGroup finalGrp = props->group(t->groupId());
+    QVERIFY2(finalGrp.anchorKind == QStringLiteral("truss") && finalGrp.anchorId == t->id(),
+             qPrintable(QString("truss's group anchored to kind=\"%1\" id=%2 instead "
+                                "of truss/%3")
+                        .arg(finalGrp.anchorKind).arg(finalGrp.anchorId).arg(t->id())));
+
+    // The Layers list agrees: the fixture sits directly under the truss's row.
+    layers->reload();
+    QTreeWidgetItem *groupRow = nullptr, *fixtureRow = nullptr;
+    QTreeWidgetItemIterator it(layers->m_tree);
+    for (; *it != nullptr; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        const int type = row->data(0, Qt::UserRole).toInt();
+        if (type == int(MonitorLayersPanel::NodeGroup)
+            && row->data(0, Qt::UserRole + 1).toUInt() == t->groupId())
+            groupRow = row;
+        else if (type == int(MonitorLayersPanel::NodeItem)
+                 && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("fixture")
+                 && row->data(0, Qt::UserRole + 1).toUInt() == fid)
+            fixtureRow = row;
+    }
+    QVERIFY2(groupRow != nullptr, "the truss's group has no row after the whole workflow");
+    QVERIFY2(fixtureRow != nullptr, "the fixture has no row at all after being relocated");
+    QVERIFY2(fixtureRow->parent() == groupRow,
+             qPrintable(QString("after moving back onto the truss, the fixture sits under "
+                                "\"%1\" instead of the truss's own row")
+                        .arg(fixtureRow->parent() ? fixtureRow->parent()->text(0)
+                                                   : QStringLiteral("(no parent)"))));
+
+    delete mon;
+    doc->deleteFixture(fid);
+    props->removeTruss(bar->id());
+    props->removeTruss(t->id());
     delete doc;
 }
 

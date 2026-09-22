@@ -180,6 +180,13 @@ private slots:
      *  fixtures nested under it, and the truss's group stays anchored (not
      *  a bare "frame" folder) even though the bar shares its group. */
     void aBarBecomesItsOwnContainerInTheLayersList();
+    /** Integration test for the whole build-out flow: add a fixture, add a
+     *  truss (the real "Add Truss" dialog), add a bar to it (the real
+     *  context-menu action's slot), drop the fixture onto the bar, drag the
+     *  bar on its own editor, then drag the fixture back onto the truss --
+     *  each step through the same production code path a user's mouse would
+     *  hit, checking the model and the Layers list agree after every one. */
+    void buildingARigStepByStepThroughRealUiStaysConsistent();
     void doubleClickingAnywhereOnATowerTopOpensIt();
     void doubleClickingABubbleShowsWhatItHides();
     /** Stacked fixtures get one named tag each, and a tag picks its own. */
