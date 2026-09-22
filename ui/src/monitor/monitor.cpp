@@ -4026,20 +4026,36 @@ quint32 Monitor::createBarOnTruss(quint32 parentId, float offset)
     // Truss-LOCAL mount defaults, per parent orientation:
     //  • Vertical tower  → a horizontal crossbar ACROSS the Downstage face
     //    (the "bar across the front" case).
-    //  • Overhead truss  → an under-hung bar running along it.
+    //  • Overhead truss  → a bar running ALONG it, offset slightly
+    //    downstage (not straight underneath -- see the comment below).
     bar->setParentTrussId(parentId);
     bar->setParentOffset(offset >= 0.0f ? offset : parent->length() / 2.0f);   // Along
     if (parent->type() == Truss::Vertical)
     {
         bar->setBarFace(Truss::FaceDownstage);
         bar->setBarRun(Truss::RunAcross);
+        bar->setBarStandoff(0.0f);
     }
     else
     {
-        bar->setBarFace(Truss::FaceBottom);
+        /* NOT FaceBottom: barFaceVector(FaceBottom) is a pure Z vector, so
+         * barStandoff -- "distance off that face" -- can never separate a
+         * RunAlong bar from its parent in Top view no matter how large it
+         * is set (recomputeChildTrusses()'s `base = attach + faceN *
+         * (half + barStandoff)` gets zero X/Y contribution from a Z-only
+         * faceN). The bar's line rendered EXACTLY on top of the truss's
+         * own line, with no pixel a click could mean "the bar" rather
+         * than "the truss" (WORKFLOW-SUBTLETIES.md #1). FaceDownstage
+         * gives a real Y offset instead -- the same face the Vertical
+         * case above already relies on for its own separation -- while
+         * RunAlong keeps the bar parallel to/under the truss, same as
+         * before. barStandoff on TOP of that is now meaningful, so it
+         * gets an explicit nonzero default too, not just the bare
+         * parent->width()/2 baseline every bar gets for free. */
+        bar->setBarFace(Truss::FaceDownstage);
         bar->setBarRun(Truss::RunAlong);
+        bar->setBarStandoff(0.15f);
     }
-    bar->setBarStandoff(0.0f);
     bar->setBarCrossShift(0.0f);
     bar->setLayerId(parent->layerId());
     m_props->recomputeChildTrusses();                  // derive world geometry

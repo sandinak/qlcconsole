@@ -20,7 +20,7 @@ entries stay unmarked.
 |---|---|---|
 | # | Entry | Domain | Status |
 |---|---|---|---|
-| [1](#1-a-horizontal-trusss-default-crossbar-is-visually-coincident-with-the-truss-itself) | Horizontal truss's default bar is visually coincident with the truss | Truss/bar | |
+| [1](#1-a-horizontal-trusss-default-crossbar-is-visually-coincident-with-the-truss-itself) | Horizontal truss's default bar is visually coincident with the truss | Truss/bar | Fixed |
 | [2](#2-a-plain-drag-drop-attach-never-forms-a-group--only-the-explicit-attach-to-truss-action-or-a-file-reload-does) | Plain drag-drop attach never forms a group | Truss/bar | Fixed |
 | [3](#3-mousepresseventss-hit-test-always-prefers-a-fixture-over-a-bar) | Fixture hit-test always wins over a bar underneath it | Truss/bar | |
 | [4](#4-structurestudioviews-bar-drag-arm-is-gated-by-the-views-own-m_locked-separately-from-the-bar-objects-own-locked-flag) | View lock vs. object lock are two different checks | Truss/bar | |
@@ -62,11 +62,31 @@ put the crossbar visibly off to the side, so this only affects the
 Horizontal-truss case — which is also the more common one (an overhead
 truss with a video/LED bar hung under it).
 
-*Status:* unmarked. Worth asking whether a Horizontal truss's default bar
-should get a nonzero standoff (or drop below the truss's Z, matching how it
-already renders in *elevation* — see `updateTrusses()`'s Z-offset comment)
-so it's clickable in Top view too, or whether Top-view bar interaction on a
-Horizontal truss is simply not an expected workflow (elevation views only).
+*Status:* **Fixed**, with a fix aimed specifically at "the standoff" per the
+user's steer, while keeping clear of the pre-existing, unrelated `Pipe`
+"stand"/`standOffset` concept (a boom's mount height up a *Stand* post — see
+#14's doc comment on `crossbarStandoff()` for the explicit disambiguation
+this raised).
+
+`barStandoff` alone cannot separate a Horizontal truss's default bar from its
+parent in Top view: `recomputeChildTrusses()`'s `base = attach + faceN *
+(half + barStandoff)` only has an effect on the axis `faceN` actually points
+along, and `barFaceVector(FaceBottom)` — the old Horizontal default — is a
+pure Z-axis vector, so no standoff value, however large, moves the bar's X/Y
+at all. The real fix is the same one that already makes the Vertical-parent
+case work: default a Horizontal truss's bar to `FaceDownstage` (a real
+Y-component) instead of `FaceBottom`, `RunAlong` (unchanged), with a nonzero
+`barStandoff` (0.15) so it renders visibly off the truss's own line instead
+of merely being *capable* of doing so. `createBarOnTruss()`'s Vertical branch
+is untouched — it already worked.
+
+A new test, `aBarOnAHorizontalTrussDefaultsClearOfItInTopView()`, creates a
+Horizontal truss via `createBarOnTruss()` (the real production call, not a
+hand-built `Truss`), asserts the new defaults (`barFace()==FaceDownstage`,
+`barRun()==RunAlong`, `barStandoff()>0`), and proves the fix at the pixel
+level using `StructureStudioView::hitTestBar()`: a hit-test at the truss's
+own centreline now finds nothing, while a hit-test at the bar's actual
+(now-offset) position finds it. Full suite reruns green.
 
 ### 2. A plain drag-drop attach never forms a group — only the explicit "Attach to Truss" action or a file reload does
 

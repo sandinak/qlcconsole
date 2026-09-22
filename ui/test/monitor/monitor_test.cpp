@@ -5285,6 +5285,68 @@ void Monitor_Test::aBarShowsInItsParentTrusssOwnEditor()
     delete doc;
 }
 
+/* A Horizontal truss's default bar used to render EXACTLY on top of the
+ * truss's own line in Top view: FaceBottom offsets purely along Z, which
+ * Top view cannot show at all, so recomputeChildTrusses()'s `base = attach
+ * + faceN * (half + barStandoff)` got zero X/Y contribution no matter how
+ * large barStandoff was set (see WORKFLOW-SUBTLETIES.md #1). Fixed by
+ * defaulting to FaceDownstage instead -- a real Y offset, the same face
+ * the Vertical-parent case already relies on for its own separation --
+ * plus a small explicit barStandoff on top of it, now that it actually
+ * does something.
+ */
+void Monitor_Test::aBarOnAHorizontalTrussDefaultsClearOfItInTopView()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *t = props->addTruss();
+    t->setName("T-1");
+    t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(3.0f, 3.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(4.0f);
+    t->setWidth(0.29f);
+
+    QWidget parent;
+    Monitor mon(&parent, doc);
+
+    // The exact function the truss's own "Add > Bar..." context-menu action
+    // (and slotAddBarToTruss()) calls. No dialog of its own -- that flow is
+    // already covered by buildingARigStepByStepThroughRealUiStaysConsistent().
+    const quint32 barId = mon.createBarOnTruss(t->id(), -1.0f);
+    QVERIFY2(barId != Truss::invalidId(), "createBarOnTruss() did not create a bar");
+    Truss *bar = props->truss(barId);
+    QVERIFY(bar != nullptr);
+
+    QCOMPARE(bar->barFace(), Truss::FaceDownstage);
+    QCOMPARE(bar->barRun(), Truss::RunAlong);
+    QVERIFY2(bar->barStandoff() > 0.0f,
+             "a bar on a Horizontal truss should default to a nonzero standoff "
+             "now that FaceDownstage makes one actually visible");
+
+    // The real check: a Top-view hit-test can tell the two apart. Press
+    // where the TRUSS's own centreline runs -- must NOT find the bar --
+    // and press where the BAR actually draws -- must find it.
+    StructureStudioView view(doc, StructureStudioView::TrussKind, t->id());
+    view.resize(800, 640);
+    view.setPlane(StructureStudioView::Top);
+    view.reload();
+    view.m_zoomed = true;
+
+    const QPointF onTrussCentreline = view.w2s(t->positionAt(t->length() * 0.5f));
+    QVERIFY2(view.hitTestBar(onTrussCentreline) == Truss::invalidId(),
+             "the bar still hit-tests at the truss's own centreline -- not "
+             "actually separated in Top view");
+
+    const QPointF onBar = view.w2s(bar->positionAt(bar->length() * 0.5f));
+    QCOMPARE(view.hitTestBar(onBar), barId);
+
+    props->removeTruss(barId);
+    props->removeTruss(t->id());
+    delete doc;
+}
+
 /* "not selectable at all with mouse to move it in position." Half of the
    same report that got the bar drawn (aBarShowsInItsParentTrusssOwnEditor,
    above) -- visible is not the same as clickable, and nothing hit-tested a

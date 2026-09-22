@@ -267,6 +267,12 @@ private slots:
      *  separate code path from the whole-rig StageKind view above, which
      *  proves nothing about this one. */
     void aBarShowsInItsParentTrusssOwnEditor();
+    /** A bar added to a HORIZONTAL truss through the real "Add Bar" action
+     *  (Monitor::createBarOnTruss()) must default somewhere a click can
+     *  actually tell apart from the truss itself -- its old FaceBottom
+     *  default offset the bar along Z only, invisible in Top view, so the
+     *  bar's drawn line landed exactly on the truss's own line. */
+    void aBarOnAHorizontalTrussDefaultsClearOfItInTopView();
     /** Visible is not the same as clickable -- hit-test and drag it too. */
     void hitTestBarFindsANearbyBar();
     void clickingABarSelectsAndHighlightsIt();
