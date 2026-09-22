@@ -175,10 +175,10 @@ here also auto-links a PanTilt palette to it" — stale from before that
 change. The test's actual assertion doesn't check palette *type*, so it
 still passes; only the prose is wrong.
 
-*Status:* unmarked, trivially fixable (one-line comment update in
-`addTargetAccepted()`). Flagging because a comment like this is exactly what
-a future reader would trust over re-deriving the behavior from the code —
-worth fixing opportunistically.
+*Status:* **Fixed.** Both comments in `addTargetAccepted()` now say `Aim`
+where they said `PanTilt`, matching the production code and its own comment
+in `slotAddTarget()`. No behavior or assertion change — the test's checks
+never depended on palette type, only the prose was wrong.
 
 ### 6. Assigning a fixture to aim at a target has no test for the real drag-drop path
 

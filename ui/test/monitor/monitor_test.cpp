@@ -213,7 +213,10 @@ void Monitor_Test::addTargetAccepted()
     // slotAddTarget() differs from slotAddTruss(): the StageTarget is created
     // with defaults FIRST, then an edit dialog opens — so even a cancelled
     // edit leaves the target in place (covered by addTargetEditCancelled()
-    // below). Accepting here also auto-links a PanTilt palette to it.
+    // below). Accepting here also auto-links an Aim palette to it (not
+    // PanTilt -- see slotAddTarget()'s own comment on why: a PanTilt
+    // palette carries fixed values and doesn't follow the target if it
+    // moves, Aim resolves per fixture from geometry).
     QWidget parent;
     Monitor mon(&parent, m_doc);
 
@@ -236,7 +239,7 @@ void Monitor_Test::addTargetAccepted()
     StageTarget *t = m_doc->monitorProperties()->stageTargets().last();
     QCOMPARE(t->name(), QString("Pilot Target"));
 
-    // A PanTilt palette auto-links to the new target.
+    // An Aim palette auto-links to the new target.
     QCOMPARE(m_doc->palettes().count(), beforePalettes + 1);
     bool linked = false;
     foreach (QLCPalette *p, m_doc->palettes())
