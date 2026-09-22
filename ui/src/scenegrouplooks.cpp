@@ -1158,12 +1158,21 @@ void SceneGroupLooks::moveLooksToTarget(const QList<quint32> &pids, quint32 effe
     for (int i = 0; i < block.size(); ++i)
         order.insert(pos + i, block.at(i));
 
+    // reload() unconditionally, even when reorderPalettes() finds the computed
+    // order identical to the current one (its own no-op guard): a freshly
+    // dropped palette was just appended by addPalette() and has never been
+    // RENDERED in the tree at all yet. When "nest right after this effect"
+    // happens to land at the same index addPalette()'s append already put it
+    // -- the ordinary case of dropping onto your only/last effect -- the
+    // reorder is a genuine no-op on the DATA, but the tree still needs its
+    // first render showing the palette nested as a child, not floating at
+    // the top level where it was drawn before this call ran at all.
     if (m_scene->reorderPalettes(order))
     {
         m_doc->setModified();
         emit sceneModified();
-        reload();
     }
+    reload();
 }
 
 void SceneGroupLooks::slotLookContextMenu(const QPoint &pos)

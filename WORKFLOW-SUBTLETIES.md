@@ -34,13 +34,24 @@ entries stay unmarked.
 | [12](#12-a-sub-group-move-through-the-real-ui-is-a-drag----and-a-drag-here-is-a-genuine-internal-qdragqdropevent-cycle-not-just-mouse-events) | Untested: the real internal `QDrag` cycle for moving a sub-group | Fixture Manager | Fixed |
 | [13](#13-assignheads-collision-behavior-at-an-already-occupied-cell-is-untested-here) | Untested: pasting a block onto an occupied cell | Fixture Manager | Fixed |
 | [14](#14-a-pipe-crossbar-has-no-standoff-field-so-it-is-always-exactly-coincident-with-its-parent-boom-in-top-view) | A pipe crossbar has no standoff field, unlike a truss bar | Stand/boom | Fixed |
+| [15](#15-a-fresh-drop-nested-onto-an-effect-can-silently-fail-to-render-as-nested) | A fresh drop nested onto an Effect can silently fail to render as nested | Programming tab | Fixed |
+| [16](#16-a-group-drop-folds-away-an-already-covered-fixed-target-even-with-zero-covering-looks) | A group drop folds away an already-covered fixed target, even with zero covering looks | Programming tab | Accepted |
+| [17](#17-reconcileafterpaletteapply-defers-past-dropevent-and-its-dialog-has-no-ok-button) | `reconcileAfterPaletteApply()` defers past `dropEvent()`, and its dialog has no Ok button | Programming tab (test technique) | Accepted |
+| [18](#18-an-unshown-top-level-widgets-own-nested-widgets-dont-get-real-geometry-from-resize-alone) | An unshown top-level widget's own nested widgets don't get real geometry from resize() alone | Programming tab (test technique) | Accepted |
 
-**All 14 entries are resolved.** #1, #2, #5, #7, #10, #11, #12, #13 and #14
-were fixed (see their entries for what changed and what each deliberately
-left out); #3, #4, #6, #8 and #9 were reviewed and accepted as-is — deliberate
-behavior, a documented test-technique trap, or a speculative coverage gap
-with no evidence it's ever caused a real problem. Nothing on this list is
-open work.
+**All 18 entries are resolved.** #1, #2, #5, #7, #10, #11, #12, #13, #14 and
+#15 were fixed (see their entries for what changed and what each
+deliberately left out); #3, #4, #6, #8, #9, #16, #17 and #18 were reviewed
+and accepted as-is — deliberate behavior, a documented test-technique trap,
+or a speculative coverage gap with no evidence it's ever caused a real
+problem. Nothing on this list is open work.
+
+**#15–18** came from a second pass surveying the Programming tab's own
+drag-construction gestures (drag palettes→looks, groups→dynamic targets,
+fixtures→fixed targets — CLAUDE.md's description of the fork's headline
+feature), closing #6 above by actually writing the test it called for. Test:
+`ProgrammingManager_Test::buildingALookThroughRealProgrammingTabDragAndDropStaysConsistent()`
+and its two siblings (`ui/test/programmingmanager/programmingmanager_test.cpp`).
 
 ---
 
@@ -519,5 +530,151 @@ paste's *other* cell and the group's untouched original member are
 unaffected), with a comment pointing at both this entry and the assertion to
 update together if that overwrite-on-collision behavior is ever deliberately
 changed.
+
+---
+
+## Programming tab: SceneGroupLooks drag-and-drop workflow
+
+Test: `ProgrammingManager_Test::buildingALookThroughRealProgrammingTabDragAndDropStaysConsistent()`,
+`droppingOnTheWrongColumnIsRejected()`, `droppingAGroupFoldsAwayAnAlreadyCoveredFixedTarget()`
+(`ui/test/programmingmanager/programmingmanager_test.cpp`) — the Programming
+tab's own construction gestures (`ui/src/programmingmanager.cpp`,
+`ui/src/scenegrouplooks.cpp`), driven for the first time through real
+`QMimeData` built the same way the real source trees
+(`FunctionsTreeWidget`, `FixtureGroupSource`) build it, delivered via a
+synthetic `QDropEvent` straight to `SceneGroupLooks::dropEvent()`. This
+closes #6 above.
+
+### 15. A fresh drop nested onto an Effect can silently fail to render as nested
+
+`SceneGroupLooks::moveLooksToTarget()` — the function a nested drop onto an
+Effect row calls — only called `reload()` (which rebuilds the Looks tree)
+*inside* an `if (m_scene->reorderPalettes(order))` guard. `reorderPalettes()`
+itself returns `false` whenever the computed order is identical to the
+scene's current palette order, a legitimate no-op guard for this function's
+*other* caller (the right-click "Feed effect ▸" context menu, where
+re-choosing the effect a look already feeds really is nothing to do).
+
+But `dropEvent()`'s own nested-drop path calls `m_scene->addPalette(pid)`
+*before* `moveLooksToTarget()` — which always **appends** the fresh palette
+to the end of the list. "Nest right after this effect" and "already at the
+end" coincide exactly whenever the drop lands on the last (or only) Effect
+in the scene — the ordinary case of dropping a colour onto your one and
+only effect. When they coincide, `reorderPalettes()` correctly reports no
+data change, `moveLooksToTarget()` skips its `reload()`, and the just-dropped
+palette sits in the scene's palette list (the DATA is correct) but was never
+rendered as a tree item at all — not even as a top-level one — because the
+tree was never told to rebuild since the palette was added. Nothing crashes
+or errors; the drop just visually appears to do nothing until some *unrelated*
+later action happens to trigger another `reload()`.
+
+Found by the workflow test itself: dropping a Dimmer directly onto the
+scene's one Effect palette (row position computed from the real,
+laid-out tree, mapped through the same coordinate space `dropEvent()`
+itself reads) added the palette to `scene->palettes()` but produced no row
+in `m_lookList` for it whatsoever — confirmed by dumping every row in the
+tree immediately after the drop and finding only the two palettes dropped
+in earlier steps, not the new one.
+
+*Status:* **Fixed.** `moveLooksToTarget()` now calls `reload()`
+unconditionally; `setModified()`/`sceneModified()` stay gated on
+`reorderPalettes()` actually reporting a change (no spurious "modified"
+flag or signal for a genuine no-op reorder from the context menu). A
+redundant `reload()` after an already-`reload()`-ing `reorderPalettes()`
+success is a cheap, safe no-op — the function is already called after every
+other mutation in this file. Full `programmingmanager_test`/`looksdrop_test`/`monitor_test`
+suites rerun green.
+
+### 16. A group drop folds away an already-covered fixed target, even with zero covering looks
+
+`dropEvent()`'s fixture-group branch strips a fixed target's baked
+`SceneValue`s that the group's own (non-Effect) looks now cover, and drops
+the fixed target entirely once nothing uncovered is left on it. The check
+is `keep.isEmpty()`, built *only* from iterating the fixture's *existing*
+baked values (`foreach (const SceneValue &scv, m_scene->values()) ...`). A
+freshly-added fixed target with **zero** baked values has nothing for that
+loop to iterate at all, so `keep` never gets anything appended to it and
+stays empty — `keep.isEmpty()` is trivially true — regardless of whether
+the group's looks cover anything whatsoever. A fixture added as an
+individual target and never given a single value disappears from Targets
+the instant its group is dropped in, even if the scene has no looks applied
+to either yet.
+
+*Status:* **Accepted**, and verified rather than left as a guess —
+`droppingAGroupFoldsAwayAnAlreadyCoveredFixedTarget()` drops a fixture
+individually first (confirming via `scene->values()` that it truly has no
+baked value), then drops a group sharing that fixture as a member, and
+asserts the fixed target is gone while the group is now present. This reads
+as intentional once stated plainly: an individual fixed target with
+nothing of its own baked onto it is trivially "fully covered" by anything
+that supersedes it (a group containing the same fixture is exactly that),
+so folding it away rather than leaving a redundant, value-less target
+behind is arguably the right call. Flagged here so a future reader who
+notices a fixed target vanish on a group drop knows it's this, not data
+loss.
+
+### 17. `reconcileAfterPaletteApply()` defers past `dropEvent()`, and its dialog has no Ok button
+
+Whenever a palette drop happens, `dropEvent()` schedules
+`reconcileAfterPaletteApply()` via `QTimer::singleShot(0, this, ...)` rather
+than calling it inline — deliberately, so its potential modal prompt
+doesn't spin a nested event loop inside the drop event itself, before the
+drop has been accepted or the (real) drag source has cleaned up. That
+prompt — `QMessageBox::question(..., QMessageBox::Yes | QMessageBox::No,
+QMessageBox::No)` — only appears if the scene has baked `SceneValue`s no
+*currently applied* look covers; a scene built purely by drops with nothing
+pre-baked never triggers it, which is why none of this session's three new
+tests needed to drive it.
+
+Two traps for a future test that does need to exercise this path:
+  - A test that drops a palette and asserts immediately, without at least
+    one `QCoreApplication::processEvents()` afterward, will observe the
+    scene *before* `reconcileAfterPaletteApply()` has run at all — this
+    session's own tests all include a `processEvents()` after every
+    palette drop specifically because of this.
+  - The `driveDialog()` helper from `ui/test/monitor/monitor_test.cpp` /
+    `ui/test/fixturemanager/fixturemanager_test.cpp` looks up
+    `QDialogButtonBox::Ok` and falls back to `modal->close()` (then asserts
+    the button was found) if it can't find one — but this dialog only has
+    Yes/No buttons, so that lookup fails, the fallback close still works,
+    but the helper's own assertion about finding the button would then
+    incorrectly fail the test. A dedicated Yes/No variant (`QMessageBox`
+    still builds its buttons into a real `QDialogButtonBox`, so
+    `findChild<QDialogButtonBox*>()` still finds it) would be needed.
+
+*Status:* **Accepted** — a documented test-technique trap, same category as
+#8, not a product bug. Nothing to fix until a test actually needs to drive
+this specific dialog.
+
+### 18. An unshown top-level widget's own nested widgets don't get real geometry from `resize()` alone
+
+Every prior workflow test in this file (Monitor, Fixture Manager) gets real,
+non-degenerate widget geometry under offscreen QTest from `mgr.resize(...)`
++ `QCoreApplication::processEvents()` (Fixture Manager also calls
+`mgr.m_splitter->setSizes(...)` explicitly, since it exposes its splitter as
+a member). The Programming tab's `ProgrammingManager` does the same
+`resize()`/`processEvents()` dance, but its top-level `QSplitter` is a
+*local variable* in the constructor, not a member — reachable in a test only
+via `findChild<QSplitter*>()`. Even after finding it and calling
+`setSizes()`, every descendant (the splitter itself, and everything inside
+it) stayed stuck at Qt's default unconfigured `QRect(0,0 100x30)` — the
+resize event posted by `resize()` was never actually delivered/cascaded
+without an explicit `mgr.layout()->activate()` call first.
+
+A second, separate instance of the *same* gap: `SceneGroupLooks` (`m_canvas`)
+is created fresh *inside* `loadCanvas()`, **after** the splitter above
+already had real geometry forced into it — as a brand-new child inserted
+into an already-laid-out ancestor's layout, it needed its *own* explicit
+`resize()` + `layout()->activate()` too; several more
+`QCoreApplication::processEvents()` calls alone were not enough to make its
+inserted-widget LayoutRequest actually land.
+
+*Status:* **Accepted** — a test-technique lesson now captured in
+`ProgrammingManager_Test`'s shared `openCanvas()` helper (with its own
+explaining comment), not a product bug: none of this ever matters for the
+real, shown application window, where the normal show/resize event pipeline
+handles it without any of this. Worth remembering for any future test that
+constructs a `ProgrammingManager` (or any other widget whose splitter isn't
+exposed as a member) without showing it.
 
 ---

@@ -37,6 +37,28 @@ private slots:
      *  (not a manually-injected signal) and checks the owning scene's
      *  Doc::functionChanged actually fires. */
     void editingALookColourNotifiesItsScene();
+    /** Integration test for the Programming tab's own drag-construction
+     *  gestures: drag a palette onto the Looks list, a group and a fixture
+     *  onto the Targets list, and a palette onto an existing Effect row to
+     *  nest it -- all through real QMimeData built the same way the real
+     *  source trees (FunctionsTreeWidget, FixtureGroupSource) build it, and
+     *  a real synthetic QDropEvent delivered straight to
+     *  SceneGroupLooks::dropEvent(). */
+    void buildingALookThroughRealProgrammingTabDragAndDropStaysConsistent();
+    /** SceneGroupLooks::dropEvent()'s column-precision guard: a palette
+     *  dropped squarely on the Targets column, or a fixture group dropped
+     *  squarely on the Looks column, is rejected outright. Also proves a
+     *  drop at the SAME coordinates but the correct column succeeds
+     *  immediately after -- so a passing rejection assertion can't just mean
+     *  the coordinate space was wrong everywhere. */
+    void droppingOnTheWrongColumnIsRejected();
+    /** Dropping a fixture group that shares a member with an existing
+     *  individual (fixed-target) fixture folds that fixed target away once
+     *  the group's looks fully cover it -- including the degenerate case of
+     *  a freshly-added fixed target with no baked values at all, which
+     *  "fully covers" trivially and disappears the moment its group lands,
+     *  regardless of whether any look was ever applied to it. */
+    void droppingAGroupFoldsAwayAnAlreadyCoveredFixedTarget();
 
 private:
     Doc* m_doc;
