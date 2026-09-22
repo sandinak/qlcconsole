@@ -22,24 +22,25 @@ entries stay unmarked.
 |---|---|---|---|
 | [1](#1-a-horizontal-trusss-default-crossbar-is-visually-coincident-with-the-truss-itself) | Horizontal truss's default bar is visually coincident with the truss | Truss/bar | Fixed |
 | [2](#2-a-plain-drag-drop-attach-never-forms-a-group--only-the-explicit-attach-to-truss-action-or-a-file-reload-does) | Plain drag-drop attach never forms a group | Truss/bar | Fixed |
-| [3](#3-mousepresseventss-hit-test-always-prefers-a-fixture-over-a-bar) | Fixture hit-test always wins over a bar underneath it | Truss/bar | |
-| [4](#4-structurestudioviews-bar-drag-arm-is-gated-by-the-views-own-m_locked-separately-from-the-bar-objects-own-locked-flag) | View lock vs. object lock are two different checks | Truss/bar | |
+| [3](#3-mousepresseventss-hit-test-always-prefers-a-fixture-over-a-bar) | Fixture hit-test always wins over a bar underneath it | Truss/bar | Accepted |
+| [4](#4-structurestudioviews-bar-drag-arm-is-gated-by-the-views-own-m_locked-separately-from-the-bar-objects-own-locked-flag) | View lock vs. object lock are two different checks | Truss/bar | Accepted |
 | [5](#5-addtargetaccepteds-own-comment-says-pantilt-palette-the-code-links-an-aim-palette) | Stale comment: says PanTilt, code links Aim | Target/aim | Fixed |
-| [6](#6-assigning-a-fixture-to-aim-at-a-target-has-no-test-for-the-real-drag-drop-path) | No test for the real palette-onto-Look drag | Target/aim | |
+| [6](#6-assigning-a-fixture-to-aim-at-a-target-has-no-test-for-the-real-drag-drop-path) | No test for the real palette-onto-Look drag | Target/aim | Accepted |
 | [7](#7-a-failed-qverifyqcompare-inside-the-dialog-driving-lambda-hangs-the-whole-test-binary-not-just-that-one-test) | A failed assertion inside a dialog lambda hangs the binary | Test technique (all dialogs) | Fixed |
-| [8](#8-findchildqlineedit-can-silently-grab-a-spin-box-own-internal-editor) | `findChild<QLineEdit*>()` can grab a spin box's own editor | Test technique (all dialogs) | |
-| [9](#9-deck-mounted-and-riser-mounted-fixtures-follow-a-moved-platform-through-two-different-mechanisms) | Deck vs. riser fixtures follow a moved platform two different ways | Platform/riser | |
+| [8](#8-findchildqlineedit-can-silently-grab-a-spin-box-own-internal-editor) | `findChild<QLineEdit*>()` can grab a spin box's own editor | Test technique (all dialogs) | Accepted |
+| [9](#9-deck-mounted-and-riser-mounted-fixtures-follow-a-moved-platform-through-two-different-mechanisms) | Deck vs. riser fixtures follow a moved platform two different ways | Platform/riser | Accepted |
 | [10](#10-a-dropped-items-screen-centre-means-two-different-things-depending-on-which-attach-check-reads-it) | Two attach paths disagree on what an item's "centre" is | Platform/riser | Fixed |
 | [11](#11-a-crossbar-has-none-of-a-truss-bars-drag-machinery----and-the-main-plot-has-no-pipe-attach-at-all) | Crossbars have no drag machinery; main plot has no pipe attach | Stand/boom | Fixed |
 | [12](#12-a-sub-group-move-through-the-real-ui-is-a-drag----and-a-drag-here-is-a-genuine-internal-qdragqdropevent-cycle-not-just-mouse-events) | Untested: the real internal `QDrag` cycle for moving a sub-group | Fixture Manager | Fixed |
 | [13](#13-assignheads-collision-behavior-at-an-already-occupied-cell-is-untested-here) | Untested: pasting a block onto an occupied cell | Fixture Manager | Fixed |
 | [14](#14-a-pipe-crossbar-has-no-standoff-field-so-it-is-always-exactly-coincident-with-its-parent-boom-in-top-view) | A pipe crossbar has no standoff field, unlike a truss bar | Stand/boom | Fixed |
 
-**#1, #2, #5, #7, #10, #11, #12, #13 and #14 are fixed** (see their entries
-for what changed and what each deliberately left out). Of what's left,
-**#3**/**#4** are real product/test-technique decisions worth a deliberate
-look if they're ever worth revisiting; **#6**, **#8** and **#9** are Notes,
-not bugs — informational only, no action expected.
+**All 14 entries are resolved.** #1, #2, #5, #7, #10, #11, #12, #13 and #14
+were fixed (see their entries for what changed and what each deliberately
+left out); #3, #4, #6, #8 and #9 were reviewed and accepted as-is — deliberate
+behavior, a documented test-technique trap, or a speculative coverage gap
+with no evidence it's ever caused a real problem. Nothing on this list is
+open work.
 
 ---
 
@@ -127,13 +128,10 @@ first attempt pressed at the bar's exact midpoint (right where the fixture
 had just been dropped in the previous step) and the bar simply never moved
 — no error, no crash, just silently the wrong object dragged.
 
-*Status:* unmarked. This matches ordinary graphics-editor conventions
-(the topmost/most-specific object wins a click) and is very likely correct
-as-is. Flagging only because there's no visual affordance in the UI itself
-that tells a user "you're about to grab the fixture, not the bar you're
-aiming for" — if this has ever come up as a real complaint (can't select
-the bar something is mounted on), a modifier-click or a small
-click-priority nudge could help.
+*Status:* **Accepted.** Matches ordinary graphics-editor conventions (the
+topmost/most-specific object wins a click); no evidence it's ever been a
+real complaint. Revisit with a modifier-click or click-priority nudge only
+if "can't select the bar something is mounted on" actually comes up.
 
 ### 4. `StructureStudioView`'s bar-drag arm is gated by the view's own `m_locked`, separately from the bar object's own `locked()` flag
 
@@ -150,11 +148,12 @@ directly don't need to. This is easy to miss if you write a *new* raw-mouse-
 event test by copying a `dragBarTo()`-based one instead of a
 `mousePressEvent()`-based one (which is what happened building this test).
 
-*Status:* Note. Not a bug — `m_locked` reads as "read-only editor instance"
-(e.g. a preview panel embedded elsewhere), separate from "this specific
-object is locked against edits" — but the two locks having the same name
+*Status:* **Accepted.** Not a bug — `m_locked` reads as "read-only editor
+instance" (e.g. a preview panel embedded elsewhere), separate from "this
+specific object is locked against edits". The two locks sharing a name
 pattern (`locked()`/`setLocked()`) on two different objects (`Truss` and
-`StructureStudioView`) makes it easy to assume they're the same check.
+`StructureStudioView`) is worth remembering, which this entry now does; no
+code change warranted.
 
 ---
 
@@ -190,11 +189,10 @@ new one, builds the `Scene` + `QLCPalette` + membership directly
 (`scene->addFixture()`/`scene->addPalette()`), which is the *data* a real
 drag would produce but not the interaction itself.
 
-*Status:* Note. Same shape as "no AddFixture-dialog test" in the truss/bar
-section — a real gap in UI-level coverage for `SceneGroupLooks`'s drop
-handling specifically, worth its own dedicated test file
-(`ui/test/scenegrouplooks/`?) if that widget's drop logic has ever been a
-source of bugs. Not attempted here; scope was the Monitor-side workflow.
+*Status:* **Accepted.** A real gap in UI-level coverage for
+`SceneGroupLooks`'s drop handling, but speculative — no evidence that drop
+logic has ever been a source of bugs. Worth a dedicated test file
+(`ui/test/scenegrouplooks/`?) if it ever is; not pursued otherwise.
 
 ---
 
@@ -250,12 +248,14 @@ so this never bit them; the platform dialog's more complex layout (a
 geometry form embedded inside a larger Structure Studio canvas pane, itself
 full of its own spin boxes) hit it immediately.
 
-*Status:* Note — not a bug in the app, a trap in the TEST technique. Worth
-writing down once so the next dialog test doesn't rediscover it the same
-way: filter for a `QLineEdit` whose `parentWidget()` is not itself a
+*Status:* **Accepted.** Not a bug in the app, a trap in the TEST technique —
+now written down so the next dialog test doesn't rediscover it the same way:
+filter for a `QLineEdit` whose `parentWidget()` is not itself a
 `QAbstractSpinBox`, or scope the search to the specific sub-container known
 to hold the real field, rather than a bare `findChild<QLineEdit*>()` on the
-whole dialog once more than one text-editing widget might exist.
+whole dialog once more than one text-editing widget might exist. (This
+session's `findRealLineEdit()` helper, added for #7, already does the
+filtering.)
 
 ---
 
@@ -274,16 +274,11 @@ computes it fresh every time from `platform->originX()/originY() + riserU/
 riserV`, so it comes out correct automatically the instant the platform's
 origin changes, with no carry code involved.
 
-*Status:* Note, not obviously a problem (both end up correct, which the new
-test checks explicitly) — but it means "does a fixture follow its
-platform when the platform moves" is actually two independently-maintained
-code paths that happen to agree today. A future change to one (e.g.
-optimizing away the deck carry-along loop, or changing what triggers it) 
-could silently break only ONE of the two mount kinds, and nothing about the
-riser path would catch it. Worth keeping the two mounts' "does it follow"
-behavior covered by a test that checks both at once, the way this one does,
-rather than as two separate tests that could each pass while the underlying
-assumption (both mounts always follow) quietly stops holding for one of them.
+*Status:* **Accepted.** Not obviously a problem — both end up correct, which
+the workflow test already checks explicitly, in one test that covers both
+mount kinds at once rather than two that could each pass while the
+underlying "both mounts always follow" assumption quietly stops holding for
+one of them. No code change; the existing coverage is the mitigation.
 
 ### 10. A dropped item's screen "centre" means two different things depending on which attach check reads it
 
