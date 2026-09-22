@@ -25,6 +25,7 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QAbstractSpinBox>
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QPushButton>
@@ -4131,6 +4132,15 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
 
     QVERIFY2(props->fixtureRigProps(fid).trussId == bar->id(),
              "dropping the fixture on the bar's line did not attach it to the bar");
+    // Not just attached to the right OBJECT -- it has to have landed where it
+    // was actually dropped, not snapped somewhere else on the bar.
+    const QVector3D posAfterBarDrop = props->fixtureRigPosition(fid);
+    QVERIFY2((posAfterBarDrop - barMid).length() < 0.1f,
+             qPrintable(QString("dropped at the bar's midpoint (%1,%2,%3) but landed "
+                                "at (%4,%5,%6)")
+                        .arg(double(barMid.x())).arg(double(barMid.y())).arg(double(barMid.z()))
+                        .arg(double(posAfterBarDrop.x())).arg(double(posAfterBarDrop.y()))
+                        .arg(double(posAfterBarDrop.z()))));
     // A plain drop attaches the RIG PROPS only -- it deliberately does not
     // form a group (that's the explicit "Attach to Truss" action's job, or
     // ensureGroupRegistry() on the next load; see the final check below).
@@ -4167,13 +4177,29 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
                         Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     sv.mouseReleaseEvent(&release);
 
-    QVERIFY2(!qFuzzyCompare(bar->parentOffset(), offsetBeforeDrag),
-             "dragging the bar on its own editor did not move it");
+    // Not just "it moved" -- it moved to where the drag actually asked for:
+    // half a metre along the parent's own run (Z, for a Vertical tower),
+    // clamped to the tower's height, the same formula
+    // draggingABarChangesItsPositionAlongTheParent() checks.
+    const float expectedOffset = qBound(0.0f, offsetBeforeDrag + 0.5f, t->length());
+    QVERIFY2(qAbs(double(bar->parentOffset()) - double(expectedOffset)) < 0.1,
+             qPrintable(QString("dragging the bar 0.5m up should land parentOffset near "
+                                "%1, got %2").arg(double(expectedOffset))
+                        .arg(double(bar->parentOffset()))));
 
-    // The fixture rides the bar -- it must have moved WITH it.
+    // The fixture rides the bar -- it must have moved by the SAME delta the
+    // bar's own offset just moved by (not merely "moved at all"), since
+    // RunAcross keeps the bar's own direction fixed and only its Z shifts.
     const QVector3D fixturePosAfterDrag = props->fixtureRigPosition(fid);
-    QVERIFY2((fixturePosAfterDrag - fixturePosBeforeDrag).length() > 0.05f,
-             "moving the bar did not carry its own fixture along with it");
+    const float actualOffsetDelta = bar->parentOffset() - offsetBeforeDrag;
+    const QVector3D expectedFixtureDelta(0.0f, 0.0f, actualOffsetDelta);
+    const QVector3D actualFixtureDelta = fixturePosAfterDrag - fixturePosBeforeDrag;
+    QVERIFY2((actualFixtureDelta - expectedFixtureDelta).length() < 0.05f,
+             qPrintable(QString("bar moved by z=%1 but its fixture moved by "
+                                "(%2,%3,%4) instead of matching")
+                        .arg(double(actualOffsetDelta))
+                        .arg(double(actualFixtureDelta.x())).arg(double(actualFixtureDelta.y()))
+                        .arg(double(actualFixtureDelta.z()))));
 
     // 6. Relocate the fixture off the bar and directly onto the truss --
     //    another real plot drop. A Vertical truss reads as a point in Top
@@ -4194,6 +4220,16 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
              qPrintable(QString("relocating onto the tower left trussId=%1 "
                                 "(expected the truss %2, not still the bar %3)")
                         .arg(rpAfter.trussId).arg(t->id()).arg(bar->id())));
+    // A Vertical truss pins ANY attach to its own X/Y exactly (snapToTruss()'s
+    // Vertical branch) -- so the fixture's world X/Y must now equal the
+    // tower's origin, not just "somewhere on the truss".
+    const QVector3D posAfterTrussDrop = props->fixtureRigPosition(fid);
+    QVERIFY2(qAbs(double(posAfterTrussDrop.x()) - double(t->origin().x())) < 0.05
+                 && qAbs(double(posAfterTrussDrop.y()) - double(t->origin().y())) < 0.05,
+             qPrintable(QString("relocated fixture sits at (%1,%2), not the tower's own "
+                                "origin (%3,%4)")
+                        .arg(double(posAfterTrussDrop.x())).arg(double(posAfterTrussDrop.y()))
+                        .arg(double(t->origin().x())).arg(double(t->origin().y()))));
 
     /* Settle the session the way the next file load would --
        ensureGroupRegistry() (called on load, see aBarBecomesItsOwnContainer-
@@ -4239,6 +4275,470 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
     doc->deleteFixture(fid);
     props->removeTruss(bar->id());
     props->removeTruss(t->id());
+    delete doc;
+}
+
+/* Chains the target/aim workflow: add a fixture, add a target through the
+ * real "Add Target" -> "Edit Target" dialog chain, assign the fixture to aim
+ * at it through a Scene (the model SceneGroupLooks' own drag-drop writes),
+ * then check the RESULT, not just that references got stored -- the same
+ * angle-based round trip aHeadAimedAtAMarkDrawsItsBeamThere() uses: solve the
+ * aim, write it back as DMX, read the ray back, and require it actually
+ * arrives at the mark. Move the target through its own real dialog and
+ * confirm the beam follows; move it somewhere the fixture physically cannot
+ * reach and confirm the plot's own "cannot reach" warning agrees -- and
+ * clears the moment it's re-rigged within reach, without anything else
+ * prodding it (mirroring aTargetSaysWhichHeadsCannotReachIt()).
+ */
+void Monitor_Test::aimingAFixtureAtATargetFollowsItThroughARealSession()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    // 1. Add a fixture -- a moving head, via the same direct-construction
+    //    helper every aim test in this file relies on (no dialog-driven
+    //    AddFixture path exists yet -- see the truss/bar workflow test).
+    Fixture *fx = makeMover(doc, 14.0, 0, "Workflow Head", QVector3D(2.0f, 3.0f, 3.0f));
+    QVERIFY(fx != nullptr);
+    Truss *bar = props->addTruss();
+    bar->setName("Rig");
+    bar->setOrigin(QVector3D(0.0f, 3.0f, 3.0f));
+    bar->setLength(6.0f);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 2.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(fx->id(), rp);
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->resize(1000, 700);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(10, 7));
+    gv->updateTrusses();
+    gv->addFixture(fx->id(), QPointF(2000.0, 3000.0));
+
+    // 2. Add a target -- the real, blocking "Add Target" -> "Edit Target"
+    //    dialog chain (Monitor::slotAddTarget()), the same technique
+    //    addTargetAccepted() already proved. Accepting auto-links an Aim
+    //    palette to it (an Aim palette, not the stale "PanTilt" the comment
+    //    on addTargetAccepted still says -- see the subtleties list).
+    const int targetsBefore = props->stageTargets().count();
+    const int palettesBefore = doc->palettes().count();
+    QTimer::singleShot(0, []() {
+        QWidget *modal = QApplication::activeModalWidget();
+        QVERIFY(modal != nullptr);
+        QVERIFY(modal->windowTitle().startsWith("Edit Target"));
+
+        QLineEdit *nameEdit = modal->findChild<QLineEdit *>();
+        QVERIFY(nameEdit != nullptr);
+        nameEdit->setText("Workflow Mark");
+
+        // X, Y, Z, follow-spot-subject-height -- in the order slotEditTarget()
+        // adds them to the form.
+        const QList<QDoubleSpinBox *> spins = modal->findChildren<QDoubleSpinBox *>();
+        QVERIFY(spins.count() >= 3);
+        spins[0]->setValue(4.0);   // X
+        spins[1]->setValue(1.5);   // Y
+        spins[2]->setValue(0.0);   // Z
+
+        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox *>();
+        QVERIFY(btns != nullptr);
+        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
+        QVERIFY(okBtn != nullptr);
+        okBtn->click();
+    });
+    mon->slotAddTarget();
+    gv->updateTargets();   // pick up the position the dialog just wrote
+
+    QCOMPARE(props->stageTargets().count(), targetsBefore + 1);
+    StageTarget *mark = props->stageTargets().last();
+    QCOMPARE(mark->name(), QString("Workflow Mark"));
+    QVERIFY2(qAbs(double(mark->x()) - 4.0) < 0.01 && qAbs(double(mark->y()) - 1.5) < 0.01
+                 && qAbs(double(mark->z())) < 0.01,
+             qPrintable(QString("the dialog's X/Y/Z fields did not reach the new target "
+                                "(got %1,%2,%3)")
+                        .arg(double(mark->x())).arg(double(mark->y())).arg(double(mark->z()))));
+
+    QCOMPARE(doc->palettes().count(), palettesBefore + 1);
+    QLCPalette *aim = nullptr;
+    foreach (QLCPalette *p, doc->palettes())
+        if (p->stageTargetId() == mark->id() && p->type() == QLCPalette::Aim)
+            aim = p;
+    QVERIFY2(aim != nullptr, "accepting the target dialog did not auto-link an Aim palette");
+
+    // 3. Assign the fixture to aim at it -- through a Scene ("Look"), the
+    //    data SceneGroupLooks' drag-drop itself writes (scene->addFixture()
+    //    + scene->addPalette()). No test anywhere drives the real QDropEvent
+    //    for that drag yet (see the subtleties list); this uses the same
+    //    direct Scene-building every other aim test in this file does.
+    Scene *scene = new Scene(doc);
+    scene->setName("Workflow Look");
+    scene->addFixture(fx->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+    gv->setActiveScene(scene->id());
+    gv->updateTargets();
+
+    QLCFixtureMode *mode = fx->fixtureMode();
+    const quint32 panCh = mode->heads().first().channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+    const quint32 tiltCh = mode->heads().first().channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+    const QLCPhysical phy = mode->physical();
+    const float panMax = phy.focusPanMax() ? float(phy.focusPanMax()) : 360.0f;
+    const float tiltMax = phy.focusTiltMax() ? float(phy.focusTiltMax()) : 270.0f;
+
+    // 4. The results match the request: AimSolver resolves a reachable
+    //    pan/tilt, and feeding that back as DMX draws the beam AT the mark --
+    //    not just "some values got written" -- the same angle-based check
+    //    aHeadAimedAtAMarkDrawsItsBeamThere() uses.
+    auto checkAimsAt = [&](const QVector3D &target, const char *when) {
+        AimSolver::Solution sol;
+        QVERIFY2(AimSolver::reach(doc, fx->id(), target, sol),
+                 qPrintable(QString("no frame to solve aim %1").arg(when)));
+        QVERIFY2(sol.reachable(),
+                 qPrintable(QString("cannot reach the mark %1 (margin %2)")
+                            .arg(when).arg(double(sol.marginDeg))));
+
+        QByteArray v(512, char(0));
+        v[int(fx->address() + panCh)] = char(uchar(qRound(sol.panDeg * 255.0f / panMax)));
+        v[int(fx->address() + tiltCh)] = char(uchar(qRound(sol.tiltDeg * 255.0f / tiltMax)));
+        fx->setChannelValues(v);
+
+        QVector3D dir;
+        QVERIFY(fixtureAimDirection(fx, props->fixtureRigProps(fx->id()), dir));
+        const QVector3D from = props->fixtureRigPosition(fx->id());
+        QVector3D want = target - from;
+        want.normalize();
+        const float offBy = float(qRadiansToDegrees(qAcos(double(qBound(-1.0f,
+                                    QVector3D::dotProduct(dir, want), 1.0f)))));
+        QVERIFY2(offBy < 2.0f,
+                 qPrintable(QString("aimed at the mark %1 but the beam points %2 degrees away")
+                            .arg(when).arg(double(offBy))));
+    };
+    checkAimsAt(mark->position(), "at the original mark");
+
+    // The view's own reachability read agrees: nothing unreachable yet.
+    TargetItem *ti = gv->m_targetItems.value(mark->id(), nullptr);
+    QVERIFY2(ti != nullptr, "the target has no plot item at all");
+    QCOMPARE(ti->unreachableCount(), 0);
+
+    // 5. Move the target -- through its own real "Edit Target" dialog again
+    //    (Monitor::slotEditTarget(), the same dialog slotAddTarget() itself
+    //    opened, driven the same QTimer::singleShot way).
+    QTimer::singleShot(0, []() {
+        QWidget *modal = QApplication::activeModalWidget();
+        QVERIFY(modal != nullptr);
+        const QList<QDoubleSpinBox *> spins = modal->findChildren<QDoubleSpinBox *>();
+        QVERIFY(spins.count() >= 3);
+        spins[0]->setValue(-1.0);   // X
+        spins[1]->setValue(4.5);    // Y
+        spins[2]->setValue(0.0);    // Z
+        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox *>();
+        QVERIFY(btns != nullptr);
+        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
+        QVERIFY(okBtn != nullptr);
+        okBtn->click();
+    });
+    mon->slotEditTarget(mark->id());
+    gv->updateTargets();
+
+    QVERIFY2(qAbs(double(mark->x()) + 1.0) < 0.01 && qAbs(double(mark->y()) - 4.5) < 0.01,
+             qPrintable(QString("moving the target through its edit dialog left it at "
+                                "(%1,%2), not (-1,4.5)")
+                        .arg(double(mark->x())).arg(double(mark->y()))));
+
+    // 6. The beam follows -- resolved fresh against the NEW mark, not the old one.
+    checkAimsAt(mark->position(), "after moving the target");
+
+    // 7. Move it somewhere this fixture physically cannot reach -- the exact
+    //    scenario aTargetSaysWhichHeadsCannotReachIt() proves is unreachable:
+    //    a head standing upright with its tilt centred UP cannot bend down to
+    //    something at its own feet half a metre off.
+    rp.mountingType = Truss::FloorMounted;
+    props->setFixtureRigProps(fx->id(), rp);
+    const QVector3D fixtureXY = props->fixtureRigPosition(fx->id());
+    mark->setX(fixtureXY.x() + 0.5f);
+    mark->setY(fixtureXY.y());
+    mark->setZ(0.0f);
+    gv->updateTargets();
+    QCoreApplication::processEvents();
+
+    ti = gv->m_targetItems.value(mark->id(), nullptr);
+    QVERIFY2(ti != nullptr, "the target lost its plot item after being moved out of reach");
+    QVERIFY2(ti->unreachableCount() == 1,
+             qPrintable(QString("standing upright with the mark at its own feet should be "
+                                "unreachable, unreachableCount() = %1").arg(ti->unreachableCount())));
+
+    // 8. Re-rig within reach again -- the warning clears without anything
+    //    else prodding it, same as the existing regression test.
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(fx->id(), rp);
+    QCoreApplication::processEvents();
+    ti = gv->m_targetItems.value(mark->id(), nullptr);
+    QVERIFY(ti != nullptr);
+    QCOMPARE(ti->unreachableCount(), 0);
+
+    delete mon;
+    doc->deleteFixture(fx->id());
+    props->removeTruss(bar->id());
+    props->removeStageTarget(mark->id());
+    delete doc;
+}
+
+/* Chains the platform/riser workflow: add a platform through its real edit
+ * dialog, deck-mount one fixture through the plot's real auto-deck drop,
+ * riser-mount a second fixture through the real Structure Studio drop path
+ * (Monitor::mountFixtureOnStructure(), the exact function a real
+ * fixturesDropped signal calls), drag the riser fixture on its own editor,
+ * then move the platform itself and check BOTH fixtures land exactly where
+ * the geometry says -- via two different mechanisms. A deck fixture's XY is
+ * stored ABSOLUTE and has to be explicitly carried by slotPlatformMoved()'s
+ * own delta loop; a riser fixture's position is DERIVED live from the
+ * platform's own geometry every time it's read, so it simply comes out
+ * right with no carry code involved at all. Getting the drop math right for
+ * one and not the other is exactly the kind of bug that only shows up once
+ * both mounts exist on the same platform in the same session.
+ */
+void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    // 1. Add two fixtures -- one ends up DECK-mounted, one RISER-mounted.
+    //    No dialog-driven AddFixture path exists yet (see the truss/bar
+    //    workflow test), so this uses the same direct construction every
+    //    other test in this file relies on.
+    Fixture *deckFx = new Fixture(doc);
+    deckFx->setName("Deck Fixture"); deckFx->setChannels(1);
+    QVERIFY(doc->addFixture(deckFx));
+    Fixture *riserFx = new Fixture(doc);
+    riserFx->setName("Riser Fixture"); riserFx->setChannels(1);
+    riserFx->setAddress(16);
+    QVERIFY(doc->addFixture(riserFx));
+    props->setFixturePosition(deckFx->id(), 0, 0, QVector3D(0, 0, 0));
+    props->setFixturePosition(riserFx->id(), 0, 0, QVector3D(0, 0, 0));
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->resize(1230, 760);
+    gv->setSnapDivisions(0);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(40, 24));
+    QVERIFY(gv->m_cellPixels > 0);
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+    gv->addFixture(deckFx->id(), QPointF(0, 0));
+    gv->addFixture(riserFx->id(), QPointF(0, 0));
+
+    // 2. Add a platform -- Monitor::slotAddPlatform() creates it, THEN opens
+    //    its real "Lighting Studio Editor -- Riser N" dialog
+    //    (slotEditPlatform()). Every field there applies LIVE as you type
+    //    (each spin box is wired straight to the property setter), so
+    //    filling them in and clicking OK is the same real path resizing a
+    //    new step takes.
+    const int platformsBefore = props->platforms().count();
+    QTimer::singleShot(0, []() {
+        /* This dialog embeds a whole Structure Studio canvas alongside the
+           geometry form (its own zoom/pan controls add MORE QDoubleSpinBoxes
+           to the dialog -- ten, not five), so any lookup here has more ways
+           to come back empty/wrong than the plainer Add Truss/Edit Target
+           dialogs. A QVERIFY() failure inside this lambda returns out of the
+           lambda WITHOUT clicking a button, and since dlg.exec()'s nested
+           event loop has nothing else that will ever close it under
+           offscreen QTest, that hangs the whole test binary forever instead
+           of just failing this one test. Use plain if-checks that fall
+           through to closing the dialog either way, so a lookup that breaks
+           in the future fails this test instead of hanging the run. */
+        QWidget *modal = QApplication::activeModalWidget();
+        // A QDoubleSpinBox owns its own internal QLineEdit editor widget, so
+        // a plain findChild<QLineEdit*>() can grab THAT instead of the
+        // dialog's actual "Name:" field -- which one depends on where each
+        // lands in the widget tree, not on construction order. Skip any
+        // QLineEdit whose parent is itself a spin box.
+        QLineEdit *nameEdit = nullptr;
+        if (modal != nullptr)
+        {
+            foreach (QLineEdit *le, modal->findChildren<QLineEdit *>())
+            {
+                if (qobject_cast<QAbstractSpinBox *>(le->parentWidget()) == nullptr)
+                { nameEdit = le; break; }
+            }
+        }
+        if (nameEdit != nullptr)
+            nameEdit->setText("Workflow Riser");
+
+        // originX, originY, width, depth, height -- in the order
+        // slotEditPlatform() adds them to the form. Scope the spin-box
+        // search to nameEdit's own container (the geometry form) rather than
+        // the whole dialog, which would also catch the canvas's controls.
+        QWidget *geomPane = nameEdit ? nameEdit->parentWidget() : nullptr;
+        const QList<QDoubleSpinBox *> spins =
+            geomPane ? geomPane->findChildren<QDoubleSpinBox *>() : QList<QDoubleSpinBox *>();
+        if (spins.count() == 5)
+        {
+            spins[0]->setValue(3.0);   // origin X
+            spins[1]->setValue(3.0);   // origin Y
+            spins[2]->setValue(2.0);   // width
+            spins[3]->setValue(1.5);   // depth
+            spins[4]->setValue(0.6);   // height
+        }
+
+        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
+        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
+        // Close the dialog BEFORE asserting anything: a QVERIFY failure below
+        // returns out of this lambda immediately, and dlg.exec()'s nested
+        // event loop has nothing else that will ever close it under
+        // offscreen QTest -- asserting first would hang the whole run
+        // instead of just failing this one test.
+        if (okBtn != nullptr)
+            okBtn->click();
+        else if (modal != nullptr)
+            modal->close();
+        QVERIFY2(modal != nullptr && nameEdit != nullptr && spins.count() == 5 && okBtn != nullptr,
+                 "the Add Platform dialog's widgets were not where expected");
+    });
+    mon->slotAddPlatform();
+    gv->updatePlatforms();
+
+    QCOMPARE(props->platforms().count(), platformsBefore + 1);
+    StagePlatform *plat = props->platforms().last();
+    QCOMPARE(plat->name(), QString("Workflow Riser"));
+    QVERIFY2(qAbs(double(plat->width()) - 2.0) < 0.01 && qAbs(double(plat->depth()) - 1.5) < 0.01
+                 && qAbs(double(plat->height()) - 0.6) < 0.01,
+             qPrintable(QString("the dialog's size fields did not reach the new platform "
+                                "(%1 x %2 x %3)")
+                        .arg(double(plat->width())).arg(double(plat->depth()))
+                        .arg(double(plat->height()))));
+
+    // 3. Put a fixture on TOP of it -- the plot's real drop path: any loose
+    //    fixture dropped over a platform's footprint auto-decks, no
+    //    explicit "attach" gesture needed (unlike a truss).
+    MonitorFixtureItem *deckItem = gv->m_fixtures.value(deckFx->id(), nullptr);
+    QVERIFY(deckItem != nullptr);
+    gv->updateFixture(deckFx->id());
+    /* The deck-mount check reads the item's centre as pos() + cellSize()/2
+       (MonitorGraphicsView.cpp's own static halfIcon()), NOT
+       sceneBoundingRect().center() -- the two differ because the drawn
+       item's bounding rect also includes its name label, which sits below
+       the icon and pulls the box's centre down with it. Using the wrong
+       centre here landed the drop just outside the platform's footprint by
+       roughly that label's height. */
+    const QPointF cellHalf(deckItem->cellSize().width() / 2.0, deckItem->cellSize().height() / 2.0);
+    const QPointF onDeckPx = gv->realPositionToPixels(double(plat->originX()) * 1000.0 + 200.0,
+                                                       double(plat->originY()) * 1000.0 + 200.0);
+    deckItem->setPos(deckItem->pos() + (onDeckPx - (deckItem->pos() + cellHalf)));
+    gv->slotFixtureMoved(deckItem);
+
+    QVERIFY2(props->fixtureRigProps(deckFx->id()).deckPlatformId == plat->id(),
+             "dropping the fixture over the platform's footprint did not deck-mount it");
+    const QVector3D deckPosBefore = props->fixtureRigPosition(deckFx->id());
+    QVERIFY2(qAbs(double(deckPosBefore.z()) - double(plat->height())) < 0.01,
+             qPrintable(QString("a fresh deck mount should sit at the platform's own height "
+                                "(%1) but Z is %2").arg(double(plat->height()))
+                        .arg(double(deckPosBefore.z()))));
+
+    // 4. Mount the other fixture INTO it -- the real path for a riser mount
+    //    is dropping on the platform's OWN Structure Studio canvas, which
+    //    fires fixturesDropped() -> Monitor::mountFixtureOnStructure()
+    //    (kind 3). Calling it directly is calling the exact function that
+    //    signal handler calls -- the same reasoning the truss/bar test uses
+    //    to call slotAddBarToTruss() directly for its context-menu action.
+    mon->mountFixtureOnStructure(riserFx->id(), 3, plat->id(), 0);
+    QVERIFY2(props->fixtureRigProps(riserFx->id()).riserPlatformId == plat->id(),
+             "mountFixtureOnStructure(kind=3) did not riser-mount the fixture");
+    const QVector3D riserPosBefore = props->fixtureRigPosition(riserFx->id());
+    const QVector3D expectRiserCentre(plat->originX() + plat->width() * 0.5f,
+                                      plat->originY() + plat->depth() * 0.5f,
+                                      plat->height());
+    QVERIFY2((riserPosBefore - expectRiserCentre).length() < 0.01f,
+             qPrintable(QString("a fresh riser-top mount should sit centred on the platform "
+                                "(%1,%2,%3), got (%4,%5,%6)")
+                        .arg(double(expectRiserCentre.x())).arg(double(expectRiserCentre.y()))
+                        .arg(double(expectRiserCentre.z()))
+                        .arg(double(riserPosBefore.x())).arg(double(riserPosBefore.y()))
+                        .arg(double(riserPosBefore.z()))));
+
+    // 5. Drag the riser fixture within the platform's own Structure Studio
+    //    editor -- a real mousePress/Move/Release sequence, the way
+    //    studioTrussDragMovesFixture() drives the truss equivalent.
+    StructureStudioView sv(doc, StructureStudioView::PlatformKind, plat->id());
+    sv.resize(700, 600);
+    sv.setPlane(StructureStudioView::Top);
+    sv.setLocked(false);   // mousePressEvent()'s drag arm is gated on this
+    sv.reload();
+
+    const QVector3D targetOnPlatform(plat->originX() + plat->width() * 0.25f,
+                                     plat->originY() + plat->depth() * 0.75f,
+                                     riserPosBefore.z());
+    const QPointF pressPt = sv.w2s(riserPosBefore);
+    const QPointF releasePt = sv.w2s(targetOnPlatform);
+    QMouseEvent press(QEvent::MouseButtonPress, pressPt, pressPt,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mousePressEvent(&press);
+    QMouseEvent move(QEvent::MouseMove, releasePt, releasePt,
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mouseMoveEvent(&move);
+    QMouseEvent release(QEvent::MouseButtonRelease, releasePt, releasePt,
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    sv.mouseReleaseEvent(&release);
+
+    const QVector3D riserPosAfterDrag = props->fixtureRigPosition(riserFx->id());
+    QVERIFY2((riserPosAfterDrag - targetOnPlatform).length() < 0.1f,
+             qPrintable(QString("dragging the riser fixture toward (%1,%2) landed it at "
+                                "(%3,%4,%5)")
+                        .arg(double(targetOnPlatform.x())).arg(double(targetOnPlatform.y()))
+                        .arg(double(riserPosAfterDrag.x())).arg(double(riserPosAfterDrag.y()))
+                        .arg(double(riserPosAfterDrag.z()))));
+
+    // 6. Move the platform itself. No raw-QMouseEvent precedent exists for
+    //    PlatformItem (it's QGraphicsSceneMouseEvent-based, not the
+    //    widget-level QMouseEvent StructureStudioView tests use) -- the
+    //    established main-plot convention this file already uses for a
+    //    structural drag under offscreen QTest is: reposition the item,
+    //    then call the real completion slot a release would invoke.
+    PlatformItem *platItem = gv->m_platformItems.value(plat->id(), nullptr);
+    QVERIFY(platItem != nullptr);
+    const QVector3D deltaMetres(1.0f, 0.5f, 0.0f);
+    const QPointF newOriginPx = gv->realPositionToPixels(
+        (double(plat->originX()) + double(deltaMetres.x())) * 1000.0,
+        (double(plat->originY()) + double(deltaMetres.y())) * 1000.0);
+    platItem->setPos(newOriginPx);
+    gv->slotPlatformMoved(platItem);
+
+    QVERIFY2(qAbs(double(plat->originX()) - (3.0 + double(deltaMetres.x()))) < 0.05
+                 && qAbs(double(plat->originY()) - (3.0 + double(deltaMetres.y()))) < 0.05,
+             qPrintable(QString("moving the platform item did not update its own origin "
+                                "(now %1,%2)").arg(double(plat->originX()))
+                        .arg(double(plat->originY()))));
+
+    // 7. The results match the request, for BOTH mounts, via their two
+    //    different mechanisms (see the comment above the function).
+    const QVector3D deckPosAfter = props->fixtureRigPosition(deckFx->id());
+    QVERIFY2((deckPosAfter - (deckPosBefore + deltaMetres)).length() < 0.05f,
+             qPrintable(QString("the deck fixture should have been carried by exactly "
+                                "(%1,%2,0), moved by (%3,%4,%5) instead")
+                        .arg(double(deltaMetres.x())).arg(double(deltaMetres.y()))
+                        .arg(double(deckPosAfter.x() - deckPosBefore.x()))
+                        .arg(double(deckPosAfter.y() - deckPosBefore.y()))
+                        .arg(double(deckPosAfter.z() - deckPosBefore.z()))));
+
+    const QVector3D riserPosAfterMove = props->fixtureRigPosition(riserFx->id());
+    const QVector3D expectedRiserPos = targetOnPlatform + deltaMetres;
+    QVERIFY2((riserPosAfterMove - expectedRiserPos).length() < 0.1f,
+             qPrintable(QString("the riser fixture should follow the platform's new geometry "
+                                "to (%1,%2,%3), sits at (%4,%5,%6) instead")
+                        .arg(double(expectedRiserPos.x())).arg(double(expectedRiserPos.y()))
+                        .arg(double(expectedRiserPos.z()))
+                        .arg(double(riserPosAfterMove.x())).arg(double(riserPosAfterMove.y()))
+                        .arg(double(riserPosAfterMove.z()))));
+
+    delete mon;
+    doc->deleteFixture(deckFx->id());
+    doc->deleteFixture(riserFx->id());
+    props->removePlatform(plat->id());
     delete doc;
 }
 

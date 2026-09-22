@@ -187,6 +187,23 @@ private slots:
      *  each step through the same production code path a user's mouse would
      *  hit, checking the model and the Layers list agree after every one. */
     void buildingARigStepByStepThroughRealUiStaysConsistent();
+    /** Integration test for the target/aim workflow: add a fixture, add a
+     *  target (the real "Add Target" -> "Edit Target" dialog chain), assign
+     *  the fixture to aim at it, verify the resolved beam actually arrives
+     *  at the target (not just that a reference was stored), move the
+     *  target through its real edit dialog and confirm the beam follows,
+     *  then move it out of reach and confirm the "cannot reach" warning
+     *  appears -- and clears once the fixture is re-rigged within reach. */
+    void aimingAFixtureAtATargetFollowsItThroughARealSession();
+    /** Integration test for the platform/riser workflow: add a platform (the
+     *  real "Lighting Studio Editor -- Riser" dialog), deck-mount one
+     *  fixture (the plot's real auto-deck drop) and riser-mount another
+     *  (the real Structure Studio drop path), drag the riser fixture on its
+     *  own editor, then move the platform and confirm BOTH fixtures land
+     *  exactly where the geometry says they should -- via two genuinely
+     *  different mechanisms (deck is carried explicitly, riser is derived
+     *  live), which is itself one of the subtleties this work surfaced. */
+    void buildingAPlatformStepByStepThroughRealUiStaysConsistent();
     void doubleClickingAnywhereOnATowerTopOpensIt();
     void doubleClickingABubbleShowsWhatItHides();
     /** Stacked fixtures get one named tag each, and a tag picks its own. */
