@@ -47,6 +47,21 @@ private slots:
      *  move that block as a unit and confirm every head landed exactly
      *  where the geometry says. */
     void populatingAndMovingAFixtureGroupBlockThroughRealUi();
+    /** The sibling workflow test above deliberately anchors its paste on an
+     *  empty cell to sidestep collision behaviour (see its own step-5
+     *  comment). This test asks the question directly: paste a block
+     *  anchored so it lands on a cell another fixture already occupies, and
+     *  confirm what actually happens to the occupant. */
+    void pastingABlockOntoAnOccupiedCellOverwritesTheOccupant();
+    /** The real UI gesture for moving a sub-group is a mouse drag, which
+     *  internally builds a genuine QDrag/QDropEvent session
+     *  (FixtureGroupEditor::startCellDrag()) -- a materially bigger, riskier
+     *  thing to fake under offscreen QTest than synthetic mouse events (no
+     *  window manager, no real drop target to negotiate with). This drives
+     *  the real Drop branch of eventFilter() with a synthetic QDropEvent
+     *  instead, exercising its actual dx/dy-from-drop-position math and
+     *  canMoveHeads() guard while skipping QDrag::exec() itself. */
+    void draggingASubGroupBlockMovesItThroughTheRealDropPath();
 
 private:
     Doc* m_doc;
