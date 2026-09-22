@@ -82,12 +82,15 @@ rows this session's earlier work fixed) will look *sparse* — flat items, no
 group folder — right after a plain drag, then reorganize itself once the
 file round-trips.
 
-*Status:* unmarked. Possibly intentional (grouping is a deliberate,
-named action; a casual drag stays ungrouped until you ask for it) — but the
-inconsistency between "drag onto a truss" and "right-click → Attach to
-Truss" producing different downstream state (one groups, one doesn't) for
-what reads as the same user intent is worth a deliberate decision rather
-than an accident of two code paths growing independently.
+*Status:* **Fixed.** `attachFixtureToTrussAt()` now calls `ensureTrussGroup()`
+and `props->setFixtureGroup()` too, matching `attachFixtureToTruss()`
+exactly (plus `mapStructureChanged()`/`refreshItemLayerState()` so the
+Layers list and lock/visibility state pick it up immediately, the same as
+the explicit action already did). A plain drag-drop attach now forms/joins
+a group the moment it happens, not just on the next file load.
+`buildingARigStepByStepThroughRealUiStaysConsistent()`'s step 4 now asserts
+the bar's group exists and is anchored to the bar right after the drop,
+where it used to assert the opposite. Full suite reruns green (136/136).
 
 ### 3. `mousePressEvent()`'s hit test always prefers a fixture over a bar
 

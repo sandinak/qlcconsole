@@ -3260,7 +3260,22 @@ void MonitorGraphicsView::attachFixtureToTrussAt(quint32 fid, TrussItem *trussIt
     mfi->setAttachMode(false);
     mfi->setEscapeMode(false);
     updateFixture(fid);
+
+    /* Join the truss's group (create/reuse it; pull in ungrouped siblings) --
+     * the same thing attachFixtureToTruss() (the explicit "Attach to Truss"
+     * context-menu action) already does. Without this, a plain drag-drop
+     * attach left the fixture rigged but ungrouped -- correct in the model,
+     * but invisible to the Layers list's "on truss" container display until
+     * the next file load (ensureGroupRegistry() forms it then). Two
+     * different real gestures for "attach this fixture" produced two
+     * different downstream states for no reason a user would expect. */
+    ensureTrussGroup(t->id());
+    if (t->groupId() != 0)
+        props->setFixtureGroup(fid, t->groupId());
+
     m_doc->setModified();
+    emit mapStructureChanged();
+    refreshItemLayerState();
 }
 
 bool MonitorGraphicsView::elevationBarDraggable(const Truss *t) const

@@ -4165,9 +4165,17 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
                         .arg(double(barMid.x())).arg(double(barMid.y())).arg(double(barMid.z()))
                         .arg(double(posAfterBarDrop.x())).arg(double(posAfterBarDrop.y()))
                         .arg(double(posAfterBarDrop.z()))));
-    // A plain drop attaches the RIG PROPS only -- it deliberately does not
-    // form a group (that's the explicit "Attach to Truss" action's job, or
-    // ensureGroupRegistry() on the next load; see the final check below).
+    // A plain drop now forms/joins a group too, exactly as the explicit
+    // "Attach to Truss" context-menu action always has -- the fix for
+    // WORKFLOW-SUBTLETIES.md #2 (a plain drag-drop attach used to leave the
+    // fixture rigged but ungrouped until the next file load).
+    QVERIFY2(bar->groupId() != 0, "attaching a fixture to the bar formed no group");
+    const MonitorProperties::MonitorGroup barGrp = props->group(bar->groupId());
+    QVERIFY2(barGrp.anchorKind == QStringLiteral("truss") && barGrp.anchorId == bar->id(),
+             qPrintable(QString("bar's group anchored to kind=\"%1\" id=%2 instead of "
+                                "truss/%3 (the bar itself)")
+                        .arg(barGrp.anchorKind).arg(barGrp.anchorId).arg(bar->id())));
+    QCOMPARE(props->fixtureGroup(fid), bar->groupId());
 
     // 5. Move the bar -- a real mousePress/Move/Release sequence on the
     //    truss's own Structure Studio editor, the sequence
