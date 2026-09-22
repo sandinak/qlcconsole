@@ -36,6 +36,17 @@ private slots:
     void deletingAFixtureRemovesItsRowUnderItsUniverse();
     /** Clicking a fixture group opens its layout editor. */
     void selectingAGroupOpensItsLayoutEditor();
+    /** Integration test for the fixture-group workflow: create two groups
+     *  through the real "Create Fixture Group" dialog (the shared factory
+     *  Fixture Manager, the Programming tab and the Studio all use), open
+     *  one's real layout editor by selecting it (as
+     *  selectingAGroupOpensItsLayoutEditor() already proves opens it),
+     *  click a real empty cell to set where the next paste lands, paste
+     *  the other group in as a block through the real "Add group as
+     *  block..." button's own handler and its real picker dialog, then
+     *  move that block as a unit and confirm every head landed exactly
+     *  where the geometry says. */
+    void populatingAndMovingAFixtureGroupBlockThroughRealUi();
 
 private:
     Doc* m_doc;

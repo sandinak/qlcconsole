@@ -18,6 +18,12 @@
 #include <QtTest>
 #include <QTreeWidgetItemIterator>
 #include <QSplitter>
+#include <QInputDialog>
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QLineEdit>
+#include <QMouseEvent>
 
 #define KColumnName 0
 
@@ -29,6 +35,7 @@
 #include "inputoutputmap.h"
 #include "fixturegroup.h"
 #include "fixturegroupeditor.h"
+#include "createfixturegroup.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -197,6 +204,196 @@ void FixtureManager_Test::selectingAGroupOpensItsLayoutEditor()
     const QVariant still = after.first()->data(KColumnName, PROP_GROUP);
     QVERIFY2(still.isValid() && still.toUInt() == gid,
              "the selection moved off the group after clicking it");
+}
+
+/* Chains the fixture-group workflow: create two groups through the real,
+ * shared "Create Fixture Group" dialog, open one's real layout editor by
+ * selecting it in the tree, click a real cell to anchor the next paste,
+ * paste the other group in as a block through the real "Add group as
+ * block..." handler and its own picker dialog, then move that block as a
+ * unit and check every head lands exactly where the geometry says.
+ *
+ * Two scope choices, both disclosed in WORKFLOW-SUBTLETIES.md: creating a
+ * group here uses the shared CreateFixtureGroup::createFromFixtures()
+ * factory rather than simulating a right-click "New Group..." on the
+ * tree's folder row (menu.exec() plus the QAction dispatch it would need
+ * is a lot of additional simulated-UI surface for the same real dialog
+ * underneath); and "move as a unit" calls FixtureGroupEditor::
+ * moveSubGroup() directly -- the exact function the right-click "Move
+ * sub-group" context-menu action reaches -- rather than synthesizing the
+ * internal QDrag/QDropEvent cycle a mouse drag actually goes through,
+ * which risks needing a real OS-level drag session under offscreen QTest.
+ */
+void FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi()
+{
+    // 1. Fixtures for two groups -- left unplaced so
+    //    CreateFixtureGroup::suggestGrid()'s "near-square of the head
+    //    count" fallback gives an exact, predictable grid: 1 fixture -> 1x1,
+    //    2 fixtures -> 2x1.
+    Fixture *targetFx = new Fixture(m_doc);
+    targetFx->setName("Target Member"); targetFx->setChannels(1);
+    QVERIFY(m_doc->addFixture(targetFx));
+
+    Fixture *blockFxA = new Fixture(m_doc);
+    blockFxA->setName("Block Member A"); blockFxA->setChannels(1);
+    blockFxA->setAddress(16);
+    QVERIFY(m_doc->addFixture(blockFxA));
+    Fixture *blockFxB = new Fixture(m_doc);
+    blockFxB->setName("Block Member B"); blockFxB->setChannels(1);
+    blockFxB->setAddress(32);
+    QVERIFY(m_doc->addFixture(blockFxB));
+
+    // 2. Create the TARGET group -- the real "Create Fixture Group" dialog,
+    //    the same shared factory the Fixture Manager, the Programming tab
+    //    and the Studio all use to create a group from a selection.
+    QTimer::singleShot(0, []() {
+        QWidget *modal = QApplication::activeModalWidget();
+        CreateFixtureGroup *cfg = qobject_cast<CreateFixtureGroup *>(modal);
+        if (cfg != nullptr)
+            cfg->m_nameEdit->setText("Workflow Target Group");
+        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
+        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
+        // Close BEFORE asserting -- a QVERIFY failure here must never skip
+        // the button click, or cfg.exec()'s nested loop never returns and
+        // this hangs the whole test binary instead of failing this test.
+        if (okBtn != nullptr)
+            okBtn->click();
+        else if (modal != nullptr)
+            modal->close();
+        QVERIFY2(cfg != nullptr && okBtn != nullptr,
+                 "the Create Fixture Group dialog's widgets were not where expected");
+    });
+    FixtureGroup *targetGrp = CreateFixtureGroup::createFromFixtures(
+        m_doc, QList<quint32>() << targetFx->id(), nullptr);
+    QVERIFY2(targetGrp != nullptr, "createFromFixtures() returned no group");
+    QCOMPARE(targetGrp->name(), QString("Workflow Target Group"));
+    QCOMPARE(targetGrp->size(), QSize(1, 1));
+    QCOMPARE(targetGrp->headsMap().value(QLCPoint(0, 0)).fxi, targetFx->id());
+    // Grow it past its one occupied cell -- a real user would do this with
+    // the editor's own width/height spin boxes; this is the same kind of
+    // direct-API simplification selectingAGroupOpensItsLayoutEditor() above
+    // already uses for its own group's size, done here so the paste in
+    // step 6 has an uncontested empty cell to land on rather than fighting
+    // over (0,0) with the fixture already there.
+    targetGrp->setSize(QSize(3, 2));
+
+    // 3. Create the SOURCE (block) group the same real way.
+    QTimer::singleShot(0, []() {
+        QWidget *modal = QApplication::activeModalWidget();
+        CreateFixtureGroup *cfg = qobject_cast<CreateFixtureGroup *>(modal);
+        if (cfg != nullptr)
+            cfg->m_nameEdit->setText("Workflow Block Group");
+        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
+        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
+        if (okBtn != nullptr)
+            okBtn->click();
+        else if (modal != nullptr)
+            modal->close();
+        QVERIFY2(cfg != nullptr && okBtn != nullptr,
+                 "the Create Fixture Group dialog's widgets were not where expected");
+    });
+    FixtureGroup *blockGrp = CreateFixtureGroup::createFromFixtures(
+        m_doc, QList<quint32>() << blockFxA->id() << blockFxB->id(), nullptr);
+    QVERIFY2(blockGrp != nullptr, "createFromFixtures() returned no group");
+    QCOMPARE(blockGrp->size(), QSize(2, 1));
+    QCOMPARE(blockGrp->headsMap().value(QLCPoint(0, 0)).fxi, blockFxA->id());
+    QCOMPARE(blockGrp->headsMap().value(QLCPoint(1, 0)).fxi, blockFxB->id());
+
+    // 4. Open the target group's real layout editor by selecting it in the
+    //    tree -- the exact path selectingAGroupOpensItsLayoutEditor() above
+    //    already proves opens FixtureManager::m_groupEditor.
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(1100, 700);
+    mgr.m_splitter->setSizes(QList<int>() << 700 << 400);
+
+    QTreeWidgetItem *targetRow = nullptr;
+    QTreeWidgetItemIterator it(mgr.m_fixtures_tree);
+    while (*it != nullptr)
+    {
+        const QVariant g = (*it)->data(KColumnName, PROP_GROUP);
+        if (g.isValid() && g.toUInt() == targetGrp->id()) { targetRow = *it; break; }
+        ++it;
+    }
+    QVERIFY2(targetRow != nullptr, "the target group never got a row carrying its id");
+    mgr.m_fixtures_tree->clearSelection();
+    targetRow->setSelected(true);
+    targetRow = nullptr;   // dies on the deferred rebuild -- see the test above
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+    QVERIFY2(mgr.m_groupEditor != nullptr,
+             "selecting the target group did not open its layout editor");
+
+    FixtureGroupEditor *editor = mgr.m_groupEditor;
+    QCoreApplication::processEvents();   // let the splitter/table settle to real geometry
+
+    // 5. Click a real cell -- a plain press+release (never crossing the
+    //    drag-distance threshold, so this can never arm startCellDrag())
+    //    through the SAME eventFilter() a real click on the grid goes
+    //    through, to set where the next paste anchors.
+    QVERIFY2(editor->m_table != nullptr, "the layout editor has no table");
+    // Column 1, not 0: column 0 already holds the target group's own
+    // fixture (from creation, above) -- clicking there would still set the
+    // anchor correctly, but the block would then have to paste ON TOP of
+    // an already-occupied cell, which is its own separate (and untested
+    // here) question. Anchoring on an empty cell keeps this test about the
+    // paste-and-move mechanics, not the collision rule.
+    const QPoint cellPx(editor->m_table->columnViewportPosition(1) + editor->m_table->columnWidth(1) / 2,
+                        editor->m_table->rowViewportPosition(0) + editor->m_table->rowHeight(0) / 2);
+    QMouseEvent press(QEvent::MouseButtonPress, cellPx, cellPx,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    editor->eventFilter(editor->m_table->viewport(), &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, cellPx, cellPx,
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    editor->eventFilter(editor->m_table->viewport(), &release);
+    QCOMPARE(editor->m_column, 1);
+    QCOMPARE(editor->m_row, 0);
+
+    // 6. Paste the block group in -- FixtureGroupEditor::slotAddGroupBlock(),
+    //    the exact handler the real "Add group as block..." button calls,
+    //    driving the real QInputDialog it opens to pick which group.
+    QTimer::singleShot(0, []() {
+        QWidget *modal = QApplication::activeModalWidget();
+        QComboBox *combo = modal ? modal->findChild<QComboBox *>() : nullptr;
+        if (combo != nullptr)
+            combo->setCurrentText("Workflow Block Group");
+        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
+        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
+        if (okBtn != nullptr)
+            okBtn->click();
+        else if (modal != nullptr)
+            modal->close();
+        QVERIFY2(modal != nullptr && combo != nullptr && okBtn != nullptr,
+                 "the Add Group Block picker's widgets were not where expected");
+    });
+    editor->slotAddGroupBlock();
+
+    // Anchored at (1,0): block A/B keep their own relative layout (A at the
+    // block's own origin, B one cell along), tagged with the source group's
+    // id, and the target group's own original member at (0,0) is untouched.
+    const QMap<QLCPoint, GroupHead> afterPaste = targetGrp->headsMap();
+    QCOMPARE(afterPaste.value(QLCPoint(0, 0)).fxi, targetFx->id());
+    QCOMPARE(afterPaste.value(QLCPoint(1, 0)).fxi, blockFxA->id());
+    QCOMPARE(afterPaste.value(QLCPoint(2, 0)).fxi, blockFxB->id());
+    QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 0)), blockGrp->id());
+    QCOMPARE(targetGrp->headSubGroup(QLCPoint(2, 0)), blockGrp->id());
+
+    // 7. Move the block as a unit. Real alternate UI path for the same
+    //    result as a drag: the right-click "Move sub-group" action reaches
+    //    exactly this function.
+    editor->moveSubGroup(blockGrp->id(), 0, 1);
+
+    const QMap<QLCPoint, GroupHead> afterMove = targetGrp->headsMap();
+    QVERIFY2(afterMove.value(QLCPoint(1, 1)).fxi == blockFxA->id(),
+             "moving the block by (0,1) did not carry member A to (1,1)");
+    QVERIFY2(afterMove.value(QLCPoint(2, 1)).fxi == blockFxB->id(),
+             "moving the block by (0,1) did not carry member B to (2,1)");
+    QVERIFY2(afterMove.contains(QLCPoint(1, 0)) == false,
+             "the block's old (1,0) cell is still occupied after moving away from it");
+    QVERIFY2(afterMove.contains(QLCPoint(2, 0)) == false,
+             "the block's old (2,0) cell is still occupied after moving away from it");
+    QCOMPARE(afterMove.value(QLCPoint(0, 0)).fxi, targetFx->id());   // untouched by the move
+    QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 1)), blockGrp->id());
+    QCOMPARE(targetGrp->headSubGroup(QLCPoint(2, 1)), blockGrp->id());
 }
 
 QTEST_MAIN(FixtureManager_Test)

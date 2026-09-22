@@ -14,6 +14,29 @@ mismatch, or a rough edge in how two features interact.
 worth a follow-up), or **Note** (informational, not actionable). Unresolved
 entries stay unmarked.
 
+## Index
+
+| # | Entry | Domain |
+|---|---|---|
+| [1](#1-a-horizontal-trusss-default-crossbar-is-visually-coincident-with-the-truss-itself) | Horizontal truss's default bar is visually coincident with the truss | Truss/bar |
+| [2](#2-a-plain-drag-drop-attach-never-forms-a-group--only-the-explicit-attach-to-truss-action-or-a-file-reload-does) | Plain drag-drop attach never forms a group | Truss/bar |
+| [3](#3-mousepresseventss-hit-test-always-prefers-a-fixture-over-a-bar) | Fixture hit-test always wins over a bar underneath it | Truss/bar |
+| [4](#4-structurestudioviews-bar-drag-arm-is-gated-by-the-views-own-m_locked-separately-from-the-bar-objects-own-locked-flag) | View lock vs. object lock are two different checks | Truss/bar |
+| [5](#5-addtargetaccepteds-own-comment-says-pantilt-palette-the-code-links-an-aim-palette) | Stale comment: says PanTilt, code links Aim | Target/aim |
+| [6](#6-assigning-a-fixture-to-aim-at-a-target-has-no-test-for-the-real-drag-drop-path) | No test for the real palette-onto-Look drag | Target/aim |
+| [7](#7-a-failed-qverifyqcompare-inside-the-dialog-driving-lambda-hangs-the-whole-test-binary-not-just-that-one-test) | A failed assertion inside a dialog lambda hangs the binary | Test technique (all dialogs) |
+| [8](#8-findchildqlineedit-can-silently-grab-a-spin-box-own-internal-editor) | `findChild<QLineEdit*>()` can grab a spin box's own editor | Test technique (all dialogs) |
+| [9](#9-deck-mounted-and-riser-mounted-fixtures-follow-a-moved-platform-through-two-different-mechanisms) | Deck vs. riser fixtures follow a moved platform two different ways | Platform/riser |
+| [10](#10-a-dropped-items-screen-centre-means-two-different-things-depending-on-which-attach-check-reads-it) | Two attach paths disagree on what an item's "centre" is | Platform/riser |
+| [11](#11-a-crossbar-has-none-of-a-truss-bars-drag-machinery----and-the-main-plot-has-no-pipe-attach-at-all) | Crossbars have no drag machinery; main plot has no pipe attach | Stand/boom |
+| [12](#12-a-sub-group-move-through-the-real-ui-is-a-drag----and-a-drag-here-is-a-genuine-internal-qdragqdropevent-cycle-not-just-mouse-events) | Untested: the real internal `QDrag` cycle for moving a sub-group | Fixture Manager |
+| [13](#13-assignheads-collision-behavior-at-an-already-occupied-cell-is-untested-here) | Untested: pasting a block onto an occupied cell | Fixture Manager |
+
+Highest-signal to look at first: **#7** (a real risk to CI/test reliability,
+not just app behavior), **#2** and **#11** (both read as real product
+decisions worth making on purpose rather than by accident), **#12** (the
+biggest actual coverage gap this effort left behind).
+
 ---
 
 ## Truss / bar / fixture workflow
@@ -299,5 +322,68 @@ the same main-plot treatment trusses and platforms already have?
 
 ---
 
-*(A section for Fixture Manager grouping to follow as that workflow test is
-built.)*
+## Fixture Manager: fixture-group workflow
+
+Test: `FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi()`
+(`ui/test/fixturemanager/fixturemanager_test.cpp`) — a different subsystem
+from everything above (`ui/src/fixturemanager.cpp`,
+`ui/src/fixturegroupeditor.cpp`), tested for the first time with any real
+UI interaction: the file's two existing tests were purely API-driven before
+this.
+
+### 12. A sub-group move through the real UI is a drag -- and a drag here is a genuine internal `QDrag`/`QDropEvent` cycle, not just mouse events
+
+Every other "drag" tested in this session's other workflow tests (truss,
+bar, platform, boom) is driven by feeding raw `QMouseEvent`s straight to a
+widget's own `mousePressEvent()`/`mouseMoveEvent()`/`mouseReleaseEvent()`
+overrides or its `eventFilter()` — no actual Qt drag-and-drop machinery
+involved anywhere. The fixture-group grid is different: past the drag
+threshold, `FixtureGroupEditor::eventFilter()`'s `MouseMove` branch calls
+`startCellDrag()`, which builds a real `QMimeData`/`QDrag` (with its own
+internal mime type, `"application/x-qlc-groupcells"`) and almost certainly
+calls `QDrag::exec()` — a genuine OS-mediated drag session, not just event
+delivery. That's a materially bigger, riskier thing to fake under offscreen
+QTest than synthetic mouse events (no user, no window manager, no real
+drop target to negotiate with).
+
+This test does not attempt it. It calls `FixtureGroupEditor::moveSubGroup()`
+directly instead — a real, exact, single-purpose function, but reached in
+the actual app via the right-click "Move sub-group" context-menu action,
+not via a drag. The mouse-driven internal drag path itself (press → move
+past threshold → `startCellDrag()` → `QDrag::exec()` → the `Drop` branch of
+`eventFilter()` computing `dx`/`dy` from the drop position → `moveHeads()`)
+remains completely untested by anything in this file.
+
+*Status:* unmarked, and the most open question this whole effort raised.
+Two honest paths forward, worth deciding rather than defaulting into:
+  - **Test it anyway, without a real drag session**: construct a synthetic
+    `QDropEvent` carrying `QMimeData` tagged with the internal mime type,
+    with `m_dragCells`/`m_dragAnchor` set directly (mirroring what
+    `startCellDrag()` would have captured from a real selection+press), and
+    deliver it straight to `eventFilter()` — skipping `QDrag::exec()`
+    entirely while still exercising the actual `Drop` branch's own
+    dx/dy-from-position math and `canMoveHeads()` guard. More real than
+    calling `moveSubGroup()` directly; still not a full end-to-end drag.
+  - **Accept the gap**: the context-menu path this test does cover reaches
+    the identical mutation (`moveHeads()` under the hood either way), so
+    the DATA outcome of "move a sub-group" is covered even though the
+    GESTURE isn't. If the internal drag path has never been a source of
+    reported bugs, that may be coverage enough.
+
+### 13. `assignHead()`'s collision behavior at an already-occupied cell is untested here
+
+`slotAddGroupBlock()`'s own paste loop only skips a source head if
+`existing.contains(gh)` — i.e. if that exact fixture/head is ALREADY a
+member of the target group somewhere, not if the DESTINATION CELL happens
+to be occupied by something else. This test deliberately anchored its
+paste on an empty cell to sidestep the question (see the comment at the
+click step) rather than find out what `assignHead()` actually does when
+asked to write into a cell something else already occupies — overwrite
+silently, refuse, or something else.
+
+*Status:* unmarked. Worth a dedicated (much smaller) test on its own:
+paste a block anchored so it overlaps an existing member and assert
+whichever behavior is intended. Left out here because it's a different
+question from the workflow this test is about, not because it's low-value.
+
+---
