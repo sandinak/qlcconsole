@@ -28,6 +28,7 @@
 #include <QAbstractSpinBox>
 #include <QFormLayout>
 #include <QLabel>
+#include <functional>
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QPushButton>
@@ -84,6 +85,98 @@ static QPushButton *findButtonByText(QWidget *root, const QString &text)
     return NULL;
 }
 
+/* A QDoubleSpinBox owns its own internal QLineEdit editor widget, so a
+ * plain findChild<QLineEdit*>() on a dialog can grab THAT instead of the
+ * dialog's actual "Name:" field -- which one it finds first depends on
+ * where each lands in the widget tree, not on construction order. Skip any
+ * QLineEdit whose parent is itself a spin box; return the first one left. */
+static QLineEdit *findRealLineEdit(QWidget *modal)
+{
+    foreach (QLineEdit *le, modal->findChildren<QLineEdit *>())
+        if (qobject_cast<QAbstractSpinBox *>(le->parentWidget()) == nullptr)
+            return le;
+    return nullptr;
+}
+
+/* Finds a QDoubleSpinBox by its QFormLayout row label (substring match) --
+ * for a dialog with too many same-typed fields for index-based lookup to
+ * mean anything reliable (position/run/base/truss/stand fields, plus a
+ * canvas's own). Searches every QFormLayout under `pane` since a dialog
+ * embedding a Structure Studio canvas may have more than one. */
+static QDoubleSpinBox *findSpinByLabel(QWidget *pane, const QString &labelSubstr)
+{
+    if (pane == nullptr)
+        return nullptr;
+    foreach (QFormLayout *form, pane->findChildren<QFormLayout *>())
+    {
+        for (int row = 0; row < form->rowCount(); ++row)
+        {
+            QLayoutItem *li = form->itemAt(row, QFormLayout::LabelRole);
+            QLabel *lbl = li ? qobject_cast<QLabel *>(li->widget()) : nullptr;
+            if (lbl != nullptr && lbl->text().contains(labelSubstr))
+            {
+                QLayoutItem *fi = form->itemAt(row, QFormLayout::FieldRole);
+                return fi ? qobject_cast<QDoubleSpinBox *>(fi->widget()) : nullptr;
+            }
+        }
+    }
+    return nullptr;
+}
+
+/* Schedules a zero-delay callback that runs `fill` against whatever modal
+ * QDialog is open by then (via QApplication::activeModalWidget() -- the
+ * caller calls this BEFORE the slot that opens the dialog, the same as
+ * every QTimer::singleShot() call this replaces), then ALWAYS clicks its Ok
+ * button (or Cancel, if accept is false) -- or closes it outright if that
+ * button can't be found -- BEFORE checking whether `fill` reported success.
+ *
+ * Why the close has to come first: a QVERIFY/QCOMPARE failure inside `fill`
+ * itself returns out of `fill` early (reporting false), but if the close
+ * were the LAST thing this function did, that early return would skip it
+ * entirely -- and nothing else will ever close that dialog under offscreen
+ * QTest (there's no user to click Cancel), so dlg.exec()'s nested event
+ * loop blocks forever. A wrong widget lookup would hang the whole test
+ * binary instead of just failing the one test that made it. Every
+ * dialog-driving QTimer::singleShot() callback in this file used to hand-rig
+ * this close-before-assert shape (or skip it and carry the risk); this is
+ * that shape, written once. See WORKFLOW-SUBTLETIES.md #7. */
+static void driveDialog(const std::function<bool(QWidget *)> &fill, bool accept = true)
+{
+    QTimer::singleShot(0, [fill, accept]() {
+        QWidget *modal = QApplication::activeModalWidget();
+        const bool filled = (modal != nullptr) && fill(modal);
+        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
+        QPushButton *btn = btns ? btns->button(accept ? QDialogButtonBox::Ok : QDialogButtonBox::Cancel)
+                                : nullptr;
+        if (btn != nullptr)
+            btn->click();
+        else if (modal != nullptr)
+            modal->close();
+        QVERIFY2(modal != nullptr && filled && btn != nullptr,
+                 "the dialog's widgets were not where expected");
+    });
+}
+
+/* Same close-before-assert shape as driveDialog(), for a QMessageBox-style
+ * confirm whose button is found by its TEXT rather than a QDialogButtonBox
+ * role (confirmFeatureDelete()'s "Delete"/"Detach & Keep"/etc. buttons are
+ * added via addButton(text, role), not a standard enum role). */
+static void driveMessageBox(const std::function<bool(QWidget *)> &fill, const QString &buttonText)
+{
+    QTimer::singleShot(0, [fill, buttonText]() {
+        QWidget *modal = QApplication::activeModalWidget();
+        const bool filled = (modal != nullptr) && fill(modal);
+        QPushButton *btn = modal ? findButtonByText(modal, buttonText) : nullptr;
+        if (btn != nullptr)
+            btn->click();
+        else if (modal != nullptr)
+            modal->close();
+        QVERIFY2(modal != nullptr && filled && btn != nullptr,
+                 qPrintable(QString("the message box's \"%1\" button was not where expected")
+                            .arg(buttonText)));
+    });
+}
+
 // Pilot for the Lighting Studio release-gate work (SHOW_LIFECYCLE_DESIGN.md):
 // can a QTest UI test drive a real, blocking QDialog::exec() call (as
 // Monitor::slotAddTruss() uses) under QT_QPA_PLATFORM=offscreen? Standard
@@ -108,20 +201,14 @@ void Monitor_Test::addTrussAccepted()
 
     const int before = m_doc->monitorProperties()->trusses().count();
 
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != NULL);
-        QCOMPARE(modal->windowTitle(), QString("Add Truss"));
-
-        QLineEdit *nameEdit = modal->findChild<QLineEdit*>();
-        QVERIFY(nameEdit != NULL);
+    driveDialog([](QWidget *modal) {
+        if (modal->windowTitle() != QString("Add Truss"))
+            return false;
+        QLineEdit *nameEdit = modal->findChild<QLineEdit *>();
+        if (nameEdit == nullptr)
+            return false;
         nameEdit->setText("Pilot Truss");
-
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox*>();
-        QVERIFY(btns != NULL);
-        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
-        QVERIFY(okBtn != NULL);
-        okBtn->click();
+        return true;
     });
 
     mon.slotAddTruss();
@@ -140,16 +227,7 @@ void Monitor_Test::addTrussCancelled()
 
     const int before = m_doc->monitorProperties()->trusses().count();
 
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != NULL);
-
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox*>();
-        QVERIFY(btns != NULL);
-        QPushButton *cancelBtn = btns->button(QDialogButtonBox::Cancel);
-        QVERIFY(cancelBtn != NULL);
-        cancelBtn->click();
-    });
+    driveDialog([](QWidget *) { return true; }, /*accept=*/false);
 
     mon.slotAddTruss();
 
@@ -169,20 +247,14 @@ void Monitor_Test::addTargetAccepted()
     const int beforeTargets = m_doc->monitorProperties()->stageTargets().count();
     const int beforePalettes = m_doc->palettes().count();
 
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != NULL);
-        QVERIFY(modal->windowTitle().startsWith("Edit Target"));
-
-        QLineEdit *nameEdit = modal->findChild<QLineEdit*>();
-        QVERIFY(nameEdit != NULL);
+    driveDialog([](QWidget *modal) {
+        if (!modal->windowTitle().startsWith("Edit Target"))
+            return false;
+        QLineEdit *nameEdit = modal->findChild<QLineEdit *>();
+        if (nameEdit == nullptr)
+            return false;
         nameEdit->setText("Pilot Target");
-
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox*>();
-        QVERIFY(btns != NULL);
-        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
-        QVERIFY(okBtn != NULL);
-        okBtn->click();
+        return true;
     });
 
     mon.slotAddTarget();
@@ -212,16 +284,7 @@ void Monitor_Test::addTargetEditCancelled()
 
     const int before = m_doc->monitorProperties()->stageTargets().count();
 
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != NULL);
-
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox*>();
-        QVERIFY(btns != NULL);
-        QPushButton *cancelBtn = btns->button(QDialogButtonBox::Cancel);
-        QVERIFY(cancelBtn != NULL);
-        cancelBtn->click();
-    });
+    driveDialog([](QWidget *) { return true; }, /*accept=*/false);
 
     mon.slotAddTarget();
 
@@ -250,16 +313,7 @@ void Monitor_Test::addPlatformEditCancelled()
 
     const int before = m_doc->monitorProperties()->platforms().count();
 
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != NULL);
-
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox*>();
-        QVERIFY(btns != NULL);
-        QPushButton *cancelBtn = btns->button(QDialogButtonBox::Cancel);
-        QVERIFY(cancelBtn != NULL);
-        cancelBtn->click();
-    });
+    driveDialog([](QWidget *) { return true; }, /*accept=*/false);
 
     mon.slotAddPlatform();
 
@@ -281,11 +335,7 @@ void Monitor_Test::removeSelectedTruss()
     Monitor mon(&parent, m_doc);
 
     quint32 addedId = Truss::invalidId();
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox*>();
-        btns->button(QDialogButtonBox::Ok)->click();
-    });
+    driveDialog([](QWidget *) { return true; });
     mon.slotAddTruss();
     addedId = m_doc->monitorProperties()->trusses().last()->id();
 
@@ -299,21 +349,14 @@ void Monitor_Test::removeSelectedTruss()
     QVERIFY(item != NULL);
     item->setSelected(true);
 
-    QTimer::singleShot(0, []() {
-        // NOTE: don't assert on windowTitle() here — QMessageBox renders
-        // without a title bar on macOS (a native-alert-style quirk), so it
-        // reads back empty even though confirmFeatureDelete() sets one. The
-        // box's own text (via QMessageBox::text()) is the reliable check.
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != NULL);
-        QMessageBox *box = qobject_cast<QMessageBox*>(modal);
-        QVERIFY(box != NULL);
-        QVERIFY(box->text().contains("Delete"));
-
-        QPushButton *deleteBtn = findButtonByText(modal, "Delete");
-        QVERIFY(deleteBtn != NULL);
-        deleteBtn->click();
-    });
+    // NOTE: don't assert on windowTitle() here — QMessageBox renders
+    // without a title bar on macOS (a native-alert-style quirk), so it
+    // reads back empty even though confirmFeatureDelete() sets one. The
+    // box's own text (via QMessageBox::text()) is the reliable check.
+    driveMessageBox([](QWidget *modal) {
+        QMessageBox *box = qobject_cast<QMessageBox *>(modal);
+        return box != nullptr && box->text().contains("Delete");
+    }, "Delete");
 
     mon.slotRemoveSelected();
 
@@ -325,11 +368,7 @@ void Monitor_Test::removeSelectedCancelled()
     QWidget parent;
     Monitor mon(&parent, m_doc);
 
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox*>();
-        btns->button(QDialogButtonBox::Ok)->click();
-    });
+    driveDialog([](QWidget *) { return true; });
     mon.slotAddTruss();
     const quint32 addedId = m_doc->monitorProperties()->trusses().last()->id();
 
@@ -343,13 +382,7 @@ void Monitor_Test::removeSelectedCancelled()
     QVERIFY(item != NULL);
     item->setSelected(true);
 
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != NULL);
-        QPushButton *cancelBtn = findButtonByText(modal, "Cancel");
-        QVERIFY(cancelBtn != NULL);
-        cancelBtn->click();
-    });
+    driveMessageBox([](QWidget *) { return true; }, "Cancel");
 
     mon.slotRemoveSelected();
 
@@ -1081,30 +1114,40 @@ void Monitor_Test::studioEditorDialogDragDoesNotCrash()
     // slotEditTruss() blocks in exec(); drive the drag from inside that loop.
     QTimer::singleShot(0, mon, [mon, fid]() {
         StructureStudioView *view = nullptr;
+        QDialog *found = nullptr;
         foreach (QWidget *w, QApplication::topLevelWidgets())
         {
             if (QDialog *d = qobject_cast<QDialog *>(w))
                 if ((view = d->findChild<StructureStudioView *>()) != nullptr)
-                {
-                    view->setLocked(false);
-                    const QPointF start =
-                        view->w2s(view->m_doc->monitorProperties()->fixtureRigPosition(fid));
-                    const QPointF end = start + QPointF(0.0, 40.0);
-                    QMouseEvent press(QEvent::MouseButtonPress, start, start, Qt::LeftButton,
-                                      Qt::LeftButton, Qt::NoModifier);
-                    QMouseEvent move(QEvent::MouseMove, end, end, Qt::NoButton,
-                                     Qt::LeftButton, Qt::NoModifier);
-                    QMouseEvent rel(QEvent::MouseButtonRelease, end, end, Qt::LeftButton,
-                                    Qt::NoButton, Qt::NoModifier);
-                    // The release is the one that emits fixtureMoved().
-                    view->mousePressEvent(&press);
-                    view->mouseMoveEvent(&move);
-                    view->mouseReleaseEvent(&rel);
-                    d->reject();
-                    return;
-                }
+                { found = d; break; }
         }
-        QFAIL("no StructureStudioView in any open dialog");
+        if (found != nullptr)
+        {
+            view->setLocked(false);
+            const QPointF start =
+                view->w2s(view->m_doc->monitorProperties()->fixtureRigPosition(fid));
+            const QPointF end = start + QPointF(0.0, 40.0);
+            QMouseEvent press(QEvent::MouseButtonPress, start, start, Qt::LeftButton,
+                              Qt::LeftButton, Qt::NoModifier);
+            QMouseEvent move(QEvent::MouseMove, end, end, Qt::NoButton,
+                             Qt::LeftButton, Qt::NoModifier);
+            QMouseEvent rel(QEvent::MouseButtonRelease, end, end, Qt::LeftButton,
+                            Qt::NoButton, Qt::NoModifier);
+            // The release is the one that emits fixtureMoved().
+            view->mousePressEvent(&press);
+            view->mouseMoveEvent(&move);
+            view->mouseReleaseEvent(&rel);
+        }
+        // Close BEFORE the QFAIL below: if no dialog carrying a
+        // StructureStudioView turned up, some OTHER modal might still be
+        // open (or this one, without having been found the expected way) --
+        // and nothing else will ever close it under offscreen QTest. See
+        // WORKFLOW-SUBTLETIES.md #7.
+        if (found != nullptr)
+            found->reject();
+        else if (QWidget *modal = QApplication::activeModalWidget())
+            modal->close();
+        QVERIFY2(found != nullptr, "no StructureStudioView in any open dialog");
     });
     mon->slotEditTruss(t->id());   // reaching here at all means it did not crash
 
@@ -4038,44 +4081,31 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
     //    filled in and accepted the way addTrussAccepted() already proved this
     //    QTimer::singleShot technique can drive under offscreen QTest.
     const int trussesBefore = props->trusses().count();
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != nullptr);
-        QCOMPARE(modal->windowTitle(), QString("Add Truss"));
-
+    // Vertical -- a tower, like every other bar-focused test in this file (a
+    // Horizontal truss's default crossbar runs ALONG the same line as the
+    // truss itself in Top view, which is a real "which one did I actually
+    // hit" ambiguity, not a test artefact -- Vertical keeps the two
+    // visually apart: the tower is a point, the crossbar a short line off
+    // to its side).
+    driveDialog([](QWidget *modal) {
+        if (modal->windowTitle() != QString("Add Truss"))
+            return false;
         QLineEdit *nameEdit = modal->findChild<QLineEdit *>();
-        QVERIFY(nameEdit != nullptr);
-        nameEdit->setText("Workflow Truss");
-
         QComboBox *typeCb = modal->findChild<QComboBox *>();
-        QVERIFY(typeCb != nullptr);
-        typeCb->setCurrentIndex(1);   // Vertical -- a tower, like every other
-                                      // bar-focused test in this file (a
-                                      // Horizontal truss's default crossbar
-                                      // runs ALONG the same line as the truss
-                                      // itself in Top view, which is a real
-                                      // "which one did I actually hit"
-                                      // ambiguity, not a test artefact --
-                                      // Vertical keeps the two visually apart:
-                                      // the tower is a point, the crossbar a
-                                      // short line off to its side).
-
-        // originX, originY, originZ, dirAngle, length, width -- in the order
-        // slotAddTruss() adds them to the form.
+        // originX, originY, originZ, dirAngle, length, width -- in the
+        // order slotAddTruss() adds them to the form.
         const QList<QDoubleSpinBox *> spins = modal->findChildren<QDoubleSpinBox *>();
-        QCOMPARE(spins.count(), 6);
+        if (nameEdit == nullptr || typeCb == nullptr || spins.count() != 6)
+            return false;
+        nameEdit->setText("Workflow Truss");
+        typeCb->setCurrentIndex(1);
         spins[0]->setValue(3.0);   // origin X
         spins[1]->setValue(3.0);   // origin Y
         spins[2]->setValue(0.0);   // origin Z (base of the tower)
         spins[3]->setValue(0.0);   // direction: unused for a Vertical truss
         spins[4]->setValue(3.0);   // length (tower height)
         spins[5]->setValue(0.29);  // width
-
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox *>();
-        QVERIFY(btns != nullptr);
-        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
-        QVERIFY(okBtn != nullptr);
-        okBtn->click();
+        return true;
     });
     mon->slotAddTruss();
 
@@ -4091,15 +4121,7 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
     //    MonitorGraphicsView::addBarToTrussRequested()). It opens the truss/
     //    bar editor on the new bar; accept it, the same as a user clicking OK.
     const int trussesBeforeBar = props->trusses().count();
-    QTimer::singleShot(0, mon, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != nullptr);
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox *>();
-        QVERIFY(btns != nullptr);
-        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
-        QVERIFY(okBtn != nullptr);
-        okBtn->click();
-    });
+    driveDialog([](QWidget *) { return true; });
     mon->slotAddBarToTruss(t->id(), -1.0f);   // -1 = mid-span, same as the menu action
 
     QCOMPARE(props->trusses().count(), trussesBeforeBar + 1);
@@ -4329,28 +4351,20 @@ void Monitor_Test::aimingAFixtureAtATargetFollowsItThroughARealSession()
     //    on addTargetAccepted still says -- see the subtleties list).
     const int targetsBefore = props->stageTargets().count();
     const int palettesBefore = doc->palettes().count();
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != nullptr);
-        QVERIFY(modal->windowTitle().startsWith("Edit Target"));
-
+    driveDialog([](QWidget *modal) {
+        if (!modal->windowTitle().startsWith("Edit Target"))
+            return false;
         QLineEdit *nameEdit = modal->findChild<QLineEdit *>();
-        QVERIFY(nameEdit != nullptr);
-        nameEdit->setText("Workflow Mark");
-
-        // X, Y, Z, follow-spot-subject-height -- in the order slotEditTarget()
-        // adds them to the form.
+        // X, Y, Z, follow-spot-subject-height -- in the order
+        // slotEditTarget() adds them to the form.
         const QList<QDoubleSpinBox *> spins = modal->findChildren<QDoubleSpinBox *>();
-        QVERIFY(spins.count() >= 3);
+        if (nameEdit == nullptr || spins.count() < 3)
+            return false;
+        nameEdit->setText("Workflow Mark");
         spins[0]->setValue(4.0);   // X
         spins[1]->setValue(1.5);   // Y
         spins[2]->setValue(0.0);   // Z
-
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox *>();
-        QVERIFY(btns != nullptr);
-        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
-        QVERIFY(okBtn != nullptr);
-        okBtn->click();
+        return true;
     });
     mon->slotAddTarget();
     gv->updateTargets();   // pick up the position the dialog just wrote
@@ -4429,19 +4443,14 @@ void Monitor_Test::aimingAFixtureAtATargetFollowsItThroughARealSession()
     // 5. Move the target -- through its own real "Edit Target" dialog again
     //    (Monitor::slotEditTarget(), the same dialog slotAddTarget() itself
     //    opened, driven the same QTimer::singleShot way).
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QVERIFY(modal != nullptr);
+    driveDialog([](QWidget *modal) {
         const QList<QDoubleSpinBox *> spins = modal->findChildren<QDoubleSpinBox *>();
-        QVERIFY(spins.count() >= 3);
+        if (spins.count() < 3)
+            return false;
         spins[0]->setValue(-1.0);   // X
         spins[1]->setValue(4.5);    // Y
         spins[2]->setValue(0.0);    // Z
-        QDialogButtonBox *btns = modal->findChild<QDialogButtonBox *>();
-        QVERIFY(btns != nullptr);
-        QPushButton *okBtn = btns->button(QDialogButtonBox::Ok);
-        QVERIFY(okBtn != nullptr);
-        okBtn->click();
+        return true;
     });
     mon->slotEditTarget(mark->id());
     gv->updateTargets();
@@ -4542,36 +4551,12 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
     //    filling them in and clicking OK is the same real path resizing a
     //    new step takes.
     const int platformsBefore = props->platforms().count();
-    QTimer::singleShot(0, []() {
-        /* This dialog embeds a whole Structure Studio canvas alongside the
-           geometry form (its own zoom/pan controls add MORE QDoubleSpinBoxes
-           to the dialog -- ten, not five), so any lookup here has more ways
-           to come back empty/wrong than the plainer Add Truss/Edit Target
-           dialogs. A QVERIFY() failure inside this lambda returns out of the
-           lambda WITHOUT clicking a button, and since dlg.exec()'s nested
-           event loop has nothing else that will ever close it under
-           offscreen QTest, that hangs the whole test binary forever instead
-           of just failing this one test. Use plain if-checks that fall
-           through to closing the dialog either way, so a lookup that breaks
-           in the future fails this test instead of hanging the run. */
-        QWidget *modal = QApplication::activeModalWidget();
-        // A QDoubleSpinBox owns its own internal QLineEdit editor widget, so
-        // a plain findChild<QLineEdit*>() can grab THAT instead of the
-        // dialog's actual "Name:" field -- which one depends on where each
-        // lands in the widget tree, not on construction order. Skip any
-        // QLineEdit whose parent is itself a spin box.
-        QLineEdit *nameEdit = nullptr;
-        if (modal != nullptr)
-        {
-            foreach (QLineEdit *le, modal->findChildren<QLineEdit *>())
-            {
-                if (qobject_cast<QAbstractSpinBox *>(le->parentWidget()) == nullptr)
-                { nameEdit = le; break; }
-            }
-        }
-        if (nameEdit != nullptr)
-            nameEdit->setText("Workflow Riser");
-
+    // This dialog embeds a whole Structure Studio canvas alongside the
+    // geometry form (its own zoom/pan controls add MORE QDoubleSpinBoxes to
+    // the dialog -- ten, not five), so any lookup here has more ways to come
+    // back empty/wrong than the plainer Add Truss/Edit Target dialogs.
+    driveDialog([](QWidget *modal) {
+        QLineEdit *nameEdit = findRealLineEdit(modal);
         // originX, originY, width, depth, height -- in the order
         // slotEditPlatform() adds them to the form. Scope the spin-box
         // search to nameEdit's own container (the geometry form) rather than
@@ -4579,28 +4564,15 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
         QWidget *geomPane = nameEdit ? nameEdit->parentWidget() : nullptr;
         const QList<QDoubleSpinBox *> spins =
             geomPane ? geomPane->findChildren<QDoubleSpinBox *>() : QList<QDoubleSpinBox *>();
-        if (spins.count() == 5)
-        {
-            spins[0]->setValue(3.0);   // origin X
-            spins[1]->setValue(3.0);   // origin Y
-            spins[2]->setValue(2.0);   // width
-            spins[3]->setValue(1.5);   // depth
-            spins[4]->setValue(0.6);   // height
-        }
-
-        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
-        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
-        // Close the dialog BEFORE asserting anything: a QVERIFY failure below
-        // returns out of this lambda immediately, and dlg.exec()'s nested
-        // event loop has nothing else that will ever close it under
-        // offscreen QTest -- asserting first would hang the whole run
-        // instead of just failing this one test.
-        if (okBtn != nullptr)
-            okBtn->click();
-        else if (modal != nullptr)
-            modal->close();
-        QVERIFY2(modal != nullptr && nameEdit != nullptr && spins.count() == 5 && okBtn != nullptr,
-                 "the Add Platform dialog's widgets were not where expected");
+        if (nameEdit == nullptr || spins.count() != 5)
+            return false;
+        nameEdit->setText("Workflow Riser");
+        spins[0]->setValue(3.0);   // origin X
+        spins[1]->setValue(3.0);   // origin Y
+        spins[2]->setValue(2.0);   // width
+        spins[3]->setValue(1.5);   // depth
+        spins[4]->setValue(0.6);   // height
+        return true;
     });
     mon->slotAddPlatform();
     gv->updatePlatforms();
@@ -4783,45 +4755,23 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
     //    dialog (and the same findChild<QLineEdit*>() trap -- see the
     //    subtleties list -- reuse the defensive lookup).
     const int standsBefore = props->stands().count();
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QLineEdit *nameEdit = nullptr;
-        if (modal != nullptr)
-        {
-            foreach (QLineEdit *le, modal->findChildren<QLineEdit *>())
-            {
-                if (qobject_cast<QAbstractSpinBox *>(le->parentWidget()) == nullptr)
-                { nameEdit = le; break; }
-            }
-        }
-        if (nameEdit != nullptr)
-            nameEdit->setText("Workflow Stand");
-
+    driveDialog([](QWidget *modal) {
+        QLineEdit *nameEdit = findRealLineEdit(modal);
         // Position X, Position Y, Top height, Base radius, Leg rotation --
         // in the order slotEditStand() adds them, scoped to nameEdit's own
         // container so the canvas's own spin boxes aren't counted too.
         QWidget *geomPane = nameEdit ? nameEdit->parentWidget() : nullptr;
         const QList<QDoubleSpinBox *> spins =
             geomPane ? geomPane->findChildren<QDoubleSpinBox *>() : QList<QDoubleSpinBox *>();
-        if (spins.count() == 5)
-        {
-            spins[0]->setValue(3.0);   // position X
-            spins[1]->setValue(3.0);   // position Y
-            spins[2]->setValue(2.0);   // top height
-            spins[3]->setValue(0.2);   // base radius
-            spins[4]->setValue(0.0);   // leg rotation
-        }
-
-        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
-        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
-        // Close BEFORE asserting -- see the platform test's own comment on
-        // why a QVERIFY failure here must never skip the button click.
-        if (okBtn != nullptr)
-            okBtn->click();
-        else if (modal != nullptr)
-            modal->close();
-        QVERIFY2(modal != nullptr && nameEdit != nullptr && spins.count() == 5 && okBtn != nullptr,
-                 "the Add Stand dialog's widgets were not where expected");
+        if (nameEdit == nullptr || spins.count() != 5)
+            return false;
+        nameEdit->setText("Workflow Stand");
+        spins[0]->setValue(3.0);   // position X
+        spins[1]->setValue(3.0);   // position Y
+        spins[2]->setValue(2.0);   // top height
+        spins[3]->setValue(0.2);   // base radius
+        spins[4]->setValue(0.0);   // leg rotation
+        return true;
     });
     mon->slotAddStand();
     gv->updatePlatforms();
@@ -4898,54 +4848,19 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
     //    this dialog has far more spin boxes (position/run/base/truss/stand
     //    fields, plus the canvas's own) than a fixed index could track.
     const float upBoomBefore = crossbar->parentPipeOffset();
-    QTimer::singleShot(0, [boom]() {
-        QWidget *modal = QApplication::activeModalWidget();
-        // This dialog ALSO embeds a Structure Studio canvas, which may have
-        // its own QFormLayout(s) elsewhere in the inspector -- scope the
-        // search to nameEdit's own container the same way the platform and
-        // stand dialogs do, rather than trusting the first QFormLayout
-        // found anywhere in the whole dialog to be the geometry form.
-        QLineEdit *nameEdit = nullptr;
-        if (modal != nullptr)
-        {
-            foreach (QLineEdit *le, modal->findChildren<QLineEdit *>())
-            {
-                if (qobject_cast<QAbstractSpinBox *>(le->parentWidget()) == nullptr)
-                { nameEdit = le; break; }
-            }
-        }
-        QWidget *geomPane = nameEdit ? nameEdit->parentWidget() : nullptr;
-        QDoubleSpinBox *upBoomSpin = nullptr;
-        if (geomPane != nullptr)
-        {
-            foreach (QFormLayout *form, geomPane->findChildren<QFormLayout *>())
-            {
-                for (int row = 0; row < form->rowCount(); ++row)
-                {
-                    QLayoutItem *li = form->itemAt(row, QFormLayout::LabelRole);
-                    QLabel *lbl = li ? qobject_cast<QLabel *>(li->widget()) : nullptr;
-                    if (lbl != nullptr && lbl->text().contains("Height up boom"))
-                    {
-                        QLayoutItem *fi = form->itemAt(row, QFormLayout::FieldRole);
-                        upBoomSpin = fi ? qobject_cast<QDoubleSpinBox *>(fi->widget()) : nullptr;
-                        break;
-                    }
-                }
-                if (upBoomSpin != nullptr)
-                    break;
-            }
-        }
-        if (upBoomSpin != nullptr)
-            upBoomSpin->setValue(double(boom->height()) * 0.5);
-
-        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
-        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
-        if (okBtn != nullptr)
-            okBtn->click();
-        else if (modal != nullptr)
-            modal->close();
-        QVERIFY2(modal != nullptr && upBoomSpin != nullptr && okBtn != nullptr,
-                 "the crossbar's Edit Pipe dialog fields were not where expected");
+    // This dialog ALSO embeds a Structure Studio canvas, which may have its
+    // own QFormLayout(s) elsewhere in the inspector -- scope the search to
+    // nameEdit's own container the same way the platform and stand dialogs
+    // do, rather than trusting the first QFormLayout found anywhere in the
+    // whole dialog to be the geometry form.
+    driveDialog([boom](QWidget *modal) {
+        QLineEdit *nameEdit = findRealLineEdit(modal);
+        QDoubleSpinBox *upBoomSpin = findSpinByLabel(nameEdit ? nameEdit->parentWidget() : nullptr,
+                                                     "Height up boom");
+        if (upBoomSpin == nullptr)
+            return false;
+        upBoomSpin->setValue(double(boom->height()) * 0.5);
+        return true;
     });
     mon->slotEditPipe(crossbar->id());
 

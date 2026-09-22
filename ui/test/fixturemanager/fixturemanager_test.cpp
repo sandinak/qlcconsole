@@ -24,6 +24,7 @@
 #include <QPushButton>
 #include <QLineEdit>
 #include <QMouseEvent>
+#include <functional>
 
 #define KColumnName 0
 
@@ -41,6 +42,37 @@
 #undef protected
 
 #include "fixturemanager_test.h"
+
+/* Schedules a zero-delay callback that runs `fill` against whatever modal
+ * QDialog is open by then (via QApplication::activeModalWidget() -- called
+ * BEFORE the action that opens the dialog, same as the QTimer::singleShot()
+ * calls this replaces), then ALWAYS clicks its Ok button -- or closes it
+ * outright if that button can't be found -- BEFORE checking whether `fill`
+ * reported success.
+ *
+ * Why the close has to come first: a QVERIFY/QCOMPARE failure inside `fill`
+ * itself returns out of `fill` early (reporting false), but if the close
+ * were the LAST thing this function did, that early return would skip it
+ * entirely -- and nothing else will ever close that dialog under offscreen
+ * QTest, so its nested event loop blocks forever: a wrong widget lookup
+ * would hang the whole test binary instead of just failing the one test
+ * that made it. See qlcconsole's WORKFLOW-SUBTLETIES.md #7 (this shape was
+ * hand-rigged at each call site here before being pulled out once). */
+static void driveDialog(const std::function<bool(QWidget *)> &fill)
+{
+    QTimer::singleShot(0, [fill]() {
+        QWidget *modal = QApplication::activeModalWidget();
+        const bool filled = (modal != nullptr) && fill(modal);
+        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
+        QPushButton *btn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
+        if (btn != nullptr)
+            btn->click();
+        else if (modal != nullptr)
+            modal->close();
+        QVERIFY2(modal != nullptr && filled && btn != nullptr,
+                 "the dialog's widgets were not where expected");
+    });
+}
 
 void FixtureManager_Test::init()
 {
@@ -246,22 +278,12 @@ void FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi()
     // 2. Create the TARGET group -- the real "Create Fixture Group" dialog,
     //    the same shared factory the Fixture Manager, the Programming tab
     //    and the Studio all use to create a group from a selection.
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
+    driveDialog([](QWidget *modal) {
         CreateFixtureGroup *cfg = qobject_cast<CreateFixtureGroup *>(modal);
-        if (cfg != nullptr)
-            cfg->m_nameEdit->setText("Workflow Target Group");
-        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
-        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
-        // Close BEFORE asserting -- a QVERIFY failure here must never skip
-        // the button click, or cfg.exec()'s nested loop never returns and
-        // this hangs the whole test binary instead of failing this test.
-        if (okBtn != nullptr)
-            okBtn->click();
-        else if (modal != nullptr)
-            modal->close();
-        QVERIFY2(cfg != nullptr && okBtn != nullptr,
-                 "the Create Fixture Group dialog's widgets were not where expected");
+        if (cfg == nullptr)
+            return false;
+        cfg->m_nameEdit->setText("Workflow Target Group");
+        return true;
     });
     FixtureGroup *targetGrp = CreateFixtureGroup::createFromFixtures(
         m_doc, QList<quint32>() << targetFx->id(), nullptr);
@@ -278,19 +300,12 @@ void FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi()
     targetGrp->setSize(QSize(3, 2));
 
     // 3. Create the SOURCE (block) group the same real way.
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
+    driveDialog([](QWidget *modal) {
         CreateFixtureGroup *cfg = qobject_cast<CreateFixtureGroup *>(modal);
-        if (cfg != nullptr)
-            cfg->m_nameEdit->setText("Workflow Block Group");
-        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
-        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
-        if (okBtn != nullptr)
-            okBtn->click();
-        else if (modal != nullptr)
-            modal->close();
-        QVERIFY2(cfg != nullptr && okBtn != nullptr,
-                 "the Create Fixture Group dialog's widgets were not where expected");
+        if (cfg == nullptr)
+            return false;
+        cfg->m_nameEdit->setText("Workflow Block Group");
+        return true;
     });
     FixtureGroup *blockGrp = CreateFixtureGroup::createFromFixtures(
         m_doc, QList<quint32>() << blockFxA->id() << blockFxB->id(), nullptr);
@@ -351,19 +366,12 @@ void FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi()
     // 6. Paste the block group in -- FixtureGroupEditor::slotAddGroupBlock(),
     //    the exact handler the real "Add group as block..." button calls,
     //    driving the real QInputDialog it opens to pick which group.
-    QTimer::singleShot(0, []() {
-        QWidget *modal = QApplication::activeModalWidget();
-        QComboBox *combo = modal ? modal->findChild<QComboBox *>() : nullptr;
-        if (combo != nullptr)
-            combo->setCurrentText("Workflow Block Group");
-        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
-        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
-        if (okBtn != nullptr)
-            okBtn->click();
-        else if (modal != nullptr)
-            modal->close();
-        QVERIFY2(modal != nullptr && combo != nullptr && okBtn != nullptr,
-                 "the Add Group Block picker's widgets were not where expected");
+    driveDialog([](QWidget *modal) {
+        QComboBox *combo = modal->findChild<QComboBox *>();
+        if (combo == nullptr)
+            return false;
+        combo->setCurrentText("Workflow Block Group");
+        return true;
     });
     editor->slotAddGroupBlock();
 

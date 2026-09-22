@@ -195,18 +195,20 @@ has to be killed. This happened three times in a row while building the
 platform/riser dialog interaction (a wrong widget lookup each time), and
 each one silently hung the binary rather than reporting a failure.
 
-*Status:* unmarked, and worth a decision either way:
-  - **Fix**: give this file a shared helper (e.g. `driveModalDialog(fn)`)
-    that wraps the lambda, catches a failed lookup, force-closes the dialog
-    via `modal->close()` in every case, and *then* reports the failure —
-    turning every one of these into "fails this test" instead of "hangs the
-    run". The new platform test's own lambda (see its comment) does this by
-    hand; worth lifting into a shared utility if this pattern gets used
-    again, which it likely will given how many more dialogs exist
-    (stand, pipe, tower, group).
-  - **Accept**: the existing tests all happen to look up unambiguous, single
-    widgets and have never hit this in practice; treat it as an accepted
-    risk of the pattern and only harden it if/when CI actually hangs on one.
+*Status:* **Fixed.** Both test files now have a shared `driveDialog()` (plus
+`driveMessageBox()` for a `QMessageBox`-style confirm, `findRealLineEdit()`
+and `findSpinByLabel()` for the two lookup traps in #8/#10) that schedules
+the `QTimer::singleShot`, runs a caller-supplied `fill(modal) -> bool`, and
+—no matter what `fill` returned or asserted internally— clicks the dialog's
+button (or closes it) *before* reporting success/failure. Every
+dialog-driving call site in `ui/test/monitor/monitor_test.cpp` and
+`ui/test/fixturemanager/fixturemanager_test.cpp` (18 in total, including
+the pre-existing `addTrussAccepted`/`addTargetAccepted`/
+`removeSelectedTruss`/etc. that predate this session, and the bespoke
+multi-dialog search in `studioEditorDialogDragDoesNotCrash`) now goes
+through one of these, so a wrong widget lookup fails that one test instead
+of hanging the binary. Full suite reruns green (136/136 in `monitor_test`,
+5/5 in `fixturemanager_test`).
 
 ### 8. `findChild<QLineEdit*>()` can silently grab a spin box's own internal editor
 
