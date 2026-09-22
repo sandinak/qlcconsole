@@ -38,11 +38,13 @@ entries stay unmarked.
 | [16](#16-a-group-drop-folds-away-an-already-covered-fixed-target-even-with-zero-covering-looks) | A group drop folds away an already-covered fixed target, even with zero covering looks | Programming tab | Accepted |
 | [17](#17-reconcileafterpaletteapply-defers-past-dropevent-and-its-dialog-has-no-ok-button) | `reconcileAfterPaletteApply()` defers past `dropEvent()`, and its dialog has no Ok button | Programming tab (test technique) | Accepted |
 | [18](#18-an-unshown-top-level-widgets-own-nested-widgets-dont-get-real-geometry-from-resize-alone) | An unshown top-level widget's own nested widgets don't get real geometry from resize() alone | Programming tab (test technique) | Accepted |
+| [19](#19-savebucketasscenes-name-and-path-arguments-look-symmetric-but-only-one-falls-back) | `saveBucketAsScene()`'s name and path arguments look symmetric but only one falls back | Programmer/Save | Accepted |
+| [20](#20-saveprogrammerasscene-is-dead-code-with-a-stale-doc-comment-pointing-at-it-as-the-real-save-path) | `saveProgrammerAsScene()` is dead code with a stale doc comment pointing at it as the real Save path | Programmer/Save | Fixed |
 
-**All 18 entries are resolved.** #1, #2, #5, #7, #10, #11, #12, #13, #14 and
-#15 were fixed (see their entries for what changed and what each
-deliberately left out); #3, #4, #6, #8, #9, #16, #17 and #18 were reviewed
-and accepted as-is — deliberate behavior, a documented test-technique trap,
+**All 20 entries are resolved.** #1, #2, #5, #7, #10, #11, #12, #13, #14,
+#15 and #20 were fixed (see their entries for what changed and what each
+deliberately left out); #3, #4, #6, #8, #9, #16, #17, #18 and #19 were
+reviewed and accepted as-is — deliberate behavior, a documented test-technique trap,
 or a speculative coverage gap with no evidence it's ever caused a real
 problem. Nothing on this list is open work.
 
@@ -676,5 +678,73 @@ real, shown application window, where the normal show/resize event pipeline
 handles it without any of this. Worth remembering for any future test that
 constructs a `ProgrammingManager` (or any other widget whose splitter isn't
 exposed as a member) without showing it.
+
+---
+
+## Programmer/Save workflow
+
+Test: `ProgrammerController_Test` (`engine/test/programmercontroller/programmercontroller_test.cpp`)
+— `engine/src/programmercontroller.{h,cpp}`, per CLAUDE.md "all programmer-mode
+logic (palettes, group scenes, Save workflow)". This file had **zero test
+coverage of any kind** before this pass — no `engine/test/programmercontroller/`
+directory existed. Driven entirely through `Doc`'s public forwarders (the real
+entry point every caller, including the UI, actually uses — `ProgrammerController`
+itself is reached only via `doc->programmer()`, which nothing outside `Doc`'s own
+constructor wiring calls directly), covering the smart-save bucketing
+(`proposedSaveBuckets()`'s channel categorization and largest/smallest
+fixture-group selection), plain scene baking (`saveBucketAsScene()`), the
+exact-match lookup (`findMatchingScene()`), and dynamic group-scene building
+with its palette/per-fixture-bake fallback (`saveBucketAsGroupScene()`). This
+is engine-level, dialog-independent logic — the real UI Save gesture
+(`VCButton::saveProgrammer()`, wired to a `SaveProgrammer`-action button press)
+is orchestration glue on top (which combo box picked which row's action) that
+doesn't compute anything this list needs to protect on its own.
+
+### 19. `saveBucketAsScene()`'s name and path arguments look symmetric, but only one falls back
+
+```cpp
+scene->setName(name.isEmpty() ? bucket.defaultName : name);
+if (!path.isEmpty())
+    scene->setPath(path);
+```
+An empty `name` argument falls back to `bucket.defaultName`. An empty `path`
+argument does **not** get the same treatment — `setPath()` is simply never
+called at all, so the new `Scene` keeps whatever its own ordinary constructor
+default is (the empty string, which `Function::path()`'s default
+non-simplified form renders as just `"Scene/"`), not `bucket.defaultPath`.
+Discovered because a test written expecting the two arguments to behave the
+same way (pass both empty, expect both to fall back to the bucket's own
+defaults) failed on the path half only.
+
+*Status:* **Accepted.** The real UI caller (`VCButton::saveProgrammer()`)
+never hits this in practice — its Save dialog always pre-fills the Path field
+from `bucket.defaultPath` before the user could see or submit an empty one,
+so every real call passes a genuine non-empty path. But any other or future
+caller reasonably assuming "blank means use the sensible default" for both
+arguments, the way `name` actually works, would silently misfile the scene
+into the default folder with no error. `saveBucketAsSceneEmptyPathDoesNotFallBackToTheBucketsDefaultPath()`
+pins the current (asymmetric) behavior down explicitly, with a comment
+pointing at its sibling test to update if this is ever made consistent.
+
+### 20. `saveProgrammerAsScene()` is dead code with a stale doc comment pointing at it as the real Save path
+
+`ProgrammerController::saveProgrammerAsScene(name)` / `Doc::saveProgrammerAsScene(name)`
+is public API, documented, and forwarded by `Doc` — a simple path that always
+creates one brand-new `Scene` from every raw programmer value, with no
+categorization, no fixture-group awareness, no group-scene option. But it has
+**no real callers anywhere in the codebase.** The actual Save pipeline
+(`VCButton::saveProgrammer()`) exclusively uses the bucket-based pipeline
+(`proposedSaveBuckets()` → `saveBucketAsScene()`/`saveBucketAsGroupScene()`
+per row, driven by a real dialog) — yet `vcbutton.h`'s own doc comment on
+`saveProgrammer()` claimed it "build[s] a Scene from `Doc::saveProgrammerAsScene()`",
+which stopped being true once the bucket pipeline replaced it.
+
+*Status:* **Fixed** — the stale comment. `VCButton::saveProgrammer()`'s doc
+comment now describes the actual edited-scenes/bucket-rows dialog flow and
+explicitly notes `saveProgrammerAsScene()` is dead code from this button's
+perspective. `saveProgrammerAsScene()` itself is left in place, untouched and
+untested by this pass — it's still real, working, forwarded public API (just
+apparently unused); removing it or deciding its fate is a separate, deliberate
+call this pass didn't make.
 
 ---

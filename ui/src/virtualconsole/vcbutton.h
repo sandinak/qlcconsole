@@ -325,9 +325,15 @@ public:
     /** Resolve groups + explicit ids into the final fixture id set. */
     QList<quint32> resolveSelectionTargets() const;
 
-    /** SaveProgrammer-action: prompt for a scene name (with a sensible
-        default), build a Scene from Doc::saveProgrammerAsScene(), and
-        clear the programmer values on success. */
+    /** SaveProgrammer-action: open the Save dialog -- one row per
+        Doc::editedSceneIds() entry (an already-running scene the
+        programmer live-edited) and one per Doc::proposedSaveBuckets()
+        entry (raw painted values, smart-categorized into new Scenes via
+        Doc::saveBucketAsScene()/saveBucketAsGroupScene()) -- then clears
+        the programmer values once every row's choice has been applied.
+        NOT Doc::saveProgrammerAsScene(): that simpler, always-new-Scene
+        method is dead code from this button's perspective -- nothing
+        calls it. */
     void saveProgrammer();
 
     /** PadModeSelect: which pad-grid mode this button activates when
