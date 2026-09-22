@@ -3854,6 +3854,9 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
         bar->setLength(1.0f);
         bar->setRunAngle(0.0f);
         bar->setBaseRadius(0.0f);
+        // Clear of the boom's own point in Top view -- see crossbarStandoff()'s
+        // own doc comment and WORKFLOW-SUBTLETIES.md #14.
+        bar->setCrossbarStandoff(0.15f);
         bar->setLayerId(pipe->layerId());
         m_props->recomputeChildTrusses();
         m_graphicsView->updatePlatforms();
@@ -3915,6 +3918,9 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
         bar->setLength(1.0f);
         bar->setRunAngle(0.0f);
         bar->setBaseRadius(0.0f);
+        // Clear of the boom's own point in Top view -- see crossbarStandoff()'s
+        // own doc comment and WORKFLOW-SUBTLETIES.md #14.
+        bar->setCrossbarStandoff(0.15f);
     }
     m_props->recomputeChildTrusses();
     m_graphicsView->updatePlatforms();
@@ -4090,6 +4096,9 @@ void Monitor::slotAddBarToPipe(quint32 parentPipeId)
     bar->setLength(qMin(1.0f, parent->length()));  // a short T-bar by default
     bar->setRunAngle(0.0f);                        // runs stage-right
     bar->setBaseRadius(0.0f);
+    // Clear of the boom's own point in Top view -- see crossbarStandoff()'s
+    // own doc comment and WORKFLOW-SUBTLETIES.md #14.
+    bar->setCrossbarStandoff(0.15f);
     bar->setColor(parent->color());
     bar->setLayerId(parent->layerId());
 
@@ -4993,12 +5002,23 @@ void Monitor::slotEditPipe(quint32 bid)
     // base position/stand/truss controls below are derived and don't apply.
     const bool barOnPipe = b->isBarOnPipe();
     QDoubleSpinBox *upBoomSpin = nullptr;
+    QDoubleSpinBox *crossbarStandoffSpin = nullptr;
     if (barOnPipe)
     {
         Pipe *pp = m_props->pipe(b->parentPipeId());
         const double maxUp = pp ? double(pp->length()) : hMax * fromDisp;
         upBoomSpin = mkSpin(b->parentPipeOffset(), 0.0, maxUp * toDisp);
         form->addRow(tr("Height up boom:"), upBoomSpin);
+
+        // Sideways clearance from the boom's own point in Top view (the
+        // Pipe analogue of a Truss bar's "standoff" field) -- without it, a
+        // crossbar renders exactly on top of its own boom with no way to
+        // tell them apart (WORKFLOW-SUBTLETIES.md #14).
+        crossbarStandoffSpin = mkSpin(b->crossbarStandoff(), 0.0, isFeet ? 6.6 : 2.0);
+        crossbarStandoffSpin->setToolTip(tr("How far this crossbar sits clear of its own "
+                                            "boom in the plan view. 0 puts it exactly on "
+                                            "the boom's own point, indistinguishable from it."));
+        form->addRow(tr("Standoff from boom:"), crossbarStandoffSpin);
     }
     form->addRow(tr("Base height (Z):"), bzSpin);
 
@@ -5143,6 +5163,8 @@ void Monitor::slotEditPipe(quint32 bid)
                           ? float(standHtSpin->value() * fromDisp) : -1.0f);
     if (barOnPipe && upBoomSpin != nullptr)
         b->setParentPipeOffset(float(upBoomSpin->value() * fromDisp));
+    if (barOnPipe && crossbarStandoffSpin != nullptr)
+        b->setCrossbarStandoff(float(crossbarStandoffSpin->value() * fromDisp));
     // Stands first, then truss-hung + bars-on-pipes derive from their parents.
     m_props->recomputeChildTrusses();
 

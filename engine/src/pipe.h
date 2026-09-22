@@ -137,6 +137,19 @@ public:
     void    setParentPipeOffset(float m) { m_parentPipeOffset = m; }
     bool    isBarOnPipe() const { return m_parentPipeId != invalidId(); }
 
+    /** How far a crossbar sits away from its parent pipe's own centreline,
+     *  metres, measured PERPENDICULAR to the crossbar's own run (rotates
+     *  with runAngle) -- the Pipe analogue of Truss::barStandoff(). Not the
+     *  same thing as standOffset()/hasStandOffset() above, which is height
+     *  UP a Stand's post for a pipe that clamps onto one; this is sideways
+     *  clearance from the PARENT PIPE a crossbar hangs on. Ignored unless
+     *  isBarOnPipe(). Zero (the historical default) leaves the crossbar's
+     *  origin exactly coincident with its parent's own point in Top view --
+     *  see MonitorProperties::recomputePipeAnchors() and
+     *  WORKFLOW-SUBTLETIES.md #14. */
+    float   crossbarStandoff() const { return m_crossbarStandoff; }
+    void    setCrossbarStandoff(float m) { m_crossbarStandoff = m; }
+
     /** World position at @p offset metres from the pipe start. */
     QVector3D positionAt(float offset) const
     {
@@ -182,6 +195,7 @@ private:
     float       m_standOffset = -1.0f;   // <0 = mount at stand top
     quint32     m_parentPipeId = UINT_MAX;
     float       m_parentPipeOffset = 0.0f;
+    float       m_crossbarStandoff = 0.0f;
     QColor      m_color;
     bool        m_locked     = false;
     quint32     m_layerId    = 0;

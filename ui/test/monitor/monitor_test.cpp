@@ -4768,15 +4768,18 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
              qPrintable(QString("the dialog's Top height field did not reach the new stand "
                                 "(height=%1)").arg(double(stand->height()))));
 
-    // 3. Add a boom -- Monitor::studioAddBar(kind=0, standId, ...), the
-    //    exact function the Stand editor's own "Add Bar" button calls: the
-    //    FIRST call (no vertical boom yet) creates the boom. The crossbar
-    //    (a second studioAddBar() call) comes LATER, in step 5 -- not here
-    //    -- because a crossbar's origin is always exactly the boom's own
-    //    point in Top view (recomputePipeAnchors() derives it from
-    //    parentPipeOffset alone; unlike a Truss bar, there is no standoff
-    //    field to separate the two), so attaching to the boom has to
-    //    happen before anything else could tie with it for the same drop.
+    // 3. Add a boom, then a crossbar on it -- both through
+    //    Monitor::studioAddBar(kind=0, standId, ...), the exact function
+    //    the Stand editor's own "Add Bar" button calls: the FIRST call (no
+    //    vertical boom yet) creates the boom; the SECOND (boom now found)
+    //    creates a horizontal crossbar hung on its top. In THIS order (both
+    //    exist before anything attaches) on purpose: a crossbar used to be
+    //    exactly coincident with its boom in Top view with no way to tell
+    //    them apart (WORKFLOW-SUBTLETIES.md #14), which made this ordering
+    //    a real hazard rather than an arbitrary test choice. Now that a
+    //    fresh crossbar defaults to a real crossbarStandoff(), step 5 below
+    //    can attach to the boom with the crossbar already in place and
+    //    prove the two are actually distinguishable.
     mon->studioAddBar(0, stand->id(), nullptr);
     Pipe *boom = nullptr;
     foreach (Pipe *p, props->pipes())
@@ -4784,19 +4787,36 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
             boom = p;
     QVERIFY2(boom != nullptr, "studioAddBar(kind=0) did not create a boom on the stand");
 
+    mon->studioAddBar(0, stand->id(), nullptr);
+    Pipe *crossbar = nullptr;
+    foreach (Pipe *p, props->pipes())
+        if (p->parentPipeId() == boom->id())
+            crossbar = p;
+    QVERIFY2(crossbar != nullptr, "the second studioAddBar(kind=0) call did not add a crossbar");
+    QVERIFY2(crossbar->crossbarStandoff() > 0.0f,
+             "a fresh crossbar should default to a nonzero crossbarStandoff() now that "
+             "recomputePipeAnchors() actually uses it to step clear of the boom");
+
     // 4. Mount the fixture on the boom -- the plot's real drop-attach path
     //    (MonitorGraphicsView::pipeUnderFixture()/slotFixtureMoved()), the
-    //    pipe equivalent of the truss/bar test's own drop-attach step.
+    //    pipe equivalent of the truss/bar test's own drop-attach step. The
+    //    crossbar already exists (step 3) -- this is the actual proof that
+    //    the standoff fix works, not just that it compiles: dropping here
+    //    must land on the BOOM, not get grabbed by the crossbar sitting
+    //    right next to it.
     gv->updateFixture(fx->id());
     MonitorFixtureItem *item = gv->m_fixtures.value(fx->id(), nullptr);
     QVERIFY(item != nullptr);
     const QPointF onBoomPx = gv->realPositionToPixels(double(boom->originX()) * 1000.0,
                                                        double(boom->originY()) * 1000.0);
-    item->setPos(item->pos() + (onBoomPx - item->sceneBoundingRect().center()));
+    item->setPos(item->pos() + (onBoomPx - item->iconCentreScene()));
     gv->slotFixtureMoved(item);
 
     QVERIFY2(props->fixtureRigProps(fx->id()).pipeId == boom->id(),
-             "dropping the fixture on the boom's plan disc did not attach it");
+             qPrintable(QString("dropping the fixture on the boom's plan disc did not "
+                                "attach it to the boom (got pipeId=%1, boom=%2, crossbar=%3)")
+                        .arg(props->fixtureRigProps(fx->id()).pipeId)
+                        .arg(boom->id()).arg(crossbar->id())));
     const float offsetAfterAttach = props->fixtureRigProps(fx->id()).pipeOffset;
     QVERIFY2(qAbs(double(offsetAfterAttach) - double(boom->height()) * 0.85) < 0.01,
              qPrintable(QString("a fresh boom mount should default to 85%% up the boom "
@@ -4806,16 +4826,7 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
                         .arg(double(boom->height()) * 0.85)
                         .arg(double(offsetAfterAttach))));
 
-    // 5. NOW add the crossbar (the second studioAddBar() call -- the boom
-    //    already exists, so this hangs a horizontal crossbar on its top).
-    mon->studioAddBar(0, stand->id(), nullptr);
-    Pipe *crossbar = nullptr;
-    foreach (Pipe *p, props->pipes())
-        if (p->parentPipeId() == boom->id())
-            crossbar = p;
-    QVERIFY2(crossbar != nullptr, "the second studioAddBar(kind=0) call did not add a crossbar");
-
-    // 6. Drag the fixture along the boom -- a real mousePress/Move/Release
+    // 5. Drag the fixture along the boom -- a real mousePress/Move/Release
     //    sequence on the Stand's own Structure Studio editor, the pipe
     //    equivalent of studioTrussDragMovesFixture(). No test anywhere in
     //    this file drags a pipe-mounted fixture with real mouse events yet.
@@ -4843,7 +4854,7 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
              qPrintable(QString("dragging the fixture toward %1 up the boom landed it at %2")
                         .arg(double(targetOffset)).arg(double(offsetAfterDrag))));
 
-    // 7. Drag the crossbar -- a real mousePress/Move/Release sequence on the
+    // 6. Drag the crossbar -- a real mousePress/Move/Release sequence on the
     //    Stand's own Structure Studio editor, the pipe-bar equivalent of
     //    draggingABarChangesItsPositionAlongTheParent(). Press ON THE
     //    CROSSBAR's own midpoint (not the boom, and not where the fixture
@@ -4878,7 +4889,7 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
                         .arg(double(targetUpBoom))
                         .arg(double(crossbar->parentPipeOffset()))));
 
-    // 8. Relocate the fixture -- another real drag on the boom, to a
+    // 7. Relocate the fixture -- another real drag on the boom, to a
     //    different offset again.
     sv.reload();
     const QPointF pressPt2 = sv.w2s(boom->positionAt(offsetAfterDrag));

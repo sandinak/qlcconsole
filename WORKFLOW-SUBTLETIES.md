@@ -29,16 +29,18 @@ entries stay unmarked.
 | [7](#7-a-failed-qverifyqcompare-inside-the-dialog-driving-lambda-hangs-the-whole-test-binary-not-just-that-one-test) | A failed assertion inside a dialog lambda hangs the binary | Test technique (all dialogs) | Fixed |
 | [8](#8-findchildqlineedit-can-silently-grab-a-spin-box-own-internal-editor) | `findChild<QLineEdit*>()` can grab a spin box's own editor | Test technique (all dialogs) | |
 | [9](#9-deck-mounted-and-riser-mounted-fixtures-follow-a-moved-platform-through-two-different-mechanisms) | Deck vs. riser fixtures follow a moved platform two different ways | Platform/riser | |
-| [10](#10-a-dropped-items-screen-centre-means-two-different-things-depending-on-which-attach-check-reads-it) | Two attach paths disagree on what an item's "centre" is | Platform/riser | |
+| [10](#10-a-dropped-items-screen-centre-means-two-different-things-depending-on-which-attach-check-reads-it) | Two attach paths disagree on what an item's "centre" is | Platform/riser | Fixed |
 | [11](#11-a-crossbar-has-none-of-a-truss-bars-drag-machinery----and-the-main-plot-has-no-pipe-attach-at-all) | Crossbars have no drag machinery; main plot has no pipe attach | Stand/boom | Fixed |
 | [12](#12-a-sub-group-move-through-the-real-ui-is-a-drag----and-a-drag-here-is-a-genuine-internal-qdragqdropevent-cycle-not-just-mouse-events) | Untested: the real internal `QDrag` cycle for moving a sub-group | Fixture Manager | |
 | [13](#13-assignheads-collision-behavior-at-an-already-occupied-cell-is-untested-here) | Untested: pasting a block onto an occupied cell | Fixture Manager | |
-| [14](#14-a-pipe-crossbar-has-no-standoff-field-so-it-is-always-exactly-coincident-with-its-parent-boom-in-top-view) | A pipe crossbar has no standoff field, unlike a truss bar | Stand/boom | |
+| [14](#14-a-pipe-crossbar-has-no-standoff-field-so-it-is-always-exactly-coincident-with-its-parent-boom-in-top-view) | A pipe crossbar has no standoff field, unlike a truss bar | Stand/boom | Fixed |
 
-**#7, #2 and #11 are fixed** (see their entries for what changed and what
-each deliberately left out). Of what's left, **#12** is the biggest actual
-coverage gap this effort left behind; **#1**, **#14** and **#3**/**#4** are
-real product/test-technique decisions worth a deliberate look.
+**#7, #2, #11, #1, #10 and #14 are fixed** (see their entries for what changed
+and what each deliberately left out). Of what's left, **#12** is the biggest
+actual coverage gap this effort left behind; **#3**/**#4** are real
+product/test-technique decisions worth a deliberate look, and **#5** is a
+trivial stale-comment cleanup. #12 and #5 are the next "honorable mentions"
+to pick up.
 
 ---
 
@@ -414,14 +416,32 @@ iteration order over `m_pipeItems` — silently wrong roughly half the time.
 The test now creates the crossbar AFTER attaching to the boom, sidestepping
 the ambiguity rather than resolving it.
 
-*Status:* unmarked. A `Pipe` gaining its own standoff field (offset along
-the parent's *width*, perpendicular to its run, the same role
-`barStandoff` plays for a `Truss`) would fix this at the data-model level
-and let a crossbar draw visibly apart from its boom the way a truss bar
-already does — worth doing if pipe crossbars are meant to be a first-class
-peer of truss bars going forward (which this whole #11 fix pushes them
-toward), rather than a permanent, disclosed limitation of the simpler
-`Pipe` geometry model.
+*Status:* **Fixed.** `Pipe` gained its own `crossbarStandoff()`/
+`setCrossbarStandoff()` field (default 0, back-compatible with every
+existing `.qxw`) — offset perpendicular to the crossbar's own `runAngle()`,
+so it stays correct if the crossbar is later reoriented, rather than a fixed
+axis. Its doc comment in `pipe.h` explicitly calls out that this is **not**
+the same thing as the pre-existing `standOffset()`/`hasStandOffset()` pair
+(height a *Pipe* mounts UP a *Stand*'s post) — the two are unrelated
+concepts that happen to share the word "stand[off]", which is exactly the
+collision the user flagged up front. `recomputePipeAnchors()`'s bar-on-pipe
+pass now applies this offset before setting the crossbar's origin, mirroring
+`recomputeChildTrusses()`'s `faceN * (half + barStandoff)` term for a Truss
+bar. All three crossbar-creation sites (`studioAddBar()`'s two branches,
+`slotAddBarToPipe()`) default it to 0.15, matching #1's truss-bar default.
+XML load/save added (`CrossbarStandoff` attribute, omitted when zero). The
+"Edit Pipe" dialog's boom-mounted-crossbar section gained a "Standoff from
+boom" spin box (`slotEditPipe()`), read back into `setCrossbarStandoff()` on
+accept, alongside the existing "Height up boom" field — so it's editable
+through the real UI, not just a fixed default.
+
+`buildingAStandStepByStepThroughRealUiStaysConsistent()`'s step ordering,
+which #14's *discovery* had forced into an unnatural "attach to boom before
+creating the crossbar" order to dodge the coincident-origin ambiguity, is now
+reverted to the natural order (boom → crossbar → attach via plot drop), with
+an explicit `QVERIFY2(crossbar->crossbarStandoff() > 0.0f, ...)` proving the
+separation exists. Full suite (monitor_test 137/137, fixturemanager_test
+5/5) reruns green.
 
 ---
 
