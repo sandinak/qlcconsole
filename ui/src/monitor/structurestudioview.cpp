@@ -2532,8 +2532,17 @@ double StructureStudioView::moverWidthPx(const FixtureVisualTraits &traits) cons
 {
     if (traits.physW > 0.0f)
         return qMax(12.0, double(traits.physW) * m_scale);
-    // Nothing declared: a sane default per head.
-    return (traits.hasFocus ? 18.0 : 13.0) * qMax(1, traits.headCount);
+    // Nothing declared (most community/custom defs still leave Width/Height
+    // at 0): a nominal per-head footprint -- roughly a compact moving
+    // head's real width with a yoke (0.25 m) or a simpler focus-less
+    // head (0.18 m) -- run through the SAME scale-and-floor formula the
+    // declared-width branch above uses. This used to be a bare pixel
+    // constant with no m_scale factor at all, so an undeclared fixture's
+    // icon stayed a fixed screen size no matter how far in or out the
+    // structure around it was zoomed, instead of growing/shrinking with
+    // it like everything else on this canvas.
+    const double perHeadPhysW = traits.hasFocus ? 0.25 : 0.18;
+    return qMax(12.0, perHeadPhysW * m_scale) * qMax(1, traits.headCount);
 }
 
 /* The radius of ONE head, which is half its slice of the fixture's width.
@@ -4450,12 +4459,27 @@ void StructureStudioView::drawDimensions(QPainter &p) const
     const QString sfx = feet ? QStringLiteral(" ft") : QStringLiteral(" m");
     const double wSpan = (maxA - minA) * conv, hSpan = (maxB - minB) * conv;
 
+    // The bracket is drawn "just below the structure" -- but a fixture
+    // mounted on it (icon + name label, drawn earlier in paintEvent()) can
+    // reach further down on screen than the structure's own bbox, and the
+    // fixed 18px gap below used to land the bracket line and its "N.N ft"
+    // text right through the fixture and its label. Clear whichever
+    // mounted fixture reaches furthest down too, not just the structure
+    // itself -- budgeting for the icon's own radius plus its name label's
+    // line below it, rather than re-deriving drawOneFixture()'s exact
+    // (much more elaborate) drawn geometry here. Only affects WHERE the
+    // line is drawn, not what it measures -- the tick marks still span
+    // exactly the structure's own sMinX/sMaxX width.
+    double fixtureClearY = sMaxY;
+    foreach (quint32 fid, mountedFixtures())
+        fixtureClearY = qMax(fixtureClearY, w2s(fixtureCentre(fid)).y() + 22.0);
+
     p.setPen(QPen(QColor(150, 160, 180, 200), 1.0));
     p.setFont(QFont("Arial", 8));
-    // Horizontal dimension, just below the structure.
+    // Horizontal dimension, just below the structure (and any fixture on it).
     if (wSpan > 0.01)
     {
-        const double y = sMaxY + 18.0;
+        const double y = fixtureClearY + 18.0;
         p.drawLine(QPointF(sMinX, y), QPointF(sMaxX, y));
         p.drawLine(QPointF(sMinX, y - 4), QPointF(sMinX, y + 4));
         p.drawLine(QPointF(sMaxX, y - 4), QPointF(sMaxX, y + 4));

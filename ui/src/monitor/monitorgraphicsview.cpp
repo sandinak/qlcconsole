@@ -5733,9 +5733,23 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             || kind == QLatin1String("stand") || kind == QLatin1String("tower"))
         {
             const QPointF at = scenePos;
-            adds()->addAction(tr("Fixture Here…"), this, [this, at]() {
-                emit addItemRequested(QStringLiteral("fixture"), at);
-            });
+            // A truss already gets a click-position-aware, ACTUALLY-attaching
+            // "Fixture…" action above (slotAddFixtureToTruss: reads the click
+            // offset along the truss and sets trussId/trussOffset before
+            // placing). This generic "Fixture Here…" never attaches to
+            // anything at all -- MonitorGraphicsView::addFixture() has no
+            // auto-snap-to-structure logic of its own, only grid-snap -- so
+            // offering both on a truss meant one of the two silently produced
+            // a free-floating fixture that just happened to sit near it,
+            // under a name ("Here") that implied the opposite. Keep this one
+            // for platform/stand/tower, which have no attaching equivalent
+            // of their own.
+            if (kind != QLatin1String("truss"))
+            {
+                adds()->addAction(tr("Fixture Here…"), this, [this, at]() {
+                    emit addItemRequested(QStringLiteral("fixture"), at);
+                });
+            }
             adds()->addSeparator();
             adds()->addAction(tr("Target Here"), this, [this, at]() {
                 emit addItemRequested(QStringLiteral("target"), at);
