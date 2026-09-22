@@ -204,6 +204,14 @@ private slots:
      *  different mechanisms (deck is carried explicitly, riser is derived
      *  live), which is itself one of the subtleties this work surfaced. */
     void buildingAPlatformStepByStepThroughRealUiStaysConsistent();
+    /** Integration test for the stand/boom/crossbar workflow: add a stand
+     *  (its real edit dialog), add a boom then a crossbar via the Stand
+     *  editor's own "Add Bar" action, mount a fixture on the boom (the real
+     *  context-menu action's target function), drag it on the Stand's own
+     *  editor, adjust the crossbar through ITS real edit dialog (a
+     *  crossbar cannot be dragged at all -- see the subtleties list), then
+     *  relocate the fixture with a second real drag. */
+    void buildingAStandStepByStepThroughRealUiStaysConsistent();
     void doubleClickingAnywhereOnATowerTopOpensIt();
     void doubleClickingABubbleShowsWhatItHides();
     /** Stacked fixtures get one named tag each, and a tag picks its own. */

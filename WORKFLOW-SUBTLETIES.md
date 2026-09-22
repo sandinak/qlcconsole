@@ -261,5 +261,43 @@ they're interchangeable.
 
 ---
 
-*(A section for Fixture Manager grouping and pipe/stand + crossbar to follow
-as those workflow tests are built.)*
+## Stand / boom / crossbar workflow
+
+Test: `Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()`.
+
+### 11. A crossbar has none of a truss bar's drag machinery -- and the main plot has no pipe attach at all
+
+Trusses and bars share one code family: `hitTestBar()`, `dragBarTo()`,
+`m_selectedBarId`/`m_dragBarId`, and a real mouse drag on a truss's own
+Structure Studio editor all work for a bar. A stand's crossbar is a
+different class entirely -- a `Pipe` with `isBarOnPipe()` true, not a
+`Truss` -- and **none** of that machinery applies to it:
+`hitTestBar()` returns `UINT_MAX` immediately whenever the view isn't
+`TrussKind`, and `dragBarTo()` only ever looks up `props->truss(barId)`.
+A crossbar's *only* real-UI edit is the "Height up boom" spin box in its
+own "Edit Pipe" dialog -- there is no drag gesture for it at all, on any
+view.
+
+Separately, and more surprising: **the main 2D plot has no pipe/boom
+support whatsoever**. `MonitorGraphicsView::slotFixtureMoved()` has real
+branches for a truss attach and a deck-mount auto-attach, but grep confirms
+zero pipe branches, and no `pipeUnderFixture()` function exists at all. The
+only ways to mount a fixture on a boom are the context-menu "Mount on >
+Boom > name" action (`attachFixtureToPipe()`) or dropping it on the stand's
+own Structure Studio canvas -- never a plain drag on the main plot the way
+a fixture auto-decks onto a platform or auto-attaches to a truss just by
+being dropped near one.
+
+*Status:* unmarked -- this reads as a real feature-completeness gap between
+the truss/bar/platform family (all of which get main-plot drag-drop and,
+for bars, a dedicated drag machinery) and the stand/boom/crossbar family
+(neither). Worth a decision: is stand rigging meant to stay a
+Structure-Studio-only workflow permanently (booms are less commonly
+repositioned once rigged, maybe intentionally more deliberate), or is this
+simply the newer/less-developed corner of the structural model and due for
+the same main-plot treatment trusses and platforms already have?
+
+---
+
+*(A section for Fixture Manager grouping to follow as that workflow test is
+built.)*

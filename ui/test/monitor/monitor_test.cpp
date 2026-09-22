@@ -26,6 +26,8 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QAbstractSpinBox>
+#include <QFormLayout>
+#include <QLabel>
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QPushButton>
@@ -4739,6 +4741,247 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
     doc->deleteFixture(deckFx->id());
     doc->deleteFixture(riserFx->id());
     props->removePlatform(plat->id());
+    delete doc;
+}
+
+/* Chains the stand/boom/crossbar workflow. Genuinely different shape from
+ * the truss/bar case, not just a rename -- see the subtleties list: there
+ * is no plot drop for a pipe at all (only an explicit context-menu-style
+ * attach), and a crossbar (a Pipe, not a Truss) has NONE of the bar-drag
+ * machinery -- hitTestBar()/dragBarTo() are Truss-only. Its one real-UI
+ * edit is a spin box in its own "Edit Pipe" dialog. The fixture, by
+ * contrast, drags along the boom exactly the way it drags along a truss.
+ */
+void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    // 1. Add a fixture. No dialog-driven AddFixture path exists yet (see
+    //    the truss/bar workflow test), so this uses the same direct
+    //    construction every other test in this file relies on.
+    Fixture *fx = new Fixture(doc);
+    fx->setName("Workflow Boom Head"); fx->setChannels(1);
+    QVERIFY(doc->addFixture(fx));
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(0, 0, 0));
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->resize(1230, 760);
+    gv->setSnapDivisions(0);
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(40, 24));
+    QVERIFY(gv->m_cellPixels > 0);
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+    gv->addFixture(fx->id(), QPointF(0, 0));
+
+    // 2. Add a stand -- Monitor::slotAddStand() creates it bare, then opens
+    //    its real "Lighting Studio Editor -- Stand N" dialog
+    //    (slotEditStand()). Same embedded-canvas shape as the platform
+    //    dialog (and the same findChild<QLineEdit*>() trap -- see the
+    //    subtleties list -- reuse the defensive lookup).
+    const int standsBefore = props->stands().count();
+    QTimer::singleShot(0, []() {
+        QWidget *modal = QApplication::activeModalWidget();
+        QLineEdit *nameEdit = nullptr;
+        if (modal != nullptr)
+        {
+            foreach (QLineEdit *le, modal->findChildren<QLineEdit *>())
+            {
+                if (qobject_cast<QAbstractSpinBox *>(le->parentWidget()) == nullptr)
+                { nameEdit = le; break; }
+            }
+        }
+        if (nameEdit != nullptr)
+            nameEdit->setText("Workflow Stand");
+
+        // Position X, Position Y, Top height, Base radius, Leg rotation --
+        // in the order slotEditStand() adds them, scoped to nameEdit's own
+        // container so the canvas's own spin boxes aren't counted too.
+        QWidget *geomPane = nameEdit ? nameEdit->parentWidget() : nullptr;
+        const QList<QDoubleSpinBox *> spins =
+            geomPane ? geomPane->findChildren<QDoubleSpinBox *>() : QList<QDoubleSpinBox *>();
+        if (spins.count() == 5)
+        {
+            spins[0]->setValue(3.0);   // position X
+            spins[1]->setValue(3.0);   // position Y
+            spins[2]->setValue(2.0);   // top height
+            spins[3]->setValue(0.2);   // base radius
+            spins[4]->setValue(0.0);   // leg rotation
+        }
+
+        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
+        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
+        // Close BEFORE asserting -- see the platform test's own comment on
+        // why a QVERIFY failure here must never skip the button click.
+        if (okBtn != nullptr)
+            okBtn->click();
+        else if (modal != nullptr)
+            modal->close();
+        QVERIFY2(modal != nullptr && nameEdit != nullptr && spins.count() == 5 && okBtn != nullptr,
+                 "the Add Stand dialog's widgets were not where expected");
+    });
+    mon->slotAddStand();
+    gv->updatePlatforms();
+
+    QCOMPARE(props->stands().count(), standsBefore + 1);
+    Stand *stand = props->stands().last();
+    QCOMPARE(stand->name(), QString("Workflow Stand"));
+    QVERIFY2(qAbs(double(stand->height()) - 2.0) < 0.01,
+             qPrintable(QString("the dialog's Top height field did not reach the new stand "
+                                "(height=%1)").arg(double(stand->height()))));
+
+    // 3. Add a boom, then a crossbar on it -- both through
+    //    Monitor::studioAddBar(kind=0, standId, ...), the exact function
+    //    the Stand editor's own "Add Bar" button calls: the FIRST call (no
+    //    vertical boom yet) creates the boom; the SECOND (boom now found)
+    //    creates a horizontal crossbar hung on its top.
+    mon->studioAddBar(0, stand->id(), nullptr);
+    Pipe *boom = nullptr;
+    foreach (Pipe *p, props->pipes())
+        if (p->standId() == stand->id() && p->isVertical())
+            boom = p;
+    QVERIFY2(boom != nullptr, "studioAddBar(kind=0) did not create a boom on the stand");
+
+    mon->studioAddBar(0, stand->id(), nullptr);
+    Pipe *crossbar = nullptr;
+    foreach (Pipe *p, props->pipes())
+        if (p->parentPipeId() == boom->id())
+            crossbar = p;
+    QVERIFY2(crossbar != nullptr, "the second studioAddBar(kind=0) call did not add a crossbar");
+
+    // 4. Mount the fixture on the boom -- the real "Mount on > Boom > name"
+    //    context-menu action's own target function
+    //    (MonitorGraphicsView::attachFixtureToPipe()).
+    gv->attachFixtureToPipe(fx->id(), boom->id());
+    QVERIFY2(props->fixtureRigProps(fx->id()).pipeId == boom->id(),
+             "attachFixtureToPipe() did not mount the fixture on the boom");
+    const float offsetAfterAttach = props->fixtureRigProps(fx->id()).pipeOffset;
+    QVERIFY2(qAbs(double(offsetAfterAttach) - double(boom->height()) * 0.85) < 0.01,
+             qPrintable(QString("a fresh boom mount should default to 85%% up the boom "
+                                "(%1), got %2").arg(double(boom->height()) * 0.85)
+                        .arg(double(offsetAfterAttach))));
+
+    // 5. Drag the fixture along the boom -- a real mousePress/Move/Release
+    //    sequence on the Stand's own Structure Studio editor, the pipe
+    //    equivalent of studioTrussDragMovesFixture(). No test anywhere in
+    //    this file drags a pipe-mounted fixture with real mouse events yet.
+    StructureStudioView sv(doc, StructureStudioView::StandKind, stand->id());
+    sv.resize(700, 600);
+    sv.setPlane(StructureStudioView::Front);
+    sv.setLocked(false);   // mousePressEvent()'s drag arm is gated on this
+    sv.reload();
+
+    const QPointF pressPt = sv.w2s(boom->positionAt(offsetAfterAttach));
+    const float targetOffset = boom->height() * 0.5f;
+    const QPointF releasePt = sv.w2s(boom->positionAt(targetOffset));
+    QMouseEvent press(QEvent::MouseButtonPress, pressPt, pressPt,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mousePressEvent(&press);
+    QMouseEvent move(QEvent::MouseMove, releasePt, releasePt,
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mouseMoveEvent(&move);
+    QMouseEvent release(QEvent::MouseButtonRelease, releasePt, releasePt,
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    sv.mouseReleaseEvent(&release);
+
+    const float offsetAfterDrag = props->fixtureRigProps(fx->id()).pipeOffset;
+    QVERIFY2(qAbs(double(offsetAfterDrag) - double(targetOffset)) < 0.1,
+             qPrintable(QString("dragging the fixture toward %1 up the boom landed it at %2")
+                        .arg(double(targetOffset)).arg(double(offsetAfterDrag))));
+
+    // 6. Adjust the crossbar -- NOT a drag: no bar-drag machinery exists
+    //    for a Pipe. Its only real-UI edit is the "Height up boom" field in
+    //    its own "Edit Pipe" dialog -- found by its LABEL, not by index:
+    //    this dialog has far more spin boxes (position/run/base/truss/stand
+    //    fields, plus the canvas's own) than a fixed index could track.
+    const float upBoomBefore = crossbar->parentPipeOffset();
+    QTimer::singleShot(0, [boom]() {
+        QWidget *modal = QApplication::activeModalWidget();
+        // This dialog ALSO embeds a Structure Studio canvas, which may have
+        // its own QFormLayout(s) elsewhere in the inspector -- scope the
+        // search to nameEdit's own container the same way the platform and
+        // stand dialogs do, rather than trusting the first QFormLayout
+        // found anywhere in the whole dialog to be the geometry form.
+        QLineEdit *nameEdit = nullptr;
+        if (modal != nullptr)
+        {
+            foreach (QLineEdit *le, modal->findChildren<QLineEdit *>())
+            {
+                if (qobject_cast<QAbstractSpinBox *>(le->parentWidget()) == nullptr)
+                { nameEdit = le; break; }
+            }
+        }
+        QWidget *geomPane = nameEdit ? nameEdit->parentWidget() : nullptr;
+        QDoubleSpinBox *upBoomSpin = nullptr;
+        if (geomPane != nullptr)
+        {
+            foreach (QFormLayout *form, geomPane->findChildren<QFormLayout *>())
+            {
+                for (int row = 0; row < form->rowCount(); ++row)
+                {
+                    QLayoutItem *li = form->itemAt(row, QFormLayout::LabelRole);
+                    QLabel *lbl = li ? qobject_cast<QLabel *>(li->widget()) : nullptr;
+                    if (lbl != nullptr && lbl->text().contains("Height up boom"))
+                    {
+                        QLayoutItem *fi = form->itemAt(row, QFormLayout::FieldRole);
+                        upBoomSpin = fi ? qobject_cast<QDoubleSpinBox *>(fi->widget()) : nullptr;
+                        break;
+                    }
+                }
+                if (upBoomSpin != nullptr)
+                    break;
+            }
+        }
+        if (upBoomSpin != nullptr)
+            upBoomSpin->setValue(double(boom->height()) * 0.5);
+
+        QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
+        QPushButton *okBtn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
+        if (okBtn != nullptr)
+            okBtn->click();
+        else if (modal != nullptr)
+            modal->close();
+        QVERIFY2(modal != nullptr && upBoomSpin != nullptr && okBtn != nullptr,
+                 "the crossbar's Edit Pipe dialog fields were not where expected");
+    });
+    mon->slotEditPipe(crossbar->id());
+
+    QVERIFY2(!qFuzzyCompare(crossbar->parentPipeOffset(), upBoomBefore),
+             "editing the crossbar's Height up boom field did not move it");
+    QVERIFY2(qAbs(double(crossbar->parentPipeOffset()) - double(boom->height()) * 0.5) < 0.01,
+             qPrintable(QString("expected the crossbar ~%1 up the boom, got %2")
+                        .arg(double(boom->height()) * 0.5)
+                        .arg(double(crossbar->parentPipeOffset()))));
+
+    // 7. Relocate the fixture -- another real drag on the boom, to a
+    //    different offset again.
+    sv.reload();
+    const QPointF pressPt2 = sv.w2s(boom->positionAt(offsetAfterDrag));
+    const float finalOffset = boom->height() * 0.2f;
+    const QPointF releasePt2 = sv.w2s(boom->positionAt(finalOffset));
+    QMouseEvent press2(QEvent::MouseButtonPress, pressPt2, pressPt2,
+                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mousePressEvent(&press2);
+    QMouseEvent move2(QEvent::MouseMove, releasePt2, releasePt2,
+                      Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    sv.mouseMoveEvent(&move2);
+    QMouseEvent release2(QEvent::MouseButtonRelease, releasePt2, releasePt2,
+                         Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    sv.mouseReleaseEvent(&release2);
+
+    const float offsetAfterSecondDrag = props->fixtureRigProps(fx->id()).pipeOffset;
+    QVERIFY2(qAbs(double(offsetAfterSecondDrag) - double(finalOffset)) < 0.1,
+             qPrintable(QString("relocating the fixture toward %1 up the boom landed it at %2")
+                        .arg(double(finalOffset)).arg(double(offsetAfterSecondDrag))));
+
+    delete mon;
+    doc->deleteFixture(fx->id());
+    props->removePipe(crossbar->id());
+    props->removePipe(boom->id());
+    props->removeStand(stand->id());
     delete doc;
 }
 
