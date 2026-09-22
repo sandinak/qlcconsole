@@ -183,6 +183,19 @@ public:
      *  What actually covers something underneath is this, not the text. */
     QRectF iconRect() const { return QRectF(0, 0, m_width, m_height); }
 
+    /** Where the icon body (not the label) actually sits, in SCENE
+     *  coordinates -- the one "where is this fixture drawn" a truss/pipe
+     *  hit-test or attach should read. sceneBoundingRect().center() used to
+     *  serve this in some call sites: it is NOT the same point, because
+     *  boundingRect() also reserves space for the name label, so its centre
+     *  shifts depending on whether labels happen to be showing on this
+     *  fixture's layer (a cosmetic view setting, not model state) -- two
+     *  call sites reading "the same" fixture's centre could disagree, and
+     *  one COULD disagree with itself before/after a label toggle. This is
+     *  mapToScene(), so it is also correct under rotation, unlike a plain
+     *  pos() + cellSize()/2 offset. */
+    QPointF iconCentreScene() const { return mapToScene(iconRect().center()); }
+
     /** "Isolated" = drilled into its group to select this ONE fixture (double-
      *  click). Draws a distinct bright dashed border so it's obvious the sub-
      *  unit is selected, not the whole group. Cleared when deselected. */

@@ -299,16 +299,31 @@ truss/tower code would put it — which is small compared to a truss's width
 tolerance, but was enough to miss a platform's footprint entirely at the
 margin this test first tried.
 
-*Status:* unmarked. Two attach paths disagreeing about what "the item's
-centre" means is the kind of inconsistency worth a deliberate look — either
-they SHOULD agree (in which case one is arguably using the wrong point,
-and a real user could see a fixture that visually looks centered on a
-target fail to attach, or attach somewhere visibly off from where it
-looks dropped), or there's a reason specific to each (truss attach cares
-about the rendered icon+label extent for its "does it touch" check, deck
-attach cares about the plain grid cell) that's worth a one-line comment at
-each site cross-referencing the other so a future reader doesn't assume
-they're interchangeable.
+*Status:* **Fixed** — the two paths now agree. There was no good reason for
+the difference: both checks want "the fixture's own visual centre", and the
+label-inclusive `sceneBoundingRect().center()` was the odd one out (its
+result moves depending on whether the label happens to be drawn, which
+`cellSize()`/`halfIcon()` never do) — the deck-mount path's plain
+`pos() + halfIcon()` was the one already doing the right thing.
+
+Added `MonitorFixtureItem::iconCentreScene()` — a single canonical accessor
+(`mapToScene(iconRect().center())`) — validated by an existing precedent
+already solving the same class of problem elsewhere
+(`mapRectToScene(iconRect())` at `monitorgraphicsview.cpp:2306`). Replaced
+all 7 `sceneBoundingRect().center()` call sites that meant "the fixture's own
+position" with it: `trussUnderFixture()`, `pipeUnderFixture()`, both sites in
+`attachFixtureToTrussAt()`, the aim-trace line, `attachFixtureToTruss()`
+(this one had an internal read/write inconsistency, also fixed), and the
+"nothing lands" note anchor. Left the *unrelated* `sceneBoundingRect()` uses
+alone (selection-viewport rect, structure-item `centreOf`, the group badge
+position) — those are legitimately about the rendered extent, not "where is
+this fixture".
+
+Updated 6 test call sites in `monitor_test.cpp` to use `iconCentreScene()`
+too, which let the platform test's manual `cellHalf` workaround (added when
+#10 was first discovered) be deleted — the two paths agreeing means the
+workaround is no longer needed. Full suite reruns green with no tolerance
+changes required.
 
 ---
 

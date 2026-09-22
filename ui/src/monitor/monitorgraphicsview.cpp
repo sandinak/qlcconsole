@@ -3168,7 +3168,11 @@ TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi,
     if (mfi == nullptr)
         return nullptr;
 
-    const QPointF centre = mfi->sceneBoundingRect().center();
+    // The ICON's centre, not sceneBoundingRect()'s -- the label pulls that
+    // one down and makes it depend on whether labels happen to be showing
+    // on this layer, disagreeing with the deck-mount attach path's own
+    // (stable) reading of the same fixture. See WORKFLOW-SUBTLETIES.md #10.
+    const QPointF centre = mfi->iconCentreScene();
     TrussItem *best = nullptr;
     float bestDist = 0.0f;
 
@@ -3210,7 +3214,9 @@ PipeItem *MonitorGraphicsView::pipeUnderFixture(MonitorFixtureItem *mfi,
     if (mfi == nullptr || m_cellPixels <= 0)
         return nullptr;
 
-    const QPointF centre = mfi->sceneBoundingRect().center();
+    // See trussUnderFixture()'s own comment on iconCentreScene() vs
+    // sceneBoundingRect().center() -- same reasoning applies here.
+    const QPointF centre = mfi->iconCentreScene();
     PipeItem *best = nullptr;
     float bestDist = 0.0f;
 
@@ -3275,7 +3281,7 @@ void MonitorGraphicsView::attachFixtureToTrussAt(quint32 fid, TrussItem *trussIt
     const double mmPerPx = double(m_unitValue) / double(m_cellPixels);
     if (t->type() != Truss::Vertical && trussItem->pxLen() > 4.0f)
     {
-        const QPointF local = trussItem->mapFromScene(mfi->sceneBoundingRect().center());
+        const QPointF local = trussItem->mapFromScene(mfi->iconCentreScene());
         const double alongM = qBound(0.0, local.x() * mmPerPx / 1000.0,
                                      double(t->length()));
         rp.trussOffset = float(alongM);
@@ -3286,7 +3292,7 @@ void MonitorGraphicsView::attachFixtureToTrussAt(quint32 fid, TrussItem *trussIt
            two-widths zone that made the ring green) -- attaching means "hang
            it here", not "teleport it to the centreline". In an elevation the
            across axis is not on screen, so there is nothing to read. */
-        const QPointF local = trussItem->mapFromScene(mfi->sceneBoundingRect().center());
+        const QPointF local = trussItem->mapFromScene(mfi->iconCentreScene());
         const double crossM = local.y() * mmPerPx / 1000.0;
         const double limitM = double(trussItem->pxWid() * 2.0f) * mmPerPx / 1000.0;
         rp.trussCross = float(qBound(-limitM, crossM, limitM));
@@ -4248,7 +4254,7 @@ void MonitorGraphicsView::updateAimLines()
             if (!canAim)
                 continue;
 
-            QPointF fixPx = mfi->sceneBoundingRect().center();
+            QPointF fixPx = mfi->iconCentreScene();
 
             /* Out of reach: solid red, and it says by how much. */
             QPen pen = aimPen;
@@ -6138,9 +6144,11 @@ void MonitorGraphicsView::attachFixtureToTruss(quint32 fid, quint32 trussId)
     rp.trussId = trussId;
 
     // Snap the fixture onto the nearest point of the truss line so it doesn't
-    // jump — mirrors the drag-drop snap (project centre onto the truss).
-    QPointF mm = pixelsToRealPosition(mfi->sceneBoundingRect().center().x(),
-                                      mfi->sceneBoundingRect().center().y());
+    // jump — mirrors the drag-drop snap (project centre onto the truss). The
+    // ICON's centre, not sceneBoundingRect()'s -- see iconCentreScene()'s own
+    // comment; this function used to read one and write the other below.
+    const QPointF iconCentre = mfi->iconCentreScene();
+    QPointF mm = pixelsToRealPosition(iconCentre.x(), iconCentre.y());
     if (t->type() == Truss::Vertical)
     {
         mm = QPointF(t->origin().x() * 1000.0, t->origin().y() * 1000.0);
@@ -6733,7 +6741,7 @@ void MonitorGraphicsView::rebuildProjectionOverlay()
                            .arg(up / qTan(qDegreesToRadians(below)), 0, 'f', 0)
                            .arg(up, 0, 'f', 1);
             }
-            const QPointF c = mfi->sceneBoundingRect().center();
+            const QPointF c = mfi->iconCentreScene();
             const double nw = nfm.horizontalAdvance(note) + 8.0;
             const double nh = nfm.height() + 2.0;
             QGraphicsPathItem *holder = new QGraphicsPathItem;
@@ -7251,7 +7259,7 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                        (the same reason a Vertical truss's own drag-attach
                        leaves its offset alone too), so this only applies to
                        the horizontal case. */
-                    const QPointF local = over->mapFromScene(mfi->sceneBoundingRect().center());
+                    const QPointF local = over->mapFromScene(mfi->iconCentreScene());
                     const double mmPerPx = double(m_unitValue) / double(m_cellPixels);
                     const double alongM = qBound(0.0, local.x() * mmPerPx / 1000.0,
                                                  double(pipe->length()));

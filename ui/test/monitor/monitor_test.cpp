@@ -530,7 +530,7 @@ void Monitor_Test::dropOnTrussAttachesAndStays()
 
     // Drop the fixture's CENTRE onto the truss line, 2 m along the run.
     const QPointF onTrussPx = rig.gv->realPositionToPixels(12000.0, 12000.0);
-    rig.item->setPos(rig.item->pos() + (onTrussPx - rig.item->sceneBoundingRect().center()));
+    rig.item->setPos(rig.item->pos() + (onTrussPx - rig.item->iconCentreScene()));
     const QPointF target = rig.item->pos();
     rig.gv->slotFixtureMoved(rig.item);
 
@@ -643,12 +643,14 @@ void Monitor_Test::nearTrussStaysFreeAndLockedTrussRefuses()
 
     // Drop 0.45 m off the line: inside the old grab-everything zone, inside
     // the detach zone, but OUTSIDE the attach zone. Near-but-free must exist.
-    /* Position by the item's actual scene CENTRE: boundingRect's origin is
-       not (0,0) (it carries a halo/label margin), so "pos minus half the rect"
-       misses by that margin -- the product code judges by the centre, so the
-       test must place by it too. */
+    /* Position by the item's actual ICON centre (iconCentreScene()), not
+       sceneBoundingRect()'s -- that one also reserves space for the name
+       label, so its centre drifts depending on whether labels happen to be
+       showing (WORKFLOW-SUBTLETIES.md #10). The product code judges by the
+       icon centre, so the test must place by it too, or the two disagree
+       about where the drop actually landed. */
     const QPointF nearPx = rig.gv->realPositionToPixels(12000.0, 12450.0);
-    rig.item->setPos(rig.item->pos() + (nearPx - rig.item->sceneBoundingRect().center()));
+    rig.item->setPos(rig.item->pos() + (nearPx - rig.item->iconCentreScene()));
     const QPointF target = rig.item->pos();
     rig.gv->slotFixtureMoved(rig.item);
 
@@ -664,7 +666,7 @@ void Monitor_Test::nearTrussStaysFreeAndLockedTrussRefuses()
     t->setLocked(true);
     rig.gv->updateTrusses();
     const QPointF onPx = rig.gv->realPositionToPixels(12000.0, 12000.0);
-    rig.item->setPos(rig.item->pos() + (onPx - rig.item->sceneBoundingRect().center()));
+    rig.item->setPos(rig.item->pos() + (onPx - rig.item->iconCentreScene()));
     rig.gv->slotFixtureMoved(rig.item);
     rp = props->fixtureRigProps(rig.fxi->id());
     QVERIFY2(rp.trussId == Truss::invalidId(),
@@ -4124,7 +4126,7 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
     const QVector3D barMid = bar->positionAt(bar->length() * 0.5f);
     const QPointF onBarPx = gv->realPositionToPixels(double(barMid.x()) * 1000.0,
                                                       double(barMid.y()) * 1000.0);
-    item->setPos(item->pos() + (onBarPx - item->sceneBoundingRect().center()));
+    item->setPos(item->pos() + (onBarPx - item->iconCentreScene()));
     gv->slotFixtureMoved(item);
 
     QVERIFY2(props->fixtureRigProps(fid).trussId == bar->id(),
@@ -4217,7 +4219,7 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
     QVERIFY(itemNow != nullptr);
     const QPointF onTrussPx = gv->realPositionToPixels(double(t->origin().x()) * 1000.0,
                                                         double(t->origin().y()) * 1000.0);
-    itemNow->setPos(itemNow->pos() + (onTrussPx - itemNow->sceneBoundingRect().center()));
+    itemNow->setPos(itemNow->pos() + (onTrussPx - itemNow->iconCentreScene()));
     gv->slotFixtureMoved(itemNow);
 
     const FixtureRigProps rpAfter = props->fixtureRigProps(fid);
@@ -4575,16 +4577,18 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
     QVERIFY(deckItem != nullptr);
     gv->updateFixture(deckFx->id());
     /* The deck-mount check reads the item's centre as pos() + cellSize()/2
-       (MonitorGraphicsView.cpp's own static halfIcon()), NOT
-       sceneBoundingRect().center() -- the two differ because the drawn
-       item's bounding rect also includes its name label, which sits below
-       the icon and pulls the box's centre down with it. Using the wrong
-       centre here landed the drop just outside the platform's footprint by
-       roughly that label's height. */
-    const QPointF cellHalf(deckItem->cellSize().width() / 2.0, deckItem->cellSize().height() / 2.0);
+       (MonitorGraphicsView.cpp's own static halfIcon()) -- the ICON, not
+       the drawn bounding rect, which also reserves space for the name
+       label and so drifts depending on whether labels happen to be
+       showing. MonitorFixtureItem::iconCentreScene() is the same reading
+       (mapToScene(iconRect().center())), added this session to give every
+       call site ONE agreed-on answer instead of each re-deriving it --
+       see WORKFLOW-SUBTLETIES.md #10, whose original fix for THIS test used
+       a manual cellSize()/2 computation because that canonical accessor
+       didn't exist yet. */
     const QPointF onDeckPx = gv->realPositionToPixels(double(plat->originX()) * 1000.0 + 200.0,
                                                        double(plat->originY()) * 1000.0 + 200.0);
-    deckItem->setPos(deckItem->pos() + (onDeckPx - (deckItem->pos() + cellHalf)));
+    deckItem->setPos(deckItem->pos() + (onDeckPx - deckItem->iconCentreScene()));
     gv->slotFixtureMoved(deckItem);
 
     QVERIFY2(props->fixtureRigProps(deckFx->id()).deckPlatformId == plat->id(),
