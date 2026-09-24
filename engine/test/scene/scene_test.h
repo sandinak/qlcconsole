@@ -66,6 +66,7 @@ private slots:
     /** A transition doesn't apply when the scene's tempo is Beats: the look
      *  arrives and leaves by its own fades, every fixture together. */
     void aTransitionIsIgnoredWhenTheTempoIsBeats();
+    void writeHTPStopWhilePaused();
     void writeHTPTwoTicksIntensity();
     void writeLTPReady();
 
