@@ -238,6 +238,7 @@ private slots:
     void aFixtureOnATowerIsListedUnderThatTower();
     void draggingATargetAnnouncesTheMove();
     void aMoverOnATopFaceStandsUpOrHangsDown();
+    void aFixtureCanBeRaisedOntoATowersTopCap();
     void aStagedFixturesTestDialogOffersNoDmxActions();
     void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
     void theDmxViewHasNoTileForAStagedFixture();

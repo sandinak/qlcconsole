@@ -34,6 +34,8 @@
 #include <QPushButton>
 #include <QToolButton>
 #include <QMenu>
+#include <QDialog>
+#include <QTreeWidget>
 #include <QSettings>
 
 #define protected public
@@ -11280,6 +11282,100 @@ void Monitor_Test::aMoverOnATopFaceStandsUpOrHangsDown()
         front.studioMount = 1;
         front.mountingType = Truss::FloorMounted;
         QVERIFY(qAbs(view.fixtureBodyUp(front).z()) > 0.99f);
+    }
+    delete doc;
+}
+
+void Monitor_Test::aFixtureCanBeRaisedOntoATowersTopCap()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    // AT2: 2.438 m tall, but its shelves stop at 1.8 m.
+    Tower *t = props->addTower();
+    t->setName("AT2");
+    t->setOriginX(2.0f);
+    t->setOriginY(2.0f);
+    t->setWidth(0.405f);
+    t->setDepth(0.405f);
+    t->setHeight(2.438f);
+    t->addShelf(0.6f);
+    t->addShelf(1.2f);
+    t->addShelf(1.8f);
+
+    Fixture *spot = new Fixture(doc);
+    spot->setName("Focus Spot Three Z 2");
+    spot->setChannels(4);
+    QVERIFY(doc->addFixture(spot));
+    FixtureRigProps rp;
+    rp.towerId = t->id();
+    rp.towerMountSide = FixtureRigProps::TowerShelf;
+    rp.towerShelf = 2;
+    rp.towerU = 0.2f;
+    rp.towerV = 0.2f;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        QWidget *pane = mon.makeStudioPane(&dlg, 1 /* tower */, t->id(), nullptr, &view);
+        QVERIFY(pane != nullptr && view != nullptr);
+        view->resize(700, 600);
+        view->reload();
+        view->setLocked(false);
+        view->setPlane(StructureStudioView::Front);
+
+        // Dragged up past the last shelf: onto the top cap, standing on it.
+        const float cx = t->originX() + 0.2f, cy = t->originY() + 0.2f;
+        QVERIFY(view->dragFixtureTo(spot->id(), view->w2s(QVector3D(cx, cy, 2.7f))));
+        FixtureRigProps now = props->fixtureRigProps(spot->id());
+        QCOMPARE(now.towerMountSide, int(FixtureRigProps::TowerTop));
+        QCOMPARE(now.mountingType, Truss::FloorMounted);
+        QVERIFY2(qAbs(props->fixtureRigPosition(spot->id()).z() - 2.438f) < 0.05f,
+                 qPrintable(QString("on the cap at z=%1").arg(props->fixtureRigPosition(spot->id()).z())));
+
+        // Back down beside the middle shelf, and to the base.
+        QVERIFY(view->dragFixtureTo(spot->id(), view->w2s(QVector3D(cx, cy, 1.25f))));
+        now = props->fixtureRigProps(spot->id());
+        QCOMPARE(now.towerMountSide, int(FixtureRigProps::TowerShelf));
+        QCOMPARE(now.towerShelf, 1);
+        QVERIFY(view->dragFixtureTo(spot->id(), view->w2s(QVector3D(cx, cy, 0.05f))));
+        QCOMPARE(props->fixtureRigProps(spot->id()).towerMountSide, int(FixtureRigProps::TowerBottom));
+
+        // Or pick it in the inspector: Top, each shelf with its height, Bottom.
+        emit view->fixtureSelected(spot->id());
+        QComboBox *pos = nullptr;
+        foreach (QComboBox *cb, dlg.findChildren<QComboBox *>())
+            if (cb->toolTip().startsWith("Where on the tower"))
+                pos = cb;
+        QVERIFY(pos != nullptr);
+        QVERIFY2(!pos->isHidden(), "the Position row is not shown for a tower-mounted fixture");
+        // ...and the rest of the fixture's fields stay available beside it
+        // (they were all hidden again by the bar half of the panel).
+        QComboBox *orient = nullptr;
+        foreach (QComboBox *cb, dlg.findChildren<QComboBox *>())
+            if (cb->toolTip().startsWith("Base direction"))
+                orient = cb;
+        QVERIFY(orient != nullptr);
+        QVERIFY2(!orient->isHidden(), "Orientation is hidden for a selected fixture");
+        QPushButton *full = nullptr;
+        foreach (QPushButton *b, dlg.findChildren<QPushButton *>())
+            if (b->text() == "Full properties…")
+                full = b;
+        QVERIFY(full != nullptr && full->isEnabled());
+        QStringList items;
+        for (int i = 0; i < pos->count(); ++i)
+            items << pos->itemText(i);
+        QCOMPARE(items, QStringList({ "Top (2.44 m)", "Shelf 3 (1.80 m)", "Shelf 2 (1.20 m)",
+                                      "Shelf 1 (0.60 m)", "Bottom" }));
+        QCOMPARE(pos->currentText(), QString("Bottom"));
+        pos->setCurrentIndex(0);
+        QCOMPARE(props->fixtureRigProps(spot->id()).towerMountSide, int(FixtureRigProps::TowerTop));
+        pos->setCurrentIndex(1);
+        now = props->fixtureRigProps(spot->id());
+        QCOMPARE(now.towerMountSide, int(FixtureRigProps::TowerShelf));
+        QCOMPARE(now.towerShelf, 2);
     }
     delete doc;
 }

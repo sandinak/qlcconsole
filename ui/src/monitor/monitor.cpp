@@ -2958,6 +2958,13 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     mountOnLbl->setStyleSheet("color:#b0b4c0;");
     mountOnLbl->setWordWrap(true);
     inspForm->addRow(tr("Mounted on:"), mountOnLbl);
+    /* Where on a tower: its top cap, a shelf, or its base. Only dragging in an
+       elevation could say, and only between shelves -- so a tower whose
+       shelves stop short of its top had no way at all to put a followspot on
+       the cap. */
+    QComboBox *towerPosCombo = new QComboBox(insp);
+    towerPosCombo->setToolTip(tr("Where on the tower: on its top cap, on a shelf, or on its base"));
+    inspForm->addRow(tr("Position:"), towerPosCombo);
     inspForm->addRow(tr("Colour:"), gelBtn);
     inspForm->addRow(tr("Orientation:"), mountCombo);
     inspForm->addRow(tr("Face:"), faceCombo);
@@ -3020,8 +3027,9 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         w->setVisible(vis);
         if (QWidget *l = inspForm->labelForField(w)) l->setVisible(vis);
     };
-    auto populate = [this, curFid, curBarId, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, tiltSpin, mountCombo, fullBtn, mountOnLbl, barAlongSpin, row]() {
+    auto populate = [this, curFid, curBarId, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, tiltSpin, mountCombo, fullBtn, mountOnLbl, barAlongSpin, towerPosCombo, row]() {
         row(barAlongSpin, false);   // this panel is never showing a bar AND a fixture
+        row(towerPosCombo, false);  // shown below, for a tower-mounted fixture only
         const quint32 fid = *curFid;
         Fixture *fx = (fid != Fixture::invalidId()) ? m_doc->fixture(fid) : nullptr;
         const bool have = (fx != nullptr);
@@ -3061,6 +3069,37 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         tiltSpin->blockSignals(true);  tiltSpin->setValue(double(rp.studioTilt));   tiltSpin->blockSignals(false);
         // Orientation options are constrained by the mount (shared helper).
         fillOrientationCombo(mountCombo, rp);
+
+        if (Tower *tw = (rp.towerId != Tower::invalidId()) ? m_props->tower(rp.towerId) : nullptr)
+        {
+            const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+            const double toDisp = isFeet ? 3.28084 : 1.0;
+            const QString unit = isFeet ? tr("ft") : tr("m");
+            towerPosCombo->blockSignals(true);
+            towerPosCombo->clear();
+            auto addPos = [towerPosCombo](const QString &label, int side, int shelf) {
+                towerPosCombo->addItem(label);
+                towerPosCombo->setItemData(towerPosCombo->count() - 1, side, Qt::UserRole);
+                towerPosCombo->setItemData(towerPosCombo->count() - 1, shelf, Qt::UserRole + 1);
+            };
+            addPos(tr("Top (%1 %2)").arg(double(tw->height()) * toDisp, 0, 'f', 2).arg(unit),
+                   FixtureRigProps::TowerTop, -1);
+            for (int i = tw->shelfCount() - 1; i >= 0; --i)
+                addPos(tr("Shelf %1 (%2 %3)").arg(i + 1)
+                           .arg(double(tw->shelfHeight(i)) * toDisp, 0, 'f', 2).arg(unit),
+                       FixtureRigProps::TowerShelf, i);
+            addPos(tr("Bottom"), FixtureRigProps::TowerBottom, -1);
+            for (int i = 0; i < towerPosCombo->count(); ++i)
+            {
+                const int side = towerPosCombo->itemData(i, Qt::UserRole).toInt();
+                const int shelf = towerPosCombo->itemData(i, Qt::UserRole + 1).toInt();
+                if (side == rp.towerMountSide
+                    && (side != FixtureRigProps::TowerShelf || shelf == int(rp.towerShelf)))
+                    towerPosCombo->setCurrentIndex(i);
+            }
+            towerPosCombo->blockSignals(false);
+            row(towerPosCombo, true);
+        }
     };
     populate();
 
@@ -3073,23 +3112,30 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
        is one click away via fullBtn, same division of labour as a fixture's
        own mini-fields + Full-properties button. */
     auto populateBar = [this, curFid, curBarId, inspTitle, mountOnLbl, fullBtn, barAlongSpin, row,
-                        gelBtn, mountCombo, faceCombo, placeCombo, angleSpin, tiltSpin]() {
+                        gelBtn, mountCombo, faceCombo, placeCombo, angleSpin, tiltSpin, towerPosCombo]() {
         const quint32 barId = *curBarId;
         Truss *bar = (barId != UINT_MAX) ? m_props->truss(barId) : nullptr;
         const bool have = (bar != nullptr);
-        row(gelBtn, false); row(mountCombo, false); row(faceCombo, false);
-        row(placeCombo, false); row(angleSpin, false); row(tiltSpin, false);
         row(barAlongSpin, have);
-        fullBtn->setEnabled(have);
         if (!have)
         {
+            /* A FIXTURE is showing (or nothing is): leave its fields alone.
+               This runs after populate() on every selection, and hiding the
+               fixture rows here unconditionally left a selected fixture with
+               nothing but "Mounted on" -- no Colour, Orientation, Face, Tilt
+               or tower Position to edit. */
             if (*curFid == Fixture::invalidId())
             {
                 inspTitle->setText(tr("(no fixture selected)"));
                 mountOnLbl->setText(QString("—"));
+                fullBtn->setEnabled(false);
             }
             return;
         }
+        fullBtn->setEnabled(true);
+        row(gelBtn, false); row(mountCombo, false); row(faceCombo, false);
+        row(placeCombo, false); row(angleSpin, false); row(tiltSpin, false);
+        row(towerPosCombo, false);
         inspTitle->setText(bar->name());
         Truss *parent = m_props->truss(bar->parentTrussId());
         const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
@@ -3192,6 +3238,24 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         m_props->setFixtureRigProps(*curFid, rp);
         m_graphicsView->updateFixture(*curFid);
         if (view) view->reload();
+    });
+    connect(towerPosCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
+            [this, curFid, view, towerPosCombo, populate](int idx) {
+        if (*curFid == Fixture::invalidId() || idx < 0) return;
+        FixtureRigProps rp = m_props->fixtureRigProps(*curFid);
+        if (rp.towerId == Tower::invalidId()) return;
+        const int side = towerPosCombo->itemData(idx, Qt::UserRole).toInt();
+        const int shelf = towerPosCombo->itemData(idx, Qt::UserRole + 1).toInt();
+        // On the cap or the base it stands, as the plot's Mount on tower does.
+        if (side != FixtureRigProps::TowerShelf && side != rp.towerMountSide)
+            rp.mountingType = Truss::FloorMounted;
+        rp.towerMountSide = side;
+        if (shelf >= 0)
+            rp.towerShelf = shelf;
+        m_props->setFixtureRigProps(*curFid, rp);
+        m_graphicsView->updateFixture(*curFid);
+        if (view) view->reload();
+        populate();                 // "Mounted on" and the orientation choices follow
     });
     connect(fullBtn, &QPushButton::clicked, insp,
             [this, curFid, curBarId]() {

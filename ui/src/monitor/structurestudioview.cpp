@@ -382,13 +382,27 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
                 rp.towerU = qBound(0.0f, float(ab.x() - t->originX()), t->width());
             else
                 rp.towerV = qBound(0.0f, float(ab.x() - t->originY()), t->depth());
-            // Snap to the nearest shelf by height (ab.y == Z).
-            int best = rp.towerShelf; double bestd = 1e9;
+            /* Snap to the nearest place on the tower by height (ab.y == Z): a
+               shelf, the top cap or the base. Shelves only, it used to be, so
+               on a tower whose shelves stop short of its top nothing could be
+               dragged up onto the cap -- the one spot a followspot goes. A
+               shelf at the very top still wins the tie, being considered
+               first. */
+            int best = rp.towerShelf;
+            int side = rp.towerMountSide;
+            double bestd = 1e9;
+            auto consider = [&](double z, int s, int shelf) {
+                const double dd = qAbs(z - ab.y());
+                if (dd < bestd) { bestd = dd; side = s; best = shelf; }
+            };
             for (int i = 0; i < t->shelfCount(); ++i)
-            {
-                const double dd = qAbs(double(t->shelfHeight(i)) - ab.y());
-                if (dd < bestd) { bestd = dd; best = i; }
-            }
+                consider(double(t->shelfHeight(i)), FixtureRigProps::TowerShelf, i);
+            consider(double(t->height()), FixtureRigProps::TowerTop, rp.towerShelf);
+            consider(0.0, FixtureRigProps::TowerBottom, rp.towerShelf);
+            // On the cap or the base it stands, as the plot's Mount on tower does.
+            if (side != FixtureRigProps::TowerShelf && side != rp.towerMountSide)
+                rp.mountingType = Truss::FloorMounted;
+            rp.towerMountSide = side;
             rp.towerShelf = best;
         }
         props->setFixtureRigProps(fid, rp);
