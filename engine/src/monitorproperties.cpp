@@ -29,6 +29,8 @@
 #include <cmath>
 
 #include "monitorproperties.h"
+#include "powerdistribution.h"
+#include "networktopology.h"
 #include "truss.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
@@ -1205,6 +1207,86 @@ quint32 MonitorProperties::nextStandId() const
     while (m_stands.contains(id))
         ++id;
     return id;
+}
+
+int MonitorProperties::foldItemLocksIntoLayers(PowerDistribution *pd, NetworkTopology *nt)
+{
+    quint32 lockedLayer = 0;
+    bool haveLayer = false;
+    int moved = 0;
+    auto target = [&]() -> quint32 {
+        if (!haveLayer)
+        {
+            foreach (const MonitorLayer &l, layers())
+                if (l.name == QStringLiteral("Locked"))
+                {
+                    lockedLayer = l.id;
+                    haveLayer = true;
+                    break;
+                }
+            if (!haveLayer)
+            {
+                lockedLayer = addLayer(QStringLiteral("Locked"));
+                haveLayer = true;
+            }
+            setLayerLocked(lockedLayer, true);
+        }
+        return lockedLayer;
+    };
+    // An object pinned on its own, on a layer that is not: that is the case
+    // layer-only locking cannot express, so it moves to a layer that can.
+    auto pinnedAlone = [this](bool locked, quint32 layerId) {
+        return locked && !layer(layerId).locked;
+    };
+
+    foreach (Truss *t, m_trusses)
+        if (pinnedAlone(t->locked(), t->layerId())) { t->setLayerId(target()); moved++; }
+    foreach (StagePlatform *p, m_platforms)
+        if (pinnedAlone(p->locked(), p->layerId())) { p->setLayerId(target()); moved++; }
+    foreach (Pipe *p, m_pipes)
+        if (pinnedAlone(p->locked(), p->layerId())) { p->setLayerId(target()); moved++; }
+    foreach (Stand *s, m_stands)
+        if (pinnedAlone(s->locked(), s->layerId())) { s->setLayerId(target()); moved++; }
+    foreach (Tower *t, m_towers)
+        if (pinnedAlone(t->locked(), t->layerId())) { t->setLayerId(target()); moved++; }
+    foreach (StageTarget *t, m_stageTargets)
+        if (pinnedAlone(t->locked(), t->layerId())) { t->setLayerId(target()); moved++; }
+    foreach (Scenery *s, m_sceneries)
+        if (pinnedAlone(s->locked(), s->layerId())) { s->setLayerId(target()); moved++; }
+    foreach (MonitorImage img, m_images)
+        if (pinnedAlone(img.locked, img.layerId)) { img.layerId = target(); setImage(img); moved++; }
+    if (pd != nullptr)
+        for (int i = 0; i < pd->sources().size(); ++i)
+            if (pinnedAlone(pd->sources().at(i).locked, pd->sources().at(i).layerId))
+            { pd->sources()[i].layerId = target(); moved++; }
+    if (nt != nullptr)
+        for (int i = 0; i < nt->nodes().size(); ++i)
+            if (pinnedAlone(nt->nodes().at(i).locked, nt->nodes().at(i).layerId))
+            { nt->nodes()[i].layerId = target(); moved++; }
+    return moved;
+}
+
+void MonitorProperties::syncItemLocksToLayers(PowerDistribution *pd, NetworkTopology *nt)
+{
+    foreach (Truss *t, m_trusses)            t->setLocked(layer(t->layerId()).locked);
+    foreach (StagePlatform *p, m_platforms)  p->setLocked(layer(p->layerId()).locked);
+    foreach (Pipe *p, m_pipes)               p->setLocked(layer(p->layerId()).locked);
+    foreach (Stand *s, m_stands)             s->setLocked(layer(s->layerId()).locked);
+    foreach (Tower *t, m_towers)             t->setLocked(layer(t->layerId()).locked);
+    foreach (StageTarget *t, m_stageTargets) t->setLocked(layer(t->layerId()).locked);
+    foreach (Scenery *s, m_sceneries)        s->setLocked(layer(s->layerId()).locked);
+    foreach (MonitorImage img, m_images)
+        if (img.locked != layer(img.layerId).locked)
+        {
+            img.locked = layer(img.layerId).locked;
+            setImage(img);
+        }
+    if (pd != nullptr)
+        for (int i = 0; i < pd->sources().size(); ++i)
+            pd->sources()[i].locked = layer(pd->sources().at(i).layerId).locked;
+    if (nt != nullptr)
+        for (int i = 0; i < nt->nodes().size(); ++i)
+            nt->nodes()[i].locked = layer(nt->nodes().at(i).layerId).locked;
 }
 
 quint32 MonitorProperties::nextSceneryId() const

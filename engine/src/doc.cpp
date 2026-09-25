@@ -2177,6 +2177,14 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
 
     postLoad();
 
+    /* Locks are by layer now: objects pinned on their own move onto a locked
+       layer, and every object's lock then follows its layer. */
+    if (m_monitorProps != NULL)
+    {
+        m_monitorProps->foldItemLocksIntoLayers(powerDistribution(), networkTopology());
+        m_monitorProps->syncItemLocksToLayers(powerDistribution(), networkTopology());
+    }
+
     m_loadStatus = Loaded;
     emit loaded();
 

@@ -165,16 +165,17 @@ public:
     void setTrussGroupSelected(bool on) { if (m_trussGroupSelected != on) { m_trussGroupSelected = on; update(); } }
     bool isTrussGroupSelected() const   { return m_trussGroupSelected; }
 
-    /** "Ghost" the fixture: drawn faint and made click-through (declines
-     *  mouse buttons) so whatever's beneath it is reachable. Used for a
-     *  fixture on a locked layer — a locked fixture is already
-     *  unselectable/click-through; this just makes that visible instead of
-     *  a silent trap. */
+    /** A fixture on a locked layer: outlined red, the same as every other
+     *  locked object on the plot, and click-through (declines mouse buttons)
+     *  so whatever is beneath it stays reachable. It used to be drawn faint
+     *  instead -- a second way of saying "locked" that matched nothing else. */
     void setGhosted(bool g)
     {
+        if (m_ghosted == g)
+            return;
         m_ghosted = g;
-        setOpacity(g ? 0.28 : 1.0);
         setAcceptedMouseButtons(g ? Qt::NoButton : Qt::AllButtons);
+        update();
     }
     bool isGhosted() const { return m_ghosted; }
 
@@ -336,7 +337,7 @@ private:
     bool m_escapeMode    = false;
     bool m_attachMode    = false;
     bool m_isolated      = false;   ///< drilled-in single selection within a group
-    bool m_ghosted       = false;   ///< locked-layer indicator: faint + click-through
+    bool m_ghosted       = false;   ///< locked-layer indicator: red + click-through
     bool m_highlighted   = false;
 
     /** True if any head has a Pan channel (i.e. a moving head): only these

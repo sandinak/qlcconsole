@@ -215,6 +215,33 @@ rig edits, bulk repatching, cross-show consistency checks.
 
 ---
 
+## Plot: Select All, one undo per drag, one lock (the layer's) — SHIPPED 2026-09-25
+
+"added [the cyc] and then tried to select all to move to make the space for
+it and I can't seem to select all" / "ctrl z doesn't undo last move" / "I
+think we need to recombine the idea of a layer lock and a feature position
+lock .. those should be consistent .. and probably only layer. The color
+changing when it is locked should be persistent for any time something is
+locked."
+  - **Select All** (Ctrl/Cmd+A, and More > Select All): every visible,
+    selectable object on the plot, as ONE selection change.
+  - **Count bubbles** (a deck's or truss's fixture count) follow the structure
+    after any drag, including a multi-item one and an undo.
+  - **Undo** puts back a whole drag at once: every object the mouse-up moved
+    (trusses, decks, towers, stands, pipes, scenery, targets, power, network,
+    fixtures) is one batch; decks bring the fixtures on them back too.
+  - **One lock, the LAYER's.** Locking any object -- from its menu ("Lock
+    Layer “Rig”"), the Layers panel or a power/network node's own toggle --
+    locks its layer and everything on it. Each object's own `Locked` flag is
+    now just a mirror of its layer (`MonitorProperties::syncItemLocksToLayers`).
+    An older workspace's per-object locks move onto a locked layer named
+    "Locked" on load (`foldItemLocksIntoLayers`), so nothing that was held
+    comes loose. Unlock that layer to move them.
+  - **Locked draws red**, always: every locked object gets the red outline,
+    and fixtures on a locked layer now do too (they used to go faint instead).
+  - Still separate on purpose: folder ("group") position locks and the global
+    Edit Plot lock hold things still but leave them selectable.
+
 ## Lighting Studio Editor: fixture 0 was unclickable; truss drag only had one freedom — SHIPPED, not yet Branson-verified (2026-09-08)
 
 Branson: "still cannot move this fixture on this truss even though it's bound

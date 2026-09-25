@@ -32,6 +32,7 @@
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QPainter>
 #include <QToolButton>
 #include <QMenu>
 #include <QDialog>
@@ -64,6 +65,7 @@
 #include "zraster.h"
 #include <QtMath>
 #include "trussitem.h"
+#include "powerdistribution.h"
 #include "targetitem.h"
 #undef protected
 #undef private
@@ -680,8 +682,10 @@ void Monitor_Test::nearTrussStaysFreeAndLockedTrussRefuses()
     QVERIFY2((rig.item->pos() - target).manhattanLength() < 2.0,
              "the near-band drop moved on re-place");
 
-    // Locked truss: drop dead ON the line; must still stay free.
-    t->setLocked(true);
+    // Locked truss (its layer locked): drop dead ON the line; must still stay free.
+    const quint32 lockedLayer = props->addLayer("Locked");
+    t->setLayerId(lockedLayer);
+    props->setLayerLocked(lockedLayer, true);
     rig.gv->updateTrusses();
     const QPointF onPx = rig.gv->realPositionToPixels(12000.0, 12000.0);
     rig.item->setPos(rig.item->pos() + (onPx - rig.item->iconCentreScene()));
@@ -691,6 +695,7 @@ void Monitor_Test::nearTrussStaysFreeAndLockedTrussRefuses()
              "a LOCKED truss must not acquire a dropped fixture");
 
     props->removeTruss(t->id());
+    props->removeLayer(lockedLayer);
 }
 
 /****************************************************************************
@@ -11740,6 +11745,126 @@ void Monitor_Test::aDecksCountBubbleMovesWithIt()
     delete doc;
 }
 
+static int lockRedPixels(QGraphicsScene *scene, const QRectF &area)
+{
+    QImage img(area.size().toSize() + QSize(4, 4), QImage::Format_ARGB32);
+    img.fill(Qt::white);
+    QPainter p(&img);
+    scene->render(&p, QRectF(2, 2, area.width(), area.height()), area);
+    p.end();
+    int n = 0;
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+        {
+            const QColor c = img.pixelColor(x, y);
+            if (qAbs(c.red() - 200) < 30 && c.green() < 110 && c.blue() < 110)
+                n++;
+        }
+    return n;
+}
+
+void Monitor_Test::aLockIsItsLayersAndDrawsRed()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 rig = props->addLayer("Rig");
+    Truss *t = props->addTruss();
+    t->setName("FOH");
+    t->setOrigin(QVector3D(2.0f, 2.0f, 6.0f));
+    t->setLength(6.0f);
+    t->setLayerId(rig);
+    Stand *stand = props->addStand();
+    stand->setOriginX(9.0f);
+    stand->setOriginY(5.0f);
+    stand->setLayerId(rig);
+    Stand *other = props->addStand();               // Default layer
+    other->setOriginX(3.0f);
+    other->setOriginY(6.0f);
+    Fixture *spot = new Fixture(doc);
+    spot->setChannels(4);
+    QVERIFY(doc->addFixture(spot));
+    props->setFixtureLayer(spot->id(), rig);
+    PowerSource ps;
+    ps.name = "Distro";
+    ps.placed = true;
+    ps.posX = 10.0;
+    ps.posY = 7.0;
+    ps.layerId = rig;
+    doc->powerDistribution()->sources() << ps;
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(14, 10));
+        view.updateTrusses();
+        view.updatePlatforms();
+        view.addFixture(spot->id(), QPointF(5000.0, 4000.0));
+        view.updatePowerSources();
+        view.refreshItemLayerState();
+        MonitorFixtureItem *fi = view.m_fixtures.value(spot->id());
+        QVERIFY(fi != nullptr);
+        const int redBefore = lockRedPixels(view.m_scene, fi->sceneBoundingRect());
+
+        // The menu offers the LAYER, by name.
+        QMenu menu;
+        view.buildItemMenu(&menu, "stand", stand->id(), MonitorGraphicsView::MenuPlace());
+        QVERIFY2(menuPaths(&menu).join("|").contains(QString::fromUtf8("Lock Layer “Rig”")),
+                 qPrintable(menuPaths(&menu).join(" | ")));
+
+        // Locking the stand locks Rig, and so everything on Rig.
+        view.setItemLocked("stand", stand->id(), true);
+        QVERIFY(props->layer(rig).locked);
+        QVERIFY(!props->layer(MonitorProperties::defaultLayerId).locked);
+        QVERIFY(stand->locked() && t->locked());
+        QVERIFY(doc->powerDistribution()->sources().first().locked);
+        QVERIFY(!other->locked());
+        QVERIFY(view.itemLocked("truss", t->id()));
+        QVERIFY(view.itemLocked("fixture", spot->id()));
+        QVERIFY(view.itemLocked("power", 0));
+        QVERIFY(!view.itemLocked("stand", other->id()));
+        QVERIFY(!view.itemLocked("stand", 999));        // no such stand
+        QVERIFY(!view.itemLocked("fixture", 999));
+        QVERIFY(!(view.m_standItems.value(stand->id())->flags() & QGraphicsItem::ItemIsMovable));
+        QVERIFY(view.m_standItems.value(other->id())->flags() & QGraphicsItem::ItemIsMovable);
+        QVERIFY(!(fi->flags() & QGraphicsItem::ItemIsMovable));
+        QVERIFY(fi->isGhosted());
+
+        // Drawn red: the fixture (which used to go faint instead) and the truss.
+        QVERIFY2(lockRedPixels(view.m_scene, fi->sceneBoundingRect()) > redBefore + 4,
+                 "a fixture on a locked layer isn't outlined red");
+        QVERIFY(lockRedPixels(view.m_scene, view.m_trussItems.value(t->id())->sceneBoundingRect()) > 4);
+
+        QMenu menu2;
+        view.buildItemMenu(&menu2, "truss", t->id(), MonitorGraphicsView::MenuPlace());
+        QVERIFY2(menuPaths(&menu2).join("|").contains(QString::fromUtf8("Unlock Layer “Rig”")),
+                 qPrintable(menuPaths(&menu2).join(" | ")));
+
+        // Asking for an object that isn't there changes nothing.
+        view.setItemLocked("stand", 999, false);
+        QVERIFY(props->layer(rig).locked);
+        view.setItemLocked("truss", 999, true);
+        QVERIFY(!props->layer(MonitorProperties::defaultLayerId).locked);
+
+        // The power source's own toggle is the same lock.
+        view.slotPowerSourceLockToggled(0);
+        QVERIFY(!props->layer(rig).locked);
+        QVERIFY(!stand->locked() && !t->locked());
+        QVERIFY(!fi->isGhosted());
+        QVERIFY(fi->flags() & QGraphicsItem::ItemIsMovable);
+        view.slotPowerSourceLockToggled(0);
+        QVERIFY(props->layer(rig).locked);
+        view.slotPowerSourceLockToggled(7);             // no such source: ignored
+        QVERIFY(props->layer(rig).locked);
+
+        // A lock set straight on an object (an old habit) doesn't survive:
+        // its layer says what it is.
+        other->setLocked(true);
+        view.refreshItemLayerState();
+        QVERIFY(!other->locked());
+    }
+    delete doc;
+}
+
 void Monitor_Test::oneUndoPutsBackAWholeMixedDrag()
 {
     Doc *doc = new Doc(this);
@@ -12172,23 +12297,36 @@ void Monitor_Test::networkNodesJoinLayersGroupsLocksAndRenames()
     QVERIFY(view.itemsUnderGroup(gid).contains(itemA));
     QVERIFY(!view.itemsUnderGroup(gid).contains(itemB));
 
-    // Lock / unlock, from the plot, the Layers list and the node's own menu.
+    /* Lock / unlock, from the plot, the Layers list and the node's own menu.
+       A lock is the LAYER's: locking node 1 locks its layer, and with it
+       every other object on that layer, while node 0 (elsewhere) stays free. */
+    const quint32 rack = props->addLayer("Rack");
+    view.setItemLayer(itemB, rack);
     QVERIFY(!view.itemLocked("network", 1));
     view.setItemLocked("network", 1, true);
+    QVERIFY(props->layer(rack).locked);
+    QVERIFY(!props->layer(layer).locked);
     QVERIFY(m_doc->networkTopology()->nodes().at(1).locked);
+    QVERIFY(!m_doc->networkTopology()->nodes().at(0).locked);
     QVERIFY(view.itemLocked("network", 1));
+    QVERIFY(!view.itemLocked("network", 0));
     QVERIFY(!(view.m_networkNodeItems.at(1)->flags() & QGraphicsItem::ItemIsMovable));
+    QVERIFY(view.m_networkNodeItems.at(0)->flags() & QGraphicsItem::ItemIsMovable);
     view.setItemLocked("network", 99, true);             // no such node: ignored
+    QVERIFY(!props->layer(MonitorProperties::defaultLayerId).locked);
     MonitorLayersPanel panel(m_doc, &view);
     panel.reload();
     QVERIFY(panel.kindLockable("network"));
     QVERIFY(panel.objectLocked("network", 1));
     panel.setObjectLocked("network", 1, false);
+    QVERIFY(!props->layer(rack).locked);
     QVERIFY(!m_doc->networkTopology()->nodes().at(1).locked);
     QVERIFY(!panel.objectLocked("network", 99));
     emit view.m_networkNodeItems.at(1)->lockToggleRequested(1);
+    QVERIFY(props->layer(rack).locked);
     QVERIFY(m_doc->networkTopology()->nodes().at(1).locked);
     view.slotNetworkNodeLockToggled(99);                 // ignored
+    view.setItemLocked("network", 1, false);
 
     // Its menu names it and offers what every map item gets.
     QMenu menu;
@@ -12205,6 +12343,7 @@ void Monitor_Test::networkNodesJoinLayersGroupsLocksAndRenames()
     view.requestDeleteItem("network", 1);
     QCOMPARE(del.count(), 1);
     QCOMPARE(del.first().first().toUInt(), quint32(1));
+    props->removeLayer(rack);
 }
 
 void Monitor_Test::networkNodesMoveTogetherAndSnap()

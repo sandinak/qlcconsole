@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 #define private public
 #include "monitorproperties.h"
 #undef private
@@ -27,6 +29,10 @@
 #include "stand.h"
 #include "tower.h"
 #include "stagetarget.h"
+#include "scenery.h"
+#include "powerdistribution.h"
+#include "networktopology.h"
+#include "doc.h"
 #include "monitorproperties_test.h"
 
 void MonitorProperties_Test::defaults()
@@ -970,7 +976,166 @@ void MonitorProperties_Test::aNewlyPlacedFixtureSavesNoJunk()
     QVERIFY2(xml.contains("Hidden") == false, qPrintable(xml));
 }
 
-QTEST_APPLESS_MAIN(MonitorProperties_Test)
+void MonitorProperties_Test::itemLocksFoldIntoALockedLayer()
+{
+    Doc doc(this);
+    MonitorProperties *mp = doc.monitorProperties();
+    PowerDistribution *pd = doc.powerDistribution();
+    NetworkTopology *nt = doc.networkTopology();
+
+    // Nothing pinned: nothing moves, and no "Locked" layer appears.
+    Truss *free = mp->addTruss();
+    QCOMPARE(mp->foldItemLocksIntoLayers(pd, nt), 0);
+    QCOMPARE(mp->layers().size(), 1);
+
+    // One of each kind, pinned on its own on the (unlocked) Default layer.
+    Truss *t = mp->addTruss();
+    t->setLocked(true);
+    StagePlatform *deck = mp->addPlatform();
+    deck->setLocked(true);
+    Pipe *pipe = mp->addPipe();
+    pipe->setLocked(true);
+    Stand *stand = mp->addStand();
+    stand->setLocked(true);
+    Tower *tower = mp->addTower();
+    tower->setLocked(true);
+    StageTarget *mark = mp->addStageTarget();
+    mark->setLocked(true);
+    Scenery *cyc = mp->addScenery();
+    cyc->setLocked(true);
+    const quint32 imgId = mp->addImage("plan.png");
+    MonitorProperties::MonitorImage img = mp->image(imgId);
+    img.locked = true;
+    mp->setImage(img);
+    PowerSource ps;
+    ps.locked = true;
+    pd->sources() << ps;
+    NetworkNode node;
+    node.locked = true;
+    nt->nodes() << node;
+
+    // Already on a locked layer: that lock already says it, so it stays.
+    const quint32 held = mp->addLayer("Held");
+    mp->setLayerLocked(held, true);
+    Stand *heldStand = mp->addStand();
+    heldStand->setLayerId(held);
+    heldStand->setLocked(true);
+
+    QCOMPARE(mp->foldItemLocksIntoLayers(pd, nt), 10);
+    quint32 locked = 0;
+    int named = 0;
+    foreach (const MonitorProperties::MonitorLayer &l, mp->layers())
+        if (l.name == QStringLiteral("Locked"))
+        {
+            locked = l.id;
+            named++;
+        }
+    QCOMPARE(named, 1);
+    QVERIFY(mp->layer(locked).locked);
+    QCOMPARE(t->layerId(), locked);
+    QCOMPARE(deck->layerId(), locked);
+    QCOMPARE(pipe->layerId(), locked);
+    QCOMPARE(stand->layerId(), locked);
+    QCOMPARE(tower->layerId(), locked);
+    QCOMPARE(mark->layerId(), locked);
+    QCOMPARE(cyc->layerId(), locked);
+    QCOMPARE(mp->image(imgId).layerId, locked);
+    QCOMPARE(pd->sources().first().layerId, locked);
+    QCOMPARE(nt->nodes().first().layerId, locked);
+    QCOMPARE(free->layerId(), quint32(MonitorProperties::defaultLayerId));
+    QCOMPARE(heldStand->layerId(), held);
+    QVERIFY(!mp->layer(MonitorProperties::defaultLayerId).locked);
+
+    // Run again (the next load): already folded, and the layer is reused.
+    Truss *later = mp->addTruss();
+    later->setLocked(true);
+    QCOMPARE(mp->foldItemLocksIntoLayers(pd, nt), 1);
+    QCOMPARE(later->layerId(), locked);
+    QCOMPARE(mp->layers().size(), 3);
+
+    // Without power or network, the rest still folds.
+    Pipe *p2 = mp->addPipe();
+    p2->setLocked(true);
+    QCOMPARE(mp->foldItemLocksIntoLayers(nullptr, nullptr), 1);
+    QCOMPARE(p2->layerId(), locked);
+
+    // Loading a workspace does the fold: an old show's pinned truss lands
+    // on the locked layer, and the unpinned one does not.
+    Doc old(this);
+    Truss *pinned = old.monitorProperties()->addTruss();
+    pinned->setName("T-1");
+    pinned->setLocked(true);
+    Truss *loose = old.monitorProperties()->addTruss();
+    loose->setName("T-2");
+    QByteArray ws;
+    QXmlStreamWriter ww(&ws);
+    ww.writeStartDocument();
+    QVERIFY(old.saveXML(&ww));
+    ww.writeEndDocument();
+    Doc reloaded(this);
+    QXmlStreamReader rr(ws);
+    while (rr.readNextStartElement() && rr.name() != QStringLiteral("Engine"))
+        ;
+    QVERIFY(reloaded.loadXML(rr));
+    MonitorProperties *rp = reloaded.monitorProperties();
+    const Truss *rt1 = rp->truss(pinned->id());
+    const Truss *rt2 = rp->truss(loose->id());
+    QVERIFY(rt1 != nullptr && rt2 != nullptr);
+    QVERIFY(rt1->layerId() != MonitorProperties::defaultLayerId);
+    QCOMPARE(rp->layer(rt1->layerId()).name, QString("Locked"));
+    QVERIFY(rp->layer(rt1->layerId()).locked);
+    QVERIFY(rt1->locked());
+    QCOMPARE(rt2->layerId(), quint32(MonitorProperties::defaultLayerId));
+    QVERIFY(!rt2->locked());
+}
+
+void MonitorProperties_Test::itemLockFlagsMirrorTheirLayer()
+{
+    Doc doc(this);
+    MonitorProperties *mp = doc.monitorProperties();
+    PowerDistribution *pd = doc.powerDistribution();
+    NetworkTopology *nt = doc.networkTopology();
+    const quint32 rig = mp->addLayer("Rig");
+
+    Truss *onRig = mp->addTruss();
+    onRig->setLayerId(rig);
+    Truss *elsewhere = mp->addTruss();
+    elsewhere->setLocked(true);                       // stale: its layer is not
+    Scenery *cyc = mp->addScenery();
+    cyc->setLayerId(rig);
+    const quint32 imgId = mp->addImage("plan.png");
+    MonitorProperties::MonitorImage img = mp->image(imgId);
+    img.layerId = rig;
+    mp->setImage(img);
+    PowerSource ps;
+    ps.layerId = rig;
+    pd->sources() << ps;
+    NetworkNode node;
+    node.locked = false;
+    node.layerId = rig;
+    nt->nodes() << node;
+
+    mp->setLayerLocked(rig, true);
+    mp->syncItemLocksToLayers(pd, nt);
+    QVERIFY(onRig->locked());
+    QVERIFY(!elsewhere->locked());
+    QVERIFY(cyc->locked());
+    QVERIFY(mp->image(imgId).locked);
+    QVERIFY(pd->sources().first().locked);
+    QVERIFY(nt->nodes().first().locked);
+
+    mp->setLayerLocked(rig, false);
+    mp->syncItemLocksToLayers(nullptr, nullptr);      // no power/network: skipped
+    QVERIFY(!onRig->locked());
+    QVERIFY(!cyc->locked());
+    QVERIFY(!mp->image(imgId).locked);
+    QVERIFY(pd->sources().first().locked);
+    mp->syncItemLocksToLayers(pd, nt);
+    QVERIFY(!pd->sources().first().locked);
+    QVERIFY(!nt->nodes().first().locked);
+}
+
+QTEST_GUILESS_MAIN(MonitorProperties_Test)
 
 void MonitorProperties_Test::aTowerOffsetIsTheHeight()
 {

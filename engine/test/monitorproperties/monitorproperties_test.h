@@ -87,6 +87,12 @@ private slots:
     /** A fixture that has only ever been placed on the plot saves nothing it
      *  was never given: no fixed zoom, and not hidden. */
     void aNewlyPlacedFixtureSavesNoJunk();
+
+    /** Locks are per LAYER: an object locked on its own (older workspaces)
+     *  moves onto a locked "Locked" layer on load, and every object's own
+     *  flag then mirrors its layer's. */
+    void itemLocksFoldIntoALockedLayer();
+    void itemLockFlagsMirrorTheirLayer();
 };
 
 #endif

@@ -329,6 +329,17 @@ public:
      *  an item referencing a deleted layer still renders (as Default). */
     MonitorLayer layer(quint32 id) const;
 
+    /** Locking is by LAYER: an object is locked exactly when its layer is.
+     *  Shows saved before that carried per-object locks; each object locked on
+     *  an unlocked layer is moved onto a locked "Locked" layer (made if there
+     *  is none), so nothing that was pinned becomes movable by surprise.
+     *  Returns how many were moved. Called once a workspace has loaded. */
+    int foldItemLocksIntoLayers(class PowerDistribution *pd, class NetworkTopology *nt);
+    /** Set every object's own lock flag from its layer's lock -- the one
+     *  source of truth -- so the views that read an object's lock (drag,
+     *  red outline) follow the layer. */
+    void syncItemLocksToLayers(class PowerDistribution *pd, class NetworkTopology *nt);
+
     /** True if a layer with this id currently exists. */
     bool hasLayer(quint32 id) const { return m_layers.contains(id); }
 

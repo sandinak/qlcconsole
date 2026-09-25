@@ -247,6 +247,11 @@ private slots:
     void selectAllTakesEverythingSelectable();
     void aDecksCountBubbleMovesWithIt();
     void oneUndoPutsBackAWholeMixedDrag();
+    /** One lock, the LAYER's: locking any object locks its layer (and
+     *  everything on it), the menu says so, a power source's own toggle
+     *  goes through it too, and every locked thing -- fixtures included --
+     *  draws red and won't drag. */
+    void aLockIsItsLayersAndDrawsRed();
     void aStagedFixturesTestDialogOffersNoDmxActions();
     void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
     void theDmxViewHasNoTileForAStagedFixture();

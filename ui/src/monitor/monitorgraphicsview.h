@@ -592,7 +592,10 @@ public:
     /** Take objects out of the folder they are in, leaving them where they are. */
     void removeFromFolder(const QList<QPair<QString, quint32> > &objects);
 
-    /** Whether @p kind / @p id is held in place, for any kind with a position. */
+    /** The layer an object is on (fixture included); @p found says whether
+     *  the object exists at all (an unknown one reports layer 0). */
+    quint32 objectLayerId(const QString &kind, quint32 id, bool *found = nullptr) const;
+    /** Whether @p kind / @p id is held in place: its LAYER is locked. */
     bool itemLocked(const QString &kind, quint32 id) const;
     void setItemLocked(const QString &kind, quint32 id, bool locked);
 

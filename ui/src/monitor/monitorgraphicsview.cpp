@@ -2080,11 +2080,15 @@ void MonitorGraphicsView::refreshItemLayerState()
     MonitorProperties *props = m_doc->monitorProperties();
     if (props == nullptr)
         return;
+    // One lock: every object's own flag follows its layer (drag, red outline).
+    props->syncItemLocksToLayers(m_doc->powerDistribution(), m_doc->networkTopology());
+    auto repaintAll = qScopeGuard([this]() { if (m_scene) m_scene->update(); });
 
-    // Lock semantics differ by SOURCE (per the user's model):
-    //   • LAYER lock   → the item can't be moved AND can't be selected.
-    //   • per-item lock / global "Edit Plot" lock → can't be moved, but CAN
-    //     still be selected (so it can be inspected / unlocked / rubber-banded).
+    // What holds an item still, by SOURCE:
+    //   • LAYER lock (the only lock an object has; its own flag mirrors it)
+    //     → the item can't be moved AND can't be selected, and draws red.
+    //   • folder lock / global "Edit Plot" lock → can't be moved, but CAN
+    //     still be selected (so it can be inspected / rubber-banded).
     // A helper keeps ItemIsSelectable in sync and drops a stale selection when an
     // item becomes unselectable.
     auto applySelectable = [](QGraphicsItem *gi, bool selectable) {
@@ -2100,9 +2104,9 @@ void MonitorGraphicsView::refreshItemLayerState()
         const MonitorProperties::MonitorLayer lyr = props->layer(props->fixtureLayer(it.key()));
         const bool grpLock = props->groupChainLocked(props->fixtureGroup(it.key()));
         it.value()->setVisible(fixtureItemShouldBeVisible(it.key()));
-        // Ghosted (faint) exactly when it's actually non-interactive — a
-        // locked layer already makes it unselectable/click-through below;
-        // this just makes that visible instead of a silent trap.
+        // Drawn red exactly when it's actually non-interactive — a locked
+        // layer already makes it unselectable/click-through below; this
+        // makes that visible, the same way as every other locked object.
         it.value()->setGhosted(lyr.locked);
         it.value()->setMovable(!m_layoutLocked && !lyr.locked && !grpLock);
         applySelectable(it.value(), !lyr.locked);
@@ -4178,10 +4182,9 @@ void MonitorGraphicsView::slotPowerSourceLockToggled(int sourceIndex)
     PowerDistribution *pd = m_doc->powerDistribution();
     if (sourceIndex < 0 || sourceIndex >= pd->sources().size())
         return;
-    pd->sources()[sourceIndex].locked = !pd->sources()[sourceIndex].locked;
-    m_doc->setModified();
-    // Rebuild so the item picks up its new movability, cursor and red tint.
-    updatePowerSources();
+    // Locks are by layer: this locks (or unlocks) the source's layer.
+    setItemLocked(QStringLiteral("power"), quint32(sourceIndex),
+                  !itemLocked(QStringLiteral("power"), quint32(sourceIndex)));
 }
 
 void MonitorGraphicsView::setPowerSourceColors(const QHash<QString, QColor> &circuitColors)
@@ -4439,10 +4442,9 @@ void MonitorGraphicsView::slotNetworkNodeLockToggled(int nodeIndex)
     NetworkTopology *nt = m_doc->networkTopology();
     if (nodeIndex < 0 || nodeIndex >= nt->nodes().size())
         return;
-    nt->nodes()[nodeIndex].locked = !nt->nodes()[nodeIndex].locked;
-    m_doc->setModified();
-    // Rebuild so the item picks up its new movability, cursor and red tint.
-    updateNetworkNodes();
+    // Locks are by layer: this locks (or unlocks) the node's layer.
+    setItemLocked(QStringLiteral("network"), quint32(nodeIndex),
+                  !itemLocked(QStringLiteral("network"), quint32(nodeIndex)));
 }
 
 void MonitorGraphicsView::slotNetworkNodeMoved(NetworkNodeItem *item)
@@ -6254,12 +6256,12 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
             lockable << o;
     if (lockable.size() >= 2)
     {
-        menu->addAction(tr("Lock Selected"), this, [this, lockable]() {
+        menu->addAction(tr("Lock Their Layers"), this, [this, lockable]() {
             for (const auto &o : lockable)
                 setItemLocked(o.first, o.second, true);
             emit mapStructureChanged();
         });
-        menu->addAction(tr("Unlock Selected"), this, [this, lockable]() {
+        menu->addAction(tr("Unlock Their Layers"), this, [this, lockable]() {
             for (const auto &o : lockable)
                 setItemLocked(o.first, o.second, false);
             emit mapStructureChanged();
@@ -6425,7 +6427,9 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
 
         menu->addSeparator();
         const bool locked = itemLocked(kind, id);
-        menu->addAction(locked ? tr("Unlock Position") : tr("Lock Position"),
+        const QString layerName = m_doc->monitorProperties()->layer(objectLayerId(kind, id)).name;
+        menu->addAction(locked ? tr("Unlock Layer “%1”").arg(layerName)
+                               : tr("Lock Layer “%1”").arg(layerName),
                         this, [this, kind, id, locked]() {
             setItemLocked(kind, id, !locked);
         });
@@ -6637,71 +6641,46 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         addItemRemoval(menu, kind, fid);
 }
 
+quint32 MonitorGraphicsView::objectLayerId(const QString &kind, quint32 id, bool *found) const
+{
+    if (kind == QLatin1String("fixture"))
+    {
+        if (found != nullptr)
+            *found = m_doc->fixture(id) != nullptr;
+        return m_doc->monitorProperties()->fixtureLayer(id);
+    }
+    QGraphicsItem *gi = itemFor(kind, id);
+    if (found != nullptr)
+        *found = gi != nullptr;
+    return gi != nullptr ? const_cast<MonitorGraphicsView *>(this)->itemLayerId(gi) : 0;
+}
+
 bool MonitorGraphicsView::itemLocked(const QString &kind, quint32 id) const
 {
-    MonitorProperties *props = m_doc->monitorProperties();
-    if (kind == QLatin1String("truss"))    { Truss *t = props->truss(id);        return t && t->locked(); }
-    if (kind == QLatin1String("platform")) { StagePlatform *p = props->platform(id); return p && p->locked(); }
-    if (kind == QLatin1String("pipe"))     { Pipe *b = props->pipe(id);          return b && b->locked(); }
-    if (kind == QLatin1String("stand"))    { Stand *s = props->stand(id);        return s && s->locked(); }
-    if (kind == QLatin1String("tower"))    { Tower *t = props->tower(id);        return t && t->locked(); }
-    if (kind == QLatin1String("target"))   { StageTarget *t = props->stageTarget(id); return t && t->locked(); }
-    if (kind == QLatin1String("scenery"))  { Scenery *sc = props->scenery(id);   return sc && sc->locked(); }
-    if (kind == QLatin1String("image"))    return props->image(id).locked;
-    if (kind == QLatin1String("power"))
-    {
-        PowerDistribution *pd = m_doc->powerDistribution();
-        return pd != nullptr && int(id) < pd->sources().size() && pd->sources().at(int(id)).locked;
-    }
-    if (kind == QLatin1String("network"))
-    {
-        NetworkTopology *nt = m_doc->networkTopology();
-        return nt != nullptr && int(id) < nt->nodes().size() && nt->nodes().at(int(id)).locked;
-    }
-    return false;
+    // Locked is its LAYER's lock -- there is no other.
+    bool found = false;
+    const quint32 lid = objectLayerId(kind, id, &found);
+    return found && m_doc->monitorProperties()->layer(lid).locked;
 }
 
 void MonitorGraphicsView::setItemLocked(const QString &kind, quint32 id, bool locked)
 {
+    /* Lock or unlock the layer it is on: everything on that layer with it.
+       An unknown object is ignored -- it must not fall through to layer 0
+       and lock the whole Default layer. */
     MonitorProperties *props = m_doc->monitorProperties();
-    if (kind == QLatin1String("truss"))         { if (Truss *t = props->truss(id)) t->setLocked(locked); }
-    else if (kind == QLatin1String("platform")) { if (StagePlatform *p = props->platform(id)) p->setLocked(locked); }
-    else if (kind == QLatin1String("pipe"))     { if (Pipe *b = props->pipe(id)) b->setLocked(locked); }
-    else if (kind == QLatin1String("stand"))    { if (Stand *s = props->stand(id)) s->setLocked(locked); }
-    else if (kind == QLatin1String("tower"))    { if (Tower *t = props->tower(id)) t->setLocked(locked); }
-    else if (kind == QLatin1String("target"))   { if (StageTarget *t = props->stageTarget(id)) t->setLocked(locked); }
-    else if (kind == QLatin1String("scenery"))  { if (Scenery *sc = props->scenery(id)) sc->setLocked(locked); }
-    else if (kind == QLatin1String("image"))
-    {
-        MonitorProperties::MonitorImage img = props->image(id);
-        img.locked = locked;
-        props->setImage(img);
-    }
-    else if (kind == QLatin1String("power"))
-    {
-        PowerDistribution *pd = m_doc->powerDistribution();
-        if (pd == nullptr || int(id) >= pd->sources().size())
-            return;
-        pd->sources()[int(id)].locked = locked;
-    }
-    else if (kind == QLatin1String("network"))
-    {
-        NetworkTopology *nt = m_doc->networkTopology();
-        if (nt == nullptr || int(id) >= nt->nodes().size())
-            return;
-        nt->nodes()[int(id)].locked = locked;
-    }
-    else
+    bool found = false;
+    const quint32 lid = objectLayerId(kind, id, &found);
+    if (!found || props->layer(lid).locked == locked)
         return;
+    props->setLayerLocked(lid, locked);
     m_doc->setModified();
     refreshItemLayerState();
-    if (kind == QLatin1String("target"))
-        updateTargets();
-    else if (kind == QLatin1String("power"))
-        updatePowerSources();
-    else if (kind == QLatin1String("network"))
-        updateNetworkNodes();
+    updateTargets();
+    updatePowerSources();
+    updateNetworkNodes();
     m_scene->update();
+    emit mapStructureChanged();
 }
 
 void MonitorGraphicsView::requestDeleteItem(const QString &kind, quint32 id)

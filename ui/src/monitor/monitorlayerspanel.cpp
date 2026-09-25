@@ -1271,73 +1271,15 @@ bool MonitorLayersPanel::kindLockable(const QString &kind) const
 
 bool MonitorLayersPanel::objectLocked(const QString &kind, quint32 id) const
 {
-    if (kind == QStringLiteral("truss"))
-        { Truss *t = m_props->truss(id); return t && t->locked(); }
-    if (kind == QStringLiteral("platform"))
-        { StagePlatform *p = m_props->platform(id); return p && p->locked(); }
-    if (kind == QStringLiteral("image"))
-        return m_props->image(id).locked;
-    if (kind == QStringLiteral("pipe"))
-        { Pipe *b = m_props->pipe(id); return b && b->locked(); }
-    if (kind == QStringLiteral("stand"))
-        { Stand *s = m_props->stand(id); return s && s->locked(); }
-    if (kind == QStringLiteral("tower"))
-        { Tower *t = m_props->tower(id); return t && t->locked(); }
-    if (kind == QStringLiteral("target"))
-        { StageTarget *t = m_props->stageTarget(id); return t && t->locked(); }
-    if (kind == QStringLiteral("scenery"))
-        { Scenery *sc = m_props->scenery(id); return sc && sc->locked(); }
-    if (kind == QStringLiteral("power"))
-    {
-        PowerDistribution *pd = m_doc->powerDistribution();
-        return int(id) < pd->sources().size() && pd->sources().at(int(id)).locked;
-    }
-    if (kind == QStringLiteral("network"))
-    {
-        NetworkTopology *nt = m_doc->networkTopology();
-        return int(id) < nt->nodes().size() && nt->nodes().at(int(id)).locked;
-    }
-    return false;
+    // An object is locked exactly when its layer is (MonitorGraphicsView).
+    return m_view != nullptr && m_view->itemLocked(kind, id);
 }
 
 void MonitorLayersPanel::setObjectLocked(const QString &kind, quint32 id, bool locked)
 {
-    if (kind == QStringLiteral("truss"))
-        { if (Truss *t = m_props->truss(id)) t->setLocked(locked); }
-    else if (kind == QStringLiteral("platform"))
-        { if (StagePlatform *p = m_props->platform(id)) p->setLocked(locked); }
-    else if (kind == QStringLiteral("image"))
-    {
-        MonitorProperties::MonitorImage img = m_props->image(id);
-        img.locked = locked;
-        m_props->setImage(img);
-    }
-    else if (kind == QStringLiteral("pipe"))
-        { if (Pipe *b = m_props->pipe(id)) b->setLocked(locked); }
-    else if (kind == QStringLiteral("stand"))
-        { if (Stand *s = m_props->stand(id)) s->setLocked(locked); }
-    else if (kind == QStringLiteral("tower"))
-        { if (Tower *t = m_props->tower(id)) t->setLocked(locked); }
-    else if (kind == QStringLiteral("target"))
-        { if (StageTarget *t = m_props->stageTarget(id)) t->setLocked(locked); }
-    else if (kind == QStringLiteral("scenery"))
-        { if (Scenery *sc = m_props->scenery(id)) sc->setLocked(locked); }
-    else if (kind == QStringLiteral("power"))
-    {
-        PowerDistribution *pd = m_doc->powerDistribution();
-        if (int(id) < pd->sources().size())
-            pd->sources()[int(id)].locked = locked;
-    }
-    else if (kind == QStringLiteral("network"))
-    {
-        NetworkTopology *nt = m_doc->networkTopology();
-        if (int(id) < nt->nodes().size())
-            nt->nodes()[int(id)].locked = locked;
-    }
-    else
-        return;
-    m_doc->setModified();
-    if (m_view) m_view->refreshItemLayerState();
+    // Locks its whole layer: there is no per-object lock.
+    if (m_view != nullptr)
+        m_view->setItemLocked(kind, id, locked);
 }
 
 void MonitorLayersPanel::renameMapItem(const QString &kind, quint32 id, const QString &name)
