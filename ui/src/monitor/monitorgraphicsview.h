@@ -1100,7 +1100,16 @@ private:
      *  performed. */
     struct UndoEntry {
         enum Type { FixtureMove, TrussMove, PlatformMove, TargetMove,
-                    FeaturePaste } type;
+                    FeaturePaste,
+                    /** Towers, stands, booms, scenery, power sources and
+                     *  network nodes: (kind, id) -> old origin, metres. */
+                    ItemMove } type;
+        /** Entries recorded by ONE drag share a batch (0 = on its own), and
+         *  one Ctrl+Z undoes the whole batch -- a Select All drag records one
+         *  entry per kind it moved. */
+        int batch = 0;
+        QList<QPair<QString, quint32> > itemKeys;     ///< type == ItemMove
+        QList<QPointF>                  itemOrigins;  ///< type == ItemMove, parallel
         QHash<quint32, QPointF>   fixturePositions; ///< type == FixtureMove
         QHash<quint32, QVector3D> trussOrigins;     ///< type == TrussMove
         QHash<quint32, QPointF>   platformOrigins;  ///< type == PlatformMove (metres)
@@ -1112,6 +1121,12 @@ private:
         QList<quint32> pastedPaletteIds;
     };
     QList<UndoEntry> m_moveUndo;
+    int m_undoBatch = 0;          ///< last batch number handed out
+    int m_openUndoBatch = 0;      ///< the drag in progress's batch, 0 = none
+    /** Record an undo entry (in the open batch, if any), keeping the last 50. */
+    void pushUndo(UndoEntry e);
+    /** Put back what one entry recorded. */
+    void undoOne(const UndoEntry &entry);
 
     /** Set by mouseDoubleClickEvent; suppresses the viewClicked emission on
      *  the paired mouseReleaseEvent so it doesn't immediately close the editor

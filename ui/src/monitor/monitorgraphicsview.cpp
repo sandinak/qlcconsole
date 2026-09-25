@@ -41,6 +41,7 @@
 #include <QGraphicsItemGroup>
 #include <QtMath>
 #include <QScopedValueRollback>
+#include <QScopeGuard>
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
@@ -3664,9 +3665,7 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
 
     if (!e.trussOrigins.isEmpty())
     {
-        m_moveUndo.append(e);
-        while (m_moveUndo.count() > 50)
-            m_moveUndo.removeFirst();
+        pushUndo(e);
         m_doc->setModified();
     }
 
@@ -3933,19 +3932,26 @@ void MonitorGraphicsView::slotTowerMoved(TowerItem *item)
     if (!moved.contains(item))
         moved.append(item);
 
+    UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (TowerItem *ti, moved)
     {
         Tower *tw = ti->tower();
         if (tw == nullptr)
             continue;
         const QPointF c = ti->pos();
+        undo.itemKeys << qMakePair(QStringLiteral("tower"), tw->id());
+        undo.itemOrigins << QPointF(double(tw->originX()), double(tw->originY()));
         tw->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
         tw->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+        if (undo.itemOrigins.last() == QPointF(double(tw->originX()), double(tw->originY())))
+        { undo.itemKeys.removeLast(); undo.itemOrigins.removeLast(); }
         // Fixtures on its shelves follow (derived).
         foreach (Fixture *fx, m_doc->fixtures())
             if (m_doc->monitorProperties()->fixtureRigProps(fx->id()).towerId == tw->id())
                 updateFixture(fx->id());
     }
+    if (!undo.itemKeys.isEmpty())
+        pushUndo(undo);
     refreshFixtureCountBadges();
     m_doc->setModified();
     emit mapStructureChanged();
@@ -3965,15 +3971,22 @@ void MonitorGraphicsView::slotStandMoved(StandItem *item)
     if (!moved.contains(item))
         moved.append(item);
 
+    UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (StandItem *si, moved)
     {
         Stand *s = si->stand();
         if (s == nullptr)
             continue;
         const QPointF c = si->pos();
+        undo.itemKeys << qMakePair(QStringLiteral("stand"), s->id());
+        undo.itemOrigins << QPointF(double(s->originX()), double(s->originY()));
         s->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
         s->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+        if (undo.itemOrigins.last() == QPointF(double(s->originX()), double(s->originY())))
+        { undo.itemKeys.removeLast(); undo.itemOrigins.removeLast(); }
     }
+    if (!undo.itemKeys.isEmpty())
+        pushUndo(undo);
     m_doc->monitorProperties()->recomputeStandMounts();   // pipes on it follow
     m_doc->setModified();
     emit mapStructureChanged();
@@ -3991,6 +4004,7 @@ void MonitorGraphicsView::slotSceneryMoved(SceneryItem *item)
     if (!moved.contains(item))
         moved.append(item);
 
+    UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (SceneryItem *sci, moved)
     {
         Scenery *s = sci->scenery();
@@ -3998,9 +4012,15 @@ void MonitorGraphicsView::slotSceneryMoved(SceneryItem *item)
             continue;
         // The item sits at the middle of the sheet's bottom edge.
         const QPointF mm = pixelsToRealPosition(sci->pos().x(), sci->pos().y());
+        undo.itemKeys << qMakePair(QStringLiteral("scenery"), s->id());
+        undo.itemOrigins << QPointF(double(s->originX()), double(s->originY()));
         s->setOriginX(float(mm.x() / 1000.0));
         s->setOriginY(float(mm.y() / 1000.0));
+        if (undo.itemOrigins.last() == QPointF(double(s->originX()), double(s->originY())))
+        { undo.itemKeys.removeLast(); undo.itemOrigins.removeLast(); }
     }
+    if (!undo.itemKeys.isEmpty())
+        pushUndo(undo);
     m_doc->setModified();
     emit mapStructureChanged();
 }
@@ -4019,15 +4039,22 @@ void MonitorGraphicsView::slotPipeMoved(PipeItem *item)
     if (!moved.contains(item))
         moved.append(item);
 
+    UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (PipeItem *pi, moved)
     {
         Pipe *b = pi->pipe();
         if (b == nullptr)
             continue;
         const QPointF c = pi->pos();   // base centre in scene pixels
+        undo.itemKeys << qMakePair(QStringLiteral("pipe"), b->id());
+        undo.itemOrigins << QPointF(double(b->originX()), double(b->originY()));
         b->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
         b->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
+        if (undo.itemOrigins.last() == QPointF(double(b->originX()), double(b->originY())))
+        { undo.itemKeys.removeLast(); undo.itemOrigins.removeLast(); }
     }
+    if (!undo.itemKeys.isEmpty())
+        pushUndo(undo);
     refreshFixtureCountBadges();
     m_doc->setModified();
     emit mapStructureChanged();
@@ -4092,9 +4119,7 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
 
     if (!e.platformOrigins.isEmpty())
     {
-        m_moveUndo.append(e);
-        while (m_moveUndo.count() > 50)
-            m_moveUndo.removeFirst();
+        pushUndo(e);
         m_doc->setModified();
     }
 
@@ -4199,17 +4224,24 @@ void MonitorGraphicsView::slotPowerSourceMoved(PowerSourceItem *item)
     }
 
     bool any = false;
+    UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (PowerSourceItem *ps, moved)
     {
         const int idx = ps->sourceIndex();
         if (idx < 0 || idx >= pd->sources().size())
             continue;
         const QPointF mm = pixelsToRealPosition(ps->pos().x(), ps->pos().y());
+        undo.itemKeys << qMakePair(QStringLiteral("power"), quint32(idx));
+        undo.itemOrigins << QPointF(pd->sources()[idx].posX, pd->sources()[idx].posY);
         pd->sources()[idx].placed = true;
         pd->sources()[idx].posX = mm.x() / 1000.0;
         pd->sources()[idx].posY = mm.y() / 1000.0;
+        if (undo.itemOrigins.last() == QPointF(pd->sources()[idx].posX, pd->sources()[idx].posY))
+        { undo.itemKeys.removeLast(); undo.itemOrigins.removeLast(); }
         any = true;
     }
+    if (!undo.itemKeys.isEmpty())
+        pushUndo(undo);
     if (any)
         m_doc->setModified();
 }
@@ -4438,17 +4470,24 @@ void MonitorGraphicsView::slotNetworkNodeMoved(NetworkNodeItem *item)
     }
 
     bool any = false;
+    UndoEntry undo; undo.type = UndoEntry::ItemMove;
     foreach (NetworkNodeItem *nn, moved)
     {
         const int idx = nn->nodeIndex();
         if (idx < 0 || idx >= nt->nodes().size())
             continue;
         const QPointF mm = pixelsToRealPosition(nn->pos().x(), nn->pos().y());
+        undo.itemKeys << qMakePair(QStringLiteral("network"), quint32(idx));
+        undo.itemOrigins << QPointF(nt->nodes()[idx].posX, nt->nodes()[idx].posY);
         nt->nodes()[idx].placed = true;
         nt->nodes()[idx].posX = mm.x() / 1000.0;
         nt->nodes()[idx].posY = mm.y() / 1000.0;
+        if (undo.itemOrigins.last() == QPointF(nt->nodes()[idx].posX, nt->nodes()[idx].posY))
+        { undo.itemKeys.removeLast(); undo.itemOrigins.removeLast(); }
         any = true;
     }
+    if (!undo.itemKeys.isEmpty())
+        pushUndo(undo);
     // Only the links follow: a rebuild here would delete the item whose mouse
     // release is still being handled.
     updateNetworkLinks();
@@ -4625,9 +4664,7 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
 
     if (!e.targetPositions.isEmpty())
     {
-        m_moveUndo.append(e);
-        while (m_moveUndo.count() > 50)
-            m_moveUndo.removeFirst();
+        pushUndo(e);
         m_doc->setModified();
         m_doc->monitorProperties()->notifyStageTargetsChanged();
     }
@@ -5347,6 +5384,10 @@ void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
 
 void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 {
+    // Everything this release records is one drag: one Ctrl+Z undoes it all.
+    m_openUndoBatch = ++m_undoBatch;
+    auto closeBatch = qScopeGuard([this]() { m_openUndoBatch = 0; });
+
     // Capture which trusses the cursor was hovering over at release time.
     // We check BOTH the last-move highlight state AND the cursor position at
     // release (mouse events can be coalesced, so the last moveEvent may not
@@ -7990,9 +8031,7 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         if (changed.isEmpty() == false)
         {
             UndoEntry e; e.type = UndoEntry::FixtureMove; e.fixturePositions = changed;
-            m_moveUndo.append(e);
-            while (m_moveUndo.count() > 50)
-                m_moveUndo.removeFirst();
+            pushUndo(e);
         }
         m_pendingMoveUndo.clear();
     }
@@ -8037,6 +8076,12 @@ void MonitorGraphicsView::recordFeaturePaste(const QList<quint32> &trussIds,
     e.pastedPlatformIds = platformIds;
     e.pastedTargetIds   = targetIds;
     e.pastedPaletteIds  = paletteIds;
+    pushUndo(e);
+}
+
+void MonitorGraphicsView::pushUndo(UndoEntry e)
+{
+    e.batch = m_openUndoBatch;
     m_moveUndo.append(e);
     while (m_moveUndo.count() > 50)
         m_moveUndo.removeFirst();
@@ -8046,7 +8091,59 @@ void MonitorGraphicsView::undoLastMove()
 {
     if (m_moveUndo.isEmpty())
         return;
-    const UndoEntry entry = m_moveUndo.takeLast();
+    // Whatever moved back, its count bubble goes with it.
+    auto refreshBadges = qScopeGuard([this]() { refreshFixtureCountBadges(); });
+    // The whole drag: every entry it recorded, newest first.
+    const UndoEntry last = m_moveUndo.takeLast();
+    undoOne(last);
+    while (last.batch != 0 && !m_moveUndo.isEmpty() && m_moveUndo.last().batch == last.batch)
+        undoOne(m_moveUndo.takeLast());
+}
+
+void MonitorGraphicsView::undoOne(const UndoEntry &entry)
+{
+    if (entry.type == UndoEntry::ItemMove)
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        bool stands = false, power = false, network = false;
+        for (int i = 0; i < entry.itemKeys.size(); ++i)
+        {
+            const QString &kind = entry.itemKeys.at(i).first;
+            const quint32 id = entry.itemKeys.at(i).second;
+            const QPointF o = entry.itemOrigins.at(i);
+            if (kind == QLatin1String("tower"))
+            { if (Tower *t = props->tower(id)) { t->setOriginX(float(o.x())); t->setOriginY(float(o.y())); } }
+            else if (kind == QLatin1String("stand"))
+            { if (Stand *st = props->stand(id)) { st->setOriginX(float(o.x())); st->setOriginY(float(o.y())); stands = true; } }
+            else if (kind == QLatin1String("pipe"))
+            { if (Pipe *b = props->pipe(id)) { b->setOriginX(float(o.x())); b->setOriginY(float(o.y())); } }
+            else if (kind == QLatin1String("scenery"))
+            { if (Scenery *sc = props->scenery(id)) { sc->setOriginX(float(o.x())); sc->setOriginY(float(o.y())); } }
+            else if (kind == QLatin1String("power"))
+            {
+                PowerDistribution *pd = m_doc->powerDistribution();
+                if (int(id) < pd->sources().size())
+                { pd->sources()[int(id)].posX = o.x(); pd->sources()[int(id)].posY = o.y(); power = true; }
+            }
+            else if (kind == QLatin1String("network"))
+            {
+                NetworkTopology *nt = m_doc->networkTopology();
+                if (int(id) < nt->nodes().size())
+                { nt->nodes()[int(id)].posX = o.x(); nt->nodes()[int(id)].posY = o.y(); network = true; }
+            }
+        }
+        if (stands)
+            props->recomputeStandMounts();
+        updatePlatforms();
+        updateTrusses();
+        // Anything mounted on what moved back follows it.
+        foreach (quint32 fid, m_fixtures.keys())
+            updateFixture(fid);
+        if (power) updatePowerSources();
+        if (network) updateNetworkNodes();
+        m_doc->setModified();
+        return;
+    }
 
     if (entry.type == UndoEntry::FeaturePaste)
     {
@@ -8082,9 +8179,24 @@ void MonitorGraphicsView::undoLastMove()
             StagePlatform *p = props ? props->platform(it.key()) : nullptr;
             if (p == nullptr)
                 continue;
+            // The deck's fixtures rode it there (slotPlatformMoved); ride back.
+            const float dxMm = float((it.value().x() - double(p->originX())) * 1000.0);
+            const float dyMm = float((it.value().y() - double(p->originY())) * 1000.0);
             p->setOriginX(float(it.value().x()));
             p->setOriginY(float(it.value().y()));
+            for (auto fit = m_fixtures.constBegin(); fit != m_fixtures.constEnd(); ++fit)
+            {
+                if (props->fixtureRigProps(fit.key()).deckPlatformId != p->id())
+                    continue;
+                QVector3D fp = props->fixturePosition(fit.key(), 0, 0);
+                fp.setX(fp.x() + dxMm);
+                fp.setY(fp.y() + dyMm);
+                props->setFixturePosition(fit.key(), 0, 0, fp);
+            }
         }
+        if (props != nullptr)
+            props->recomputeAnchoredFrames();
+        refreshRiserFixtures();
         updatePlatforms();
         updatePowerSources();
         updateNetworkNodes();

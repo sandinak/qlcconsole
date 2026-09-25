@@ -11682,6 +11682,154 @@ void Monitor_Test::selectAllTakesEverythingSelectable()
     delete doc;
 }
 
+void Monitor_Test::aDecksCountBubbleMovesWithIt()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setName("USP1");
+    deck->setOriginX(1.0f);
+    deck->setOriginY(1.0f);
+    deck->setWidth(4.0f);
+    deck->setDepth(1.0f);
+    deck->setHeight(0.6f);
+    QList<Fixture *> heads;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setChannels(4);
+        f->setAddress(quint32(i * 4));
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(1500.0f + i * 1000.0f, 1500.0f, 0.0f));
+        FixtureRigProps rp;
+        rp.deckPlatformId = deck->id();
+        props->setFixtureRigProps(f->id(), rp);
+        heads << f;
+    }
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.setSnapDivisions(0);
+        view.updatePlatforms();
+        foreach (Fixture *f, heads)
+            view.addFixture(f->id(), QPointF(props->fixturePosition(f->id(), 0, 0).x(),
+                                             props->fixturePosition(f->id(), 0, 0).y()));
+        view.setMountedFixturesVisible(false);          // the deck shows a count bubble instead
+        const QString key = QString("platform:%1").arg(deck->id());
+        QVERIFY2(view.m_countBadges.contains(key), "the deck should carry a count bubble");
+        const QPointF before = view.m_countBadges.value(key)->sceneBoundingRect().center();
+
+        // Dragged a metre downstage: the deck, its fixtures and its bubble all go.
+        PlatformItem *item = view.m_platformItems.value(deck->id());
+        item->setPos(item->pos() + QPointF(0, view.m_cellPixels));
+        view.slotPlatformMoved(item);
+        QVERIFY(qAbs(deck->originY() - 2.0f) < 0.02f);
+        QVERIFY(qAbs(props->fixturePosition(heads.first()->id(), 0, 0).y() - 2500.0f) < 20.0f);
+        const QPointF after = view.m_countBadges.value(key)->sceneBoundingRect().center();
+        QVERIFY2(qAbs((after - before).y() - view.m_cellPixels) < 2.0,
+                 qPrintable(QString("bubble moved %1 px, deck moved %2 px")
+                            .arg((after - before).y()).arg(view.m_cellPixels)));
+
+        // Undo puts all three back, bubble included.
+        view.undoLastMove();
+        const QPointF back = view.m_countBadges.value(key)->sceneBoundingRect().center();
+        QVERIFY((back - before).manhattanLength() < 2.0);
+    }
+    delete doc;
+}
+
+void Monitor_Test::oneUndoPutsBackAWholeMixedDrag()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.0f);
+    deck->setWidth(3.0f); deck->setDepth(1.0f); deck->setHeight(0.5f);
+    Fixture *onDeck = new Fixture(doc);
+    onDeck->setChannels(4);
+    QVERIFY(doc->addFixture(onDeck));
+    props->setFixturePosition(onDeck->id(), 0, 0, QVector3D(1500.0f, 1500.0f, 0.0f));
+    FixtureRigProps rp;
+    rp.deckPlatformId = deck->id();
+    props->setFixtureRigProps(onDeck->id(), rp);
+    Tower *tower = props->addTower();
+    tower->setOriginX(6.0f); tower->setOriginY(3.0f);
+    Stand *stand = props->addStand();
+    stand->setOriginX(8.0f); stand->setOriginY(3.0f);
+    Scenery *cyc = props->addScenery();
+    cyc->setOriginX(5.0f); cyc->setOriginY(0.5f);
+    StageTarget *mark = props->addStageTarget();
+    mark->setPosition(QVector3D(4.0f, 4.0f, 0.0f));
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.setSnapDivisions(0);
+        view.updatePlatforms();
+        view.updateTargets();
+        view.addFixture(onDeck->id(), QPointF(1500.0, 1500.0));
+        const qreal m = view.m_cellPixels;               // one metre
+
+        // One drag of a mixed selection: every item a metre downstage, then
+        // each kind's handler -- twice, as a real release does (its own drop,
+        // then the sweep); the second pass must not record a second move.
+        view.m_openUndoBatch = ++view.m_undoBatch;
+        QList<QGraphicsItem *> items = { view.m_platformItems.value(deck->id()), view.m_towerItems.value(tower->id()),
+                                         view.m_standItems.value(stand->id()), view.m_sceneryItems.value(cyc->id()),
+                                         view.m_targetItems.value(mark->id()) };
+        for (QGraphicsItem *gi : items)
+        {
+            QVERIFY(gi != nullptr);
+            gi->setPos(gi->pos() + QPointF(0, m));
+        }
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            view.slotPlatformMoved(view.m_platformItems.value(deck->id()));
+            view.slotTowerMoved(view.m_towerItems.value(tower->id()));
+            view.slotStandMoved(view.m_standItems.value(stand->id()));
+            view.slotSceneryMoved(view.m_sceneryItems.value(cyc->id()));
+            view.slotTargetMoved(view.m_targetItems.value(mark->id()));
+        }
+        view.m_openUndoBatch = 0;
+        QVERIFY(qAbs(deck->originY() - 2.0f) < 0.02f);
+        QVERIFY(qAbs(tower->originY() - 4.0f) < 0.02f);
+        QVERIFY(qAbs(stand->originY() - 4.0f) < 0.02f);
+        QVERIFY(qAbs(cyc->originY() - 1.5f) < 0.02f);
+        QVERIFY(qAbs(mark->y() - 5.0f) < 0.02f);
+        QVERIFY(qAbs(props->fixturePosition(onDeck->id(), 0, 0).y() - 2500.0f) < 20.0f);
+        const int entries = view.m_moveUndo.size();
+        QCOMPARE(entries, 5);                            // one per kind, none doubled
+
+        // One Ctrl+Z: all of it, the deck's fixture included.
+        view.undoLastMove();
+        QVERIFY(view.m_moveUndo.isEmpty());
+        QVERIFY2(qAbs(deck->originY() - 1.0f) < 0.02f, qPrintable(QString::number(deck->originY())));
+        QVERIFY(qAbs(tower->originY() - 3.0f) < 0.02f);
+        QVERIFY(qAbs(stand->originY() - 3.0f) < 0.02f);
+        QVERIFY(qAbs(cyc->originY() - 0.5f) < 0.02f);
+        QVERIFY(qAbs(mark->y() - 4.0f) < 0.02f);
+        QVERIFY2(qAbs(props->fixturePosition(onDeck->id(), 0, 0).y() - 1500.0f) < 20.0f,
+                 qPrintable(QString::number(props->fixturePosition(onDeck->id(), 0, 0).y())));
+
+        // Moves made on their own stay separate steps.
+        QGraphicsItem *ti = view.m_towerItems.value(tower->id());
+        ti->setPos(ti->pos() + QPointF(m, 0));
+        view.slotTowerMoved(view.m_towerItems.value(tower->id()));
+        QGraphicsItem *si = view.m_standItems.value(stand->id());
+        si->setPos(si->pos() + QPointF(m, 0));
+        view.slotStandMoved(view.m_standItems.value(stand->id()));
+        view.undoLastMove();
+        QVERIFY(qAbs(stand->originX() - 8.0f) < 0.02f);  // the stand came back...
+        QVERIFY(qAbs(tower->originX() - 7.0f) < 0.02f);  // ...the tower waits its turn
+        view.undoLastMove();
+        QVERIFY(qAbs(tower->originX() - 6.0f) < 0.02f);
+    }
+    delete doc;
+}
+
 /* A staged fixture whose definition has a Maintenance channel with Reset and
  * Identify, so the test dialogs grow their DMX buttons. */
 static Fixture *stagedWithMaintenance(Doc *doc, FixtureCleanup *cleanup)
