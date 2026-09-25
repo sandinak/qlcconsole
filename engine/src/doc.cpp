@@ -43,6 +43,7 @@
 
 #include "monitorproperties.h"
 #include "powerdistribution.h"
+#include "networktopology.h"
 #include "timecodesource.h"
 #include "audioplugincache.h"
 #include "capturemanager.h"
@@ -90,6 +91,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_ioMap(new InputOutputMap(this, universes))
     , m_monitorProps(NULL)
     , m_powerDist(NULL)
+    , m_networkTopology(NULL)
     , m_timecodeSource(NULL)
     , m_mode(Design)
     , m_kiosk(false)
@@ -237,6 +239,9 @@ Doc::~Doc()
 
     delete m_powerDist;
     m_powerDist = NULL;
+
+    delete m_networkTopology;
+    m_networkTopology = NULL;
 }
 
 void Doc::clearContents()
@@ -253,6 +258,9 @@ void Doc::clearContents()
 
     if (m_powerDist != NULL)
         m_powerDist->reset();
+
+    if (m_networkTopology != NULL)
+        m_networkTopology->reset();
 
     // Drop any parked fixtures so a quarantine doesn't bleed into the next
     // workspace (loadXML re-populates from <Park> if present).
@@ -2029,6 +2037,18 @@ PowerDistribution *Doc::powerDistribution()
     return m_powerDist;
 }
 
+/*********************************************************************
+ * Network Topology
+ *********************************************************************/
+
+NetworkTopology *Doc::networkTopology()
+{
+    if (m_networkTopology == NULL)
+        m_networkTopology = new NetworkTopology();
+
+    return m_networkTopology;
+}
+
 TimecodeSource *Doc::timecodeSource()
 {
     if (m_timecodeSource == NULL)
@@ -2122,6 +2142,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         else if (doc.name() == KXMLQLCPowerDistribution)
         {
             powerDistribution()->loadXML(doc, this);
+        }
+        else if (doc.name() == KXMLQLCNetworkTopology)
+        {
+            networkTopology()->loadXML(doc, this);
         }
         else if (doc.name() == KXMLQLCPark)
         {
@@ -2218,6 +2242,9 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
 
     if (m_powerDist != NULL)
         m_powerDist->saveXML(doc);
+
+    if (m_networkTopology != NULL)
+        m_networkTopology->saveXML(doc);
 
     if (m_programmer != NULL)
         m_programmer->saveParkXML(doc);

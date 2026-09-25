@@ -49,6 +49,7 @@ class RGBScriptsCache;
 class AudioPluginCache;
 class MonitorProperties;
 class PowerDistribution;
+class NetworkTopology;
 class TimecodeSource;
 class CaptureManager;
 class ProgrammerFlasher;
@@ -187,6 +188,7 @@ private:
     mutable QSharedPointer<AudioCapture> m_inputCapture;
     MonitorProperties *m_monitorProps;
     PowerDistribution *m_powerDist;
+    NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
 
     /*********************************************************************
@@ -1071,6 +1073,13 @@ public:
 public:
     /** Returns a reference to the power distribution model instance */
     PowerDistribution *powerDistribution();
+
+    /*********************************************************************
+     * Network Topology
+     *********************************************************************/
+public:
+    /** Returns a reference to the network/cabling topology model instance */
+    NetworkTopology *networkTopology();
 
     /*********************************************************************
      * Timecode

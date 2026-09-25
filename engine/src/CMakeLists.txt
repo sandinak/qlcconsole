@@ -39,6 +39,8 @@ add_library(${module_name} SHARED
     keypadparser.cpp keypadparser.h
     mastertimer.cpp mastertimer.h
     monitorproperties.cpp monitorproperties.h
+    networkreport.cpp networkreport.h
+    networktopology.cpp networktopology.h
     powerdistribution.cpp powerdistribution.h
     venue.cpp venue.h
     aimsolver.cpp aimsolver.h
