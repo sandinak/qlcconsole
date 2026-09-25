@@ -34,6 +34,10 @@
 #include "patchinventorydialog.h"
 #undef private
 #include "scene.h"
+#include <QCheckBox>
+#include "monitorproperties.h"
+#include "networktopology.h"
+#include "inputoutputmap.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
@@ -98,7 +102,7 @@ void PatchInventoryDialog_Test::editingIntoACollisionFlagsItAndBlocksApply()
 
     // Put B on top of A.
     qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(1, 6))->setValue(1);
-    QVERIFY2(dlg.m_table->item(1, 7)->text().contains("CONFLICT"), qPrintable(dlg.m_table->item(1, 7)->text()));
+    QVERIFY2(dlg.m_table->item(1, 8)->text().contains("CONFLICT"), qPrintable(dlg.m_table->item(1, 8)->text()));
     QVERIFY(!dlg.m_apply->isEnabled());
     QVERIFY(dlg.m_summary->text().contains("1 conflict"));
 
@@ -187,7 +191,7 @@ void PatchInventoryDialog_Test::aGenericDimmersChannelsAreChosenHere()
     QCOMPARE(sp->value(), 4);
     sp->setValue(8);
     QCOMPARE(dlg.m_table->item(0, 3)->text(), QString("8"));
-    QVERIFY2(dlg.m_table->item(1, 7)->text().contains("CONFLICT"), qPrintable(dlg.m_table->item(1, 7)->text()));
+    QVERIFY2(dlg.m_table->item(1, 8)->text().contains("CONFLICT"), qPrintable(dlg.m_table->item(1, 8)->text()));
     QVERIFY(!dlg.m_apply->isEnabled());
 
     // Re-plan keeps the footprint decision and moves B clear of it.
@@ -328,7 +332,7 @@ void PatchInventoryDialog_Test::aCollisionWithTheShowIsFlaggedToo()
     QVERIFY(dlg.m_apply->isEnabled());
 
     qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(0, 6))->setValue(8);   // onto 8-11
-    QVERIFY(dlg.m_table->item(0, 7)->text().contains("CONFLICT"));
+    QVERIFY(dlg.m_table->item(0, 8)->text().contains("CONFLICT"));
     QVERIFY(!dlg.m_apply->isEnabled());
 }
 
@@ -344,7 +348,7 @@ void PatchInventoryDialog_Test::newUniversesAndNotesAreSpelledOut()
     QCOMPARE(dlg.m_table->rowCount(), 2);
     for (int r = 0; r < 2; r++)
     {
-        const QString st = dlg.m_table->item(r, 7)->text();
+        const QString st = dlg.m_table->item(r, 8)->text();
         QVERIFY2(st.startsWith("new universe"), qPrintable(st));
         const bool noIp = dlg.m_table->item(r, 0)->text() == "Fence 2";
         QCOMPARE(st.contains(" -- network fixture has no IP"), noIp);
@@ -381,6 +385,115 @@ void PatchInventoryDialog_Test::problemsDuringApplyAreReported()
     QVERIFY2(shown.contains("Patched 1 fixture") && shown.contains("no ArtNet/sACN output"),
              qPrintable(shown));
     QCOMPARE(dlg.result(), int(QDialog::Accepted));
+}
+
+static NetworkNode nodeAt(const char *name, double x, double y, const QList<quint32> &unis)
+{
+    NetworkNode n;
+    n.name = name;
+    n.placed = true;
+    n.posX = x;
+    n.posY = y;
+    foreach (quint32 u, unis)
+    {
+        NetworkPort p;
+        p.universe = u;
+        n.ports << p;
+    }
+    return n;
+}
+
+static Fixture *placed(Doc *doc, const QString &name, double x, double y)
+{
+    Fixture *f = staged(doc, 4, name);
+    doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(float(x * 1000), float(y * 1000), 0));
+    return f;
+}
+
+static int rowOf(PatchInventoryDialog &dlg, quint32 fid)
+{
+    for (int r = 0; r < dlg.m_table->rowCount(); r++)
+        if (dlg.m_table->item(r, 0)->data(Qt::UserRole).toUInt() == fid)
+            return r;
+    return -1;
+}
+
+void PatchInventoryDialog_Test::nearestNodeProposalsShowWhereTheyGoAndApply()
+{
+    m_doc->networkTopology()->nodes() << nodeAt("SR Node", 0, 0, { 0 })
+                                      << nodeAt("SL Node", 10, 0, { 1 });
+    Fixture *t1 = placed(m_doc, "T1", 1, 0);
+    Fixture *t4 = placed(m_doc, "T4", 9, 0);
+
+    PatchInventoryDialog dlg(m_doc);
+    QVERIFY(dlg.m_proximity->isEnabled() && dlg.m_proximity->isChecked());
+    const int r1 = rowOf(dlg, t1->id()), r4 = rowOf(dlg, t4->id());
+    QVERIFY2(dlg.m_table->item(r1, 7)->text() == QString::fromUtf8("SR Node · port 1 · 1.0 m"),
+             qPrintable(dlg.m_table->item(r1, 7)->text()));
+    QVERIFY2(dlg.m_table->item(r4, 7)->text().startsWith(QString::fromUtf8("SL Node · port 1")),
+             qPrintable(dlg.m_table->item(r4, 7)->text()));
+
+    dlg.accept();
+    QCOMPARE(t1->universe(), quint32(0));
+    QCOMPARE(t4->universe(), quint32(1));
+}
+
+void PatchInventoryDialog_Test::untickingNearestNodeProposesFirstFit()
+{
+    m_doc->networkTopology()->nodes() << nodeAt("SL Node", 10, 0, { 1 });
+    Fixture *t4 = placed(m_doc, "T4", 9, 0);
+
+    PatchInventoryDialog dlg(m_doc);
+    QCOMPARE(dlg.currentPlan().first().universe, quint32(1));
+    dlg.m_proximity->setChecked(false);                  // re-proposes on its own
+    QCOMPARE(dlg.currentPlan().first().universe, quint32(0));
+    QCOMPARE(dlg.currentPlan().first().nodeIndex, -1);
+    QCOMPARE(dlg.m_table->item(rowOf(dlg, t4->id()), 7)->text(), QString::fromUtf8("—"));
+}
+
+void PatchInventoryDialog_Test::aHandEditedUniverseDropsTheProposedPort()
+{
+    // The node's only port is free: the proposal gives it a new universe.
+    m_doc->networkTopology()->nodes()
+        << nodeAt("SL Node", 10, 0, { 1, InputOutputMap::invalidUniverse() });
+    Fixture *full = new Fixture(m_doc);
+    full->setChannels(512);
+    full->setUniverse(1);
+    QVERIFY(m_doc->addFixture(full));                    // universe 2 is full
+    Fixture *t4 = placed(m_doc, "T4", 9, 0);
+
+    PatchInventoryDialog dlg(m_doc);
+    const int r = rowOf(dlg, t4->id());
+    PatchPlanner::Assignment a = dlg.currentPlan().at(r);
+    QVERIFY(a.claimsPort && a.portIndex == 1);
+    QVERIFY2(dlg.m_table->item(r, 7)->text().contains("assigns the port"), qPrintable(dlg.m_table->item(r, 7)->text()));
+
+    // Moved by hand to universe 1: no longer the free port's, and says what carries it.
+    qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(r, 5))->setValue(1);
+    a = dlg.currentPlan().at(r);
+    QVERIFY(!a.claimsPort);
+    QCOMPARE(a.nodeIndex, -1);
+    QCOMPARE(dlg.m_table->item(r, 7)->text(), QString::fromUtf8("—"));   // nothing carries universe 1
+    qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(r, 5))->setValue(2);
+    QCOMPARE(dlg.m_table->item(r, 7)->text(), QString::fromUtf8("SL Node · port 1"));
+
+    // Back to 1 and apply: the free port stays free.
+    qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(r, 5))->setValue(1);
+    dlg.accept();
+    QCOMPARE(m_doc->networkTopology()->nodes().first().ports.at(1).universe,
+             InputOutputMap::invalidUniverse());
+}
+
+void PatchInventoryDialog_Test::withNoNodesOnThePlotThereIsNothingToTick()
+{
+    NetworkNode unplaced = nodeAt("Somewhere", 0, 0, { 0 });
+    unplaced.placed = false;
+    m_doc->networkTopology()->nodes() << unplaced;
+    placed(m_doc, "T1", 1, 0);
+    PatchInventoryDialog dlg(m_doc);
+    QVERIFY(!dlg.m_proximity->isEnabled());
+    QVERIFY(!dlg.m_proximity->isChecked());
+    QVERIFY(dlg.m_proximity->toolTip().contains("Place network nodes"));
 }
 
 QTEST_MAIN(PatchInventoryDialog_Test)

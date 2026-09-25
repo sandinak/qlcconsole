@@ -49,6 +49,11 @@ private slots:
     void newUniversesAndNotesAreSpelledOut();
     void problemsDuringApplyAreReported();
 
+    void nearestNodeProposalsShowWhereTheyGoAndApply();
+    void untickingNearestNodeProposesFirstFit();
+    void aHandEditedUniverseDropsTheProposedPort();
+    void withNoNodesOnThePlotThereIsNothingToTick();
+
 private:
     Doc *m_doc;
 };

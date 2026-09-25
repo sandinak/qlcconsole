@@ -58,8 +58,12 @@ Sequenced: network topology first, then inventory.
   suite (Simple Desk, VC slider/XY pad presets, DMX dump, Connections tree,
   input/output manager, app.cpp), FixtureRemap (needs the whole App), and
   `QDrag::exec()` in the inventory panel.
+- **Done 2026-09-25:** N6 -- proximity-guided patching: a placed DMX fixture
+  goes to the nearest node port with room (a free port claims a new universe,
+  written onto the port on Apply); Patch dialog Via column and "Place by nearest
+  node". See NETWORK_CABLING_DESIGN.md "What N6 built".
 - **Open (deferred):** equipment catalog for network gear (place a node from a
-  model); N6 proximity-guided Patch.
+  model); pipes/booms still list their fixtures loose in Layers.
 
 ---
 
@@ -89,10 +93,21 @@ audience blinders are exempt by fixture group.
 
 ---
 
-## IDEA (not started): stage scenery -- back wall, cyclorama, drapes
+## NEXT (after N6): stage scenery -- back wall, cyclorama, drapes
 
 Branson, 2026-09-17: "stage features .. like back wall .. cyclorama .. front
 drapes ..etc. how do we visualize and manage them"
+
+Branson, 2026-09-25: queued as the next feature after N6 -- "stage features
+like main drape, cyclorama, side drapes .. etc."
+
+**The set to model** (the usual proscenium soft goods, plus hard scenery):
+  - Main drape / house curtain -- downstage, full width; open, closed, or flown.
+  - Cyclorama -- upstage, full width and height, often curved; light-receiving.
+  - Side drapes: legs (vertical masking each side, in pairs per wing) and
+    tormentors (the downstage-most pair).
+  - Borders / teasers -- horizontal masking hung above, one per wing.
+  - Travelers (mid-stage curtains that split and track), scrims, back wall.
 
 **What exists.** Structures today are things you rig ON -- trusses, towers,
 pipes, stands, platforms/steps -- plus targets. Nothing models a SURFACE that

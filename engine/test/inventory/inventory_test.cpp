@@ -33,6 +33,8 @@
 #include "qlcfixturehead.h"
 #include "fixture.h"
 #include "inputoutputmap.h"
+#include "monitorproperties.h"
+#include "networktopology.h"
 #include "outputpatch.h"
 #include "doc.h"
 
@@ -832,6 +834,157 @@ void Inventory_Test::groupingNamesForGenericAndRgbPanels()
     QVERIFY(g_doc->addFixture(p));
     QCOMPARE(p->groupingManufacturer(), QString("Generic"));
     QCOMPARE(p->groupingModel(), QString("RGB panel"));
+}
+
+/* A wired node at (x, y) metres, one port per universe (invalid = free port). */
+static NetworkNode proxNode(const char *name, double x, double y, const QList<quint32> &unis)
+{
+    NetworkNode n;
+    n.name = name;
+    n.placed = true;
+    n.posX = x;
+    n.posY = y;
+    foreach (quint32 u, unis)
+    {
+        NetworkPort p;
+        p.universe = u;
+        n.ports << p;
+    }
+    return n;
+}
+
+/* A staged dimmer placed on the plot at (x, y) metres. */
+static Fixture *placedStaged(Doc *doc, int channels, const QString &name, double x, double y)
+{
+    Fixture *f = makeStaged(doc, channels, name);
+    if (f != nullptr)
+        doc->monitorProperties()->setFixturePosition(f->id(), 0, 0,
+                                                     QVector3D(float(x * 1000), float(y * 1000), 0));
+    return f;
+}
+
+void Inventory_Test::eachNodeTakesTheFixturesNearIt()
+{
+    // T1/T2 off the SR node, T3/T4 off the SL node -- the rig in the brief.
+    g_doc->networkTopology()->nodes() << proxNode("SR Node", 0, 0, { 0 })
+                                      << proxNode("SL Node", 10, 0, { 1 });
+    Fixture *t1 = placedStaged(g_doc, 4, "T1", 1, 2);
+    Fixture *t2 = placedStaged(g_doc, 4, "T2", 2, 2);
+    Fixture *t3 = placedStaged(g_doc, 4, "T3", 8, 2);
+    Fixture *t4 = placedStaged(g_doc, 4, "T4", 9, 2);
+
+    const QList<PatchPlanner::Assignment> plan = PatchPlanner(g_doc).plan({ t1->id(), t2->id(), t3->id(), t4->id() });
+    QCOMPARE(forFixture(plan, t1->id()).universe, quint32(0));
+    QCOMPARE(forFixture(plan, t2->id()).universe, quint32(0));
+    QCOMPARE(forFixture(plan, t2->id()).address, quint32(4));
+    QCOMPARE(forFixture(plan, t3->id()).universe, quint32(1));
+    QCOMPARE(forFixture(plan, t4->id()).universe, quint32(1));
+    QCOMPARE(forFixture(plan, t1->id()).nodeIndex, 0);
+    QCOMPARE(forFixture(plan, t4->id()).nodeIndex, 1);
+    QCOMPARE(forFixture(plan, t4->id()).portIndex, 0);
+    QVERIFY(qAbs(forFixture(plan, t4->id()).distanceMetres - qSqrt(5.0)) < 0.01);
+    QVERIFY(!forFixture(plan, t4->id()).claimsPort);
+}
+
+void Inventory_Test::equallyNearPortsFillLeastLoadedFirst()
+{
+    makeDimmer(g_doc, 100, 0, 0);                        // universe 1 already carries 100 ch
+    g_doc->networkTopology()->nodes() << proxNode("Node", 0, 0, { 0, 1 });
+    Fixture *f = placedStaged(g_doc, 4, "Near", 1, 1);
+    const PatchPlanner::Assignment a = PatchPlanner(g_doc).plan({ f->id() }).first();
+    QCOMPARE(a.universe, quint32(1));                   // the emptier of the node's two ports
+    QCOMPARE(a.portIndex, 1);
+    QCOMPARE(a.address, quint32(0));
+}
+
+void Inventory_Test::aFullPortOverflowsToAFreePortThatApplyClaims()
+{
+    makeDimmer(g_doc, 510, 0, 0);                        // universe 1: two channels left
+    g_doc->networkTopology()->nodes()
+        << proxNode("Node", 0, 0, { 0, InputOutputMap::invalidUniverse() });
+    Fixture *a1 = placedStaged(g_doc, 4, "A1", 1, 1);
+    Fixture *a2 = placedStaged(g_doc, 4, "A2", 1, 2);
+    const quint32 existing = g_doc->inputOutputMap()->universesCount();
+
+    PatchPlanner pp(g_doc);
+    const QList<PatchPlanner::Assignment> plan = pp.plan({ a1->id(), a2->id() });
+    const PatchPlanner::Assignment p1 = forFixture(plan, a1->id());
+    const PatchPlanner::Assignment p2 = forFixture(plan, a2->id());
+    QCOMPARE(p1.universe, existing);                     // a new universe, on the free port
+    QVERIFY(p1.newUniverse && p1.claimsPort);
+    QCOMPARE(p1.portIndex, 1);
+    QCOMPARE(p2.universe, existing);                     // the next one joins it
+    QCOMPARE(p2.address, quint32(4));
+    QVERIFY(!p2.claimsPort);
+
+    QStringList problems;
+    QCOMPARE(pp.apply(plan, &problems), 2);
+    QCOMPARE(g_doc->networkTopology()->nodes().first().ports.at(1).universe, existing);
+    QVERIFY(a1->isPatched() && a2->isPatched());
+}
+
+void Inventory_Test::aWirelessPortIsNearWhereItsReceiverIs()
+{
+    NetworkNode tx = proxNode("Beach TX", -50, 0, { 2 });
+    tx.transport = NetworkNode::WirelessDMX;
+    tx.ports[0].receiver.placed = true;
+    tx.ports[0].receiver.posX = 10;
+    tx.ports[0].receiver.posY = 0;
+    g_doc->networkTopology()->nodes() << proxNode("SR Node", 0, 0, { 0 }) << tx;
+    Fixture *f = placedStaged(g_doc, 4, "Out in the rig", 9, 0);
+    const PatchPlanner::Assignment a = PatchPlanner(g_doc).plan({ f->id() }).first();
+    QCOMPARE(a.universe, quint32(2));                    // the receiver 1 m away, not the TX 59 m off
+    QCOMPARE(a.nodeIndex, 1);
+    QVERIFY(qAbs(a.distanceMetres - 1.0) < 0.01);
+}
+
+void Inventory_Test::placedFixturesArePlannedBeforeTheRest()
+{
+    makeDimmer(g_doc, 500, 0, 0);                        // universe 1: 12 channels left
+    g_doc->networkTopology()->nodes() << proxNode("Node", 0, 0, { 0 });
+    Fixture *loose = makeStaged(g_doc, 10, "A Loose");   // sorts first, not on the plot
+    Fixture *near = placedStaged(g_doc, 10, "B Near", 1, 0);
+    const QList<PatchPlanner::Assignment> plan = PatchPlanner(g_doc).plan({ loose->id(), near->id() });
+    QCOMPARE(plan.at(0).fixtureId, loose->id());         // listed in inventory order still
+    QCOMPARE(forFixture(plan, near->id()).universe, quint32(0));
+    QCOMPARE(forFixture(plan, near->id()).address, quint32(500));
+    QVERIFY(forFixture(plan, loose->id()).universe != 0);
+    QCOMPARE(forFixture(plan, loose->id()).nodeIndex, -1);
+}
+
+void Inventory_Test::unplacedNetworkAndOptedOutFixturesKeepTheOldRules()
+{
+    g_doc->networkTopology()->nodes() << proxNode("SL Node", 10, 0, { 1 });
+    Fixture *loose = makeStaged(g_doc, 4, "Loose");                         // not on the plot
+    Fixture *fence = placedStaged(g_doc, 3, "Fence", 9, 0);
+    fence->setConnection(Fixture::Network);
+    fence->setIPAddress("172.18.2.41");
+    Fixture *near = placedStaged(g_doc, 4, "Near SL", 9, 1);
+
+    PatchPlanner pp(g_doc);
+    QList<PatchPlanner::Assignment> plan = pp.plan({ loose->id(), fence->id(), near->id() });
+    QCOMPARE(forFixture(plan, loose->id()).universe, quint32(0));            // first-fit
+    QCOMPARE(forFixture(plan, loose->id()).nodeIndex, -1);
+    QVERIFY(forFixture(plan, fence->id()).newUniverse);                      // its own, by IP
+    QCOMPARE(forFixture(plan, fence->id()).nodeIndex, -1);
+    QCOMPARE(forFixture(plan, near->id()).universe, quint32(1));             // the SL node's
+
+    pp.setUseProximity(false);
+    QVERIFY(!pp.useProximity());
+    plan = pp.plan({ near->id() });
+    QCOMPARE(plan.first().universe, quint32(0));
+    QCOMPARE(plan.first().nodeIndex, -1);
+}
+
+void Inventory_Test::nothingNearWithRoomFallsBackToFirstFit()
+{
+    makeDimmer(g_doc, 512, 1, 0);                        // universe 2 full, and it is the only port
+    g_doc->networkTopology()->nodes() << proxNode("Node", 0, 0, { 1 });
+    Fixture *f = placedStaged(g_doc, 4, "Stranded", 1, 0);
+    const PatchPlanner::Assignment a = PatchPlanner(g_doc).plan({ f->id() }).first();
+    QCOMPARE(a.universe, quint32(0));
+    QCOMPARE(a.nodeIndex, -1);
+    QVERIFY2(a.note.contains("no node near it has room"), qPrintable(a.note));
 }
 
 QTEST_GUILESS_MAIN(Inventory_Test)

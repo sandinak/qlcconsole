@@ -5,8 +5,8 @@ network — ArtNet/sACN nodes, their DMX output ports, and the runs to fixtures 
 so the 2D map can answer real cabling questions: how many nodes, where they sit,
 how many universes each carries, and which fixtures hang off each DMX output.
 
-Status: **N1-N5 built** (model, map item, Network Topology dialog, cable runs
-in the Network overlay, reports); N6 still design. The overlays below already ship:
+Status: **N1-N6 built** (model, map item, Network Topology dialog, cable runs
+in the Network overlay, reports, proximity-guided patching). The overlays below already ship:
 - **DMX overlay** — colour by universe + address-clash flags + transport tag.
 - **Network overlay** — colour by transport (ArtNet / sACN / interface).
 
@@ -165,7 +165,7 @@ Cabling is then fully derived:
 | **N3 — Network pane** (done) | Add/edit nodes + ports + universe assignment; place/edit wireless receivers; mismatch/conflict warnings. | 4–6 days |
 | **N4 — run lines** (done) | Upgrade the Network overlay to draw node→fixtures (or receiver→fixtures) run polylines in address order; hover stats; run-length estimate; no run for `direct` nodes. | 3–5 days |
 | **N5 — reports** (done) | Node/universe/run/port summary for the data package. | 1–2 days |
-| **N6 — bulk Patch suggestions** | Proximity-based universe/port suggestion for the inventory-first workflow's bulk "Patch…" view, per the anchor rule above. Depends on N1 (model) + [Inventory-first workflow](docs/proposals/inventory-first-workflow.md) Phase 1 (`isPatched`). | 2–3 days |
+| **N6 — bulk Patch suggestions** (done) | Proximity-based universe/port suggestion for the inventory-first workflow's bulk "Patch…" view, per the anchor rule above. Depends on N1 (model) + [Inventory-first workflow](docs/proposals/inventory-first-workflow.md) Phase 1 (`isPatched`). | 2–3 days |
 
 **Usable "see my nodes + runs on the map"** = N1–N4: **built.**
 
@@ -221,6 +221,27 @@ where they need it. Lengths follow the plot's units.
 
 In Lighting Studio, **More > Network Report...** opens it read-only with
 **Copy** (the text) and **Save CSV...**.
+
+## What N6 built
+
+`PatchPlanner` places a DMX fixture that is on the plot by its nearest node
+port: every port with a known location is ranked by the plan distance from the
+fixture to where the port's universe lands (the receiver for a wireless port,
+else the node), equally near ports least-loaded first. The nearest port with
+room wins -- first-fit within the universe it already carries, or, when none of
+that node's universes has room, a free port on it claims a new universe, which
+the next fixture near that node then joins. Applying the plan writes a claimed
+universe onto its port. Fixtures not on the plot, and those with no node near
+them that has room (noted on the row), are packed first-fit as before; network
+fixtures keep one universe per IP; DMX still never shares a network universe.
+Placed fixtures are planned first, so first-fit never takes the room the
+fixtures next to a node were going to use.
+
+The Patch dialog shows the proposal in a **Via** column ("SR Node · port 2 ·
+3.2 m", "(assigns the port)" when it claims a free one) and a **Place by nearest
+node** checkbox, on when any node port is placed. Editing a row's universe by
+hand drops the proposed port; Via then names whichever port carries the new
+universe, or a dash.
 
 ## Relationship to Power
 

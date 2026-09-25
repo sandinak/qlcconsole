@@ -74,8 +74,15 @@ private:
     void refreshConflicts();
 
 private:
+    /** A planner set up the way the dialog is (nearest-node placement on/off). */
+    PatchPlanner planner() const;
+    /** "SR Node · port 2 · 3.2 m" for the node port carrying @p universe to a
+     *  row, or a dash when no node port carries it. */
+    QString viaText(int row, quint32 universe) const;
+
     Doc *m_doc;
     QList<quint32> m_ids;
+    class QCheckBox *m_proximity;   //!< "Place by nearest node"
     QTableWidget *m_table;
     QLabel *m_summary;
     QPushButton *m_apply;

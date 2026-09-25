@@ -21,10 +21,13 @@
 #include <QSet>
 
 #include <QComboBox>
+#include <QCheckBox>
 #include <QStandardItemModel>
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "patchinventorydialog.h"
+#include "networktopology.h"
+#include "inputoutputmap.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -35,7 +38,15 @@
 #define COL_CONN    4
 #define COL_UNI     5
 #define COL_ADDR    6
-#define COL_STATUS  7
+#define COL_VIA     7
+#define COL_STATUS  8
+
+// Per-row proximity proposal, kept on the Via cell.
+#define ROLE_NODE     (Qt::UserRole)
+#define ROLE_PORT     (Qt::UserRole + 1)
+#define ROLE_CLAIMS   (Qt::UserRole + 2)
+#define ROLE_DIST     (Qt::UserRole + 3)
+#define ROLE_PLANUNI  (Qt::UserRole + 4)
 
 static bool isGenericDimmer(const Fixture *fx)
 {
@@ -47,6 +58,7 @@ static bool isGenericDimmer(const Fixture *fx)
 PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtureIds, QWidget *parent)
     : QDialog(parent)
     , m_doc(doc)
+    , m_proximity(NULL)
     , m_filling(false)
 {
     setWindowTitle(tr("Patch Inventory"));
@@ -62,18 +74,36 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     }
 
     QVBoxLayout *root = new QVBoxLayout(this);
-    QLabel *intro = new QLabel(tr("Proposed homes for the fixtures staged in the inventory. DMX "
-                                  "fixtures are packed into the first free channels; each network "
-                                  "fixture IP gets a universe of its own (unicast). Pick each "
+    QLabel *intro = new QLabel(tr("Proposed homes for the fixtures staged in the inventory. A DMX "
+                                  "fixture on the plot goes to the nearest node port with room (the "
+                                  "Via column); the rest are packed into the first free channels; "
+                                  "each network fixture IP gets a universe of its own (unicast). Pick each "
                                   "fixture's mode here -- it sets the DMX footprint -- and edit any "
                                   "universe or address, then Apply. A fixture that a scene sets "
                                   "channel-by-channel keeps its mode."), this);
     intro->setWordWrap(true);
     root->addWidget(intro);
 
-    m_table = new QTableWidget(0, 8, this);
+    // Only worth offering when some node port has somewhere to be.
+    bool anyAnchor = false;
+    foreach (const NetworkNode &n, m_doc->networkTopology()->nodes())
+        foreach (const NetworkPort &p, n.ports)
+        {
+            double x, y;
+            anyAnchor = anyAnchor || NetworkTopology::proximityAnchor(n, p, x, y);
+        }
+    m_proximity = new QCheckBox(tr("Place by nearest node"), this);
+    m_proximity->setChecked(anyAnchor);
+    m_proximity->setEnabled(anyAnchor);
+    m_proximity->setToolTip(anyAnchor
+        ? tr("A DMX fixture on the plot goes to the nearest node port (its receiver, for "
+             "wireless) with room; a free port on that node takes a new universe")
+        : tr("Place network nodes on the plot (Lighting Studio) to patch by proximity"));
+    root->addWidget(m_proximity);
+
+    m_table = new QTableWidget(0, 9, this);
     m_table->setHorizontalHeaderLabels({ tr("Fixture"), tr("Model"), tr("Mode"), tr("Ch"), tr("Connection"),
-                                         tr("Universe"), tr("Address"), tr("Status") });
+                                         tr("Universe"), tr("Address"), tr("Via"), tr("Status") });
     m_table->verticalHeader()->hide();
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(COL_NAME, QHeaderView::Stretch);
@@ -94,10 +124,11 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     root->addLayout(btns);
 
     connect(replan, &QPushButton::clicked, this, &PatchInventoryDialog::slotReplan);
+    connect(m_proximity, &QCheckBox::toggled, this, &PatchInventoryDialog::slotReplan);
     connect(bb, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-    fill(PatchPlanner(m_doc).plan(m_ids));
+    fill(planner().plan(m_ids));
 }
 
 void PatchInventoryDialog::slotReplan()
@@ -113,7 +144,41 @@ void PatchInventoryDialog::slotReplan()
         if (a.dimmerChannels > 0)
             dimmers.insert(a.fixtureId, a.dimmerChannels);
     }
-    fill(PatchPlanner(m_doc).plan(m_ids, channelOverrides()), modes, dimmers);
+    fill(planner().plan(m_ids, channelOverrides()), modes, dimmers);
+}
+
+PatchPlanner PatchInventoryDialog::planner() const
+{
+    PatchPlanner pp(m_doc);
+    pp.setUseProximity(m_proximity != NULL && m_proximity->isChecked());
+    return pp;
+}
+
+QString PatchInventoryDialog::viaText(int row, quint32 universe) const
+{
+    const NetworkTopology *nt = m_doc->networkTopology();
+    QTableWidgetItem *via = m_table->item(row, COL_VIA);
+    // As proposed: that port, how far, and whether it is being given the universe.
+    if (via != NULL && via->data(ROLE_NODE).toInt() >= 0
+        && via->data(ROLE_PLANUNI).toUInt() == universe)
+    {
+        const int ni = via->data(ROLE_NODE).toInt();
+        if (ni < nt->nodes().size())
+        {
+            QString t = tr("%1 · port %2 · %3 m").arg(nt->nodes().at(ni).name)
+                            .arg(via->data(ROLE_PORT).toInt() + 1)
+                            .arg(via->data(ROLE_DIST).toDouble(), 0, 'f', 1);
+            if (via->data(ROLE_CLAIMS).toBool())
+                t += tr(" (assigns the port)");
+            return t;
+        }
+    }
+    // Edited by hand: whichever port already carries that universe, if any.
+    int ni = -1, pi = -1;
+    nt->portForUniverse(universe, ni, pi);
+    if (ni >= 0)
+        return tr("%1 · port %2").arg(nt->nodes().at(ni).name).arg(pi + 1);
+    return QStringLiteral("\u2014");
 }
 
 quint32 PatchInventoryDialog::rowChannels(int row) const
@@ -260,6 +325,15 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
         connect(addr, QOverload<int>::of(&QSpinBox::valueChanged), this, &PatchInventoryDialog::slotCellEdited);
         m_table->setCellWidget(r, COL_ADDR, addr);
 
+        QTableWidgetItem *via = new QTableWidgetItem;
+        via->setFlags(Qt::ItemIsEnabled);
+        via->setData(ROLE_NODE, a.nodeIndex);
+        via->setData(ROLE_PORT, a.portIndex);
+        via->setData(ROLE_CLAIMS, a.claimsPort);
+        via->setData(ROLE_DIST, a.distanceMetres);
+        via->setData(ROLE_PLANUNI, a.universe);
+        m_table->setItem(r, COL_VIA, via);
+
         QTableWidgetItem *st = new QTableWidgetItem;
         st->setFlags(Qt::ItemIsEnabled);
         st->setData(Qt::UserRole + 1, a.note);
@@ -288,6 +362,17 @@ QList<PatchPlanner::Assignment> PatchInventoryDialog::currentPlan() const
         a.newUniverse = (a.universe >= existing);
         if (QTableWidgetItem *st = m_table->item(r, COL_STATUS))
             a.note = st->data(Qt::UserRole + 1).toString();
+        // The proposed port only stands while the row keeps the proposed universe.
+        if (QTableWidgetItem *via = m_table->item(r, COL_VIA))
+        {
+            if (via->data(ROLE_NODE).toInt() >= 0 && via->data(ROLE_PLANUNI).toUInt() == a.universe)
+            {
+                a.nodeIndex = via->data(ROLE_NODE).toInt();
+                a.portIndex = via->data(ROLE_PORT).toInt();
+                a.claimsPort = via->data(ROLE_CLAIMS).toBool();
+                a.distanceMetres = via->data(ROLE_DIST).toDouble();
+            }
+        }
         if (QComboBox *cb = qobject_cast<QComboBox *>(m_table->cellWidget(r, COL_MODE)))
             a.mode = static_cast<QLCFixtureMode *>(cb->currentData(Qt::UserRole).value<void *>());
         else if (QSpinBox *sp = qobject_cast<QSpinBox *>(m_table->cellWidget(r, COL_MODE)))
@@ -338,6 +423,8 @@ void PatchInventoryDialog::refreshConflicts()
     QSet<quint32> seenNew;
     for (int r = 0; r < plan.size(); r++)
     {
+        if (QTableWidgetItem *via = m_table->item(r, COL_VIA))
+            via->setText(viaText(r, plan.at(r).universe));
         QTableWidgetItem *st = m_table->item(r, COL_STATUS);
         if (st == NULL)
             continue;

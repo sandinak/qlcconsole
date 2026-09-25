@@ -79,6 +79,14 @@ private slots:
     void aModelNameThatNeverFreesUpIsReturnedAsIs();
     void groupingNamesForGenericAndRgbPanels();
 
+    void eachNodeTakesTheFixturesNearIt();
+    void equallyNearPortsFillLeastLoadedFirst();
+    void aFullPortOverflowsToAFreePortThatApplyClaims();
+    void aWirelessPortIsNearWhereItsReceiverIs();
+    void placedFixturesArePlannedBeforeTheRest();
+    void unplacedNetworkAndOptedOutFixturesKeepTheOldRules();
+    void nothingNearWithRoomFallsBackToFirstFit();
+
 private:
 };
 

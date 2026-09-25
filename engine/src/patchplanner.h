@@ -40,6 +40,16 @@ class QLCFixtureMode;
  * a universe that carries network fixtures, since a universe has one output
  * and so one destination.
  *
+ * Proximity (N6, see NETWORK_CABLING_DESIGN.md): a DMX fixture that is on the
+ * plot goes to the nearest node port with room -- nearest by where the port's
+ * universe physically lands (the receiver for a wireless port, else the node),
+ * least-loaded first among equally near ports. A universe already on the port
+ * is filled first-fit; failing that, a free port on that node claims a new
+ * universe, which apply() writes onto the port. A fixture that is not on the
+ * plot, or has no node with room anywhere, falls back to first-fit. Placed
+ * fixtures are planned before the rest, so first-fit never takes the room the
+ * fixtures standing next to a node were going to use.
+ *
  * plan() is pure -- it reads the Doc and changes nothing -- so the UI can show
  * the proposal and let the LD adjust it before apply() commits it.
  */
@@ -60,11 +70,25 @@ public:
         /** For a generic dimmer: set this many channels when applying (0 = keep). */
         quint32 dimmerChannels;
 
+        /** The node port that carries this universe to the fixture, as
+         *  proposed by proximity (-1 when first-fit placed it). */
+        int     nodeIndex;
+        int     portIndex;
+        double  distanceMetres;  //!< fixture to the port's anchor, on the plan
+        /** The port had no universe: apply() gives it this one. */
+        bool    claimsPort;
+
         Assignment() : fixtureId(0), universe(0), address(0), newUniverse(false),
-                       mode(NULL), dimmerChannels(0) {}
+                       mode(NULL), dimmerChannels(0), nodeIndex(-1), portIndex(-1),
+                       distanceMetres(0), claimsPort(false) {}
     };
 
     explicit PatchPlanner(Doc *doc);
+
+    /** Place plotted DMX fixtures by their nearest node port (default on).
+     *  Off, every DMX fixture is packed first-fit as before N6. */
+    void setUseProximity(bool on) { m_useProximity = on; }
+    bool useProximity() const { return m_useProximity; }
 
     /** Propose a universe and address for each unpatched fixture in
      *  @p fixtureIds (patched and unknown ids are skipped). */
@@ -79,12 +103,14 @@ public:
     /** Commit assignments through Doc::patchFixture(). For a network fixture
      *  also points its universe's output at the fixture's IP, copying the
      *  plugin and interface of an existing ArtNet/sACN universe when the
-     *  universe has none. Returns how many were patched; anything that could
+     *  universe has none. A claimsPort assignment also writes its universe
+     *  onto that node port. Returns how many were patched; anything that could
      *  not be done is described in @p problems. */
     int apply(const QList<Assignment> &assignments, QStringList *problems = NULL);
 
 private:
     Doc *m_doc;
+    bool m_useProximity;
 };
 
 /** @} */
