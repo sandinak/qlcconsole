@@ -240,6 +240,10 @@ private slots:
     void aMoverOnATopFaceStandsUpOrHangsDown();
     void aFixtureCanBeRaisedOntoATowersTopCap();
     void fixturesAndBarsAreRenamedInTheStructureEditorsList();
+    void addCycloramaSpansTheBackOfTheStage();
+    void theCycloramaEditorPreviewsAndCancelReverts();
+    void aCycloramaOnThePlotMovesLocksHidesAndDeletes();
+    void beamsLandOnTheCycloramaInTheRigView();
     void aStagedFixturesTestDialogOffersNoDmxActions();
     void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
     void theDmxViewHasNoTileForAStagedFixture();

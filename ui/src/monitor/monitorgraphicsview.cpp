@@ -52,6 +52,7 @@
 #include "platformitem.h"
 #include "pipeitem.h"
 #include "standitem.h"
+#include "sceneryitem.h"
 #include "toweritem.h"
 #include "tower.h"
 #include "stand.h"
@@ -951,6 +952,8 @@ void MonitorGraphicsView::reassignLayerItems(quint32 fromLayerId, quint32 toLaye
         if (Pipe *p = bi->pipe()) if (p->layerId() == fromLayerId) p->setLayerId(toLayerId);
     foreach (StandItem *si, m_standItems)
         if (Stand *s = si->stand()) if (s->layerId() == fromLayerId) s->setLayerId(toLayerId);
+    foreach (SceneryItem *sc, m_sceneryItems)
+        if (Scenery *s = sc->scenery()) if (s->layerId() == fromLayerId) s->setLayerId(toLayerId);
     foreach (TowerItem *twi, m_towerItems)
         if (Tower *t = twi->tower()) if (t->layerId() == fromLayerId) t->setLayerId(toLayerId);
 
@@ -990,6 +993,8 @@ quint32 MonitorGraphicsView::itemGroupId(QGraphicsItem *gi) const
         return bi->pipe() ? bi->pipe()->groupId() : 0;
     if (auto *si = dynamic_cast<StandItem *>(gi))
         return si->stand() ? si->stand()->groupId() : 0;
+    if (auto *sc = dynamic_cast<SceneryItem *>(gi))
+        return sc->scenery() ? sc->scenery()->groupId() : 0;
     if (auto *twi = dynamic_cast<TowerItem *>(gi))
         return twi->tower() ? twi->tower()->groupId() : 0;
     if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
@@ -1032,6 +1037,8 @@ void MonitorGraphicsView::setItemGroupId(QGraphicsItem *gi, quint32 gid)
     { if (Pipe *p = bi->pipe()) p->setGroupId(gid); }
     else if (auto *si = dynamic_cast<StandItem *>(gi))
     { if (Stand *s = si->stand()) s->setGroupId(gid); }
+    else if (auto *sc = dynamic_cast<SceneryItem *>(gi))
+    { if (Scenery *s = sc->scenery()) s->setGroupId(gid); }
     else if (auto *twi = dynamic_cast<TowerItem *>(gi))
     { if (Tower *t = twi->tower()) t->setGroupId(gid); }
     else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
@@ -1052,6 +1059,7 @@ QList<QGraphicsItem *> MonitorGraphicsView::itemsInGroup(quint32 gid) const
     foreach (PlatformItem *i, m_platformItems)         if (itemGroupId(i) == gid) out << i;
     foreach (PipeItem *i, m_pipeItems)                 if (itemGroupId(i) == gid) out << i;
     foreach (StandItem *i, m_standItems)               if (itemGroupId(i) == gid) out << i;
+    foreach (SceneryItem *i, m_sceneryItems)           if (itemGroupId(i) == gid) out << i;
     foreach (TowerItem *i, m_towerItems)               if (itemGroupId(i) == gid) out << i;
     foreach (TargetItem *i, m_targetItems)             if (itemGroupId(i) == gid) out << i;
     foreach (PowerSourceItem *i, m_powerSourceItems)   if (itemGroupId(i) == gid) out << i;
@@ -1119,6 +1127,8 @@ quint32 MonitorGraphicsView::itemLayerId(QGraphicsItem *gi) const
         return bi->pipe() ? bi->pipe()->layerId() : 0;
     if (auto *si = dynamic_cast<StandItem *>(gi))
         return si->stand() ? si->stand()->layerId() : 0;
+    if (auto *sc = dynamic_cast<SceneryItem *>(gi))
+        return sc->scenery() ? sc->scenery()->layerId() : 0;
     if (auto *twi = dynamic_cast<TowerItem *>(gi))
         return twi->tower() ? twi->tower()->layerId() : 0;
     if (auto *ps = dynamic_cast<PowerSourceItem *>(gi))
@@ -1165,6 +1175,8 @@ void MonitorGraphicsView::setItemLayer(QGraphicsItem *gi, quint32 layerId)
     { if (Pipe *p = bi->pipe()) p->setLayerId(layerId); }
     else if (auto *si = dynamic_cast<StandItem *>(gi))
     { if (Stand *s = si->stand()) s->setLayerId(layerId); }
+    else if (auto *sc = dynamic_cast<SceneryItem *>(gi))
+    { if (Scenery *s = sc->scenery()) s->setLayerId(layerId); }
     else if (auto *twi = dynamic_cast<TowerItem *>(gi))
     { if (Tower *t = twi->tower()) t->setLayerId(layerId); }
     else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
@@ -1796,6 +1808,8 @@ void MonitorGraphicsView::selectMapItem(const QString &kind, quint32 id)
         target = m_pipeItems.value(id, nullptr);
     else if (kind == QStringLiteral("stand"))
         target = m_standItems.value(id, nullptr);
+    else if (kind == QStringLiteral("scenery"))
+        target = m_sceneryItems.value(id, nullptr);
     else if (kind == QStringLiteral("tower"))
         target = m_towerItems.value(id, nullptr);
     else if (kind == QStringLiteral("target"))
@@ -1829,6 +1843,7 @@ void MonitorGraphicsView::requestEditItem(const QString &kind, quint32 id)
     else if (kind == QStringLiteral("platform")) emit platformDoubleClicked(id);
     else if (kind == QStringLiteral("pipe"))     emit pipeDoubleClicked(id);
     else if (kind == QStringLiteral("stand"))    emit standDoubleClicked(id);
+    else if (kind == QStringLiteral("scenery"))  emit sceneryDoubleClicked(id);
     else if (kind == QStringLiteral("tower"))    emit towerDoubleClicked(id);
     else if (kind == QStringLiteral("image"))    emit imageDoubleClicked(id);
     else if (kind == QStringLiteral("power"))    emit powerDoubleClicked(id);
@@ -1850,6 +1865,7 @@ void MonitorGraphicsView::selectMapItems(const QList<QPair<QString, quint32> > &
         else if (kind == QStringLiteral("platform")) target = m_platformItems.value(id, nullptr);
         else if (kind == QStringLiteral("pipe"))     target = m_pipeItems.value(id, nullptr);
         else if (kind == QStringLiteral("stand"))    target = m_standItems.value(id, nullptr);
+        else if (kind == QStringLiteral("scenery"))  target = m_sceneryItems.value(id, nullptr);
         else if (kind == QStringLiteral("tower"))    target = m_towerItems.value(id, nullptr);
         else if (kind == QStringLiteral("target"))   target = m_targetItems.value(id, nullptr);
         else if (kind == QStringLiteral("power"))
@@ -1872,6 +1888,7 @@ QGraphicsItem *MonitorGraphicsView::itemFor(const QString &kind, quint32 id) con
     if (kind == QStringLiteral("platform")) return m_platformItems.value(id, nullptr);
     if (kind == QStringLiteral("pipe"))     return m_pipeItems.value(id, nullptr);
     if (kind == QStringLiteral("stand"))    return m_standItems.value(id, nullptr);
+    if (kind == QStringLiteral("scenery"))  return m_sceneryItems.value(id, nullptr);
     if (kind == QStringLiteral("tower"))    return m_towerItems.value(id, nullptr);
     if (kind == QStringLiteral("target"))   return m_targetItems.value(id, nullptr);
     if (kind == QStringLiteral("power"))
@@ -2190,6 +2207,15 @@ void MonitorGraphicsView::refreshItemLayerState()
         si->setMovable(!m_layoutLocked && !(s && s->locked()) && !lyr.locked);
         applySelectable(si, !lyr.locked);
     }
+    foreach (SceneryItem *sc, m_sceneryItems)
+    {
+        Scenery *s = sc->scenery();
+        const MonitorProperties::MonitorLayer lyr = props->layer(s ? s->layerId() : 0);
+        sc->setVisible(lyr.visible);
+        sc->setMovable(!m_layoutLocked && !(s && s->locked()) && !lyr.locked);
+        sc->showLabel(lyr.labels);
+        applySelectable(sc, !lyr.locked);
+    }
     foreach (TowerItem *twi, m_towerItems)
     {
         Tower *tw = twi->tower();
@@ -2245,6 +2271,7 @@ void MonitorGraphicsView::refreshItemLayerState()
         }
         foreach (PipeItem *i, m_pipeItems)               i->setMovable(false);
         foreach (StandItem *i, m_standItems)             i->setMovable(false);
+        foreach (SceneryItem *i, m_sceneryItems)         i->setMovable(false);
         foreach (TowerItem *i, m_towerItems)             i->setMovable(false);
     }
 
@@ -3676,6 +3703,12 @@ void MonitorGraphicsView::updatePlatforms()
         delete si;
     }
     m_standItems.clear();
+    foreach (SceneryItem *sci, m_sceneryItems)
+    {
+        m_scene->removeItem(sci);
+        delete sci;
+    }
+    m_sceneryItems.clear();
     foreach (TowerItem *twi, m_towerItems)
     {
         m_scene->removeItem(twi);
@@ -3794,6 +3827,34 @@ void MonitorGraphicsView::updatePlatforms()
         connect(si, &StandItem::itemDropped, this, &MonitorGraphicsView::slotStandMoved);
     }
 
+    /* Scenery: its line across the floor in Top, the sheet itself in the
+       elevations -- a bowed cyc as the curve it really is. */
+    foreach (Scenery *sc, props->sceneries())
+    {
+        const QPointF anchor = projectMm(sc->originX() * 1000.0, sc->originY() * 1000.0,
+                                         sc->bottom() * 1000.0);
+        QPolygonF outline;
+        const int segs = 16;
+        for (int i = 0; i <= segs; ++i)
+        {
+            const QVector3D p = sc->pointAt(-1.0 + 2.0 * i / segs, sc->bottom());
+            outline << projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
+        }
+        if (m_pov != PovTop)
+        {
+            for (int i = segs; i >= 0; --i)
+            {
+                const QVector3D p = sc->pointAt(-1.0 + 2.0 * i / segs, sc->bottom() + sc->height());
+                outline << projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
+            }
+        }
+        SceneryItem *sci = new SceneryItem(sc, m_doc, anchor, outline, m_pov != PovTop);
+        sci->setMovable(!m_layoutLocked);
+        m_scene->addItem(sci);
+        m_sceneryItems.insert(sc->id(), sci);
+        connect(sci, &SceneryItem::itemDropped, this, &MonitorGraphicsView::slotSceneryMoved);
+    }
+
     // Towers: footprint square in Top; box + shelf lines in the elevations.
     foreach (Tower *tw, props->towers())
     {
@@ -3883,6 +3944,32 @@ void MonitorGraphicsView::slotStandMoved(StandItem *item)
         s->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
     }
     m_doc->monitorProperties()->recomputeStandMounts();   // pipes on it follow
+    m_doc->setModified();
+    emit mapStructureChanged();
+}
+
+void MonitorGraphicsView::slotSceneryMoved(SceneryItem *item)
+{
+    if (item == nullptr || m_cellPixels == 0 || m_pov != PovTop)
+        return;
+
+    QList<SceneryItem *> moved;
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        if (auto *sc = dynamic_cast<SceneryItem *>(gi))
+            moved.append(sc);
+    if (!moved.contains(item))
+        moved.append(item);
+
+    foreach (SceneryItem *sci, moved)
+    {
+        Scenery *s = sci->scenery();
+        if (s == nullptr)
+            continue;
+        // The item sits at the middle of the sheet's bottom edge.
+        const QPointF mm = pixelsToRealPosition(sci->pos().x(), sci->pos().y());
+        s->setOriginX(float(mm.x() / 1000.0));
+        s->setOriginY(float(mm.y() / 1000.0));
+    }
     m_doc->setModified();
     emit mapStructureChanged();
 }
@@ -5304,6 +5391,7 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
         PlatformItem       *repPlatform = nullptr;
         PipeItem           *repPipe    = nullptr;
         StandItem          *repStand   = nullptr;
+        SceneryItem        *repScenery = nullptr;
         TowerItem          *repTower   = nullptr;
         PowerSourceItem    *repPower   = nullptr;
         NetworkNodeItem    *repNetwork = nullptr;
@@ -5317,6 +5405,7 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
             if (repPlatform == nullptr) repPlatform = dynamic_cast<PlatformItem *>(gi);
             if (repPipe == nullptr)     repPipe     = dynamic_cast<PipeItem *>(gi);
             if (repStand == nullptr)    repStand    = dynamic_cast<StandItem *>(gi);
+            if (repScenery == nullptr)  repScenery  = dynamic_cast<SceneryItem *>(gi);
             if (repTower == nullptr)    repTower    = dynamic_cast<TowerItem *>(gi);
             if (repPower == nullptr)    repPower    = dynamic_cast<PowerSourceItem *>(gi);
             if (repNetwork == nullptr)  repNetwork  = dynamic_cast<NetworkNodeItem *>(gi);
@@ -5329,6 +5418,7 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
         if (repPlatform != nullptr) slotPlatformMoved(repPlatform);
         if (repPipe != nullptr)     slotPipeMoved(repPipe);
         if (repStand != nullptr)    slotStandMoved(repStand);
+        if (repScenery != nullptr)  slotSceneryMoved(repScenery);
         if (repTower != nullptr)    slotTowerMoved(repTower);
         if (repPower != nullptr)    slotPowerSourceMoved(repPower);
         if (repNetwork != nullptr)  slotNetworkNodeMoved(repNetwork);
@@ -5572,6 +5662,12 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         emit standDoubleClicked(si->standId());
         return;
     }
+    if (auto *sc = dynamic_cast<SceneryItem *>(it))
+    {
+        if (drilledIntoGroup(sc)) return;
+        emit sceneryDoubleClicked(sc->sceneryId());
+        return;
+    }
     if (auto *twi = dynamic_cast<TowerItem *>(it))
     {
         if (drilledIntoGroup(twi)) return;
@@ -5664,6 +5760,7 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
     else if (auto *ii = dynamic_cast<MonitorImageItem *>(it)) { kind = QStringLiteral("image");    id = ii->imageId(); }
     else if (auto *bi = dynamic_cast<PipeItem *>(it))         { kind = QStringLiteral("pipe");     id = bi->pipeId(); }
     else if (auto *si = dynamic_cast<StandItem *>(it))        { kind = QStringLiteral("stand");    id = si->standId(); }
+    else if (auto *sci = dynamic_cast<SceneryItem *>(it))     { kind = QStringLiteral("scenery");  id = sci->sceneryId(); }
     else if (auto *twi = dynamic_cast<TowerItem *>(it))       { kind = QStringLiteral("tower");    id = twi->towerId(); }
     else if (auto *tgi = dynamic_cast<TargetItem *>(it))      { kind = QStringLiteral("target");   id = tgi->targetId(); }
     else if (auto *psi = dynamic_cast<PowerSourceItem *>(it)) { kind = QStringLiteral("power");    id = quint32(psi->sourceIndex()); }
@@ -5692,7 +5789,8 @@ static QGraphicsItem *mapItemFor(const QString &kind, quint32 id,
                                  const QHash<quint32, PipeItem *> &pipes,
                                  const QHash<quint32, StandItem *> &stands,
                                  const QHash<quint32, TowerItem *> &towers,
-                                 const QHash<quint32, TargetItem *> &targets)
+                                 const QHash<quint32, TargetItem *> &targets,
+                                 const QHash<quint32, SceneryItem *> &sceneries)
 {
     if (kind == QLatin1String("fixture"))  return fixtures.value(id, nullptr);
     if (kind == QLatin1String("truss"))    return trusses.value(id, nullptr);
@@ -5701,6 +5799,7 @@ static QGraphicsItem *mapItemFor(const QString &kind, quint32 id,
     if (kind == QLatin1String("stand"))    return stands.value(id, nullptr);
     if (kind == QLatin1String("tower"))    return towers.value(id, nullptr);
     if (kind == QLatin1String("target"))   return targets.value(id, nullptr);
+    if (kind == QLatin1String("scenery"))  return sceneries.value(id, nullptr);
     return nullptr;
 }
 
@@ -5717,6 +5816,7 @@ QList<QPair<QString, quint32> > MonitorGraphicsView::selectedMapObjects() const
         else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))  out << qMakePair(QStringLiteral("image"), ii->imageId());
         else if (auto *bi = dynamic_cast<PipeItem *>(gi))          out << qMakePair(QStringLiteral("pipe"), bi->pipeId());
         else if (auto *si = dynamic_cast<StandItem *>(gi))         out << qMakePair(QStringLiteral("stand"), si->standId());
+        else if (auto *sc = dynamic_cast<SceneryItem *>(gi))       out << qMakePair(QStringLiteral("scenery"), sc->sceneryId());
         else if (auto *twi = dynamic_cast<TowerItem *>(gi))        out << qMakePair(QStringLiteral("tower"), twi->towerId());
         else if (auto *tgi = dynamic_cast<TargetItem *>(gi))       out << qMakePair(QStringLiteral("target"), tgi->targetId());
         else if (auto *psi = dynamic_cast<PowerSourceItem *>(gi))  out << qMakePair(QStringLiteral("power"), quint32(psi->sourceIndex()));
@@ -5809,6 +5909,7 @@ static QString itemNameOf(Doc *doc, const QString &kind, quint32 id)
     if (kind == QLatin1String("platform")) { StagePlatform *p = props->platform(id); return p ? p->name() : QString(); }
     if (kind == QLatin1String("pipe"))     { Pipe *b = props->pipe(id);              return b ? b->name() : QString(); }
     if (kind == QLatin1String("stand"))    { Stand *st = props->stand(id);           return st ? st->name() : QString(); }
+    if (kind == QLatin1String("scenery"))  { Scenery *sc = props->scenery(id);       return sc ? sc->name() : QString(); }
     if (kind == QLatin1String("tower"))    { Tower *t = props->tower(id);            return t ? t->name() : QString(); }
     if (kind == QLatin1String("target"))   { StageTarget *t = props->stageTarget(id); return t ? t->name() : QString(); }
     if (kind == QLatin1String("image"))    return props->hasImage(id) ? props->image(id).name : QString();
@@ -5869,6 +5970,11 @@ void MonitorGraphicsView::renameItem(const QString &kind, quint32 id, const QStr
     {
         if (Pipe *b = props->pipe(id)) b->setName(name);
         updatePlatforms();   // pipes/stands/towers redraw here
+    }
+    else if (kind == QLatin1String("scenery"))
+    {
+        if (Scenery *sc = props->scenery(id)) sc->setName(name);
+        updatePlatforms();
     }
     else if (kind == QLatin1String("stand"))
     {
@@ -5938,7 +6044,8 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
 
     auto groupOf = [this](const QString &kind, quint32 id) -> quint32 {
         QGraphicsItem *gi = mapItemFor(kind, id, m_fixtures, m_trussItems, m_platformItems,
-                                       m_pipeItems, m_standItems, m_towerItems, m_targetItems);
+                                       m_pipeItems, m_standItems, m_towerItems, m_targetItems,
+                                       m_sceneryItems);
         if (gi != nullptr)
             return itemGroupId(gi);
         return (kind == QLatin1String("fixture")) ? m_doc->monitorProperties()->fixtureGroup(id) : 0;
@@ -5973,7 +6080,7 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
             else if (QGraphicsItem *gi = mapItemFor(objects.first().first, objects.first().second,
                                                     m_fixtures, m_trussItems, m_platformItems,
                                                     m_pipeItems, m_standItems, m_towerItems,
-                                                    m_targetItems))
+                                                    m_targetItems, m_sceneryItems))
                 layer = itemLayerId(gi);
             const quint32 gid = p->nextGroupId();
             bool ok = false;
@@ -6089,6 +6196,7 @@ static QString itemNoun(const QString &kind)
     if (kind == QLatin1String("image"))    return MonitorGraphicsView::tr("Image");
     if (kind == QLatin1String("pipe"))     return MonitorGraphicsView::tr("Boom");
     if (kind == QLatin1String("stand"))    return MonitorGraphicsView::tr("Stand");
+    if (kind == QLatin1String("scenery"))  return MonitorGraphicsView::tr("Scenery");
     if (kind == QLatin1String("tower"))    return MonitorGraphicsView::tr("Tower");
     if (kind == QLatin1String("target"))   return MonitorGraphicsView::tr("Target");
     if (kind == QLatin1String("power"))    return MonitorGraphicsView::tr("Power Source");
@@ -6460,6 +6568,7 @@ bool MonitorGraphicsView::itemLocked(const QString &kind, quint32 id) const
     if (kind == QLatin1String("stand"))    { Stand *s = props->stand(id);        return s && s->locked(); }
     if (kind == QLatin1String("tower"))    { Tower *t = props->tower(id);        return t && t->locked(); }
     if (kind == QLatin1String("target"))   { StageTarget *t = props->stageTarget(id); return t && t->locked(); }
+    if (kind == QLatin1String("scenery"))  { Scenery *sc = props->scenery(id);   return sc && sc->locked(); }
     if (kind == QLatin1String("image"))    return props->image(id).locked;
     if (kind == QLatin1String("power"))
     {
@@ -6483,6 +6592,7 @@ void MonitorGraphicsView::setItemLocked(const QString &kind, quint32 id, bool lo
     else if (kind == QLatin1String("stand"))    { if (Stand *s = props->stand(id)) s->setLocked(locked); }
     else if (kind == QLatin1String("tower"))    { if (Tower *t = props->tower(id)) t->setLocked(locked); }
     else if (kind == QLatin1String("target"))   { if (StageTarget *t = props->stageTarget(id)) t->setLocked(locked); }
+    else if (kind == QLatin1String("scenery"))  { if (Scenery *sc = props->scenery(id)) sc->setLocked(locked); }
     else if (kind == QLatin1String("image"))
     {
         MonitorProperties::MonitorImage img = props->image(id);
@@ -6523,6 +6633,7 @@ void MonitorGraphicsView::requestDeleteItem(const QString &kind, quint32 id)
     else if (kind == QLatin1String("image"))    emit imageRemoveRequested(id);
     else if (kind == QLatin1String("pipe"))     emit pipeRemoveRequested(id);
     else if (kind == QLatin1String("stand"))    emit standRemoveRequested(id);
+    else if (kind == QLatin1String("scenery"))  emit sceneryRemoveRequested(id);
     else if (kind == QLatin1String("tower"))    emit towerRemoveRequested(id);
     else if (kind == QLatin1String("network"))  emit networkRemoveRequested(id);
     else if (kind == QLatin1String("target"))

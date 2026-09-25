@@ -40,6 +40,7 @@ class TrussItem;
 class PlatformItem;
 class PipeItem;
 class StandItem;
+class SceneryItem;
 class TowerItem;
 class PowerSourceItem;
 class NetworkNodeItem;
@@ -798,6 +799,7 @@ protected slots:
     void slotPlatformMoved(PlatformItem *item);
     void slotPipeMoved(PipeItem *item);
     void slotStandMoved(StandItem *item);
+    void slotSceneryMoved(SceneryItem *item);
     void slotTowerMoved(TowerItem *item);
 
     /** Slot called when a PowerSourceItem is dropped after a drag */
@@ -916,6 +918,7 @@ signals:
     void platformDoubleClicked(quint32 pid);
     void pipeDoubleClicked(quint32 pipeId);
     void standDoubleClicked(quint32 standId);
+    void sceneryDoubleClicked(quint32 sceneryId);
     void towerDoubleClicked(quint32 towerId);
     /** A power source was double-clicked (host opens the Power Distribution editor). */
     void powerDoubleClicked(quint32 sourceIndex);
@@ -927,6 +930,7 @@ signals:
      *  Delete (truss/platform/image already have theirs above). */
     void pipeRemoveRequested(quint32 pipeId);
     void standRemoveRequested(quint32 standId);
+    void sceneryRemoveRequested(quint32 sceneryId);
     void towerRemoveRequested(quint32 towerId);
     /** Open the unified studio editor for a studio (frame) group. */
     void studioGroupEditRequested(quint32 groupId);
@@ -1027,6 +1031,7 @@ private:
     QHash <quint32, PlatformItem*> m_platformItems;
     QHash <quint32, PipeItem*> m_pipeItems;
     QHash <quint32, StandItem*> m_standItems;
+    QHash <quint32, SceneryItem*> m_sceneryItems;
     QHash <quint32, TowerItem*> m_towerItems;
 
     /** Power-source markers, indexed positionally to PowerDistribution::sources(). */

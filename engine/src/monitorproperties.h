@@ -31,6 +31,7 @@
 #include "truss.h"
 #include "stageplatform.h"
 #include "pipe.h"
+#include "scenery.h"
 #include "stand.h"
 #include "tower.h"
 #include "stagetarget.h"
@@ -632,7 +633,18 @@ public:
     void removeTower(quint32 id);
     quint32 nextTowerId() const;
 
+    /********************************************************************
+     * Scenery (cyc, back wall, drapes -- surfaces light lands on)
+     ********************************************************************/
+public:
+    QList<Scenery*> sceneries() const { return m_sceneries.values(); }
+    Scenery *scenery(quint32 id) const { return m_sceneries.value(id, nullptr); }
+    Scenery *addScenery();
+    void removeScenery(quint32 id);
+    quint32 nextSceneryId() const;
+
 private:
+    QMap<quint32, Scenery*> m_sceneries;
     QMap<quint32, StagePlatform*> m_platforms;
     QMap<quint32, Pipe*> m_pipes;
     QMap<quint32, Stand*> m_stands;

@@ -348,6 +348,17 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
         d.groupId = s->groupId();
         out << d;
     }
+    foreach (Scenery *sc, m_props->sceneries())
+    {
+        ItemDesc d;
+        d.kind    = QStringLiteral("scenery");
+        d.id      = sc->id();
+        d.name    = sc->name().isEmpty() ? Scenery::kindName(sc->kind()) : sc->name();
+        d.layerId = sc->layerId();
+        d.groupId = sc->groupId();
+        d.color   = sc->color();
+        out << d;
+    }
     foreach (Tower *t, m_props->towers())
     {
         ItemDesc d;
@@ -519,6 +530,7 @@ QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) con
     if (kind == QStringLiteral("network"))  return glyphIcon(QStringLiteral("\xF0\x9F\x8C\x90"), QColor(70, 140, 220));  // 🌐 network node
     if (kind == QStringLiteral("target"))   return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xAF"), QColor(255, 180, 0));    // 🎯 aim target
     if (kind == QStringLiteral("image"))    return QIcon(":/image.png");
+    if (kind == QStringLiteral("scenery"))  return swatchIcon(color.isValid() ? color : QColor(226, 228, 236)); // the cloth
     return style()->standardIcon(QStyle::SP_FileIcon);
 }
 
@@ -1253,7 +1265,8 @@ bool MonitorLayersPanel::kindLockable(const QString &kind) const
         || kind == QStringLiteral("image") || kind == QStringLiteral("power")
         || kind == QStringLiteral("network")
         || kind == QStringLiteral("pipe")  || kind == QStringLiteral("stand")
-        || kind == QStringLiteral("tower") || kind == QStringLiteral("target");
+        || kind == QStringLiteral("tower") || kind == QStringLiteral("target")
+        || kind == QStringLiteral("scenery");
 }
 
 bool MonitorLayersPanel::objectLocked(const QString &kind, quint32 id) const
@@ -1272,6 +1285,8 @@ bool MonitorLayersPanel::objectLocked(const QString &kind, quint32 id) const
         { Tower *t = m_props->tower(id); return t && t->locked(); }
     if (kind == QStringLiteral("target"))
         { StageTarget *t = m_props->stageTarget(id); return t && t->locked(); }
+    if (kind == QStringLiteral("scenery"))
+        { Scenery *sc = m_props->scenery(id); return sc && sc->locked(); }
     if (kind == QStringLiteral("power"))
     {
         PowerDistribution *pd = m_doc->powerDistribution();
@@ -1305,6 +1320,8 @@ void MonitorLayersPanel::setObjectLocked(const QString &kind, quint32 id, bool l
         { if (Tower *t = m_props->tower(id)) t->setLocked(locked); }
     else if (kind == QStringLiteral("target"))
         { if (StageTarget *t = m_props->stageTarget(id)) t->setLocked(locked); }
+    else if (kind == QStringLiteral("scenery"))
+        { if (Scenery *sc = m_props->scenery(id)) sc->setLocked(locked); }
     else if (kind == QStringLiteral("power"))
     {
         PowerDistribution *pd = m_doc->powerDistribution();

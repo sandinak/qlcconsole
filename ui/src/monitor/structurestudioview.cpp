@@ -793,6 +793,8 @@ QList<QPair<StructureStudioView::Kind, quint32> > StructureStudioView::everyStru
         if (st != nullptr) out << qMakePair(StandKind, st->id());
     foreach (Pipe *pp, props->pipes())
         if (pp != nullptr && !pp->isBarOnPipe()) out << qMakePair(PipeKind, pp->id());
+    foreach (Scenery *sc, props->sceneries())
+        if (sc != nullptr) out << qMakePair(SceneryKind, sc->id());
     return out;
 }
 
@@ -1229,6 +1231,15 @@ void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, qui
     else if (kind == GroupKind)
     {
         pts << props->group(id).origin;   // members added below
+    }
+    else if (kind == SceneryKind)
+    {
+        if (Scenery *sc = props->scenery(id))
+        {
+            const float lo = sc->bottom(), hi = sc->bottom() + sc->height();
+            for (double u : { -1.0, 0.0, 1.0 })
+                pts << sc->pointAt(u, lo) << sc->pointAt(u, hi);
+        }
     }
 
     foreach (quint32 fid, mountedFixtures())
@@ -2315,6 +2326,36 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             p.drawLine(w2s(QVector3D(x0, y0, top)), w2s(QVector3D(x1, y1, top)));
         }
     }
+    else if (kind == SceneryKind)
+    {
+        /* The cloth, as a strip of panels so a bowed cyc curves and each
+           panel sorts at its own depths. Lit by the room like any scenery --
+           the light the rig throws on it arrives as pools on top. */
+        Scenery *sc = props->scenery(id);
+        if (sc == nullptr) return;
+        QColor cloth = sc->color().isValid() ? sc->color() : QColor(226, 228, 236);
+        const double af = 0.18 + 0.82 * m_ambient;
+        cloth = QColor(qRound(cloth.red() * af), qRound(cloth.green() * af), qRound(cloth.blue() * af));
+        const QColor seam = cloth.darker(118);
+        const float lo = sc->bottom(), hi = sc->bottom() + sc->height();
+        const int segs = sc->bow() > 0.0f ? 16 : 1;
+        for (int i = 0; i < segs; ++i)
+        {
+            const double u0 = -1.0 + 2.0 * i / segs, u1 = -1.0 + 2.0 * (i + 1) / segs;
+            const QVector3D c[4] = { sc->pointAt(u0, lo), sc->pointAt(u1, lo),
+                                     sc->pointAt(u1, hi), sc->pointAt(u0, hi) };
+            QPolygonF poly;
+            QVector<double> vz;
+            double d = 0.0;
+            for (const QVector3D &w : c)
+            {
+                poly << w2s(w);
+                vz << viewDepth(w);
+                d += vz.last();
+            }
+            emitPoly(poly, d / 4.0, cloth, seam, 0.6, p, vz);
+        }
+    }
     else if (kind == PipeKind)
     {
         Pipe *pipe = props->pipe(id);
@@ -2717,7 +2758,7 @@ bool StructureStudioView::beamHitsSomething(const QVector3D &apex,
 }
 
 double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &dir,
-                                     bool *hit) const
+                                     bool *hit, QVector3D *landNormal) const
 {
     static const double NO_HIT = 8.0;      // metres, for a beam fired into the air
     static const double MAX_THROW = 24.0;
@@ -2754,9 +2795,27 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
             continue;
         best = t;
     }
+    QVector3D normal(0, 0, 1);                // floor and decks face up
+
+    /* Scenery: a cyc or a drape stands in the way of a beam going level or
+       even upward, which is exactly how a cyc is lit. */
+    foreach (Scenery *sc, props->sceneries())
+    {
+        if (sc == nullptr)
+            continue;
+        double t = 0.0;
+        QVector3D n;
+        if (sc->rayHit(apex, dir, t, best > 0.0 ? best : MAX_THROW, 16, &n) && t > MIN_THROW)
+        {
+            best = t;
+            normal = n;
+        }
+    }
 
     if (hit != nullptr)
         *hit = (best > 0.0);
+    if (landNormal != nullptr)
+        *landNormal = normal;
     return (best > 0.0) ? best : NO_HIT;
 }
 
@@ -3058,7 +3117,8 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
        into the air has nothing to stop it, so it has to fade out on its own,
        or it ends in a hard disc hanging in space. */
     bool lands = false;
-    const double len = beamThrow(apex, d, &lands);
+    QVector3D landNormal(0, 0, 1);
+    const double len = beamThrow(apex, d, &lands, &landNormal);
 
     /* Brighter in a dark room, which is both true and useful: at work light you
        want to see the rig, at blackout you want to see the light. */
@@ -3077,7 +3137,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     const double poolA = 130.0 * level * room;
 
     // Where it ends: the pool's shape, and the far end of the cone's outline.
-    const QVector<QVector3D> footprint = beamFootprint(apex, d, halfAngleRad, len, lands);
+    const QVector<QVector3D> footprint = beamFootprint(apex, d, halfAngleRad, len, lands, landNormal);
 
     /* ONE polygon, faded along its length by per-vertex alpha.
      *
@@ -3178,7 +3238,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
 
 QVector<QVector3D> StructureStudioView::beamFootprint(const QVector3D &apex, const QVector3D &dir,
                                                      double halfAngleRad, double length,
-                                                     bool lands) const
+                                                     bool lands, const QVector3D &landNormal) const
 {
     /* Sixteen points round the end of a beam. It is a soft glow, and every
        point is another triangle of light to fill: 24 were indistinguishable
@@ -3194,7 +3254,10 @@ QVector<QVector3D> StructureStudioView::beamFootprint(const QVector3D &apex, con
     const QVector3D up = QVector3D::crossProduct(d, side).normalized();
 
     const QVector3D axisEnd = apex + d * float(length);
-    const double landZ = double(axisEnd.z());
+    // The surface the axis landed on: through axisEnd, facing landNormal (up
+    // for the floor or a deck, across the stage for a cyc).
+    const QVector3D ln = landNormal.isNull() ? QVector3D(0, 0, 1) : landNormal.normalized();
+    const double planeD = double(QVector3D::dotProduct(axisEnd - apex, ln));
     /* A beam arriving nearly edge-on to the deck has edge rays that run on for
        tens of metres before they come down, or never do. Cap them: past a few
        times the axis throw the pool is too faint to matter and the polygon
@@ -3219,8 +3282,10 @@ QVector<QVector3D> StructureStudioView::beamFootprint(const QVector3D &apex, con
            along the beam when it arrives at an angle. */
         const QVector3D ray = (d * float(qCos(half)) + across * float(qSin(half))).normalized();
         double run = maxRun;
-        if (ray.z() < -1e-4f)
-            run = qMin(maxRun, (landZ - double(apex.z())) / double(ray.z()));
+        // Same sign as the axis's own approach: the edge ray reaches the surface.
+        const double approach = double(QVector3D::dotProduct(ray, ln));
+        if (planeD * approach > 1e-8)
+            run = qMin(maxRun, planeD / approach);
         out << apex + ray * float(qMax(0.0, run));
     }
     return out;

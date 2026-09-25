@@ -109,6 +109,24 @@ like main drape, cyclorama, side drapes .. etc."
   - Borders / teasers -- horizontal masking hung above, one per wing.
   - Travelers (mid-stage curtains that split and track), scrims, back wall.
 
+**Shipped 2026-09-25: the cyclorama** (first of the scenery kinds).
+  - Engine: `Scenery` (engine/src/scenery.{h,cpp}) -- one object with a kind
+    (Cyclorama now; BackWall, MainDrape, Leg, Border, Traveler, Scrim named for
+    later), the middle of its bottom edge, width, height, bottom trim, facing,
+    bow (a cyc curving upstage at its centre), colour, lock/layer/group; saved
+    in the workspace (`<Scenery>` in the Monitor section). `rayHit()` gives
+    where a beam meets it and the surface normal there.
+  - Studio: Add > Add Cyclorama (toolbar: across the back, stage width, 6 m
+    tall; canvas menu: where clicked) opens its editor (live preview, Cancel
+    reverts). On the plot it is a band in Top and the sheet in the elevations;
+    drag, lock, rename, layer, hide and delete like any structure; listed in
+    Layers.
+  - Rig view: drawn as the cloth, lit by the room; beams going level or up
+    stop on it and leave their pool ON it (pools now follow the surface a beam
+    lands on, not only horizontal ones).
+  - Still to do: the other kinds (main drape open/closed, legs and tormentors,
+    borders, travelers, scrim), and opaque scenery hiding what is behind it.
+
 **What exists.** Structures today are things you rig ON -- trusses, towers,
 pipes, stands, platforms/steps -- plus targets. Nothing models a SURFACE that
 light lands on or that blocks a sightline: a back wall, a cyc, legs and borders,

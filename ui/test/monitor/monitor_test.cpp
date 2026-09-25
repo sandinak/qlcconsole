@@ -50,6 +50,10 @@
 #include "networkreportdialog.h"
 #include "monitorfixture.h"
 #include "networknodeitem.h"
+#include "sceneryitem.h"
+#include "standitem.h"
+#include "toweritem.h"
+#include "scenery.h"
 #include "networktopology.h"
 #include "platformitem.h"
 #include "studiotemplate.h"
@@ -11437,6 +11441,188 @@ void Monitor_Test::fixturesAndBarsAreRenamedInTheStructureEditorsList()
         QVERIFY(barRow != nullptr && (barRow->flags() & Qt::ItemIsEditable));
         barRow->setText(0, "Pipe A");
         QCOMPARE(bar->name(), QString("Pipe A"));
+    }
+    delete doc;
+}
+
+void Monitor_Test::addCycloramaSpansTheBackOfTheStage()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(12, 6, 8));             // 12 m wide
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        bool opened = false;
+        driveDialog([&opened](QWidget *dlg) {
+            opened = dlg->windowTitle().startsWith("Cyclorama");
+            return true;
+        });
+        mon.slotAddCyclorama();
+        QVERIFY2(opened, "adding a cyc should open its editor");
+        QCOMPARE(props->sceneries().size(), 1);
+        Scenery *cyc = props->sceneries().first();
+        QCOMPARE(cyc->kind(), int(Scenery::Cyclorama));
+        QCOMPARE(cyc->name(), QString("Cyclorama 1"));
+        QVERIFY(qAbs(cyc->originX() - 6.0f) < 0.01f);   // centred
+        QVERIFY(qAbs(cyc->originY() - 0.3f) < 0.01f);   // at the upstage edge
+        QVERIFY(qAbs(cyc->width() - 11.0f) < 0.01f);    // the stage's width, less a margin
+        QVERIFY(qAbs(cyc->height() - 6.0f) < 0.01f);
+        QCOMPARE(cyc->layerId(), props->activeLayerId());
+        QVERIFY(mon.m_graphicsView->m_sceneryItems.contains(cyc->id()));
+        QVERIFY(doc->isModified());
+
+        // Listed in the Layers panel, with the other structures.
+        MonitorLayersPanel panel(doc, mon.m_graphicsView);
+        panel.reload();
+        bool listed = false;
+        for (QTreeWidgetItemIterator it(panel.m_tree); *it != nullptr; ++it)
+            listed = listed || ((*it)->data(0, Qt::UserRole + 2).toString() == "scenery");
+        QVERIFY(listed);
+        QVERIFY(panel.kindLockable("scenery"));
+    }
+    delete doc;
+}
+
+void Monitor_Test::theCycloramaEditorPreviewsAndCancelReverts()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    Scenery *cyc = props->addScenery();
+    cyc->setName("Cyc");
+    cyc->setWidth(10.0f);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        auto spinWithTip = [](QWidget *dlg, const QString &tip) -> QDoubleSpinBox * {
+            foreach (QDoubleSpinBox *sp, dlg->findChildren<QDoubleSpinBox *>())
+                if (sp->toolTip().startsWith(tip))
+                    return sp;
+            return nullptr;
+        };
+        // Bowed and cancelled: back to flat.
+        driveDialog([&](QWidget *dlg) {
+            QDoubleSpinBox *bow = spinWithTip(dlg, "How far the middle curves");
+            if (bow == nullptr) return false;
+            bow->setValue(1.5);
+            return qAbs(cyc->bow() - 1.5f) < 0.01f;        // previewed live
+        }, false);
+        mon.slotEditScenery(cyc->id());
+        QCOMPARE(cyc->bow(), 0.0f);
+
+        // Raised and accepted: kept.
+        driveDialog([&](QWidget *dlg) {
+            QDoubleSpinBox *trim = spinWithTip(dlg, "Height of the bottom edge");
+            if (trim == nullptr) return false;
+            trim->setValue(0.5);
+            return true;
+        });
+        mon.slotEditScenery(cyc->id());
+        QVERIFY(qAbs(cyc->bottom() - 0.5f) < 0.01f);
+        QCOMPARE(cyc->name(), QString("Cyc"));
+    }
+    delete doc;
+}
+
+void Monitor_Test::aCycloramaOnThePlotMovesLocksHidesAndDeletes()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Scenery *cyc = props->addScenery();
+    cyc->setName("Cyc");
+    cyc->setOriginX(5.0f);
+    cyc->setOriginY(0.5f);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setSnapDivisions(0);
+        gv->updatePlatforms();
+        SceneryItem *item = gv->m_sceneryItems.value(cyc->id());
+        QVERIFY(item != nullptr);
+        QCOMPARE(gv->itemFor("scenery", cyc->id()), static_cast<QGraphicsItem *>(item));
+        QVERIFY(item->flags() & QGraphicsItem::ItemIsMovable);
+
+        // Dragged a metre downstage.
+        const QPointF before = gv->pixelsToRealPosition(item->pos().x(), item->pos().y());
+        const QPointF one = gv->realPositionToPixels(before.x(), before.y() + 1000.0);
+        item->setPos(one);
+        gv->slotSceneryMoved(item);
+        QVERIFY2(qAbs(cyc->originY() - 1.5f) < 0.02f, qPrintable(QString::number(cyc->originY())));
+
+        // Renamed, locked, hidden with its layer.
+        gv->renameItem("scenery", cyc->id(), "Upstage Cyc");
+        QCOMPARE(cyc->name(), QString("Upstage Cyc"));
+        gv->setItemLocked("scenery", cyc->id(), true);
+        QVERIFY(gv->itemLocked("scenery", cyc->id()));
+        QVERIFY(!(gv->m_sceneryItems.value(cyc->id())->flags() & QGraphicsItem::ItemIsMovable));
+        gv->setItemLocked("scenery", cyc->id(), false);
+        const quint32 layer = props->addLayer("Scenery");
+        gv->setItemLayer(gv->m_sceneryItems.value(cyc->id()), layer);
+        QCOMPARE(cyc->layerId(), layer);
+        props->setLayerVisible(layer, false);
+        gv->refreshItemLayerState();
+        QVERIFY(!gv->m_sceneryItems.value(cyc->id())->isVisible());
+
+        // Delete from its menu asks first: Cancel keeps it, Delete removes it.
+        QSignalSpy asked(gv, &MonitorGraphicsView::sceneryRemoveRequested);
+        const quint32 id = cyc->id();
+        driveMessageBox([](QWidget *) { return true; }, "Cancel");
+        gv->requestDeleteItem("scenery", id);
+        QCOMPARE(asked.count(), 1);
+        QVERIFY(props->scenery(id) != nullptr);
+        driveMessageBox([](QWidget *) { return true; }, "Delete");
+        gv->requestDeleteItem("scenery", id);
+        QVERIFY(props->scenery(id) == nullptr);
+        QVERIFY(!gv->m_sceneryItems.contains(id));
+    }
+    delete doc;
+}
+
+void Monitor_Test::beamsLandOnTheCycloramaInTheRigView()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Scenery *cyc = props->addScenery();
+    cyc->setOriginX(6.0f);
+    cyc->setOriginY(0.5f);
+    cyc->setWidth(10.0f);
+    cyc->setHeight(6.0f);
+    {
+        StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+        // A head 5 m downstage at 3 m, aimed level and upstage: it hits the cloth.
+        const QVector3D apex(6.0f, 5.5f, 3.0f), dir(0.0f, -1.0f, 0.0f);
+        bool hit = false;
+        QVector3D n;
+        const double t = view.beamThrow(apex, dir, &hit, &n);
+        QVERIFY(hit);
+        QVERIFY(qAbs(t - 5.0) < 0.01);
+        QVERIFY2(qAbs(n.y() - 1.0f) < 0.01f, "the pool lies on the cloth, facing the head");
+
+        // The pool is on the cloth: every ring point at the cyc's line.
+        const QVector<QVector3D> ring = view.beamFootprint(apex, dir, qDegreesToRadians(7.0), t, true, n);
+        QCOMPARE(ring.size(), 16);
+        for (const QVector3D &p : ring)
+            QVERIFY2(qAbs(p.y() - 0.5f) < 0.01f, qPrintable(QString("ring point at y=%1").arg(p.y())));
+
+        // Aimed at the floor in front of it, it still lands on the floor.
+        const QVector3D down = QVector3D(0.0f, -0.2f, -1.0f).normalized();
+        view.beamThrow(apex, down, &hit, &n);
+        QVERIFY(hit && n.z() > 0.99f);
+
+        // The cyc is part of the overview and of its extent.
+        bool listed = false;
+        foreach (const auto &ki, view.everyStructure())
+            listed = listed || ki.first == StructureStudioView::SceneryKind;
+        QVERIFY(listed);
+        QList<QVector3D> pts;
+        view.collectPointsFor(pts, StructureStudioView::SceneryKind, cyc->id());
+        float top = 0.0f;
+        for (const QVector3D &p : pts)
+            top = qMax(top, p.z());
+        QVERIFY(qAbs(top - 6.0f) < 0.01f);
     }
     delete doc;
 }

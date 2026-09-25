@@ -152,6 +152,8 @@ void MonitorProperties::reset()
     m_stands.clear();
     qDeleteAll(m_towers);
     m_towers.clear();
+    qDeleteAll(m_sceneries);
+    m_sceneries.clear();
     qDeleteAll(m_stageTargets);
     m_stageTargets.clear();
     m_rigProps.clear();
@@ -1205,6 +1207,26 @@ quint32 MonitorProperties::nextStandId() const
     return id;
 }
 
+quint32 MonitorProperties::nextSceneryId() const
+{
+    quint32 id = 0;
+    while (m_sceneries.contains(id))
+        ++id;
+    return id;
+}
+
+Scenery *MonitorProperties::addScenery()
+{
+    Scenery *s = new Scenery(nextSceneryId(), this);
+    m_sceneries.insert(s->id(), s);
+    return s;
+}
+
+void MonitorProperties::removeScenery(quint32 id)
+{
+    delete m_sceneries.take(id);
+}
+
 Stand *MonitorProperties::addStand()
 {
     quint32 id = nextStandId();
@@ -2083,6 +2105,19 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 delete s;
             }
         }
+        else if (root.name() == KXMLScenery)
+        {
+            Scenery *s = new Scenery(nextSceneryId(), this);
+            if (s->loadXML(root) && !m_sceneries.contains(s->id()))
+            {
+                m_sceneries.insert(s->id(), s);
+            }
+            else
+            {
+                qWarning() << "Discarding scenery with missing or duplicate id" << s->id();
+                delete s;
+            }
+        }
         else if (root.name() == QStringLiteral("Tower"))
         {
             Tower *t = new Tower(nextTowerId(), this);
@@ -2716,6 +2751,10 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     // Towers
     foreach (const Tower *t, m_towers)
         t->saveXML(doc);
+
+    // Scenery
+    foreach (const Scenery *s, m_sceneries)
+        s->saveXML(doc);
 
     // Stage targets
     foreach (const StageTarget *t, m_stageTargets)

@@ -375,6 +375,7 @@ protected slots:
     void slotPipeRemoveRequested(quint32 pid);
     void slotStandRemoveRequested(quint32 sid);
     void slotTowerRemoveRequested(quint32 tid);
+    void slotSceneryRemoveRequested(quint32 sid);
     void slotAddImage();
 
     /** Stage a fixture in the inventory (no universe/address yet). */
@@ -406,6 +407,10 @@ protected slots:
     void slotAddStand();
     void slotEditStand(quint32 sid);
     void slotAddTower();
+    /** Add a cyclorama: where the canvas menu was opened, or across the back
+     *  of the stage (full width, at the upstage edge) from the toolbar. */
+    void slotAddCyclorama();
+    void slotEditScenery(quint32 sid);
     void slotEditTower(quint32 tid);
 
     /** Build the embedded graphical structure canvas pane (plane switcher + the

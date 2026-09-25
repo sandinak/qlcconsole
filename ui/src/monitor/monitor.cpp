@@ -470,6 +470,10 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotPipeRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::standRemoveRequested,
             this, &Monitor::slotStandRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::sceneryRemoveRequested,
+            this, &Monitor::slotSceneryRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::sceneryDoubleClicked,
+            this, &Monitor::slotEditScenery);
     connect(m_graphicsView, &MonitorGraphicsView::towerRemoveRequested,
             this, &Monitor::slotTowerRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::imageDoubleClicked,
@@ -1488,6 +1492,8 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddTruss()));
         addMenu->addAction(tr("Add Platform/Riser"),
                            this, SLOT(slotAddPlatform()));
+        addMenu->addAction(tr("Add Cyclorama"),
+                           this, SLOT(slotAddCyclorama()));
         addMenu->addAction(QIcon(":/image.png"), tr("Add Image"),
                            this, SLOT(slotAddImage()));
         addMenu->addAction(tr("Add Network Node"),
@@ -4375,6 +4381,22 @@ void Monitor::slotStandRemoveRequested(quint32 sid)
     m_doc->setModified();
 }
 
+void Monitor::slotSceneryRemoveRequested(quint32 sid)
+{
+    Scenery *s = m_props->scenery(sid);
+    if (s == NULL)
+        return;
+    // Nothing is mounted on scenery, so there are no fixtures to offer.
+    const FeatureDeleteChoice choice = confirmFeatureDelete(Scenery::kindName(s->kind()), s->name(),
+                                                            QList<quint32>());
+    if (choice == DeleteCancel)
+        return;
+    m_props->removeScenery(sid);
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
 void Monitor::slotTowerRemoveRequested(quint32 tid)
 {
     Tower *tw = m_props->tower(tid);
@@ -5100,6 +5122,142 @@ void Monitor::slotEditStand(quint32 sid)
     m_doc->setModified();
 }
 
+void Monitor::slotAddCyclorama()
+{
+    Scenery *s = m_props->addScenery();
+    s->setKind(Scenery::Cyclorama);
+    s->setName(tr("Cyclorama %1").arg(s->id() + 1));
+    const double mpu = (m_props->gridUnits() == MonitorProperties::Feet) ? 0.3048 : 1.0;
+    const double stageW = double(m_props->gridSize().x()) * mpu;
+    if (!m_pendingAddScenePos.isNull())
+    {
+        // Where the canvas menu was opened, the stage's width wide.
+        const QPointF mm = m_graphicsView->pixelsToRealPosition(
+            m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+        s->setOriginX(float(mm.x() / 1000.0));
+        s->setOriginY(float(mm.y() / 1000.0));
+        m_pendingAddScenePos = QPointF();
+    }
+    else
+    {
+        // Across the back: centred, at the upstage edge of the stage.
+        s->setOriginX(float(stageW / 2.0));
+        s->setOriginY(0.3f);
+    }
+    s->setWidth(float(qMax(2.0, stageW - 1.0)));
+    s->setHeight(6.0f);
+    s->setLayerId(m_props->activeLayerId());
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    slotEditScenery(s->id());
+}
+
+void Monitor::slotEditScenery(quint32 sid)
+{
+    Scenery *s = m_props->scenery(sid);
+    if (s == NULL)
+        return;
+
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+    const double posR = isFeet ? 164.0 : 50.0;
+
+    // Snapshot for reverting the live preview on Cancel.
+    const QString snapName = s->name();
+    const float snapX = s->originX(), snapY = s->originY(), snapW = s->width(), snapH = s->height();
+    const float snapB = s->bottom(), snapR = s->rotation(), snapBow = s->bow();
+    const QColor snapC = s->color();
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("%1 -- %2").arg(Scenery::kindName(s->kind()), s->name()));
+    QFormLayout *form = new QFormLayout;
+    QLineEdit *nameEdit = new QLineEdit(s->name(), &dlg);
+    form->addRow(tr("Name:"), nameEdit);
+    auto mkSpin = [&](double val, double lo, double hi) {
+        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
+        sp->setRange(lo, hi); sp->setDecimals(2); sp->setSuffix(sfx);
+        sp->setValue(val * toDisp);
+        return sp;
+    };
+    QDoubleSpinBox *xSpin   = mkSpin(s->originX(), -posR, posR);
+    QDoubleSpinBox *ySpin   = mkSpin(s->originY(), -posR, posR);
+    QDoubleSpinBox *wSpin   = mkSpin(s->width(), 0.1, posR * 2);
+    QDoubleSpinBox *hSpin   = mkSpin(s->height(), 0.1, isFeet ? 100.0 : 30.0);
+    QDoubleSpinBox *bSpin   = mkSpin(s->bottom(), 0.0, isFeet ? 100.0 : 30.0);
+    QDoubleSpinBox *bowSpin = mkSpin(s->bow(), 0.0, isFeet ? 33.0 : 10.0);
+    QDoubleSpinBox *rotSpin = new QDoubleSpinBox(&dlg);
+    rotSpin->setRange(-180, 180); rotSpin->setDecimals(0); rotSpin->setSuffix(QStringLiteral("°"));
+    rotSpin->setValue(double(s->rotation()));
+    xSpin->setToolTip(tr("The middle of the bottom edge, across the stage"));
+    ySpin->setToolTip(tr("The middle of the bottom edge, up/down stage"));
+    bSpin->setToolTip(tr("Height of the bottom edge above the floor (0 = to the deck)"));
+    bowSpin->setToolTip(tr("How far the middle curves away from the audience; 0 is flat"));
+    rotSpin->setToolTip(tr("0 runs across the stage facing the audience"));
+    form->addRow(tr("Centre X:"), xSpin);
+    form->addRow(tr("Centre Y:"), ySpin);
+    form->addRow(tr("Width:"), wSpin);
+    form->addRow(tr("Height:"), hSpin);
+    form->addRow(tr("Bottom trim:"), bSpin);
+    form->addRow(tr("Bow:"), bowSpin);
+    form->addRow(tr("Facing:"), rotSpin);
+    QPushButton *colorBtn = new QPushButton(&dlg);
+    auto showColor = [colorBtn](const QColor &c) {
+        colorBtn->setText(c.name());
+        colorBtn->setStyleSheet(QString("background:%1; color:%2").arg(c.name())
+                                    .arg(c.lightness() > 128 ? "#000" : "#fff"));
+    };
+    QColor chosen = s->color();
+    showColor(chosen);
+    form->addRow(tr("Colour:"), colorBtn);
+
+    auto apply = [&]() {
+        s->setName(nameEdit->text().trimmed().isEmpty() ? snapName : nameEdit->text().trimmed());
+        s->setOriginX(float(xSpin->value() * fromDisp));
+        s->setOriginY(float(ySpin->value() * fromDisp));
+        s->setWidth(float(wSpin->value() * fromDisp));
+        s->setHeight(float(hSpin->value() * fromDisp));
+        s->setBottom(float(bSpin->value() * fromDisp));
+        s->setBow(float(bowSpin->value() * fromDisp));
+        s->setRotation(float(rotSpin->value()));
+        s->setColor(chosen);
+        m_graphicsView->updatePlatforms();
+    };
+    for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&apply](double) { apply(); });
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [&apply](const QString &) { apply(); });
+    connect(colorBtn, &QPushButton::clicked, &dlg, [&]() {
+        const QColor c = QColorDialog::getColor(chosen, &dlg, tr("Cloth colour"));
+        if (c.isValid())
+        {
+            chosen = c;
+            showColor(c);
+            apply();
+        }
+    });
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    vl->addLayout(form);
+    vl->addWidget(bb);
+
+    if (dlg.exec() != QDialog::Accepted)
+    {
+        s->setName(snapName); s->setOriginX(snapX); s->setOriginY(snapY);
+        s->setWidth(snapW); s->setHeight(snapH); s->setBottom(snapB);
+        s->setRotation(snapR); s->setBow(snapBow); s->setColor(snapC);
+        m_graphicsView->updatePlatforms();
+        return;
+    }
+    apply();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
 void Monitor::slotAddTower()
 {
     Tower *t = m_props->addTower();
@@ -5743,6 +5901,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
                        this, SLOT(slotAddStand()));
     addMenu->addAction(tr("Tower"),
                        this, SLOT(slotAddTower()));
+    addMenu->addAction(tr("Cyclorama"),
+                       this, SLOT(slotAddCyclorama()));
     addMenu->addSeparator();
     addMenu->addAction(tr("Target Position"),
                        this, SLOT(slotAddTarget()));

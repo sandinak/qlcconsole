@@ -94,6 +94,7 @@ add_library(${module_name}
     monitor/trussitem.cpp monitor/trussitem.h
     monitor/platformitem.cpp monitor/platformitem.h
     monitor/pipeitem.cpp monitor/pipeitem.h
+    monitor/sceneryitem.cpp monitor/sceneryitem.h
     monitor/standitem.cpp monitor/standitem.h
     monitor/toweritem.cpp monitor/toweritem.h
     monitor/powersourceitem.cpp monitor/powersourceitem.h

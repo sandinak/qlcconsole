@@ -51,7 +51,10 @@ public:
                  PlatformKind = 3, PipeKind = 4, GroupKind = 5,
                  /** The WHOLE rig rather than one object: every structure and
                   *  every placed fixture, for an overview. Read-only. */
-                 StageKind = 6 };
+                 StageKind = 6,
+                 /** A cyclorama or other scenery: a surface, drawn in the
+                  *  overview, carrying no fixtures. */
+                 SceneryKind = 7 };
     /** Top/Front/Side are the axis-aligned working planes -- each drops one
      *  world axis, which is exactly why a screen point can be turned back into
      *  a world one and fixtures can be DRAGGED in them.
@@ -469,7 +472,7 @@ private:
     /** How far a beam travels before it lands: the floor, or the top of a
      *  platform it passes over. A sensible throw when it hits nothing. */
     double beamThrow(const QVector3D &apex, const QVector3D &dir,
-                     bool *hit = nullptr) const;
+                     bool *hit = nullptr, QVector3D *landNormal = nullptr) const;
     /** Whether a beam lands on anything, or is thrown into the room. */
     bool beamHitsSomething(const QVector3D &apex, const QVector3D &dir) const;
     /** The cone from a head out to whatever it lands on, plus the pool where
@@ -486,7 +489,8 @@ private:
      *  A beam that lands on nothing ends square across its axis at @p length. */
     QVector<QVector3D> beamFootprint(const QVector3D &apex, const QVector3D &dir,
                                      double halfAngleRad, double length,
-                                     bool lands) const;
+                                     bool lands,
+                                     const QVector3D &landNormal = QVector3D(0, 0, 1)) const;
     /** What one head of a mover is doing: where it points (null = rest) and
      *  the beam it throws. A two-arm fixture has two, and they differ. */
     struct MoverHeadLook
