@@ -115,7 +115,8 @@ void AudioBar::attachDmxChannels(Doc *doc, QList<SceneValue> list)
     foreach (SceneValue scv, m_dmxChannels)
     {
         Fixture *fx = doc->fixture(scv.fxi);
-        if (fx != NULL)
+        // An unpatched fixture has no address to drive.
+        if (fx != NULL && fx->isPatched())
         {
             quint32 absAddr = fx->universeAddress() + scv.channel;
             m_absDmxChannels.append(absAddr);

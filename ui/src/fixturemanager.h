@@ -123,6 +123,16 @@ private:
     /** Open a fixture selector to add new fixtures */
     void addFixture();
 
+    /** Stage a fixture in the inventory: no universe, no address. */
+    void addToInventory();
+    void addFixtureImpl(bool inventory);
+
+    /** Release these fixtures' universe/address, sending them back to the inventory. */
+    void returnToInventory(const QList<quint32> &fixtureIds);
+
+    /** Open the Patch view for @p fixtureIds (empty = every staged fixture). */
+    void patchInventory(const QList<quint32> &fixtureIds = QList<quint32>());
+
     /** Open a channels selector to add new channels group */
     void addChannelsGroup();
 
@@ -305,6 +315,8 @@ private slots:
 
 private:
     QAction* m_addAction;
+    QAction* m_addInventoryAction;
+    QAction* m_patchInventoryAction;
     QAction* m_addRGBAction;
     /** Toolbar-only container action for the "Add" dropdown button (Add
      *  Fixture.../Add RGB Panel...) — toggled visible/hidden per active tab

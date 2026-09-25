@@ -30,6 +30,31 @@ private slots:
     void init();
     void cleanup();
 
+    /** Right-clicking the Inventory root must offer inventory actions, and NOT
+     *  the generic "Add fixture..." (which patches, and asks for a universe). */
+    void rightClickOnInventoryOffersInventoryActionsNotAGenericAdd();
+    /** ...while the same click on the Universes root still offers the normal add. */
+    void rightClickOnUniversesStillOffersAFixtureAdd();
+    /** The toolbar's plain "Add fixture" with the Inventory root selected stages
+     *  the fixture instead of asking for a universe and address. */
+    void addFixtureWithInventorySelectedStagesIt();
+
+    /** A patched fixture's right-click offers Return to inventory; a staged one's does not. */
+    void returnToInventoryIsOfferedForPatchedFixturesOnly();
+    /** Confirming it releases the fixture's address and keeps the fixture. */
+    void returningToInventoryReleasesTheAddress();
+
+    /** Right-clicking a manufacturer or model folder in the inventory offers to
+     *  patch every staged fixture beneath it. */
+    void rightClickOnAnInventoryFolderOffersToPatchWhatIsInIt();
+    void choosingReturnToInventoryFromTheMenuReleasesIt();
+    void choosingAddToInventoryFromTheMenuStagesAFixture();
+    void choosingPatchFromTheMenuPatchesThoseFixtures();
+    void aNetworkFixturesInfoStatesItsConnection();
+    void theInventoryActionsFollowTheAddAction();
+    void editingAStagedFixtureKeepsItStaged();
+    void deletingInventoryFixturesUpdatesTheFolderCounts();
+
     /** Deleting a fixture that lives under a universe folder (the
      *  Fixture Manager tree's default shape) must actually remove its
      *  row, not just the underlying Doc object. */

@@ -1,7 +1,9 @@
 # Inventory-first workflow — design the rig before you patch it
 
-**Status:** analysis, not yet started (not referenced in TODO.md/DONE.md)
-**Owner:** unassigned
+**Status:** Phase 1 (engine) and the Phase 2 UI are built -- see "What shipped"
+below. Still open: the equipment catalog for network gear, badges in the
+Programming tab, and proximity-guided patching (needs NetworkTopology N6).
+**Owner:** Branson / Claude
 **Related:** [Lighting Studio](../features/lighting-studio.md),
 [Fixture Manager](../features/fixture-manager.md)
 
@@ -219,15 +221,128 @@ make the outcome correct regardless.
    there so an LD never has to detour through Fixture Manager to originate
    one. This is the change that actually inverts the workflow order, not
    just permits it.
-3. **A real "Inventory" section** in the Fixture Manager tree (a peer of
+3. **A docked Inventory tree in Lighting Studio itself** (Branson, discussing
+   N2): once fixtures can be staged unpatched, dragging them onto the rig one
+   at a time via a picker dialog is the wrong interaction for the common case
+   — an LD building a rig from a known inventory wants a persistent side panel
+   (right-hand dock, alongside the existing Layers panel on the left) listing
+   every `isPatched() == false` fixture, dragged straight onto a truss/pipe/
+   riser the way a palette is already dragged onto a look in the Programming
+   tab. This is the natural UI home for point 4 below (not just a Fixture
+   Manager tree row) — the same underlying "Inventory" list, presented where
+   the placing actually happens instead of requiring a detour to Fixture
+   Manager. Worth designing as one panel serving both.
+4. **A real "Inventory" section** in the Fixture Manager tree (a peer of
    "Fixture Groups"/"Power"/"Universes," per `FixtureTreeWidget`'s existing
    pattern of always-present root sections) listing every `isPatched() ==
    false` fixture — a real, queryable list, not an inferred one.
-4. **An "unpatched" badge** wherever a fixture is listed elsewhere
+5. **An "unpatched" badge** wherever a fixture is listed elsewhere
    (Lighting Studio labels, Programming tab target rows).
-5. **A "Patch…" bulk view** — everything still unpatched, assign each to a
+6. **A "Patch…" bulk view** — everything still unpatched, assign each to a
    real universe/address one at a time (reopens edit-mode `AddFixture`) or
    in bulk via `findAddress()`.
+
+## Connection type: DMX vs Network fixtures
+
+A second persisted attribute rides alongside `isPatched`: `Fixture::connection`
+(`Dmx` default / `Network`) plus an optional `ipAddress`, specified in
+[NETWORK_CABLING_DESIGN.md](../../NETWORK_CABLING_DESIGN.md#fixture-connection-dmx-vs-network-supersedes-direct).
+It matters here because the Inventory and the Patch step both branch on it:
+
+- **Add to Inventory** asks for the connection (and IP for network fixtures)
+  up front, since an LD knows a fence is ArtNet before any universe exists.
+- **Patch...** for a `Dmx` fixture picks a node port by proximity; for a
+  `Network` fixture it allocates or reuses a universe at that fixture's IP
+  (unicast -- one universe per distinct IP) and sets `outputIP` in Connections.
+- Phase 1 gains one more small engine change: the attribute and its XML
+  (omitted when `Dmx`), covered by the same "old file opens unchanged" test.
+
+## What shipped (2026-09-24)
+
+**Engine.**
+- `Fixture::isPatched()` (default true; `<Patched>False</Patched>` only when
+  staged), `Fixture::connection()` (Dmx/Network) and `ipAddress()`. Nothing is
+  written to the XML for an ordinary fixture, and a test proves an old file
+  round-trips unchanged.
+- `Doc::addFixture()` skips the overlap check, the address book and universe
+  growth for a staged fixture, so any number can sit at the placeholder 0/0.
+  This was the gap the first draft missed: without it only one inventory
+  fixture could ever be added. `Doc::slotFixtureChanged()` and
+  `replaceFixtures()` honour it too.
+- `Doc::patchFixture(id, universe, address)` -- collision-checked, refuses to
+  run past a universe, applies the channel capabilities `addFixture()` skipped.
+- DMX write path. The doc said two chokepoints; the real audit found more,
+  because this fork's highlight/mark/park/flasher effects, the generic DMX
+  source, the effect instance, the script runner and the programmer's live
+  write all build a universe index from the raw fixture. Every one now skips an
+  unpatched fixture. The fader path is covered by an *inert* `FadeChannel`
+  (`address()` invalid, `universe()` invalid): the earlier idea of "treat it
+  like `fixture == NULL`" would have been wrong, because a NULL-fixture channel
+  falls back to the bare channel number and writes universe 1 at that address.
+  `GenericFader::write()` skips inert channels silently.
+- `PatchPlanner`: DMX packed first-fit around what is patched, spilling into new
+  universes; network fixtures unicast, one universe per distinct IP, fixtures
+  behind one IP sharing it, DMX never placed in a network universe. `plan()` is
+  pure; `apply()` patches and, for network fixtures, points the universe's
+  `outputIP` at the fixture (borrowing the plugin and interface of an existing
+  ArtNet/sACN universe when the new one has none).
+
+**UI.**
+- Fixture Manager: **Add to inventory...** (the Add dialog in inventory mode --
+  no universe/address/gap), an **Inventory** root in the tree, and
+  **Patch inventory...** (whole inventory, or the selected staged fixtures).
+  Staged fixtures are excluded from every per-universe listing (Universes
+  folder, Connections, patch grid, channel selection, power estimate), so
+  a placeholder 0/0 never makes one look like it sits in universe 1, and
+  deleting a universe never sweeps them up.
+- Patch dialog: opens on the planner's proposal, every universe and address
+  editable, conflicts flagged live, Apply disabled while any remain.
+- Lighting Studio: a right-hand **Inventory** panel (toolbar toggle) listing
+  staged fixtures not yet on the plot, grouped by model, filterable. Drag one
+  onto the plot to place it -- onto a truss, riser or tower to mount it, by the
+  same release logic a dragged fixture gets. Placing does not patch it.
+- Everything that shows or drives a fixture by universe/address was audited for
+  the placeholder 0/0 (a first pass missed most of these, and a staged fixture
+  showed up as "universe 1"): the Studio's DMX and Network overlays, tooltips,
+  address-clash flags and inspector labels; Locate, Test orientation, Reset and
+  the maintenance buttons (which write straight to the universe -- Locate on a
+  staged fixture would have lit whatever real fixture sits at universe 1,
+  address 1); the Monitor DMX view; Simple Desk's fixture consoles and scene
+  sliders and its cue defaults; the audio bar; DMX dump; VC XY pad and level
+  slider; the group layout labels.
+- The inventory is organised **manufacturer -> model -> fixture**, alphabetical at
+  every level with a count on each folder, in both the Fixture Manager tree and
+  the Studio panel. Generic dimmers and RGB panels file under "Generic" with a
+  model that says what they are ("Dimmer, 4 ch"). Selecting a manufacturer or
+  model folder stands for everything beneath it: drag it from the Studio panel,
+  or right-click it in the manager to patch it. `PatchPlanner` follows the same
+  order, with numbers compared as numbers ("Wash 2" before "Wash 10"), so
+  identical fixtures get contiguous addresses.
+- **Naming.** A model's own digits are never a counter: adding a second LM70 gives
+  "LM70 #2", not "LM71", and a multi-add of Par 64 gives "Par 64 #1, #2" rather
+  than Par 65. Only an explicit `#N` suffix in a typed name ("US #4") continues
+  as a counter (`Doc::nextUniqueModelName`, and the multi-add rule in
+  `FixtureCreator`).
+- **Mode and channels are chosen when patching.** The Add dialog in inventory mode
+  has no channel count (a generic dimmer starts at one channel; a real fixture
+  starts in the mode preselected there). The Patch dialog has a Mode column -- the
+  definition's modes, or a channel spin for a generic dimmer -- and the plan is
+  made for the chosen footprint. `Doc::canChangeFixtureMode()` guards it: a
+  fixture a scene sets channel-by-channel keeps its mode (scenes store raw channel
+  indexes), and a mode with a different head count is refused (fixture groups lay
+  out heads by number). Disabled choices are shown with the reason. Palettes and
+  looks built from them are by capability and are unaffected. Apply is
+  transactional: a refused change leaves the fixture unpatched and unchanged.
+- The add-fixture flow moved out of `FixtureManager` into `FixtureCreator` so the
+  Studio creates fixtures exactly the way the manager does.
+
+**Not done.** The network *equipment* catalog (placing a node or wireless link
+from a model definition, with ports prefilled) -- nodes are still created by
+hand in the Network Topology dialog. Proximity-guided patching (N6).
+
+Added after the first pass: "Return to inventory" (`Doc::unpatchFixture`, Design
+mode only -- a running function holds channels resolved against the old
+address), and an "(unpatched)" badge on Programming-tab target rows.
 
 ## What deliberately doesn't need to change
 

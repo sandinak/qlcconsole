@@ -38,6 +38,8 @@ class Doc;
 #define PROP_FOLDER   Qt::UserRole + 5  //!< group-folder path (string)
 #define PROP_SOURCE   Qt::UserRole + 6  //!< power source index (int, into PowerDistribution::sources())
 #define PROP_CIRCUIT  Qt::UserRole + 7  //!< power circuit index (int, within its source's circuits())
+#define PROP_INVENTORY Qt::UserRole + 8 //!< marks the Inventory root (1) or one of its manufacturer/model folders (2)
+#define PROP_INVENTORY_NAME Qt::UserRole + 9 //!< an Inventory folder's bare name, before its "(N)" count
 
 class FixtureTreeWidget final : public QTreeWidget
 {
@@ -59,6 +61,11 @@ public:
     void restoreSelection(const Selection &sel);
 
     void updateTree();
+
+    /** Relabel the Inventory root and its folders with their fixture counts,
+     *  dropping folders left empty. updateTree() does this after a rebuild; a
+     *  caller that removes fixture rows in place calls it to catch up. */
+    void refreshInventoryCounts();
 
     /** Toggle whether each fixture row expands to show its individual heads
      *  as draggable children (see headDragMimeType()) -- off by default even

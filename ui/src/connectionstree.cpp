@@ -1245,7 +1245,7 @@ void ConnectionsTree::refresh()
                     int nfx = 0, nheads = 0, lastCh = 0;
                     foreach (Fixture *fx, m_doc->fixtures())
                     {
-                        if (fx == NULL || fx->universe() != uniId)
+                        if (fx == NULL || !fx->isPatched() || fx->universe() != uniId)
                             continue;
                         nfx++;
                         nheads += qMax(1, fx->heads());
@@ -4057,7 +4057,7 @@ void ConnectionsTree::setCarriesFixtures(QTreeWidgetItem *item, quint32 universe
     int nfx = 0, nheads = 0, lastCh = 0;
     foreach (Fixture *fx, m_doc->fixtures())
     {
-        if (fx == NULL || fx->universe() != universeId)
+        if (fx == NULL || !fx->isPatched() || fx->universe() != universeId)
             continue;
         nfx++;
         nheads += qMax(1, fx->heads());

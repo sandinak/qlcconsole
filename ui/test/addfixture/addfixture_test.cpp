@@ -504,3 +504,44 @@ void AddFixture_Test::rememberExpanded()
 }
 
 QTEST_MAIN(AddFixture_Test)
+
+void AddFixture_Test::inventoryModeHidesAddressAndIgnoresOverlap()
+{
+    // Occupy universe 1's first channels so a normal add there would overlap.
+    Fixture *taken = new Fixture(m_doc);
+    taken->setChannels(512);
+    QVERIFY(m_doc->addFixture(taken));
+
+    AddFixture af(NULL, m_doc);
+    af.setInventoryMode(true);
+    QVERIFY(af.inventoryMode());
+    QVERIFY(af.m_universeCombo->isHidden());
+    QVERIFY(af.m_addressSpin->isHidden());
+    QVERIFY(af.m_gapSpin->isHidden());
+    QVERIFY(af.windowTitle().contains("Inventory"));
+    // The channel count is a footprint decision: made when patching, not here.
+    QVERIFY(af.m_channelsSpin->isHidden());
+    QVERIFY(af.m_channelsLabel->isHidden());
+
+    // A staged fixture claims no address, so a full universe is no obstacle.
+    af.m_addressSpin->setValue(1);
+    QVERIFY(!af.invalidAddress());
+
+    m_doc->deleteFixture(taken->id());
+}
+
+void AddFixture_Test::connectionAndIpAreReported()
+{
+    AddFixture af(NULL, m_doc);
+    QCOMPARE(af.connection(), Fixture::Dmx);
+    QVERIFY(af.ipAddress().isEmpty());
+    QVERIFY(!af.m_ipEdit->isEnabled());              // only a network fixture has an IP
+
+    af.m_ipEdit->setText("172.18.2.41");
+    QVERIFY2(af.ipAddress().isEmpty(), "a DMX fixture must not carry an IP");
+
+    af.m_connectionCombo->setCurrentIndex(af.m_connectionCombo->findData(int(Fixture::Network)));
+    QCOMPARE(af.connection(), Fixture::Network);
+    QVERIFY(af.m_ipEdit->isEnabled());
+    QCOMPARE(af.ipAddress(), QString("172.18.2.41"));
+}

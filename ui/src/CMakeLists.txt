@@ -52,6 +52,7 @@ add_library(${module_name}
     efxeditor.cpp efxeditor.h efxeditor.ui
     efxpreviewarea.cpp efxpreviewarea.h
     fixtureconsole.cpp fixtureconsole.h
+    fixturecreator.cpp fixturecreator.h
     fixturegroupeditor.cpp fixturegroupeditor.h fixturegroupeditor.ui
     fixturemanager.cpp fixturemanager.h
     fixtureremap.cpp fixtureremap.h fixtureremap.ui
@@ -124,6 +125,7 @@ add_library(${module_name}
     lookeditor.cpp lookeditor.h
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
+    patchinventorydialog.cpp patchinventorydialog.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h
     universeusagewidget.cpp universeusagewidget.h

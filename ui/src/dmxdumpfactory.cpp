@@ -149,7 +149,7 @@ void DmxDumpFactory::slotSelectSceneButtonClicked()
         foreach (SceneValue scv, scene->values())
         {
             Fixture *fxi = m_doc->fixture(scv.fxi);
-            if (fxi == NULL)
+            if (fxi == NULL || !fxi->isPatched())
                 continue;
             quint32 absAddress = fxi->universeAddress() + scv.channel;
             if (chMask.length() > (int)absAddress)

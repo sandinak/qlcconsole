@@ -28,6 +28,7 @@
 #include <QKeyEvent>
 #include <QTreeWidgetItemIterator>
 
+#include <QMap>
 #include "fixturetreewidget.h"
 #include "qlcfixturedef.h"
 #include "fixturegroup.h"
@@ -604,11 +605,20 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
 
     if (m_uniColumn > 0)
     {
-        item->setText(m_uniColumn, QString("%1").arg(fixture->universe() + 1));
+        // An inventory fixture's universe is a placeholder, not a fact.
+        item->setText(m_uniColumn, fixture->isPatched() ? QString("%1").arg(fixture->universe() + 1)
+                                                        : QString::fromUtf8("\xE2\x80\x94"));
         item->setTextAlignment(m_uniColumn, Qt::AlignHCenter | Qt::AlignVCenter);
     }
 
-    if (m_addressColumn)
+    if (m_addressColumn && !fixture->isPatched())
+    {
+        item->setText(m_addressColumn, fixture->connection() == Fixture::Network
+                          ? (fixture->ipAddress().isEmpty() ? tr("unpatched (network)")
+                                                            : tr("unpatched (%1)").arg(fixture->ipAddress()))
+                          : tr("unpatched"));
+    }
+    else if (m_addressColumn)
     {
         QString s;
         if (fixture->channels() > 1)
@@ -986,6 +996,39 @@ void FixtureTreeWidget::updateTree()
         }
     }
 
+    // The Inventory: fixtures staged in the show but not yet given a universe
+    // and address. A peer of Fixture Groups / Power / Universes, always
+    // present in the manager so it has a right-clickable home of its own.
+    QTreeWidgetItem *inventoryRoot = NULL;
+    QMap<QString, QTreeWidgetItem *> invManuf;    // manufacturer -> folder
+    QMap<QString, QTreeWidgetItem *> invModel;    // manufacturer\x1fmodel -> folder
+    auto newInventoryFolder = [this](QTreeWidgetItem *parent, const QString &name) {
+        QTreeWidgetItem *f = new QTreeWidgetItem(parent);
+        f->setText(KColumnName, name);
+        f->setIcon(KColumnName, QIcon(":/folder.png"));
+        f->setData(KColumnName, PROP_INVENTORY, 2);
+        f->setData(KColumnName, PROP_INVENTORY_NAME, name);
+        f->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        f->setExpanded(true);
+        return f;
+    };
+    auto ensureInventoryRoot = [&]() {
+        if (inventoryRoot == NULL)
+        {
+            blockSignals(true);
+            inventoryRoot = new QTreeWidgetItem(this);
+            inventoryRoot->setText(KColumnName, tr("Inventory"));
+            inventoryRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+            inventoryRoot->setData(KColumnName, PROP_INVENTORY, 1);
+            inventoryRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            blockSignals(false);
+            inventoryRoot->setExpanded(true);
+        }
+        return inventoryRoot;
+    };
+    if (m_showGroups == true)
+        ensureInventoryRoot();
+
     // Power sources/circuits, peer to the fixture-group folders and the
     // Universes folder below. A source with 0 or 1 circuits feeds fixtures
     // directly (mirrors the "(direct)" case in FixtureManager's right-click
@@ -1099,6 +1142,29 @@ void FixtureTreeWidget::updateTree()
     {
         Q_ASSERT(fixture != NULL);
 
+        // Staged fixtures live under the Inventory, never under a universe --
+        // a placeholder 0/0 must not make one look like it sits in universe 1.
+        // Channel selection has no use for them: they have no address.
+        if (!fixture->isPatched())
+        {
+            if (m_channelSelection)
+                continue;
+            // Manufacturer -> model -> fixture, so a big inventory reads like the
+            // bill of materials it is.
+            const QString manuf = fixture->groupingManufacturer();
+            const QString model = fixture->groupingModel();
+            QTreeWidgetItem *&mNode = invManuf[manuf];
+            if (mNode == NULL)
+                mNode = newInventoryFolder(ensureInventoryRoot(), manuf);
+            QTreeWidgetItem *&modelNode = invModel[manuf + QLatin1Char('\x1f') + model];
+            if (modelNode == NULL)
+                modelNode = newInventoryFolder(mNode, model);
+            QTreeWidgetItem *iItem = new QTreeWidgetItem(modelNode);
+            updateFixtureItem(iItem, fixture);
+            m_fixturesCount++;
+            continue;
+        }
+
         // The universe nodes live under universesRoot (or at top level when
         // groups aren't shown, e.g. in fixture-selection dialogs).
         QTreeWidgetItem *uniParent = universesRoot ? universesRoot : invisibleRootItem();
@@ -1146,9 +1212,64 @@ void FixtureTreeWidget::updateTree()
         m_channelsCount += fixture->channels();
     }
 
+    if (inventoryRoot != NULL)
+    {
+        // Alphabetical at every level, sorted on the bare names before the
+        // counts go on.
+        inventoryRoot->sortChildren(KColumnName, Qt::AscendingOrder);
+        for (int m = 0; m < inventoryRoot->childCount(); m++)
+        {
+            QTreeWidgetItem *mNode = inventoryRoot->child(m);
+            mNode->sortChildren(KColumnName, Qt::AscendingOrder);
+            for (int d = 0; d < mNode->childCount(); d++)
+                mNode->child(d)->sortChildren(KColumnName, Qt::AscendingOrder);
+        }
+        refreshInventoryCounts();
+    }
+
     header()->resizeSections(QHeaderView::ResizeToContents);
 
     restoreSelection(keep);
+}
+
+void FixtureTreeWidget::refreshInventoryCounts()
+{
+    QTreeWidgetItem *root = NULL;
+    for (int i = 0; i < topLevelItemCount() && root == NULL; i++)
+        if (topLevelItem(i)->data(KColumnName, PROP_INVENTORY).toInt() == 1)
+            root = topLevelItem(i);
+    if (root == NULL)
+        return;
+
+    int total = 0;
+    for (int m = root->childCount() - 1; m >= 0; m--)
+    {
+        QTreeWidgetItem *mNode = root->child(m);
+        int manufTotal = 0;
+        for (int d = mNode->childCount() - 1; d >= 0; d--)
+        {
+            QTreeWidgetItem *dNode = mNode->child(d);
+            if (dNode->childCount() == 0)
+            {
+                delete dNode;
+                continue;
+            }
+            dNode->setText(KColumnName, QStringLiteral("%1 (%2)")
+                               .arg(dNode->data(KColumnName, PROP_INVENTORY_NAME).toString())
+                               .arg(dNode->childCount()));
+            manufTotal += dNode->childCount();
+        }
+        if (manufTotal == 0)
+        {
+            delete mNode;
+            continue;
+        }
+        mNode->setText(KColumnName, QStringLiteral("%1 (%2)")
+                           .arg(mNode->data(KColumnName, PROP_INVENTORY_NAME).toString()).arg(manufTotal));
+        total += manufTotal;
+    }
+    // The root stays, empty or not: it is where Add to inventory lives.
+    root->setText(KColumnName, total > 0 ? tr("Inventory (%1)").arg(total) : tr("Inventory"));
 }
 
 

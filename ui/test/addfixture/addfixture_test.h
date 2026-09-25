@@ -43,6 +43,9 @@ private slots:
 
     void rememberExpanded();
 
+    void inventoryModeHidesAddressAndIgnoresOverlap();
+    void connectionAndIpAreReported();
+
 private:
     Doc* m_doc;
     QVariant m_expanded;

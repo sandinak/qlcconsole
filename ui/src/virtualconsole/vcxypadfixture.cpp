@@ -474,7 +474,9 @@ bool VCXYPadFixture::saveXML(QXmlStreamWriter *doc) const
 void VCXYPadFixture::arm()
 {
     Fixture* fxi = m_doc->fixture(m_head.fxi);
-    if (fxi == NULL)
+    // An unpatched (inventory) fixture has no address: arm it like a missing
+    // one, so the pad never writes to its placeholder universe/address.
+    if (fxi == NULL || !fxi->isPatched())
     {
         m_xMSB = QLCChannel::invalid();
         m_xLSB = QLCChannel::invalid();

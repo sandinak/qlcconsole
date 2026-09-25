@@ -603,7 +603,9 @@ void InputOutputManager::slotDeleteUniverse()
 
     foreach (Fixture *fx, m_doc->fixtures())
     {
-        if (fx->universe() == uniID)
+        // Deleting a universe must not sweep up inventory fixtures: their
+        // universe is a placeholder, they were never in it.
+        if (fx->isPatched() && fx->universe() == uniID)
         {
             // Ask for user's confirmation
             if (QMessageBox::question(

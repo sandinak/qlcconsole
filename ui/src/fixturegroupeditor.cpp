@@ -513,10 +513,14 @@ void FixtureGroupEditor::updateTable()
 
         QIcon icon = fxi->getIconFromType();
         const QString colorTag = headColorTag(fxi, head.head);
-        QString str = QString("%1 H:%2\nA:%3 U:%4").arg(fxi->name())
-                                               .arg(head.head + 1)
-                                               .arg(fxi->address() + 1)
-                                               .arg(fxi->universe() + 1);
+        QString str = fxi->isPatched()
+            ? QString("%1 H:%2\nA:%3 U:%4").arg(fxi->name())
+                                          .arg(head.head + 1)
+                                          .arg(fxi->address() + 1)
+                                          .arg(fxi->universe() + 1)
+            : QString("%1 H:%2\n%3").arg(fxi->name())
+                                   .arg(head.head + 1)
+                                   .arg(tr("unpatched"));
         if (colorTag.isEmpty() == false)
             str += QStringLiteral("\n[%1]").arg(colorTag);
 

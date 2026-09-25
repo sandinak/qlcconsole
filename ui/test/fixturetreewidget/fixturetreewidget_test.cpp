@@ -24,6 +24,9 @@
 #define protected public
 #define private public
 #include "fixturetreewidget.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
 #include "fixture.h"
 #include "fixturegroup.h"
 #include "inputoutputmap.h"
@@ -185,4 +188,135 @@ void FixtureTreeWidget_Test::emptyUniverseEditIsRejected()
 
     QCOMPARE(iomap->getUniverseNameByID(uni), QString("Original Name"));
     QCOMPARE(uniItem->text(0), QString("Original Name"));
+}
+
+static QTreeWidgetItem *findByRole(FixtureTreeWidget &tree, int role, const QVariant &v = QVariant())
+{
+    QTreeWidgetItemIterator it(&tree);
+    while (*it != nullptr)
+    {
+        const QVariant d = (*it)->data(0, role);
+        if (d.isValid() && (!v.isValid() || d == v))
+            return *it;
+        ++it;
+    }
+    return nullptr;
+}
+
+void FixtureTreeWidget_Test::inventoryFixturesGetTheirOwnRootNotAUniverse()
+{
+    Fixture *real = new Fixture(m_doc);
+    real->setName("Real");
+    real->setChannels(4);
+    QVERIFY(m_doc->addFixture(real));
+
+    Fixture *inv = new Fixture(m_doc);
+    inv->setName("Staged");
+    inv->setChannels(4);
+    inv->setPatched(false);
+    QVERIFY(m_doc->addFixture(inv));
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+
+    QTreeWidgetItem *root = findByRole(tree, PROP_INVENTORY);
+    QVERIFY2(root != nullptr, "no Inventory root");
+    QVERIFY(root->text(0).startsWith("Inventory"));
+    // Inventory -> manufacturer -> model -> fixture.
+    QCOMPARE(root->childCount(), 1);
+    QTreeWidgetItem *manuf = root->child(0);
+    QCOMPARE(manuf->text(0), QString("Generic (1)"));
+    QCOMPARE(manuf->childCount(), 1);
+    QCOMPARE(manuf->child(0)->text(0), QString("Dimmer, 4 ch (1)"));
+    QCOMPARE(manuf->child(0)->childCount(), 1);
+    QCOMPARE(manuf->child(0)->child(0)->text(0), QString("Staged"));
+
+    // The universe node holds the real fixture only.
+    QTreeWidgetItem *uni0 = findByRole(tree, PROP_UNIVERSE, 0u);
+    QVERIFY(uni0 != nullptr);
+    QCOMPARE(uni0->childCount(), 1);
+    QCOMPARE(uni0->child(0)->text(0), QString("Real"));
+
+    // And the staged row says so in the universe column instead of "1".
+    QVERIFY(manuf->child(0)->child(0)->text(1) != QString("1"));
+}
+
+void FixtureTreeWidget_Test::inventoryRootIsAlwaysPresentInTheManager()
+{
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+    QTreeWidgetItem *root = findByRole(tree, PROP_INVENTORY);
+    QVERIFY(root != nullptr);
+    QCOMPARE(root->text(0), QString("Inventory"));
+    QCOMPARE(root->childCount(), 0);
+}
+
+void FixtureTreeWidget_Test::channelSelectionSkipsInventory()
+{
+    Fixture *inv = new Fixture(m_doc);
+    inv->setChannels(4);
+    inv->setPatched(false);
+    QVERIFY(m_doc->addFixture(inv));
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::ChannelSelection);
+    tree.updateTree();
+    QCOMPARE(tree.topLevelItemCount(), 0);
+}
+
+static Fixture *stagedModel(Doc *doc, const char *manuf, const char *model, const char *name)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(manuf);
+    def->setModel(model);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Std");
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Dimmer");
+    ch->setGroup(QLCChannel::Intensity);
+    def->addChannel(ch);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+
+    Fixture *f = new Fixture(doc);
+    f->setFixtureDefinition(def, mode);
+    f->setName(name);
+    f->setPatched(false);
+    return doc->addFixture(f) ? f : nullptr;
+}
+
+void FixtureTreeWidget_Test::inventoryIsOrganisedByManufacturerAndModel()
+{
+    // Added out of order on purpose: the tree must sort, not keep insertion order.
+    QVERIFY(stagedModel(m_doc, "Robe", "Pointe", "Pointe 2"));
+    QVERIFY(stagedModel(m_doc, "Martin", "MAC Viper", "Viper 1"));
+    QVERIFY(stagedModel(m_doc, "Robe", "Pointe", "Pointe 1"));
+    QVERIFY(stagedModel(m_doc, "Martin", "MAC Aura", "Aura 1"));
+    QVERIFY(stagedModel(m_doc, "Robe", "Robin 600", "Robin 1"));
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+
+    QTreeWidgetItem *root = findByRole(tree, PROP_INVENTORY);
+    QVERIFY(root != nullptr);
+    QCOMPARE(root->text(0), QString("Inventory (5)"));
+    QCOMPARE(root->childCount(), 2);
+
+    QTreeWidgetItem *martin = root->child(0);
+    QTreeWidgetItem *robe = root->child(1);
+    QCOMPARE(martin->text(0), QString("Martin (2)"));
+    QCOMPARE(robe->text(0), QString("Robe (3)"));
+
+    QCOMPARE(martin->child(0)->text(0), QString("MAC Aura (1)"));       // alphabetical models
+    QCOMPARE(martin->child(1)->text(0), QString("MAC Viper (1)"));
+    QCOMPARE(robe->child(0)->text(0), QString("Pointe (2)"));
+    QCOMPARE(robe->child(1)->text(0), QString("Robin 600 (1)"));
+
+    QTreeWidgetItem *pointe = robe->child(0);
+    QCOMPARE(pointe->child(0)->text(0), QString("Pointe 1"));            // alphabetical fixtures
+    QCOMPARE(pointe->child(1)->text(0), QString("Pointe 2"));
+
+    // Folders are marked so the manager can tell them from a fixture row.
+    QCOMPARE(martin->data(0, PROP_INVENTORY).toInt(), 2);
+    QVERIFY(!martin->data(0, PROP_ID).isValid());
+    QVERIFY(pointe->child(0)->data(0, PROP_ID).isValid());
 }

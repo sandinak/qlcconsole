@@ -839,7 +839,7 @@ void VCXYPad::slotPresetClicked(bool checked)
         foreach (SceneValue scv, m_scene->values())
         {
             Fixture *fixture = m_doc->fixture(scv.fxi);
-            if (fixture == NULL)
+            if (fixture == NULL || !fixture->isPatched())
                 continue;
             const QLCChannel *ch = fixture->channel(scv.channel);
             if (ch == NULL)

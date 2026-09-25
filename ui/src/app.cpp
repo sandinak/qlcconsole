@@ -1037,7 +1037,7 @@ void App::slotUniverseWritten(quint32 idx, const QByteArray &ua)
 {
     foreach (Fixture *fixture, m_doc->fixtures())
     {
-        if (fixture->universe() != idx)
+        if (!fixture->isPatched() || fixture->universe() != idx)
             continue;
 
         fixture->setChannelValues(ua);

@@ -596,7 +596,7 @@ void SimpleDesk::initSliderView(bool fullMode)
         int c = 0;
         foreach (Fixture *fixture, m_doc->fixtures())
         {
-            if (fixture->universe() != (quint32)m_universesCombo->currentIndex())
+            if (!fixture->isPatched() || fixture->universe() != (quint32)m_universesCombo->currentIndex())
                 continue;
             FixtureConsole* console = NULL;
             if (c%2 == 0)
@@ -1234,7 +1234,7 @@ void SimpleDesk::slotGroupValueChanged(quint32 groupID, uchar value)
     foreach (SceneValue scv, group->getChannels())
     {
         Fixture *fixture = m_doc->fixture(scv.fxi);
-        if (fixture == NULL)
+        if (fixture == NULL || !fixture->isPatched())
             continue;
         quint32 absAddr = fixture->universeAddress() + scv.channel;
 

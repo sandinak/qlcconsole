@@ -38,6 +38,7 @@
 #include "qlcfixturedef.h"
 
 #include "addresstool.h"
+#include <QGridLayout>
 #include "addfixture.h"
 #include "apputil.h"
 #include "doc.h"
@@ -60,10 +61,33 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
     m_fxiCount = 0;
     m_fixtureID = Fixture::invalidId();
     m_invalidAddressFlag = false;
+    m_inventoryMode = false;
 
     setupUi(this);
     m_addrErrorLabel->hide();
     m_nameErrorLabel->hide();
+
+    /* Connection: DMX (through a converter node / wireless receiver) or
+       Network (the fixture speaks ArtNet/sACN itself and takes a unicast IP). */
+    m_connectionCombo = new QComboBox(m_propertiesGroup);
+    m_connectionCombo->addItem(tr("DMX"), int(Fixture::Dmx));
+    m_connectionCombo->addItem(tr("Network (ArtNet/sACN)"), int(Fixture::Network));
+    m_connectionCombo->setToolTip(tr("DMX fixtures hang off a node or wireless receiver. "
+                                     "Network fixtures are their own endpoint and are "
+                                     "sent to at their own IP."));
+    m_ipEdit = new QLineEdit(m_propertiesGroup);
+    m_ipEdit->setPlaceholderText(tr("unicast IP, e.g. 172.18.2.41"));
+    m_ipEdit->setEnabled(false);
+    if (QGridLayout *pg = qobject_cast<QGridLayout *>(m_propertiesGroup->layout()))
+    {
+        const int row = pg->rowCount();
+        pg->addWidget(new QLabel(tr("Connection:"), m_propertiesGroup), row, 0);
+        pg->addWidget(m_connectionCombo, row, 2);
+        pg->addWidget(new QLabel(tr("IP address:"), m_propertiesGroup), row + 1, 0);
+        pg->addWidget(m_ipEdit, row + 1, 2);
+    }
+    connect(m_connectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) { m_ipEdit->setEnabled(m_connectionCombo->currentData().toInt() == int(Fixture::Network)); });
 
     QAction* action = new QAction(this);
     action->setShortcut(QKeySequence(QKeySequence::Close));
@@ -120,6 +144,9 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
         m_addressValue = fxi->address();
 
         m_multipleGroup->setEnabled(false);
+
+        m_connectionCombo->setCurrentIndex(m_connectionCombo->findData(int(fxi->connection())));
+        m_ipEdit->setText(fxi->ipAddress());
 
         // Name
         m_nameEdit->setText(fxi->name());
@@ -215,6 +242,41 @@ quint32 AddFixture::gap() const
 quint32 AddFixture::channels() const
 {
     return m_channelsValue;
+}
+
+void AddFixture::setInventoryMode(bool inventory)
+{
+    m_inventoryMode = inventory;
+    QWidget *addressBits[] = { m_universeLabel, m_universeCombo, m_addressLabel, m_addressSpin,
+                               m_diptoolButton, m_gapLabel, m_gapSpin, m_addrErrorLabel };
+    for (QWidget *w : addressBits)
+        w->setVisible(!inventory);
+    // The channel count is a footprint decision, so it is made when patching
+    // (the Patch dialog has a Mode / channels column). A generic dimmer starts
+    // at one channel; a real fixture starts in the mode preselected here, which
+    // can be changed then too.
+    m_channelsLabel->setVisible(!inventory);
+    m_channelsSpin->setVisible(!inventory);
+    m_modeCombo->setToolTip(inventory
+        ? tr("The mode you expect to use. It can be changed when you patch, unless a "
+             "scene sets this fixture's channels directly.")
+        : QString());
+    if (inventory)
+    {
+        setWindowTitle(tr("Add to Inventory"));
+        m_addrErrorLabel->hide();
+        m_invalidAddressFlag = false;
+    }
+}
+
+Fixture::Connection AddFixture::connection() const
+{
+    return Fixture::Connection(m_connectionCombo->currentData().toInt());
+}
+
+QString AddFixture::ipAddress() const
+{
+    return connection() == Fixture::Network ? m_ipEdit->text().trimmed() : QString();
 }
 
 bool AddFixture::invalidAddress()
@@ -679,7 +741,7 @@ void AddFixture::slotSelectionChanged()
         if (m_nameEdit->isModified() == false)
         {
             const QSet<QString> used = existingFixtureNames();
-            m_nameEdit->setText(Doc::nextUniqueName(tr("Dimmers"),
+            m_nameEdit->setText(Doc::nextUniqueModelName(tr("Dimmers"),
                 [&used](const QString &c) { return used.contains(c); }));
             slotNameEdited(m_nameEdit->text());
             m_nameEdit->setModified(false);
@@ -704,7 +766,7 @@ void AddFixture::slotSelectionChanged()
         if (m_nameEdit->isModified() == false)
         {
             const QSet<QString> used = existingFixtureNames();
-            m_nameEdit->setText(Doc::nextUniqueName(m_fixtureDef->model(),
+            m_nameEdit->setText(Doc::nextUniqueModelName(m_fixtureDef->model(),
                 [&used](const QString &c) { return used.contains(c); }));
             slotNameEdited(m_nameEdit->text());
             m_nameEdit->setModified(false);
@@ -757,6 +819,14 @@ void AddFixture::slotDiptoolButtonClicked()
 
 void AddFixture::checkOverlapping()
 {
+    if (m_inventoryMode)
+    {
+        // Staged fixtures hold no address, so there is nothing to overlap.
+        m_addrErrorLabel->hide();
+        m_invalidAddressFlag = false;
+        return;
+    }
+
     for (int i = 0; i < m_amountValue; ++i)
     {
         int address = m_addressValue + i * (m_gapValue + m_channelsValue);

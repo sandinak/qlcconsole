@@ -533,6 +533,13 @@ void SceneGroupLooks::reload()
                     text += tr("  ⚠ can't reach: %1").arg(names.join(", "));
                     it->setForeground(0, cannotReachColour);
                 }
+                // A staged fixture can be designed against but sends no DMX yet.
+                if (!f->isPatched())
+                {
+                    text += tr("  (unpatched)");
+                    it->setToolTip(0, tr("In the inventory: the look is built, but nothing "
+                                         "is sent until the fixture is patched"));
+                }
                 it->setText(0, text);
                 it->setData(0, Qt::UserRole, f->id());
                 it->setData(0, TARGET_KIND_ROLE, TargetFixture);

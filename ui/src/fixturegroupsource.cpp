@@ -158,9 +158,16 @@ void FixtureGroupSource::reload()
     // it, fixtures nested by their universe (so all fixtures are reachable
     // even without a group).
     QMap<quint32, QList<Fixture*> > byUniverse;
+    QList<Fixture*> inventory;   // staged, not patched: never filed under a universe
     foreach (Fixture *f, m_doc->fixtures())
-        if (f != NULL)
+    {
+        if (f == NULL)
+            continue;
+        if (f->isPatched())
             byUniverse[f->universe()].append(f);
+        else
+            inventory.append(f);
+    }
 
     if (byUniverse.isEmpty() == false)
     {
@@ -192,6 +199,21 @@ void FixtureGroupSource::reload()
             foreach (Fixture *f, fl)
                 addFixtureLeaf(uNode, f);
         }
+    }
+
+    if (!inventory.isEmpty())
+    {
+        QTreeWidgetItem *iRoot = new QTreeWidgetItem(this);
+        iRoot->setText(0, tr("Inventory"));
+        iRoot->setIcon(0, QIcon(":/folder.png"));
+        iRoot->setData(0, KindRole, CategoryNode);
+        iRoot->setFlags(Qt::ItemIsEnabled);
+        std::sort(inventory.begin(), inventory.end(),
+                  [](Fixture *a, Fixture *b) {
+                      return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+                  });
+        foreach (Fixture *f, inventory)
+            addFixtureLeaf(iRoot, f);
     }
 
     // Start collapsed — expand a group/universe to reach its fixtures.

@@ -941,7 +941,7 @@ void VCSlider::slotUniverseWritten(quint32 idx, const QByteArray &universeData)
     {
         LevelChannel lch(it.next());
         Fixture* fxi = m_doc->fixture(lch.fixture);
-        if (fxi == NULL || fxi->universe() != idx)
+        if (fxi == NULL || !fxi->isPatched() || fxi->universe() != idx)
             continue;
 
         if (lch.channel >= fxi->channels() ||

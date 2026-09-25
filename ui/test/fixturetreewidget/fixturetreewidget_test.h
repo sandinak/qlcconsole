@@ -42,6 +42,17 @@ private slots:
     /** An empty or unchanged edit must not blank the universe's name. */
     void emptyUniverseEditIsRejected();
 
+    /** Staged fixtures live under an Inventory root and never under a
+     *  universe, whose placeholder 0/0 would otherwise put them in universe 1. */
+    void inventoryFixturesGetTheirOwnRootNotAUniverse();
+    /** The manager always shows an Inventory root, even when it is empty. */
+    void inventoryRootIsAlwaysPresentInTheManager();
+    /** Channel selection has no use for a fixture with no address. */
+    void channelSelectionSkipsInventory();
+    /** The inventory reads as manufacturer -> model -> fixture, alphabetical at
+     *  every level, with a count on each folder. */
+    void inventoryIsOrganisedByManufacturerAndModel();
+
 private:
     Doc* m_doc;
 };

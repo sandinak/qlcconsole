@@ -17,6 +17,10 @@
 
 #include <QtTest>
 #include <QTreeWidgetItemIterator>
+#include <QMenu>
+#include <memory>
+#include <QTimer>
+#include <QMessageBox>
 #include <QSplitter>
 #include <QInputDialog>
 #include <QComboBox>
@@ -27,6 +31,8 @@
 #include <QMimeData>
 #include <QDropEvent>
 #include <functional>
+#include <QTextBrowser>
+#include <QAction>
 
 #define KColumnName 0
 
@@ -39,6 +45,8 @@
 #include "fixturegroup.h"
 #include "fixturegroupeditor.h"
 #include "createfixturegroup.h"
+#include "patchinventorydialog.h"
+#include "addfixture.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -735,6 +743,404 @@ void FixtureManager_Test::draggingASubGroupBlockMovesItThroughTheRealDropPath()
         QCOMPARE(targetGrp->headSubGroup(QLCPoint(2, 1)), blockGrp->id());
         QCOMPARE(afterDrag.value(QLCPoint(0, 0)).fxi, targetFx->id());   // untouched by the drag
     }
+}
+
+
+/* Right-click @p item and return the texts of the menu it pops up. The menu's
+ * exec() blocks, so a timer reads it out and closes it. */
+static QStringList contextMenuTexts(FixtureManager &mgr, QTreeWidgetItem *item)
+{
+    QStringList texts;
+    auto poll = std::make_shared<std::function<void()>>();
+    *poll = [&texts, poll]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == nullptr)
+        {
+            QTimer::singleShot(10, *poll);
+            return;
+        }
+        foreach (QAction *a, m->actions())
+            if (!a->isSeparator())
+                texts << a->text();
+        m->close();
+    };
+    QTimer::singleShot(0, *poll);
+    mgr.m_fixtures_tree->setCurrentItem(item);
+    mgr.slotContextMenuRequested(mgr.m_fixtures_tree->visualItemRect(item).center());
+    return texts;
+}
+
+static QTreeWidgetItem *rowWithRole(FixtureManager &mgr, int role)
+{
+    for (QTreeWidgetItemIterator it(mgr.m_fixtures_tree); *it != nullptr; ++it)
+        if ((*it)->data(KColumnName, role).isValid())
+            return *it;
+    return nullptr;
+}
+
+void FixtureManager_Test::rightClickOnInventoryOffersInventoryActionsNotAGenericAdd()
+{
+    FixtureManager mgr(nullptr, m_doc);
+    QTreeWidgetItem *inv = rowWithRole(mgr, PROP_INVENTORY);
+    QVERIFY2(inv != nullptr, "no Inventory root in the tree");
+
+    const QStringList texts = contextMenuTexts(mgr, inv);
+    QVERIFY2(!texts.isEmpty(), "the context menu never appeared");
+    QVERIFY2(texts.contains("Add to inventory..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Patch inventory..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Add fixture..."),
+             qPrintable("the generic Add fixture offer is still there: " + texts.join(" | ")));
+    QVERIFY2(!texts.contains("Add RGB panel..."), qPrintable(texts.join(" | ")));
+}
+
+void FixtureManager_Test::rightClickOnUniversesStillOffersAFixtureAdd()
+{
+    FixtureManager mgr(nullptr, m_doc);
+    // The Universes root is the top-level row that is not one of the others.
+    QTreeWidgetItem *uni = nullptr;
+    for (QTreeWidgetItemIterator it(mgr.m_fixtures_tree); *it != nullptr; ++it)
+        if ((*it)->parent() == nullptr && (*it)->text(KColumnName) == "Universes")
+            uni = *it;
+    QVERIFY(uni != nullptr);
+
+    const QStringList texts = contextMenuTexts(mgr, uni);
+    QVERIFY2(texts.contains("Add fixture..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Add to inventory..."), qPrintable(texts.join(" | ")));
+}
+
+void FixtureManager_Test::addFixtureWithInventorySelectedStagesIt()
+{
+    FixtureManager mgr(nullptr, m_doc);
+    QTreeWidgetItem *inv = rowWithRole(mgr, PROP_INVENTORY);
+    QVERIFY(inv != nullptr);
+    mgr.m_fixtures_tree->setCurrentItem(inv);
+
+    // Accept whatever dialog opens, and record which kind it was.
+    bool sawInventoryDialog = false;
+    QTimer::singleShot(0, [&sawInventoryDialog]() {
+        QWidget *modal = QApplication::activeModalWidget();
+        if (modal == nullptr)
+            return;
+        sawInventoryDialog = modal->windowTitle().contains("Inventory");
+        if (QDialogButtonBox *b = modal->findChild<QDialogButtonBox *>())
+            if (QPushButton *ok = b->button(QDialogButtonBox::Ok))
+            {
+                ok->click();
+                return;
+            }
+        modal->close();
+    });
+    mgr.addFixture();
+
+    QVERIFY2(sawInventoryDialog, "the Add dialog was not in inventory mode");
+    QCOMPARE(m_doc->fixturesCount(), 1);
+    QVERIFY2(!m_doc->fixtures().first()->isPatched(), "the fixture was patched instead of staged");
+}
+
+static QTreeWidgetItem *fixtureRow(FixtureManager &mgr, quint32 fid)
+{
+    for (QTreeWidgetItemIterator it(mgr.m_fixtures_tree); *it != nullptr; ++it)
+        if ((*it)->data(KColumnName, PROP_ID).isValid()
+            && (*it)->data(KColumnName, PROP_ID).toString().toUInt() == fid
+            && !(*it)->data(KColumnName, PROP_HEAD).isValid())
+            return *it;
+    return nullptr;
+}
+
+void FixtureManager_Test::returnToInventoryIsOfferedForPatchedFixturesOnly()
+{
+    Fixture *real = new Fixture(m_doc);
+    real->setName("Real");
+    real->setChannels(4);
+    QVERIFY(m_doc->addFixture(real));
+    Fixture *staged = new Fixture(m_doc);
+    staged->setName("Staged");
+    staged->setChannels(4);
+    staged->setPatched(false);
+    QVERIFY(m_doc->addFixture(staged));
+
+    FixtureManager mgr(nullptr, m_doc);
+    QTreeWidgetItem *realRow = fixtureRow(mgr, real->id());
+    QTreeWidgetItem *stagedRow = fixtureRow(mgr, staged->id());
+    QVERIFY(realRow != nullptr && stagedRow != nullptr);
+
+    QVERIFY(contextMenuTexts(mgr, realRow).contains("Return to inventory..."));
+    const QStringList st = contextMenuTexts(mgr, stagedRow);
+    QVERIFY2(!st.contains("Return to inventory..."), qPrintable(st.join(" | ")));
+    QVERIFY2(st.contains("Patch this fixture..."), qPrintable(st.join(" | ")));
+}
+
+void FixtureManager_Test::returningToInventoryReleasesTheAddress()
+{
+    Fixture *real = new Fixture(m_doc);
+    real->setName("Real");
+    real->setChannels(4);
+    QVERIFY(m_doc->addFixture(real));
+    QCOMPARE(m_doc->fixtureForAddress(0), real->id());
+
+    FixtureManager mgr(nullptr, m_doc);
+    QTimer::singleShot(0, []() {
+        if (QMessageBox *mb = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            mb->button(QMessageBox::Yes)->click();
+    });
+    mgr.returnToInventory(QList<quint32>() << real->id());
+
+    QVERIFY(!real->isPatched());
+    QCOMPARE(m_doc->fixtureForAddress(0), Fixture::invalidId());
+    QCOMPARE(m_doc->fixturesCount(), 1);              // still in the show
+    QCOMPARE(real->name(), QString("Real"));
+}
+
+void FixtureManager_Test::rightClickOnAnInventoryFolderOffersToPatchWhatIsInIt()
+{
+    for (int i = 0; i < 3; i++)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QString("Dimmer %1").arg(i));
+        f->setChannels(4);
+        f->setPatched(false);
+        QVERIFY(m_doc->addFixture(f));
+    }
+
+    FixtureManager mgr(nullptr, m_doc);
+    QTreeWidgetItem *inv = rowWithRole(mgr, PROP_INVENTORY);
+    QVERIFY(inv != nullptr && inv->childCount() == 1);
+    QTreeWidgetItem *manuf = inv->child(0);                      // "Generic (3)"
+    QCOMPARE(manuf->data(KColumnName, PROP_INVENTORY).toInt(), 2);
+
+    const QStringList texts = contextMenuTexts(mgr, manuf);
+    QVERIFY2(texts.contains("Patch 3 selected fixtures..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Add to inventory..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Add fixture..."), qPrintable(texts.join(" | ")));
+}
+
+namespace
+{
+/* Call @p act with the next modal widget of type T, polling until it is up.
+ * @p act must close it. */
+template <class T>
+void whenModal(const std::function<void(T *)> &act)
+{
+    auto poll = std::make_shared<std::function<void()>>();
+    *poll = [act, poll]() {
+        T *w = qobject_cast<T *>(QApplication::activeModalWidget());
+        if (w == nullptr)
+        {
+            QTimer::singleShot(10, *poll);
+            return;
+        }
+        act(w);
+    };
+    QTimer::singleShot(0, *poll);
+}
+
+/* Right-click @p item and pick the action titled @p text. False if the menu
+ * never offered it. */
+bool chooseFromContextMenu(FixtureManager &mgr, QTreeWidgetItem *item, const QString &text)
+{
+    bool found = false;
+    auto poll = std::make_shared<std::function<void()>>();
+    *poll = [&found, text, poll]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == nullptr)
+        {
+            QTimer::singleShot(10, *poll);
+            return;
+        }
+        foreach (QAction *a, m->actions())
+            if (a->text() == text)
+            {
+                found = true;
+                m->setActiveAction(a);
+                QTest::keyClick(m, Qt::Key_Return);   // exec() only reports a real pick
+                return;
+            }
+        m->close();
+    };
+    QTimer::singleShot(0, *poll);
+    mgr.m_fixtures_tree->clearSelection();
+    mgr.m_fixtures_tree->setCurrentItem(item);
+    item->setSelected(true);
+    mgr.slotContextMenuRequested(mgr.m_fixtures_tree->visualItemRect(item).center());
+    return found;
+}
+
+Fixture *stagedDimmer(Doc *doc, const QString &name)
+{
+    Fixture *f = new Fixture(doc);
+    f->setName(name);
+    f->setChannels(4);
+    f->setPatched(false);
+    if (!doc->addFixture(f))
+        return nullptr;
+    return f;
+}
+} // namespace
+
+void FixtureManager_Test::choosingReturnToInventoryFromTheMenuReleasesIt()
+{
+    Fixture *real = new Fixture(m_doc);
+    real->setName("Real");
+    real->setChannels(4);
+    QVERIFY(m_doc->addFixture(real));
+
+    FixtureManager mgr(nullptr, m_doc);
+    whenModal<QMessageBox>([](QMessageBox *mb) { mb->button(QMessageBox::Yes)->click(); });
+    QVERIFY(chooseFromContextMenu(mgr, fixtureRow(mgr, real->id()), "Return to inventory..."));
+    QVERIFY(!real->isPatched());
+    // ...and the tree now files it under the Inventory.
+    QTreeWidgetItem *row = fixtureRow(mgr, real->id());
+    QVERIFY(row != nullptr);
+    QTreeWidgetItem *top = row;
+    while (top->parent() != nullptr)
+        top = top->parent();
+    QVERIFY(top->data(KColumnName, PROP_INVENTORY).isValid());
+}
+
+void FixtureManager_Test::choosingAddToInventoryFromTheMenuStagesAFixture()
+{
+    FixtureManager mgr(nullptr, m_doc);
+    QTreeWidgetItem *inv = rowWithRole(mgr, PROP_INVENTORY);
+    QVERIFY(inv != nullptr);
+    whenModal<AddFixture>([](AddFixture *dlg) {
+        QVERIFY(dlg->inventoryMode());
+        dlg->m_buttonBox->button(QDialogButtonBox::Ok)->click();
+    });
+    QVERIFY(chooseFromContextMenu(mgr, inv, "Add to inventory..."));
+    QCOMPARE(m_doc->fixturesCount(), 1);
+    QVERIFY(!m_doc->fixtures().first()->isPatched());
+}
+
+void FixtureManager_Test::choosingPatchFromTheMenuPatchesThoseFixtures()
+{
+    Fixture *a = stagedDimmer(m_doc, "A");
+    Fixture *b = stagedDimmer(m_doc, "B");
+    QVERIFY(a && b);
+
+    // "Patch this fixture...": just that one.
+    {
+        FixtureManager mgr(nullptr, m_doc);
+        int rows = -1;
+        whenModal<PatchInventoryDialog>([&rows](PatchInventoryDialog *dlg) {
+            rows = dlg->m_table->rowCount();
+            dlg->accept();
+        });
+        QVERIFY(chooseFromContextMenu(mgr, fixtureRow(mgr, a->id()), "Patch this fixture..."));
+        QCOMPARE(rows, 1);
+        QVERIFY(a->isPatched());
+        QVERIFY(!b->isPatched());
+    }
+    // "Patch inventory...": everything still staged.
+    {
+        Fixture *c = stagedDimmer(m_doc, "C");
+        FixtureManager mgr(nullptr, m_doc);
+        int rows = -1;
+        whenModal<PatchInventoryDialog>([&rows](PatchInventoryDialog *dlg) {
+            rows = dlg->m_table->rowCount();
+            dlg->reject();
+        });
+        QVERIFY(chooseFromContextMenu(mgr, rowWithRole(mgr, PROP_INVENTORY), "Patch inventory..."));
+        QCOMPARE(rows, 2);                               // B and C
+        QVERIFY(!b->isPatched() && !c->isPatched());     // cancelled
+    }
+}
+
+void FixtureManager_Test::aNetworkFixturesInfoStatesItsConnection()
+{
+    Fixture *withIp = stagedDimmer(m_doc, "Fence 1");
+    withIp->setConnection(Fixture::Network);
+    withIp->setIPAddress("172.18.2.41");
+    Fixture *noIp = stagedDimmer(m_doc, "Fence 2");
+    noIp->setConnection(Fixture::Network);
+
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.m_fixtures_tree->setCurrentItem(fixtureRow(mgr, withIp->id()));
+    QVERIFY2(mgr.m_info->toPlainText().contains("Network, unicast to 172.18.2.41"),
+             qPrintable(mgr.m_info->toPlainText()));
+    mgr.m_fixtures_tree->setCurrentItem(fixtureRow(mgr, noIp->id()));
+    QVERIFY2(mgr.m_info->toPlainText().contains("Network (no IP set)"), qPrintable(mgr.m_info->toPlainText()));
+}
+
+void FixtureManager_Test::theInventoryActionsFollowTheAddAction()
+{
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.m_addAction->setEnabled(false);
+    QVERIFY(!mgr.m_addInventoryAction->isEnabled());
+    QVERIFY(!mgr.m_patchInventoryAction->isEnabled());
+    mgr.m_addAction->setEnabled(true);
+    QVERIFY(mgr.m_addInventoryAction->isEnabled());
+    QVERIFY(mgr.m_patchInventoryAction->isEnabled());
+}
+
+void FixtureManager_Test::editingAStagedFixtureKeepsItStaged()
+{
+    Fixture *f = stagedDimmer(m_doc, "Fence 1");
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.m_fixtures_tree->setCurrentItem(fixtureRow(mgr, f->id()));
+
+    QString title;
+    whenModal<AddFixture>([&title](AddFixture *dlg) {
+        title = dlg->windowTitle();
+        dlg->m_connectionCombo->setCurrentIndex(dlg->m_connectionCombo->findData(int(Fixture::Network)));
+        dlg->m_ipEdit->setText("172.18.2.41");
+        // The universe/address fields are hidden placeholders; even if they
+        // moved, an inventory fixture must not turn them into a claim.
+        dlg->m_universeValue = 2;
+        dlg->m_addressValue = 40;
+        dlg->m_buttonBox->button(QDialogButtonBox::Ok)->click();
+    });
+    mgr.editFixtureProperties();
+
+    QCOMPARE(title, QString("Change inventory fixture"));
+    QVERIFY(!f->isPatched());
+    QCOMPARE(f->connection(), Fixture::Network);
+    QCOMPARE(f->ipAddress(), QString("172.18.2.41"));
+    QCOMPARE(f->universe(), quint32(0));
+    QCOMPARE(f->address(), quint32(0));
+    QCOMPARE(m_doc->fixtureForAddress((2 << 9) | 40), Fixture::invalidId());
+}
+
+void FixtureManager_Test::deletingInventoryFixturesUpdatesTheFolderCounts()
+{
+    // Two models under one manufacturer, as in the Betopper/LM70 report.
+    QList<Fixture *> lm70, other;
+    for (int i = 0; i < 3; i++)
+        lm70 << stagedDimmer(m_doc, QString("LM70 %1").arg(i + 1));
+    Fixture *wide = new Fixture(m_doc);
+    wide->setName("Wide 1");
+    wide->setChannels(6);                              // "Dimmer, 6 ch": its own model folder
+    wide->setPatched(false);
+    QVERIFY(m_doc->addFixture(wide));
+    // One of them is also in a fixture group, so it has two rows.
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Wash");
+    grp->setSize(QSize(4, 1));
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->assignFixture(lm70.at(0)->id());
+
+    FixtureManager mgr(nullptr, m_doc);
+    // Looked up afresh each time: a delete that touches a group rebuilds the tree.
+    auto inv = [&mgr]() { return rowWithRole(mgr, PROP_INVENTORY); };
+    QCOMPARE(inv()->text(KColumnName), QString("Inventory (4)"));
+    QCOMPARE(inv()->child(0)->text(KColumnName), QString("Generic (4)"));
+
+    QVERIFY(m_doc->deleteFixture(lm70.at(0)->id()));
+    QCOMPARE(fixtureRow(mgr, lm70.at(0)->id()), nullptr);   // every row of it, group one included
+    QCOMPARE(inv()->text(KColumnName), QString("Inventory (3)"));
+    QCOMPARE(inv()->child(0)->text(KColumnName), QString("Generic (3)"));
+    QCOMPARE(inv()->child(0)->child(0)->text(KColumnName), QString("Dimmer, 4 ch (2)"));
+
+    // Emptying a model folder drops it...
+    QVERIFY(m_doc->deleteFixture(lm70.at(1)->id()));
+    QVERIFY(m_doc->deleteFixture(lm70.at(2)->id()));
+    QCOMPARE(inv()->child(0)->childCount(), 1);
+    QCOMPARE(inv()->child(0)->child(0)->text(KColumnName), QString("Dimmer, 6 ch (1)"));
+    QCOMPARE(inv()->text(KColumnName), QString("Inventory (1)"));
+
+    // ...and the manufacturer with it; the root stays, uncounted.
+    QVERIFY(m_doc->deleteFixture(wide->id()));
+    QCOMPARE(inv()->childCount(), 0);
+    QCOMPARE(inv()->text(KColumnName), QString("Inventory"));
 }
 
 QTEST_MAIN(FixtureManager_Test)

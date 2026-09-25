@@ -319,7 +319,7 @@ void SimpleDeskEngine::writeDMX(MasterTimer *timer, QList<Universe *> ua)
                         Fixture *fixture = m_doc->fixture(fc.fixture());
                         quint32 chIndex = fc.channel();
 
-                        if (fixture != NULL)
+                        if (fixture != NULL && fixture->isPatched())
                         {
                             const QLCChannel *ch = fixture->channel(chIndex);
                             if (ch != NULL)

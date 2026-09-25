@@ -2605,7 +2605,7 @@ void ProgrammingManager::slotSnapshotLive()
         QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
         foreach (Fixture *fxi, m_doc->fixtures())
         {
-            if (fxi == NULL)
+            if (fxi == NULL || !fxi->isPatched())
                 continue;
             const quint32 uni = fxi->universe();
             if (uni >= quint32(universes.size()))
