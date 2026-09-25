@@ -317,8 +317,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Level-role fader mapping (fader N controls the Nth slider here), so
     // it's visible on screen which physical fader does what.
     QWidget *colorPage = new QWidget(this);
-    QHBoxLayout *cl = new QHBoxLayout(colorPage);
+    QVBoxLayout *cv = new QVBoxLayout(colorPage);
+    cv->setContentsMargins(0, 0, 0, 0);
+    QHBoxLayout *cl = new QHBoxLayout();
     cl->setContentsMargins(0, 0, 0, 0);
+    cv->addLayout(cl, 1);
 
     m_colorDialog = new QColorDialog(colorPage);
     m_colorDialog->setOptions(QColorDialog::NoButtons
@@ -360,6 +363,12 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     xl->addWidget(m_amberRow);
     xl->addWidget(m_uvRow);
     cl->addWidget(extras, 0);
+
+    m_colorWarning = new QLabel(colorPage);
+    m_colorWarning->setWordWrap(true);
+    m_colorWarning->setStyleSheet(QStringLiteral("color: #e0a030;"));
+    m_colorWarning->setVisible(false);
+    cv->addWidget(m_colorWarning, 0);
 
     m_pageColor = m_stack->addWidget(colorPage);
     connect(m_colorDialog, SIGNAL(currentColorChanged(QColor)),
@@ -723,6 +732,7 @@ void LookEditor::setPalette(quint32 paletteId)
         m_amberSlider->setValue(wauv.isValid() ? wauv.green() : 0);
         m_uvSlider->setValue   (wauv.isValid() ? wauv.blue()  : 0);
         m_whiteSlider->blockSignals(false); m_amberSlider->blockSignals(false); m_uvSlider->blockSignals(false);
+        updateColorWarning();
 
         // White is near-universal on LED fixtures and is the common request,
         // so always offer it; gate the rarer Amber/UV on actual presence (but
@@ -1154,8 +1164,36 @@ void LookEditor::commitColor()
     const QColor wauv(m_whiteSlider->value(), m_amberSlider->value(), m_uvSlider->value());
     p->setValue(QLCPalette::colorToString(rgb, wauv));
     maybeAutoName(p);
+    updateColorWarning();
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
+}
+
+QString LookEditor::darkColourWarning(const QColor &rgb, const QColor &wauv)
+{
+    int level = qMax(rgb.red(), qMax(rgb.green(), rgb.blue()));
+    if (wauv.isValid())
+        level = qMax(level, qMax(wauv.red(), qMax(wauv.green(), wauv.blue())));
+    // A fifth of full is dim but deliberate; below that it reads as "off".
+    if (level >= 51)
+        return QString();
+    if (level == 0)
+        return tr("This colour is black: fixtures that mix colour (RGB, RGBW) "
+                  "will be dark whatever their dimmer is set to.");
+    return tr("This colour is at %1% brightness: fixtures that mix colour (RGB, "
+              "RGBW) will be nearly dark -- their dimmer scales the colour, it "
+              "cannot raise it. Raise the picker's brightness (Val) or the "
+              "sliders. Colour-wheel fixtures only take the hue and still shine.")
+               .arg(qMax(1, qRound(level * 100.0 / 255.0)));
+}
+
+void LookEditor::updateColorWarning()
+{
+    const QString text = darkColourWarning(
+        QColor(m_redSlider->value(), m_greenSlider->value(), m_blueSlider->value()),
+        QColor(m_whiteSlider->value(), m_amberSlider->value(), m_uvSlider->value()));
+    m_colorWarning->setText(text);
+    m_colorWarning->setVisible(!text.isEmpty());
 }
 
 bool LookEditor::targetsHaveColour(int primaryColour) const

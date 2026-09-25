@@ -115,6 +115,19 @@ private:
 
     /** Store the Color palette from the picker + White/Amber/UV sliders. */
     void commitColor();
+    /** Show or hide the "this colour is nearly dark" line for the current
+     *  slider values (see darkColourWarning()). */
+    void updateColorWarning();
+
+public:
+    /** What to tell the user about a colour look this dark, or an empty
+     *  string when it is bright enough to need no comment. A colour look is a
+     *  LEVEL on every fixture that mixes colour -- the dimmer scales it, it
+     *  cannot raise it -- so "red" at 4% leaves RGB heads dark while a
+     *  colour-wheel head, which only takes the hue, still shines. */
+    static QString darkColourWarning(const QColor &rgb, const QColor &wauv);
+
+private:
 
     /** Capability name covering value v on the channel, or empty. */
     QString capabilityNameAt(const QLCChannel *ch, int v) const;
@@ -155,6 +168,7 @@ private:
     QSlider *m_whiteSlider, *m_amberSlider, *m_uvSlider; //!< 4, 5, 6 — extra colour emitters
     QWidget *m_whiteRow, *m_amberRow, *m_uvRow;          //!< hidden when absent
     CapabilityBar *m_dimmerBar; //!< gradient + strobe region marks
+    QLabel *m_colorWarning;    //!< "nearly dark" note under the colour page
     QLabel *m_dimmerValue;
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
