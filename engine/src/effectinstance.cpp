@@ -1103,7 +1103,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         quint32 fid  = cell.fixtureId;
         int     head = cell.head;
         Fixture *fxi = m_doc->fixture(fid);
-        if (!fxi || !fxi->fixtureMode())
+        if (!fxi || !fxi->fixtureMode() || !fxi->isPatched())
             continue;
         // The set of channels this CELL owns: just this head's channels for a
         // multi-head/pixel fixture, or the whole fixture for a single-head one.

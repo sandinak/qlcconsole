@@ -145,7 +145,7 @@ void MarkPlanner::evaluate()
             continue;                        // cue doesn't light it → nothing to pre-empt
 
         Fixture *fxi = m_doc->fixture(fid);
-        if (fxi == nullptr)
+        if (fxi == nullptr || !fxi->isPatched())
             continue;
         const quint32 master = fxi->masterIntensityChannel();
         if (master == QLCChannel::invalid())

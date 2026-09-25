@@ -77,6 +77,9 @@ public:
     int flags() const;
     void setFlags(int flags);
 
+    /** See m_inert: an inert channel writes nothing, ever. */
+    bool isInert() const { return m_inert; }
+
     /** Add/Remove a single flag */
     void addFlag(int flag);
     void removeFlag(int flag);
@@ -206,6 +209,12 @@ private:
     quint32 m_target;
     quint32 m_current;
     bool m_ready;
+
+    /** True when the fixture is an unpatched inventory fixture: the channel
+     *  exists (a scene can hold values for it) but has NO real address, so it
+     *  must never reach a universe. Kept apart from m_flags because callers
+     *  overwrite the flags wholesale. */
+    bool m_inert;
 
     uint m_fadeTime;
     uint m_elapsed;

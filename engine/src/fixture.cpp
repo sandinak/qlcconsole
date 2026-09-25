@@ -44,6 +44,8 @@ Fixture::Fixture(QObject* parent)
     : QObject(parent)
     , m_id(Fixture::invalidId())
     , m_address(0)
+    , m_patched(true)
+    , m_connection(Dmx)
     , m_crossUniverse(false)
     , m_channels(0)
     , m_fixtureDef(NULL)
@@ -823,6 +825,22 @@ QString Fixture::iconResource(bool svg) const
     return QString("%1:/other.%2").arg(prefix).arg(ext);
 }
 
+QString Fixture::groupingManufacturer() const
+{
+    if (m_fixtureDef == NULL || m_fixtureDef->manufacturer().isEmpty())
+        return KXMLFixtureGeneric;
+    return m_fixtureDef->manufacturer();
+}
+
+QString Fixture::groupingModel() const
+{
+    if (m_fixtureDef == NULL || m_fixtureDef->model() == KXMLFixtureGeneric)
+        return QStringLiteral("Dimmer, %1 ch").arg(channels());
+    if (m_fixtureDef->model() == KXMLFixtureRGBPanel)
+        return QStringLiteral("RGB panel");
+    return m_fixtureDef->model();
+}
+
 QIcon Fixture::getIconFromType() const
 {
     return QIcon(iconResource());
@@ -1181,6 +1199,9 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     quint32 id = Fixture::invalidId();
     quint32 universe = 0;
     quint32 address = 0;
+    bool patched = true;
+    Connection connection = Dmx;
+    QString ipAddress;
     quint32 channels = 0;
     quint32 width = 0, height = 0;
     QList<int> excludeList;
@@ -1228,6 +1249,18 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         else if (xmlDoc.name() == KXMLFixtureUniverse)
         {
             universe = xmlDoc.readElementText().toInt();
+        }
+        else if (xmlDoc.name() == KXMLFixturePatched)
+        {
+            patched = (xmlDoc.readElementText() != KXMLQLCFalse);
+        }
+        else if (xmlDoc.name() == KXMLFixtureConnection)
+        {
+            connection = xmlDoc.readElementText() == QLatin1String("Network") ? Network : Dmx;
+        }
+        else if (xmlDoc.name() == KXMLFixtureIPAddress)
+        {
+            ipAddress = xmlDoc.readElementText();
         }
         else if (xmlDoc.name() == KXMLFixtureCrossUniverse)
         {
@@ -1387,6 +1420,9 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
 
     setAddress(address);
     setUniverse(universe);
+    setPatched(patched);
+    setConnection(connection);
+    setIPAddress(ipAddress);
     setName(name);
     setExcludeFadeChannels(excludeList);
     setForcedHTPChannels(forcedHTP);
@@ -1443,6 +1479,14 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
         doc->writeTextElement(KXMLFixtureCrossUniverse, KXMLQLCTrue);
     /* Address */
     doc->writeTextElement(KXMLFixtureAddress, QString::number(address()));
+    /* Only what differs from the default is written, so a file with no
+       inventory fixtures and no network fixtures is byte-identical. */
+    if (!m_patched)
+        doc->writeTextElement(KXMLFixturePatched, KXMLQLCFalse);
+    if (m_connection == Network)
+        doc->writeTextElement(KXMLFixtureConnection, QStringLiteral("Network"));
+    if (!m_ipAddress.isEmpty())
+        doc->writeTextElement(KXMLFixtureIPAddress, m_ipAddress);
     /* Channel count */
     doc->writeTextElement(KXMLFixtureChannels, QString::number(channels()));
 

@@ -592,6 +592,20 @@ void Doc::setShowLocked(bool locked)
     m_programmer->setShowLocked(locked);
 }
 
+QString Doc::nextUniqueModelName(const QString &name,
+                                 const std::function<bool(const QString &)> &isTaken)
+{
+    if (name.isEmpty() || isTaken(name) == false)
+        return name;
+    for (int n = 2; n < 100000; ++n)
+    {
+        const QString candidate = QStringLiteral("%1 #%2").arg(name).arg(n);
+        if (isTaken(candidate) == false)
+            return candidate;
+    }
+    return name;
+}
+
 QString Doc::nextUniqueName(const QString &name,
                             const std::function<bool(const QString &)> &isTaken)
 {
@@ -1022,7 +1036,6 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
     Q_ASSERT(fixture != NULL);
 
     quint32 i;
-    quint32 uni = fixture->universe();
 
     // No ID given, this method can assign one
     if (id == Fixture::invalidId())
@@ -1034,14 +1047,20 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
         return false;
     }
 
-    /* Check for overlapping address */
-    for (i = fixture->universeAddress();
-         i < fixture->universeAddress() + fixture->channels(); i++)
+    /* An inventory fixture holds no address: no overlap check, no address
+       registration, no universe growth. Its 0/0 is a placeholder, not a
+       claim on universe 1's first channels. */
+    if (fixture->isPatched())
     {
-        if (m_addresses.contains(i))
+        /* Check for overlapping address */
+        for (i = fixture->universeAddress();
+             i < fixture->universeAddress() + fixture->channels(); i++)
         {
-            qWarning() << Q_FUNC_INFO << "fixture" << id << "overlapping with fixture" << m_addresses[i] << "@ channel" << i;
-            return false;
+            if (m_addresses.contains(i))
+            {
+                qWarning() << Q_FUNC_INFO << "fixture" << id << "overlapping with fixture" << m_addresses[i] << "@ channel" << i;
+                return false;
+            }
         }
     }
 
@@ -1053,12 +1072,28 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
     connect(fixture, SIGNAL(changed(quint32)),
             this, SLOT(slotFixtureChanged(quint32)));
 
-    /* Keep track of fixture addresses */
-    for (i = fixture->universeAddress();
-         i < fixture->universeAddress() + fixture->channels(); i++)
+    if (fixture->isPatched())
     {
-        m_addresses[i] = id;
+        /* Keep track of fixture addresses */
+        for (i = fixture->universeAddress();
+             i < fixture->universeAddress() + fixture->channels(); i++)
+        {
+            m_addresses[i] = id;
+        }
+
+        applyFixtureToUniverses(fixture, crossUniverse);
     }
+
+    emit fixtureAdded(id);
+    setModified();
+
+    return true;
+}
+
+void Doc::applyFixtureToUniverses(Fixture *fixture, bool crossUniverse)
+{
+    quint32 i;
+    quint32 uni = fixture->universe();
 
     if (crossUniverse)
         uni = floor((fixture->universeAddress() + fixture->channels()) / 512);
@@ -1104,10 +1139,106 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
         universes.at(uni)->setChannelModifier(addr, mod);
     }
     inputOutputMap()->releaseUniverses(true);
+}
 
-    emit fixtureAdded(id);
+bool Doc::patchFixture(quint32 id, quint32 universe, quint32 address)
+{
+    Fixture *fxi = fixture(id);
+    if (fxi == NULL)
+        return false;
+    if (address + fxi->channels() > 512)
+        return false;
+
+    const quint32 base = (universe << 9) | address;
+    for (quint32 i = base; i < base + fxi->channels(); i++)
+    {
+        if (m_addresses.contains(i) && m_addresses.value(i) != id)
+            return false;
+    }
+
+    // Drop any previous claim (re-patching an already patched fixture moves it).
+    QMutableHashIterator <uint,uint> it(m_addresses);
+    while (it.hasNext() == true)
+    {
+        it.next();
+        if (it.value() == id)
+            it.remove();
+    }
+
+    fxi->blockSignals(true);
+    fxi->setUniverse(universe);
+    fxi->setAddress(address);
+    fxi->setPatched(true);
+    fxi->blockSignals(false);
+
+    for (quint32 i = base; i < base + fxi->channels(); i++)
+        m_addresses[i] = id;
+    applyFixtureToUniverses(fxi, false);
+
     setModified();
+    emit fixtureChanged(id);
+    return true;
+}
 
+bool Doc::unpatchFixture(quint32 id)
+{
+    Fixture *fxi = fixture(id);
+    if (fxi == NULL || !fxi->isPatched() || mode() != Design)
+        return false;
+
+    QMutableHashIterator <uint,uint> it(m_addresses);
+    while (it.hasNext() == true)
+    {
+        it.next();
+        if (it.value() == id)
+            it.remove();
+    }
+
+    // Back to the placeholder 0/0 a freshly staged fixture holds.
+    fxi->blockSignals(true);
+    fxi->setPatched(false);
+    fxi->setUniverse(0);
+    fxi->setAddress(0);
+    fxi->blockSignals(false);
+
+    setModified();
+    emit fixtureChanged(id);
+    return true;
+}
+
+bool Doc::canChangeFixtureMode(quint32 id, const QLCFixtureMode *newMode, QString *why) const
+{
+    Fixture *fxi = fixture(id);
+    if (fxi == NULL)
+    {
+        if (why != NULL) *why = QStringLiteral("no such fixture");
+        return false;
+    }
+
+    if (newMode != NULL && fxi->fixtureMode() != NULL
+        && newMode->heads().size() != fxi->fixtureMode()->heads().size())
+    {
+        if (why != NULL)
+            *why = QStringLiteral("that mode has %1 head(s), this one has %2 -- fixture groups "
+                                  "lay out heads by number")
+                       .arg(newMode->heads().size()).arg(fxi->fixtureMode()->heads().size());
+        return false;
+    }
+
+    foreach (Function *f, functionsByType(Function::SceneType))
+    {
+        Scene *scene = static_cast<Scene *>(f);
+        foreach (const SceneValue &sv, scene->values())
+        {
+            if (sv.fxi == id)
+            {
+                if (why != NULL)
+                    *why = QStringLiteral("scene \"%1\" sets its channels directly, by number")
+                               .arg(scene->name());
+                return false;
+            }
+        }
+    }
     return true;
 }
 
@@ -1177,6 +1308,9 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setName(fixture->name());
         newFixture->setAddress(fixture->address());
         newFixture->setUniverse(fixture->universe());
+        newFixture->setPatched(fixture->isPatched());
+        newFixture->setConnection(fixture->connection());
+        newFixture->setIPAddress(fixture->ipAddress());
 
         if (fixture->fixtureDef() == NULL ||
             (fixture->fixtureDef()->manufacturer() == KXMLFixtureGeneric &&
@@ -1227,7 +1361,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
 
         /* Keep track of fixture addresses */
         for (uint i = newFixture->universeAddress();
-             i < newFixture->universeAddress() + newFixture->channels(); i++)
+             newFixture->isPatched() && i < newFixture->universeAddress() + newFixture->channels(); i++)
         {
             m_addresses[i] = id;
         }
@@ -1359,7 +1493,8 @@ void Doc::slotFixtureChanged(quint32 id)
         }
     }
 
-    for (uint i = fxi->universeAddress(); i < fxi->universeAddress() + fxi->channels(); i++)
+    // An inventory fixture claims nothing (its 0/0 is a placeholder).
+    for (uint i = fxi->universeAddress(); fxi->isPatched() && i < fxi->universeAddress() + fxi->channels(); i++)
     {
         /*
          * setting new universe and address calls this twice,

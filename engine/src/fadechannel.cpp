@@ -37,6 +37,7 @@ FadeChannel::FadeChannel()
     , m_target(0)
     , m_current(0)
     , m_ready(false)
+    , m_inert(false)
     , m_fadeTime(0)
     , m_elapsed(0)
 {
@@ -54,6 +55,7 @@ FadeChannel::FadeChannel(const FadeChannel& ch)
     , m_target(ch.m_target)
     , m_current(ch.m_current)
     , m_ready(ch.m_ready)
+    , m_inert(ch.m_inert)
     , m_fadeTime(ch.m_fadeTime)
     , m_elapsed(ch.m_elapsed)
 {
@@ -68,6 +70,7 @@ FadeChannel::FadeChannel(const Doc *doc, quint32 fxi, quint32 channel)
     , m_target(0)
     , m_current(0)
     , m_ready(false)
+    , m_inert(false)
     , m_fadeTime(0)
     , m_elapsed(0)
 {
@@ -94,6 +97,7 @@ FadeChannel &FadeChannel::operator=(const FadeChannel &fc)
         m_target = fc.m_target;
         m_current = fc.m_current;
         m_ready = fc.m_ready;
+        m_inert = fc.m_inert;
         m_fadeTime = fc.m_fadeTime;
         m_elapsed = fc.m_elapsed;
     }
@@ -142,6 +146,7 @@ void FadeChannel::autoDetect(const Doc *doc)
     }
 
     Fixture *fixture = doc->fixture(m_fixture);
+    m_inert = (fixture != NULL && !fixture->isPatched());
     if (fixture == NULL)
     {
         m_universe = Universe::invalid();
@@ -199,6 +204,8 @@ quint32 FadeChannel::fixture() const
 
 quint32 FadeChannel::universe() const
 {
+    if (m_inert)
+        return Universe::invalid();
     if (m_universe == Universe::invalid())
         return address() / UNIVERSE_SIZE;
     return m_universe;
@@ -244,6 +251,9 @@ quint32 FadeChannel::primaryChannel() const
 
 quint32 FadeChannel::address() const
 {
+    if (m_inert)
+        return QLCChannel::invalid();
+
     if (m_address == QLCChannel::invalid())
         return channel();
 

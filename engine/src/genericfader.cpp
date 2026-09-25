@@ -219,6 +219,12 @@ void GenericFader::write(Universe *universe)
     while (it.hasNext() == true)
     {
         FadeChannel& fc(it.next().value());
+
+        // An unpatched (inventory) fixture's channel has no real address; it
+        // must not fall through to the bare-channel-number address below.
+        if (fc.isInert())
+            continue;
+
         int flags = fc.flags();
         quint32 address = fc.addressInUniverse();
         int channelCount = fc.channelCount();

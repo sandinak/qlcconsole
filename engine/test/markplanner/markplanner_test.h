@@ -33,6 +33,7 @@ private slots:
     void noUpcomingCueMeansMarkedIsDangling();
     /** dangleFixturesChanged() fires on change, not on every tick. */
     void signalFiresOnlyOnChange();
+    void aDarkFixtureIsPresetButAStagedOneIsNot();
 
 private:
     Doc *m_doc = nullptr;

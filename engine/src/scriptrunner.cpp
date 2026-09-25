@@ -321,6 +321,10 @@ bool ScriptRunner::setFixture(quint32 fxID, quint32 channel, uchar value, uint t
         return false;
     }
 
+    // An inventory fixture has no address to write to.
+    if (!fxi->isPatched())
+        return false;
+
     if (channel >= fxi->channels())
     {
         qWarning() << QString("Fixture (%1) has no channel number %2").arg(fxi->name()).arg(channel);

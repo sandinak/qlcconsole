@@ -49,6 +49,9 @@ class Doc;
 #define KXMLFixtureUniverse         QStringLiteral("Universe")
 #define KXMLFixtureCrossUniverse    QStringLiteral("CrossUniverse")
 #define KXMLFixtureAddress          QStringLiteral("Address")
+#define KXMLFixturePatched          QStringLiteral("Patched")
+#define KXMLFixtureConnection       QStringLiteral("Connection")
+#define KXMLFixtureIPAddress        QStringLiteral("IPAddress")
 #define KXMLFixtureID               QStringLiteral("ID")
 #define KXMLFixtureGeneric          QStringLiteral("Generic")
 #define KXMLFixtureRGBPanel         QStringLiteral("RGBPanel")
@@ -167,6 +170,28 @@ public:
      * Universe
      *********************************************************************/
 public:
+    /** How a fixture is fed. Not a property of the fixture definition (none
+     *  carries it); the LD chooses it per fixture instance. */
+    enum Connection
+    {
+        Dmx     = 0,    //!< DMX, through a converter node or wireless receiver
+        Network = 1     //!< speaks ArtNet/sACN itself: its own endpoint, its own IP
+    };
+
+    /** False while the fixture is staged in the inventory. An unpatched
+     *  fixture keeps whatever universe()/address() it holds (default 0/0) but
+     *  those are NOT real: every DMX write path must skip it. Default true, so
+     *  every fixture in an existing workspace stays exactly as it was. */
+    bool isPatched() const { return m_patched; }
+    void setPatched(bool patched) { m_patched = patched; }
+
+    Connection connection() const { return Connection(m_connection); }
+    void setConnection(Connection c) { m_connection = int(c); }
+
+    /** Unicast target of a Network fixture; empty when unset or DMX. */
+    QString ipAddress() const { return m_ipAddress; }
+    void setIPAddress(const QString &ip) { m_ipAddress = ip; }
+
     /**
      * Set the fixture instance's DMX universe
      *
@@ -340,6 +365,14 @@ protected:
     /** DMX address & universe */
     quint32 m_address;
 
+    /** False for a fixture staged in the inventory: it exists in the show
+     *  (placeable, groupable, usable in looks) but holds NO address, is
+     *  registered in no universe and must never be written to DMX. */
+    bool m_patched;
+
+    int m_connection;
+    QString m_ipAddress;
+
     /** Flag that indicates if this fixture crosses a DMX Universe */
     bool m_crossUniverse;
 
@@ -440,6 +473,13 @@ public:
     Q_INVOKABLE QString iconResource(bool svg = false) const;
 
     QIcon getIconFromType() const;
+
+    /** Where this fixture files under in a manufacturer -> model hierarchy (the
+     *  inventory trees). A generic dimmer or RGB panel has no real manufacturer
+     *  or model, so it files under "Generic" with a model that says what it is
+     *  ("Dimmer, 4 ch", "RGB panel"), rather than a bare "Generic / Generic". */
+    QString groupingManufacturer() const;
+    QString groupingModel() const;
 
     QRectF degreesRange(int head) const;
 

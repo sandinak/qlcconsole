@@ -427,6 +427,13 @@ public:
      * @p isTaken decides collisions, so the caller controls the namespace
      * (functions in a folder, fixtures in the doc, an accumulating batch, …).
      */
+    /** The same for a name that is a MODEL designation ("LM70", "Par 64"). Its
+     *  own digits are part of what it is, so they are never bumped -- LM70 must
+     *  not become LM71 -- and a taken name gets " #2", " #3"... appended instead.
+     *  nextUniqueName() below is for names that already carry a counter. */
+    static QString nextUniqueModelName(const QString &name,
+                                       const std::function<bool(const QString &)> &isTaken);
+
     static QString nextUniqueName(const QString &name,
                                   const std::function<bool(const QString &)> &isTaken);
 
@@ -666,6 +673,30 @@ public:
      * @return true if the fixture was successfully added to doc,
      *         otherwise false.
      */
+    /** Give a staged (or already patched) fixture a real universe and address.
+     *  Refuses -- returning false and changing nothing -- if the range would
+     *  run past the universe or overlap another fixture. Applies the fixture's
+     *  channel capabilities to the universe, which addFixture() skipped while
+     *  it was in the inventory. */
+    bool patchFixture(quint32 id, quint32 universe, quint32 address);
+
+    /** Take a patched fixture back into the inventory: it keeps its name, its
+     *  placement and everything it is in, but releases its channels and stops
+     *  writing DMX. Design mode only -- a running function holds channels
+     *  resolved against the old address until it is restarted. Returns false
+     *  (changing nothing) if the fixture is unknown, already staged, or the
+     *  document is in Operate mode. */
+    bool unpatchFixture(quint32 id);
+
+    /** Whether a fixture's mode can change to @p newMode (or, with NULL, a
+     *  generic dimmer's channel count can change) without breaking what refers
+     *  to its channel numbers. Scenes store raw channel indexes, so a fixture a
+     *  scene sets directly is locked to its mode; a fixture group's layout
+     *  stores head indexes, so a mode with a different head count is refused
+     *  too. Palettes and looks built from them are by capability and are fine.
+     *  On false, @p why says what stands in the way. */
+    bool canChangeFixtureMode(quint32 id, const QLCFixtureMode *newMode, QString *why = NULL) const;
+
     bool addFixture(Fixture* fixture, quint32 id = Fixture::invalidId(), bool crossUniverse = false);
 
     /**
@@ -758,6 +789,10 @@ protected:
     /** Fixtures list cache */
     bool m_fixturesListCacheUpToDate;
     QList<Fixture*> m_fixturesListCache;
+
+    /** Register a patched fixture's channel capabilities/defaults/modifiers
+     *  with the universes it lives in, growing them if needed. */
+    void applyFixtureToUniverses(Fixture *fixture, bool crossUniverse);
 
     /** Map of the addresses occupied by fixtures */
     QHash <quint32, quint32> m_addresses;

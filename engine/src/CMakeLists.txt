@@ -49,6 +49,7 @@ add_library(${module_name} SHARED
     stagetarget.cpp stagetarget.h
     truss.cpp truss.h
     outputpatch.cpp outputpatch.h
+    patchplanner.cpp patchplanner.h
     qlccapability.cpp qlccapability.h
     qlcchannel.cpp qlcchannel.h
     qlcclipboard.cpp qlcclipboard.h
