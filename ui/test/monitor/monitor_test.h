@@ -237,6 +237,7 @@ private slots:
     void theNetworkReportOpensFromTheStudio();
     void aFixtureOnATowerIsListedUnderThatTower();
     void draggingATargetAnnouncesTheMove();
+    void aMoverOnATopFaceStandsUpOrHangsDown();
     void aStagedFixturesTestDialogOffersNoDmxActions();
     void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
     void theDmxViewHasNoTileForAStagedFixture();

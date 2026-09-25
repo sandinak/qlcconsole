@@ -2409,6 +2409,19 @@ QVector3D StructureStudioView::fixtureBodyUp(const FixtureRigProps &rp) const
     QVector3D L, N, H;
     fixtureFrame(rp, L, N, H);
 
+    /* A mover's base sits flat on the face it is mounted to.
+     *
+       fixtureFrame() describes a fixture lying IN a plane: for a top face
+       (studioMount 0) the length runs across the deck, the depth N points up,
+       and H -- the only axis left -- lies flat. That is right for a bar or a
+       pixel strip laid in a step, and it is what H means here. But a moving
+       head is not laid in its face, it is stood on it: taking the in-plane H as
+       its up drew every mover on a deck lying on its side, arms out sideways
+       and head poking along the floor. On a face that looks upward, up is the
+       face's own normal. Front and side faces keep the in-plane answer. */
+    if (qAbs(N.z()) > 0.7f && qAbs(H.z()) < 0.7f)
+        H = N;
+
     /* You cannot hang from the top of something you are standing on.
      *
        mountingType defaults to TopHung, so a fixture dropped onto a deck and
@@ -3214,6 +3227,12 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
     // Base at the bottom, head on top -- which requires knowing which way up
     // the thing is rigged, not just which plane it lies in.
     H = fixtureBodyUp(rp);
+    // Depth is whatever is left: when up was taken from the face normal (a
+    // head standing on a deck), N would otherwise be up as well and every box
+    // would collapse to a sheet.
+    const QVector3D depth = QVector3D::crossProduct(L, H);
+    if (depth.length() > 1e-4f)
+        N = depth.normalized();
 
     const int units = qMax(1, traits.headCount);
     const double wTot = (traits.physW > 0.0f) ? double(traits.physW) : 0.3;
@@ -3259,9 +3278,6 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
     const double seat = (rp.placement == FixtureRigProps::Inside
                          || hasStructuralMount(rp) == false) ? 0.0 : 0.5;
     const QVector3D seated = c + H * float(h * seat);
-    qDebug() << "DRAWDIAG c=" << c << "H=" << H << "h=" << h << "seat=" << seat
-             << "hasStructuralMount=" << hasStructuralMount(rp)
-             << "seated=" << seated;
 
     for (int u = 0; u < units; ++u)
     {

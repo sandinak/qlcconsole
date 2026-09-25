@@ -11238,6 +11238,52 @@ void Monitor_Test::draggingATargetAnnouncesTheMove()
     delete doc;
 }
 
+void Monitor_Test::aMoverOnATopFaceStandsUpOrHangsDown()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("Frame");
+    {
+        StructureStudioView view(doc, StructureStudioView::TrussKind, t->id());
+
+        // A head on a deck, laid out on the deck's TOP face (studioMount 0) as
+        // the deck editor records it: its base is on the deck, so up is up --
+        // not the in-plane axis a bar lying in that face would use.
+        FixtureRigProps deck;
+        deck.deckPlatformId = 0;
+        deck.studioMount = 0;
+        for (float angle : { 0.0f, 37.0f, 90.0f })
+        {
+            deck.studioAngle = angle;
+            for (int mounting : { int(Truss::TopHung), int(Truss::FloorMounted) })
+            {
+                deck.mountingType = Truss::MountingType(mounting);
+                const QVector3D up = view.fixtureBodyUp(deck);
+                QVERIFY2(up.z() > 0.99f, qPrintable(QString("deck head at %1 deg, mounting %2: up (%3,%4,%5)")
+                                                    .arg(angle).arg(mounting)
+                                                    .arg(up.x()).arg(up.y()).arg(up.z())));
+            }
+        }
+
+        // Hung under a truss, same face: straight down.
+        FixtureRigProps hung;
+        hung.trussId = t->id();
+        hung.studioMount = 0;
+        hung.mountingType = Truss::TopHung;
+        QVERIFY(view.fixtureBodyUp(hung).z() < -0.99f);
+
+        // A front face keeps the in-plane answer: upright on a riser's front.
+        FixtureRigProps front;
+        front.riserPlatformId = 0;
+        front.riserFace = FixtureRigProps::RiserFront;
+        front.studioMount = 1;
+        front.mountingType = Truss::FloorMounted;
+        QVERIFY(qAbs(view.fixtureBodyUp(front).z()) > 0.99f);
+    }
+    delete doc;
+}
+
 /* A staged fixture whose definition has a Maintenance channel with Reset and
  * Identify, so the test dialogs grow their DMX buttons. */
 static Fixture *stagedWithMaintenance(Doc *doc, FixtureCleanup *cleanup)
