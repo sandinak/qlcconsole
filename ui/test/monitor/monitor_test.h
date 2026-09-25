@@ -244,6 +244,7 @@ private slots:
     void theCycloramaEditorPreviewsAndCancelReverts();
     void aCycloramaOnThePlotMovesLocksHidesAndDeletes();
     void beamsLandOnTheCycloramaInTheRigView();
+    void selectAllTakesEverythingSelectable();
     void aStagedFixturesTestDialogOffersNoDmxActions();
     void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
     void theDmxViewHasNoTileForAStagedFixture();

@@ -131,6 +131,11 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     undoSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(undoSc, &QShortcut::activated, this, &MonitorGraphicsView::undoLastMove);
 
+    // Cmd/Ctrl+A selects everything that can be selected.
+    QShortcut *allSc = new QShortcut(QKeySequence::SelectAll, this);
+    allSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(allSc, &QShortcut::activated, this, [this]() { selectAllMapItems(); });
+
     // Cmd/Ctrl+G groups the selection; Cmd/Ctrl+Shift+G ungroups it.
     QShortcut *groupSc = new QShortcut(QKeySequence(tr("Ctrl+G")), this);
     groupSc->setContext(Qt::WidgetWithChildrenShortcut);
@@ -2715,6 +2720,30 @@ QList<quint32> MonitorGraphicsView::fixturesOffGrid() const
     return out;
 }
 
+int MonitorGraphicsView::selectAllMapItems()
+{
+    if (m_scene == NULL)
+        return 0;
+    /* One selection change, not one per item: every item's setSelected() would
+       otherwise run the group-extension and overlay handlers again. */
+    int n = 0;
+    m_scene->blockSignals(true);
+    foreach (QGraphicsItem *gi, m_scene->items())
+    {
+        // Top-level map objects only: labels and handles belong to their item.
+        if (gi->parentItem() != NULL || !gi->isVisible()
+            || !(gi->flags() & QGraphicsItem::ItemIsSelectable))
+            continue;
+        gi->setSelected(true);
+        n++;
+    }
+    m_scene->blockSignals(false);
+    // The scene's own handlers (group extension, overlays) run once, and
+    // announce mapSelectionChanged themselves.
+    emit m_scene->selectionChanged();
+    return n;
+}
+
 void MonitorGraphicsView::selectFixtures(const QList<quint32> &ids)
 {
     if (m_scene == NULL)
@@ -3680,6 +3709,7 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
         QTimer::singleShot(0, this, [this]() { followParentTrusses(); });
 
     updateTrussAnchorLines();
+    refreshFixtureCountBadges();       // its count bubble goes where it went
 }
 
 void MonitorGraphicsView::updatePlatforms()
@@ -3916,6 +3946,7 @@ void MonitorGraphicsView::slotTowerMoved(TowerItem *item)
             if (m_doc->monitorProperties()->fixtureRigProps(fx->id()).towerId == tw->id())
                 updateFixture(fx->id());
     }
+    refreshFixtureCountBadges();
     m_doc->setModified();
     emit mapStructureChanged();
 }
@@ -3997,6 +4028,7 @@ void MonitorGraphicsView::slotPipeMoved(PipeItem *item)
         b->setOriginX(float(((c.x() - m_xOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
         b->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
     }
+    refreshFixtureCountBadges();
     m_doc->setModified();
     emit mapStructureChanged();
 }
@@ -4070,6 +4102,10 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
     // fixtures follow the platforms to their new position.
     m_doc->monitorProperties()->recomputeAnchoredFrames();
     refreshRiserFixtures();
+    /* A deck's count bubble stands for the fixtures on it, which are hidden
+       under it: without this the deck and its fixtures moved but the bubble
+       -- all you can see of them -- stayed behind, as if they had not. */
+    refreshFixtureCountBadges();
 }
 
 void MonitorGraphicsView::updatePowerSources()
@@ -5424,6 +5460,7 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
         if (repNetwork != nullptr)  slotNetworkNodeMoved(repNetwork);
         if (repImage != nullptr)    slotImageMoved(repImage);
         if (repTarget != nullptr)   slotTargetMoved(repTarget);
+        refreshFixtureCountBadges();   // moved fixtures change what covers what
     }
 
     // Restore rubber-band selection after a shift-drag pan.

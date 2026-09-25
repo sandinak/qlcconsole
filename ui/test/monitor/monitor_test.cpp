@@ -11627,6 +11627,61 @@ void Monitor_Test::beamsLandOnTheCycloramaInTheRigView()
     delete doc;
 }
 
+void Monitor_Test::selectAllTakesEverythingSelectable()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("T-1");
+    t->setLength(3.0f);
+    StagePlatform *deck = props->addPlatform();
+    deck->setName("Deck");
+    Stand *stand = props->addStand();
+    stand->setOriginX(2.0f);
+    Scenery *cyc = props->addScenery();
+    cyc->setOriginX(5.0f);
+    StageTarget *mark = props->addStageTarget();
+    mark->setPosition(QVector3D(3.0f, 3.0f, 0.0f));
+    Fixture *spot = new Fixture(doc);
+    spot->setChannels(4);
+    QVERIFY(doc->addFixture(spot));
+    // One on a hidden layer, one on a locked layer: neither can be selected.
+    const quint32 hidden = props->addLayer("Hidden");
+    const quint32 locked = props->addLayer("Locked");
+    Stand *gone = props->addStand();
+    gone->setLayerId(hidden);
+    Stand *pinned = props->addStand();
+    pinned->setLayerId(locked);
+    props->setLayerVisible(hidden, false);
+    props->setLayerLocked(locked, true);
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.updateTrusses();
+        view.updatePlatforms();
+        view.updateTargets();
+        view.addFixture(spot->id(), QPointF(4000.0, 3000.0));
+        view.refreshItemLayerState();
+
+        QSignalSpy changed(&view, &MonitorGraphicsView::mapSelectionChanged);
+        const int n = view.selectAllMapItems();
+        QVERIFY2(n >= 6, qPrintable(QString::number(n)));
+        QCOMPARE(changed.count(), 1);                   // one change, not one per item
+        QVERIFY(view.m_trussItems.value(t->id())->isSelected());
+        QVERIFY(view.m_platformItems.value(deck->id())->isSelected());
+        QVERIFY(view.m_standItems.value(stand->id())->isSelected());
+        QVERIFY(view.m_sceneryItems.value(cyc->id())->isSelected());
+        QVERIFY(view.m_targetItems.value(mark->id())->isSelected());
+        QVERIFY(view.m_fixtures.value(spot->id())->isSelected());
+        QVERIFY(!view.m_standItems.value(gone->id())->isSelected());
+        QVERIFY(!view.m_standItems.value(pinned->id())->isSelected());
+        QVERIFY(view.selectedMapObjects().contains(qMakePair(QString("scenery"), cyc->id())));
+    }
+    delete doc;
+}
+
 /* A staged fixture whose definition has a Maintenance channel with Reset and
  * Identify, so the test dialogs grow their DMX buttons. */
 static Fixture *stagedWithMaintenance(Doc *doc, FixtureCleanup *cleanup)

@@ -232,6 +232,11 @@ public:
     /** Select exactly these fixtures and scroll the first into view. */
     void selectFixtures(const QList<quint32> &ids);
 
+    /** Select every object on the plot that can be selected right now --
+     *  visible, on an unlocked layer -- fixtures, structures, scenery, targets
+     *  and all. Returns how many. (Cmd/Ctrl+A on the plot.) */
+    int selectAllMapItems();
+
     /** Set the gel color of the fixture with the given ID */
     void setFixtureGelColor(quint32 id, QColor col);
 

@@ -1543,6 +1543,11 @@ void Monitor::initGraphicsToolbar()
 
     moreMenu->addSeparator();
 
+    moreMenu->addAction(tr("Select All (Ctrl+A)"), this, [this]() {
+        if (m_graphicsView != NULL)
+            m_graphicsView->selectAllMapItems();
+    });
+
     // Copy / paste of stage features (trusses, platforms, targets). addAction()
     // keeps the Cmd/Ctrl+C/V shortcuts alive on the window even off the toolbar.
     QAction *copyAct = new QAction(QIcon(":/editcopy.png"), tr("Copy selected features"), this);
