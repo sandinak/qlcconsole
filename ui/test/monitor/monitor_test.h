@@ -239,6 +239,7 @@ private slots:
     void draggingATargetAnnouncesTheMove();
     void aMoverOnATopFaceStandsUpOrHangsDown();
     void aFixtureCanBeRaisedOntoATowersTopCap();
+    void fixturesAndBarsAreRenamedInTheStructureEditorsList();
     void aStagedFixturesTestDialogOffersNoDmxActions();
     void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
     void theDmxViewHasNoTileForAStagedFixture();

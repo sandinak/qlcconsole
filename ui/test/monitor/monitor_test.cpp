@@ -11380,6 +11380,67 @@ void Monitor_Test::aFixtureCanBeRaisedOntoATowersTopCap()
     delete doc;
 }
 
+void Monitor_Test::fixturesAndBarsAreRenamedInTheStructureEditorsList()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setLength(3.0f);
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1");
+    bar->setParentTrussId(t1->id());
+    Fixture *spot = new Fixture(doc);
+    spot->setName("LED Movinghead+Circle");
+    spot->setChannels(4);
+    QVERIFY(doc->addFixture(spot));
+    FixtureRigProps rp;
+    rp.trussId = t1->id();
+    rp.trussOffset = 1.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        mon.makeStudioPane(&dlg, 2 /* truss */, t1->id(), nullptr, &view);
+        QTreeWidget *list = nullptr;
+        foreach (QTreeWidget *tw, dlg.findChildren<QTreeWidget *>())
+            for (int i = 0; i < tw->topLevelItemCount(); ++i)
+                if (tw->topLevelItem(i)->text(0) == "Ungrouped")
+                    list = tw;
+        QVERIFY(list != nullptr);
+        auto rowNamed = [list](const QString &name) -> QTreeWidgetItem * {
+            for (QTreeWidgetItemIterator it(list); *it != nullptr; ++it)
+                if ((*it)->text(0) == name)
+                    return *it;
+            return nullptr;
+        };
+
+        // Return / F2 renames a fixture row: it is editable, and the edit sticks.
+        QTreeWidgetItem *row = rowNamed("LED Movinghead+Circle");
+        QVERIFY(row != nullptr);
+        QVERIFY(row->flags() & Qt::ItemIsEditable);
+        row->setText(0, "  SR Spot  ");                  // what the inline editor commits
+        QCOMPARE(spot->name(), QString("SR Spot"));
+        QCOMPARE(row->text(0), QString("SR Spot"));
+        QVERIFY(doc->isModified());
+
+        // An empty name is refused and the old one put back.
+        row->setText(0, "   ");
+        QCOMPARE(spot->name(), QString("SR Spot"));
+        QCOMPARE(row->text(0), QString("SR Spot"));
+
+        // A bar row renames the bar.
+        QTreeWidgetItem *barRow = rowNamed("Bar 1");
+        QVERIFY(barRow != nullptr && (barRow->flags() & Qt::ItemIsEditable));
+        barRow->setText(0, "Pipe A");
+        QCOMPARE(bar->name(), QString("Pipe A"));
+    }
+    delete doc;
+}
+
 /* A staged fixture whose definition has a Maintenance channel with Reset and
  * Identify, so the test dialogs grow their DMX buttons. */
 static Fixture *stagedWithMaintenance(Doc *doc, FixtureCleanup *cleanup)

@@ -3323,6 +3323,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             Fixture *fx = m_doc->fixture(fid);
             QTreeWidgetItem *it = new QTreeWidgetItem(parent, QStringList(fx ? fx->name() : QString::number(fid)));
             it->setData(0, Qt::UserRole, fid);
+            it->setFlags(it->flags() | Qt::ItemIsEditable);    // Return / F2 renames the fixture
         }
         /* A bar hung on THIS truss is a child Truss, not a fixture, so it never
            shows up above -- mountedFixtures() only walks m_doc->fixtures(). Left
@@ -3346,6 +3347,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                 }
                 QTreeWidgetItem *it = new QTreeWidgetItem(barsNode, QStringList(t->name()));
                 it->setData(0, Qt::UserRole + 2, t->id());
+                it->setFlags(it->flags() | Qt::ItemIsEditable);   // ...and a bar
             }
         }
         tree->blockSignals(false);
@@ -3390,13 +3392,56 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         tree->blockSignals(false);
     });
     // Rename a group folder (F2 or right-click Rename) → update the fixture group.
-    connect(tree, &QTreeWidget::itemChanged, tree, [this](QTreeWidgetItem *it, int col) {
+    connect(tree, &QTreeWidget::itemChanged, tree, [this, tree, view, curFid, populate](QTreeWidgetItem *it, int col) {
         if (col != 0) return;
+        const QString nm = it->text(0).trimmed();
+        // Put the stored name back without re-entering this handler.
+        auto restore = [tree, it](const QString &name) {
+            tree->blockSignals(true);
+            it->setText(0, name);
+            tree->blockSignals(false);
+        };
+
+        // A fixture row: rename the fixture itself, everywhere it is shown.
+        if (it->data(0, Qt::UserRole).isValid())
+        {
+            Fixture *fx = m_doc->fixture(it->data(0, Qt::UserRole).toUInt());
+            if (fx == nullptr) return;
+            if (nm.isEmpty()) { restore(fx->name()); return; }
+            if (fx->name() != nm)
+            {
+                fx->setName(nm);
+                m_doc->setModified();
+                m_graphicsView->updateFixture(fx->id());
+                if (m_layersPanel) m_layersPanel->reload();
+                if (view) view->reload();
+                if (*curFid == fx->id()) populate();         // the inspector's title
+            }
+            if (it->text(0) != nm) restore(nm);
+            return;
+        }
+        // A bar row.
+        if (studioRowBarId(it) != Truss::invalidId())
+        {
+            Truss *bar = m_props->truss(studioRowBarId(it));
+            if (bar == nullptr) return;
+            if (nm.isEmpty()) { restore(bar->name()); return; }
+            if (bar->name() != nm)
+            {
+                bar->setName(nm);
+                m_doc->setModified();
+                m_graphicsView->updateTrusses();
+                if (m_layersPanel) m_layersPanel->reload();
+                if (view) view->reload();
+            }
+            return;
+        }
+        // A group folder.
         const quint32 gid = it->data(0, Qt::UserRole + 1).toUInt();
         if (gid == 0) return;
         FixtureGroup *g = m_doc->fixtureGroup(gid);
-        const QString nm = it->text(0).trimmed();
-        if (g != nullptr && !nm.isEmpty() && g->name() != nm)
+        if (g != nullptr && nm.isEmpty()) { restore(g->name()); return; }
+        if (g != nullptr && g->name() != nm)
         {
             g->setName(nm);
             m_doc->setModified();
@@ -3459,7 +3504,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             m.addSeparator();
             aNew = m.addAction(tr("New Fixture Group from Selection…"));
         }
-        // Rename when a group folder is under the cursor.
+        // Rename whatever is under the cursor: a group folder, a fixture, a bar.
         QTreeWidgetItem *hit = tree->itemAt(pos);
         QAction *aRen = nullptr, *aLay = nullptr;
         if (hit != nullptr && hit->data(0, Qt::UserRole + 1).toUInt() != 0)
@@ -3467,6 +3512,12 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             m.addSeparator();
             aRen = m.addAction(tr("Rename Group"));
             aLay = m.addAction(tr("Head Layout…"));
+        }
+        else if (hit != nullptr && (hit->flags() & Qt::ItemIsEditable))
+        {
+            m.addSeparator();
+            aRen = m.addAction(studioRowBarId(hit) != Truss::invalidId() ? tr("Rename Bar")
+                                                                        : tr("Rename Fixture"));
         }
         QAction *chosen = m.exec(tree->viewport()->mapToGlobal(pos));
         if (chosen == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); rebuildSource(); }
