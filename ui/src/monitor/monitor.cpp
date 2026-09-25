@@ -4827,6 +4827,8 @@ void Monitor::slotEditTarget(quint32 tid)
     t->setZ(float(zSpin->value() * fromDisp_t));
     t->setColor(chosenColor);
     m_props->setAimSubjectHeight(float(subjSpin->value() * fromDisp_t));
+    // Position and subject height both change what a head can reach.
+    m_props->notifyStageTargetsChanged();
 
     t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
     const QString bound = boundCombo->currentData().toString();

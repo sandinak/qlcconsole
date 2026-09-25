@@ -160,17 +160,13 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
        changes, but rebuild only if the answer did: this panel is where looks
        are edited, and a rebuild for nothing would pull the rug out. */
     if (m_doc != nullptr && m_doc->monitorProperties() != nullptr)
+    {
         connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged, this,
-                [this](quint32) {
-            if (m_reachCheckPending)
-                return;
-            m_reachCheckPending = true;
-            QTimer::singleShot(0, this, [this]() {
-                m_reachCheckPending = false;
-                if (m_scene != nullptr && headsThatCannotReach() != m_cannotReach)
-                    reload();
-            });
-        });
+                [this](quint32) { scheduleReachCheck(); });
+        // Moving a target is the other half: the same heads, somewhere else.
+        connect(m_doc->monitorProperties(), &MonitorProperties::stageTargetsChanged,
+                this, &SceneGroupLooks::scheduleReachCheck);
+    }
 
     QHBoxLayout *cols = new QHBoxLayout();
     root->addLayout(cols);
@@ -389,6 +385,18 @@ static QString capCoverageHint(Fixture *fxi, const QSet<QLCPalette::PaletteType>
     return QObject::tr("  ⚠ no look for: %1").arg(missing.join(", "));
 }
 
+
+void SceneGroupLooks::scheduleReachCheck()
+{
+    if (m_reachCheckPending)
+        return;
+    m_reachCheckPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_reachCheckPending = false;
+        if (m_scene != nullptr && headsThatCannotReach() != m_cannotReach)
+            reload();
+    });
+}
 
 QHash<quint32, QStringList> SceneGroupLooks::headsThatCannotReach() const
 {

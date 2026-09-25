@@ -46,6 +46,13 @@ bool AimSolver::floorMounted(const FixtureRigProps &rp)
         return true;
     if (rp.riserPlatformId != UINT_MAX && rp.riserFace == 1)
         return true;
+    // Deck mount means standing on the platform's top: there is nothing to
+    // hang from. The rig props' TopHung default used to leak through here, so
+    // of eight identical heads on one deck, the ones never explicitly set to
+    // FloorMounted were solved (and drawn) upside down -- aimed "up" at a
+    // target above them, past their tilt limit.
+    if (rp.onDeck())
+        return true;
     return false;
 }
 
@@ -66,7 +73,11 @@ bool AimSolver::frameFor(Doc *doc, quint32 fixtureId, Frame &frame)
     // Fixture world position in metres; a free-placed fixture on a platform sits
     // at the deck height (mirror the target's platform handling).
     frame.position = mProps->fixtureRigPosition(fixtureId);
-    if (rp.trussId == Truss::invalidId())
+    // Only a free-placed head gets the height of whatever platform it stands
+    // over: every mount (truss, pipe, tower, deck, riser) already puts the
+    // head at its real height, and adding the platform again lifted a
+    // deck-mounted head to twice the deck's height.
+    if (rp.primaryMount() == FixtureRigProps::NoMount)
         frame.position.setZ(frame.position.z()
                             + mProps->platformHeightAt(frame.position.x(), frame.position.y()));
 

@@ -30,6 +30,7 @@
 #include "qlcpalette.h"
 #include "fixture.h"
 #include "scene.h"
+#include "stageplatform.h"
 #include "truss.h"
 #include "doc.h"
 
@@ -313,6 +314,49 @@ void AimSolver_Test::aSceneSaysWhichHeadsCannotReach()
              "the spot standing on the tower can reach a chest half a metre away");
     QVERIFY2(byFixture.value(hung->id()).solution.reachable(),
              "the hung spot cannot reach a chest half a metre away");
+
+    delete doc;
+}
+
+void AimSolver_Test::aDeckHeadStandsAtTheDecksHeight()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(1.0f);
+    deck->setOriginY(1.0f);
+    deck->setWidth(10.0f);
+    deck->setDepth(2.0f);
+    deck->setHeight(0.6f);
+
+    // Eight identical heads on one deck: the rig-props default (TopHung) must
+    // not leave the ones nobody touched upside down.
+    Fixture *onDeck = makeSpot(doc, "On deck");
+    Fixture *free   = makeSpot(doc, "Free over deck");
+    QVERIFY(onDeck != nullptr && free != nullptr);
+    props->setFixturePosition(onDeck->id(), 0, 0, QVector3D(3000, 1500, 0));
+    props->setFixturePosition(free->id(), 0, 0, QVector3D(5000, 1500, 0));
+    FixtureRigProps rp;
+    rp.deckPlatformId = deck->id();
+    QCOMPARE(rp.mountingType, int(Truss::TopHung));
+    props->setFixtureRigProps(onDeck->id(), rp);
+
+    AimSolver::Frame f;
+    QVERIFY(AimSolver::frameFor(doc, onDeck->id(), f));
+    QVERIFY2(f.floorMounted, "a deck-mounted head stands on the deck");
+    QVERIFY2(qAbs(f.position.z() - 0.6f) < 0.01f,
+             qPrintable(QString("deck head solved at %1 m, deck is 0.6 m").arg(f.position.z())));
+
+    // A head merely placed over the deck (no mount) still gets its height.
+    QVERIFY(AimSolver::frameFor(doc, free->id(), f));
+    QVERIFY2(qAbs(f.position.z() - 0.6f) < 0.01f,
+             qPrintable(QString("free head over the deck solved at %1 m").arg(f.position.z())));
+
+    // Standing there, a followspot subject a couple of metres upstage is easy.
+    AimSolver::Solution s;
+    QVERIFY(AimSolver::reach(doc, onDeck->id(), QVector3D(3.0f, 4.0f, 2.0f), s));
+    QVERIFY2(s.reachable(), qPrintable(QString("margin %1").arg(s.marginDeg)));
 
     delete doc;
 }

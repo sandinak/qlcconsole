@@ -4506,6 +4506,7 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
         while (m_moveUndo.count() > 50)
             m_moveUndo.removeFirst();
         m_doc->setModified();
+        m_doc->monitorProperties()->notifyStageTargetsChanged();
     }
     updateAimLines();
 
@@ -7957,6 +7958,8 @@ void MonitorGraphicsView::undoLastMove()
             t->setY(float(it.value().y()));
         }
         updateTargets();
+        if (props != nullptr)
+            props->notifyStageTargetsChanged();
         m_doc->setModified();
         return;
     }

@@ -722,6 +722,16 @@ signals:
      *  instead of only after the scene is restarted. */
     void rigPropsChanged(quint32 fid);
 
+    /** Emitted when a stage target is added, removed, moved or edited, so
+     *  whatever aims at targets (the look panel's "can't reach" check) can
+     *  re-evaluate. StageTarget's own setters are signal-less (they are also
+     *  written from the DMX thread), so the UI that edits them calls
+     *  notifyStageTargetsChanged(). */
+    void stageTargetsChanged();
+
+public:
+    void notifyStageTargetsChanged() { emit stageTargetsChanged(); }
+
 public:
     bool hasFixtureRigProps(quint32 fid) const { return m_rigProps.contains(fid); }
     const QMap<quint32, FixtureRigProps> &fixtureRigPropsMap() const { return m_rigProps; }

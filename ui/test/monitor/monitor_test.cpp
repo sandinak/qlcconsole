@@ -11208,6 +11208,36 @@ void Monitor_Test::aFixtureOnATowerIsListedUnderThatTower()
     delete doc;
 }
 
+void Monitor_Test::draggingATargetAnnouncesTheMove()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *t = props->addStageTarget();
+    t->setName("Vocalist");
+    t->setPosition(QVector3D(2.0f, 2.0f, 0.0f));
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updateTargets();
+        TargetItem *ti = view.m_targetItems.value(t->id(), nullptr);
+        QVERIFY(ti != nullptr);
+
+        // Anything aiming at it (the look panel's reach check) hears about it.
+        QSignalSpy spy(props, &MonitorProperties::stageTargetsChanged);
+        ti->setPos(ti->pos() + QPointF(0, view.m_cellPixels * 2));
+        view.slotTargetMoved(ti);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY2(t->y() > 3.5f, qPrintable(QString("target now at y=%1").arg(t->y())));
+
+        view.undoLastMove();
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(qAbs(t->y() - 2.0f) < 0.01f);
+    }
+    delete doc;
+}
+
 /* A staged fixture whose definition has a Maintenance channel with Reset and
  * Identify, so the test dialogs grow their DMX buttons. */
 static Fixture *stagedWithMaintenance(Doc *doc, FixtureCleanup *cleanup)

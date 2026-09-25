@@ -84,6 +84,9 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
+    /** Re-check what the Aim looks can reach after the rig or a target moved;
+     *  coalesced, and rebuilds only if the answer changed. */
+    void scheduleReachCheck();
     void slotRemoveTarget();
     void slotRemoveLook();
     void slotMoveLookUp();

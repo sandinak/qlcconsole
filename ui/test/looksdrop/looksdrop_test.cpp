@@ -212,6 +212,19 @@ void LooksDrop_Test::aHeadAimedOutOfReachIsFlagged()
              qPrintable("the hung head is flagged: " + rowText("Hung")));
     QVERIFY(looks->m_targetsLabel->text().contains("1 can't reach"));
 
+    // Moving the target somewhere it can reach clears it too -- the target
+    // moving is as much a change as the head being re-rigged.
+    who->setPosition(QVector3D(1.67f, 4.372f, 0.0f));
+    props->notifyStageTargetsChanged();
+    QCoreApplication::processEvents();
+    QVERIFY2(!rowText("On top").contains("can't reach"),
+             qPrintable("still flagged after the target moved away: " + rowText("On top")));
+    // ...and back in close, it is flagged again.
+    who->setPosition(QVector3D(1.67f, 1.872f, 0.0f));
+    props->notifyStageTargetsChanged();
+    QCoreApplication::processEvents();
+    QVERIFY(rowText("On top").contains("can't reach: Vocalist"));
+
     // Re-rig the one on top to hang: the warning clears on its own.
     props->setFixtureRigProps(onTop->id(), rp);
     QCoreApplication::processEvents();

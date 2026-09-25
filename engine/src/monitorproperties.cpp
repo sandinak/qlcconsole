@@ -1464,12 +1464,14 @@ StageTarget *MonitorProperties::addStageTarget()
     quint32 id = nextStageTargetId();
     StageTarget *t = new StageTarget(id, this);
     m_stageTargets.insert(id, t);
+    emit stageTargetsChanged();
     return t;
 }
 
 void MonitorProperties::removeStageTarget(quint32 id)
 {
     delete m_stageTargets.take(id);
+    emit stageTargetsChanged();
 }
 
 /*********************************************************************

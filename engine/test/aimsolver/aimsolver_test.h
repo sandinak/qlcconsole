@@ -40,6 +40,7 @@ private slots:
     /** A scene's Aim look: which heads it points, at what, and which of them
      *  cannot get there. */
     void aSceneSaysWhichHeadsCannotReach();
+    void aDeckHeadStandsAtTheDecksHeight();
 };
 
 #endif
