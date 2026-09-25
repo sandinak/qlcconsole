@@ -23,6 +23,8 @@
 #include <QDebug>
 #include <QWheelEvent>
 #include <QMouseEvent>
+#include <QDataStream>
+#include <QMimeData>
 #include <QNativeGestureEvent>
 #include <QScrollBar>
 #include <QShortcut>
@@ -54,8 +56,12 @@
 #include "tower.h"
 #include "stand.h"
 #include "pipe.h"
+#include "qlceventpos.h"
 #include "powersourceitem.h"
 #include "powerdistribution.h"
+#include <QGraphicsLineItem>
+#include "networknodeitem.h"
+#include "networktopology.h"
 #include "targetitem.h"
 #include "monitorimageitem.h"
 #include "truss.h"
@@ -696,6 +702,7 @@ void MonitorGraphicsView::refreshAllItems()
     updatePlatforms();
     updateTargets();
     updatePowerSources();
+    updateNetworkNodes();
     updateImages();
     // The tethers are projected like everything else, so a scale or
     // point-of-view change invalidates them too.
@@ -776,6 +783,12 @@ int MonitorGraphicsView::setSelectedItemsLayer(quint32 layerId)
         {
             const int s = ps->sourceIndex();
             if (s >= 0 && s < pd->sources().size()) { pd->sources()[s].layerId = layerId; count++; }
+        }
+        else if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi))
+        {
+            NetworkTopology *nt = m_doc->networkTopology();
+            const int n = nn->nodeIndex();
+            if (n >= 0 && n < nt->nodes().size()) { nt->nodes()[n].layerId = layerId; count++; }
         }
     }
 
@@ -967,6 +980,12 @@ quint32 MonitorGraphicsView::itemGroupId(QGraphicsItem *gi) const
         const int s = ps->sourceIndex();
         return (s >= 0 && s < pd->sources().size()) ? pd->sources().at(s).groupId : 0;
     }
+    if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        const int n = nn->nodeIndex();
+        return (n >= 0 && n < nt->nodes().size()) ? nt->nodes().at(n).groupId : 0;
+    }
     if (auto *bi = dynamic_cast<PipeItem *>(gi))
         return bi->pipe() ? bi->pipe()->groupId() : 0;
     if (auto *si = dynamic_cast<StandItem *>(gi))
@@ -1002,6 +1021,13 @@ void MonitorGraphicsView::setItemGroupId(QGraphicsItem *gi, quint32 gid)
         if (s >= 0 && s < pd->sources().size())
             pd->sources()[s].groupId = gid;
     }
+    else if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        const int n = nn->nodeIndex();
+        if (n >= 0 && n < nt->nodes().size())
+            nt->nodes()[n].groupId = gid;
+    }
     else if (auto *bi = dynamic_cast<PipeItem *>(gi))
     { if (Pipe *p = bi->pipe()) p->setGroupId(gid); }
     else if (auto *si = dynamic_cast<StandItem *>(gi))
@@ -1029,6 +1055,7 @@ QList<QGraphicsItem *> MonitorGraphicsView::itemsInGroup(quint32 gid) const
     foreach (TowerItem *i, m_towerItems)               if (itemGroupId(i) == gid) out << i;
     foreach (TargetItem *i, m_targetItems)             if (itemGroupId(i) == gid) out << i;
     foreach (PowerSourceItem *i, m_powerSourceItems)   if (itemGroupId(i) == gid) out << i;
+    foreach (NetworkNodeItem *i, m_networkNodeItems)   if (itemGroupId(i) == gid) out << i;
     foreach (MonitorImageItem *i, m_imageItems)        if (itemGroupId(i) == gid) out << i;
     return out;
 }
@@ -1072,6 +1099,7 @@ QList<QGraphicsItem *> MonitorGraphicsView::itemsUnderGroup(quint32 top) const
     foreach (PlatformItem *i, m_platformItems)         if (groupIsUnder(itemGroupId(i), top)) out << i;
     foreach (TargetItem *i, m_targetItems)             if (groupIsUnder(itemGroupId(i), top)) out << i;
     foreach (PowerSourceItem *i, m_powerSourceItems)   if (groupIsUnder(itemGroupId(i), top)) out << i;
+    foreach (NetworkNodeItem *i, m_networkNodeItems)   if (groupIsUnder(itemGroupId(i), top)) out << i;
     foreach (MonitorImageItem *i, m_imageItems)        if (groupIsUnder(itemGroupId(i), top)) out << i;
     return out;
 }
@@ -1099,6 +1127,12 @@ quint32 MonitorGraphicsView::itemLayerId(QGraphicsItem *gi) const
         const int s = ps->sourceIndex();
         return (s >= 0 && s < pd->sources().size()) ? pd->sources().at(s).layerId : 0;
     }
+    if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        const int n = nn->nodeIndex();
+        return (n >= 0 && n < nt->nodes().size()) ? nt->nodes().at(n).layerId : 0;
+    }
     if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
         return props->image(ii->imageId()).layerId;
     return 0;
@@ -1120,6 +1154,12 @@ void MonitorGraphicsView::setItemLayer(QGraphicsItem *gi, quint32 layerId)
         PowerDistribution *pd = m_doc->powerDistribution();
         const int s = ps->sourceIndex();
         if (s >= 0 && s < pd->sources().size()) pd->sources()[s].layerId = layerId;
+    }
+    else if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        const int n = nn->nodeIndex();
+        if (n >= 0 && n < nt->nodes().size()) nt->nodes()[n].layerId = layerId;
     }
     else if (auto *bi = dynamic_cast<PipeItem *>(gi))
     { if (Pipe *p = bi->pipe()) p->setLayerId(layerId); }
@@ -1687,6 +1727,8 @@ void MonitorGraphicsView::selectMapItem(const QString &kind, quint32 id)
         target = m_targetItems.value(id, nullptr);
     else if (kind == QStringLiteral("power"))
         target = (int(id) < m_powerSourceItems.size()) ? m_powerSourceItems.at(int(id)) : nullptr;
+    else if (kind == QStringLiteral("network"))
+        target = (int(id) < m_networkNodeItems.size()) ? m_networkNodeItems.at(int(id)) : nullptr;
     else if (kind == QStringLiteral("image"))
         target = m_imageItems.value(id, nullptr);
 
@@ -1715,6 +1757,7 @@ void MonitorGraphicsView::requestEditItem(const QString &kind, quint32 id)
     else if (kind == QStringLiteral("tower"))    emit towerDoubleClicked(id);
     else if (kind == QStringLiteral("image"))    emit imageDoubleClicked(id);
     else if (kind == QStringLiteral("power"))    emit powerDoubleClicked(id);
+    else if (kind == QStringLiteral("network"))  emit networkDoubleClicked(id);
     else if (kind == QStringLiteral("target"))   emit targetDoubleClicked(id);
 }
 
@@ -1736,6 +1779,8 @@ void MonitorGraphicsView::selectMapItems(const QList<QPair<QString, quint32> > &
         else if (kind == QStringLiteral("target"))   target = m_targetItems.value(id, nullptr);
         else if (kind == QStringLiteral("power"))
             target = (int(id) < m_powerSourceItems.size()) ? m_powerSourceItems.at(int(id)) : nullptr;
+        else if (kind == QStringLiteral("network"))
+            target = (int(id) < m_networkNodeItems.size()) ? m_networkNodeItems.at(int(id)) : nullptr;
         else if (kind == QStringLiteral("image"))    target = m_imageItems.value(id, nullptr);
         if (target)
             target->setSelected(true);
@@ -1756,6 +1801,8 @@ QGraphicsItem *MonitorGraphicsView::itemFor(const QString &kind, quint32 id) con
     if (kind == QStringLiteral("target"))   return m_targetItems.value(id, nullptr);
     if (kind == QStringLiteral("power"))
         return (int(id) < m_powerSourceItems.size()) ? m_powerSourceItems.at(int(id)) : nullptr;
+    if (kind == QStringLiteral("network"))
+        return (int(id) < m_networkNodeItems.size()) ? m_networkNodeItems.at(int(id)) : nullptr;
     if (kind == QStringLiteral("image"))    return m_imageItems.value(id, nullptr);
     return nullptr;
 }
@@ -2000,6 +2047,29 @@ void MonitorGraphicsView::refreshItemLayerState()
         applySelectable(ps, !lyr.locked);
     }
 
+    // Network nodes (model lives in NetworkTopology, indexed positionally).
+    NetworkTopology *nt = m_doc->networkTopology();
+    foreach (NetworkNodeItem *nn, m_networkNodeItems)
+    {
+        const int n = nn->nodeIndex();
+        if (n < 0 || n >= nt->nodes().size())
+            continue;
+        const NetworkNode &node = nt->nodes().at(n);
+        const MonitorProperties::MonitorLayer lyr = props->layer(node.layerId);
+        nn->setVisible(lyr.visible && !m_stageOnly);
+        nn->setMovable(!m_layoutLocked && !node.locked && !lyr.locked);
+        applySelectable(nn, !lyr.locked);
+        // Receivers and their links live on the same layer as their transmitter.
+        for (int r = 0; r < m_networkReceiverItems.size(); r++)
+        {
+            if (m_networkReceiverItems.at(r)->nodeIndex() != n)
+                continue;
+            m_networkReceiverItems.at(r)->setVisible(lyr.visible && !m_stageOnly);
+            if (r < m_networkLinks.size())
+                m_networkLinks.at(r)->setVisible(lyr.visible && !m_stageOnly);
+        }
+    }
+
     // Targets: aim points stay draggable in Design mode regardless of the global
     // layout lock, but a locked layer still freezes them; a hidden layer hides.
     foreach (TargetItem *ti, m_targetItems)
@@ -2089,6 +2159,7 @@ void MonitorGraphicsView::refreshItemLayerState()
         }
         foreach (PlatformItem *i, m_platformItems)       i->setMovable(false);
         foreach (PowerSourceItem *i, m_powerSourceItems) i->setMovable(false);
+        foreach (NetworkNodeItem *i, m_networkNodeItems) i->setMovable(false);
         /* Targets were frozen here outright. Their drop is unprojected for the
            current view now, so dragging one in an elevation sets its HEIGHT --
            which is the only way to give a target a Z at all. */
@@ -2669,6 +2740,7 @@ static QVector3D fixtureLongAxis(const FixtureRigProps &rp)
 
 void MonitorGraphicsView::updateFixture(quint32 id)
 {
+    scheduleNetworkRuns();
     Fixture *fxi = m_doc->fixture(id);
     if (fxi == NULL || m_fixtures.contains(id) == false)
         return;
@@ -2874,6 +2946,7 @@ QList<MonitorFixtureItem *> MonitorGraphicsView::selectedFixtureItems() const
 
 void MonitorGraphicsView::addFixture(quint32 id, QPointF pos)
 {
+    scheduleNetworkRuns();
     if (id == Fixture::invalidId() || m_fixtures.contains(id) == true)
         return;
 
@@ -2904,6 +2977,7 @@ void MonitorGraphicsView::addFixture(quint32 id, QPointF pos)
 
 bool MonitorGraphicsView::removeFixture(quint32 id)
 {
+    scheduleNetworkRuns();
     MonitorFixtureItem *item = NULL;
 
     if (id == Fixture::invalidId())
@@ -3942,6 +4016,248 @@ void MonitorGraphicsView::slotPowerSourceMoved(PowerSourceItem *item)
         m_doc->setModified();
 }
 
+void MonitorGraphicsView::updateNetworkNodes()
+{
+    QScopedValueRollback<bool> rb(m_itemsRebuilding); m_itemsRebuilding = true;
+    foreach (NetworkNodeItem *nn, m_networkNodeItems)
+    {
+        m_scene->removeItem(nn);
+        delete nn;
+    }
+    m_networkNodeItems.clear();
+    foreach (QGraphicsLineItem *ln, m_networkLinks)
+    {
+        m_scene->removeItem(ln);
+        delete ln;
+    }
+    m_networkLinks.clear();
+    foreach (NetworkReceiverItem *rx, m_networkReceiverItems)
+    {
+        m_scene->removeItem(rx);
+        delete rx;
+    }
+    m_networkReceiverItems.clear();
+
+    if (m_cellPixels == 0)
+        return;
+
+    NetworkTopology *nt = m_doc->networkTopology();
+    for (int i = 0; i < nt->nodes().size(); i++)
+    {
+        const NetworkNode &node = nt->nodes().at(i);
+        // Placed nodes use their stored metres; unplaced ones cascade near the
+        // origin so they're visible and can be dragged into position.
+        const double mx = node.placed ? node.posX : (0.5 + i * 0.4);
+        const double my = node.placed ? node.posY : 0.8;   // offset from power's row
+        // Network nodes sit on the floor (Z=0); projectMm handles Top vs elevation.
+        const QPointF px = projectMm(mx * 1000.0, my * 1000.0, 0.0);
+
+        NetworkNodeItem *nn = new NetworkNodeItem(i, node.name, node.transport, node.locked);
+        nn->setPos(px);
+        // Draggable only when neither the whole layout nor this node is locked.
+        nn->setMovable(!m_layoutLocked && !node.locked);
+        m_scene->addItem(nn);
+        m_networkNodeItems.append(nn);
+
+        connect(nn, &NetworkNodeItem::itemDropped,
+                this, &MonitorGraphicsView::slotNetworkNodeMoved);
+        connect(nn, &NetworkNodeItem::lockToggleRequested,
+                this, &MonitorGraphicsView::slotNetworkNodeLockToggled);
+
+        // A wireless port's receiver is drawn where the receiver IS, with a
+        // dashed link back to the transmitter -- the transmitter's own position
+        // says nothing about where the universe lands.
+        if (node.isWireless())
+        {
+            for (int p = 0; p < node.ports.size(); p++)
+            {
+                const NetworkReceiver &rcv = node.ports.at(p).receiver;
+                if (!rcv.placed)
+                    continue;
+                NetworkReceiverItem *rx = new NetworkReceiverItem(i, p, rcv.name);
+                rx->setPos(projectMm(rcv.posX * 1000.0, rcv.posY * 1000.0, 0.0));
+                m_scene->addItem(rx);
+                m_networkReceiverItems.append(rx);
+
+                QGraphicsLineItem *ln = new QGraphicsLineItem;
+                QPen pen(QColor(235, 140, 40), 1.5, Qt::DashLine);
+                pen.setCosmetic(true);
+                ln->setPen(pen);
+                ln->setZValue(0.4);
+                ln->setAcceptedMouseButtons(Qt::NoButton);
+                m_scene->addItem(ln);
+                m_networkLinks.append(ln);
+            }
+        }
+    }
+
+    updateNetworkLinks();
+    refreshItemLayerState();
+}
+
+void MonitorGraphicsView::updateNetworkLinks()
+{
+    // updateNetworkNodes() builds receivers and links in step, each receiver
+    // right after its own transmitter, so the indices always line up.
+    for (int i = 0; i < m_networkReceiverItems.size(); i++)
+    {
+        NetworkReceiverItem *rx = m_networkReceiverItems.at(i);
+        NetworkNodeItem *tx = m_networkNodeItems.at(rx->nodeIndex());
+        m_networkLinks.at(i)->setLine(QLineF(tx->centre(), rx->pos()));
+    }
+    // A node that moved changes where its runs start.
+    scheduleNetworkRuns();
+}
+
+void MonitorGraphicsView::setNetworkRunsVisible(bool on)
+{
+    if (m_showNetworkRuns == on)
+        return;
+    m_showNetworkRuns = on;
+    updateNetworkRuns();
+}
+
+void MonitorGraphicsView::scheduleNetworkRuns()
+{
+    if (!m_showNetworkRuns)
+        return;
+    if (m_runsTimer == nullptr)
+    {
+        m_runsTimer = new QTimer(this);
+        m_runsTimer->setSingleShot(true);
+        m_runsTimer->setInterval(40);
+        connect(m_runsTimer, &QTimer::timeout, this, &MonitorGraphicsView::updateNetworkRuns);
+    }
+    m_runsTimer->start();
+}
+
+void MonitorGraphicsView::updateNetworkRuns()
+{
+    foreach (NetworkRunItem *ri, m_networkRunItems)
+    {
+        m_scene->removeItem(ri);
+        delete ri;
+    }
+    m_networkRunItems.clear();
+
+    if (!m_showNetworkRuns || m_cellPixels == 0)
+        return;
+
+    // Where each plotted fixture is, in metres, for the engine's length estimate.
+    MonitorProperties *props = m_doc->monitorProperties();
+    QHash<quint32, QVector3D> positions;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        positions.insert(it.key(), props->fixtureRigPosition(it.key()));
+
+    const bool feet = (props->gridUnits() == MonitorProperties::Feet);
+    const QList<NetworkRun> runs = m_doc->networkTopology()->runs(m_doc, positions);
+    foreach (const NetworkRun &run, runs)
+    {
+        // Unanchored: nowhere to run from. Past the items: the model changed
+        // and updateNetworkNodes() has not caught up yet.
+        if (!run.anchored || run.nodeIndex >= m_networkNodeItems.size())
+            continue;
+
+        // Where the run starts on screen: the receiver for a wireless port
+        // (an anchored wireless run always has a placed one), else the node.
+        QPointF start = m_networkNodeItems.at(run.nodeIndex)->centre();
+        if (run.wireless)
+        {
+            foreach (NetworkReceiverItem *rx, m_networkReceiverItems)
+                if (rx->nodeIndex() == run.nodeIndex && rx->portIndex() == run.portIndex)
+                {
+                    start = rx->pos();
+                    break;
+                }
+        }
+
+        QPainterPath path(start);
+        int vertices = 0;
+        foreach (quint32 fid, run.plotted)
+        {
+            MonitorFixtureItem *fi = m_fixtures.value(fid, nullptr);
+            if (fi == nullptr || !fi->isVisible())
+                continue;
+            path.lineTo(fi->iconCentreScene());
+            vertices++;
+        }
+        if (vertices == 0)
+            continue;
+
+        QString from = run.nodeName;
+        if (run.wireless && !run.receiverName.isEmpty())
+            from = tr("%1 via %2").arg(run.nodeName, run.receiverName);
+        QString stats = tr("%1 · Port %2 · Universe %3 · %4 fixture(s) · ~%5 %6 · %7/512 ch")
+                            .arg(from).arg(run.portIndex + 1).arg(run.universe + 1)
+                            .arg(run.fixtures.size())
+                            .arg(run.lengthMetres * (feet ? 3.28084 : 1.0), 0, 'f', 1)
+                            .arg(feet ? tr("ft") : tr("m")).arg(run.channels);
+        const int unplotted = run.fixtures.size() - run.plotted.size();
+        if (unplotted > 0)
+            stats += tr(" · %1 not on the plot").arg(unplotted);
+
+        const int hue = (run.nodeIndex * 67 + run.portIndex * 23) % 360;
+        NetworkRunItem *ri = new NetworkRunItem(path, QColor::fromHsv(hue, 200, 235), stats,
+                                                run.nodeIndex, run.portIndex);
+        m_scene->addItem(ri);
+        m_networkRunItems.append(ri);
+    }
+}
+
+void MonitorGraphicsView::slotNetworkNodeLockToggled(int nodeIndex)
+{
+    NetworkTopology *nt = m_doc->networkTopology();
+    if (nodeIndex < 0 || nodeIndex >= nt->nodes().size())
+        return;
+    nt->nodes()[nodeIndex].locked = !nt->nodes()[nodeIndex].locked;
+    m_doc->setModified();
+    // Rebuild so the item picks up its new movability, cursor and red tint.
+    updateNetworkNodes();
+}
+
+void MonitorGraphicsView::slotNetworkNodeMoved(NetworkNodeItem *item)
+{
+    NetworkTopology *nt = m_doc->networkTopology();
+
+    // Persist every selected node (group move), not just the dropped one.
+    QList<NetworkNodeItem *> moved;
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi))
+            moved.append(nn);
+    if (item != nullptr && !moved.contains(item))
+        moved.append(item);
+
+    // Snap the dragged node, shift the rest by the same delta.
+    if (m_snapDivisions > 0 && m_cellPixels > 0 && item != nullptr)
+    {
+        const QPointF snapped = snapScenePos(item->pos());
+        const QPointF delta = snapped - item->pos();
+        if (!delta.isNull())
+        {
+            foreach (NetworkNodeItem *nn, moved)
+                nn->setPos(nn->pos() + delta);
+        }
+    }
+
+    bool any = false;
+    foreach (NetworkNodeItem *nn, moved)
+    {
+        const int idx = nn->nodeIndex();
+        if (idx < 0 || idx >= nt->nodes().size())
+            continue;
+        const QPointF mm = pixelsToRealPosition(nn->pos().x(), nn->pos().y());
+        nt->nodes()[idx].placed = true;
+        nt->nodes()[idx].posX = mm.x() / 1000.0;
+        nt->nodes()[idx].posY = mm.y() / 1000.0;
+        any = true;
+    }
+    // Only the links follow: a rebuild here would delete the item whose mouse
+    // release is still being handled.
+    updateNetworkLinks();
+    if (any)
+        m_doc->setModified();
+}
+
 void MonitorGraphicsView::repositionTargetItems()
 {
     if (m_cellPixels == 0)
@@ -4815,6 +5131,7 @@ void MonitorGraphicsView::updateGrid()
     updateTrusses();
     updatePlatforms();
     updatePowerSources();
+    updateNetworkNodes();
     updateTargets();
 }
 
@@ -4913,6 +5230,7 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
         StandItem          *repStand   = nullptr;
         TowerItem          *repTower   = nullptr;
         PowerSourceItem    *repPower   = nullptr;
+        NetworkNodeItem    *repNetwork = nullptr;
         MonitorImageItem   *repImage   = nullptr;
         TargetItem         *repTarget  = nullptr;
 
@@ -4925,6 +5243,7 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
             if (repStand == nullptr)    repStand    = dynamic_cast<StandItem *>(gi);
             if (repTower == nullptr)    repTower    = dynamic_cast<TowerItem *>(gi);
             if (repPower == nullptr)    repPower    = dynamic_cast<PowerSourceItem *>(gi);
+            if (repNetwork == nullptr)  repNetwork  = dynamic_cast<NetworkNodeItem *>(gi);
             if (repImage == nullptr)    repImage    = dynamic_cast<MonitorImageItem *>(gi);
             if (repTarget == nullptr)   repTarget   = dynamic_cast<TargetItem *>(gi);
         }
@@ -4936,6 +5255,7 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
         if (repStand != nullptr)    slotStandMoved(repStand);
         if (repTower != nullptr)    slotTowerMoved(repTower);
         if (repPower != nullptr)    slotPowerSourceMoved(repPower);
+        if (repNetwork != nullptr)  slotNetworkNodeMoved(repNetwork);
         if (repImage != nullptr)    slotImageMoved(repImage);
         if (repTarget != nullptr)   slotTargetMoved(repTarget);
     }
@@ -5197,8 +5517,58 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         emit powerDoubleClicked(quint32(ps->sourceIndex()));
         return;
     }
+    if (auto *nn = dynamic_cast<NetworkNodeItem *>(it))
+    {
+        emit networkDoubleClicked(quint32(nn->nodeIndex()));
+        return;
+    }
 
     QGraphicsView::mouseDoubleClickEvent(event);
+}
+
+static const char *INVENTORY_FID_MIME = "application/x-qlc-fid";
+
+void MonitorGraphicsView::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasFormat(INVENTORY_FID_MIME))
+        event->acceptProposedAction();
+    else
+        QGraphicsView::dragEnterEvent(event);
+}
+
+void MonitorGraphicsView::dragMoveEvent(QDragMoveEvent *event)
+{
+    if (event->mimeData()->hasFormat(INVENTORY_FID_MIME))
+        event->acceptProposedAction();
+    else
+        QGraphicsView::dragMoveEvent(event);
+}
+
+void MonitorGraphicsView::dropEvent(QDropEvent *event)
+{
+    if (!event->mimeData()->hasFormat(INVENTORY_FID_MIME))
+    {
+        QGraphicsView::dropEvent(event);
+        return;
+    }
+    QDataStream s(event->mimeData()->data(INVENTORY_FID_MIME));
+    QList<quint32> fids;
+    while (!s.atEnd())
+    {
+        quint32 fid = 0;
+        s >> fid;
+        if (fid != 0 || fids.isEmpty())
+            fids << fid;
+    }
+    event->acceptProposedAction();
+    if (!fids.isEmpty())
+        emit fixturesDropped(fids, mapToScene(qlcEventPos(event)));
+}
+
+void MonitorGraphicsView::finishFixtureDrop(quint32 fid)
+{
+    if (MonitorFixtureItem *item = m_fixtures.value(fid, nullptr))
+        slotFixtureMoved(item);
 }
 
 void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
@@ -5221,6 +5591,7 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
     else if (auto *twi = dynamic_cast<TowerItem *>(it))       { kind = QStringLiteral("tower");    id = twi->towerId(); }
     else if (auto *tgi = dynamic_cast<TargetItem *>(it))      { kind = QStringLiteral("target");   id = tgi->targetId(); }
     else if (auto *psi = dynamic_cast<PowerSourceItem *>(it)) { kind = QStringLiteral("power");    id = quint32(psi->sourceIndex()); }
+    else if (auto *nni = dynamic_cast<NetworkNodeItem *>(it)) { kind = QStringLiteral("network");  id = quint32(nni->nodeIndex()); }
 
     if (kind.isEmpty())
     {
@@ -5273,6 +5644,7 @@ QList<QPair<QString, quint32> > MonitorGraphicsView::selectedMapObjects() const
         else if (auto *twi = dynamic_cast<TowerItem *>(gi))        out << qMakePair(QStringLiteral("tower"), twi->towerId());
         else if (auto *tgi = dynamic_cast<TargetItem *>(gi))       out << qMakePair(QStringLiteral("target"), tgi->targetId());
         else if (auto *psi = dynamic_cast<PowerSourceItem *>(gi))  out << qMakePair(QStringLiteral("power"), quint32(psi->sourceIndex()));
+        else if (auto *nni = dynamic_cast<NetworkNodeItem *>(gi))  out << qMakePair(QStringLiteral("network"), quint32(nni->nodeIndex()));
     }
     return out;
 }
@@ -5369,6 +5741,11 @@ static QString itemNameOf(Doc *doc, const QString &kind, quint32 id)
         PowerDistribution *pd = doc->powerDistribution();
         return (pd != nullptr && int(id) < pd->sources().size()) ? pd->sources().at(int(id)).name : QString();
     }
+    if (kind == QLatin1String("network"))
+    {
+        NetworkTopology *nt = doc->networkTopology();
+        return (nt != nullptr && int(id) < nt->nodes().size()) ? nt->nodes().at(int(id)).name : QString();
+    }
     return QString();
 }
 
@@ -5395,6 +5772,12 @@ void MonitorGraphicsView::renameItem(const QString &kind, quint32 id, const QStr
         PowerDistribution *pd = m_doc->powerDistribution();
         if (pd != nullptr && int(id) < pd->sources().size()) pd->sources()[int(id)].name = name;
         updatePowerSources();
+    }
+    else if (kind == QLatin1String("network"))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        if (nt != nullptr && int(id) < nt->nodes().size()) nt->nodes()[int(id)].name = name;
+        updateNetworkNodes();
     }
     else if (kind == QLatin1String("image"))
     {
@@ -5633,6 +6016,7 @@ static QString itemNoun(const QString &kind)
     if (kind == QLatin1String("tower"))    return MonitorGraphicsView::tr("Tower");
     if (kind == QLatin1String("target"))   return MonitorGraphicsView::tr("Target");
     if (kind == QLatin1String("power"))    return MonitorGraphicsView::tr("Power Source");
+    if (kind == QLatin1String("network"))  return MonitorGraphicsView::tr("Network Node");
     return MonitorGraphicsView::tr("Fixture");
 }
 
@@ -6006,6 +6390,11 @@ bool MonitorGraphicsView::itemLocked(const QString &kind, quint32 id) const
         PowerDistribution *pd = m_doc->powerDistribution();
         return pd != nullptr && int(id) < pd->sources().size() && pd->sources().at(int(id)).locked;
     }
+    if (kind == QLatin1String("network"))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        return nt != nullptr && int(id) < nt->nodes().size() && nt->nodes().at(int(id)).locked;
+    }
     return false;
 }
 
@@ -6031,6 +6420,13 @@ void MonitorGraphicsView::setItemLocked(const QString &kind, quint32 id, bool lo
             return;
         pd->sources()[int(id)].locked = locked;
     }
+    else if (kind == QLatin1String("network"))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        if (nt == nullptr || int(id) >= nt->nodes().size())
+            return;
+        nt->nodes()[int(id)].locked = locked;
+    }
     else
         return;
     m_doc->setModified();
@@ -6039,6 +6435,8 @@ void MonitorGraphicsView::setItemLocked(const QString &kind, quint32 id, bool lo
         updateTargets();
     else if (kind == QLatin1String("power"))
         updatePowerSources();
+    else if (kind == QLatin1String("network"))
+        updateNetworkNodes();
     m_scene->update();
 }
 
@@ -6050,6 +6448,7 @@ void MonitorGraphicsView::requestDeleteItem(const QString &kind, quint32 id)
     else if (kind == QLatin1String("pipe"))     emit pipeRemoveRequested(id);
     else if (kind == QLatin1String("stand"))    emit standRemoveRequested(id);
     else if (kind == QLatin1String("tower"))    emit towerRemoveRequested(id);
+    else if (kind == QLatin1String("network"))  emit networkRemoveRequested(id);
     else if (kind == QLatin1String("target"))
     {
         if (TargetItem *ti = m_targetItems.value(id, nullptr))
@@ -6915,6 +7314,7 @@ void MonitorGraphicsView::rebuildReachOverlay()
 
 void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
 {
+    scheduleNetworkRuns();
     // ELEVATION drag of a truss-bound fixture: it slides ALONG its truss/bar, so
     // convert the drop delta into a new trussOffset (Front view only).
     if (isElevation() && item != nullptr)
@@ -7416,6 +7816,7 @@ void MonitorGraphicsView::undoLastMove()
         updateTrusses();
         updatePlatforms();
         updatePowerSources();
+        updateNetworkNodes();
         updateTargets();
         m_doc->setModified();
         return;
@@ -7436,6 +7837,7 @@ void MonitorGraphicsView::undoLastMove()
         }
         updatePlatforms();
         updatePowerSources();
+        updateNetworkNodes();
         m_doc->setModified();
         return;
     }

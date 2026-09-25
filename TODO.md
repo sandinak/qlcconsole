@@ -8,6 +8,61 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## ACTIVE: network topology + inventory-first workflow
+
+Branson, 2026-09-23: design the rig from an inventory of unpatched fixtures,
+place and group it in the Studio, and only then backfill real universes --
+patching guided by which ArtNet/sACN node (or wireless receiver) physically
+serves each part of the rig. Two linked designs:
+[NETWORK_CABLING_DESIGN.md](NETWORK_CABLING_DESIGN.md) (the physical network
+model, phases N1-N6) and
+[docs/proposals/inventory-first-workflow.md](docs/proposals/inventory-first-workflow.md)
+(unpatched fixtures, the docked Inventory tree, the bulk Patch view).
+Sequenced: network topology first, then inventory.
+
+- **Done:** N1 engine model (`NetworkTopology`, converter/direct nodes,
+  wireless receivers, XML, `warnings()`); N2 placeable node item in Lighting
+  Studio (drag/lock/layer/group/rename/delete, Add menu); N3 Network Topology
+  dialog (nodes, ports, universe per port, wireless receiver placement, live
+  warnings) -- double-click a node, or Monitor > More > Network Topology...
+- **Next:** N4 run lines + hover stats; N5 reports; N6 proximity-based Patch
+  suggestions; then inventory Phase 1 (`Fixture::isPatched`, the
+  `Doc::addFixture()` unpatched bypass, the two DMX write-path guards) and
+  Phase 2 (Add to Inventory, docked Inventory tree in the Studio, badges,
+  bulk Patch view).
+- **Done 2026-09-24:** inventory Phase 1 + 2 -- `Fixture::isPatched`,
+  `connection`/`ipAddress`, the `Doc::addFixture()` unpatched bypass,
+  `Doc::patchFixture`, DMX write-path guards (inert `FadeChannel` plus every
+  raw-universe writer), `PatchPlanner` (DMX first-fit, one universe per unicast
+  IP), Add to inventory / Inventory tree root / Patch dialog in the Fixture
+  Manager, and a docked Inventory panel in the Studio with drag-onto-truss.
+  `NetworkNode::Direct` removed: DMX vs Network is per fixture. See
+  docs/proposals/inventory-first-workflow.md "What shipped".
+- **Done 2026-09-25:** "Return to inventory" (`Doc::unpatchFixture`, Design mode
+  only, Fixture Manager right-click), unpatched badge on Programming-tab target
+  rows, FixtureRemap carries the staged/connection state, wireless receiver
+  markers with a dashed link on the Studio plot (N3 map gap), and Add Network
+  Node now opens the Network Topology dialog so ports can be added at once.
+- **Done 2026-09-25:** N4 -- cable runs (`NetworkTopology::runs()`, address order,
+  receiver-anchored for wireless) drawn as hoverable polylines in the Studio's
+  Network overlay, with stats, and unserved DMX fixtures flagged.
+- **Done 2026-09-25:** N5 -- `NetworkReport` (nodes, ports used/free, universes
+  carried, longest run, per-port fixtures/channels/run length, network fixtures
+  by IP, unserved fixtures, warnings) as text and CSV; Studio > More > Network
+  Report... shows it with Copy and Save CSV.
+- **Done 2026-09-25:** test coverage pass over everything above. Every added
+  engine line runs under test; new suites `stagedoutput` (every raw DMX writer
+  skips a staged fixture), `networkreport`, `networknodeitem`,
+  `networkreportdialog`, `stagedscreens`, plus additions across the existing
+  ones. Still untested: one-line staged-fixture guards in screens that have no
+  suite (Simple Desk, VC slider/XY pad presets, DMX dump, Connections tree,
+  input/output manager, app.cpp), FixtureRemap (needs the whole App), and
+  `QDrag::exec()` in the inventory panel.
+- **Open (deferred):** equipment catalog for network gear (place a node from a
+  model); N6 proximity-guided Patch.
+
+---
+
 ## IDEA (not started): no-light zones -- warn when a look lights the audience
 
 Branson, 2026-09-17: "if we create a scene with lights that point an area that

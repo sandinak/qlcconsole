@@ -69,6 +69,7 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "truss.h"
 #include "doc.h"
 #include "powerdistribution.h"
+#include "networktopology.h"
 #include "stageplatform.h"
 #include "pipe.h"
 #include "stand.h"
@@ -387,6 +388,18 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
         d.groupId = src.groupId;
         out << d;
     }
+    NetworkTopology *nt = m_doc->networkTopology();
+    for (int n = 0; n < nt->nodes().size(); n++)
+    {
+        const NetworkNode &node = nt->nodes().at(n);
+        ItemDesc d;
+        d.kind    = QStringLiteral("network");
+        d.id      = quint32(n);
+        d.name    = node.name.isEmpty() ? tr("Network %1").arg(n) : node.name;
+        d.layerId = node.layerId;
+        d.groupId = node.groupId;
+        out << d;
+    }
     foreach (const MonitorProperties::MonitorImage &img, m_props->images())
     {
         ItemDesc d;
@@ -503,6 +516,7 @@ QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) con
     if (kind == QStringLiteral("stand"))    return glyphIcon(QStringLiteral("\xF0\x9F\x93\x8D"), QColor(150, 200, 235)); // 📍 stand
     if (kind == QStringLiteral("tower"))    return glyphIcon(QStringLiteral("\xF0\x9F\x8F\xAF"), QColor(150, 200, 235)); // 🏯 tower
     if (kind == QStringLiteral("power"))    return glyphIcon(QStringLiteral("\xE2\x9A\xA1"), QColor(235, 185, 0));       // ⚡
+    if (kind == QStringLiteral("network"))  return glyphIcon(QStringLiteral("\xF0\x9F\x8C\x90"), QColor(70, 140, 220));  // 🌐 network node
     if (kind == QStringLiteral("target"))   return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xAF"), QColor(255, 180, 0));    // 🎯 aim target
     if (kind == QStringLiteral("image"))    return QIcon(":/image.png");
     return style()->standardIcon(QStyle::SP_FileIcon);
@@ -1191,6 +1205,7 @@ bool MonitorLayersPanel::kindLockable(const QString &kind) const
 {
     return kind == QStringLiteral("truss") || kind == QStringLiteral("platform")
         || kind == QStringLiteral("image") || kind == QStringLiteral("power")
+        || kind == QStringLiteral("network")
         || kind == QStringLiteral("pipe")  || kind == QStringLiteral("stand")
         || kind == QStringLiteral("tower") || kind == QStringLiteral("target");
 }
@@ -1215,6 +1230,11 @@ bool MonitorLayersPanel::objectLocked(const QString &kind, quint32 id) const
     {
         PowerDistribution *pd = m_doc->powerDistribution();
         return int(id) < pd->sources().size() && pd->sources().at(int(id)).locked;
+    }
+    if (kind == QStringLiteral("network"))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        return int(id) < nt->nodes().size() && nt->nodes().at(int(id)).locked;
     }
     return false;
 }
@@ -1244,6 +1264,12 @@ void MonitorLayersPanel::setObjectLocked(const QString &kind, quint32 id, bool l
         PowerDistribution *pd = m_doc->powerDistribution();
         if (int(id) < pd->sources().size())
             pd->sources()[int(id)].locked = locked;
+    }
+    else if (kind == QStringLiteral("network"))
+    {
+        NetworkTopology *nt = m_doc->networkTopology();
+        if (int(id) < nt->nodes().size())
+            nt->nodes()[int(id)].locked = locked;
     }
     else
         return;

@@ -89,6 +89,7 @@ add_library(${module_name}
     monitor/monitorlayerspanel.cpp monitor/monitorlayerspanel.h
     monitor/monitorruler.cpp monitor/monitorruler.h
     monitor/monitorimageitem.cpp monitor/monitorimageitem.h
+    monitor/monitorinventorypanel.cpp monitor/monitorinventorypanel.h
     monitor/monitorlayout.cpp monitor/monitorlayout.h
     monitor/trussitem.cpp monitor/trussitem.h
     monitor/platformitem.cpp monitor/platformitem.h
@@ -96,6 +97,7 @@ add_library(${module_name}
     monitor/standitem.cpp monitor/standitem.h
     monitor/toweritem.cpp monitor/toweritem.h
     monitor/powersourceitem.cpp monitor/powersourceitem.h
+    monitor/networknodeitem.cpp monitor/networknodeitem.h
     monitor/riserfaceeditor.cpp monitor/riserfaceeditor.h
     monitor/studiogroupeditor.cpp monitor/studiogroupeditor.h
     monitor/studiotemplate.cpp monitor/studiotemplate.h
@@ -125,6 +127,8 @@ add_library(${module_name}
     lookeditor.cpp lookeditor.h
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
+    networkreportdialog.cpp networkreportdialog.h
+    networktopologydialog.cpp networktopologydialog.h
     patchinventorydialog.cpp patchinventorydialog.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h

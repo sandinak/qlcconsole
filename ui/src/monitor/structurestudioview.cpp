@@ -5083,7 +5083,14 @@ bool StructureStudioView::event(QEvent *e)
         QNativeGestureEvent *g = static_cast<QNativeGestureEvent *>(e);
         if (g->gestureType() == Qt::ZoomNativeGesture)
         {
+            // QNativeGestureEvent doesn't fit qlceventpos.h's shared template --
+            // Qt5 spells the QPointF accessor localPos(), not posF() like the
+            // event types that header already covers.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
             zoomAt(g->position(), m_scale * (1.0 + g->value()));
+#else
+            zoomAt(g->localPos(), m_scale * (1.0 + g->value()));
+#endif
             return true;
         }
     }

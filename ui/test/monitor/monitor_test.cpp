@@ -18,10 +18,12 @@
 */
 
 #include <QtTest>
+#include <memory>
 #include <QGraphicsItem>
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QApplication>
+#include <QLabel>
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -32,6 +34,7 @@
 #include <QPushButton>
 #include <QToolButton>
 #include <QMenu>
+#include <QSettings>
 
 #define protected public
 #define private public
@@ -40,6 +43,12 @@
 #include "monitorfixtureitem.h"
 #include "structurestudioview.h"
 #include "monitorlayerspanel.h"
+#include "monitorinventorypanel.h"
+#include "networktopologydialog.h"
+#include "networkreportdialog.h"
+#include "monitorfixture.h"
+#include "networknodeitem.h"
+#include "networktopology.h"
 #include "platformitem.h"
 #include "studiotemplate.h"
 #include <QTreeWidgetItemIterator>
@@ -3945,67 +3954,80 @@ void Monitor_Test::aBarBecomesItsOwnContainerInTheLayersList()
     props->setFixtureGroup(onTruss->id(), gid);
     props->setFixtureGroup(onBar->id(), gid);
 
-    MonitorGraphicsView view(doc);
-    view.resize(900, 700);
-    view.setGridMetrics(1000.0);
-    view.setGridSize(QSize(10, 8));
-    view.updateTrusses();
-    view.addFixture(onTruss->id(), QPointF(3000.0, 3000.0));
-    view.addFixture(onBar->id(), QPointF(2500.0, 3145.0));
-    view.ensureGroupRegistry();      // the exact pass that runs on file load
-
-    // The group must still be anchored to the TRUSS -- not fallen back to
-    // an unanchored "frame" folder just because a bar shares its group.
-    QCOMPARE(t1->groupId(), gid);
-    const MonitorProperties::MonitorGroup g = props->group(gid);
-    QVERIFY2(g.anchorKind == QStringLiteral("truss") && g.anchorId == t1->id(),
-             qPrintable(QString("T-1's group anchored to kind=\"%1\" id=%2 "
-                                "(expected truss/%3) -- it fell back to a "
-                                "plain frame folder")
-                        .arg(g.anchorKind).arg(g.anchorId).arg(t1->id())));
-
-    MonitorLayersPanel panel(doc, &view);
-    panel.reload();
-
-    QTreeWidgetItem *groupRow = nullptr, *barRow = nullptr;
-    QTreeWidgetItem *onTrussRow = nullptr, *onBarRow = nullptr;
-    QTreeWidgetItemIterator it(panel.m_tree);
-    for (; *it != nullptr; ++it)
+    // Scoped: view/panel must be torn down before `delete doc` below runs --
+    // MonitorGraphicsView::~MonitorGraphicsView() walks its MonitorFixtureItems,
+    // and each one dereferences its Doc* on destruction (clearFixtures() ->
+    // ~MonitorFixtureItem() -> m_doc->fixture()). Every other test in this file
+    // that builds a MonitorGraphicsView on top of a `delete doc` ending scopes it
+    // the same way; this one didn't, so `delete doc` freed the Doc while `view`
+    // was still alive, and its destructor ran that lookup through a dangling
+    // pointer -- a real use-after-free, just one that happened not to crash
+    // under Qt6's allocator. It reproducibly segfaults under Qt5 (confirmed on
+    // a clean checkout, independent of any unrelated change) because there
+    // Doc's freed memory gets reused/unmapped instead of sitting untouched.
     {
-        QTreeWidgetItem *row = *it;
-        const int type = row->data(0, Qt::UserRole).toInt();
-        if (type == int(MonitorLayersPanel::NodeGroup)
-            && row->data(0, Qt::UserRole + 1).toUInt() == gid)
-            groupRow = row;
-        else if (type == int(MonitorLayersPanel::NodeItem)
-                 && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("truss")
-                 && row->data(0, Qt::UserRole + 1).toUInt() == bar->id())
-            barRow = row;
-        else if (type == int(MonitorLayersPanel::NodeItem)
-                 && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("fixture")
-                 && row->data(0, Qt::UserRole + 1).toUInt() == onTruss->id())
-            onTrussRow = row;
-        else if (type == int(MonitorLayersPanel::NodeItem)
-                 && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("fixture")
-                 && row->data(0, Qt::UserRole + 1).toUInt() == onBar->id())
-            onBarRow = row;
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updateTrusses();
+        view.addFixture(onTruss->id(), QPointF(3000.0, 3000.0));
+        view.addFixture(onBar->id(), QPointF(2500.0, 3145.0));
+        view.ensureGroupRegistry();      // the exact pass that runs on file load
+
+        // The group must still be anchored to the TRUSS -- not fallen back to
+        // an unanchored "frame" folder just because a bar shares its group.
+        QCOMPARE(t1->groupId(), gid);
+        const MonitorProperties::MonitorGroup g = props->group(gid);
+        QVERIFY2(g.anchorKind == QStringLiteral("truss") && g.anchorId == t1->id(),
+                 qPrintable(QString("T-1's group anchored to kind=\"%1\" id=%2 "
+                                    "(expected truss/%3) -- it fell back to a "
+                                    "plain frame folder")
+                            .arg(g.anchorKind).arg(g.anchorId).arg(t1->id())));
+
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
+
+        QTreeWidgetItem *groupRow = nullptr, *barRow = nullptr;
+        QTreeWidgetItem *onTrussRow = nullptr, *onBarRow = nullptr;
+        QTreeWidgetItemIterator it(panel.m_tree);
+        for (; *it != nullptr; ++it)
+        {
+            QTreeWidgetItem *row = *it;
+            const int type = row->data(0, Qt::UserRole).toInt();
+            if (type == int(MonitorLayersPanel::NodeGroup)
+                && row->data(0, Qt::UserRole + 1).toUInt() == gid)
+                groupRow = row;
+            else if (type == int(MonitorLayersPanel::NodeItem)
+                     && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("truss")
+                     && row->data(0, Qt::UserRole + 1).toUInt() == bar->id())
+                barRow = row;
+            else if (type == int(MonitorLayersPanel::NodeItem)
+                     && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("fixture")
+                     && row->data(0, Qt::UserRole + 1).toUInt() == onTruss->id())
+                onTrussRow = row;
+            else if (type == int(MonitorLayersPanel::NodeItem)
+                     && row->data(0, Qt::UserRole + 2).toString() == QStringLiteral("fixture")
+                     && row->data(0, Qt::UserRole + 1).toUInt() == onBar->id())
+                onBarRow = row;
+        }
+
+        QVERIFY2(groupRow != nullptr, "T-1's group has no row at all");
+        QVERIFY2(groupRow->text(0).contains(QStringLiteral("on truss")),
+                 qPrintable(QString("T-1's row does not read as a truss: \"%1\"")
+                            .arg(groupRow->text(0))));
+        QVERIFY2(barRow != nullptr, "Bar 1 has no row of its own under T-1");
+        QVERIFY2(onTrussRow != nullptr && onBarRow != nullptr,
+                 "one of the two fixtures has no row at all");
+
+        QVERIFY2(onTrussRow->parent() == groupRow,
+                 "the fixture mounted directly on T-1 is not a direct child of T-1's row");
+        QVERIFY2(onBarRow->parent() == barRow,
+                 qPrintable(QString("the fixture mounted on Bar 1 sits under \"%1\", not "
+                                    "under Bar 1's own row -- it's a flat sibling instead "
+                                    "of nested under the bar")
+                            .arg(onBarRow->parent() ? onBarRow->parent()->text(0) : QStringLiteral("(no parent)"))));
     }
-
-    QVERIFY2(groupRow != nullptr, "T-1's group has no row at all");
-    QVERIFY2(groupRow->text(0).contains(QStringLiteral("on truss")),
-             qPrintable(QString("T-1's row does not read as a truss: \"%1\"")
-                        .arg(groupRow->text(0))));
-    QVERIFY2(barRow != nullptr, "Bar 1 has no row of its own under T-1");
-    QVERIFY2(onTrussRow != nullptr && onBarRow != nullptr,
-             "one of the two fixtures has no row at all");
-
-    QVERIFY2(onTrussRow->parent() == groupRow,
-             "the fixture mounted directly on T-1 is not a direct child of T-1's row");
-    QVERIFY2(onBarRow->parent() == barRow,
-             qPrintable(QString("the fixture mounted on Bar 1 sits under \"%1\", not "
-                                "under Bar 1's own row -- it's a flat sibling instead "
-                                "of nested under the bar")
-                        .arg(onBarRow->parent() ? onBarRow->parent()->text(0) : QStringLiteral("(no parent)"))));
 
     delete doc;
 }
@@ -4260,8 +4282,10 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
     // The Layers list agrees: the fixture sits directly under the truss's row.
     layers->reload();
     QTreeWidgetItem *groupRow = nullptr, *fixtureRow = nullptr;
-    QTreeWidgetItemIterator it(layers->m_tree);
-    for (; *it != nullptr; ++it)
+    // Iterator declared in the for-init so it dies with the loop: Qt5's
+    // ~QTreeWidgetItemIterator() unregisters from the tree's model, so one that
+    // outlived `delete mon` below touched a freed model and segfaulted.
+    for (QTreeWidgetItemIterator it(layers->m_tree); *it != nullptr; ++it)
     {
         QTreeWidgetItem *row = *it;
         const int type = row->data(0, Qt::UserRole).toInt();
@@ -10395,4 +10419,1250 @@ void Monitor_Test::aHeadThatCanLightNothingSaysWhy()
     }
 
     delete doc;
+}
+
+
+namespace
+{
+/* A Monitor on a deterministic canvas, torn down by RAII so a failed QVERIFY
+ * cannot leak it (or free the Doc out from under it). */
+struct InventoryRig
+{
+    QWidget parent;
+    Monitor *mon = nullptr;
+    MonitorGraphicsView *gv = nullptr;
+
+    ~InventoryRig() { delete mon; }
+
+    bool build(Doc *doc)
+    {
+        mon = new Monitor(&parent, doc);
+        gv = mon->findChild<MonitorGraphicsView *>();
+        if (gv == nullptr)
+            return false;
+        gv->resize(1230, 760);
+        gv->setSnapDivisions(0);
+        gv->setGridMetrics(1000.0);
+        gv->setGridSize(QSize(40, 24));
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        return gv->m_cellPixels > 0;
+    }
+};
+
+/* The Doc is shared by every test in this file, so anything a test adds must go
+ * again -- a fixture left at 0/0 makes the NEXT test's addFixture() overlap and
+ * fail for a reason that has nothing to do with it. Declared before the rig so
+ * it is destroyed after the Monitor that still references the fixtures. */
+struct FixtureCleanup
+{
+    Doc *doc;
+    QList<quint32> ids;
+    explicit FixtureCleanup(Doc *d) : doc(d) {}
+    ~FixtureCleanup()
+    {
+        foreach (quint32 id, ids)
+            doc->deleteFixture(id);
+    }
+};
+
+Fixture *stagedFixture(Doc *doc, const char *name, FixtureCleanup *cleanup)
+{
+    Fixture *f = new Fixture(doc);
+    f->setName(name);
+    f->setChannels(3);
+    f->setPatched(false);
+    if (!doc->addFixture(f))
+        return nullptr;
+    cleanup->ids << f->id();
+    return f;
+}
+
+int inventoryLeaves(MonitorInventoryPanel *panel, QStringList *names = nullptr)
+{
+    int n = 0;
+    for (QTreeWidgetItemIterator it(panel->tree()); *it != nullptr; ++it)
+    {
+        if ((*it)->data(0, Qt::UserRole).isValid())
+        {
+            n++;
+            if (names != nullptr)
+                names->append((*it)->text(0));
+        }
+    }
+    return n;
+}
+
+/* The middle of the plot's viewport, in millimetres. The Monitor is never shown
+ * in a test, so its layout squeezes the viewport to a few dozen pixels: a drop
+ * has to land inside it or Qt refuses the event, so aim at the centre rather than
+ * at a fixed coordinate. */
+QPointF viewportCentreMm(MonitorGraphicsView *gv)
+{
+    const QPointF sp = gv->mapToScene(gv->viewport()->rect().center());
+    return gv->pixelsToRealPosition(sp.x(), sp.y());
+}
+
+bool dropFixtureAtCentre(MonitorGraphicsView *gv, quint32 fid)
+{
+    QByteArray data;
+    QDataStream s(&data, QIODevice::WriteOnly);
+    s << fid;
+    QMimeData mime;
+    mime.setData(QStringLiteral("application/x-qlc-fid"), data);
+    QDropEvent ev(QPointF(gv->viewport()->rect().center()), Qt::CopyAction, &mime,
+                  Qt::LeftButton, Qt::NoModifier);
+    // Qt only delivers a Drop to a widget that has accepted the DragEnter, so
+    // play the sequence a real drag makes.
+    QDragEnterEvent en(gv->viewport()->rect().center(), Qt::CopyAction, &mime,
+                       Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(gv->viewport(), &en);
+    QApplication::sendEvent(gv->viewport(), &ev);
+    return ev.isAccepted();
+}
+} // namespace
+
+void Monitor_Test::inventoryPanelListsOnlyStagedFixturesNotOnThePlot()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *staged = stagedFixture(m_doc, "Staged Bar", &cleanup);
+    QVERIFY(staged != nullptr);
+    Fixture *patched = new Fixture(m_doc);
+    patched->setName("Patched Bar");
+    patched->setChannels(3);
+    QVERIFY(m_doc->addFixture(patched));
+    cleanup.ids << patched->id();
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    MonitorInventoryPanel *panel = rig.mon->m_inventoryPanel;
+    QVERIFY(panel != nullptr);
+    panel->reload();
+
+    QStringList names;
+    QCOMPARE(inventoryLeaves(panel, &names), 1);
+    QCOMPARE(names.first(), QString("Staged Bar"));
+
+    // Once it is on the plot it has left the queue.
+    rig.gv->addFixture(staged->id(), QPointF(0, 0));
+    panel->reload();
+    QCOMPARE(inventoryLeaves(panel), 0);
+}
+
+void Monitor_Test::droppingAnInventoryFixtureOnThePlotPlacesIt()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *staged = stagedFixture(m_doc, "Dropped Bar", &cleanup);
+    QVERIFY(staged != nullptr);
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.mon->m_inventoryPanel->reload();
+    QCOMPARE(inventoryLeaves(rig.mon->m_inventoryPanel), 1);
+
+    const QPointF at = viewportCentreMm(rig.gv);
+    QVERIFY(dropFixtureAtCentre(rig.gv, staged->id()));
+
+    QVERIFY2(rig.gv->fixturesID().contains(staged->id()), "the drop did not put the fixture on the plot");
+    const QVector3D pos = m_doc->monitorProperties()->fixturePosition(staged->id(), 0, 0);
+    QVERIFY2(qAbs(pos.x() - at.x()) < 200.0 && qAbs(pos.y() - at.y()) < 200.0,
+             qPrintable(QString("placed at (%1, %2), dropped at (%3, %4)")
+                        .arg(pos.x()).arg(pos.y()).arg(at.x()).arg(at.y())));
+    QVERIFY2(!staged->isPatched(), "placing a fixture must not patch it");
+    QCOMPARE(inventoryLeaves(rig.mon->m_inventoryPanel), 0);
+}
+
+void Monitor_Test::droppingAnInventoryFixtureOnATrussMountsIt()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureCleanup cleanup(m_doc);
+    Fixture *staged = stagedFixture(m_doc, "Truss Mover", &cleanup);
+    QVERIFY(staged != nullptr);
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    // A truss running through the middle of the viewport, where the drop lands.
+    const QPointF c = viewportCentreMm(rig.gv);
+    Truss *t = props->addTruss();
+    t->setName("InventoryBar");
+    t->setOrigin(QVector3D(float(c.x() / 1000.0 - 1.5), float(c.y() / 1000.0), 4.0f));   // metres
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(3.0f);
+    t->setWidth(0.3f);
+    rig.gv->updateTrusses();
+    rig.mon->m_inventoryPanel->reload();
+
+    QVERIFY(dropFixtureAtCentre(rig.gv, staged->id()));
+
+    const FixtureRigProps rp = props->fixtureRigProps(staged->id());
+    QVERIFY2(rp.trussId == t->id(), "dropped on the truss but did not mount on it");
+    QVERIFY(!staged->isPatched());
+
+    props->removeTruss(t->id());
+}
+
+void Monitor_Test::aStagedFixtureOnThePlotNeverClaimsAUniverse()
+{
+    FixtureCleanup cleanup(m_doc);
+    // A real fixture at the very address a staged one's placeholder would claim.
+    Fixture *real = new Fixture(m_doc);
+    real->setName("Real");
+    real->setChannels(3);
+    QVERIFY(m_doc->addFixture(real));
+    cleanup.ids << real->id();
+    Fixture *staged = stagedFixture(m_doc, "Staged", &cleanup);
+    QVERIFY(staged != nullptr);
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.gv->addFixture(real->id(), QPointF(1000, 1000));
+    rig.gv->addFixture(staged->id(), QPointF(4000, 4000));
+
+    // DMX overlay: the staged one is not "universe 1", and neither fixture is
+    // reported as clashing (the placeholder 0/0 overlaps the real one's range).
+    rig.mon->applyMapView(Monitor::ViewDMX);
+    MonitorFixtureItem *si = rig.gv->fixtureItemForId(staged->id());
+    MonitorFixtureItem *ri = rig.gv->fixtureItemForId(real->id());
+    QVERIFY(si != nullptr && ri != nullptr);
+    QVERIFY2(si->toolTip().contains("Unpatched"), qPrintable(si->toolTip()));
+    QVERIFY2(!ri->toolTip().contains("clash"), qPrintable(ri->toolTip()));
+    QVERIFY2(ri->toolTip().contains("Universe 1"), qPrintable(ri->toolTip()));
+
+    // Network overlay says the same.
+    rig.mon->applyMapView(Monitor::ViewNet);
+    QVERIFY2(si->toolTip().contains("Unpatched"), qPrintable(si->toolTip()));
+
+    rig.mon->applyMapView(Monitor::ViewNormal);
+}
+
+void Monitor_Test::locateAndResetLeaveAStagedFixtureAlone()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *staged = stagedFixture(m_doc, "Staged", &cleanup);
+    QVERIFY(staged != nullptr);
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    // Locate starts a session that flashes the fixture's DMX; for a staged one
+    // there is nothing to flash, so no session may start.
+    rig.mon->locateFixture(staged->id());
+    QVERIFY2(rig.mon->m_locateSessions.isEmpty(), "Locate started a DMX session for a staged fixture");
+    rig.mon->resetFixture(staged->id());        // must simply return
+}
+
+namespace
+{
+/* The topology is document-wide and the Doc is shared by every test here. */
+struct TopologyCleanup
+{
+    Doc *doc;
+    explicit TopologyCleanup(Doc *d) : doc(d) {}
+    ~TopologyCleanup() { doc->networkTopology()->reset(); }
+};
+}
+
+void Monitor_Test::wirelessReceiversAreDrawnWithALinkToTheirTransmitter()
+{
+    TopologyCleanup topo(m_doc);
+    NetworkNode tx;
+    tx.name = "Beach TX";
+    tx.transport = NetworkNode::WirelessDMX;
+    tx.placed = true;
+    tx.posX = 1.0;
+    tx.posY = 1.0;
+    NetworkPort p;
+    p.universe = 3;
+    p.receiver.name = "Rig RX A";
+    p.receiver.placed = true;
+    p.receiver.posX = 8.0;
+    p.receiver.posY = 6.0;
+    NetworkPort unplaced;                       // a second port with no receiver yet
+    tx.ports << p << unplaced;
+    m_doc->networkTopology()->nodes() << tx;
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.gv->updateNetworkNodes();
+
+    QCOMPARE(rig.gv->m_networkNodeItems.size(), 1);
+    QCOMPARE(rig.gv->m_networkReceiverItems.size(), 1);     // only the placed one
+    QCOMPARE(rig.gv->m_networkLinks.size(), 1);
+
+    NetworkNodeItem *node = rig.gv->m_networkNodeItems.first();
+    NetworkReceiverItem *rx = rig.gv->m_networkReceiverItems.first();
+    QCOMPARE(rx->nodeIndex(), 0);
+    QCOMPARE(rx->portIndex(), 0);
+
+    // The receiver sits at ITS position, not the transmitter's.
+    const QPointF want = rig.gv->realPositionToPixels(8000.0, 6000.0);
+    QVERIFY2((rx->pos() - want).manhattanLength() < 3.0,
+             qPrintable(QString("receiver drawn at (%1,%2), expected (%3,%4)")
+                        .arg(rx->pos().x()).arg(rx->pos().y()).arg(want.x()).arg(want.y())));
+    QVERIFY((rx->pos() - node->pos()).manhattanLength() > 20.0);
+
+    // The link joins the two.
+    QGraphicsLineItem *ln = rig.gv->m_networkLinks.first();
+    QVERIFY((ln->line().p1() - node->centre()).manhattanLength() < 3.0);
+    QVERIFY((ln->line().p2() - rx->pos()).manhattanLength() < 3.0);
+
+    // Drag the transmitter: the link follows without a rebuild.
+    node->setPos(node->pos() + QPointF(40.0, 30.0));
+    rig.gv->slotNetworkNodeMoved(node);
+    QVERIFY2((ln->line().p1() - node->centre()).manhattanLength() < 3.0,
+             "the link did not follow the dragged transmitter");
+    QVERIFY((ln->line().p2() - rx->pos()).manhattanLength() < 3.0);
+}
+
+void Monitor_Test::aWiredNodeDrawsNoReceiverMarkers()
+{
+    TopologyCleanup topo(m_doc);
+    NetworkNode n;
+    n.name = "SR Node";
+    n.placed = true;
+    NetworkPort p;
+    p.universe = 0;
+    p.receiver.placed = true;       // meaningless on a wired node; must be ignored
+    n.ports << p;
+    m_doc->networkTopology()->nodes() << n;
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.gv->updateNetworkNodes();
+    QCOMPARE(rig.gv->m_networkNodeItems.size(), 1);
+    QCOMPARE(rig.gv->m_networkReceiverItems.size(), 0);
+    QCOMPARE(rig.gv->m_networkLinks.size(), 0);
+}
+
+static Fixture *stagedWithModel(Doc *doc, const char *manuf, const char *model, const char *name,
+                                QList<quint32> *ids)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(manuf);
+    def->setModel(model);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Std");
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Dimmer");
+    ch->setGroup(QLCChannel::Intensity);
+    def->addChannel(ch);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    Fixture *f = new Fixture(doc);
+    f->setFixtureDefinition(def, mode);
+    f->setName(name);
+    f->setPatched(false);
+    if (!doc->addFixture(f))
+        return nullptr;
+    ids->append(f->id());
+    return f;
+}
+
+void Monitor_Test::inventoryPanelIsOrganisedByManufacturerAndModel()
+{
+    FixtureCleanup cleanup(m_doc);
+    QVERIFY(stagedWithModel(m_doc, "Robe", "Pointe", "Pointe 2", &cleanup.ids));
+    QVERIFY(stagedWithModel(m_doc, "Martin", "MAC Viper", "Viper 1", &cleanup.ids));
+    QVERIFY(stagedWithModel(m_doc, "Robe", "Pointe", "Pointe 1", &cleanup.ids));
+    QVERIFY(stagedWithModel(m_doc, "Robe", "Robin 600", "Robin 1", &cleanup.ids));
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    MonitorInventoryPanel *panel = rig.mon->m_inventoryPanel;
+    panel->reload();
+    InventoryTree *tree = panel->tree();
+
+    QCOMPARE(tree->topLevelItemCount(), 2);
+    QTreeWidgetItem *martin = tree->topLevelItem(0);
+    QTreeWidgetItem *robe = tree->topLevelItem(1);
+    QCOMPARE(martin->text(0), QString("Martin (1)"));
+    QCOMPARE(robe->text(0), QString("Robe (3)"));
+    QCOMPARE(robe->child(0)->text(0), QString("Pointe (2)"));
+    QCOMPARE(robe->child(1)->text(0), QString("Robin 600 (1)"));
+    QCOMPARE(robe->child(0)->child(0)->text(0), QString("Pointe 1"));
+
+    // Dragging a manufacturer carries all three Robe fixtures; a model, its two.
+    tree->clearSelection();
+    robe->setSelected(true);
+    QCOMPARE(tree->selectedFixtureIds().size(), 3);
+    tree->clearSelection();
+    robe->child(0)->setSelected(true);
+    QCOMPARE(tree->selectedFixtureIds().size(), 2);
+
+    // The filter narrows every level, dropping folders that end up empty.
+    panel->m_filter->setText("viper");
+    QCOMPARE(tree->topLevelItemCount(), 1);
+    QCOMPARE(tree->topLevelItem(0)->text(0), QString("Martin (1)"));
+}
+
+void Monitor_Test::inventoryPanelKeepsFoldersCollapsedAcrossAReload()
+{
+    FixtureCleanup cleanup(m_doc);
+    QVERIFY(stagedWithModel(m_doc, "Robe", "Pointe", "Pointe 1", &cleanup.ids));
+    QVERIFY(stagedWithModel(m_doc, "Robe", "Robin 600", "Robin 1", &cleanup.ids));
+    QVERIFY(stagedWithModel(m_doc, "Martin", "MAC Viper", "Viper 1", &cleanup.ids));
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    MonitorInventoryPanel *panel = rig.mon->m_inventoryPanel;
+    panel->reload();
+    InventoryTree *tree = panel->tree();
+    QTreeWidgetItem *martin = tree->topLevelItem(0);
+    QTreeWidgetItem *robe = tree->topLevelItem(1);
+    QVERIFY(martin->isExpanded() && robe->isExpanded() && robe->child(1)->isExpanded());
+
+    martin->setExpanded(false);                        // a manufacturer...
+    robe->child(1)->setExpanded(false);                // ...and one model under another
+    panel->reload();
+
+    martin = tree->topLevelItem(0);
+    robe = tree->topLevelItem(1);
+    QVERIFY(!martin->isExpanded());
+    QVERIFY(robe->isExpanded());
+    QVERIFY(robe->child(0)->isExpanded());
+    QVERIFY(!robe->child(1)->isExpanded());
+}
+
+void Monitor_Test::inventoryPanelCountsNetworkFixtures()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *dmx = stagedFixture(m_doc, "Wired Bar", &cleanup);
+    Fixture *net = stagedFixture(m_doc, "Fence 1", &cleanup);
+    QVERIFY(dmx != nullptr && net != nullptr);
+    net->setConnection(Fixture::Network);
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    MonitorInventoryPanel *panel = rig.mon->m_inventoryPanel;
+    panel->reload();
+    QVERIFY2(panel->m_count->text().contains("2 waiting") && panel->m_count->text().contains("1 network"),
+             qPrintable(panel->m_count->text()));
+    QStringList names;
+    inventoryLeaves(panel, &names);
+    QVERIFY2(names.contains("Fence 1  [network]"), qPrintable(names.join(" | ")));
+}
+
+void Monitor_Test::aDragFromTheInventoryCarriesEverySelectedFixture()
+{
+    FixtureCleanup cleanup(m_doc);
+    QVERIFY(stagedWithModel(m_doc, "Robe", "Pointe", "Pointe 1", &cleanup.ids));
+    QVERIFY(stagedWithModel(m_doc, "Robe", "Pointe", "Pointe 2", &cleanup.ids));
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    MonitorInventoryPanel *panel = rig.mon->m_inventoryPanel;
+    panel->reload();
+    InventoryTree *tree = panel->tree();
+
+    // Nothing selected: no drag starts (and nothing blocks).
+    tree->clearSelection();
+    tree->startDrag(Qt::CopyAction);
+
+    tree->topLevelItem(0)->setSelected(true);          // the manufacturer: both Pointes
+    const QList<quint32> ids = tree->selectedFixtureIds();
+    QCOMPARE(ids.size(), 2);
+    std::unique_ptr<QMimeData> mime(InventoryTree::fixtureMime(ids));
+    QVERIFY(mime->hasFormat("application/x-qlc-fid"));
+
+    // What the plot receives is what a drop of that payload places.
+    QDragEnterEvent en(rig.gv->viewport()->rect().center(), Qt::CopyAction, mime.get(),
+                       Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(rig.gv->viewport(), &en);
+    QDropEvent ev(QPointF(rig.gv->viewport()->rect().center()), Qt::CopyAction, mime.get(),
+                  Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(rig.gv->viewport(), &ev);
+    QVERIFY(ev.isAccepted());
+    for (quint32 id : ids)
+        QVERIFY2(rig.gv->fixturesID().contains(id), qPrintable(QString("fixture %1 not placed").arg(id)));
+
+    panel->reload();
+    QCOMPARE(inventoryLeaves(panel), 0);
+}
+
+namespace
+{
+/* Run @p look against the next modal dialog, then reject/close it whatever
+ * @p look found -- an assert inside it must not leave exec() blocking. */
+void inspectModal(const std::function<void(QWidget *)> &look)
+{
+    QTimer::singleShot(0, [look]() {
+        QWidget *modal = QApplication::activeModalWidget();
+        QVERIFY2(modal != nullptr, "no modal dialog opened");
+        look(modal);
+        if (QDialog *d = qobject_cast<QDialog *>(modal))
+            d->reject();
+        else
+            modal->close();
+    });
+}
+
+/* Answer the next QMessageBox with @p answer, recording its text. */
+void answerMessageBox(QMessageBox::StandardButton answer, QString *text = nullptr)
+{
+    QTimer::singleShot(0, [answer, text]() {
+        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QVERIFY2(box != nullptr, "no message box opened");
+        if (text != nullptr)
+            *text = box->text();
+        QAbstractButton *b = box->button(answer);
+        if (b != nullptr)
+            b->click();
+        else
+            box->close();
+    });
+}
+
+QPushButton *buttonWithText(QWidget *w, const QString &text)
+{
+    foreach (QPushButton *b, w->findChildren<QPushButton *>())
+        if (b->text() == text)
+            return b;
+    return nullptr;
+}
+
+bool hasLabel(QWidget *w, const QString &text)
+{
+    foreach (QLabel *l, w->findChildren<QLabel *>())
+        if (l->text() == text)
+            return true;
+    return false;
+}
+} // namespace
+
+void Monitor_Test::theInventoryButtonShowsAndHidesThePanel()
+{
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    QAction *act = rig.mon->m_inventoryAction;
+    MonitorInventoryPanel *panel = rig.mon->m_inventoryPanel;
+    QVERIFY(act != nullptr && panel != nullptr);
+
+    act->setChecked(true);
+    QVERIFY(!panel->isHidden());
+    QCOMPARE(QSettings().value("monitor/showInventory").toBool(), true);
+
+    emit panel->closeRequested();                      // the panel's own x
+    QVERIFY(!act->isChecked());
+    QVERIFY(panel->isHidden());
+    QCOMPARE(QSettings().value("monitor/showInventory").toBool(), false);
+}
+
+void Monitor_Test::addToInventoryFromTheStudioShowsTheNewFixture()
+{
+    FixtureCleanup cleanup(m_doc);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.mon->m_inventoryAction->setChecked(false);
+
+    // Cancelled: nothing made, panel left as it was.
+    inspectModal([](QWidget *) {});
+    rig.mon->slotAddToInventory();
+    QVERIFY(!rig.mon->m_inventoryAction->isChecked());
+
+    driveDialog([](QWidget *) { return true; });
+    rig.mon->slotAddToInventory();
+    foreach (Fixture *f, m_doc->fixtures())
+        if (!f->isPatched())
+            cleanup.ids << f->id();
+    QCOMPARE(cleanup.ids.size(), 1);
+    QVERIFY2(rig.mon->m_inventoryAction->isChecked(), "adding should reveal the panel");
+    QCOMPARE(inventoryLeaves(rig.mon->m_inventoryPanel), 1);
+    rig.mon->m_inventoryAction->setChecked(false);
+}
+
+void Monitor_Test::aDropOnALockedPlotIsRefused()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *staged = stagedFixture(m_doc, "Refused Bar", &cleanup);
+    QVERIFY(staged != nullptr);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    const bool wasLocked = m_doc->monitorProperties()->layoutLocked();
+    m_doc->monitorProperties()->setLayoutLocked(true);
+    QString said;
+    answerMessageBox(QMessageBox::Ok, &said);
+    rig.mon->slotFixturesDropped(QList<quint32>() << staged->id(), QPointF(0, 0));
+    m_doc->monitorProperties()->setLayoutLocked(false);
+    QVERIFY2(said.contains("Unlock the plot"), qPrintable(said));
+    QVERIFY(!rig.gv->fixturesID().contains(staged->id()));
+
+    // Unlocked, an unknown id is skipped and the real one lands.
+    rig.mon->slotFixturesDropped(QList<quint32>() << 99999 << staged->id(), QPointF(0, 0));
+    QVERIFY(rig.gv->fixturesID().contains(staged->id()));
+    m_doc->monitorProperties()->setLayoutLocked(wasLocked);
+}
+
+void Monitor_Test::addNetworkNodePlacesItWhereTheMenuWasOpened()
+{
+    TopologyCleanup topo(m_doc);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    const QPointF scenePos = rig.gv->realPositionToPixels(3000, 2000);   // 3 m, 2 m
+    rig.mon->m_pendingAddScenePos = scenePos;
+
+    driveDialog([](QWidget *dlg) {
+        QLineEdit *name = findRealLineEdit(dlg);
+        QComboBox *transport = dlg->findChild<QComboBox *>();
+        if (name == nullptr || transport == nullptr)
+            return false;
+        name->setText("  SR ArtNet Node  ");
+        transport->setCurrentIndex(transport->findData(int(NetworkNode::sACN)));
+        // Accepting it opens the full Network Topology editor on the new node.
+        inspectModal([](QWidget *next) {
+            QVERIFY(qobject_cast<NetworkTopologyDialog *>(next) != nullptr);
+        });
+        return true;
+    });
+    rig.mon->slotAddNetworkNode();
+
+    QCOMPARE(m_doc->networkTopology()->nodes().size(), 1);
+    const NetworkNode &n = m_doc->networkTopology()->nodes().first();
+    QCOMPARE(n.name, QString("SR ArtNet Node"));
+    QCOMPARE(n.transport, int(NetworkNode::sACN));
+    QVERIFY(n.placed);
+    QVERIFY2(qAbs(n.posX - 3.0) < 0.01 && qAbs(n.posY - 2.0) < 0.01,
+             qPrintable(QString("placed at %1,%2").arg(n.posX).arg(n.posY)));
+    QCOMPARE(n.layerId, m_doc->monitorProperties()->activeLayerId());
+    QCOMPARE(rig.gv->m_networkNodeItems.size(), 1);
+    QVERIFY(rig.mon->m_pendingAddScenePos.isNull());   // used once
+
+    // No name typed: it is numbered.
+    driveDialog([](QWidget *) {
+        inspectModal([](QWidget *) {});
+        return true;
+    });
+    rig.mon->slotAddNetworkNode();
+    QCOMPARE(m_doc->networkTopology()->nodes().size(), 2);
+    QCOMPARE(m_doc->networkTopology()->nodes().at(1).name, QString("Node 2"));
+}
+
+void Monitor_Test::addNetworkNodeCancelledAddsNothing()
+{
+    TopologyCleanup topo(m_doc);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    const MonitorProperties::GridUnits units = m_doc->monitorProperties()->gridUnits();
+    m_doc->monitorProperties()->setGridUnits(MonitorProperties::Feet);
+    driveDialog([](QWidget *dlg) {
+        QDoubleSpinBox *x = dlg->findChild<QDoubleSpinBox *>();
+        return x != nullptr && x->suffix() == " ft";
+    }, false);
+    rig.mon->slotAddNetworkNode();
+    m_doc->monitorProperties()->setGridUnits(units);
+    QCOMPARE(m_doc->networkTopology()->nodes().size(), 0);
+}
+
+void Monitor_Test::deletingANetworkNodeAsksFirst()
+{
+    TopologyCleanup topo(m_doc);
+    NetworkNode n;
+    n.name = "Doomed";
+    n.placed = true;
+    m_doc->networkTopology()->nodes() << n;
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    QCOMPARE(rig.gv->m_networkNodeItems.size(), 1);
+
+    rig.mon->slotNetworkNodeRemoveRequested(5);        // no such node: nothing asked
+    QCOMPARE(m_doc->networkTopology()->nodes().size(), 1);
+
+    QString asked;
+    answerMessageBox(QMessageBox::No, &asked);
+    rig.mon->slotNetworkNodeRemoveRequested(0);
+    QVERIFY(asked.contains("Doomed"));
+    QCOMPARE(m_doc->networkTopology()->nodes().size(), 1);
+
+    answerMessageBox(QMessageBox::Yes);
+    rig.mon->slotNetworkNodeRemoveRequested(0);
+    QCOMPARE(m_doc->networkTopology()->nodes().size(), 0);
+    QCOMPARE(rig.gv->m_networkNodeItems.size(), 0);
+}
+
+void Monitor_Test::editingANetworkNodeRebuildsThePlot()
+{
+    TopologyCleanup topo(m_doc);
+    NetworkNode n;
+    n.name = "Before";
+    n.placed = true;
+    m_doc->networkTopology()->nodes() << n;
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    driveDialog([](QWidget *dlg) {
+        NetworkTopologyDialog *nt = qobject_cast<NetworkTopologyDialog *>(dlg);
+        if (nt == nullptr)
+            return false;
+        nt->m_name->setText("After");
+        emit nt->m_name->textEdited("After");
+        return true;
+    });
+    rig.mon->slotEditNetworkNode(0);
+    QCOMPARE(m_doc->networkTopology()->nodes().first().name, QString("After"));
+    QCOMPARE(rig.gv->m_networkNodeItems.size(), 1);
+    QVERIFY(rig.gv->m_networkNodeItems.first()->toolTip().contains("After"));
+
+    // Cancelled: unchanged.
+    inspectModal([](QWidget *) {});
+    rig.mon->slotEditNetworkNode(0);
+    QCOMPARE(m_doc->networkTopology()->nodes().first().name, QString("After"));
+}
+
+void Monitor_Test::theNetworkReportOpensFromTheStudio()
+{
+    TopologyCleanup topo(m_doc);
+    NetworkNode n;
+    n.name = "Reported";
+    m_doc->networkTopology()->nodes() << n;
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    QString shown;
+    inspectModal([&shown](QWidget *dlg) {
+        NetworkReportDialog *rd = qobject_cast<NetworkReportDialog *>(dlg);
+        QVERIFY(rd != nullptr);
+        shown = rd->report().toText();
+    });
+    rig.mon->slotNetworkReport();
+    QVERIFY2(shown.contains("Reported -- ArtNet"), qPrintable(shown));
+}
+
+/* A staged fixture whose definition has a Maintenance channel with Reset and
+ * Identify, so the test dialogs grow their DMX buttons. */
+static Fixture *stagedWithMaintenance(Doc *doc, FixtureCleanup *cleanup)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Serviceable");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Std");
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer");
+    dim->setGroup(QLCChannel::Intensity);
+    QLCChannel *ctl = new QLCChannel();
+    ctl->setName("Control");
+    ctl->setGroup(QLCChannel::Maintenance);
+    QLCCapability *reset = new QLCCapability(200, 209);
+    reset->setName("Reset");
+    QLCCapability *ident = new QLCCapability(210, 219);
+    ident->setName("Identify");
+    ctl->addCapability(reset);
+    ctl->addCapability(ident);
+    def->addChannel(dim);
+    def->addChannel(ctl);
+    mode->insertChannel(dim, 0);
+    mode->insertChannel(ctl, 1);
+    def->addMode(mode);
+
+    Fixture *f = new Fixture(doc);
+    f->setFixtureDefinition(def, mode);
+    f->setName("Serviceable 1");
+    f->setPatched(false);
+    if (!doc->addFixture(f))
+        return nullptr;
+    cleanup->ids << f->id();
+    return f;
+}
+
+void Monitor_Test::aStagedFixturesTestDialogOffersNoDmxActions()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *f = stagedWithMaintenance(m_doc, &cleanup);
+    QVERIFY(f != nullptr);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    QVERIFY(!rig.gv->fixturesID().contains(f->id()));   // not placed: the compact dialog
+
+    int guarded = 0;
+    inspectModal([&guarded](QWidget *dlg) {
+        QVERIFY2(hasLabel(dlg, "Unpatched (inventory)"), "the address should say it is unpatched");
+        foreach (QPushButton *b, dlg->findChildren<QPushButton *>())
+            if (b->toolTip().startsWith("Patch this fixture first"))
+            {
+                QVERIFY(!b->isEnabled());
+                b->setEnabled(true);                      // even forced, a click writes nothing
+                b->click();
+                guarded++;
+            }
+    });
+    rig.mon->showFixturePropertiesById(f->id());
+    QCOMPARE(guarded, 2);                               // Reset and Identify
+    QCOMPARE(m_doc->inputOutputMap()->claimUniverses().first()->preGMValue(1), uchar(0));
+    m_doc->inputOutputMap()->releaseUniverses(false);
+}
+
+void Monitor_Test::aStagedFixtureOnThePlotCannotBeTestedOrLocated()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *f = stagedWithMaintenance(m_doc, &cleanup);
+    QVERIFY(f != nullptr);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    QVERIFY(dropFixtureAtCentre(rig.gv, f->id()));
+
+    bool looked = false;
+    inspectModal([&looked](QWidget *dlg) {
+        QVERIFY2(hasLabel(dlg, "Unpatched (inventory)"), "the address should say it is unpatched");
+        QPushButton *test = buttonWithText(dlg, "Test");
+        QPushButton *locate = buttonWithText(dlg, "Locate");
+        QVERIFY(test != nullptr && locate != nullptr);
+        QVERIFY(!test->isEnabled() && !locate->isEnabled());
+        QVERIFY(locate->toolTip().contains("inventory"));
+        looked = true;
+    });
+    rig.mon->showFixtureItemEditor(f->id());
+    QVERIFY(looked);
+}
+
+void Monitor_Test::theDmxViewHasNoTileForAStagedFixture()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *staged = stagedFixture(m_doc, "No Tile", &cleanup);
+    Fixture *real = new Fixture(m_doc);
+    real->setName("Tile");
+    real->setChannels(2);
+    QVERIFY(m_doc->addFixture(real));
+    cleanup.ids << real->id();
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.mon->m_dmxViewPopulated = false;
+    rig.mon->populateDMXView();
+    QList<quint32> tiles;
+    foreach (MonitorFixture *mof, rig.mon->m_monitorFixtures)
+        tiles << mof->fixture();
+    QVERIFY(tiles.contains(real->id()));
+    QVERIFY(!tiles.contains(staged->id()));
+}
+
+namespace
+{
+Fixture *dmxFixtureOnPlot(Doc *doc, MonitorGraphicsView *gv, const char *name, quint32 addr,
+                          double xMm, double yMm, FixtureCleanup *cleanup)
+{
+    Fixture *f = new Fixture(doc);
+    f->setName(name);
+    f->setChannels(4);
+    f->setAddress(addr);
+    if (!doc->addFixture(f))
+    {
+        delete f;
+        return nullptr;
+    }
+    cleanup->ids << f->id();
+    doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(xMm, yMm, 0));
+    gv->addFixture(f->id(), QPointF(xMm, yMm));
+    return f;
+}
+}
+
+void Monitor_Test::theNetworkOverlayDrawsCableRunsInAddressOrder()
+{
+    TopologyCleanup topo(m_doc);
+    FixtureCleanup cleanup(m_doc);
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    // Patched high-address first, to prove the run is by address and not by id.
+    Fixture *b = dmxFixtureOnPlot(m_doc, rig.gv, "B", 20, 8000, 2000, &cleanup);
+    Fixture *a = dmxFixtureOnPlot(m_doc, rig.gv, "A", 0, 4000, 2000, &cleanup);
+    QVERIFY(a && b);
+
+    NetworkNode n;
+    n.name = "SR Node";
+    n.placed = true;
+    n.posX = 1.0;
+    n.posY = 2.0;
+    NetworkPort p;
+    p.universe = 0;
+    n.ports << p;
+    m_doc->networkTopology()->nodes() << n;
+    rig.gv->updateNetworkNodes();
+
+    // Not in the normal view.
+    rig.mon->applyMapView(Monitor::ViewNormal);
+    rig.gv->updateNetworkRuns();
+    QCOMPARE(rig.gv->m_networkRunItems.size(), 0);
+
+    rig.mon->applyMapView(Monitor::ViewNet);
+    rig.gv->updateNetworkRuns();
+    QCOMPARE(rig.gv->m_networkRunItems.size(), 1);
+
+    NetworkRunItem *run = rig.gv->m_networkRunItems.first();
+    const QPainterPath path = run->path();
+    QCOMPARE(path.elementCount(), 3);                       // node, A, B
+    // A (4 m) comes before B (8 m) along the run.
+    QVERIFY2(path.elementAt(1).x < path.elementAt(2).x,
+             "the run should visit the lower address first");
+    const QPointF nodeC = rig.gv->m_networkNodeItems.first()->centre();
+    QVERIFY((QPointF(path.elementAt(0).x, path.elementAt(0).y) - nodeC).manhattanLength() < 3.0);
+
+    // The stats on hover.
+    const QString tip = run->toolTip();
+    QVERIFY2(tip.contains("SR Node") && tip.contains("Port 1") && tip.contains("Universe 1")
+             && tip.contains("2 fixture") && tip.contains("8/512 ch"), qPrintable(tip));
+    QVERIFY2(tip.contains(" m"), qPrintable(tip));
+
+    // Hovering has to be possible: the hit shape is a band, wider than the line.
+    QVERIFY(run->shape().boundingRect().height() > run->path().boundingRect().height() + 5.0
+            || run->shape().boundingRect().width() > run->path().boundingRect().width() + 5.0);
+
+    // Leaving the overlay takes the runs away again.
+    rig.mon->applyMapView(Monitor::ViewNormal);
+    QCOMPARE(rig.gv->m_networkRunItems.size(), 0);
+}
+
+namespace
+{
+NetworkNode wirelessNode(const char *name, quint32 universe, bool receiverPlaced,
+                         double rxX = 5.0, double rxY = 5.0)
+{
+    NetworkNode n;
+    n.name = name;
+    n.transport = NetworkNode::WirelessDMX;
+    n.placed = true;
+    n.posX = -8.0;
+    n.posY = 1.0;
+    NetworkPort p;
+    p.universe = universe;
+    p.receiver.name = "Rig RX";
+    p.receiver.placed = receiverPlaced;
+    p.receiver.posX = rxX;
+    p.receiver.posY = rxY;
+    n.ports << p;
+    return n;
+}
+} // namespace
+
+void Monitor_Test::aWirelessRunStartsAtItsReceiverAndCountsWhatIsOffThePlot()
+{
+    TopologyCleanup topo(m_doc);
+    FixtureCleanup cleanup(m_doc);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    // Universe 1: one plotted, one patched but not on the plot.
+    QVERIFY(dmxFixtureOnPlot(m_doc, rig.gv, "On Plot", 0, 4000, 2000, &cleanup));
+    Fixture *off = new Fixture(m_doc);
+    off->setName("Off Plot");
+    off->setChannels(4);
+    off->setAddress(10);
+    QVERIFY(m_doc->addFixture(off));
+    cleanup.ids << off->id();
+    auto onUniverse = [&](const char *name, quint32 uni, double xMm) -> Fixture * {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(name);
+        f->setChannels(4);
+        f->setUniverse(uni);
+        if (!m_doc->addFixture(f))
+        {
+            delete f;
+            return nullptr;
+        }
+        cleanup.ids << f->id();
+        m_doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(xMm, 2000, 0));
+        rig.gv->addFixture(f->id(), QPointF(xMm, 2000));
+        return f;
+    };
+    // Universe 2: a node never placed on the plot -- no anchor, no run.
+    Fixture *u2 = onUniverse("U2", 1, 6000);
+    // Universe 3: a wired node whose only fixture is hidden -- nothing to draw.
+    Fixture *u3 = onUniverse("U3", 2, 7000);
+    QVERIFY(u2 && u3);
+
+    NetworkNode wired;
+    wired.name = "Wired";
+    wired.placed = true;
+    NetworkPort wp;
+    wp.universe = 2;
+    wired.ports << wp;
+    NetworkNode lost;
+    lost.name = "Lost";
+    NetworkPort lp;
+    lp.universe = 1;
+    lost.ports << lp;
+    m_doc->networkTopology()->nodes() << wirelessNode("Beach TX", 0, true) << lost << wired;
+    rig.gv->updateNetworkNodes();
+    rig.mon->applyMapView(Monitor::ViewNet);
+    rig.gv->m_fixtures.value(u3->id())->setVisible(false);
+    rig.gv->updateNetworkRuns();
+
+    QStringList tips;
+    foreach (NetworkRunItem *ri, rig.gv->m_networkRunItems)
+        tips << ri->toolTip();
+    QVERIFY2(rig.gv->m_networkRunItems.size() == 1, qPrintable(tips.join(" || ")));
+    NetworkRunItem *run = rig.gv->m_networkRunItems.first();
+    QCOMPARE(run->nodeIndex(), 0);
+    const QString tip = run->toolTip();
+    QVERIFY2(tip.startsWith("Beach TX via Rig RX") && tip.contains("2 fixture")
+             && tip.contains("1 not on the plot"), qPrintable(tip));
+    // It leaves from the receiver in the rig, not from the transmitter on the beach.
+    const QPointF rx = rig.gv->m_networkReceiverItems.first()->pos();
+    QVERIFY((QPointF(run->path().elementAt(0).x, run->path().elementAt(0).y) - rx).manhattanLength() < 1.0);
+    // The dashed link joins the transmitter to its receiver.
+    QCOMPARE(rig.gv->m_networkLinks.size(), 1);
+    QCOMPARE(rig.gv->m_networkLinks.first()->line().p2(), rx);
+    rig.mon->applyMapView(Monitor::ViewNormal);
+}
+
+void Monitor_Test::networkNodesJoinLayersGroupsLocksAndRenames()
+{
+    TopologyCleanup topo(m_doc);
+    NetworkNode a, b;
+    a.name = "Node A";
+    a.placed = true;
+    b.name = "Node B";
+    b.placed = true;
+    b.posX = 3.0;
+    // Two wireless nodes with receivers, so each node's layer pass has to pick
+    // out its own receivers from the other's.
+    m_doc->networkTopology()->nodes() << a << b << wirelessNode("TX 1", 0, true)
+                                      << wirelessNode("TX 2", 1, true, 6.0, 6.0);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const quint32 layer = props->addLayer("Network");
+
+    MonitorGraphicsView view(m_doc);
+    // Without a grid there is nowhere to draw a node.
+    const int cell = view.m_cellPixels;
+    view.m_cellPixels = 0;
+    view.updateNetworkNodes();
+    QCOMPARE(view.m_networkNodeItems.size(), 0);
+    view.m_cellPixels = cell;
+    view.resize(900, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(20, 12));
+    view.updateNetworkNodes();
+    QCOMPARE(view.m_networkNodeItems.size(), 4);
+    QCOMPARE(view.m_networkReceiverItems.size(), 2);
+
+    QGraphicsItem *itemA = view.itemFor("network", 0);
+    QGraphicsItem *itemB = view.itemFor("network", 1);
+    QCOMPARE(itemA, static_cast<QGraphicsItem *>(view.m_networkNodeItems.at(0)));
+    QCOMPARE(view.itemFor("network", 9), nullptr);
+
+    // Select from the list, move to a layer.
+    view.selectMapItem("network", 0);
+    QVERIFY(itemA->isSelected());
+    view.selectMapItems({ qMakePair(QString("network"), quint32(0)), qMakePair(QString("network"), quint32(1)) });
+    QVERIFY(view.selectedMapObjects().contains(qMakePair(QString("network"), quint32(1))));
+    QCOMPARE(view.setSelectedItemsLayer(layer), 2);
+    QCOMPARE(m_doc->networkTopology()->nodes().at(0).layerId, layer);
+    QCOMPARE(view.itemLayerId(itemB), layer);
+    view.setItemLayer(itemB, 0);
+    QCOMPARE(m_doc->networkTopology()->nodes().at(1).layerId, quint32(0));
+
+    // A hidden layer hides the node and nothing else.
+    props->setLayerVisible(layer, false);
+    view.refreshItemLayerState();
+    QVERIFY(!view.m_networkNodeItems.at(0)->isVisible());
+    QVERIFY(view.m_networkNodeItems.at(1)->isVisible());
+    props->setLayerVisible(layer, true);
+    view.refreshItemLayerState();
+
+    // Groups.
+    const quint32 gid = props->nextGroupId();
+    props->createGroup(gid, "Nodes", 0);
+    view.setItemGroupId(itemA, gid);
+    QCOMPARE(m_doc->networkTopology()->nodes().at(0).groupId, gid);
+    QCOMPARE(view.itemGroupId(itemA), gid);
+    QVERIFY(view.itemsUnderGroup(gid).contains(itemA));
+    QVERIFY(!view.itemsUnderGroup(gid).contains(itemB));
+
+    // Lock / unlock, from the plot, the Layers list and the node's own menu.
+    QVERIFY(!view.itemLocked("network", 1));
+    view.setItemLocked("network", 1, true);
+    QVERIFY(m_doc->networkTopology()->nodes().at(1).locked);
+    QVERIFY(view.itemLocked("network", 1));
+    QVERIFY(!(view.m_networkNodeItems.at(1)->flags() & QGraphicsItem::ItemIsMovable));
+    view.setItemLocked("network", 99, true);             // no such node: ignored
+    MonitorLayersPanel panel(m_doc, &view);
+    panel.reload();
+    QVERIFY(panel.kindLockable("network"));
+    QVERIFY(panel.objectLocked("network", 1));
+    panel.setObjectLocked("network", 1, false);
+    QVERIFY(!m_doc->networkTopology()->nodes().at(1).locked);
+    QVERIFY(!panel.objectLocked("network", 99));
+    emit view.m_networkNodeItems.at(1)->lockToggleRequested(1);
+    QVERIFY(m_doc->networkTopology()->nodes().at(1).locked);
+    view.slotNetworkNodeLockToggled(99);                 // ignored
+
+    // Its menu names it and offers what every map item gets.
+    QMenu menu;
+    view.buildItemMenu(&menu, "network", 0, MonitorGraphicsView::MenuPlace());
+    const QStringList paths = menuPaths(&menu);
+    QVERIFY2(!paths.isEmpty(), "a network node has no menu");
+    QVERIFY2(paths.join("|").contains("Network Node"), qPrintable(paths.join(" | ")));
+
+    // Rename and delete.
+    view.renameItem("network", 0, "Renamed");
+    QCOMPARE(m_doc->networkTopology()->nodes().at(0).name, QString("Renamed"));
+    QVERIFY(view.m_networkNodeItems.at(0)->toolTip().contains("Renamed"));
+    QSignalSpy del(&view, &MonitorGraphicsView::networkRemoveRequested);
+    view.requestDeleteItem("network", 1);
+    QCOMPARE(del.count(), 1);
+    QCOMPARE(del.first().first().toUInt(), quint32(1));
+}
+
+void Monitor_Test::networkNodesMoveTogetherAndSnap()
+{
+    TopologyCleanup topo(m_doc);
+    NetworkNode a, b;
+    a.name = "A";
+    a.placed = true;
+    b.name = "B";
+    b.placed = true;
+    b.posX = 4.0;
+    m_doc->networkTopology()->nodes() << a << b;
+
+    MonitorGraphicsView view(m_doc);
+    view.resize(900, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(20, 12));
+    view.setSnapDivisions(1);                          // whole metres
+    view.updateNetworkNodes();
+    NetworkNodeItem *ia = view.m_networkNodeItems.at(0);
+    NetworkNodeItem *ib = view.m_networkNodeItems.at(1);
+    ia->setSelected(true);
+    ib->setSelected(true);
+
+    // Drag A a bit more than a metre: both follow, A lands on the grid.
+    const qreal m = view.m_cellPixels;
+    ia->setPos(ia->pos() + QPointF(m * 1.2, 0));
+    ib->setPos(ib->pos() + QPointF(m * 1.2, 0));
+    view.slotNetworkNodeMoved(ia);
+
+    const NetworkNode &na = m_doc->networkTopology()->nodes().at(0);
+    const NetworkNode &nb = m_doc->networkTopology()->nodes().at(1);
+    QVERIFY2(qAbs(na.posX - 1.0) < 0.01, qPrintable(QString::number(na.posX)));
+    QVERIFY2(qAbs(nb.posX - 5.0) < 0.01, qPrintable(QString::number(nb.posX)));   // same delta
+}
+
+void Monitor_Test::doubleClickingANetworkNodeOpensIt()
+{
+    TopologyCleanup topo(m_doc);
+    NetworkNode a;
+    a.name = "Click Me";
+    a.placed = true;
+    a.posX = 2.0;
+    a.posY = 2.0;
+    m_doc->networkTopology()->nodes() << a;
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.gv->updateNetworkNodes();
+    NetworkNodeItem *item = rig.gv->m_networkNodeItems.first();
+    rig.gv->centerOn(item);
+
+    QSignalSpy spy(rig.gv, &MonitorGraphicsView::networkDoubleClicked);
+    // The Monitor answers by opening the topology editor on that node.
+    inspectModal([](QWidget *dlg) {
+        NetworkTopologyDialog *nt = qobject_cast<NetworkTopologyDialog *>(dlg);
+        QVERIFY(nt != nullptr);
+        QCOMPARE(nt->m_row, 0);
+    });
+    const QPoint at = rig.gv->mapFromScene(item->centre());
+    QTest::mouseDClick(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.first().first().toUInt(), quint32(0));
+}
+
+void Monitor_Test::onlyInventoryDragsAreTakenByThePlot()
+{
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    const QList<quint32> before = rig.gv->fixturesID();
+    const QPoint c = rig.gv->viewport()->rect().center();
+
+    QMimeData text;
+    text.setText("not a fixture");
+    QDragEnterEvent en(c, Qt::CopyAction, &text, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(rig.gv->viewport(), &en);
+    QDragMoveEvent mv(c, Qt::CopyAction, &text, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(rig.gv->viewport(), &mv);
+    QDropEvent dr(QPointF(c), Qt::CopyAction, &text, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(rig.gv->viewport(), &dr);
+    QCOMPARE(rig.gv->fixturesID(), before);
+
+    // An inventory drag is taken while it moves over the plot.
+    std::unique_ptr<QMimeData> mime(InventoryTree::fixtureMime({ 12345 }));
+    QDragEnterEvent en2(c, Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(rig.gv->viewport(), &en2);
+    QDragMoveEvent mv2(c, Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+    mv2.setDropAction(Qt::IgnoreAction);
+    mv2.ignore();
+    QApplication::sendEvent(rig.gv->viewport(), &mv2);
+    QVERIFY(mv2.isAccepted());
+}
+
+void Monitor_Test::aCableRunFollowsAMovedFixture()
+{
+    TopologyCleanup topo(m_doc);
+    FixtureCleanup cleanup(m_doc);
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    Fixture *a = dmxFixtureOnPlot(m_doc, rig.gv, "A", 0, 4000, 2000, &cleanup);
+    QVERIFY(a != nullptr);
+
+    NetworkNode n;
+    n.name = "Node";
+    n.placed = true;
+    n.posX = 1.0;
+    n.posY = 2.0;
+    NetworkPort p;
+    p.universe = 0;
+    n.ports << p;
+    m_doc->networkTopology()->nodes() << n;
+    rig.gv->updateNetworkNodes();
+    rig.mon->applyMapView(Monitor::ViewNet);
+    rig.gv->updateNetworkRuns();
+    QCOMPARE(rig.gv->m_networkRunItems.size(), 1);
+    const QPainterPath before = rig.gv->m_networkRunItems.first()->path();
+
+    // Move the fixture and let the debounce fire.
+    MonitorFixtureItem *item = rig.gv->m_fixtures.value(a->id());
+    item->setPos(item->pos() + QPointF(60.0, 40.0));
+    rig.gv->slotFixtureMoved(item);
+    QTest::qWait(120);
+
+    QCOMPARE(rig.gv->m_networkRunItems.size(), 1);
+    const QPainterPath after = rig.gv->m_networkRunItems.first()->path();
+    QVERIFY2((QPointF(after.elementAt(1).x, after.elementAt(1).y)
+              - QPointF(before.elementAt(1).x, before.elementAt(1).y)).manhattanLength() > 20.0,
+             "the run's end did not follow the fixture");
+    rig.mon->applyMapView(Monitor::ViewNormal);
+}
+
+void Monitor_Test::theNetworkOverlayFlagsFixturesNoPortServes()
+{
+    TopologyCleanup topo(m_doc);
+    FixtureCleanup cleanup(m_doc);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    Fixture *served = dmxFixtureOnPlot(m_doc, rig.gv, "Served", 0, 2000, 2000, &cleanup);
+    Fixture *orphan = dmxFixtureOnPlot(m_doc, rig.gv, "Orphan", 10, 4000, 2000, &cleanup);
+    QVERIFY(served && orphan);
+    orphan->setUniverse(3);                                    // a universe no port carries
+
+    // No topology yet: nothing is flagged (everything would be, which is noise).
+    rig.mon->applyMapView(Monitor::ViewNet);
+    QVERIFY2(!rig.gv->fixtureItemForId(orphan->id())->toolTip().contains("no node port"),
+             qPrintable(rig.gv->fixtureItemForId(orphan->id())->toolTip()));
+
+    NetworkNode n;
+    n.name = "Node";
+    n.placed = true;
+    NetworkPort p;
+    p.universe = 0;
+    n.ports << p;
+    m_doc->networkTopology()->nodes() << n;
+    rig.mon->applyMapView(Monitor::ViewNet);
+
+    QVERIFY2(rig.gv->fixtureItemForId(orphan->id())->toolTip().contains("no node port"),
+             qPrintable(rig.gv->fixtureItemForId(orphan->id())->toolTip()));
+    QVERIFY2(!rig.gv->fixtureItemForId(served->id())->toolTip().contains("no node port"),
+             qPrintable(rig.gv->fixtureItemForId(served->id())->toolTip()));
+    rig.mon->applyMapView(Monitor::ViewNormal);
 }

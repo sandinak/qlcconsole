@@ -22,6 +22,9 @@
 
 #include <QElapsedTimer>
 #include <QGraphicsView>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <functional>
 #include <QHash>
 #include <QList>
@@ -39,6 +42,10 @@ class PipeItem;
 class StandItem;
 class TowerItem;
 class PowerSourceItem;
+class NetworkNodeItem;
+class NetworkReceiverItem;
+class NetworkRunItem;
+class QTimer;
 class TargetItem;
 class MonitorImageItem;
 class Doc;
@@ -374,6 +381,24 @@ public:
     /** Power view: tint each source marker with its circuits' colours (key
      *  "sourceIdx:circuitIdx"). Empty map restores the plain markers. */
     void setPowerSourceColors(const QHash<QString, QColor> &circuitColors);
+
+    /** Rebuild the network-node markers (and wireless receiver markers with
+     *  their dashed links) from the network-topology model. */
+    void updateNetworkNodes();
+
+    /** Show/hide the cable runs (one polyline per port, in address order) --
+     *  on while the Network overlay is selected. */
+    void setNetworkRunsVisible(bool on);
+    bool networkRunsVisible() const { return m_showNetworkRuns; }
+
+    /** Rebuild the run polylines now / soon (debounced: fixtures moving fire it
+     *  many times a second). No-ops while the runs are hidden. */
+    void updateNetworkRuns();
+    void scheduleNetworkRuns();
+
+    /** Re-aim every transmitter->receiver link at where its ends are now.
+     *  Cheap, and safe mid-event, unlike a full rebuild. */
+    void updateNetworkLinks();
 
     /** Rebuild the placeable image items from MonitorProperties (only those on
      *  the plane matching the current POV are shown). */
@@ -714,6 +739,12 @@ protected:
     /** Right-click on empty canvas emits contextMenuRequested; on items routes to them. */
     void contextMenuEvent(QContextMenuEvent *event) override;
 
+    /** Accept fixtures dragged in from the Inventory panel
+     *  ("application/x-qlc-fid": a run of quint32 fixture ids). */
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
+
     /** Push the current snap configuration to a single fixture item */
     void applySnapToItem(MonitorFixtureItem *item);
 
@@ -736,6 +767,11 @@ public:
      *  Call this after programmatically changing a fixture's truss offset. */
     void moveFixtureTo(quint32 fid, QPointF mmPos);
 
+    /** Run the same release logic a dragged fixture gets (attach to the truss,
+     *  riser or tower under it, snap), for a fixture that has just been placed
+     *  by a drop rather than dragged. */
+    void finishFixtureDrop(quint32 fid);
+
 public slots:
     void mouseReleaseEvent(QMouseEvent *e) override;
 
@@ -755,6 +791,10 @@ protected slots:
     /** Slot called when a PowerSourceItem is dropped after a drag */
     void slotPowerSourceMoved(PowerSourceItem *item);
     void slotPowerSourceLockToggled(int sourceIndex);
+
+    /** Slot called when a NetworkNodeItem is dropped after a drag */
+    void slotNetworkNodeMoved(NetworkNodeItem *item);
+    void slotNetworkNodeLockToggled(int nodeIndex);
 
     /** Slot called when a TargetItem is dropped after a drag */
     void slotTargetMoved(TargetItem *item);
@@ -867,6 +907,10 @@ signals:
     void towerDoubleClicked(quint32 towerId);
     /** A power source was double-clicked (host opens the Power Distribution editor). */
     void powerDoubleClicked(quint32 sourceIndex);
+    /** A network node was double-clicked (host opens its edit dialog). */
+    void networkDoubleClicked(quint32 nodeIndex);
+    /** Emitted from the network-node context menu — Monitor confirms + removes it. */
+    void networkRemoveRequested(quint32 nodeIndex);
     /** Delete requests for the structural features that lacked a right-click
      *  Delete (truss/platform/image already have theirs above). */
     void pipeRemoveRequested(quint32 pipeId);
@@ -889,6 +933,10 @@ signals:
     /** Emitted whenever the canvas selection changes, so the toolbar can update
      *  the enabled state of the Group / Ungroup actions. */
     void mapSelectionChanged();
+
+    /** Fixtures were dropped on the plot from the Inventory panel, at this
+     *  scene position. The host places them (it owns layers and undo). */
+    void fixturesDropped(const QList<quint32> &fixtureIds, QPointF scenePos);
 
     /** Emitted when the group structure changes (group / ungroup), so the
      *  Layers tree can rebuild its folders. */
@@ -971,6 +1019,19 @@ private:
 
     /** Power-source markers, indexed positionally to PowerDistribution::sources(). */
     QList <PowerSourceItem*> m_powerSourceItems;
+
+    /** Network-node markers, indexed positionally to NetworkTopology::nodes(). */
+    QList <NetworkNodeItem*> m_networkNodeItems;
+
+    /** Wireless receiver markers, and (same index) the dashed line each one
+     *  has back to its transmitter. */
+    QList <NetworkReceiverItem*> m_networkReceiverItems;
+    QList <QGraphicsLineItem*> m_networkLinks;
+
+    /** Cable-run polylines, shown in the Network overlay. */
+    QList <NetworkRunItem*> m_networkRunItems;
+    bool m_showNetworkRuns = false;
+    QTimer *m_runsTimer = nullptr;
 
     /** Interactive target marker items keyed by target ID. */
     QHash <quint32, TargetItem*> m_targetItems;

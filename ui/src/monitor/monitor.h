@@ -32,6 +32,7 @@
 
 class MonitorGraphicsView;
 class MonitorLayersPanel;
+class MonitorInventoryPanel;
 class MonitorFixture;
 class MonitorLayout;
 class QScrollArea;
@@ -375,8 +376,22 @@ protected slots:
     void slotStandRemoveRequested(quint32 sid);
     void slotTowerRemoveRequested(quint32 tid);
     void slotAddImage();
+
+    /** Stage a fixture in the inventory (no universe/address yet). */
+    void slotAddToInventory();
+    /** Fixtures dragged from the Inventory panel landed on the plot. */
+    void slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scenePos);
     void slotEditImage(quint32 id);
     void slotImageRemoveRequested(quint32 id);
+
+    /** Add a new network node (ArtNet/sACN gateway, direct fixture interface,
+     *  or wireless DMX transmitter) interactively and refresh the canvas. */
+    void slotAddNetworkNode();
+    /** Open the network-node edit form for a specific node index (double-click). */
+    void slotEditNetworkNode(quint32 nodeIndex);
+    /** Show the network summary for the data package (N5). */
+    void slotNetworkReport();
+    void slotNetworkNodeRemoveRequested(quint32 nodeIndex);
 
     /** Show the Add context menu at the given scene position. */
     void slotCanvasContextMenu(QPointF scenePos);
@@ -481,6 +496,7 @@ protected:
     QPointF m_pendingAddScenePos;
     MonitorGraphicsView* m_graphicsView;
     MonitorLayersPanel* m_layersPanel;
+    MonitorInventoryPanel* m_inventoryPanel;
     QSpinBox* m_gridWSpin;
     QSpinBox *m_gridHSpin;
     QComboBox *m_unitsCombo;
@@ -515,6 +531,7 @@ protected:
     QAction *m_labelsAction;
     QAction *m_lockAction;
     QAction *m_layersAction;
+    QAction *m_inventoryAction;
     QAction *m_groupAction;
     QAction *m_ungroupAction;
     QAction *m_addPlatformAction;

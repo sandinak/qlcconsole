@@ -86,6 +86,11 @@
 #include <memory>
 #include "monitorfixtureitem.h"
 #include "powerdistribution.h"
+#include "networktopology.h"
+#include "networktopologydialog.h"
+#include "networkreportdialog.h"
+#include "fixturecreator.h"
+#include "monitorinventorypanel.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "scenevalue.h"
@@ -168,12 +173,14 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     , m_splitter(NULL)
     , m_graphicsView(NULL)
     , m_layersPanel(NULL)
+    , m_inventoryPanel(NULL)
     , m_gridWSpin(NULL)
     , m_gridHSpin(NULL)
     , m_unitsCombo(NULL)
     , m_povCombo(NULL)
     , m_labelsAction(NULL)
     , m_layersAction(NULL)
+    , m_inventoryAction(NULL)
     , m_groupAction(NULL)
     , m_ungroupAction(NULL)
     , m_pasteAction(NULL)
@@ -296,6 +303,9 @@ void Monitor::populateDMXView()
     foreach (Fixture* fxi, m_doc->fixtures())
     {
         Q_ASSERT(fxi != NULL);
+        // A staged fixture has no place in a universe grid.
+        if (!fxi->isPatched())
+            continue;
         if (m_currentUniverse == Universe::invalid() ||
             m_currentUniverse == fxi->universe())
                 createMonitorFixture(fxi);
@@ -395,6 +405,36 @@ void Monitor::initGraphicsView()
         if (m_layersAction != NULL)
             m_layersAction->setChecked(false);
     });
+    // Inventory panel, docked on the RIGHT: fixtures staged but not yet placed,
+    // to drag onto the plot. Hidden until asked for (toolbar "Inventory").
+    m_inventoryPanel = new MonitorInventoryPanel(m_doc, m_graphicsView, this);
+    m_splitter->addWidget(m_inventoryPanel);
+    m_splitter->setStretchFactor(m_splitter->indexOf(m_inventoryPanel), 0);
+    m_inventoryPanel->setMinimumWidth(180);
+    {
+        const bool show = QSettings().value(QStringLiteral("monitor/showInventory"), false).toBool();
+        m_inventoryPanel->setVisible(show);
+        if (m_inventoryAction != NULL)
+        {
+            m_inventoryAction->blockSignals(true);
+            m_inventoryAction->setChecked(show);
+            m_inventoryAction->blockSignals(false);
+        }
+    }
+    connect(m_inventoryPanel, &MonitorInventoryPanel::closeRequested, this, [this]() {
+        if (m_inventoryAction != NULL)
+            m_inventoryAction->setChecked(false);
+    });
+    connect(m_inventoryPanel, &MonitorInventoryPanel::addRequested, this, &Monitor::slotAddToInventory);
+    connect(m_graphicsView, &MonitorGraphicsView::fixturesDropped, this, &Monitor::slotFixturesDropped);
+    // Keep the panel true to the show: fixtures come and go, get patched, or
+    // land on the plot from elsewhere.
+    connect(m_doc, &Doc::fixtureAdded, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
+    connect(m_doc, &Doc::fixtureRemoved, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
+    connect(m_doc, &Doc::fixtureChanged, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
+    // A repatch changes which port a fixture is on, so the cable runs follow.
+    connect(m_doc, &Doc::fixtureChanged, m_graphicsView, [this](quint32) { m_graphicsView->scheduleNetworkRuns(); });
+
     // Double-clicking a Fixture Group node in the panel opens its head-layout editor.
     /* "Show in Layers" from the plot's menu: open the list if it is hidden,
        then bring the row into view. */
@@ -453,6 +493,10 @@ void Monitor::initGraphicsView()
         m_graphicsView->updatePowerSources();
         if (m_layersPanel) m_layersPanel->reload();
     });
+    connect(m_graphicsView, &MonitorGraphicsView::networkDoubleClicked,
+            this, &Monitor::slotEditNetworkNode);
+    connect(m_graphicsView, &MonitorGraphicsView::networkRemoveRequested,
+            this, &Monitor::slotNetworkNodeRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
     connect(m_graphicsView, &MonitorGraphicsView::addItemRequested, this,
@@ -1415,6 +1459,15 @@ void Monitor::initGraphicsToolbar()
     updatePlotLockAppearance(m_props->layoutLocked());
     connect(m_lockAction, SIGNAL(toggled(bool)), this, SLOT(slotLockToggled(bool)));
 
+    m_inventoryAction = m_graphicsToolBar->addAction(QIcon(":/fixture.png"), tr("Inventory"));
+    m_inventoryAction->setCheckable(true);
+    m_inventoryAction->setToolTip(tr("Show the fixtures staged in the inventory, ready to drag onto the plot"));
+    connect(m_inventoryAction, &QAction::toggled, this, [this](bool on) {
+        if (m_inventoryPanel != NULL)
+            m_inventoryPanel->setVisible(on);
+        QSettings().setValue(QStringLiteral("monitor/showInventory"), on);
+    });
+
     m_graphicsToolBar->addSeparator();
     // Group/Ungroup, the Overlay selector, Copy/Paste, labels and background
     // live in the "More" popup (built after Add/Remove below), to keep this
@@ -1437,6 +1490,8 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddPlatform()));
         addMenu->addAction(QIcon(":/image.png"), tr("Add Image"),
                            this, SLOT(slotAddImage()));
+        addMenu->addAction(tr("Add Network Node"),
+                           this, SLOT(slotAddNetworkNode()));
         addMenu->addSeparator();
         addMenu->addAction(tr("Add Target Position"),
                            this, SLOT(slotAddTarget()));
@@ -1505,6 +1560,8 @@ void Monitor::initGraphicsToolbar()
     // a layer; flat background colour stays here.
     moreMenu->addAction(QIcon(":/color.png"), tr("Set background color"),
                         this, SLOT(slotSetBackgroundColor()));
+    moreMenu->addAction(tr("Network Topology…"), this, [this]() { slotEditNetworkNode(0); });
+    moreMenu->addAction(tr("Network Report…"), this, &Monitor::slotNetworkReport);
 
     moreBtn->setMenu(moreMenu);
     m_graphicsToolBar->addWidget(moreBtn);
@@ -1798,6 +1855,10 @@ void Monitor::applyMapView(int view)
     // colour overlays too (falls through to the ViewNormal branch below).
     m_graphicsView->setStageFeaturesOnly(view == ViewStage);
 
+    // The Network overlay also draws each port's cable run, node -> fixtures in
+    // address order, with its stats on hover.
+    m_graphicsView->setNetworkRunsVisible(view == ViewNet);
+
     if (view == ViewPower)
     {
         PowerDistribution *pd = m_doc->powerDistribution();
@@ -1850,7 +1911,7 @@ void Monitor::applyMapView(int view)
         // universe (a DMX output/run), so cabling reads at a glance.
         QList<quint32> universes;
         foreach (Fixture *fx, fixtures)
-            if (fx != NULL && !universes.contains(fx->universe()))
+            if (fx != NULL && fx->isPatched() && !universes.contains(fx->universe()))
                 universes.append(fx->universe());
         std::sort(universes.begin(), universes.end());
         QHash<quint32, QColor> uniColor;
@@ -1870,12 +1931,12 @@ void Monitor::applyMapView(int view)
         for (int i = 0; i < fixtures.size(); i++)
         {
             Fixture *a = fixtures.at(i);
-            if (a == NULL) continue;
+            if (a == NULL || !a->isPatched()) continue;
             const quint32 aS = a->address(), aE = a->address() + a->channels();
             for (int j = i + 1; j < fixtures.size(); j++)
             {
                 Fixture *b = fixtures.at(j);
-                if (b == NULL || a->universe() != b->universe()) continue;
+                if (b == NULL || !b->isPatched() || a->universe() != b->universe()) continue;
                 const quint32 bS = b->address(), bE = b->address() + b->channels();
                 if (aS < bE && bS < aE)   // ranges overlap → address clash
                 {
@@ -1891,6 +1952,12 @@ void Monitor::applyMapView(int view)
             if (fx == NULL) continue;
             MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
             if (it == NULL) continue;
+            if (!fx->isPatched())
+            {
+                it->setViewTint(QColor(70, 70, 70));
+                it->setToolTip(tr("Unpatched (inventory)"));
+                continue;
+            }
             const quint32 uni = fx->universe() + 1;        // 1-based for display
             const quint32 a0 = fx->address() + 1;
             const quint32 a1 = fx->address() + fx->channels();
@@ -1929,7 +1996,7 @@ void Monitor::applyMapView(int view)
         // Distinct hue per distinct transport name.
         QStringList transports;
         foreach (Fixture *fx, m_doc->fixtures())
-            if (fx != NULL)
+            if (fx != NULL && fx->isPatched())
             {
                 const QString t = transportOf(fx->universe());
                 if (!transports.contains(t)) transports.append(t);
@@ -1940,14 +2007,34 @@ void Monitor::applyMapView(int view)
             xportColor.insert(transports[i],
                 QColor::fromHsv(int(i * 360.0 / qMax(1, transports.size())) % 360, 190, 235));
 
+        // With a topology defined, a DMX fixture on a universe no port carries
+        // has no physical path to the console -- say so. (With no nodes at all
+        // every fixture would be flagged, which is noise, not information.)
+        const NetworkTopology *nt = m_doc->networkTopology();
+        const QList<quint32> unservedList = nt->nodes().isEmpty() ? QList<quint32>()
+                                                                  : nt->unservedFixtures(m_doc);
+        const QSet<quint32> unserved(unservedList.begin(), unservedList.end());
+
         foreach (Fixture *fx, m_doc->fixtures())
         {
             if (fx == NULL) continue;
             MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
             if (it == NULL) continue;
+            if (!fx->isPatched())
+            {
+                it->setViewTint(QColor(70, 70, 70));
+                it->setToolTip(tr("Unpatched (inventory)"));
+                continue;
+            }
             const QString t = transportOf(fx->universe());
             it->setViewTint(xportColor.value(t, QColor(120, 120, 120)));
             it->setToolTip(tr("%1 · Universe %2").arg(t).arg(fx->universe() + 1));
+            if (unserved.contains(fx->id()))
+            {
+                it->setViewTint(QColor(230, 110, 60));
+                it->setToolTip(tr("%1 · Universe %2 · ⚠ no node port carries this universe -- "
+                                  "no cable run reaches it").arg(t).arg(fx->universe() + 1));
+            }
         }
         m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
     }
@@ -4220,6 +4307,53 @@ void Monitor::slotAddImage()
     slotEditImage(id);
 }
 
+void Monitor::slotAddToInventory()
+{
+    const QList<quint32> made = FixtureCreator::addFromDialog(this, m_doc, true,
+                                                              InputOutputMap::invalidUniverse(), NULL);
+    if (!made.isEmpty() && m_inventoryPanel != NULL)
+    {
+        if (m_inventoryAction != NULL)
+            m_inventoryAction->setChecked(true);
+        m_inventoryPanel->reload();
+    }
+}
+
+void Monitor::slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scenePos)
+{
+    if (m_props->layoutLocked())
+    {
+        QMessageBox::information(this, tr("Plot locked"),
+            tr("Unlock the plot (Edit Plot) before placing fixtures -- a fixture "
+               "placed on a locked plot can't be positioned."));
+        return;
+    }
+
+    // Same placement as Add > Fixture, but at the drop point. Several at once
+    // fan out sideways so they don't land in a single stack; the release logic
+    // below then mounts each one on whatever truss/riser/tower it landed on.
+    const QPointF base = m_graphicsView->pixelsToRealPosition(scenePos.x(), scenePos.y());
+    int n = 0;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (fx == NULL || m_graphicsView->fixturesID().contains(fid))
+            continue;
+        const QPointF mm(base.x() + n * 400.0, base.y());
+        m_graphicsView->addFixture(fid, mm);
+        m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
+        m_props->setFixtureFlags(fid, 0, 0, 0);
+        m_props->setFixtureLayer(fid, m_props->activeLayerId());
+        m_graphicsView->finishFixtureDrop(fid);
+        n++;
+    }
+    if (n > 0)
+        m_doc->setModified();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_graphicsView->refreshFixtureLabels();
+    if (m_inventoryPanel) m_inventoryPanel->reload();
+}
+
 void Monitor::slotEditImage(quint32 id)
 {
     if (!m_props->hasImage(id))
@@ -4305,6 +4439,109 @@ void Monitor::slotEditImage(quint32 id)
     m_props->setImage(img);
 
     m_graphicsView->updateImages();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotAddNetworkNode()
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Add Network Node"));
+    QFormLayout *form = new QFormLayout(&dlg);
+
+    QLineEdit *nameEdit = new QLineEdit(&dlg);
+    nameEdit->setPlaceholderText(tr("e.g. SR ArtNet Node"));
+    form->addRow(tr("Name:"), nameEdit);
+
+    QComboBox *transportCb = new QComboBox(&dlg);
+    transportCb->addItem(tr("ArtNet"), int(NetworkNode::ArtNet));
+    transportCb->addItem(tr("sACN"), int(NetworkNode::sACN));
+    transportCb->addItem(tr("Interface"), int(NetworkNode::Interface));
+    transportCb->addItem(tr("Wireless DMX"), int(NetworkNode::WirelessDMX));
+    form->addRow(tr("Transport:"), transportCb);
+
+    // Pre-fill position from the right-click point, like Add Truss/Add Image.
+    QPointF pendMm = m_pendingAddScenePos.isNull()
+                     ? QPointF(0, 0)
+                     : m_graphicsView->pixelsToRealPosition(
+                           m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    m_pendingAddScenePos = QPointF();
+
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const QString unitSfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+    const double posRange = isFeet ? 164.0 : 50.0;
+
+    QDoubleSpinBox *xSpin = new QDoubleSpinBox(&dlg);
+    xSpin->setRange(-posRange, posRange); xSpin->setSuffix(unitSfx); xSpin->setDecimals(2);
+    xSpin->setValue(pendMm.x() / 1000.0 * toDisp);
+    form->addRow(tr("X (stage left):"), xSpin);
+
+    QDoubleSpinBox *ySpin = new QDoubleSpinBox(&dlg);
+    ySpin->setRange(-posRange, posRange); ySpin->setSuffix(unitSfx); ySpin->setDecimals(2);
+    ySpin->setValue(pendMm.y() / 1000.0 * toDisp);
+    form->addRow(tr("Y (downstage):"), ySpin);
+
+    QDialogButtonBox *btns = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    form->addRow(btns);
+    connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    NetworkTopology *nt = m_doc->networkTopology();
+    NetworkNode node;
+    node.name = nameEdit->text().trimmed().isEmpty()
+                ? tr("Node %1").arg(nt->nodes().size() + 1) : nameEdit->text().trimmed();
+    node.transport = transportCb->currentData().toInt();
+    node.placed = true;
+    node.posX = xSpin->value() * fromDisp;
+    node.posY = ySpin->value() * fromDisp;
+    node.layerId = m_props->activeLayerId();   // land on the selected layer
+    nt->nodes().append(node);
+
+    m_graphicsView->updateNetworkNodes();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+
+    // A node with no ports carries nothing: go straight on to giving it some.
+    slotEditNetworkNode(quint32(nt->nodes().size() - 1));
+}
+
+void Monitor::slotEditNetworkNode(quint32 nodeIndex)
+{
+    NetworkTopologyDialog dlg(m_doc, int(nodeIndex), this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    // Nodes are keyed to map items by index and the dialog may have added,
+    // removed or reordered them, so rebuild everything from the settled list.
+    m_graphicsView->updateNetworkNodes();
+    if (m_layersPanel) m_layersPanel->reload();
+}
+
+void Monitor::slotNetworkReport()
+{
+    NetworkReportDialog dlg(m_doc, this);
+    dlg.exec();
+}
+
+void Monitor::slotNetworkNodeRemoveRequested(quint32 nodeIndex)
+{
+    NetworkTopology *nt = m_doc->networkTopology();
+    if (int(nodeIndex) >= nt->nodes().size())
+        return;
+    if (QMessageBox::question(this, tr("Delete Network Node"),
+            tr("Delete network node '%1'?").arg(nt->nodes().at(int(nodeIndex)).name),
+            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+        return;
+    // Index-based, like PowerDistribution's sources() -- safe because every
+    // mutation here is immediately followed by a full rebuild (updateNetworkNodes()),
+    // so no later index reference outlives this removal.
+    nt->nodes().removeAt(int(nodeIndex));
+    m_graphicsView->updateNetworkNodes();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 }
@@ -5394,6 +5631,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     addMenu->addSeparator();
     addMenu->addAction(QIcon(":/image.png"), tr("Image"),
                        this, SLOT(slotAddImage()));
+    addMenu->addAction(tr("Network Node"),
+                       this, SLOT(slotAddNetworkNode()));
 
     menu.addSeparator();
     QAction *groupAct = menu.addAction(QIcon(":/group.png"), tr("Group selected (Ctrl+G)"),
@@ -5872,6 +6111,10 @@ void Monitor::locateFixture(quint32 fxId)
     Fixture *fxi = m_doc->fixture(fxId);
     if (fxi == nullptr)
         return;
+    // No address, nothing to flash: it would light whatever real fixture
+    // happens to sit at the placeholder universe 1 / address 1.
+    if (!fxi->isPatched())
+        return;
 
     LocateSession *session = new LocateSession;
     session->src = std::make_shared<FixtureLocate>(fxi, m_doc);
@@ -5916,7 +6159,7 @@ void Monitor::locateFixtures(const QList<quint32> &ids)
 void Monitor::resetFixture(quint32 fxId)
 {
     Fixture *fxi = m_doc->fixture(fxId);
-    if (fxi == nullptr || fxi->fixtureMode() == nullptr)
+    if (fxi == nullptr || fxi->fixtureMode() == nullptr || !fxi->isPatched())
         return;
 
     // Same "reset" Maintenance-capability detection the Fixture Test
@@ -7094,6 +7337,8 @@ void Monitor::showFixturePropertiesById(quint32 fxId)
             .arg(int(fxi->universe()) + 1).arg(int(fxi->address()) + 1);
         if (fxi->channels() > 1)
             addrStr += tr("–%1").arg(int(fxi->address()) + int(fxi->channels()));
+        if (!fxi->isPatched())
+            addrStr = tr("Unpatched (inventory)");
         QLabel *addrLabel = new QLabel(addrStr, &dlg);
         addrLabel->setStyleSheet("color:#aaa; font-size:10px;");
         vl->addWidget(addrLabel);
@@ -7128,7 +7373,14 @@ void Monitor::showFixturePropertiesById(quint32 fxId)
                 QPushButton *btn = new QPushButton(label, &dlg);
                 btn->setToolTip(tip);
                 hl->addWidget(btn);
+                if (!fxi->isPatched())
+                {
+                    btn->setEnabled(false);
+                    btn->setToolTip(tr("Patch this fixture first: it is in the inventory and has no DMX address"));
+                }
                 connect(btn, &QPushButton::clicked, [=]() {
+                    if (!fxi->isPatched())
+                        return;
                     QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
                     quint32 u = fxi->universe();
                     if (u < quint32(ua.size()))
@@ -7393,6 +7645,8 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
             .arg(fxi ? int(fxi->address()) + 1 : 0);
         if (fxi && fxi->channels() > 1)
             addrStr += tr("–%1").arg(int(fxi->address()) + int(fxi->channels()));
+        if (fxi && !fxi->isPatched())
+            addrStr = tr("Unpatched (inventory)");
         QLabel *addrLabel = new QLabel(addrStr, &dlg);
         addrLabel->setStyleSheet("color: #aaa; font-size: 10px;");
         infoForm->addRow(tr("Address:"), addrLabel);
@@ -7638,6 +7892,16 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     QPushButton *locateBtn = new QPushButton(tr("Locate"));
     locateBtn->setToolTip(tr("Flash this fixture at full intensity 3 times to identify it on the rig.\n"
                              "Works in any running scene without affecting other fixtures."));
+    // Both drive real DMX at the fixture's address, which a staged fixture
+    // does not have.
+    if (fxi && !fxi->isPatched())
+    {
+        const QString why = tr("Patch this fixture first: it is in the inventory and has no DMX address");
+        testBtn->setEnabled(false);
+        testBtn->setToolTip(why);
+        locateBtn->setEnabled(false);
+        locateBtn->setToolTip(why);
+    }
     testRowLayout->addWidget(testModeCb, 1);
     testRowLayout->addWidget(testTargetCb, 1);
     testRowLayout->addWidget(testBtn);

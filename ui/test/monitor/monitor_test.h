@@ -187,6 +187,57 @@ private slots:
      *  each step through the same production code path a user's mouse would
      *  hit, checking the model and the Layers list agree after every one. */
     void buildingARigStepByStepThroughRealUiStaysConsistent();
+
+    /** The Studio's Inventory panel lists staged fixtures that are not on the plot yet. */
+    void inventoryPanelListsOnlyStagedFixturesNotOnThePlot();
+    /** Dragging a staged fixture onto the plot places it where it was dropped. */
+    void droppingAnInventoryFixtureOnThePlotPlacesIt();
+    /** ...and dropping it onto a truss mounts it there, as a dragged fixture would. */
+    void droppingAnInventoryFixtureOnATrussMountsIt();
+
+    /** A staged fixture on the plot says "unpatched" in the DMX and network
+     *  overlays and never contributes a universe or an address clash. */
+    void aStagedFixtureOnThePlotNeverClaimsAUniverse();
+    /** Locate and reset drive real DMX, so they must refuse a staged fixture. */
+    void locateAndResetLeaveAStagedFixtureAlone();
+
+    /** A wireless port's receiver is drawn where the receiver is, with a dashed
+     *  link back to its transmitter that follows the transmitter when dragged. */
+    void wirelessReceiversAreDrawnWithALinkToTheirTransmitter();
+    /** A wired node has no receivers to draw. */
+    void aWiredNodeDrawsNoReceiverMarkers();
+
+    /** The Network overlay draws each port's cable run through its fixtures in
+     *  address order, with the run's stats on hover, and only in that overlay. */
+    void theNetworkOverlayDrawsCableRunsInAddressOrder();
+    /** A run follows a fixture that moves. */
+    void aCableRunFollowsAMovedFixture();
+    void aWirelessRunStartsAtItsReceiverAndCountsWhatIsOffThePlot();
+    void networkNodesJoinLayersGroupsLocksAndRenames();
+    void networkNodesMoveTogetherAndSnap();
+    void doubleClickingANetworkNodeOpensIt();
+    void onlyInventoryDragsAreTakenByThePlot();
+
+    /** In the Network overlay a DMX fixture on a universe no port carries is flagged. */
+    void theNetworkOverlayFlagsFixturesNoPortServes();
+
+    /** The panel files staged fixtures manufacturer -> model -> fixture, and
+     *  dragging a folder carries every fixture beneath it. */
+    void inventoryPanelIsOrganisedByManufacturerAndModel();
+    void inventoryPanelKeepsFoldersCollapsedAcrossAReload();
+    void inventoryPanelCountsNetworkFixtures();
+    void aDragFromTheInventoryCarriesEverySelectedFixture();
+    void theInventoryButtonShowsAndHidesThePanel();
+    void addToInventoryFromTheStudioShowsTheNewFixture();
+    void aDropOnALockedPlotIsRefused();
+    void addNetworkNodePlacesItWhereTheMenuWasOpened();
+    void addNetworkNodeCancelledAddsNothing();
+    void deletingANetworkNodeAsksFirst();
+    void editingANetworkNodeRebuildsThePlot();
+    void theNetworkReportOpensFromTheStudio();
+    void aStagedFixturesTestDialogOffersNoDmxActions();
+    void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
+    void theDmxViewHasNoTileForAStagedFixture();
     /** Integration test for the target/aim workflow: add a fixture, add a
      *  target (the real "Add Target" -> "Edit Target" dialog chain), assign
      *  the fixture to aim at it, verify the resolved beam actually arrives
