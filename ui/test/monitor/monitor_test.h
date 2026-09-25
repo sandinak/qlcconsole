@@ -235,6 +235,7 @@ private slots:
     void deletingANetworkNodeAsksFirst();
     void editingANetworkNodeRebuildsThePlot();
     void theNetworkReportOpensFromTheStudio();
+    void aFixtureOnATowerIsListedUnderThatTower();
     void aStagedFixturesTestDialogOffersNoDmxActions();
     void aStagedFixtureOnThePlotCannotBeTestedOrLocated();
     void theDmxViewHasNoTileForAStagedFixture();

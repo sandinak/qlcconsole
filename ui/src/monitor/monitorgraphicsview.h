@@ -506,6 +506,13 @@ public:
      *  that are still ungrouped. Leaves manually-grouped items alone. */
     void ensureTrussGroup(quint32 trussId);
 
+    /** Ensure a tower and the fixtures mounted on it share a map group: the
+     *  tower's own group if it is in one (a manual "Towers" folder, say --
+     *  the Layers list then nests the fixtures under the tower's row), else a
+     *  new one named after the tower and anchored to it. Pulls in mounted
+     *  fixtures that are still ungrouped; leaves manually-grouped ones alone. */
+    void ensureTowerGroup(quint32 towerId);
+
     /** Symmetric to ensureTrussGroup(): if @p fid is currently a member of a
      *  group that's dedicated to @p trussId (anchorKind == "truss", anchorId
      *  == trussId — i.e. still just "the truss's own group", not something
@@ -513,6 +520,11 @@ public:
      *  fixture's truss binding is cleared, so an unbound fixture doesn't keep
      *  select/move-together with a truss it's no longer on. */
     void leaveDedicatedTrussGroup(quint32 fid, quint32 trussId);
+    /** The tower counterpart: take @p fid out of a group anchored to
+     *  @p towerId when it comes off that tower. */
+    void leaveDedicatedTowerGroup(quint32 fid, quint32 towerId);
+    /** An explicit tower mount: join the tower's group (ensureTowerGroup()). */
+    void joinTowerGroup(quint32 fid, quint32 towerId);
 
     /** Select on the canvas every item under group @p gid (recursively through
      *  nested sub-groups). Used by the Layers tree when a group folder is
@@ -838,7 +850,7 @@ private:
     /** Next unused map-group id (registry-authoritative once migrated). */
     quint32 nextMapGroupId() const;
 
-    /** Count of structural items (trusses + platforms) in a group — used to
+    /** Count of structural items (trusses, platforms, towers) in a group — used to
      *  decide whether an auto-group is dedicated (anchorable) or a manual mix. */
     int structuralMembersOf(quint32 gid) const;
 

@@ -3564,8 +3564,7 @@ void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32
        always done this; dropping onto the structure canvas did not, so which
        route you used decided whether the fixture appeared. */
     quint32 gid = 0;
-    if (kind == 1)      { if (Tower *tw = m_props->tower(id))         gid = tw->groupId(); }
-    else if (kind == 2) { if (Truss *t = m_props->truss(id))          gid = t->groupId(); }
+    if (kind == 2)      { if (Truss *t = m_props->truss(id))          gid = t->groupId(); }
     else if (kind == 3) { if (StagePlatform *pl = m_props->platform(id)) gid = pl->groupId(); }
     if (gid != 0)
         m_props->setFixtureGroup(fid, gid);
@@ -3575,6 +3574,10 @@ void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32
        and invisible -- and uncounted by the structure's bubble. */
     m_graphicsView->ensureFixtureOnPlot(fid);
     m_graphicsView->updateFixture(fid);
+
+    // A tower gets its group formed on first mount (it has none until then).
+    if (kind == 1)
+        m_graphicsView->joinTowerGroup(fid, id);
 }
 
 void Monitor::studioCreateGroup(const QList<quint32> &fids, StructureStudioView *view)

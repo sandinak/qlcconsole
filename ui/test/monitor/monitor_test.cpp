@@ -11127,6 +11127,87 @@ void Monitor_Test::theNetworkReportOpensFromTheStudio()
     QVERIFY2(shown.contains("Reported -- ArtNet"), qPrintable(shown));
 }
 
+namespace
+{
+/* The Layers row whose text starts with @p name, or nullptr. */
+QTreeWidgetItem *layersRow(MonitorLayersPanel &panel, const QString &name)
+{
+    for (QTreeWidgetItemIterator it(panel.m_tree); *it != nullptr; ++it)
+        if ((*it)->text(0).startsWith(name))
+            return *it;
+    return nullptr;
+}
+} // namespace
+
+void Monitor_Test::aFixtureOnATowerIsListedUnderThatTower()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Tower *sl = props->addTower();
+    sl->setName("SL Tower");
+    sl->addShelf(1.0f);
+    Tower *sr = props->addTower();
+    sr->setName("SR Tower");
+    sr->addShelf(1.0f);
+    Tower *lone = props->addTower();
+    lone->setName("Lone Tower");
+    lone->addShelf(1.0f);
+    // SL and SR live in a hand-made "Towers" folder, as in the report.
+    const quint32 towers = props->nextGroupId();
+    props->createGroup(towers, "Towers", 0, 0);
+    sl->setGroupId(towers);
+    sr->setGroupId(towers);
+
+    auto spot = [doc](const char *name) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setChannels(4);
+        f->setPatched(false);                         // straight from the inventory
+        doc->addFixture(f);
+        return f;
+    };
+    Fixture *z = spot("Focus Spot Three Z");
+    Fixture *other = spot("Lone Spot");
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updatePlatforms();
+        MonitorLayersPanel panel(doc, &view);
+
+        // Mount on top of SL: listed under SL Tower, inside Towers.
+        view.mountFixtureOnTower(z->id(), sl->id(), FixtureRigProps::TowerTop);
+        QCOMPARE(props->fixtureGroup(z->id()), towers);
+        panel.reload();
+        QTreeWidgetItem *slRow = layersRow(panel, "SL Tower");
+        QVERIFY(slRow != nullptr);
+        QCOMPARE(slRow->childCount(), 1);
+        QVERIFY(slRow->child(0)->text(0).startsWith("Focus Spot Three Z"));
+        QVERIFY(slRow->parent() != nullptr && slRow->parent()->text(0).startsWith("Towers"));
+        QCOMPARE(layersRow(panel, "SR Tower")->childCount(), 0);   // SR stays a plain row
+
+        // A tower with a group of its own shows AS that group, like a truss.
+        view.attachFixtureToTower(other->id(), lone->id());
+        panel.reload();
+        QTreeWidgetItem *loneRow = layersRow(panel, "Lone Tower");
+        QVERIFY(loneRow != nullptr);
+        QVERIFY2(loneRow->text(0).contains("on tower"), qPrintable(loneRow->text(0)));
+        QCOMPARE(loneRow->childCount(), 1);
+        QVERIFY(loneRow->child(0)->text(0).startsWith("Lone Spot"));
+
+        // Taken off, it leaves the tower's own group (a manual one keeps it).
+        view.unmountFixture(other->id());
+        QCOMPARE(props->fixtureGroup(other->id()), quint32(0));
+        view.unmountFixture(z->id());
+        QCOMPARE(props->fixtureGroup(z->id()), towers);
+        panel.reload();
+        QCOMPARE(layersRow(panel, "SL Tower")->childCount(), 0);   // no longer mounted there
+    }
+    delete doc;
+}
+
 /* A staged fixture whose definition has a Maintenance channel with Reset and
  * Identify, so the test dialogs grow their DMX buttons. */
 static Fixture *stagedWithMaintenance(Doc *doc, FixtureCleanup *cleanup)

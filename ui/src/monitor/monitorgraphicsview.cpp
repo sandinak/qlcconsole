@@ -1208,6 +1208,8 @@ void MonitorGraphicsView::ensureGroupRegistry()
         if (StagePlatform *p = i->platform()) props->ensureGroup(p->groupId(), p->layerId());
     foreach (TargetItem *i, m_targetItems)
         if (StageTarget *t = i->target()) props->ensureGroup(t->groupId(), t->layerId());
+    foreach (TowerItem *i, m_towerItems)
+        if (Tower *t = i->tower()) props->ensureGroup(t->groupId(), t->layerId());
     PowerDistribution *pd = m_doc->powerDistribution();
     for (int s = 0; s < pd->sources().size(); s++)
         props->ensureGroup(pd->sources().at(s).groupId, pd->sources().at(s).layerId);
@@ -1230,6 +1232,10 @@ void MonitorGraphicsView::ensureGroupRegistry()
     foreach (PlatformItem *i, m_platformItems)
         if (StagePlatform *p = i->platform())
             ensurePlatformGroup(p->id());
+
+    // ...and each tower.
+    foreach (TowerItem *i, m_towerItems)
+        ensureTowerGroup(i->towerId());
 }
 
 void MonitorGraphicsView::ensurePlatformGroup(quint32 platformId)
@@ -1361,6 +1367,73 @@ void MonitorGraphicsView::leaveDedicatedTrussGroup(quint32 fid, quint32 trussId)
     props->setFixtureGroup(fid, 0);
 }
 
+void MonitorGraphicsView::ensureTowerGroup(quint32 towerId)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    Tower *t = props->tower(towerId);
+    if (t == nullptr)
+        return;
+
+    QList<quint32> mounted;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (props->fixtureRigProps(it.key()).towerId == towerId)
+            mounted << it.key();
+    if (mounted.isEmpty())
+        return;
+
+    // Only report a change when there is one (see ensurePlatformGroup()).
+    bool changed = false;
+    quint32 gid = t->groupId();
+    if (gid == 0 || !props->hasGroup(gid))
+    {
+        gid = props->nextGroupId();
+        const QString nm = t->name().isEmpty() ? tr("Tower %1").arg(towerId) : t->name();
+        props->createGroup(gid, nm, t->layerId(), 0);
+        changed = true;
+    }
+    if (t->groupId() != gid)
+        changed = true;
+    t->setGroupId(gid);
+
+    foreach (quint32 fid, mounted)
+    {
+        if (props->fixtureGroup(fid) == 0)
+        {
+            props->setFixtureGroup(fid, gid);
+            changed = true;
+        }
+    }
+
+    // Anchored to the tower only when the group is its own; a manual group of
+    // several structures stays a folder, with the tower's row as the container.
+    const QString newAnchorKind = (structuralMembersOf(gid) <= 1) ? QStringLiteral("tower") : QString();
+    const quint32 newAnchorId   = (structuralMembersOf(gid) <= 1) ? towerId : 0u;
+    if (props->group(gid).anchorKind != newAnchorKind || props->group(gid).anchorId != newAnchorId)
+    {
+        props->setGroupAnchor(gid, newAnchorKind, newAnchorId);
+        changed = true;
+    }
+
+    setGroupSubtreeLayer(gid, t->layerId());
+    if (changed)
+    {
+        m_doc->setModified();
+        emit mapStructureChanged();
+    }
+}
+
+void MonitorGraphicsView::leaveDedicatedTowerGroup(quint32 fid, quint32 towerId)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const quint32 gid = props->fixtureGroup(fid);
+    if (gid == 0)
+        return;
+    const MonitorProperties::MonitorGroup g = props->group(gid);
+    if (g.anchorKind != QStringLiteral("tower") || g.anchorId != towerId)
+        return;   // a manual group, or anchored elsewhere -- leave it alone
+    props->setFixtureGroup(fid, 0);
+}
+
 int MonitorGraphicsView::structuralMembersOf(quint32 gid) const
 {
     if (gid == 0)
@@ -1378,6 +1451,8 @@ int MonitorGraphicsView::structuralMembersOf(quint32 gid) const
         if (i->truss() && i->truss()->groupId() == gid && i->truss()->isChildBar() == false) n++;
     foreach (PlatformItem *i, m_platformItems)
         if (i->platform() && i->platform()->groupId() == gid) n++;
+    foreach (TowerItem *i, m_towerItems)
+        if (i->tower() && i->tower()->groupId() == gid) n++;
     return n;
 }
 
@@ -6462,6 +6537,18 @@ void MonitorGraphicsView::requestDeleteItem(const QString &kind, quint32 id)
     }
 }
 
+void MonitorGraphicsView::joinTowerGroup(quint32 fid, quint32 towerId)
+{
+    /* The Layers list nests a fixture under a structure by GROUP, not by
+       mount: mounted but ungrouped, it is drawn on the tower and listed
+       loose. Same as attachFixtureToTruss(): an explicit mount joins the
+       structure's group, whatever group the fixture was in. */
+    ensureTowerGroup(towerId);
+    if (Tower *t = m_doc->monitorProperties()->tower(towerId))
+        if (t->groupId() != 0)
+            m_doc->monitorProperties()->setFixtureGroup(fid, t->groupId());
+}
+
 void MonitorGraphicsView::mountFixtureOnTower(quint32 fid, quint32 towerId, int side, int shelf)
 {
     ensureFixtureOnPlot(fid);
@@ -6470,6 +6557,8 @@ void MonitorGraphicsView::mountFixtureOnTower(quint32 fid, quint32 towerId, int 
     if (t == nullptr)
         return;
     FixtureRigProps r = p->fixtureRigProps(fid);
+    if (r.onTower() && r.towerId != towerId)
+        leaveDedicatedTowerGroup(fid, r.towerId);
     r.clearMounts();
     r.towerId = towerId;
     r.towerMountSide = side;
@@ -6481,8 +6570,10 @@ void MonitorGraphicsView::mountFixtureOnTower(quint32 fid, quint32 towerId, int 
     r.towerV = t->depth() * 0.5f;
     p->setFixtureRigProps(fid, r);
     updateFixture(fid);
+    joinTowerGroup(fid, towerId);
     m_doc->setModified();
     emit mapStructureChanged();
+    refreshItemLayerState();
 }
 
 void MonitorGraphicsView::ensureFixtureOnPlot(quint32 fid)
@@ -6508,6 +6599,8 @@ void MonitorGraphicsView::unmountFixture(quint32 fid)
         detachFixtureFromTruss(fid);
         return;
     }
+    if (rp.onTower())
+        leaveDedicatedTowerGroup(fid, rp.towerId);
     FixtureRigProps r = rp;
     r.pipeId = Pipe::invalidId();
     r.towerId = Tower::invalidId();
@@ -6526,6 +6619,8 @@ void MonitorGraphicsView::attachFixtureToPipe(quint32 fid, quint32 pipeId)
         return;
 
     FixtureRigProps rp = props->fixtureRigProps(fid);
+    if (rp.onTower())
+        leaveDedicatedTowerGroup(fid, rp.towerId);
     // Boom mount is mutually exclusive with the other structural mounts.
     rp.clearMounts();   // ...including towerId, which this used to miss
     rp.pipeId = pipeId;
@@ -6594,6 +6689,9 @@ void MonitorGraphicsView::attachFixtureToTruss(quint32 fid, quint32 trussId)
 
 void MonitorGraphicsView::attachFixtureToTower(quint32 fid, quint32 towerId)
 {
+    // Like the truss and pipe attaches: a never-placed fixture gets an icon,
+    // or it is rigged, invisible and not counted as on the tower.
+    ensureFixtureOnPlot(fid);
     MonitorProperties *props = m_doc->monitorProperties();
     Tower *t = props->tower(towerId);
     if (t == nullptr || t->shelfCount() == 0)
@@ -6606,6 +6704,8 @@ void MonitorGraphicsView::attachFixtureToTower(quint32 fid, quint32 towerId)
     // right-click menu's own default assignment. A plain drop always means a
     // SHELF (Top/Bottom are menu-only, explicit choices), so this also pulls
     // a fixture that was previously Top/Bottom-mounted back onto a shelf.
+    if (rp.onTower() && rp.towerId != towerId)
+        leaveDedicatedTowerGroup(fid, rp.towerId);
     const bool alreadyOnAShelf = (rp.towerId == towerId
                                    && rp.towerMountSide == FixtureRigProps::TowerShelf
                                    && rp.towerShelf < quint32(t->shelfCount()));
@@ -6624,6 +6724,7 @@ void MonitorGraphicsView::attachFixtureToTower(quint32 fid, quint32 towerId)
     props->setFixtureRigProps(fid, rp);
 
     updateFixture(fid);
+    joinTowerGroup(fid, towerId);
     m_doc->setModified();
     emit mapStructureChanged();
     refreshItemLayerState();
