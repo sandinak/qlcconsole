@@ -60,3 +60,6 @@ engine/test/qlci18n/qlci18n_*.ts_
 
 # Workspace autosave files
 *.qxw.autosave
+
+# Local scratch area (logs, coverage scripts) -- not part of the project
+/scratchpad/
