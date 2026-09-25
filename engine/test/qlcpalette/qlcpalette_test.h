@@ -39,6 +39,10 @@ private slots:
     void load();
     void loadWrongRoot();
     void save();
+
+    /** A gobo look writes its value to the fixture's gobo channel -- which
+     *  a head's channel map never lists, so it has to be found per fixture. */
+    void aGoboLookReachesTheGoboChannel();
 };
 
 #endif

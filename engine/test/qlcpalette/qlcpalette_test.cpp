@@ -23,6 +23,12 @@
 
 #include "qlcpalette_test.h"
 #include "qlcpalette.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
+#include "scenevalue.h"
+#include "fixture.h"
+#include "doc.h"
 
 void QLCPalette_Test::initialization()
 {
@@ -269,4 +275,47 @@ void QLCPalette_Test::save()
     QVERIFY(xmlReader.attributes().value("Value").toString() == "90,145");
 }
 
-QTEST_APPLESS_MAIN(QLCPalette_Test)
+void QLCPalette_Test::aGoboLookReachesTheGoboChannel()
+{
+    // Dimmer, gobo wheel, gobo rotation -- no <Head>, like most spots.
+    QLCFixtureDef def;
+    def.setManufacturer("Test");
+    def.setModel("Spot");
+    QLCFixtureMode *mode = new QLCFixtureMode(&def);
+    mode->setName("3ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Intensity, QLCChannel::Gobo,
+                                         QLCChannel::Gobo };
+    const char *names[] = { "Dimmer", "Gobo", "Gobo Rotation" };
+    for (int i = 0; i < 3; i++)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[i]);
+        ch->setGroup(groups[i]);
+        ch->setControlByte(QLCChannel::MSB);
+        def.addChannel(ch);
+        mode->insertChannel(ch, i);
+    }
+    def.addMode(mode);
+
+    Doc doc(this);
+    Fixture *spot = new Fixture(&doc);
+    spot->setFixtureDefinition(&def, mode);
+    QVERIFY(doc.addFixture(spot));
+    Fixture *plain = new Fixture(&doc);             // generic dimmer: no wheel
+    plain->setChannels(1);
+    plain->setAddress(10);
+    QVERIFY(doc.addFixture(plain));
+
+    QLCPalette gobo(QLCPalette::Gobo);
+    gobo.setValue(49);
+    const QList<SceneValue> vals =
+        gobo.valuesFromFixtures(&doc, QList<quint32>() << spot->id() << plain->id());
+    QCOMPARE(vals.size(), 1);
+    QCOMPARE(vals.first().fxi, spot->id());
+    QCOMPARE(vals.first().channel, quint32(1));     // the wheel, not the rotation
+    QCOMPARE(int(vals.first().value), 49);
+
+    spot->setFixtureDefinition(nullptr, nullptr);   // def is on the stack
+}
+
+QTEST_GUILESS_MAIN(QLCPalette_Test)

@@ -96,6 +96,8 @@ private slots:
     void slotAimTargetChanged(int index);
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
+    /** "Wheel of" changed: list that fixture type's gobos/shutter states. */
+    void slotSingleSourcePicked(int index);
     void slotBeamChanged(int);
     /** Per-look fade override (checkbox + seconds spin) changed. */
     void slotFadeTimeChanged();
@@ -108,6 +110,27 @@ private:
     /** A representative target-fixture channel of the given group, or NULL.
      *  Used to surface capability (gobo/shutter/strobe) names. */
     const QLCChannel *representativeChannel(int group) const;
+
+public:
+    /** One fixture TYPE whose channel of a group can name a gobo/shutter
+     *  value: what the "Wheel of" chooser lists. */
+    struct ChannelSource
+    {
+        QString key;                //!< manufacturer/model/mode, for dedup + memory
+        QString label;              //!< shown in the chooser
+        const QLCChannel *channel;  //!< the channel the palette's value lands on
+    };
+    /** The fixture types that can show a @p group value: the look's own
+     *  targets when it has any that can, otherwise every fixture in the
+     *  workspace -- a gobo made from the palette list has no look yet, and
+     *  still needs a wheel to pick from. One entry per fixture type, most
+     *  numerous first. Uses the same channel the palette writes to
+     *  (QLCPalette: the mode's first MSB channel of the group). */
+    QList<ChannelSource> singleChannelSources(int group) const;
+
+private:
+    /** Fill the named-capability picker from m_singleChannel for value @p v. */
+    void fillSingleCapabilities(int v);
 
     /** True if any target fixture has the given QLCChannel::PrimaryColour
      *  emitter channel (White/Amber/UV). */
@@ -180,6 +203,10 @@ private:
     QComboBox *m_singleCombo;  //!< named gobo/shutter capabilities
     QLabel *m_singlePreview;   //!< gobo/shutter image for the current value
     const QLCChannel *m_singleChannel; //!< representative chan for the single page
+    QLabel *m_singleSourceLabel;       //!< "Wheel of"
+    QComboBox *m_singleSourceCombo;    //!< which fixture type's wheel to browse
+    QList<ChannelSource> m_singleSources;
+    QString m_singleSourceKey;         //!< last type chosen, kept across palettes
 
     // Strobe page
     QSlider *m_strobeSlider;   //!< 0-100 → rate 0.0-1.0

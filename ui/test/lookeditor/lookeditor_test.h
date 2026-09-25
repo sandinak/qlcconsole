@@ -29,6 +29,10 @@ class LookEditor_Test final : public QObject
 private slots:
     void aColourDarkerThanAFifthIsCalledOut();
     void aDarkRedLookWarnsUntilItIsBrightened();
+    /** "if I create a gobo it doesn't give me a gobo selector?" A gobo made
+     *  from the palette list has no look yet; the picker falls back to the
+     *  workspace's fixtures, with a chooser when several wheels differ. */
+    void aNewGoboOffersTheWorkspacesWheels();
 };
 
 #endif

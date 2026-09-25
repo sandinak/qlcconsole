@@ -28,6 +28,7 @@
 #include <QDataStream>
 #include <QMenu>
 #include <functional>
+#include <algorithm>
 
 #include <QTreeWidget>
 #include <QDialogButtonBox>
@@ -44,6 +45,8 @@
 #include "qlcchannel.h"
 #include "fixturegroup.h"
 #include "fixture.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
 #include "scene.h"
 #include "doc.h"
 #include "effectscriptrunner.h"
@@ -520,6 +523,19 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     QVBoxLayout *sv = new QVBoxLayout(single);
     // Named capabilities (gobo/shutter) from a representative fixture, with a
     // gobo image preview beside the picker.
+    QHBoxLayout *sourceRow = new QHBoxLayout();
+    sv->addLayout(sourceRow);
+    m_singleSourceLabel = new QLabel(tr("Wheel of"), single);
+    sourceRow->addWidget(m_singleSourceLabel);
+    m_singleSourceCombo = new QComboBox(single);
+    m_singleSourceCombo->setToolTip(tr("The look stores one DMX value; each fixture "
+                                       "type has its own wheel. Pick the type whose "
+                                       "gobos to choose from."));
+    sourceRow->addWidget(m_singleSourceCombo, 1);
+    m_singleSourceLabel->setVisible(false);
+    m_singleSourceCombo->setVisible(false);
+    connect(m_singleSourceCombo, SIGNAL(activated(int)),
+            this, SLOT(slotSingleSourcePicked(int)));
     QHBoxLayout *pickRow = new QHBoxLayout();
     sv->addLayout(pickRow);
     m_singlePreview = new QLabel(single);
@@ -840,42 +856,29 @@ void LookEditor::setPalette(quint32 paletteId)
         m_singleSlider->setValue(p->intValue1());
         m_singleValue->setText(QString::number(p->intValue1()));
 
-        // Named capabilities for gobo/shutter from a representative fixture.
+        // Named capabilities for gobo/shutter, from the look's fixtures or,
+        // with none that can, from any fixture type in the workspace.
         int chGroup = -1;
         if (p->type() == QLCPalette::Gobo)         chGroup = QLCChannel::Gobo;
         else if (p->type() == QLCPalette::Shutter) chGroup = QLCChannel::Shutter;
 
-        m_singleCombo->clear();
-        const QLCChannel *ch = (chGroup >= 0) ? representativeChannel(chGroup) : NULL;
-        m_singleChannel = ch;
-        if (ch != NULL)
+        m_singleSources = (chGroup >= 0) ? singleChannelSources(chGroup)
+                                         : QList<ChannelSource>();
+        m_singleSourceCombo->clear();
+        int source = 0;
+        for (int i = 0; i < m_singleSources.size(); i++)
         {
-            int sel = -1, idx = 0;
-            foreach (QLCCapability *cap, ch->capabilities())
-            {
-                // Show a gobo/effect thumbnail next to each named capability.
-                QIcon icon;
-                if (cap->presetType() == QLCCapability::Picture)
-                {
-                    const QPixmap px(cap->resource(0).toString());
-                    if (px.isNull() == false)
-                        icon = QIcon(px);
-                }
-                m_singleCombo->addItem(icon, cap->name(),
-                                       (int(cap->min()) + int(cap->max())) / 2);
-                if (p->intValue1() >= cap->min() && p->intValue1() <= cap->max())
-                    sel = idx;
-                idx++;
-            }
-            if (sel >= 0)
-                m_singleCombo->setCurrentIndex(sel);
-            m_singleCombo->setIconSize(QSize(32, 32));
-            m_singleCombo->setVisible(true);
+            m_singleSourceCombo->addItem(m_singleSources.at(i).label);
+            if (m_singleSources.at(i).key == m_singleSourceKey)
+                source = i;
         }
-        else
-        {
-            m_singleCombo->setVisible(false);
-        }
+        m_singleSourceCombo->setCurrentIndex(source);
+        const bool choose = m_singleSources.size() > 1;
+        m_singleSourceLabel->setVisible(choose);
+        m_singleSourceCombo->setVisible(choose);
+        m_singleChannel = m_singleSources.isEmpty() ? NULL
+                                                    : m_singleSources.at(source).channel;
+        fillSingleCapabilities(p->intValue1());
         updateSinglePreview(p->intValue1());
         m_stack->setCurrentIndex(m_pageSingle);
         setMaximumHeight(340);
@@ -1330,6 +1333,130 @@ void LookEditor::slotSingleCapabilityPicked(int index)
     // Set the slider to the picked capability's mid value; that drives the
     // palette update via slotSingleValueChanged().
     m_singleSlider->setValue(m_singleCombo->itemData(index).toInt());
+}
+
+void LookEditor::slotSingleSourcePicked(int index)
+{
+    if (index < 0 || index >= m_singleSources.size())
+        return;
+    m_singleSourceKey = m_singleSources.at(index).key;
+    m_singleChannel = m_singleSources.at(index).channel;
+    fillSingleCapabilities(m_singleSlider->value());
+    updateSinglePreview(m_singleSlider->value());
+}
+
+void LookEditor::fillSingleCapabilities(int v)
+{
+    m_singleCombo->clear();
+    if (m_singleChannel == NULL)
+    {
+        m_singleCombo->setVisible(false);
+        return;
+    }
+    int sel = -1, idx = 0;
+    foreach (QLCCapability *cap, m_singleChannel->capabilities())
+    {
+        // Show a gobo/effect thumbnail next to each named capability.
+        QIcon icon;
+        if (cap->presetType() == QLCCapability::Picture)
+        {
+            const QPixmap px(cap->resource(0).toString());
+            if (px.isNull() == false)
+                icon = QIcon(px);
+        }
+        m_singleCombo->addItem(icon, cap->name(),
+                               (int(cap->min()) + int(cap->max())) / 2);
+        if (v >= cap->min() && v <= cap->max())
+            sel = idx;
+        idx++;
+    }
+    if (sel >= 0)
+        m_singleCombo->setCurrentIndex(sel);
+    m_singleCombo->setIconSize(QSize(32, 32));
+    m_singleCombo->setVisible(true);
+}
+
+QList<LookEditor::ChannelSource> LookEditor::singleChannelSources(int group) const
+{
+    // The look's own targets first; a look with none that can (or no look at
+    // all) falls back to the whole workspace.
+    QList<quint32> ids;
+    if (m_contextScene != NULL)
+    {
+        QSet<quint32> seen;
+        foreach (quint32 fid, m_contextScene->fixtures())
+            if (!seen.contains(fid)) { seen.insert(fid); ids << fid; }
+        foreach (quint32 gid, m_contextScene->fixtureGroups())
+        {
+            FixtureGroup *g = m_doc->fixtureGroup(gid);
+            if (g == NULL)
+                continue;
+            foreach (quint32 fid, g->fixtureList())
+            {
+                if (!seen.contains(fid)) { seen.insert(fid); ids << fid; }
+            }
+        }
+    }
+
+    auto gather = [this, group](const QList<quint32> &fids) {
+        QList<ChannelSource> out;
+        QHash<QString, int> count;
+        foreach (quint32 fid, fids)
+        {
+            Fixture *f = m_doc->fixture(fid);
+            if (f == NULL)
+                continue;
+            // The channel QLCPalette writes the value to (per fixture mode).
+            const quint32 chn = f->fixtureMode() == NULL ? QLCChannel::invalid()
+                : f->fixtureMode()->channelNumber(QLCChannel::Group(group), QLCChannel::MSB);
+            const QLCChannel *ch = (chn == QLCChannel::invalid()) ? NULL : f->channel(chn);
+            if (ch == NULL)
+                continue;
+            QString key, label;
+            if (f->fixtureDef() != NULL)
+            {
+                label = QString("%1 %2").arg(f->fixtureDef()->manufacturer(),
+                                             f->fixtureDef()->model());
+                key = label;
+                if (f->fixtureMode() != NULL)
+                    key += QLatin1Char('/') + f->fixtureMode()->name();
+            }
+            else
+            {
+                label = key = f->name();
+            }
+            if (!count.contains(key))
+            {
+                ChannelSource src;
+                src.key = key;
+                src.label = label;
+                src.channel = ch;
+                out << src;
+            }
+            count[key]++;
+        }
+        std::stable_sort(out.begin(), out.end(),
+                         [&count](const ChannelSource &a, const ChannelSource &b) {
+            return count.value(a.key) > count.value(b.key);
+        });
+        for (int i = 0; i < out.size(); i++)
+        {
+            const int n = count.value(out.at(i).key);
+            out[i].label = n > 1 ? tr("%1 (%2 fixtures)").arg(out.at(i).label).arg(n)
+                                 : out.at(i).label;
+        }
+        return out;
+    };
+
+    QList<ChannelSource> sources = gather(ids);
+    if (sources.isEmpty())
+    {
+        QList<quint32> all;
+        foreach (Fixture *f, m_doc->fixtures())
+            all << f->id();
+        sources = gather(all);
+    }
+    return sources;
 }
 
 void LookEditor::slotBeamChanged(int)

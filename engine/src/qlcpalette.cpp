@@ -880,7 +880,12 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             break;
             case Gobo:
             {
-                quint32 goboCh = fixture->channelNumber(QLCChannel::Gobo, QLCChannel::MSB);
+                // Per FIXTURE, not per head: a head's channel map never lists
+                // gobo channels, so the head lookup found nothing and a gobo
+                // look wrote no value at all.
+                const quint32 goboCh = fixture->fixtureMode() != NULL
+                    ? fixture->fixtureMode()->channelNumber(QLCChannel::Gobo, QLCChannel::MSB)
+                    : QLCChannel::invalid();
                 if (goboCh != QLCChannel::invalid())
                     list << SceneValue(id, goboCh, uchar(value().toUInt()));
             }
