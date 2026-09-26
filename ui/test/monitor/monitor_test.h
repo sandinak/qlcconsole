@@ -246,6 +246,10 @@ private slots:
     void beamsLandOnTheCycloramaInTheRigView();
     void selectAllTakesEverythingSelectable();
     void aDecksCountBubbleMovesWithIt();
+    /** "when I zoom in, the blue circles can stay the same size so what's
+     *  under them is more easily clickable." Same screen size at any zoom,
+     *  still centred on its structure. */
+    void aCountBubbleKeepsItsScreenSizeWhenZoomed();
     void oneUndoPutsBackAWholeMixedDrag();
     /** One lock, the LAYER's: locking any object locks its layer (and
      *  everything on it), the menu says so, a power source's own toggle

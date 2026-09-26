@@ -243,6 +243,8 @@ locked."
     selectable object on the plot, as ONE selection change.
   - **Count bubbles** (a deck's or truss's fixture count) follow the structure
     after any drag, including a multi-item one and an undo.
+  - Count bubbles keep one screen size at any zoom (and stay upright when the
+    plot is rotated), so zooming in uncovers what is under them.
   - **Undo** puts back a whole drag at once: every object the mouse-up moved
     (trusses, decks, towers, stands, pipes, scenery, targets, power, network,
     fixtures) is one batch; decks bring the fixtures on them back too.

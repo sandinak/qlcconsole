@@ -2583,6 +2583,11 @@ void MonitorGraphicsView::refreshFixtureCountBadges()
             badge->addToGroup(num);
             badge->setZValue(3.0);                    // above fixtures (2) and their halo
             badge->setAcceptedMouseButtons(Qt::NoButton);   // never steal the click
+            /* "when I zoom in, the blue circles can stay the same size so
+               what's under them is more easily clickable." A fixed screen
+               size (and upright under plot rotation): zooming in grows the
+               structure and its fixtures, never the bubble over them. */
+            badge->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
             m_scene->addItem(badge);
             m_countBadges.insert(key, badge);
         }
@@ -2604,7 +2609,10 @@ void MonitorGraphicsView::refreshFixtureCountBadges()
 
         const QRectF tb = num->boundingRect();
         const double d = qMax(16.0, qMax(tb.width(), tb.height()) + 8.0);
-        disc->setRect(0, 0, d, d);
+        // Centred on the badge's own origin, which sits on the structure's
+        // centre: an item that ignores the view's scale must be anchored at
+        // the point it marks, or zooming slides it off that point.
+        disc->setRect(-d * 0.5, -d * 0.5, d, d);
         /* Filled blue = these fixtures bury their structure (the mandated
            look). Hollow = they are hidden because "Fixtures on the rig" is
            off. Keyed on the MODE, not on the individual structure: with the
@@ -2625,15 +2633,14 @@ void MonitorGraphicsView::refreshFixtureCountBadges()
         badge->setToolTip(m_showMountedFixtures
             ? tr("%n fixture(s) here cover this and are hidden in this view", "", n)
             : tr("%n fixture(s) here, hidden by “Fixtures on the rig”", "", n));
-        num->setPos((d - tb.width()) * 0.5, (d - tb.height()) * 0.5);
+        num->setPos(-tb.width() * 0.5, -tb.height() * 0.5);
 
         const QGraphicsItem *hostItem =
               (sk.first == QStringLiteral("truss"))    ? (QGraphicsItem *)m_trussItems.value(sk.second, nullptr)
             : (sk.first == QStringLiteral("tower"))    ? (QGraphicsItem *)m_towerItems.value(sk.second, nullptr)
             : (sk.first == QStringLiteral("pipe"))     ? (QGraphicsItem *)m_pipeItems.value(sk.second, nullptr)
             : (QGraphicsItem *)m_platformItems.value(sk.second, nullptr);
-        const QPointF c = centreOf(hostItem);
-        badge->setPos(c.x() - d * 0.5, c.y() - d * 0.5);
+        badge->setPos(centreOf(hostItem));
         badge->setVisible(true);
     }
 

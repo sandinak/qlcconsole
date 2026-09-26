@@ -11687,6 +11687,64 @@ void Monitor_Test::selectAllTakesEverythingSelectable()
     delete doc;
 }
 
+void Monitor_Test::aCountBubbleKeepsItsScreenSizeWhenZoomed()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(2.0f);
+    deck->setOriginY(2.0f);
+    deck->setWidth(4.0f);
+    deck->setDepth(2.0f);
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setChannels(4);
+        f->setAddress(quint32(i * 4));
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(3000.0f + i * 1000.0f, 3000.0f, 0.0f));
+        FixtureRigProps rp;
+        rp.deckPlatformId = deck->id();
+        props->setFixtureRigProps(f->id(), rp);
+    }
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.updatePlatforms();
+        foreach (Fixture *f, doc->fixtures())
+            view.addFixture(f->id(), QPointF(props->fixturePosition(f->id(), 0, 0).x(),
+                                             props->fixturePosition(f->id(), 0, 0).y()));
+        view.setMountedFixturesVisible(false);
+        QGraphicsItemGroup *badge = view.m_countBadges.value(QString("platform:%1").arg(deck->id()));
+        QVERIFY(badge != nullptr);
+        QVERIFY(badge->flags() & QGraphicsItem::ItemIgnoresTransformations);
+        PlatformItem *deckItem = view.m_platformItems.value(deck->id());
+
+        // On screen: the bubble's size, and where it sits against the deck.
+        auto onScreen = [&]() {
+            return badge->deviceTransform(view.viewportTransform()).mapRect(badge->boundingRect());
+        };
+        auto deckCentre = [&]() {
+            return QPointF(view.mapFromScene(deckItem->sceneBoundingRect().center()));
+        };
+        const QRectF at1 = onScreen();
+        QVERIFY((at1.center() - deckCentre()).manhattanLength() < 3.0);
+        const double deckAt1 = view.mapFromScene(deckItem->sceneBoundingRect()).boundingRect().width();
+
+        view.scale(4.0, 4.0);
+        const QRectF at4 = onScreen();
+        QVERIFY2(qAbs(at4.width() - at1.width()) < 1.0,
+                 qPrintable(QString("bubble %1 px wide at 1x, %2 px at 4x").arg(at1.width()).arg(at4.width())));
+        QVERIFY((at4.center() - deckCentre()).manhattanLength() < 3.0);
+        // ...while the deck under it did grow, so more of it is clear to click.
+        const double deckAt4 = view.mapFromScene(deckItem->sceneBoundingRect()).boundingRect().width();
+        QVERIFY(deckAt4 > deckAt1 * 3.0);
+    }
+    delete doc;
+}
+
 void Monitor_Test::aDecksCountBubbleMovesWithIt()
 {
     Doc *doc = new Doc(this);
