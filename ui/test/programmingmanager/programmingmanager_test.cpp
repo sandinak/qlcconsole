@@ -36,6 +36,10 @@
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "doc.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcphysical.h"
+#include "monitor/structurestudioview.h"
 #undef private
 #undef protected
 
@@ -480,6 +484,121 @@ void ProgrammingManager_Test::droppingAGroupFoldsAwayAnAlreadyCoveredFixedTarget
              "the individual fixed target survived the group drop -- it should "
              "have folded away (group now covers the same fixture with nothing "
              "of its own left uncovered)");
+}
+
+/* A 540/270 moving head with pan and tilt only. */
+static Fixture *makeMover(Doc *doc, QLCFixtureDef *def)
+{
+    def->setManufacturer("Test");
+    def->setModel("Mover");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    for (int k = 0; k < 2; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(k == 0 ? "Pan" : "Tilt");
+        ch->setGroup(k == 0 ? QLCChannel::Pan : QLCChannel::Tilt);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName("Mover");
+    fxi->setFixtureDefinition(def, mode);
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+void ProgrammingManager_Test::aNewPanTiltIsTriedOnTheLookSoTheRigFollows()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    QLCFixtureDef *def = new QLCFixtureDef();
+    Fixture *mover = makeMover(m_doc, def);
+    QVERIFY(mover != nullptr);
+
+    QLCPalette *base = new QLCPalette(QLCPalette::PanTilt, m_doc);
+    base->setName("Base");
+    base->setValue(90, 45);
+    QVERIFY(m_doc->addPalette(base));
+    Scene *look = new Scene(m_doc);
+    look->setName("Spots");
+    look->addFixture(mover->id());
+    look->addPalette(base->id());
+    QVERIFY(m_doc->addFunction(look));
+
+    StructureStudioView rig(m_doc, StructureStudioView::StageKind, 0);
+    rig.setActiveScene(look->id());
+    rig.rebuildAimTargets();
+    auto rigPan = [&]() {
+        const QByteArray v = rig.m_sceneValues.value(mover->id());
+        return v.isEmpty() ? -1 : int(uchar(v.at(0)));
+    };
+    const int basePan = rigPan();
+
+    {
+        ProgrammingManager mgr(nullptr, m_doc);
+        QVERIFY(openCanvas(mgr, look->id()) != nullptr);
+        QVERIFY(mgr.m_lookEditor->trialNote().isEmpty());
+
+        // "New Pan/Tilt" from the palette list: it opens in the editor,
+        // and the look on the canvas tries it on.
+        const int before = m_doc->palettes().size();
+        mgr.createPalette(QLCPalette::PanTilt);
+        QCOMPARE(m_doc->palettes().size(), before + 1);
+        const quint32 pid = mgr.m_lookEditor->paletteId();
+        QLCPalette *fresh = m_doc->palette(pid);
+        QVERIFY(fresh != nullptr && fresh->type() == QLCPalette::PanTilt);
+        QCOMPARE(look->trialPalette(), pid);
+        QVERIFY(!look->palettes().contains(pid));
+        // Its new "Palettes/PanTilt" folder didn't rename the look (id 0).
+        QCOMPARE(look->name(), QString("Spots"));
+        QVERIFY2(mgr.m_lookEditor->trialNote().contains("Spots"),
+                 qPrintable(mgr.m_lookEditor->trialNote()));
+
+        // Moving the pad moves the rig: the look is re-resolved with the trial.
+        QSignalSpy changed(m_doc, &Doc::functionChanged);
+        mgr.m_lookEditor->slotPanTiltChanged(QPointF(200.0, 100.0));
+        QVERIFY(changed.count() > 0);
+        QCOMPARE(changed.last().at(0).toUInt(), look->id());
+        rig.rebuildAimTargets();
+        const QList<SceneValue> want = fresh->valuesFromFixtures(m_doc, QList<quint32>() << mover->id());
+        QVERIFY(!want.isEmpty());
+        QCOMPARE(rigPan(), int(want.first().value));
+        QVERIFY2(rigPan() != basePan, "the rig still shows the look's own position");
+
+        // Dropped INTO the look for real: no longer a trial, no note.
+        look->addPalette(pid);
+        mgr.slotCanvasModified();
+        QCOMPARE(look->trialPalette(), QLCPalette::invalidId());
+        QVERIFY(mgr.m_lookEditor->trialNote().isEmpty());
+        look->removePalette(pid);
+
+        // Editing one of the look's own palettes tries nothing on.
+        mgr.m_lookEditor->setPalette(base->id());
+        QCOMPARE(look->trialPalette(), QLCPalette::invalidId());
+        QVERIFY(mgr.m_lookEditor->trialNote().isEmpty());
+
+        // Back to the loose one, then away from the look: the trial ends.
+        mgr.m_lookEditor->setPalette(pid);
+        QCOMPARE(look->trialPalette(), pid);
+        mgr.loadCanvas(Function::invalidId());
+        QCOMPARE(look->trialPalette(), QLCPalette::invalidId());
+
+        // No look on the canvas: nothing to try it on, and the editor says so.
+        mgr.m_lookEditor->setPalette(pid);
+        QVERIFY2(mgr.m_lookEditor->trialNote().contains("Not in a look"),
+                 qPrintable(mgr.m_lookEditor->trialNote()));
+    }
+    rig.rebuildAimTargets();
+    QCOMPARE(rigPan(), basePan);                    // nothing was saved into it
+    QCOMPARE(look->palettes(), QList<quint32>() << base->id());
+    m_doc->deleteFixture(mover->id());
+    delete def;
 }
 
 QTEST_MAIN(ProgrammingManager_Test)

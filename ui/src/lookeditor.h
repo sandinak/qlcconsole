@@ -62,6 +62,12 @@ public:
      *  id itself. */
     quint32 paletteId() const { return m_paletteId; }
 
+    /** A line under the title saying where this palette is being shown, e.g.
+     *  "trying it on <look>" when it isn't in the look on the canvas. Empty
+     *  hides it. Set by the Programming tab, which owns the preview. */
+    void setTrialNote(const QString &text);
+    QString trialNote() const;
+
 public slots:
     /** Edit the given palette; invalidId() shows the empty page. */
     void setPalette(quint32 paletteId);
@@ -172,6 +178,7 @@ private:
     QLineEdit *m_nameEdit;   //!< editable palette name
     QLabel    *m_title;      //!< "used by N scene(s)" info line
     QLabel    *m_warning;
+    QLabel    *m_trialNote;   //!< see setTrialNote()
 
     // Per-look fade override row (per scene+palette; hidden when no context
     // scene or for Effect palettes, which the script runner fades itself).

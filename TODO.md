@@ -215,6 +215,22 @@ rig edits, bulk repatching, cross-show consistency checks.
 
 ---
 
+## Programming: a palette being edited is tried on the look — SHIPPED 2026-09-25
+
+"I just tried a new pan/tilt ... moved it around and the rig isn't
+following." The pad worked; the palette was in no look, and only a look
+reaches the rig.
+  - While the look editor shows a palette the look on the canvas doesn't
+    have, the look tries it on (`Scene::setTrialPalette`): it plays after the
+    look's own palettes, so it wins, and it is never saved, copied or listed
+    as the look's. `Scene::runtimePalettes()` is what plays; Scene::write, the
+    rig view and the plot's aim lines resolve it.
+  - The editor says "Trying it on “<look>” — not saved into it", or "Not in a
+    look" with none open. Dropping it into the look ends the trial.
+  - Found on the way: creating a palette or function in a NEW folder renamed
+    function 0 (the workspace's first look) to the folder's name --
+    FunctionsTreeWidget took a half-built folder row's unset id as 0.
+
 ## Plot: Select All, one undo per drag, one lock (the layer's) — SHIPPED 2026-09-25
 
 "added [the cyc] and then tried to select all to move to make the space for

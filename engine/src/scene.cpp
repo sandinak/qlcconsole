@@ -546,6 +546,31 @@ QList<quint32> Scene::palettes() const
     return m_palettes;
 }
 
+void Scene::setTrialPalette(quint32 id)
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    m_trialPalette = id;
+}
+
+quint32 Scene::trialPalette() const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_trialPalette;
+}
+
+QList<quint32> Scene::runtimePalettes() const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    QList<quint32> out = m_palettes;
+    if (m_trialPalette != QLCPalette::invalidId() && !out.contains(m_trialPalette))
+    {
+        QLCPalette *p = doc() != NULL ? doc()->palette(m_trialPalette) : NULL;
+        if (p != NULL && p->type() != QLCPalette::Effect)
+            out.append(m_trialPalette);
+    }
+    return out;
+}
+
 bool Scene::reorderPalettes(const QList<quint32> &orderedIds)
 {
     QMutexLocker locker(&m_bindingsMutex);
@@ -1144,7 +1169,8 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         const bool noValues = m_values.isEmpty();
         vLocker.unlock();
         QMutexLocker bLocker(&m_bindingsMutex);
-        empty = noValues && m_palettes.isEmpty();
+        empty = noValues && m_palettes.isEmpty()
+                && m_trialPalette == QLCPalette::invalidId();
     }
 
     if (empty)
@@ -1184,8 +1210,10 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             // uses it for its channels only; the rest fall back to the step/scene
             // fadeIn. Lets colour snap while movers glide within one cue.
             const QHash<quint32, PaletteFade> paletteFadeMap = paletteFades();
+            // The look's palettes plus one being tried on (setTrialPalette).
+            const QList<quint32> pals = runtimePalettes();
 
-            foreach (quint32 paletteID, palettes())
+            foreach (quint32 paletteID, pals)
             {
                 QLCPalette *palette = doc()->palette(paletteID);
                 if (palette == NULL)
@@ -1195,12 +1223,12 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 // A Colour/Dimmer palette AFTER an Effect in the list belongs to
                 // the effect (feeds its colours), so it is NOT painted as a static
                 // base — see QLCPalette::isEffectScoped.
-                if (QLCPalette::isEffectScoped(doc(), palettes(), paletteID))
+                if (QLCPalette::isEffectScoped(doc(), pals, paletteID))
                     continue;
 
                 const int inOverride = paletteFadeMap.value(paletteID).fadeInMs;
                 const uint pFade = inOverride >= 0 ? uint(inOverride) : fadeIn;
-                const int cOff = QLCPalette::colorSetOffset(doc(), palettes(), paletteID);
+                const int cOff = QLCPalette::colorSetOffset(doc(), pals, paletteID);
 
                 foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
                     processValue(timer, ua, pFade, scv);
@@ -1238,19 +1266,20 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 m_fadersMap[universe]->replace(fc);
             };
 
-            foreach (quint32 paletteID, palettes())
+            const QList<quint32> pals = runtimePalettes();
+            foreach (quint32 paletteID, pals)
             {
                 QLCPalette *palette = doc()->palette(paletteID);
                 if (palette == NULL) continue;
                 if (palette->type() == QLCPalette::Effect)
                     continue;  // EffectScriptRunner owns these
-                if (QLCPalette::isEffectScoped(doc(), palettes(), paletteID))
+                if (QLCPalette::isEffectScoped(doc(), pals, paletteID))
                     continue;  // effect-scoped colour, not a static base
                 if (positionsOnly &&
                     palette->type() != QLCPalette::Aim &&
                     palette->type() != QLCPalette::PanTilt) continue;
 
-                const int cOff = QLCPalette::colorSetOffset(doc(), palettes(), paletteID);
+                const int cOff = QLCPalette::colorSetOffset(doc(), pals, paletteID);
                 foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
                     replaceOne(scv);
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this, cOff))

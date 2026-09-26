@@ -115,4 +115,32 @@ void FunctionsTreeWidget_Test::categoryOrderAlphabetical()
     QCOMPARE(got, sorted);
 }
 
+void FunctionsTreeWidget_Test::aNewFolderDoesNotRenameTheFirstFunction()
+{
+    Scene *first = new Scene(m_doc);
+    first->setName("Show");
+    QVERIFY(m_doc->addFunction(first));
+    QCOMPARE(first->id(), quint32(0));
+
+    FunctionsTreeWidget tree(m_doc);
+    tree.setDisplayFilter(FunctionsTreeWidget::FunctionsOnly);
+    tree.updateTree();
+
+    // A look filed in two folders that don't exist yet.
+    Scene *second = new Scene(m_doc);
+    second->setName("Deep Blue");
+    second->setPath("Washes/Deep");
+    QVERIFY(m_doc->addFunction(second));
+    QVERIFY(tree.addFunction(second->id()) != nullptr);
+
+    QCOMPARE(first->name(), QString("Show"));
+    QCOMPARE(second->name(), QString("Deep Blue"));
+
+    // A real rename of a function row still sticks.
+    QTreeWidgetItem *row = tree.functionItem(first);
+    QVERIFY(row != nullptr);
+    row->setText(0, "Opener");
+    QCOMPARE(first->name(), QString("Opener"));
+}
+
 QTEST_MAIN(FunctionsTreeWidget_Test)

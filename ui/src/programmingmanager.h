@@ -100,6 +100,10 @@ private slots:
     void slotCanvasModified();
     void slotModeChanged();
     void slotLookEdited(quint32 paletteId);
+    /** The look editor now shows @p paletteId: if the look on the canvas
+     *  doesn't have it, try it on that look (Scene::setTrialPalette) so the
+     *  rig follows the edit; say so, or say there is no look to show it on. */
+    void updateTrialPalette(quint32 paletteId);
     void slotCopy();
     void slotPaste();
     void slotPaletteDoubleClicked(QTreeWidgetItem *item);
@@ -296,6 +300,7 @@ private:
     quint32 m_currentScene;       //!< scene shown in canvas (invalid if non-scene)
     quint32 m_canvasFunction;     //!< any function shown in canvas (preview target)
     quint32 m_previewFunction;    //!< the function we started for live preview
+    quint32 m_trialScene;         //!< scene a palette is being tried on (updateTrialPalette)
     quint32 m_operateFunction;   //!< scene we started in Operate mode (all channels live)
     quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate
     quint32 m_clipboardPalette;   //!< Cmd-C source palette for Cmd-V duplicate

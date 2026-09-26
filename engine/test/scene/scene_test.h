@@ -43,6 +43,9 @@ private slots:
     void loadWrongRoot();
     void save();
     void paletteFadeTime();
+    /** A palette tried on a look (Scene::setTrialPalette) plays after the
+     *  look's own, but is never saved, copied or listed as the look's. */
+    void aTriedOnPalettePlaysButIsNotKept();
     void lookScope();
     void copyFrom();
     void createCopy();

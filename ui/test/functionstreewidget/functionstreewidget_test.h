@@ -42,6 +42,10 @@ private slots:
     /** With it OFF, top-level categories stay classic A–Z. */
     void categoryOrderAlphabetical();
 
+    /** A new folder row must never rename a function: it fires itemChanged
+     *  before it has an id, and an unset id read as function 0. */
+    void aNewFolderDoesNotRenameTheFirstFunction();
+
 private:
     Doc *m_doc;
 };

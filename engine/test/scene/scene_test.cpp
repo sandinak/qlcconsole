@@ -25,6 +25,8 @@
 #define protected public
 #define private public
 #include "mastertimer_stub.h"
+#include <QBuffer>
+#include "qlcpalette.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "scene_test.h"
@@ -557,6 +559,84 @@ void Scene_Test::paletteFadeTime()
     QVERIFY(s3.copyFrom(&s2) == true);
     QCOMPARE(s3.paletteFadeIn(9), 1500);
     QCOMPARE(s3.paletteFadeOut(9), 2500);
+}
+
+void Scene_Test::aTriedOnPalettePlaysButIsNotKept()
+{
+    Doc *doc = new Doc(this);
+    MasterTimer timer(doc);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    fxi->setChannels(1);                          // one dimmer
+    QVERIFY(doc->addFixture(fxi));
+
+    QLCPalette *low = new QLCPalette(QLCPalette::Dimmer, doc);
+    low->setValue(40);
+    QVERIFY(doc->addPalette(low));
+    QLCPalette *trial = new QLCPalette(QLCPalette::Dimmer, doc);
+    trial->setValue(200);
+    QVERIFY(doc->addPalette(trial));
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, doc);
+    QVERIFY(doc->addPalette(fx));
+
+    Scene *look = new Scene(doc);
+    look->setFadeInSpeed(0);
+    look->setFadeOutSpeed(0);
+    look->addFixture(fxi->id());                  // a target, no looks yet
+    QVERIFY(doc->addFunction(look));
+    QCOMPARE(look->trialPalette(), QLCPalette::invalidId());
+    QVERIFY(look->runtimePalettes().isEmpty());
+
+    // Tried on an empty look: it plays (and the look doesn't self-stop).
+    look->setTrialPalette(trial->id());
+    QCOMPARE(look->trialPalette(), trial->id());
+    QVERIFY(look->palettes().isEmpty());
+    QCOMPARE(look->runtimePalettes(), QList<quint32>() << trial->id());
+    look->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QList<Universe*> ua = doc->inputOutputMap()->claimUniverses();
+    ua[0]->processFaders();
+    QCOMPARE(int(uchar(ua[0]->preGMValues()[0])), 200);
+    QVERIFY(look->stopped() == false);
+    doc->inputOutputMap()->releaseUniverses(false);
+    look->stop(FunctionParent::master());
+    timer.timerTick();
+
+    // With the look's own palette: the trial plays AFTER it, so it wins.
+    look->addPalette(low->id());
+    QCOMPARE(look->runtimePalettes(), QList<quint32>() << low->id() << trial->id());
+    look->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    ua = doc->inputOutputMap()->claimUniverses();
+    ua[0]->processFaders();
+    QCOMPARE(int(uchar(ua[0]->preGMValues()[0])), 200);
+    doc->inputOutputMap()->releaseUniverses(false);
+    look->stop(FunctionParent::master());
+    timer.timerTick();
+
+    // Never saved, never copied.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xml(&buffer);
+    QVERIFY(look->saveXML(&xml));
+    xml.writeEndDocument();
+    const QString saved = QString(buffer.data());
+    QVERIFY2(saved.contains(QString("ID=\"%1\"").arg(low->id())), qPrintable(saved));
+    QVERIFY2(!saved.contains(QString("<Palette ID=\"%1\"").arg(trial->id())), qPrintable(saved));
+    Scene *copy = qobject_cast<Scene*>(look->createCopy(doc));
+    QVERIFY(copy != NULL);
+    QCOMPARE(copy->trialPalette(), QLCPalette::invalidId());
+    QCOMPARE(copy->runtimePalettes(), QList<quint32>() << low->id());
+
+    // Already one of the look's: listed once. An Effect is never tried on.
+    look->setTrialPalette(low->id());
+    QCOMPARE(look->runtimePalettes(), QList<quint32>() << low->id());
+    look->setTrialPalette(fx->id());
+    QCOMPARE(look->runtimePalettes(), QList<quint32>() << low->id());
+    look->setTrialPalette(QLCPalette::invalidId());
+    QCOMPARE(look->runtimePalettes(), QList<quint32>() << low->id());
 }
 
 void Scene_Test::lookScope()

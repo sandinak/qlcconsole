@@ -331,8 +331,22 @@ public:
      *  palettes with an explicit override in either direction appear. */
     QHash<quint32, PaletteFade> paletteFades() const;
 
+    /** A palette being TRIED ON this look: the Programming tab's look editor
+     *  editing a palette the look doesn't have. It plays after the look's own
+     *  palettes (so it wins on the channels it drives) and is never saved,
+     *  copied, or listed by palettes(). invalidId() clears it. Effect palettes
+     *  are not tried on -- the EffectScriptRunner owns those. */
+    void setTrialPalette(quint32 id);
+    quint32 trialPalette() const;
+
+    /** What actually plays: palettes(), then the trial palette if it isn't
+     *  already one of them. Scene::write and the rig view resolve this. */
+    QList<quint32> runtimePalettes() const;
+
 private:
     QList<quint32> m_palettes;
+    /** See setTrialPalette(); guarded by m_bindingsMutex, never saved. */
+    quint32 m_trialPalette = 0xFFFFFFFF;
     /** paletteId -> fade override (see setPaletteFade). Guarded by
      *  m_bindingsMutex like m_palettes. */
     QHash<quint32, PaletteFade> m_paletteFade;

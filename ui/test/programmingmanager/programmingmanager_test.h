@@ -59,6 +59,11 @@ private slots:
      *  "fully covers" trivially and disappears the moment its group lands,
      *  regardless of whether any look was ever applied to it. */
     void droppingAGroupFoldsAwayAnAlreadyCoveredFixedTarget();
+    /** "I just tried a new pan/tilt ... moved it around and the rig isn't
+     *  following." A palette made from the palette list is in no look; while
+     *  it's being edited it is tried on the look on the canvas (never saved
+     *  into it), so moving the pad moves the rig -- and the editor says so. */
+    void aNewPanTiltIsTriedOnTheLookSoTheRigFollows();
 
 private:
     Doc* m_doc;

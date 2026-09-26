@@ -2903,8 +2903,10 @@ void StructureStudioView::rebuildAimTargets()
        aimSubjectHeight() above whatever they are standing on. QLCPalette does
        exactly this when it resolves an Aim palette, and if the two disagree the
        rig view points somewhere the rig does not. */
+    // What plays: the look's palettes plus one being tried on in the editor.
+    const QList<quint32> pals = scene->runtimePalettes();
     bool subjectMode = false;
-    foreach (quint32 pid, scene->palettes())
+    foreach (quint32 pid, pals)
     {
         QLCPalette *p2 = m_doc->palette(pid);
         if (p2 != nullptr && p2->type() == QLCPalette::Effect
@@ -2914,7 +2916,13 @@ void StructureStudioView::rebuildAimTargets()
             break;
         }
     }
-    foreach (quint32 pid, scene->palettes())
+    // A palette being tried on wins, as it does on the rig (it plays last).
+    QList<quint32> aimOrder = pals;
+    const int trialAt = scene->palettes().contains(scene->trialPalette())
+                        ? -1 : int(aimOrder.indexOf(scene->trialPalette()));
+    if (trialAt > 0)
+        aimOrder.move(trialAt, 0);
+    foreach (quint32 pid, aimOrder)
     {
         QLCPalette *pal = m_doc->palette(pid);
         if (pal == nullptr || pal->type() != QLCPalette::Aim)
@@ -2944,17 +2952,17 @@ void StructureStudioView::rebuildAimTargets()
        rather than painting a static base), which is the same rule Scene::write
        applies. An effect's output is a running thing, not a static look, and
        guessing at it here would be worse than saying nothing. */
-    foreach (quint32 pid, scene->palettes())
+    foreach (quint32 pid, pals)
     {
         QLCPalette *pal = m_doc->palette(pid);
         if (pal == nullptr)
             continue;
         if (pal->type() == QLCPalette::Effect || pal->type() == QLCPalette::Aim)
             continue;
-        if (QLCPalette::isEffectScoped(m_doc, scene->palettes(), pid))
+        if (QLCPalette::isEffectScoped(m_doc, pals, pid))
             continue;
 
-        const int cOff = QLCPalette::colorSetOffset(m_doc, scene->palettes(), pid);
+        const int cOff = QLCPalette::colorSetOffset(m_doc, pals, pid);
         QList<SceneValue> vals =
             pal->valuesFromFixtureGroups(m_doc, scene->fixtureGroups(), scene, cOff);
         vals += pal->valuesFromFixtures(m_doc, scene->fixtures(), scene, cOff);

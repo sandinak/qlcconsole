@@ -4549,7 +4549,7 @@ void MonitorGraphicsView::updateTargets()
         Scene *activeScene = qobject_cast<Scene *>(m_doc->function(m_activeSceneId));
         if (activeScene)
         {
-            foreach (quint32 pid, activeScene->palettes())
+            foreach (quint32 pid, activeScene->runtimePalettes())
             {
                 QLCPalette *pal = m_doc->palette(pid);
                 if (pal && pal->type() == QLCPalette::Aim)

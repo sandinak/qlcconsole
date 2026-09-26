@@ -256,6 +256,12 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_warning->hide();
     root->addWidget(m_warning);
 
+    m_trialNote = new QLabel(this);
+    m_trialNote->setStyleSheet("color: #2a7ab8; font-style: italic;");
+    m_trialNote->setWordWrap(true);
+    m_trialNote->hide();
+    root->addWidget(m_trialNote);
+
     // Per-look fade override row: "Fade in [ step ] s   out [ step ] s". Each
     // spin's minimum reads "step" — meaning fall back to the chaser step /
     // scene fade for that direction. Any value >= 0 overrides it for this look's
@@ -681,6 +687,17 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
 LookEditor::~LookEditor()
 {
+}
+
+void LookEditor::setTrialNote(const QString &text)
+{
+    m_trialNote->setText(text);
+    m_trialNote->setVisible(!text.isEmpty());
+}
+
+QString LookEditor::trialNote() const
+{
+    return m_trialNote->isHidden() ? QString() : m_trialNote->text();
 }
 
 void LookEditor::setPalette(quint32 paletteId)

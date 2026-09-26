@@ -234,7 +234,7 @@ QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
     }
 
     const bool subject = sceneFollowsSubject(doc, scene);
-    foreach (quint32 pid, scene->palettes())
+    foreach (quint32 pid, scene->runtimePalettes())   // a tried-on Aim draws too
     {
         QLCPalette *pal = doc->palette(pid);
         if (pal == NULL || pal->type() != QLCPalette::Aim)

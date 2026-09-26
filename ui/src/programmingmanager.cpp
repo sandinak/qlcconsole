@@ -88,6 +88,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     , m_currentScene(Function::invalidId())
     , m_canvasFunction(Function::invalidId())
     , m_previewFunction(Function::invalidId())
+    , m_trialScene(Function::invalidId())
     , m_operateFunction(Function::invalidId())
     , m_clipboardFunction(Function::invalidId())
     , m_clipboardPalette(QLCPalette::invalidId())
@@ -633,6 +634,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_doc, &Doc::cleared, this, [this]() {
         m_currentScene   = Function::invalidId();
         m_canvasFunction = Function::invalidId();
+        m_trialScene     = Function::invalidId();   // ids are reused by the next show
         clearEditors();
         m_funcTree->updateTree();
         m_memberContainer = Function::invalidId();
@@ -651,6 +653,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
             this, SLOT(slotLookEdited(quint32)));
     connect(m_lookEditor, &LookEditor::lookFocusChanged,
             this, &ProgrammingManager::currentPaletteIdChanged);
+    connect(m_lookEditor, &LookEditor::lookFocusChanged,
+            this, &ProgrammingManager::updateTrialPalette);
     // Lightweight live-value change (effect params, etc.) — only refresh the
     // DMX preview, do NOT rebuild the look list or palette tree.  This avoids
     // a reload() → lookSelected → setPalette → rebuildEffectDynWidget cycle
@@ -1006,9 +1010,51 @@ void ProgrammingManager::slotLookEdited(quint32 paletteId)
     foreach (Function *f, m_doc->functions())
     {
         Scene *s = qobject_cast<Scene*>(f);
-        if (s != nullptr && s->palettes().contains(paletteId))
+        if (s != nullptr && (s->palettes().contains(paletteId)
+                             || s->trialPalette() == paletteId))
             m_doc->notifyFunctionChanged(s->id());
     }
+}
+
+void ProgrammingManager::updateTrialPalette(quint32 paletteId)
+{
+    /* "I just tried a new pan/tilt ... moved it around and the rig isn't
+       following." A palette only reaches the rig through a look that plays
+       it, and a new one is in none -- so the pad moved a value nothing sent.
+       While it is being edited, it is tried on the look on the canvas: played
+       after the look's own palettes, never saved into it. */
+    Scene *old = qobject_cast<Scene*>(m_doc->function(m_trialScene));
+    if (old != nullptr)
+    {
+        old->setTrialPalette(QLCPalette::invalidId());
+        m_doc->notifyFunctionChanged(old->id());
+    }
+    m_trialScene = Function::invalidId();
+
+    QLCPalette *p = m_doc->palette(paletteId);
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    QString note;
+    if (p != nullptr && p->type() != QLCPalette::Effect)
+    {
+        if (scene == nullptr)
+            note = tr("Not in a look — open one and drag this onto it to see it on the rig.");
+        else if (!scene->palettes().contains(paletteId))
+        {
+            scene->setTrialPalette(paletteId);
+            m_trialScene = scene->id();
+            m_doc->notifyFunctionChanged(scene->id());
+            note = tr("Trying it on “%1” — not saved into it. Drag it onto the look to keep it.")
+                       .arg(scene->name());
+        }
+    }
+    m_lookEditor->setTrialNote(note);
+    // Re-play only the look on the canvas: a look the canvas has left was
+    // already stopped, and refreshPreview() STARTS whatever is on the canvas
+    // (never wanted for, say, a Show that was just opened).
+    const bool touchesCanvas = (old != nullptr && old->id() == m_currentScene)
+                               || m_trialScene != Function::invalidId();
+    if (touchesCanvas && m_currentScene == m_canvasFunction)
+        refreshPreview();
 }
 
 bool ProgrammingManager::organizeEffectPalettes()
@@ -1503,6 +1549,9 @@ void ProgrammingManager::refreshPreview()
 
 void ProgrammingManager::slotCanvasModified()
 {
+    // Dropping the palette being tried on INTO the look ends the trial.
+    if (m_trialScene != Function::invalidId() || !m_lookEditor->trialNote().isEmpty())
+        updateTrialPalette(m_lookEditor->paletteId());
     // Record the pre-edit state for Ctrl+Z (the baseline still holds the state
     // from before this edit; push it and re-capture).
     pushUndoSnapshot();
