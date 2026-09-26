@@ -215,6 +215,24 @@ rig edits, bulk repatching, cross-show consistency checks.
 
 ---
 
+## Rig view: gobos, gobo rotation and prisms on the pool — SHIPPED 2026-09-25
+
+"set a gobo and projected on the cyc .. and it's not visible" / "handle
+prisms and rotation".
+  - `ui/src/monitor/beamoptics.{h,cpp}`: a fixture's optics from its channel
+    values as one 64x64 light-through mask across the beam -- every Gobo
+    channel with pictures at its slot (open = none; a wheel spinning between
+    slots = none), turned by the Gobo rotation channel after it (indexed
+    angle, or clockwise/counter-clockwise at a speed read from the preset or
+    the name "slow - fast"), repeated by the prism (facets from the
+    capability name: "6 facet prism", "Linear prism"), turned by a Prism
+    rotation channel. Gobo pictures: black blocks, clear/white passes.
+  - The pool is drawn through it as a 16x48 mesh with per-corner alpha, on
+    the floor, a deck or the cyc; the haze is dimmed by the share it passes.
+    Anything turning keeps the view redrawing.
+  - Still open: gobo shake, focus/frost softening the image, a rotating
+    colour wheel.
+
 ## Programming: a palette being edited is tried on the look — SHIPPED 2026-09-25
 
 "I just tried a new pan/tilt ... moved it around and the rig isn't

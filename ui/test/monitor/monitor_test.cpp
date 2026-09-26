@@ -33,6 +33,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QPainter>
+#include <QTemporaryDir>
 #include <QToolButton>
 #include <QMenu>
 #include <QDialog>
@@ -52,6 +53,7 @@
 #include "monitorfixture.h"
 #include "networknodeitem.h"
 #include "sceneryitem.h"
+#include "beamoptics.h"
 #include "standitem.h"
 #include "toweritem.h"
 #include "scenery.h"
@@ -11582,6 +11584,275 @@ void Monitor_Test::aCycloramaOnThePlotMovesLocksHidesAndDeletes()
         gv->requestDeleteItem("scenery", id);
         QVERIFY(props->scenery(id) == nullptr);
         QVERIFY(!gv->m_sceneryItems.contains(id));
+    }
+    delete doc;
+}
+
+/* A spot with one gobo wheel (open, and a gobo whose LEFT half is metal),
+   a gobo rotation channel, a prism and a prism rotation. */
+static QLCFixtureDef *opticsDef(const QString &halfGobo, const QString &openGobo)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Optics Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("5ch");
+    auto add = [&](const QString &name, QLCChannel::Group g) {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(name);
+        ch->setGroup(g);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, mode->channels().size());
+        return ch;
+    };
+    auto cap = [](QLCChannel *ch, int lo, int hi, const QString &name,
+                  QLCCapability::Preset p = QLCCapability::Custom, const QString &res = QString()) {
+        QLCCapability *c = new QLCCapability(uchar(lo), uchar(hi), name);
+        if (p != QLCCapability::Custom)
+            c->setPreset(p);
+        if (!res.isEmpty())
+            c->setResource(0, res);
+        ch->addCapability(c);
+    };
+    QLCChannel *wheel = add("Gobo wheel", QLCChannel::Gobo);
+    cap(wheel, 0, 9, "Open", QLCCapability::GoboMacro, openGobo);
+    cap(wheel, 10, 19, "Half", QLCCapability::GoboMacro, halfGobo);
+    cap(wheel, 20, 255, "Wheel spin", QLCCapability::RotationClockwise);
+    QLCChannel *rot = add("Gobo rotation", QLCChannel::Gobo);
+    cap(rot, 0, 127, "Indexing", QLCCapability::RotationIndexed);
+    cap(rot, 128, 255, "Rotation slow - fast", QLCCapability::RotationClockwiseSlowToFast);
+    QLCChannel *prism = add("Prism", QLCChannel::Prism);
+    cap(prism, 0, 9, "No prism");
+    cap(prism, 10, 127, "6 facet prism");
+    cap(prism, 128, 255, "Linear prism");
+    QLCChannel *prot = add("Prism rotation", QLCChannel::Prism);
+    cap(prot, 0, 3, "Stop");
+    cap(prot, 4, 255, "Counter-clockwise rotation slow - fast");
+    add("Dimmer", QLCChannel::Intensity);
+    def->addMode(mode);
+    return def;
+}
+
+void Monitor_Test::beamOpticsReadGobosRotationAndPrism()
+{
+    // Gobo pictures as drawn: metal black, holes clear.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QImage half(80, 80, QImage::Format_ARGB32);
+    half.fill(Qt::transparent);
+    {
+        QPainter hp(&half);
+        hp.fillRect(0, 0, 40, 80, Qt::black);          // the left half blocks
+    }
+    const QString halfPath = dir.filePath("half.png");
+    QVERIFY(half.save(halfPath));
+    QImage open(80, 80, QImage::Format_ARGB32);
+    open.fill(Qt::transparent);
+    const QString openPath = dir.filePath("open.png");
+    QVERIFY(open.save(openPath));
+
+    const QImage m = BeamOptics::goboMask(halfPath);
+    QVERIFY(!m.isNull());
+    QCOMPARE(m.width(), BeamOptics::kMaskSize);
+    QVERIFY(BeamOptics::sample(m, -0.5, 0.0) < 0.05);
+    QVERIFY(BeamOptics::sample(m, 0.5, 0.0) > 0.95);
+    QCOMPARE(BeamOptics::sample(m, 0.9, 0.9), 0.0);    // outside the cone
+    QVERIFY(BeamOptics::goboMask(dir.filePath("missing.png")).isNull());
+    QVERIFY(BeamOptics::sample(QImage(), 0.0, 0.0) == 0.0);
+
+    QLCFixtureDef *def = opticsDef(halfPath, openPath);
+    Doc doc(this);
+    Fixture *fx = new Fixture(&doc);
+    fx->setFixtureDefinition(def, def->modes().first());
+    QVERIFY(doc.addFixture(fx));
+    auto vals = [](int wheel, int rot, int prism, int prot) {
+        QByteArray v(5, 0);
+        v[0] = char(wheel); v[1] = char(rot); v[2] = char(prism); v[3] = char(prot); v[4] = char(255);
+        return v;
+    };
+
+    // Open, no prism: a plain beam.
+    BeamOptics::Optics o = BeamOptics::opticsFor(fx, vals(0, 0, 0, 0), 0.0);
+    QVERIFY(o.mask.isNull());
+    QCOMPARE(o.coverage, 1.0);
+    QVERIFY(!o.animated);
+    // A wheel spinning between slots shows no gobo either.
+    QVERIFY(BeamOptics::opticsFor(fx, vals(100, 0, 0, 0), 0.0).mask.isNull());
+
+    // The half gobo: dark left, lit right, about half the light.
+    o = BeamOptics::opticsFor(fx, vals(15, 0, 0, 0), 0.0);
+    QVERIFY(!o.mask.isNull());
+    QVERIFY(BeamOptics::sample(o.mask, -0.5, 0.0) < 0.05);
+    QVERIFY(BeamOptics::sample(o.mask, 0.5, 0.0) > 0.9);
+    QVERIFY2(qAbs(o.coverage - 0.5) < 0.08, qPrintable(QString::number(o.coverage)));
+    QVERIFY(!o.animated);
+
+    // Indexed half a turn: now the right is dark.
+    o = BeamOptics::opticsFor(fx, vals(15, 64, 0, 0), 0.0);
+    QVERIFY(BeamOptics::sample(o.mask, -0.5, 0.0) > 0.9);
+    QVERIFY(BeamOptics::sample(o.mask, 0.5, 0.0) < 0.05);
+
+    // Turning: animated, and not where it was a moment ago.
+    const BeamOptics::Optics t0 = BeamOptics::opticsFor(fx, vals(15, 200, 0, 0), 0.0);
+    const BeamOptics::Optics t1 = BeamOptics::opticsFor(fx, vals(15, 200, 0, 0), 0.5);
+    QVERIFY(t0.animated && t1.animated);
+    QVERIFY(t0.mask != t1.mask);
+
+    // A 6-facet prism on the open beam: six images round the axis.
+    o = BeamOptics::opticsFor(fx, vals(0, 0, 60, 0), 0.0);
+    QCOMPARE(o.prismFacets, 6);
+    QVERIFY(!o.mask.isNull());
+    QVERIFY(!o.animated);
+    for (int k = 0; k < 6; ++k)
+    {
+        const double a = 2.0 * M_PI * k / 6;
+        QVERIFY2(BeamOptics::sample(o.mask, 0.55 * qCos(a), 0.55 * qSin(a)) > 0.5,
+                 qPrintable(QString("facet %1 dark").arg(k)));
+    }
+    QVERIFY(o.coverage < 1.0);
+    // Linear: three in a row across the beam, dark above and below.
+    o = BeamOptics::opticsFor(fx, vals(0, 0, 200, 0), 0.0);
+    QCOMPARE(o.prismFacets, 1);
+    QVERIFY(BeamOptics::sample(o.mask, 0.5, 0.0) > 0.5);
+    QVERIFY(BeamOptics::sample(o.mask, -0.5, 0.0) > 0.5);
+    QVERIFY(BeamOptics::sample(o.mask, 0.0, 0.7) < 0.05);
+    // A turning prism turns the images.
+    const BeamOptics::Optics p0 = BeamOptics::opticsFor(fx, vals(0, 0, 200, 128), 0.0);
+    const BeamOptics::Optics p1 = BeamOptics::opticsFor(fx, vals(0, 0, 200, 128), 0.3);
+    QVERIFY(p0.animated);
+    QVERIFY(p0.mask != p1.mask);
+    // Gobo and prism together: the gobo's image, repeated.
+    o = BeamOptics::opticsFor(fx, vals(15, 0, 60, 0), 0.0);
+    QCOMPARE(o.prismFacets, 6);
+    QVERIFY(o.coverage < BeamOptics::opticsFor(fx, vals(0, 0, 60, 0), 0.0).coverage);
+
+    QVERIFY(BeamOptics::opticsFor(nullptr, QByteArray(), 0.0).mask.isNull());
+    doc.deleteFixture(fx->id());
+    delete def;
+}
+
+void Monitor_Test::prismAndRotationNamesAreRead()
+{
+    auto facets = [](const QString &name, QLCCapability::Preset p = QLCCapability::Custom) {
+        QLCCapability c(0, 10, name);
+        if (p != QLCCapability::Custom)
+            c.setPreset(p);
+        return BeamOptics::prismFacets(&c);
+    };
+    QCOMPARE(facets("6 facet prism"), 6);
+    QCOMPARE(facets("3-facet prism"), 3);
+    QCOMPARE(facets("8 Facet Rotating"), 8);
+    QCOMPARE(facets("Linear prism"), 1);
+    QCOMPARE(facets("Prism"), 3);
+    QCOMPARE(facets("Prism in"), 3);
+    QCOMPARE(facets("No prism"), 0);
+    QCOMPARE(facets("Prism off"), 0);
+    QCOMPARE(facets("Stop"), 0);
+    QCOMPARE(facets("No effect"), 0);
+    QCOMPARE(facets("Effect", QLCCapability::PrismEffectOn), 3);
+    QCOMPARE(facets("Prism", QLCCapability::PrismEffectOff), 0);
+    QCOMPARE(BeamOptics::prismFacets(nullptr), 0);
+
+    auto speed = [](const QString &name, int v, QLCCapability::Preset p = QLCCapability::Custom) {
+        QLCCapability c(100, 200, name);
+        if (p != QLCCapability::Custom)
+            c.setPreset(p);
+        return BeamOptics::rotationSpeed(&c, v);
+    };
+    // Direction: by preset, else by name.
+    QVERIFY(speed("x", 150, QLCCapability::RotationClockwise) > 0.0);
+    QVERIFY(speed("x", 150, QLCCapability::RotationCounterClockwise) < 0.0);
+    QVERIFY(speed("Clockwise rotation", 150) > 0.0);
+    QVERIFY(speed("Counter-clockwise rotation", 150) < 0.0);
+    QVERIFY(speed("Anti-clockwise rotation", 150) < 0.0);
+    QCOMPARE(speed("Rotation stop", 150), 0.0);
+    QCOMPARE(speed("No rotation", 150), 0.0);
+    QCOMPARE(speed("Shake", 150), 0.0);
+    QCOMPARE(speed("x", 150, QLCCapability::RotationStop), 0.0);
+    // Speed across the range, whichever way it runs.
+    QVERIFY(speed("Clockwise rotation slow - fast", 190) > speed("Clockwise rotation slow - fast", 110));
+    QVERIFY(speed("Clockwise rotation fast - slow", 190) < speed("Clockwise rotation fast - slow", 110));
+    QVERIFY(qAbs(speed("x", 190, QLCCapability::RotationCounterClockwiseSlowToFast))
+            > qAbs(speed("x", 110, QLCCapability::RotationCounterClockwiseSlowToFast)));
+    QVERIFY(qAbs(speed("x", 190, QLCCapability::RotationClockwiseFastToSlow))
+            < qAbs(speed("x", 110, QLCCapability::RotationClockwiseFastToSlow)));
+    QCOMPARE(BeamOptics::rotationSpeed(nullptr, 0), 0.0);
+
+    QLCCapability idx(0, 127, "Indexing");
+    idx.setPreset(QLCCapability::RotationIndexed);
+    QCOMPARE(BeamOptics::indexedAngle(&idx, 0), 0.0);
+    QCOMPARE(BeamOptics::indexedAngle(&idx, 64), 180.0);
+    QCOMPARE(BeamOptics::rotationSpeed(&idx, 64), 0.0);
+    QLCCapability notIdx(0, 127, "Spin");
+    QCOMPARE(BeamOptics::indexedAngle(&notIdx, 64), -1.0);
+}
+
+void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
+{
+    Doc *doc = new Doc(this);
+    {
+        StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+        view.resize(800, 600);
+        view.setPlane(StructureStudioView::Angled);
+        view.setAngledView(-30.0, 30.0);
+        QImage canvas(800, 600, QImage::Format_ARGB32);
+        QPainter p(&canvas);
+        // A spot 5 m up, straight down onto the floor.
+        const QVector3D apex(4.0f, 4.0f, 5.0f), down(0.0f, 0.0f, -1.0f);
+        const double half = qDegreesToRadians(8.0);
+
+        auto emitted = [&](const BeamOptics::Optics *o, double *hazeAlpha = nullptr) {
+            view.m_ops.clear();
+            view.m_collecting = true;
+            view.drawBeamCone(p, apex, down, half, QColor(0, 0, 255), 1.0, 1.0, o);
+            view.m_collecting = false;
+            int n = 0;
+            for (const auto &op : view.m_ops)
+                if (op.light)
+                {
+                    ++n;
+                    if (hazeAlpha != nullptr && op.poly.size() == 3 && *hazeAlpha < 0)
+                        *hazeAlpha = op.fill.alpha();   // the first: a cone triangle
+                }
+            return n;
+        };
+        const int plain = emitted(nullptr);             // cone triangles + one pool
+        QVERIFY(plain > 1);
+
+        BeamOptics::Optics clear;
+        clear.mask = QImage(BeamOptics::kMaskSize, BeamOptics::kMaskSize, QImage::Format_Grayscale8);
+        clear.mask.fill(255);
+        clear.coverage = 1.0;
+        BeamOptics::Optics metal = clear;
+        metal.mask = QImage(clear.mask.size(), QImage::Format_Grayscale8);
+        metal.mask.fill(0);
+        metal.coverage = 0.0;
+        BeamOptics::Optics halfOpen = clear;
+        halfOpen.mask = QImage(clear.mask.size(), QImage::Format_Grayscale8);
+        halfOpen.mask.fill(0);
+        for (int y = 0; y < BeamOptics::kMaskSize; ++y)
+            for (int x = BeamOptics::kMaskSize / 2; x < BeamOptics::kMaskSize; ++x)
+                halfOpen.mask.scanLine(y)[x] = 255;
+        halfOpen.coverage = 0.5;
+
+        const int cone = plain - 1;
+        // All metal: no pool at all. All clear: the whole mesh.
+        QCOMPARE(emitted(&metal), cone);
+        const int full = emitted(&clear) - cone;
+        QVERIFY2(full > 1000, qPrintable(QString::number(full)));
+        // Half open: about half of it.
+        const int halfN = emitted(&halfOpen) - cone;
+        QVERIFY2(halfN > full * 0.4 && halfN < full * 0.65,
+                 qPrintable(QString("%1 of %2").arg(halfN).arg(full)));
+
+        // The air carries only what the gobo lets through.
+        double airOpen = -1.0, airHalf = -1.0;
+        emitted(nullptr, &airOpen);
+        emitted(&halfOpen, &airHalf);
+        QVERIFY2(airHalf < airOpen * 0.7, qPrintable(QString("%1 vs %2").arg(airHalf).arg(airOpen)));
+        p.end();
     }
     delete doc;
 }

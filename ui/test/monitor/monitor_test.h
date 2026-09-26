@@ -244,6 +244,14 @@ private slots:
     void theCycloramaEditorPreviewsAndCancelReverts();
     void aCycloramaOnThePlotMovesLocksHidesAndDeletes();
     void beamsLandOnTheCycloramaInTheRigView();
+    /** "set a gobo and projected on the cyc .. and it's not visible" /
+     *  "handle prisms and rotation". What the gobo wheels, their rotation and
+     *  the prism make of a beam (BeamOptics), from the channel values. */
+    void beamOpticsReadGobosRotationAndPrism();
+    void prismAndRotationNamesAreRead();
+    /** The pool is drawn through the mask: none of it where the gobo is
+     *  metal, all of it where it is clear, and the haze dimmed to match. */
+    void aGoboPoolIsDrawnThroughItsMask();
     void selectAllTakesEverythingSelectable();
     void aDecksCountBubbleMovesWithIt();
     /** "when I zoom in, the blue circles can stay the same size so what's

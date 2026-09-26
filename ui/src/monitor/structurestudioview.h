@@ -33,6 +33,9 @@
 #include <QPair>
 #include <QVector>
 #include <climits>
+#include <QElapsedTimer>
+
+#include "beamoptics.h"
 
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
 
@@ -480,9 +483,14 @@ private:
     /** @p haze scales how visible the beam is in the air only -- not how
      *  much it lights what it lands on -- for beams that share their air,
      *  like the several emitters of one head. */
+    /** @p optics, when given and not open, is what the gobo wheels and prism
+     *  make of the beam (BeamOptics): the pool is drawn through its mask --
+     *  the gobo's pattern on whatever it lands on -- and the haze in the air
+     *  carries only the share of light it lets through. */
     void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,
                       double halfAngleRad, const QColor &colour, double level,
-                      double haze = 1.0) const;
+                      double haze = 1.0,
+                      const BeamOptics::Optics *optics = nullptr) const;
     /** Where a beam ends, as a ring of world points: on the surface it lands
      *  on, the cone's own edge rays cut by that surface -- a circle straight
      *  down, an oval stretched along the beam when it arrives at an angle.
@@ -498,7 +506,15 @@ private:
         QVector3D aim;
         double beamLevel = 0.0;
         QColor beamColour;
+        BeamOptics::Optics optics;   ///< gobo / prism, for the pool it throws
     };
+    /** Seconds on the clock gobo and prism rotation turn by; a test may pin
+     *  it (m_opticsTime >= 0). Something turning keeps the view redrawing. */
+    double opticsTime() const;
+    mutable QElapsedTimer m_opticsClock;
+    double m_opticsTime = -1.0;
+    mutable bool m_opticsAnimating = false;
+    bool m_opticsTickPending = false;
     /** The people targets stand for, as figures in the rig -- on the deck
      *  under them, chest at the aim height, facing downstage, and LIT: each
      *  face takes the colour of every beam passing through it that it faces,

@@ -3105,8 +3105,9 @@ void StructureStudioView::setBeams(bool on)
 void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                                       const QVector3D &dir, double halfAngleRad,
                                       const QColor &colour, double level,
-                                      double haze) const
+                                      double haze, const BeamOptics::Optics *optics) const
 {
+    const bool gobo = optics != nullptr && !optics->mask.isNull();
     if (level <= 0.004 || dir.isNull())
         return;
 
@@ -3141,7 +3142,10 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
        for white that was a solid glare ("blue worked great .. white .. does
        not .. it's too overdriven"). @p haze shares the glow of beams that
        share their air. */
-    const double baseA = 95.0 * level * room * qBound(0.0, haze, 1.0);
+    /* A gobo stops most of the light: the air carries what it lets through
+       (the pool below shows WHERE). */
+    const double baseA = 95.0 * level * room * qBound(0.0, haze, 1.0)
+                         * (gobo ? qBound(0.05, optics->coverage, 1.0) : 1.0);
     const double poolA = 130.0 * level * room;
 
     // Where it ends: the pool's shape, and the far end of the cone's outline.
@@ -3226,7 +3230,77 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
        that surface, so each point carries its own depth: an oval a couple of
        metres long spans real depth, and one number for all of it sank the far
        end into the deck. */
-    if (lands)
+    if (lands && gobo)
+    {
+        /* "set a gobo and projected on the cyc .. and it's not visible." The
+           pool is the gobo's image, so it is drawn as a mesh of small cells
+           on the surface, each as bright as the mask lets through at that
+           point of the beam -- the same edge rays as the plain pool, at a
+           fraction of the cone's angle, so it lies on the cyc or the deck
+           exactly where the plain one would. */
+        static const int RINGS = 16, SECTORS = 48;
+        const double halfA = qBound(0.005, halfAngleRad, 1.4);
+        QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
+        if (side.length() < 1e-3f)
+            side = QVector3D(1, 0, 0);
+        side.normalize();
+        const QVector3D up = QVector3D::crossProduct(d, side).normalized();
+        const QVector3D ln = landNormal.isNull() ? QVector3D(0, 0, 1) : landNormal.normalized();
+        const double planeD = double(QVector3D::dotProduct(d * float(len), ln));
+        const double maxRun = qMin(24.0, len * 4.0);
+        auto landAt = [&](double r, double a) {
+            const QVector3D across = side * float(qCos(a)) + up * float(qSin(a));
+            const QVector3D ray = (d * float(qCos(halfA * r)) + across * float(qSin(halfA * r))).normalized();
+            double run = maxRun;
+            const double approach = double(QVector3D::dotProduct(ray, ln));
+            if (planeD * approach > 1e-8)
+                run = qMin(maxRun, planeD / approach);
+            return apex + ray * float(qMax(0.0, run));
+        };
+        /* The grid of landed points, ring by ring (ring 0 is the axis), each
+           with how much light the mask lets through THERE. Alpha is carried
+           per corner and each cell is two triangles, whose fade the
+           rasteriser fits exactly -- so a gobo's edges come out smooth rather
+           than stepped at the cell size. */
+        const int N = (RINGS + 1) * SECTORS;
+        QVector<QPointF> px(N);
+        QVector<double> pz(N), pt(N);
+        for (int ri = 0; ri <= RINGS; ++ri)
+            for (int si = 0; si < SECTORS; ++si)
+            {
+                const double r = double(ri) / RINGS;
+                const double a = 2.0 * M_PI * si / SECTORS;
+                const QVector3D q = landAt(r, a);
+                const int k = ri * SECTORS + si;
+                px[k] = w2s(q);
+                pz[k] = viewDepth(q) + 1e-4;
+                // Just inside the rim, so the outer ring isn't sampled dark.
+                const double rs = qMin(r, 0.985);
+                pt[k] = BeamOptics::sample(optics->mask, rs * qCos(a), rs * qSin(a));
+            }
+        QColor cellCol = colour;
+        cellCol.setAlpha(qBound(0, int(poolA), 220));
+        auto tri = [&](int i, int j, int k) {
+            if (pt[i] < 0.04 && pt[j] < 0.04 && pt[k] < 0.04)
+                return;                                   // all metal here
+            QPolygonF t;
+            t << px[i] << px[j] << px[k];
+            emitLight(t, (pz[i] + pz[j] + pz[k]) / 3.0, cellCol, p,
+                      QVector<double>({ pz[i], pz[j], pz[k] }),
+                      QVector<double>({ pt[i], pt[j], pt[k] }));
+        };
+        for (int ri = 0; ri < RINGS; ++ri)
+            for (int si = 0; si < SECTORS; ++si)
+            {
+                const int s1 = (si + 1) % SECTORS;
+                const int i00 = ri * SECTORS + si, i01 = ri * SECTORS + s1;
+                const int i10 = (ri + 1) * SECTORS + si, i11 = (ri + 1) * SECTORS + s1;
+                if (ri > 0)                    // ring 0 is one point: one triangle
+                    tri(i00, i10, i01);
+                tri(i01, i10, i11);
+            }
+    }
+    else if (lands)
     {
         QPolygonF poolPoly;
         QVector<double> poolZ;
@@ -3242,6 +3316,15 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
         poolCol.setAlpha(qBound(0, int(poolA), 220));
         emitLight(poolPoly, sum / qMax(1, footprint.size()), poolCol, p, poolZ);
     }
+}
+
+double StructureStudioView::opticsTime() const
+{
+    if (m_opticsTime >= 0.0)
+        return m_opticsTime;
+    if (!m_opticsClock.isValid())
+        m_opticsClock.start();
+    return m_opticsClock.elapsed() / 1000.0;
 }
 
 QVector<QVector3D> StructureStudioView::beamFootprint(const QVector3D &apex, const QVector3D &dir,
@@ -3436,7 +3519,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                 {
                     const QVector3D apex = lens + side * float((b - (beams - 1) * 0.5) * pitch);
                     drawBeamCone(p, apex, beam, qDegreesToRadians(deg / 2.0),
-                                 lightColour, look.beamLevel, haze);
+                                 lightColour, look.beamLevel, haze, &look.optics);
                     m_frameBeams << FrameBeam{ apex, beam.normalized(),
                                                qDegreesToRadians(deg / 2.0),
                                                beamThrow(apex, beam.normalized()),
@@ -3822,6 +3905,10 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                         looks[u].beamLevel = dim / 255.0;
                         looks[u].beamColour = live;
                         beamLevel = qMax(beamLevel, looks[u].beamLevel);
+                        // The gobo and prism it throws through.
+                        looks[u].optics = BeamOptics::opticsFor(fx, vals, opticsTime());
+                        if (looks[u].optics.animated)
+                            m_opticsAnimating = true;
                     }
                 }
             }
@@ -3882,7 +3969,10 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 const double deg = (declared > 0.0 && declared < 180.0) ? declared : 40.0;
                 const QVector3D apex = fixtureCentre(fid);
                 const double half = qDegreesToRadians(deg / 2.0);
-                drawBeamCone(p, apex, dir, half, live, dim / 255.0, 1.0);
+                const BeamOptics::Optics optics = BeamOptics::opticsFor(fx, vals, opticsTime());
+                if (optics.animated)
+                    m_opticsAnimating = true;
+                drawBeamCone(p, apex, dir, half, live, dim / 255.0, 1.0, &optics);
                 m_frameBeams << FrameBeam{ apex, dir.normalized(), half,
                                            beamThrow(apex, dir.normalized()),
                                            live, dim / 255.0 };
@@ -5067,6 +5157,7 @@ void StructureStudioView::rebuildOverlapWarnings() const
 
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
+    m_opticsAnimating = false;          // set again by any gobo or prism turning
     QElapsedTimer frameTimer;
     if (m_liveValues)
     {
@@ -5136,6 +5227,20 @@ void StructureStudioView::paintEvent(QPaintEvent *)
         const int want = int(qBound(1000.0 / m_maxFps, m_frameMs * 1.25, 250.0));
         if (qAbs(m_liveTimer->interval() - want) > 8)
             m_liveTimer->setInterval(want);
+    }
+
+    /* A turning gobo or prism has to be seen turning. The live timer already
+       repaints when it runs; otherwise ask for the next frame here, no faster
+       than frames are being drawn. */
+    const bool liveTicking = m_liveValues && m_liveTimer != nullptr && m_liveTimer->isActive();
+    if (m_opticsAnimating && !liveTicking && !m_opticsTickPending)
+    {
+        m_opticsTickPending = true;
+        const int ms = int(qBound(40.0, m_frameMs * 1.25, 250.0));
+        QTimer::singleShot(ms, this, [this]() {
+            m_opticsTickPending = false;
+            update();
+        });
     }
 }
 
