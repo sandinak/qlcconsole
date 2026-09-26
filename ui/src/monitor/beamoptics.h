@@ -21,6 +21,7 @@
 
 class Fixture;
 class QLCCapability;
+class MonitorProperties;
 
 namespace BeamOptics
 {
@@ -48,8 +49,16 @@ namespace BeamOptics
      *  Gobo rotation: a Gobo channel without pictures that indexes or spins,
      *  applied to the nearest picture wheel before it. Prism: the Prism
      *  channel that inserts one (facets from its capability name -- "6 facet
-     *  prism", "Linear prism"), turned by a Prism channel that rotates. */
-    Optics opticsFor(const Fixture *fx, const QByteArray &values, double seconds);
+     *  prism", "Linear prism"), turned by a Prism channel that rotates.
+     *  With @p props, a slot this fixture has fitted with other glass
+     *  (MonitorProperties::goboSwap) shows that picture instead. */
+    Optics opticsFor(const Fixture *fx, const QByteArray &values, double seconds,
+                     const MonitorProperties *props = nullptr);
+
+    /** The picture in a gobo slot of @p fx: its swap if it has one (resolved
+     *  through GoboLibrary), else the definition's own. Empty if neither. */
+    QString slotPicture(const Fixture *fx, quint32 channel, const QLCCapability *cap,
+                        const MonitorProperties *props);
 
     /** How much light a gobo picture lets through, as a kMaskSize Grayscale8
      *  mask: clear or white passes, black blocks (how gobo images are drawn:

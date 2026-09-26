@@ -1267,7 +1267,11 @@ bool Doc::deleteFixture(quint32 id)
                 it.remove();
         }
         if (m_monitorProps != NULL)
+        {
             m_monitorProps->removeFixture(id);
+            // The glass goes with the unit; a reused id starts with none.
+            m_monitorProps->clearGoboSwaps(id);
+        }
 
         if (m_powerDist != NULL)
             m_powerDist->removeFixture(id);

@@ -770,6 +770,27 @@ private:
     QMap<quint32, FixtureRigProps> m_rigProps;
 
     /********************************************************************
+     * Gobo swaps
+     *
+     * A gobo slot of ONE fixture fitted with different glass -- a logo, a
+     * show's custom gobo -- the way a tech swaps it in the unit, leaving the
+     * shared fixture definition alone. Keyed by the gobo wheel's channel
+     * index and the slot's first DMX value (its capability's min). The image
+     * is as GoboLibrary::import() stored it (see GoboLibrary::resolve()).
+     * Survives taking the fixture off the plot; Doc drops it with the fixture.
+     ********************************************************************/
+public:
+    /** Fit @p image in that slot; an empty @p image restores the original. */
+    void setGoboSwap(quint32 fid, quint32 channel, uchar slotMin, const QString &image);
+    QString goboSwap(quint32 fid, quint32 channel, uchar slotMin) const;
+    /** Every swap on @p fid: (channel, slotMin) -> image. */
+    QMap<QPair<quint32, int>, QString> goboSwaps(quint32 fid) const;
+    void clearGoboSwaps(quint32 fid) { m_goboSwaps.remove(fid); }
+
+private:
+    QMap<quint32, QMap<QPair<quint32, int>, QString> > m_goboSwaps;
+
+    /********************************************************************
      * 2D view background
      ********************************************************************/
 public:

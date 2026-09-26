@@ -96,6 +96,7 @@ add_library(${module_name}
     monitor/pipeitem.cpp monitor/pipeitem.h
     monitor/sceneryitem.cpp monitor/sceneryitem.h
     monitor/beamoptics.cpp monitor/beamoptics.h
+    monitor/gobowheelsdialog.cpp monitor/gobowheelsdialog.h
     monitor/standitem.cpp monitor/standitem.h
     monitor/toweritem.cpp monitor/toweritem.h
     monitor/powersourceitem.cpp monitor/powersourceitem.h

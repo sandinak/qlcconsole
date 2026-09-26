@@ -230,6 +230,16 @@ prisms and rotation".
   - The pool is drawn through it as a 16x48 mesh with per-corner alpha, on
     the floor, a deck or the cyc; the haze is dimmed by the share it passes.
     Anything turning keeps the view redrawing.
+  - Your own gobos ("specialized gobos": your own images + swap a slot per
+    fixture). A user folder, ~/Library/Application Support/qlcconsole/Gobos
+    (`GoboLibrary`: import copies without overwriting a different picture;
+    resolve looks there, then in the bundled library). Right-click a fixture
+    on the plot > Gobo Wheels… shows the glass in each slot of THAT unit and
+    fits your picture in place of the definition's (a slot's shake variants
+    are the same glass), optionally in every fixture of its type. Stored per
+    fixture in the workspace (`MonitorProperties::setGoboSwap`, `<GoboSwap>`),
+    kept when the fixture leaves the plot, dropped when it is deleted. The rig
+    and the look editor's gobo picker ("Star — our-logo") show it.
   - Still open: gobo shake, focus/frost softening the image, a rotating
     colour wheel.
 

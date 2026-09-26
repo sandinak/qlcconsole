@@ -33,6 +33,9 @@ private slots:
      *  from the palette list has no look yet; the picker falls back to the
      *  workspace's fixtures, with a chooser when several wheels differ. */
     void aNewGoboOffersTheWorkspacesWheels();
+    /** A slot a unit has fitted with other glass (Gobo Wheels…) is listed
+     *  as that glass, by name, with its picture. */
+    void aSwappedSlotShowsItsOwnGlass();
 };
 
 #endif

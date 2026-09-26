@@ -3906,7 +3906,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                         looks[u].beamColour = live;
                         beamLevel = qMax(beamLevel, looks[u].beamLevel);
                         // The gobo and prism it throws through.
-                        looks[u].optics = BeamOptics::opticsFor(fx, vals, opticsTime());
+                        looks[u].optics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
                         if (looks[u].optics.animated)
                             m_opticsAnimating = true;
                     }
@@ -3969,7 +3969,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 const double deg = (declared > 0.0 && declared < 180.0) ? declared : 40.0;
                 const QVector3D apex = fixtureCentre(fid);
                 const double half = qDegreesToRadians(deg / 2.0);
-                const BeamOptics::Optics optics = BeamOptics::opticsFor(fx, vals, opticsTime());
+                const BeamOptics::Optics optics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
                 if (optics.animated)
                     m_opticsAnimating = true;
                 drawBeamCone(p, apex, dir, half, live, dim / 255.0, 1.0, &optics);

@@ -40,6 +40,7 @@
 #include "capabilitybar.h"
 #include "qlcpalette.h"
 #include "monitorproperties.h"
+#include "gobolibrary.h"
 #include "stagetarget.h"
 #include "qlccapability.h"
 #include "qlcchannel.h"
@@ -1313,6 +1314,30 @@ void LookEditor::slotSingleValueChanged(int v)
     emit paletteChanged(m_paletteId);
 }
 
+QString LookEditor::slotPicture(QLCCapability *cap, QString *swapName) const
+{
+    if (cap == NULL)
+        return QString();
+    // The fixtures of the type being browsed, for their own swapped glass.
+    MonitorProperties *props = m_doc->monitorProperties();
+    for (const ChannelSource &src : m_singleSources)
+    {
+        if (src.channel != m_singleChannel || props == NULL)
+            continue;
+        for (quint32 fid : src.fixtures)
+        {
+            const QString swap = props->goboSwap(fid, src.channelIndex, cap->min());
+            const QString path = swap.isEmpty() ? QString() : GoboLibrary::resolve(swap);
+            if (path.isEmpty())
+                continue;
+            if (swapName != NULL)
+                *swapName = QFileInfo(swap).completeBaseName();
+            return path;
+        }
+    }
+    return cap->presetType() == QLCCapability::Picture ? cap->resource(0).toString() : QString();
+}
+
 void LookEditor::updateSinglePreview(int v)
 {
     // Find the Picture-preset capability covering v and show its image.
@@ -1323,8 +1348,9 @@ void LookEditor::updateSinglePreview(int v)
         {
             if (v >= cap->min() && v <= cap->max())
             {
-                if (cap->presetType() == QLCCapability::Picture)
-                    px = QPixmap(cap->resource(0).toString());
+                const QString picture = slotPicture(cap);
+                if (!picture.isEmpty())
+                    px = QPixmap(picture);
                 break;
             }
         }
@@ -1373,15 +1399,21 @@ void LookEditor::fillSingleCapabilities(int v)
     int sel = -1, idx = 0;
     foreach (QLCCapability *cap, m_singleChannel->capabilities())
     {
-        // Show a gobo/effect thumbnail next to each named capability.
+        /* Show a gobo/effect thumbnail next to each named capability -- the
+           glass actually fitted: a slot a unit has swapped (Gobo Wheels…)
+           shows that picture, and says so. */
+        QString swapName;
+        const QString picture = slotPicture(cap, &swapName);
+        const QString name = swapName.isEmpty() ? cap->name()
+                                                : tr("%1 — %2").arg(cap->name(), swapName);
         QIcon icon;
-        if (cap->presetType() == QLCCapability::Picture)
+        if (!picture.isEmpty())
         {
-            const QPixmap px(cap->resource(0).toString());
+            const QPixmap px(picture);
             if (px.isNull() == false)
                 icon = QIcon(px);
         }
-        m_singleCombo->addItem(icon, cap->name(),
+        m_singleCombo->addItem(icon, name,
                                (int(cap->min()) + int(cap->max())) / 2);
         if (v >= cap->min() && v <= cap->max())
             sel = idx;
@@ -1448,8 +1480,12 @@ QList<LookEditor::ChannelSource> LookEditor::singleChannelSources(int group) con
                 src.key = key;
                 src.label = label;
                 src.channel = ch;
+                src.channelIndex = chn;
                 out << src;
             }
+            for (ChannelSource &src : out)
+                if (src.key == key)
+                    src.fixtures << fid;
             count[key]++;
         }
         std::stable_sort(out.begin(), out.end(),

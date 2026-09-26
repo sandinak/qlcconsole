@@ -252,6 +252,9 @@ private slots:
     /** The pool is drawn through the mask: none of it where the gobo is
      *  metal, all of it where it is clear, and the haze dimmed to match. */
     void aGoboPoolIsDrawnThroughItsMask();
+    /** "specialized gobos": a slot of ONE unit fitted with the operator's
+     *  own picture (Gobo Wheels…), saved per fixture, drawn on the rig. */
+    void goboWheelsFitsYourOwnGlassInOneUnit();
     void selectAllTakesEverythingSelectable();
     void aDecksCountBubbleMovesWithIt();
     /** "when I zoom in, the blue circles can stay the same size so what's

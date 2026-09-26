@@ -93,6 +93,13 @@ private slots:
      *  flag then mirrors its layer's. */
     void itemLocksFoldIntoALockedLayer();
     void itemLockFlagsMirrorTheirLayer();
+
+    /** A gobo slot of one unit fitted with other glass: kept per fixture,
+     *  saved with the workspace, dropped when the fixture is deleted. */
+    void goboSwapsAreKeptPerFixtureAndSaved();
+    /** The operator's gobo folder: import copies (never overwriting a
+     *  different picture), resolve finds a name there or in the library. */
+    void theGoboLibraryImportsAndResolves();
 };
 
 #endif

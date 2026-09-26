@@ -54,6 +54,8 @@
 #include "pipeitem.h"
 #include "standitem.h"
 #include "sceneryitem.h"
+#include "gobowheelsdialog.h"
+#include "structurestudioview.h"
 #include "toweritem.h"
 #include "tower.h"
 #include "stand.h"
@@ -6468,6 +6470,18 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         if (Monitor::instance() != nullptr)
             Monitor::instance()->locateFixtures(ids);
     });
+    // Its own glass in the gobo wheels (a logo, a custom gobo).
+    if (GoboWheelsDialog::hasGoboWheels(fxi))
+        menu->addAction(tr("Gobo Wheels…"), this, [this, fid]() {
+            GoboWheelsDialog dlg(m_doc, fid, this);
+            if (dlg.exec() != QDialog::Accepted)
+                return;
+            // Every open rig view draws the new glass.
+            foreach (QWidget *w, QApplication::allWidgets())
+                if (StructureStudioView *sv = qobject_cast<StructureStudioView *>(w))
+                    sv->update();
+            emit mapStructureChanged();
+        });
     /* Where this one lands, on its own -- no need to select it first, and it
        stays drawn while you look at something else. */
     {

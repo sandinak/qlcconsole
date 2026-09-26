@@ -159,6 +159,7 @@ void MonitorProperties::reset()
     qDeleteAll(m_stageTargets);
     m_stageTargets.clear();
     m_rigProps.clear();
+    m_goboSwaps.clear();
     m_layers.clear();
     m_activeLayerId = defaultLayerId;
     ensureDefaultLayer();
@@ -235,6 +236,33 @@ void MonitorProperties::setPointOfView(MonitorProperties::PointOfView pov)
 /********************************************************************
  * Fixture items
  ********************************************************************/
+
+void MonitorProperties::setGoboSwap(quint32 fid, quint32 channel, uchar slotMin,
+                                    const QString &image)
+{
+    const QPair<quint32, int> key(channel, int(slotMin));
+    if (image.isEmpty())
+    {
+        auto it = m_goboSwaps.find(fid);
+        if (it == m_goboSwaps.end())
+            return;
+        it.value().remove(key);
+        if (it.value().isEmpty())
+            m_goboSwaps.erase(it);
+        return;
+    }
+    m_goboSwaps[fid].insert(key, image);
+}
+
+QString MonitorProperties::goboSwap(quint32 fid, quint32 channel, uchar slotMin) const
+{
+    return m_goboSwaps.value(fid).value(qMakePair(channel, int(slotMin)));
+}
+
+QMap<QPair<quint32, int>, QString> MonitorProperties::goboSwaps(quint32 fid) const
+{
+    return m_goboSwaps.value(fid);
+}
 
 void MonitorProperties::removeFixture(quint32 fid)
 {
@@ -2226,6 +2254,15 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 delete t;
             }
         }
+        else if (root.name() == QStringLiteral("GoboSwap"))
+        {
+            const QXmlStreamAttributes a = root.attributes();
+            const int slot = a.value("Slot").toInt();
+            if (slot >= 0 && slot <= 255)
+                setGoboSwap(a.value("Fixture").toUInt(), a.value("Channel").toUInt(),
+                            uchar(slot), a.value("Image").toString());
+            root.skipCurrentElement();
+        }
         else if (root.name() == QStringLiteral("FixtureRig"))
         {
             QXmlStreamAttributes a = root.attributes();
@@ -2841,6 +2878,18 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     // Stage targets
     foreach (const StageTarget *t, m_stageTargets)
         t->saveXML(doc);
+
+    // Gobo swaps
+    for (auto fit = m_goboSwaps.constBegin(); fit != m_goboSwaps.constEnd(); ++fit)
+        for (auto sit = fit.value().constBegin(); sit != fit.value().constEnd(); ++sit)
+        {
+            doc->writeStartElement(QStringLiteral("GoboSwap"));
+            doc->writeAttribute(QStringLiteral("Fixture"), QString::number(fit.key()));
+            doc->writeAttribute(QStringLiteral("Channel"), QString::number(sit.key().first));
+            doc->writeAttribute(QStringLiteral("Slot"),    QString::number(sit.key().second));
+            doc->writeAttribute(QStringLiteral("Image"),   sit.value());
+            doc->writeEndElement();
+        }
 
     // Fixture rig props (only write entries that differ from defaults)
     for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)

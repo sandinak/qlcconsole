@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QTemporaryDir>
 #define private public
 #include "monitorproperties.h"
 #undef private
@@ -33,6 +34,8 @@
 #include "powerdistribution.h"
 #include "networktopology.h"
 #include "doc.h"
+#include "fixture.h"
+#include "gobolibrary.h"
 #include "monitorproperties_test.h"
 
 void MonitorProperties_Test::defaults()
@@ -1133,6 +1136,111 @@ void MonitorProperties_Test::itemLockFlagsMirrorTheirLayer()
     mp->syncItemLocksToLayers(pd, nt);
     QVERIFY(!pd->sources().first().locked);
     QVERIFY(!nt->nodes().first().locked);
+}
+
+void MonitorProperties_Test::goboSwapsAreKeptPerFixtureAndSaved()
+{
+    Doc doc(this);
+    Fixture *a = new Fixture(&doc);
+    a->setChannels(4);
+    QVERIFY(doc.addFixture(a));
+    Fixture *b = new Fixture(&doc);
+    b->setChannels(4);
+    b->setAddress(10);
+    QVERIFY(doc.addFixture(b));
+    MonitorProperties *mp = doc.monitorProperties();
+
+    QVERIFY(mp->goboSwap(a->id(), 3, 16).isEmpty());
+    mp->setGoboSwap(a->id(), 3, 16, "logo.png");
+    mp->setGoboSwap(a->id(), 3, 73, "logo.png");      // its shake
+    mp->setGoboSwap(a->id(), 4, 28, "/abs/breakup.svg");
+    QCOMPARE(mp->goboSwap(a->id(), 3, 16), QString("logo.png"));
+    QCOMPARE(mp->goboSwaps(a->id()).size(), 3);
+    QVERIFY(mp->goboSwaps(b->id()).isEmpty());
+    QVERIFY(mp->goboSwap(a->id(), 3, 17).isEmpty());   // another slot
+    mp->setGoboSwap(a->id(), 3, 73, QString());         // restored
+    QCOMPARE(mp->goboSwaps(a->id()).size(), 2);
+    mp->setGoboSwap(b->id(), 9, 9, QString());          // nothing to restore
+    QVERIFY(mp->goboSwaps(b->id()).isEmpty());
+
+    // Taking it off the plot keeps the glass; it is still the same unit.
+    mp->removeFixture(a->id());
+    QCOMPARE(mp->goboSwaps(a->id()).size(), 2);
+
+    // Saved and loaded with the workspace.
+    QByteArray ws;
+    QXmlStreamWriter ww(&ws);
+    ww.writeStartDocument();
+    QVERIFY(doc.saveXML(&ww));
+    ww.writeEndDocument();
+    QVERIFY(ws.contains("<GoboSwap"));
+    Doc back(this);
+    QXmlStreamReader rr(ws);
+    while (rr.readNextStartElement() && rr.name() != QStringLiteral("Engine"))
+        ;
+    QVERIFY(back.loadXML(rr));
+    QCOMPARE(back.monitorProperties()->goboSwap(a->id(), 3, 16), QString("logo.png"));
+    QCOMPARE(back.monitorProperties()->goboSwap(a->id(), 4, 28), QString("/abs/breakup.svg"));
+    QCOMPARE(back.monitorProperties()->goboSwaps(a->id()).size(), 2);
+
+    // Deleting the fixture takes its glass: a reused id starts with none.
+    QVERIFY(doc.deleteFixture(a->id()));
+    QVERIFY(mp->goboSwaps(a->id()).isEmpty());
+
+    // A cleared workspace has none.
+    back.monitorProperties()->reset();
+    QVERIFY(back.monitorProperties()->goboSwaps(a->id()).isEmpty());
+}
+
+void MonitorProperties_Test::theGoboLibraryImportsAndResolves()
+{
+    QTemporaryDir home;
+    QVERIFY(home.isValid());
+    const QString userDir = home.filePath("Gobos");
+    GoboLibrary::setUserDirectoryOverride(userDir);
+
+    QVERIFY(GoboLibrary::userDirectory().exists());
+    QVERIFY(GoboLibrary::userGobos().isEmpty());
+    QVERIFY(GoboLibrary::imageFilters().contains("*.svg"));
+    QVERIFY(GoboLibrary::imageFilters().contains("*.png"));
+
+    auto write = [&](const QString &path, const QByteArray &data) {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(data);
+    };
+    QDir(home.path()).mkpath("elsewhere");
+    const QString logo = home.filePath("elsewhere/logo.png");
+    write(logo, "picture one");
+
+    // Imported: copied in under its own name.
+    QCOMPARE(GoboLibrary::import(logo), QString("logo.png"));
+    QVERIFY(QFile::exists(userDir + "/logo.png"));
+    QCOMPARE(GoboLibrary::userGobos(), QStringList() << "logo.png");
+    // The same picture again: the same name, no second copy.
+    QCOMPARE(GoboLibrary::import(logo), QString("logo.png"));
+    QCOMPARE(GoboLibrary::userGobos().size(), 1);
+    // A DIFFERENT picture with that name: a free name, the first kept.
+    QDir(home.path()).mkpath("other");
+    const QString other = home.filePath("other/logo.png");
+    write(other, "picture two");
+    QCOMPARE(GoboLibrary::import(other), QString("logo-2.png"));
+    QFile first(userDir + "/logo.png");
+    QVERIFY(first.open(QIODevice::ReadOnly));
+    QCOMPARE(first.readAll(), QByteArray("picture one"));
+    // Already in the folder: nothing copied.
+    QCOMPARE(GoboLibrary::import(userDir + "/logo-2.png"), QString("logo-2.png"));
+    QVERIFY(GoboLibrary::import(home.filePath("nope.png")).isEmpty());
+    QVERIFY(GoboLibrary::import(home.path()).isEmpty());    // a folder
+
+    // Resolved: a bare name from the folder, an absolute path as it is.
+    QCOMPARE(GoboLibrary::resolve("logo.png"), QDir(userDir).absoluteFilePath("logo.png"));
+    QCOMPARE(GoboLibrary::resolve(logo), logo);
+    QVERIFY(GoboLibrary::resolve("gone.png").isEmpty());
+    QVERIFY(GoboLibrary::resolve(home.filePath("gone.png")).isEmpty());
+    QVERIFY(GoboLibrary::resolve(QString()).isEmpty());
+
+    GoboLibrary::setUserDirectoryOverride(QString());
 }
 
 QTEST_GUILESS_MAIN(MonitorProperties_Test)

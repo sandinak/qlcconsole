@@ -18,6 +18,8 @@
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "fixture.h"
+#include "gobolibrary.h"
+#include "monitorproperties.h"
 
 namespace
 {
@@ -206,7 +208,28 @@ double BeamOptics::rotationSpeed(const QLCCapability *cap, int value)
     return ccw ? -speed : speed;
 }
 
-BeamOptics::Optics BeamOptics::opticsFor(const Fixture *fx, const QByteArray &values, double seconds)
+QString BeamOptics::slotPicture(const Fixture *fx, quint32 channel, const QLCCapability *cap,
+                                const MonitorProperties *props)
+{
+    if (fx == nullptr || cap == nullptr)
+        return QString();
+    if (props != nullptr)
+    {
+        const QString swap = props->goboSwap(fx->id(), channel, cap->min());
+        if (!swap.isEmpty())
+        {
+            const QString path = GoboLibrary::resolve(swap);
+            if (!path.isEmpty())
+                return path;
+        }
+    }
+    if (cap->presetType() != QLCCapability::Picture)
+        return QString();
+    return const_cast<QLCCapability *>(cap)->resource(0).toString();
+}
+
+BeamOptics::Optics BeamOptics::opticsFor(const Fixture *fx, const QByteArray &values, double seconds,
+                                         const MonitorProperties *props)
 {
     Optics out;
     if (fx == nullptr)
@@ -235,12 +258,10 @@ BeamOptics::Optics BeamOptics::opticsFor(const Fixture *fx, const QByteArray &va
                 // A wheel: the picture in the slot it is on. "Open" is the
                 // absence of a gobo; a wheel spinning between slots shows none.
                 QImage mask;
-                if (cap != nullptr && cap->presetType() == QLCCapability::Picture)
-                {
-                    const QString path = cap->resource(0).toString();
-                    if (!path.contains(QLatin1String("/open."), Qt::CaseInsensitive))
-                        mask = goboMask(path);
-                }
+                const QString path = slotPicture(fx, i, cap, props);
+                if (!path.isEmpty()
+                    && !path.contains(QLatin1String("/open."), Qt::CaseInsensitive))
+                    mask = goboMask(path);
                 wheels << Wheel{ i, mask, 0.0 };
             }
             else if (turns(ch) && !wheels.isEmpty())

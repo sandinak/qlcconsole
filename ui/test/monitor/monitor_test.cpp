@@ -36,6 +36,8 @@
 #include <QTemporaryDir>
 #include <QToolButton>
 #include <QMenu>
+#include <QCheckBox>
+#include <QScopeGuard>
 #include <QDialog>
 #include <QTreeWidget>
 #include <QSettings>
@@ -54,6 +56,10 @@
 #include "networknodeitem.h"
 #include "sceneryitem.h"
 #include "beamoptics.h"
+#include "gobolibrary.h"
+#define private public
+#include "gobowheelsdialog.h"
+#undef private
 #include "standitem.h"
 #include "toweritem.h"
 #include "scenery.h"
@@ -11619,7 +11625,8 @@ static QLCFixtureDef *opticsDef(const QString &halfGobo, const QString &openGobo
     QLCChannel *wheel = add("Gobo wheel", QLCChannel::Gobo);
     cap(wheel, 0, 9, "Open", QLCCapability::GoboMacro, openGobo);
     cap(wheel, 10, 19, "Half", QLCCapability::GoboMacro, halfGobo);
-    cap(wheel, 20, 255, "Wheel spin", QLCCapability::RotationClockwise);
+    cap(wheel, 20, 29, "Half shake", QLCCapability::GoboShakeMacro, halfGobo);
+    cap(wheel, 30, 255, "Wheel spin", QLCCapability::RotationClockwise);
     QLCChannel *rot = add("Gobo rotation", QLCChannel::Gobo);
     cap(rot, 0, 127, "Indexing", QLCCapability::RotationIndexed);
     cap(rot, 128, 255, "Rotation slow - fast", QLCCapability::RotationClockwiseSlowToFast);
@@ -11855,6 +11862,165 @@ void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
         p.end();
     }
     delete doc;
+}
+
+void Monitor_Test::goboWheelsFitsYourOwnGlassInOneUnit()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    GoboLibrary::setUserDirectoryOverride(dir.filePath("Gobos"));
+    auto cleanup = qScopeGuard([]() { GoboLibrary::setUserDirectoryOverride(QString()); });
+
+    QImage half(80, 80, QImage::Format_ARGB32);
+    half.fill(Qt::transparent);
+    {
+        QPainter hp(&half);
+        hp.fillRect(0, 0, 40, 80, Qt::black);          // left blocks
+    }
+    const QString halfPath = dir.filePath("half.png");
+    QVERIFY(half.save(halfPath));
+    QImage open(80, 80, QImage::Format_ARGB32);
+    open.fill(Qt::transparent);
+    const QString openPath = dir.filePath("open.png");
+    QVERIFY(open.save(openPath));
+    // The operator's own glass: the TOP half blocks.
+    QImage logo(80, 80, QImage::Format_ARGB32);
+    logo.fill(Qt::transparent);
+    {
+        QPainter lp(&logo);
+        lp.fillRect(0, 0, 80, 40, Qt::black);
+    }
+    QDir(dir.path()).mkpath("downloads");
+    const QString logoPath = dir.filePath("downloads/logo.png");
+    QVERIFY(logo.save(logoPath));
+
+    QLCFixtureDef *def = opticsDef(halfPath, openPath);
+    Doc *doc = new Doc(this);
+    QList<Fixture *> units;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("Spot %1").arg(i + 1));
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setAddress(quint32(i * 8));
+        QVERIFY(doc->addFixture(f));
+        units << f;
+    }
+    Fixture *plain = new Fixture(doc);
+    plain->setChannels(3);
+    plain->setAddress(100);
+    QVERIFY(doc->addFixture(plain));
+    MonitorProperties *props = doc->monitorProperties();
+
+    QVERIFY(GoboWheelsDialog::hasGoboWheels(units.first()));
+    QVERIFY(!GoboWheelsDialog::hasGoboWheels(plain));
+    QVERIFY(!GoboWheelsDialog::hasGoboWheels(nullptr));
+    // The slot and its shake are one piece of glass.
+    const QLCChannel *wheel = units.first()->channel(0);
+    const QList<const QLCCapability *> glass =
+        GoboWheelsDialog::sameGlass(wheel, wheel->searchCapability(15));
+    QCOMPARE(glass.size(), 2);
+
+    {
+        GoboWheelsDialog dlg(doc, units.first()->id());
+        // One wheel, its two pictures (Half listed once, with its shake).
+        QCOMPARE(dlg.m_tree->topLevelItemCount(), 1);
+        QTreeWidgetItem *w = dlg.m_tree->topLevelItem(0);
+        QCOMPARE(w->childCount(), 2);
+        QTreeWidgetItem *halfSlot = w->child(1);
+        QVERIFY(halfSlot->text(0).contains("Half"));
+        QVERIFY(halfSlot->text(0).contains("shake"));
+        QCOMPARE(halfSlot->text(1), QString("as built"));
+        QVERIFY(!dlg.m_replace->isEnabled());           // nothing chosen yet
+        QVERIFY(!dlg.m_allOfType->isHidden());          // three of this type
+
+        dlg.m_tree->setCurrentItem(halfSlot);
+        QVERIFY(dlg.m_replace->isEnabled());
+        QVERIFY(!dlg.m_restore->isEnabled());
+        dlg.pickImage = [&](QWidget *) { return logoPath; };
+        dlg.slotReplace();
+        QVERIFY(QFile::exists(dir.filePath("Gobos/logo.png")));   // copied in
+        QCOMPARE(dlg.m_tree->currentItem()->text(1), QString("logo.png"));
+        QVERIFY(dlg.m_restore->isEnabled());
+        // Not applied until OK.
+        QVERIFY(props->goboSwaps(units.first()->id()).isEmpty());
+        dlg.accept();
+    }
+    QCOMPARE(props->goboSwap(units.first()->id(), 0, 10), QString("logo.png"));
+    QCOMPARE(props->goboSwap(units.first()->id(), 0, 20), QString("logo.png"));   // its shake
+    QVERIFY(props->goboSwaps(units.at(1)->id()).isEmpty());                     // only this unit
+    QVERIFY(doc->isModified());
+
+    // The rig draws the new glass for that unit, and the old for the others.
+    QByteArray vals(5, 0);
+    vals[0] = char(15);
+    vals[4] = char(255);
+    const BeamOptics::Optics mine = BeamOptics::opticsFor(units.first(), vals, 0.0, props);
+    QVERIFY(BeamOptics::sample(mine.mask, 0.0, 0.5) < 0.05);     // top blocked
+    QVERIFY(BeamOptics::sample(mine.mask, 0.0, -0.5) > 0.9);
+    QVERIFY(BeamOptics::sample(mine.mask, -0.5, -0.2) > 0.9);   // left is clear now
+    const BeamOptics::Optics theirs = BeamOptics::opticsFor(units.at(1), vals, 0.0, props);
+    QVERIFY(BeamOptics::sample(theirs.mask, -0.5, 0.0) < 0.05);  // still the half gobo
+    QCOMPARE(BeamOptics::slotPicture(units.first(), 0, wheel->searchCapability(15), props),
+             QDir(dir.filePath("Gobos")).absoluteFilePath("logo.png"));
+    QCOMPARE(BeamOptics::slotPicture(units.at(1), 0, wheel->searchCapability(15), props), halfPath);
+    QCOMPARE(BeamOptics::slotPicture(units.at(1), 0, wheel->searchCapability(100), props), QString());
+
+    // A bad picture is refused; Cancel keeps nothing.
+    {
+        GoboWheelsDialog dlg(doc, units.at(1)->id());
+        dlg.m_tree->setCurrentItem(dlg.m_tree->topLevelItem(0)->child(0));
+        const QString junk = dir.filePath("downloads/notapicture.png");
+        QFile jf(junk);
+        QVERIFY(jf.open(QIODevice::WriteOnly));
+        jf.write("not an image");
+        jf.close();
+        dlg.pickImage = [&](QWidget *) { return junk; };
+        driveMessageBox([](QWidget *) { return true; }, "OK");
+        dlg.slotReplace();
+        QCOMPARE(dlg.m_tree->currentItem()->text(1), QString("as built"));
+        dlg.pickImage = [&](QWidget *) { return logoPath; };
+        dlg.slotReplace();
+        dlg.reject();
+    }
+    QVERIFY(props->goboSwaps(units.at(1)->id()).isEmpty());
+
+    // "All of this type" fits the same glass in every unit; Restore undoes a slot.
+    {
+        GoboWheelsDialog dlg(doc, units.first()->id());
+        dlg.m_tree->setCurrentItem(dlg.m_tree->topLevelItem(0)->child(0));   // Open
+        dlg.pickImage = [&](QWidget *) { return logoPath; };
+        dlg.slotReplace();
+        dlg.m_tree->setCurrentItem(dlg.m_tree->topLevelItem(0)->child(1));   // Half
+        dlg.slotRestore();
+        QCOMPARE(dlg.m_tree->currentItem()->text(1), QString("as built"));
+        dlg.m_allOfType->setChecked(true);
+        dlg.accept();
+    }
+    for (Fixture *f : units)
+    {
+        QCOMPARE(props->goboSwap(f->id(), 0, 0), QString("logo.png"));
+        QVERIFY(props->goboSwap(f->id(), 0, 10).isEmpty());
+    }
+    // The open slot fitted with glass is no longer open.
+    vals[0] = char(0);
+    QVERIFY(!BeamOptics::opticsFor(units.at(2), vals, 0.0, props).mask.isNull());
+
+    // Offered on a gobo fixture's menu, not on a plain one.
+    {
+        MonitorGraphicsView view(doc);
+        QMenu gm;
+        view.buildItemMenu(&gm, "fixture", units.first()->id(), MonitorGraphicsView::MenuPlace());
+        QVERIFY2(menuPaths(&gm).join("|").contains(QString::fromUtf8("Gobo Wheels…")),
+                 qPrintable(menuPaths(&gm).join(" | ")));
+        QMenu pm;
+        view.buildItemMenu(&pm, "fixture", plain->id(), MonitorGraphicsView::MenuPlace());
+        QVERIFY(!menuPaths(&pm).join("|").contains(QString::fromUtf8("Gobo Wheels")));
+    }
+
+    doc->clearContents();
+    delete doc;
+    delete def;
 }
 
 void Monitor_Test::beamsLandOnTheCycloramaInTheRigView()

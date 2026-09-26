@@ -21,6 +21,8 @@
 #include <QSlider>
 #include <QLabel>
 #include <QComboBox>
+#include <QTemporaryDir>
+#include <QImage>
 
 #define private public
 #include "lookeditor.h"
@@ -33,6 +35,8 @@
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
+#include "gobolibrary.h"
+#include "monitorproperties.h"
 
 #include "lookeditor_test.h"
 
@@ -189,6 +193,43 @@ void LookEditor_Test::aNewGoboOffersTheWorkspacesWheels()
     delete spot;
     delete beam;
     delete par;
+}
+
+void LookEditor_Test::aSwappedSlotShowsItsOwnGlass()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    GoboLibrary::setUserDirectoryOverride(dir.filePath("Gobos"));
+    QImage logo(40, 40, QImage::Format_ARGB32);
+    logo.fill(Qt::black);
+    QVERIFY(logo.save(GoboLibrary::userDirectory().absoluteFilePath("our-logo.png")));
+
+    QLCFixtureDef *spot = wheelDef("Spot", { "Open", "Star", "Ring" });
+    {
+        Doc doc(this);
+        Fixture *f = addOf(doc, spot);
+        QVERIFY(f != nullptr);
+        doc.monitorProperties()->setGoboSwap(f->id(), 0, 20, "our-logo.png");   // Star's slot
+        QLCPalette *gobo = new QLCPalette(QLCPalette::Gobo, &doc);
+        gobo->setValue(29);                                                     // Star
+        QVERIFY(doc.addPalette(gobo));
+
+        LookEditor ed(&doc);
+        ed.setPalette(gobo->id());
+        QCOMPARE(itemsOf(ed.m_singleCombo), QStringList({ "Open", "Star — our-logo", "Ring" }));
+        QVERIFY(!ed.m_singleCombo->itemIcon(1).isNull());
+        QCOMPARE(ed.m_singleCombo->currentIndex(), 1);
+        // The big preview shows the fitted glass too.
+        QVERIFY(!ed.m_singlePreview->isHidden());
+        QVERIFY(!ed.m_singlePreview->pixmap(Qt::ReturnByValue).isNull());
+
+        // A missing picture falls back to the definition's slot.
+        doc.monitorProperties()->setGoboSwap(f->id(), 0, 20, "gone.png");
+        ed.setPalette(gobo->id());
+        QCOMPARE(ed.m_singleCombo->itemText(1), QString("Star"));
+    }
+    delete spot;
+    GoboLibrary::setUserDirectoryOverride(QString());
 }
 
 QTEST_MAIN(LookEditor_Test)

@@ -125,6 +125,8 @@ public:
         QString key;                //!< manufacturer/model/mode, for dedup + memory
         QString label;              //!< shown in the chooser
         const QLCChannel *channel;  //!< the channel the palette's value lands on
+        quint32 channelIndex = 0;   //!< its index in the fixture
+        QList<quint32> fixtures;    //!< the fixtures of this type considered
     };
     /** The fixture types that can show a @p group value: the look's own
      *  targets when it has any that can, otherwise every fixture in the
@@ -137,6 +139,10 @@ public:
 private:
     /** Fill the named-capability picker from m_singleChannel for value @p v. */
     void fillSingleCapabilities(int v);
+    /** The picture in that slot: a unit's swapped glass (the first fixture
+     *  of the browsed type that has one, its name in @p swapName), else the
+     *  definition's. */
+    QString slotPicture(class QLCCapability *cap, QString *swapName = nullptr) const;
 
     /** True if any target fixture has the given QLCChannel::PrimaryColour
      *  emitter channel (White/Amber/UV). */
