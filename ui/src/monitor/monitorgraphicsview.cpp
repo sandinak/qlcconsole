@@ -5714,11 +5714,7 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
     for (auto bit = m_countBadges.constBegin(); bit != m_countBadges.constEnd(); ++bit)
     {
         QGraphicsItemGroup *badge = bit.value();
-        /* childrenBoundingRect(), not sceneBoundingRect(): a group caches its
-           bounds when items are added, and the disc is sized afterwards, so
-           the cached rect is empty. */
-        if (badge == nullptr || !badge->isVisible()
-            || !badge->mapRectToScene(badge->childrenBoundingRect()).contains(sp))
+        if (badge == nullptr || !badge->isVisible() || !countBadgeHit(badge, event->pos()))
             continue;
         const QStringList key = bit.key().split(QLatin1Char(':'));
         if (key.size() == 2)
@@ -7129,6 +7125,27 @@ void MonitorGraphicsView::revealBuriedFixtures(const QString &kind, quint32 id)
     rebuildRevealTags();
     rebuildProjectionOverlay();
     m_scene->update();
+}
+
+bool MonitorGraphicsView::countBadgeHit(QGraphicsItemGroup *badge, const QPoint &viewPos) const
+{
+    /* In SCREEN pixels, on the disc itself. The bubble keeps one size on
+       screen whatever the zoom (ItemIgnoresTransformations), so its bounds in
+       scene units are not what is drawn: zoomed in they covered several times
+       the circle, and a double-click on the tower around it opened the
+       breakout instead of the tower ("it's assuming I am clicking on the
+       circle .. even when I am not"). childrenBoundingRect(), not
+       sceneBoundingRect(): a group caches its bounds when items are added,
+       and the disc is sized afterwards. */
+    if (badge == nullptr)
+        return false;
+    const QRectF onScreen =
+        badge->deviceTransform(viewportTransform()).mapRect(badge->childrenBoundingRect());
+    if (onScreen.isEmpty())
+        return false;
+    const QPointF d = QPointF(viewPos) - onScreen.center();
+    const double r = qMin(onScreen.width(), onScreen.height()) * 0.5;
+    return d.x() * d.x() + d.y() * d.y() <= r * r;
 }
 
 QList<quint32> MonitorGraphicsView::revealedFixtures() const

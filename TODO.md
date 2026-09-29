@@ -232,6 +232,10 @@ rig edits, bulk repatching, cross-show consistency checks.
   - A tower's editor: shelf labels ("Shelf 3 — 5.91 ft") on the left of the
     tower, fixture names on the right -- they printed over each other -- and
     the height dimension moved out past the shelf labels.
+  - A count bubble is hit where it is DRAWN (its disc, in screen pixels):
+    since bubbles keep one screen size, their scene-unit bounds covered
+    several times the circle when zoomed in, and double-clicking a tower
+    around it opened the breakout instead of the tower's editor.
   - Selecting on the plot selects the same objects in Layers (folders opened,
     scrolled to the first); Layers -> plot already worked.
   - A rename anywhere shows everywhere: the plot's label and tooltip (it had

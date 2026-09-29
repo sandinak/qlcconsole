@@ -1302,6 +1302,8 @@ private:
     QSet<quint32> m_buriedByOwnFixtures;
     /** Count badges, keyed "kind:id". */
     QHash<QString, class QGraphicsItemGroup *> m_countBadges;
+    /** Whether @p viewPos (viewport pixels) is on @p badge's disc as drawn. */
+    bool countBadgeHit(class QGraphicsItemGroup *badge, const QPoint &viewPos) const;
 
     /** Above this fraction, a structure's fixtures are replaced by a count. */
     static constexpr double kBuryThreshold = 0.40;

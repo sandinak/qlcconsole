@@ -12370,13 +12370,15 @@ void Monitor_Test::aCountBubbleKeepsItsScreenSizeWhenZoomed()
         PlatformItem *deckItem = view.m_platformItems.value(deck->id());
 
         // On screen: the bubble's size, and where it sits against the deck.
+        // childrenBoundingRect(): the group's own cached bounds predate the disc.
         auto onScreen = [&]() {
-            return badge->deviceTransform(view.viewportTransform()).mapRect(badge->boundingRect());
+            return badge->deviceTransform(view.viewportTransform()).mapRect(badge->childrenBoundingRect());
         };
         auto deckCentre = [&]() {
             return QPointF(view.mapFromScene(deckItem->sceneBoundingRect().center()));
         };
         const QRectF at1 = onScreen();
+        QVERIFY2(at1.width() >= 16.0, qPrintable(QString::number(at1.width())));   // a real disc
         QVERIFY((at1.center() - deckCentre()).manhattanLength() < 3.0);
         const double deckAt1 = view.mapFromScene(deckItem->sceneBoundingRect()).boundingRect().width();
 
@@ -12388,6 +12390,27 @@ void Monitor_Test::aCountBubbleKeepsItsScreenSizeWhenZoomed()
         // ...while the deck under it did grow, so more of it is clear to click.
         const double deckAt4 = view.mapFromScene(deckItem->sceneBoundingRect()).boundingRect().width();
         QVERIFY(deckAt4 > deckAt1 * 3.0);
+
+        /* "when I click on the tower .. it's assuming I am clicking on the
+           circle to open the breakout .. even when I am not": the bubble is
+           hit where it is DRAWN. Zoomed in, its size in scene units covered
+           several times the circle. */
+        view.show();                                    // real geometry for the clicks
+        QCoreApplication::processEvents();
+        const QRectF shown = onScreen();
+        const QPoint centre = shown.center().toPoint();
+        const int radius = int(shown.width() / 2.0);
+        QVERIFY(view.countBadgeHit(badge, centre));
+        QVERIFY(view.countBadgeHit(badge, centre + QPoint(radius - 2, 0)));
+        const QPoint beside = centre + QPoint(radius * 2, 0);        // on the deck, off the disc
+        QVERIFY(!view.countBadgeHit(badge, beside));
+        QVERIFY(!view.countBadgeHit(badge, centre + QPoint(radius, radius)));   // the square's corner
+        QVERIFY(deckItem->sceneBoundingRect().contains(view.mapToScene(beside)));
+        // A double-click beside it is the deck's, not the breakout.
+        QTest::mouseDClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, beside);
+        QVERIFY(view.revealedFixtures().isEmpty());
+        QTest::mouseDClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, centre);
+        QCOMPARE(view.revealedFixtures().size(), 2);
     }
     delete doc;
 }
