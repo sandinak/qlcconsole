@@ -63,6 +63,7 @@ public:
     {
         QString name;
         QString transport;
+        QString model;                   //!< the gear, when made from a catalog model
         QString ip;
         bool    placed = false;
         int     ports = 0;

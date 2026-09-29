@@ -92,6 +92,9 @@ public:
     QString name;
     int     transport;         //!< Transport
     QString ipHint;              //!< informational only
+    /** The gear it is ("ENTTEC ODE Mk3"), when it was made from the
+     *  NetworkGearCatalog; empty for a node built by hand. Informational. */
+    QString model;
     QList<NetworkPort> ports;
 
     // Physical location on the 2D stage plot (metres), same shape as

@@ -25,11 +25,6 @@ Sequenced: network topology first, then inventory.
   Studio (drag/lock/layer/group/rename/delete, Add menu); N3 Network Topology
   dialog (nodes, ports, universe per port, wireless receiver placement, live
   warnings) -- double-click a node, or Monitor > More > Network Topology...
-- **Next:** N4 run lines + hover stats; N5 reports; N6 proximity-based Patch
-  suggestions; then inventory Phase 1 (`Fixture::isPatched`, the
-  `Doc::addFixture()` unpatched bypass, the two DMX write-path guards) and
-  Phase 2 (Add to Inventory, docked Inventory tree in the Studio, badges,
-  bulk Patch view).
 - **Done 2026-09-24:** inventory Phase 1 + 2 -- `Fixture::isPatched`,
   `connection`/`ipAddress`, the `Doc::addFixture()` unpatched bypass,
   `Doc::patchFixture`, DMX write-path guards (inert `FadeChannel` plus every
@@ -62,8 +57,14 @@ Sequenced: network topology first, then inventory.
   goes to the nearest node port with room (a free port claims a new universe,
   written onto the port on Apply); Patch dialog Via column and "Place by nearest
   node". See NETWORK_CABLING_DESIGN.md "What N6 built".
-- **Open (deferred):** equipment catalog for network gear (place a node from a
-  model).
+- **Done 2026-09-26:** the network gear catalog (`NetworkGearCatalog`): Add
+  Network Node > Model places a node from a model with its transport and ports
+  (a receiver per wireless universe) -- a built-in list of common gear (ENTTEC,
+  DMXking, Chauvet, ETC, Wireless Solution, generic) plus your own as JSON in
+  ~/Library/Application Support/qlcconsole/NetworkGear; a node's menu has
+  Save as Gear Model… The node records its model (`<Node Model=...>`), shown
+  in its tooltip and the Network Report. Check a built-in's port count
+  against its spec sheet before relying on it.
 - **Done 2026-09-26:** pipes and booms list their fixtures in Layers: a pipe
   forms a group with what is mounted on it ("SL Boom · on boom", "1st
   Electric · on pipe"), or is a container inside a manual folder, like a

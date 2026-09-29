@@ -57,6 +57,7 @@
 #include "sceneryitem.h"
 #include "beamoptics.h"
 #include "gobolibrary.h"
+#include "networkgearcatalog.h"
 #define private public
 #include "gobowheelsdialog.h"
 #undef private
@@ -11022,7 +11023,7 @@ void Monitor_Test::addNetworkNodePlacesItWhereTheMenuWasOpened()
 
     driveDialog([](QWidget *dlg) {
         QLineEdit *name = findRealLineEdit(dlg);
-        QComboBox *transport = dlg->findChild<QComboBox *>();
+        QComboBox *transport = dlg->findChild<QComboBox *>("networkTransport");
         if (name == nullptr || transport == nullptr)
             return false;
         name->setText("  SR ArtNet Node  ");
@@ -11054,6 +11055,97 @@ void Monitor_Test::addNetworkNodePlacesItWhereTheMenuWasOpened()
     rig.mon->slotAddNetworkNode();
     QCOMPARE(m_doc->networkTopology()->nodes().size(), 2);
     QCOMPARE(m_doc->networkTopology()->nodes().at(1).name, QString("Node 2"));
+}
+
+void Monitor_Test::aNetworkNodeCanBePlacedFromAGearModel()
+{
+    TopologyCleanup topo(m_doc);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    NetworkGearCatalog::setUserDirectoryOverride(dir.filePath("NetworkGear"));
+    auto restore = qScopeGuard([]() { NetworkGearCatalog::setUserDirectoryOverride(QString()); });
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    // Pick the ENTTEC ODE Mk3: the transport follows (and is not editable),
+    // and the node arrives with its two ports.
+    auto pick = [](const QString &which, const QString &name) {
+        driveDialog([which, name](QWidget *dlg) {
+            QComboBox *model = dlg->findChild<QComboBox *>("networkGearModel");
+            QComboBox *transport = dlg->findChild<QComboBox *>("networkTransport");
+            if (model == nullptr || transport == nullptr)
+                return false;
+            const int at = model->findText(which, Qt::MatchStartsWith);
+            if (at < 0)
+                return false;
+            model->setCurrentIndex(at);
+            if (transport->isEnabled())
+                return false;
+            if (!name.isEmpty())
+                findRealLineEdit(dlg)->setText(name);
+            inspectModal([](QWidget *) {});
+            return true;
+        });
+    };
+    pick("ENTTEC ODE Mk3", QString());
+    rig.mon->slotAddNetworkNode();
+    NetworkTopology *nt = m_doc->networkTopology();
+    QCOMPARE(nt->nodes().size(), 1);
+    QCOMPARE(nt->nodes().at(0).name, QString("ODE Mk3"));
+    QCOMPARE(nt->nodes().at(0).model, QString("ENTTEC ODE Mk3"));
+    QCOMPARE(nt->nodes().at(0).transport, int(NetworkNode::ArtNet));
+    QCOMPARE(nt->nodes().at(0).ports.size(), 2);
+    QVERIFY(nt->nodes().at(0).placed);
+    // A second of the same: numbered.
+    pick("ENTTEC ODE Mk3", QString());
+    rig.mon->slotAddNetworkNode();
+    QCOMPARE(nt->nodes().at(1).name, QString("ODE Mk3 #2"));
+    // Wireless gear: a receiver per universe, named after the node.
+    pick("Wireless Solution BlackBox F-1 G5", "SR Wireless");
+    rig.mon->slotAddNetworkNode();
+    QCOMPARE(nt->nodes().at(2).transport, int(NetworkNode::WirelessDMX));
+    QCOMPARE(nt->nodes().at(2).ports.size(), 1);
+    QCOMPARE(nt->nodes().at(2).ports.at(0).receiver.name, QString("SR Wireless RX"));
+    // The plot says what it is.
+    rig.gv->updateNetworkNodes();
+    QVERIFY(rig.gv->m_networkNodeItems.at(0)->toolTip().contains("ENTTEC ODE Mk3"));
+
+    // A hand-built node saved as a model is offered next time, as yours.
+    NetworkNode hand;
+    hand.name = "Rack Node";
+    hand.transport = NetworkNode::sACN;
+    hand.ports << NetworkPort() << NetworkPort() << NetworkPort();
+    nt->nodes() << hand;
+    const QString file = rig.gv->saveNetworkNodeAsModel(3, "Acme", "Rack 3");
+    QVERIFY(QFile::exists(file));
+    QCOMPARE(nt->nodes().at(3).model, QString("Acme Rack 3"));
+    QVERIFY(rig.gv->saveNetworkNodeAsModel(3, "Acme", "  ").isEmpty());      // needs a name
+    QVERIFY(rig.gv->saveNetworkNodeAsModel(99, "Acme", "X").isEmpty());      // no such node
+    pick("Acme Rack 3", "Second Rack");
+    rig.mon->slotAddNetworkNode();
+    QCOMPARE(nt->nodes().at(4).transport, int(NetworkNode::sACN));
+    QCOMPARE(nt->nodes().at(4).ports.size(), 3);
+    QCOMPARE(nt->nodes().at(4).name, QString("Second Rack"));
+
+    // Its menu offers it.
+    QMenu menu;
+    rig.gv->buildItemMenu(&menu, "network", 3, MonitorGraphicsView::MenuPlace());
+    QVERIFY2(menuPaths(&menu).join("|").contains(QString::fromUtf8("Save as Gear Model…")),
+             qPrintable(menuPaths(&menu).join(" | ")));
+
+    // Custom still works as before: transport editable, no ports.
+    driveDialog([](QWidget *dlg) {
+        QComboBox *model = dlg->findChild<QComboBox *>("networkGearModel");
+        QComboBox *transport = dlg->findChild<QComboBox *>("networkTransport");
+        if (model == nullptr || transport == nullptr || model->currentIndex() != 0
+            || !transport->isEnabled())
+            return false;
+        inspectModal([](QWidget *) {});
+        return true;
+    });
+    rig.mon->slotAddNetworkNode();
+    QCOMPARE(nt->nodes().at(5).ports.size(), 0);
+    QVERIFY(nt->nodes().at(5).model.isEmpty());
 }
 
 void Monitor_Test::addNetworkNodeCancelledAddsNothing()

@@ -43,6 +43,10 @@
 #include <QScopedValueRollback>
 #include <QScopeGuard>
 #include <functional>
+#include <QDialog>
+#include <QLabel>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
@@ -56,6 +60,7 @@
 #include "standitem.h"
 #include "sceneryitem.h"
 #include "gobowheelsdialog.h"
+#include "networkgearcatalog.h"
 #include "structurestudioview.h"
 #include "toweritem.h"
 #include "tower.h"
@@ -4383,6 +4388,8 @@ void MonitorGraphicsView::updateNetworkNodes()
         const QPointF px = projectMm(mx * 1000.0, my * 1000.0, 0.0);
 
         NetworkNodeItem *nn = new NetworkNodeItem(i, node.name, node.transport, node.locked);
+        if (!node.model.isEmpty())
+            nn->setToolTip(tr("Network node: %1 (%2)").arg(node.name, node.model));
         nn->setPos(px);
         // Draggable only when neither the whole layout nor this node is locked.
         nn->setMovable(!m_layoutLocked && !node.locked);
@@ -6044,6 +6051,35 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
             }
         });
 
+        /* A network node set up by hand can become a model to place the next
+           one from (Add Network Node > Model). */
+        if (kind == QLatin1String("network"))
+            menu->addAction(tr("Save as Gear Model…"), this, [this, id]() {
+                NetworkTopology *nt = m_doc->networkTopology();
+                if (int(id) >= nt->nodes().size())
+                    return;
+                const NetworkNode node = nt->nodes().at(int(id));
+                QDialog dlg(this);
+                dlg.setWindowTitle(tr("Save as Gear Model"));
+                QFormLayout *form = new QFormLayout(&dlg);
+                QLineEdit *make = new QLineEdit(&dlg);
+                make->setPlaceholderText(tr("e.g. ENTTEC"));
+                QLineEdit *model = new QLineEdit(node.model.isEmpty() ? node.name : node.model, &dlg);
+                form->addRow(tr("Manufacturer:"), make);
+                form->addRow(tr("Model:"), model);
+                form->addRow(tr("Carries:"), new QLabel(tr("%1, %n port(s)", "", node.ports.size())
+                                                      .arg(NetworkNode::transportName(node.transport)), &dlg));
+                QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+                form->addRow(bb);
+                connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+                connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+                if (dlg.exec() != QDialog::Accepted)
+                    return;
+                if (saveNetworkNodeAsModel(id, make->text(), model->text()).isEmpty())
+                    QMessageBox::warning(this, tr("Save as Gear Model"),
+                                         tr("The model could not be saved: it needs a name and at least one port."));
+            });
+
         /* A truss or riser carrying fixtures has an auto-group, and with it a
            fixture layout and the option to break the group up. */
         quint32 anchorGroup = 0;
@@ -6101,6 +6137,28 @@ static QString itemNameOf(Doc *doc, const QString &kind, quint32 id)
         return (nt != nullptr && int(id) < nt->nodes().size()) ? nt->nodes().at(int(id)).name : QString();
     }
     return QString();
+}
+
+QString MonitorGraphicsView::saveNetworkNodeAsModel(quint32 nodeIndex, const QString &manufacturer,
+                                                    const QString &model)
+{
+    NetworkTopology *nt = m_doc->networkTopology();
+    if (nt == nullptr || int(nodeIndex) >= nt->nodes().size())
+        return QString();
+    NetworkNode &node = nt->nodes()[int(nodeIndex)];
+    NetworkGearModel m;
+    m.manufacturer = manufacturer.trimmed();
+    m.model = model.trimmed();
+    m.transport = node.transport;
+    m.ports = node.ports.size();
+    m.builtIn = false;
+    const QString path = NetworkGearCatalog::saveUserModel(m);
+    if (!path.isEmpty() && node.model != m.displayName())
+    {
+        node.model = m.displayName();          // it IS that gear now
+        m_doc->setModified();
+    }
+    return path;
 }
 
 void MonitorGraphicsView::renameItem(const QString &kind, quint32 id, const QString &name)

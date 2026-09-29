@@ -59,6 +59,7 @@ NetworkReport NetworkReport::build(Doc *doc)
         Node node;
         node.name = nn.name;
         node.transport = NetworkNode::transportName(nn.transport);
+        node.model = nn.model;
         node.ip = nn.ipHint;
         node.placed = nn.placed;
         node.ports = nn.ports.size();
@@ -169,6 +170,8 @@ QString NetworkReport::toText(bool feet) const
         const Node &node = nodes.at(n);
         out << QString();
         QString head = QStringLiteral("%1 -- %2").arg(node.name, node.transport);
+        if (!node.model.isEmpty())
+            head += QStringLiteral(" (%1)").arg(node.model);
         if (!node.ip.isEmpty())
             head += QStringLiteral(" @ %1").arg(node.ip);
         if (!node.placed)

@@ -6,7 +6,10 @@ so the 2D map can answer real cabling questions: how many nodes, where they sit,
 how many universes each carries, and which fixtures hang off each DMX output.
 
 Status: **N1-N6 built** (model, map item, Network Topology dialog, cable runs
-in the Network overlay, reports, proximity-guided patching). The overlays below already ship:
+in the Network overlay, reports, proximity-guided patching), plus a gear
+catalog (2026-09-26): Add Network Node > Model places a node from a model --
+built-in or your own JSON in ~/Library/Application Support/qlcconsole/
+NetworkGear -- with its transport and ports filled in (`NetworkGearCatalog`). The overlays below already ship:
 - **DMX overlay** — colour by universe + address-clash flags + transport tag.
 - **Network overlay** — colour by transport (ArtNet / sACN / interface).
 

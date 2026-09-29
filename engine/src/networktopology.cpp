@@ -34,6 +34,7 @@
 #define KXMLQLCNetworkNodeName          QStringLiteral("Name")
 #define KXMLQLCNetworkNodeTransport     QStringLiteral("Transport")
 #define KXMLQLCNetworkNodeIpHint        QStringLiteral("IpHint")
+#define KXMLQLCNetworkNodeModel         QStringLiteral("Model")
 #define KXMLQLCNetworkNodePosX          QStringLiteral("PosX")
 #define KXMLQLCNetworkNodePosY          QStringLiteral("PosY")
 #define KXMLQLCNetworkNodeLocked        QStringLiteral("Locked")
@@ -309,6 +310,8 @@ bool NetworkTopology::loadXML(QXmlStreamReader &root, Doc *doc)
             node.transport = nattrs.value(KXMLQLCNetworkNodeTransport).toString().toInt();
         if (nattrs.hasAttribute(KXMLQLCNetworkNodeIpHint))
             node.ipHint = nattrs.value(KXMLQLCNetworkNodeIpHint).toString();
+        if (nattrs.hasAttribute(KXMLQLCNetworkNodeModel))
+            node.model = nattrs.value(KXMLQLCNetworkNodeModel).toString();
         if (nattrs.hasAttribute(KXMLQLCNetworkNodePosX) &&
             nattrs.hasAttribute(KXMLQLCNetworkNodePosY))
         {
@@ -389,6 +392,8 @@ bool NetworkTopology::saveXML(QXmlStreamWriter *doc) const
             doc->writeAttribute(KXMLQLCNetworkNodeTransport, QString::number(node.transport));
         if (node.ipHint.isEmpty() == false)
             doc->writeAttribute(KXMLQLCNetworkNodeIpHint, node.ipHint);
+        if (node.model.isEmpty() == false)
+            doc->writeAttribute(KXMLQLCNetworkNodeModel, node.model);
         if (node.placed)
         {
             doc->writeAttribute(KXMLQLCNetworkNodePosX, QString::number(node.posX));

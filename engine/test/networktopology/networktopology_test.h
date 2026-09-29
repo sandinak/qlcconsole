@@ -60,6 +60,12 @@ private slots:
     void unknownXmlIsSkippedNotFatal();
     void clearContentsResetsTheTopologyAndTheDocPersistsIt();
     void unusedPortsAndANullDocYieldNoRuns();
+
+    /** The network gear catalog: the built-in models, the operator's own
+     *  JSON models (theirs win, bad files skipped), a node made from a model,
+     *  saving a model, and a node's model kept in the workspace. */
+    void theGearCatalogListsBuiltInAndYourModels();
+    void aNodeMadeFromAModelHasItsPortsAndKeepsItsModel();
 };
 
 #endif

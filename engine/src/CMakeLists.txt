@@ -48,6 +48,7 @@ add_library(${module_name} SHARED
     pipe.cpp pipe.h
     scenery.cpp scenery.h
     gobolibrary.cpp gobolibrary.h
+    networkgearcatalog.cpp networkgearcatalog.h
     stand.cpp stand.h
     tower.cpp tower.h
     stagetarget.cpp stagetarget.h

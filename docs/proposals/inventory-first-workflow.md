@@ -1,8 +1,9 @@
 # Inventory-first workflow — design the rig before you patch it
 
-**Status:** Phase 1 (engine) and the Phase 2 UI are built -- see "What shipped"
-below. Still open: the equipment catalog for network gear, badges in the
-Programming tab, and proximity-guided patching (needs NetworkTopology N6).
+**Status:** Built -- Phase 1 (engine), the Phase 2 UI, the Programming-tab
+"(unpatched)" badges and proximity-guided patching (NetworkTopology N6); see
+"What shipped" below. The equipment catalog for network gear followed on
+2026-09-26 (`NetworkGearCatalog`; Add Network Node > Model).
 **Owner:** Branson / Claude
 **Related:** [Lighting Studio](../features/lighting-studio.md),
 [Fixture Manager](../features/fixture-manager.md)
@@ -336,9 +337,11 @@ It matters here because the Inventory and the Patch step both branch on it:
 - The add-fixture flow moved out of `FixtureManager` into `FixtureCreator` so the
   Studio creates fixtures exactly the way the manager does.
 
-**Not done.** The network *equipment* catalog (placing a node or wireless link
-from a model definition, with ports prefilled) -- nodes are still created by
-hand in the Network Topology dialog. Proximity-guided patching (N6).
+**Not done at the time, since built (2026-09-26).** The network *equipment*
+catalog: placing a node or wireless link from a model definition, with ports
+prefilled -- `NetworkGearCatalog`, Add Network Node > Model, and Save as Gear
+Model… on a node. (Proximity-guided patching, listed here
+at first, shipped with N6 on 2026-09-25.)
 
 Added after the first pass: "Return to inventory" (`Doc::unpatchFixture`, Design
 mode only -- a running function holds channels resolved against the old

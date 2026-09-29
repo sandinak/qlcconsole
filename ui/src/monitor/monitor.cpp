@@ -87,6 +87,7 @@
 #include "monitorfixtureitem.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
+#include "networkgearcatalog.h"
 #include "networktopologydialog.h"
 #include "networkreportdialog.h"
 #include "fixturecreator.h"
@@ -4601,16 +4602,55 @@ void Monitor::slotAddNetworkNode()
     dlg.setWindowTitle(tr("Add Network Node"));
     QFormLayout *form = new QFormLayout(&dlg);
 
+    /* From a model: the gear's transport and ports filled in (the user's
+       own models first, then the built-in list), or Custom to set it up by
+       hand as before. */
+    const QList<NetworkGearModel> gear = NetworkGearCatalog::all();
+    QComboBox *modelCb = new QComboBox(&dlg);
+    modelCb->setObjectName("networkGearModel");
+    modelCb->addItem(tr("Custom — set up by hand"), -1);
+    for (int i = 0; i < gear.size(); ++i)
+    {
+        const NetworkGearModel &m = gear.at(i);
+        modelCb->addItem(tr("%1 — %2 %3, %4").arg(m.displayName())
+                             .arg(m.ports)
+                             .arg(m.transport == NetworkNode::WirelessDMX
+                                      ? (m.ports == 1 ? tr("universe") : tr("universes"))
+                                      : (m.ports == 1 ? tr("port") : tr("ports")))
+                             .arg(NetworkNode::transportName(m.transport))
+                             + (m.builtIn ? QString() : tr("  (yours)")),
+                         i);
+    }
+    modelCb->setToolTip(tr("Your own models live in %1 as JSON files; "
+                           "Save as Gear Model… on a node's menu adds one.")
+                        .arg(NetworkGearCatalog::userDirectory().absolutePath()));
+    form->addRow(tr("Model:"), modelCb);
+
     QLineEdit *nameEdit = new QLineEdit(&dlg);
     nameEdit->setPlaceholderText(tr("e.g. SR ArtNet Node"));
     form->addRow(tr("Name:"), nameEdit);
 
     QComboBox *transportCb = new QComboBox(&dlg);
+    transportCb->setObjectName("networkTransport");
     transportCb->addItem(tr("ArtNet"), int(NetworkNode::ArtNet));
     transportCb->addItem(tr("sACN"), int(NetworkNode::sACN));
     transportCb->addItem(tr("Interface"), int(NetworkNode::Interface));
     transportCb->addItem(tr("Wireless DMX"), int(NetworkNode::WirelessDMX));
     form->addRow(tr("Transport:"), transportCb);
+
+    auto modelChosen = [&gear, modelCb, nameEdit, transportCb]() {
+        const int gi = modelCb->currentData().toInt();
+        const bool custom = gi < 0 || gi >= gear.size();
+        transportCb->setEnabled(custom);
+        if (custom)
+        {
+            nameEdit->setPlaceholderText(tr("e.g. SR ArtNet Node"));
+            return;
+        }
+        transportCb->setCurrentIndex(transportCb->findData(gear.at(gi).transport));
+        nameEdit->setPlaceholderText(gear.at(gi).model);
+    };
+    connect(modelCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, modelChosen);
 
     // Pre-fill position from the right-click point, like Add Truss/Add Image.
     QPointF pendMm = m_pendingAddScenePos.isNull()
@@ -4646,9 +4686,29 @@ void Monitor::slotAddNetworkNode()
 
     NetworkTopology *nt = m_doc->networkTopology();
     NetworkNode node;
-    node.name = nameEdit->text().trimmed().isEmpty()
-                ? tr("Node %1").arg(nt->nodes().size() + 1) : nameEdit->text().trimmed();
-    node.transport = transportCb->currentData().toInt();
+    const int gi = modelCb->currentData().toInt();
+    if (gi >= 0 && gi < gear.size())
+    {
+        // Named as typed, else after the model -- numbered when there are two.
+        QString name = nameEdit->text().trimmed();
+        if (name.isEmpty())
+        {
+            name = gear.at(gi).model;
+            int n = 1;
+            for (const NetworkNode &other : nt->nodes())
+                if (other.name == name || other.name.startsWith(name + " #"))
+                    ++n;
+            if (n > 1)
+                name = QString("%1 #%2").arg(gear.at(gi).model).arg(n);
+        }
+        node = NetworkGearCatalog::makeNode(gear.at(gi), name);
+    }
+    else
+    {
+        node.name = nameEdit->text().trimmed().isEmpty()
+                    ? tr("Node %1").arg(nt->nodes().size() + 1) : nameEdit->text().trimmed();
+        node.transport = transportCb->currentData().toInt();
+    }
     node.placed = true;
     node.posX = xSpin->value() * fromDisp;
     node.posY = ySpin->value() * fromDisp;
@@ -4659,7 +4719,8 @@ void Monitor::slotAddNetworkNode()
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 
-    // A node with no ports carries nothing: go straight on to giving it some.
+    // Straight on to its ports: giving a hand-built node some, or a model's
+    // their universes.
     slotEditNetworkNode(quint32(nt->nodes().size() - 1));
 }
 

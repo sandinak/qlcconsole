@@ -18,9 +18,14 @@
 */
 
 #include <QtTest>
+#include <QTemporaryDir>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 
 #include "fakenetplugin.h"
 #include "networktopology.h"
+#include "networkgearcatalog.h"
+#include "networkreport.h"
 #include "fixture.h"
 #include "doc.h"
 #include "inputoutputmap.h"
@@ -611,6 +616,161 @@ void NetworkTopology_Test::unusedPortsAndANullDocYieldNoRuns()
 
     QVERIFY(topo.runs(nullptr, QHash<quint32, QVector3D>()).isEmpty());
     QVERIFY(topo.unservedFixtures(nullptr).isEmpty());
+}
+
+void NetworkTopology_Test::theGearCatalogListsBuiltInAndYourModels()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    NetworkGearCatalog::setUserDirectoryOverride(dir.filePath("NetworkGear"));
+
+    // Built in: sorted by manufacturer then model, every one with ports.
+    const QList<NetworkGearModel> built = NetworkGearCatalog::builtIn();
+    QVERIFY(built.size() >= 10);
+    for (int i = 0; i < built.size(); ++i)
+    {
+        QVERIFY(built.at(i).ports >= 1);
+        QVERIFY(built.at(i).builtIn);
+        if (i > 0)
+            QVERIFY(built.at(i - 1).manufacturer.compare(built.at(i).manufacturer, Qt::CaseInsensitive) <= 0);
+    }
+    bool ode = false;
+    for (const NetworkGearModel &m : built)
+        if (m.displayName() == "ENTTEC ODE Mk3")
+        {
+            ode = true;
+            QCOMPARE(m.ports, 2);
+            QCOMPARE(m.transport, int(NetworkNode::ArtNet));
+        }
+    QVERIFY(ode);
+
+    // Yours: one model per file, or several; a broken one is skipped.
+    QVERIFY(NetworkGearCatalog::userModels().isEmpty());
+    auto write = [&](const QString &name, const QByteArray &json) {
+        QFile f(NetworkGearCatalog::userDirectory().absoluteFilePath(name));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(json);
+    };
+    write("one.json", R"({"manufacturer":"Acme","model":"Rack 3","transport":"sACN","ports":3})");
+    write("two.json", R"([{"manufacturer":"Acme","model":"Box","transport":"Wireless DMX","ports":2},
+                          {"manufacturer":"ENTTEC","model":"ODE Mk3","transport":"ArtNet","ports":4},
+                          {"manufacturer":"Acme","model":"","transport":"ArtNet","ports":1},
+                          {"manufacturer":"Acme","model":"Bad","transport":"Carrier Pigeon","ports":1},
+                          {"manufacturer":"Acme","model":"None","transport":"ArtNet","ports":0}])");
+    write("broken.json", "{ not json");
+    const QList<NetworkGearModel> mine = NetworkGearCatalog::userModels();
+    QCOMPARE(mine.size(), 3);
+    QCOMPARE(mine.at(0).displayName(), QString("Acme Box"));
+    QCOMPARE(mine.at(1).displayName(), QString("Acme Rack 3"));
+    QCOMPARE(mine.at(2).displayName(), QString("ENTTEC ODE Mk3"));
+    QVERIFY(!mine.at(0).builtIn);
+    QCOMPARE(mine.at(0).transport, int(NetworkNode::WirelessDMX));
+
+    // Everything: yours first, and your ODE Mk3 (4 ports) replaces the built-in.
+    const QList<NetworkGearModel> all = NetworkGearCatalog::all();
+    QCOMPARE(all.first().displayName(), QString("Acme Box"));
+    int odes = 0;
+    for (const NetworkGearModel &m : all)
+        if (m.displayName() == "ENTTEC ODE Mk3")
+        {
+            ++odes;
+            QCOMPARE(m.ports, 4);
+            QVERIFY(!m.builtIn);
+        }
+    QCOMPARE(odes, 1);
+    QCOMPARE(all.size(), built.size() + 2);
+
+    // Saving one: a file named after it, read back as yours.
+    NetworkGearModel saved;
+    saved.manufacturer = "Acme";
+    saved.model = "Truss/Node 6";
+    saved.transport = NetworkNode::Interface;
+    saved.ports = 6;
+    const QString path = NetworkGearCatalog::saveUserModel(saved);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(QFileInfo(path).fileName() == "Acme Truss_Node 6.json");
+    bool found = false;
+    for (const NetworkGearModel &m : NetworkGearCatalog::userModels())
+        if (m.displayName() == "Acme Truss/Node 6")
+        {
+            found = true;
+            QCOMPARE(m.ports, 6);
+            QCOMPARE(m.transport, int(NetworkNode::Interface));
+        }
+    QVERIFY(found);
+    NetworkGearModel nameless;
+    QVERIFY(NetworkGearCatalog::saveUserModel(nameless).isEmpty());
+
+    // Transport names both ways.
+    QCOMPARE(NetworkGearCatalog::transportFromName("Art-Net"), int(NetworkNode::ArtNet));
+    QCOMPARE(NetworkGearCatalog::transportFromName("E1.31"), int(NetworkNode::sACN));
+    QCOMPARE(NetworkGearCatalog::transportFromName("usb"), int(NetworkNode::Interface));
+    QCOMPARE(NetworkGearCatalog::transportFromName("Wireless"), int(NetworkNode::WirelessDMX));
+    QCOMPARE(NetworkGearCatalog::transportFromName("smoke"), -1);
+    for (int t = NetworkNode::ArtNet; t <= NetworkNode::WirelessDMX; ++t)
+        QCOMPARE(NetworkGearCatalog::transportFromName(NetworkGearCatalog::transportToName(t)), t);
+
+    NetworkGearCatalog::setUserDirectoryOverride(QString());
+}
+
+void NetworkTopology_Test::aNodeMadeFromAModelHasItsPortsAndKeepsItsModel()
+{
+    NetworkGearModel storm;
+    storm.manufacturer = "ENTTEC";
+    storm.model = "Storm 8";
+    storm.transport = NetworkNode::ArtNet;
+    storm.ports = 8;
+    const NetworkNode n = NetworkGearCatalog::makeNode(storm);
+    QCOMPARE(n.name, QString("Storm 8"));
+    QCOMPARE(n.model, QString("ENTTEC Storm 8"));
+    QCOMPARE(n.ports.size(), 8);
+    for (const NetworkPort &p : n.ports)
+    {
+        QCOMPARE(p.universe, InputOutputMap::invalidUniverse());
+        QCOMPARE(p.receiver.name, NetworkReceiver().name);   // wired: left as is
+        QVERIFY(!p.receiver.placed);
+    }
+    QCOMPARE(NetworkGearCatalog::makeNode(storm, "  SR Storm ").name, QString("SR Storm"));
+
+    NetworkGearModel radio;
+    radio.manufacturer = "Acme";
+    radio.model = "Two Way";
+    radio.transport = NetworkNode::WirelessDMX;
+    radio.ports = 2;
+    const NetworkNode w = NetworkGearCatalog::makeNode(radio, "Beach TX");
+    QVERIFY(w.isWireless());
+    QCOMPARE(w.ports.at(0).receiver.name, QString("Beach TX RX 1"));
+    QCOMPARE(w.ports.at(1).receiver.name, QString("Beach TX RX 2"));
+    QVERIFY(!w.ports.at(0).receiver.placed);
+
+    // Kept in the workspace, and only written when set.
+    NetworkTopology topo;
+    topo.nodes() << n;
+    NetworkNode hand;
+    hand.name = "Hand Built";
+    topo.nodes() << hand;
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    QVERIFY(topo.saveXML(&writer));
+    writer.writeEndDocument();
+    QCOMPARE(buf.count("Model="), 1);
+    NetworkTopology back;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+    {
+        if (reader.name() == QStringLiteral("NetworkTopology"))
+            QVERIFY(back.loadXML(reader, nullptr));
+        else
+            reader.skipCurrentElement();
+    }
+    QCOMPARE(back.nodes().at(0).model, QString("ENTTEC Storm 8"));
+    QVERIFY(back.nodes().at(1).model.isEmpty());
+
+    // The report names it.
+    m_doc->networkTopology()->nodes() << n;
+    const QString text = NetworkReport::build(m_doc).toText();
+    QVERIFY2(text.contains("Storm 8 -- ArtNet (ENTTEC Storm 8)"), qPrintable(text));
 }
 
 QTEST_GUILESS_MAIN(NetworkTopology_Test)

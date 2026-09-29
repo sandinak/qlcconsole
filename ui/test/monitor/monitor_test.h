@@ -232,6 +232,9 @@ private slots:
     void aDropOnALockedPlotIsRefused();
     void addNetworkNodePlacesItWhereTheMenuWasOpened();
     void addNetworkNodeCancelledAddsNothing();
+    /** "network gear": a node placed from a catalog model arrives with its
+     *  transport and ports; a hand-built one can be saved as a model. */
+    void aNetworkNodeCanBePlacedFromAGearModel();
     void deletingANetworkNodeAsksFirst();
     void editingANetworkNodeRebuildsThePlot();
     void theNetworkReportOpensFromTheStudio();

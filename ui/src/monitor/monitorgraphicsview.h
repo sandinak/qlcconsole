@@ -603,6 +603,11 @@ public:
     QList<QPair<QString, quint32> > selectedMapObjects() const;
 
     void renameItem(const QString &kind, quint32 id, const QString &name);
+    /** Save network node @p nodeIndex's transport and port count as a gear
+     *  model of the operator's (NetworkGearCatalog), and record it on the
+     *  node. Returns the file written, or empty if it could not be. */
+    QString saveNetworkNodeAsModel(quint32 nodeIndex, const QString &manufacturer,
+                                   const QString &model);
     /** Take objects out of the folder they are in, leaving them where they are. */
     void removeFromFolder(const QList<QPair<QString, quint32> > &objects);
 
