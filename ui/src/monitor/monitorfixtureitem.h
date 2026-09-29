@@ -113,6 +113,8 @@ public:
 
     /** Get the fixture name as displayed on the label */
     QString name() const { return m_name; }
+    /** Re-read the fixture's name (label and tooltip) after a rename. */
+    void refreshName();
 
     /** Set the position of this fixture using the monitor measure units */
     void setRealPosition(QPointF pos) { m_realPos = pos; }

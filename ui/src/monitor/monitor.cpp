@@ -3113,6 +3113,11 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             row(towerPosCombo, true);
         }
     };
+    // The heading is the fixture's name: a rename elsewhere shows here too.
+    connect(m_doc, &Doc::fixtureChanged, inspTitle, [curFid, populate](quint32 fid) {
+        if (*curFid == fid)
+            populate();
+    });
     populate();
 
     /* The bar half of the same panel: "when I select it .. it doesn't
@@ -3365,6 +3370,23 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         tree->blockSignals(false);
     };
     rebuildTree();
+
+    /* A fixture renamed anywhere (the edit dialog, Layers, the Fixture
+       Manager) shows its new name in this list and on the canvas. Deferred:
+       a rename made IN this list arrives mid-edit of its own row. */
+    {
+        auto pending = std::make_shared<bool>(false);
+        connect(m_doc, &Doc::fixtureChanged, tree, [tree, view, rebuildTree, pending](quint32) {
+            if (*pending)
+                return;
+            *pending = true;
+            QTimer::singleShot(0, tree, [view, rebuildTree, pending]() {
+                *pending = false;
+                rebuildTree();
+                view->update();
+            });
+        });
+    }
 
     auto rebuildSource = []() {};   // drag-source panel retired (right-click adds)
 
@@ -7964,12 +7986,21 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Fixture Properties — %1").arg(fxItem->name()));
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    QLineEdit *nameEdit = nullptr;
 
     // Header: "Name  [right-aligned type]" on one line
     {
         QHBoxLayout *headerRow = new QHBoxLayout;
-        QLabel *nameLabel = new QLabel(QString("<b>%1</b>").arg(fxItem->name()));
-        headerRow->addWidget(nameLabel, 1);
+        // The name is editable here: "when I edit a fixture from studio I
+        // should be able to change its name".
+        nameEdit = new QLineEdit(fxi != nullptr ? fxi->name() : fxItem->name());
+        nameEdit->setObjectName("fixtureNameEdit");
+        nameEdit->setPlaceholderText(tr("Fixture name"));
+        QFont nf = nameEdit->font();
+        nf.setBold(true);
+        nameEdit->setFont(nf);
+        headerRow->addWidget(new QLabel(tr("Name:")));
+        headerRow->addWidget(nameEdit, 2);
 
         if (fxi && fxi->fixtureDef())
         {
@@ -8798,6 +8829,18 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
 
     // Stop the test source before committing (ensure clean DMX handoff)
     testSrc.reset();
+
+    // The name first: renaming a Fixture tells every view (plot, Layers, the
+    // Fixture Manager, the Programming tab, the structure editors).
+    if (fxi != nullptr && nameEdit != nullptr)
+    {
+        const QString newName = nameEdit->text().trimmed();
+        if (!newName.isEmpty() && newName != fxi->name())
+        {
+            fxi->setName(newName);
+            m_doc->setModified();
+        }
+    }
 
     // Commit rig props — START from the EXISTING rig so studio-managed mounts
     // (pipe / tower / riser / studio-frame + studioMount/Angle/groupLocal) are

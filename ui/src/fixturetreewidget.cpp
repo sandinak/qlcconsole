@@ -567,6 +567,56 @@ QTreeWidgetItem *FixtureTreeWidget::fixtureItem(quint32 id) const
     return NULL;
 }
 
+void FixtureTreeWidget::refreshFixtureName(quint32 id)
+{
+    Fixture *fxi = m_doc->fixture(id);
+    if (fxi == NULL)
+        return;
+    const bool was = blockSignals(true);      // not an edit: no itemChanged
+    for (QTreeWidgetItemIterator it(this); *it != NULL; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        const QVariant var = item->data(KColumnName, PROP_ID);
+        if (var.isValid() && var.toUInt() == id
+            && item->data(KColumnName, PROP_HEAD).isValid() == false
+            && item->text(KColumnName) != fxi->name())
+            item->setText(KColumnName, fxi->name());
+    }
+    blockSignals(was);
+}
+
+namespace
+{
+    bool filterRow(QTreeWidgetItem *item, const QString &needle, int *fixtures)
+    {
+        bool anyChild = false;
+        for (int i = 0; i < item->childCount(); ++i)
+            if (filterRow(item->child(i), needle, fixtures))
+                anyChild = true;
+
+        bool self = needle.isEmpty();
+        for (int c = 0; !self && c < item->columnCount(); ++c)
+            self = item->text(c).contains(needle, Qt::CaseInsensitive);
+        const bool visible = self || anyChild;
+        item->setHidden(!visible);
+        if (!needle.isEmpty() && anyChild)
+            item->setExpanded(true);   // reveal a match inside a collapsed folder
+        if (visible && self && item->data(KColumnName, PROP_ID).isValid()
+            && !item->data(KColumnName, PROP_HEAD).isValid())
+            ++*fixtures;
+        return visible;
+    }
+}
+
+int FixtureTreeWidget::setTextFilter(const QString &text)
+{
+    const QString needle = text.trimmed();
+    int fixtures = 0;
+    for (int i = 0; i < topLevelItemCount(); ++i)
+        filterRow(topLevelItem(i), needle, &fixtures);
+    return fixtures;
+}
+
 QTreeWidgetItem *FixtureTreeWidget::groupItem(quint32 id) const
 {
     // Groups are nested under their folder path, so search recursively.

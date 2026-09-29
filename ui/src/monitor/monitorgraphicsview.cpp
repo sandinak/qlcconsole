@@ -2982,6 +2982,7 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     Fixture *fxi = m_doc->fixture(id);
     if (fxi == NULL || m_fixtures.contains(id) == false)
         return;
+    m_fixtures.value(id)->refreshName();
 
     const QLCFixtureMode *mode = fxi->fixtureMode();
     double width = 0;

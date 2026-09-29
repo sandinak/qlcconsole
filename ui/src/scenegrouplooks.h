@@ -136,6 +136,7 @@ private:
     bool m_includeFixtureTargets;
     QHash<quint32, QStringList> m_cannotReach;   //!< as shown by the last reload()
     bool m_reachCheckPending = false;
+    bool m_nameReloadPending = false;   ///< a fixed target was renamed
 
     QLabel *m_targetsLabel;     //!< "Targets (N fixtures)"
     QComboBox *m_scopeCombo;    //!< declared look scope — see Scene::LookScope

@@ -79,6 +79,16 @@ public:
     /** Get a QTreeWidgetItem whose fixture ID is $id */
     QTreeWidgetItem* fixtureItem(quint32 id) const;
 
+    /** Show fixture @p id's current name on every row that stands for it
+     *  (a fixture can be listed under its universe and in groups). */
+    void refreshFixtureName(quint32 id);
+
+    /** Show only rows whose text (any column: name, manufacturer, model...)
+     *  contains @p text, ignoring case; a folder stays shown -- and opens --
+     *  while anything inside it matches. Empty shows everything. Returns how
+     *  many fixture rows match. */
+    int setTextFilter(const QString &text);
+
     /** Get a QTreeWidgetItem whose group ID is $id */
     QTreeWidgetItem* groupItem(quint32 id) const;
 

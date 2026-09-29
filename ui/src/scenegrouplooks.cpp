@@ -168,6 +168,20 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
                 this, &SceneGroupLooks::scheduleReachCheck);
     }
 
+    /* A fixed target renamed anywhere shows its new name here. Deferred, and
+       only when the renamed fixture is one of this look's fixed targets. */
+    if (m_doc != nullptr)
+        connect(m_doc, &Doc::fixtureChanged, this, [this](quint32 fid) {
+            if (m_scene == nullptr || !m_includeFixtureTargets
+                || !m_scene->fixtures().contains(fid) || m_nameReloadPending)
+                return;
+            m_nameReloadPending = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_nameReloadPending = false;
+                reload();
+            });
+        });
+
     QHBoxLayout *cols = new QHBoxLayout();
     root->addLayout(cols);
 

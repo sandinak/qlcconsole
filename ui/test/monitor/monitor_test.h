@@ -242,6 +242,16 @@ private slots:
     /** "pipes/booms still list their fixtures loose in Layers": a fixture on
      *  a pipe or boom is listed under it, as on a tower. */
     void aFixtureOnAPipeOrBoomIsListedUnderIt();
+    /** "when I edit a fixture from studio I should be able to change its
+     *  name" / "when I rename it should update visually everywhere". */
+    void aFixtureIsRenamedFromItsEditDialogAndEverywhere();
+    /** "when I select a fixture in the main studio view .. should also select
+     *  it in the side layers". */
+    void selectingOnThePlotSelectsInLayers();
+    /** "in truss view we have text stomping on each other .. shelf info on
+     *  left and light info on right": a tower's shelf labels sit left of it,
+     *  and the height dimension moves out past them. */
+    void towerShelfLabelsAreOnTheLeft();
     void draggingATargetAnnouncesTheMove();
     void aMoverOnATopFaceStandsUpOrHangsDown();
     void aFixtureCanBeRaisedOntoATowersTopCap();

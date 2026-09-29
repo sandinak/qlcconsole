@@ -511,6 +511,23 @@ void MonitorFixtureItem::setSize(QSize size)
     update();
 }
 
+void MonitorFixtureItem::refreshName()
+{
+    /* The name was read once, when the item was made: renamed anywhere else
+       (the edit dialog, Layers, the Fixture Manager) the plot kept the old
+       label and tooltip. */
+    Fixture *fxi = m_doc->fixture(m_fid);
+    if (fxi == NULL || fxi->name() == m_name)
+        return;
+    prepareGeometryChange();
+    m_name = fxi->name();
+    setToolTip(baseToolTip());
+    QFontMetrics fm(m_font);
+    m_labelRect = fm.boundingRect(QRect(-10, m_height + 2, m_width + 20, 30),
+                                  Qt::AlignHCenter | Qt::TextWrapAnywhere, m_name);
+    update();
+}
+
 void MonitorFixtureItem::setViewTint(const QColor &color)
 {
     m_viewTint = color;

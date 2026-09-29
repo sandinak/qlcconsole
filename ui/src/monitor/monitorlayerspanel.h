@@ -115,6 +115,11 @@ public:
      *  False when the list has no such row. */
     bool revealItem(const QString &kind, quint32 id);
 
+    /** Mirror the plot's selection: select exactly the rows for @p objects
+     *  (kind, id), open their folders and scroll to the first -- without
+     *  handing the selection back to the plot. */
+    void followMapSelection(const QList<QPair<QString, quint32> > &objects);
+
 signals:
     /** Emitted when the in-panel close/hide button is clicked. */
     void closeRequested();
@@ -239,6 +244,7 @@ private:
     /** True while a tree drag is in flight — reload() is suppressed so we never
      *  rebuild the tree inside Qt's nested drag event loop. */
     bool m_suppressReload = false;
+    bool m_reloadQueued = false;   ///< a deferred reload (after a rename) is pending
 
     /** After a drop, the (queued) reload scrolls this layer back into view so
      *  the target layer never appears to "vanish". <0 = none. */

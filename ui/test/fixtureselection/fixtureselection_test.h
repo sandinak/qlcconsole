@@ -32,6 +32,10 @@ private slots:
     void cleanup();
 
     void execDialog();
+    /** "when adding a fixture under select fixture .. can we have a text
+     *  search": filter by name, manufacturer or model; one match is picked
+     *  and Return adds it. */
+    void searchFiltersAndPicksASingleMatch();
 
 private:
     Doc* m_doc;

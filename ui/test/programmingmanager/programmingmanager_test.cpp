@@ -601,4 +601,37 @@ void ProgrammingManager_Test::aNewPanTiltIsTriedOnTheLookSoTheRigFollows()
     delete def;
 }
 
+void ProgrammingManager_Test::aRenamedFixedTargetShowsItsNewName()
+{
+    Fixture *spot = new Fixture(m_doc);
+    spot->setName("Spot A");
+    spot->setChannels(4);
+    QVERIFY(m_doc->addFixture(spot));
+    Fixture *other = new Fixture(m_doc);
+    other->setName("Not In It");
+    other->setChannels(4);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    Scene *look = new Scene(m_doc);
+    look->addFixture(spot->id());
+    QVERIFY(m_doc->addFunction(look));
+
+    SceneGroupLooks canvas(look, m_doc, nullptr, true);
+    auto listed = [&canvas](const QString &name) {
+        for (QTreeWidgetItemIterator it(canvas.m_targetList); *it != nullptr; ++it)
+            if ((*it)->text(0).contains(name))
+                return true;
+        return false;
+    };
+    QVERIFY(listed("Spot A"));
+    spot->setName("Downstage Spot");
+    QCoreApplication::processEvents();
+    QVERIFY(listed("Downstage Spot"));
+    QVERIFY(!listed("Spot A"));
+    // A fixture this look doesn't use changes nothing here.
+    other->setName("Still Not In It");
+    QCoreApplication::processEvents();
+    QVERIFY(!listed("Still Not In It"));
+}
+
 QTEST_MAIN(ProgrammingManager_Test)

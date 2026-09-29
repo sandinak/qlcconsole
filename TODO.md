@@ -221,6 +221,26 @@ rig edits, bulk repatching, cross-show consistency checks.
 
 ---
 
+## Studio nits: rename from the edit dialog, selection in Layers, renames everywhere — SHIPPED 2026-09-26
+
+  - The Studio's fixture edit dialog (double-click / Edit Fixture…) has a
+    Name field.
+  - Select Fixture (Add Fixture on the plot) has a search box: name,
+    manufacturer or model; a single match you can add is picked, so Return
+    adds it; Down moves into the list. `FixtureTreeWidget::setTextFilter()`,
+    now shared with the Fixture Manager's search.
+  - A tower's editor: shelf labels ("Shelf 3 — 5.91 ft") on the left of the
+    tower, fixture names on the right -- they printed over each other -- and
+    the height dimension moved out past the shelf labels.
+  - Selecting on the plot selects the same objects in Layers (folders opened,
+    scrolled to the first); Layers -> plot already worked.
+  - A rename anywhere shows everywhere: the plot's label and tooltip (it had
+    cached the name when the item was made), Layers, the Fixture Manager's
+    rows, the Studio inspector heading and structure editor lists, the rig
+    view, and the Programming tab's fixed-target rows. All of it follows
+    `Doc::fixtureChanged`; the list rebuilds are deferred so a rename made by
+    editing a row in place doesn't pull that row out from under its editor.
+
 ## Rig view: gobos, gobo rotation and prisms on the pool — SHIPPED 2026-09-25
 
 "set a gobo and projected on the cyc .. and it's not visible" / "handle

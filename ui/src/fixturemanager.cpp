@@ -151,6 +151,11 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
         grpItem->setExpanded(true);
 
     /* Connect fixture list change signals from the new document object */
+    // A fixture renamed elsewhere (the Studio, Layers) shows here too.
+    connect(m_doc, &Doc::fixtureChanged, this, [this](quint32 id) {
+        if (m_fixtures_tree != NULL)
+            m_fixtures_tree->refreshFixtureName(id);
+    });
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)),
             this, SLOT(slotFixtureRemoved(quint32)));
 
@@ -1051,27 +1056,9 @@ void FixtureManager::slotDisplayFixtureInfo(QString &info)
     m_info->setText(info);
 }
 
-bool FixtureManager::filterFixtureTreeItem(QTreeWidgetItem *item, const QString &needle)
-{
-    bool anyChildMatch = false;
-    for (int i = 0; i < item->childCount(); ++i)
-        if (filterFixtureTreeItem(item->child(i), needle))
-            anyChildMatch = true;
-
-    const bool selfMatch = needle.isEmpty()
-        || item->text(KColumnName).toLower().contains(needle);
-    const bool visible = selfMatch || anyChildMatch;
-    item->setHidden(!visible);
-    if (!needle.isEmpty() && anyChildMatch)
-        item->setExpanded(true);   // reveal a match sitting inside a collapsed folder
-    return visible;
-}
-
 void FixtureManager::slotFixturesSearchChanged(const QString &text)
 {
-    const QString needle = text.trimmed().toLower();
-    for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); ++i)
-        filterFixtureTreeItem(m_fixtures_tree->topLevelItem(i), needle);
+    m_fixtures_tree->setTextFilter(text);
 }
 
 void FixtureManager::selectGroup(quint32 id)

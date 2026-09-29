@@ -426,7 +426,12 @@ private:
      *  interleaved, so nearer objects cover further ones whatever order they
      *  happen to sit in the workspace. Angled overview only. */
     void drawRigDepthSorted(QPainter &p) const;
-    void drawDimensions(QPainter &p) const;   ///< feature width/height labels (ft/m)
+    void drawDimensions(QPainter &p) const;
+    /** "Shelf 3 — 5.91 ft": drawn left of a tower's shelf line. */
+    QString shelfLabel(int index, float height, double toDisp, const QString &unitSuffix) const;
+    /** How far the shelf labels reach left of this tower editor's tower (0
+     *  where none are drawn), so the height dimension clears them. */
+    double shelfLabelsWidth() const;   ///< feature width/height labels (ft/m)
     void drawRulers(QPainter &p) const;        ///< height (0=floor) + width (0=centre) rulers
     void drawCursorReadout(QPainter &p) const; ///< crosshair + live height/offset at the pointer
     double structureCentreA() const;           ///< plane-horizontal centre of the structure (metres)

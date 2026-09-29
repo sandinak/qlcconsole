@@ -19,6 +19,7 @@
 #include <QHBoxLayout>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <QTreeWidgetItemIterator>
 #include <QHeaderView>
 #include <QToolButton>
 #include <QInputDialog>
@@ -34,6 +35,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
+#include <QTimer>
 
 // Draw a small rounded colour swatch icon (used for platforms).
 static QIcon swatchIcon(const QColor &c)
@@ -260,6 +262,27 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
 
     if (m_doc != nullptr)
         connect(m_doc, &Doc::modeChanged, this, &MonitorLayersPanel::updateEditableState);
+
+    /* Selecting on the plot selects here too: the list shows where the thing
+       you clicked lives (its layer, its structure, its folder). */
+    if (m_view != nullptr)
+        connect(m_view, &MonitorGraphicsView::mapSelectionChanged, this, [this]() {
+            followMapSelection(m_view->selectedMapObjects());
+        });
+
+    /* A fixture renamed anywhere shows its new name here. Deferred: a rename
+       made IN this list arrives while its row is still being edited, and a
+       rebuild there would pull the row out from under the edit. */
+    if (m_doc != nullptr)
+        connect(m_doc, &Doc::fixtureChanged, this, [this](quint32) {
+            if (m_reloadQueued)
+                return;
+            m_reloadQueued = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_reloadQueued = false;
+                reload();
+            });
+        });
 
     updateEditableState();   // sets m_editable and calls reload()
 }
@@ -1546,6 +1569,46 @@ bool MonitorLayersPanel::revealItem(const QString &kind, quint32 id)
         return true;
     }
     return false;
+}
+
+void MonitorLayersPanel::followMapSelection(const QList<QPair<QString, quint32> > &objects)
+{
+    if (m_syncingSelection)
+        return;                         // the plot is following US
+    QSet<QString> want;
+    for (const QPair<QString, quint32> &o : objects)
+        want.insert(o.first + QLatin1Char(':') + QString::number(o.second));
+
+    m_syncingSelection = true;
+    m_tree->clearSelection();
+    QTreeWidgetItem *first = nullptr;
+    for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        const int type = row->data(0, NodeTypeRole).toInt();
+        QString key;
+        if (type == NodeItem)
+            key = row->data(0, NodeKindRole).toString() + QLatin1Char(':')
+                  + QString::number(row->data(0, NodeIdRole).toUInt());
+        else if (type == NodeGroup)
+        {
+            // A structure shown AS its group ("T-1 · on truss") is that row.
+            const MonitorProperties::MonitorGroup g = m_props->group(row->data(0, NodeIdRole).toUInt());
+            if (!g.anchorKind.isEmpty())
+                key = g.anchorKind + QLatin1Char(':') + QString::number(g.anchorId);
+        }
+        if (key.isEmpty() || !want.contains(key))
+            continue;
+        for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
+            up->setExpanded(true);
+        row->setSelected(true);
+        if (first == nullptr)
+            first = row;
+    }
+    if (first != nullptr)
+        m_tree->scrollToItem(first);
+    m_syncingSelection = false;
+    updateButtons();
 }
 
 void MonitorLayersPanel::slotAddLayer()

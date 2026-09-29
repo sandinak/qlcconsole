@@ -10,6 +10,7 @@
 */
 
 #include <QPainter>
+#include <QFontMetricsF>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QNativeGestureEvent>
@@ -89,6 +90,8 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
        single joystick tick emits one functionChanged per fixture per channel,
        and a full re-resolve for each would be dozens of rebuilds for one
        visible change. */
+    // Fixture names are drawn beside them: a rename shows at once.
+    connect(m_doc, &Doc::fixtureChanged, this, [this](quint32) { update(); });
     connect(m_doc, &Doc::functionChanged, this, [this](quint32 fid) {
         if (fid != m_activeSceneId || m_lookRefreshPending)
             return;
@@ -2141,6 +2144,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             p.drawRect(QRectF(a, b).normalized());
             p.setPen(QPen(steel.lighter(140), 2.0));
             p.setFont(QFont("Arial", 8));
+            const QFontMetricsF fm(p.font());
             for (int i = 0; i < t->shelfCount(); ++i)
             {
                 const float z = t->shelfHeight(i);
@@ -2148,9 +2152,14 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 const QPointF sB = w2s(QVector3D(x1, y1, z));
                 p.setPen(QPen(steel.lighter(140), 2.0));
                 p.drawLine(sA, sB);
+                /* On the LEFT of the tower, right-aligned against it: the
+                   fixtures on a shelf are named on the right, and the two
+                   used to print over each other ("text stomping on each
+                   other .. shelf info on left and light info on right"). */
                 p.setPen(steel.lighter(170));
-                p.drawText(sB + QPointF(6, -3), tr("Shelf %1 — %2%3")
-                    .arg(i + 1).arg(double(z) * toDisp, 0, 'f', 2).arg(sfx));
+                const QString label = shelfLabel(i, z, toDisp, sfx);
+                const double leftX = qMin(sA.x(), sB.x());
+                p.drawText(QPointF(leftX - 6 - fm.horizontalAdvance(label), sA.y() - 3), label);
             }
         }
     }
@@ -4679,10 +4688,11 @@ void StructureStudioView::drawDimensions(QPainter &p) const
         p.drawText(QRectF(sMinX, y + 2, sMaxX - sMinX, 14), Qt::AlignCenter,
                    QString("%1%2").arg(wSpan, 0, 'f', 1).arg(sfx));
     }
-    // Vertical dimension, just left of the structure.
+    // Vertical dimension, just left of the structure -- and left of a
+    // tower's shelf labels, which are drawn on that side.
     if (hSpan > 0.01)
     {
-        const double x = sMinX - 20.0;
+        const double x = sMinX - 20.0 - shelfLabelsWidth();
         p.drawLine(QPointF(x, sMinY), QPointF(x, sMaxY));
         p.drawLine(QPointF(x - 4, sMinY), QPointF(x + 4, sMinY));
         p.drawLine(QPointF(x - 4, sMaxY), QPointF(x + 4, sMaxY));
@@ -4693,6 +4703,30 @@ void StructureStudioView::drawDimensions(QPainter &p) const
                    QString("%1%2").arg(hSpan, 0, 'f', 1).arg(sfx));
         p.restore();
     }
+}
+
+QString StructureStudioView::shelfLabel(int index, float height, double toDisp,
+                                       const QString &unitSuffix) const
+{
+    return tr("Shelf %1 — %2%3").arg(index + 1)
+        .arg(double(height) * toDisp, 0, 'f', 2).arg(unitSuffix);
+}
+
+double StructureStudioView::shelfLabelsWidth() const
+{
+    // Only where they are drawn: a tower's own editor, in an elevation.
+    if (m_kind != TowerKind || m_plane == Top || m_plane == Angled)
+        return 0.0;
+    Tower *t = m_doc->monitorProperties()->tower(m_id);
+    if (t == nullptr || t->shelfCount() == 0)
+        return 0.0;
+    const bool isFeet = (m_doc->monitorProperties()->gridUnits() == MonitorProperties::Feet);
+    const QFontMetricsF fm(QFont("Arial", 8));
+    double w = 0.0;
+    for (int i = 0; i < t->shelfCount(); ++i)
+        w = qMax(w, fm.horizontalAdvance(shelfLabel(i, t->shelfHeight(i), isFeet ? 3.28084 : 1.0,
+                                                     isFeet ? tr(" ft") : tr(" m"))));
+    return w + 8.0;
 }
 
 double StructureStudioView::structureCentreA() const

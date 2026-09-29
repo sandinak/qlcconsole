@@ -57,6 +57,7 @@
 #include "sceneryitem.h"
 #include "beamoptics.h"
 #include "gobolibrary.h"
+#include "fixturetreewidget.h"
 #include "networkgearcatalog.h"
 #define private public
 #include "gobowheelsdialog.h"
@@ -11657,6 +11658,12 @@ void Monitor_Test::fixturesAndBarsAreRenamedInTheStructureEditorsList()
         QVERIFY(barRow != nullptr && (barRow->flags() & Qt::ItemIsEditable));
         barRow->setText(0, "Pipe A");
         QCOMPARE(bar->name(), QString("Pipe A"));
+
+        // Renamed somewhere else (the edit dialog, Layers): the list follows.
+        spot->setName("From Elsewhere");
+        QCoreApplication::processEvents();
+        QVERIFY(rowNamed("From Elsewhere") != nullptr);
+        QVERIFY(rowNamed("SR Spot") == nullptr);
     }
     delete doc;
 }
@@ -12715,6 +12722,192 @@ void Monitor_Test::aStagedFixturesTestDialogOffersNoDmxActions()
     QCOMPARE(guarded, 2);                               // Reset and Identify
     QCOMPARE(m_doc->inputOutputMap()->claimUniverses().first()->preGMValue(1), uchar(0));
     m_doc->inputOutputMap()->releaseUniverses(false);
+}
+
+void Monitor_Test::aFixtureIsRenamedFromItsEditDialogAndEverywhere()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *f = new Fixture(m_doc);
+    f->setName("Spot 1");
+    f->setChannels(4);
+    f->setAddress(300);
+    QVERIFY(m_doc->addFixture(f));
+    cleanup.ids << f->id();
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    QVERIFY(dropFixtureAtCentre(rig.gv, f->id()));
+    MonitorLayersPanel *panel = rig.mon->m_layersPanel;
+    QVERIFY(panel != nullptr);
+    panel->reload();
+    QVERIFY(layersRow(*panel, "Spot 1") != nullptr);
+    FixtureTreeWidget manager(m_doc, FixtureTreeWidget::UniverseNumber);
+    manager.updateTree();
+    auto managerRow = [&manager, f]() {
+        QTreeWidgetItem *it = manager.fixtureItem(f->id());
+        return it != nullptr ? it->text(0) : QString();
+    };
+    QCOMPARE(managerRow(), QString("Spot 1"));
+
+    // The edit dialog has the name, and a new one sticks (trimmed).
+    driveDialog([](QWidget *dlg) {
+        QLineEdit *name = dlg->findChild<QLineEdit *>("fixtureNameEdit");
+        if (name == nullptr || name->text() != "Spot 1")
+            return false;
+        name->setText("  Downstage Spot  ");
+        return true;
+    });
+    rig.mon->showFixtureItemEditor(f->id());
+    QCOMPARE(f->name(), QString("Downstage Spot"));
+    QCoreApplication::processEvents();
+
+    // ...and shows everywhere: the plot's label and tooltip, Layers, the
+    // Fixture Manager's rows.
+    MonitorFixtureItem *item = rig.gv->m_fixtures.value(f->id());
+    QCOMPARE(item->name(), QString("Downstage Spot"));
+    QVERIFY(item->toolTip().contains("Downstage Spot"));
+    QVERIFY(layersRow(*panel, "Downstage Spot") != nullptr);
+    QVERIFY(layersRow(*panel, "Spot 1") == nullptr);
+    manager.refreshFixtureName(f->id());                // what FixtureManager does on the signal
+    QCOMPARE(managerRow(), QString("Downstage Spot"));
+
+    // Renamed anywhere else, the plot and Layers follow too.
+    f->setName("SR Spot");
+    QCoreApplication::processEvents();
+    QCOMPARE(item->name(), QString("SR Spot"));
+    QVERIFY(layersRow(*panel, "SR Spot") != nullptr);
+
+    // An empty name in the dialog leaves it alone.
+    driveDialog([](QWidget *dlg) {
+        QLineEdit *name = dlg->findChild<QLineEdit *>("fixtureNameEdit");
+        if (name == nullptr)
+            return false;
+        name->setText("   ");
+        return true;
+    });
+    rig.mon->showFixtureItemEditor(f->id());
+    QCOMPARE(f->name(), QString("SR Spot"));
+}
+
+void Monitor_Test::selectingOnThePlotSelectsInLayers()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("FOH");
+    t->setOrigin(QVector3D(2.0f, 2.0f, 6.0f));
+    t->setLength(6.0f);
+    Stand *stand = props->addStand();
+    stand->setName("Stand A");
+    stand->setOriginX(8.0f);
+    stand->setOriginY(5.0f);
+    Fixture *onTruss = new Fixture(doc);
+    onTruss->setName("FOH Wash");
+    onTruss->setChannels(4);
+    QVERIFY(doc->addFixture(onTruss));
+    Fixture *loose = new Fixture(doc);
+    loose->setName("Floor Par");
+    loose->setChannels(4);
+    loose->setAddress(10);
+    QVERIFY(doc->addFixture(loose));
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.updateTrusses();
+        view.updatePlatforms();
+        view.ensureFixtureOnPlot(loose->id());
+        view.ensureFixtureOnPlot(onTruss->id());
+        view.attachFixtureToTruss(onTruss->id(), t->id());
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
+        auto selectedNames = [&panel]() {
+            QStringList out;
+            foreach (QTreeWidgetItem *it, panel.m_tree->selectedItems())
+                out << it->text(0).section(QString::fromUtf8("  \xc2\xb7"), 0, 0).trimmed();
+            out.sort();
+            return out;
+        };
+
+        // A fixture picked on the plot is picked in the list, folders opened.
+        view.selectMapItem("fixture", onTruss->id());
+        QCOMPARE(selectedNames(), QStringList() << "FOH Wash");
+        QTreeWidgetItem *row = panel.m_tree->selectedItems().first();
+        for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
+            QVERIFY(up->isExpanded());
+        // ...and the list did not hand it back and change the plot's pick.
+        QCOMPARE(view.selectedMapObjects().size(), 1);
+
+        // Several at once, including a structure shown as its group row.
+        view.selectMapItems({ qMakePair(QString("fixture"), loose->id()),
+                              qMakePair(QString("stand"), stand->id()),
+                              qMakePair(QString("truss"), t->id()) });
+        // (Picking the truss picks its group -- the fixture on it -- on the
+        // plot, and the list shows exactly what the plot picked.)
+        QCOMPARE(view.selectedMapObjects().size(), 4);
+        QCOMPARE(selectedNames(), QStringList() << "FOH" << "FOH Wash" << "Floor Par" << "Stand A");
+
+        // Cleared on the plot: cleared here.
+        view.scene()->clearSelection();
+        QVERIFY(panel.m_tree->selectedItems().isEmpty());
+
+        // The other way still works: a row picked selects on the plot.
+        layersRow(panel, "Floor Par")->setSelected(true);
+        QVERIFY(view.m_fixtures.value(loose->id())->isSelected());
+    }
+    delete doc;
+}
+
+void Monitor_Test::towerShelfLabelsAreOnTheLeft()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Tower *t = props->addTower();
+    t->setName("AT2");
+    t->addShelf(0.6f);
+    t->addShelf(1.2f);
+    t->addShelf(1.8f);
+    Truss *truss = props->addTruss();
+    {
+        StructureStudioView v(doc, StructureStudioView::TowerKind, t->id());
+        v.resize(520, 780);
+        v.setPlane(StructureStudioView::Front);
+        QCOMPARE(v.shelfLabel(2, 1.8f, 1.0, " m"), QString::fromUtf8("Shelf 3 — 1.80 m"));
+        const double w = v.shelfLabelsWidth();
+        QVERIFY2(w > 40.0, qPrintable(QString::number(w)));   // room for "Shelf 3 — 1.80 m"
+
+        // Drawn: shelf label pixels left of the tower, none of them right of it.
+        QImage img(520, 780, QImage::Format_ARGB32);
+        img.fill(Qt::black);
+        {
+            QPainter p(&img);
+            v.render(&p);
+        }
+        const QPointF left = v.w2s(QVector3D(t->originX(), t->originY(), 1.8f));
+        const QPointF right = v.w2s(QVector3D(t->originX() + t->width(), t->originY(), 1.8f));
+        const int y = int(left.y()) - 7;                    // the text's row
+        auto bright = [&img, y](int x0, int x1) {
+            int n = 0;
+            for (int x = qMax(0, x0); x < qMin(img.width(), x1); ++x)
+                for (int dy = -3; dy <= 3; ++dy)
+                    if (qGray(img.pixel(x, qBound(0, y + dy, img.height() - 1))) > 150)
+                        ++n;
+            return n;
+        };
+        const int lx = int(qMin(left.x(), right.x())), rx = int(qMax(left.x(), right.x()));
+        QVERIFY2(bright(lx - int(w), lx - 2) > 20, "no shelf label left of the tower");
+        QCOMPARE(bright(rx + 4, rx + 120), 0);              // right side kept for fixture names
+
+        // Top view draws no shelf labels, so the dimension stays put.
+        v.setPlane(StructureStudioView::Top);
+        QCOMPARE(v.shelfLabelsWidth(), 0.0);
+    }
+    {
+        StructureStudioView tv(doc, StructureStudioView::TrussKind, truss->id());
+        tv.setPlane(StructureStudioView::Front);
+        QCOMPARE(tv.shelfLabelsWidth(), 0.0);              // not a tower
+    }
+    delete doc;
 }
 
 void Monitor_Test::aStagedFixtureOnThePlotCannotBeTestedOrLocated()

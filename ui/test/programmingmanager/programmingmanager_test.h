@@ -64,6 +64,9 @@ private slots:
      *  it's being edited it is tried on the look on the canvas (never saved
      *  into it), so moving the pad moves the rig -- and the editor says so. */
     void aNewPanTiltIsTriedOnTheLookSoTheRigFollows();
+    /** A fixed target renamed anywhere shows its new name in the look's
+     *  Targets list. */
+    void aRenamedFixedTargetShowsItsNewName();
 
 private:
     Doc* m_doc;
