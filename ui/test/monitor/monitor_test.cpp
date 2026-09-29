@@ -11227,6 +11227,117 @@ void Monitor_Test::aFixtureOnATowerIsListedUnderThatTower()
     delete doc;
 }
 
+void Monitor_Test::aFixtureOnAPipeOrBoomIsListedUnderIt()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    auto boom = [props](const char *name, float x) {
+        Pipe *p = props->addPipe();
+        p->setName(name);
+        p->setOrientation(Pipe::Vertical);
+        p->setOriginX(x);
+        p->setOriginY(2.0f);
+        return p;
+    };
+    Pipe *slBoom = boom("SL Boom", 1.0f);
+    Pipe *srBoom = boom("SR Boom", 7.0f);
+    Pipe *electric = props->addPipe();
+    electric->setName("1st Electric");
+    electric->setOrientation(Pipe::Horizontal);
+    electric->setOriginX(3.0f);
+    electric->setOriginY(3.0f);
+    Tower *tower = props->addTower();
+    tower->setName("DS Tower");
+    tower->addShelf(1.0f);
+    // The two booms live in a hand-made "Booms" folder.
+    const quint32 booms = props->nextGroupId();
+    props->createGroup(booms, "Booms", 0, 0);
+    slBoom->setGroupId(booms);
+    srBoom->setGroupId(booms);
+
+    auto spot = [doc](const char *name, quint32 addr) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setChannels(4);
+        f->setAddress(addr);
+        doc->addFixture(f);
+        return f;
+    };
+    Fixture *side = spot("Side Light", 0);
+    Fixture *wash = spot("Electric Wash", 10);
+    Fixture *mover = spot("Mover", 20);
+    Fixture *old = spot("Old Show Par", 30);
+    // An older workspace: already on the electric, never grouped.
+    FixtureRigProps rp;
+    rp.pipeId = electric->id();
+    props->setFixtureRigProps(old->id(), rp);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updatePlatforms();
+        view.addFixture(old->id(), QPointF(3000.0, 3000.0));
+        view.ensureFixtureOnPlot(wash->id());          // on the plot, loose
+        view.ensureGroupRegistry();                     // what a load does
+        MonitorLayersPanel panel(doc, &view);
+
+        // The loaded one joins the electric's own group, shown AS the pipe.
+        QVERIFY(electric->groupId() != 0);
+        QCOMPARE(props->fixtureGroup(old->id()), electric->groupId());
+        panel.reload();
+        QTreeWidgetItem *elecRow = layersRow(panel, "1st Electric");
+        QVERIFY(elecRow != nullptr);
+        QVERIFY2(elecRow->text(0).contains("on pipe"), qPrintable(elecRow->text(0)));
+        QCOMPARE(elecRow->childCount(), 1);
+        QVERIFY(elecRow->child(0)->text(0).startsWith("Old Show Par"));
+
+        // Onto the SL boom: listed under it, inside Booms.
+        view.attachFixtureToPipe(side->id(), slBoom->id());
+        QCOMPARE(props->fixtureGroup(side->id()), booms);
+        panel.reload();
+        QTreeWidgetItem *slRow = layersRow(panel, "SL Boom");
+        QVERIFY(slRow != nullptr);
+        QCOMPARE(slRow->childCount(), 1);
+        QVERIFY(slRow->child(0)->text(0).startsWith("Side Light"));
+        QVERIFY(slRow->parent() != nullptr && slRow->parent()->text(0).startsWith("Booms"));
+        QCOMPARE(layersRow(panel, "SR Boom")->childCount(), 0);
+
+        // Dropped on the electric's row in Layers: mounted there.
+        QVERIFY(layersRow(panel, "Electric Wash") != nullptr);
+        panel.handleTreeDrop({ layersRow(panel, "Electric Wash") }, layersRow(panel, "1st Electric"));
+        QCOMPARE(props->fixtureRigProps(wash->id()).pipeId, electric->id());
+        QCOMPARE(props->fixtureGroup(wash->id()), electric->groupId());
+        panel.reload();
+        QCOMPARE(layersRow(panel, "1st Electric")->childCount(), 2);
+
+        // A standing boom with a group of its own reads "on boom".
+        view.attachFixtureToPipe(mover->id(), srBoom->id());
+        srBoom->setGroupId(0);                           // take SR out of the folder
+        props->setFixtureGroup(mover->id(), 0);
+        view.ensureMountGroup("pipe", srBoom->id());
+        panel.reload();
+        QTreeWidgetItem *srRow = layersRow(panel, "SR Boom");
+        QVERIFY2(srRow->text(0).contains("on boom"), qPrintable(srRow->text(0)));
+        QCOMPARE(srRow->childCount(), 1);
+
+        // Moved from the electric to a tower: it leaves the pipe's own group.
+        view.attachFixtureToTower(wash->id(), tower->id());
+        QCOMPARE(props->fixtureGroup(wash->id()), tower->groupId());
+        QVERIFY(props->fixtureGroup(wash->id()) != electric->groupId());
+        // Unmounted: out of the pipe's own group; a manual folder keeps it.
+        view.unmountFixture(old->id());
+        QCOMPARE(props->fixtureGroup(old->id()), quint32(0));
+        view.unmountFixture(side->id());
+        QCOMPARE(props->fixtureGroup(side->id()), booms);
+        panel.reload();
+        QCOMPARE(layersRow(panel, "SL Boom")->childCount(), 0);
+        QCOMPARE(layersRow(panel, "1st Electric")->childCount(), 0);
+    }
+    delete doc;
+}
+
 void Monitor_Test::draggingATargetAnnouncesTheMove()
 {
     Doc *doc = new Doc(this);

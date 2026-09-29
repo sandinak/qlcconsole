@@ -588,6 +588,14 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
         setNodeLabel(node, anchorName, tr("  \xc2\xb7 on tower"));
         node->setIcon(0, kindIcon(anchorKind, anchorColor));
     }
+    else if (anchored && anchorKind == QStringLiteral("pipe"))
+    {
+        // A standing, vertical pipe is a boom; anything else a pipe.
+        const Pipe *pp = m_props->pipe(anchorId);
+        const bool boom = pp != nullptr && pp->isVertical();
+        setNodeLabel(node, anchorName, boom ? tr("  \xc2\xb7 on boom") : tr("  \xc2\xb7 on pipe"));
+        node->setIcon(0, kindIcon(anchorKind, anchorColor));
+    }
     else if (g.hasFrame)
     {
         /* The only group kind with real editing behaviour -- a rigid body with
@@ -679,37 +687,48 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
         }
     }
 
-    /* A tower in a manual group (a "Towers" folder holding SL and SR) is a
-       container for what is mounted on it, the way a bar is on its truss --
-       otherwise its fixtures sit in the folder beside it, not under it. (A
-       tower whose group is its own is the group node itself, above.) */
-    QHash<quint32, QTreeWidgetItem *> towerNode;  // tower id → its container
-    QHash<quint32, quint32> fixtureTower;         // fid → the tower it's mounted on
+    /* A tower or pipe in a manual group (a "Towers" folder holding SL and SR,
+       a "Booms" folder) is a container for what is mounted on it, the way a
+       bar is on its truss -- otherwise its fixtures sit in the folder beside
+       it, not under it. (One whose group is its own is the group node itself,
+       above.) */
+    typedef QPair<QString, quint32> HostKey;
+    QHash<HostKey, QTreeWidgetItem *> hostNode;   // (kind, id) → its container
+    QHash<quint32, HostKey> fixtureHost;          // fid → the tower/pipe it's on
     foreach (quint32 fid, myFixtures)
     {
         const FixtureRigProps rp = m_props->fixtureRigProps(fid);
-        if (rp.onTower() && !(anchorKind == QStringLiteral("tower") && anchorId == rp.towerId))
-            fixtureTower.insert(fid, rp.towerId);
+        HostKey key;
+        if (rp.onTower())
+            key = HostKey(QStringLiteral("tower"), rp.towerId);
+        else if (rp.pipeId != Pipe::invalidId())
+            key = HostKey(QStringLiteral("pipe"), rp.pipeId);
+        else
+            continue;
+        if (!(anchorKind == key.first && anchorId == key.second))
+            fixtureHost.insert(fid, key);
     }
     foreach (const ItemDesc &d, myItems)
     {
-        if (d.kind != QStringLiteral("tower") || fixtureTower.key(d.id, UINT_MAX) == UINT_MAX)
+        const HostKey key(d.kind, d.id);
+        if ((d.kind != QStringLiteral("tower") && d.kind != QStringLiteral("pipe"))
+            || fixtureHost.key(key, UINT_MAX) == UINT_MAX)
             continue;
         QTreeWidgetItem *tn = new QTreeWidgetItem(node);
         setNodeLabel(tn, d.name, QString());
-        tn->setIcon(0, kindIcon(QStringLiteral("tower"), d.color));
+        tn->setIcon(0, kindIcon(d.kind, d.color));
         tn->setToolTip(0, tn->text(0));
         tn->setFirstColumnSpanned(true);
         tn->setData(0, NodeTypeRole, int(NodeItem));
         tn->setData(0, NodeIdRole, d.id);
         tn->setData(0, NodeKindRole, d.kind);
         tn->setExpanded(true);
-        towerNode.insert(d.id, tn);
+        hostNode.insert(key, tn);
     }
-    // A tower that is not in this group (the fixture was grouped by hand):
-    // the fixture stays a plain member here.
-    for (auto it = fixtureTower.begin(); it != fixtureTower.end(); )
-        it = towerNode.contains(it.value()) ? std::next(it) : fixtureTower.erase(it);
+    // A structure that is not in this group (the fixture was grouped by
+    // hand): the fixture stays a plain member here.
+    for (auto it = fixtureHost.begin(); it != fixtureHost.end(); )
+        it = hostNode.contains(it.value()) ? std::next(it) : fixtureHost.erase(it);
 
     // LOCAL Fixture Groups whose members are all within this group's fixtures show
     // as 💡 nodes, with those fixtures nested under them -- scoped per bar (so an
@@ -723,11 +742,11 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
         foreach (quint32 fid, fixtureBar.keys(barId)) { onThisBar.insert(fid); onNoBar.remove(fid); }
         addLocalFixtureGroups(barNode.value(barId), onThisBar, fixtureFGNode);
     }
-    foreach (quint32 towerId, towerNode.keys())
+    foreach (const HostKey &key, hostNode.keys())
     {
-        QSet<quint32> onThisTower;
-        foreach (quint32 fid, fixtureTower.keys(towerId)) { onThisTower.insert(fid); onNoBar.remove(fid); }
-        addLocalFixtureGroups(towerNode.value(towerId), onThisTower, fixtureFGNode);
+        QSet<quint32> onThisHost;
+        foreach (quint32 fid, fixtureHost.keys(key)) { onThisHost.insert(fid); onNoBar.remove(fid); }
+        addLocalFixtureGroups(hostNode.value(key), onThisHost, fixtureFGNode);
     }
     addLocalFixtureGroups(node, onNoBar, fixtureFGNode);
 
@@ -739,13 +758,13 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
     {
         if (d.kind == QStringLiteral("truss") && barNode.contains(d.id))
             continue;       // this bar is a container now, not a leaf
-        if (d.kind == QStringLiteral("tower") && towerNode.contains(d.id))
-            continue;       // likewise a tower carrying fixtures
+        if (hostNode.contains(HostKey(d.kind, d.id)))
+            continue;       // likewise a tower or pipe carrying fixtures
         QTreeWidgetItem *host = node;
         if (d.kind == QStringLiteral("fixture") && fixtureBar.contains(d.id))
             host = barNode.value(fixtureBar.value(d.id));
-        if (d.kind == QStringLiteral("fixture") && fixtureTower.contains(d.id))
-            host = towerNode.value(fixtureTower.value(d.id));
+        if (d.kind == QStringLiteral("fixture") && fixtureHost.contains(d.id))
+            host = hostNode.value(fixtureHost.value(d.id));
         if (d.kind == QStringLiteral("fixture") && fixtureFGNode.contains(d.id))
             host = fixtureFGNode.value(d.id);
         addItemLeaf(host, d);
@@ -1091,18 +1110,18 @@ void MonitorLayersPanel::handleTreeDrop(const QList<QTreeWidgetItem *> &dragged,
     if (!leaves.isEmpty())
     {
         // Dropping fixture(s) directly onto a truss/pipe/tower ITEM, or onto a
-        // truss-anchored GROUP (an already-populated truss), attaches them --
-        // explicit attach, since 2D drop-to-bind was removed. Trusses and
-        // towers have anchored groups (ensureTrussGroup()/ensureTowerGroup());
-        // a riser's is mounted through the Face Editor and pipes have none, so
-        // the direct-item path above covers pipes (and a not-yet-grouped truss
-        // or tower). Non-fixture leaves just reparent as usual.
+        // truss-, tower- or pipe-anchored GROUP (an already-populated one),
+        // attaches them -- explicit attach, since 2D drop-to-bind was removed.
+        // A riser's group is mounted through the Face Editor; the direct-item
+        // path above covers a not-yet-grouped structure. Non-fixture leaves
+        // just reparent as usual.
         const MonitorProperties::MonitorGroup g =
             intoGroup ? m_props->group(containerId) : MonitorProperties::MonitorGroup();
         QString attachKind = directAttachKind;
         quint32 attachId = directAttachId;
         if (attachKind.isEmpty() && intoGroup && g.anchorId != 0
-            && (g.anchorKind == QStringLiteral("truss") || g.anchorKind == QStringLiteral("tower")))
+            && (g.anchorKind == QStringLiteral("truss") || g.anchorKind == QStringLiteral("tower")
+                || g.anchorKind == QStringLiteral("pipe")))
         {
             attachKind = g.anchorKind;
             attachId = g.anchorId;

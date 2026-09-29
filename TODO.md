@@ -63,7 +63,12 @@ Sequenced: network topology first, then inventory.
   written onto the port on Apply); Patch dialog Via column and "Place by nearest
   node". See NETWORK_CABLING_DESIGN.md "What N6 built".
 - **Open (deferred):** equipment catalog for network gear (place a node from a
-  model); pipes/booms still list their fixtures loose in Layers.
+  model).
+- **Done 2026-09-26:** pipes and booms list their fixtures in Layers: a pipe
+  forms a group with what is mounted on it ("SL Boom · on boom", "1st
+  Electric · on pipe"), or is a container inside a manual folder, like a
+  tower (`MonitorGraphicsView::ensureMountGroup()`, shared with towers);
+  dropping a fixture on the row mounts it there.
 
 ---
 

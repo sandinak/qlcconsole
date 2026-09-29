@@ -3618,6 +3618,10 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             else if (ch == aRem)
             {
                 pushUndo();
+                // Out of the tower's or pipe's own group too, or it stays
+                // listed under a structure it is no longer on.
+                if (kind == 0 || kind == 1 || kind == 4)
+                    m_graphicsView->leaveMountGroupsOf(fidUnder);
                 FixtureRigProps rp = m_props->fixtureRigProps(fidUnder);
                 if (kind == 0 || kind == 4) rp.pipeId = Pipe::invalidId();
                 else if (kind == 1) rp.towerId = Tower::invalidId();
@@ -3665,7 +3669,10 @@ void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32
         m_graphicsView->attachFixtureToPipe(fid, boomId);   // clears other mounts
         return;
     }
-    FixtureRigProps rp = m_props->fixtureRigProps(fid);
+    const FixtureRigProps was = m_props->fixtureRigProps(fid);
+    if (!(kind == 1 && was.onTower() && was.towerId == id))
+        m_graphicsView->leaveMountGroupsOf(fid);    // off its old tower/pipe
+    FixtureRigProps rp = was;
     rp.trussId = Truss::invalidId();
     rp.pipeId  = Pipe::invalidId();
     rp.towerId = Tower::invalidId();

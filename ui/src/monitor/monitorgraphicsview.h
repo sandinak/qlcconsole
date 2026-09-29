@@ -519,6 +519,20 @@ public:
      *  fixtures that are still ungrouped; leaves manually-grouped ones alone. */
     void ensureTowerGroup(quint32 towerId);
 
+    /** The same for any structure whose mounted fixtures form its group --
+     *  "tower" or "pipe" (a boom is a pipe on a stand): ensureTowerGroup() is
+     *  this for a tower. */
+    void ensureMountGroup(const QString &kind, quint32 id);
+    /** Mount-time: ensureMountGroup(), then put @p fid in that group whatever
+     *  group it was in (an explicit mount, like attachFixtureToTruss()). */
+    void joinMountGroup(quint32 fid, const QString &kind, quint32 id);
+    /** Take @p fid out of the structure's group if it is still that
+     *  structure's OWN group (anchored to it); a manual group is left alone. */
+    void leaveMountGroup(quint32 fid, const QString &kind, quint32 id);
+    /** leaveMountGroup() for whatever tower or pipe @p fid is mounted on now:
+     *  call it before a mount is cleared or moved. */
+    void leaveMountGroupsOf(quint32 fid);
+
     /** Symmetric to ensureTrussGroup(): if @p fid is currently a member of a
      *  group that's dedicated to @p trussId (anchorKind == "truss", anchorId
      *  == trussId — i.e. still just "the truss's own group", not something

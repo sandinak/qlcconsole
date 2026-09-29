@@ -236,6 +236,9 @@ private slots:
     void editingANetworkNodeRebuildsThePlot();
     void theNetworkReportOpensFromTheStudio();
     void aFixtureOnATowerIsListedUnderThatTower();
+    /** "pipes/booms still list their fixtures loose in Layers": a fixture on
+     *  a pipe or boom is listed under it, as on a tower. */
+    void aFixtureOnAPipeOrBoomIsListedUnderIt();
     void draggingATargetAnnouncesTheMove();
     void aMoverOnATopFaceStandsUpOrHangsDown();
     void aFixtureCanBeRaisedOntoATowersTopCap();
