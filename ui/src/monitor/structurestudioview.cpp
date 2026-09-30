@@ -5815,6 +5815,22 @@ void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)
         emit pipeBarActivated(pipeBarId);
 }
 
+float StructureStudioView::offsetAlongTrussAt(quint32 trussId, const QPoint &viewPos) const
+{
+    Truss *t = m_doc->monitorProperties()->truss(trussId);
+    if (t == nullptr)
+        return -1.0f;
+    const QPointF a = w2s(t->origin());
+    const QPointF b = w2s(t->positionAt(t->length()));
+    const QPointF ab = b - a;
+    const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+    if (len2 < 16.0)                       // under 4 px long: end-on
+        return -1.0f;
+    const QPointF ap = QPointF(viewPos) - a;
+    const double u = qBound(0.0, (ap.x() * ab.x() + ap.y() * ab.y()) / len2, 1.0);
+    return float(u) * t->length();
+}
+
 void StructureStudioView::contextMenuEvent(QContextMenuEvent *e)
 {
     emit canvasContextMenu(e->globalPos(), hitTestFixture(e->pos()));

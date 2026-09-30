@@ -236,6 +236,9 @@ rig edits, bulk repatching, cross-show consistency checks.
     since bubbles keep one screen size, their scene-unit bounds covered
     several times the circle when zoomed in, and double-clicking a tower
     around it opened the breakout instead of the tower's editor.
+  - A truss editor's right-click menu has Add Bar Here (the bar lands where
+    you clicked along the truss; mid-span when it is seen end-on), and a
+    stand's or boom's has Add Crossbar -- only the toolbar had them.
   - Selecting on the plot selects the same objects in Layers (folders opened,
     scrolled to the first); Layers -> plot already worked.
   - A rename anywhere shows everywhere: the plot's label and tooltip (it had

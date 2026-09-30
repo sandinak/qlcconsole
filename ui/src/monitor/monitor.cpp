@@ -3659,12 +3659,32 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         }
         QAction *aFix = m.addAction(tr("Add Fixtures…"));
         QAction *aGrp = m.addAction(tr("Add Existing Fixture Group…"));
+        /* "i can't add cross bar/truss on T2 .. that option is missing": the
+           toolbar's Add Bar, here too -- and on a truss, where you clicked. */
+        QAction *aBar = nullptr;
+        float barAt = -1.0f;
+        if (kind == 2)
+        {
+            Truss *tr2 = m_props->truss(id);
+            if (tr2 != nullptr && !tr2->isChildBar())
+            {
+                barAt = view->offsetAlongTrussAt(id, view->mapFromGlobal(globalPos));
+                m.addSeparator();
+                aBar = m.addAction(barAt >= 0.0f ? tr("Add Bar Here") : tr("Add Bar"));
+            }
+        }
+        else if (kind == 0 || kind == 4)
+        {
+            m.addSeparator();
+            aBar = m.addAction(tr("Add Crossbar"));
+        }
         const QList<quint32> selNow = selectedFids();
         QAction *aNew = selNow.isEmpty() ? nullptr
             : (m.addSeparator(), m.addAction(tr("New Fixture Group from Selection…")));
         QAction *ch = m.exec(globalPos);
         if (ch == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); rebuildSource(); }
         else if (ch == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); rebuildSource(); }
+        else if (aBar && ch == aBar) { studioAddBar(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
         else if (aNew && ch == aNew) { studioCreateGroup(selNow, view); rebuildTree(); rebuildSource(); }
         Q_UNUSED(tree)
     });
@@ -4073,7 +4093,7 @@ QString Monitor::mountDescription(const FixtureRigProps &rp, quint32 fid) const
     return tr("free / on the floor");
 }
 
-void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
+void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view, float offset)
 {
     if (kind == 1)   // tower
     {
@@ -4112,9 +4132,9 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
         return;
     }
 
-    if (kind == 2)   // truss → a child bar at mid-span
+    if (kind == 2)   // truss → a child bar at @p offset (mid-span when -1)
     {
-        const quint32 barId = createBarOnTruss(id, -1.0f);
+        const quint32 barId = createBarOnTruss(id, offset);
         if (barId != Truss::invalidId())
         {
             m_graphicsView->updateTrusses();

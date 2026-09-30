@@ -125,6 +125,11 @@ public:
      *  is no live DMX saying otherwise. The studio draws these as dashed lines;
      *  this is the same association, shown as the direction it actually means. */
     void setActiveScene(quint32 sceneId);
+
+    /** Metres along truss @p trussId to the point nearest @p viewPos as it
+     *  is drawn in this view (0 at its origin, clamped to its length); -1 when
+     *  it is seen end-on here (no length on screen to pick a point along). */
+    float offsetAlongTrussAt(quint32 trussId, const QPoint &viewPos) const;
     bool beams() const { return m_beams; }
     double ambient() const { return m_ambient; }
 

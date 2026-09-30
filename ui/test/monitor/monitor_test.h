@@ -252,6 +252,9 @@ private slots:
      *  left and light info on right": a tower's shelf labels sit left of it,
      *  and the height dimension moves out past them. */
     void towerShelfLabelsAreOnTheLeft();
+    /** "i can't add cross bar/truss on T2 .. that option is missing": the
+     *  truss editor's right-click menu adds a bar where you clicked. */
+    void aBarIsAddedWhereTheTrussEditorWasRightClicked();
     void draggingATargetAnnouncesTheMove();
     void aMoverOnATopFaceStandsUpOrHangsDown();
     void aFixtureCanBeRaisedOntoATowersTopCap();

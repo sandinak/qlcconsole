@@ -428,7 +428,10 @@ protected slots:
      *  structure, or add a bar. kind: 0=Stand,1=Tower,2=Truss,3=Platform,4=Pipe. */
     void studioAddFixture(int kind, quint32 id, class StructureStudioView *view);
     void studioAddGroup(int kind, quint32 id, class StructureStudioView *view);
-    void studioAddBar(int kind, quint32 id, class StructureStudioView *view);
+    /** Add a bar to the structure this editor shows: on a truss at @p offset
+     *  metres along it (mid-span when -1), a crossbar on a stand's or pipe's
+     *  boom. */
+    void studioAddBar(int kind, quint32 id, class StructureStudioView *view, float offset = -1.0f);
 
     /** What a fixture is mounted on, in words -- shared by the Fixture
      *  Properties dialog and the Lighting Studio inspector so they cannot

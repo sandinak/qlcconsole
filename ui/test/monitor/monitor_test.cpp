@@ -12933,6 +12933,62 @@ void Monitor_Test::towerShelfLabelsAreOnTheLeft()
     delete doc;
 }
 
+void Monitor_Test::aBarIsAddedWhereTheTrussEditorWasRightClicked()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t2 = props->addTruss();
+    t2->setName("T2");
+    t2->setType(Truss::Vertical);
+    t2->setOrigin(QVector3D(2.0f, 2.0f, 0.0f));
+    t2->setLength(3.0f);
+    t2->setWidth(0.29f);
+    {
+        StructureStudioView v(doc, StructureStudioView::TrussKind, t2->id());
+        v.resize(520, 780);
+        v.setPlane(StructureStudioView::Front);
+        // Up the truss as drawn: the foot is 0, the top its length, between
+        // is between; off the ends clamps.
+        const QPoint foot = v.w2s(t2->origin()).toPoint();
+        const QPoint top = v.w2s(t2->positionAt(3.0f)).toPoint();
+        const QPoint twoThirds = v.w2s(t2->positionAt(2.0f)).toPoint();
+        QVERIFY(qAbs(v.offsetAlongTrussAt(t2->id(), foot) - 0.0f) < 0.05f);
+        QVERIFY(qAbs(v.offsetAlongTrussAt(t2->id(), top) - 3.0f) < 0.05f);
+        QVERIFY(qAbs(v.offsetAlongTrussAt(t2->id(), twoThirds + QPoint(30, 0)) - 2.0f) < 0.05f);
+        QVERIFY(qAbs(v.offsetAlongTrussAt(t2->id(), top - QPoint(0, 200)) - 3.0f) < 0.05f);
+        QCOMPARE(v.offsetAlongTrussAt(99, foot), -1.0f);
+        // From above a vertical truss is a point: no "here" to pick.
+        v.setPlane(StructureStudioView::Top);
+        QCOMPARE(v.offsetAlongTrussAt(t2->id(), foot), -1.0f);
+    }
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        const int before = props->trusses().size();
+        driveDialog([](QWidget *) { return true; }, false);   // the new bar's editor opens
+        mon.studioAddBar(2, t2->id(), nullptr, 2.0f);
+        QCOMPARE(props->trusses().size(), before + 1);
+        Truss *bar = nullptr;
+        foreach (Truss *t, props->trusses())
+            if (t->parentTrussId() == t2->id())
+                bar = t;
+        QVERIFY(bar != nullptr);
+        QVERIFY(qAbs(bar->parentOffset() - 2.0f) < 0.01f);  // where it was clicked
+        driveDialog([](QWidget *) { return true; }, false);
+        mon.studioAddBar(2, t2->id(), nullptr);              // the toolbar: mid-span
+        int bars = 0;
+        foreach (Truss *t, props->trusses())
+            if (t->parentTrussId() == t2->id())
+            {
+                ++bars;
+                if (t != bar)
+                    QVERIFY(qAbs(t->parentOffset() - 1.5f) < 0.01f);
+            }
+        QCOMPARE(bars, 2);
+    }
+    delete doc;
+}
+
 void Monitor_Test::aStagedFixtureOnThePlotCannotBeTestedOrLocated()
 {
     FixtureCleanup cleanup(m_doc);
