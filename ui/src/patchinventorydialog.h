@@ -36,24 +36,36 @@ class QLCFixtureMode;
  */
 
 /**
- * The Patch view: gives inventory fixtures a real universe and address.
+ * The Patch view: gives fixtures a universe and address -- inventory fixtures
+ * their first, patched ones a new one.
  *
- * It opens on PatchPlanner's proposal (DMX packed first-fit, one universe per
- * distinct unicast IP) with every universe and address editable, flags rows that
- * collide with each other or with the show, and commits on Apply. The point is
- * the LD reviews a plan rather than being handed a result.
+ * It opens on PatchPlanner's proposal for the inventory fixtures (DMX packed
+ * first-fit, one universe per distinct unicast IP) and on where the patched
+ * ones already are, with every universe and address editable. "Place" puts the
+ * selected rows (or all of them) at a universe and address, as a block that
+ * keeps its spacing or packed tight. Rows that collide with each other or with
+ * the rest of the show are flagged, and Apply commits the lot as one step --
+ * all of it or none. The point is the LD reviews a plan rather than being
+ * handed a result.
  */
 class PatchInventoryDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    /** @param fixtureIds  fixtures to patch; empty = every unpatched fixture */
+    /** @param fixtureIds  fixtures to patch or re-address; empty = every
+     *                     unpatched fixture (address clashes included) */
     PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtureIds = QList<quint32>(),
                          QWidget *parent = NULL);
 
     /** The plan as currently edited. Exposed for tests. */
     QList<PatchPlanner::Assignment> currentPlan() const;
+
+    /** Put @p rows (empty = every row) at @p universe / @p address, both
+     *  zero-based, keeping the patched ones' spacing or packing them all --
+     *  what the Place button does with the selection. */
+    void placeRows(quint32 universe, quint32 address, bool keepSpacing,
+                   const QList<int> &rows = QList<int>());
 
 public slots:
     void accept() override;
@@ -62,6 +74,7 @@ private slots:
     void slotReplan();
     void slotCellEdited();
     void slotModeChanged();
+    void slotPlace();
 
 private:
     void fill(const QList<PatchPlanner::Assignment> &plan,
@@ -74,6 +87,12 @@ private:
     void refreshConflicts();
 
 private:
+    /** Inventory fixtures as planned, patched ones where they are now. */
+    QList<PatchPlanner::Assignment> initialPlan(
+        const QHash<quint32, quint32> &channelOverride = QHash<quint32, quint32>()) const;
+    /** Write @p plan's universe/address into the matching rows. */
+    void setRowAddresses(const QList<PatchPlanner::Assignment> &plan);
+
     /** A planner set up the way the dialog is (nearest-node placement on/off). */
     PatchPlanner planner() const;
     /** "SR Node · port 2 · 3.2 m" for the node port carrying @p universe to a
@@ -86,6 +105,9 @@ private:
     QTableWidget *m_table;
     QLabel *m_summary;
     QPushButton *m_apply;
+    class QSpinBox *m_placeUni;     //!< Place: universe (1-based)
+    class QSpinBox *m_placeAddr;    //!< Place: address (1-based)
+    class QComboBox *m_placeHow;    //!< Place: keep spacing / pack
     bool m_filling;
 };
 

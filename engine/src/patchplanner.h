@@ -100,7 +100,31 @@ public:
     QList<Assignment> plan(const QList<quint32> &fixtureIds,
                            const QHash<quint32, quint32> &channelOverride) const;
 
-    /** Commit assignments through Doc::patchFixture(). For a network fixture
+    /** Put @p fixtureIds -- patched or not -- at @p universe / @p address,
+     *  ignoring where the ones already patched are now (they are the ones
+     *  moving), and around everything else.
+     *
+     *  @p keepSpacing: the patched ones keep their address gaps relative to
+     *  the lowest of them, as one block (it may run past the universe or
+     *  onto another fixture: the plan says so in its note, and the dialog
+     *  flags the conflict, rather than quietly breaking the block up); any
+     *  unpatched ones follow it, packed. Otherwise every fixture, in list
+     *  order, takes the first free run at or after the previous one's end,
+     *  spilling into the next universe when one fills.
+     *
+     *  @p elsewhere: other fixtures that are going somewhere too (a plan
+     *  being edited) -- fixture -> (absolute start, channels). Their present
+     *  channels are free and those are not. */
+    QList<Assignment> place(const QList<quint32> &fixtureIds, quint32 universe, quint32 address,
+                            bool keepSpacing,
+                            const QHash<quint32, quint32> &channelOverride = QHash<quint32, quint32>(),
+                            const QHash<quint32, QPair<quint32, quint32> > &elsewhere
+                                = QHash<quint32, QPair<quint32, quint32> >()) const;
+
+    /** Commit assignments through Doc::patchFixtures() -- all of them or
+     *  none, so a block of patched fixtures can shift onto its own old
+     *  channels. An assignment that leaves a patched fixture where it is
+     *  is skipped. For a network fixture
      *  also points its universe's output at the fixture's IP, copying the
      *  plugin and interface of an existing ArtNet/sACN universe when the
      *  universe has none. A claimsPort assignment also writes its universe

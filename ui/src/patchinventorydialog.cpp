@@ -19,6 +19,7 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <QSet>
+#include <algorithm>
 
 #include <QComboBox>
 #include <QCheckBox>
@@ -59,19 +60,26 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     : QDialog(parent)
     , m_doc(doc)
     , m_proximity(NULL)
+    , m_placeUni(NULL)
+    , m_placeAddr(NULL)
+    , m_placeHow(NULL)
     , m_filling(false)
 {
-    setWindowTitle(tr("Patch Inventory"));
-    resize(900, 520);
+    resize(960, 560);
 
     foreach (quint32 id, fixtureIds)
-        m_ids << id;
+        if (m_doc->fixture(id) != NULL && !m_ids.contains(id))
+            m_ids << id;
     if (m_ids.isEmpty())
     {
         foreach (Fixture *fx, m_doc->fixtures())
             if (fx != NULL && !fx->isPatched())
                 m_ids << fx->id();
     }
+    bool anyPatched = false;
+    foreach (quint32 id, m_ids)
+        anyPatched = anyPatched || m_doc->fixture(id)->isPatched();
+    setWindowTitle(anyPatched ? tr("Patch / Re-address") : tr("Patch Inventory"));
 
     QVBoxLayout *root = new QVBoxLayout(this);
     QLabel *intro = new QLabel(tr("Proposed homes for the fixtures staged in the inventory. A DMX "
@@ -80,7 +88,9 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
                                   "each network fixture IP gets a universe of its own (unicast). Pick each "
                                   "fixture's mode here -- it sets the DMX footprint -- and edit any "
                                   "universe or address, then Apply. A fixture that a scene sets "
-                                  "channel-by-channel keeps its mode."), this);
+                                  "channel-by-channel keeps its mode. Fixtures already patched start "
+                                  "where they are; Place moves the selected rows (or all of them) "
+                                  "as a block, and Apply moves everything at once."), this);
     intro->setWordWrap(true);
     root->addWidget(intro);
 
@@ -101,13 +111,38 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
         : tr("Place network nodes on the plot (Lighting Studio) to patch by proximity"));
     root->addWidget(m_proximity);
 
+    // Place: the selected rows (or all of them) at one universe and address.
+    QHBoxLayout *placeRow = new QHBoxLayout;
+    placeRow->addWidget(new QLabel(tr("Place selected at universe"), this));
+    m_placeUni = new QSpinBox(this);
+    m_placeUni->setRange(1, 999);
+    placeRow->addWidget(m_placeUni);
+    placeRow->addWidget(new QLabel(tr("address"), this));
+    m_placeAddr = new QSpinBox(this);
+    m_placeAddr->setRange(1, 512);
+    placeRow->addWidget(m_placeAddr);
+    m_placeHow = new QComboBox(this);
+    m_placeHow->addItem(tr("keeping their spacing"));
+    m_placeHow->addItem(tr("packed together"));
+    m_placeHow->setToolTip(tr("Keeping their spacing moves the patched fixtures as one block, "
+                              "gaps and all. Packed puts every fixture in the first free channels "
+                              "from there on, around whatever else is in the universe, and "
+                              "carries on into the next universe when one fills."));
+    placeRow->addWidget(m_placeHow);
+    QPushButton *place = new QPushButton(tr("Place"), this);
+    place->setToolTip(tr("Move the selected rows -- every row when none is selected"));
+    placeRow->addWidget(place);
+    placeRow->addStretch();
+    root->addLayout(placeRow);
+
     m_table = new QTableWidget(0, 9, this);
     m_table->setHorizontalHeaderLabels({ tr("Fixture"), tr("Model"), tr("Mode"), tr("Ch"), tr("Connection"),
                                          tr("Universe"), tr("Address"), tr("Via"), tr("Status") });
     m_table->verticalHeader()->hide();
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(COL_NAME, QHeaderView::Stretch);
-    m_table->setSelectionMode(QAbstractItemView::NoSelection);
+    m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     root->addWidget(m_table, 1);
 
     m_summary = new QLabel(this);
@@ -125,10 +160,120 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
 
     connect(replan, &QPushButton::clicked, this, &PatchInventoryDialog::slotReplan);
     connect(m_proximity, &QCheckBox::toggled, this, &PatchInventoryDialog::slotReplan);
+    connect(place, &QPushButton::clicked, this, &PatchInventoryDialog::slotPlace);
     connect(bb, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-    fill(planner().plan(m_ids));
+    fill(initialPlan());
+}
+
+QList<PatchPlanner::Assignment> PatchInventoryDialog::initialPlan(
+    const QHash<quint32, quint32> &channelOverride) const
+{
+    // Patched fixtures first, in address order, where they are now; then the
+    // inventory, as planned.
+    QList<Fixture *> patched;
+    QList<quint32> staged;
+    foreach (quint32 id, m_ids)
+    {
+        Fixture *fx = m_doc->fixture(id);
+        if (fx == NULL)
+            continue;
+        if (fx->isPatched())
+            patched << fx;
+        else
+            staged << id;
+    }
+    std::sort(patched.begin(), patched.end(), [](Fixture *a, Fixture *b) {
+        return a->universeAddress() < b->universeAddress();
+    });
+
+    QList<PatchPlanner::Assignment> out;
+    foreach (Fixture *fx, patched)
+    {
+        PatchPlanner::Assignment a;
+        a.fixtureId = fx->id();
+        a.universe = fx->universe();
+        a.address = fx->address();
+        out << a;
+    }
+    foreach (PatchPlanner::Assignment a, planner().plan(staged, channelOverride))
+    {
+        // Say where a clash wanted to be, and whose channels those are.
+        Fixture *fx = m_doc->fixture(a.fixtureId);
+        if (fx != NULL && fx->addressClash())
+        {
+            Fixture *owner = m_doc->fixture(m_doc->fixtureForAddress(fx->universeAddress()));
+            const QString clash = owner != NULL
+                ? tr("the show file has it at universe %1, address %2, over %3")
+                      .arg(fx->universe() + 1).arg(fx->address() + 1).arg(owner->name())
+                : tr("the show file has it at universe %1, address %2, over another fixture")
+                      .arg(fx->universe() + 1).arg(fx->address() + 1);
+            a.note = a.note.isEmpty() ? clash : clash + QStringLiteral("; ") + a.note;
+        }
+        out << a;
+    }
+    return out;
+}
+
+void PatchInventoryDialog::slotPlace()
+{
+    QList<int> rows;
+    foreach (const QModelIndex &idx, m_table->selectionModel()->selectedRows())
+        rows << idx.row();
+    std::sort(rows.begin(), rows.end());
+    placeRows(quint32(m_placeUni->value() - 1), quint32(m_placeAddr->value() - 1),
+              m_placeHow->currentIndex() == 0, rows);
+}
+
+void PatchInventoryDialog::placeRows(quint32 universe, quint32 address, bool keepSpacing,
+                                     const QList<int> &rows)
+{
+    QList<int> which = rows;
+    if (which.isEmpty())
+        for (int r = 0; r < m_table->rowCount(); r++)
+            which << r;
+    QList<quint32> ids;
+    foreach (int r, which)
+        if (QTableWidgetItem *name = m_table->item(r, COL_NAME))
+            ids << name->data(Qt::UserRole).toUInt();
+
+    // The rows NOT being placed stay where the table has them, so the
+    // planner must not hand their channels out.
+    const QHash<quint32, quint32> overrides = channelOverrides();
+    QHash<quint32, QPair<quint32, quint32> > elsewhere;
+    foreach (const PatchPlanner::Assignment &a, currentPlan())
+        if (!ids.contains(a.fixtureId))
+            elsewhere.insert(a.fixtureId, qMakePair((a.universe << 9) | a.address,
+                                                    overrides.value(a.fixtureId)));
+    setRowAddresses(planner().place(ids, universe, address, keepSpacing, overrides, elsewhere));
+}
+
+void PatchInventoryDialog::setRowAddresses(const QList<PatchPlanner::Assignment> &plan)
+{
+    QHash<quint32, PatchPlanner::Assignment> byId;
+    foreach (const PatchPlanner::Assignment &a, plan)
+        byId.insert(a.fixtureId, a);
+
+    m_filling = true;
+    for (int r = 0; r < m_table->rowCount(); r++)
+    {
+        QTableWidgetItem *name = m_table->item(r, COL_NAME);
+        if (name == NULL || !byId.contains(name->data(Qt::UserRole).toUInt()))
+            continue;
+        const PatchPlanner::Assignment a = byId.value(name->data(Qt::UserRole).toUInt());
+        if (QSpinBox *uni = qobject_cast<QSpinBox *>(m_table->cellWidget(r, COL_UNI)))
+            uni->setValue(int(a.universe) + 1);
+        if (QSpinBox *addr = qobject_cast<QSpinBox *>(m_table->cellWidget(r, COL_ADDR)))
+            addr->setValue(int(a.address) + 1);
+        // Placed by hand: the nearest-node proposal no longer applies.
+        if (QTableWidgetItem *via = m_table->item(r, COL_VIA))
+            via->setData(ROLE_NODE, -1);
+        if (QTableWidgetItem *st = m_table->item(r, COL_STATUS))
+            st->setData(Qt::UserRole + 1, a.note);
+    }
+    m_filling = false;
+    refreshConflicts();
 }
 
 void PatchInventoryDialog::slotReplan()
@@ -144,7 +289,7 @@ void PatchInventoryDialog::slotReplan()
         if (a.dimmerChannels > 0)
             dimmers.insert(a.fixtureId, a.dimmerChannels);
     }
-    fill(planner().plan(m_ids, channelOverrides()), modes, dimmers);
+    fill(initialPlan(channelOverrides()), modes, dimmers);
 }
 
 PatchPlanner PatchInventoryDialog::planner() const
@@ -238,12 +383,12 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
         QTableWidgetItem *name = new QTableWidgetItem(fx->name());
         name->setData(Qt::UserRole, a.fixtureId);
         name->setToolTip(a.note);
-        name->setFlags(Qt::ItemIsEnabled);
+        name->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         m_table->setItem(r, COL_NAME, name);
 
         QString model = fx->fixtureDef() ? fx->fixtureDef()->model() : tr("Generic");
         QTableWidgetItem *mi = new QTableWidgetItem(model);
-        mi->setFlags(Qt::ItemIsEnabled);
+        mi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         m_table->setItem(r, COL_MODEL, mi);
 
         // Mode: it decides the DMX footprint, so it is chosen here, at patch
@@ -251,7 +396,18 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
         // directly, or the head count differs) are shown but disabled, with why.
         quint32 chans = fx->channels();
         QString why;
-        if (isGenericDimmer(fx))
+        if (fx->isPatched())
+        {
+            /* Re-addressing, not re-patching: its mode is part of what is
+               live, and is changed in its properties, where everything that
+               depends on it is looked after. */
+            QTableWidgetItem *mo = new QTableWidgetItem(fx->fixtureMode() ? fx->fixtureMode()->name()
+                                                                          : QString());
+            mo->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            mo->setToolTip(tr("Already patched: change its mode in the fixture's properties"));
+            m_table->setItem(r, COL_MODE, mo);
+        }
+        else if (isGenericDimmer(fx))
         {
             QSpinBox *sp = new QSpinBox(m_table);
             sp->setRange(1, 512);
@@ -296,13 +452,13 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
         else
         {
             QTableWidgetItem *mo = new QTableWidgetItem(fx->fixtureMode() ? fx->fixtureMode()->name() : QString());
-            mo->setFlags(Qt::ItemIsEnabled);
+            mo->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
             m_table->setItem(r, COL_MODE, mo);
         }
 
         QTableWidgetItem *ch = new QTableWidgetItem(QString::number(chans));
         ch->setData(Qt::UserRole, chans);
-        ch->setFlags(Qt::ItemIsEnabled);
+        ch->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         ch->setTextAlignment(Qt::AlignCenter);
         m_table->setItem(r, COL_CH, ch);
 
@@ -310,7 +466,7 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
                            ? (fx->ipAddress().isEmpty() ? tr("Network") : tr("Network %1").arg(fx->ipAddress()))
                            : tr("DMX");
         QTableWidgetItem *ci = new QTableWidgetItem(conn);
-        ci->setFlags(Qt::ItemIsEnabled);
+        ci->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         m_table->setItem(r, COL_CONN, ci);
 
         QSpinBox *uni = new QSpinBox(m_table);
@@ -326,7 +482,7 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
         m_table->setCellWidget(r, COL_ADDR, addr);
 
         QTableWidgetItem *via = new QTableWidgetItem;
-        via->setFlags(Qt::ItemIsEnabled);
+        via->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         via->setData(ROLE_NODE, a.nodeIndex);
         via->setData(ROLE_PORT, a.portIndex);
         via->setData(ROLE_CLAIMS, a.claimsPort);
@@ -335,7 +491,7 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
         m_table->setItem(r, COL_VIA, via);
 
         QTableWidgetItem *st = new QTableWidgetItem;
-        st->setFlags(Qt::ItemIsEnabled);
+        st->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         st->setData(Qt::UserRole + 1, a.note);
         st->setData(Qt::UserRole + 2, a.newUniverse);
         m_table->setItem(r, COL_STATUS, st);
@@ -392,9 +548,10 @@ void PatchInventoryDialog::refreshConflicts()
 {
     // A row collides if its channels overlap a patched fixture OR another row.
     QHash<quint32, quint32> taken;            // absolute channel -> owner (0 = the show)
+    const QSet<quint32> mine(m_ids.begin(), m_ids.end());   // these are the ones moving
     foreach (Fixture *fx, m_doc->fixtures())
     {
-        if (fx == NULL || !fx->isPatched())
+        if (fx == NULL || !fx->isPatched() || mine.contains(fx->id()))
             continue;
         for (quint32 i = 0; i < fx->channels(); i++)
             taken.insert(fx->universeAddress() + i, 0);
@@ -420,6 +577,7 @@ void PatchInventoryDialog::refreshConflicts()
     }
 
     int newUnis = 0;
+    int changes = 0;
     QSet<quint32> seenNew;
     for (int r = 0; r < plan.size(); r++)
     {
@@ -429,12 +587,23 @@ void PatchInventoryDialog::refreshConflicts()
         if (st == NULL)
             continue;
         QString text;
+        Fixture *fx = m_doc->fixture(plan.at(r).fixtureId);
+        const bool moved = fx != NULL && fx->isPatched()
+                           && (fx->universe() != plan.at(r).universe || fx->address() != plan.at(r).address);
+        if (fx != NULL && (!fx->isPatched() || moved))
+            changes++;
         if (bad.contains(r))
             text = tr("CONFLICT");
+        else if (fx != NULL && fx->isPatched() && !moved)
+            text = tr("unchanged");
+        else if (moved)
+            text = tr("moves from %1.%2").arg(fx->universe() + 1).arg(fx->address() + 1);
         else if (plan.at(r).newUniverse)
             text = tr("new universe");
         else
             text = tr("ok");
+        if (moved && plan.at(r).newUniverse && !bad.contains(r))
+            text += tr(" (new universe)");
         const QString note = st->data(Qt::UserRole + 1).toString();
         if (!note.isEmpty() && !bad.contains(r))
             text += tr(" -- %1").arg(note);
@@ -446,9 +615,9 @@ void PatchInventoryDialog::refreshConflicts()
             newUnis++;
         }
     }
-    m_summary->setText(tr("%1 fixture(s) to patch, %2 new universe(s), %3 conflict(s).")
-                           .arg(plan.size()).arg(newUnis).arg(bad.size()));
-    m_apply->setEnabled(bad.isEmpty() && !plan.isEmpty());
+    m_summary->setText(tr("%1 fixture(s) to patch or move, %2 new universe(s), %3 conflict(s).")
+                           .arg(changes).arg(newUnis).arg(bad.size()));
+    m_apply->setEnabled(bad.isEmpty() && changes > 0);
 }
 
 void PatchInventoryDialog::accept()
@@ -456,9 +625,16 @@ void PatchInventoryDialog::accept()
     PatchPlanner pp(m_doc);
     QStringList problems;
     const int done = pp.apply(currentPlan(), &problems);
+    if (done == 0 && !problems.isEmpty())
+    {
+        // Nothing changed: stay open, so the plan can be fixed and tried again.
+        QMessageBox::warning(this, windowTitle(), problems.join("\n"));
+        refreshConflicts();
+        return;
+    }
     if (!problems.isEmpty())
     {
-        QMessageBox::warning(this, tr("Patch Inventory"),
+        QMessageBox::warning(this, windowTitle(),
             tr("Patched %1 fixture(s). Things to look at:\n\n%2").arg(done).arg(problems.join("\n")));
     }
     QDialog::accept();

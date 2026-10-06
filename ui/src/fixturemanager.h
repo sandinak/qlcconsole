@@ -125,13 +125,19 @@ private:
 
     /** Stage a fixture in the inventory: no universe, no address. */
     void addToInventory();
-    void addFixtureImpl(bool inventory);
+    void addFixtureImpl(bool inventory, quint32 likeFixture = UINT_MAX,
+                        const QString &manufacturer = QString());
 
     /** Release these fixtures' universe/address, sending them back to the inventory. */
     void returnToInventory(const QList<quint32> &fixtureIds);
 
     /** Open the Patch view for @p fixtureIds (empty = every staged fixture). */
     void patchInventory(const QList<quint32> &fixtureIds = QList<quint32>());
+    /** Patch / re-address @p fixtureIds -- patched or not -- in the Patch
+     *  dialog. With a valid @p universe they start packed into it, first free
+     *  channels first (a drop onto that universe's row). */
+    void patchOrReaddress(const QList<quint32> &fixtureIds,
+                          quint32 universe = UINT_MAX);
 
     /** Open a channels selector to add new channels group */
     void addChannelsGroup();
@@ -302,6 +308,7 @@ private slots:
     /** Assign the dropped fixtures to a power circuit (dragged onto it in the
      *  Power section of the tree). */
     void slotFixturesDroppedOnCircuit(const QList<quint32>& fixtureIds, int sourceIdx, int circuitIdx);
+    void slotFixturesDroppedOnUniverse(const QList<quint32>& fixtureIds, quint32 universe);
 
 private:
     QAction* m_addAction;

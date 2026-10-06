@@ -774,3 +774,53 @@ void NetworkTopology_Test::aNodeMadeFromAModelHasItsPortsAndKeepsItsModel()
 }
 
 QTEST_GUILESS_MAIN(NetworkTopology_Test)
+
+void NetworkTopology_Test::wirelessReceiversArePlacedNearTheirFixtures()
+{
+    Fixture *a = dimmer(m_doc, 2, 0, 4, "SR 1");
+    Fixture *b = dimmer(m_doc, 2, 10, 4, "SR 2");
+    QVERIFY(a && b);
+    QHash<quint32, QVector3D> pos;
+    pos.insert(a->id(), QVector3D(2.0f, 4.0f, 3.0f));
+    pos.insert(b->id(), QVector3D(4.0f, 6.0f, 3.0f));
+
+    NetworkTopology &nt = *m_doc->networkTopology();
+    NetworkNode tx;
+    tx.name = "WDMX";
+    tx.transport = NetworkNode::WirelessDMX;
+    tx.placed = true;
+    tx.posX = 10.0; tx.posY = 12.0;
+    NetworkPort p1; p1.universe = 2;               // carries SR 1 and SR 2
+    NetworkPort p2; p2.universe = 5;               // nothing on it yet
+    NetworkPort p3; p3.universe = 6;
+    p3.receiver.placed = true;                     // placed by hand: left alone
+    p3.receiver.posX = 1.0; p3.receiver.posY = 1.0;
+    tx.ports << p1 << p2 << p3;
+    nt.nodes().append(tx);
+    NetworkNode wired;
+    wired.name = "SR Node";
+    wired.transport = NetworkNode::ArtNet;
+    wired.ports << NetworkPort();
+    nt.nodes().append(wired);
+
+    QCOMPARE(nt.placeReceivers(0, m_doc, pos), 2);
+    const NetworkNode &n = nt.nodes().at(0);
+    // In the middle of its universe's fixtures.
+    QVERIFY(n.ports[0].receiver.placed);
+    QCOMPARE(n.ports[0].receiver.posX, 3.0);
+    QCOMPARE(n.ports[0].receiver.posY, 5.0);
+    QCOMPARE(n.ports[0].receiver.name, QString("WDMX RX 1"));
+    // No fixtures yet: beside the transmitter.
+    QVERIFY(n.ports[1].receiver.placed);
+    QCOMPARE(n.ports[1].receiver.posY, 12.0);
+    QVERIFY(n.ports[1].receiver.posX > 10.0);
+    // Placed by hand: not moved.
+    QCOMPARE(n.ports[2].receiver.posX, 1.0);
+    // Nothing more to do, and a wired node has no receivers.
+    QCOMPARE(nt.placeReceivers(0, m_doc, pos), 0);
+    QCOMPARE(nt.placeReceivers(1, m_doc, pos), 0);
+    QVERIFY(!nt.nodes().at(1).ports[0].receiver.placed);
+    // And no "no receiver placed" warning is left for it.
+    foreach (const QString &w, nt.warnings(nullptr))
+        QVERIFY2(!w.contains("WDMX"), qPrintable(w));
+}

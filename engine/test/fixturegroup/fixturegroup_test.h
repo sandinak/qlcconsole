@@ -48,6 +48,7 @@ private slots:
     void loadWrongHeadAttributes();
     void load();
     void save();
+    void subGroupTagsCoverGroupZero();
 
 private:
     Doc* m_doc;

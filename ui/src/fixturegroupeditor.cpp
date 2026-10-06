@@ -922,7 +922,7 @@ void FixtureGroupEditor::slotAddGroupBlock()
         const int x = m_column + (it.key().x() - minX);
         const int y = m_row + (it.key().y() - minY);
         m_grp->assignHead(QLCPoint(x, y), gh);
-        m_grp->setHeadSubGroup(QLCPoint(x, y), src->id()); // tag the block
+        m_grp->setHeadSubGroup(QLCPoint(x, y), FixtureGroup::subGroupTagFor(src->id())); // tag the block
         maxX = qMax(maxX, x);
         maxY = qMax(maxY, y);
     }

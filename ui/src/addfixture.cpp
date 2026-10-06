@@ -267,6 +267,7 @@ void AddFixture::setInventoryMode(bool inventory)
         m_addrErrorLabel->hide();
         m_invalidAddressFlag = false;
     }
+    updateMaximumAmount();
 }
 
 Fixture::Connection AddFixture::connection() const
@@ -465,7 +466,9 @@ quint32 AddFixture::findAddress(quint32 universe, quint32 numChannels,
         Fixture* fxi(fxit.next());
         Q_ASSERT(fxi != NULL);
 
-        if (fxi->universe() != universe)
+        // An inventory fixture's 0/0 (or an address clash's wanted spot)
+        // holds no channels: it must not push new fixtures off address 1.
+        if (fxi->universe() != universe || !fxi->isPatched())
             continue;
 
         if (fxi->id() == currentFixture && currentFixture != Fixture::invalidId())
@@ -498,6 +501,15 @@ quint32 AddFixture::findAddress(quint32 universe, quint32 numChannels,
 
 void AddFixture::updateMaximumAmount()
 {
+    /* Staged fixtures hold no address, so how many fit in the rest of the
+       universe has nothing to do with how many can be added. That limit,
+       read off the hidden address, held a 165-channel fixture to ONE ("why
+       can't I add more than 1 fixture here?"). */
+    if (m_inventoryMode)
+    {
+        m_amountSpin->setRange(1, 999);
+        return;
+    }
     m_amountSpin->setRange(1, (513 - m_addressSpin->value()) /
                            (m_channelsSpin->value() + m_gapSpin->value()));
 }
@@ -543,6 +555,38 @@ void AddFixture::slotModeActivated(int modeIndex)
         new QListWidgetItem(
             QString("%1: %2").arg(i + 1).arg(channel->name()),
             m_channelList);
+    }
+}
+
+void AddFixture::preselectLike(const Fixture *like)
+{
+    if (like == NULL || like->fixtureDef() == NULL)
+        return;                                   // generic: the default already
+    fillTree(like->fixtureDef()->manufacturer(), like->fixtureDef()->model());
+    if (like->fixtureMode() != NULL)
+    {
+        const int idx = m_modeCombo->findText(like->fixtureMode()->name());
+        if (idx >= 0)
+        {
+            m_modeCombo->setCurrentIndex(idx);
+            slotModeActivated(idx);
+        }
+    }
+}
+
+void AddFixture::preselectManufacturer(const QString &manufacturer)
+{
+    if (manufacturer.isEmpty())
+        return;
+    // Open its models and bring them into view; no model is picked for you.
+    for (int i = 0; i < m_tree->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem *it = m_tree->topLevelItem(i);
+        if (it->text(KColumnName) != manufacturer)
+            continue;
+        it->setExpanded(true);
+        m_tree->scrollToItem(it, QAbstractItemView::PositionAtTop);
+        break;
     }
 }
 

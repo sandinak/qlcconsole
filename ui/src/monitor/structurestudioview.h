@@ -30,6 +30,7 @@
 #include <QColor>
 #include <QList>
 #include <QSet>
+#include <QHash>
 #include <QPair>
 #include <QVector>
 #include <climits>
@@ -38,6 +39,7 @@
 #include "beamoptics.h"
 
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
+#include "truss.h"     // FixtureRigProps::Face
 
 class Doc;
 
@@ -155,6 +157,11 @@ public:
      *  pick, so hitTestFixture() walks the same list. */
     QList<quint32> fixturesInDrawOrder() const;
 
+    /** Which head is drawn in each cell of a @p cols x @p rows LED grid, row
+     *  by row (-1 = none): the model's LED map when the show or library has
+     *  one of that size (an XL-450 built RGB/W/RGB/W/RGB), else head order. */
+    QVector<int> headsByCell(class Fixture *fx, int cols, int rows, int headCount) const;
+
     /** Ring-highlight a set of fixtures (driven by the tree selection). */
     void setHighlight(const QList<quint32> &ids);
     /** Ring-highlight a single bar (or clear it with UINT_MAX == Truss::invalidId()). */
@@ -173,6 +180,9 @@ public:
 
     /** Inspector edits for one fixture (frame-group only). */
     void setFixtureFace(quint32 fid, int face);     ///< studioMount + re-pin
+    /** Which face it is on as a direction (Top/Bottom/Front/Back/Stage left/
+     *  Stage right): plane, side, and on a truss which side of it. */
+    void setFixtureFacing(quint32 fid, FixtureRigProps::Face face);
     void setFixtureAngle(quint32 fid, float deg);   ///< studioAngle (bar rotation)
 
     /** Position an already-mounted fixture at a screen point (drop landing). */
@@ -186,6 +196,12 @@ signals:
     void fixtureActivated(quint32 fid);
     /** A fixture on the structure was single-clicked (selection). */
     void fixtureSelected(quint32 fid);
+    /** The canvas selection is now @p fids -- after fixtureSelected(), so a
+     *  host syncing a list to both ends up with all of them. Cmd-click adds
+     *  and removes; a plain click on one of several keeps them all. */
+    void fixturesSelected(const QList<quint32> &fids);
+    /** Several fixtures were dragged together (after each one's fixtureMoved()). */
+    void fixturesMoved(const QList<quint32> &fids);
     /** A drag of a fixture is about to change the doc (for undo snapshotting). */
     void editAboutToStart();
     /** A fixture was dragged to a new spot on the structure (rig prop changed). */
@@ -601,6 +617,40 @@ private:
     double moverBaseRadius(const struct FixtureVisualTraits &traits) const;
     /** Total on-screen width of a mover unit (its declared Physical width). */
     double moverWidthPx(const struct FixtureVisualTraits &traits) const;
+    /** The rotation handle drawn on the ONE selected fixture: a ring around
+     *  its mount point with a knob to drag round it. Which angle it turns
+     *  depends on the view, because a mouse can only honestly turn something
+     *  about the axis pointing out of the screen:
+     *    - Angle (studioAngle) when its length lies flat in the view -- the
+     *      run spins about the axis out of the screen (moving it onto the
+     *      viewed face first if that is not the one it is on);
+     *    - Tilt (studioTilt) when looking down its length -- it rolls.
+     *  None in any other view, or when it is locked, or for a body whose flat
+     *  drawing ignores its orientation (movers, pars, a tower-shelf unit). */
+    struct RotateHandle
+    {
+        enum Mode { None = 0, Angle, Tilt };
+        Mode    mode = None;
+        quint32 fid = Fixture::invalidId();
+        QPointF centre;        ///< screen px: the pivot, the fixture's mount point
+        double  radius = 0.0;  ///< screen px
+        QPointF knob;          ///< screen px
+        double  value = 0.0;   ///< current studioAngle / studioTilt, degrees
+        /** +1 when turning the mouse counter-clockwise in PLANE coordinates
+         *  increases the value, -1 when it decreases it. */
+        double  sign = 1.0;
+        /** >= 0: turning it means moving it onto this face (studioMount) with
+         *  @c reframeTilt first -- the view is not looking at its own face. */
+        int     reframeMount = -1;
+        double  reframeTilt = 0.0;
+    };
+    RotateHandle rotateHandle() const;
+    void drawRotateHandle(QPainter &p) const;
+    /** Angle of @p px about @p centre in plane coordinates, degrees. */
+    double planeAngleAround(const QPointF &centre, const QPointF &px) const;
+    /** Turn the fixture being rotated to follow the pointer. @p snap = 15° steps. */
+    bool rotateDragTo(const QPointF &px, bool snap);
+
     /** For the anchor platform: which local component the given face pins, and to
      *  what value. mount 0=Top(pin Z),1=Front(pin Y),2=Side(pin X). */
     void facePin(int mount, int &pinComp, double &pinVal) const;
@@ -673,6 +723,16 @@ private:
     quint32  m_dragBarId = UINT_MAX;             ///< bar being dragged (== Truss::invalidId())
     quint32  m_dragPipeBarId = UINT_MAX;         ///< crossbar being dragged (== Pipe::invalidId())
     bool     m_dragged = false;
+    /** A drag of several selected fixtures together: each keeps its offset
+     *  from the pointer, so they move as one rather than piling up on it. */
+    QList<quint32> m_dragGroup;
+    QHash<quint32, QPointF> m_dragGroupStart;  ///< each one's screen centre at the press
+    QPointF  m_dragPressPx;
+    bool     m_pressedSelected = false;  ///< pressed one of several: a click narrows to it
+    RotateHandle m_rotate;          ///< handle being dragged (mode None = not rotating)
+    double   m_rotateLastMouse = 0.0;   ///< pointer's plane angle at the last move
+    double   m_rotateTurned = 0.0;      ///< degrees turned since the press, unwrapped
+    bool     m_hoverKnob = false;       ///< pointer is over a rotation knob
     quint32  m_resizeBoom = 0; ///< +1 boom id whose top is being dragged (0 = none)
     QPointF  m_cursorPx;       ///< last pointer position (for the ruler readout)
     bool     m_hasCursor = false;

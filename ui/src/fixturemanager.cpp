@@ -485,6 +485,8 @@ void FixtureManager::initDataView()
             this, SLOT(slotGroupFolderRenamed(QString,QString)));
     connect(m_fixtures_tree, SIGNAL(fixturesDroppedOnCircuit(QList<quint32>,int,int)),
             this, SLOT(slotFixturesDroppedOnCircuit(QList<quint32>,int,int)));
+    connect(m_fixtures_tree, SIGNAL(fixturesDroppedOnUniverse(QList<quint32>,quint32)),
+            this, SLOT(slotFixturesDroppedOnUniverse(QList<quint32>,quint32)));
 
     connect(m_fixtures_tree, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotSelectionChanged()));
@@ -1660,12 +1662,27 @@ void FixtureManager::returnToInventory(const QList<quint32> &fixtureIds)
 
 void FixtureManager::patchInventory(const QList<quint32> &fixtureIds)
 {
+    patchOrReaddress(fixtureIds);
+}
+
+void FixtureManager::patchOrReaddress(const QList<quint32> &fixtureIds, quint32 universe)
+{
     PatchInventoryDialog dlg(m_doc, fixtureIds, this);
+    if (universe != UINT_MAX)
+        dlg.placeRows(universe, 0, false);
     if (dlg.exec() == QDialog::Accepted)
         updateView();
 }
 
-void FixtureManager::addFixtureImpl(bool inventory)
+void FixtureManager::slotFixturesDroppedOnUniverse(const QList<quint32> &fixtureIds, quint32 universe)
+{
+    /* "clean ways to assign fixtures into universes": dragged onto a universe,
+       they are proposed packed into its first free channels -- reviewed and
+       applied in the Patch dialog, not moved behind the LD's back. */
+    patchOrReaddress(fixtureIds, universe);
+}
+
+void FixtureManager::addFixtureImpl(bool inventory, quint32 likeFixture, const QString &manufacturer)
 {
     // The group the new fixtures join: the selected fixture's group, or the
     // selected group itself.
@@ -1690,7 +1707,8 @@ void FixtureManager::addFixtureImpl(bool inventory)
     }
 
     const QList<quint32> created =
-        FixtureCreator::addFromDialog(this, m_doc, inventory, m_ctxUniverse, addToGroup);
+        FixtureCreator::addFromDialog(this, m_doc, inventory, m_ctxUniverse, addToGroup,
+                                      m_doc->fixture(likeFixture), manufacturer);
     if (created.isEmpty())
         return;
 
@@ -2505,7 +2523,7 @@ void FixtureManager::copySelectionIntoGroup(FixtureGroup* target,
             const int y = curY + (it.key().y() - minY);
             if (target->assignHead(QLCPoint(x, y), it.value()) == true)
             {
-                target->setHeadSubGroup(QLCPoint(x, y), src->id());
+                target->setHeadSubGroup(QLCPoint(x, y), FixtureGroup::subGroupTagFor(src->id()));
                 blockMaxY = qMax(blockMaxY, y);
             }
         }
@@ -2851,9 +2869,27 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (pf != NULL && pf->isPatched())
             patchedSel << fid;
     }
+    /* Patch / re-address: the whole selection, patched and staged together,
+       so a mixed set can be placed as one block. */
+    QAction *readdress = NULL;
+    QList<quint32> readdressIds = patchedSel;
+    foreach (quint32 fid, stagedSel)
+        if (!readdressIds.contains(fid))
+            readdressIds << fid;
     if (!patchedSel.isEmpty())
     {
         menu.addSeparator();
+        readdress = menu.addAction(!stagedSel.isEmpty()
+                                       ? tr("Patch / re-address %1 fixtures...").arg(readdressIds.size())
+                                   : readdressIds.size() > 1
+                                       ? tr("Re-address %1 fixtures...").arg(readdressIds.size())
+                                       : tr("Re-address..."));
+        readdress->setEnabled(m_doc->mode() == Doc::Design);
+        readdress->setToolTip(tr("Move to another universe or address -- as a block keeping "
+                                 "their spacing, or packed -- reviewed before it is applied"));
+    }
+    if (!patchedSel.isEmpty())
+    {
         returnToInv = menu.addAction(patchedSel.size() > 1
                                          ? tr("Return %1 fixtures to inventory...").arg(patchedSel.size())
                                          : tr("Return to inventory..."));
@@ -2862,11 +2898,66 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                                    "placement and its groups"));
     }
 
+    // The Address clashes root: give every one of them a home.
+    QAction *fixClashes = NULL;
+    if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
+    {
+        if (clicked->data(KColumnName, PROP_CLASHES).isValid() && !m_doc->addressClashes().isEmpty())
+        {
+            menu.addSeparator();
+            fixClashes = menu.addAction(tr("Patch the clashing fixtures..."));
+            fixClashes->setToolTip(tr("Propose free channels for each one, to review and apply"));
+        }
+    }
+
+    /* Right-clicked a model's folder (or one of its fixtures) in the
+       Inventory: adding starts on that model and mode ("when I right click
+       on a model .. it should auto select that model from the list for
+       adding"); a manufacturer's folder, on that manufacturer. */
+    quint32 likeFixture = Fixture::invalidId();
+    QString likeManufacturer;
+    QTreeWidgetItem *invHit = m_fixtures_tree->itemAt(pos);
+    if (invHit != NULL && invHit->data(KColumnName, PROP_INVENTORY).toInt() == 2)
+    {
+        // A model folder holds fixtures; a manufacturer folder holds models.
+        std::function<quint32(QTreeWidgetItem *)> firstFixture = [&](QTreeWidgetItem *n) -> quint32 {
+            for (int c = 0; c < n->childCount(); ++c)
+            {
+                QTreeWidgetItem *ch = n->child(c);
+                if (ch->data(KColumnName, PROP_ID).isValid() && !ch->data(KColumnName, PROP_HEAD).isValid())
+                    return ch->data(KColumnName, PROP_ID).toString().toUInt();
+                const quint32 deeper = firstFixture(ch);
+                if (deeper != Fixture::invalidId())
+                    return deeper;
+            }
+            return Fixture::invalidId();
+        };
+        bool modelFolder = false;
+        for (int c = 0; c < invHit->childCount() && !modelFolder; ++c)
+            modelFolder = invHit->child(c)->data(KColumnName, PROP_ID).isValid();
+        const quint32 any = firstFixture(invHit);
+        Fixture *af = m_doc->fixture(any);
+        if (modelFolder)
+            likeFixture = any;
+        else if (af != NULL && af->fixtureDef() != NULL)
+            likeManufacturer = af->fixtureDef()->manufacturer();
+    }
+    else if (invHit != NULL && stagedSel.size() == 1 && selFixtures.size() == 1)
+    {
+        likeFixture = stagedSel.first();   // a staged fixture: more like it
+    }
+    Fixture *likeFx = m_doc->fixture(likeFixture);
+    QString addLabel = tr("Add to inventory...");
+    if (likeFx != NULL)
+        addLabel = tr("Add more %1 to inventory...").arg(likeFx->groupingModel());   // as its folder reads
+    else if (!likeManufacturer.isEmpty())
+        addLabel = tr("Add %1 fixtures to inventory...").arg(likeManufacturer);
+
     if (ctxIsInventoryRoot || !stagedSel.isEmpty())
     {
         menu.addSeparator();
-        if (ctxIsInventoryRoot)
-            addToInv = menu.addAction(tr("Add to inventory..."));
+        if (ctxIsInventoryRoot || likeFx != NULL)
+            addToInv = menu.addAction(addLabel);
         if (!stagedSel.isEmpty())
             patchSel = menu.addAction(stagedSel.size() > 1
                                           ? tr("Patch %1 selected fixtures...").arg(stagedSel.size())
@@ -2891,6 +2982,16 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     if (chosen == NULL)
         return;
 
+    if (readdress != NULL && chosen == readdress)
+    {
+        patchOrReaddress(readdressIds);
+        return;
+    }
+    if (fixClashes != NULL && chosen == fixClashes)
+    {
+        patchOrReaddress(m_doc->addressClashes());
+        return;
+    }
     if (returnToInv != NULL && chosen == returnToInv)
     {
         returnToInventory(patchedSel);
@@ -2898,7 +2999,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
     if (addToInv != NULL && chosen == addToInv)
     {
-        addToInventory();
+        addFixtureImpl(true, likeFixture, likeManufacturer);
         return;
     }
     if ((patchAll != NULL && chosen == patchAll) || (patchSel != NULL && chosen == patchSel))

@@ -402,13 +402,13 @@ void FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi()
     QCOMPARE(afterPaste.value(QLCPoint(0, 0)).fxi, targetFx->id());
     QCOMPARE(afterPaste.value(QLCPoint(1, 0)).fxi, blockFxA->id());
     QCOMPARE(afterPaste.value(QLCPoint(2, 0)).fxi, blockFxB->id());
-    QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 0)), blockGrp->id());
-    QCOMPARE(targetGrp->headSubGroup(QLCPoint(2, 0)), blockGrp->id());
+    QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 0)), FixtureGroup::subGroupTagFor(blockGrp->id()));
+    QCOMPARE(targetGrp->headSubGroup(QLCPoint(2, 0)), FixtureGroup::subGroupTagFor(blockGrp->id()));
 
     // 7. Move the block as a unit. Real alternate UI path for the same
     //    result as a drag: the right-click "Move sub-group" action reaches
     //    exactly this function.
-    editor->moveSubGroup(blockGrp->id(), 0, 1);
+    editor->moveSubGroup(FixtureGroup::subGroupTagFor(blockGrp->id()), 0, 1);
 
     const QMap<QLCPoint, GroupHead> afterMove = targetGrp->headsMap();
     QVERIFY2(afterMove.value(QLCPoint(1, 1)).fxi == blockFxA->id(),
@@ -420,8 +420,8 @@ void FixtureManager_Test::populatingAndMovingAFixtureGroupBlockThroughRealUi()
     QVERIFY2(afterMove.contains(QLCPoint(2, 0)) == false,
              "the block's old (2,0) cell is still occupied after moving away from it");
     QCOMPARE(afterMove.value(QLCPoint(0, 0)).fxi, targetFx->id());   // untouched by the move
-    QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 1)), blockGrp->id());
-    QCOMPARE(targetGrp->headSubGroup(QLCPoint(2, 1)), blockGrp->id());
+    QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 1)), FixtureGroup::subGroupTagFor(blockGrp->id()));
+    QCOMPARE(targetGrp->headSubGroup(QLCPoint(2, 1)), FixtureGroup::subGroupTagFor(blockGrp->id()));
 }
 
 void FixtureManager_Test::pastingABlockOntoAnOccupiedCellOverwritesTheOccupant()
@@ -566,7 +566,7 @@ void FixtureManager_Test::pastingABlockOntoAnOccupiedCellOverwritesTheOccupant()
     const QMap<QLCPoint, GroupHead> afterPaste = targetGrp->headsMap();
     QVERIFY2(afterPaste.value(QLCPoint(1, 0)).fxi == blockFxA->id(),
              "the paste did not land block member A on the (occupied) anchor cell");
-    QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 0)), blockGrp->id());
+    QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 0)), FixtureGroup::subGroupTagFor(blockGrp->id()));
     QCOMPARE(afterPaste.value(QLCPoint(2, 0)).fxi, blockFxB->id());
     QCOMPARE(afterPaste.value(QLCPoint(0, 0)).fxi, targetFx->id());   // untouched
 
@@ -739,8 +739,8 @@ void FixtureManager_Test::draggingASubGroupBlockMovesItThroughTheRealDropPath()
                  "the block's old (1,0) cell is still occupied after dragging away from it");
         QVERIFY2(afterDrag.contains(QLCPoint(2, 0)) == false,
                  "the block's old (2,0) cell is still occupied after dragging away from it");
-        QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 1)), blockGrp->id());
-        QCOMPARE(targetGrp->headSubGroup(QLCPoint(2, 1)), blockGrp->id());
+        QCOMPARE(targetGrp->headSubGroup(QLCPoint(1, 1)), FixtureGroup::subGroupTagFor(blockGrp->id()));
+        QCOMPARE(targetGrp->headSubGroup(QLCPoint(2, 1)), FixtureGroup::subGroupTagFor(blockGrp->id()));
         QCOMPARE(afterDrag.value(QLCPoint(0, 0)).fxi, targetFx->id());   // untouched by the drag
     }
 }
@@ -910,8 +910,17 @@ void FixtureManager_Test::rightClickOnAnInventoryFolderOffersToPatchWhatIsInIt()
 
     const QStringList texts = contextMenuTexts(mgr, manuf);
     QVERIFY2(texts.contains("Patch 3 selected fixtures..."), qPrintable(texts.join(" | ")));
-    QVERIFY2(texts.contains("Add to inventory..."), qPrintable(texts.join(" | ")));
+    // A manufacturer's folder adds that manufacturer's fixtures.
+    QVERIFY2(texts.contains("Add Generic fixtures to inventory..."), qPrintable(texts.join(" | ")));
     QVERIFY2(!texts.contains("Add fixture..."), qPrintable(texts.join(" | ")));
+
+    // A model's folder adds more of that model; the root, anything.
+    QTreeWidgetItem *model = manuf->child(0);                    // "Dimmer, 4 ch (3)"
+    QCOMPARE(model->data(KColumnName, PROP_INVENTORY).toInt(), 2);
+    const QStringList modelTexts = contextMenuTexts(mgr, model);
+    QVERIFY2(modelTexts.contains("Add more Dimmer, 4 ch to inventory..."), qPrintable(modelTexts.join(" | ")));
+    const QStringList rootTexts = contextMenuTexts(mgr, inv);
+    QVERIFY2(rootTexts.contains("Add to inventory..."), qPrintable(rootTexts.join(" | ")));
 }
 
 namespace

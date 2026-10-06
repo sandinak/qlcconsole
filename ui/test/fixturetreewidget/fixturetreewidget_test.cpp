@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <QTreeWidgetItemIterator>
 #include <QKeyEvent>
+#include <QMimeData>
 
 #define protected public
 #define private public
@@ -319,4 +320,93 @@ void FixtureTreeWidget_Test::inventoryIsOrganisedByManufacturerAndModel()
     QCOMPARE(martin->data(0, PROP_INVENTORY).toInt(), 2);
     QVERIFY(!martin->data(0, PROP_ID).isValid());
     QVERIFY(pointe->child(0)->data(0, PROP_ID).isValid());
+}
+
+void FixtureTreeWidget_Test::addressClashesGetTheirOwnRootAtTheTop()
+{
+    Fixture *real = new Fixture(m_doc);
+    real->setName("Owner");
+    real->setChannels(8);
+    QVERIFY(m_doc->addFixture(real));
+
+    // What Fixture::loader() makes of a fixture the file puts on 3..10.
+    Fixture *clash = new Fixture(m_doc);
+    clash->setName("Clash");
+    clash->setChannels(8);
+    clash->setAddress(2);
+    clash->setPatched(false);
+    clash->setAddressClash(true);
+    QVERIFY(m_doc->addFixture(clash));
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber | FixtureTreeWidget::AddressRange
+                                  | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+
+    QTreeWidgetItem *root = findByRole(tree, PROP_CLASHES);
+    QVERIFY2(root != nullptr, "no Address clashes root");
+    QCOMPARE(tree.topLevelItem(0), root);
+    QCOMPARE(root->text(0), QString("Address clashes (1)"));
+    QCOMPARE(root->childCount(), 1);
+    QTreeWidgetItem *row = root->child(0);
+    QCOMPARE(row->text(0), QString("Clash"));
+    QVERIFY2(row->text(tree.m_addressColumn).contains("clashes at 1.3"),
+             qPrintable(row->text(tree.m_addressColumn)));
+    QVERIFY(row->toolTip(tree.m_addressColumn).contains("Owner"));
+
+    // Not also counted as inventory waiting to be rigged.
+    QTreeWidgetItem *inv = findByRole(tree, PROP_INVENTORY, 1);
+    QVERIFY(inv != nullptr);
+    QCOMPARE(inv->text(0), QString("Inventory"));
+
+    // Once it has a home, the root goes.
+    QVERIFY(m_doc->patchFixtures({ { clash->id(), 0, 100 } }));
+    tree.updateTree();
+    QVERIFY(findByRole(tree, PROP_CLASHES) == nullptr);
+}
+
+void FixtureTreeWidget_Test::aDropOnAUniverseNamesItAndItsFixtures()
+{
+    Fixture *a = new Fixture(m_doc);
+    a->setName("A");
+    a->setChannels(4);
+    QVERIFY(m_doc->addFixture(a));
+    Fixture *b = new Fixture(m_doc);
+    b->setName("B");
+    b->setChannels(4);
+    b->setAddress(4);
+    QVERIFY(m_doc->addFixture(b));
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Pair");
+    grp->setSize(QSize(2, 1));
+    m_doc->addFixtureGroup(grp);
+    grp->assignFixture(b->id());
+    grp->assignFixture(a->id());
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+
+    QTreeWidgetItem *uni = findByRole(tree, PROP_UNIVERSE, 0u);
+    QVERIFY(uni != nullptr && uni->childCount() == 2);
+    QCOMPARE(tree.dropUniverse(uni), QVariant(0u));
+    QCOMPARE(tree.dropUniverse(uni->child(0)), QVariant(0u));        // a fixture in it
+    QVERIFY(!tree.dropUniverse(findByRole(tree, PROP_INVENTORY, 1)).isValid());
+    QVERIFY(!tree.dropUniverse(nullptr).isValid());
+
+    // A fixture drag carries its fixtures; a group drag stands for its own.
+    QMimeData fx;
+    {
+        QByteArray data;
+        QDataStream out(&data, QIODevice::WriteOnly);
+        out << a->id() << b->id() << a->id();
+        fx.setData(FixtureTreeWidget::fixtureDragMimeType(), data);
+    }
+    QCOMPARE(tree.droppedFixtures(&fx), QList<quint32>({ a->id(), b->id() }));
+    QMimeData gr;
+    {
+        QByteArray data;
+        QDataStream out(&data, QIODevice::WriteOnly);
+        out << grp->id();
+        gr.setData(FixtureTreeWidget::groupDragMimeType(), data);
+    }
+    QCOMPARE(tree.droppedFixtures(&gr), QList<quint32>({ b->id(), a->id() }));
 }

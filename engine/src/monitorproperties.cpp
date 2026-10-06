@@ -160,6 +160,7 @@ void MonitorProperties::reset()
     m_stageTargets.clear();
     m_rigProps.clear();
     m_goboSwaps.clear();
+    m_headLayouts.clear();
     m_layers.clear();
     m_activeLayerId = defaultLayerId;
     ensureDefaultLayer();
@@ -1422,8 +1423,8 @@ float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
     float h = 0.0f;
     foreach (const StagePlatform *p, m_platforms)
     {
-        if (p->containsPoint(xMetres, yMetres))
-            h = qMax(h, platformBaseZ(p->id()) + p->height());   // absolute deck top
+        if (p->containsPoint(xMetres, yMetres))   // absolute deck top -- the tread, on steps
+            h = qMax(h, platformBaseZ(p->id()) + p->topAt(xMetres, yMetres));
     }
     return h;
 }
@@ -1445,9 +1446,11 @@ QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMo
         if (type == QLatin1String("platform"))
         {
             if (StagePlatform *pl = platform(t->boundId()))
-                p = QVector3D(pl->originX() + pl->width() * 0.5f,
-                              pl->originY() + pl->depth() * 0.5f,
-                              platformBaseZ(pl->id()) + pl->height());
+            {
+                const float cx = pl->originX() + pl->width() * 0.5f;
+                const float cy = pl->originY() + pl->depth() * 0.5f;
+                p = QVector3D(cx, cy, platformBaseZ(pl->id()) + pl->topAt(cx, cy));
+            }
         }
         else if (type == QLatin1String("truss"))
         {
@@ -1570,9 +1573,9 @@ quint32 MonitorProperties::platformIdAt(float xMetres, float yMetres) const
     float bestH = -1.0f;
     foreach (const StagePlatform *p, m_platforms)
     {
-        if (p->containsPoint(xMetres, yMetres) && p->height() > bestH)
+        if (p->containsPoint(xMetres, yMetres) && p->topAt(xMetres, yMetres) > bestH)
         {
-            bestH = p->height();
+            bestH = p->topAt(xMetres, yMetres);
             best = p->id();
         }
     }
@@ -1755,11 +1758,14 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
             const float base = platformBaseZ(pl->id());
             // Inside: measured up from the platform's floor, same as a riser
             // mount above -- a deck-mounted light can be in the box too.
+            // On steps, the tread it stands on -- not the top of the flight.
+            const float top = pl->isSteps() ? pl->topAt(p.x() / 1000.0f, p.y() / 1000.0f)
+                                            : pl->height();
             if (rp.placement == FixtureRigProps::Inside)
                 return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f,
-                                 base + qBound(0.0f, rp.deckHeightOffset, pl->height()));
+                                 base + qBound(0.0f, rp.deckHeightOffset, top));
             return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f,
-                             base + pl->height() + rp.deckHeightOffset);
+                             base + top + rp.deckHeightOffset);
         }
     }
 
@@ -2254,6 +2260,22 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 delete t;
             }
         }
+        else if (root.name() == QStringLiteral("HeadLayout"))
+        {
+            // Key="Mfr|Model|Mode" Cols Rows, and "c,r c,r ..." per head.
+            const QXmlStreamAttributes a = root.attributes();
+            HeadLayout l;
+            l.key = a.value("Key").toString();
+            l.size = QSize(a.value("Cols").toInt(), a.value("Rows").toInt());
+            const QStringList cells = root.readElementText().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+            foreach (const QString &c, cells)
+            {
+                const QStringList xy = c.split(QLatin1Char(','));
+                l.cells << QPoint(xy.value(0).toInt(), xy.value(1, QStringLiteral("-1")).toInt());
+            }
+            if (l.isValid())
+                setHeadLayout(l);
+        }
         else if (root.name() == QStringLiteral("GoboSwap"))
         {
             const QXmlStreamAttributes a = root.attributes();
@@ -2314,9 +2336,14 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.groupLocal = QVector3D(a.value("GLX").toFloat(),
                                           a.value("GLY").toFloat(),
                                           a.value("GLZ").toFloat());
-            if (a.hasAttribute("SM")) rp.studioMount = a.value("SM").toInt();
+            if (a.hasAttribute("SM"))
+            {
+                rp.studioMount = a.value("SM").toInt();
+                rp.studioFaceChosen = true;
+            }
             if (a.hasAttribute("SA")) rp.studioAngle = a.value("SA").toFloat();
             if (a.hasAttribute("ST")) rp.studioTilt = a.value("ST").toFloat();
+            if (a.hasAttribute("SF")) rp.studioFlip = (a.value("SF").toInt() != 0);
             if (a.hasAttribute("Boom"))
             {
                 rp.pipeId     = a.value("Boom").toUInt();
@@ -2511,9 +2538,87 @@ void MonitorProperties::repairMountPlanes()
     }
 }
 
+HeadLayout MonitorProperties::headLayoutFor(const Fixture *fx) const
+{
+    const QString key = HeadLayout::keyFor(fx);
+    if (key.isEmpty())
+        return HeadLayout();
+    if (m_headLayouts.contains(key))
+        return m_headLayouts.value(key);
+    const HeadLayout lib = HeadLayoutLibrary::load(key);
+    if (lib.isValid())
+        return lib;
+    return HeadLayout::headOrder(fx);
+}
+
+bool MonitorProperties::hasHeadLayout(const Fixture *fx) const
+{
+    const QString key = HeadLayout::keyFor(fx);
+    return !key.isEmpty() && (m_headLayouts.contains(key) || HeadLayoutLibrary::load(key).isValid());
+}
+
+void MonitorProperties::setHeadLayout(const HeadLayout &layout)
+{
+    if (layout.isValid())
+        m_headLayouts.insert(layout.key, layout);
+}
+
+void MonitorProperties::setFixtureFace(FixtureRigProps &rp, FixtureRigProps::Face face) const
+{
+    const int mount = (face == FixtureRigProps::FaceTop || face == FixtureRigProps::FaceBottom) ? 0
+                    : (face == FixtureRigProps::FaceFront || face == FixtureRigProps::FaceBack) ? 1 : 2;
+    rp.setStudioMount(mount);
+    rp.studioFaceChosen = true;
+    rp.studioFlip = (face == FixtureRigProps::FaceBottom || face == FixtureRigProps::FaceBack
+                     || face == FixtureRigProps::FaceStageRight);
+
+    const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
+    if (t == nullptr || rp.placement == FixtureRigProps::Inside)
+        return;
+    const float half = t->width() * 0.5f;
+    // +X is stage left, +Y downstage.
+    if (t->type() == Truss::Vertical)
+    {
+        switch (face)
+        {
+        case FixtureRigProps::FaceFront:      rp.trussCrossY =  half; break;
+        case FixtureRigProps::FaceBack:       rp.trussCrossY = -half; break;
+        case FixtureRigProps::FaceStageLeft:  rp.trussCross  =  half; break;
+        case FixtureRigProps::FaceStageRight: rp.trussCross  = -half; break;
+        default: break;                      // its top or bottom: the run's ends
+        }
+        return;
+    }
+
+    if (face == FixtureRigProps::FaceTop || face == FixtureRigProps::FaceBottom)
+    {
+        rp.trussMountSide = (face == FixtureRigProps::FaceTop) ? FixtureRigProps::TopMounted
+                                                               : FixtureRigProps::UnderHung;
+        rp.trussCross = 0.0f;
+        return;
+    }
+    /* A side of a horizontal run: across it, on the chord that faces that
+       way -- when the run goes that way at all. A run up and down stage has
+       no downstage chord; one across stage has no stage-left one. */
+    const QPointF d = t->direction();
+    const double dl = std::hypot(d.x(), d.y());
+    if (dl <= 0.0)
+        return;
+    const double cx = -d.y() / dl, cy = d.x() / dl;   // the cross direction trussCross runs
+    double along = 0.0;
+    if (face == FixtureRigProps::FaceFront)          along = cy;
+    else if (face == FixtureRigProps::FaceBack)      along = -cy;
+    else if (face == FixtureRigProps::FaceStageLeft) along = cx;
+    else                                             along = -cx;
+    if (qAbs(along) < 0.5)
+        return;
+    rp.trussCross = (along > 0.0) ? half : -half;
+    rp.trussMountSide = FixtureRigProps::Centered;
+}
+
 void MonitorProperties::repairMountPlane(FixtureRigProps &rp) const
 {
-    if (rp.onDeck() && rp.studioMount == 1)
+    if (rp.onDeck() && rp.studioMount == 1 && !rp.studioFaceChosen)
     {
         qDebug() << "[Monitor] fixture is standing on a deck"
                  << "but was left on the default Front/face plane"
@@ -2522,7 +2627,7 @@ void MonitorProperties::repairMountPlane(FixtureRigProps &rp) const
         return;
     }
 
-    if (rp.studioMount == 1 &&
+    if (rp.studioMount == 1 && !rp.studioFaceChosen &&
         ((rp.trussId != Truss::invalidId() && truss(rp.trussId) &&
           truss(rp.trussId)->type() != Truss::Vertical) ||
          (rp.onPipe() && pipe(rp.pipeId) && !pipe(rp.pipeId)->isVertical())))
@@ -2891,6 +2996,25 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeEndElement();
         }
 
+    // LED maps the show uses (see HeadLayout), by key for a stable file.
+    {
+        QStringList keys = m_headLayouts.keys();
+        keys.sort();
+        foreach (const QString &k, keys)
+        {
+            const HeadLayout &l = m_headLayouts[k];
+            QStringList cells;
+            foreach (const QPoint &p, l.cells)
+                cells << QStringLiteral("%1,%2").arg(p.x()).arg(p.y());
+            doc->writeStartElement(QStringLiteral("HeadLayout"));
+            doc->writeAttribute(QStringLiteral("Key"), l.key);
+            doc->writeAttribute(QStringLiteral("Cols"), QString::number(l.size.width()));
+            doc->writeAttribute(QStringLiteral("Rows"), QString::number(l.size.height()));
+            doc->writeCharacters(cells.join(QLatin1Char(' ')));
+            doc->writeEndElement();
+        }
+    }
+
     // Fixture rig props (only write entries that differ from defaults)
     for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)
     {
@@ -2969,12 +3093,14 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
 
            Written only when they differ from the default so no existing file
            gains attributes it did not have. */
-        if (rp.studioMount != 1)
+        if (rp.studioMount != 1 || rp.studioFaceChosen)   // a chosen Front is named
             doc->writeAttribute(QStringLiteral("SM"), QString::number(rp.studioMount));
         if (!qFuzzyIsNull(rp.studioAngle))
             doc->writeAttribute(QStringLiteral("SA"), QString::number(double(rp.studioAngle), 'f', 1));
         if (!qFuzzyIsNull(rp.studioTilt))
             doc->writeAttribute(QStringLiteral("ST"), QString::number(double(rp.studioTilt), 'f', 1));
+        if (rp.studioFlip)
+            doc->writeAttribute(QStringLiteral("SF"), QStringLiteral("1"));
         doc->writeEndElement();
     }
 

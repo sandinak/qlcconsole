@@ -87,6 +87,17 @@ private slots:
     void unplacedNetworkAndOptedOutFixturesKeepTheOldRules();
     void nothingNearWithRoomFallsBackToFirstFit();
 
+    // Re-addressing patched fixtures ("clean ways to assign fixtures into universes")
+    void aBlockCanShiftOntoItsOwnChannels();
+    void patchFixturesIsAllOrNothing();
+    void movingAPatchedFixtureIsDesignModeOnly();
+    void findFreeAddressSeesThroughTheFixturesMoving();
+    void aClashingFixtureLoadsUnpatchedAndSavesUnchanged();
+    void patchingAClashClearsIt();
+    void placeKeepsSpacingAsOneBlock();
+    void placePacksAroundOthersAndSpills();
+    void applyMovesPatchedFixturesTogether();
+
 private:
 };
 

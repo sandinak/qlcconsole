@@ -497,3 +497,118 @@ void PatchInventoryDialog_Test::withNoNodesOnThePlotThereIsNothingToTick()
 }
 
 QTEST_MAIN(PatchInventoryDialog_Test)
+
+/*****************************************************************************
+ * Re-addressing fixtures that are already patched
+ *****************************************************************************/
+
+// The dialog's column numbers, as the tests above spell them.
+static const int COL_MODE = 2;
+static const int COL_STATUS = 8;
+
+static Fixture *patched(Doc *doc, int channels, quint32 uni, quint32 addr, const QString &name)
+{
+    Fixture *f = new Fixture(doc);
+    f->setChannels(channels);
+    f->setUniverse(uni);
+    f->setAddress(addr);
+    f->setName(name);
+    doc->addFixture(f);
+    return f;
+}
+
+void PatchInventoryDialog_Test::patchedFixturesStartWhereTheyAre()
+{
+    Fixture *b = patched(m_doc, 4, 0, 40, "B");
+    Fixture *a = patched(m_doc, 4, 0, 20, "A");
+    Fixture *s = staged(m_doc, 4, "S");
+    PatchInventoryDialog dlg(m_doc, { b->id(), s->id(), a->id() });
+    QCOMPARE(dlg.windowTitle(), QString("Patch / Re-address"));
+    QCOMPARE(dlg.m_table->rowCount(), 3);
+    const QList<PatchPlanner::Assignment> plan = dlg.currentPlan();
+    // Patched ones first, in address order, where they are.
+    QCOMPARE(plan[0].fixtureId, a->id());
+    QCOMPARE(plan[0].address, quint32(20));
+    QCOMPARE(plan[1].fixtureId, b->id());
+    QCOMPARE(plan[2].fixtureId, s->id());
+    QCOMPARE(dlg.m_table->item(0, COL_STATUS)->text(), QString("unchanged"));
+    // Their mode is not a patch-time choice: no editor in that cell.
+    QVERIFY(dlg.m_table->cellWidget(0, COL_MODE) == nullptr);
+    // The staged one still has somewhere to go, so there is something to apply.
+    QVERIFY(dlg.m_apply->isEnabled());
+
+    PatchInventoryDialog onlyPatched(m_doc, { a->id(), b->id() });
+    QVERIFY2(!onlyPatched.m_apply->isEnabled(), "nothing moves, nothing to apply");
+}
+
+void PatchInventoryDialog_Test::placeMovesTheSelectionAsABlock()
+{
+    Fixture *a = patched(m_doc, 4, 0, 20, "A");
+    Fixture *b = patched(m_doc, 4, 0, 40, "B");
+    Fixture *c = patched(m_doc, 4, 0, 60, "C");
+    PatchInventoryDialog dlg(m_doc, { a->id(), b->id(), c->id() });
+
+    // A and B (rows 0, 1) to universe 3, address 101, keeping their 20 apart.
+    dlg.placeRows(2, 100, true, { 0, 1 });
+    const QList<PatchPlanner::Assignment> plan = dlg.currentPlan();
+    QCOMPARE(plan[0].universe, quint32(2));
+    QCOMPARE(plan[0].address, quint32(100));
+    QCOMPARE(plan[1].address, quint32(120));
+    QCOMPARE(plan[2].universe, quint32(0));          // C was not selected
+    QCOMPARE(plan[2].address, quint32(60));
+    QVERIFY(dlg.m_table->item(0, COL_STATUS)->text().startsWith("moves from 1.21"));
+    QVERIFY(dlg.m_apply->isEnabled());
+}
+
+void PatchInventoryDialog_Test::placePacksAroundTheOtherRows()
+{
+    Fixture *a = patched(m_doc, 4, 0, 20, "A");
+    Fixture *b = patched(m_doc, 4, 0, 40, "B");
+    Fixture *c = patched(m_doc, 4, 0, 60, "C");
+    PatchInventoryDialog dlg(m_doc, { a->id(), b->id(), c->id() });
+
+    // C first, by hand, to 1..4 -- then pack A and B from 1: they go round it,
+    // not onto where C will be (nor treat C's old 61..64 as taken).
+    dlg.placeRows(0, 0, false, { 2 });
+    dlg.placeRows(0, 0, false, { 0, 1 });
+    const QList<PatchPlanner::Assignment> plan = dlg.currentPlan();
+    QCOMPARE(plan[2].address, quint32(0));
+    QCOMPARE(plan[0].address, quint32(4));
+    QCOMPARE(plan[1].address, quint32(8));
+    QCOMPARE(dlg.m_summary->text().contains("0 conflict"), true);
+}
+
+void PatchInventoryDialog_Test::applyMovesABlockOntoItsOwnChannels()
+{
+    Fixture *a = patched(m_doc, 4, 0, 0, "A");
+    Fixture *b = patched(m_doc, 4, 0, 4, "B");
+    PatchInventoryDialog dlg(m_doc, { a->id(), b->id() });
+    dlg.placeRows(0, 2, true);                       // up by two, onto themselves
+    QVERIFY(dlg.m_apply->isEnabled());
+    dlg.accept();
+    QCOMPARE(dlg.result(), int(QDialog::Accepted));
+    QCOMPARE(a->address(), quint32(2));
+    QCOMPARE(b->address(), quint32(6));
+    QCOMPARE(m_doc->fixtureForAddress(0), Fixture::invalidId());
+}
+
+void PatchInventoryDialog_Test::aClashSaysWhereItWantedToBe()
+{
+    Fixture *owner = patched(m_doc, 8, 1, 10, "Owner");
+    Fixture *clash = staged(m_doc, 8, "Clash");
+    clash->blockSignals(true);
+    clash->setUniverse(1);
+    clash->setAddress(12);
+    clash->blockSignals(false);
+    clash->setAddressClash(true);
+
+    // Opened with no list: every unpatched fixture, the clash among them.
+    PatchInventoryDialog dlg(m_doc);
+    QCOMPARE(dlg.m_table->rowCount(), 1);
+    const QString note = dlg.m_table->item(0, COL_STATUS)->text();
+    QVERIFY2(note.contains("universe 2, address 13") && note.contains(owner->name()),
+             qPrintable(note));
+    dlg.accept();
+    QVERIFY(clash->isPatched());
+    QVERIFY(!clash->addressClash());
+}

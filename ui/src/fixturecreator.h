@@ -25,6 +25,7 @@
 
 class QWidget;
 class FixtureGroup;
+class Fixture;
 class Doc;
 
 /** @addtogroup ui_functions
@@ -49,10 +50,14 @@ public:
      * @param inventory          stage the fixtures (no universe/address) instead of patching
      * @param preselectUniverse  universe to default the dialog to; ignored for inventory
      * @param addToGroup         group to put the new fixtures in, or NULL
+     * @param like               start on this fixture's model and mode (adding more of it)
+     * @param manufacturer       else start on this manufacturer, if given
      * @return the ids created; empty if the dialog was cancelled or refused
      */
     static QList<quint32> addFromDialog(QWidget *parent, Doc *doc, bool inventory,
-                                        quint32 preselectUniverse, FixtureGroup *addToGroup);
+                                        quint32 preselectUniverse, FixtureGroup *addToGroup,
+                                        const Fixture *like = NULL,
+                                        const QString &manufacturer = QString());
 };
 
 /** @} */

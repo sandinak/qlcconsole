@@ -80,6 +80,73 @@ private slots:
     /** The same drag on a HORIZONTAL truss, and with a fixture whose id is not
      *  0 -- so a pass here isn't an artefact of the id-0 rig. */
     void studioHorizontalTrussDragMovesFixture();
+    /** "handles to allow for rotation via mouse movement": the selected
+     *  fixture's knob turns its run (Angle) facing its mount face... */
+    void aFixtureOnATrussTurnsByItsAngleHandle();
+    /** ...and rolls an LED bar (Tilt) looking down its length. */
+    void anLedBarOnATrussRollsByItsTiltHandle();
+    /** "where do I grab that to rotate it .. I see no handles": a bar laid
+     *  on its Top face, seen from the Side, still turns. */
+    void aBarTurnsInAViewOfAnotherFace();
+    /** "clean ways to assign fixtures into universes": the structure
+     *  editor's inspector moves the selected fixture's universe/address. */
+    void theInspectorMovesAFixturesDmxAddress();
+    /** "if I select all the fixtures in the left hand .. apply tilt/angle
+     *  changes to all of them at same time .. auto distribute and
+     *  multi-select to move them around". */
+    void theInspectorEditsEveryFixtureSelected();
+    void cmdClickBuildsASelectionThatDragsTogether();
+    void distributingAFewSpacesThemBetweenTheOutermost();
+    /** "I can't right click on a FART to move to a new layer .. it unselects
+     *  after I select it": a right-press keeps the selection it lands in. */
+    void aRightClickKeepsTheSelectionItLandsIn();
+    /** "I still can't select things in the side layers menu .. they select
+     *  and deselect immediately .. T1-W": a row whose plot item cannot be
+     *  selected (stacked out of sight in a tower) stays selected. */
+    void aLayersRowStaysSelectedWhenThePlotCannotFollow();
+    /** "remove from truss" for a fixture group listed under one it is not on. */
+    void takingFixturesOutOfAStructure();
+    /** "create fixture group from those groups that uses the relative layout
+     *  sizing from the studio". */
+    void aGroupOfGroupsIsLaidOutAsOnStage();
+    void aGroupOfGroupsIsLaidOutFromTheChosenView();
+    void aGroupIsLaidOutAgainFromTheStage();
+    void enterRenamesAnyLayersRowFromItsBareName();
+    void stepFrontsAndTopsAreLaidOutAsOnStage();
+    void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
+    /** "I can't click on any side arrow to open any of the groups": an
+     *  opened fixture group stays open through a rebuild of the list; and a
+     *  duplicate group ("UST" beside "USTs") can be deleted from its row. */
+    void aFixtureGroupRowStaysOpenAndCanBeDeleted();
+    /** "No way to put this fixture on the back? .. which side?": the
+     *  inspector's Face names six directions, and Back faces upstage. */
+    void theInspectorPutsFixturesOnTheBack();
+    /** "the bars on the farts render funny in the studio view but look right
+     *  in the rig view": the plan view draws a bar by the way it runs. */
+    void aBarHangingStraightDownIsADotInPlan();
+    /** "fixtures like XL-450 that have two distinct types of heads .. auto-
+     *  generate fixture groups based on the type". */
+    void headKindGroupsFollowTheLedMapAndTheRig();
+    void closedUpBarsKeepTheirOrderAcrossDistantTrusses();
+    void theStageGroupDialogNamesViewsAndSpotsDuplicates();
+    void selectAllSimilarFindsLikeGroupsAndFixtures();
+    void theSplitWizardMapsRowsAndMakesAGroupPerKind();
+    void theRigViewDrawsHeadsWhereTheLedMapSays();
+    /** "it puts the fixture in that group but not the other groups" / where
+     *  does a group across several trusses go: Layers lists a fixture under
+     *  every group it is in, and gives a spanning group a home. */
+    void layersListsEveryGroupAFixtureIsIn();
+    /** "no way to remove fixture from tower": the editor's list menu does it. */
+    void fixturesAreRemovedFromATowerFromItsList();
+    /** "can we patch more than one fixture .. selected 4 and got 1": from the
+     *  Layers list, Patch takes the LIST's selection. */
+    void patchingFromLayersTakesEveryFixtureSelectedThere();
+    /** A wireless transmitter's receivers appear on the plot by themselves,
+     *  and are dragged to where the box is rigged. */
+    void wirelessReceiversArePlacedAndDragged();
+    /** "I can't move USTs fixture group to a different layer .. drag/drop
+     *  or right click move to layer": the group's row moves its fixtures. */
+    void aFixtureGroupRowMovesToAnotherLayer();
     /** Vertical drag in an elevation on a horizontal run = the drop length
      *  (mountZOffset), so a bar-hung fixture can be raised/lowered there. */
     void studioTrussDragSetsDropInElevation();
@@ -255,6 +322,9 @@ private slots:
     /** "i can't add cross bar/truss on T2 .. that option is missing": the
      *  truss editor's right-click menu adds a bar where you clicked. */
     void aBarIsAddedWhereTheTrussEditorWasRightClicked();
+    /** ...from the right-click menu itself, over a fixture as well as on
+     *  empty canvas. */
+    void theTrussEditorsMenusOfferAddBar();
     void draggingATargetAnnouncesTheMove();
     void aMoverOnATopFaceStandsUpOrHangsDown();
     void aFixtureCanBeRaisedOntoATowersTopCap();

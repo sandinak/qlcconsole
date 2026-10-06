@@ -19,6 +19,8 @@
 
 #include <QtTest>
 #include <QSettings>
+#include <QTemporaryDir>
+#include <QScopeGuard>
 
 #include "autosave_test.h"
 #define private public
@@ -28,6 +30,9 @@
 #undef private
 
 #include "qlcconfig.h"
+#include "fixturegroup.h"
+#include "fixture.h"
+#include "doc.h"
 
 void Autosave_Test::initTestCase()
 {
@@ -114,6 +119,69 @@ void Autosave_Test::autosaveFilePathWithFileName()
 
     // Clean up
     m_app->setFileName(QString());
+}
+
+/* qlcconsole's own shows are .qlcc (.qxw is still read, for QLC+ shows):
+   saved and opened again, everything is there. */
+void Autosave_Test::aQlccShowSavesAndOpensAgain()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath("DanceHysteria-test.qlcc");
+
+    Doc *doc = m_app->doc();
+    doc->clearContents();
+    auto tidy = qScopeGuard([doc]() { doc->clearContents(); });
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("Step %1").arg(i + 1));
+        f->setChannels(4);
+        f->setAddress(quint32(i) * 4);
+        QVERIFY(doc->addFixture(f));
+    }
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName("US2f");
+    g->setSize(QSize(3, 1));
+    doc->addFixtureGroup(g);
+    for (int i = 0; i < 3; ++i)
+        g->assignFixture(quint32(i), QLCPoint(i, 0));
+    const QMap<QLCPoint, GroupHead> heads = g->headsMap();
+    const QSize size = g->size();
+
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    QVERIFY(QFile::exists(path));
+    QVERIFY(!QFile::exists(path + ".temp"));
+
+    doc->clearContents();
+    QCOMPARE(doc->fixtures().size(), 0);
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QCOMPARE(doc->fixtures().size(), 3);
+    QCOMPARE(doc->fixtureGroups().size(), 1);
+    QCOMPARE(doc->fixtureGroups().first()->name(), QString("US2f"));
+    QCOMPARE(doc->fixtureGroups().first()->size(), size);
+    QCOMPARE(doc->fixtureGroups().first()->headsMap(), heads);
+}
+
+/* Opening a show that is not there (renamed .qxw -> .qlcc) is an error, and
+   the show already open is left as it was -- not swapped for an empty one. */
+void Autosave_Test::aMissingShowFileIsAnErrorNotAnEmptyShow()
+{
+    Doc *doc = m_app->doc();
+    doc->clearContents();
+    auto tidy = qScopeGuard([doc]() { doc->clearContents(); });
+    Fixture *f = new Fixture(doc);
+    f->setName("Kept");
+    f->setChannels(1);
+    QVERIFY(doc->addFixture(f));
+
+    QTemporaryDir dir;
+    const QString missing = dir.filePath("DanceHysteria-0.1.qxw");
+    QVERIFY(!QFile::exists(missing));
+    QVERIFY(m_app->loadXML(missing) != QFile::NoError);
+    QCOMPARE(doc->fixtures().size(), 1);
+    QVERIFY(m_app->fileName() != missing);
+    QVERIFY(!QFile::exists(missing));       // nothing written in its place
 }
 
 QTEST_MAIN(Autosave_Test)

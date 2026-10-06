@@ -146,7 +146,23 @@ NetworkReceiverItem::NetworkReceiverItem(int nodeIndex, int portIndex, const QSt
 {
     setZValue(0.45);   // with the network nodes, under fixtures
     setToolTip(QObject::tr("Wireless receiver %1 (port %2) -- where this port's universe "
-                           "reaches the rig. Edit in Network Topology.").arg(name).arg(portIndex + 1));
+                           "reaches the rig. Drag it to where the box is rigged.")
+                   .arg(name).arg(portIndex + 1));
+    setFlag(QGraphicsItem::ItemSendsGeometryChanges, true);
+}
+
+QVariant NetworkReceiverItem::itemChange(GraphicsItemChange change, const QVariant &value)
+{
+    if (change == ItemPositionHasChanged && onMoving)
+        onMoving();
+    return QGraphicsItem::itemChange(change, value);
+}
+
+void NetworkReceiverItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+{
+    QGraphicsItem::mouseReleaseEvent(event);
+    if (onDropped)
+        onDropped();
 }
 
 QRectF NetworkReceiverItem::boundingRect() const

@@ -84,6 +84,14 @@ public:
      *  the default address into it. Call after construction, before exec(). */
     void preselectUniverse(quint32 universe);
 
+    /** Start from @p like's definition and mode -- adding more of a model
+     *  that is already in the show (right-click its Inventory folder). A
+     *  generic dimmer starts on Generic. Call after construction, before exec(). */
+    void preselectLike(const Fixture *like);
+
+    /** Start on @p manufacturer's models, none picked (its Inventory folder). */
+    void preselectManufacturer(const QString &manufacturer);
+
     /** Get the number of similar fixtures to add */
     int amount() const;
 

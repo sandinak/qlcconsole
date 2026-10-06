@@ -25,6 +25,7 @@
 #include <QObject>
 #include <QString>
 #include <QColor>
+#include <functional>
 
 class QGraphicsSceneMouseEvent;
 class QGraphicsSceneContextMenuEvent;
@@ -98,6 +99,15 @@ public:
     QRectF boundingRect() const override;
     void   paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                  QWidget *widget) override;
+
+    /** Dragged: called while it moves (the link follows) and once where it
+     *  is let go (the receiver's new place is stored). */
+    std::function<void()> onMoving;
+    std::function<void()> onDropped;
+
+protected:
+    QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
 
 private:
     int     m_node;

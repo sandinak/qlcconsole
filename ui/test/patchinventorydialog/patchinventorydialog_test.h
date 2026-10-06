@@ -54,6 +54,13 @@ private slots:
     void aHandEditedUniverseDropsTheProposedPort();
     void withNoNodesOnThePlotThereIsNothingToTick();
 
+    // Re-addressing fixtures that are already patched
+    void patchedFixturesStartWhereTheyAre();
+    void placeMovesTheSelectionAsABlock();
+    void placePacksAroundTheOtherRows();
+    void applyMovesABlockOntoItsOwnChannels();
+    void aClashSaysWhereItWantedToBe();
+
 private:
     Doc *m_doc;
 };

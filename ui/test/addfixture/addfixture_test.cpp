@@ -545,3 +545,69 @@ void AddFixture_Test::connectionAndIpAreReported()
     QVERIFY(af.m_ipEdit->isEnabled());
     QCOMPARE(af.ipAddress(), QString("172.18.2.41"));
 }
+
+void AddFixture_Test::findAddressIgnoresUnpatchedFixtures()
+{
+    // An inventory fixture sits on the placeholder 0/0 and claims nothing: a
+    // new fixture still goes to address 1, not after the placeholder.
+    QList <Fixture*> fixtures;
+    Fixture *staged = new Fixture(m_doc);
+    staged->setChannels(24);
+    staged->setPatched(false);
+    fixtures << staged;
+    QCOMPARE(AddFixture::findAddress(8, fixtures, 4), quint32(0));
+    staged->setPatched(true);
+    QCOMPARE(AddFixture::findAddress(8, fixtures, 4), quint32(24));
+    delete staged;
+}
+
+void AddFixture_Test::inventoryQuantityIsNotLimitedByAUniverse()
+{
+    // "why can't I add more than 1 fixture here?": a 165-channel fixture with
+    // the (hidden) address where the auto-search put it left room for one.
+    AddFixture af(NULL, m_doc);
+    af.m_channelsSpin->setValue(165);
+    af.m_addressSpin->setValue(300);
+    QCOMPARE(af.m_amountSpin->maximum(), 1);          // patching: one fits there
+
+    af.setInventoryMode(true);
+    QVERIFY(af.m_amountSpin->maximum() >= 100);
+    af.m_amountSpin->setValue(16);
+    QCOMPARE(af.amount(), 16);
+
+    // And it stays lifted when the hidden address or footprint moves.
+    af.m_addressSpin->setValue(400);
+    af.m_channelsSpin->setValue(200);
+    QCOMPARE(af.amount(), 16);
+}
+
+void AddFixture_Test::addingMoreStartsOnTheSameModelAndMode()
+{
+    // "when I right click on a model .. it should auto select that model from
+    // the list for adding": the dialog starts on the model AND the mode.
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Martin", "MAC300");
+    QVERIFY(def != NULL);
+    QVERIFY(def->modes().size() > 1);
+    QLCFixtureMode *second = def->modes().at(1);
+    Fixture *like = new Fixture(m_doc);
+    like->setFixtureDefinition(def, second);
+
+    AddFixture af(NULL, m_doc);
+    QVERIFY(af.fixtureDef() != def);                  // Generic by default
+    af.preselectLike(like);
+    af.setInventoryMode(true);
+    QCOMPARE(af.fixtureDef(), def);
+    QCOMPARE(af.mode(), second);
+
+    // A manufacturer's folder: that manufacturer, opened.
+    AddFixture bf(NULL, m_doc);
+    bf.preselectManufacturer("Martin");
+    QTreeWidgetItem *martin = NULL;
+    for (int i = 0; i < bf.m_tree->topLevelItemCount(); ++i)
+        if (bf.m_tree->topLevelItem(i)->text(0) == "Martin")
+            martin = bf.m_tree->topLevelItem(i);
+    QVERIFY(martin != NULL);
+    QVERIFY(martin->isExpanded());
+
+    delete like;
+}

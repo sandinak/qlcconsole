@@ -988,3 +988,207 @@ void Inventory_Test::nothingNearWithRoomFallsBackToFirstFit()
 }
 
 QTEST_GUILESS_MAIN(Inventory_Test)
+
+/*****************************************************************************
+ * Re-addressing patched fixtures
+ *****************************************************************************/
+
+void Inventory_Test::aBlockCanShiftOntoItsOwnChannels()
+{
+    // Three 4-channel dimmers at 1, 5, 9 moved up by 2: each lands on channels
+    // the next one still holds until it moves. One at a time, the first refuses.
+    Fixture *a = makeDimmer(g_doc, 4, 0, 0);
+    Fixture *b = makeDimmer(g_doc, 4, 0, 4);
+    Fixture *c = makeDimmer(g_doc, 4, 0, 8);
+    QVERIFY(a && b && c);
+    QVERIFY(!g_doc->patchFixture(a->id(), 0, 2));
+
+    QString why;
+    QVERIFY2(g_doc->patchFixtures({ { a->id(), 0, 2 }, { b->id(), 0, 6 }, { c->id(), 0, 10 } }, &why),
+             qPrintable(why));
+    QCOMPARE(a->address(), quint32(2));
+    QCOMPARE(c->address(), quint32(10));
+    QCOMPARE(g_doc->fixtureForAddress(0), Fixture::invalidId());
+    QCOMPARE(g_doc->fixtureForAddress(2), a->id());
+    QCOMPARE(g_doc->fixtureForAddress(13), c->id());
+}
+
+void Inventory_Test::patchFixturesIsAllOrNothing()
+{
+    Fixture *a = makeDimmer(g_doc, 4, 0, 0);
+    Fixture *b = makeDimmer(g_doc, 4, 0, 4);
+    Fixture *wall = makeDimmer(g_doc, 4, 1, 0);
+    QVERIFY(a && b && wall);
+
+    // b onto the wall in universe 2: nothing moves, a included.
+    QString why;
+    QVERIFY(!g_doc->patchFixtures({ { a->id(), 0, 100 }, { b->id(), 1, 2 } }, &why));
+    QVERIFY2(why.contains("overlaps"), qPrintable(why));
+    QCOMPARE(a->address(), quint32(0));
+    QCOMPARE(b->address(), quint32(4));
+    QCOMPARE(g_doc->fixtureForAddress(0), a->id());
+
+    // Two entries onto each other, and past the end, are refused too.
+    QVERIFY(!g_doc->patchFixtures({ { a->id(), 0, 50 }, { b->id(), 0, 52 } }));
+    QVERIFY(!g_doc->patchFixtures({ { a->id(), 0, 510 } }));
+}
+
+void Inventory_Test::movingAPatchedFixtureIsDesignModeOnly()
+{
+    Fixture *a = makeDimmer(g_doc, 4, 0, 0);
+    Fixture *staged = makeDimmer(g_doc, 4, 0, 0, false);
+    QVERIFY(a && staged);
+    g_doc->setMode(Doc::Operate);
+    QString why;
+    QVERIFY(!g_doc->patchFixtures({ { a->id(), 0, 20 } }, &why));
+    QVERIFY2(why.contains("Design"), qPrintable(why));
+    // Patching from the inventory has always worked while running, and still does.
+    QVERIFY(g_doc->patchFixtures({ { staged->id(), 0, 40 } }));
+    g_doc->setMode(Doc::Design);
+    QVERIFY(g_doc->patchFixtures({ { a->id(), 0, 20 } }));
+}
+
+void Inventory_Test::findFreeAddressSeesThroughTheFixturesMoving()
+{
+    Fixture *a = makeDimmer(g_doc, 10, 0, 0);
+    Fixture *b = makeDimmer(g_doc, 10, 0, 20);
+    QVERIFY(a && b);
+    QCOMPARE(g_doc->findFreeAddress(0, 10), quint32(10));
+    QCOMPARE(g_doc->findFreeAddress(0, 11), quint32(30));
+    QCOMPARE(g_doc->findFreeAddress(0, 4, 12), quint32(12));
+    QCOMPARE(g_doc->findFreeAddress(0, 11, 0, { a->id() }), quint32(0));
+    QCOMPARE(g_doc->findFreeAddress(0, 600), quint32(UINT_MAX));
+    QCOMPARE(g_doc->findFreeAddress(0, 10, 505), quint32(UINT_MAX));
+}
+
+void Inventory_Test::aClashingFixtureLoadsUnpatchedAndSavesUnchanged()
+{
+    // Two fixtures in one file on overlapping channels. The second used to be
+    // deleted on load, taking itself out of everything that used it.
+    Fixture *first = makeDimmer(g_doc, 8, 2, 10);
+    Fixture *second = makeDimmer(g_doc, 8, 2, 30);
+    QVERIFY(first && second);
+    second->setName("Clash");
+    const QByteArray x1 = saveFixture(first);
+    QByteArray x2 = saveFixture(second);
+    QVERIFY(x2.contains("<Address>30</Address>"));
+    x2.replace("<Address>30</Address>", "<Address>14</Address>");   // a hand-edited file
+
+    Doc doc2(this);
+    for (const QByteArray &xml : { x1, x2 })
+    {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        r.readNextStartElement();
+        QVERIFY(Fixture::loader(r, &doc2));
+    }
+    QCOMPARE(doc2.fixturesCount(), 2);
+    Fixture *back = doc2.fixture(second->id());
+    QVERIFY(back != nullptr);
+    QVERIFY(!back->isPatched());
+    QVERIFY(back->addressClash());
+    QCOMPARE(back->universe(), quint32(2));
+    QCOMPARE(back->address(), quint32(14));
+    QCOMPARE(doc2.addressClashes(), QList<quint32>({ second->id() }));
+    // The first keeps its channels: the clash writes nothing over it.
+    QCOMPARE(doc2.fixtureForAddress((2 << 9) | 14), first->id());
+
+    // Saved, it still asks for universe 3 address 15 -- the file is unchanged.
+    const QByteArray again = saveFixture(back);
+    QVERIFY(!again.contains("Patched"));
+    QVERIFY(again.contains("<Address>14</Address>"));
+}
+
+void Inventory_Test::patchingAClashClearsIt()
+{
+    Fixture *f = makeDimmer(g_doc, 4, 0, 0, false);
+    QVERIFY(f);
+    f->setAddressClash(true);
+    QCOMPARE(g_doc->addressClashes().size(), 1);
+    QVERIFY(g_doc->patchFixtures({ { f->id(), 0, 100 } }));
+    QVERIFY(!f->addressClash());
+    QVERIFY(g_doc->addressClashes().isEmpty());
+
+    // Returning one to the inventory is a decision too.
+    Fixture *g = makeDimmer(g_doc, 4, 0, 0, false);
+    g->setPatched(true);            // as if it had been patched...
+    QVERIFY(g_doc->patchFixtures({ { g->id(), 0, 200 } }));
+    g->setAddressClash(true);       // ...and flagged
+    QVERIFY(g_doc->unpatchFixture(g->id()));
+    QVERIFY(!g->addressClash());
+}
+
+void Inventory_Test::placeKeepsSpacingAsOneBlock()
+{
+    Fixture *a = makeDimmer(g_doc, 4, 0, 10);
+    Fixture *b = makeDimmer(g_doc, 4, 0, 30);       // 20 after a
+    Fixture *staged = makeDimmer(g_doc, 6, 0, 0, false);
+    QVERIFY(a && b && staged);
+
+    PatchPlanner pp(g_doc);
+    const QList<PatchPlanner::Assignment> plan =
+        pp.place({ b->id(), staged->id(), a->id() }, 1, 100, true);
+    QCOMPARE(plan.size(), 3);
+    // List order is kept; the block keeps its 20-channel gap.
+    QCOMPARE(plan.at(2).fixtureId, a->id());
+    QCOMPARE(plan.at(2).universe, quint32(1));
+    QCOMPARE(plan.at(2).address, quint32(100));
+    QCOMPARE(plan.at(0).address, quint32(120));
+    // The staged one packs on after the block.
+    QCOMPARE(plan.at(1).universe, quint32(1));
+    QCOMPARE(plan.at(1).address, quint32(124));
+
+    // Placed so it runs off the end: said so, not broken up.
+    const QList<PatchPlanner::Assignment> off = pp.place({ a->id(), b->id() }, 0, 510, true);
+    QVERIFY(off.at(0).note.contains("runs past"));    // 511..514 of a 512 universe
+    QCOMPARE(off.at(1).universe, quint32(1));         // 530 -> universe 2, address 19
+    QCOMPARE(off.at(1).address, quint32(18));
+}
+
+void Inventory_Test::placePacksAroundOthersAndSpills()
+{
+    Fixture *wall = makeDimmer(g_doc, 10, 0, 4);      // 5..14 stays put
+    Fixture *a = makeDimmer(g_doc, 4, 0, 100);
+    Fixture *b = makeDimmer(g_doc, 8, 0, 200);
+    Fixture *c = makeDimmer(g_doc, 500, 1, 0);
+    QVERIFY(wall && a && b && c);
+
+    PatchPlanner pp(g_doc);
+    QList<PatchPlanner::Assignment> plan = pp.place({ a->id(), b->id() }, 0, 0, false);
+    QCOMPARE(plan.at(0).address, quint32(0));         // 1..4 fits before the wall
+    QCOMPARE(plan.at(1).address, quint32(14));        // 8 does not; after it
+
+    // c (500 ch) after a and b in universe 1 no longer fits: on to universe 2,
+    // which c itself is leaving -- so it is free.
+    plan = pp.place({ a->id(), b->id(), c->id() }, 0, 400, false);
+    QCOMPARE(plan.at(0).address, quint32(400));
+    QCOMPARE(plan.at(1).address, quint32(404));
+    QCOMPARE(plan.at(2).universe, quint32(1));
+    QCOMPARE(plan.at(2).address, quint32(0));
+}
+
+void Inventory_Test::applyMovesPatchedFixturesTogether()
+{
+    Fixture *a = makeDimmer(g_doc, 4, 0, 0);
+    Fixture *b = makeDimmer(g_doc, 4, 0, 4);
+    Fixture *still = makeDimmer(g_doc, 4, 0, 50);
+    QVERIFY(a && b && still);
+
+    PatchPlanner pp(g_doc);
+    QList<PatchPlanner::Assignment> plan = pp.place({ a->id(), b->id() }, 0, 2, true);
+    PatchPlanner::Assignment same;
+    same.fixtureId = still->id(); same.universe = 0; same.address = 50;
+    plan << same;                                    // left where it is: skipped
+    QStringList problems;
+    QCOMPARE(pp.apply(plan, &problems), 2);
+    QVERIFY2(problems.isEmpty(), qPrintable(problems.join("; ")));
+    QCOMPARE(a->address(), quint32(2));
+    QCOMPARE(b->address(), quint32(6));
+
+    // A plan made stale by an edit since: nothing at all is moved.
+    plan = pp.place({ a->id(), b->id() }, 0, 48, false);
+    QVERIFY(g_doc->patchFixtures({ { still->id(), 0, 52 } }));
+    QCOMPARE(pp.apply(plan, &problems), 0);
+    QVERIFY(problems.last().startsWith("Nothing was patched"));
+    QCOMPARE(a->address(), quint32(2));
+}

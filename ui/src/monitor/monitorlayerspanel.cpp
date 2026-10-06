@@ -36,6 +36,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QTimer>
+#include <QStyledItemDelegate>
 
 // Draw a small rounded colour swatch icon (used for platforms).
 static QIcon swatchIcon(const QColor &c)
@@ -78,6 +79,8 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "tower.h"
 #include "fixturegroup.h"
 #include "createfixturegroup.h"
+#include "stagegroupdialog.h"
+#include "headtypesdialog.h"
 #include <QLineEdit>
 #include <QtMath>
 #include "stagetarget.h"
@@ -114,6 +117,41 @@ static void setNodeLabel(QTreeWidgetItem *node, const QString &name, const QStri
     node->setData(0, NodeBadgeRole, badge);
     node->setText(0, badge.isEmpty() ? name : name + badge);
 }
+
+/* A row's name without what this list adds to it: the "  · on riser" badge
+   (exactly what setNodeLabel() appended) and a fixture's "  💡 <group>"
+   lighting badge. */
+static QString bareNodeName(QString text, QString badge)
+{
+    text = text.trimmed();
+    badge = badge.trimmed();
+    if (!badge.isEmpty() && text.endsWith(badge))
+        text = text.left(text.size() - badge.size()).trimmed();
+    const int bulb = text.indexOf(QStringLiteral("\xF0\x9F\x92\xA1"));
+    if (bulb >= 0)
+        text = text.left(bulb).trimmed();
+    return text;
+}
+
+/* Inline rename starts from the bare name: the editor showed "US2f  · fixture
+   group", badge and all, to be deleted by hand. */
+class LayersNameDelegate final : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override
+    {
+        QLineEdit *le = qobject_cast<QLineEdit *>(editor);
+        if (le == nullptr)
+        {
+            QStyledItemDelegate::setEditorData(editor, index);
+            return;
+        }
+        le->setText(bareNodeName(index.data(Qt::DisplayRole).toString(),
+                                 index.data(NodeBadgeRole).toString()));
+        le->selectAll();
+    }
+};
 
 MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWidget *parent)
     : QWidget(parent)
@@ -217,6 +255,15 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setDropIndicatorShown(true);
     m_tree->installEventFilter(this);   // Enter-to-rename only
+    LayersNameDelegate *names = new LayersNameDelegate(m_tree);
+    m_tree->setItemDelegate(names);
+    // The reload held back while a name was typed in, now it is in.
+    connect(names, &QAbstractItemDelegate::closeEditor, this, [this]() {
+        if (!m_reloadAfterEdit)
+            return;
+        m_reloadAfterEdit = false;
+        QTimer::singleShot(0, this, &MonitorLayersPanel::reload);
+    });
     connect(m_tree, &LayersTreeWidget::itemsDropped,
             this, &MonitorLayersPanel::handleTreeDrop);
     // Suppress rebuilds during the drag; rebuild once, safely, after it ends.
@@ -478,8 +525,26 @@ void MonitorLayersPanel::filterTree(const QString &text)
         applyTreeFilter(m_tree->topLevelItem(i), t);
 }
 
+QTreeWidgetItem *MonitorLayersPanel::addFixtureGroupNode(QTreeWidgetItem *host, FixtureGroup *fg)
+{
+    QTreeWidgetItem *fgNode = new QTreeWidgetItem(host);
+    setNodeLabel(fgNode, fg->name(), QObject::tr("  \xc2\xb7 fixture group"));
+    fgNode->setIcon(0, QIcon(":/group.png"));   // the app's Fixture Group icon
+    fgNode->setFirstColumnSpanned(true);
+    // Draggable too: dropped on a layer or a folder, its fixtures go there.
+    // Renamed in place like every other row (select it, Enter).
+    fgNode->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled
+                     | (m_editable ? Qt::ItemIsDragEnabled | Qt::ItemIsEditable : Qt::NoItemFlags));
+    fgNode->setData(0, NodeTypeRole, int(NodeFixtureGroup));
+    fgNode->setData(0, NodeIdRole, fg->id());
+    fgNode->setToolTip(0, tr("Fixture Group “%1” — double-click to edit the head "
+                             "layout; drop fixtures here to add them").arg(fg->name()));
+    m_listedFixtureGroups.insert(fg->id());
+    return fgNode;
+}
+
 void MonitorLayersPanel::addLocalFixtureGroups(QTreeWidgetItem *host,
-        const QSet<quint32> &fixtureSet, QHash<quint32, QTreeWidgetItem *> &map)
+        const QSet<quint32> &fixtureSet, QHash<quint32, QList<QTreeWidgetItem *> > &map)
 {
     if (host == nullptr || fixtureSet.isEmpty())
         return;
@@ -496,18 +561,14 @@ void MonitorLayersPanel::addLocalFixtureGroups(QTreeWidgetItem *host,
         if (!allInside)
             continue;   // spans a wider scope → not local here
 
-        QTreeWidgetItem *fgNode = new QTreeWidgetItem(host);
-        setNodeLabel(fgNode, fg->name(), QObject::tr("  \xc2\xb7 fixture group"));
-        fgNode->setIcon(0, QIcon(":/group.png"));   // the app's Fixture Group icon
-        fgNode->setFirstColumnSpanned(true);
-        fgNode->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
-        fgNode->setData(0, NodeTypeRole, int(NodeFixtureGroup));
-        fgNode->setData(0, NodeIdRole, fg->id());
-        fgNode->setToolTip(0, tr("Fixture Group “%1” — double-click to edit the head "
-                                 "layout; drop fixtures here to add them").arg(fg->name()));
+        QTreeWidgetItem *fgNode = addFixtureGroupNode(host, fg);
+        /* Under EVERY group it is in, not only the first: a fixture split by
+           head type is in its RGB group and its W group alike, and listing it
+           once left the others looking empty ("it puts the fixture in that
+           group but not the other groups"). */
         foreach (quint32 fid, members)
-            if (!map.contains(fid))
-                map.insert(fid, fgNode);
+            if (!map.value(fid).contains(fgNode))
+                map[fid] << fgNode;
     }
 }
 
@@ -562,6 +623,14 @@ void MonitorLayersPanel::collectCollapsedNodes(QTreeWidgetItem *item, QSet<QStri
     const int type = item->data(0, NodeTypeRole).toInt();
     if ((type == NodeLayer || type == NodeGroup) && item->isExpanded() == false)
         out.insert(QString("%1:%2").arg(type).arg(item->data(0, NodeIdRole).toUInt()));
+    /* A fixture group's row is built CLOSED, the opposite of a layer or a
+       folder, so what has to survive a rebuild is that it was OPEN. It was
+       not recorded at all: any rebuild -- and reload() has ~20 triggers --
+       snapped every fixture group shut again ("I can't click on any side
+       arrow to open any of the groups"). Marked so it cannot be mistaken
+       for a closed folder. */
+    if (type == NodeFixtureGroup && item->isExpanded())
+        out.insert(QString("open:%1:%2").arg(type).arg(item->data(0, NodeIdRole).toUInt()));
 
     for (int i = 0; i < item->childCount(); i++)
         collectCollapsedNodes(item->child(i), out);
@@ -757,7 +826,7 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
     // as 💡 nodes, with those fixtures nested under them -- scoped per bar (so an
     // FG entirely on one bar nests under it) plus once more for whatever is left
     // directly on this truss.
-    QHash<quint32, QTreeWidgetItem *> fixtureFGNode;   // fid → the FG node it lives under
+    QHash<quint32, QList<QTreeWidgetItem *> > fixtureFGNode;   // fid → the FG nodes it is listed under
     QSet<quint32> onNoBar = myFixtures;
     foreach (quint32 barId, barNode.keys())
     {
@@ -789,7 +858,11 @@ void MonitorLayersPanel::buildGroupNode(QTreeWidgetItem *parent, quint32 groupId
         if (d.kind == QStringLiteral("fixture") && fixtureHost.contains(d.id))
             host = hostNode.value(fixtureHost.value(d.id));
         if (d.kind == QStringLiteral("fixture") && fixtureFGNode.contains(d.id))
-            host = fixtureFGNode.value(d.id);
+        {
+            foreach (QTreeWidgetItem *fgNode, fixtureFGNode.value(d.id))
+                addItemLeaf(fgNode, d);
+            continue;
+        }
         addItemLeaf(host, d);
     }
 
@@ -806,6 +879,17 @@ void MonitorLayersPanel::reload()
     // once the drag has fully unwound.
     if (m_suppressReload)
         return;
+
+    /* Nor while a name is being typed in: clearing the tree closes the editor
+       mid-rebuild and the new name is thrown away. Enter commits a beat later
+       (the delegate's commit is queued), so a reload already queued -- a
+       fixture renamed a moment before -- landed first and the rename was lost.
+       Once the editor closes, reload. */
+    if (m_tree->isEditing())
+    {
+        m_reloadAfterEdit = true;
+        return;
+    }
 
     // Preserve the scroll position: without this, setCurrentItem(active) below
     // scrolls the tree back to the active layer after every reload — so moving
@@ -824,10 +908,12 @@ void MonitorLayersPanel::reload()
 
     m_reloading = true;
     m_tree->clear();
+    m_listedFixtureGroups.clear();
 
     const QList<ItemDesc> items = gatherItems();
     const quint32 activeId = m_props->activeLayerId();
     QTreeWidgetItem *activeNode = nullptr;
+    QHash<quint32, QTreeWidgetItem *> layerNodes;
 
     foreach (const MonitorProperties::MonitorLayer &lyr, m_props->layers())
     {
@@ -950,25 +1036,85 @@ void MonitorLayersPanel::reload()
         foreach (const ItemDesc &d, items)
             if (d.groupId == 0 && d.layerId == lyr.id && d.kind == QStringLiteral("fixture"))
                 looseFix.insert(d.id);
-        QHash<quint32, QTreeWidgetItem *> looseFGNode;
+        QHash<quint32, QList<QTreeWidgetItem *> > looseFGNode;
         addLocalFixtureGroups(layerNode, looseFix, looseFGNode);
 
         foreach (const ItemDesc &d, items)
             if (d.groupId == 0 && d.layerId == lyr.id)
             {
-                QTreeWidgetItem *host = layerNode;
                 if (d.kind == QStringLiteral("fixture") && looseFGNode.contains(d.id))
-                    host = looseFGNode.value(d.id);
-                addItemLeaf(host, d);
+                {
+                    foreach (QTreeWidgetItem *fgNode, looseFGNode.value(d.id))
+                        addItemLeaf(fgNode, d);
+                    continue;
+                }
+                addItemLeaf(layerNode, d);
             }
+        layerNodes.insert(lyr.id, layerNode);
 
         layerNode->setExpanded(!wasNodeCollapsed(NodeLayer, lyr.id));
         if (lyr.id == activeId)
             activeNode = layerNode;
     }
 
+    /* Fixture Groups local to no one structure -- a group made across T-1 to
+       T-4 -- were in no row at all. Under their layer when all their fixtures
+       are on it, else under "Fixture Groups" at the end; their fixtures
+       listed under them as well as where they hang. */
+    {
+        QHash<quint32, ItemDesc> fixtureDesc;
+        foreach (const ItemDesc &d, items)
+            if (d.kind == QStringLiteral("fixture"))
+                fixtureDesc.insert(d.id, d);
+        QTreeWidgetItem *across = nullptr;
+        foreach (FixtureGroup *fg, m_doc->fixtureGroups())
+        {
+            if (fg == nullptr || m_listedFixtureGroups.contains(fg->id()))
+                continue;
+            QList<ItemDesc> members;
+            QSet<quint32> layers;
+            foreach (quint32 fid, fg->fixtureList())
+                if (fixtureDesc.contains(fid))
+                {
+                    members << fixtureDesc.value(fid);
+                    layers.insert(fixtureDesc.value(fid).layerId);
+                }
+            if (members.isEmpty())
+                continue;           // nothing of it on the plot
+            QTreeWidgetItem *host = (layers.size() == 1) ? layerNodes.value(*layers.constBegin()) : nullptr;
+            if (host == nullptr)
+            {
+                if (across == nullptr)
+                {
+                    across = new QTreeWidgetItem(m_tree);
+                    across->setText(0, tr("Fixture Groups"));
+                    across->setToolTip(0, tr("Fixture groups whose fixtures are on more than one layer"));
+                    across->setFirstColumnSpanned(true);
+                    across->setFlags(Qt::ItemIsEnabled);
+                    // Not a layer: no type would read as 0, which IS a layer.
+                    across->setData(0, NodeTypeRole, -1);
+                    across->setExpanded(true);
+                }
+                host = across;
+            }
+            QTreeWidgetItem *fgNode = addFixtureGroupNode(host, fg);
+            foreach (const ItemDesc &d, members)
+                addItemLeaf(fgNode, d);
+        }
+    }
+
     if (activeNode != nullptr)
         m_tree->setCurrentItem(activeNode);
+
+    // Reopen the fixture groups that were open (see collectCollapsedNodes()).
+    for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+    {
+        const int type = (*it)->data(0, NodeTypeRole).toInt();
+        if (type == NodeFixtureGroup
+            && m_collapsedKeys.contains(QString("open:%1:%2").arg(type)
+                                            .arg((*it)->data(0, NodeIdRole).toUInt())))
+            (*it)->setExpanded(true);
+    }
 
     // Restore the scroll position (overriding the scrollTo that setCurrentItem
     // just did), so a reload doesn't jump the view around.
@@ -996,7 +1142,10 @@ bool MonitorLayersPanel::eventFilter(QObject *obj, QEvent *event)
     if (obj == m_tree && event->type() == QEvent::KeyPress)
     {
         QKeyEvent *ke = static_cast<QKeyEvent *>(event);
-        if (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter)
+        /* Enter starts a rename -- not the one that ENDS a rename: the
+           editor's Return comes on up to the tree, and the edit it is
+           committing must be left to finish. */
+        if ((ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter) && !m_tree->isEditing())
         {
             beginRenameCurrent();
             return true;
@@ -1127,6 +1276,13 @@ void MonitorLayersPanel::handleTreeDrop(const QList<QTreeWidgetItem *> &dragged,
             leaves << qMakePair(d->data(0, NodeKindRole).toString(), d->data(0, NodeIdRole).toUInt());
         else if (type == NodeGroup)
             groups << d->data(0, NodeIdRole).toUInt();
+        else if (type == NodeFixtureGroup)
+        {
+            // A fixture group goes where it is dropped as its fixtures do.
+            for (const QPair<QString, quint32> &m : fixtureGroupMembers(d->data(0, NodeIdRole).toUInt()))
+                if (!leaves.contains(m))
+                    leaves << m;
+        }
         // dragged layer nodes are ignored (use the up/down buttons to reorder)
     }
 
@@ -1267,18 +1423,9 @@ void MonitorLayersPanel::slotItemChanged(QTreeWidgetItem *item, int column)
         return;
     const int type = item->data(0, NodeTypeRole).toInt();
     const quint32 id = item->data(0, NodeIdRole).toUInt();
-    QString name = item->text(0).trimmed();
-    /* Strip the "what kind of grouping" badge before it is baked into the name.
-       Exact suffix match on what setNodeLabel() actually appended -- no
-       guessing at a separator that a real name might contain. */
-    const QString badge = item->data(0, NodeBadgeRole).toString().trimmed();
-    if (!badge.isEmpty() && name.endsWith(badge))
-        name = name.left(name.size() - badge.size()).trimmed();
-    // A fixture row may carry a "  💡 <group>" lighting badge in its text — strip
-    // it so an inline rename doesn't bake the badge into the fixture's name.
-    const int bulb = name.indexOf(QStringLiteral("\xF0\x9F\x92\xA1"));
-    if (bulb >= 0)
-        name = name.left(bulb).trimmed();
+    /* Strip the badges before they are baked into the name -- an edit that
+       kept them, or one made before the editor started from the bare name. */
+    const QString name = bareNodeName(item->text(0), item->data(0, NodeBadgeRole).toString());
     if (name.isEmpty())
         return;
 
@@ -1293,6 +1440,23 @@ void MonitorLayersPanel::slotItemChanged(QTreeWidgetItem *item, int column)
         const MonitorProperties::MonitorGroup g = m_props->group(id);
         if (!g.anchorKind.isEmpty())
             renameMapItem(g.anchorKind, g.anchorId, name);
+    }
+    else if (type == NodeFixtureGroup)
+    {
+        FixtureGroup *fg = m_doc->fixtureGroup(id);
+        if (fg == nullptr || fg->name() == name)
+            return;
+        fg->setName(name);
+        /* It is listed under every structure holding its fixtures: every row
+           shows the new name. Not now -- the edited row is still in use. */
+        if (!m_reloadQueued)
+        {
+            m_reloadQueued = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_reloadQueued = false;
+                reload();
+            });
+        }
     }
     else // NodeItem — rename the underlying map item
     {
@@ -1344,6 +1508,25 @@ void MonitorLayersPanel::collectLeaves(QTreeWidgetItem *node,
     }
 }
 
+QList<QPair<QString, quint32> > MonitorLayersPanel::fixtureGroupMembers(quint32 fgId) const
+{
+    /* A fixture group is not a thing on the plot -- its FIXTURES are. So it
+       moves to a layer, or anywhere else, as they do ("I can't move USTs
+       fixture group to a different layer .. drag/drop or right click move to
+       layer"); a row that stood for nothing left Move to Layer with nothing
+       to move. Only the members that are on the plot: a layer is a plot
+       thing. */
+    QList<QPair<QString, quint32> > out;
+    FixtureGroup *fg = m_doc->fixtureGroup(fgId);
+    if (fg == nullptr)
+        return out;
+    const QList<quint32> onPlot = m_props->fixtureItemsID();
+    foreach (quint32 fid, fg->fixtureList())
+        if (onPlot.contains(fid))
+            out << qMakePair(QStringLiteral("fixture"), fid);
+    return out;
+}
+
 QList<QPair<QString, quint32> > MonitorLayersPanel::selectedObjects() const
 {
     QList<QPair<QString, quint32> > out;
@@ -1356,6 +1539,8 @@ QList<QPair<QString, quint32> > MonitorLayersPanel::selectedObjects() const
             add << qMakePair(it->data(0, NodeKindRole).toString(), it->data(0, NodeIdRole).toUInt());
         else if (type == NodeGroup)
             collectLeaves(it, add);
+        else if (type == NodeFixtureGroup)
+            add << fixtureGroupMembers(it->data(0, NodeIdRole).toUInt());
         // layer nodes contribute nothing on their own
         for (const QPair<QString, quint32> &p : add)
         {
@@ -1427,15 +1612,20 @@ void MonitorLayersPanel::slotItemClicked(QTreeWidgetItem *item, int)
             reload();
         }
     }
-    else if (type == NodeGroup)
+    else if (m_view != nullptr)
     {
-        if (m_view != nullptr)
+        /* The plot follows the list here -- so the list must not then follow
+           the plot back. An item the plot cannot select (a fixture stacked out
+           of sight inside a tower in plan view: exactly what this list is for
+           reaching) came back as "nothing selected", and the row the click
+           had just selected was cleared again ("they select and deselect
+           immediately .. T1-W which I need to rename"). */
+        m_syncingSelection = true;
+        if (type == NodeGroup)
             m_view->selectItemsInGroup(id);
-    }
-    else // NodeItem
-    {
-        if (m_view != nullptr)
+        else // NodeItem
             m_view->selectMapItem(item->data(0, NodeKindRole).toString(), id);
+        m_syncingSelection = false;
     }
 }
 
@@ -1530,6 +1720,117 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
             });
         }
     }
+    else if (type == NodeFixtureGroup && m_doc->fixtureGroup(id) != nullptr)
+    {
+        /* The others like it: the step fronts are four groups of eight of the
+           same bar, laid out the same -- select them all at once. When none
+           match the layout exactly, the groups of the same fixtures in any
+           layout. Selecting is not an edit: offered in any mode. */
+        FixtureGroup *fg = m_doc->fixtureGroup(id);
+        const QList<FixtureGroup *> same = CreateFixtureGroup::similarGroups(m_doc, fg, true);
+        const QList<FixtureGroup *> sameFixtures = CreateFixtureGroup::similarGroups(m_doc, fg, false);
+        auto idsOf = [](const QList<FixtureGroup *> &gs) {
+            QList<quint32> ids;
+            foreach (FixtureGroup *g, gs) ids << g->id();
+            return ids;
+        };
+        QAction *sim = menu.addAction(same.size() > 1 ? tr("Select All Similar (%1)").arg(same.size())
+                                                      : tr("Select All Similar"),
+                                      this, [this, ids = idsOf(same)]() { selectFixtureGroups(ids); });
+        sim->setEnabled(same.size() > 1);
+        sim->setToolTip(tr("Fixture groups of the same fixture models, laid out the same way"));
+        if (sameFixtures.size() > same.size())
+            menu.addAction(tr("Select All with the Same Fixtures (%1)").arg(sameFixtures.size()),
+                           this, [this, ids = idsOf(sameFixtures)]() { selectFixtureGroups(ids); });
+        menu.addSeparator();
+    }
+    if (type == NodeFixtureGroup && m_editable)
+    {
+        FixtureGroup *fg = m_doc->fixtureGroup(id);
+        /* Listed under a truss, tower or boom: it can be taken out of it
+           ("I can't right click the 3z fixture group and have an option to
+           remove from truss .. which it clearly shouldn't be there"). */
+        for (QTreeWidgetItem *up = item->parent(); up != nullptr && fg != nullptr; up = up->parent())
+        {
+            if (up->data(0, NodeTypeRole).toInt() != NodeGroup)
+                continue;
+            const MonitorProperties::MonitorGroup host = m_props->group(up->data(0, NodeIdRole).toUInt());
+            if (host.anchorKind != QLatin1String("truss") && host.anchorKind != QLatin1String("tower")
+                && host.anchorKind != QLatin1String("pipe"))
+                continue;
+            const QString kind = host.anchorKind;
+            const quint32 anchor = host.anchorId;
+            const QList<quint32> members = fg->fixtureList();
+            menu.addAction(tr("Remove “%1” from “%2”").arg(fg->name(), up->text(0).section(QStringLiteral("  "), 0, 0)),
+                           this, [this, members, kind, anchor]() {
+                if (m_view) m_view->takeOutOfStructure(members, kind, anchor);
+                reload();
+            });
+            break;
+        }
+
+        /* Several fixture groups: one group of them, laid out as they stand on
+           stage ("create fixture group from those groups that uses the
+           relative layout sizing from the studio"). */
+        QList<quint32> groups;
+        foreach (QTreeWidgetItem *sel, m_tree->selectedItems())
+            if (sel->data(0, NodeTypeRole).toInt() == NodeFixtureGroup)
+                groups << sel->data(0, NodeIdRole).toUInt();
+        if (!groups.contains(id))
+            groups = { id };
+        if (groups.size() > 1)
+            menu.addAction(tr("Create Fixture Group from %1 Groups…").arg(groups.size()),
+                           this, [this, groups]() {
+                if (CreateFixtureGroup::createFromGroups(m_doc, groups, this) != nullptr)
+                    reload();
+            });
+
+        /* Its layout made again from where its fixtures stand -- a group
+           filled in head order (US2f: eight 64-head bars poured into a 23 x
+           23 square) is put right without making a new one. */
+        if (fg != nullptr && StageGroupDialog::anyOnStage(m_doc, fg->fixtureList()))
+            menu.addAction(tr("Lay Out from the Stage…"), this, [this, id]() {
+                FixtureGroup *g = m_doc->fixtureGroup(id);
+                if (g == nullptr)
+                    return;
+                StageGroupDialog dlg(m_doc, g->fixtureList(), g->name(), this);
+                dlg.setEditing(g);
+                if (dlg.exec() == QDialog::Accepted)
+                    reload();
+            });
+
+        // Mixed heads (RGB and white rows): a group per kind of head.
+        if (fg != nullptr && HeadTypesDialog::anyMixed(m_doc, fg->fixtureList()))
+        {
+            const QList<quint32> members = fg->fixtureList();
+            const QString base = fg->name();
+            menu.addAction(tr("Split “%1” by Head Type…").arg(base), this, [this, members, base]() {
+                HeadTypesDialog dlg(m_doc, members, base, this);
+                if (dlg.exec() == QDialog::Accepted)
+                    reload();
+            });
+        }
+
+        /* The group itself can go -- "UST" was a duplicate of "USTs", the
+           same eight fixtures, with no way to get rid of it from here. The
+           fixtures stay; only the group (its head layout) is removed. */
+        if (fg != nullptr)
+        {
+            menu.addSeparator();
+            const QString name = fg->name();
+            menu.addAction(tr("Delete Fixture Group “%1”…").arg(name), this, [this, id, name]() {
+                if (QMessageBox::question(this, tr("Delete Fixture Group"),
+                        tr("Delete the fixture group “%1”?\n\nIts fixtures are not deleted -- "
+                           "only the group and its head layout. Anything set up to use this "
+                           "group will no longer find it.").arg(name),
+                        QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+                    return;
+                m_doc->deleteFixtureGroup(id);
+                m_doc->setModified();
+                reload();
+            });
+        }
+    }
     else if (type == NodeLayer && m_editable)
     {
         menu.addAction(tr("Rename Layer…"), this, [this, item]() {
@@ -1569,6 +1870,37 @@ bool MonitorLayersPanel::revealItem(const QString &kind, quint32 id)
         return true;
     }
     return false;
+}
+
+void MonitorLayersPanel::selectFixtureGroups(const QList<quint32> &ids)
+{
+    QSet<quint32> want(ids.begin(), ids.end());
+    m_syncingSelection = true;          // one hand-off to the plot, at the end
+    m_tree->clearSelection();
+    QTreeWidgetItem *first = nullptr;
+    for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        if (row->data(0, NodeTypeRole).toInt() != NodeFixtureGroup)
+            continue;
+        const quint32 fgId = row->data(0, NodeIdRole).toUInt();
+        if (!want.remove(fgId))
+            continue;                   // not wanted, or already selected elsewhere
+        for (QTreeWidgetItem *up = row->parent(); up != nullptr; up = up->parent())
+            up->setExpanded(true);
+        row->setSelected(true);
+        if (first == nullptr)
+            first = row;
+    }
+    if (first != nullptr)
+    {
+        m_tree->setCurrentItem(first, 0, QItemSelectionModel::NoUpdate);
+        m_tree->scrollToItem(first);
+    }
+    if (m_view != nullptr)
+        m_view->selectMapItems(selectedObjects());
+    m_syncingSelection = false;
+    updateButtons();
 }
 
 void MonitorLayersPanel::followMapSelection(const QList<QPair<QString, quint32> > &objects)

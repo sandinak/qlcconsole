@@ -28,6 +28,7 @@
 
 #include <QObject>
 #include <QVector3D>
+#include <QtMath>
 #include <QPointF>
 #include <QString>
 #include <climits>
@@ -305,6 +306,58 @@ struct FixtureRigProps
      *  0 = flat in its mounting face, which is every fixture that predates
      *  this, so old files are unchanged. */
     float            studioTilt = 0.0f;
+
+    /** Faces the OTHER way across its mounting plane: a 180-degree roll about
+     *  its own length. studioMount names a plane, not a direction -- the front
+     *  plane is faced from downstage (+Y), the side plane from stage left
+     *  (+X), the top from above -- so without this nothing could say Back
+     *  (upstage), Stage right or Bottom ("no way to put this fixture on the
+     *  back? also when I say side .. which side?"). See face()/setFace(). */
+    bool             studioFlip = false;
+    /** The face was CHOSEN (setFixtureFace(), or read from a file that names
+     *  it), not left at the Front default. The load-time repair that moves a
+     *  stray default Front onto the Top plane for a deck or a horizontal truss
+     *  must not undo a deliberate Front or Back. */
+    bool             studioFaceChosen = false;
+
+    /** The six faces a fixture can be on, as a direction: which way it faces
+     *  out. Each is a plane (studioMount) and a side of it (studioFlip). */
+    enum Face { FaceTop = 0, FaceBottom, FaceFront, FaceBack, FaceStageLeft, FaceStageRight };
+    /** The unit vector along its length (its LED grid's columns), from
+     *  studioMount and studioAngle -- the same as the rig view draws. */
+    QVector3D longAxis() const
+    {
+        const double th = qDegreesToRadians(double(studioAngle));
+        const float c = float(qCos(th)), s = float(qSin(th));
+        switch (studioMount)
+        {
+        case 0:  return QVector3D(c, s, 0.0f);       // Top: X-Y
+        case 2:  return QVector3D(0.0f, c, s);       // Side: Y-Z
+        default: return QVector3D(c, 0.0f, s);       // Front: X-Z
+        }
+    }
+    /** The unit vector across it, the way its grid's rows run (row 0 at the
+     *  top of a front-facing bar): the mount face's normal crossed with the
+     *  length, reversed when it faces the other way. Roll (studioTilt) is
+     *  left out: it tips the rows into depth, which a flat grid cannot show. */
+    QVector3D acrossAxis() const
+    {
+        const QVector3D n = (studioMount == 0) ? QVector3D(0, 0, 1)
+                          : (studioMount == 2) ? QVector3D(1, 0, 0) : QVector3D(0, 1, 0);
+        QVector3D h = QVector3D::crossProduct(n, longAxis());
+        if (h.length() < 1e-6f)
+            h = QVector3D(0, 0, -1);
+        h.normalize();
+        return studioFlip ? -h : h;
+    }
+
+    Face face() const
+    {
+        const int m = qBound(0, studioMount, 2);
+        return Face(m == 0 ? (studioFlip ? FaceBottom : FaceTop)
+                  : m == 1 ? (studioFlip ? FaceBack : FaceFront)
+                           : (studioFlip ? FaceStageRight : FaceStageLeft));
+    }
 
     /** Boom mount. When pipeId is valid the fixture rides a pipe's pipe at
      *  pipeOffset metres up from the base, facing pipeAngle degrees around it.

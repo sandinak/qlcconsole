@@ -185,6 +185,16 @@ public:
     bool isPatched() const { return m_patched; }
     void setPatched(bool patched) { m_patched = patched; }
 
+    /** An ADDRESS CLASH: the file patched this fixture onto channels another
+     *  fixture already held. It used to be dropped from the show on load --
+     *  silently, with everything that referred to it. Now it loads unpatched
+     *  (so it writes no DMX over the fixture it clashes with) but keeps the
+     *  universe()/address() it asked for, and is SAVED as patched there, so
+     *  the file is unchanged until someone gives it a home. Runtime only;
+     *  cleared by Doc::patchFixtures() and Doc::unpatchFixture(). */
+    bool addressClash() const { return m_addressClash; }
+    void setAddressClash(bool clash) { m_addressClash = clash; }
+
     Connection connection() const { return Connection(m_connection); }
     void setConnection(Connection c) { m_connection = int(c); }
 
@@ -369,6 +379,7 @@ protected:
      *  (placeable, groupable, usable in looks) but holds NO address, is
      *  registered in no universe and must never be written to DMX. */
     bool m_patched;
+    bool m_addressClash;
 
     int m_connection;
     QString m_ipAddress;

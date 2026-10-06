@@ -23,6 +23,7 @@
 #include <QtMath>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <functional>
 #include <QSettings>
 #include <QThread>
 #include <QSemaphore>
@@ -489,10 +490,13 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         if (m_plane != Top)
         {
             const float base = props->platformBaseZ(pl->id());
+            // The tread it is over, on steps; the deck, on a platform.
+            const QVector3D at = fixtureCentre(fid);
+            const float top = pl->topAt(at.x(), at.y());
             if (rp.placement == FixtureRigProps::Inside)
-                rp.deckHeightOffset = qBound(0.0f, float(ab.y()) - base, pl->height());
+                rp.deckHeightOffset = qBound(0.0f, float(ab.y()) - base, top);
             else
-                rp.deckHeightOffset = qMax(0.0f, float(ab.y()) - (base + pl->height()));
+                rp.deckHeightOffset = qMax(0.0f, float(ab.y()) - (base + top));
         }
         props->setFixtureRigProps(fid, rp);
         return true;
@@ -2312,11 +2316,32 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                (and light) through it, because that is the entire reason for
                rigging fixtures inside a step. */
             const float b0 = props->platformBaseZ(id);
-            QVector3D c[8];
-            boxCorners(c, x0, y0, b0, x1, y1, b0 + h);
             const int topAlpha = (pl->topMaterial() == StagePlatform::SolidTop) ? 255
                                : (pl->topMaterial() == StagePlatform::ClearTop) ? 70 : 0;
-            drawSolidBox(p, c, pc, edge, topAlpha);
+            // A flight of steps is a box per step; a platform is one.
+            foreach (const StagePlatform::Block &bk, pl->blocks())
+            {
+                QVector3D c[8];
+                boxCorners(c, bk.x0, bk.y0, b0, bk.x1, bk.y1, b0 + bk.height);
+                drawSolidBox(p, c, pc, edge, topAlpha);
+            }
+        }
+        else if (pl->isSteps())
+        {
+            /* Steps, flat: every step from the base to its tread, tallest
+               first. Seen from the side that IS the staircase profile; seen
+               face-on the lower ones draw over the taller, leaving a line at
+               each tread; in plan they are the treads. */
+            const float b0 = (m_plane == Top) ? 0.0f : props->platformBaseZ(id);
+            QList<StagePlatform::Block> bl = pl->blocks();
+            std::sort(bl.begin(), bl.end(), [](const StagePlatform::Block &a,
+                                               const StagePlatform::Block &b) {
+                return a.height > b.height;
+            });
+            foreach (const StagePlatform::Block &bk, bl)
+                outline(QRectF(w2s(QVector3D(bk.x0, bk.y0, b0)),
+                               w2s(QVector3D(bk.x1, bk.y1, m_plane == Top ? b0 : b0 + bk.height)))
+                            .normalized());
         }
         else if (m_plane == Top)
         {
@@ -2451,6 +2476,14 @@ void StructureStudioView::fixtureFrame(const FixtureRigProps &rp,
         // -- which is the direction you would describe it in.
         N = (n0 * float(c) - h0 * float(sn)).normalized();
         H = (h0 * float(c) + n0 * float(sn)).normalized();
+    }
+
+    // The other side of its plane: Back, Bottom, Stage right. A roll of 180
+    // degrees about the length, so the frame stays right-handed.
+    if (rp.studioFlip)
+    {
+        N = -N;
+        H = -H;
     }
 }
 
@@ -2791,18 +2824,20 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
     {
         if (pl == nullptr)
             continue;
-        const double topZ = double(props->platformBaseZ(pl->id())) + double(pl->height());
-        if (double(apex.z()) <= topZ)      // already at or below it
-            continue;
-        const double t = toPlane(topZ);
-        if (t < 0.0 || (best > 0.0 && t >= best))
-            continue;
-        const QVector3D at = apex + dir * float(t);
-        if (at.x() < pl->originX() || at.x() > pl->originX() + pl->width())
-            continue;
-        if (at.y() < pl->originY() || at.y() > pl->originY() + pl->depth())
-            continue;
-        best = t;
+        // Each tread of a flight of steps is a deck of its own height.
+        foreach (const StagePlatform::Block &bk, pl->blocks())
+        {
+            const double topZ = double(props->platformBaseZ(pl->id())) + double(bk.height);
+            if (double(apex.z()) <= topZ)      // already at or below it
+                continue;
+            const double t = toPlane(topZ);
+            if (t < 0.0 || (best > 0.0 && t >= best))
+                continue;
+            const QVector3D at = apex + dir * float(t);
+            if (at.x() < bk.x0 || at.x() > bk.x1 || at.y() < bk.y0 || at.y() > bk.y1)
+                continue;
+            best = t;
+        }
     }
     QVector3D normal(0, 0, 1);                // floor and decks face up
 
@@ -4007,6 +4042,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         const int rows = traits.layout.isValid() ? traits.layout.height() : 1;
         const double pxPerPixel = QLineF(w2s(corner[0]), w2s(corner[1])).length()
                                   / qMax(1, cols);
+        const QVector<int> cellHead = headsByCell(fx, cols, rows, traits.headCount);
         if (traits.headCount > 1)
         {
             /* Which of the two long faces points AT us -- a question about the
@@ -4050,12 +4086,14 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                    handful of distinct colours. */
                 QHash<QRgb, QVector<QPointF> > byColour;
                 QHash<QRgb, QVector<double> > byColourZ;
-                int placed = 0;
-                for (int r = 0; r < rows && placed < traits.headCount; ++r)
+                for (int r = 0; r < rows; ++r)
                 {
                     const float fr = (rows > 1) ? float(r) / (rows - 1) : 0.5f;
-                    for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
+                    for (int cx = 0; cx < cols; ++cx)
                     {
+                        const int placed = cellHead.value(r * cols + cx, -1);
+                        if (placed < 0)
+                            continue;
                         const float fc = (cols > 1) ? float(cx) / (cols - 1) : 0.5f;
                         const QVector3D lo = b0 + (b1 - b0) * fc;
                         const QVector3D hi = f0 + (f1 - f0) * fc;
@@ -4313,10 +4351,36 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
            different: there the box IS the lamp, so it keeps its colour. */
         const bool pixelBar = (traits.headCount > 1);
         const QColor body = pixelBar ? bodyShade() : col.darker(230);
-        const QColor rim = (drag || hi) ? col
-                         : pixelBar ? bodyShade().lighter(135) : col.darker(150);
-        p.setPen(QPen(rim, (drag || hi) ? 1.8 : 1.0));
+        p.setPen(Qt::NoPen);
         p.setBrush(body);
+        p.drawPolygon(silhouette);
+
+        /* An outline you can find. The rim used to be the housing grey a shade
+           lighter -- grey on grey, inside a truss drawn in grey -- so a bar in
+           a tower was a column of dots with no edges ("really hard to discern
+           where the bars actually are"). A dark halo then a rim in the
+           fixture's GEL colour -- its static colour, never the live one: the
+           housing is not the lamp, and a few lit pixels in mixed colours wash
+           the fixture-wide live colour out to near-white, which drew the whole
+           bar as though it were lit (aMostlyDarkPixelBarDrawsNoBrightOutline).
+           Held to a mid luminance: clearly above the dark canvas and the
+           housing, clearly below anything that reads as light, and tinted so
+           it stays apart from the structure's neutral lines. */
+        QColor rim = m_doc->monitorProperties()->fixtureGelColor(fid, 0, 0);
+        if (!rim.isValid() || rim.hslSaturation() < 30)
+            rim = QColor(70, 110, 160);
+        else
+            rim = QColor::fromHsl(rim.hslHue(), qMin(200, rim.hslSaturation()), 110);
+        auto luma = [](const QColor &c) { return c.red() * 0.30 + c.green() * 0.59 + c.blue() * 0.11; };
+        for (int i = 0; i < 8 && luma(rim) > 80.0; ++i)
+            rim = rim.darker(110);
+        if (drag || hi)
+            rim = rim.lighter(140);
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(0, 0, 0, 150), (drag || hi) ? 3.6 : 3.0, Qt::SolidLine,
+                      Qt::SquareCap, Qt::MiterJoin));
+        p.drawPolygon(silhouette);
+        p.setPen(QPen(rim, (drag || hi) ? 1.8 : 1.4, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin));
         p.drawPolygon(silhouette);
 
         /* The heads. A declared grid wins; otherwise a single row of however
@@ -4328,12 +4392,15 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         const double cellH = boxPx.height() / qMax(1, rows);
         const double rad = qBound(0.7, qMin(cellW, cellH) * 0.40, 3.0);
         p.setPen(Qt::NoPen);
-        int placed = 0;
-        for (int r = 0; r < rows && placed < traits.headCount; ++r)
+        const QVector<int> cellHead = headsByCell(fx, cols, rows, traits.headCount);
+        for (int r = 0; r < rows; ++r)
         {
             const double fy = (rows > 1) ? (double(r) / (rows - 1) - 0.5) : 0.0;
-            for (int cx = 0; cx < cols && placed < traits.headCount; ++cx, ++placed)
+            for (int cx = 0; cx < cols; ++cx)
             {
+                const int placed = cellHead.value(r * cols + cx, -1);
+                if (placed < 0)
+                    continue;
                 const double fx2 = (cols > 1) ? (double(cx) / (cols - 1) - 0.5) : 0.0;
                 p.setBrush(pixelColor(fx, vals, placed, col, unlit, visibility, master));
                 p.drawEllipse(c + wPx * fx2 + hPx * fy, rad, rad);
@@ -4369,6 +4436,29 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         if (nameEveryone || hi)
             p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
     }
+}
+
+QVector<int> StructureStudioView::headsByCell(Fixture *fx, int cols, int rows, int headCount) const
+{
+    QVector<int> out(qMax(0, cols * rows), -1);
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (fx != nullptr && props->hasHeadLayout(fx))
+    {
+        const HeadLayout map = props->headLayoutFor(fx);
+        if (map.size == QSize(cols, rows))
+        {
+            for (int h = 0; h < map.cells.size() && h < headCount; ++h)
+            {
+                const QPoint c = map.cellOf(h);
+                if (c.x() >= 0 && c.x() < cols && c.y() >= 0 && c.y() < rows)
+                    out[c.y() * cols + c.x()] = h;
+            }
+            return out;
+        }
+    }
+    for (int i = 0; i < out.size() && i < headCount; ++i)
+        out[i] = i;
+    return out;
 }
 
 QList<quint32> StructureStudioView::fixturesInDrawOrder() const
@@ -4519,19 +4609,102 @@ void StructureStudioView::distributeOnFace(const QList<quint32> &sel)
         }
     }
 
-    // Non-frame fixtures (riser/pipe/truss): even spread along their own param.
+    /* Non-frame fixtures (riser/pipe/truss): even spread along their own
+       param, one structure at a time.
+     *
+     * Everything on it (or nothing picked): across its whole length, as
+     * before. A FEW of them ("if I select .. auto distribute"): evenly between
+     * the outermost two, which stay put -- spreading three fixtures over the
+     * whole truss would land them on top of the ones that were not selected. */
     std::sort(other.begin(), other.end(), byName);
-    for (int i = 0; i < other.size(); ++i)
-    {
-        const float t = (i + 0.5f) / float(other.size());
-        FixtureRigProps rp = props->fixtureRigProps(other[i]);
+    // How long the structure it rides is; -1 when it rides none of these.
+    auto lengthOf = [props](const FixtureRigProps &rp) -> float {
         if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
-        { if (StagePlatform *pl = props->platform(rp.riserPlatformId)) rp.riserU = t * pl->width(); }
-        else if (rp.pipeId != Pipe::invalidId())
-        { if (Pipe *p = props->pipe(rp.pipeId)) rp.pipeOffset = t * p->length(); }
-        else if (rp.trussId != Truss::invalidId())
-        { if (Truss *tt = props->truss(rp.trussId)) rp.trussOffset = t * tt->length(); }
-        props->setFixtureRigProps(other[i], rp);
+        { StagePlatform *pl = props->platform(rp.riserPlatformId); return pl ? pl->width() : -1.0f; }
+        if (rp.pipeId != Pipe::invalidId())
+        { Pipe *p = props->pipe(rp.pipeId); return p ? p->length() : -1.0f; }
+        if (rp.trussId != Truss::invalidId())
+        { Truss *tt = props->truss(rp.trussId); return tt ? tt->length() : -1.0f; }
+        return -1.0f;
+    };
+    auto value = [](const FixtureRigProps &rp) -> float {
+        if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId()) return rp.riserU;
+        if (rp.pipeId != Pipe::invalidId()) return rp.pipeOffset;
+        return rp.trussOffset;
+    };
+    auto setValue = [](FixtureRigProps &rp, float v) {
+        if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId()) rp.riserU = v;
+        else if (rp.pipeId != Pipe::invalidId()) rp.pipeOffset = v;
+        else if (rp.trussId != Truss::invalidId()) rp.trussOffset = v;
+    };
+    auto structureOf = [](const FixtureRigProps &rp) -> QPair<int, quint32> {
+        if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId()) return qMakePair(0, rp.riserPlatformId);
+        if (rp.pipeId != Pipe::invalidId()) return qMakePair(1, rp.pipeId);
+        return qMakePair(2, rp.trussId);
+    };
+    QMap<QPair<int, quint32>, QList<quint32> > byStructure;
+    foreach (quint32 fid, other)
+    {
+        const FixtureRigProps rp = props->fixtureRigProps(fid);
+        if (lengthOf(rp) >= 0.0f)
+            byStructure[structureOf(rp)] << fid;
+    }
+    QSet<quint32> everyMounted;
+    foreach (quint32 fid, mountedFixtures())
+        everyMounted.insert(fid);
+    for (auto it = byStructure.constBegin(); it != byStructure.constEnd(); ++it)
+    {
+        const QList<quint32> &on = it.value();
+        const float len = lengthOf(props->fixtureRigProps(on.first()));
+        int othersThere = 0;
+        foreach (quint32 fid, everyMounted)
+            if (!on.contains(fid) && structureOf(props->fixtureRigProps(fid)) == it.key())
+                othersThere++;
+        float lo = 0.0f, hi = 0.0f;
+        bool between = false;
+        if (!sel.isEmpty() && othersThere > 0 && on.size() >= 3)
+        {
+            lo = hi = value(props->fixtureRigProps(on.first()));
+            foreach (quint32 fid, on)
+            {
+                lo = qMin(lo, value(props->fixtureRigProps(fid)));
+                hi = qMax(hi, value(props->fixtureRigProps(fid)));
+            }
+            between = (hi - lo) > 0.01f;
+        }
+        /* In a LINE, too: everything but the spacing comes from the middle
+           one of them. Each fixture's height and its offset across the truss
+           are whatever its last drag left, a few millimetres apart, so evenly
+           spaced fixtures still read as ragged ("the vertical height isn't
+           quite right consistently"). The median, not the mean: an actual
+           position one of them already has, and one stray does not drag the
+           rest after it. */
+        auto median = [&on, props](std::function<float(const FixtureRigProps &)> get) {
+            QList<float> v;
+            foreach (quint32 fid, on)
+                v << get(props->fixtureRigProps(fid));
+            std::sort(v.begin(), v.end());
+            return v.at((v.size() - 1) / 2);
+        };
+        const float midCross  = median([](const FixtureRigProps &r) { return r.trussCross; });
+        const float midCrossY = median([](const FixtureRigProps &r) { return r.trussCrossY; });
+        const float midDrop   = median([](const FixtureRigProps &r) { return r.mountZOffset; });
+        const float midRiserV = median([](const FixtureRigProps &r) { return r.riserV; });
+        for (int i = 0; i < on.size(); ++i)
+        {
+            FixtureRigProps rp = props->fixtureRigProps(on[i]);
+            setValue(rp, between ? lo + (hi - lo) * float(i) / float(on.size() - 1)
+                                 : (i + 0.5f) / float(on.size()) * len);
+            if (it.key().first == 2)            // a truss: across it, and the drop
+            {
+                rp.trussCross = midCross;
+                rp.trussCrossY = midCrossY;
+                rp.mountZOffset = midDrop;
+            }
+            else if (it.key().first == 0)       // a riser face: the same height up it
+                rp.riserV = midRiserV;
+            props->setFixtureRigProps(on[i], rp);
+        }
     }
 
     m_doc->setModified();
@@ -4562,6 +4735,42 @@ void StructureStudioView::setFixtureFace(quint32 fid, int face)
     reload();
 }
 
+void StructureStudioView::setFixtureFacing(quint32 fid, FixtureRigProps::Face face)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    props->setFixtureFace(rp, face);
+    // A frame-group fixture also re-pins to that face of its frame.
+    if (!hasStructuralMount(rp) && props->fixtureFrameGroup(fid) != 0)
+    {
+        int pinComp; double pinVal; facePin(rp.studioMount, pinComp, pinVal);
+        /* On a platform, the SURFACE that faces that way: the top or the base,
+           the downstage or upstage edge, the stage-left (x = width) or
+           stage-right (x = 0) end. facePin() knows planes only, and put Side
+           on x = 0 -- the stage-right end, facing stage left, into the deck. */
+        if (StagePlatform *pl = (m_kind == PlatformKind) ? props->platform(m_id) : nullptr)
+        {
+            switch (face)
+            {
+            case FixtureRigProps::FaceTop:        pinVal = pl->height(); break;
+            case FixtureRigProps::FaceBottom:     pinVal = 0.0; break;
+            case FixtureRigProps::FaceFront:      pinVal = pl->depth(); break;
+            case FixtureRigProps::FaceBack:       pinVal = 0.0; break;
+            case FixtureRigProps::FaceStageLeft:  pinVal = pl->width(); break;
+            case FixtureRigProps::FaceStageRight: pinVal = 0.0; break;
+            }
+        }
+        QVector3D lp = rp.groupLocal;
+        if (pinComp == 0)      lp.setX(float(pinVal));
+        else if (pinComp == 1) lp.setY(float(pinVal));
+        else                   lp.setZ(float(pinVal));
+        rp.groupLocal = lp;
+    }
+    props->setFixtureRigProps(fid, rp);
+    m_doc->setModified();
+    reload();
+}
+
 void StructureStudioView::setFixtureAngle(quint32 fid, float deg)
 {
     MonitorProperties *props = m_doc->monitorProperties();
@@ -4570,6 +4779,219 @@ void StructureStudioView::setFixtureAngle(quint32 fid, float deg)
     props->setFixtureRigProps(fid, rp);
     m_doc->setModified();
     reload();
+}
+
+/* "when editing a fixture on a truss or bar .. can we have handles to allow for
+ * rotation via mouse movement?" The Angle and Tilt spin boxes were the only way
+ * to turn one, which means typing numbers and watching what happens.
+ *
+ * A flat view drops one world axis, so the only rotation a pointer circling a
+ * point can describe without guessing is the one ABOUT that dropped axis. That
+ * is studioAngle when the view looks straight at the fixture's mounting face,
+ * and studioTilt when it looks down the fixture's own length -- never both in
+ * the same view, since the length lies in the face. */
+StructureStudioView::RotateHandle StructureStudioView::rotateHandle() const
+{
+    RotateHandle h;
+    if (m_plane == Angled || m_locked || m_highlight.size() != 1)
+        return h;
+    const quint32 fid = *m_highlight.constBegin();
+    Fixture *fx = m_doc->fixture(fid);
+    if (fx == nullptr || fixtureMovementLocked(fid))
+        return h;
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    // A tower-shelf unit in an elevation is drawn as an upright body that
+    // does not follow its frame at all -- a handle would turn nothing visible.
+    if (rp.towerId != Tower::invalidId() && (m_plane == Front || m_plane == Side))
+        return h;
+    /* Only what the flat views draw WITH its orientation. A mover or a par is
+       drawn square-on to the screen whatever its frame says, so turning one
+       here would change a number and nothing on the canvas. */
+    const FixtureVisualTraits traits = classifyFixture(fx);
+    if (traits.kind != FixtureSilhouette::Bar && traits.kind != FixtureSilhouette::Generic)
+        return h;
+
+    const QVector3D viewAxis = (m_plane == Top)   ? QVector3D(0, 0, 1)
+                             : (m_plane == Front) ? QVector3D(0, 1, 0)
+                                                  : QVector3D(1, 0, 0);
+    QVector3D L, N, H;          // as it is now, roll included
+    fixtureFrame(rp, L, N, H);
+
+    const double w = (traits.physW > 0.0f) ? double(traits.physW) : qMax(0.05, fixtureLenM(fid));
+    const double ht = (traits.physH > 0.0f) ? double(traits.physH) : w * 0.2;
+    const double d = (traits.physD > 0.0f) ? double(traits.physD) : ht;
+    const QVector3D c = fixtureCentre(fid);
+    QPointF dir;
+
+    if (qAbs(QVector3D::dotProduct(L, viewAxis)) < 0.1f)
+    {
+        /* Its length lies flat in this view, so turning it here is turning it
+           about the axis out of the screen -- which is studioAngle on the face
+           the view is looking at. When that IS its mount face this is just the
+           Angle. When it is not ("where do I grab that to rotate it .. I see no
+           handles": a deck bar, laid on the Top face, seen from the Side), the
+           same turn is only expressible on the view's face, so the drag moves
+           it there -- with the Angle and Tilt that leave it exactly as it is,
+           so the move itself changes nothing you can see. */
+        h.mode = RotateHandle::Angle;
+        const int view = int(m_plane);          // Top/Front/Side == studioMount 0/1/2
+        if (view == rp.studioMount)
+            h.value = double(rp.studioAngle);
+        else
+        {
+            const QPointF lp = project(L);       // linear in a flat plane
+            const double angle0 = qRadiansToDegrees(qAtan2(lp.y(), lp.x()));
+            FixtureRigProps cand = rp;
+            cand.studioMount = view;             // not setStudioMount(): see below
+            cand.studioAngle = float(angle0);
+            cand.studioTilt = 0.0f;
+            QVector3D L0, N0, H0;
+            fixtureFrame(cand, L0, N0, H0);
+            cand.studioTilt = float(qRadiansToDegrees(
+                qAtan2(-double(QVector3D::dotProduct(N, H0)),
+                        double(QVector3D::dotProduct(N, N0)))));
+            /* Only where the face would STAY: a load repairs a deck or a
+               horizontal-truss fixture left on the Front face back to Top,
+               and a riser fixture to its riser's face -- which would turn it
+               to something else the next time the file is opened. */
+            FixtureRigProps chk = cand;
+            props->repairMountPlane(chk);
+            if (chk.studioMount != view)
+                return RotateHandle();
+            h.reframeMount = view;
+            h.reframeTilt = double(cand.studioTilt);
+            h.value = angle0;
+        }
+        // The run as it is DRAWN (a frame group's own rotation included),
+        // so the knob sits on the end of the bar you can see.
+        dir = w2s(fixtureEndB(fid)) - w2s(fixtureEndA(fid));
+        // Constant while it spins, so the ring does not breathe under the hand.
+        h.radius = 0.5 * qSqrt(w * w + ht * ht) * m_scale + 16.0;
+        // fixtureAxisLocal() is (cos, sin) in every plane's own (a, b): turning
+        // counter-clockwise in plane coordinates is +angle.
+        h.sign = 1.0;
+    }
+    else if (traits.kind == FixtureSilhouette::Bar
+             && qAbs(QVector3D::dotProduct(L, viewAxis)) > 0.9f)
+    {
+        // A Generic fixture draws as a line along its length, which a roll
+        // about that length cannot change -- only a Bar body shows its tilt.
+        h.mode = RotateHandle::Tilt;
+        h.value = double(rp.studioTilt);
+        dir = w2s(c + N) - w2s(c);   // the knob points the way it fires
+        // The body is pushed out along N by its seat; this clears it at any roll.
+        h.radius = qSqrt(d * d + ht * ht) * m_scale + 16.0;
+        /* fixtureFrame() rolls N toward -H0 as the tilt grows. Which way round
+           that is on screen depends on which end of the bar faces the viewer. */
+        FixtureRigProps flat = rp;
+        flat.studioTilt = 0.0f;
+        QVector3D L0, N0, H0;
+        fixtureFrame(flat, L0, N0, H0);
+        const QPointF n0 = project(c + N0) - project(c);
+        const QPointF h0 = project(c + H0) - project(c);
+        const double cross = n0.x() * h0.y() - n0.y() * h0.x();
+        h.sign = (cross > 0.0) ? -1.0 : 1.0;
+    }
+    else
+        return h;
+
+    const double len = qSqrt(dir.x() * dir.x() + dir.y() * dir.y());
+    if (len < 1e-6)
+        return RotateHandle();
+    h.fid = fid;
+    h.centre = w2s(c);
+    h.radius = qBound(26.0, h.radius, 600.0);
+    h.knob = h.centre + dir / len * h.radius;
+    return h;
+}
+
+double StructureStudioView::planeAngleAround(const QPointF &centre, const QPointF &px) const
+{
+    const QPointF v = screenToPlane(px) - screenToPlane(centre);
+    return qRadiansToDegrees(qAtan2(v.y(), v.x()));
+}
+
+bool StructureStudioView::rotateDragTo(const QPointF &px, bool snap)
+{
+    if (m_rotate.mode == RotateHandle::None)
+        return false;
+
+    /* Accumulate in small wrapped steps rather than taking the pointer's
+       absolute bearing: a frame group's own rotation, or a view turned a
+       quarter, would otherwise make the bar jump to the cursor on the first
+       move. Relative to where it was grabbed, it simply follows the hand. */
+    const double now = planeAngleAround(m_rotate.centre, px);
+    double step = now - m_rotateLastMouse;
+    while (step > 180.0)  step -= 360.0;
+    while (step < -180.0) step += 360.0;
+    m_rotateLastMouse = now;
+    m_rotateTurned += step;
+
+    double v = m_rotate.value + m_rotate.sign * m_rotateTurned;
+    v = snap ? qRound(v / 15.0) * 15.0 : double(qRound(v));
+    while (v > 180.0)   v -= 360.0;   // the inspector's range, either angle
+    while (v <= -180.0) v += 360.0;
+
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(m_rotate.fid);
+    float &field = (m_rotate.mode == RotateHandle::Angle) ? rp.studioAngle : rp.studioTilt;
+    const bool reframe = (m_rotate.reframeMount >= 0 && rp.studioMount != m_rotate.reframeMount);
+    if (!reframe && qFuzzyCompare(double(field) + 1000.0, v + 1000.0))
+        return false;
+    if (!m_dragged)
+        emit editAboutToStart();   // snapshot for undo before the first change
+    if (m_rotate.reframeMount >= 0)
+    {
+        // Onto the face being looked at -- see rotateHandle(). Re-applied on
+        // every move, so the frame is always the one the drag started from.
+        rp.studioMount = m_rotate.reframeMount;
+        rp.studioTilt = float(m_rotate.reframeTilt);
+    }
+    field = float(v);
+    props->setFixtureRigProps(m_rotate.fid, rp);
+    update();
+    return true;
+}
+
+void StructureStudioView::drawRotateHandle(QPainter &p) const
+{
+    const RotateHandle h = rotateHandle();
+    if (h.mode == RotateHandle::None)
+        return;
+    const QColor accent(255, 184, 64);
+    const bool active = (m_rotate.mode != RotateHandle::None) || m_hoverKnob;
+
+    p.save();
+    p.setBrush(Qt::NoBrush);
+    QPen ring(accent, 1.0, Qt::DashLine);
+    ring.setColor(QColor(accent.red(), accent.green(), accent.blue(), active ? 220 : 140));
+    p.setPen(ring);
+    p.drawEllipse(h.centre, h.radius, h.radius);
+    p.setPen(QPen(accent, 1.0));
+    p.drawLine(h.centre, h.knob);
+    p.setPen(QPen(accent.darker(220), 1.2));
+    p.setBrush(accent);
+    const double r = active ? 6.5 : 5.0;
+    p.drawEllipse(h.knob, r, r);
+
+    // Say what it turns, and by how much, beside the knob.
+    const QString text = (h.mode == RotateHandle::Angle)
+        ? tr("Angle %1°").arg(qRound(h.value))
+        : tr("Tilt %1°").arg(qRound(h.value));
+    QPointF out = h.knob - h.centre;
+    const double ol = qSqrt(out.x() * out.x() + out.y() * out.y());
+    out = (ol > 1e-6) ? out / ol : QPointF(1, 0);
+    const QFontMetricsF fm(p.font());
+    const double tw = fm.horizontalAdvance(text);
+    QPointF at = h.knob + out * 12.0;
+    if (out.x() < 0.0)
+        at.rx() -= tw;               // keep the text on the outside of the ring
+    at.ry() += fm.ascent() * 0.5 * (1.0 + out.y());
+    p.setPen(accent);
+    p.drawText(at, text);
+    p.restore();
 }
 
 void StructureStudioView::putOnFace(const QList<quint32> &ids)
@@ -5227,6 +5649,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
         // -- unchanged, existing behaviour, not this report's complaint.
         if (m_kind == TrussKind)
             drawChildBars(p, m_id);
+        drawRotateHandle(p);    // on top of everything it might overlap
     }
     drawCursorReadout(p);
     drawDimensions(p);   // selected fixture's own W/H, or the structure's
@@ -5366,8 +5789,12 @@ void StructureStudioView::wheelEvent(QWheelEvent *e)
 
 void StructureStudioView::mousePressEvent(QMouseEvent *e)
 {
+    /* Shift-drag pans -- but Shift-click on a FIXTURE adds it to the
+       selection, as Shift does in the list beside it ("I can't shift select
+       multiple fixtures in the display .. but CAN select them on the list"). */
     if (e->button() == Qt::MiddleButton
-        || (e->button() == Qt::LeftButton && (e->modifiers() & Qt::ShiftModifier)))
+        || (e->button() == Qt::LeftButton && (e->modifiers() & Qt::ShiftModifier)
+            && hitTestFixture(e->pos()) == Fixture::invalidId()))
     {
         m_panning = true;
         m_panLast = e->pos();
@@ -5389,6 +5816,19 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
                     return;
                 }
             }
+        }
+        // The selected fixture's rotation knob, ahead of the fixture itself:
+        // the knob often sits over the bar it turns, or over a neighbour.
+        const RotateHandle rh = rotateHandle();
+        if (rh.mode != RotateHandle::None && QLineF(rh.knob, e->pos()).length() <= 9.0)
+        {
+            m_rotate = rh;
+            m_rotateLastMouse = planeAngleAround(rh.centre, e->pos());
+            m_rotateTurned = 0.0;
+            m_dragFid = Fixture::invalidId();
+            m_dragged = false;
+            setCursor(Qt::ClosedHandCursor);
+            return;
         }
         m_dragFid = hitTestFixture(e->pos());   // invalidId() if empty space
         m_dragged = false;
@@ -5443,6 +5883,7 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
                 setBarHighlight(UINT_MAX);
                 setPipeBarHighlight(Pipe::invalidId());
                 emit fixtureSelected(Fixture::invalidId());
+                emit fixturesSelected({});
             }
 
             /* Empty canvas. What a plain drag SHOULD do depends on the view:
@@ -5471,12 +5912,54 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         }
         if (m_dragFid != Fixture::invalidId())
         {
-            setCursor((m_locked || m_plane == Angled || fixtureMovementLocked(m_dragFid))
-                          ? Qt::ArrowCursor : Qt::ClosedHandCursor);
-            setHighlight({ m_dragFid });
             setBarHighlight(UINT_MAX);   // a bar and a fixture are never selected together
             setPipeBarHighlight(Pipe::invalidId());
+            m_dragGroup.clear();
+            m_dragGroupStart.clear();
+            m_pressedSelected = false;
+
+            /* "select all the fixtures .. and multi-select to move them
+               around": Cmd-click (Ctrl elsewhere) or Shift-click adds or
+               removes one, and pressing one of several selected keeps them
+               all, to drag as a group. */
+            if (e->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier))
+            {
+                QSet<quint32> sel = m_highlight;
+                if (sel.contains(m_dragFid))
+                    sel.remove(m_dragFid);
+                else
+                    sel.insert(m_dragFid);
+                const quint32 primary = sel.contains(m_dragFid) ? m_dragFid
+                                      : sel.isEmpty() ? Fixture::invalidId()
+                                                      : *sel.constBegin();
+                QList<quint32> ids = fixturesInDrawOrder();
+                for (int i = ids.size() - 1; i >= 0; --i)
+                    if (!sel.contains(ids.at(i)))
+                        ids.removeAt(i);
+                setHighlight(ids);
+                m_dragFid = Fixture::invalidId();   // a toggle, not a drag
+                emit fixtureSelected(primary);
+                emit fixturesSelected(ids);
+                return;
+            }
+
+            if (m_highlight.size() > 1 && m_highlight.contains(m_dragFid))
+            {
+                m_pressedSelected = true;
+                foreach (quint32 f, fixturesInDrawOrder())
+                    if (m_highlight.contains(f))
+                    {
+                        m_dragGroup << f;
+                        m_dragGroupStart.insert(f, w2s(fixtureCentre(f)));
+                    }
+                m_dragPressPx = e->pos();
+            }
+            else
+                setHighlight({ m_dragFid });
+            setCursor((m_locked || m_plane == Angled || fixtureMovementLocked(m_dragFid))
+                          ? Qt::ArrowCursor : Qt::ClosedHandCursor);
             emit fixtureSelected(m_dragFid);   // selection always works
+            emit fixturesSelected(m_dragGroup.isEmpty() ? QList<quint32>{ m_dragFid } : m_dragGroup);
         }
     }
 }
@@ -5514,7 +5997,43 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
         update();
         return;
     }
-    if (m_dragFid != Fixture::invalidId() && !m_locked && !fixtureMovementLocked(m_dragFid))
+    if (m_rotate.mode != RotateHandle::None)
+    {
+        if (rotateDragTo(e->pos(), e->modifiers() & Qt::ShiftModifier))
+            m_dragged = true;
+        return;
+    }
+    if (e->buttons() == Qt::NoButton)
+    {
+        // Hovering: say the knob can be grabbed.
+        const RotateHandle rh = rotateHandle();
+        const bool over = rh.mode != RotateHandle::None
+                          && QLineF(rh.knob, e->pos()).length() <= 9.0;
+        if (over != m_hoverKnob)
+        {
+            m_hoverKnob = over;
+            setCursor(over ? Qt::OpenHandCursor : Qt::ArrowCursor);
+        }
+    }
+    if (m_dragFid != Fixture::invalidId() && !m_locked && !m_dragGroup.isEmpty())
+    {
+        // Together: each one keeps its offset from the pointer. One that is
+        // locked (or on a locked structure) stays; the rest still go.
+        const QPointF delta = QPointF(e->pos()) - m_dragPressPx;
+        bool any = false;
+        foreach (quint32 f, m_dragGroup)
+        {
+            if (fixtureMovementLocked(f))
+                continue;
+            if (!m_dragged && !any)
+                emit editAboutToStart();   // one snapshot for the whole group
+            if (dragFixtureTo(f, m_dragGroupStart.value(f) + delta))
+                any = true;
+        }
+        if (any)
+            m_dragged = true;
+    }
+    else if (m_dragFid != Fixture::invalidId() && !m_locked && !fixtureMovementLocked(m_dragFid))
     {
         if (!m_dragged)
             emit editAboutToStart();   // snapshot for undo before the first change
@@ -5541,6 +6060,7 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
 void StructureStudioView::leaveEvent(QEvent *)
 {
     m_hasCursor = false;
+    m_hoverKnob = false;
     update();
 }
 
@@ -5558,6 +6078,21 @@ void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
         setCursor(Qt::ArrowCursor);
         return;
     }
+    if (m_rotate.mode != RotateHandle::None)
+    {
+        const quint32 fid = m_rotate.fid;
+        m_rotate = RotateHandle();
+        setCursor(m_hoverKnob ? Qt::OpenHandCursor : Qt::ArrowCursor);
+        if (m_dragged)
+        {
+            m_dragged = false;
+            m_doc->setModified();
+            emit fixtureMoved(fid);      // the plot and the tree follow
+            emit fixtureSelected(fid);   // the inspector's Angle / Tilt too
+        }
+        update();
+        return;
+    }
     if (m_resizeBoom != 0)
     {
         m_resizeBoom = 0;
@@ -5573,9 +6108,26 @@ void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
         if (m_dragged)
         {
             m_doc->setModified();
-            emit fixtureMoved(m_dragFid);
+            if (m_dragGroup.isEmpty())
+                emit fixtureMoved(m_dragFid);
+            else
+            {
+                foreach (quint32 f, m_dragGroup)
+                    emit fixtureMoved(f);
+                emit fixturesMoved(m_dragGroup);
+            }
+        }
+        else if (m_pressedSelected)
+        {
+            // Clicked, not dragged, one of several: just that one now.
+            setHighlight({ m_dragFid });
+            emit fixtureSelected(m_dragFid);
+            emit fixturesSelected({ m_dragFid });
         }
         m_dragFid = Fixture::invalidId();
+        m_dragGroup.clear();
+        m_dragGroupStart.clear();
+        m_pressedSelected = false;
         m_dragged = false;
     }
     else if (m_dragBarId != UINT_MAX)

@@ -312,7 +312,7 @@ void FixtureTreeWidget::dragEnterEvent(QDragEnterEvent* event)
     // circuits are shown — fixture-onto-circuit drops. Fixture drags are
     // otherwise for external targets (the group editor grid), not this tree.
     if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE) ||
-        (m_showPower && event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)))
+        ((m_showPower || m_showGroups) && event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)))
         event->acceptProposedAction();
     else
         event->ignore();
@@ -325,6 +325,15 @@ void FixtureTreeWidget::dragMoveEvent(QDragMoveEvent* event)
 #else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
 #endif
+
+    // Fixtures (or a group's fixtures) onto a universe: patch them into it.
+    if (m_showGroups && dropUniverse(target).isValid()
+        && (event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)
+            || event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE)))
+    {
+        event->acceptProposedAction();
+        return;
+    }
 
     if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE))
     {
@@ -367,6 +376,18 @@ void FixtureTreeWidget::dropEvent(QDropEvent* event)
 #else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
 #endif
+
+    const QVariant dropUni = m_showGroups ? dropUniverse(target) : QVariant();
+    if (dropUni.isValid()
+        && (event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)
+            || event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE)))
+    {
+        const QList<quint32> ids = droppedFixtures(event->mimeData());
+        if (!ids.isEmpty())
+            emit fixturesDroppedOnUniverse(ids, dropUni.toUInt());
+        event->acceptProposedAction();
+        return;
+    }
 
     const QVariant dropSrcVar = (target != NULL) ? target->data(KColumnName, PROP_SOURCE) : QVariant();
     const bool validPowerTarget = target != NULL &&
@@ -438,6 +459,59 @@ void FixtureTreeWidget::dropEvent(QDropEvent* event)
     if (ids.isEmpty() == false)
         emit groupsDroppedOnFolder(ids, destPath);
     event->acceptProposedAction();
+}
+
+QVariant FixtureTreeWidget::dropUniverse(QTreeWidgetItem *target) const
+{
+    if (target == NULL)
+        return QVariant();
+    const QVariant own = target->data(KColumnName, PROP_UNIVERSE);
+    if (own.isValid())
+        return own;
+    // A fixture row (not a head) listed under a universe row.
+    if (target->data(KColumnName, PROP_ID).isValid() && !target->data(KColumnName, PROP_HEAD).isValid()
+        && target->parent() != NULL)
+        return target->parent()->data(KColumnName, PROP_UNIVERSE);
+    return QVariant();
+}
+
+QList<quint32> FixtureTreeWidget::droppedFixtures(const QMimeData *mime) const
+{
+    QList<quint32> ids;
+    if (mime->hasFormat(FIXTURE_DRAG_MIME_TYPE))
+    {
+        QByteArray data = mime->data(FIXTURE_DRAG_MIME_TYPE);
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 fid = 0;
+            stream >> fid;
+            if (!ids.contains(fid))
+                ids << fid;
+        }
+    }
+    else if (mime->hasFormat(GROUP_DRAG_MIME_TYPE))
+    {
+        // A group stands for its fixtures, in its own head order.
+        QByteArray data = mime->data(GROUP_DRAG_MIME_TYPE);
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 gid = 0;
+            stream >> gid;
+            FixtureGroup *grp = m_doc->fixtureGroup(gid);
+            if (grp == NULL)
+                continue;
+            // Braces: foreach expands to an if/else, so a braceless if
+            // around one is a dangling else.
+            foreach (quint32 fid, grp->fixtureList())
+            {
+                if (!ids.contains(fid))
+                    ids << fid;
+            }
+        }
+    }
+    return ids;
 }
 
 FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
@@ -661,7 +735,20 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
         item->setTextAlignment(m_uniColumn, Qt::AlignHCenter | Qt::AlignVCenter);
     }
 
-    if (m_addressColumn && !fixture->isPatched())
+    if (m_addressColumn && fixture->addressClash())
+    {
+        item->setText(m_addressColumn, tr("clashes at %1.%2").arg(fixture->universe() + 1)
+                                                              .arg(fixture->address() + 1));
+        item->setForeground(m_addressColumn, QBrush(QColor(220, 70, 70)));
+        Fixture *owner = m_doc->fixture(m_doc->fixtureForAddress(fixture->universeAddress()));
+        item->setToolTip(m_addressColumn,
+            tr("The show file patches it at universe %1, address %2, which %3 already uses. "
+               "It is loaded unpatched so it cannot write over it -- give it a home with "
+               "Patch / Re-address, or drag it onto a universe.")
+                .arg(fixture->universe() + 1).arg(fixture->address() + 1)
+                .arg(owner != NULL ? owner->name() : tr("another fixture")));
+    }
+    else if (m_addressColumn && !fixture->isPatched())
     {
         item->setText(m_addressColumn, fixture->connection() == Fixture::Network
                           ? (fixture->ipAddress().isEmpty() ? tr("unpatched (network)")
@@ -1050,6 +1137,7 @@ void FixtureTreeWidget::updateTree()
     // and address. A peer of Fixture Groups / Power / Universes, always
     // present in the manager so it has a right-clickable home of its own.
     QTreeWidgetItem *inventoryRoot = NULL;
+    QTreeWidgetItem *clashRoot = NULL;
     QMap<QString, QTreeWidgetItem *> invManuf;    // manufacturer -> folder
     QMap<QString, QTreeWidgetItem *> invModel;    // manufacturer\x1fmodel -> folder
     auto newInventoryFolder = [this](QTreeWidgetItem *parent, const QString &name) {
@@ -1195,6 +1283,35 @@ void FixtureTreeWidget::updateTree()
         // Staged fixtures live under the Inventory, never under a universe --
         // a placeholder 0/0 must not make one look like it sits in universe 1.
         // Channel selection has no use for them: they have no address.
+        /* An address clash: patched by the file onto channels another fixture
+           holds (see Fixture::addressClash()). Listed on its own, at the top,
+           rather than among the inventory -- it is a problem with the show,
+           not a fixture waiting to be rigged. */
+        if (fixture->addressClash() && m_showGroups && !m_channelSelection)
+        {
+            if (clashRoot == NULL)
+            {
+                blockSignals(true);
+                clashRoot = new QTreeWidgetItem;
+                insertTopLevelItem(0, clashRoot);
+                clashRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+                clashRoot->setData(KColumnName, PROP_CLASHES, true);
+                clashRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                clashRoot->setForeground(KColumnName, QBrush(QColor(220, 70, 70)));
+                clashRoot->setToolTip(KColumnName,
+                    tr("Fixtures the show file patches onto channels another fixture already "
+                       "uses. They are loaded unpatched (they send no DMX) and saved as they "
+                       "were, until they are given a home."));
+                blockSignals(false);
+                clashRoot->setExpanded(true);
+            }
+            QTreeWidgetItem *cItem = new QTreeWidgetItem(clashRoot);
+            updateFixtureItem(cItem, fixture);
+            clashRoot->setText(KColumnName, tr("Address clashes (%1)").arg(clashRoot->childCount()));
+            m_fixturesCount++;
+            continue;
+        }
+
         if (!fixture->isPatched())
         {
             if (m_channelSelection)

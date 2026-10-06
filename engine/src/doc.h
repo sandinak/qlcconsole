@@ -634,11 +634,13 @@ public:
      *  unit (e.g. importing a Show must bring its Chasers and their Scenes). */
     QList<quint32> functionFunctions(quint32 fid) const;
 
-    /** First local DMX address (0-511) in @p universe with @p channels
-     *  consecutive free slots, or 0xFFFFFFFF if the universe has no room.
-     *  Used by Import to relocate a fixture whose original address is
-     *  already occupied in the target workspace. */
-    quint32 findFreeAddress(quint32 universe, quint32 channels) const;
+    /** First local DMX address (0-511) in @p universe, from @p from on, with
+     *  @p channels consecutive free slots -- treating the fixtures in @p ignore
+     *  as already moved away -- or 0xFFFFFFFF if the universe has no room.
+     *  Used by Import to relocate a fixture whose original address is already
+     *  occupied in the target workspace, and by re-addressing. */
+    quint32 findFreeAddress(quint32 universe, quint32 channels, quint32 from = 0,
+                            const QSet<quint32> &ignore = QSet<quint32>()) const;
 
     /** Snapshot the current pre-GM output of everything function @p fid drives
      *  and install it as the held last look (so the rig doesn't blackout when
@@ -681,6 +683,32 @@ public:
      *  channel capabilities to the universe, which addFixture() skipped while
      *  it was in the inventory. */
     bool patchFixture(quint32 id, quint32 universe, quint32 address);
+
+    /** One fixture's new home, for patchFixtures(). */
+    struct FixturePatch
+    {
+        quint32 fixtureId;
+        quint32 universe;   //!< zero-based
+        quint32 address;    //!< zero-based within the universe
+    };
+
+    /** Patch or MOVE several fixtures as one step: all of them, or -- if any
+     *  one would run past its universe, overlap a fixture outside the set or
+     *  another entry -- none, with @p why saying which. The fixtures being
+     *  moved are checked against where the others are GOING, not where they
+     *  are now, so a block can shift onto its own old channels. Moving an
+     *  already patched fixture is Design mode only, for the reason
+     *  unpatchFixture() is. */
+    bool patchFixtures(const QList<FixturePatch> &patches, QString *why = NULL);
+
+    /** The same checks as patchFixtures(), changing nothing. @p channels
+     *  overrides a fixture's footprint (the mode it is about to be given). */
+    bool canPatchFixtures(const QList<FixturePatch> &patches, QString *why = NULL,
+                          const QHash<quint32, quint32> &channels = QHash<quint32, quint32>()) const;
+
+    /** Fixtures that loaded unpatched because their address clashed with
+     *  another fixture's (see Fixture::addressClash()), in id order. */
+    QList<quint32> addressClashes() const;
 
     /** Take a patched fixture back into the inventory: it keeps its name, its
      *  placement and everything it is in, but releases its channels and stops

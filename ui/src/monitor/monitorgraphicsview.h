@@ -533,6 +533,17 @@ public:
      *  call it before a mount is cleared or moved. */
     void leaveMountGroupsOf(quint32 fid);
 
+    /** Place every unplaced wireless receiver (NetworkTopology::
+     *  placeReceivers()) -- near its universe's fixtures, else beside its
+     *  transmitter -- and redraw. Returns how many it placed. */
+    int placeWirelessReceivers();
+
+    /** Take @p fids out of the structure @p kind / @p id ("truss", "tower",
+     *  "pipe"): one MOUNTED on it is unmounted; one only filed under it -- in
+     *  its group while really mounted somewhere else -- leaves its group and
+     *  goes back under the structure it is actually on. */
+    void takeOutOfStructure(const QList<quint32> &fids, const QString &kind, quint32 id);
+
     /** Symmetric to ensureTrussGroup(): if @p fid is currently a member of a
      *  group that's dedicated to @p trussId (anchorKind == "truss", anchorId
      *  == trussId — i.e. still just "the truss's own group", not something
@@ -579,6 +590,11 @@ public:
 
     /** Where a menu was opened: the plot or the Layers list. The menu is the
      *  same in both; only these differ. */
+    /** What is selected where the menu being built was opened (the plot's
+     *  selection, or the Layers list's), for actions on "these fixtures". Set
+     *  by buildItemMenu() around populateItemMenu(). */
+    QList<QPair<QString, quint32> > m_menuSelection;
+
     struct MenuPlace
     {
         bool inList = false;                            ///< opened in the Layers list
@@ -925,6 +941,9 @@ signals:
     void trussRemoveRequested(quint32 tid);
     /** "Show in Layers": select and reveal this item's row in the Layers list. */
     void revealInLayersRequested(const QString &kind, quint32 id);
+    /** Select these rows in the Layers list -- fixtures the plot hides (a
+     *  pile on a truss shown as a count) can be selected only there. */
+    void selectInLayersRequested(const QList<QPair<QString, quint32> > &objects);
 
     /** Emitted from the truss context menu / strip — add a bar hung on this
      *  truss. @p offset < 0 means "use a sensible default (mid-span)". */

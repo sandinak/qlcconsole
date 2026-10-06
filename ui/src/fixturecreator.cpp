@@ -24,10 +24,15 @@
 #include "doc.h"
 
 QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inventory,
-                                             quint32 preselectUniverse, FixtureGroup *addToGroup)
+                                             quint32 preselectUniverse, FixtureGroup *addToGroup,
+                                             const Fixture *like, const QString &manufacturer)
 {
     QList<quint32> created;
     AddFixture af(parent, doc);
+    if (like != NULL)
+        af.preselectLike(like);
+    else
+        af.preselectManufacturer(manufacturer);
     af.setInventoryMode(inventory);
     // Seed the dialog with the universe the context menu was opened in, so
     // right-clicking inside a universe adds there instead of the global default.

@@ -70,6 +70,40 @@ Sequenced: network topology first, then inventory.
   Electric · on pipe"), or is a container inside a manual folder, like a
   tower (`MonitorGraphicsView::ensureMountGroup()`, shared with towers);
   dropping a fixture on the row mounts it there.
+- **Done 2026-10-02:** assigning fixtures to universes, patched ones included
+  ("we need clean ways to assign fixtures into universes"):
+  - `Doc::patchFixtures()` patches or MOVES a set all-or-nothing, checked
+    against where the others are going (a block can shift onto its own old
+    channels); moving a patched fixture is Design mode only.
+    `Doc::findFreeAddress()` gained a start and an ignore set (Import's helper,
+    now shared). `PatchPlanner::place()` puts a set at a universe/address --
+    keeping the block's spacing or packed, spilling into the next universe --
+    and `apply()` goes through `patchFixtures()`.
+  - The Patch dialog takes patched fixtures (they start where they are, mode
+    read-only) and has "Place selected at universe / address, keeping their
+    spacing / packed together". Opened from Fixture Manager right-click
+    (Re-address / Patch / re-address N fixtures), the Studio plot's fixture
+    menu, and the structure editor inspector's DMX "…".
+  - Drop fixtures, or a fixture group, on a universe row in Fixture Manager:
+    the Patch dialog opens with them packed into that universe.
+  - Structure editor inspector: a DMX row (universe + address) moves the
+    selected fixture at once, or says why not.
+  - Address clashes: a show file with two fixtures on overlapping channels
+    used to DROP the second on load (with every group/scene/cue using it).
+    It now loads unpatched, flagged (`Fixture::addressClash()`), is saved
+    back exactly as it was, and is listed under "Address clashes (N)" at the
+    top of Fixture Manager, with "Patch the clashing fixtures..." to fix them.
+  - Add Fixture's auto-address no longer treats staged fixtures' 0/0
+    placeholder as occupied.
+  - Inventory right-click on a model's folder (or a staged fixture):
+    "Add more XL-450 to inventory..." opens Add on that model and mode; on a
+    manufacturer's folder, on that manufacturer (`AddFixture::preselectLike()`
+    / `preselectManufacturer()`, through `FixtureCreator::addFromDialog()`).
+  - Add to Inventory's Quantity is no longer capped by how many fit in a
+    universe from the hidden address (a 165-ch fixture was held to 1):
+    staged fixtures take no channels, so up to 999 at once.
+  - Not done: no undo for a re-address (the dialog is the confirm step; the
+    structure editor's Ctrl+Z covers rig props only).
 
 ---
 
@@ -239,6 +273,190 @@ rig edits, bulk repatching, cross-show consistency checks.
   - A truss editor's right-click menu has Add Bar Here (the bar lands where
     you clicked along the truss; mid-span when it is seen end-on), and a
     stand's or boom's has Add Crossbar -- only the toolbar had them.
+  - Steps, a stage feature ("count, rise, run and width .. default 8" rise,
+    8" run, 2 steps, 3' wide"): a `StagePlatform` with a Steps shape
+    (`setSteps()`, `topAt()`, `blocks()`, climb upstage/downstage/stage
+    left/right; XML `Steps`/`StepRise`/`StepRun`/`StepClimb`, written only for
+    steps). Add > Add Steps (toolbar and canvas menu) with those defaults; the
+    platform editor has Shape: Platform / Steps, with Steps, Rise, Run, Step
+    width and Climb toward, the box following from them. Drawn as treads + an
+    UP arrow in plan, risers face-on, the staircase side-on (plot and rig
+    view), a solid per step at 45°. Beams land on each tread; a deck-mounted
+    fixture stands on the tread under it; targets bound to it aim at its
+    middle tread. Not yet: riser-face mounts still treat the flight as one
+    box (front face = the whole front), and the older studio plane editor
+    (studioplaneview) draws it as a box.
+  - Layers, a fixture group listed under a truss/tower/boom: right-click
+    "Remove “3z” from “T-3”" (`MonitorGraphicsView::takeOutOfStructure()`):
+    members mounted on it are unmounted; members only FILED under it (AT1-3z,
+    mounted on tower AT1) leave its group and go back under their own
+    structure.
+  - Layers, several fixture groups selected: "Create Fixture Group from N
+    Groups (as on stage)…" (`CreateFixtureGroup::createFromGroups()` /
+    `layoutGroupsByStage()`): each group goes in as a sub-group block keeping
+    its own layout, placed where it stands -- across by X (stage right on the
+    left), up/down by height (or upstage/downstage when level) -- in one
+    cells-per-metre scale from the groups' own layouts; overlaps pushed apart,
+    life-size gaps squeezed to stay usable.
+  - Layers: a fixture group's row stands for its fixtures -- right-click
+    Move to Layer / New Layer from Selection, and dragging the row onto a
+    layer or folder, move them ("I can't move USTs fixture group to a
+    different layer"). It contributed nothing to the selection and could not
+    be dragged at all.
+  - Structure editor list: "Remove from Tower/Truss/Boom/Platform" for the
+    selected fixtures ("no way to remove fixture from tower"); the canvas's
+    "Remove from object" is the same action now, and both do the full
+    unmount (out of the structure's group too).
+  - Patch / Re-address from the Layers list takes the LIST's selection --
+    fixtures stacked in a tower cannot be selected on the plot, so it got
+    only the one right-clicked ("selected 4 and got 1"). Split by Head Type
+    likewise (`MonitorGraphicsView::m_menuSelection`).
+  - Wireless DMX: a W-DMX transmitter's receivers are placed by themselves
+    (`NetworkTopology::placeReceivers()`, after a node is added or edited) --
+    in the middle of the fixtures on their universe, else beside the
+    transmitter -- and named "<transmitter> RX n"; they were unplaced, so
+    drawn nowhere, until coordinates were typed in. On the plan view a
+    receiver can be dragged to where the box is rigged (not when the layout
+    is locked); its dashed link and the cable runs follow.
+  - Fixtures with more than one kind of head (XL-450: rows of 15 RGB / W /
+    RGB / W / RGB, numbered 45 RGB then 30 W): engine `HeadKinds` (RGB, W,
+    RGBW... from the channels' colours) and `HeadLayout`, a per model+mode
+    LED map (head -> cell) in the operator's library (`HeadLayoutLibrary`,
+    ~/Library/Application Support/qlcconsole/HeadLayouts, JSON) and copied
+    into the show (`<HeadLayout>` in the Monitor section). The definition
+    only declares the grid size, so head order was assumed everywhere. The
+    "Split by Head Type" wizard (`HeadTypesDialog`) shows the grid coloured
+    by kind with head numbers, a row pattern (Apply Rows / Head Order) and
+    click-two-to-swap, and makes a group per kind ("FART-SR RGB", "FART-SR
+    W"), each fixture's heads of that kind as a block turned the way it is
+    rigged (a bar hanging down is a column) and placed as on stage
+    (`CreateFixtureGroup::createByHeadKind()` / `layoutBlocksByStage()`).
+    Each kind's group has its own exact, editable name in the wizard (a name
+    that already ends in the kind is not given it twice -- "T1-CW-RGB RGB").
+    Layers lists a fixture under EVERY fixture group it is in (it showed
+    under the first only, so a split's other group looked empty), and a
+    group local to no one structure (across T-1..T-4) is listed under its
+    layer, or under "Fixture Groups" when it spans layers -- it was in no
+    row at all.
+    Offered when making a group from mixed fixtures (selection or groups),
+    on the plot's fixture menu and a fixture group's Layers row. The rig
+    view draws heads by the map. Not yet: the 2D plot's own pixel grid
+    (MonitorFixtureItem) still lays heads in head order.
+  - New Fixture Group from fixtures on stage (`StageGroupDialog`): name it,
+    pick the view -- From the front (across, and up the grid is up: the
+    step fronts become one picture for the audience), From above (up the
+    grid is upstage: the step tops as a plan) or Automatic -- and "Close up
+    the gaps" (on by default: each fixture keeps its place relative to the
+    others but empty rows/columns go, an ordinal band layout in
+    `layoutBlocksByStage()`; off is the rig to scale). Live preview and
+    size. The split wizard has the same view / gaps choices. Its "same
+    place" tolerance is a fraction of the median gap between positions, so
+    one wide gap (two FARTs 4 m apart) does not merge bars 15 cm apart --
+    "*St*" fronts were 128 x 24 and scrambled, now 256 x 24 in order; the
+    FART bars SR-1..16 then SL-1..16. Generic definitions' placeholder
+    sizes are ignored (a washer was 14 m of pixels). Both dialogs warn when
+    a group with exactly these heads already exists and offer Keep it /
+    Make Another. Where it is listed is unchanged: under the structure or
+    layer it fits in, else under "Fixture Groups" -- it need not belong to
+    any layer.
+  - "Create Fixture Group from N Groups" (Layers) opens the same named,
+    previewed dialog as fixtures do, with the view -- From the front / From
+    above / Automatic -- and Close up the gaps; it said "(as on stage)" and
+    never said from where. "Keep each group's own layout" (on): each group
+    goes in as a block and the view places the blocks; off, every fixture is
+    laid out afresh from the studio in that view. Block tags are now the
+    group's ID + 1 (`FixtureGroup::subGroupTagFor()`) -- 0 means "none", so
+    the first group made (ID 0) could never be a block. Old shows' tags
+    still group, as tags are only compared.
+  - Test audit of the stage-layout / group work (2026-10-06): added
+    `stepFrontsAndTopsAreLaidOutAsOnStage` (riser faces: #1 on top, decks in
+    stage order, tops from above by depth with every head, Generic sizes
+    ignored), `theSplitWizardOffersAViewAndKeepsAnExistingGroup`,
+    `FixtureGroup_Test::subGroupTagsCoverGroupZero`, and in autosave_test a
+    `.qlcc` save/open round trip and "a missing show file is an error, the
+    open show is untouched". The split wizard's "already exist" box now
+    offers Keep Them / Make Another / Cancel -- it could only keep, so the
+    same heads from above as well as from the front could not be made.
+  - Layers: every row renames by select + Enter -- a fixture group's too
+    (its rows were never editable); the editor starts from the bare name,
+    not "US2f  · fixture group" / "US-2  · on riser"
+    (`LayersNameDelegate`). A rename could be LOST: Enter's commit is
+    queued by Qt, so a reload already queued (e.g. a fixture renamed a
+    moment before) cleared the tree first and dropped it. Reloads now wait
+    while a name is being typed (`LayersTreeWidget::isEditing()`), and the
+    editor's own Enter no longer re-triggers "start rename".
+  - "Lay Out from the Stage…" on a fixture group's Layers row: the same
+    dialog laying out THAT group again in place (name kept, Apply) -- so a
+    group filled in head order is put right without a new one. Found by the
+    groups dialog: US2f in stage-structures-demo held its eight 64-head
+    bars poured into a 23 x 23 square (claiming 64 x 8); re-laid from the
+    front it is 64 x 8 like its eleven siblings.
+  - Select All Similar. A fixture group's Layers row: the groups of the
+    same fixture models (as many of each) laid out the same, cell for cell
+    (`CreateFixtureGroup::similarGroups()`) -- the four step fronts find
+    each other; when there are more groups of those fixtures in other
+    layouts, "Select All with the Same Fixtures (n)" too. A fixture (plot
+    or list): every fixture of the same model and mode. Selecting is not
+    an edit, so it is offered in any mode. Fixtures the plot hides (a pile
+    on a truss shown as a count) are selected in the Layers list
+    (`selectInLayersRequested`).
+  - The plot's plan view draws a bar by the way it runs, like the
+    elevations always did: a bar hanging straight down is its end, not a 1 m
+    strip lying left-right (the FART bars read as one solid band of
+    overlapping bars in plan while the rig view was right).
+  - Face is a DIRECTION: Top / Bottom / Front (downstage) / Back (upstage) /
+    Stage left / Stage right, in the structure inspector and Full properties
+    ("no way to put this fixture on the back? .. which side?"). A plane
+    (studioMount) plus `studioFlip` (a 180° roll; XML `SF`), via
+    `MonitorProperties::setFixtureFace()`, which on the OUTSIDE of a truss
+    also moves it to that side (tower: trussCross/Y = ±half width;
+    horizontal: on top / under / the downstage/upstage chord). A chosen face
+    is marked (`studioFaceChosen`, SM always written) so the load-time
+    repair of a stray default Front no longer undoes a deliberate Front/Back.
+    Frame-group fixtures on a platform pin to the matching surface (Side used
+    to pin to the stage-RIGHT end while facing stage left).
+  - Layers: an opened fixture group stays open through a rebuild of the
+    list (its rows are built closed and nothing remembered it was open, so
+    any of reload()'s ~20 triggers snapped it shut -- "I can't click on any
+    side arrow to open any of the groups"; not reproduced offscreen, so the
+    trigger in the live app is unconfirmed). A fixture group's row has
+    "Delete Fixture Group…" (group only, fixtures kept) -- for duplicates
+    like UST beside USTs in the demo, same eight fixtures.
+  - Tests never put windows on the real screen: unittest.sh runs them with
+    QT_QPA_PLATFORM=offscreen on macOS unless the caller sets a platform
+    (CI's Linux job keeps its xvfb). The whole gate passes offscreen.
+  - A Layers row stays selected when the plot cannot select its item (a
+    fixture stacked out of sight inside a tower in plan view -- T1-W in the
+    demo): the row CLICK handler asked the plot to select it outside the
+    sync guard, the plot answered "nothing selected", and Layers cleared the
+    row it had just selected ("they select and deselect immediately").
+  - Right-click on the plot keeps the selection it lands in (selects what
+    was clicked if it was not selected). The right-press went to Qt, the
+    items take only the left button, and an unaccepted press clears the
+    selection -- so "Move to Layer" on a selected truss moved only the one
+    clicked ("I can't right click on a FART to move to a new layer").
+  - LED bar fixtures have a real outline in the rig view's flat planes: a dark
+    halo and a rim in their own colour, lifted until it reads -- they were
+    grey-on-grey inside grey truss ("hard to discern where the bars are").
+  - Structure editors work on a SELECTION ("select all the fixtures .. apply
+    tilt/angle .. to all of them .. auto distribute and multi-select to move
+    them around"): the inspector's Colour / Placement / Face / Angle / Tilt /
+    Orientation apply to every selected fixture (a folder row -- a group or
+    "Ungrouped" -- selects what is in it; the title says how many); ⌘-click
+    or ⇧-click on the canvas adds/removes, dragging any selected one moves them
+    all (one undo); Distribute on a few spaces them between the outermost two
+    (all, or none picked, still spreads across the whole object), and lines
+    them up -- drop and cross offset (riser: height up the face) from the
+    median one, since earlier drags leave each a few mm apart. The action buttons
+    got a row of their own -- they were clipped to "t on Fa"/"stribu".
+  - Rotation handles in the structure editors: the one selected bar/strip
+    gets a ring and a knob to drag round. Wherever its length lies flat in
+    the view it turns about the axis out of the screen (Angle -- moved onto
+    the viewed face, Tilt kept equivalent, when that is not its own face);
+    looking down its length it rolls (Tilt). Shift snaps to 15°. Unlocked
+    editor only; one Ctrl+Z per drag. None where the load-time mount-plane
+    repair would undo the result (Front face on a deck/horizontal truss), and
+    none for movers/pars, whose flat drawings ignore their orientation.
   - Selecting on the plot selects the same objects in Layers (folders opened,
     scrolled to the first); Layers -> plot already worked.
   - A rename anywhere shows everywhere: the plot's label and tooltip (it had

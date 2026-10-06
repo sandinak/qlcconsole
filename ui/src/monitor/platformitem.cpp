@@ -107,6 +107,12 @@ void PlatformItem::paint(QPainter *painter,
     if (m_platform->locked())
         border = QColor(200, 60, 60, selected ? 255 : 200);
 
+    if (m_platform->isSteps())
+    {
+        paintSteps(painter, fill, border, selected);
+        return;
+    }
+
     painter->setPen(QPen(border, selected ? 2.0 : 1.5));
     painter->setBrush(QBrush(fill));
     painter->drawRect(QRectF(0, 0, m_pxW, m_pxD));
@@ -121,6 +127,87 @@ void PlatformItem::paint(QPainter *painter,
         painter->drawLine(QPointF(x, 0), QPointF(x, m_pxD));
     for (float y = spacing; y < m_pxD; y += spacing)
         painter->drawLine(QPointF(0, y), QPointF(m_pxW, y));
+}
+
+void PlatformItem::paintSteps(QPainter *painter, const QColor &fill, const QColor &border,
+                              bool selected)
+{
+    /* Local x runs with world X (plan, front) or world Y (side); local y runs
+       with world Y in plan, and DOWN from the top of the flight in an
+       elevation. +X is stage left, +Y downstage. */
+    const int n = qMax(1, m_platform->stepCount());
+    const StagePlatform::Climb climb = m_platform->stepsClimb();
+    const bool alongX = (climb == StagePlatform::ClimbStageLeft || climb == StagePlatform::ClimbStageRight);
+    const QPen edge(border, selected ? 2.0 : 1.5);
+    QPen tread(border.lighter(140), 1.0);
+
+    if (m_view == 0)
+    {
+        // Plan: the treads, and which way is up.
+        painter->setPen(edge);
+        painter->setBrush(QBrush(fill));
+        painter->drawRect(QRectF(0, 0, m_pxW, m_pxD));
+        painter->setPen(tread);
+        for (int k = 1; k < n; ++k)
+        {
+            if (alongX)
+                painter->drawLine(QPointF(m_pxW * k / n, 0), QPointF(m_pxW * k / n, m_pxD));
+            else
+                painter->drawLine(QPointF(0, m_pxD * k / n), QPointF(m_pxW, m_pxD * k / n));
+        }
+        QPointF from, to;      // bottom step's edge to the top step's
+        const QPointF mid(m_pxW / 2.0, m_pxD / 2.0);
+        switch (climb)
+        {
+        case StagePlatform::ClimbDownstage:  from = QPointF(mid.x(), 0);      to = QPointF(mid.x(), m_pxD); break;
+        case StagePlatform::ClimbStageLeft:  from = QPointF(0, mid.y());      to = QPointF(m_pxW, mid.y()); break;
+        case StagePlatform::ClimbStageRight: from = QPointF(m_pxW, mid.y());  to = QPointF(0, mid.y());     break;
+        case StagePlatform::ClimbUpstage:
+        default:                             from = QPointF(mid.x(), m_pxD);  to = QPointF(mid.x(), 0);     break;
+        }
+        const QPointF a = from + (to - from) * 0.15, b = from + (to - from) * 0.85;
+        QLineF shaft(a, b);
+        painter->setPen(QPen(border.lighter(160), 1.4));
+        painter->drawLine(shaft);
+        QLineF head1 = QLineF(b, a); head1.setLength(qMin(8.0, shaft.length() * 0.4));
+        QLineF head2 = head1;
+        head1.setAngle(head1.angle() + 28); head2.setAngle(head2.angle() - 28);
+        painter->drawLine(head1);
+        painter->drawLine(head2);
+        QFont f = painter->font(); f.setPixelSize(9); painter->setFont(f);
+        painter->drawText(QRectF(a.x() - 20, a.y() - 14, 40, 12), Qt::AlignCenter, tr("UP"));
+        return;
+    }
+
+    // Elevation. Is the climb across the screen here, or toward the viewer?
+    const bool profile = (m_view == 1) ? alongX : !alongX;
+    if (!profile)
+    {
+        // Face-on: the risers, one above the other.
+        painter->setPen(edge);
+        painter->setBrush(QBrush(fill));
+        painter->drawRect(QRectF(0, 0, m_pxW, m_pxD));
+        painter->setPen(tread);
+        for (int k = 1; k < n; ++k)
+            painter->drawLine(QPointF(0, m_pxD * k / n), QPointF(m_pxW, m_pxD * k / n));
+        return;
+    }
+    // Side-on: the staircase itself. Low end at local x = 0 when climbing
+    // toward +X (stage left) in front, or toward +Y (downstage) in side.
+    const bool lowAtStart = (m_view == 1) ? (climb == StagePlatform::ClimbStageLeft)
+                                          : (climb == StagePlatform::ClimbDownstage);
+    QPolygonF stairs;
+    stairs << QPointF(0, m_pxD);
+    for (int k = 0; k < n; ++k)
+    {
+        const int step = lowAtStart ? k : n - 1 - k;
+        const double y = m_pxD - m_pxD * (step + 1) / n;
+        stairs << QPointF(m_pxW * k / n, y) << QPointF(m_pxW * (k + 1) / n, y);
+    }
+    stairs << QPointF(m_pxW, m_pxD);
+    painter->setPen(edge);
+    painter->setBrush(QBrush(fill));
+    painter->drawPolygon(stairs);
 }
 
 QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &value)

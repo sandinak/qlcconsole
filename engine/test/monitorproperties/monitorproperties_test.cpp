@@ -21,8 +21,15 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QTemporaryDir>
+#include <QBuffer>
 #define private public
 #include "monitorproperties.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
+#include "qlcfixturehead.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
+#include "headlayout.h"
 #undef private
 #include "stageplatform.h"
 #include "truss.h"
@@ -1443,4 +1450,363 @@ void MonitorProperties_Test::targetXmlRoundTrip()
              "a target with no kind is writing Kind= into every show file");
     QVERIFY2(plainBuf.contains("BoundType=") == false,
              "an unbound target is writing a binding into every show file");
+}
+
+void MonitorProperties_Test::stepsAreAFlightOfTreads()
+{
+    // The default: two steps, 8" rise and run, 3' wide, climbing upstage.
+    MonitorProperties mp;
+    StagePlatform *st = mp.addPlatform();
+    st->setOriginX(1.0f);
+    st->setOriginY(2.0f);
+    st->setSteps(2, 0.2032f, 0.2032f, 0.9144f);
+    QVERIFY(st->isSteps());
+    QCOMPARE(st->width(), 0.9144f);                 // across stage
+    QCOMPARE(st->depth(), 0.4064f);                 // 16"
+    QCOMPARE(st->height(), 0.4064f);                // 16"
+    QCOMPARE(st->stepWidth(), 0.9144f);
+
+    // +Y is downstage, so the bottom step is the high-Y strip.
+    const float x = 1.4f;
+    QCOMPARE(st->topAt(x, 2.0f + 0.35f), 0.2032f);  // bottom tread
+    QCOMPARE(st->topAt(x, 2.0f + 0.05f), 0.4064f);  // top tread
+    QCOMPARE(st->topAt(x, 9.0f), 0.2032f);          // off the downstage edge: the bottom one
+    QCOMPARE(mp.platformHeightAt(x, 2.35f), 0.2032f);
+    QCOMPARE(mp.platformHeightAt(x, 2.05f), 0.4064f);
+
+    const QList<StagePlatform::Block> b = st->blocks();
+    QCOMPARE(b.size(), 2);
+    QCOMPARE(b[0].height, 0.2032f);
+    QCOMPARE(b[0].y1, 2.4064f);                     // the downstage strip
+    QCOMPARE(b[1].height, 0.4064f);
+    QCOMPARE(b[1].y0, 2.0f);
+
+    // A plain platform is one block at its own height, everywhere.
+    StagePlatform *box = mp.addPlatform();
+    box->setHeight(0.5f);
+    QCOMPARE(box->blocks().size(), 1);
+    QCOMPARE(box->topAt(0.3f, 0.3f), 0.5f);
+}
+
+void MonitorProperties_Test::stepsClimbEveryWay()
+{
+    MonitorProperties mp;
+    StagePlatform *st = mp.addPlatform();
+    st->setOriginX(0.0f);
+    st->setOriginY(0.0f);
+
+    st->setSteps(3, 0.2f, 0.3f, 1.0f, StagePlatform::ClimbDownstage);
+    QCOMPARE(st->depth(), 0.9f);
+    QCOMPARE(st->topAt(0.5f, 0.1f), 0.2f);         // upstage edge is the bottom
+    QCOMPARE(st->topAt(0.5f, 0.8f), 0.6f);
+
+    st->setSteps(3, 0.2f, 0.3f, 1.0f, StagePlatform::ClimbStageLeft);   // toward +X
+    QCOMPARE(st->width(), 0.9f);
+    QCOMPARE(st->depth(), 1.0f);
+    QCOMPARE(st->stepWidth(), 1.0f);
+    QCOMPARE(st->topAt(0.1f, 0.5f), 0.2f);
+    QCOMPARE(st->topAt(0.8f, 0.5f), 0.6f);
+
+    st->setSteps(3, 0.2f, 0.3f, 1.0f, StagePlatform::ClimbStageRight);
+    QCOMPARE(st->topAt(0.8f, 0.5f), 0.2f);
+    QCOMPARE(st->topAt(0.1f, 0.5f), 0.6f);
+}
+
+void MonitorProperties_Test::stepsRoundTripInXml()
+{
+    StagePlatform st(4);
+    st.setName("House steps");
+    st.setSteps(4, 0.18f, 0.28f, 1.2f, StagePlatform::ClimbStageRight);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    st.saveXML(&w);
+    buf.close();
+    QVERIFY(buf.data().contains("Steps=\"4\""));
+
+    QXmlStreamReader r(buf.data());
+    r.readNextStartElement();
+    StagePlatform back(0);
+    QVERIFY(back.loadXML(r));
+    QVERIFY(back.isSteps());
+    QCOMPARE(back.stepCount(), 4);
+    QCOMPARE(back.stepRise(), 0.18f);
+    QCOMPARE(back.stepRun(), 0.28f);
+    QCOMPARE(back.stepsClimb(), StagePlatform::ClimbStageRight);
+    QCOMPARE(back.width(), st.width());
+    QCOMPARE(back.depth(), 1.2f);
+    QCOMPARE(back.height(), st.height());
+
+    // A plain platform writes nothing new.
+    StagePlatform box(5);
+    QBuffer b2;
+    b2.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w2(&b2);
+    box.saveXML(&w2);
+    QVERIFY(!b2.data().contains("Step"));
+}
+
+void MonitorProperties_Test::aFixtureOnStepsStandsOnItsTread()
+{
+    MonitorProperties mp;
+    StagePlatform *st = mp.addPlatform();
+    st->setSteps(2, 0.2032f, 0.2032f, 0.9144f);     // y 0..0.4064, bottom tread downstage
+
+    // Standing on the bottom tread (y = 0.3 m, in mm on the plot).
+    mp.setFixturePosition(7, 0, 0, QVector3D(400.0f, 300.0f, 0.0f));
+    FixtureRigProps rp;
+    rp.deckPlatformId = st->id();
+    mp.setFixtureRigProps(7, rp);
+    QCOMPARE(mp.fixtureRigPosition(7).z(), 0.2032f);
+
+    // On the top one.
+    mp.setFixturePosition(7, 0, 0, QVector3D(400.0f, 100.0f, 0.0f));
+    QCOMPARE(mp.fixtureRigPosition(7).z(), 0.4064f);
+}
+
+void MonitorProperties_Test::aFixtureFacesEachOfSixWays()
+{
+    MonitorProperties mp;
+    const FixtureRigProps::Face all[6] = {
+        FixtureRigProps::FaceTop, FixtureRigProps::FaceBottom, FixtureRigProps::FaceFront,
+        FixtureRigProps::FaceBack, FixtureRigProps::FaceStageLeft, FixtureRigProps::FaceStageRight };
+    const int plane[6] = { 0, 0, 1, 1, 2, 2 };
+    for (int i = 0; i < 6; ++i)
+    {
+        FixtureRigProps rp;
+        mp.setFixtureFace(rp, all[i]);
+        QCOMPARE(rp.studioMount, plane[i]);
+        QCOMPARE(rp.studioFlip, (i % 2) == 1);
+        QCOMPARE(rp.face(), all[i]);
+        QVERIFY(rp.studioFaceChosen);
+    }
+    // The default is Front, facing downstage, and not a choice.
+    FixtureRigProps def;
+    QCOMPARE(def.face(), FixtureRigProps::FaceFront);
+    QVERIFY(!def.studioFaceChosen);
+}
+
+void MonitorProperties_Test::aFaceOnATrussIsThatSideOfIt()
+{
+    MonitorProperties mp;
+    Truss *tower = mp.addTruss();
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(2.0f, 3.0f, 0.0f));
+    tower->setLength(3.0f);
+    tower->setWidth(0.3f);
+    mp.setFixturePosition(1, 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = tower->id();
+    rp.trussOffset = 1.5f;
+
+    // On the back of a tower: its upstage side (+Y is downstage).
+    mp.setFixtureFace(rp, FixtureRigProps::FaceBack);
+    QCOMPARE(rp.trussCrossY, -0.15f);
+    mp.setFixtureRigProps(1, rp);
+    QVERIFY(mp.fixtureRigPosition(1).y() < 3.0f);
+    mp.setFixtureFace(rp, FixtureRigProps::FaceStageRight);
+    QCOMPARE(rp.trussCross, -0.15f);                // stage right is -X
+    QCOMPARE(rp.trussCrossY, -0.15f);               // the other axis is left alone
+
+    // A horizontal run across stage: Front/Back are its downstage/upstage
+    // chords, Top/Bottom on and under it; it has no stage-left chord.
+    Truss *pipe = mp.addTruss();
+    pipe->setType(Truss::Horizontal);
+    pipe->setOrigin(QVector3D(0.0f, 5.0f, 4.0f));
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+    pipe->setWidth(0.3f);
+    FixtureRigProps h;
+    h.trussId = pipe->id();
+    mp.setFixtureFace(h, FixtureRigProps::FaceFront);
+    QCOMPARE(h.trussCross, 0.15f);
+    QCOMPARE(h.trussMountSide, int(FixtureRigProps::Centered));
+    mp.setFixtureFace(h, FixtureRigProps::FaceBack);
+    QCOMPARE(h.trussCross, -0.15f);
+    mp.setFixtureFace(h, FixtureRigProps::FaceTop);
+    QCOMPARE(h.trussMountSide, int(FixtureRigProps::TopMounted));
+    QCOMPARE(h.trussCross, 0.0f);
+    mp.setFixtureFace(h, FixtureRigProps::FaceStageLeft);
+    QCOMPARE(h.trussCross, 0.0f);                   // unchanged: no such chord
+    QCOMPARE(h.face(), FixtureRigProps::FaceStageLeft);
+
+    // Inside a truss it only turns.
+    FixtureRigProps in;
+    in.trussId = tower->id();
+    in.placement = FixtureRigProps::Inside;
+    mp.setFixtureFace(in, FixtureRigProps::FaceBack);
+    QCOMPARE(in.trussCrossY, 0.0f);
+    QCOMPARE(in.face(), FixtureRigProps::FaceBack);
+}
+
+void MonitorProperties_Test::aChosenFaceSurvivesSaveAndRepair()
+{
+    MonitorProperties mp;
+    Truss *pipe = mp.addTruss();
+    pipe->setType(Truss::Horizontal);
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+    mp.setFixturePosition(1, 0, 0, QVector3D(0, 0, 0));
+    mp.setFixturePosition(2, 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps back;
+    back.trussId = pipe->id();
+    mp.setFixtureFace(back, FixtureRigProps::FaceBack);
+    mp.setFixtureRigProps(1, back);
+    FixtureRigProps front;
+    front.trussId = pipe->id();
+    mp.setFixtureFace(front, FixtureRigProps::FaceFront);
+    mp.setFixtureRigProps(2, front);
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+    QVERIFY(buf.contains("SF=\"1\""));
+
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+    // The load-time repair moves a STRAY default Front on a horizontal truss
+    // to Top. A chosen Front or Back stays.
+    mp2.repairMountPlanes();
+    QCOMPARE(mp2.fixtureRigProps(1).face(), FixtureRigProps::FaceBack);
+    QCOMPARE(mp2.fixtureRigProps(2).face(), FixtureRigProps::FaceFront);
+
+    FixtureRigProps stray;
+    stray.trussId = pipe->id();
+    mp2.repairMountPlane(stray);
+    QCOMPARE(stray.studioMount, 0);
+}
+
+/* An XL-450 as its 165-channel mode is defined: 45 RGB heads, then 30 white
+   ones, on a declared 15 x 5 grid. */
+static QLCFixtureDef *xl450(QLCFixtureMode **modeOut)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Warmdance");
+    def->setModel("XL-450");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("165ch");
+    auto add = [&](const QString &name, QLCChannel::Preset preset) {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(name);
+        ch->setPreset(preset);
+        def->addChannel(ch);
+        mode->insertChannel(ch, mode->channels().size());
+        return quint32(mode->channels().size() - 1);
+    };
+    for (int i = 0; i < 45; ++i)
+    {
+        QLCFixtureHead h;
+        h.addChannel(add(QString("Red %1").arg(i + 1), QLCChannel::IntensityRed));
+        h.addChannel(add(QString("Green %1").arg(i + 1), QLCChannel::IntensityGreen));
+        h.addChannel(add(QString("Blue %1").arg(i + 1), QLCChannel::IntensityBlue));
+        mode->insertHead(-1, h);
+    }
+    for (int i = 0; i < 30; ++i)
+    {
+        QLCFixtureHead h;
+        h.addChannel(add(QString("White %1").arg(i + 1), QLCChannel::IntensityWhite));
+        mode->insertHead(-1, h);
+    }
+    QLCPhysical ph;
+    ph.setLayoutSize(QSize(15, 5));
+    ph.setWidth(401); ph.setHeight(180); ph.setDepth(100);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    *modeOut = mode;
+    return def;
+}
+
+void MonitorProperties_Test::headKindsAreReadFromTheChannels()
+{
+    QLCFixtureMode *mode = nullptr;
+    QLCFixtureDef *def = xl450(&mode);
+    Fixture fx(this);
+    fx.setFixtureDefinition(def, mode);
+    QCOMPARE(HeadKinds::kindOf(mode, 0), QString("RGB"));
+    QCOMPARE(HeadKinds::kindOf(mode, 44), QString("RGB"));
+    QCOMPARE(HeadKinds::kindOf(mode, 45), QString("W"));
+    QCOMPARE(HeadKinds::kindsOf(&fx), QStringList({ "RGB", "W" }));
+    QVERIFY(HeadKinds::isMixed(&fx));
+    QCOMPARE(HeadLayout::keyFor(&fx), QString("Warmdance|XL-450|165ch"));
+    fx.setFixtureDefinition(nullptr, nullptr);
+    delete def;
+}
+
+void MonitorProperties_Test::aRowPatternMapsEachKindToItsRows()
+{
+    QLCFixtureMode *mode = nullptr;
+    QLCFixtureDef *def = xl450(&mode);
+    Fixture fx(this);
+    fx.setFixtureDefinition(def, mode);
+
+    // What everything assumed: head order, row by row -- RGB in rows 0-2.
+    const HeadLayout order = HeadLayout::headOrder(&fx);
+    QCOMPARE(order.size, QSize(15, 5));
+    QCOMPARE(order.cellOf(45), QPoint(0, 3));
+    QCOMPARE(order.rowKinds(&fx), QStringList({ "RGB", "RGB", "RGB", "W", "W" }));
+
+    // As built.
+    const HeadLayout built = HeadLayout::fromRowPattern(&fx, { "RGB", "W", "RGB", "W", "RGB" });
+    QVERIFY(built.isValid());
+    QCOMPARE(built.cellOf(0), QPoint(0, 0));        // RGB 1
+    QCOMPARE(built.cellOf(14), QPoint(14, 0));
+    QCOMPARE(built.cellOf(15), QPoint(0, 2));       // RGB 16 starts the 2nd RGB row
+    QCOMPARE(built.cellOf(30), QPoint(0, 4));
+    QCOMPARE(built.cellOf(45), QPoint(0, 1));       // W 1
+    QCOMPARE(built.cellOf(60), QPoint(0, 3));       // W 16
+    QCOMPARE(built.rowKinds(&fx), QStringList({ "RGB", "W", "RGB", "W", "RGB" }));
+
+    // Rows that cannot hold the heads there are: refused, not guessed.
+    QVERIFY(!HeadLayout::fromRowPattern(&fx, { "RGB", "RGB", "RGB", "RGB", "W" }).isValid());
+    fx.setFixtureDefinition(nullptr, nullptr);
+    delete def;
+}
+
+void MonitorProperties_Test::anLedMapLivesInTheLibraryAndTheShow()
+{
+    QTemporaryDir lib;
+    HeadLayoutLibrary::setUserDirectoryOverride(lib.path());
+    QLCFixtureMode *mode = nullptr;
+    QLCFixtureDef *def = xl450(&mode);
+    Fixture fx(this);
+    fx.setFixtureDefinition(def, mode);
+    const HeadLayout built = HeadLayout::fromRowPattern(&fx, { "RGB", "W", "RGB", "W", "RGB" });
+
+    MonitorProperties mp;
+    QVERIFY(!mp.hasHeadLayout(&fx));
+    QCOMPARE(mp.headLayoutFor(&fx), HeadLayout::headOrder(&fx));   // nothing known: head order
+
+    // In the library: every show sees it.
+    QVERIFY(HeadLayoutLibrary::save(built));
+    QCOMPARE(HeadLayoutLibrary::load(built.key), built);
+    QVERIFY(mp.hasHeadLayout(&fx));
+    QCOMPARE(mp.headLayoutFor(&fx), built);
+
+    // A show's own copy wins, and travels with the file.
+    HeadLayout mine = built;
+    mine.cells[0] = QPoint(1, 0);
+    mine.cells[1] = QPoint(0, 0);
+    mp.setHeadLayout(mine);
+    QCOMPARE(mp.headLayoutFor(&fx), mine);
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+    QCOMPARE(mp2.headLayoutFor(&fx), mine);
+
+    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+    fx.setFixtureDefinition(nullptr, nullptr);
+    delete def;
 }

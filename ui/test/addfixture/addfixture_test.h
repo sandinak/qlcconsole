@@ -34,6 +34,9 @@ private slots:
     void cleanupTestCase();
 
     void findAddress();
+    void findAddressIgnoresUnpatchedFixtures();
+    void inventoryQuantityIsNotLimitedByAUniverse();
+    void addingMoreStartsOnTheSameModelAndMode();
     void initialNoFixture();
     void initialDimmer();
     void initialScanner();

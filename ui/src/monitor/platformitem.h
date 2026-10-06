@@ -55,6 +55,11 @@ public:
     /** Show or hide the platform's name/size label. */
     void showLabel(bool visible);
 
+    /** Which plot view it is drawn in -- 0 plan, 1 front, 2 side -- so a
+     *  flight of steps can draw its treads, or its profile, the right way
+     *  round. A box draws the same in all of them. */
+    void setView(int view) { m_view = view; update(); }
+
     // QGraphicsItem interface
     QRectF boundingRect() const override;
     void   paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
@@ -67,6 +72,9 @@ protected:
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
 
+private:
+    void paintSteps(QPainter *painter, const QColor &fill, const QColor &border, bool selected);
+
 signals:
     /** Emitted when the user finishes a drag so the view can persist the move. */
     void itemDropped(PlatformItem *item);
@@ -77,7 +85,8 @@ private:
     float              m_pxW;
     float              m_pxD;
     QGraphicsTextItem *m_label;   ///< child item
-    bool               m_dragMoved = false;   ///< a click only counts as a move once the pointer moves
+    bool               m_dragMoved = false;
+    int                m_view = 0;    ///< 0 plan, 1 front, 2 side   ///< a click only counts as a move once the pointer moves
 };
 
 /** @} */

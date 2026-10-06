@@ -100,6 +100,23 @@ private slots:
     /** The operator's gobo folder: import copies (never overwriting a
      *  different picture), resolve finds a name there or in the library. */
     void theGoboLibraryImportsAndResolves();
+
+    /** "Steps as a stage feature .. count, rise, run and width". */
+    void stepsAreAFlightOfTreads();
+    void stepsClimbEveryWay();
+    void stepsRoundTripInXml();
+    void aFixtureOnStepsStandsOnItsTread();
+
+    /** "No way to put this fixture on the back? Also when I say side ..
+     *  which side?" -- six faces, each a direction. */
+    void aFixtureFacesEachOfSixWays();
+    void aFaceOnATrussIsThatSideOfIt();
+    void aChosenFaceSurvivesSaveAndRepair();
+
+    /** The XL-450's LED map: heads numbered by kind, built RGB/W/RGB/W/RGB. */
+    void headKindsAreReadFromTheChannels();
+    void aRowPatternMapsEachKindToItsRows();
+    void anLedMapLivesInTheLibraryAndTheShow();
 };
 
 #endif

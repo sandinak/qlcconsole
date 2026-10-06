@@ -52,6 +52,10 @@ private slots:
     /** The inventory reads as manufacturer -> model -> fixture, alphabetical at
      *  every level, with a count on each folder. */
     void inventoryIsOrganisedByManufacturerAndModel();
+    /** A fixture whose file address clashed is listed apart, at the top. */
+    void addressClashesGetTheirOwnRootAtTheTop();
+    /** Fixtures or a group dropped on a universe, or on a fixture in one. */
+    void aDropOnAUniverseNamesItAndItsFixtures();
 
 private:
     Doc* m_doc;

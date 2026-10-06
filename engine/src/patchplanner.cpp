@@ -318,20 +318,145 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
     return out;
 }
 
+QList<PatchPlanner::Assignment> PatchPlanner::place(const QList<quint32> &fixtureIds,
+                                                    quint32 universe, quint32 address,
+                                                    bool keepSpacing,
+                                                    const QHash<quint32, quint32> &channelOverride,
+                                                    const QHash<quint32, QPair<quint32, quint32> > &elsewhere) const
+{
+    QList<Assignment> out;
+    QList<Fixture *> fixtures;
+    QSet<quint32> moving;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (fx != NULL && !moving.contains(fid))
+        {
+            fixtures << fx;
+            moving.insert(fid);
+        }
+    }
+
+    // Everything that is staying put, and where the rest of the plan goes.
+    QHash<quint32, QBitArray> used;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == NULL || !fx->isPatched() || moving.contains(fx->id())
+            || elsewhere.contains(fx->id()))
+            continue;
+        if (!used.contains(fx->universe()))
+            used[fx->universe()] = QBitArray(UNI_SIZE);
+        mark(used[fx->universe()], fx->address(), fx->channels());
+    }
+    QHashIterator<quint32, QPair<quint32, quint32> > ew(elsewhere);
+    while (ew.hasNext())
+    {
+        ew.next();
+        if (moving.contains(ew.key()))
+            continue;
+        const quint32 uni = ew.value().first >> 9;
+        if (!used.contains(uni))
+            used[uni] = QBitArray(UNI_SIZE);
+        mark(used[uni], ew.value().first & 0x1FF, ew.value().second);
+    }
+    auto usedIn = [&used](quint32 uni) -> QBitArray & {
+        if (!used.contains(uni))
+            used[uni] = QBitArray(UNI_SIZE);
+        return used[uni];
+    };
+
+    const quint32 existing = m_doc->inputOutputMap()->universesCount();
+    auto chans = [&channelOverride](Fixture *fx) {
+        return channelOverride.value(fx->id(), fx->channels());
+    };
+    QHash<quint32, Assignment> planned;
+
+    // The block: patched fixtures keep their offsets from the lowest of them.
+    quint32 nextAbs = (universe << 9) | address;   // where packing continues
+    if (keepSpacing)
+    {
+        quint32 lowest = UINT_MAX;
+        foreach (Fixture *fx, fixtures)
+            if (fx->isPatched())
+                lowest = qMin(lowest, fx->universeAddress());
+        foreach (Fixture *fx, fixtures)
+        {
+            if (!fx->isPatched())
+                continue;
+            const quint32 n = chans(fx);
+            const quint32 abs = ((universe << 9) | address) + (fx->universeAddress() - lowest);
+            Assignment a;
+            a.fixtureId = fx->id();
+            a.universe = abs >> 9;
+            a.address = abs & 0x1FF;
+            a.newUniverse = (a.universe >= existing);
+            if (a.address + n > UNI_SIZE)
+                a.note = QStringLiteral("runs past the end of universe %1").arg(a.universe + 1);
+            else
+                mark(usedIn(a.universe), a.address, n);
+            nextAbs = qMax(nextAbs, abs + n);
+            planned.insert(fx->id(), a);
+        }
+    }
+
+    // Everything else, packed from where the block (or the start) leaves off.
+    quint32 uni = nextAbs >> 9;
+    quint32 from = nextAbs & 0x1FF;
+    foreach (Fixture *fx, fixtures)
+    {
+        if (planned.contains(fx->id()))
+            continue;
+        const quint32 n = chans(fx);
+        Assignment a;
+        a.fixtureId = fx->id();
+        if (n == 0 || n > UNI_SIZE)
+        {
+            a.note = QStringLiteral("%1 channels do not fit in a universe").arg(n);
+            planned.insert(fx->id(), a);
+            continue;
+        }
+        for (int guard = 0; guard < 4096; guard++)
+        {
+            QBitArray probe = usedIn(uni);
+            for (quint32 i = 0; i < from && i < UNI_SIZE; i++)
+                probe.setBit(int(i));           // only at or after the cursor
+            const int addr = firstFree(probe, n);
+            if (addr >= 0)
+            {
+                a.universe = uni;
+                a.address = quint32(addr);
+                break;
+            }
+            uni++;                              // full: on to the next one
+            from = 0;
+        }
+        a.newUniverse = (a.universe >= existing);
+        mark(usedIn(a.universe), a.address, n);
+        from = a.address + n;
+        planned.insert(fx->id(), a);
+    }
+
+    foreach (Fixture *fx, fixtures)
+        out << planned.value(fx->id());
+    return out;
+}
+
 int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *problems)
 {
     InputOutputMap *io = m_doc->inputOutputMap();
-    int done = 0;
 
+    /* Decide everything before changing anything: which mode changes are
+       allowed, and whether the whole set of addresses fits. */
+    QList<Assignment> todo;
+    QList<Doc::FixturePatch> patches;
+    QHash<quint32, quint32> footprint;
     foreach (const Assignment &a, assignments)
     {
         Fixture *fx = m_doc->fixture(a.fixtureId);
         if (fx == NULL)
             continue;
         const QString name = fx->name();
-
-        // The mode was chosen for its footprint: apply it first, so the range
-        // patched below is the one the plan was made for.
+        quint32 n = fx->channels();
         if (a.mode != NULL && a.mode != fx->fixtureMode())
         {
             QString why;
@@ -341,7 +466,7 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
                     *problems << QStringLiteral("%1: mode not changed (%2)").arg(name, why);
                 continue;
             }
-            fx->setFixtureDefinition(fx->fixtureDef(), a.mode);
+            n = quint32(a.mode->channels().size());
         }
         else if (a.dimmerChannels > 0 && a.dimmerChannels != fx->channels())
         {
@@ -352,18 +477,58 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
                     *problems << QStringLiteral("%1: channel count not changed (%2)").arg(name, why);
                 continue;
             }
-            QLCFixtureDef *def = fx->genericDimmerDef(int(a.dimmerChannels));
-            fx->setFixtureDefinition(def, fx->genericDimmerMode(def, int(a.dimmerChannels)));
+            n = a.dimmerChannels;
         }
-
-        if (!m_doc->patchFixture(a.fixtureId, a.universe, a.address))
-        {
-            if (problems != NULL)
-                *problems << QStringLiteral("%1: universe %2, address %3 is taken or does not fit")
-                                 .arg(name).arg(a.universe + 1).arg(a.address + 1);
+        // Already there, same footprint: nothing to do.
+        if (fx->isPatched() && n == fx->channels()
+            && fx->universe() == a.universe && fx->address() == a.address)
             continue;
+        todo << a;
+        patches << Doc::FixturePatch{ a.fixtureId, a.universe, a.address };
+        footprint.insert(a.fixtureId, n);
+    }
+
+    QString why;
+    if (!m_doc->canPatchFixtures(patches, &why, footprint))
+    {
+        if (problems != NULL)
+            *problems << QStringLiteral("Nothing was patched: %1").arg(why);
+        return 0;
+    }
+
+    // Modes first, so the ranges patched below are the ones checked above.
+    // Signals held: a patched fixture's new footprint must not be claimed at
+    // its OLD address on the way through -- patchFixtures() claims it.
+    foreach (const Assignment &a, todo)
+    {
+        Fixture *fx = m_doc->fixture(a.fixtureId);
+        const bool held = fx->signalsBlocked();
+        if (a.mode != NULL && a.mode != fx->fixtureMode())
+        {
+            fx->blockSignals(true);
+            fx->setFixtureDefinition(fx->fixtureDef(), a.mode);
+            fx->blockSignals(held);
         }
-        done++;
+        else if (a.dimmerChannels > 0 && a.dimmerChannels != fx->channels())
+        {
+            QLCFixtureDef *def = fx->genericDimmerDef(int(a.dimmerChannels));
+            fx->blockSignals(true);
+            fx->setFixtureDefinition(def, fx->genericDimmerMode(def, int(a.dimmerChannels)));
+            fx->blockSignals(held);
+        }
+    }
+
+    if (!m_doc->patchFixtures(patches, &why))
+    {
+        if (problems != NULL)
+            *problems << QStringLiteral("Nothing was patched: %1").arg(why);
+        return 0;
+    }
+
+    foreach (const Assignment &a, todo)
+    {
+        Fixture *fx = m_doc->fixture(a.fixtureId);
+        const QString name = fx->name();
 
         if (a.claimsPort)
         {
@@ -410,5 +575,5 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
             op->setPluginParameter(QStringLiteral("outputIP"), fx->ipAddress());
         }
     }
-    return done;
+    return todo.size();
 }

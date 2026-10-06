@@ -32,6 +32,7 @@
 #define STAGEPLATFORM_H
 
 #include <QObject>
+#include <QList>
 #include <QColor>
 #include <QString>
 #include <climits>
@@ -98,6 +99,48 @@ public:
     bool containsPoint(float x, float y) const;
 
     /********************************************************************
+     * Shape: a box, or a flight of steps
+     ********************************************************************/
+
+    /** A platform is a box: one deck at height(). Steps are a flight of
+     *  @c stepCount() treads, each @c stepRise() above the last and
+     *  @c stepRun() deep, the top one at height(). Steps keep the box's
+     *  footprint and height -- width() x depth() x height() is still the
+     *  outside of the flight -- so everything that only needs the outline
+     *  (dragging, overlap, the plan view) is unchanged. */
+    enum Shape { BoxShape = 0, StepsShape = 1 };
+    Shape shape() const { return m_shape; }
+    bool isSteps() const { return m_shape == StepsShape; }
+
+    /** Which way you walk going UP. Upstage (the default): the bottom step is
+     *  at the downstage edge, as steps from the house onto the stage are.
+     *  (+X is stage left, +Y downstage; originY is the UPSTAGE edge.) */
+    enum Climb { ClimbUpstage = 0, ClimbDownstage = 1, ClimbStageLeft = 2, ClimbStageRight = 3 };
+    Climb stepsClimb() const { return m_climb; }
+    int   stepCount() const { return m_stepCount; }
+    float stepRise() const { return m_stepRise; }
+    float stepRun() const { return m_stepRun; }
+    /** Across the treads: width() climbing up/downstage, depth() across stage. */
+    float stepWidth() const;
+
+    /** Make it a flight of @p count steps, @p rise high and @p run deep each,
+     *  @p width across, climbing toward @p climb. Sets width/depth/height to
+     *  the flight's outside. */
+    void setSteps(int count, float rise, float run, float width, Climb climb = ClimbUpstage);
+    /** Back to a plain box, keeping the outside dimensions. */
+    void setBoxShape() { m_shape = BoxShape; }
+
+    /** Height of the walking surface above the platform's own base at (x, y)
+     *  -- height() for a box, the tread there for steps (the nearest tread
+     *  for a point off the platform; callers decide whether it is on it). */
+    float topAt(float x, float y) const;
+
+    /** The solid as boxes standing on the base: one for a box, one per step
+     *  (each from the base up to its own tread). Metres, plan coordinates. */
+    struct Block { float x0, y0, x1, y1, height; };
+    QList<Block> blocks() const;
+
+    /********************************************************************
      * Appearance
      ********************************************************************/
     QColor color() const { return m_color; }
@@ -141,6 +184,11 @@ private:
     float   m_depth   = 2.0f;
     float   m_height  = 0.5f;
     TopMaterial m_topMaterial = SolidTop;
+    Shape   m_shape = BoxShape;
+    Climb   m_climb = ClimbUpstage;
+    int     m_stepCount = 2;
+    float   m_stepRise = 0.2032f;   ///< 8"
+    float   m_stepRun  = 0.2032f;   ///< 8"
     QColor  m_color;
     bool    m_locked  = false;
     bool    m_solid     = true;    ///< occupies space: no-overlap with other solids

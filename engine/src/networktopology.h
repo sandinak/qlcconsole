@@ -189,6 +189,14 @@ public:
      *  still count toward the run's fixtures and channels but have no vertex. */
     QList<NetworkRun> runs(Doc *doc, const QHash<quint32, QVector3D> &fixturePositions) const;
 
+    /** Give every unplaced receiver of wireless node @p nodeIndex a place
+     *  ("if I add a wDMX transmitter .. shouldn't there be a wDMX receiver
+     *  somewhere for the fixtures?"): the middle of the fixtures on its port's
+     *  universe (@p fixturePositions, metres, as for runs()), else beside the
+     *  transmitter, a step apart per port. An unnamed one is named after the
+     *  transmitter. Returns how many it placed. */
+    int placeReceivers(int nodeIndex, Doc *doc, const QHash<quint32, QVector3D> &fixturePositions);
+
     /** Patched DMX fixtures on a universe that no node port carries: they have
      *  no physical path to the console. */
     QList<quint32> unservedFixtures(Doc *doc) const;

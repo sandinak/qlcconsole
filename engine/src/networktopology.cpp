@@ -262,6 +262,55 @@ QList<NetworkRun> NetworkTopology::runs(Doc *doc, const QHash<quint32, QVector3D
     return out;
 }
 
+int NetworkTopology::placeReceivers(int nodeIndex, Doc *doc,
+                                    const QHash<quint32, QVector3D> &fixturePositions)
+{
+    if (nodeIndex < 0 || nodeIndex >= m_nodes.size())
+        return 0;
+    NetworkNode &node = m_nodes[nodeIndex];
+    if (!node.isWireless())
+        return 0;
+    int placed = 0;
+    for (int p = 0; p < node.ports.size(); ++p)
+    {
+        NetworkPort &port = node.ports[p];
+        if (port.receiver.placed)
+            continue;
+        if (port.receiver.name.isEmpty() || port.receiver.name == QLatin1String("Receiver"))
+            port.receiver.name = QStringLiteral("%1 RX %2").arg(node.name).arg(p + 1);
+
+        // Where its universe's fixtures are, when there are any on the plot.
+        double sx = 0, sy = 0;
+        int n = 0;
+        if (doc != nullptr && port.universe != InputOutputMap::invalidUniverse())
+        {
+            foreach (Fixture *fx, doc->fixtures())
+            {
+                if (fx == nullptr || !fx->isPatched() || fx->universe() != port.universe
+                    || !fixturePositions.contains(fx->id()))
+                    continue;
+                sx += fixturePositions.value(fx->id()).x();
+                sy += fixturePositions.value(fx->id()).y();
+                ++n;
+            }
+        }
+        if (n > 0)
+        {
+            port.receiver.posX = sx / n;
+            port.receiver.posY = sy / n;
+        }
+        else
+        {
+            // Nothing to be near yet: beside the transmitter, out of its way.
+            port.receiver.posX = node.posX + 1.0 + 0.75 * p;
+            port.receiver.posY = node.posY;
+        }
+        port.receiver.placed = true;
+        ++placed;
+    }
+    return placed;
+}
+
 QList<quint32> NetworkTopology::unservedFixtures(Doc *doc) const
 {
     QList<quint32> out;

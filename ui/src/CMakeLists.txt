@@ -45,6 +45,8 @@ add_library(${module_name}
     collectioneditor.cpp collectioneditor.h collectioneditor.ui
     consolechannel.cpp consolechannel.h
     createfixturegroup.cpp createfixturegroup.h createfixturegroup.ui
+    headtypesdialog.cpp headtypesdialog.h
+    stagegroupdialog.cpp stagegroupdialog.h
     ctkrangeslider.cpp ctkrangeslider.h
     cuestackmodel.cpp cuestackmodel.h
     customfeedbackdialog.cpp customfeedbackdialog.h customfeedbackdialog.ui

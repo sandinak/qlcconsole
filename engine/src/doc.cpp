@@ -19,6 +19,7 @@
 */
 
 #include <climits>
+#include <algorithm>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QRegularExpression>
@@ -922,30 +923,6 @@ QList<quint32> Doc::functionFunctions(quint32 fid) const
     return functions.values();
 }
 
-quint32 Doc::findFreeAddress(quint32 universe, quint32 channels) const
-{
-    if (channels == 0 || channels > 512)
-        return UINT_MAX;
-
-    for (quint32 start = 0; start + channels <= 512; start++)
-    {
-        bool free = true;
-        const quint32 base = (universe << 9) | start;
-        for (quint32 i = 0; i < channels; i++)
-        {
-            if (fixtureForAddress(base + i) != Fixture::invalidId())
-            {
-                free = false;
-                break;
-            }
-        }
-        if (free == true)
-            return start;
-    }
-
-    return UINT_MAX;
-}
-
 void Doc::captureLastLook(quint32 fid, const QList<Universe*> &universes,
                           bool append) const
 {
@@ -1151,41 +1128,129 @@ void Doc::applyFixtureToUniverses(Fixture *fixture, bool crossUniverse)
 
 bool Doc::patchFixture(quint32 id, quint32 universe, quint32 address)
 {
-    Fixture *fxi = fixture(id);
-    if (fxi == NULL)
-        return false;
-    if (address + fxi->channels() > 512)
-        return false;
+    return patchFixtures({ FixturePatch{ id, universe, address } });
+}
 
-    const quint32 base = (universe << 9) | address;
-    for (quint32 i = base; i < base + fxi->channels(); i++)
+bool Doc::canPatchFixtures(const QList<FixturePatch> &patches, QString *why,
+                           const QHash<quint32, quint32> &channels) const
+{
+    auto refuse = [why](const QString &text) {
+        if (why != NULL)
+            *why = text;
+        return false;
+    };
+
+    QSet<quint32> moving;
+    foreach (const FixturePatch &p, patches)
     {
-        if (m_addresses.contains(i) && m_addresses.value(i) != id)
-            return false;
+        Fixture *fxi = fixture(p.fixtureId);
+        if (fxi == NULL)
+            return refuse(QStringLiteral("no fixture with id %1").arg(p.fixtureId));
+        if (moving.contains(p.fixtureId))
+            return refuse(QStringLiteral("%1 is listed twice").arg(fxi->name()));
+        moving.insert(p.fixtureId);
+        if (fxi->isPatched() && mode() == Operate
+            && (fxi->universe() != p.universe || fxi->address() != p.address))
+            return refuse(QStringLiteral("%1 is patched and the show is running -- "
+                                         "switch to Design mode to move it").arg(fxi->name()));
     }
 
-    // Drop any previous claim (re-patching an already patched fixture moves it).
-    QMutableHashIterator <uint,uint> it(m_addresses);
+    QHash<quint32, quint32> claimed;    // absolute channel -> fixture, after the move
+    QHashIterator<quint32, quint32> it(m_addresses);
+    while (it.hasNext())
+    {
+        it.next();
+        if (!moving.contains(it.value()))
+            claimed.insert(it.key(), it.value());
+    }
+
+    foreach (const FixturePatch &p, patches)
+    {
+        Fixture *fxi = fixture(p.fixtureId);
+        const quint32 n = channels.value(p.fixtureId, fxi->channels());
+        if (n == 0 || p.address + n > 512)
+            return refuse(QStringLiteral("%1 (%2 ch) does not fit at universe %3, address %4")
+                              .arg(fxi->name()).arg(n).arg(p.universe + 1).arg(p.address + 1));
+        const quint32 base = (p.universe << 9) | p.address;
+        for (quint32 i = base; i < base + n; i++)
+        {
+            if (claimed.contains(i))
+            {
+                Fixture *other = fixture(claimed.value(i));
+                return refuse(QStringLiteral("%1 at universe %2, address %3 overlaps %4")
+                                  .arg(fxi->name()).arg(p.universe + 1).arg(p.address + 1)
+                                  .arg(other != NULL ? other->name() : QStringLiteral("another fixture")));
+            }
+            claimed.insert(i, p.fixtureId);
+        }
+    }
+    return true;
+}
+
+bool Doc::patchFixtures(const QList<FixturePatch> &patches, QString *why)
+{
+    if (!canPatchFixtures(patches, why))
+        return false;
+
+    // Release every claim first, so the order of the list cannot matter.
+    QSet<quint32> moving;
+    foreach (const FixturePatch &p, patches)
+        moving.insert(p.fixtureId);
+    QMutableHashIterator <quint32, quint32> it(m_addresses);
     while (it.hasNext() == true)
     {
         it.next();
-        if (it.value() == id)
+        if (moving.contains(it.value()))
             it.remove();
     }
 
-    fxi->blockSignals(true);
-    fxi->setUniverse(universe);
-    fxi->setAddress(address);
-    fxi->setPatched(true);
-    fxi->blockSignals(false);
+    foreach (const FixturePatch &p, patches)
+    {
+        Fixture *fxi = fixture(p.fixtureId);
+        fxi->blockSignals(true);
+        fxi->setUniverse(p.universe);
+        fxi->setAddress(p.address);
+        fxi->setPatched(true);
+        fxi->setAddressClash(false);
+        fxi->blockSignals(false);
 
-    for (quint32 i = base; i < base + fxi->channels(); i++)
-        m_addresses[i] = id;
-    applyFixtureToUniverses(fxi, false);
+        const quint32 base = (p.universe << 9) | p.address;
+        for (quint32 i = base; i < base + fxi->channels(); i++)
+            m_addresses[i] = p.fixtureId;
+        applyFixtureToUniverses(fxi, false);
+    }
 
     setModified();
-    emit fixtureChanged(id);
+    foreach (const FixturePatch &p, patches)
+        emit fixtureChanged(p.fixtureId);
     return true;
+}
+
+quint32 Doc::findFreeAddress(quint32 universe, quint32 channels, quint32 from,
+                             const QSet<quint32> &ignore) const
+{
+    if (channels == 0 || channels > 512)
+        return UINT_MAX;
+    quint32 run = 0;
+    for (quint32 a = from; a < 512; a++)
+    {
+        const quint32 abs = (universe << 9) | a;
+        const bool taken = m_addresses.contains(abs) && !ignore.contains(m_addresses.value(abs));
+        run = taken ? 0 : run + 1;
+        if (run == channels)
+            return a - channels + 1;
+    }
+    return UINT_MAX;
+}
+
+QList<quint32> Doc::addressClashes() const
+{
+    QList<quint32> out;
+    foreach (Fixture *fxi, m_fixtures)
+        if (fxi->addressClash())
+            out << fxi->id();
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 bool Doc::unpatchFixture(quint32 id)
@@ -1205,6 +1270,7 @@ bool Doc::unpatchFixture(quint32 id)
     // Back to the placeholder 0/0 a freshly staged fixture holds.
     fxi->blockSignals(true);
     fxi->setPatched(false);
+    fxi->setAddressClash(false);
     fxi->setUniverse(0);
     fxi->setAddress(0);
     fxi->blockSignals(false);

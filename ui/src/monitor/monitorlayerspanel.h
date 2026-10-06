@@ -57,6 +57,9 @@ class LayersTreeWidget final : public QTreeWidget
 public:
     explicit LayersTreeWidget(QWidget *parent = nullptr) : QTreeWidget(parent) {}
 
+    /** A row's name is being typed in. */
+    bool isEditing() const { return state() == QAbstractItemView::EditingState; }
+
 signals:
     /** Emitted on drop: the dragged rows and the row they were dropped onto
      *  (nullptr if dropped on empty space). */
@@ -120,6 +123,11 @@ public:
      *  handing the selection back to the plot. */
     void followMapSelection(const QList<QPair<QString, quint32> > &objects);
 
+    /** Select the rows of the fixture groups @p ids (the first row of each, as
+     *  a group can be listed in several places), and their fixtures on the
+     *  plot. */
+    void selectFixtureGroups(const QList<quint32> &ids);
+
 signals:
     /** Emitted when the in-panel close/hide button is clicked. */
     void closeRequested();
@@ -181,7 +189,14 @@ private:
      *  so the caller can nest those fixtures. Works for a group's members OR a
      *  layer's loose fixtures. */
     void addLocalFixtureGroups(QTreeWidgetItem *host, const QSet<quint32> &fixtureSet,
-                               QHash<quint32, QTreeWidgetItem *> &map);
+                               QHash<quint32, QList<QTreeWidgetItem *> > &map);
+    /** The plot objects a fixture group stands for: its fixtures on the plot. */
+    QList<QPair<QString, quint32> > fixtureGroupMembers(quint32 fgId) const;
+    /** A Fixture Group row (no children). */
+    QTreeWidgetItem *addFixtureGroupNode(QTreeWidgetItem *host, class FixtureGroup *fg);
+    /** Fixture Groups listed by this reload, so the ones local nowhere -- a
+     *  group across several trusses -- can be given a home at the end. */
+    QSet<quint32> m_listedFixtureGroups;
     void addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d);
     /** The tree icon for an item KIND (fixture/truss/platform/pipe/stand/tower/
      *  image/power). @p color tints the platform swatch. */
@@ -245,6 +260,7 @@ private:
      *  rebuild the tree inside Qt's nested drag event loop. */
     bool m_suppressReload = false;
     bool m_reloadQueued = false;   ///< a deferred reload (after a rename) is pending
+    bool m_reloadAfterEdit = false; ///< a reload asked for while a name was being typed
 
     /** After a drop, the (queued) reload scrolls this layer back into view so
      *  the target layer never appears to "vanish". <0 = none. */

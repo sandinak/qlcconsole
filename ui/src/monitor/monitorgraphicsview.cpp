@@ -50,6 +50,8 @@
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
+#include "patchinventorydialog.h"
+#include "headtypesdialog.h"
 #include "monitorfixtureitem.h"
 #include "trussitem.h"
 #include "studiogroupeditor.h"
@@ -412,6 +414,27 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
         m_pickingOrigin = false;
         viewport()->unsetCursor();
         emit originPicked();
+        event->accept();
+        return;
+    }
+
+    /* A right-press is the start of a context menu, not a click. Handed to Qt,
+       it went to the item under the pointer, which only takes the LEFT button,
+       so nobody accepted it -- and Qt's answer to an unaccepted press is to
+       clear the selection. The menu then opened on nothing selected ("I can't
+       right click on a FART to move to a new layer .. it unselects after I
+       select it"). Keep the selection when the press is on part of it;
+       otherwise select what was pressed, as every other editor does. */
+    if (event->button() == Qt::RightButton)
+    {
+        QGraphicsItem *hit = topPickableAt(mapToScene(event->pos()));
+        while (hit && hit->parentItem())
+            hit = hit->parentItem();
+        if (hit != nullptr && (hit->flags() & QGraphicsItem::ItemIsSelectable) && !hit->isSelected())
+        {
+            m_scene->clearSelection();
+            hit->setSelected(true);
+        }
         event->accept();
         return;
     }
@@ -1533,6 +1556,72 @@ void MonitorGraphicsView::leaveMountGroupsOf(quint32 fid)
         leaveMountGroup(fid, QStringLiteral("tower"), rp.towerId);
     if (rp.pipeId != Pipe::invalidId())
         leaveMountGroup(fid, QStringLiteral("pipe"), rp.pipeId);
+}
+
+void MonitorGraphicsView::takeOutOfStructure(const QList<quint32> &fids,
+                                             const QString &kind, quint32 id)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    bool any = false;
+    foreach (quint32 fid, fids)
+    {
+        const FixtureRigProps rp = props->fixtureRigProps(fid);
+        const bool onIt = (kind == QLatin1String("truss") && rp.trussId == id)
+                       || (kind == QLatin1String("tower") && rp.onTower() && rp.towerId == id)
+                       || (kind == QLatin1String("pipe") && rp.onPipe() && rp.pipeId == id);
+        if (onIt)
+        {
+            unmountFixture(fid);
+            any = true;
+            continue;
+        }
+
+        /* Filed under it, mounted elsewhere ("3z .. under T-3 .. which it
+           clearly shouldn't be"): out of this structure's group, back into
+           the one it really hangs on, if any. */
+        const quint32 gid = props->fixtureGroup(fid);
+        const MonitorProperties::MonitorGroup g = props->group(gid);
+        if (gid == 0 || g.anchorKind != kind || g.anchorId != id)
+            continue;
+        props->setFixtureGroup(fid, 0);
+        if (rp.trussId != Truss::invalidId())
+        {
+            ensureTrussGroup(rp.trussId);
+            if (Truss *t = props->truss(rp.trussId))
+                if (t->groupId() != 0)
+                    props->setFixtureGroup(fid, t->groupId());
+        }
+        else if (rp.onTower())
+            joinMountGroup(fid, QStringLiteral("tower"), rp.towerId);
+        else if (rp.onPipe())
+            joinMountGroup(fid, QStringLiteral("pipe"), rp.pipeId);
+        updateFixture(fid);
+        any = true;
+    }
+    if (any)
+    {
+        m_doc->setModified();
+        refreshItemLayerState();
+        emit mapStructureChanged();
+    }
+}
+
+int MonitorGraphicsView::placeWirelessReceivers()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    QHash<quint32, QVector3D> positions;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        positions.insert(it.key(), props->fixtureRigPosition(it.key()));
+    NetworkTopology *nt = m_doc->networkTopology();
+    int placed = 0;
+    for (int i = 0; i < nt->nodes().size(); ++i)
+        placed += nt->placeReceivers(i, m_doc, positions);
+    if (placed > 0)
+    {
+        m_doc->setModified();
+        updateNetworkNodes();
+    }
+    return placed;
 }
 
 void MonitorGraphicsView::ensureTowerGroup(quint32 towerId)
@@ -2900,7 +2989,7 @@ float MonitorGraphicsView::floorHeightAt(float xMetres, float yMetres) const
             continue;
         if (yMetres < p->originY() || yMetres > p->originY() + p->depth())
             continue;
-        best = qMax(best, p->height());
+        best = qMax(best, p->topAt(xMetres, yMetres));   // the tread, on steps
     }
     return best;
 }
@@ -3023,11 +3112,18 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     // collapses to a dot in Side (its length is perpendicular to that view) —
     // the same projection the studio editor uses. The heads then lay out along
     // whichever screen axis survives.
-    if (isElevation())
+    /* ...and the plan view too: it drew every bar at full length lying
+       left-right, whichever way it actually ran, so a row of bars hanging
+       straight down from a truss became a solid strip of overlapping 1 m bars
+       ("the bars on the farts render funny in the studio view but look right
+       in the rig view"). Screen X is X there and screen Y is Y; a bar
+       pointing up or down is a dot. Unchanged for a bar running along X,
+       which is the default. */
     {
         const QVector3D axis = fixtureLongAxis(m_doc->monitorProperties()->fixtureRigProps(id));
-        const double hAxis = (m_pov == PovFront) ? qAbs(double(axis.x())) : qAbs(double(axis.y()));
-        const double vAxis = qAbs(double(axis.z()));   // vertical screen axis is Z in both
+        const double hAxis = (m_pov == PovSide) ? qAbs(double(axis.y())) : qAbs(double(axis.x()));
+        const double vAxis = (m_pov == PovTop) ? qAbs(double(axis.y()))
+                                               : qAbs(double(axis.z()));   // Z is up in both elevations
         const double L = pw, Th = ph;                  // physical width / thickness (px)
         pw = qMax(3.0, L * hAxis + Th * vAxis);
         ph = qMax(3.0, L * vAxis + Th * hAxis);
@@ -3882,6 +3978,7 @@ void MonitorGraphicsView::updatePlatforms()
         }
 
         PlatformItem *pi = new PlatformItem(p, m_doc, pxX, pxY, pxW, pxD);
+        pi->setView(m_pov == PovTop ? 0 : m_pov == PovSide ? 2 : 1);
         pi->setMovable(!m_layoutLocked);
         pi->showLabel(m_doc->monitorProperties()->layer(p->layerId()).labels);
         m_scene->addItem(pi);
@@ -4414,6 +4511,29 @@ void MonitorGraphicsView::updateNetworkNodes()
                     continue;
                 NetworkReceiverItem *rx = new NetworkReceiverItem(i, p, rcv.name);
                 rx->setPos(projectMm(rcv.posX * 1000.0, rcv.posY * 1000.0, 0.0));
+                /* Drag it to where the box is rigged -- plan view only, where
+                   a screen point IS a stage X/Y, and not while the layout is
+                   locked. Its dashed link follows; the drop stores it. */
+                const bool movable = !m_layoutLocked && m_pov == PovTop;
+                rx->setFlag(QGraphicsItem::ItemIsMovable, movable);
+                rx->setFlag(QGraphicsItem::ItemIsSelectable, movable);
+                rx->onMoving = [this]() { updateNetworkLinks(); };
+                rx->onDropped = [this, rx]() {
+                    NetworkTopology *nt = m_doc->networkTopology();
+                    const int ni = rx->nodeIndex(), pi = rx->portIndex();
+                    if (ni >= nt->nodes().size() || pi >= nt->nodes().at(ni).ports.size())
+                        return;
+                    const QPointF mm = pixelsToRealPosition(rx->pos().x(), rx->pos().y());
+                    NetworkReceiver &r = nt->nodes()[ni].ports[pi].receiver;
+                    if (qFuzzyCompare(r.posX + 1e3, mm.x() / 1000.0 + 1e3)
+                        && qFuzzyCompare(r.posY + 1e3, mm.y() / 1000.0 + 1e3))
+                        return;
+                    r.posX = mm.x() / 1000.0;
+                    r.posY = mm.y() / 1000.0;
+                    r.placed = true;
+                    m_doc->setModified();
+                    scheduleNetworkRuns();
+                };
                 m_scene->addItem(rx);
                 m_networkReceiverItems.append(rx);
 
@@ -5491,6 +5611,13 @@ void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
 
 void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 {
+    // The end of a right-press: the context menu has it. Not a click, not a drop.
+    if (e->button() == Qt::RightButton)
+    {
+        e->accept();
+        return;
+    }
+
     // Everything this release records is one drag: one Ctrl+Z undoes it all.
     m_openUndoBatch = ++m_undoBatch;
     auto closeBatch = qScopeGuard([this]() { m_openUndoBatch = 0; });
@@ -6015,7 +6142,9 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
     const bool design = (m_doc->mode() == Doc::Design);
 
     // 1. The thing.
+    m_menuSelection = place.selection;
     populateItemMenu(menu, kind, id, scenePos, false);
+    m_menuSelection.clear();
 
     // 2. Where it is, and its name.
     if (!menu->isEmpty())
@@ -6613,6 +6742,70 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         if (Monitor::instance() != nullptr)
             Monitor::instance()->locateFixtures(ids);
     });
+    /* Its universe and address, with the rest of the selection: patched or
+       not, they are placed as a block in the Patch dialog and applied at
+       once. Moving a patched one is a Design-mode edit. */
+    {
+        /* The selection where the menu was opened. From the Layers list that
+           is the LIST's selection: fixtures stacked in a tower cannot be
+           selected on the plot at all, so the plot's selection held only the
+           one right-clicked ("selected 4 and got 1"). */
+        QList<quint32> ids;
+        for (const QPair<QString, quint32> &o : m_menuSelection)
+            if (o.first == QLatin1String("fixture") && !ids.contains(o.second))
+                ids << o.second;
+        if (!ids.contains(fid))
+            ids.clear();            // clicked outside the selection: just this one
+        if (ids.isEmpty())
+        {
+            foreach (QGraphicsItem *gi, m_scene->selectedItems())
+            {
+                MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi);
+                if (mfi != nullptr && !ids.contains(mfi->fixtureID()))
+                    ids << mfi->fixtureID();
+            }
+        }
+        if (!ids.contains(fid))
+            ids << fid;
+        const bool staged = fxi != nullptr && !fxi->isPatched();
+        QAction *pa = menu->addAction(ids.size() > 1 ? tr("Patch / Re-address %1 Fixtures…").arg(ids.size())
+                                      : staged       ? tr("Patch…")
+                                                     : tr("Re-address…"),
+                                      this, [this, ids]() {
+            PatchInventoryDialog dlg(m_doc, ids, this);
+            if (dlg.exec() != QDialog::Accepted)
+                return;
+            foreach (quint32 f, ids)
+                updateFixture(f);
+            emit mapStructureChanged();
+        });
+        pa->setEnabled(staged || m_doc->mode() == Doc::Design || ids.size() > 1);
+
+        /* More than one kind of head (RGB and white rows): its LED map, and
+           a fixture group per kind. */
+        if (HeadTypesDialog::anyMixed(m_doc, ids))
+            menu->addAction(tr("Split by Head Type…"), this, [this, ids]() {
+                HeadTypesDialog dlg(m_doc, ids, HeadTypesDialog::suggestName(m_doc, ids), this);
+                if (dlg.exec() == QDialog::Accepted)
+                    emit mapStructureChanged();
+            });
+    }
+    /* Every fixture of the same model and mode on the plot -- all the step
+       bars, all the XL-450s -- to patch, move or group together. */
+    {
+        const QString key = CreateFixtureGroup::fixtureModelKey(fxi);
+        QList<QPair<QString, quint32> > same;
+        for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+            if (CreateFixtureGroup::fixtureModelKey(m_doc->fixture(it.key())) == key)
+                same << qMakePair(QStringLiteral("fixture"), it.key());
+        QAction *sa = menu->addAction(same.size() > 1 ? tr("Select All Similar (%1)").arg(same.size())
+                                                      : tr("Select All Similar"),
+                                      this, [this, same]() {
+            selectMapItems(same);
+            emit selectInLayersRequested(same);     // the ones buried on a truss too
+        });
+        sa->setEnabled(fxi != nullptr && same.size() > 1);
+    }
     // Its own glass in the gobo wheels (a logo, a custom gobo).
     if (GoboWheelsDialog::hasGoboWheels(fxi))
         menu->addAction(tr("Gobo Wheels…"), this, [this, fid]() {

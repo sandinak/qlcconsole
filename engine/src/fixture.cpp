@@ -45,6 +45,7 @@ Fixture::Fixture(QObject* parent)
     , m_id(Fixture::invalidId())
     , m_address(0)
     , m_patched(true)
+    , m_addressClash(false)
     , m_connection(Dmx)
     , m_crossUniverse(false)
     , m_channels(0)
@@ -1170,6 +1171,20 @@ bool Fixture::loader(QXmlStreamReader &root, Doc* doc)
             /* Success */
             result = true;
         }
+        else if (fxi->isPatched() && doc->fixture(fxi->id()) == NULL)
+        {
+            /* Its id is free, so what was refused is its ADDRESS: it overlaps
+               a fixture loaded before it. Deleting it took it out of every
+               group, scene and cue that used it, with nothing on screen to
+               say so. Keep it, unpatched, and say what it wanted. */
+            qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name()
+                       << "overlaps another fixture's address; loaded unpatched";
+            fxi->setPatched(false);
+            fxi->setAddressClash(true);
+            result = doc->addFixture(fxi, fxi->id(), fxi->crossUniverse());
+            if (!result)
+                delete fxi;
+        }
         else
         {
             /* Doc is full */
@@ -1481,7 +1496,7 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
     doc->writeTextElement(KXMLFixtureAddress, QString::number(address()));
     /* Only what differs from the default is written, so a file with no
        inventory fixtures and no network fixtures is byte-identical. */
-    if (!m_patched)
+    if (!m_patched && !m_addressClash)   // a clash still wants its address
         doc->writeTextElement(KXMLFixturePatched, KXMLQLCFalse);
     if (m_connection == Network)
         doc->writeTextElement(KXMLFixtureConnection, QStringLiteral("Network"));

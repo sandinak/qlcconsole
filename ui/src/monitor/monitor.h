@@ -402,6 +402,8 @@ protected slots:
 
     /** Add a new platform and open its editor. */
     void slotAddPlatform();
+    /** A flight of steps: 2 x 8" rise and run, 3' wide, climbing upstage. */
+    void slotAddSteps();
     void slotAddPipe();
     void slotAddElectric();
     void slotAddStand();

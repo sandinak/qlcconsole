@@ -45,6 +45,8 @@
 #define protected public
 #define private public
 #include "monitor.h"
+#include "headtypesdialog.h"
+#include "stagegroupdialog.h"
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "structurestudioview.h"
@@ -87,6 +89,9 @@
 #include "stagetarget.h"
 #include "qlcpalette.h"
 #include "fixturegroup.h"
+#include "createfixturegroup.h"
+#include "headlayout.h"
+#include "tower.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
@@ -4595,7 +4600,9 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
         QWidget *geomPane = nameEdit ? nameEdit->parentWidget() : nullptr;
         const QList<QDoubleSpinBox *> spins =
             geomPane ? geomPane->findChildren<QDoubleSpinBox *>() : QList<QDoubleSpinBox *>();
-        if (nameEdit == nullptr || spins.count() != 5)
+        // Origin X/Y, width, depth, height -- then the Steps shape's own
+        // Rise / Run / Step width, created after them and hidden for a box.
+        if (nameEdit == nullptr || spins.count() != 8)
             return false;
         nameEdit->setText("Workflow Riser");
         spins[0]->setValue(3.0);   // origin X
@@ -12397,6 +12404,12 @@ void Monitor_Test::aCountBubbleKeepsItsScreenSizeWhenZoomed()
            several times the circle. */
         view.show();                                    // real geometry for the clicks
         QCoreApplication::processEvents();
+        /* A deferred rebuild may have run in those events: the deck and its
+           bubble are new items, and the ones held above are gone (it crashed
+           on them, now and then). */
+        badge = view.m_countBadges.value(QString("platform:%1").arg(deck->id()));
+        deckItem = view.m_platformItems.value(deck->id());
+        QVERIFY(badge != nullptr && deckItem != nullptr);
         const QRectF shown = onScreen();
         const QPoint centre = shown.center().toPoint();
         const int radius = int(shown.width() / 2.0);
@@ -12989,6 +13002,130 @@ void Monitor_Test::aBarIsAddedWhereTheTrussEditorWasRightClicked()
     delete doc;
 }
 
+/* Answer the next popup menu: record its entries in @p seen and pick the one
+ * whose text is @p pick (by keyboard -- QMenu::exec() only reports an action
+ * chosen that way), or close it when @p pick is empty. Then close whatever
+ * modal dialog the choice opens, if any. */
+static void answerPopup(QStringList *seen, const QString &pick)
+{
+    auto attempts = std::make_shared<int>(0);
+    auto poll = std::make_shared<std::function<void()> >();
+    *poll = [seen, pick, attempts, poll]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+        {
+            if (++*attempts < 200)
+                QTimer::singleShot(10, *poll);
+            return;
+        }
+        QAction *chosen = nullptr;
+        foreach (QAction *a, menu->actions())
+        {
+            if (a->isSeparator())
+                continue;
+            seen->append(a->text());
+            if (!pick.isEmpty() && a->text() == pick)
+                chosen = a;
+        }
+        if (chosen == nullptr)
+        {
+            menu->close();
+            return;
+        }
+        // Whatever the choice opens, close it once it is up.
+        auto later = std::make_shared<int>(0);
+        auto closeModal = std::make_shared<std::function<void()> >();
+        *closeModal = [later, closeModal]() {
+            if (QWidget *modal = QApplication::activeModalWidget())
+            {
+                if (QDialog *d = qobject_cast<QDialog *>(modal))
+                    d->reject();
+                else
+                    modal->close();
+                return;
+            }
+            if (++*later < 100)
+                QTimer::singleShot(10, *closeModal);
+        };
+        QTimer::singleShot(10, *closeModal);
+        menu->setActiveAction(chosen);
+        QTest::keyClick(menu, Qt::Key_Return);
+    };
+    QTimer::singleShot(0, *poll);
+}
+
+void Monitor_Test::theTrussEditorsMenusOfferAddBar()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t2 = props->addTruss();
+    t2->setName("T2");
+    t2->setType(Truss::Vertical);
+    t2->setOrigin(QVector3D(2.0f, 2.0f, 0.0f));
+    t2->setLength(3.0f);
+    t2->setWidth(0.29f);
+    Fixture *inside = new Fixture(doc);
+    inside->setName("T2-B1");
+    inside->setChannels(4);
+    QVERIFY(doc->addFixture(inside));
+    FixtureRigProps rp;
+    rp.trussId = t2->id();
+    rp.trussOffset = 2.5f;
+    props->setFixtureRigProps(inside->id(), rp);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        mon.makeStudioPane(&dlg, 2 /* truss */, t2->id(), nullptr, &view);
+        QVERIFY(view != nullptr);
+        view->resize(520, 780);
+        view->setPlane(StructureStudioView::Front);
+        auto bars = [props, t2]() {
+            QList<Truss *> out;
+            foreach (Truss *t, props->trusses())
+                if (t->parentTrussId() == t2->id())
+                    out << t;
+            return out;
+        };
+
+        // Over the fixture rigged in it: its own entries, and Add Bar Here.
+        QStringList seen;
+        const QPoint oneMetre = view->w2s(t2->positionAt(1.0f)).toPoint();
+        answerPopup(&seen, "Add Bar Here");
+        emit view->canvasContextMenu(view->mapToGlobal(oneMetre), inside->id());
+        QVERIFY2(seen.contains("Edit fixture…") && seen.contains("Add Bar Here"),
+                 qPrintable(seen.join(" | ")));
+        QCOMPARE(bars().size(), 1);
+        QVERIFY(qAbs(bars().first()->parentOffset() - 1.0f) < 0.05f);   // where it was clicked
+
+        // On empty canvas too.
+        seen.clear();
+        const QPoint twoMetres = view->w2s(t2->positionAt(2.0f)).toPoint();
+        answerPopup(&seen, "Add Bar Here");
+        emit view->canvasContextMenu(view->mapToGlobal(twoMetres), Fixture::invalidId());
+        QVERIFY2(seen.contains("Add Fixtures…") && seen.contains("Add Bar Here"),
+                 qPrintable(seen.join(" | ")));
+        QCOMPARE(bars().size(), 2);
+    }
+    {
+        // A bar's own editor offers no bar: bars don't carry bars.
+        Truss *bar = props->truss(props->trusses().last()->id());
+        QVERIFY(bar->isChildBar());
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        mon.makeStudioPane(&dlg, 2, bar->id(), nullptr, &view);
+        QStringList seen;
+        answerPopup(&seen, QString());
+        emit view->canvasContextMenu(view->mapToGlobal(QPoint(50, 50)), Fixture::invalidId());
+        QVERIFY(!seen.isEmpty());
+        QVERIFY(!seen.join("|").contains("Add Bar"));
+    }
+    delete doc;
+}
+
 void Monitor_Test::aStagedFixtureOnThePlotCannotBeTestedOrLocated()
 {
     FixtureCleanup cleanup(m_doc);
@@ -13477,4 +13614,2106 @@ void Monitor_Test::theNetworkOverlayFlagsFixturesNoPortServes()
     QVERIFY2(!rig.gv->fixtureItemForId(served->id())->toolTip().contains("no node port"),
              qPrintable(rig.gv->fixtureItemForId(served->id())->toolTip()));
     rig.mon->applyMapView(Monitor::ViewNormal);
+}
+
+/* Make @p fxi a 1 m single-channel LED bar -- the kind of body the flat views
+   draw with its real orientation. Returns the definition for the caller to
+   delete once the fixture lets go of it. */
+static QLCFixtureDef *makeStudioBar(Fixture *fxi)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Bar 1m");
+    def->setType(QLCFixtureDef::LEDBarBeams);
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Dimmer"); ch->setGroup(QLCChannel::Intensity);
+    def->addChannel(ch);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("1ch");
+    QLCPhysical ph;
+    ph.setWidth(1000); ph.setHeight(65); ph.setDepth(80);
+    mode->setPhysical(ph);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    fxi->setFixtureDefinition(def, mode);
+    return def;
+}
+
+/* Press on @p from, move through each of @p path, release at the last. */
+static void studioMouseDrag(StructureStudioView *view, const QPointF &from,
+                            const QList<QPointF> &path,
+                            Qt::KeyboardModifiers mods = Qt::NoModifier)
+{
+    QMouseEvent press(QEvent::MouseButtonPress, from, from,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    view->mousePressEvent(&press);
+    foreach (const QPointF &pt, path)
+    {
+        QMouseEvent move(QEvent::MouseMove, pt, pt, Qt::NoButton, Qt::LeftButton, mods);
+        view->mouseMoveEvent(&move);
+    }
+    const QPointF end = path.isEmpty() ? from : path.last();
+    QMouseEvent rel(QEvent::MouseButtonRelease, end, end,
+                    Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    view->mouseReleaseEvent(&rel);
+}
+
+void Monitor_Test::aFixtureOnATrussTurnsByItsAngleHandle()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+    MonitorProperties *props = m_doc->monitorProperties();
+    const quint32 fid = rig.fxi->id();
+    QLCFixtureDef *def = makeStudioBar(rig.fxi);
+    rig.view->setPlane(StructureStudioView::Front);   // the face it is mounted on
+    rig.view->setHighlight({ fid });
+
+    // Locked: selectable, but nothing to grab.
+    rig.view->setLocked(true);
+    QCOMPARE(int(rig.view->rotateHandle().mode), int(StructureStudioView::RotateHandle::None));
+
+    rig.view->setLocked(false);
+    const StructureStudioView::RotateHandle h = rig.view->rotateHandle();
+    QCOMPARE(int(h.mode), int(StructureStudioView::RotateHandle::Angle));
+    QCOMPARE(h.fid, fid);
+    // At 0° the run is level, so the knob sits level with the pivot.
+    QVERIFY2(qAbs(h.knob.y() - h.centre.y()) < 1.0 && qAbs(h.knob.x() - h.centre.x()) > 20.0,
+             "the angle knob is not on the end of a level run");
+
+    // Swing it round to straight up, through 45° so the turn is accumulated.
+    QSignalSpy undo(rig.view, &StructureStudioView::editAboutToStart);
+    QSignalSpy moved(rig.view, &StructureStudioView::fixtureMoved);
+    const double r = h.radius;
+    const QPointF mid = h.centre + QPointF(r * 0.7071, -r * 0.7071);
+    const QPointF top = h.centre + QPointF(0.0, -r);
+    studioMouseDrag(rig.view, h.knob, { mid, top });
+
+    QCOMPARE(double(props->fixtureRigProps(fid).studioAngle), 90.0);
+    QCOMPARE(undo.count(), 1);    // one snapshot for the whole drag
+    QCOMPARE(moved.count(), 1);
+    // The fixture did not move -- it turned.
+    QCOMPARE(props->fixtureRigProps(fid).trussId, rig.truss->id());
+
+    // Its length now points straight up, out of a plan view: that is the
+    // view that rolls it.
+    rig.view->setPlane(StructureStudioView::Top);
+    QCOMPARE(int(rig.view->rotateHandle().mode), int(StructureStudioView::RotateHandle::Tilt));
+
+    /* A par is drawn square-on to the screen whatever its frame says, so a
+       knob would turn a number and nothing you can see: none offered. */
+    rig.fxi->setFixtureDefinition(nullptr, nullptr);
+    delete def;
+    rig.fxi->setChannels(1);                  // back to a generic dimmer
+    rig.view->setPlane(StructureStudioView::Front);
+    QCOMPARE(int(classifyFixture(rig.fxi).kind), int(FixtureSilhouette::Par));
+    QCOMPARE(int(rig.view->rotateHandle().mode), int(StructureStudioView::RotateHandle::None));
+}
+
+void Monitor_Test::anLedBarOnATrussRollsByItsTiltHandle()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+    MonitorProperties *props = m_doc->monitorProperties();
+    const quint32 fid = rig.fxi->id();
+
+    QLCFixtureDef *def = makeStudioBar(rig.fxi);
+
+    rig.view->setLocked(false);
+    rig.view->setHighlight({ fid });
+    // Front-face bar running along X: Side looks straight down its length.
+    rig.view->setPlane(StructureStudioView::Side);
+    const StructureStudioView::RotateHandle h = rig.view->rotateHandle();
+    QCOMPARE(int(h.mode), int(StructureStudioView::RotateHandle::Tilt));
+    QCOMPARE(h.value, 0.0);
+
+    // Where the knob WOULD point at a given tilt, from the same frame the
+    // bar is drawn with -- so the handle and the drawing agree on direction.
+    auto knobAt = [&](double deg) {
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.studioTilt = float(deg);
+        QVector3D L, N, H;
+        rig.view->fixtureFrame(rp, L, N, H);
+        const QVector3D c = rig.view->fixtureCentre(fid);
+        QPointF d = rig.view->w2s(c + N) - rig.view->w2s(c);
+        d /= qSqrt(d.x() * d.x() + d.y() * d.y());
+        return h.centre + d * h.radius;
+    };
+
+    studioMouseDrag(rig.view, h.knob, { knobAt(15.0), knobAt(30.0) });
+    QCOMPARE(double(props->fixtureRigProps(fid).studioTilt), 30.0);
+
+    // Shift snaps to 15° steps: 52° lands on 45°.
+    const StructureStudioView::RotateHandle h2 = rig.view->rotateHandle();
+    QVERIFY(QLineF(h2.knob, knobAt(30.0)).length() < 1.0);   // knob followed the roll
+    studioMouseDrag(rig.view, h2.knob, { knobAt(41.0), knobAt(52.0) }, Qt::ShiftModifier);
+    QCOMPARE(double(props->fixtureRigProps(fid).studioTilt), 45.0);
+
+    // Facing its mount face instead, the same bar spins its run.
+    rig.view->setPlane(StructureStudioView::Front);
+    QCOMPARE(int(rig.view->rotateHandle().mode), int(StructureStudioView::RotateHandle::Angle));
+
+    rig.fxi->setFixtureDefinition(nullptr, nullptr);
+    delete def;
+}
+
+void Monitor_Test::aBarTurnsInAViewOfAnotherFace()
+{
+    // T3-B2 in stage-structures-demo: laid on the Top face (SM 0), run turned
+    // 90° so it points up/downstage, looked at from the Side.
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+    MonitorProperties *props = m_doc->monitorProperties();
+    const quint32 fid = rig.fxi->id();
+    QLCFixtureDef *def = makeStudioBar(rig.fxi);
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.studioMount = 0; rp.studioAngle = 90.0f; rp.studioTilt = 0.0f;
+    props->setFixtureRigProps(fid, rp);
+
+    rig.view->setLocked(false);
+    rig.view->setHighlight({ fid });
+    rig.view->setPlane(StructureStudioView::Side);
+    const StructureStudioView::RotateHandle h = rig.view->rotateHandle();
+    QCOMPARE(int(h.mode), int(StructureStudioView::RotateHandle::Angle));
+    QCOMPARE(h.reframeMount, 2);
+    QVERIFY(qAbs(h.value) < 0.01);
+
+    // Grabbing it without turning changes nothing -- not even the face.
+    studioMouseDrag(rig.view, h.knob, {});
+    QCOMPARE(props->fixtureRigProps(fid).studioMount, 0);
+
+    // Tip the run 30° about the stage left-right axis.
+    const QVector3D c = rig.view->fixtureCentre(fid);
+    auto runAt = [&](double deg) {
+        const double t = qDegreesToRadians(deg);
+        const QVector3D l(0.0f, float(qCos(t)), float(qSin(t)));
+        QPointF d = rig.view->w2s(c + l) - rig.view->w2s(c);
+        d /= qSqrt(d.x() * d.x() + d.y() * d.y());
+        return h.centre + d * h.radius;
+    };
+    studioMouseDrag(rig.view, h.knob, { runAt(15.0), runAt(30.0) });
+
+    // Stored on the Side face now, and turned exactly as dragged: the run up
+    // 30°, and the face that was firing straight up tipped with it.
+    const FixtureRigProps after = props->fixtureRigProps(fid);
+    QCOMPARE(after.studioMount, 2);
+    QCOMPARE(double(after.studioAngle), 30.0);
+    QVector3D L, N, H;
+    rig.view->fixtureFrame(after, L, N, H);
+    QVERIFY2((L - QVector3D(0.0f, 0.8660f, 0.5f)).length() < 1e-3f,
+             qPrintable(QString("run %1 %2 %3").arg(L.x()).arg(L.y()).arg(L.z())));
+    QVERIFY2((N - QVector3D(0.0f, -0.5f, 0.8660f)).length() < 1e-3f,
+             qPrintable(QString("face %1 %2 %3").arg(N.x()).arg(N.y()).arg(N.z())));
+    // And it would stay that way through a save and reload.
+    FixtureRigProps chk = after;
+    props->repairMountPlane(chk);
+    QCOMPARE(chk.studioMount, 2);
+
+    /* Where the turn could only be stored on a face the next load would put
+       back -- the Front face of a fixture on a horizontal truss -- there is
+       no handle, rather than one whose result would not survive. */
+    rp.studioMount = 0; rp.studioAngle = 0.0f; rp.studioTilt = 0.0f;
+    props->setFixtureRigProps(fid, rp);
+    rig.view->setPlane(StructureStudioView::Front);
+    QCOMPARE(int(rig.view->rotateHandle().mode), int(StructureStudioView::RotateHandle::None));
+
+    rig.fxi->setFixtureDefinition(nullptr, nullptr);
+    delete def;
+}
+
+void Monitor_Test::theInspectorMovesAFixturesDmxAddress()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("T-1");
+    t->setLength(3.0f);
+    Fixture *spot = new Fixture(doc);
+    spot->setName("Spot");
+    spot->setChannels(8);
+    QVERIFY(doc->addFixture(spot));
+    Fixture *wall = new Fixture(doc);
+    wall->setName("Wall");
+    wall->setChannels(8);
+    wall->setAddress(100);
+    QVERIFY(doc->addFixture(wall));
+    props->setFixturePosition(spot->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t->id();
+    rp.trussOffset = 1.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        QVERIFY(mon.makeStudioPane(&dlg, 2 /* truss */, t->id(), nullptr, &view) != nullptr);
+        emit view->fixtureSelected(spot->id());
+
+        QSpinBox *uni = nullptr, *addr = nullptr;
+        foreach (QSpinBox *sb, dlg.findChildren<QSpinBox *>())
+        {
+            if (sb->toolTip() == "Universe") uni = sb;
+            if (sb->toolTip() == "Start address") addr = sb;
+        }
+        QVERIFY(uni != nullptr && addr != nullptr);
+        QVERIFY2(!addr->parentWidget()->isHidden(), "no DMX row for a selected fixture");
+        QCOMPARE(addr->value(), 1);
+        QCOMPARE(addr->suffix(), QString("–8"));
+
+        // Onto the wall: refused, with the reason, and the fixture stays put.
+        addr->setValue(97);
+        QCOMPARE(spot->address(), quint32(0));
+        QLabel *note = nullptr;
+        foreach (QLabel *l, dlg.findChildren<QLabel *>())
+            if (l->text().startsWith("Not moved"))
+                note = l;
+        QVERIFY2(note != nullptr && note->text().contains("Wall"), "no reason given");
+
+        // Clear of it: moved.
+        addr->setValue(201);
+        QCOMPARE(spot->address(), quint32(200));
+        QCOMPARE(doc->fixtureForAddress(200), spot->id());
+        uni->setValue(3);
+        QCOMPARE(spot->universe(), quint32(2));
+        QCOMPARE(spot->address(), quint32(200));
+
+        // Running: a patched fixture stays where it is.
+        doc->setMode(Doc::Operate);
+        addr->setValue(301);
+        QCOMPARE(spot->address(), quint32(200));
+        doc->setMode(Doc::Design);
+    }
+    delete doc;
+}
+
+/* A horizontal 4 m truss carrying four fixtures, "F1".."F4", at the given
+   offsets along it. */
+struct MultiTrussRig
+{
+    Doc *doc = nullptr;
+    Truss *truss = nullptr;
+    QList<Fixture *> fx;
+
+    void build(Doc *d, const QList<float> &offsets)
+    {
+        doc = d;
+        MonitorProperties *props = d->monitorProperties();
+        truss = props->addTruss();
+        truss->setName("FART-1");
+        truss->setType(Truss::Horizontal);
+        truss->setOrigin(QVector3D(0.0f, 0.0f, 2.0f));
+        truss->setDirection(QPointF(1.0, 0.0));
+        truss->setLength(4.0f);
+        for (int i = 0; i < offsets.size(); ++i)
+        {
+            Fixture *f = new Fixture(d);
+            f->setName(QString("F%1").arg(i + 1));
+            f->setChannels(1);
+            f->setAddress(quint32(i) * 8);
+            d->addFixture(f);
+            props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+            FixtureRigProps rp;
+            rp.trussId = truss->id();
+            rp.trussOffset = offsets.at(i);
+            props->setFixtureRigProps(f->id(), rp);
+            fx << f;
+        }
+    }
+    float offset(int i) const { return doc->monitorProperties()->fixtureRigProps(fx.at(i)->id()).trussOffset; }
+    QList<quint32> ids(const QList<int> &which) const
+    {
+        QList<quint32> out;
+        foreach (int i, which) out << fx.at(i)->id();
+        return out;
+    }
+};
+
+void Monitor_Test::theInspectorEditsEveryFixtureSelected()
+{
+    Doc *doc = new Doc(this);
+    MultiTrussRig rig;
+    rig.build(doc, { 0.5f, 1.5f, 2.5f, 3.5f });
+    MonitorProperties *props = doc->monitorProperties();
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        QVERIFY(mon.makeStudioPane(&dlg, 2, rig.truss->id(), nullptr, &view) != nullptr);
+
+        // Three of the four selected in the list on the left.
+        QTreeWidget *tree = nullptr;
+        foreach (QTreeWidget *t, dlg.findChildren<QTreeWidget *>())
+            if (t->topLevelItemCount() > 0)
+                tree = t;
+        QVERIFY(tree != nullptr);
+        const QList<quint32> want = rig.ids({ 0, 1, 2 });
+        QTreeWidgetItemIterator it(tree);
+        while (*it)
+        {
+            const QVariant v = (*it)->data(0, Qt::UserRole);
+            if (v.isValid() && want.contains(v.toUInt()) && (*it)->text(0).startsWith("F"))
+                (*it)->setSelected(true);
+            ++it;
+        }
+        QCOMPARE(view->m_highlight.size(), 3);
+
+        QDoubleSpinBox *tilt = nullptr, *angle = nullptr;
+        foreach (QDoubleSpinBox *sb, dlg.findChildren<QDoubleSpinBox *>())
+        {
+            if (sb->toolTip().startsWith("Tip the fixture")) tilt = sb;
+            else if (sb->minimum() == -180.0 && sb->suffix() == QString::fromUtf8("°")) angle = sb;
+        }
+        QVERIFY(tilt != nullptr && angle != nullptr);
+        QLabel *title = nullptr;
+        foreach (QLabel *l, dlg.findChildren<QLabel *>())
+            if (l->text().startsWith("3 fixtures selected"))
+                title = l;
+        QVERIFY2(title != nullptr, "the inspector does not say three are selected");
+
+        tilt->setValue(25.0);
+        angle->setValue(40.0);
+        for (int i = 0; i < 3; ++i)
+        {
+            QCOMPARE(double(props->fixtureRigProps(rig.fx[i]->id()).studioTilt), 25.0);
+            QCOMPARE(double(props->fixtureRigProps(rig.fx[i]->id()).studioAngle), 40.0);
+        }
+        // The one not selected is left alone.
+        QCOMPARE(double(props->fixtureRigProps(rig.fx[3]->id()).studioTilt), 0.0);
+        QCOMPARE(double(props->fixtureRigProps(rig.fx[3]->id()).studioAngle), 0.0);
+
+        // Selecting the folder row (here "Ungrouped") selects everything in it.
+        tree->clearSelection();
+        QTreeWidgetItem *folder = nullptr;
+        for (int i = 0; i < tree->topLevelItemCount(); ++i)
+            if (tree->topLevelItem(i)->childCount() == 4)
+                folder = tree->topLevelItem(i);
+        QVERIFY(folder != nullptr);
+        folder->setSelected(true);
+        QCOMPARE(view->m_highlight.size(), 4);
+        tilt->setValue(-10.0);
+        for (int i = 0; i < 4; ++i)
+            QCOMPARE(double(props->fixtureRigProps(rig.fx[i]->id()).studioTilt), -10.0);
+    }
+    delete doc;
+}
+
+void Monitor_Test::cmdClickBuildsASelectionThatDragsTogether()
+{
+    Doc *doc = new Doc(this);
+    MultiTrussRig rig;
+    rig.build(doc, { 0.5f, 1.5f, 2.5f, 3.5f });
+    StructureStudioView view(doc, StructureStudioView::TrussKind, rig.truss->id());
+    view.resize(800, 600);
+    view.reload();
+    view.setPlane(StructureStudioView::Front);
+    view.setLocked(false);
+    QSignalSpy sel(&view, &StructureStudioView::fixturesSelected);
+
+    auto click = [&view](const QPointF &at, Qt::KeyboardModifiers mods) {
+        QMouseEvent press(QEvent::MouseButtonPress, at, at, Qt::LeftButton, Qt::LeftButton, mods);
+        view.mousePressEvent(&press);
+        QMouseEvent rel(QEvent::MouseButtonRelease, at, at, Qt::LeftButton, Qt::NoButton, mods);
+        view.mouseReleaseEvent(&rel);
+    };
+    auto at = [&](int i) { return view.w2s(view.fixtureCentre(rig.fx[i]->id())); };
+
+    click(at(0), Qt::NoModifier);
+    click(at(2), Qt::ControlModifier);
+    click(at(3), Qt::ControlModifier);
+    QCOMPARE(view.m_highlight, QSet<quint32>({ rig.fx[0]->id(), rig.fx[2]->id(), rig.fx[3]->id() }));
+    QCOMPARE(sel.last().first().value<QList<quint32>>().size(), 3);
+    click(at(3), Qt::ControlModifier);                     // and out again
+    QCOMPARE(view.m_highlight.size(), 2);
+    // Shift-click does the same, as it does in the list beside it.
+    click(at(1), Qt::ShiftModifier);
+    QCOMPARE(view.m_highlight.size(), 3);
+    click(at(1), Qt::ShiftModifier);
+    QCOMPARE(view.m_highlight.size(), 2);
+    QVERIFY(!view.m_panning);
+
+    // Drag F3 (selected) a metre stage right: F1 goes with it, F2 does not.
+    QSignalSpy undo(&view, &StructureStudioView::editAboutToStart);
+    const QPointF from = at(2);
+    const QPointF to = from + QPointF(-view.m_scale * 1.0, 0.0);
+    QMouseEvent press(QEvent::MouseButtonPress, from, from, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    view.mousePressEvent(&press);
+    QMouseEvent move(QEvent::MouseMove, to, to, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    view.mouseMoveEvent(&move);
+    QMouseEvent rel(QEvent::MouseButtonRelease, to, to, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    view.mouseReleaseEvent(&rel);
+
+    QVERIFY2(qAbs(rig.offset(2) - 1.5f) < 0.05f, qPrintable(QString::number(rig.offset(2))));
+    QVERIFY2(qAbs(rig.offset(0) - 0.0f) < 0.05f, qPrintable(QString::number(rig.offset(0))));
+    QCOMPARE(rig.offset(1), 1.5f);
+    QCOMPARE(undo.count(), 1);                              // one snapshot for both
+    QCOMPARE(view.m_highlight.size(), 2);                   // still both selected
+
+    // A plain click (no drag) on one of them narrows the selection to it.
+    click(at(2), Qt::NoModifier);
+    QCOMPARE(view.m_highlight, QSet<quint32>({ rig.fx[2]->id() }));
+    delete doc;
+}
+
+void Monitor_Test::distributingAFewSpacesThemBetweenTheOutermost()
+{
+    Doc *doc = new Doc(this);
+    MultiTrussRig rig;
+    rig.build(doc, { 0.5f, 0.7f, 3.0f, 3.5f });
+    StructureStudioView view(doc, StructureStudioView::TrussKind, rig.truss->id());
+    view.resize(800, 600);
+    view.reload();
+
+    // F1, F2, F3: the ends (0.5 and 3.0) stay; F2 goes half way. F4 is untouched.
+    view.distributeOnFace(rig.ids({ 0, 1, 2 }));
+    QCOMPARE(rig.offset(0), 0.5f);
+    QVERIFY(qAbs(rig.offset(1) - 1.75f) < 1e-4f);
+    QCOMPARE(rig.offset(2), 3.0f);
+    QCOMPARE(rig.offset(3), 3.5f);
+
+    // All of them (or none picked): across the whole truss, as before.
+    MonitorProperties *props = doc->monitorProperties();
+    // ...and in a line: the drops and cross offsets earlier drags left a
+    // little apart (FART-SR's were -0.064..-0.086 m) come to the middle one.
+    const float drops[4] = { -0.073f, -0.086f, -0.064f, -0.070f };
+    for (int i = 0; i < 4; ++i)
+    {
+        FixtureRigProps rp = props->fixtureRigProps(rig.fx[i]->id());
+        rp.mountZOffset = drops[i];
+        rp.trussCross = 0.01f * float(i);
+        props->setFixtureRigProps(rig.fx[i]->id(), rp);
+    }
+    view.distributeOnFace(rig.ids({ 0, 1, 2, 3 }));
+    QCOMPARE(rig.offset(0), 0.5f);
+    QCOMPARE(rig.offset(1), 1.5f);
+    QCOMPARE(rig.offset(3), 3.5f);
+    for (int i = 0; i < 4; ++i)
+    {
+        const FixtureRigProps rp = props->fixtureRigProps(rig.fx[i]->id());
+        QCOMPARE(rp.mountZOffset, -0.073f);     // median of the four (lower middle)
+        QCOMPARE(rp.trussCross, 0.01f);
+    }
+    const float z0 = props->fixtureRigPosition(rig.fx[0]->id()).z();
+    for (int i = 1; i < 4; ++i)
+        QCOMPARE(props->fixtureRigPosition(rig.fx[i]->id()).z(), z0);
+    delete doc;
+}
+
+void Monitor_Test::aRightClickKeepsTheSelectionItLandsIn()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    QList<StagePlatform *> pls;
+    for (int i = 0; i < 3; ++i)
+    {
+        StagePlatform *p = props->addPlatform();
+        p->setName(QString("FART-%1").arg(i + 1));
+        p->setOriginX(1.0f + 3.0f * i);
+        p->setOriginY(2.0f);
+        p->setWidth(2.0f);
+        p->setDepth(1.0f);
+        pls << p;
+    }
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.findChild<MonitorGraphicsView *>();
+        QVERIFY(gv != nullptr);
+        gv->resize(1230, 760);
+        gv->setGridMetrics(1000.0);
+        gv->setGridSize(QSize(40, 24));
+        gv->updatePlatforms();
+        PlatformItem *a = gv->m_platformItems.value(pls[0]->id());
+        PlatformItem *b = gv->m_platformItems.value(pls[1]->id());
+        PlatformItem *c = gv->m_platformItems.value(pls[2]->id());
+        QVERIFY(a && b && c);
+
+        auto rightPress = [gv](QGraphicsItem *it) {
+            const QPoint at = gv->mapFromScene(it->mapToScene(it->boundingRect().center()));
+            QMouseEvent press(QEvent::MouseButtonPress, at, gv->viewport()->mapToGlobal(at),
+                              Qt::RightButton, Qt::RightButton, Qt::NoModifier);
+            gv->mousePressEvent(&press);
+            QMouseEvent rel(QEvent::MouseButtonRelease, at, gv->viewport()->mapToGlobal(at),
+                            Qt::RightButton, Qt::NoButton, Qt::NoModifier);
+            gv->mouseReleaseEvent(&rel);
+        };
+
+        a->setSelected(true);
+        b->setSelected(true);
+        rightPress(b);
+        QVERIFY2(a->isSelected() && b->isSelected(),
+                 "right-clicking one of two selected platforms dropped the selection");
+        QCOMPARE(gv->selectedMapObjects().size(), 2);
+
+        // The reported case: trusses (FART-1), and fixtures on the plot.
+        Truss *t1 = props->addTruss();
+        t1->setName("FART-1"); t1->setOrigin(QVector3D(2.0f, 6.0f, 3.0f));
+        t1->setDirection(QPointF(1.0, 0.0)); t1->setLength(3.0f);
+        Truss *t2 = props->addTruss();
+        t2->setName("FART-2"); t2->setOrigin(QVector3D(2.0f, 9.0f, 3.0f));
+        t2->setDirection(QPointF(1.0, 0.0)); t2->setLength(3.0f);
+        gv->updateTrusses();
+        TrussItem *ta = gv->m_trussItems.value(t1->id());
+        TrussItem *tb = gv->m_trussItems.value(t2->id());
+        QVERIFY(ta && tb);
+        gv->m_scene->clearSelection();
+        ta->setSelected(true);
+        tb->setSelected(true);
+        rightPress(ta);
+        QVERIFY2(ta->isSelected() && tb->isSelected(),
+                 "right-clicking one of two selected trusses dropped the selection");
+
+        Fixture *f1 = new Fixture(doc); f1->setName("FART-SR-1"); f1->setChannels(1);
+        Fixture *f2 = new Fixture(doc); f2->setName("FART-SR-2"); f2->setChannels(1); f2->setAddress(10);
+        QVERIFY(doc->addFixture(f1) && doc->addFixture(f2));
+        gv->addFixture(f1->id(), QPointF(15000, 3000));
+        gv->addFixture(f2->id(), QPointF(18000, 3000));
+        MonitorFixtureItem *fa = gv->m_fixtures.value(f1->id());
+        MonitorFixtureItem *fb = gv->m_fixtures.value(f2->id());
+        QVERIFY(fa && fb);
+        gv->m_scene->clearSelection();
+        fa->setSelected(true);
+        fb->setSelected(true);
+        rightPress(fa);
+        QVERIFY2(fa->isSelected() && fb->isSelected(),
+                 "right-clicking one of two selected fixtures dropped the selection");
+
+        // On something NOT selected: that, alone.
+        rightPress(c);
+        QVERIFY(c->isSelected());
+        QVERIFY(!a->isSelected() && !b->isSelected() && !fa->isSelected());
+    }
+    delete doc;
+}
+
+void Monitor_Test::aLayersRowStaysSelectedWhenThePlotCannotFollow()
+{
+    Doc *doc = new Doc(this);
+    Fixture *f = new Fixture(doc);
+    f->setName("T1-W");
+    f->setChannels(4);
+    QVERIFY(doc->addFixture(f));
+    doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(2000, 2000, 0));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        parent.resize(1400, 900);
+        mon.resize(1400, 900);
+        parent.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&parent));
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        MonitorFixtureItem *item = gv->m_fixtures.value(f->id(), nullptr);
+        QVERIFY(item != nullptr);
+        // What a fixture stacked inside a tower is in plan view: on the plot,
+        // but not visible, so the plot cannot select it.
+        item->setVisible(false);
+
+        MonitorLayersPanel *panel = mon.m_layersPanel;
+        panel->reload();
+        QTreeWidgetItem *row = nullptr;
+        for (QTreeWidgetItemIterator it(panel->m_tree); *it; ++it)
+            if ((*it)->text(0) == "T1-W") { row = *it; break; }
+        QVERIFY(row != nullptr);
+        panel->m_tree->scrollToItem(row);
+        QTest::mouseClick(panel->m_tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          panel->m_tree->visualItemRect(row).center());
+        QCoreApplication::processEvents();
+        QVERIFY2(row->isSelected(), "the row was cleared by the plot's empty selection");
+        QVERIFY(gv->selectedMapObjects().isEmpty());
+
+        // A row the plot CAN select still works both ways.
+        item->setVisible(true);
+        panel->m_tree->clearSelection();
+        QTest::mouseClick(panel->m_tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          panel->m_tree->visualItemRect(row).center());
+        QCoreApplication::processEvents();
+        QVERIFY(row->isSelected());
+        QVERIFY(item->isSelected());
+    }
+    delete doc;
+}
+
+void Monitor_Test::takingFixturesOutOfAStructure()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("T-3");
+    t->setType(Truss::Vertical);
+    t->setOrigin(QVector3D(7.0f, 3.0f, 0.0f));
+    t->setLength(3.0f);
+    Tower *tw = props->addTower();
+    tw->setName("AT1");
+    tw->setOriginX(0.2f); tw->setOriginY(8.0f);
+    tw->setWidth(0.4f); tw->setDepth(0.4f); tw->setHeight(2.4f);
+
+    Fixture *onTruss = new Fixture(doc); onTruss->setName("T3-B1"); onTruss->setChannels(1);
+    Fixture *onTower = new Fixture(doc); onTower->setName("AT1-3z"); onTower->setChannels(1);
+    onTower->setAddress(10);
+    QVERIFY(doc->addFixture(onTruss) && doc->addFixture(onTower));
+    props->setFixturePosition(onTruss->id(), 0, 0, QVector3D(7000, 3000, 0));
+    props->setFixturePosition(onTower->id(), 0, 0, QVector3D(200, 8000, 0));
+    FixtureRigProps a; a.trussId = t->id(); a.trussOffset = 1.0f;
+    props->setFixtureRigProps(onTruss->id(), a);
+    FixtureRigProps b; b.towerId = tw->id(); b.towerShelf = 0;
+    props->setFixtureRigProps(onTower->id(), b);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->ensureTrussGroup(t->id());
+        const quint32 trussGroup = t->groupId();
+        QVERIFY(trussGroup != 0);
+        // AT1-3z filed under T-3 although it hangs on AT1.
+        props->setFixtureGroup(onTower->id(), trussGroup);
+
+        gv->takeOutOfStructure({ onTruss->id(), onTower->id() }, "truss", t->id());
+
+        QCOMPARE(props->fixtureRigProps(onTruss->id()).trussId, Truss::invalidId());
+        QVERIFY(props->fixtureGroup(onTruss->id()) != trussGroup);
+        // Still on its tower, and back under it.
+        QCOMPARE(props->fixtureRigProps(onTower->id()).towerId, tw->id());
+        const quint32 g = props->fixtureGroup(onTower->id());
+        QVERIFY(g != trussGroup);
+        QCOMPARE(props->group(g).anchorKind, QString("tower"));
+        QCOMPARE(props->group(g).anchorId, tw->id());
+    }
+    delete doc;
+}
+
+void Monitor_Test::aGroupOfGroupsIsLaidOutAsOnStage()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    // Four single-head fixtures 0.2 m apart: a 4-cell row over 0.6 m, i.e.
+    // 5 cells a metre. SR at x 1.0, SL at x 4.0, a third above SR.
+    auto makeGroup = [&](const QString &name, double x, double z, int addr) {
+        FixtureGroup *g = new FixtureGroup(doc);
+        g->setName(name);
+        g->setSize(QSize(4, 1));
+        doc->addFixtureGroup(g);
+        for (int i = 0; i < 4; ++i)
+        {
+            Fixture *f = new Fixture(doc);
+            f->setName(QString("%1-%2").arg(name).arg(i + 1));
+            f->setChannels(1);
+            f->setAddress(quint32(addr + i));
+            doc->addFixture(f);
+            // X/Y in millimetres, Z in metres -- as the plot stores them.
+            props->setFixturePosition(f->id(), 0, 0,
+                QVector3D(float((x + 0.2 * i) * 1000.0), 3000.0f, float(z)));
+            g->assignFixture(f->id(), QLCPoint(i, 0));
+        }
+        return g;
+    };
+    FixtureGroup *sr = makeGroup("FART-SR", 1.0, 2.0, 0);
+    FixtureGroup *sl = makeGroup("FART-SL", 4.0, 2.0, 10);
+    FixtureGroup *hi = makeGroup("FART-HI", 1.0, 3.0, 20);
+
+    // Scoped: a FixtureGroup is parented to its Doc, which must outlive it.
+    {
+    FixtureGroup target(doc);
+    target.setSize(QSize(1, 1));
+    QVERIFY(CreateFixtureGroup::layoutGroupsByStage(doc, { sr->id(), sl->id(), hi->id() }, &target));
+
+    auto colOf = [&target](quint32 fid) {
+        QMapIterator<QLCPoint, GroupHead> it(target.headsMap());
+        while (it.hasNext()) { it.next(); if (it.value().fxi == fid) return it.key(); }
+        return QLCPoint(-1, -1);
+    };
+    // Higher up = earlier rows; SR's first head at the left edge.
+    QCOMPARE(colOf(hi->fixtureList().first()), QLCPoint(0, 0));
+    const QLCPoint srAt = colOf(sr->fixtureList().first());
+    const QLCPoint slAt = colOf(sl->fixtureList().first());
+    QCOMPARE(srAt, QLCPoint(0, 5));                   // a metre below: 5 rows
+    QCOMPARE(slAt.y(), 5);                            // same height as SR
+    QCOMPARE(slAt.x(), 15);                           // 3 m stage left: 15 columns
+    // Each group keeps its own shape, tagged as a block.
+    QCOMPARE(colOf(sl->fixtureList().last()), QLCPoint(18, 5));
+    QCOMPARE(target.headSubGroup(slAt), FixtureGroup::subGroupTagFor(sl->id()));
+    QCOMPARE(target.size(), QSize(19, 6));
+    }
+    delete doc;
+}
+
+/* Two groups of four: LOW upstage at 1 m, HIGH downstage at 3 m. From the
+   front HIGH is the top row; from above, LOW (upstage) is. */
+void Monitor_Test::aGroupOfGroupsIsLaidOutFromTheChosenView()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    auto makeGroup = [&](const QString &name, double y, double z, int addr) {
+        FixtureGroup *g = new FixtureGroup(doc);
+        g->setName(name);
+        g->setSize(QSize(4, 1));
+        doc->addFixtureGroup(g);
+        for (int i = 0; i < 4; ++i)
+        {
+            Fixture *f = new Fixture(doc);
+            f->setName(QString("%1-%2").arg(name).arg(i + 1));
+            f->setChannels(1);
+            f->setAddress(quint32(addr + i));
+            doc->addFixture(f);
+            props->setFixturePosition(f->id(), 0, 0,
+                QVector3D(float((1.0 + 0.2 * i) * 1000.0), float(y * 1000.0), float(z)));
+            g->assignFixture(f->id(), QLCPoint(i, 0));
+        }
+        return g;
+    };
+    FixtureGroup *low = makeGroup("LOW", 2.0, 1.0, 0);
+    FixtureGroup *high = makeGroup("HIGH", 6.0, 3.0, 10);
+    QList<quint32> members = low->fixtureList() + high->fixtureList();
+    {
+        StageGroupDialog dlg(doc, members, "LOW + HIGH", nullptr, { low->id(), high->id() });
+        QVERIFY(dlg.m_keepGroups != nullptr && dlg.m_keepGroups->isChecked());
+        auto rowOf = [&dlg](quint32 fid) {
+            QMapIterator<QLCPoint, GroupHead> it(dlg.m_heads);
+            while (it.hasNext()) { it.next(); if (it.value().fxi == fid) return it.key().y(); }
+            return -1;
+        };
+        const int front = dlg.m_viewCombo->findData(int(CreateFixtureGroup::ViewFront));
+        const int top = dlg.m_viewCombo->findData(int(CreateFixtureGroup::ViewTop));
+        dlg.m_viewCombo->setCurrentIndex(front);
+        QVERIFY(rowOf(high->fixtureList().first()) < rowOf(low->fixtureList().first()));
+        QCOMPARE(dlg.m_size, QSize(4, 2));                 // closed up: two rows
+        // Each group still a block of its own.
+        QSet<quint32> tags;
+        foreach (quint32 t, dlg.m_tags.values()) tags.insert(t);
+        QCOMPARE(tags, QSet<quint32>({ FixtureGroup::subGroupTagFor(low->id()), FixtureGroup::subGroupTagFor(high->id()) }));
+
+        dlg.m_viewCombo->setCurrentIndex(top);
+        QVERIFY(rowOf(low->fixtureList().first()) < rowOf(high->fixtureList().first()));
+
+        // Laid out afresh from the fixtures: the same views, no blocks.
+        dlg.m_keepGroups->setChecked(false);
+        QVERIFY(rowOf(low->fixtureList().first()) < rowOf(high->fixtureList().first()));
+        dlg.m_viewCombo->setCurrentIndex(front);
+        QVERIFY(rowOf(high->fixtureList().first()) < rowOf(low->fixtureList().first()));
+        QCOMPARE(dlg.m_heads.size(), 8);
+
+        dlg.m_keepGroups->setChecked(true);
+        dlg.m_nameEdit->setText("Both");
+        dlg.accept();
+        QVERIFY(dlg.group() != nullptr);
+        QCOMPARE(dlg.group()->name(), QString("Both"));
+        QCOMPARE(dlg.group()->headsMap().size(), 8);
+    }
+    delete doc;
+}
+
+/* A group filled in head order, not as rigged (US2f: eight bars poured into
+   a square): laid out again in place, from the front. */
+void Monitor_Test::aGroupIsLaidOutAgainFromTheStage()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    FixtureGroup *bad = new FixtureGroup(doc);
+    bad->setName("Row");
+    bad->setSize(QSize(2, 2));
+    doc->addFixtureGroup(bad);
+    QList<quint32> fids;
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("R-%1").arg(i + 1));
+        f->setChannels(1);
+        f->setAddress(quint32(i));
+        doc->addFixture(f);
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(float((1.0 + 0.5 * i) * 1000.0), 3000.0f, 1.0f));
+        fids << f->id();
+    }
+    // Backwards, two by two.
+    for (int i = 0; i < 4; ++i)
+        bad->assignFixture(fids[3 - i], QLCPoint(i % 2, i / 2));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorLayersPanel *panel = mon.m_layersPanel;
+        panel->reload();
+        QTreeWidgetItem *row = nullptr;
+        for (QTreeWidgetItemIterator it(panel->m_tree); *it; ++it)
+            if ((*it)->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeFixtureGroup
+                && (*it)->data(0, Qt::UserRole + 1).toUInt() == bad->id())
+                row = *it;
+        QVERIFY(row != nullptr);
+        QMenu m;
+        panel->buildContextMenu(&m, row);
+        bool offered = false;
+        foreach (QAction *a, m.actions())
+            offered |= a->text() == "Lay Out from the Stage…";
+        QVERIFY(offered);
+    }
+    {
+        StageGroupDialog dlg(doc, bad->fixtureList(), bad->name());
+        dlg.setEditing(bad);
+        QCOMPARE(dlg.m_okButton->text(), QString("Apply"));
+        QCOMPARE(dlg.m_nameEdit->text(), QString("Row"));
+        QVERIFY(dlg.m_sameNote->isHidden());          // itself is not a duplicate
+        dlg.accept();
+        QCOMPARE(dlg.group(), bad);
+    }
+    QCOMPARE(doc->fixtureGroups().size(), 1);           // no new group
+    QCOMPARE(bad->size(), QSize(4, 1));
+    for (int i = 0; i < 4; ++i)
+        QCOMPARE(bad->head(QLCPoint(i, 0)).fxi, fids[i]);   // stage right to left as seen
+    delete doc;
+}
+
+/* Click a row, Enter, type, Enter: a fixture group's row too, and the edit
+   starts from the name alone, not "US2f  · fixture group". */
+void Monitor_Test::enterRenamesAnyLayersRowFromItsBareName()
+{
+    Doc *doc = new Doc(this);
+    doc->setMode(Doc::Design);
+    MonitorProperties *props = doc->monitorProperties();
+    QList<quint32> fids;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("Bar %1").arg(i + 1));
+        f->setChannels(1);
+        f->setAddress(quint32(i));
+        doc->addFixture(f);
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(1000.0f + 500.0f * i, 3000.0f, 0.0f));
+        fids << f->id();
+    }
+    FixtureGroup *fg = new FixtureGroup(doc);
+    fg->setName("US2f");
+    fg->setSize(QSize(2, 1));
+    doc->addFixtureGroup(fg);
+    fg->assignFixture(fids[0], QLCPoint(0, 0));
+    fg->assignFixture(fids[1], QLCPoint(1, 0));
+    {
+        QWidget parent;
+        parent.resize(1200, 800);
+        Monitor mon(&parent, doc);
+        parent.show();
+        MonitorLayersPanel *panel = mon.m_layersPanel;
+        panel->setVisible(true);
+        panel->reload();
+        QTreeWidget *tree = panel->m_tree;
+        auto rowOf = [tree](int type, quint32 id) -> QTreeWidgetItem * {
+            for (QTreeWidgetItemIterator it(tree); *it; ++it)
+                if ((*it)->data(0, Qt::UserRole).toInt() == type
+                    && (*it)->data(0, Qt::UserRole + 1).toUInt() == id)
+                    return *it;
+            return nullptr;
+        };
+        auto renameBy = [tree](QTreeWidgetItem *row, const QString &typed) -> QString {
+            for (QTreeWidgetItem *up = row->parent(); up; up = up->parent())
+                up->setExpanded(true);
+            tree->scrollToItem(row);
+            tree->setFocus();
+            tree->setCurrentItem(row);
+            QTest::keyClick(tree, Qt::Key_Return);
+            QLineEdit *ed = nullptr;
+            foreach (QLineEdit *le, tree->viewport()->findChildren<QLineEdit *>())
+                if (le->isVisible()) ed = le;
+            if (ed == nullptr)
+                return QString("<no editor>");
+            const QString shown = ed->text();
+            ed->setText(typed);
+            QTest::keyClick(ed, Qt::Key_Return);
+            QCoreApplication::processEvents();
+            return shown;
+        };
+
+        QTreeWidgetItem *fgRow = rowOf(MonitorLayersPanel::NodeFixtureGroup, fg->id());
+        QVERIFY(fgRow != nullptr);
+        QVERIFY(fgRow->text(0).contains("fixture group"));
+        QCOMPARE(renameBy(fgRow, "US2 Front"), QString("US2f"));       // the bare name to edit
+        QCOMPARE(fg->name(), QString("US2 Front"));
+        QCoreApplication::processEvents();                               // the queued reload
+        fgRow = rowOf(MonitorLayersPanel::NodeFixtureGroup, fg->id());
+        QVERIFY(fgRow != nullptr && fgRow->text(0).startsWith("US2 Front"));
+
+        // A fixture row and a layer row, the same way.
+        QTreeWidgetItem *fxRow = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeItem
+                && (*it)->data(0, Qt::UserRole + 2).toString() == "fixture"
+                && (*it)->data(0, Qt::UserRole + 1).toUInt() == fids[0])
+                fxRow = *it;
+        QVERIFY(fxRow != nullptr);
+        renameBy(fxRow, "Bar One");
+        QCOMPARE(doc->fixture(fids[0])->name(), QString("Bar One"));
+
+        QTreeWidgetItem *layerRow = tree->topLevelItem(0);
+        QVERIFY(layerRow != nullptr);
+        const quint32 layerId = layerRow->data(0, Qt::UserRole + 1).toUInt();
+        /* Renamed just after a fixture was: that queued a reload, which used
+           to land before Enter's (queued) commit and drop the new name. */
+        renameBy(layerRow, "Front Steps");
+        QCOMPARE(props->layer(layerId).name, QString("Front Steps"));
+    }
+    delete doc;
+}
+
+void Monitor_Test::aFixtureGroupRowStaysOpenAndCanBeDeleted()
+{
+    Doc *doc = new Doc(this);
+    QList<quint32> fids;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("UST-%1").arg(i + 1));
+        f->setChannels(1);
+        f->setAddress(quint32(i));
+        QVERIFY(doc->addFixture(f));
+        doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(1000.0f * (i + 1), 2000, 0));
+        fids << f->id();
+    }
+    auto makeGroup = [&](const QString &name) {
+        FixtureGroup *g = new FixtureGroup(doc);
+        g->setName(name);
+        g->setSize(QSize(3, 1));
+        doc->addFixtureGroup(g);
+        for (int i = 0; i < 3; ++i)
+            g->assignFixture(fids[i], QLCPoint(i, 0));
+        return g;
+    };
+    FixtureGroup *usts = makeGroup("USTs");
+    FixtureGroup *ust = makeGroup("UST");
+    const quint32 ustId = ust->id();
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorLayersPanel *panel = mon.m_layersPanel;
+        panel->reload();
+        auto row = [panel](const QString &name) -> QTreeWidgetItem * {
+            for (QTreeWidgetItemIterator it(panel->m_tree); *it; ++it)
+                if ((*it)->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeFixtureGroup
+                    && (*it)->text(0).startsWith(name + "  "))
+                    return *it;
+            return nullptr;
+        };
+        QTreeWidgetItem *r = row("USTs");
+        QVERIFY(r != nullptr);
+        QVERIFY(r->childCount() > 0);
+        QVERIFY(!r->isExpanded());
+        r->setExpanded(true);
+
+        // Anything that rebuilds the list must leave it open.
+        panel->reload();
+        r = row("USTs");
+        QVERIFY(r != nullptr);
+        QVERIFY2(r->isExpanded(), "a rebuild closed the fixture group the user had opened");
+
+        // The duplicate's row offers Delete; it takes the group, not the fixtures.
+        QTreeWidgetItem *dup = row("UST");
+        QVERIFY(dup != nullptr);
+        QMenu menu;
+        panel->buildContextMenu(&menu, dup);
+        QAction *del = nullptr;
+        foreach (QAction *a, menu.actions())
+            if (a->text().startsWith("Delete Fixture Group"))
+                del = a;
+        QVERIFY(del != nullptr);
+        QTimer::singleShot(0, [] {
+            if (QMessageBox *mb = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+                mb->button(QMessageBox::Yes)->click();
+        });
+        del->trigger();
+        QVERIFY(doc->fixtureGroup(ustId) == nullptr);
+        QVERIFY(doc->fixtureGroup(usts->id()) != nullptr);
+        foreach (quint32 fid, fids)
+            QVERIFY(doc->fixture(fid) != nullptr);
+    }
+    delete doc;
+}
+
+void Monitor_Test::theInspectorPutsFixturesOnTheBack()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("T-1");
+    t->setType(Truss::Vertical);
+    t->setOrigin(QVector3D(1.0f, 2.0f, 0.0f));
+    t->setLength(3.0f);
+    t->setWidth(0.3f);
+    QLCFixtureDef *def = nullptr;
+    QList<Fixture *> bars;
+    for (int k = 0; k < 2; ++k)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("XL-450 #%1").arg(k + 1));
+        f->setChannels(1);
+        f->setAddress(quint32(k) * 4);
+        QVERIFY(doc->addFixture(f));
+        if (def == nullptr)
+            def = makeStudioBar(f);         // linear: the Face row shows
+        else
+            f->setFixtureDefinition(def, def->modes().first());
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.trussId = t->id();
+        rp.trussOffset = 1.0f + k;
+        props->setFixtureRigProps(f->id(), rp);
+        bars << f;
+    }
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        QVERIFY(mon.makeStudioPane(&dlg, 2, t->id(), nullptr, &view) != nullptr);
+        emit view->fixtureSelected(bars[0]->id());
+        emit view->fixturesSelected({ bars[0]->id(), bars[1]->id() });
+
+        QComboBox *face = nullptr;
+        foreach (QComboBox *cb, dlg.findChildren<QComboBox *>())
+            if (cb->toolTip().startsWith("The face it is on"))
+                face = cb;
+        QVERIFY(face != nullptr);
+        QStringList items;
+        for (int i = 0; i < face->count(); ++i)
+            items << face->itemText(i);
+        QCOMPARE(items, QStringList({ "Top", "Bottom", "Front (downstage)", "Back (upstage)",
+                                      "Stage left", "Stage right" }));
+        QCOMPARE(face->currentText(), QString("Front (downstage)"));
+
+        face->setCurrentIndex(3);                       // Back
+        foreach (Fixture *f, bars)
+        {
+            const FixtureRigProps rp = props->fixtureRigProps(f->id());
+            QCOMPARE(rp.face(), FixtureRigProps::FaceBack);
+            QCOMPARE(rp.trussCrossY, -0.15f);           // the upstage side of the tower
+            QVector3D L, N, H;
+            view->fixtureFrame(rp, L, N, H);
+            QVERIFY2(N.y() < -0.99f, "a fixture on the back does not face upstage");
+        }
+    }
+    foreach (Fixture *f, bars)
+        f->setFixtureDefinition(nullptr, nullptr);
+    delete def;
+    delete doc;
+}
+
+void Monitor_Test::aBarHangingStraightDownIsADotInPlan()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("FART-1");
+    t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(2.0f, 3.0f, 1.5f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(2.4f);
+    Fixture *f = new Fixture(doc);
+    f->setName("FART-SR-1");
+    f->setChannels(1);
+    QVERIFY(doc->addFixture(f));
+    QLCFixtureDef *def = makeStudioBar(f);          // 1000 x 65 mm
+    props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t->id();
+    rp.trussOffset = 1.0f;
+    rp.studioMount = 1;
+    rp.studioAngle = 0.0f;                           // along the truss
+    props->setFixtureRigProps(f->id(), rp);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->resize(1230, 760);
+        gv->setGridMetrics(1000.0);
+        gv->setGridSize(QSize(40, 24));
+        QCOMPARE(gv->viewPOV(), MonitorGraphicsView::PovTop);
+        gv->updateFixture(f->id());
+        MonitorFixtureItem *item = gv->m_fixtures.value(f->id());
+        QVERIFY(item != nullptr);
+        const QSizeF along(item->m_width, item->m_height);   // the body, not label + halo
+        QVERIFY2(along.width() > along.height() * 4, "a bar along X is long left-right in plan");
+
+        // Hanging straight down: seen from above it is its end.
+        rp.studioAngle = 90.0f;
+        props->setFixtureRigProps(f->id(), rp);
+        gv->updateFixture(f->id());
+        const QSizeF down(item->m_width, item->m_height);
+        QVERIFY2(down.width() < along.width() / 3,
+                 qPrintable(QString("a bar hanging down is %1 px wide in plan (along: %2)")
+                            .arg(down.width()).arg(along.width())));
+
+        // In Front it is still its full length, upright.
+        gv->setViewPOV(MonitorGraphicsView::PovFront);
+        gv->updateFixture(f->id());
+        const QSizeF front(item->m_width, item->m_height);
+        QVERIFY(front.height() > front.width() * 4);
+    }
+    f->setFixtureDefinition(nullptr, nullptr);
+    delete def;
+    delete doc;
+}
+
+/* An XL-450 as its 165-channel mode is defined: 45 RGB heads, then 30 white
+   ones, on a declared 15 x 5 grid, 401 mm long. */
+static QLCFixtureDef *makeXl450()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Warmdance");
+    def->setModel("XL-450");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("165ch");
+    auto add = [&](const QString &name, QLCChannel::Preset preset) {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(name);
+        ch->setPreset(preset);
+        def->addChannel(ch);
+        mode->insertChannel(ch, mode->channels().size());
+        return quint32(mode->channels().size() - 1);
+    };
+    for (int i = 0; i < 45; ++i)
+    {
+        QLCFixtureHead h;
+        h.addChannel(add(QString("Red %1").arg(i + 1), QLCChannel::IntensityRed));
+        h.addChannel(add(QString("Green %1").arg(i + 1), QLCChannel::IntensityGreen));
+        h.addChannel(add(QString("Blue %1").arg(i + 1), QLCChannel::IntensityBlue));
+        mode->insertHead(-1, h);
+    }
+    for (int i = 0; i < 30; ++i)
+    {
+        QLCFixtureHead h;
+        h.addChannel(add(QString("White %1").arg(i + 1), QLCChannel::IntensityWhite));
+        mode->insertHead(-1, h);
+    }
+    QLCPhysical ph;
+    ph.setLayoutSize(QSize(15, 5));
+    ph.setWidth(401); ph.setHeight(180); ph.setDepth(100);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    return def;
+}
+
+/* Three XL-450s on a horizontal truss, 0.2 m apart, at @p angle (90 = hanging
+   straight down). */
+static QList<Fixture *> xlBarsOnATruss(Doc *doc, QLCFixtureDef *def, float angle)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("FART-1");
+    t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(2.0f, 3.0f, 2.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(2.4f);
+    QList<Fixture *> bars;
+    for (int k = 0; k < 3; ++k)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("FART-SR-%1").arg(k + 1));
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setAddress(quint32(k) * 165);
+        doc->addFixture(f);
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.trussId = t->id();
+        rp.trussOffset = 0.3f + 0.2f * k;
+        rp.studioMount = 1;
+        rp.studioAngle = angle;
+        rp.studioFaceChosen = true;
+        props->setFixtureRigProps(f->id(), rp);
+        bars << f;
+    }
+    return bars;
+}
+
+static QLCPoint cellOfHead(FixtureGroup *g, quint32 fid, int head)
+{
+    QMapIterator<QLCPoint, GroupHead> it(g->headsMap());
+    while (it.hasNext())
+    {
+        it.next();
+        if (it.value().fxi == fid && it.value().head == head)
+            return it.key();
+    }
+    return QLCPoint(-1, -1);
+}
+
+void Monitor_Test::headKindGroupsFollowTheLedMapAndTheRig()
+{
+    QTemporaryDir lib;
+    HeadLayoutLibrary::setUserDirectoryOverride(lib.path());
+    QLCFixtureDef *def = makeXl450();
+    {
+        Doc *doc = new Doc(this);
+        QList<Fixture *> bars = xlBarsOnATruss(doc, def, 90.0f);   // hanging straight down
+        // As built: RGB / W / RGB / W / RGB.
+        doc->monitorProperties()->setHeadLayout(
+            HeadLayout::fromRowPattern(bars[0], { "RGB", "W", "RGB", "W", "RGB" }));
+        QList<quint32> ids;
+        foreach (Fixture *f, bars) ids << f->id();
+
+        const QList<FixtureGroup *> made =
+            CreateFixtureGroup::createByHeadKind(doc, ids, { { "RGB", "FART-SR RGB" }, { "W", "FART-SR W" } });
+        QCOMPARE(made.size(), 2);
+        QCOMPARE(made[0]->name(), QString("FART-SR RGB"));
+        QCOMPARE(made[1]->name(), QString("FART-SR W"));
+        FixtureGroup *rgb = made[0];
+        QCOMPARE(rgb->headList().size(), 3 * 45);
+        QCOMPARE(made[1]->headList().size(), 3 * 30);
+
+        /* Each bar hangs straight down: a column 3 RGB rows wide and 15
+           tall, its first head at the bottom; the bars side by side. */
+        const QLCPoint h0 = cellOfHead(rgb, bars[0]->id(), 0);
+        QCOMPARE(cellOfHead(rgb, bars[0]->id(), 14), QLCPoint(h0.x(), h0.y() - 14));
+        QCOMPARE(cellOfHead(rgb, bars[0]->id(), 15), QLCPoint(h0.x() + 1, h0.y()));   // 2nd RGB row
+        QCOMPARE(cellOfHead(rgb, bars[0]->id(), 30), QLCPoint(h0.x() + 2, h0.y()));
+        const QLCPoint next = cellOfHead(rgb, bars[1]->id(), 0);
+        QVERIFY2(next.x() >= h0.x() + 3 && next.y() == h0.y(),
+                 qPrintable(QString("bar 2 starts at %1,%2 after bar 1 at %3,%4")
+                            .arg(next.x()).arg(next.y()).arg(h0.x()).arg(h0.y())));
+        QCOMPARE(rgb->size().height(), 15);
+        delete doc;
+    }
+    {
+        // Lying along the truss: each bar is a row block, 15 wide, 3 tall.
+        Doc *doc = new Doc(this);
+        QList<Fixture *> bars = xlBarsOnATruss(doc, def, 0.0f);
+        doc->monitorProperties()->setHeadLayout(
+            HeadLayout::fromRowPattern(bars[0], { "RGB", "W", "RGB", "W", "RGB" }));
+        const QList<FixtureGroup *> made =
+            CreateFixtureGroup::createByHeadKind(doc, { bars[0]->id() }, { { "RGB", "One RGB" } });
+        QCOMPARE(made.size(), 1);
+        QCOMPARE(made[0]->size(), QSize(15, 3));
+        QCOMPARE(cellOfHead(made[0], bars[0]->id(), 0), QLCPoint(0, 0));
+        QCOMPARE(cellOfHead(made[0], bars[0]->id(), 15), QLCPoint(0, 1));
+        QCOMPARE(cellOfHead(made[0], bars[0]->id(), 44), QLCPoint(14, 2));
+        delete doc;
+    }
+    delete def;
+    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+}
+
+/* Four bars 15 cm apart on each of two trusses 4 m apart, hanging: closed
+   up, they are eight columns side by side in stage order -- the one wide gap
+   between the trusses must not make the close spacing count as "the same
+   place". */
+static QList<Fixture *> barsOnTwoTrusses(Doc *doc, QLCFixtureDef *def)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    QList<Fixture *> bars;
+    for (int t = 0; t < 2; ++t)
+    {
+        Truss *truss = props->addTruss();
+        truss->setName(QString("FART-%1").arg(t + 1));
+        truss->setType(Truss::Horizontal);
+        truss->setOrigin(QVector3D(2.0f + 6.0f * t, 3.0f, 2.0f));
+        truss->setDirection(QPointF(1.0, 0.0));
+        truss->setLength(2.4f);
+        for (int k = 0; k < 4; ++k)
+        {
+            Fixture *f = new Fixture(doc);
+            f->setName(QString("FART-%1-%2").arg(t == 0 ? "SR" : "SL").arg(k + 1));
+            f->setFixtureDefinition(def, def->modes().first());
+            f->setUniverse(quint32(bars.size()));
+            f->setAddress(0);
+            doc->addFixture(f);
+            props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+            FixtureRigProps rp;
+            rp.trussId = truss->id();
+            rp.trussOffset = 0.076f + 0.152f * k;
+            rp.studioMount = 1;
+            rp.studioAngle = 90.0f;
+            rp.studioFaceChosen = true;
+            props->setFixtureRigProps(f->id(), rp);
+            bars << f;
+        }
+    }
+    return bars;
+}
+
+void Monitor_Test::closedUpBarsKeepTheirOrderAcrossDistantTrusses()
+{
+    QLCFixtureDef *def = makeXl450();
+    Doc *doc = new Doc(this);
+    const QList<Fixture *> bars = barsOnTwoTrusses(doc, def);
+    QList<quint32> ids;
+    foreach (Fixture *f, bars) ids << f->id();
+    {
+        FixtureGroup g(doc);
+        g.setSize(QSize(1, 1));
+        CreateFixtureGroup::layoutFixturesByStage(doc, ids, &g, CreateFixtureGroup::ViewFront, true);
+        // Each hanging bar is 5 heads across and 15 down; eight of them, no gaps.
+        QCOMPARE(g.size(), QSize(40, 15));
+        QCOMPARE(g.headsMap().size(), 8 * 75);
+        int lastLeft = -1;
+        foreach (Fixture *f, bars)
+        {
+            int left = INT_MAX;
+            QMapIterator<QLCPoint, GroupHead> it(g.headsMap());
+            while (it.hasNext())
+            {
+                it.next();
+                if (it.value().fxi == f->id())
+                    left = qMin(left, it.key().x());
+            }
+            QVERIFY2(left == lastLeft + 5 || (lastLeft < 0 && left == 0),
+                     qPrintable(QString("%1 starts at column %2, after %3").arg(f->name()).arg(left).arg(lastLeft)));
+            lastLeft = left;
+        }
+    }
+    {
+        // To scale, the gap between the trusses stays.
+        FixtureGroup g(doc);
+        g.setSize(QSize(1, 1));
+        CreateFixtureGroup::layoutFixturesByStage(doc, ids, &g, CreateFixtureGroup::ViewFront, false);
+        QVERIFY2(g.size().width() > 40, qPrintable(QString::number(g.size().width())));
+    }
+    delete doc;
+    delete def;
+}
+
+void Monitor_Test::theStageGroupDialogNamesViewsAndSpotsDuplicates()
+{
+    QLCFixtureDef *def = makeXl450();
+    Doc *doc = new Doc(this);
+    const QList<Fixture *> bars = barsOnTwoTrusses(doc, def);
+    QList<quint32> ids;
+    foreach (Fixture *f, bars) ids << f->id();
+    QVERIFY(StageGroupDialog::anyOnStage(doc, ids));
+    {
+        StageGroupDialog dlg(doc, ids, "FARTs");
+        // From the front, closed up, by default: the audience's picture.
+        QCOMPARE(dlg.m_viewCombo->currentData().toInt(), int(CreateFixtureGroup::ViewFront));
+        QVERIFY(dlg.m_closeGaps->isChecked());
+        QCOMPARE(dlg.m_size, QSize(40, 15));
+        QVERIFY(dlg.m_sizeLabel->text().startsWith("40 × 15"));
+        QVERIFY(dlg.m_sameNote->isHidden());
+
+        // From above, the hanging bars are seen end on: one row deep.
+        dlg.m_viewCombo->setCurrentIndex(dlg.m_viewCombo->findData(int(CreateFixtureGroup::ViewTop)));
+        QVERIFY2(dlg.m_size.height() < 15, qPrintable(QString::number(dlg.m_size.height())));
+        dlg.m_viewCombo->setCurrentIndex(dlg.m_viewCombo->findData(int(CreateFixtureGroup::ViewFront)));
+        QCOMPARE(dlg.m_size, QSize(40, 15));
+
+        dlg.m_nameEdit->setText("FART Front");
+        dlg.accept();
+        QVERIFY(dlg.group() != nullptr);
+        QCOMPARE(dlg.group()->name(), QString("FART Front"));
+        QCOMPARE(dlg.group()->size(), QSize(40, 15));
+        QCOMPARE(doc->fixtureGroups().size(), 1);
+    }
+    {
+        // The same heads in the same places again: said so up front.
+        StageGroupDialog dlg(doc, ids, "FARTs");
+        QVERIFY(!dlg.m_sameNote->isHidden());
+        QVERIFY(dlg.m_sameNote->text().contains("FART Front"));
+        // Laid out another way it is still those heads: still said.
+        dlg.m_closeGaps->setChecked(false);
+        QVERIFY(!dlg.m_sameNote->isHidden());
+        // Other heads are not.
+        StageGroupDialog fewer(doc, ids.mid(0, 4), "SR");
+        QVERIFY(fewer.m_sameNote->isHidden());
+    }
+    delete doc;
+    delete def;
+}
+
+void Monitor_Test::selectAllSimilarFindsLikeGroupsAndFixtures()
+{
+    QLCFixtureDef *def = makeXl450();
+    Doc *doc = new Doc(this);
+    const QList<Fixture *> bars = barsOnTwoTrusses(doc, def);
+    // A plain dimmer: not like the bars.
+    Fixture *dim = new Fixture(doc);
+    dim->setName("Dim");
+    dim->setChannels(1);
+    dim->setUniverse(9);
+    QVERIFY(doc->addFixture(dim));
+    doc->monitorProperties()->setFixturePosition(dim->id(), 0, 0, QVector3D(500, 500, 0));
+
+    auto make = [doc](const QString &name, const QList<Fixture *> &fs, bool closed) {
+        FixtureGroup *g = new FixtureGroup(doc);
+        g->setName(name);
+        doc->addFixtureGroup(g);
+        QList<quint32> ids;
+        foreach (Fixture *f, fs) ids << f->id();
+        CreateFixtureGroup::layoutFixturesByStage(doc, ids, g, CreateFixtureGroup::ViewFront, closed);
+        return g;
+    };
+    FixtureGroup *sr = make("SR pair", { bars[0], bars[1] }, true);
+    FixtureGroup *sl = make("SL pair", { bars[4], bars[5] }, true);       // same bars, same layout
+    FixtureGroup *wide = make("Wide pair", { bars[3], bars[4] }, false);  // same bars, to scale
+    FixtureGroup *one = make("One", { bars[2] }, true);
+
+    QCOMPARE(CreateFixtureGroup::similarGroups(doc, sr, true), QList<FixtureGroup *>({ sr, sl }));
+    QCOMPARE(CreateFixtureGroup::similarGroups(doc, sr, false), QList<FixtureGroup *>({ sr, sl, wide }));
+    QCOMPARE(CreateFixtureGroup::similarGroups(doc, one, true), QList<FixtureGroup *>({ one }));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorLayersPanel *panel = mon.m_layersPanel;
+        panel->reload();
+        auto rowOf = [panel](quint32 fgId) -> QTreeWidgetItem * {
+            for (QTreeWidgetItemIterator it(panel->m_tree); *it; ++it)
+                if ((*it)->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeFixtureGroup
+                    && (*it)->data(0, Qt::UserRole + 1).toUInt() == fgId)
+                    return *it;
+            return nullptr;
+        };
+        auto actionIn = [](QMenu &m, const QString &prefix) -> QAction * {
+            foreach (QAction *a, m.actions())
+                if (a->text().startsWith(prefix))
+                    return a;
+            return nullptr;
+        };
+        auto selectedGroups = [panel]() {
+            QSet<quint32> out;
+            foreach (QTreeWidgetItem *it, panel->m_tree->selectedItems())
+                if (it->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeFixtureGroup)
+                    out.insert(it->data(0, Qt::UserRole + 1).toUInt());
+            return out;
+        };
+        QTreeWidgetItem *srRow = rowOf(sr->id());
+        QVERIFY(srRow != nullptr);
+        {
+            QMenu m;
+            panel->buildContextMenu(&m, srRow);
+            QAction *sim = actionIn(m, "Select All Similar");
+            QVERIFY(sim != nullptr);
+            QCOMPARE(sim->text(), QString("Select All Similar (2)"));
+            sim->trigger();
+            QCOMPARE(selectedGroups(), QSet<quint32>({ sr->id(), sl->id() }));
+            // Their fixtures are what the selection stands for.
+            QSet<quint32> objs;
+            for (const QPair<QString, quint32> &o : panel->selectedObjects())
+                objs.insert(o.second);
+            QCOMPARE(objs, QSet<quint32>({ bars[0]->id(), bars[1]->id(), bars[4]->id(), bars[5]->id() }));
+        }
+        {
+            QMenu m;
+            panel->buildContextMenu(&m, srRow);
+            QAction *loose = actionIn(m, "Select All with the Same Fixtures");
+            QVERIFY(loose != nullptr);
+            QCOMPARE(loose->text(), QString("Select All with the Same Fixtures (3)"));
+            loose->trigger();
+            QCOMPARE(selectedGroups(), QSet<quint32>({ sr->id(), sl->id(), wide->id() }));
+        }
+        {
+            // Nothing like it: offered, but off.
+            QMenu m;
+            panel->buildContextMenu(&m, rowOf(one->id()));
+            QAction *sim = actionIn(m, "Select All Similar");
+            QVERIFY(sim != nullptr && !sim->isEnabled());
+            QVERIFY(actionIn(m, "Select All with the Same Fixtures") == nullptr);
+        }
+        {
+            // A fixture: every one of the same model and mode.
+            QMenu m;
+            MonitorGraphicsView::MenuPlace place;
+            mon.m_graphicsView->buildItemMenu(&m, "fixture", bars[0]->id(), place);
+            QAction *sa = actionIn(m, "Select All Similar");
+            QVERIFY(sa != nullptr);
+            QCOMPARE(sa->text(), QString("Select All Similar (8)"));
+            sa->trigger();
+            /* Bars 15 cm apart on a truss are a count on the plot, not
+               clickable items: the Layers list holds the selection. */
+            QSet<quint32> rows;
+            foreach (QTreeWidgetItem *it, panel->m_tree->selectedItems())
+                if (it->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeItem)
+                    rows.insert(it->data(0, Qt::UserRole + 1).toUInt());
+            QSet<quint32> want;
+            foreach (Fixture *f, bars) want.insert(f->id());
+            QCOMPARE(rows, want);
+        }
+    }
+    delete doc;
+    delete def;
+}
+
+/* A one-row pixel bar: @p heads single-channel heads along it, @p widthMm
+   long. @p generic: a Generic definition, whose size is QLC+'s 300 mm-a-pixel
+   placeholder and must not be taken as real. */
+static QLCFixtureDef *makePixelRow(const QString &model, int heads, int widthMm, bool generic)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(generic ? QString(KXMLFixtureGeneric) : QString("PHS Chorus"));
+    def->setModel(model);
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("ALL");
+    for (int i = 0; i < heads; ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("Dimmer %1").arg(i + 1));
+        ch->setGroup(QLCChannel::Intensity);
+        def->addChannel(ch);
+        mode->insertChannel(ch, i);
+        QLCFixtureHead h;
+        h.addChannel(quint32(i));
+        mode->insertHead(-1, h);
+    }
+    QLCPhysical ph;
+    ph.setLayoutSize(QSize(heads, 1));
+    ph.setWidth(generic ? heads * 300 : widthMm);
+    ph.setHeight(100); ph.setDepth(100);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    return def;
+}
+
+/* Steps as in stage-structures-demo, smaller: two decks side by side in each
+   of two rows (US upstage, CS downstage). Each deck's front face carries three
+   8-head bars, #1 at the top; its top carries a 6-head and a 2-head Generic
+   washer, one after the other across it. */
+void Monitor_Test::stepFrontsAndTopsAreLaidOutAsOnStage()
+{
+    QLCFixtureDef *bar = makePixelRow("Step Row 8", 8, 2438, false);
+    QLCFixtureDef *wash6 = makePixelRow("Washer 6", 6, 0, true);
+    QLCFixtureDef *wash2 = makePixelRow("Washer 2", 2, 0, true);
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    QMap<QString, QList<quint32> > fronts, tops;   // per deck
+    QList<quint32> allFronts, allTops;
+    quint32 uni = 0;
+    auto place = [&](QLCFixtureDef *def, const QString &name, StagePlatform *pl, int face, float u, float v) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setUniverse(uni++);
+        f->setAddress(0);
+        doc->addFixture(f);
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.riserPlatformId = pl->id();
+        rp.riserFace = face;
+        rp.riserU = u;
+        rp.riserV = v;
+        props->setFixtureRigProps(f->id(), rp);
+        return f->id();
+    };
+    const QStringList rows = { "US", "CS" };
+    for (int r = 0; r < 2; ++r)
+        for (int d = 0; d < 2; ++d)
+        {
+            const QString deck = QString("%1%2").arg(rows[r]).arg(d + 1);
+            StagePlatform *pl = props->addPlatform();
+            pl->setName(deck);
+            pl->setOriginX(1.2f + 2.438f * d);
+            pl->setOriginY(4.9f + 1.22f * r);
+            pl->setWidth(2.438f); pl->setDepth(1.219f); pl->setHeight(0.2f);
+            for (int k = 0; k < 3; ++k)          // #1 at the top
+                fronts[deck] << place(bar, QString("%1 #%2").arg(deck).arg(k + 1), pl, 0, 1.219f, 0.15f - 0.05f * k);
+            tops[deck] << place(wash6, deck + "t1", pl, 1, 0.9f, 0.6f);
+            tops[deck] << place(wash2, deck + "t2", pl, 1, 2.0f, 0.6f);
+            allFronts << fronts[deck];
+            allTops << tops[deck];
+        }
+    auto layout = [doc](const QList<quint32> &ids, int view) {
+        FixtureGroup *g = new FixtureGroup(doc);
+        g->setSize(QSize(1, 1));
+        CreateFixtureGroup::layoutFixturesByStage(doc, ids, g, view, true);
+        return g;
+    };
+    auto cellsOf = [](FixtureGroup *g, quint32 fid) {
+        QList<QLCPoint> out;
+        QMapIterator<QLCPoint, GroupHead> it(g->headsMap());
+        while (it.hasNext()) { it.next(); if (it.value().fxi == fid) out << it.key(); }
+        return out;
+    };
+    auto rowOf = [&cellsOf](FixtureGroup *g, quint32 fid) {
+        const QList<QLCPoint> c = cellsOf(g, fid);
+        return c.isEmpty() ? -1 : c.first().y();
+    };
+    auto headAt = [](FixtureGroup *g, int x, int y) { return g->head(QLCPoint(x, y)); };
+
+    {
+        // One deck's front: three rows of eight, #1 on top, head 1 on the left.
+        FixtureGroup *f = layout(fronts["US1"], CreateFixtureGroup::ViewFront);
+        QCOMPARE(f->size(), QSize(8, 3));
+        for (int k = 0; k < 3; ++k)
+            QCOMPARE(rowOf(f, fronts["US1"][k]), k);
+        QCOMPARE(headAt(f, 0, 0).head, 0);
+        QCOMPARE(headAt(f, 7, 0).head, 7);
+        delete f;
+    }
+    {
+        // Both decks of a row: side by side, stage right first.
+        FixtureGroup *f = layout(fronts["US1"] + fronts["US2"], CreateFixtureGroup::ViewFront);
+        QCOMPARE(f->size(), QSize(16, 3));
+        QCOMPARE(headAt(f, 0, 0).fxi, fronts["US1"][0]);
+        QCOMPARE(headAt(f, 8, 0).fxi, fronts["US2"][0]);
+        delete f;
+    }
+    {
+        // One deck's top, from above: one row, every head of both washers,
+        // the 6-head first. The Generic washers' placeholder size (1.8 m and
+        // 0.6 m on a 2.4 m deck) is not taken for real.
+        FixtureGroup *t = layout(tops["US1"], CreateFixtureGroup::ViewTop);
+        QCOMPARE(t->size(), QSize(8, 1));
+        QCOMPARE(t->headsMap().size(), 8);
+        QCOMPARE(cellsOf(t, tops["US1"][0]).size(), 6);
+        QCOMPARE(cellsOf(t, tops["US1"][1]).size(), 2);
+        QCOMPARE(headAt(t, 0, 0).fxi, tops["US1"][0]);
+        QCOMPARE(headAt(t, 6, 0).fxi, tops["US1"][1]);
+        delete t;
+    }
+    {
+        // All the tops, from above: upstage row first, decks across.
+        FixtureGroup *t = layout(allTops, CreateFixtureGroup::ViewTop);
+        QCOMPARE(t->size(), QSize(16, 2));
+        QCOMPARE(t->headsMap().size(), 4 * 8);
+        QCOMPARE(rowOf(t, tops["US1"][0]), 0);
+        QCOMPARE(rowOf(t, tops["CS2"][1]), 1);
+        QCOMPARE(headAt(t, 8, 0).fxi, tops["US2"][0]);
+        delete t;
+    }
+    delete doc;
+    delete bar; delete wash6; delete wash2;
+}
+
+/* The split wizard lays its groups out from the chosen view, and a kind whose
+   group already exists is kept, not made twice. */
+void Monitor_Test::theSplitWizardOffersAViewAndKeepsAnExistingGroup()
+{
+    QTemporaryDir lib;
+    HeadLayoutLibrary::setUserDirectoryOverride(lib.path());
+    QLCFixtureDef *def = makeXl450();
+    Doc *doc = new Doc(this);
+    QList<Fixture *> bars = xlBarsOnATruss(doc, def, 90.0f);
+    QList<quint32> ids;
+    foreach (Fixture *f, bars) ids << f->id();
+    {
+        HeadTypesDialog dlg(doc, ids, "FART-SR");
+        QCOMPARE(dlg.m_viewCombo->currentData().toInt(), int(CreateFixtureGroup::ViewFront));
+        QVERIFY(dlg.m_closeGaps->isChecked());
+        dlg.accept();
+        QCOMPARE(dlg.createdGroups().size(), 2);
+        // Hanging, from the front: three bars side by side, 15 heads tall.
+        QCOMPARE(dlg.createdGroups()[0]->size().height(), 15);
+    }
+    QCOMPARE(doc->fixtureGroups().size(), 2);
+    // Answer the "already exist" question with the button labelled @p label.
+    auto answer = [](const QString &label, QString *asked) {
+        QTimer::singleShot(0, [label, asked]() {
+            QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+            if (box == nullptr) return;
+            *asked = box->text();
+            foreach (QAbstractButton *b, box->buttons())
+                if (b->text() == label) { b->click(); return; }
+            box->reject();
+        });
+    };
+    {
+        // Again: both already exist -- said so, and kept by default.
+        HeadTypesDialog dlg(doc, ids, "FART-SR");
+        QString asked;
+        answer("Keep Them", &asked);
+        dlg.accept();
+        QVERIFY2(asked.contains("already exist"), qPrintable(asked));
+        QCOMPARE(dlg.createdGroups().size(), 2);
+        QCOMPARE(doc->fixtureGroups().size(), 2);
+    }
+    {
+        // The same heads from above: a second layout is wanted -- Make Another.
+        HeadTypesDialog dlg(doc, ids, "FART-SR top");
+        dlg.m_viewCombo->setCurrentIndex(dlg.m_viewCombo->findData(int(CreateFixtureGroup::ViewTop)));
+        dlg.m_kindNames[0]->setText("Top RGB");
+        dlg.m_kindNames[1]->setText("Top W");
+        QString asked;
+        answer("Make Another", &asked);
+        dlg.accept();
+        QVERIFY(asked.contains("already exist"));
+        QCOMPARE(doc->fixtureGroups().size(), 4);
+        QCOMPARE(dlg.createdGroups()[0]->name(), QString("Top RGB"));
+        QVERIFY(dlg.createdGroups()[0]->size() != doc->fixtureGroups().first()->size());
+    }
+    {
+        // Cancel: nothing made, the wizard stays open.
+        HeadTypesDialog dlg(doc, ids, "FART-SR");
+        QString asked;
+        answer("Cancel", &asked);
+        dlg.accept();
+        QCOMPARE(dlg.result(), int(QDialog::Rejected));
+        QVERIFY(dlg.createdGroups().isEmpty());
+        QCOMPARE(doc->fixtureGroups().size(), 4);
+    }
+    delete doc;
+    delete def;
+    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+}
+
+void Monitor_Test::theSplitWizardMapsRowsAndMakesAGroupPerKind()
+{
+    QTemporaryDir lib;
+    HeadLayoutLibrary::setUserDirectoryOverride(lib.path());
+    QLCFixtureDef *def = makeXl450();
+    Doc *doc = new Doc(this);
+    QList<Fixture *> bars = xlBarsOnATruss(doc, def, 90.0f);
+    QList<quint32> ids;
+    foreach (Fixture *f, bars) ids << f->id();
+    QVERIFY(HeadTypesDialog::anyMixed(doc, ids));
+    QCOMPARE(HeadTypesDialog::suggestName(doc, ids), QString("FART-SR"));
+    {
+        HeadTypesDialog dlg(doc, ids, HeadTypesDialog::suggestName(doc, ids));
+        // Each group's exact name, editable, not a prefix with more added on.
+        QCOMPARE(dlg.m_kindNames.size(), 2);
+        QCOMPARE(dlg.m_kindNames[0]->text(), QString("FART-SR RGB"));
+        QCOMPARE(dlg.m_kindNames[1]->text(), QString("FART-SR W"));
+        dlg.m_kindNames[1]->setText("FART-SR Whites");
+        QCOMPARE(dlg.m_modelCombo->count(), 1);
+        // Head order, as the definition alone says: RGB, RGB, RGB, W, W.
+        QCOMPARE(dlg.m_rowCombos.size(), 5);
+        QCOMPARE(dlg.m_rowCombos[3]->currentText(), QString("W"));
+
+        // A pattern that cannot hold the heads is refused, with the reason.
+        dlg.m_rowCombos[1]->setCurrentText("RGB");
+        dlg.m_rowCombos[3]->setCurrentText("RGB");
+        dlg.slotApplyRows();
+        QVERIFY(!dlg.m_rowNote->isHidden());
+        QVERIFY(dlg.m_rowNote->text().contains("RGB rows hold 60 heads, it has 45"));
+
+        // As built.
+        const QStringList built = { "RGB", "W", "RGB", "W", "RGB" };
+        for (int r = 0; r < 5; ++r)
+            dlg.m_rowCombos[r]->setCurrentText(built[r]);
+        dlg.slotApplyRows();
+        QVERIFY(dlg.m_rowNote->isHidden());
+        QCOMPARE(dlg.m_grid->map().cellOf(45), QPoint(0, 1));   // W 1 on the 2nd row
+
+        dlg.accept();
+        QCOMPARE(dlg.createdGroups().size(), 2);
+        QCOMPARE(dlg.createdGroups()[1]->name(), QString("FART-SR Whites"));
+    }
+    // A name that already says the kind is not said twice.
+    QCOMPARE(CreateFixtureGroup::headKindGroupName("T1-CW-RGB", "RGB"), QString("T1-CW-RGB"));
+    QCOMPARE(CreateFixtureGroup::headKindGroupName("T1-CW", "RGB"), QString("T1-CW RGB"));
+    QCOMPARE(CreateFixtureGroup::headKindGroupName("MYRGB", "RGB"), QString("MYRGB RGB"));
+    // The map is kept in the library and in the show.
+    const QString key = HeadLayout::keyFor(bars[0]);
+    QVERIFY(HeadLayoutLibrary::load(key).isValid());
+    QCOMPARE(HeadLayoutLibrary::load(key).cellOf(45), QPoint(0, 1));
+    QCOMPARE(doc->monitorProperties()->headLayoutFor(bars[0]).cellOf(45), QPoint(0, 1));
+    delete doc;
+    delete def;
+    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+}
+
+void Monitor_Test::theRigViewDrawsHeadsWhereTheLedMapSays()
+{
+    QTemporaryDir lib;
+    HeadLayoutLibrary::setUserDirectoryOverride(lib.path());
+    QLCFixtureDef *def = makeXl450();
+    Doc *doc = new Doc(this);
+    QList<Fixture *> bars = xlBarsOnATruss(doc, def, 0.0f);
+    {
+        StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+        // No map yet: head order, so the 2nd row starts with head 16 (RGB).
+        QVector<int> cells = view.headsByCell(bars[0], 15, 5, 75);
+        QCOMPARE(cells[15], 15);
+        QCOMPARE(cells[45], 45);
+        // As built, the 2nd row is the first white row: head 46.
+        doc->monitorProperties()->setHeadLayout(
+            HeadLayout::fromRowPattern(bars[0], { "RGB", "W", "RGB", "W", "RGB" }));
+        cells = view.headsByCell(bars[0], 15, 5, 75);
+        QCOMPARE(cells[0], 0);
+        QCOMPARE(cells[15], 45);
+        QCOMPARE(cells[30], 15);
+        // A grid of another size is not this map's: head order.
+        QCOMPARE(view.headsByCell(bars[0], 75, 1, 75)[15], 15);
+    }
+    delete doc;
+    delete def;
+    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+}
+
+void Monitor_Test::layersListsEveryGroupAFixtureIsIn()
+{
+    QLCFixtureDef *def = makeXl450();
+    Doc *doc = new Doc(this);
+    QList<Fixture *> bars = xlBarsOnATruss(doc, def, 90.0f);
+    // A second truss with one more bar, on the same layer.
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t2 = props->addTruss();
+    t2->setName("FART-2");
+    t2->setType(Truss::Horizontal);
+    t2->setOrigin(QVector3D(6.0f, 3.0f, 2.0f));
+    t2->setDirection(QPointF(1.0, 0.0));
+    t2->setLength(2.4f);
+    Fixture *far = new Fixture(doc);
+    far->setName("FART-SL-1");
+    far->setFixtureDefinition(def, def->modes().first());
+    far->setUniverse(1);                // 3 x 165 fill most of universe 1
+    far->setAddress(0);
+    QVERIFY(doc->addFixture(far));
+    props->setFixturePosition(far->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t2->id();
+    rp.trussOffset = 0.5f;
+    props->setFixtureRigProps(far->id(), rp);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        mon.m_graphicsView->ensureTrussGroup(props->fixtureRigProps(bars[0]->id()).trussId);
+        mon.m_graphicsView->ensureTrussGroup(t2->id());
+
+        // One bar, split: it is in BOTH groups.
+        const QList<FixtureGroup *> mine =
+            CreateFixtureGroup::createByHeadKind(doc, { bars[0]->id() },
+                                                 { { "RGB", "T1-CW RGB" }, { "W", "T1-CW W" } });
+        // Across the two trusses: local to neither.
+        const QList<FixtureGroup *> wide =
+            CreateFixtureGroup::createByHeadKind(doc, { bars[1]->id(), far->id() },
+                                                 { { "RGB", "Wide RGB" } });
+        QCOMPARE(mine.size(), 2);
+        QCOMPARE(wide.size(), 1);
+
+        MonitorLayersPanel *panel = mon.m_layersPanel;
+        panel->reload();
+        auto groupRow = [panel](const QString &name) -> QTreeWidgetItem * {
+            for (QTreeWidgetItemIterator it(panel->m_tree); *it; ++it)
+                if ((*it)->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeFixtureGroup
+                    && (*it)->text(0).startsWith(name + "  "))
+                    return *it;
+            return nullptr;
+        };
+        auto childNames = [](QTreeWidgetItem *n) {
+            QStringList out;
+            for (int i = 0; i < n->childCount(); ++i) out << n->child(i)->text(0);
+            return out;
+        };
+        QTreeWidgetItem *rgb = groupRow("T1-CW RGB");
+        QTreeWidgetItem *w = groupRow("T1-CW W");
+        QVERIFY(rgb != nullptr && w != nullptr);
+        QCOMPARE(childNames(rgb), QStringList({ "FART-SR-1" }));
+        QCOMPARE(childNames(w), QStringList({ "FART-SR-1" }));    // in both, shown in both
+
+        QTreeWidgetItem *across = groupRow("Wide RGB");
+        QVERIFY2(across != nullptr, "a group across two trusses is not in the list");
+        QCOMPARE(childNames(across), QStringList({ "FART-SR-2", "FART-SL-1" }));
+        // On one layer, so under that layer.
+        QVERIFY(across->parent() != nullptr);
+        QCOMPARE(across->parent()->data(0, Qt::UserRole).toInt(), int(MonitorLayersPanel::NodeLayer));
+    }
+    delete doc;
+    delete def;
+}
+
+void Monitor_Test::fixturesAreRemovedFromATowerFromItsList()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Tower *t = props->addTower();
+    t->setName("AT1");
+    t->setOriginX(0.2f); t->setOriginY(8.0f);
+    t->setWidth(0.4f); t->setDepth(0.4f); t->setHeight(2.4f);
+    t->addShelf(0.6f);
+    QList<Fixture *> fx;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("AT1-36-%1").arg(i + 1));
+        f->setChannels(4);
+        f->setAddress(quint32(i) * 4);
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(200, 8000, 0));
+        FixtureRigProps rp;
+        rp.towerId = t->id();
+        rp.towerShelf = 0;
+        props->setFixtureRigProps(f->id(), rp);
+        fx << f;
+    }
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        mon.makeStudioPane(&dlg, 1 /* tower */, t->id(), nullptr, &view);
+        QVERIFY(view != nullptr);
+        QTreeWidget *tree = nullptr;
+        foreach (QTreeWidget *tw, dlg.findChildren<QTreeWidget *>())
+            if (tw->topLevelItemCount() > 0)
+                tree = tw;
+        QVERIFY(tree != nullptr);
+        QTreeWidgetItem *first = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        {
+            const QVariant v = (*it)->data(0, Qt::UserRole);
+            if (v.isValid() && (v.toUInt() == fx[0]->id() || v.toUInt() == fx[1]->id())
+                && (*it)->text(0).startsWith("AT1-36"))
+            {
+                (*it)->setSelected(true);
+                if (first == nullptr) first = *it;
+            }
+        }
+        QVERIFY(first != nullptr);
+
+        QStringList seen;
+        answerPopup(&seen, "Remove 2 Fixtures from Tower");
+        emit tree->customContextMenuRequested(tree->visualItemRect(first).center());
+        QVERIFY2(seen.contains("Remove 2 Fixtures from Tower"), qPrintable(seen.join(" | ")));
+        QCOMPARE(props->fixtureRigProps(fx[0]->id()).towerId, Tower::invalidId());
+        QCOMPARE(props->fixtureRigProps(fx[1]->id()).towerId, Tower::invalidId());
+        QCOMPARE(props->fixtureRigProps(fx[2]->id()).towerId, t->id());   // not selected
+        QCOMPARE(view->mountedFixtures(), QList<quint32>({ fx[2]->id() }));
+    }
+    delete doc;
+}
+
+void Monitor_Test::patchingFromLayersTakesEveryFixtureSelectedThere()
+{
+    Doc *doc = new Doc(this);
+    QList<Fixture *> fx;
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("AT2-36-%1").arg(i + 1));
+        f->setChannels(18);
+        f->setPatched(false);
+        QVERIFY(doc->addFixture(f));
+        doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(1000, 1000, 0));
+        fx << f;
+    }
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        // Stacked in a tower: on the plot, but not selectable there.
+        foreach (Fixture *f, fx)
+            if (MonitorFixtureItem *it = mon.m_graphicsView->m_fixtures.value(f->id()))
+                it->setVisible(false);
+        MonitorLayersPanel *panel = mon.m_layersPanel;
+        panel->reload();
+        QTreeWidgetItem *first = nullptr;
+        for (QTreeWidgetItemIterator it(panel->m_tree); *it; ++it)
+            if ((*it)->text(0).startsWith("AT2-36-"))
+            {
+                (*it)->setSelected(true);
+                if (first == nullptr) first = *it;
+            }
+        QVERIFY(first != nullptr);
+        QVERIFY(mon.m_graphicsView->selectedMapObjects().isEmpty());
+
+        QMenu menu;
+        panel->buildContextMenu(&menu, first);
+        QStringList texts;
+        foreach (QAction *a, menu.actions())
+            texts << a->text();
+        QVERIFY2(texts.contains("Patch / Re-address 4 Fixtures…"), qPrintable(texts.join(" | ")));
+    }
+    delete doc;
+}
+
+void Monitor_Test::wirelessReceiversArePlacedAndDragged()
+{
+    Doc *doc = new Doc(this);
+    NetworkNode tx;
+    tx.name = "WDMX";
+    tx.transport = NetworkNode::WirelessDMX;
+    tx.placed = true;
+    tx.posX = 4.0; tx.posY = 6.0;
+    NetworkPort port;
+    port.universe = 0;
+    tx.ports << port;
+    doc->networkTopology()->nodes().append(tx);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->resize(1230, 760);
+        gv->setGridMetrics(1000.0);
+        gv->setGridSize(QSize(40, 24));
+        gv->updateNetworkNodes();
+        QVERIFY(gv->m_networkReceiverItems.isEmpty());      // not placed: not drawn
+
+        QCOMPARE(gv->placeWirelessReceivers(), 1);
+        QCOMPARE(gv->m_networkReceiverItems.size(), 1);
+        NetworkReceiverItem *rx = gv->m_networkReceiverItems.first();
+        QVERIFY(rx->flags() & QGraphicsItem::ItemIsMovable);
+
+        // Dragged two metres stage left: stored where it was let go.
+        const QPointF to = gv->projectMm(7000.0, 6000.0, 0.0);
+        rx->setPos(to);
+        rx->onDropped();
+        const NetworkReceiver &r = doc->networkTopology()->nodes().at(0).ports.at(0).receiver;
+        QVERIFY2(qAbs(r.posX - 7.0) < 0.05 && qAbs(r.posY - 6.0) < 0.05,
+                 qPrintable(QString("receiver at %1, %2").arg(r.posX).arg(r.posY)));
+
+        // A locked layout keeps it where it is.
+        gv->setLayoutLocked(true);
+        gv->updateNetworkNodes();
+        QVERIFY(!(gv->m_networkReceiverItems.first()->flags() & QGraphicsItem::ItemIsMovable));
+    }
+    delete doc;
+}
+
+void Monitor_Test::aFixtureGroupRowMovesToAnotherLayer()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 stageLights = props->addLayer("Stage Lights");
+    const quint32 trusses = props->addLayer("Trusses");
+    const quint32 steps = props->addLayer("Steps");
+    QList<quint32> ids;
+    FixtureGroup *usts = new FixtureGroup(doc);
+    usts->setName("USTs");
+    usts->setSize(QSize(3, 1));
+    doc->addFixtureGroup(usts);
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("UST-%1").arg(i + 1));
+        f->setChannels(1);
+        f->setAddress(quint32(i));
+        QVERIFY(doc->addFixture(f));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(1000.0f * (i + 1), 2000, 0));
+        props->setFixtureLayer(f->id(), stageLights);
+        usts->assignFixture(f->id(), QLCPoint(i, 0));
+        ids << f->id();
+    }
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        mon.m_graphicsView->setLayoutLocked(false);
+        MonitorLayersPanel *panel = mon.m_layersPanel;
+        panel->reload();
+        auto groupRow = [panel]() -> QTreeWidgetItem * {
+            for (QTreeWidgetItemIterator it(panel->m_tree); *it; ++it)
+                if ((*it)->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeFixtureGroup
+                    && (*it)->text(0).startsWith("USTs  "))
+                    return *it;
+            return nullptr;
+        };
+        auto layerRow = [panel](quint32 lid) -> QTreeWidgetItem * {
+            for (QTreeWidgetItemIterator it(panel->m_tree); *it; ++it)
+                if ((*it)->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeLayer
+                    && (*it)->data(0, Qt::UserRole + 1).toUInt() == lid)
+                    return *it;
+            return nullptr;
+        };
+        QTreeWidgetItem *row = groupRow();
+        QVERIFY(row != nullptr);
+        QVERIFY(row->flags() & Qt::ItemIsDragEnabled);
+
+        // Right-click → Move to Layer → Trusses.
+        panel->m_tree->clearSelection();
+        row->setSelected(true);
+        QMenu menu;
+        panel->buildContextMenu(&menu, row);
+        QAction *to = nullptr;
+        foreach (QAction *a, menu.actions())
+        {
+            if (a->menu() == nullptr || a->text() != "Move to Layer")
+                continue;
+            foreach (QAction *l, a->menu()->actions())
+            {
+                if (l->text() == "Trusses")
+                    to = l;
+            }
+        }
+        QVERIFY2(to != nullptr, "no Move to Layer for a fixture group's row");
+        to->trigger();
+        foreach (quint32 fid, ids)
+            QCOMPARE(props->fixtureLayer(fid), trusses);
+
+        // Dragged onto another layer: its fixtures go there.
+        panel->reload();
+        row = groupRow();
+        QVERIFY(row != nullptr);
+        panel->handleTreeDrop({ row }, layerRow(steps));
+        QCoreApplication::processEvents();
+        foreach (quint32 fid, ids)
+            QCOMPARE(props->fixtureLayer(fid), steps);
+    }
+    delete doc;
 }

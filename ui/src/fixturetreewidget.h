@@ -40,6 +40,7 @@ class Doc;
 #define PROP_CIRCUIT  Qt::UserRole + 7  //!< power circuit index (int, within its source's circuits())
 #define PROP_INVENTORY Qt::UserRole + 8 //!< marks the Inventory root (1) or one of its manufacturer/model folders (2)
 #define PROP_INVENTORY_NAME Qt::UserRole + 9 //!< an Inventory folder's bare name, before its "(N)" count
+#define PROP_CLASHES  Qt::UserRole + 10 //!< marks the "Address clashes" root
 
 class FixtureTreeWidget final : public QTreeWidget
 {
@@ -140,6 +141,12 @@ signals:
      *  Doc::powerDistribution()->sources(). Only emitted with ShowPower set. */
     void fixturesDroppedOnCircuit(const QList<quint32>& fixtureIds, int sourceIdx, int circuitIdx);
 
+    /** Emitted when fixtures -- or fixture groups, standing for their
+     *  fixtures -- are dropped onto a universe row (or onto a fixture listed
+     *  under one). @p universe is zero-based. Only emitted with ShowGroups
+     *  set, where the universe rows are. */
+    void fixturesDroppedOnUniverse(const QList<quint32>& fixtureIds, quint32 universe);
+
 protected:
     /** Provide fixture/group IDs for dragging onto drop targets (the group
      *  editor grid for fixtures, folders for groups). */
@@ -147,6 +154,13 @@ protected:
         { return buildMimeData(items); }
     QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const
         { return buildMimeData(items); }
+private:
+    /** The universe a drop on @p target means: a universe row's own, or the
+     *  one of the universe row a fixture is listed under. Invalid otherwise. */
+    QVariant dropUniverse(QTreeWidgetItem *target) const;
+    /** Fixture ids carried by a fixture or group drag. */
+    QList<quint32> droppedFixtures(const QMimeData *mime) const;
+
 private:
     QMimeData* buildMimeData(const QList<QTreeWidgetItem*> &items) const;
 

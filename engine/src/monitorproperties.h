@@ -29,6 +29,7 @@
 #include <QMap>
 
 #include "truss.h"
+#include "headlayout.h"
 #include "stageplatform.h"
 #include "pipe.h"
 #include "scenery.h"
@@ -533,6 +534,14 @@ public:
      *  load to catch it. */
     void repairMountPlane(FixtureRigProps &rp) const;
 
+    /** Put a fixture on @p face: its plane and which way it faces
+     *  (studioMount + studioFlip). Mounted on the OUTSIDE of a truss, it also
+     *  goes to that side of it -- the face of a tower it is clamped to, or for
+     *  a horizontal run on top, underneath, or the downstage/upstage (stage
+     *  left/right) chord -- which is what "on the back" means for a fixture on
+     *  a truss. Inside one, or not on a truss, only the facing changes. */
+    void setFixtureFace(FixtureRigProps &rp, FixtureRigProps::Face face) const;
+
 private:
     QMap<quint32, Truss*> m_trusses;
 
@@ -789,6 +798,24 @@ public:
 
 private:
     QMap<quint32, QMap<QPair<quint32, int>, QString> > m_goboSwaps;
+
+    /********************************************************************
+     * LED maps (HeadLayout): which head of a model sits in which cell.
+     * The show's own copy of each it uses, so it travels with the file;
+     * the operator's library (HeadLayoutLibrary) holds the master.
+     ********************************************************************/
+public:
+    /** @p fx's map: the show's copy, else the library's, else head order. */
+    HeadLayout headLayoutFor(const Fixture *fx) const;
+    /** True when the show or the library has a map for @p fx -- i.e. head
+     *  order is not merely assumed. */
+    bool hasHeadLayout(const Fixture *fx) const;
+    /** Keep @p layout in the show (replacing any for its key). */
+    void setHeadLayout(const HeadLayout &layout);
+    QList<HeadLayout> headLayouts() const { return m_headLayouts.values(); }
+
+private:
+    QHash<QString, HeadLayout> m_headLayouts;
 
     /********************************************************************
      * 2D view background

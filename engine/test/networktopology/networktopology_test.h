@@ -66,6 +66,10 @@ private slots:
      *  saving a model, and a node's model kept in the workspace. */
     void theGearCatalogListsBuiltInAndYourModels();
     void aNodeMadeFromAModelHasItsPortsAndKeepsItsModel();
+
+    /** "if I add a wDMX transmitter .. shouldn't have a wDMX receiver
+     *  somewhere for the fixtures?" */
+    void wirelessReceiversArePlacedNearTheirFixtures();
 };
 
 #endif

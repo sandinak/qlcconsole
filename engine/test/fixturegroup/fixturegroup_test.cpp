@@ -906,4 +906,20 @@ void FixtureGroup_Test::save()
     QCOMPARE(fixture, 32);
 }
 
+void FixtureGroup_Test::subGroupTagsCoverGroupZero()
+{
+    /* 0 means "no sub-group", and fixture group 0 is a real group: a block
+       pasted from it must still be tagged, or it cannot move as a unit. */
+    QVERIFY(FixtureGroup::subGroupTagFor(0) != 0);
+    QVERIFY(FixtureGroup::subGroupTagFor(0) != FixtureGroup::subGroupTagFor(1));
+    QCOMPARE(FixtureGroup::subGroupTagFor(41), FixtureGroup::subGroupTagFor(41));
+
+    FixtureGroup grp(m_doc);
+    grp.setSize(QSize(2, 1));
+    grp.assignHead(QLCPoint(0, 0), GroupHead(0, 0));
+    grp.setHeadSubGroup(QLCPoint(0, 0), FixtureGroup::subGroupTagFor(0));
+    QCOMPARE(grp.headSubGroup(QLCPoint(0, 0)), FixtureGroup::subGroupTagFor(0));
+    QCOMPARE(grp.headSubGroup(QLCPoint(1, 0)), quint32(0));
+}
+
 QTEST_APPLESS_MAIN(FixtureGroup_Test)
