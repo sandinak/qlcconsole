@@ -168,8 +168,109 @@ and colour, not pixel mapping.
   ... from build/Resources/<kind>, which held stale COPIES (the Lantern was
   missing from Add Fixture). resources/CMakeLists.txt now links each entry
   to its source at configure time.
-- NOT YET: tried against a real WLED on Branson's Wi-Fi; effect/palette
-  NAMES from the device (/json/eff, /json/pal) in the look editor.
+- DONE: what makes the light, and the glass ("point source / hanging LED
+  cluster (more distributed) / LED tape (less distributed) ... glass
+  diffuse or clear (default diffuse)"). Definition: `<Body ... LEDs="16"
+  Layout="Cluster|Tape" Glass="Clear"/>` (`QLCPhysical::leds()/
+  ledLayout()/clearGlass()`; fixture editor "Source" and "Glass"). Per
+  fixture: Light and Glass rows in the studio inspector AND Fixture
+  Properties (`LightControls`, shared), the definition's choice marked
+  "(as defined)" and stored as no override (`FixtureRigProps::lightLeds/
+  lightLayout/lightGlass`, saved `LEDs`/`LEDLayout`/`Glass`). A WLED that
+  answers says how many LEDs it drives (/json/info) and that wins over the
+  definition. `RigHeads::lightLeds()/lightPoints()/clearGlass()`: a hanging
+  cluster spreads through the cage, tape is a tight helix round a core,
+  both from the top. Drawn: clear glass shows each LED as a bead in its
+  own colour; diffusing glass glows, each pane in 2x3 patches lit by the
+  LEDs nearest them (an effect moves across the glass as a soft patch),
+  the beads a blur behind; frosted when dark. The halo and the light
+  thrown are what the LEDs add up to.
+- DONE: what the LEDs show (`LanternPixels`), in order of truth:
+  (1) the device's own live view -- the WLED plugin asks /json/live every
+  150 ms, ONLY while a rig view showing it is on screen and only for a look
+  that is actually going out (new QLCIOPlugin `watchTargetPixels()/
+  targetPixels()/targetPixelCount()`, `targetPixelsChanged`); (2) the
+  effect script that ports that WLED effect, run on the LEDs with the
+  speed/intensity/palette/option/colours the device is sent -- same maths,
+  not in step with the device; (3) colour 1 at its dimmer, with
+  "WLED: Fireworks" beside it when the effect has no port.
+- DONE: the hook for the WLED effects import. A port is an effect script
+  with `effect.wled = "Chase"` (WLED's name -- matched by name, the numbers
+  move between firmware) and `effect.requires = ["wled"]`, which loads
+  `effectscripts/lib/wled.js` first (new: shared script libraries). The
+  library is WLED's segment (SEGLEN, strip.now, SEGCOLOR, setPixelColor,
+  color_from_palette, mirror/reverse applied as WLED applies them) and the
+  FastLED integer helpers. Palettes 0, 2-5 built from the colours as WLED
+  does, 6 Party and 11 Rainbow from FastLED; the rest drawn as 4 until
+  their tables come in. Two ports prove it: WLED Breathe (mode_breath) and
+  WLED Chase (mode_chase_color/chase()), tested against numbers worked by
+  hand from FX.cpp. They also run on any RGB fixtures as ordinary effects.
+- DONE: WLED effects in looks, run BY THE DEVICE ("for WLED based
+  fixtures we should be selecting WLED effects"; Branson chose "device runs
+  it"). `QLCPalette::wledEffect()` (saved `<WledEffect>`): WLED fixtures in
+  the look are sent the effect, speed/intensity/palette/option and the
+  look's three colours on their own channels, and the look's dimmer through
+  the scene's fade on Master Dimmer (`EffectInstance::wledDeviceWrites()`,
+  `WledFixture` helpers); they are left out of the script's cells. Every
+  other fixture runs the port, or -- with none -- `wled-device.js`, a
+  hidden stand-in (`effect.hidden`, never listed) that only gives the look
+  WLED's controls. Looks file under Palettes/Effect/WLED/<name>.
+- DONE: the effect picker is a browser, not a dropdown ("too long and too
+  disjointed"; Branson chose the inline browser). `EffectBrowser` in the
+  look editor: search (all categories), tabs Recent / Color / Dimmer /
+  Position / Beam / Other / WLED, each row its name, what it does and a
+  strip of 16 lights running it (visible rows only, ~12 fps), presets under
+  their generator; Recent remembered. It mirrors the (now hidden) effect
+  combo, which stays the source of truth. WLED's effects come from a WLED
+  fixture in the show (its firmware's list) or the installed definition.
+  Found on the way: a script returning undefined for a channel crashed the
+  preview (qRound(NaN)); guarded there and in LanternPixels.
+- NOT YET: tried against a real WLED on Branson's Wi-Fi (live view
+  included); effect/palette NAMES from the device (/json/eff, /json/pal) in
+  the look editor; the mass import of WLED's effects (Branson considering);
+  the ports were written from FX.cpp as I know it -- check them against
+  the source when the import is done.
+
+## Truss socks, tower faces, printed patterns, and searching fixtures & groups -- SHIPPED 2026-10-08
+
+- Tower FACES ("faces on the tower .. similar to sock .. for the towers
+  they're opaque"): `Tower::hasFaces()/facesSides()` (Front, Back, Stage
+  left, Stage right; all by default) `/facesColour()` (near-black by
+  default) `/facesFrom()/facesTo()` (its top follows the height), saved
+  Faces/FacesColour/FacesFrom/FacesTo. Tower editor: Faces checkbox,
+  colour, from/to, the sides, live and undone by Cancel. Drawn opaque in
+  the angled view after every fixture, lit by the room and by whatever of
+  the rig points at them (`beamLightAt()`); flat elevations fill the
+  stretch; plan and plot show the faced sides as thick edges.
+- PRINTED patterns ("upload a pattern that can cover the sock or opaque
+  parts"): `Tower::facesPattern()` and `Truss::sockPattern()`, an image
+  file stretched over each face (FacesPattern / SockPattern, the path as
+  chosen). Drawn as a fine mosaic of depth-sorted patches sampling the
+  image (`emitPatternedFace()`, images cached small), so a print is lit
+  and hidden like anything else; a printed sock still glows, the print
+  filtering it. A missing file falls back to plain colour. Picker:
+  "Pattern…" / "×" in both editors.
+- Print OPACITY ("an opacity setting for the pattern"): `sockPatternOpacity()`
+  / `facesPatternOpacity()` (0..1, 1 by default; saved only below 1): the
+  print laid over the fabric's or panels' own colour by that much, and by
+  the image's own alpha, so a PNG's clear parts show the colour beneath.
+  A percentage beside each picker.
+
+- Truss SOCKS ("put a sock on trusses that would diffuse for internal led
+  bars .. a sock color picker as the default color of white and a way to
+  set how much of the truss the sock covers"). `Truss::hasSock()/
+  sockColour()/sockFrom()/sockTo()` (saved Sock/SockColour/SockFrom/SockTo,
+  To following the truss's length when it is its end). Truss editor: Sock
+  checkbox, colour button, from/to, live on the canvas, undone by Cancel.
+  Rig view: the fabric over its stretch, in 20 cm stretches each lit by
+  the room and glowing with the bars rigged Inside near it, filtered by the
+  fabric's colour (`sockGlow()`, `drawSocks()`); flat views a glowing band;
+  the plot a band in the sock's colour. (Inside fixtures never threw beams;
+  the sock is their light now.)
+- Programming tab: "Search fixtures & groups…" over the Fixtures & groups
+  list, as Layers' search: a row stays when it or anything under it
+  matches, the way down opens, a matching group keeps its fixtures; kept
+  across rebuilds; cleared, it closes back up.
 
 ## BACKLOG (not started, 2026-10-08): from Branson -- no action yet
 
