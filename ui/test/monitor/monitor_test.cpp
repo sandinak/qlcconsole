@@ -15635,15 +15635,19 @@ void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()
     tower->setOrigin(QVector3D(2.0f, 3.0f, 0.0f));
     tower->setLength(3.0f);
     tower->setWidth(0.29f);
+    Hanger *hanger = props->addHanger(Hanger::OnTruss, tower->id());
+    hanger->setAlong(2.6f);
+    hanger->setAngle(90.0f);                    // stage left
+    hanger->setArm(0.4f);
+    hanger->setDrop(0.5f);
+    props->recomputeHangers();
     FixtureRigProps rp;
-    rp.trussId = tower->id();
-    rp.trussOffset = 2.6f;
-    rp.hangerArm = 0.4f;
-    rp.hangerAngle = 90.0f;                     // stage left
-    rp.hangerDrop = 0.5f;
+    rp.hangerId = hanger->id();
     props->setFixtureRigProps(lantern->id(), rp);
-    const QVector3D at = props->fixtureRigPosition(lantern->id());
-    QVERIFY(qAbs(at.x() - (props->fixtureMountPoint(lantern->id()).x() + 0.4f)) < 1e-3f);
+    QCOMPARE(props->fixtureRigPosition(lantern->id()), hanger->hook());
+    // It hangs BELOW the hook: its middle half its height (250 mm) lower.
+    const QVector3D at = fixtureWorldCentre(doc, lantern->id());
+    QVERIFY(qAbs(at.z() - (hanger->hook().z() - 0.125f)) < 1e-3f);
 
     Scene *scene = new Scene(doc);
     scene->setName("Red");
@@ -15680,6 +15684,101 @@ void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()
 
     delete doc;
     delete def;
+}
+
+/* Hangers are rigging: put one on a tower, copy it to every other tower
+   (standing trusses and Tower structures, once each), hang a lantern on its
+   hook -- one hook, so a second lantern takes the first one's place -- and
+   find them in Layers with their tower. */
+void Monitor_Test::hangersAreRiggingCopiedToEveryTower()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    QList<Truss *> towers;
+    for (int i = 0; i < 3; ++i)
+    {
+        Truss *t = props->addTruss();
+        t->setName(QString("T-%1").arg(i + 1));
+        t->setType(Truss::Vertical);
+        t->setOrigin(QVector3D(1.0f + 3.0f * i, 3.0f, 0.0f));
+        t->setLength(3.0f);
+        t->setWidth(0.29f);
+        towers << t;
+    }
+    Truss *pipe = props->addTruss();                 // a horizontal run: not a tower
+    pipe->setName("FOH");
+    pipe->setType(Truss::Horizontal);
+    pipe->setOrigin(QVector3D(0.0f, 0.0f, 5.0f));
+    pipe->setLength(8.0f);
+    Tower *box = props->addTower();
+    box->setName("SR Box");
+
+    Hanger *h = props->addHanger(Hanger::OnTruss, towers.first()->id());
+    h->setAlong(2.4f);
+    h->setAngle(90.0f);
+    h->setArm(0.35f);
+    h->setDrop(0.4f);
+    props->recomputeHangers();
+
+    QWidget parent;
+    Monitor mon(&parent, doc);
+    QCOMPARE(mon.copyHangerToEveryTower(h->id()), 3);     // T-2, T-3, SR Box
+    QCOMPARE(props->hangers().size(), 4);
+    QVERIFY(props->hangersOn(Hanger::OnTruss, pipe->id()).isEmpty());
+    const Hanger *onT3 = props->hangersOn(Hanger::OnTruss, towers.at(2)->id()).value(0);
+    QVERIFY(onT3 != nullptr);
+    QCOMPARE(onT3->along(), 2.4f);
+    QCOMPARE(onT3->arm(), 0.35f);
+    QVERIFY(qAbs(onT3->hook().x() - (7.0f + 0.145f + 0.35f)) < 1e-3f);
+    QCOMPARE(mon.copyHangerToEveryTower(h->id()), 0);     // every tower has it now
+
+    auto lantern = [doc](const char *name) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setChannels(4);
+        f->setPatched(false);
+        doc->addFixture(f);
+        return f;
+    };
+    Fixture *a = lantern("Lantern A");
+    Fixture *b = lantern("Lantern B");
+    MonitorGraphicsView view(doc);
+    view.resize(900, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(12, 8));
+    view.updatePlatforms();
+    view.attachFixtureToHanger(a->id(), h->id());
+    QCOMPARE(props->fixtureRigPosition(a->id()), h->hook());
+    QCOMPARE(props->fixtureRigProps(a->id()).primaryMount(), FixtureRigProps::HangerMount);
+    view.attachFixtureToHanger(b->id(), h->id());         // one hook
+    QCOMPARE(props->fixtureOnHanger(h->id()), b->id());
+    QVERIFY(!props->fixtureRigProps(a->id()).onHanger());
+
+    MonitorLayersPanel panel(doc, &view);
+    panel.reload();
+    QVERIFY(layersRow(panel, h->name()) != nullptr);
+
+    // In T-1's own studio pane the hanger is there to be double-clicked: its
+    // arm opens the hanger (the lantern on it is the fixture's).
+    {
+        StructureStudioView studio(doc, StructureStudioView::TrussKind, towers.first()->id());
+        studio.resize(600, 700);
+        studio.reload();
+        studio.setPlane(StructureStudioView::Front);
+        QCoreApplication::processEvents();
+        const QPointF mid = (studio.w2s(h->fastened()) + studio.w2s(h->armEnd())) / 2.0;
+        QCOMPARE(studio.hitTestHanger(mid), h->id());
+        QSignalSpy activated(&studio, &StructureStudioView::hangerActivated);
+        QTest::mouseDClick(&studio, Qt::LeftButton, Qt::NoModifier, mid.toPoint());
+        QCOMPARE(activated.count(), 1);
+        QCOMPARE(activated.first().first().toUInt(), h->id());
+        QCOMPARE(studio.hitTestHanger(QPointF(2, 2)), quint32(UINT_MAX));
+    }
+
+    // The tower goes: its hanger with it; the lantern stays, unmounted.
+    props->removeTruss(towers.first()->id());
+    QVERIFY(!props->fixtureRigProps(b->id()).onHanger());
+    QCOMPARE(props->hangers().size(), 3);
 }
 
 void Monitor_Test::aBarHungOnATrussShinesOutOfItsFace()

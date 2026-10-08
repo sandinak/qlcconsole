@@ -145,6 +145,9 @@ public:
     /** Metres along truss @p trussId to the point nearest @p viewPos as it
      *  is drawn in this view (0 at its origin, clamped to its length); -1 when
      *  it is seen end-on here (no length on screen to pick a point along). */
+    /** The hanger whose clamp, arm or chain is under @p px -- on this view's
+     *  truss or tower, or any on the whole-stage view -- or UINT_MAX. */
+    quint32 hitTestHanger(const QPointF &px) const;
     float offsetAlongTrussAt(quint32 trussId, const QPoint &viewPos) const;
     bool beams() const { return m_beams; }
     double ambient() const { return m_ambient; }
@@ -231,6 +234,8 @@ signals:
     /** A bar hung on this truss was double-clicked -- its own editor (Along
      *  truss / Face / Lock) lives elsewhere, this just says which bar. */
     void barActivated(quint32 barId);
+    /** A hanger double-clicked: open its editor. */
+    void hangerActivated(quint32 hangerId);
     /** A bar was single-clicked (selection, for tree-highlight sync). */
     void barSelected(quint32 barId);
     /** A bar was dragged to a new offset along its parent. */
@@ -290,6 +295,8 @@ private:
     void drawGrid(QPainter &p) const;
     void drawStructure(QPainter &p) const;
     void drawOneStructure(QPainter &p, Kind kind, quint32 id) const;
+    /** The hangers on truss/tower @p id: clamp, arm, chain. */
+    void drawHangersOn(QPainter &p, Kind kind, quint32 id) const;
     /** Every bar hung on @p parentId, each just another drawOneStructure(Truss)
      *  call. In Angled this is called from inside drawOneStructure() itself
      *  (depth-sorted, so call order doesn't matter); in a flat plane it is
@@ -483,6 +490,7 @@ private:
     /** Nearest bar hung on THIS truss (Truss::invalidId() if none/not close
      *  enough), same "distance to the drawn shape" reasoning as hitTestFixture(). */
     quint32 hitTestBar(const QPointF &px) const;
+
     /** Nearest crossbar hung on the Pipe this editor is showing (a StandKind
      *  editor's own booms, or a PipeKind editor's own boom) -- Pipe::invalidId()
      *  if none/not close enough/wrong kind. Same shape as hitTestBar(), for

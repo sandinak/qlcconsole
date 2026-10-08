@@ -122,6 +122,7 @@ private slots:
     void aPixelBarsLightComesFromItsLitPixels();
     void aBarHungOnATrussShinesOutOfItsFace();
     void aLanternHangsOffATowerAndGlowsAllRound();
+    void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an
      *  opened fixture group stays open through a rebuild of the list; and a

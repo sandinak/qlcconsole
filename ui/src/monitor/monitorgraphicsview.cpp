@@ -2033,6 +2033,7 @@ void MonitorGraphicsView::requestEditItem(const QString &kind, quint32 id)
     else if (kind == QStringLiteral("truss"))    emit trussDoubleClicked(id);
     else if (kind == QStringLiteral("platform")) emit platformDoubleClicked(id);
     else if (kind == QStringLiteral("pipe"))     emit pipeDoubleClicked(id);
+    else if (kind == QStringLiteral("hanger"))   emit hangerDoubleClicked(id);
     else if (kind == QStringLiteral("stand"))    emit standDoubleClicked(id);
     else if (kind == QStringLiteral("scenery"))  emit sceneryDoubleClicked(id);
     else if (kind == QStringLiteral("tower"))    emit towerDoubleClicked(id);
@@ -3149,7 +3150,7 @@ void MonitorGraphicsView::updateFixture(quint32 id)
     // the structure/frame in EVERY view (they follow it), so centre the icon on
     // the derived point — otherwise the top view shows the stale stored XY (e.g.
     // a studio group distributed on a step looked un-distributed in 2D).
-    const bool riser = frp.onRiser() || frp.onPipe() || frp.onTower()
+    const bool riser = frp.onRiser() || frp.onPipe() || frp.onTower() || frp.onHanger()
                        || m_doc->monitorProperties()->fixtureFrameGroup(id) != 0;
     // A truss-bound fixture's stored position is the point ON the truss line, so
     // centre the icon on it (like risers) instead of pinning its top-left corner.
@@ -3873,8 +3874,10 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
         m_doc->setModified();
     }
 
-    // Bound fixtures are physically attached: follow the truss to its new place.
+    // Bound fixtures are physically attached: follow the truss to its new place
+    // -- and so do the ones hung on its hangers.
     MonitorProperties *props = m_doc->monitorProperties();
+    props->recomputeHangers();
     foreach (TrussItem *ti, moved)
     {
         Truss *t = ti->truss();
@@ -3883,7 +3886,10 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
         for (auto fit = m_fixtures.constBegin(); fit != m_fixtures.constEnd(); ++fit)
         {
             const FixtureRigProps rp = props->fixtureRigProps(fit.key());
-            if (rp.trussId != t->id())
+            const Hanger *hung = rp.onHanger() ? props->hanger(rp.hangerId) : nullptr;
+            const bool onIt = rp.trussId == t->id()
+                || (hung != nullptr && hung->parentKind() == Hanger::OnTruss && hung->parentId() == t->id());
+            if (!onIt)
                 continue;
             // fixtureRigPosition() (not the bare positionAt()) so a fixture
             // dropped at a cross (perpendicular) offset from the centreline
@@ -4150,10 +4156,17 @@ void MonitorGraphicsView::slotTowerMoved(TowerItem *item)
         tw->setOriginY(float(((c.y() - m_yOffset) * m_unitValue) / (1000.0 * m_cellPixels)));
         if (undo.itemOrigins.last() == QPointF(double(tw->originX()), double(tw->originY())))
         { undo.itemKeys.removeLast(); undo.itemOrigins.removeLast(); }
-        // Fixtures on its shelves follow (derived).
+        // Fixtures on its shelves follow (derived) -- and those on its hangers.
+        MonitorProperties *props = m_doc->monitorProperties();
+        props->recomputeHangers();
         foreach (Fixture *fx, m_doc->fixtures())
-            if (m_doc->monitorProperties()->fixtureRigProps(fx->id()).towerId == tw->id())
+        {
+            const FixtureRigProps rp = props->fixtureRigProps(fx->id());
+            const Hanger *hung = rp.onHanger() ? props->hanger(rp.hangerId) : nullptr;
+            if (rp.towerId == tw->id()
+                || (hung != nullptr && hung->parentKind() == Hanger::OnTower && hung->parentId() == tw->id()))
                 updateFixture(fx->id());
+        }
     }
     if (!undo.itemKeys.isEmpty())
         pushUndo(undo);
@@ -6334,6 +6347,10 @@ bool MonitorGraphicsView::renameItem(const QString &kind, quint32 id, const QStr
         if (Pipe *b = props->pipe(id)) b->setName(name);
         updatePlatforms();   // pipes/stands/towers redraw here
     }
+    else if (kind == QLatin1String("hanger"))
+    {
+        if (Hanger *hg = props->hanger(id)) hg->setName(name);
+    }
     else if (kind == QLatin1String("scenery"))
     {
         if (Scenery *sc = props->scenery(id)) sc->setName(name);
@@ -6559,6 +6576,7 @@ static QString itemNoun(const QString &kind)
     if (kind == QLatin1String("platform")) return MonitorGraphicsView::tr("Platform");
     if (kind == QLatin1String("image"))    return MonitorGraphicsView::tr("Image");
     if (kind == QLatin1String("pipe"))     return MonitorGraphicsView::tr("Boom");
+    if (kind == QLatin1String("hanger"))   return MonitorGraphicsView::tr("Hanger");
     if (kind == QLatin1String("stand"))    return MonitorGraphicsView::tr("Stand");
     if (kind == QLatin1String("scenery"))  return MonitorGraphicsView::tr("Scenery");
     if (kind == QLatin1String("tower"))    return MonitorGraphicsView::tr("Tower");
@@ -6869,6 +6887,29 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             a->setChecked(rp.pipeId == bid);
         }
 
+        /* A hanger: a bracket and chain on a tower or truss -- named with what
+           it hangs off, since "Hanger 3" alone says nothing. */
+        QMenu *hangerMenu = mountMenu->addMenu(tr("Hanger"));
+        const QList<Hanger *> hangers = props->hangers();
+        hangerMenu->setEnabled(!hangers.isEmpty());
+        for (Hanger *hg : hangers)
+        {
+            if (hg == nullptr)
+                continue;
+            QString on;
+            if (hg->parentKind() == Hanger::OnTruss)
+            {
+                if (Truss *t = props->truss(hg->parentId())) on = t->name();
+            }
+            else if (Tower *tw = props->tower(hg->parentId()))
+                on = tw->name();
+            const quint32 hid = hg->id();
+            QAction *a = hangerMenu->addAction(on.isEmpty() ? hg->name() : tr("%1 (on %2)").arg(hg->name(), on),
+                                               this, [this, fid, hid]() { attachFixtureToHanger(fid, hid); });
+            a->setCheckable(true);
+            a->setChecked(rp.hangerId == hid);
+        }
+
         QMenu *towerMenu = mountMenu->addMenu(tr("Tower"));
         const QList<Tower *> towers = props->towers();
         towerMenu->setEnabled(!towers.isEmpty());
@@ -6906,7 +6947,9 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
     // What it is mounted on: reach that, or come off it.
     QString mountKind, mountName;
     quint32 mountId = 0;
-    if (Truss *t = (rp.trussId != Truss::invalidId()) ? props->truss(rp.trussId) : nullptr)
+    if (Hanger *hg = rp.onHanger() ? props->hanger(rp.hangerId) : nullptr)
+    { mountKind = QStringLiteral("hanger"); mountId = hg->id(); mountName = hg->name(); }
+    else if (Truss *t = (rp.trussId != Truss::invalidId()) ? props->truss(rp.trussId) : nullptr)
     { mountKind = QStringLiteral("truss"); mountId = t->id(); mountName = t->name(); }
     else if (Pipe *b = (rp.pipeId != Pipe::invalidId()) ? props->pipe(rp.pipeId) : nullptr)
     { mountKind = QStringLiteral("pipe"); mountId = b->id(); mountName = b->name(); }
@@ -7049,6 +7092,7 @@ void MonitorGraphicsView::requestDeleteItem(const QString &kind, quint32 id)
     else if (kind == QLatin1String("platform")) emit platformRemoveRequested(id);
     else if (kind == QLatin1String("image"))    emit imageRemoveRequested(id);
     else if (kind == QLatin1String("pipe"))     emit pipeRemoveRequested(id);
+    else if (kind == QLatin1String("hanger"))   emit hangerRemoveRequested(id);
     else if (kind == QLatin1String("stand"))    emit standRemoveRequested(id);
     else if (kind == QLatin1String("scenery"))  emit sceneryRemoveRequested(id);
     else if (kind == QLatin1String("tower"))    emit towerRemoveRequested(id);
@@ -7123,9 +7167,18 @@ void MonitorGraphicsView::unmountFixture(quint32 fid)
     }
     leaveMountGroupsOf(fid);
     FixtureRigProps r = rp;
+    // Off a hanger: it stays where it hung.
+    const QVector3D hungAt = rp.onHanger() ? p->fixtureRigPosition(fid) : QVector3D();
     r.pipeId = Pipe::invalidId();
     r.towerId = Tower::invalidId();
+    r.hangerId = UINT_MAX;
     p->setFixtureRigProps(fid, r);
+    if (rp.onHanger())
+    {
+        const QPointF mm(hungAt.x() * 1000.0, hungAt.y() * 1000.0);
+        moveFixtureTo(fid, mm);
+        emit fixtureMoved(fid, mm);
+    }
     updateFixture(fid);
     m_doc->setModified();
     emit mapStructureChanged();
@@ -7155,6 +7208,29 @@ void MonitorGraphicsView::attachFixtureToPipe(quint32 fid, quint32 pipeId)
 
     updateFixture(fid);
     joinMountGroup(fid, QStringLiteral("pipe"), pipeId);
+    m_doc->setModified();
+    emit mapStructureChanged();
+    refreshItemLayerState();
+}
+
+void MonitorGraphicsView::attachFixtureToHanger(quint32 fid, quint32 hangerId)
+{
+    ensureFixtureOnPlot(fid);
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props->hanger(hangerId) == nullptr)
+        return;
+    // One hook: whatever was on it comes off and stays where it was.
+    const quint32 previous = props->fixtureOnHanger(hangerId);
+    if (previous != UINT_MAX && previous != fid)
+        unmountFixture(previous);
+
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    leaveMountGroupsOf(fid);
+    rp.clearMounts();
+    rp.hangerId = hangerId;
+    rp.mountingType = Truss::TopHung;      // it hangs from the hook
+    props->setFixtureRigProps(fid, rp);
+    updateFixture(fid);
     m_doc->setModified();
     emit mapStructureChanged();
     refreshItemLayerState();

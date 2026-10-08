@@ -373,6 +373,7 @@ protected slots:
     void slotAddBarToPipe(quint32 parentPipeId);
     void slotPlatformRemoveRequested(quint32 pid);
     void slotPipeRemoveRequested(quint32 pid);
+    void slotHangerRemoveRequested(quint32 hid);
     void slotStandRemoveRequested(quint32 sid);
     void slotTowerRemoveRequested(quint32 tid);
     void slotSceneryRemoveRequested(quint32 sid);
@@ -434,6 +435,14 @@ protected slots:
      *  metres along it (mid-span when -1), a crossbar on a stand's or pipe's
      *  boom. */
     void studioAddBar(int kind, quint32 id, class StructureStudioView *view, float offset = -1.0f);
+    /** A hanger on truss (kind 2) or Tower (kind 1) @p id, at @p offset along it
+     *  (-1: three quarters up); opens its editor. */
+    void studioAddHanger(int kind, quint32 id, class StructureStudioView *view, float offset = -1.0f);
+public:
+    /** The same hanger as @p hid on every tower (standing truss or Tower)
+     *  that lacks one at that height and direction. Returns how many. */
+    int copyHangerToEveryTower(quint32 hid);
+protected:
 
     /** What a fixture is mounted on, in words -- shared by the Fixture
      *  Properties dialog and the Lighting Studio inspector so they cannot
@@ -457,6 +466,7 @@ protected slots:
     /** Open the platform edit dialog for the given platform ID. */
     void slotEditPlatform(quint32 pid);
     void slotEditPipe(quint32 bid);
+    void slotEditHanger(quint32 hid);
 
     /** Open platform edit on double-click. */
     void slotPlatformDoubleClicked(quint32 pid);

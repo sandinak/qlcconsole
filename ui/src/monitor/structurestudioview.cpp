@@ -1160,10 +1160,15 @@ QList<quint32> StructureStudioView::mountedFixtures(Kind kind, quint32 id) const
         bool on = false;
         if (kind == StandKind || kind == PipeKind)
             on = (rp.pipeId != Pipe::invalidId() && pipeIds.contains(rp.pipeId));
-        else if (kind == TowerKind)
-            on = (rp.towerId == id);
-        else if (kind == TrussKind)
-            on = (rp.trussId == id);
+        else if (kind == TowerKind || kind == TrussKind)
+        {
+            on = (kind == TowerKind) ? (rp.towerId == id) : (rp.trussId == id);
+            // ...or hung on one of its hangers.
+            if (!on && rp.onHanger())
+                if (const Hanger *hg = props->hanger(rp.hangerId))
+                    on = hg->parentId() == id
+                         && hg->parentKind() == (kind == TowerKind ? Hanger::OnTower : Hanger::OnTruss);
+        }
         else if (kind == GroupKind)
             on = (props->fixtureFrameGroup(fx->id()) == id);
         else if (kind == PlatformKind)
@@ -2031,8 +2036,44 @@ void StructureStudioView::drawChildBars(QPainter &p, quint32 parentId) const
             drawOneStructure(p, TrussKind, bar->id());
 }
 
+void StructureStudioView::drawHangersOn(QPainter &p, Kind kind, quint32 id) const
+{
+    if (kind != TrussKind && kind != TowerKind)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QList<Hanger *> hangers = props->hangersOn(kind == TrussKind ? Hanger::OnTruss : Hanger::OnTower, id);
+    if (hangers.isEmpty())
+        return;
+    /* The bracket: a short clamp on the face, the arm out from it, a hook at
+       its end, and the chain down from the hook -- what holds a lantern off
+       the side of a tower, so the hang reads. */
+    const double af = 0.45 + 0.55 * m_ambient;
+    const QColor metal(qRound(165 * af), qRound(165 * af), qRound(172 * af));
+    for (const Hanger *h : hangers)
+    {
+        const QVector3D fastened = h->fastened(), end = h->armEnd(), hook = h->hook();
+        const QVector3D clampA = fastened + QVector3D(0.0f, 0.0f, 0.05f);
+        const QVector3D clampB = fastened - QVector3D(0.0f, 0.0f, 0.05f);
+        emitLine(w2s(clampA), w2s(clampB), viewDepth(clampA), viewDepth(clampB), metal, 4.0, p);
+        if (h->arm() > 0.0f)
+            emitLine(w2s(fastened), w2s(end), viewDepth(fastened), viewDepth(end), metal, 3.0, p);
+        if (h->drop() > 0.0f)
+        {
+            // A chain: short links, not a rod.
+            const int links = qMax(2, int(h->drop() / 0.04f));
+            for (int i = 0; i < links; i += 2)
+            {
+                const QVector3D a = end + (hook - end) * float(double(i) / links);
+                const QVector3D b = end + (hook - end) * float(double(i + 1) / links);
+                emitLine(w2s(a), w2s(b), viewDepth(a), viewDepth(b), metal.darker(110), 1.4, p);
+            }
+        }
+    }
+}
+
 void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) const
 {
+    drawHangersOn(p, kind, id);
     MonitorProperties *props = m_doc->monitorProperties();
     /* A selected/dragged bar reads distinctly from an ordinary truss chord --
      * otherwise clicking one gave no feedback at all that anything had
@@ -4314,23 +4355,6 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     if (drag)     col = QColor(255, 196, 64);
     else if (hi)  col = QColor(120, 220, 140);
 
-    /* Hung on a hanger: the bracket arm out from the structure, and the chain
-       or cable down from its end to the top of the fixture -- what holds a
-       lantern off the side of a tower, drawn so the hang reads. */
-    const bool onStructure = rp.trussId != Truss::invalidId() || rp.onPipe() || rp.onTower();
-    if (onStructure && rp.hasHanger())
-    {
-        const QVector3D fastened = props->fixtureMountPoint(fid);
-        const QVector3D armEnd = fastened + rp.hangerDirection() * rp.hangerArm;
-        const float halfH = traits.physH > 0.0f ? traits.physH * 0.5f : 0.05f;
-        const QVector3D top = fixtureCentre(fid) + QVector3D(0.0f, 0.0f, halfH);
-        const double af = 0.45 + 0.55 * m_ambient;
-        const QColor metal(qRound(160 * af), qRound(160 * af), qRound(168 * af));
-        if (rp.hangerArm > 0.0f)
-            emitLine(w2s(fastened), w2s(armEnd), viewDepth(fastened), viewDepth(armEnd), metal, 3.0, p);
-        if (rp.hangerDrop > 0.0f)
-            emitLine(w2s(armEnd), w2s(top), viewDepth(armEnd), viewDepth(top), metal.darker(115), 1.2, p);
-    }
 
     // Tower-shelf mount, in an elevation: a fixture resting on (or hung
     // under) a shelf isn't "a bar running along something" the way a
@@ -6972,12 +6996,47 @@ quint32 StructureStudioView::hitTestPipeBar(const QPointF &px) const
     return best;
 }
 
+quint32 StructureStudioView::hitTestHanger(const QPointF &px) const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    quint32 best = UINT_MAX;
+    double bestD = 8.0;                       // px: a hanger is drawn thin
+    auto segment = [&](const QVector3D &a3, const QVector3D &b3) {
+        const QPointF a = w2s(a3), b = w2s(b3), ab = b - a;
+        const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+        double t = (len2 > 1e-6) ? ((px.x() - a.x()) * ab.x() + (px.y() - a.y()) * ab.y()) / len2 : 0.0;
+        t = qBound(0.0, t, 1.0);
+        return QLineF(a + ab * t, px).length();
+    };
+    foreach (const Hanger *h, props->hangers())
+    {
+        const bool shown = m_kind == StageKind
+            || (m_kind == TrussKind && h->parentKind() == Hanger::OnTruss && h->parentId() == m_id)
+            || (m_kind == TowerKind && h->parentKind() == Hanger::OnTower && h->parentId() == m_id);
+        if (!shown)
+            continue;
+        const double d = qMin(qMin(segment(h->fastened() + QVector3D(0, 0, 0.05f),
+                                           h->fastened() - QVector3D(0, 0, 0.05f)),
+                                   segment(h->fastened(), h->armEnd())),
+                              segment(h->armEnd(), h->hook()));
+        if (d < bestD) { bestD = d; best = h->id(); }
+    }
+    return best;
+}
+
 void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)
 {
     const quint32 fid = hitTestFixture(e->pos());
     if (fid != Fixture::invalidId())
     {
         emit fixtureActivated(fid);
+        return;
+    }
+    // Its bracket, arm or chain: the hanger itself (the lantern on it is the fixture).
+    const quint32 hangerId = hitTestHanger(e->pos());
+    if (hangerId != UINT_MAX)
+    {
+        emit hangerActivated(hangerId);
         return;
     }
     const quint32 barId = hitTestBar(e->pos());

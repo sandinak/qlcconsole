@@ -476,6 +476,10 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotPlatformRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::pipeRemoveRequested,
             this, &Monitor::slotPipeRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::hangerRemoveRequested,
+            this, &Monitor::slotHangerRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::hangerDoubleClicked,
+            this, &Monitor::slotEditHanger);
     connect(m_graphicsView, &MonitorGraphicsView::standRemoveRequested,
             this, &Monitor::slotStandRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::sceneryRemoveRequested,
@@ -3878,6 +3882,9 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     // reaches from the sidebar tree's own double-click.
     connect(view, &StructureStudioView::barActivated, body,
             [this](quint32 barId){ slotEditTruss(barId); });
+    // Double-click a hanger's bracket, arm or chain → the hanger editor.
+    connect(view, &StructureStudioView::hangerActivated, body,
+            [this, view](quint32 hid){ slotEditHanger(hid); view->reload(); });
     // Dragged a bar on the canvas → sync the main 2D plot's truss item.
     connect(view, &StructureStudioView::barMoved, body,
             [this](quint32){ m_graphicsView->updateTrusses(); });
@@ -3939,13 +3946,49 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             }
             return nullptr;
         };
+        /* A hanger -- bracket, arm and chain, one fixture on its hook -- off a
+           truss (a tower truss too) or a Tower, where you clicked. */
+        auto addHangerAction = [&]() -> QAction * {
+            if (kind == 2)
+            {
+                Truss *tr2 = m_props->truss(id);
+                if (tr2 == nullptr)
+                    return nullptr;
+                if (barAt < 0.0f)
+                    barAt = view->offsetAlongTrussAt(id, view->mapFromGlobal(globalPos));
+                return m.addAction(barAt >= 0.0f ? tr("Add Hanger Here") : tr("Add Hanger"));
+            }
+            if (kind == 1)
+                return m.addAction(tr("Add Hanger"));
+            return nullptr;
+        };
+        /* Right-click a hanger (not the lantern on it): edit it, or take it off. */
+        const quint32 hangerUnder = (fidUnder == Fixture::invalidId())
+            ? view->hitTestHanger(view->mapFromGlobal(globalPos)) : UINT_MAX;
+        if (hangerUnder != UINT_MAX)
+        {
+            QAction *aEditH = m.addAction(tr("Edit Hanger…"));
+            QAction *aRemH  = m.addAction(tr("Remove Hanger"));
+            QAction *ch = m.exec(globalPos);
+            if (ch == aEditH)
+                slotEditHanger(hangerUnder);
+            else if (ch == aRemH)
+                slotHangerRemoveRequested(hangerUnder);
+            if (ch != nullptr)
+            {
+                view->reload(); rebuildTree(); rebuildSource();
+            }
+            return;
+        }
         if (fidUnder != Fixture::invalidId())
         {
             QAction *aEdit = m.addAction(tr("Edit fixture…"));
             QAction *aRem  = m.addAction(tr("Remove from %1").arg(objectNoun));
             QAction *aBarF = addBarAction();
+            QAction *aHangF = addHangerAction();
             QAction *ch = m.exec(globalPos);
-            if (aBarF && ch == aBarF) { studioAddBar(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
+            if (aHangF && ch == aHangF) { studioAddHanger(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
+            else if (aBarF && ch == aBarF) { studioAddBar(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
             else if (ch == aEdit) editFixtureProperties(fidUnder);
             else if (ch == aRem)
             {
@@ -3958,6 +4001,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         QAction *aFix = m.addAction(tr("Add Fixtures…"));
         QAction *aGrp = m.addAction(tr("Add Existing Fixture Group…"));
         QAction *aBar = addBarAction();
+        QAction *aHang = addHangerAction();
         const QList<quint32> selNow = selectedFids();
         QAction *aNew = selNow.isEmpty() ? nullptr
             : (m.addSeparator(), m.addAction(tr("New Fixture Group from Selection…")));
@@ -3965,6 +4009,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         if (ch == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); rebuildSource(); }
         else if (ch == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); rebuildSource(); }
         else if (aBar && ch == aBar) { studioAddBar(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
+        else if (aHang && ch == aHang) { studioAddHanger(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
         else if (aNew && ch == aNew) { studioCreateGroup(selNow, view); rebuildTree(); rebuildSource(); }
         Q_UNUSED(tree)
     });
@@ -4338,6 +4383,21 @@ QString Monitor::mountDescription(const FixtureRigProps &rp, quint32 fid) const
     const QString sfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp = isFeet ? 3.28084 : 1.0;
 
+    if (rp.onHanger())
+    {
+        Hanger *h = m_props->hanger(rp.hangerId);
+        QString on;
+        if (h != nullptr && h->parentKind() == Hanger::OnTruss)
+        {
+            if (Truss *t = m_props->truss(h->parentId())) on = t->name();
+        }
+        else if (h != nullptr)
+        {
+            if (Tower *tw = m_props->tower(h->parentId())) on = tw->name();
+        }
+        return on.isEmpty() ? tr("Hanger %1").arg(h ? h->name() : QString())
+                            : tr("%1 on %2").arg(h ? h->name() : tr("Hanger"), on);
+    }
     if (rp.trussId != Truss::invalidId())
     {
         Truss *t = m_props->truss(rp.trussId);
@@ -4692,6 +4752,213 @@ void Monitor::slotPipeRemoveRequested(quint32 pid)
     }
     m_props->removePipe(pid);
     m_graphicsView->updatePlatforms();          // pipes/stands/towers live here
+    m_graphicsView->refreshFixtureBindings();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotHangerRemoveRequested(quint32 hid)
+{
+    Hanger *h = m_props->hanger(hid);
+    if (h == nullptr)
+        return;
+    const quint32 hung = m_props->fixtureOnHanger(hid);
+    if (hung != UINT_MAX)
+    {
+        Fixture *fx = m_doc->fixture(hung);
+        if (QMessageBox::question(this, tr("Remove Hanger"),
+                tr("%1 hangs on %2. Remove the hanger? The fixture stays where it is, "
+                   "unmounted.").arg(fx ? fx->name() : tr("A fixture"), h->name()),
+                QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+            return;
+        m_graphicsView->unmountFixture(hung);
+    }
+    m_props->removeHanger(hid);
+    m_graphicsView->refreshFixtureBindings();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::studioAddHanger(int kind, quint32 id, StructureStudioView *view, float offset)
+{
+    Hanger *h = nullptr;
+    if (kind == 2 && m_props->truss(id) != nullptr)
+    {
+        Truss *t = m_props->truss(id);
+        h = m_props->addHanger(Hanger::OnTruss, id);
+        // Where it was clicked; else three quarters of the way up (along).
+        h->setAlong(offset >= 0.0f ? offset : t->length() * 0.75f);
+    }
+    else if (kind == 1 && m_props->tower(id) != nullptr)
+    {
+        h = m_props->addHanger(Hanger::OnTower, id);
+        h->setAlong(m_props->tower(id)->height() * 0.75f);
+    }
+    if (h == nullptr)
+        return;
+    m_props->recomputeHangers();
+    m_doc->setModified();
+    if (m_layersPanel) m_layersPanel->reload();
+    slotEditHanger(h->id());
+    if (view != nullptr)
+        view->reload();
+}
+
+int Monitor::copyHangerToEveryTower(quint32 hid)
+{
+    Hanger *src = m_props->hanger(hid);
+    if (src == nullptr)
+        return 0;
+    /* "Every tower": the trusses that stand up (not bars hung off others)
+       and the Tower structures -- each one that does not already carry the
+       same hanger at the same height and the same way. */
+    auto alreadyHas = [&](Hanger::ParentKind kind, quint32 pid) {
+        foreach (Hanger *h, m_props->hangersOn(kind, pid))
+            if (qAbs(h->along() - src->along()) < 0.01f && qAbs(h->angle() - src->angle()) < 0.5f)
+                return true;
+        return false;
+    };
+    auto copyOnto = [&](Hanger::ParentKind kind, quint32 pid) {
+        Hanger *h = m_props->addHanger(kind, pid);
+        h->setAlong(src->along());
+        h->setAngle(src->angle());
+        h->setArm(src->arm());
+        h->setDrop(src->drop());
+    };
+    int added = 0;
+    foreach (Truss *t, m_props->trusses())
+        if (t->type() == Truss::Vertical && !t->isChildBar()
+            && !alreadyHas(Hanger::OnTruss, t->id()))
+        {
+            copyOnto(Hanger::OnTruss, t->id());
+            ++added;
+        }
+    foreach (Tower *tw, m_props->towers())
+        if (!alreadyHas(Hanger::OnTower, tw->id()))
+        {
+            copyOnto(Hanger::OnTower, tw->id());
+            ++added;
+        }
+    m_props->recomputeHangers();
+    if (added > 0)
+    {
+        m_doc->setModified();
+        if (m_layersPanel) m_layersPanel->reload();
+    }
+    return added;
+}
+
+void Monitor::slotEditHanger(quint32 hid)
+{
+    Hanger *h = m_props->hanger(hid);
+    if (h == nullptr)
+        return;
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+
+    QString on;
+    bool vertical = true;
+    float maxAlong = 20.0f;
+    if (h->parentKind() == Hanger::OnTruss)
+    {
+        if (Truss *t = m_props->truss(h->parentId()))
+        {
+            on = t->name();
+            vertical = (t->type() == Truss::Vertical);
+            maxAlong = t->length();
+        }
+    }
+    else if (Tower *tw = m_props->tower(h->parentId()))
+    {
+        on = tw->name();
+        maxAlong = tw->height();
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Hanger — %1").arg(h->name()));
+    QFormLayout *form = new QFormLayout(&dlg);
+    QLineEdit *nameEdit = new QLineEdit(h->name(), &dlg);
+    form->addRow(tr("Name:"), nameEdit);
+    form->addRow(tr("On:"), new QLabel(on.isEmpty() ? tr("(nothing -- its structure is gone)") : on, &dlg));
+    auto mkSpin = [&](double val, double hi) {
+        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
+        sp->setRange(0.0, hi * toDisp); sp->setDecimals(2); sp->setSuffix(sfx);
+        sp->setValue(val * toDisp);
+        return sp;
+    };
+    QDoubleSpinBox *alongSpin = mkSpin(h->along(), qMax(0.1f, maxAlong));
+    form->addRow(vertical ? tr("Height:") : tr("Along:"), alongSpin);
+    QComboBox *dirCb = new QComboBox(&dlg);
+    const QList<QPair<QString, int> > dirs = {
+        { tr("Downstage"), 0 }, { tr("Downstage left"), 45 }, { tr("Stage left"), 90 },
+        { tr("Upstage left"), 135 }, { tr("Upstage"), 180 }, { tr("Upstage right"), 225 },
+        { tr("Stage right"), 270 }, { tr("Downstage right"), 315 } };
+    int best = 0;
+    double bestD = 1e9;
+    for (int i = 0; i < dirs.size(); ++i)
+    {
+        dirCb->addItem(dirs.at(i).first, dirs.at(i).second);
+        const double d = qAbs(std::fmod(double(h->angle()) - dirs.at(i).second + 540.0, 360.0) - 180.0);
+        if (d < bestD) { bestD = d; best = i; }
+    }
+    dirCb->setCurrentIndex(best);
+    const int initialDir = best;
+    dirCb->setToolTip(tr("Which way the arm reaches, seen from above"));
+    form->addRow(tr("Points:"), dirCb);
+    QDoubleSpinBox *armSpin = mkSpin(h->arm(), 5.0);
+    armSpin->setToolTip(tr("How far the arm reaches out from the face of the structure"));
+    form->addRow(tr("Arm:"), armSpin);
+    QDoubleSpinBox *dropSpin = mkSpin(h->drop(), 10.0);
+    dropSpin->setToolTip(tr("How far the hook hangs below the end of the arm"));
+    form->addRow(tr("Drop:"), dropSpin);
+
+    // What hangs on it: chosen here too, one hook.
+    QComboBox *hangCb = new QComboBox(&dlg);
+    hangCb->addItem(tr("(nothing)"), UINT_MAX);
+    const quint32 hungNow = m_props->fixtureOnHanger(hid);
+    foreach (Fixture *fx, m_doc->fixtures())
+        hangCb->addItem(fx->name(), fx->id());
+    hangCb->setCurrentIndex(qMax(0, hangCb->findData(hungNow)));
+    form->addRow(tr("Hangs:"), hangCb);
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    QPushButton *copyAll = bb->addButton(tr("Copy to Every Tower"), QDialogButtonBox::ActionRole);
+    copyAll->setToolTip(tr("The same hanger -- height, direction, arm, drop -- on every tower "
+                           "that does not already have one there"));
+    form->addRow(bb);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    auto apply = [&]() {
+        h->setName(nameEdit->text().trimmed().isEmpty() ? h->name() : nameEdit->text().trimmed());
+        h->setAlong(float(alongSpin->value() * fromDisp));
+        if (dirCb->currentIndex() != initialDir)
+            h->setAngle(float(dirCb->currentData().toInt()));
+        h->setArm(float(armSpin->value() * fromDisp));
+        h->setDrop(float(dropSpin->value() * fromDisp));
+        m_props->recomputeHangers();
+    };
+    connect(copyAll, &QPushButton::clicked, &dlg, [&]() {
+        apply();
+        const int n = copyHangerToEveryTower(hid);
+        QMessageBox::information(&dlg, tr("Copy to Every Tower"),
+            n == 0 ? tr("Every tower already has this hanger.")
+                   : tr("Added this hanger to %n more tower(s).", "", n));
+    });
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    apply();
+    const quint32 hang = hangCb->currentData().toUInt();
+    if (hang != hungNow)
+    {
+        if (hang == UINT_MAX)
+            m_graphicsView->unmountFixture(hungNow);
+        else
+            m_graphicsView->attachFixtureToHanger(hang, hid);
+    }
     m_graphicsView->refreshFixtureBindings();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
@@ -8612,27 +8879,6 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
                                  "mount — e.g. lift a followspot above the truss."));
     rigForm->addRow(tr("Height offset:"), heightOffSpin);
 
-    /* Hanger: hung off its structure on an arm and a drop -- a lantern on a
-       bracket off the side of a tower. 0 and 0 = fastened at the mount. */
-    QDoubleSpinBox *hangerArmSpin = new QDoubleSpinBox;
-    hangerArmSpin->setRange(0, 5 * toDisp_fx);
-    hangerArmSpin->setSuffix(unitSfx_fx); hangerArmSpin->setDecimals(2);
-    hangerArmSpin->setToolTip(tr("How far the hanger's arm reaches out from the structure"));
-    rigForm->addRow(tr("Hanger arm:"), hangerArmSpin);
-    QComboBox *hangerDirCb = new QComboBox;
-    const QList<QPair<QString, int> > hangerDirs = {
-        { tr("Downstage"), 0 }, { tr("Downstage left"), 45 }, { tr("Stage left"), 90 },
-        { tr("Upstage left"), 135 }, { tr("Upstage"), 180 }, { tr("Upstage right"), 225 },
-        { tr("Stage right"), 270 }, { tr("Downstage right"), 315 } };
-    for (const auto &d : hangerDirs)
-        hangerDirCb->addItem(d.first, d.second);
-    hangerDirCb->setToolTip(tr("Which way the arm points, seen from above"));
-    rigForm->addRow(tr("Hanger points:"), hangerDirCb);
-    QDoubleSpinBox *hangerDropSpin = new QDoubleSpinBox;
-    hangerDropSpin->setRange(0, 10 * toDisp_fx);
-    hangerDropSpin->setSuffix(unitSfx_fx); hangerDropSpin->setDecimals(2);
-    hangerDropSpin->setToolTip(tr("How far it hangs below the end of the arm, on its chain or cable"));
-    rigForm->addRow(tr("Hanger drop:"), hangerDropSpin);
 
     // Deck mount: a fixture standing on top of a platform ("floor mounted").
     QComboBox *deckCb = new QComboBox;
@@ -8779,21 +9025,6 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         { deckCb->setCurrentIndex(i); break; }
     deckHeightSpin->setValue(double(rp.deckHeightOffset) * toDisp_fx);
     heightOffSpin->setValue(double(rp.mountZOffset) * toDisp_fx);
-    hangerArmSpin->setValue(double(rp.hangerArm) * toDisp_fx);
-    hangerDropSpin->setValue(double(rp.hangerDrop) * toDisp_fx);
-    {
-        // The nearest of the eight; a value set elsewhere that is none of them
-        // is kept as it is unless the combo is changed.
-        int best = 0;
-        double bestD = 1e9;
-        for (int i = 0; i < hangerDirCb->count(); ++i)
-        {
-            double d = qAbs(std::fmod(double(rp.hangerAngle) - hangerDirCb->itemData(i).toDouble() + 540.0, 360.0) - 180.0);
-            if (d < bestD) { bestD = d; best = i; }
-        }
-        hangerDirCb->setCurrentIndex(best);
-    }
-    const int initialHangerDirIndex = hangerDirCb->currentIndex();
     panZeroSpin->setValue(double(rp.panZeroDir));
     panOffsetSpin->setValue(double(rp.panOffsetDeg));
     tiltOffsetSpin->setValue(double(rp.tiltOffsetDeg));
@@ -8828,7 +9059,6 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     const bool structMount = rp.trussId != Truss::invalidId()
         || rp.pipeId != Pipe::invalidId() || rp.towerId != Tower::invalidId();
     if (!structMount) hideRow(heightOffSpin);
-    if (!structMount) { hideRow(hangerArmSpin); hideRow(hangerDirCb); hideRow(hangerDropSpin); }
     // Aim (pan-zero / front of device) applies to movers AND fixed beams (their
     // facing); a strip uses Face+Angle instead. Pan/tilt CAL + Test are movers-only.
     if (isStrip) hideRow(panZeroSpin);
@@ -9335,10 +9565,6 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     newRp.deckPlatformId = deckCb->currentData().toUInt();
     newRp.deckHeightOffset = float(deckHeightSpin->value() * fromDisp_fx);
     newRp.mountZOffset = float(heightOffSpin->value() * fromDisp_fx);
-    newRp.hangerArm  = float(hangerArmSpin->value() * fromDisp_fx);
-    newRp.hangerDrop = float(hangerDropSpin->value() * fromDisp_fx);
-    if (hangerDirCb->currentIndex() != initialHangerDirIndex)
-        newRp.hangerAngle = float(hangerDirCb->currentData().toInt());
     newRp.panZeroDir    = float(panZeroSpin->value());
     newRp.panOffsetDeg  = float(panOffsetSpin->value());
     newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());

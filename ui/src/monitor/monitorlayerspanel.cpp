@@ -429,6 +429,26 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
         d.color   = sc->color();
         out << d;
     }
+    /* Hangers sit with what they hang off: its layer and its group. */
+    foreach (Hanger *h, m_props->hangers())
+    {
+        ItemDesc d;
+        d.kind    = QStringLiteral("hanger");
+        d.id      = h->id();
+        d.name    = h->name().isEmpty() ? tr("Hanger %1").arg(h->id() + 1) : h->name();
+        d.layerId = h->layerId();
+        d.groupId = 0;
+        if (h->parentKind() == Hanger::OnTruss)
+        {
+            if (Truss *t = m_props->truss(h->parentId())) { d.layerId = t->layerId(); d.groupId = t->groupId(); }
+        }
+        else if (Tower *tw = m_props->tower(h->parentId()))
+        {
+            d.layerId = tw->layerId();
+            d.groupId = tw->groupId();
+        }
+        out << d;
+    }
     foreach (Tower *t, m_props->towers())
     {
         ItemDesc d;
@@ -610,6 +630,7 @@ QIcon MonitorLayersPanel::kindIcon(const QString &kind, const QColor &color) con
     if (kind == QStringLiteral("pipe"))     return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xA4"), QColor(150, 200, 235)); // 🎤 boom
     if (kind == QStringLiteral("stand"))    return glyphIcon(QStringLiteral("\xF0\x9F\x93\x8D"), QColor(150, 200, 235)); // 📍 stand
     if (kind == QStringLiteral("tower"))    return glyphIcon(QStringLiteral("\xF0\x9F\x8F\xAF"), QColor(150, 200, 235)); // 🏯 tower
+    if (kind == QStringLiteral("hanger"))   return glyphIcon(QStringLiteral("\xF0\x9F\xAA\x9D"), QColor(150, 200, 235)); // 🪝 hanger
     if (kind == QStringLiteral("power"))    return glyphIcon(QStringLiteral("\xE2\x9A\xA1"), QColor(235, 185, 0));       // ⚡
     if (kind == QStringLiteral("network"))  return glyphIcon(QStringLiteral("\xF0\x9F\x8C\x90"), QColor(70, 140, 220));  // 🌐 network node
     if (kind == QStringLiteral("target"))   return glyphIcon(QStringLiteral("\xF0\x9F\x8E\xAF"), QColor(255, 180, 0));    // 🎯 aim target

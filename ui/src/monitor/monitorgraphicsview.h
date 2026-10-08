@@ -672,6 +672,9 @@ public:
      *  was removed so assignment is now always explicit). */
     void attachFixtureToTruss(quint32 fid, quint32 trussId);
     void attachFixtureToPipe(quint32 fid, quint32 pipeId);
+    /** Hang @p fid on hanger @p hangerId's hook. One hook: a fixture already
+     *  on it comes off, staying where it was. */
+    void attachFixtureToHanger(quint32 fid, quint32 hangerId);
     /** Same idea for a tower: mounts on its first shelf (or the shelf it's
      *  already on, if reattaching), centred on that shelf's footprint. No
      *  natural "along the run" position to snap to from a plain drop the way
@@ -964,6 +967,7 @@ signals:
     /** Signal emitted when the user double-clicks a platform item */
     void platformDoubleClicked(quint32 pid);
     void pipeDoubleClicked(quint32 pipeId);
+    void hangerDoubleClicked(quint32 hangerId);
     void standDoubleClicked(quint32 standId);
     void sceneryDoubleClicked(quint32 sceneryId);
     void towerDoubleClicked(quint32 towerId);
@@ -976,6 +980,7 @@ signals:
     /** Delete requests for the structural features that lacked a right-click
      *  Delete (truss/platform/image already have theirs above). */
     void pipeRemoveRequested(quint32 pipeId);
+    void hangerRemoveRequested(quint32 hangerId);
     void standRemoveRequested(quint32 standId);
     void sceneryRemoveRequested(quint32 sceneryId);
     void towerRemoveRequested(quint32 towerId);
