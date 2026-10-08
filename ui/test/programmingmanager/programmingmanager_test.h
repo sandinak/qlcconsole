@@ -30,6 +30,10 @@ private slots:
     void init();
     void cleanup();
 
+    /** "fixtures and groups needs a text field search ... that narrows the
+     *  view similar to search the tree for layers". */
+    void fixturesAndGroupsNarrowToASearch();
+
     /** "Didn't change colour when colour was changed in program from white
      *  to blue." A palette isn't a Function, so editing one through the real
      *  look editor UI must explicitly tell the scenes that use it -- nothing

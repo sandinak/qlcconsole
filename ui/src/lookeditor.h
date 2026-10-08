@@ -227,6 +227,7 @@ private:
 
     // Effect page
     int m_pageEffect;
+    class EffectBrowser *m_effectBrowser = nullptr;   ///< the visible picker over m_effectScriptCombo
     QComboBox   *m_effectScriptCombo;
     QLabel      *m_effectDescLabel;   //!< one-line description below combo
     QLabel      *m_effectNotesLabel;  //!< longer paragraph in edit panel
@@ -288,6 +289,9 @@ private:
 
     /** Fill the effect picker combo with presets + raw scripts grouped by
      *  category, and select the entry matching palette @p p. */
+    /** WLED's effects by name: a WLED fixture's in the show (its firmware's
+     *  list), else the installed WLED definition's. Empty when neither. */
+    QStringList wledEffectNames() const;
     void populateEffectPicker(QLCPalette *p);
 
     /** Auto-set palette name from its value when it still has the factory

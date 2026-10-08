@@ -48,6 +48,12 @@ public slots:
     /** Rebuild the tree from the Doc's fixtures and groups. */
     void reload();
 
+    /** Narrow the tree to rows whose name holds @p text (any case): a row
+     *  stays when it or anything under it matches, the branches down to a
+     *  match open, and a matching group or folder keeps everything in it.
+     *  Empty shows everything. Kept across reload(). */
+    void setFilterText(const QString &text);
+
 signals:
     /** A group row was double-clicked (host may visualize/edit it). */
     void groupDoubleClicked(quint32 groupId);
@@ -102,6 +108,7 @@ private:
     Doc *m_doc;
     QHash<QString, QTreeWidgetItem*> m_folderMap; //!< rebuilt each reload()
     bool m_clearing = false;  //!< true while the Doc is clearing/tearing down
+    QString m_filter;         //!< setFilterText(), re-applied after reload()
 };
 
 /** @} */

@@ -218,6 +218,37 @@ void FixtureGroupSource::reload()
 
     // Start collapsed — expand a group/universe to reach its fixtures.
     collapseAll();
+    if (!m_filter.isEmpty())
+        setFilterText(m_filter);
+}
+
+namespace
+{
+/** Show @p node when it or anything under it holds @p t; a node that holds
+ *  it keeps all it contains. Returns whether @p node is shown. */
+bool applyFilter(QTreeWidgetItem *node, const QString &t, bool parentMatched)
+{
+    const bool self = t.isEmpty() || parentMatched || node->text(0).contains(t, Qt::CaseInsensitive);
+    bool child = false;
+    for (int i = 0; i < node->childCount(); ++i)
+        child = applyFilter(node->child(i), t, self && !t.isEmpty()) || child;
+    const bool visible = self || child;
+    node->setHidden(!visible);
+    if (!t.isEmpty() && child)
+        node->setExpanded(true);    // open the way down to what matched
+    return visible;
+}
+}
+
+void FixtureGroupSource::setFilterText(const QString &text)
+{
+    const QString t = text.trimmed();
+    const bool cleared = !m_filter.isEmpty() && t.isEmpty();
+    m_filter = t;
+    for (int i = 0; i < topLevelItemCount(); ++i)
+        applyFilter(topLevelItem(i), t, false);
+    if (cleared)
+        collapseAll();              // back as it opens: collapsed
 }
 
 void FixtureGroupSource::addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f)

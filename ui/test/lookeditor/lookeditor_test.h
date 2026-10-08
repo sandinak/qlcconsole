@@ -36,6 +36,9 @@ private slots:
     /** A slot a unit has fitted with other glass (Gobo Wheels…) is listed
      *  as that glass, by name, with its picture. */
     void aSwappedSlotShowsItsOwnGlass();
+    /** "when selecting an effect we need a better way than a drop down ...
+     *  AND for WLED based fixtures we should be selecting WLED effects". */
+    void effectsArePickedFromABrowserWithWledsOwn();
 };
 
 #endif

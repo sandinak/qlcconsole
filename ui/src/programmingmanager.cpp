@@ -563,8 +563,16 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     srcCol->addWidget(sourceTab, 3);
 
     srcCol->addWidget(new QLabel(tr("Fixtures & groups"), sourcePanel));
+    // Find a group or fixture by name in a long list (as Layers does).
+    QLineEdit *fixGroupFilter = new QLineEdit(sourcePanel);
+    fixGroupFilter->setObjectName(QStringLiteral("fixGroupFilter"));
+    fixGroupFilter->setPlaceholderText(tr("Search fixtures & groups…"));
+    fixGroupFilter->setClearButtonEnabled(true);
+    srcCol->addWidget(fixGroupFilter);
     m_fixGroupSource = new FixtureGroupSource(m_doc, sourcePanel);
     srcCol->addWidget(m_fixGroupSource, 2);
+    connect(fixGroupFilter, &QLineEdit::textChanged,
+            m_fixGroupSource, &FixtureGroupSource::setFilterText);
     connect(m_fixGroupSource, &QTreeWidget::itemSelectionChanged,
             this, &ProgrammingManager::slotFixGroupSourceSelectionChanged);
     // Double-click a group in the source tree -> visualize/edit its head layout
@@ -1078,8 +1086,13 @@ bool ProgrammingManager::organizeEffectPalettes()
 
         const QString base = scache->nameFromPath(p->scriptPath());
         const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
-        const QString engine = meta.displayName.isEmpty() ? base : meta.displayName;
-        const QString cat    = EffectScriptCache::categoryForTypes(meta.fixtureTypes);
+        // A WLED look files under WLED, by WLED's name for it -- as the
+        // effect browser lists it -- not under its port's (or stand-in's).
+        const bool wled = !p->wledEffect().isEmpty();
+        const QString engine = wled ? p->wledEffect()
+                                    : meta.displayName.isEmpty() ? base : meta.displayName;
+        const QString cat    = wled ? QStringLiteral("WLED")
+                                    : EffectScriptCache::categoryForTypes(meta.fixtureTypes);
         if (engine.isEmpty() || cat.isEmpty())
             continue;
 

@@ -34,6 +34,9 @@
 #include <QDialogButtonBox>
 #include <QDialog>
 #include "lookeditor.h"
+#include "effectbrowser.h"
+#include "qlcfixturedefcache.h"
+#include "wledfixture.h"
 #include "pathdrawwidget.h"
 #include "gradientdirectionwidget.h"
 #include "virtualconsole/vcxypadarea.h"
@@ -84,7 +87,9 @@ static const char *PALETTE_DROP_MIME = "application/x-qlcplus-palettes";
 
 // Effect picker combo: each item is a category header, a raw engine script, or
 // a preset. The kind is stored at EffectKindRole, the name at Qt::UserRole.
-enum { EffectKindHeader = 0, EffectKindScript = 1, EffectKindPreset = 2 };
+// A WLED item is one of WLED's own effects, run ON WLED fixtures by the device
+// (QLCPalette::wledEffect()) and by its port, where there is one, elsewhere.
+enum { EffectKindHeader = 0, EffectKindScript = 1, EffectKindPreset = 2, EffectKindWled = 3 };
 static const int EffectKindRole = Qt::UserRole + 1;
 
 // Display order for the category groups in the effect picker.
@@ -577,7 +582,8 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
     // Effect picker row (Effects grouped by category, each over a Generator)
     QHBoxLayout *efScriptRow = new QHBoxLayout();
-    efScriptRow->addWidget(new QLabel(tr("Effect:"), effectPage));
+    QLabel *effectLabel = new QLabel(tr("Effect:"), effectPage);
+    efScriptRow->addWidget(effectLabel);
     m_effectScriptCombo = new QComboBox(effectPage);
     m_effectScriptCombo->setToolTip(tr("Pick an Effect (or a raw Generator) for this look"));
     /* Cap the popup and force it to scroll. Several styles (macOS among them)
@@ -612,6 +618,17 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     efScriptRow->addWidget(m_editScriptButton);
 
     efv->addLayout(efScriptRow);
+
+    /* The picker itself: search, a tab per category, each effect with what it
+       does and a strip of lights running it ("a better way than a drop down
+       ... too long and too disjointed"). It mirrors the combo above, which
+       stays the one source of truth but is no longer shown. */
+    m_effectScriptCombo->hide();
+    browseBtn->hide();
+    effectLabel->hide();
+    efScriptRow->insertStretch(0, 1);
+    m_effectBrowser = new EffectBrowser(m_doc, m_effectScriptCombo, effectPage);
+    efv->addWidget(m_effectBrowser, 1);
 
     // Short description label (one line, shown below combo)
     m_effectDescLabel = new QLabel(effectPage);
@@ -1054,6 +1071,7 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     {
         // Prefer the preset's name ("Breathe") over the engine basename.
         if (!p->effectPreset().isEmpty()) { autoName = p->effectPreset(); break; }
+        if (!p->wledEffect().isEmpty()) { autoName = tr("WLED %1").arg(p->wledEffect()); break; }
         const QString path = p->scriptPath();
         if (!path.isEmpty() && m_doc->effectScriptRunner())
         {
@@ -2273,7 +2291,58 @@ void LookEditor::populateEffectPicker(QLCPalette *p)
         }
     }
 
+    /* WLED's own effects, where the show has WLED fixtures or the WLED
+       definitions are installed: run by the device on WLED fixtures, by their
+       port (if any) on everything else. */
+    const QStringList wled = wledEffectNames();
+    if (!wled.isEmpty())
+    {
+        addHeader(QStringLiteral("WLED"));
+        const QString curWled = p ? p->wledEffect() : QString();
+        for (const QString &fx : wled)
+        {
+            m_effectScriptCombo->addItem(QStringLiteral("  ") + fx, fx);
+            const int widx = m_effectScriptCombo->count() - 1;
+            m_effectScriptCombo->setItemData(widx, EffectKindWled, EffectKindRole);
+            const bool ported = !scache->scriptPathForWled(fx).isEmpty();
+            m_effectScriptCombo->setItemData(widx, ported
+                ? tr("WLED's %1, run by WLED fixtures themselves; others run its port").arg(fx)
+                : tr("WLED's %1, run by WLED fixtures themselves (no port yet: "
+                     "other fixtures are left as the look sets them)").arg(fx), Qt::ToolTipRole);
+            if (!curWled.isEmpty() && fx.compare(curWled, Qt::CaseInsensitive) == 0)
+                selectIdx = widx;
+        }
+    }
+
     m_effectScriptCombo->setCurrentIndex(selectIdx);
+    if (m_effectBrowser != nullptr)
+        m_effectBrowser->reload();
+}
+
+QStringList LookEditor::wledEffectNames() const
+{
+    // A WLED fixture in the show says what its firmware's list is...
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (WledFixture::runsEffects(fx))
+            return WledFixture::effectNames(fx);
+    // ...else the installed WLED definition's.
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("WLED"),
+                                                             QStringLiteral("Lantern"));
+    if (def == nullptr)
+        def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("WLED"), QStringLiteral("Effect Mode"));
+    QStringList out;
+    if (def != nullptr)
+    {
+        foreach (QLCChannel *ch, def->channels())
+        {
+            if (ch->name() == QLatin1String("Effect"))
+            {
+                foreach (QLCCapability *cap, ch->capabilities())
+                    out << cap->name();
+            }
+        }
+    }
+    return out;
 }
 
 void LookEditor::slotEffectScriptChanged(int /*index*/)
@@ -2327,7 +2396,21 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         }
     };
 
-    if (kind == EffectKindPreset)
+    if (kind == EffectKindWled)
+    {
+        /* One of WLED's own: WLED fixtures run it (QLCPalette::wledEffect());
+           everything else runs its port, or -- with none yet -- the stand-in
+           that only gives the look WLED's controls. */
+        QString path = scache->scriptPathForWled(name);
+        if (path.isEmpty())
+            path = scache->scriptPath(QStringLiteral("WLED device effect"));
+        p->setScriptPath(path);
+        p->setEffectPreset(QString());
+        p->setWledEffect(name);
+        p->clearEffectParamValues();
+        carryOverParams(p, path);
+    }
+    else if (kind == EffectKindPreset)
     {
         // Stamp the preset: engine script + pinned param values + identity. The
         // preset's own values win; shared params it doesn't pin still carry over.
@@ -2336,6 +2419,7 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         const QString path = scache->scriptPath(pr.script);
         p->setScriptPath(path);
         p->setEffectPreset(pr.name);
+        p->setWledEffect(QString());
         p->clearEffectParamValues();
         carryOverParams(p, path);
         for (auto it = pr.params.constBegin(); it != pr.params.constEnd(); ++it)
@@ -2348,6 +2432,7 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         const QString path = name.isEmpty() ? QString() : scache->scriptPath(name);
         p->setScriptPath(path);
         p->setEffectPreset(QString());
+        p->setWledEffect(QString());
         p->clearEffectParamValues();
         carryOverParams(p, path);
     }
@@ -2360,7 +2445,9 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
     // so browsing effect palettes reads the same as the script picker.
     {
         QString engineBase;
-        if (kind == EffectKindPreset)
+        if (kind == EffectKindWled)
+            maybeAutoPath(p, QStringLiteral("WLED"), name);
+        else if (kind == EffectKindPreset)
             engineBase = m_doc->effectScriptRunner()->presetCache()->preset(name).script;
         else if (!name.isEmpty())
             engineBase = scache->nameFromPath(scache->scriptPath(name));

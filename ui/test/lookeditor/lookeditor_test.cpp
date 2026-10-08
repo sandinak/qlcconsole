@@ -26,7 +26,13 @@
 
 #define private public
 #include "lookeditor.h"
+#include "effectbrowser.h"
 #undef private
+#include <QListWidget>
+#include <QLineEdit>
+#include <QTabBar>
+#include "effectscriptrunner.h"
+#include "effectscriptcache.h"
 #include "qlcpalette.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -230,6 +236,107 @@ void LookEditor_Test::aSwappedSlotShowsItsOwnGlass()
     }
     delete spot;
     GoboLibrary::setUserDirectoryOverride(QString());
+}
+
+void LookEditor_Test::effectsArePickedFromABrowserWithWledsOwn()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    // A WLED lantern in the show: its firmware's effects are offered.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf"),
+             QFile::NoError);
+    Fixture *lantern = new Fixture(&doc);
+    lantern->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    QVERIFY(doc.addFixture(lantern));
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("New Effect");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    QVERIFY(browser != nullptr);
+    QVERIFY(!ed.m_effectScriptCombo->isVisible());      // the browser, not a dropdown
+
+    const QStringList tabs = browser->tabNames();
+    QCOMPARE(tabs.first(), QString("Recent"));
+    QVERIFY(tabs.contains("Color"));
+    QCOMPARE(tabs.last(), QString("WLED"));
+
+    // A row by its name -- and, where names repeat (an RGB Matrix "Fireworks"
+    // beside WLED's), by its category.
+    auto rowNamed = [browser](const QString &label, const QString &category = QString()) -> QListWidgetItem * {
+        for (int i = 0; i < browser->list()->count(); ++i)
+        {
+            QListWidgetItem *it = browser->list()->item(i);
+            const int e = it->data(Qt::UserRole + 10).toInt();
+            if (it->text() == label
+                && (category.isEmpty() || browser->m_entries.at(e).category == category))
+                return it;
+        }
+        return nullptr;
+    };
+
+    // Search finds it wherever it lives: WLED's Chase and the port's generator.
+    browser->search()->setText("chase");
+    QVERIFY(rowNamed("Chase", "WLED") != nullptr);
+    QVERIFY(rowNamed("WLED Chase") != nullptr);
+    QVERIFY(rowNamed("Breathe") == nullptr);
+
+    // Picking WLED's Chase: the lantern runs it, everything else its port.
+    QListWidgetItem *chase = rowNamed("Chase", "WLED");
+    browser->list()->setCurrentItem(chase);
+    emit browser->list()->itemClicked(chase);
+    QCOMPARE(look->wledEffect(), QString("Chase"));
+    QVERIFY(look->scriptPath().endsWith("wled-chase.js"));
+    QCOMPARE(look->name(), QString("WLED Chase"));
+    QCOMPARE(EffectBrowser::recent().first(), QString("3:Chase"));
+
+    // One with no port: the device runs it; the look gets WLED's controls.
+    browser->search()->setText("fireworks");
+    QListWidgetItem *fireworks = rowNamed("Fireworks", "WLED");
+    QVERIFY(fireworks != nullptr);
+    emit browser->list()->itemClicked(fireworks);
+    QCOMPARE(look->wledEffect(), QString("Fireworks"));
+    QVERIFY(look->scriptPath().endsWith("wled-device.js"));
+
+    // An ordinary effect is not a WLED one.
+    browser->search()->setText("breathe");
+    QListWidgetItem *breathe = rowNamed("WLED Breathe");
+    QVERIFY(breathe != nullptr);
+    emit browser->list()->itemClicked(breathe);
+    QVERIFY(look->wledEffect().isEmpty());
+    QVERIFY(look->scriptPath().endsWith("wled-breathe.js"));
+
+    // The stand-in is never listed.
+    browser->search()->setText("device effect");
+    QVERIFY(rowNamed("WLED device effect") == nullptr);
+
+    // Previews run: a visible row has a frame of sixteen lights.
+    browser->search()->setText("WLED Chase");
+    browser->resize(500, 400);
+    browser->show();
+    QCoreApplication::processEvents();
+    browser->tickPreviews();
+    QCOMPARE(browser->m_frames.value(rowNamed("WLED Chase")->data(Qt::UserRole + 11).toString()).size(), 16);
+    if (!qEnvironmentVariableIsEmpty("BROWSER_PNG"))
+    {
+        browser->search()->clear();
+        browser->tabs()->setCurrentIndex(browser->tabNames().indexOf("Color"));
+        for (int k = 0; k < 6; ++k)
+        {
+            QTest::qWait(90);
+            browser->tickPreviews();
+        }
+        browser->setParent(nullptr);
+        browser->resize(560, 420);
+        browser->show();
+        QCoreApplication::processEvents();
+        browser->tickPreviews();
+        browser->grab().save(qEnvironmentVariable("BROWSER_PNG"));
+        browser->setParent(&ed);
+    }
 }
 
 QTEST_MAIN(LookEditor_Test)

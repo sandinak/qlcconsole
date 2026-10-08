@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include <QLineEdit>
 #include <QSignalSpy>
 #include <QMimeData>
 #include <QDropEvent>
@@ -174,6 +175,74 @@ void ProgrammingManager_Test::init()
 void ProgrammingManager_Test::cleanup()
 {
     delete m_doc;
+}
+
+void ProgrammingManager_Test::fixturesAndGroupsNarrowToASearch()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    int address = 0;
+    auto group = [this, &address](const QString &name, const QStringList &members) {
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(name);
+        g->setSize(QSize(members.size(), 1));
+        m_doc->addFixtureGroup(g);
+        foreach (const QString &m, members)
+        {
+            Fixture *f = new Fixture(m_doc);
+            f->setName(m);
+            f->setChannels(1);
+            f->setAddress(quint32(address++));
+            QVERIFY(m_doc->addFixture(f));
+            g->assignFixture(f->id());
+        }
+    };
+    group("CS1f", { "Step L1", "Step L2" });
+    group("DS1f", { "Step R1", "Step R2" });
+    group("AT-W-Top", { "Lantern SL", "Lantern SR" });
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    FixtureGroupSource *tree = mgr.findChild<FixtureGroupSource *>();
+    QLineEdit *search = mgr.findChild<QLineEdit *>(QStringLiteral("fixGroupFilter"));
+    QVERIFY(tree != nullptr && search != nullptr);
+    tree->reload();
+    auto row = [tree](const QString &startsWith) -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->text(0).startsWith(startsWith))
+                return *it;
+        return nullptr;
+    };
+    auto shown = [&](const QString &startsWith) {
+        QTreeWidgetItem *it = row(startsWith);
+        for (QTreeWidgetItem *p = it; p != nullptr; p = p->parent())
+            if (p->isHidden())
+                return false;
+        return it != nullptr;
+    };
+    QVERIFY(shown("CS1f") && shown("DS1f") && shown("AT-W-Top"));
+
+    // A group by name: it, and all it holds.
+    search->setText("cs1");
+    QVERIFY(shown("CS1f"));
+    QVERIFY(!shown("DS1f"));
+    QVERIFY(!shown("AT-W-Top"));
+    QVERIFY(shown("Step L1") && shown("Step L2"));
+
+    // A fixture by name: its group opened to show it, its neighbours gone.
+    search->setText("lantern sl");
+    QVERIFY(shown("AT-W-Top"));
+    QVERIFY(row("AT-W-Top")->isExpanded());
+    QVERIFY(shown("Lantern SL"));
+    QVERIFY(!shown("Lantern SR"));
+    QVERIFY(!shown("CS1f"));
+
+    // Kept when the tree is rebuilt.
+    tree->reload();
+    QVERIFY(shown("Lantern SL") && !shown("CS1f"));
+
+    // Cleared: everything back, closed.
+    search->clear();
+    QVERIFY(shown("CS1f") && shown("DS1f") && shown("AT-W-Top"));
+    QVERIFY(!row("AT-W-Top")->isExpanded());
 }
 
 void ProgrammingManager_Test::editingALookColourNotifiesItsScene()
