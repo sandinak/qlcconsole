@@ -187,3 +187,103 @@ QVector<QVector3D> RigHeads::headPositions(Doc *doc, quint32 fid)
     }
     return out;
 }
+
+int RigHeads::lightLeds(Doc *doc, quint32 fid, int deviceLeds, int *layout)
+{
+    Fixture *fx = (doc != nullptr) ? doc->fixture(fid) : nullptr;
+    if (fx == nullptr || doc->monitorProperties() == nullptr)
+        return 0;
+    const FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(fid);
+    const QLCFixtureMode *mode = fx->fixtureMode();
+    const int defLeds = mode != nullptr ? mode->physical().leds() : 0;
+    const int defLayout = mode != nullptr ? int(mode->physical().ledLayout())
+                                          : int(QLCPhysical::ClusterLeds);
+    if (layout != nullptr)
+        *layout = rp.lightLayout >= 0 ? rp.lightLayout : defLayout;
+
+    if (rp.lightLeds >= 0)
+        return rp.lightLeds;                // this one's real build
+    if (defLeds <= 0)
+        return 0;                           // a point, as the definition says
+    return deviceLeds > 0 ? deviceLeds : defLeds;
+}
+
+QVector<QVector3D> RigHeads::lightPoints(Doc *doc, quint32 fid, int deviceLeds)
+{
+    QVector<QVector3D> out;
+    int layout = QLCPhysical::ClusterLeds;
+    const int n = qMin(lightLeds(doc, fid, deviceLeds, &layout), 1024);
+    if (n <= 0)
+        return out;
+
+    Fixture *fx = doc->fixture(fid);
+    const FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(fid);
+    float physW = 0.0f, physH = 0.0f, physD = 0.0f;
+    if (const QLCFixtureMode *mode = fx->fixtureMode())
+    {
+        const QLCPhysical &phys = mode->physical();
+        if (phys.width()  > 0) physW = float(phys.width())  / 1000.0f;
+        if (phys.height() > 0) physH = float(phys.height()) / 1000.0f;
+        if (phys.depth()  > 0) physD = float(phys.depth())  / 1000.0f;
+    }
+    // The body the rig view builds (headPositions() above).
+    const double w = physW > 0.0f ? double(physW) : 0.3;
+    const double h = physH > 0.0f ? double(physH) : w * 0.2;
+    const double d = physD > 0.0f ? double(physD) : h;
+    QVector3D L, N, H;
+    frame(rp, L, N, H);
+    const double seat = (rp.placement == FixtureRigProps::Inside) ? 0.0 : 0.5;
+    const QVector3D c = fixtureCentre(doc, fid) + N * float(d * seat);
+    // The first LED at the TOP, whichever way the frame's H points: a string
+    // is wired from where it hangs.
+    const QVector3D up = (H.z() < 0.0f) ? -H : H;
+
+    out.resize(n);
+    for (int i = 0; i < n; ++i)
+    {
+        const double t = (i + 0.5) / n;
+        switch (layout)
+        {
+        case QLCPhysical::TapeLeds:
+        {
+            /* LED tape wound tight round a core in the middle: a narrow
+               helix, eight to a turn, top to bottom. Less spread than a
+               cluster -- the light comes from one bright column. */
+            const double a = 2.0 * M_PI * i / 8.0;
+            const double rx = qMax(0.008, 0.07 * w), ry = qMax(0.008, 0.07 * d);
+            out[i] = c + L * float(rx * qCos(a)) + N * float(ry * qSin(a))
+                       + up * float(h * (0.18 - 0.36 * t));
+            break;
+        }
+        case QLCPhysical::ClusterLeds:
+        default:
+        {
+            /* A wire string hung from the top and let fall in a loose bunch:
+               through most of the cage, top to bottom in order (a golden-
+               angle spiral), each a different way in or out -- the same
+               every time, so a frame never shimmers. */
+            const double zz = 1.0 - 2.0 * t;
+            const double rr = qSqrt(qMax(0.0, 1.0 - zz * zz));
+            const double phi = i * 2.399963;
+            double jitter = qSin(i * 12.9898) * 43758.5453;
+            jitter = 0.40 + 0.60 * (jitter - qFloor(jitter));
+            out[i] = c + L * float(0.36 * w * jitter * rr * qCos(phi))
+                       + N * float(0.36 * d * jitter * rr * qSin(phi))
+                       + up * float(0.28 * h * zz);
+            break;
+        }
+        }
+    }
+    return out;
+}
+
+bool RigHeads::clearGlass(Doc *doc, quint32 fid)
+{
+    Fixture *fx = (doc != nullptr) ? doc->fixture(fid) : nullptr;
+    if (fx == nullptr || doc->monitorProperties() == nullptr)
+        return false;
+    const int own = doc->monitorProperties()->fixtureRigProps(fid).lightGlass;
+    if (own >= 0)
+        return own == 1;
+    return fx->fixtureMode() != nullptr && fx->fixtureMode()->physical().clearGlass();
+}

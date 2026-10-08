@@ -2458,6 +2458,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.mountZOffset = a.value("MountZ").toFloat();
             if (a.hasAttribute("Hanger"))
                 rp.hangerId = a.value("Hanger").toUInt();
+            if (a.hasAttribute("LEDs"))
+                rp.lightLeds = qMax(-1, a.value("LEDs").toInt());
+            if (a.hasAttribute("LEDLayout"))
+                rp.lightLayout = qBound(-1, a.value("LEDLayout").toInt(), 1);
+            if (a.hasAttribute("Glass"))
+                rp.lightGlass = qBound(-1, a.value("Glass").toInt(), 1);
             if (a.hasAttribute("Deck"))
             {
                 rp.deckPlatformId   = a.value("Deck").toUInt();
@@ -3197,6 +3203,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("MountZ"), QString::number(double(rp.mountZOffset), 'f', 3));
         if (rp.onHanger())
             doc->writeAttribute(QStringLiteral("Hanger"), QString::number(rp.hangerId));
+        if (rp.lightLeds >= 0)
+            doc->writeAttribute(QStringLiteral("LEDs"), QString::number(rp.lightLeds));
+        if (rp.lightLayout >= 0)
+            doc->writeAttribute(QStringLiteral("LEDLayout"), QString::number(rp.lightLayout));
+        if (rp.lightGlass >= 0)
+            doc->writeAttribute(QStringLiteral("Glass"), QString::number(rp.lightGlass));
         if (rp.onDeck())
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));

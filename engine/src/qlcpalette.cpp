@@ -70,6 +70,7 @@ QLCPalette *QLCPalette::createCopy()
     copy->setScriptPath(this->scriptPath());
     copy->setPersistent(this->persistent());
     copy->setEffectPreset(this->effectPreset());
+    copy->setWledEffect(this->wledEffect());
     copy->setEffectInputBindings(this->effectInputBindings());
     for (auto it = m_effectPaletteBindings.constBegin();
          it != m_effectPaletteBindings.constEnd(); ++it)
@@ -1409,6 +1410,8 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 m_scriptPath = doc.readElementText();
             else if (doc.name() == QLatin1String("EffectPreset"))
                 m_effectPreset = doc.readElementText();
+            else if (doc.name() == QLatin1String("WledEffect"))
+                m_wledEffect = doc.readElementText();
             else if (doc.name() == QLatin1String("EffectInputBinding"))
             {
                 QString slot   = doc.attributes().value("slot").toString();
@@ -1573,6 +1576,13 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             // Preset identity (display only); script+params above are authoritative.
             doc->writeStartElement("EffectPreset");
             doc->writeCharacters(m_effectPreset);
+            doc->writeEndElement();
+        }
+        if (!m_wledEffect.isEmpty())
+        {
+            // Run ON WLED fixtures by the device (see wledEffect()).
+            doc->writeStartElement("WledEffect");
+            doc->writeCharacters(m_wledEffect);
             doc->writeEndElement();
         }
         for (auto it = m_effectInputBindings.constBegin();

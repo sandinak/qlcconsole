@@ -6,9 +6,12 @@
 */
 
 #include "effectscript.h"
+#include "effectscriptcache.h"
 
+#include <QRegularExpression>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QMap>
 #include <QDebug>
 
@@ -99,6 +102,7 @@ bool EffectScript::load(const QString &path)
     m_description.clear();
     m_notes.clear();
     m_author.clear();
+    m_wled.clear();
     m_apiVersion = 0;
     m_lifecycle = QStringLiteral("loop");
     m_syncTo    = QStringLiteral("span");
@@ -121,6 +125,34 @@ bool EffectScript::load(const QString &path)
     }
     const QString contents = QString::fromUtf8(f.readAll());
     f.close();
+
+    // Its helper libraries first (effect.requires), into the same engine.
+    const QRegularExpressionMatch req =
+        QRegularExpression(QStringLiteral("effect\\.requires\\s*=\\s*\\[([^\\]]*)\\]")).match(contents);
+    if (req.hasMatch())
+    {
+        QRegularExpressionMatchIterator items =
+            QRegularExpression(QStringLiteral("[\"']([A-Za-z0-9_-]+)[\"']")).globalMatch(req.captured(1));
+        while (items.hasNext())
+        {
+            const QString lib = items.next().captured(1) + QStringLiteral(".js");
+            QString libPath = QFileInfo(path).dir().filePath(QStringLiteral("lib/") + lib);
+            if (!QFileInfo::exists(libPath))
+                libPath = EffectScriptCache::systemScriptsDirectory().filePath(QStringLiteral("lib/") + lib);
+            QFile lf(libPath);
+            if (!lf.open(QIODevice::ReadOnly | QIODevice::Text))
+            {
+                qWarning() << "[EffectScript]" << path << "needs" << lib << "-- not found";
+                return false;
+            }
+            const QJSValue done = m_engine.evaluate(QString::fromUtf8(lf.readAll()), libPath);
+            if (done.isError())
+            {
+                qWarning() << "[EffectScript]" << libPath << "evaluate error:" << done.toString();
+                return false;
+            }
+        }
+    }
 
     m_script = m_engine.evaluate(contents, path);
     qDebug() << "[ES-DIAG] evaluate: isError=" << m_script.isError()
@@ -180,6 +212,7 @@ bool EffectScript::parseMeta()
     m_description = m_script.property("description").toString();
     m_notes       = m_script.property("notes").toString();
     m_author      = m_script.property("author").toString();
+    m_wled        = m_script.property("wled").toString();
     m_version     = m_script.property("version").toInt();
     if (m_version < 1)
         m_version = 1;   // default for Generators that don't declare one

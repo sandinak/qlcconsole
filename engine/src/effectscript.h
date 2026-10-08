@@ -105,7 +105,12 @@ class EffectScript
 public:
     EffectScript();
 
-    /** Load and evaluate @p path. Returns true iff the script is valid. */
+    /** Load and evaluate @p path. Returns true iff the script is valid.
+     *
+     *  A script can share helpers with others: @c effect.requires = ["wled"]
+     *  evaluates lib/wled.js (beside the script, else in the system scripts
+     *  directory's lib/) first, into the same engine -- what a family of ports
+     *  of one source's effects needs, rather than a copy in each. */
     bool load(const QString &path);
 
     bool isValid() const { return m_valid; }
@@ -116,6 +121,10 @@ public:
     QString     description()  const { return m_description; }
     QString     notes()        const { return m_notes; }
     QString     author()       const { return m_author; }
+    /** The WLED effect this is a port of, by WLED's own name ("Chase") --
+     *  empty for a native effect. A WLED lantern set to that effect is drawn
+     *  by running this on its LEDs (the rig view's LanternPixels). */
+    QString     wled()         const { return m_wled; }
     int         apiVersion()   const { return m_apiVersion; }
     /** Generator content version (effect.version; default 1). Bumped by the
      *  author when params/behaviour change; used to reason about Effects
@@ -197,7 +206,7 @@ private:
     QJSValue  m_tickFn;   // the tick() function ref
 
     QString     m_filePath;
-    QString     m_name, m_description, m_notes, m_author;
+    QString     m_name, m_description, m_notes, m_author, m_wled;
     int         m_apiVersion = 0;
     int         m_version = 1;
     QString     m_lifecycle = QStringLiteral("loop");

@@ -44,9 +44,18 @@ set(SCRIPT_FILES
     warm-cool.js
     wave.js
     zoom-pulse.js
+    wled-breathe.js
+    wled-chase.js
+    wled-device.js
+)
+
+# Helpers several scripts share (effect.requires): not effects themselves.
+set(SCRIPT_LIBS
+    lib/wled.js
 )
 
 install(FILES ${SCRIPT_FILES} DESTINATION ${INSTALLROOT}/${EFFECTSCRIPTDIR})
+install(FILES ${SCRIPT_LIBS} DESTINATION ${INSTALLROOT}/${EFFECTSCRIPTDIR}/lib)
 
 # Copy scripts into the build tree so the app finds them when run
 # from the build directory on macOS (QLCFile::systemDirectory uses
@@ -59,7 +68,7 @@ if (APPLE)
     set(BUILD_EFFECTSCRIPTDIR "${CMAKE_BINARY_DIR}/Resources/EffectScripts")
     file(MAKE_DIRECTORY ${BUILD_EFFECTSCRIPTDIR})
     set(COPIED_SCRIPTS)
-    foreach(SCRIPT_FILE IN LISTS SCRIPT_FILES)
+    foreach(SCRIPT_FILE IN LISTS SCRIPT_FILES SCRIPT_LIBS)
         add_custom_command(
             OUTPUT ${BUILD_EFFECTSCRIPTDIR}/${SCRIPT_FILE}
             COMMAND ${CMAKE_COMMAND} -E copy_if_different

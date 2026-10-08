@@ -65,6 +65,8 @@ private slots:
      *  to horizontal runs, where the width is vertical. */
     void aTowerOffsetIsTheHeight();
     void aLanternHangsOnItsHanger();
+    void aTrussSockIsSavedWithItsColourAndStretch();
+    void aTowersFacesAreSavedWithTheirSidesAndPrint();
     void studioFrameDerivation();
     /** A target kind changes where light is aimed -- a drum kit is not a
      *  vocalist, and one global subject height made them the same. */

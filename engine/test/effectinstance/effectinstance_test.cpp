@@ -11,6 +11,9 @@
 */
 
 #include <QtTest>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
+#include <QBuffer>
 
 #include "effectinstance_test.h"
 #include "doc.h"
@@ -25,6 +28,8 @@
 #define private public
 #include "effectinstance.h"
 #include "effectscript.h"
+#include "effectscriptcache.h"
+#include "wledfixture.h"
 #undef private
 #include "monitorproperties.h"
 #include "righeads.h"
@@ -33,6 +38,7 @@
 #include "truss.h"
 #include "aimsolver.h"
 #include <QtMath>
+#include <QVector2D>
 
 void EffectInstance_Test::init()
 {
@@ -268,6 +274,307 @@ void EffectInstance_Test::aBarsHeadsAreAlongItsLength()
         QVERIFY(qAbs((at.at(h).x() - at.at(h - 1).x()) - 0.3f) < 1e-3f);   // evenly, in order
         QVERIFY(qAbs(at.at(h).z() - at.at(0).z()) < 1e-4f);
     }
+}
+
+/* A lantern of sixteen LEDs on a wire: how many there are (its own build,
+   then what the device says, then the definition) and where each is. */
+void EffectInstance_Test::aLanternIsBuiltOfItsLeds()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Lantern");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Dimmer");
+    ch->setGroup(QLCChannel::Intensity);
+    def->addChannel(ch);
+    mode->insertChannel(ch, 0);
+    QLCPhysical phys = mode->physical();
+    phys.setWidth(150); phys.setHeight(250); phys.setDepth(150);
+    phys.setBodyShape(QLCPhysical::LanternBody);
+    phys.setEmission(QLCPhysical::OmniEmission);
+    phys.setLeds(16);
+    mode->setPhysical(phys);
+    def->addMode(mode);
+
+    Fixture *fx = new Fixture(m_doc);
+    fx->setFixtureDefinition(def, mode);
+    fx->setUniverse(1); fx->setAddress(0);
+    m_doc->addFixture(fx);
+    const quint32 fid = fx->id();
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(fid, 0, 0, QVector3D(2000, 0, 3000));
+
+    int layout = -1;
+    QCOMPARE(RigHeads::lightLeds(m_doc, fid, 0, &layout), 16);       // the definition
+    QCOMPARE(layout, int(QLCPhysical::ClusterLeds));
+    QCOMPARE(RigHeads::lightLeds(m_doc, fid, 20), 20);               // the device knows better
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.lightLeds = 0;
+    props->setFixtureRigProps(fid, rp);
+    QCOMPARE(RigHeads::lightLeds(m_doc, fid, 20), 0);                // this one is a bulb
+    QVERIFY(RigHeads::lightPoints(m_doc, fid).isEmpty());
+    rp.lightLeds = 8;
+    props->setFixtureRigProps(fid, rp);
+    QCOMPARE(RigHeads::lightLeds(m_doc, fid, 20), 8);                // and this one has eight
+    rp.lightLeds = -1;
+    props->setFixtureRigProps(fid, rp);
+
+    // A cluster: in the middle of the body, the first at the top.
+    const QVector3D c = RigHeads::fixtureCentre(m_doc, fid);
+    QVector<QVector3D> at = RigHeads::lightPoints(m_doc, fid);
+    QCOMPARE(at.size(), 16);
+    QVector3D mean;
+    foreach (const QVector3D &p, at)
+    {
+        mean += p;
+        QVERIFY(qAbs(p.x() - c.x()) < 0.075f);
+        QVERIFY(qAbs(p.z() - c.z()) < 0.125f);
+    }
+    QVERIFY(at.first().z() > at.last().z());
+    mean /= 16.0f;
+    QVERIFY(qAbs(mean.x() - c.x()) < 0.02f);
+
+    // LED tape, wound round a core: tighter than the hanging cluster, and
+    // still from the top down.
+    auto spread = [](const QVector<QVector3D> &pts) {
+        QVector3D mid;
+        foreach (const QVector3D &p, pts)
+            mid += p;
+        mid /= float(pts.size());
+        double s = 0.0;
+        foreach (const QVector3D &p, pts)
+            s += double(QVector2D(p.x() - mid.x(), p.y() - mid.y()).length());
+        return s / pts.size();
+    };
+    const double clusterSpread = spread(at);
+    rp.lightLayout = QLCPhysical::TapeLeds;
+    props->setFixtureRigProps(fid, rp);
+    at = RigHeads::lightPoints(m_doc, fid);
+    QCOMPARE(at.size(), 16);
+    QVERIFY(spread(at) < clusterSpread * 0.5);
+    for (int i = 1; i < at.size(); ++i)
+        QVERIFY(at.at(i).z() < at.at(i - 1).z());
+
+    // Glass: diffusing unless the definition or the fixture says clear.
+    QVERIFY(!RigHeads::clearGlass(m_doc, fid));
+    rp.lightGlass = 1;
+    props->setFixtureRigProps(fid, rp);
+    QVERIFY(RigHeads::clearGlass(m_doc, fid));
+    phys.setClearGlass(true);
+    mode->setPhysical(phys);
+    rp.lightGlass = 0;
+    props->setFixtureRigProps(fid, rp);
+    QVERIFY(!RigHeads::clearGlass(m_doc, fid));                     // its own wins
+    rp.lightGlass = -1;
+    props->setFixtureRigProps(fid, rp);
+    QVERIFY(RigHeads::clearGlass(m_doc, fid));                      // else the definition
+}
+
+/* The ports of WLED's effects run as WLED's own code does: its integer
+   maths, its colours, its mirror and reverse -- the numbers below are worked
+   from FX.cpp by hand. */
+void EffectInstance_Test::wledPortsRunAsWledDoes()
+{
+    const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
+    EffectScriptCache cache;
+    cache.addDirectory(QDir(dir));
+    QVERIFY(cache.scriptPathForWled("chase").endsWith("wled-chase.js"));
+    QVERIFY(cache.scriptPathForWled("Breathe").endsWith("wled-breathe.js"));
+    QVERIFY(cache.scriptPathForWled("Fireworks").isEmpty());
+
+    auto run = [](EffectScript &es, int n, double t, int speed, int intensity, int option,
+                  const QList<QColor> &cols) {
+        QJSEngine *eng = es.engine();
+        QJSValue fixtures = eng->newArray(uint(n));
+        for (int i = 0; i < n; ++i)
+        {
+            QJSValue o = eng->newObject();
+            o.setProperty("head", i);
+            fixtures.setProperty(uint(i), o);
+        }
+        QJSValue inputs = eng->newObject();
+        inputs.setProperty("_time", t);
+        QJSValue colours = eng->newArray(uint(cols.size()));
+        for (int k = 0; k < cols.size(); ++k)
+        {
+            QJSValue c = eng->newObject();
+            c.setProperty("r", cols.at(k).red());
+            c.setProperty("g", cols.at(k).green());
+            c.setProperty("b", cols.at(k).blue());
+            colours.setProperty(uint(k), c);
+        }
+        QJSValue look = eng->newObject();
+        look.setProperty("colors", colours);
+        QJSValue palettes = eng->newObject();
+        palettes.setProperty("look", look);
+        QJSValue params = eng->newObject();
+        params.setProperty("speed", speed);
+        params.setProperty("intensity", intensity);
+        params.setProperty("palette", 0);
+        params.setProperty("option", option);
+        QJSValue state = es.newState();
+        const QJSValue r = es.callTick(fixtures, inputs, palettes, params, state, eng->newObject());
+        QList<QColor> out;
+        for (int i = 0; i < n; ++i)
+        {
+            const QJSValue o = r.property(uint(i));
+            out << QColor(o.property("r").toInt(), o.property("g").toInt(), o.property("b").toInt());
+        }
+        return out;
+    };
+    const QColor red(255, 0, 0), green(0, 255, 0), blue(0, 0, 255);
+
+    EffectScript chase;
+    QVERIFY(chase.load(dir + "wled-chase.js"));            // lib/wled.js came with it
+    QCOMPARE(chase.wled(), QString("Chase"));
+    QCOMPARE(chase.paramDefs().size(), 4);
+
+    // Sixteen LEDs, intensity 128: blocks 1 + (128 * 16 >> 10) = 3 wide. At
+    // the start the colour-3 block (blue) is at 0..2, colour 1 (red) behind
+    // it at 3..5, the palette (colour 1, red) the rest.
+    QList<QColor> px = run(chase, 16, 0.0, 0, 128, 0, { red, green, blue });
+    for (int i = 0; i < 16; ++i)
+        QCOMPARE(px.at(i), i < 3 ? blue : red);
+
+    // Speed 0 counts a millisecond a step: 8.192 s is an eighth of the way
+    // round, two LEDs on.
+    px = run(chase, 16, 8.192, 0, 128, 0, { red, green, blue });
+    for (int i = 0; i < 16; ++i)
+        QCOMPARE(px.at(i), (i >= 2 && i < 5) ? blue : red);
+
+    // Mirrored, it runs on half the string (8, blocks of 2) both ways out.
+    px = run(chase, 16, 0.0, 0, 128, 64, { red, green, blue });
+    for (int i = 0; i < 16; ++i)
+        QCOMPARE(px.at(i), (i < 2 || i > 13) ? blue : red);
+
+    // Reversed, from the other end.
+    px = run(chase, 16, 0.0, 0, 128, 128, { red, green, blue });
+    for (int i = 0; i < 16; ++i)
+        QCOMPARE(px.at(i), i > 12 ? blue : red);
+
+    EffectScript breathe;
+    QVERIFY(breathe.load(dir + "wled-breathe.js"));
+    QCOMPARE(breathe.wled(), QString("Breathe"));
+
+    // At rest: 30/255 of colour 1 over colour 2 (black) -- (255 * 30) >> 8.
+    px = run(breathe, 4, 0.0, 128, 128, 0, { red, QColor(Qt::black), QColor(Qt::black) });
+    foreach (const QColor &c, px)
+        QCOMPARE(c, QColor(29, 0, 0));
+    // At the top of the breath, speed 128 (x26): 1.008 s is counter 26208,
+    // 8190 after WLED's folding -- sin16 / 103 = 224, so 254 of 255.
+    px = run(breathe, 4, 1.008, 128, 128, 0, { red, QColor(Qt::black), QColor(Qt::black) });
+    QCOMPARE(px.first(), QColor(253, 0, 0));
+}
+
+/* "for WLED based fixtures we should be selecting WLED effects": a look set
+   to WLED's Chase sends a WLED lantern the effect and the look's settings --
+   the lantern runs it -- while an ordinary RGB fixture in the same look runs
+   the port of Chase, computed here. */
+void EffectInstance_Test::aWledLookRunsOnTheDeviceAndThePortElsewhere()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf"),
+             QFile::NoError);
+    QLCFixtureMode *mode = def->mode("Effect (15ch)");
+    QVERIFY(mode != nullptr);
+    Fixture *lantern = new Fixture(m_doc);
+    lantern->setFixtureDefinition(def, mode);
+    lantern->setUniverse(0); lantern->setAddress(100);
+    QVERIFY(m_doc->addFixture(lantern));
+    QVERIFY(WledFixture::runsEffects(lantern));
+    QCOMPARE(WledFixture::effectValue(lantern, "chase"), 28);
+    QVERIFY(WledFixture::effectNames(lantern).size() > 100);
+
+    // An ordinary RGB par beside it.
+    QLCFixtureDef *parDef = new QLCFixtureDef();
+    parDef->setManufacturer("Test"); parDef->setModel("RGB");
+    QLCFixtureMode *parMode = new QLCFixtureMode(parDef);
+    const QLCChannel::Preset rgb[3] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                        QLCChannel::IntensityBlue };
+    for (int i = 0; i < 3; ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(i));
+        ch->setPreset(rgb[i]);
+        parDef->addChannel(ch);
+        parMode->insertChannel(ch, quint32(i));
+    }
+    QLCFixtureHead parHead;
+    for (int i = 0; i < 3; ++i)
+        parHead.addChannel(quint32(i));
+    parMode->insertHead(-1, parHead);
+    parMode->cacheHeads();
+    parDef->addMode(parMode);
+    Fixture *par = new Fixture(m_doc);
+    par->setFixtureDefinition(parDef, parMode);
+    par->setUniverse(0); par->setAddress(300);
+    QVERIFY(m_doc->addFixture(par));
+    QVERIFY(!WledFixture::runsEffects(par));
+
+    QLCPalette *chase = new QLCPalette(QLCPalette::Effect, m_doc);
+    chase->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/wled-chase.js");
+    chase->setWledEffect("Chase");
+    chase->setEffectParamValue("speed", 200);
+    chase->setEffectParamValue("intensity", 64);
+    chase->setEffectParamValue("palette", 6);
+    QVERIFY(m_doc->addPalette(chase));
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setValue(QColor(255, 0, 0));
+    QVERIFY(m_doc->addPalette(red));
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setValue(QColor(0, 0, 255));
+    QVERIFY(m_doc->addPalette(blue));
+
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(lantern->id());
+    scene->addFixture(par->id());
+    scene->addPalette(chase->id());
+    scene->addPalette(red->id());
+    scene->addPalette(blue->id());
+
+    EffectInstance inst(m_doc, scene->id(), chase->id());
+    QVERIFY(inst.isValid());
+    inst.runTick();
+    QHash<quint32, uchar> sent;                 // lantern channel -> value
+    bool parDriven = false;
+    foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+    {
+        if (w.fixtureId == lantern->id())
+        {
+            sent.insert(w.channel, w.value);
+            QCOMPARE(w.addr, 100 + int(w.channel));
+        }
+        if (w.fixtureId == par->id())
+            parDriven = true;
+    }
+    QCOMPARE(int(sent.value(1)), 28);           // Effect: Chase
+    QCOMPARE(int(sent.value(2)), 200);          // speed
+    QCOMPARE(int(sent.value(3)), 64);           // intensity
+    QCOMPARE(int(sent.value(4)), 6);            // palette
+    QCOMPARE(int(sent.value(6)), 255);          // colour 1: red
+    QCOMPARE(int(sent.value(8)), 0);
+    QCOMPARE(int(sent.value(11)), 255);         // colour 2: blue
+    QVERIFY(sent.contains(0));                  // its master dimmer, a level
+    // The port runs on the par, never on the lantern. (Its colours go out
+    // scaled by the scene's envelope: 0 here, with the scene not running.)
+    Q_UNUSED(parDriven)
+    QCOMPARE(inst.effectiveFixtureIds(), QList<quint32>() << par->id());
+
+    // Saved and read back with its WLED effect.
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter writer(&buf);
+    chase->saveXML(&writer);
+    writer.writeEndDocument();
+    buf.close();
+    QVERIFY(buf.data().contains("<WledEffect>Chase</WledEffect>"));
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader reader(&buf);
+    reader.readNextStartElement();
+    QLCPalette back(QLCPalette::Effect, m_doc);
+    QVERIFY(back.loadXML(reader));
+    QCOMPARE(back.wledEffect(), QString("Chase"));
 }
 
 void EffectInstance_Test::followSpotFadesAHeadThatCannotReach()

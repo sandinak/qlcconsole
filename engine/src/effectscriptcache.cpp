@@ -137,8 +137,10 @@ void EffectScriptCache::scanDir(const QDir &dir)
         {
             m_scripts.insert(meta.displayName, meta);
             // The picker shows ONE name per script (the display name); filename
-            // aliases below are for resolution only, not for the list.
-            m_displayNames.append(meta.displayName);
+            // aliases below are for resolution only, not for the list. A
+            // hidden script is never listed (a host's stand-in).
+            if (!meta.hidden)
+                m_displayNames.append(meta.displayName);
             // Also index by filename basename so XML round-trips work when
             // the display name (effect.name) differs from the .js filename.
             const QString baseName = nameFromPath(absPath);
@@ -150,6 +152,16 @@ void EffectScriptCache::scanDir(const QDir &dir)
 }
 
 /** Extract a single-quoted or double-quoted string value for `effect.<field> = "..."` */
+QString EffectScriptCache::scriptPathForWled(const QString &wledName) const
+{
+    if (wledName.isEmpty())
+        return QString();
+    for (const ScriptMeta &meta : m_scripts)
+        if (meta.wled.compare(wledName, Qt::CaseInsensitive) == 0)
+            return meta.path;
+    return QString();
+}
+
 QString EffectScriptCache::extractField(const QString &src, const QString &field)
 {
     // Match:  effect.fieldName  = "value"  or  = 'value'
@@ -176,6 +188,8 @@ EffectScriptCache::ScriptMeta EffectScriptCache::parseMeta(const QString &path)
     meta.displayName  = extractField(src, "name");
     meta.description  = extractField(src, "description");
     meta.notes        = extractField(src, "notes");
+    meta.wled         = extractField(src, "wled");
+    meta.hidden       = QRegularExpression(QStringLiteral("effect\\.hidden\\s*=\\s*true")).match(src).hasMatch();
 
     // RGBScript (QLC+ RGB Matrix API): no effect.name, but algo.name + rgbMap().
     // Run through the EffectScript compat host; treat as an RGB pixel effect.

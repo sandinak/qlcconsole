@@ -364,7 +364,7 @@
    <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
    <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
    <Technical PowerConsumption="5" DmxConnector="Other"/>
-   <Body Shape="Lantern" Emission="Omni"/>
+   <Body Shape="Lantern" Emission="Omni" LEDs="16" Layout="Cluster"/>
   </Physical>
   <Channel Number="0">Master Dimmer</Channel>
   <Channel Number="1">Effect</Channel>
@@ -389,7 +389,7 @@
    <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
    <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
    <Technical PowerConsumption="5" DmxConnector="Other"/>
-   <Body Shape="Lantern" Emission="Omni"/>
+   <Body Shape="Lantern" Emission="Omni" LEDs="16" Layout="Cluster"/>
   </Physical>
   <Channel Number="0">Master Dimmer</Channel>
   <Channel Number="1">Red</Channel>
@@ -403,7 +403,7 @@
    <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
    <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
    <Technical PowerConsumption="5" DmxConnector="Other"/>
-   <Body Shape="Lantern" Emission="Omni"/>
+   <Body Shape="Lantern" Emission="Omni" LEDs="16" Layout="Cluster"/>
   </Physical>
   <Channel Number="0">Red</Channel>
   <Channel Number="1">Green</Channel>

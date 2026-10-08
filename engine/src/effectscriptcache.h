@@ -34,6 +34,8 @@ public:
         QString description;    //!< effect.description (one-liner)
         QString notes;          //!< effect.notes (longer paragraph)
         QStringList fixtureTypes; //!< effect.fixtureTypes array
+        QString wled;           //!< effect.wled: the WLED effect it ports
+        bool hidden = false;    //!< effect.hidden = true: resolvable, never listed
     };
 
     explicit EffectScriptCache(QObject *parent = nullptr);
@@ -52,6 +54,10 @@ public:
 
     /** Full metadata for display @p name, or empty struct if not found. */
     ScriptMeta scriptMeta(const QString &name) const;
+
+    /** The script porting WLED's effect @p wledName ("Chase", any case), or
+     *  an empty string when none does. */
+    QString scriptPathForWled(const QString &wledName) const;
 
     /** Infer a script name from its file basename (strips .js). */
     static QString nameFromPath(const QString &path);

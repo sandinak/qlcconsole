@@ -109,6 +109,29 @@ public:
     quint32 groupId() const { return m_groupId; }
     void setGroupId(quint32 id) { m_groupId = id; }
 
+    /** FACES: opaque panels on the tower's sides -- a black facade over the
+     *  steel, or a printed one (@c facesPattern, an image stretched over each
+     *  face). On the sides in @c facesSides (FaceSide bits), from
+     *  @c facesFrom to @c facesTo metres up. */
+    enum FaceSide { FrontSide = 1, BackSide = 2, LeftSide = 4, RightSide = 8, AllSides = 15 };
+    bool hasFaces() const { return m_faces; }
+    void setFaces(bool on) { m_faces = on; }
+    int facesSides() const { return m_facesSides; }
+    void setFacesSides(int sides) { m_facesSides = sides & AllSides; }
+    QColor facesColour() const { return m_facesColour; }
+    void setFacesColour(const QColor &c) { m_facesColour = c.isValid() ? c : QColor(24, 24, 26); }
+    /** Metres up, within the tower; To < 0 (the default) is its top. */
+    float facesFrom() const { return qBound(0.0f, m_facesFrom, m_height); }
+    float facesTo() const { return m_facesTo < 0.0f ? m_height : qBound(facesFrom(), m_facesTo, m_height); }
+    void setFacesRange(float from, float to) { m_facesFrom = qMax(0.0f, from); m_facesTo = to; }
+    /** An image file printed on the faces; empty for plain colour. */
+    QString facesPattern() const { return m_facesPattern; }
+    void setFacesPattern(const QString &path) { m_facesPattern = path; }
+    /** How much of the print shows over the panels' own colour: 1 (the
+     *  default) all of it, less and the colour shows through. */
+    float facesPatternOpacity() const { return m_facesPatternOpacity; }
+    void setFacesPatternOpacity(float o) { m_facesPatternOpacity = qBound(0.0f, o, 1.0f); }
+
     bool loadXML(QXmlStreamReader &root);
     bool saveXML(QXmlStreamWriter *doc) const;
 
@@ -125,6 +148,13 @@ private:
     bool         m_locked  = false;
     quint32      m_layerId = 0;
     quint32      m_groupId = 0;
+    bool         m_faces = false;
+    int          m_facesSides = AllSides;
+    QColor       m_facesColour = QColor(24, 24, 26);
+    float        m_facesFrom = 0.0f;
+    float        m_facesTo = -1.0f;
+    QString      m_facesPattern;
+    float        m_facesPatternOpacity = 1.0f;
 };
 
 /** @} */

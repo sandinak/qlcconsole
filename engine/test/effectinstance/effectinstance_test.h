@@ -38,6 +38,9 @@ private slots:
     void multiHeadYieldsPerHeadCells();
     void groupsAreLaidAcrossTheStageWhereTheyStand();
     void aBarsHeadsAreAlongItsLength();
+    void aLanternIsBuiltOfItsLeds();
+    void wledPortsRunAsWledDoes();
+    void aWledLookRunsOnTheDeviceAndThePortElsewhere();
     void anEffectRunsOnUnpatchedFixturesToo();
     /** A follow-spot with Fade Near Limit takes a head's dimmer down when its
      *  target is out of that head's reach, and leaves the dimmer to the scene

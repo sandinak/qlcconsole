@@ -389,6 +389,27 @@ when changing this list -->
             </xs:restriction>
         </xs:simpleType>
     </xs:attribute>
+    <!-- What makes the light: absent or 0, one point; else that many LEDs,
+         laid out in the body as Layout says: a hanging Cluster spread through it,
+         or Tape wound round a core (in order, the first at the top). -->
+    <xs:attribute name="LEDs" type="xs:nonNegativeInteger" use="optional"/>
+    <xs:attribute name="Layout" use="optional">
+        <xs:simpleType>
+            <xs:restriction base="xs:string">
+                <xs:enumeration value="Cluster"/>
+                <xs:enumeration value="Tape"/>
+            </xs:restriction>
+        </xs:simpleType>
+    </xs:attribute>
+    <!-- What the light is seen through: Diffuse (absent, the default) or Clear. -->
+    <xs:attribute name="Glass" use="optional">
+        <xs:simpleType>
+            <xs:restriction base="xs:string">
+                <xs:enumeration value="Diffuse"/>
+                <xs:enumeration value="Clear"/>
+            </xs:restriction>
+        </xs:simpleType>
+    </xs:attribute>
 </xs:complexType>
 
 <xs:complexType name="technicalType">

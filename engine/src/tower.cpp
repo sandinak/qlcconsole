@@ -92,6 +92,18 @@ bool Tower::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLTowerLocked))  m_locked  = (a.value(KXMLTowerLocked).toString() == "true");
     if (a.hasAttribute(KXMLTowerLayerId)) m_layerId = a.value(KXMLTowerLayerId).toUInt();
     if (a.hasAttribute(KXMLTowerGroupId)) m_groupId = a.value(KXMLTowerGroupId).toUInt();
+    m_faces = a.hasAttribute(QStringLiteral("Faces"));
+    if (m_faces)
+        setFacesSides(a.value(QStringLiteral("Faces")).toInt());
+    if (a.hasAttribute(QStringLiteral("FacesColour")))
+        setFacesColour(QColor(a.value(QStringLiteral("FacesColour")).toString()));
+    if (a.hasAttribute(QStringLiteral("FacesFrom")))
+        m_facesFrom = a.value(QStringLiteral("FacesFrom")).toFloat();
+    if (a.hasAttribute(QStringLiteral("FacesTo")))
+        m_facesTo = a.value(QStringLiteral("FacesTo")).toFloat();
+    m_facesPattern = a.value(QStringLiteral("FacesPattern")).toString();
+    if (a.hasAttribute(QStringLiteral("FacesPatternOpacity")))
+        setFacesPatternOpacity(a.value(QStringLiteral("FacesPatternOpacity")).toFloat());
 
     m_shelves.clear();
     while (root.readNextStartElement())
@@ -128,6 +140,19 @@ bool Tower::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLTowerLayerId, QString::number(m_layerId));
     if (m_groupId != 0)
         doc->writeAttribute(KXMLTowerGroupId, QString::number(m_groupId));
+    if (m_faces)
+    {
+        doc->writeAttribute(QStringLiteral("Faces"), QString::number(m_facesSides));
+        doc->writeAttribute(QStringLiteral("FacesColour"), m_facesColour.name());
+        doc->writeAttribute(QStringLiteral("FacesFrom"), QString::number(double(m_facesFrom), 'f', 3));
+        if (m_facesTo >= 0.0f)
+            doc->writeAttribute(QStringLiteral("FacesTo"), QString::number(double(m_facesTo), 'f', 3));
+        if (!m_facesPattern.isEmpty())
+            doc->writeAttribute(QStringLiteral("FacesPattern"), m_facesPattern);
+        if (m_facesPatternOpacity < 1.0f)
+            doc->writeAttribute(QStringLiteral("FacesPatternOpacity"),
+                                QString::number(double(m_facesPatternOpacity), 'f', 2));
+    }
     foreach (float z, m_shelves)
     {
         doc->writeStartElement(KXMLTowerShelf);

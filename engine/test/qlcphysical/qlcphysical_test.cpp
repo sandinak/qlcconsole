@@ -443,6 +443,31 @@ void QLCPhysical_Test::aLanternBodyRoundTrips()
 
     roundTrip(QLCPhysical(), &xml);
     QVERIFY(!xml.contains("<Body"));
+
+    // Built of LEDs: how many and how they sit, written only when it is.
+    QCOMPARE(lantern.leds(), 0);
+    lantern.setLeds(16);
+    lantern.setLedLayout(QLCPhysical::TapeLeds);
+    QCOMPARE(QLCPhysical(lantern).leds(), 16);
+    QLCPhysical leds = roundTrip(lantern, &xml);
+    QVERIFY(xml.contains("LEDs=\"16\" Layout=\"Tape\""));
+    QVERIFY(!xml.contains("Glass"));                     // diffusing: the default
+    QCOMPARE(leds.leds(), 16);
+    QCOMPARE(leds.ledLayout(), QLCPhysical::TapeLeds);
+    QVERIFY(!leds.clearGlass());
+
+    // Clear glass says so.
+    lantern.setClearGlass(true);
+    QVERIFY(QLCPhysical(lantern).clearGlass());
+    leds = roundTrip(lantern, &xml);
+    QVERIFY(xml.contains("Glass=\"Clear\""));
+    QVERIFY(leds.clearGlass());
+
+    // A box built of LEDs says so too.
+    QLCPhysical box;
+    box.setLeds(8);
+    QCOMPARE(roundTrip(box, &xml).leds(), 8);
+    QVERIFY(xml.contains("<Body Shape=\"Box\" Emission=\"Beam\" LEDs=\"8\" Layout=\"Cluster\"/>"));
 }
 
 QTEST_MAIN(QLCPhysical_Test)

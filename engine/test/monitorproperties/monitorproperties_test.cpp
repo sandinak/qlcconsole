@@ -1258,6 +1258,128 @@ QTEST_GUILESS_MAIN(MonitorProperties_Test)
    follows its tower; it is saved; removing the tower takes its hangers with
    it and leaves the lantern where it was, unmounted. On a Tower structure it
    clamps to the tower's side. */
+void MonitorProperties_Test::aTrussSockIsSavedWithItsColourAndStretch()
+{
+    Truss t(4);
+    t.setLength(6.0f);
+    QVERIFY(!t.hasSock());
+    QCOMPARE(t.sockColour(), QColor(Qt::white));
+    QCOMPARE(t.sockFrom(), 0.0f);
+    QCOMPARE(t.sockTo(), 6.0f);                         // the whole truss
+    QVERIFY(!t.sockCovers(1.0f));                       // none: covers nothing
+
+    auto roundTrip = [](const Truss &in, QByteArray *xml) {
+        QBuffer buf;
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        in.saveXML(&w);
+        w.writeEndDocument();
+        buf.close();
+        *xml = buf.data();
+        buf.open(QIODevice::ReadOnly);
+        QXmlStreamReader r(&buf);
+        r.readNextStartElement();
+        Truss *out = new Truss(in.id());
+        out->loadXML(r);
+        return out;
+    };
+    QByteArray xml;
+    delete roundTrip(t, &xml);
+    QVERIFY(!xml.contains("Sock"));                     // no sock, nothing said
+
+    t.setSock(true);
+    t.setSockColour(QColor("#ff8000"));
+    t.setSockRange(1.5f, 4.0f);
+    QVERIFY(t.sockCovers(2.0f));
+    QVERIFY(!t.sockCovers(1.0f) && !t.sockCovers(5.0f));
+    Truss *back = roundTrip(t, &xml);
+    QVERIFY(back->hasSock());
+    QCOMPARE(back->sockColour(), QColor("#ff8000"));
+    QCOMPARE(back->sockFrom(), 1.5f);
+    QCOMPARE(back->sockTo(), 4.0f);
+    delete back;
+
+    // To its end: it follows the truss when the truss grows.
+    t.setSockRange(0.0f, -1.0f);
+    back = roundTrip(t, &xml);
+    back->setLength(8.0f);
+    QCOMPARE(back->sockTo(), 8.0f);
+    delete back;
+
+    // Out of range is held to the truss.
+    t.setSockRange(2.0f, 20.0f);
+    QCOMPARE(t.sockTo(), 6.0f);
+}
+
+void MonitorProperties_Test::aTowersFacesAreSavedWithTheirSidesAndPrint()
+{
+    Tower t(2);
+    t.setHeight(2.4f);
+    QVERIFY(!t.hasFaces());
+    QCOMPARE(t.facesSides(), int(Tower::AllSides));
+    QCOMPARE(t.facesTo(), 2.4f);                        // the whole tower
+
+    auto roundTrip = [](const Tower &in, QByteArray *xml) {
+        QBuffer buf;
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        in.saveXML(&w);
+        w.writeEndDocument();
+        buf.close();
+        *xml = buf.data();
+        buf.open(QIODevice::ReadOnly);
+        QXmlStreamReader r(&buf);
+        r.readNextStartElement();
+        Tower *out = new Tower(in.id());
+        out->loadXML(r);
+        return out;
+    };
+    QByteArray xml;
+    delete roundTrip(t, &xml);
+    QVERIFY(!xml.contains("Faces"));
+
+    t.setFaces(true);
+    t.setFacesSides(Tower::FrontSide | Tower::LeftSide);
+    t.setFacesColour(QColor("#101010"));
+    t.setFacesRange(0.3f, 2.0f);
+    t.setFacesPattern("/shows/art/tower-wrap.png");
+    QCOMPARE(t.facesPatternOpacity(), 1.0f);            // the print as it is
+    delete roundTrip(t, &xml);
+    QVERIFY(!xml.contains("FacesPatternOpacity"));
+    t.setFacesPatternOpacity(0.4f);
+    Tower *back = roundTrip(t, &xml);
+    QCOMPARE(back->facesPatternOpacity(), 0.4f);
+    QVERIFY(back->hasFaces());
+    QCOMPARE(back->facesSides(), int(Tower::FrontSide | Tower::LeftSide));
+    QCOMPARE(back->facesColour(), QColor("#101010"));
+    QCOMPARE(back->facesFrom(), 0.3f);
+    QCOMPARE(back->facesTo(), 2.0f);
+    QCOMPARE(back->facesPattern(), QString("/shows/art/tower-wrap.png"));
+    delete back;
+
+    // The sock takes a print too.
+    Truss truss(5);
+    truss.setLength(3.0f);
+    truss.setSock(true);
+    truss.setSockPattern("/shows/art/sock.png");
+    truss.setSockPatternOpacity(0.25f);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    truss.saveXML(&w);
+    w.writeEndDocument();
+    buf.close();
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader r(&buf);
+    r.readNextStartElement();
+    Truss in(5);
+    in.loadXML(r);
+    QCOMPARE(in.sockPattern(), QString("/shows/art/sock.png"));
+    QCOMPARE(in.sockPatternOpacity(), 0.25f);
+    truss.setSockPatternOpacity(3.0f);
+    QCOMPARE(truss.sockPatternOpacity(), 1.0f);         // held to 0..1
+}
+
 void MonitorProperties_Test::aLanternHangsOnItsHanger()
 {
     MonitorProperties mp;

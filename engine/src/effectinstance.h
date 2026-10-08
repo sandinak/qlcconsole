@@ -18,6 +18,7 @@
 
 #include <QMutex>
 #include <QJSValue>
+#include <QColor>
 #include <QHash>
 #include <QList>
 #include <QPointF>
@@ -160,6 +161,16 @@ private:
     QJSValue buildFixturesArray(const QList<EffectCell> &cells, int gridCols, int gridRows);
     QJSValue buildInputsObject() const;
     QJSValue buildPalettesObject() const;
+    /** The look's colours, in its order (those after this effect, else all),
+     *  and its master dimmer (1 when it has none) -- what the effect's colour
+     *  slots and palettes.look are filled from. */
+    void lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer = nullptr) const;
+    /** The fixtures and groups the look is on, before any type filter. */
+    QList<quint32> lookFixtureIds() const;
+    /** A WLED look (QLCPalette::wledEffect()): what WLED fixtures in it are
+     *  sent -- the effect, its controls and the look's colours, on their own
+     *  channels. They run it; the script never sees them. */
+    QList<DmxWrite> wledDeviceWrites() const;
     QJSValue buildParamsObject() const;
     QJSValue buildDataChannelsObject() const;
 
@@ -209,6 +220,7 @@ private:
     qint64           m_fadeOutStartMs = 0;  //!< m_elapsed.elapsed() when the fade began
 
     float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
+    QString m_wledEffect;    //!< QLCPalette::wledEffect(), at construction
 
     //!< look's master Dimmer (0..1, 1.0 if none), rebuilt each runTick(). Applied
     //!< host-side to effect colour output on fixtures WITHOUT a master intensity

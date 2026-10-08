@@ -31,6 +31,7 @@
 #include <QtMath>
 #include <QPointF>
 #include <QString>
+#include <QColor>
 #include <climits>
 
 class QXmlStreamReader;
@@ -165,6 +166,30 @@ public:
     void setStandId(quint32 id) { m_standId = id; }
     bool isStandMounted() const { return m_standId != invalidId(); }
 
+    /** A SOCK: a diffusing fabric sleeve over part of the truss, lit from
+     *  within by the LED bars rigged Inside it -- they glow through it rather
+     *  than throwing beams. @c sockColour is the fabric (white by default);
+     *  it covers from @c sockFrom to @c sockTo metres along the truss. */
+    bool hasSock() const { return m_sock; }
+    void setSock(bool on) { m_sock = on; }
+    QColor sockColour() const { return m_sockColour; }
+    void setSockColour(const QColor &c) { m_sockColour = c.isValid() ? c : QColor(Qt::white); }
+    /** Metres along, within the truss; To < 0 (the default) is its far end. */
+    float sockFrom() const { return qBound(0.0f, m_sockFrom, m_length); }
+    float sockTo() const { return m_sockTo < 0.0f ? m_length : qBound(sockFrom(), m_sockTo, m_length); }
+    void setSockRange(float from, float to) { m_sockFrom = qMax(0.0f, from); m_sockTo = to; }
+    /** An image file printed on the sock (stretched over each side of it);
+     *  empty for plain fabric. */
+    QString sockPattern() const { return m_sockPattern; }
+    void setSockPattern(const QString &path) { m_sockPattern = path; }
+    /** How much of the print shows over the fabric's own colour: 1 (the
+     *  default) all of it, less and the fabric shows through. */
+    float sockPatternOpacity() const { return m_sockPatternOpacity; }
+    void setSockPatternOpacity(float o) { m_sockPatternOpacity = qBound(0.0f, o, 1.0f); }
+    /** Whether @p offset (metres along) is under the sock. */
+    bool sockCovers(float offset) const
+    { return m_sock && offset >= sockFrom() - 1e-4f && offset <= sockTo() + 1e-4f; }
+
     /** Compute the world-space position of a fixture whose truss-offset
      *  (metres from origin along the truss direction) is @p offset. */
     QVector3D positionAt(float offset) const;
@@ -204,6 +229,12 @@ private:
     int       m_barRun = RunAlong;            ///< Along / Across / Drop
     float     m_barCrossShift = 0.0f;         ///< shift along the run (0 = centred)
     quint32   m_standId = invalidId();        ///< stand this truss stands on
+    bool      m_sock = false;                 ///< a fabric sleeve over it
+    QColor    m_sockColour = QColor(Qt::white);
+    float     m_sockFrom = 0.0f;              ///< metres along
+    float     m_sockTo = -1.0f;               ///< metres along; < 0 = its far end
+    QString   m_sockPattern;                  ///< image printed on it
+    float     m_sockPatternOpacity = 1.0f;    ///< 0..1, the print over the fabric
 };
 
 /** Per-fixture rig assignment.  Stored alongside MonitorProperties visual
@@ -268,6 +299,15 @@ struct FixtureRigProps
     /** On a hanger (Hanger: a bracket and chain on a truss or tower): the
      *  fixture hangs from its hook. UINT_MAX = not on one. */
     quint32          hangerId = UINT_MAX;
+
+    /** What makes its light, where the definition can say (QLCPhysical::leds()):
+     *  -1 = as the definition says (or as the device reports), 0 = one point,
+     *  N = that many LEDs -- this one's real build. @c lightLayout is a
+     *  QLCPhysical::LedLayout (hanging cluster, tape), -1 = as defined. */
+    int              lightLeds = -1;
+    int              lightLayout = -1;
+    /** Its glass: -1 = as the definition says, 0 = diffusing, 1 = clear. */
+    int              lightGlass = -1;
 
     /** Deck mount: a fixture standing ON TOP of a stage platform ("floor
      *  mounted"). Unlike a riser FACE mount it keeps its free XY position; only

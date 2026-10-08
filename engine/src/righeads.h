@@ -44,6 +44,24 @@ namespace RigHeads
      *  the show's head map of that size), else one row along the length. An
      *  empty vector when the fixture is unknown. */
     QVector<QVector3D> headPositions(Doc *doc, quint32 fid);
+
+    /** How many LEDs make a fixture's light: 0 when it is one point. The
+     *  fixture's own setting wins (FixtureRigProps::lightLeds), then what the
+     *  device itself reports (@p deviceLeds, 0 = not known -- a WLED says how
+     *  many it drives), then the definition (QLCPhysical::leds()). A definition
+     *  that names no LEDs is a point unless the fixture says otherwise.
+     *  @p layout, when given, gets their QLCPhysical::LedLayout. */
+    int lightLeds(Doc *doc, quint32 fid, int deviceLeds = 0, int *layout = nullptr);
+
+    /** Where each of those LEDs is (world metres), the first first -- in the
+     *  body the rig view draws: a hanging cluster spread through it, or tape
+     *  wound round a core in its middle. Empty when its light is one point. */
+    QVector<QVector3D> lightPoints(Doc *doc, quint32 fid, int deviceLeds = 0);
+
+    /** Whether its light is seen through clear glass (each LED seen) rather
+     *  than diffusing glass (the default: it glows) -- the fixture's own
+     *  setting (FixtureRigProps::lightGlass), else the definition's. */
+    bool clearGlass(Doc *doc, quint32 fid);
 }
 
 #endif

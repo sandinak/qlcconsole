@@ -96,7 +96,7 @@ def main():
             "  </Physical>")
     write("WLED-Effect-Mode.qxf", definition("Effect Mode", phys, eff, pal), eff, pal)
 
-    # The lantern: ~16 LEDs (about 5 lm each at full white, ~0.3 W each) in
+    # The lantern: 16 LEDs on a wire bunched in the middle (about 5 lm each at full white, ~0.3 W each) in
     # a cage; set the real size here when it is measured.
     lantern = ("  <Physical>\n"
                '   <Bulb Type="LED" Lumens="100" ColourTemperature="0"/>\n'
@@ -104,7 +104,7 @@ def main():
                '   <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>\n'
                '   <Focus Type="Fixed" PanMax="0" TiltMax="0"/>\n'
                '   <Technical PowerConsumption="5" DmxConnector="Other"/>\n'
-               '   <Body Shape="Lantern" Emission="Omni"/>\n'
+               '   <Body Shape="Lantern" Emission="Omni" LEDs="16" Layout="Cluster"/>\n'
                "  </Physical>")
     write("WLED-Lantern.qxf", definition("Lantern", lantern, eff, pal), eff, pal)
 

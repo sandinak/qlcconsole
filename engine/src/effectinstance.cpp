@@ -6,6 +6,7 @@
 */
 
 #include "effectinstance.h"
+#include "wledfixture.h"
 #include "aimsolver.h"
 
 #include "doc.h"
@@ -50,6 +51,8 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
         qWarning() << "[EffectInstance] palette" << effectPaletteId << "not found";
         return;
     }
+
+    m_wledEffect = pal->wledEffect();
 
     // Load the script
     if (!m_script.load(pal->scriptPath()))
@@ -168,14 +171,6 @@ void EffectInstance::runTick()
     // Collect the fixture ids the scene targets, filtered by the script's
     // declared fixtureTypes (e.g. ["rgb"] excludes movers, ["moving"] excludes
     // wash fixtures).  If the script declares no types, all scene fixtures are used.
-    int gridCols = 1, gridRows = 1;
-    QList<EffectCell> cells = effectiveCells(gridCols, gridRows);
-    if (cells.isEmpty())
-    {
-        clearResults();
-        return;
-    }
-
     // Actuation envelope: scale intensity/colour output by the host scene's
     // fade-in ramp so the effect fires *with* the scene (ramps up as the scene
     // fades in, then holds) instead of blasting at full independent of it.
@@ -188,6 +183,25 @@ void EffectInstance::runTick()
     }
     else
         m_envelope = sceneEnvelope();
+
+    // WLED fixtures in a WLED look run the effect themselves: theirs is a
+    // handful of settings, not a frame.
+    const QList<DmxWrite> device = wledDeviceWrites();
+
+    int gridCols = 1, gridRows = 1;
+    QList<EffectCell> cells = effectiveCells(gridCols, gridRows);
+    if (cells.isEmpty())
+    {
+        if (device.isEmpty())
+            clearResults();
+        else
+        {
+            QMutexLocker locker(&m_mutex);
+            m_lastResults = device;
+            m_lastFrameEmpty = false;
+        }
+        return;
+    }
 
     // Snapshot the scene's base per-channel values so an intensity flicker can
     // modulate *around* the Dimmer/Colour looks instead of overriding them.
@@ -317,6 +331,7 @@ void EffectInstance::runTick()
     // Frame is "empty" (drives nothing) if every write is 0 — a note effect with
     // no held notes and no live ripples. The runner uses this to skip the next
     // tick until fresh input arrives (wait-for-input instead of polling at 50 Hz).
+    writes += device;
     bool empty = true;
     for (const DmxWrite &w : writes)
         if (w.value != 0) { empty = false; break; }
@@ -471,7 +486,7 @@ int EffectInstance::resolvedDurationMs() const
     return m_script.naturalDurationMs();
 }
 
-QList<quint32> EffectInstance::effectiveFixtureIds() const
+QList<quint32> EffectInstance::lookFixtureIds() const
 {
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     if (!scene)
@@ -487,6 +502,17 @@ QList<quint32> EffectInstance::effectiveFixtureIds() const
     for (quint32 fid : scene->fixtures())
         if (!fxIds.contains(fid))
             fxIds.append(fid);
+    return fxIds;
+}
+
+QList<quint32> EffectInstance::effectiveFixtureIds() const
+{
+    QList<quint32> fxIds = lookFixtureIds();
+    // A WLED look's WLED fixtures run it themselves (wledDeviceWrites()).
+    if (!m_wledEffect.isEmpty())
+        fxIds.erase(std::remove_if(fxIds.begin(), fxIds.end(), [this](quint32 fid) {
+            return WledFixture::runsEffects(m_doc->fixture(fid));
+        }), fxIds.end());
 
     // An effect drives ONLY the fixtures/groups explicitly assigned to its look.
     // (There used to be a fallback that ran the effect on every fixture in the
@@ -1084,44 +1110,9 @@ QJSValue EffectInstance::buildPalettesObject() const
     // ALL colours so existing looks keep working (the base then also shows —
     // reorder colours after the effect to separate them).
     QList<QColor> lookColors;
-    QList<QColor> afterColors;   // colours positioned after this effect
-    QList<QColor> allColors;     // every colour in the look (fallback)
     double lookDimmer = 1.0;
     bool   haveLookDimmer = false;
-    if (Scene *scene = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
-    {
-        bool pastThisEffect = false;
-        foreach (quint32 pid, scene->palettes())
-        {
-            QLCPalette *p = m_doc->palette(pid);
-            if (!p)
-                continue;
-            if (pid == m_effectPaletteId)
-            {
-                pastThisEffect = true;
-                continue;
-            }
-            // The NEXT effect ends this effect's run of child colours (in the tree
-            // view, those colours are nested under the other effect).
-            if (p->type() == QLCPalette::Effect)
-            {
-                pastThisEffect = false;
-                continue;
-            }
-            if (p->type() == QLCPalette::Color)
-            {
-                allColors.append(p->colorValue());
-                if (pastThisEffect)
-                    afterColors.append(p->colorValue());
-            }
-            else if (p->type() == QLCPalette::Dimmer)
-            {
-                lookDimmer = p->value().toDouble() / 255.0;
-                haveLookDimmer = true;
-            }
-        }
-    }
-    lookColors = afterColors.isEmpty() ? allColors : afterColors;
+    lookColours(lookColors, lookDimmer, &haveLookDimmer);
 
     const QMap<QString, quint32> &bindings = effectPal->effectPaletteBindings();
     int nextLookColor = 0;   // walks lookColors as unbound Colour slots claim them
@@ -1169,6 +1160,107 @@ QJSValue EffectInstance::buildPalettesObject() const
     obj.setProperty("look", lookObj);
 
     return obj;
+}
+
+void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer) const
+{
+    double lookDimmer = 1.0;
+    bool   haveLookDimmer = false;
+    QList<QColor> afterColors;   // colours positioned after this effect
+    QList<QColor> allColors;     // every colour in the look (fallback)
+    if (Scene *scene = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
+    {
+        bool pastThisEffect = false;
+        foreach (quint32 pid, scene->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (!p)
+                continue;
+            if (pid == m_effectPaletteId)
+            {
+                pastThisEffect = true;
+                continue;
+            }
+            // The NEXT effect ends this effect's run of child colours (in the tree
+            // view, those colours are nested under the other effect).
+            if (p->type() == QLCPalette::Effect)
+            {
+                pastThisEffect = false;
+                continue;
+            }
+            if (p->type() == QLCPalette::Color)
+            {
+                allColors.append(p->colorValue());
+                if (pastThisEffect)
+                    afterColors.append(p->colorValue());
+            }
+            else if (p->type() == QLCPalette::Dimmer)
+            {
+                lookDimmer = p->value().toDouble() / 255.0;
+                haveLookDimmer = true;
+            }
+        }
+    }
+    colours = afterColors.isEmpty() ? allColors : afterColors;
+    dimmer = lookDimmer;
+    if (haveDimmer != nullptr)
+        *haveDimmer = haveLookDimmer;
+}
+
+QList<EffectInstance::DmxWrite> EffectInstance::wledDeviceWrites() const
+{
+    QList<DmxWrite> out;
+    if (m_wledEffect.isEmpty())
+        return out;
+    QList<QColor> colours;
+    double dimmer = 1.0;
+    lookColours(colours, dimmer);
+    auto param = [this](const char *name, int fallback) {
+        return qBound(0, qRound(m_paramValues.value(QLatin1String(name), fallback)), 255);
+    };
+    for (quint32 fid : lookFixtureIds())
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (!WledFixture::runsEffects(fx))
+            continue;
+        const int effect = WledFixture::effectValue(fx, m_wledEffect);
+        if (effect < 0)
+            continue;                       // its firmware's list lacks it
+        auto put = [&](const QString &channel, int value, bool replace) {
+            const int ch = WledFixture::channel(fx, channel);
+            if (ch < 0)
+                return;
+            DmxWrite w;
+            w.universeId = int(fx->universe());
+            w.addr = int(fx->address()) + ch;
+            w.value = uchar(qBound(0, value, 255));
+            w.fixtureId = fid;
+            w.channel = quint32(ch);
+            w.replace = replace;
+            out << w;
+        };
+        // Settings, not levels: they replace whatever the scene has.
+        put(QStringLiteral("Effect"), effect, true);
+        put(QStringLiteral("Effect Speed"), param("speed", 128), true);
+        put(QStringLiteral("Effect Intensity"), param("intensity", 128), true);
+        put(QStringLiteral("Palette"), param("palette", 0), true);
+        put(QStringLiteral("Effect Option"), param("option", 0), true);
+        static const char *const names[3][3] = {
+            { "Red", "Green", "Blue" },
+            { "Secondary Red", "Secondary Green", "Secondary Blue" },
+            { "Tertiary Red", "Tertiary Green", "Tertiary Blue" } };
+        for (int k = 0; k < 3; ++k)
+        {
+            const QColor c = colours.value(k, k == 0 ? QColor(Qt::white) : QColor(Qt::black));
+            put(QLatin1String(names[k][0]), c.red(), true);
+            put(QLatin1String(names[k][1]), c.green(), true);
+            put(QLatin1String(names[k][2]), c.blue(), true);
+        }
+        // Its brightness is a level: the look's dimmer through the scene's
+        // fade, merged with the scene's own (HTP).
+        put(QStringLiteral("Master Dimmer"), qRound(255.0 * dimmer * double(m_envelope)), false);
+    }
+    return out;
 }
 
 QJSValue EffectInstance::buildParamsObject() const

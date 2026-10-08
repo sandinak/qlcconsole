@@ -51,6 +51,7 @@ add_library(${module_name} SHARED
     headlayout.cpp headlayout.h
     righeads.cpp righeads.h
     hanger.cpp hanger.h
+    wledfixture.cpp wledfixture.h
     fixturedefcheck.cpp fixturedefcheck.h
     networkgearcatalog.cpp networkgearcatalog.h
     stand.cpp stand.h
