@@ -122,12 +122,22 @@ and colour, not pixel mapping.
   extension QLC+ skips (schema updated). `QLCPhysical::bodyShape()/
   emission()`; the fixture editor's Physical tab sets them ("Look in the
   rig view"); no "No beam angle" warning for an all-round source.
-- DONE: Hanger mount (`FixtureRigProps::hangerArm/hangerDrop/hangerAngle`,
-  saved HangArm/HangDrop/HangAngle): out along an arm toward a plan angle
-  (0 downstage, 90 stage left), then down a drop, off any truss, pipe or
-  tower mount; on a tower the arm is clamped to the face, not the axis
-  (`fixtureMountPoint()`). Fixture properties: Hanger arm / points / drop.
-  The rig view draws the arm and the cable.
+- DONE (2026-10-08, reworked the same day): hangers are RIGGING, not a
+  fixture setting ("wouldn't it make sense to make the hanger a feature
+  like a truss"). `Hanger` (engine/src/hanger.*): on a truss (tower
+  trusses included) or a Tower structure, at a height/along it, pointing
+  a plan direction, an arm out from the parent's FACE and a chain drop to
+  a hook; derived from its parent (`recomputeHangers()`), saved, removed
+  with its parent (what hung on it stays, unmounted). One hook: a fixture
+  mounts on it (`FixtureRigProps::hangerId`, HangerMount) and hangs BELOW
+  the hook. UI: studio pane right-click "Add Hanger (Here)" on a truss or
+  tower; hanger editor (height, points, arm, drop, what hangs, "Copy to
+  Every Tower" -- standing trusses and Towers, once each); Mount on ->
+  Hanger; Layers lists hangers with their tower (rename, edit, delete);
+  "Mounted on: Hanger 1 on T-1"; rig view draws clamp, arm and chain --
+  double-click any of them to edit the hanger, right-click for Edit/Remove
+  (`StructureStudioView::hitTestHanger()`). The first version's per-fixture
+  hanger fields are gone. Not yet: hangers on the 2D plot.
 - DONE: lantern body (`FixtureSilhouette::Lantern`): angled view a cage --
   caps, posts -- round a core lit in its live colour, a halo in the haze;
   flat views and the plot a rounded cage with the core. Light all round
@@ -150,6 +160,14 @@ and colour, not pixel mapping.
   "Network (WLED, JSON over Wi-Fi)"; the patch planner patches a WLED
   fixture's universe to the WLED output (never borrows Art-Net) with its
   IP, address and channel count.
+- DONE: a batch of network fixtures gets ONE IP EACH, counting up from the
+  one given (`AppUtil::nthAddress()`: .60, .61, ... carrying past .255);
+  the Add dialog shows "One each: 172.18.2.60 to 172.18.2.63" -- it gave
+  every fixture of the batch the same IP.
+- DONE: macOS dev builds read included fixtures, scripts, profiles, gobos
+  ... from build/Resources/<kind>, which held stale COPIES (the Lantern was
+  missing from Add Fixture). resources/CMakeLists.txt now links each entry
+  to its source at configure time.
 - NOT YET: tried against a real WLED on Branson's Wi-Fi; effect/palette
   NAMES from the device (/json/eff, /json/pal) in the look editor.
 
