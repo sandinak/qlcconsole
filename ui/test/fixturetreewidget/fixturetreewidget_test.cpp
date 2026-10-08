@@ -19,6 +19,9 @@
 
 #include <QtTest>
 #include <QTreeWidgetItemIterator>
+#include <QApplication>
+#include <QMessageBox>
+#include <QTimer>
 #include <QKeyEvent>
 #include <QMimeData>
 
@@ -409,4 +412,68 @@ void FixtureTreeWidget_Test::aDropOnAUniverseNamesItAndItsFixtures()
         gr.setData(FixtureTreeWidget::groupDragMimeType(), data);
     }
     QCOMPARE(tree.droppedFixtures(&gr), QList<quint32>({ b->id(), a->id() }));
+}
+
+/* Two fixtures called "AT1-3z" (a show from before names were unique):
+   listed at the top. Renaming another fixture to a taken name is refused. */
+void FixtureTreeWidget_Test::duplicateNamesAreListedAndARenameToATakenNameIsRefused()
+{
+    Fixture *rigged = new Fixture(m_doc);
+    rigged->setName("AT1-3z");
+    rigged->setChannels(1);
+    rigged->setAddress(447);
+    QVERIFY(m_doc->addFixture(rigged));
+    Fixture *stray = new Fixture(m_doc);
+    stray->setName("AT1-3z");
+    stray->setChannels(1);
+    stray->setPatched(false);
+    QVERIFY(m_doc->addFixture(stray));
+    Fixture *other = new Fixture(m_doc);
+    other->setName("SR 1");
+    other->setChannels(1);
+    other->setAddress(20);
+    QVERIFY(m_doc->addFixture(other));
+
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber | FixtureTreeWidget::AddressRange
+                                  | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+    QTreeWidgetItem *root = findByRole(tree, PROP_DUPLICATES);
+    QVERIFY2(root != nullptr, "no Duplicate names root");
+    QCOMPARE(tree.topLevelItem(0), root);
+    QCOMPARE(root->text(0), QString("Duplicate names (1)"));
+    QCOMPARE(root->childCount(), 1);
+    QCOMPARE(root->child(0)->text(0), QString("AT1-3z — 2 fixtures"));
+    QVERIFY(root->child(0)->toolTip(0).contains("address 448"));
+    QVERIFY(root->child(0)->toolTip(0).contains("in the inventory"));
+
+    // Rename "SR 1" to "AT1-3z" in place: refused, with a note; name kept.
+    QTreeWidgetItem *row = nullptr;
+    for (QTreeWidgetItemIterator it(&tree); *it; ++it)
+        if ((*it)->data(0, PROP_ID).isValid() && (*it)->data(0, PROP_ID).toUInt() == other->id()
+            && !(*it)->data(0, PROP_HEAD).isValid() && !(*it)->data(0, PROP_CHANNEL).isValid())
+            row = *it;
+    QVERIFY(row != nullptr);
+    QString note;
+    QTimer watch;                       // the note is modal: answer it once it shows
+    QObject::connect(&watch, &QTimer::timeout, [&note, &watch]() {
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        {
+            note = box->text();
+            box->accept();
+            watch.stop();
+        }
+    });
+    watch.start(20);
+    tree.blockSignals(true);                               // armed, as Return does
+    row->setFlags(row->flags() | Qt::ItemIsEditable);
+    tree.blockSignals(false);
+    row->setText(0, "AT1-3z");
+    watch.stop();
+    QCOMPARE(other->name(), QString("SR 1"));
+    QVERIFY2(note.contains("already called “AT1-3z”"), qPrintable(note));
+
+    // Numbered apart: the root goes.
+    QCOMPARE(m_doc->makeFixtureNamesUnique(), 1);
+    tree.updateTree();
+    QVERIFY(findByRole(tree, PROP_DUPLICATES) == nullptr);
 }

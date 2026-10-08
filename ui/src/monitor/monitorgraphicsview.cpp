@@ -86,6 +86,7 @@
 #include "scene.h"
 #include "fixturegroup.h"
 #include "createfixturegroup.h"
+#include "apputil.h"
 #include "function.h"
 #include "programmercontroller.h"
 #include "doc.h"
@@ -6169,9 +6170,8 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
             bool ok = false;
             const QString name = QInputDialog::getText(this, tr("Rename"), tr("Name:"),
                                                        QLineEdit::Normal, itemNameOf(m_doc, kind, id), &ok).trimmed();
-            if (ok && !name.isEmpty())
+            if (ok && !name.isEmpty() && renameItem(kind, id, name))
             {
-                renameItem(kind, id, name);
                 m_doc->setModified();
                 emit mapStructureChanged();
             }
@@ -6287,11 +6287,13 @@ QString MonitorGraphicsView::saveNetworkNodeAsModel(quint32 nodeIndex, const QSt
     return path;
 }
 
-void MonitorGraphicsView::renameItem(const QString &kind, quint32 id, const QString &name)
+bool MonitorGraphicsView::renameItem(const QString &kind, quint32 id, const QString &name)
 {
     MonitorProperties *props = m_doc->monitorProperties();
     if (kind == QLatin1String("fixture"))
     {
+        if (AppUtil::refuseTakenFixtureName(this, m_doc, id, name))
+            return false;
         if (Fixture *f = m_doc->fixture(id)) f->setName(name);
         updateFixture(id);
     }
@@ -6352,6 +6354,7 @@ void MonitorGraphicsView::renameItem(const QString &kind, quint32 id, const QStr
         if (StageTarget *t = props->stageTarget(id)) t->setName(name);
         updateTargets();
     }
+    return true;
 }
 
 void MonitorGraphicsView::removeFromFolder(const QList<QPair<QString, quint32> > &objects)

@@ -139,6 +139,7 @@ private:
     bool m_nameReloadPending = false;   ///< a fixed target was renamed
 
     QLabel *m_targetsLabel;     //!< "Targets (N fixtures)"
+    QLabel *m_unpatchedNote;    //!< some targets are in the inventory: no DMX
     QComboBox *m_scopeCombo;    //!< declared look scope — see Scene::LookScope
     QTreeWidget *m_targetList;  //!< groups + fixtures grouped by type
     QTreeWidget *m_lookList;    //!< Look | In | Out (In/Out editable per look)

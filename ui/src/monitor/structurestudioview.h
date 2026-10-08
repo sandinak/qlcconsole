@@ -107,6 +107,20 @@ public:
      *  vivid as a test card. 0 = blackout (only what the rig emits is visible),
      *  1 = full working light. */
     void setAmbient(double level);
+    /** How much haze is in the air: scales the beams drawn IN THE AIR only --
+     *  what they land on, and what they light, is the same with or without
+     *  it. 0 = clean air (no visible shafts), 1 = the usual stage haze,
+     *  above 1 = thick. */
+    void setHaze(double level);
+    double haze() const { return m_haze; }
+
+    /** A fixture's light against a reference 100 W LED fixture (3500 lm), from
+     *  its definition: the declared lumens, else the declared power at 35 lm/W,
+     *  else 1 with @p known false -- unknown, and drawn as before: every head
+     *  and every lit section at full, not sharing the fixture's light. Linear
+     *  -- what adds up on a surface is light, and the rasteriser rolls a stack
+     *  of it off short of white. */
+    double fixtureOutput(class Fixture *fx, bool *known = nullptr) const;
     /** Draw the beams moving heads are throwing. Live output only -- an unlit
      *  rig has no beams to show. */
     void setBeams(bool on);
@@ -369,6 +383,14 @@ private:
      *  that turns to face the viewer. */
     /** @p topAlpha is the opacity of the TOP face (255 = solid, 0 = omitted),
      *  so a clear-topped step shows what is rigged inside it. */
+    /** Light from fixtures rigged INSIDE a platform with a clear or open top
+     *  ("the figure .. should only show [colour] relative to the installed
+     *  angle of the fixture in the step"): every lit head is a light of its
+     *  own -- where it sits along the bar, firing along the fixture's own
+     *  facing (studioTilt included), in its cone -- and it gets out only
+     *  through the top. Adds them to m_frameBeams for the figures, and
+     *  draws each fixture's footprint where its cone meets the top. */
+    void collectInsideLight(QPainter &p) const;
     void drawSolidBox(QPainter &p, const QVector3D corner[8],
                       const QColor &base, const QColor &edge,
                       int topAlpha = 255, bool ambientLit = true,
@@ -559,8 +581,52 @@ private:
         double    length;
         QColor    colour;
         double    level;
+        /** Lit from inside a box: the light leaves only through its top --
+         *  the opening [ax0,ax1] x [ay0,ay1] at height az. */
+        bool      apertured = false;
+        /** All round (a lantern): no cone -- @c apex is the source and light
+         *  falls off with distance from it (lightFactor(), beamCoverage()). */
+        bool      omni = false;
+        float     ax0 = 0, ay0 = 0, ax1 = 0, ay1 = 0, az = 0;
     };
     mutable QVector<FrameBeam> m_frameBeams;
+    /** How much of beam @p fb reaches @p at: 1 inside its cone, rolling off
+     *  over a soft edge; 0 outside, past where it lands, or -- lit from inside
+     *  a box -- unless the line from it to @p at goes out through the top. */
+    static double beamCoverage(const FrameBeam &fb, const QVector3D &at);
+    /** How bright a cone of half-angle @p half is relative to a 40-degree
+     *  one carrying the same light: the same output over a wider solid angle
+     *  is that much dimmer, in the air and where it lands. 1 for 40 degrees
+     *  and narrower (spots are not made brighter); about 1/12 for a
+     *  150-degree flood. */
+    static double spreadFactor(double half);
+    /** spreadFactor() for a beam, and for an all-round source the share of
+     *  its light a surface a metre away gets (FrameBeam::omni). */
+    static double lightFactor(const FrameBeam &fb);
+    /** A lantern in the angled view: caps and posts of a cage round a core
+     *  lit in @p live at @p level (0 = dark glass), with a halo in the haze. */
+    void drawLanternSolid(QPainter &p, const QVector3D corner[8], const QColor &cage,
+                          const QColor &live, double level, double depthBias) const;
+    /** The light this frame's beams put on a surface at @p at facing @p n,
+     *  as RGB 0..255 sums (before exposure and the knee). */
+    QVector3D beamLightAt(const QVector3D &at, const QVector3D &n) const;
+    /** Where a bar of pixels' light comes from: along each lit section, up
+     *  to six points spread evenly, each with the section's colour and its
+     *  share of its level. Empty when nothing is lit. */
+    struct BarLight { QVector3D at; QColor colour; double level; };
+    QVector<BarLight> barLights(class Fixture *fx, const struct FixtureRigProps &rp,
+                                const struct FixtureVisualTraits &traits,
+                                const QByteArray &vals, const QVector3D &centre) const;
+    /** Where light from a lit stretch of a bar inside a box -- heads from
+     *  @p a to @p b, firing along @p dir in a cone of @p half -- lands on the
+     *  scenery after leaving through the box's top (@p aperture): the patch
+     *  a cyc catches from the steps in front of it. Not where the AXIS lands:
+     *  tipped 20 degrees, the axis clears a 6 m cyc while the cone's upstage
+     *  edge washes its top. Points on the cloth, grouped by the piece they
+     *  are on. */
+    QVector<QVector<QVector3D> > washOnScenery(const QVector3D &a, const QVector3D &b,
+                                               const QVector3D &dir, double half,
+                                               const FrameBeam &aperture) const;
     /** @p heads holds one look per physical head; a shorter list reuses its
      *  last entry, so a single look drives every head alike. */
     void drawMoverSolid(QPainter &p, quint32 fid,
@@ -708,6 +774,7 @@ private:
     double   m_elevationDeg = 30.0;  ///< Angled plane: eye height above the floor
     bool     m_liveValues = false;   ///< paint DMX output instead of gel colours
     double   m_ambient = 0.62;       ///< room light, 0 = blackout .. 1 = work light
+    double   m_haze = 1.0;           ///< haze in the air (setHaze())
     class QTimer *m_liveTimer = nullptr;
     double   m_frameMs = 0.0;        ///< smoothed repaint cost, for the live rate
     mutable int m_lastOpCount = 0;   ///< primitives in the last angled frame

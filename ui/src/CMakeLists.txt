@@ -159,6 +159,7 @@ add_library(${module_name}
     showmanager/trackitem.cpp showmanager/trackitem.h
     showmanager/videoitem.cpp showmanager/videoitem.h
     showstatus.cpp showstatus.h
+    showstatusdialog.cpp showstatusdialog.h
     simpledesk.cpp simpledesk.h
     simpledeskengine.cpp simpledeskengine.h
     speeddial.cpp speeddial.h

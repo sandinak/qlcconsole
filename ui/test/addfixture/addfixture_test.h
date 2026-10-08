@@ -48,6 +48,9 @@ private slots:
 
     void inventoryModeHidesAddressAndIgnoresOverlap();
     void connectionAndIpAreReported();
+    void aTakenNameIsRefusedWhenEditingAndNumberedWhenAdding();
+    void eachModelSaysWhereItsDefinitionComesFrom();
+    void aNetworkFixtureCanBeSentToByWled();
 
 private:
     Doc* m_doc;

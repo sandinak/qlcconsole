@@ -2519,6 +2519,10 @@ void Monitor_Test::subPixelLedGridsAreCulledWhenZoomedOut()
     v.setPlane(StructureStudioView::Angled);
     v.setAngledView(20.0, 30.0);
     v.setLiveValues(true);
+    /* The LED grids alone: a lit strip's light now comes from along it (a
+       cone per lit stretch, up to six), and counting those beams in measures
+       something else. */
+    v.setBeams(false);
 
     /* Two explicit scales rather than "the default fit", which on a small test
        rig can already be close enough to draw every LED -- the first version of
@@ -14538,6 +14542,40 @@ void Monitor_Test::enterRenamesAnyLayersRowFromItsBareName()
         renameBy(fxRow, "Bar One");
         QCOMPARE(doc->fixture(fids[0])->name(), QString("Bar One"));
 
+        /* Another fixture's name is refused, with a note; the row goes back.
+           (The box comes from Enter's queued commit: watch for it.) */
+        QString note;
+        QTimer watch;
+        QObject::connect(&watch, &QTimer::timeout, [&note, &watch]() {
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            {
+                note = box->text();
+                box->accept();
+                watch.stop();
+            }
+        });
+        watch.start(20);
+        QTreeWidgetItem *bar2 = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, Qt::UserRole).toInt() == MonitorLayersPanel::NodeItem
+                && (*it)->data(0, Qt::UserRole + 2).toString() == "fixture"
+                && (*it)->data(0, Qt::UserRole + 1).toUInt() == fids[1])
+                bar2 = *it;
+        QVERIFY(bar2 != nullptr);
+        renameBy(bar2, "Bar One");
+        QTRY_VERIFY_WITH_TIMEOUT(!note.isEmpty(), 3000);
+        watch.stop();
+        QVERIFY2(note.contains("already called “Bar One”"), qPrintable(note));
+        QCOMPARE(doc->fixture(fids[1])->name(), QString("Bar 2"));
+        QTRY_VERIFY_WITH_TIMEOUT([&]() {
+            for (QTreeWidgetItemIterator it(tree); *it; ++it)
+                if ((*it)->data(0, Qt::UserRole + 1).toUInt() == fids[1]
+                    && (*it)->data(0, Qt::UserRole + 2).toString() == "fixture")
+                    return (*it)->text(0).startsWith("Bar 2");
+            return false;
+        }(), 3000);
+        QVERIFY(doc->duplicateFixtureNames().isEmpty());
+
         QTreeWidgetItem *layerRow = tree->topLevelItem(0);
         QVERIFY(layerRow != nullptr);
         const quint32 layerId = layerRow->data(0, Qt::UserRole + 1).toUInt();
@@ -15153,10 +15191,652 @@ static QLCFixtureDef *makePixelRow(const QString &model, int heads, int widthMm,
     return def;
 }
 
+/* The Oppsk wall washer: a 1005 mm bar whose definition declares ONE grid,
+   8 x 4, for its 32-head 64ch mode -- patched here, as in DanceHysteria, as
+   its 16-head "48ch RGB" and "16ch White" modes. */
+static QLCFixtureDef *makeWallWasher()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Oppsk");
+    def->setModel("Wall Washer Light Bar");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCPhysical ph;
+    ph.setLayoutSize(QSize(8, 4));
+    ph.setWidth(1005); ph.setHeight(65); ph.setDepth(60);
+    auto mode = [&](const QString &name, const QList<QLCChannel::Preset> &perHead) {
+        QLCFixtureMode *m = new QLCFixtureMode(def);
+        m->setName(name);
+        for (int h = 0; h < 16; ++h)
+        {
+            QLCFixtureHead head;
+            for (QLCChannel::Preset pr : perHead)
+            {
+                QLCChannel *ch = new QLCChannel();
+                ch->setName(QString("%1 %2 %3").arg(name).arg(h + 1).arg(int(pr)));
+                ch->setPreset(pr);
+                def->addChannel(ch);
+                m->insertChannel(ch, m->channels().size());
+                head.addChannel(quint32(m->channels().size() - 1));
+            }
+            m->insertHead(-1, head);
+        }
+        m->setPhysical(ph);
+        def->addMode(m);
+    };
+    mode("48ch RGB", { QLCChannel::IntensityRed, QLCChannel::IntensityGreen, QLCChannel::IntensityBlue });
+    mode("16ch White", { QLCChannel::IntensityWhite });
+    return def;
+}
+
+/* Two bars per step top, inside the step: the RGB one at 0.6 m across, the
+   white one at 1.8 m, on four steps side by side. */
+static QList<Fixture *> washersOnSteps(Doc *doc, QLCFixtureDef *def)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    QList<Fixture *> out;
+    for (int s = 0; s < 4; ++s)
+    {
+        StagePlatform *step = props->addPlatform();
+        step->setName(QString("US-%1").arg(s + 1));
+        step->setOriginX(1.2f + 2.438f * s); step->setOriginY(4.9f);
+        step->setWidth(2.438f); step->setDepth(0.204f); step->setHeight(0.204f);
+        step->setTopMaterial(StagePlatform::ClearTop);
+        for (int b = 0; b < 2; ++b)
+        {
+            Fixture *f = new Fixture(doc);
+            f->setName(QString("US%1t%2").arg(s + 1).arg(b + 1));
+            f->setFixtureDefinition(def, def->modes().at(b));
+            f->setUniverse(quint32(out.size()));
+            doc->addFixture(f);
+            props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+            FixtureRigProps rp;
+            rp.riserPlatformId = step->id();
+            rp.riserFace = 1;
+            rp.riserU = b == 0 ? 0.61f : 1.829f;
+            rp.riserV = 0.102f;
+            rp.placement = FixtureRigProps::Inside;
+            rp.mountZOffset = 0.184f;           // just under the top, as built
+            rp.studioMount = 0;
+            rp.studioTilt = 20.0f;
+            rp.studioFaceChosen = true;
+            props->setFixtureRigProps(f->id(), rp);
+            out << f;
+        }
+    }
+    return out;
+}
+
+void Monitor_Test::twoBarsOfOneKindEachSplitIntoAGroupPerKind()
+{
+    QTemporaryDir lib;
+    HeadLayoutLibrary::setUserDirectoryOverride(lib.path());
+    QLCFixtureDef *def = makeWallWasher();
+    // The 8 x 4 grid is the 32-head mode's, not these 16-head modes'.
+    QCOMPARE(HeadLayout::declaredGrid(def->modes().at(0)), QSize());
+    QCOMPARE(HeadLayout::declaredGrid(def->modes().at(1)), QSize());
+    Doc *doc = new Doc(this);
+    const QList<Fixture *> bars = washersOnSteps(doc, def);
+    QCOMPARE(HeadLayout::headOrder(bars[0]).size, QSize(16, 1));   // a strip: one row
+
+    QList<quint32> ids;
+    foreach (Fixture *f, bars) ids << f->id();
+    // Each fixture has one kind of head; together, two: offered.
+    QVERIFY(!HeadKinds::isMixed(bars[0]));
+    QVERIFY(HeadTypesDialog::anyMixed(doc, ids));
+    QVERIFY(!HeadTypesDialog::anyMixed(doc, { bars[0]->id(), bars[2]->id() }));   // RGB only
+
+    HeadTypesDialog dlg(doc, ids, "USt");
+    for (int i = 0; i < dlg.m_kindChecks.size(); ++i)
+        dlg.m_kindNames[i]->setText(QString("USt-%1-ALL").arg(dlg.m_kindChecks[i]->property("kind").toString()));
+    dlg.m_viewCombo->setCurrentIndex(dlg.m_viewCombo->findData(int(CreateFixtureGroup::ViewTop)));
+    dlg.accept();
+    QCOMPARE(dlg.createdGroups().size(), 2);
+    FixtureGroup *rgb = nullptr, *w = nullptr;
+    foreach (FixtureGroup *g, dlg.createdGroups())
+    {
+        if (g->name() == "USt-RGB-ALL") rgb = g;
+        if (g->name() == "USt-W-ALL") w = g;
+    }
+    QVERIFY(rgb != nullptr && w != nullptr);
+    // Four bars across, one row of sixteen each, stage right first.
+    QCOMPARE(rgb->size(), QSize(64, 1));
+    QCOMPARE(w->size(), QSize(64, 1));
+    QCOMPARE(rgb->head(QLCPoint(0, 0)).fxi, bars[0]->id());
+    QCOMPARE(rgb->head(QLCPoint(0, 0)).head, 0);
+    QCOMPARE(rgb->head(QLCPoint(15, 0)).head, 15);
+    QCOMPARE(rgb->head(QLCPoint(16, 0)).fxi, bars[2]->id());
+    QCOMPARE(w->head(QLCPoint(48, 0)).fxi, bars[7]->id());
+    delete doc;
+    delete def;
+    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+}
+
+/* "if I right click on US1t1 to edit fixture I get nothing": a washer inside
+   a step cannot be selected on the plot, and Edit Fixture edited the plot's
+   selection -- nothing. It edits the fixture it was asked for. */
+void Monitor_Test::editFixtureFromLayersEditsThatFixture()
+{
+    QLCFixtureDef *def = makeWallWasher();
+    Doc *doc = new Doc(this);
+    doc->setMode(Doc::Design);
+    const QList<Fixture *> bars = washersOnSteps(doc, def);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        mon.m_graphicsView->m_scene->clearSelection();
+        QMenu m;
+        MonitorGraphicsView::MenuPlace place;
+        place.inList = true;
+        mon.m_graphicsView->buildItemMenu(&m, "fixture", bars[0]->id(), place);
+        QAction *edit = nullptr;
+        foreach (QAction *a, m.actions())
+            if (a->text().startsWith("Edit Fixture"))
+                edit = a;
+        QVERIFY(edit != nullptr);
+        QString opened;
+        QTimer watch;
+        QObject::connect(&watch, &QTimer::timeout, [&opened, &watch]() {
+            if (QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+            {
+                opened = d->windowTitle();
+                d->reject();
+                watch.stop();
+            }
+        });
+        watch.start(20);
+        edit->trigger();
+        watch.stop();
+        QVERIFY2(!opened.isEmpty(), "Edit Fixture opened nothing");
+    }
+    delete doc;
+    delete def;
+}
+
+/* Lit in sections -- the two ends of a bar, its middle dark: the light gets
+   out above the lit pixels and not above the dark ones. */
+/* "are we gauging the luminosity based on the actual devices": a fixture
+   throws the light its definition says it puts out -- declared lumens, else
+   declared watts -- shared between its heads. A 10-lumen strip is a glimmer
+   next to a 3500-lumen bar; a fixture declaring neither is drawn as before. */
+void Monitor_Test::aFixturesLightFollowsWhatItsDefinitionPutsOut()
+{
+    QLCFixtureDef *def = makeWallWasher();
+    Doc *doc = new Doc(this);
+    const QList<Fixture *> bars = washersOnSteps(doc, def);
+    Fixture *bar = bars[0];
+    MonitorProperties *props = doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(bar->id());
+    rp.studioTilt = 0.0f;
+    props->setFixtureRigProps(bar->id(), rp);
+    Scene *scene = new Scene(doc);
+    scene->setName("All blue");
+    QVERIFY(doc->addFunction(scene));
+    for (int h = 0; h < 16; ++h)
+        scene->setValue(bar->id(), quint32(h * 3 + 2), 255);
+
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    view.resize(800, 600);
+    view.setLiveValues(true);
+    view.setActiveScene(scene->id());
+    view.setPlane(StructureStudioView::Angled);
+    const QVector3D above(1.81f, 5.002f, 0.204f + 0.15f), down(0, 0, -1);
+    auto lightWithLumens = [&](int lumens) {
+        QLCFixtureMode *mode = bar->fixtureMode();
+        QLCPhysical ph = mode->physical();
+        ph.setBulbLumens(lumens);
+        mode->setPhysical(ph);
+        view.reload();
+        QCoreApplication::processEvents();
+        QImage img(view.size(), QImage::Format_ARGB32);
+        view.render(&img);
+        return double(view.beamLightAt(above, down).z());
+    };
+    bool known = true;
+    view.fixtureOutput(bar, &known);
+    QVERIFY(!known);                                // the test washer declares nothing
+    const double unknown = lightWithLumens(0);
+    const double bright = lightWithLumens(3500);
+    const double strip = lightWithLumens(10);
+    QVERIFY2(unknown > 0.0 && bright > 0.0 && strip > 0.0,
+             qPrintable(QString("%1 %2 %3").arg(unknown).arg(bright).arg(strip)));
+    // Sixteen heads share the bar's light instead of each being a whole fixture.
+    QVERIFY2(bright < unknown / 4.0, qPrintable(QString("%1 vs %2").arg(bright).arg(unknown)));
+    // Light is linear in what is put out: 10 lm is 1/350 of 3500 lm.
+    QVERIFY2(qAbs(strip * 350.0 / bright - 1.0) < 0.05,
+             qPrintable(QString("%1 vs %2").arg(strip).arg(bright)));
+    delete doc;
+    delete def;
+}
+
+void Monitor_Test::aBarLitInSectionsLightsOnlyAboveThem()
+{
+    QLCFixtureDef *def = makeWallWasher();
+    Doc *doc = new Doc(this);
+    const QList<Fixture *> bars = washersOnSteps(doc, def);
+    Fixture *bar = bars[0];
+    MonitorProperties *props = doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(bar->id());
+    rp.studioTilt = 0.0f;                       // straight up, to keep it simple
+    props->setFixtureRigProps(bar->id(), rp);
+    Scene *scene = new Scene(doc);
+    scene->setName("Ends");
+    QVERIFY(doc->addFunction(scene));
+    for (int h : { 0, 1, 2, 13, 14, 15 })      // blue on both ends
+        scene->setValue(bar->id(), quint32(h * 3 + 2), 255);
+
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    view.resize(800, 600);
+    view.setLiveValues(true);
+    view.setActiveScene(scene->id());
+    view.reload();
+    view.setPlane(StructureStudioView::Angled);
+    QCoreApplication::processEvents();
+    QImage img(view.size(), QImage::Format_ARGB32);
+    view.render(&img);
+
+    // The bar: 1.005 m centred at x = 1.2 + 0.61, at y = 4.9 + 0.102.
+    const float cx = 1.81f, y = 5.002f, len = 1.005f, z = 0.204f + 0.15f;
+    const QVector3D down(0, 0, -1);
+    const QVector3D leftEnd(cx - len / 2 + 0.06f, y, z), rightEnd(cx + len / 2 - 0.06f, y, z),
+                    middle(cx, y, z);
+    QVERIFY(view.beamLightAt(leftEnd, down).z() > 50);
+    QVERIFY(view.beamLightAt(rightEnd, down).z() > 50);
+    QCOMPARE(view.beamLightAt(middle, down).z(), 0.0f);
+    delete doc;
+    delete def;
+}
+
+/* "would there be any overwash on the cyclorama from the top steps at 20
+   degrees?" -- the rig view has to say, because it is taken as the room.
+   The bars' AXIS clears a 6 m cyc; the upstage edge of their cones washes its
+   top. Where it lands follows from the geometry: a ray at angle a from the
+   vertical reaches the cloth D metres upstage at height z0 + D / tan(a). */
+void Monitor_Test::stepBarsTippedUpstageWashTheTopOfTheCyc()
+{
+    QLCFixtureDef *def = makeWallWasher();
+    Doc *doc = new Doc(this);
+    const QList<Fixture *> bars = washersOnSteps(doc, def);      // steps at y 4.9, tipped 20
+    MonitorProperties *props = doc->monitorProperties();
+    Scenery *cyc = props->addScenery();
+    cyc->setOriginX(6.0f);
+    cyc->setOriginY(1.2f);
+    cyc->setWidth(11.0f);
+    cyc->setHeight(6.0f);
+
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    Fixture *bar = bars[0];
+    auto wash = [&](float &zmin, float &zmax) {
+        const FixtureRigProps rp = props->fixtureRigProps(bar->id());
+        QVector3D L, N, H;
+        view.fixtureFrame(rp, L, N, H);
+        const QVector3D c = view.fixtureCentre(bar->id());
+        const double len = view.fixtureLenM(bar->id());
+        StagePlatform *pl = props->platform(rp.riserPlatformId);
+        StructureStudioView::FrameBeam ap{ QVector3D(), N, qDegreesToRadians(20.0), 10.0, QColor(), 0.0 };
+        ap.apertured = pl->topMaterial() != StagePlatform::SolidTop;
+        ap.ax0 = pl->originX(); ap.ax1 = pl->originX() + pl->width();
+        ap.ay0 = pl->originY(); ap.ay1 = pl->originY() + pl->depth();
+        ap.az = props->platformBaseZ(pl->id()) + pl->height();
+        if (!ap.apertured) { ap.ax1 = ap.ax0; ap.ay1 = ap.ay0; }    // a lid: no opening
+        zmin = 99.0f; zmax = -1.0f;
+        int n = 0;
+        for (const auto &patch : view.washOnScenery(c - L * float(len / 2), c + L * float(len / 2), N,
+                                                    qDegreesToRadians(20.0), ap))
+            for (const QVector3D &q : patch) { zmin = qMin(zmin, q.z()); zmax = qMax(zmax, q.z()); ++n; }
+        return std::make_pair(n, c);
+    };
+
+    float zmin = 0, zmax = 0;
+    auto r = wash(zmin, zmax);
+    QVERIFY2(r.first > 0, "a bar tipped 20 degrees upstage in a 40 degree cone does not reach the cyc");
+    const double D = double(r.second.y()) - 1.2;
+    const double expected = double(r.second.z()) + D / qTan(qDegreesToRadians(40.0));
+    QVERIFY2(qAbs(zmin - expected) < 0.1, qPrintable(QString("wash starts at %1 m, expected %2").arg(zmin).arg(expected)));
+    QVERIFY(qAbs(zmax - 6.0f) < 0.05);                           // up to the top of the cloth
+
+    /* On the FLOOR of the 20 cm box instead: the shallow upstage rays meet
+       the back wall before the opening -- less of the cone gets out, so the
+       wash starts higher up the cloth (or not at all). */
+    FixtureRigProps rp = props->fixtureRigProps(bar->id());
+    rp.mountZOffset = 0.0f;
+    props->setFixtureRigProps(bar->id(), rp);
+    float floorMin = 0, floorMax = 0;
+    const int onFloor = wash(floorMin, floorMax).first;
+    QVERIFY2(onFloor == 0 || floorMin > zmin + 0.3f,
+             qPrintable(QString("walled in, the wash still starts at %1 m").arg(floorMin)));
+    rp.mountZOffset = 0.184f;
+    props->setFixtureRigProps(bar->id(), rp);
+
+    // Upright, the cone's edge is 20 degrees from vertical: over the top.
+    rp.studioTilt = 0.0f;
+    props->setFixtureRigProps(bar->id(), rp);
+    QCOMPARE(wash(zmin, zmax).first, 0);
+
+    // Tipped again, but the step has a solid lid: nothing gets out.
+    rp.studioTilt = 20.0f;
+    props->setFixtureRigProps(bar->id(), rp);
+    props->platform(rp.riserPlatformId)->setTopMaterial(StagePlatform::SolidTop);
+    QCOMPARE(wash(zmin, zmax).first, 0);
+    delete doc;
+    delete def;
+}
+
+/* "the source appears centred on the matrix, not using the individual LEDs":
+   a bar of pixels throws its light from the lit ones -- lit only at one end,
+   from that end; lit in two sections, from both, nothing from the dark middle.
+   An XL-450 hung on a truss (15 columns along its 401 mm). */
+void Monitor_Test::aPixelBarsLightComesFromItsLitPixels()
+{
+    QLCFixtureDef *def = makeXl450();
+    Doc *doc = new Doc(this);
+    QList<Fixture *> bars = xlBarsOnATruss(doc, def, 0.0f);         // lying along the truss
+    Fixture *bar = bars[0];
+    Scene *scene = new Scene(doc);
+    scene->setName("Ends");
+    QVERIFY(doc->addFunction(scene));
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    view.setLiveValues(true);
+    view.setActiveScene(scene->id());
+    MonitorProperties *props = doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(bar->id());
+    const FixtureVisualTraits traits = classifyFixture(bar);
+    QVector3D L, N, H;
+    view.fixtureFrame(rp, L, N, H);
+    const QVector3D centre = view.fixtureCentre(bar->id());
+    const double len = view.fixtureLenM(bar->id());
+    auto along = [&](const QVector3D &p) { return double(QVector3D::dotProduct(p - centre, L)); };
+    auto lights = [&]() {
+        QCoreApplication::processEvents();
+        return view.barLights(bar, rp, traits, view.valuesForDrawing(bar), centre);
+    };
+
+    QVERIFY(lights().isEmpty());                                     // dark
+
+    // The first RGB head of each row of the LED map: the bar's first column.
+    const HeadLayout map = props->headLayoutFor(bar);
+    QList<int> firstColumn;
+    for (int h = 0; h < 45; ++h)                                     // the RGB heads
+        if (map.cellOf(h).x() == 0) firstColumn << h;
+    QVERIFY(!firstColumn.isEmpty());
+    for (int h : firstColumn)
+        scene->setValue(bar->id(), quint32(h * 3 + 2), 255);         // its blue
+    QVector<StructureStudioView::BarLight> ls = lights();
+    QVERIFY(!ls.isEmpty());
+    for (const auto &l : ls)
+    {
+        QVERIFY2(along(l.at) < -0.4 * len, qPrintable(QString("light at %1 of a %2 m bar").arg(along(l.at)).arg(len)));
+        QVERIFY(l.colour.blue() > 200 && l.colour.red() < 30);
+    }
+
+    // The last column too: two sections, light from both ends, none between.
+    for (int h = 0; h < 45; ++h)
+        if (map.cellOf(h).x() == map.size.width() - 1)
+            scene->setValue(bar->id(), quint32(h * 3), 255);         // red at the other end
+    ls = lights();
+    bool left = false, right = false;
+    for (const auto &l : ls)
+    {
+        const double u = along(l.at);
+        QVERIFY2(qAbs(u) > 0.4 * len, qPrintable(QString("light from the dark middle, at %1").arg(u)));
+        left |= u < 0;
+        right |= u > 0;
+    }
+    QVERIFY(left && right);
+    delete doc;
+    delete def;
+}
+
+/* "the effect on these bars appears to be going backwards, not frontwards ..
+   are the bars set facing downstage?" -- the FART bars hang vertically off a
+   truss, faced to the front. "Hung means pointing down" sent their light to
+   the floor behind the truss; a bar's light leaves its face. A 180-degree
+   lens is a flood, drawn wide -- and dimmer for being spread. */
+/* A WLED lantern on a bracket off the side of a tower: drawn as a lantern,
+   hung where its hanger puts it, and lit all round -- no cone; what is near
+   it is lit, falling off with the square of the distance. */
+void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("WLED");
+    def->setModel("Lantern");
+    def->setType(QLCFixtureDef::ColorChanger);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("DRGB");
+    const QLCChannel::Preset presets[4] = { QLCChannel::IntensityMasterDimmer, QLCChannel::IntensityRed,
+                                            QLCChannel::IntensityGreen, QLCChannel::IntensityBlue };
+    for (int i = 0; i < 4; ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("ch%1").arg(i));
+        ch->setPreset(presets[i]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(i));
+    }
+    QLCPhysical ph;
+    ph.setWidth(150); ph.setHeight(250); ph.setDepth(150);
+    ph.setBulbLumens(100);
+    ph.setBodyShape(QLCPhysical::LanternBody);
+    ph.setEmission(QLCPhysical::OmniEmission);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+
+    Doc *doc = new Doc(this);
+    Fixture *lantern = new Fixture(doc);
+    lantern->setFixtureDefinition(def, mode);
+    lantern->setName("Lantern SL");
+    QVERIFY(doc->addFixture(lantern));
+    const FixtureVisualTraits traits = classifyFixture(lantern);
+    QCOMPARE(int(traits.kind), int(FixtureSilhouette::Lantern));
+    QVERIFY(traits.omni);
+
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *tower = props->addTruss();
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(2.0f, 3.0f, 0.0f));
+    tower->setLength(3.0f);
+    tower->setWidth(0.29f);
+    FixtureRigProps rp;
+    rp.trussId = tower->id();
+    rp.trussOffset = 2.6f;
+    rp.hangerArm = 0.4f;
+    rp.hangerAngle = 90.0f;                     // stage left
+    rp.hangerDrop = 0.5f;
+    props->setFixtureRigProps(lantern->id(), rp);
+    const QVector3D at = props->fixtureRigPosition(lantern->id());
+    QVERIFY(qAbs(at.x() - (props->fixtureMountPoint(lantern->id()).x() + 0.4f)) < 1e-3f);
+
+    Scene *scene = new Scene(doc);
+    scene->setName("Red");
+    QVERIFY(doc->addFunction(scene));
+    scene->setValue(lantern->id(), 0, 255);
+    scene->setValue(lantern->id(), 1, 255);
+
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    view.resize(700, 700);
+    view.setLiveValues(true);
+    view.setBeams(true);
+    view.setActiveScene(scene->id());
+    view.reload();
+    view.setPlane(StructureStudioView::Angled);
+    QCoreApplication::processEvents();
+    QImage img(view.size(), QImage::Format_ARGB32);
+    img.fill(Qt::black);
+    view.render(&img);
+
+    // No cone: one all-round source, at the lantern.
+    int omni = 0;
+    for (const StructureStudioView::FrameBeam &fb : view.m_frameBeams)
+        if (fb.omni) { ++omni; QVERIFY((fb.apex - at).length() < 1e-3f); }
+    QCOMPARE(omni, 1);
+
+    // Red on what is near; next to nothing six metres away.
+    const QVector3D near = at + QVector3D(0.5f, 0.0f, 0.0f), far = at + QVector3D(6.0f, 0.0f, 0.0f);
+    const QVector3D facingBack(-1, 0, 0);
+    const QVector3D litNear = view.beamLightAt(near, facingBack), litFar = view.beamLightAt(far, facingBack);
+    QVERIFY2(litNear.x() > 0.0f && litNear.y() == 0.0f, qPrintable(QString("%1 %2").arg(litNear.x()).arg(litNear.y())));
+    QVERIFY2(litFar.x() < litNear.x() / 50.0f, qPrintable(QString("%1 vs %2").arg(litFar.x()).arg(litNear.x())));
+    // Turned away from it, nothing.
+    QCOMPARE(view.beamLightAt(near, QVector3D(1, 0, 0)).x(), 0.0f);
+
+    delete doc;
+    delete def;
+}
+
+void Monitor_Test::aBarHungOnATrussShinesOutOfItsFace()
+{
+    QLCFixtureDef *def = makeXl450();
+    Doc *doc = new Doc(this);
+    QList<Fixture *> bars = xlBarsOnATruss(doc, def, 90.0f);       // hanging, face chosen
+    Fixture *bar = bars[0];
+    MonitorProperties *props = doc->monitorProperties();
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    FixtureRigProps rp = props->fixtureRigProps(bar->id());
+    rp.studioMount = 1;                                // the front plane: faces downstage
+    rp.studioFlip = false;
+    props->setFixtureRigProps(bar->id(), rp);
+    QVector3D dir;
+    QVERIFY(view.emitDirection(bar, rp, classifyFixture(bar), dir));
+    QVERIFY2(dir.y() > 0.99f, qPrintable(QString("faced front, it shines %1,%2,%3").arg(dir.x()).arg(dir.y()).arg(dir.z())));
+
+    rp.studioFlip = true;                              // the back: upstage
+    props->setFixtureRigProps(bar->id(), rp);
+    QVERIFY(view.emitDirection(bar, rp, classifyFixture(bar), dir));
+    QVERIFY(dir.y() < -0.99f);
+
+    // A flood is fainter than a spot of the same light; spots are not boosted.
+    QCOMPARE(StructureStudioView::spreadFactor(qDegreesToRadians(20.0)), 1.0);
+    QCOMPARE(StructureStudioView::spreadFactor(qDegreesToRadians(7.0)), 1.0);
+    const double flood = StructureStudioView::spreadFactor(qDegreesToRadians(75.0));
+    QVERIFY2(flood > 0.05 && flood < 0.12, qPrintable(QString::number(flood)));
+    delete doc;
+    delete def;
+}
+
 /* Steps as in stage-structures-demo, smaller: two decks side by side in each
    of two rows (US upstage, CS downstage). Each deck's front face carries three
    8-head bars, #1 at the top; its top carries a 6-head and a 2-head Generic
    washer, one after the other across it. */
+/* Washers INSIDE a clear-topped step: no beam drawn (they are in a box),
+   but their light gets out through the top -- along each fixture's own
+   facing, in its cone, from where each head sits -- and only there ("should
+   only show relative to the installed angle of the fixture in the step").
+   Checked as light arriving at exact points, which is what the figure is
+   shaded from. */
+void Monitor_Test::aClearTopGlowsWithTheLightInsideIt()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Oppsk");
+    def->setModel("Wall Washer");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("RGB");
+    const QLCChannel::Preset rgb[3] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                        QLCChannel::IntensityBlue };
+    for (int h = 0; h < 2; ++h)
+    {
+        QLCFixtureHead head;
+        for (int c = 0; c < 3; ++c)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("P%1 %2").arg(h).arg(c));
+            ch->setPreset(rgb[c]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, mode->channels().size());
+            head.addChannel(quint32(mode->channels().size() - 1));
+        }
+        mode->insertHead(-1, head);
+    }
+    def->addMode(mode);
+
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *step = props->addPlatform();
+    step->setName("US-1");
+    step->setOriginX(2.0f); step->setOriginY(2.0f);
+    step->setWidth(2.4f); step->setDepth(1.2f); step->setHeight(0.2f);
+    step->setTopMaterial(StagePlatform::ClearTop);
+    Fixture *washer = new Fixture(doc);
+    washer->setName("US1t1");
+    washer->setFixtureDefinition(def, mode);
+    QVERIFY(doc->addFixture(washer));
+    props->setFixturePosition(washer->id(), 0, 0, QVector3D(0, 0, 0));
+    auto rig = [&](float tilt) {
+        FixtureRigProps rp;
+        rp.riserPlatformId = step->id();
+        rp.riserFace = 1;                   // on the top plane, inside the box
+        rp.riserU = 1.2f;                   // x = 3.2
+        rp.riserV = 0.6f;                   // y = 2.6, mid-depth
+        rp.placement = FixtureRigProps::Inside;
+        rp.studioMount = 0;
+        rp.studioTilt = tilt;
+        rp.studioFaceChosen = true;
+        props->setFixtureRigProps(washer->id(), rp);
+    };
+    rig(0.0f);
+
+    Scene *scene = new Scene(doc);
+    scene->setName("USt-Blue");
+    QVERIFY(doc->addFunction(scene));
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    view.resize(800, 600);
+    view.setLiveValues(true);
+    view.setActiveScene(scene->id());
+    view.reload();
+    view.setPlane(StructureStudioView::Angled);
+    auto frame = [&view]() {
+        QCoreApplication::processEvents();
+        QImage img(view.size(), QImage::Format_ARGB32);
+        view.render(&img);
+    };
+    auto apertured = [&view]() {
+        int n = 0;
+        for (const auto &fb : view.m_frameBeams) n += fb.apertured;
+        return n;
+    };
+    const QVector3D down(0, 0, -1);           // a surface facing the floor: an underside
+    const float top = 0.2f;
+
+    frame();
+    QCOMPARE(apertured(), 0);                // dark: no light
+
+    // Blue at full on both pixels.
+    scene->setValue(washer->id(), 2, 255);
+    scene->setValue(washer->id(), 5, 255);
+    frame();
+    QTRY_COMPARE(apertured(), 2);            // a light per head
+    const QVector3D above(3.2f, 2.6f, top + 0.6f);
+    const QVector3D lit = view.beamLightAt(above, down);
+    QVERIFY2(lit.z() > 100 && lit.x() < 10, qPrintable(QString("above the bar: %1,%2,%3").arg(lit.x()).arg(lit.y()).arg(lit.z())));
+
+    // In front of the step, downstage: outside the cone -- dark.
+    QCOMPARE(view.beamLightAt(QVector3D(3.2f, 3.6f, top + 0.6f), down).z(), 0.0f);
+    // Inside the box, under the top: the light has not got out yet.
+    QCOMPARE(view.beamLightAt(QVector3D(3.2f, 2.6f, top - 0.05f), down).z(), 0.0f);
+    // Facing away from it (a surface looking up), nothing.
+    QCOMPARE(view.beamLightAt(above, QVector3D(0, 0, 1)).z(), 0.0f);
+
+    /* Tipped 30 degrees upstage, as a bar built on a diagonal in the box:
+       the light leans upstage. A point up and upstage is lit; the same
+       point downstage is not. */
+    rig(30.0f);
+    view.reload();
+    frame();
+    QTRY_COMPARE(apertured(), 2);
+    const QVector3D upstage(3.2f, 2.6f - 0.5f, top + 0.8f), downstage(3.2f, 2.6f + 0.5f, top + 0.8f);
+    QVERIFY2(view.beamLightAt(upstage, down).z() > 50, "tipped upstage, the upstage side is dark");
+    QCOMPARE(view.beamLightAt(downstage, down).z(), 0.0f);
+
+    // A solid top lets nothing out.
+    step->setTopMaterial(StagePlatform::SolidTop);
+    view.reload();
+    frame();
+    QCOMPARE(apertured(), 0);
+    QCOMPARE(view.beamLightAt(upstage, down).z(), 0.0f);
+
+    delete doc;
+    delete def;
+}
+
 void Monitor_Test::stepFrontsAndTopsAreLaidOutAsOnStage()
 {
     QLCFixtureDef *bar = makePixelRow("Step Row 8", 8, 2438, false);

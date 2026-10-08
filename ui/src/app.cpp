@@ -73,6 +73,7 @@
 #include "lastlookeffect.h"
 
 #include "qlcfixturedefcache.h"
+#include "patchinventorydialog.h"
 #include "audioplugincache.h"
 #include "rgbscriptscache.h"
 #include "videoprovider.h"
@@ -83,6 +84,8 @@
 #include "controlsurfaceengine.h"
 #include "pmjoverlay.h"
 #include "showstatus.h"
+#include "showstatusdialog.h"
+#include "qlcioplugin.h"
 #include "startupwindow.h"
 
 #if defined(WIN32) || defined(Q_OS_WIN)
@@ -820,6 +823,121 @@ void App::initDoc()
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
+
+    /* Fixtures not patched, or whose definition says nothing about how much
+       light they put out, go in the footer's "Not ready" list. Re-checked a
+       moment after any fixture change -- a load or a bulk patch is hundreds
+       of changes, and one check covers them all. */
+    QTimer *fixtureReadiness = new QTimer(this);
+    fixtureReadiness->setObjectName(QStringLiteral("fixtureReadinessTimer"));
+    fixtureReadiness->setSingleShot(true);
+    fixtureReadiness->setInterval(200);
+    connect(fixtureReadiness, &QTimer::timeout, this, [this]() {
+        AppUtil::updateFixtureReadiness(m_doc);
+    });
+    auto recheckFixtures = [fixtureReadiness]() { fixtureReadiness->start(); };
+    connect(m_doc, &Doc::fixtureAdded, fixtureReadiness, recheckFixtures);
+    connect(m_doc, &Doc::fixtureRemoved, fixtureReadiness, recheckFixtures);
+    connect(m_doc, &Doc::fixtureChanged, fixtureReadiness, recheckFixtures);
+    connect(m_doc, &Doc::loaded, fixtureReadiness, recheckFixtures);
+
+    /* ...and each can be fixed from there: the unpatched selected and
+       patched, a definition opened to say what it puts out. */
+    ShowStatus::instance()->setAction("fixtures.unpatched", tr("Patch…"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            PatchInventoryDialog dlg(m_doc, ids, parent);
+            dlg.exec();
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    ShowStatus::instance()->setAction("fixtures.output", tr("Edit Definition…"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QStringList files;
+            foreach (const QVariant &v, items)
+                if (!files.contains(v.toString()))
+                    files << v.toString();
+            foreach (const QString &file, files)
+            {
+                if (file.isEmpty())
+                {
+                    QMessageBox::information(parent, tr("No definition to edit"),
+                        tr("A generic fixture has no definition file. Change it to "
+                           "its real model in the Fixture Manager to give it one."));
+                    continue;
+                }
+                watchDefinition(file);
+                AppUtil::launchFixtureEditor(file, parent);
+            }
+        });
+    ShowStatus::instance()->setAction("fixtures.clash", tr("Re-patch…"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            PatchInventoryDialog dlg(m_doc, ids, parent);
+            dlg.exec();
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    ShowStatus::instance()->setAction("fixtures.duplicates", tr("Number Them"),
+        [this](QWidget *, const QVariantList &items) {
+            QStringList names;
+            foreach (const QVariant &v, items)
+                names << v.toString();
+            m_doc->makeFixtureNamesUnique(names);
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    /* Opened in the fixture editor, which says where the file breaks and
+       offers repairs; saved there, it is watched and loads. */
+    ShowStatus::instance()->setAction("definitions.failed", tr("Repair in Fixture Editor…"),
+        [this](QWidget *parent, const QVariantList &items) {
+            foreach (const QVariant &v, items)
+            {
+                const QString file = v.toString();
+                watchDefinition(file);
+                AppUtil::launchFixtureEditor(file, parent);
+            }
+        });
+    auto trashDefinitions = [this](QWidget *parent, const QVariantList &items) {
+            QStringList files, names;
+            foreach (const QVariant &v, items)
+                if (!files.contains(v.toString()))
+                {
+                    files << v.toString();
+                    names << QFileInfo(v.toString()).fileName();
+                }
+            if (files.isEmpty()
+                || QMessageBox::question(parent, tr("Move to Trash"),
+                       tr("Move %n definition file(s) to the Trash?\n\n%1", "", files.size())
+                           .arg(names.join("\n")),
+                       QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+                return;
+            QStringList failed;
+            foreach (const QString &file, files)
+            {
+                if (QFile::moveToTrash(file))
+                    m_doc->fixtureDefCache()->forgetFailedDefinition(file);
+                else
+                    failed << QFileInfo(file).fileName();
+            }
+            if (!failed.isEmpty())
+                QMessageBox::warning(parent, tr("Move to Trash"),
+                    tr("Could not move these to the Trash:\n\n%1").arg(failed.join("\n")));
+            AppUtil::updateFixtureReadiness(m_doc);
+        };
+    ShowStatus::instance()->addAction("definitions.failed", tr("Move to Trash…"), trashDefinitions);
+    ShowStatus::instance()->setAction("definitions.duplicates", tr("Move to Trash…"), trashDefinitions);
+    ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"),
+        [this](QWidget *parent, const QVariantList &items) {
+            InputOutputManager *io = InputOutputManager::instance();
+            if (io == NULL || items.isEmpty())
+                return;
+            switchToTabContaining(io);
+            io->selectUniverse(items.first().toUInt());
+            if (QDialog *dlg = qobject_cast<QDialog *>(parent))
+                dlg->accept();          // out of the way of the tab it opened
+        });
 #ifdef DEBUG_SPEED
     speedTime.start();
 #endif
@@ -865,6 +983,10 @@ void App::initDoc()
             m_startupWindow->logDetail(name);
     });
     m_doc->ioPluginCache()->load(IOPluginCache::systemPluginDirectory());
+    // WLED devices that stop answering, or fade to a weak signal: the footer.
+    if (QLCIOPlugin *wled = m_doc->ioPluginCache()->plugin(QStringLiteral("WLED")))
+        if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
+            connect(wled, &QLCIOPlugin::configurationChanged, t, QOverload<>::of(&QTimer::start));
 
     /* Load audio decoder plugins
      * This doesn't use a AudioPluginCache::systemPluginDirectory() cause
@@ -907,6 +1029,36 @@ void App::initDoc()
         m_startupWindow->beginStep(tr("Initializing control surfaces"));
     m_controlSurfaceEngine = new ControlSurfaceEngine(this);
     m_pmjOverlay = new PMJOverlay(m_doc, m_controlSurfaceEngine, this, this);
+}
+
+void App::watchDefinition(const QString &file)
+{
+    if (m_definitionWatcher == nullptr)
+    {
+        m_definitionWatcher = new QFileSystemWatcher(this);
+        connect(m_definitionWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &path) {
+            /* After the editor has finished writing -- and an editor that
+               saves by replacing the file drops it from the watch, so it is
+               put back. */
+            QTimer::singleShot(300, this, [this, path]() {
+                if (QFile::exists(path) && !m_definitionWatcher->files().contains(path))
+                    m_definitionWatcher->addPath(path);
+                // A file that would not load: try it again.
+                if (m_doc->fixtureDefCache()->failedDefinitions().contains(path))
+                    m_doc->fixtureDefCache()->loadQXF(path, true);
+                QSet<QLCFixtureDef *> defs;
+                foreach (Fixture *fx, m_doc->fixtures())
+                    if (fx != NULL && fx->fixtureDef() != NULL
+                        && fx->fixtureDef()->definitionSourceFile() == path)
+                        defs.insert(fx->fixtureDef());
+                foreach (QLCFixtureDef *def, defs)
+                    m_doc->fixtureDefCache()->reloadPhysical(def);
+                AppUtil::updateFixtureReadiness(m_doc);
+            });
+        });
+    }
+    if (!m_definitionWatcher->files().contains(file))
+        m_definitionWatcher->addPath(file);
 }
 
 void App::updateOutputReadiness()
@@ -4725,52 +4877,9 @@ void App::updateStatusBar()
 
 void App::showStatusDetails()
 {
-    const QList<ShowStatus::Entry> entries = ShowStatus::instance()->allEntries();
-    if (entries.isEmpty())
+    if (ShowStatus::instance()->allEntries().isEmpty())
         return;
-
-    QDialog dlg(this);
-    dlg.setWindowTitle(tr("Show readiness"));
-
-    QVBoxLayout *lay = new QVBoxLayout(&dlg);
-
-    // An actual list, not a wall of prose: one top-level row per registered
-    // source (its summary, bold), the one-sentence detail as an italic
-    // child, then each individually affected thing (a universe, say) as its
-    // own row underneath -- so "which ones, specifically" is a glance
-    // rather than a re-read of a paragraph.
-    QTreeWidget *tree = new QTreeWidget(&dlg);
-    tree->setHeaderHidden(true);
-    tree->setColumnCount(1);
-    foreach (const ShowStatus::Entry &e, entries)
-    {
-        QTreeWidgetItem *top = new QTreeWidgetItem(tree);
-        top->setText(0, e.summary.isEmpty() ? e.key : e.summary);
-        QFont boldFont = top->font(0);
-        boldFont.setBold(true);
-        top->setFont(0, boldFont);
-
-        if (e.detail.isEmpty() == false)
-        {
-            QTreeWidgetItem *d = new QTreeWidgetItem(top);
-            d->setText(0, e.detail);
-            QFont italicFont = d->font(0);
-            italicFont.setItalic(true);
-            d->setFont(0, italicFont);
-        }
-        foreach (const QString &line, e.items)
-            new QTreeWidgetItem(top, QStringList(line));
-
-        top->setExpanded(true);
-    }
-    lay->addWidget(tree);
-
-    QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
-    connect(box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    connect(box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    lay->addWidget(box);
-
-    dlg.resize(520, 360);
+    ShowStatusDialog dlg(this);
     dlg.exec();
 }
 

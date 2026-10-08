@@ -31,7 +31,8 @@ ShowStatus *ShowStatus::instance()
 }
 
 void ShowStatus::setStatus(const QString &key, Severity severity, const QString &summary,
-                           const QString &detail, const QStringList &items)
+                           const QString &detail, const QStringList &items,
+                           const QVariantList &itemData, const QStringList &itemGroups)
 {
     Entry e;
     e.key = key;
@@ -39,13 +40,17 @@ void ShowStatus::setStatus(const QString &key, Severity severity, const QString 
     e.summary = summary;
     e.detail = detail;
     e.items = items;
+    e.itemData = itemData;
+    e.itemGroups = itemGroups;
 
     const QMap<QString, Entry>::const_iterator existing = m_entries.constFind(key);
     const bool isChange = (existing == m_entries.constEnd())
         || existing.value().severity != severity
         || existing.value().summary != summary
         || existing.value().detail != detail
-        || existing.value().items != items;
+        || existing.value().items != items
+        || existing.value().itemData != itemData
+        || existing.value().itemGroups != itemGroups;
 
     m_entries.insert(key, e);
     if (isChange)
@@ -80,4 +85,41 @@ QList<ShowStatus::Entry> ShowStatus::allEntries() const
         return a.severity > b.severity;
     });
     return list;
+}
+
+void ShowStatus::setAction(const QString &key, const QString &label, const Action &action)
+{
+    QList<QPair<QString, Action> > list;
+    if (!label.isEmpty() && action)
+        list << qMakePair(label, action);
+    m_actions.insert(key, list);
+}
+
+void ShowStatus::addAction(const QString &key, const QString &label, const Action &action)
+{
+    if (!label.isEmpty() && action)
+        m_actions[key] << qMakePair(label, action);
+}
+
+QString ShowStatus::actionLabel(const QString &key) const
+{
+    const QList<QPair<QString, Action> > list = m_actions.value(key);
+    return list.isEmpty() ? QString() : list.first().first;
+}
+
+QStringList ShowStatus::actionLabels(const QString &key) const
+{
+    QStringList out;
+    foreach (const auto &a, m_actions.value(key))
+        out << a.first;
+    return out;
+}
+
+bool ShowStatus::runAction(const QString &key, QWidget *parent, const QVariantList &items, int index) const
+{
+    const QList<QPair<QString, Action> > list = m_actions.value(key);
+    if (index < 0 || index >= list.size() || !list.at(index).second)
+        return false;
+    list.at(index).second(parent, items);
+    return true;
 }

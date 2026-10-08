@@ -1198,7 +1198,16 @@ void ProgrammingManager::slotFixGroupSourceSelectionChanged()
 
 void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
 {
+    /* A look is being edited and this is the same selection, re-announced by
+       the canvas rebuilding after that very edit (every colour slider tick
+       reloads it): keep the look editor. Swapping in the fixtures' faders
+       here threw the user out of the colour picker on every click ("it drops
+       out of the color picker"). A real change of selection still swaps. */
+    if (!m_lookEditor->isHidden() && fixtureIds == m_selectedFixtures
+        && m_currentScene == m_selectedFixturesScene)
+        return;
     m_selectedFixtures = fixtureIds;
+    m_selectedFixturesScene = m_currentScene;
     // Feed selection to ProgrammerController so Highlight/Followspot effects
     // know which fixtures to steer.
     if (ProgrammerController *pc = m_doc->programmer())

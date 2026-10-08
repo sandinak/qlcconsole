@@ -1090,7 +1090,8 @@ void FixtureManager_Test::editingAStagedFixtureKeepsItStaged()
     QString title;
     whenModal<AddFixture>([&title](AddFixture *dlg) {
         title = dlg->windowTitle();
-        dlg->m_connectionCombo->setCurrentIndex(dlg->m_connectionCombo->findData(int(Fixture::Network)));
+        dlg->m_connectionCombo->setCurrentIndex(dlg->m_connectionCombo->findData(
+            AddFixture::connectionKey(Fixture::Network, Fixture::ArtNetTransport)));
         dlg->m_ipEdit->setText("172.18.2.41");
         // The universe/address fields are hidden placeholders; even if they
         // moved, an inventory fixture must not turn them into a claim.

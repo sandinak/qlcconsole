@@ -114,6 +114,10 @@ public:
     /** How the fixture is fed (DMX through a node, or natively over the
      *  network) and, for a network fixture, its unicast IP. */
     Fixture::Connection connection() const;
+    /** Art-Net or WLED -- for a Network fixture. */
+    Fixture::Transport transport() const;
+    /** The connection combo's data for @p c sent by @p t. */
+    static int connectionKey(Fixture::Connection c, Fixture::Transport t);
     QString ipAddress() const;
 
 protected:

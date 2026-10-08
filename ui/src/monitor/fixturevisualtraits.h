@@ -36,7 +36,7 @@ class QVector3D;
 // whole existing library, not just fixtures someone hand-tags going forward.
 // ---------------------------------------------------------------------------
 
-enum class FixtureSilhouette { Bar, Mover, Par, Generic };
+enum class FixtureSilhouette { Bar, Mover, Par, Generic, Lantern };
 
 #include <QSize>
 #include <QColor>
@@ -70,6 +70,9 @@ struct FixtureVisualTraits
      *  ever say "two things are controlled", never how many emitters each
      *  one lights. */
     int   beamsPerHead = 1;
+    /** Its light leaves all round (a lantern, a bulb): no cone, it lights
+     *  what is near it, falling off with distance (QLCPhysical::emission). */
+    bool  omni = false;
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);

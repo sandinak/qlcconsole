@@ -162,7 +162,8 @@ void FixtureCreator_Test::ordinaryAddStillPatches()
 void FixtureCreator_Test::networkFixtureKeepsItsIp()
 {
     driveAddDialog([](AddFixture *dlg) {
-        dlg->m_connectionCombo->setCurrentIndex(dlg->m_connectionCombo->findData(int(Fixture::Network)));
+        dlg->m_connectionCombo->setCurrentIndex(dlg->m_connectionCombo->findData(
+            AddFixture::connectionKey(Fixture::Network, Fixture::ArtNetTransport)));
         dlg->m_ipEdit->setText("172.18.2.41");
     });
     const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, true,
@@ -371,6 +372,28 @@ void FixtureCreator_Test::aFixtureTheDocRefusesIsNotLeaked()
     QVERIFY(FixtureCreator::addFromDialog(nullptr, m_doc, false,
                                           InputOutputMap::invalidUniverse(), nullptr).isEmpty());
     QCOMPARE(m_doc->fixturesCount(), 1);
+}
+
+/* Names are unique: adding one "AT1-3z" when there is one already makes
+   "AT1-3z #2", not a second "AT1-3z". */
+void FixtureCreator_Test::aSingleAddWithATakenNameIsNumbered()
+{
+    Fixture *existing = new Fixture(m_doc);
+    existing->setName("AT1-3z");
+    existing->setChannels(1);
+    QVERIFY(m_doc->addFixture(existing));
+
+    driveAddDialog([](AddFixture *dlg) {
+        dlg->m_fixtureDef = nullptr;
+        dlg->m_mode = nullptr;
+        dlg->m_nameValue = "AT1-3z";
+    });
+    QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, true,
+                                                        InputOutputMap::invalidUniverse(), nullptr);
+    QCOMPARE(made.size(), 1);
+    QCOMPARE(m_doc->fixture(made.first())->name(), QString("AT1-3z #2"));
+    QCOMPARE(existing->name(), QString("AT1-3z"));
+    QVERIFY(m_doc->duplicateFixtureNames().isEmpty());
 }
 
 QTEST_MAIN(FixtureCreator_Test)

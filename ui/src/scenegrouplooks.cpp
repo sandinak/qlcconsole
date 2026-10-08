@@ -35,6 +35,8 @@
 #include "programmingmanager.h"
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"   // palette MIME type
+#include "effectscriptrunner.h"
+#include "effectscriptcache.h"
 #include "fixturegroupsource.h"    // fixture-group / fixture MIME types
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -189,19 +191,34 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     QVBoxLayout *targetCol = new QVBoxLayout();
     m_targetsLabel = new QLabel(tr("Targets"), this);
     targetCol->addWidget(m_targetsLabel);
+    /* Targets in the inventory -- not patched -- send nothing ("not seeing
+       output on farts .. we need a warning in programming view for unpatched
+       fixtures"): a group of them looked like any other target. */
+    m_unpatchedNote = new QLabel(this);
+    m_unpatchedNote->setWordWrap(true);
+    m_unpatchedNote->setStyleSheet(QStringLiteral("color: rgb(230,160,40);"));
+    m_unpatchedNote->hide();
+    targetCol->addWidget(m_unpatchedNote);
 
     // Declared SCOPE (Scene::LookScope) — what this look is FOR, as a
     // statement of intent. Distinct from the Targets list below it (what it
     // actually paints): a look can be scoped to "SR Truss" while its targets
     // happen to be a superset/subset, e.g. mid-build. Purely organisational
     // metadata today — doesn't affect playback.
+    /* Not shown. Sitting right above Targets, it read as a second place to
+       say which fixtures the look is on ("what is scope in this context.. I
+       set the group and that should be sufficient") while changing nothing
+       that lights. Kept, hidden, so a show's saved scope survives. */
     QHBoxLayout *scopeRow = new QHBoxLayout();
-    scopeRow->addWidget(new QLabel(tr("Scope:"), this));
+    QLabel *scopeLabel = new QLabel(tr("Scope:"), this);
+    scopeRow->addWidget(scopeLabel);
     m_scopeCombo = new QComboBox(this);
     m_scopeCombo->setToolTip(tr("What this look is FOR (a statement of intent) — "
         "not what it paints. Whole Stage, or a specific fixture group/zone."));
     scopeRow->addWidget(m_scopeCombo, 1);
     targetCol->addLayout(scopeRow);
+    scopeLabel->hide();
+    m_scopeCombo->hide();
     connect(m_scopeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotScopeChanged(int)));
 
     m_targetList = new QTreeWidget(this);
@@ -460,7 +477,32 @@ void SceneGroupLooks::reload()
     foreach (quint32 pid, m_scene->palettes())
     {
         QLCPalette *p = m_doc->palette(pid);
-        if (p) coveredTypes.insert(p->type());
+        if (p == NULL)
+            continue;
+        coveredTypes.insert(p->type());
+        /* An effect covers what it drives: its category -- the folder it is
+           filed under, else the script's own -- so a colour effect is a look
+           for colour ("Effect/Color/sinewave" was flagged "no look for:
+           color"). */
+        if (p->type() == QLCPalette::Effect)
+        {
+            QString cat;
+            const QString prefix = QStringLiteral("Palettes/Effect/");
+            if (p->path().startsWith(prefix))
+                cat = p->path().mid(prefix.length()).section('/', 0, 0);
+            if (cat.isEmpty() && m_doc->effectScriptRunner() != NULL && !p->scriptPath().isEmpty())
+            {
+                EffectScriptCache *cache = m_doc->effectScriptRunner()->cache();
+                cat = EffectScriptCache::categoryForTypes(
+                          cache->scriptMeta(cache->nameFromPath(p->scriptPath())).fixtureTypes);
+            }
+            if (cat == QLatin1String("Color"))
+                coveredTypes.insert(QLCPalette::Color);
+            else if (cat == QLatin1String("Dimmer"))
+                coveredTypes.insert(QLCPalette::Dimmer);
+            else if (cat == QLatin1String("Position"))
+                coveredTypes.insert(QLCPalette::PanTilt);
+        }
     }
 
     // Groups = dynamic targets (top level).
@@ -605,6 +647,20 @@ void SceneGroupLooks::reload()
     m_targetsLabel->setText(targetsText);
     m_targetsLabel->setStyleSheet(m_cannotReach.isEmpty()
                                   ? QString() : QStringLiteral("color: rgb(220,60,50);"));
+
+    int unpatched = 0;
+    foreach (quint32 fid, allFixtures)
+        if (Fixture *f = m_doc->fixture(fid))
+            if (!f->isPatched())
+                ++unpatched;
+    m_unpatchedNote->setVisible(unpatched > 0);
+    if (unpatched > 0)
+        m_unpatchedNote->setText(unpatched == allFixtures.count()
+            ? tr("⚠ None of these fixtures is patched: they send no DMX. The look shows in the "
+                 "rig view only. Patch them in the Fixture Manager.")
+            : tr("⚠ %1 of these %2 fixtures are not patched: they send no DMX. They show in "
+                 "the rig view only. Patch them in the Fixture Manager.")
+                  .arg(unpatched).arg(allFixtures.count()));
 
     // Declared scope: (re)populate from every group in the doc (not just this
     // scene's own targets — scope is a statement of intent, independent of

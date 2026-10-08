@@ -297,6 +297,7 @@ private:
     FixtureConsole *m_fixtureConsole;
     QLabel *m_fixtureMixedNote;    //!< shown when selected fixed fixtures differ in type
     QList<quint32> m_selectedFixtures; //!< fixed fixtures edited together (same type)
+    quint32 m_selectedFixturesScene = UINT_MAX; //!< the scene m_selectedFixtures was announced for
     quint32 m_currentScene;       //!< scene shown in canvas (invalid if non-scene)
     quint32 m_canvasFunction;     //!< any function shown in canvas (preview target)
     quint32 m_previewFunction;    //!< the function we started for live preview

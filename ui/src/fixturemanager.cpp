@@ -1150,6 +1150,7 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
         info += genInfo.arg(tr("Model")).arg(fixtureDef->model());
         info += genInfo.arg(tr("Mode")).arg(fixtureMode->name());
         info += genInfo.arg(tr("Type")).arg(fixtureDef->typeToString(fixtureDef->type()));
+        info += genInfo.arg(tr("Definition")).arg(fixtureDef->sourceDescription());
     }
 
     // Connection (only worth stating when it isn't plain DMX)
@@ -1809,7 +1810,7 @@ void FixtureManager::slotAddRGBPanel()
         {
             Fixture *fxi = new Fixture(m_doc);
             Q_ASSERT(fxi != NULL);
-            fxi->setName(tr("%1 - Row %2").arg(rgb.name()).arg(i + 1));
+            fxi->setName(m_doc->uniqueFixtureName(tr("%1 - Row %2").arg(rgb.name()).arg(i + 1)));
             if (rowDef == NULL)
                 rowDef = fxi->genericRGBPanelDef(columns, components, rgb.is16Bit());
             if (rowMode == NULL)
@@ -2058,6 +2059,11 @@ void FixtureManager::editFixtureProperties()
             if (fxi->ipAddress() != af.ipAddress())
             {
                 fxi->setIPAddress(af.ipAddress());
+                changed = true;
+            }
+            if (fxi->transport() != af.transport())
+            {
+                fxi->setTransport(af.transport());
                 changed = true;
             }
             fxi->blockSignals(false);
@@ -2898,6 +2904,20 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                                    "placement and its groups"));
     }
 
+    // The Duplicate names root: number them apart.
+    QAction *fixDuplicates = NULL;
+    if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
+    {
+        if (clicked->data(KColumnName, PROP_DUPLICATES).isValid()
+            && !m_doc->duplicateFixtureNames().isEmpty())
+        {
+            menu.addSeparator();
+            fixDuplicates = menu.addAction(tr("Number the Duplicates"));
+            fixDuplicates->setToolTip(tr("Of each name, the patched fixture keeps it; the others "
+                                         "become “name #2”, “name #3”…"));
+        }
+    }
+
     // The Address clashes root: give every one of them a home.
     QAction *fixClashes = NULL;
     if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
@@ -2985,6 +3005,12 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     if (readdress != NULL && chosen == readdress)
     {
         patchOrReaddress(readdressIds);
+        return;
+    }
+    if (fixDuplicates != NULL && chosen == fixDuplicates)
+    {
+        m_doc->makeFixtureNamesUnique();
+        updateView();
         return;
     }
     if (fixClashes != NULL && chosen == fixClashes)

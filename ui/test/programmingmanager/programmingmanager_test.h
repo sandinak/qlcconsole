@@ -37,6 +37,16 @@ private slots:
      *  (not a manually-injected signal) and checks the owning scene's
      *  Doc::functionChanged actually fires. */
     void editingALookColourNotifiesItsScene();
+    void theColourPickerStaysOpenWhileItsLookIsEdited();
+    void theRigViewDrawsWhatTheScenesFadersSet();
+    void theRigViewFollowsALookSwappedOnTheScene();
+    void unpatchedTargetsAreFlaggedInTheProgrammingView();
+    void anEffectIsALookForWhatItDrives();
+    void unpatchedAndSilentFixturesAreInTheFooter();
+    void theReadinessDialogFixesWhatIsSelected();
+    void otherRigProblemsAreInTheFooter();
+    void readinessItemsSitUnderHeadingsWithMoreThanOneFix();
+    void duplicateDefinitionsAreListedWithWhatIsUsed();
     /** Integration test for the Programming tab's own drag-construction
      *  gestures: drag a palette onto the Looks list, a group and a fixture
      *  onto the Targets list, and a palette onto an existing Effect row to

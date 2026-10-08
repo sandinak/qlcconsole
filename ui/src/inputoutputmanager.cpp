@@ -42,6 +42,7 @@
 #include "universeitemwidget.h"
 #include "connectionstree.h"
 #include "inputoutputmanager.h"
+#include "apputil.h"
 #include "inputoutputmap.h"
 #include "patchundo.h"
 #include "ioplugincache.h"
@@ -511,6 +512,19 @@ void InputOutputManager::slotMappingChanged()
         updateItem(item, universe);
         m_doc->inputOutputMap()->saveDefaults();
     }
+    // A universe given an output (or losing one) changes the footer.
+    AppUtil::updateFixtureReadiness(m_doc);
+}
+
+void InputOutputManager::selectUniverse(quint32 universe)
+{
+    for (int i = 0; i < m_list->count(); ++i)
+        if (m_list->item(i)->data(Qt::UserRole).toUInt() == universe)
+        {
+            m_list->setCurrentRow(i);
+            m_list->scrollToItem(m_list->item(i));
+            return;
+        }
 }
 
 void InputOutputManager::slotAudioInputChanged()

@@ -24,7 +24,11 @@
 #include <QColor>
 #include <QSize>
 
+#include <QHash>
 class QWidget;
+class QTreeWidgetItem;
+class QLCFixtureDef;
+class QLCFixtureDefCache;
 class Doc;
 class Scene;
 
@@ -132,6 +136,43 @@ namespace AppUtil
      */
     bool launchFixtureEditor(const QString &fixtureFilePath = QString(),
                              QWidget *parentForError = nullptr);
+
+    /*********************************************************************
+     * Fixture names
+     *********************************************************************/
+    /**
+     * Fixture names are unique (Doc::fixtureNameTaken()). True -- and a note
+     * saying which name is taken -- when fixture @p fid may NOT be renamed to
+     * @p name because another fixture has it; the caller keeps the old name.
+     */
+    bool refuseTakenFixtureName(QWidget *parent, Doc *doc, quint32 fid, const QString &name);
+
+    /*********************************************************************
+     * Fixture readiness
+     *********************************************************************/
+    /**
+     * Declare (or clear) the footer's rig problems in ShowStatus, each
+     * item carrying what it is for the entry's fix (App sets the actions):
+     * "fixtures.unpatched" -- fixtures that send no DMX (fixture ids);
+     * "fixtures.output" -- fixture types whose definition declares no light
+     * output (QLCPhysical::declaresOutput()), drawn at a guess (files);
+     * "fixtures.clash" -- fixtures that loaded unpatched because their
+     * address was taken (fixture ids); "fixtures.duplicates" -- names more
+     * than one fixture has (names); "definitions.failed" -- definition files
+     * that could not be read (files); "universes.nooutput" -- universes
+     * fixtures are patched on with no output (universe indexes).
+     */
+    void updateFixtureReadiness(Doc *doc);
+
+    /*********************************************************************
+     * Definition sources
+     *********************************************************************/
+    /** The cache's definitions by "manufacturer\nmodel", unloaded ones too. */
+    QHash<QString, QLCFixtureDef *> definitionsByName(QLCFixtureDefCache *cache);
+    /** Show where @p def comes from in @p item's @p column: Included in grey,
+     *  Local (and "replaces the included one") in blue, Downloadable in
+     *  italics -- the same everywhere a definition is picked. */
+    void showDefinitionSource(QTreeWidgetItem *item, int column, const QLCFixtureDef *def);
 };
 
 /*****************************************************************************

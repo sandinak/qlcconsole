@@ -22,6 +22,7 @@
 #include <QLabel>
 #include <QFrame>
 #include <QMessageBox>
+#include <QSet>
 #include <QRegularExpression>
 
 #include "createfixturegroup.h"
@@ -142,9 +143,21 @@ void LedMapWidget::mousePressEvent(QMouseEvent *e)
 
 bool HeadTypesDialog::anyMixed(Doc *doc, const QList<quint32> &fixtureIds)
 {
+    /* Mixed heads in one fixture (an XL-450's RGB and white rows) -- or
+       across the selection: a bar patched as two fixtures, its RGB part and
+       its white part ("the same problem we have for the other bars .. two
+       head types"), wants a group per kind just the same. */
+    QSet<QString> kinds;
     foreach (quint32 fid, fixtureIds)
-        if (HeadKinds::isMixed(doc->fixture(fid)))
+    {
+        const Fixture *fx = doc->fixture(fid);
+        if (HeadKinds::isMixed(fx))
             return true;
+        foreach (const QString &k, HeadKinds::kindsOf(fx))
+            kinds.insert(k);
+        if (kinds.size() > 1)
+            return true;
+    }
     return false;
 }
 

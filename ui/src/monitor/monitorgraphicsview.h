@@ -618,7 +618,8 @@ public:
     /** What is selected on the plot, as kind/id pairs. */
     QList<QPair<QString, quint32> > selectedMapObjects() const;
 
-    void renameItem(const QString &kind, quint32 id, const QString &name);
+    /** False when the rename was refused (a fixture name another fixture has). */
+    bool renameItem(const QString &kind, quint32 id, const QString &name);
     /** Save network node @p nodeIndex's transport and port count as a gear
      *  model of the operator's (NetworkGearCatalog), and record it on the
      *  node. Returns the file written, or empty if it could not be. */

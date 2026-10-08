@@ -55,6 +55,7 @@ private slots:
     void anEmptyNameFallsBackToTheModelOrGenericDimmer();
     void newFixturesJoinTheGroupTheyWereAddedFrom();
     void aFixtureTheDocRefusesIsNotLeaked();
+    void aSingleAddWithATakenNameIsNumbered();
 
 private:
     Doc *m_doc;

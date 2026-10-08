@@ -69,7 +69,7 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
 
     /* Names already in use, so a multi-add continues past existing fixtures
        and never collides. Seeded once and grown as we assign each name.
-       (A single add keeps the typed name verbatim — duplicates allowed.) */
+       A single add gets the next free "name #2" if the name is taken. */
     QSet<QString> usedNames;
     bool nameHasTrailingNumber = false;
     if (af.amount() > 1)
@@ -108,7 +108,7 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
             usedNames.insert(modname);
         }
         else
-            modname = name;
+            modname = doc->uniqueFixtureName(name);   // names are unique: "X #2"
 
         /* Create the fixture */
         Fixture* fxi = new Fixture(doc);
@@ -130,6 +130,7 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
         }
         fxi->setConnection(af.connection());
         fxi->setIPAddress(af.ipAddress());
+        fxi->setTransport(af.transport());
         fxi->setName(modname);
         /* Set a fixture definition & mode if they were
            selected. Otherwise create a fixture definition

@@ -30,6 +30,7 @@
 
 #include <QMap>
 #include "fixturetreewidget.h"
+#include "apputil.h"
 #include "qlcfixturedef.h"
 #include "fixturegroup.h"
 #include "qlcchannel.h"
@@ -272,7 +273,8 @@ void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
         if (fxi != NULL)
         {
             const QString newName = item->text(KColumnName).trimmed();
-            if (newName.isEmpty() == false && newName != fxi->name())
+            if (newName.isEmpty() == false && newName != fxi->name()
+                && AppUtil::refuseTakenFixtureName(this, m_doc, fid, newName) == false)
             {
                 fxi->setName(newName);
                 m_doc->setModified();
@@ -1392,6 +1394,49 @@ void FixtureTreeWidget::updateTree()
                 mNode->child(d)->sortChildren(KColumnName, Qt::AscendingOrder);
         }
         refreshInventoryCounts();
+    }
+
+    /* Names more than one fixture has -- a show from before names were
+       unique, or merged with another ("two AT1-3z lights .. one in the upper
+       left corner"). Listed at the top, a row per name, to be numbered apart
+       from the Fixture Manager's menu. The fixtures stay where they are. */
+    if (m_showGroups && !m_channelSelection)
+    {
+        const QMap<QString, QList<quint32> > dups = m_doc->duplicateFixtureNames();
+        if (!dups.isEmpty())
+        {
+            blockSignals(true);
+            QTreeWidgetItem *dupRoot = new QTreeWidgetItem;
+            insertTopLevelItem(0, dupRoot);
+            dupRoot->setText(KColumnName, tr("Duplicate names (%1)").arg(dups.size()));
+            dupRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+            dupRoot->setData(KColumnName, PROP_DUPLICATES, true);
+            dupRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            dupRoot->setForeground(KColumnName, QBrush(QColor(224, 160, 48)));
+            dupRoot->setToolTip(KColumnName,
+                tr("More than one fixture has each of these names. Right-click to number "
+                   "them apart: the patched one keeps the name."));
+            for (auto it = dups.constBegin(); it != dups.constEnd(); ++it)
+            {
+                QTreeWidgetItem *row = new QTreeWidgetItem(dupRoot);
+                row->setText(KColumnName, tr("%1 — %2 fixtures").arg(it.key()).arg(it.value().size()));
+                row->setData(KColumnName, PROP_DUPLICATES, true);
+                row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                QStringList where;
+                foreach (quint32 fid, it.value())
+                {
+                    Fixture *f = m_doc->fixture(fid);
+                    if (f == NULL)
+                        continue;
+                    where << (f->isPatched() ? tr("ID %1: universe %2, address %3").arg(fid)
+                                                   .arg(f->universe() + 1).arg(f->address() + 1)
+                                             : tr("ID %1: in the inventory").arg(fid));
+                }
+                row->setToolTip(KColumnName, where.join(QStringLiteral("\n")));
+            }
+            blockSignals(false);
+            dupRoot->setExpanded(true);
+        }
     }
 
     header()->resizeSections(QHeaderView::ResizeToContents);

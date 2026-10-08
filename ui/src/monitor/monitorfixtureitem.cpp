@@ -36,6 +36,7 @@
 #include <QPixmap>
 
 #include <QtMath>
+#include "headlayout.h"
 #include "monitorfixtureitem.h"
 #include <QGraphicsScene>
 #include "monitor.h"
@@ -411,10 +412,8 @@ void MonitorFixtureItem::setSize(QSize size)
     {
         if (const QLCFixtureMode *mode = fxi->fixtureMode())
         {
-            const QSize declared = mode->physical().layoutSize();
-            if (declared.width() > 0 && declared.height() > 0
-                && declared != QSize(1, 1)
-                && declared.width() * declared.height() >= n)
+            const QSize declared = HeadLayout::declaredGrid(mode);
+            if (declared.isValid() && declared.width() * declared.height() >= n)
             {
                 columns = declared.width();
                 rows    = declared.height();
@@ -828,6 +827,13 @@ void MonitorFixtureItem::drawBody(QPainter *painter, const QRectF &r) const
         {
             // A can/wash unit: rounded, but still clearly rectangular.
             const qreal rad = qMin(r.width(), r.height()) * 0.25;
+            painter->drawRoundedRect(r, rad, rad);
+            break;
+        }
+        case FixtureSilhouette::Lantern:
+        {
+            // A lantern: a rounded cage, its glowing core in the middle.
+            const qreal rad = qMin(r.width(), r.height()) * 0.45;
             painter->drawRoundedRect(r, rad, rad);
             break;
         }

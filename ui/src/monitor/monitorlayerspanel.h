@@ -222,7 +222,8 @@ private:
 
     void beginRenameCurrent();
     /** Rename the underlying map item (fixture/truss/platform/power). */
-    void renameMapItem(const QString &kind, quint32 id, const QString &name);
+    /** False when the plot refused the name (a fixture name already taken). */
+    bool renameMapItem(const QString &kind, quint32 id, const QString &name);
 
     /** Per-item position lock for an object by (kind,id): truss / platform /
      *  image / power. Fixtures have no per-item lock (returns false / no-op). */

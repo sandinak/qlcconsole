@@ -19,7 +19,9 @@
 
 #include <QSet>
 
+#include "headlayout.h"
 #include "fixturevisualtraits.h"
+#include "righeads.h"
 #include "aimsolver.h"
 #include "fixture.h"
 #include "qlcfixturedef.h"
@@ -78,13 +80,18 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
     t.beamMinDeg = float(qMin(phys.lensDegreesMin(), phys.lensDegreesMax()));
     t.beamMaxDeg = float(qMax(phys.lensDegreesMin(), phys.lensDegreesMax()));
     t.beamsPerHead = phys.lensBeamsPerHead();
+    /* The definition's own word on what it looks like and how it lights,
+       over what its Type suggests: a WLED lantern is a colour changer by
+       type and a lantern by body. */
+    if (phys.bodyShape() == QLCPhysical::LanternBody)
+        t.kind = FixtureSilhouette::Lantern;
+    t.omni = (phys.emission() == QLCPhysical::OmniEmission);
 
-    /* The declared pixel grid, when it can actually hold this mode's heads.
-       layoutSize() defaults to 1x1, and some definitions declare a layout that
-       belongs to a different mode's head count. */
-    const QSize declared = phys.layoutSize();
-    if (declared.width() > 0 && declared.height() > 0 && declared != QSize(1, 1)
-        && declared.width() * declared.height() >= fx->heads())
+    /* The declared pixel grid, when it is THIS mode's: one grid is declared
+       for every mode, and a 32-cell grid on a 16-head mode drew a bar as two
+       rows of eight (HeadLayout::declaredGrid()). */
+    const QSize declared = HeadLayout::declaredGrid(mode);
+    if (declared.isValid())
         t.layout = declared;
 
     QSet<int> colours;
@@ -675,37 +682,6 @@ double fixtureBeamAngle(Fixture *fx, const QByteArray &v,
 
 QVector3D fixtureWorldCentre(Doc *doc, quint32 fid)
 {
-    if (doc == nullptr || doc->monitorProperties() == nullptr)
-        return QVector3D();
-
-    MonitorProperties *props = doc->monitorProperties();
-    const QVector3D w = props->fixtureRigPosition(fid);
-    const FixtureRigProps rp = props->fixtureRigProps(fid);
-
-    /* A DERIVED position is already a centre: a truss, pipe, tower or riser
-       mount computes the point from the structure, and the 2D plot centres its
-       icon on it to match. Only the two cases that read the stored plot XY
-       straight back need the anchor undone -- free placement, and a deck mount
-       (which keeps the free XY and derives only Z). */
-    if (props->fixtureFrameGroup(fid) != 0)
-        return w;
-    const bool derived = rp.trussId != Truss::invalidId() || rp.onPipe()
-                      || rp.onTower() || rp.onRiser();
-    if (derived)
-        return w;
-
-    Fixture *fx = doc->fixture(fid);
-    if (fx == nullptr)
-        return w;
-    const FixtureVisualTraits traits = classifyFixture(fx);
-    if (traits.physW <= 0.0f && traits.physH <= 0.0f)
-        return w;
-
-    /* Width and HEIGHT, not width and depth, however odd that reads for a
-       top-down view: MonitorGraphicsView::updateFixture() sizes its icon
-       physical().width() x physical().height() in every view, plan included,
-       so the corner the plot anchored is the corner of a W x H box. */
-    return QVector3D(w.x() + traits.physW * 0.5f,
-                     w.y() + traits.physH * 0.5f,
-                     w.z());
+    // The rule lives in the engine, where effects lay their grids out from it.
+    return RigHeads::fixtureCentre(doc, fid);
 }

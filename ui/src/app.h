@@ -171,6 +171,15 @@ public:
         re-patch. */
     void updateOutputReadiness();
 
+    /** Re-read @p file's physical properties into the loaded definitions
+     *  from it, whenever it changes on disk from now on -- a definition
+     *  opened from the footer's "declare no light output" to set its lumens
+     *  takes effect when it is saved, show still open. */
+    void watchDefinition(const QString &file);
+private:
+    class QFileSystemWatcher *m_definitionWatcher = nullptr;
+public:
+
     /** Busy dialog shown while a workspace is being read outside of boot
         (File > Open, a recent file, autosave recovery) -- the main window
         is already visible then, which is exactly when a large workspace

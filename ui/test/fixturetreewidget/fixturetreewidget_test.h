@@ -54,6 +54,7 @@ private slots:
     void inventoryIsOrganisedByManufacturerAndModel();
     /** A fixture whose file address clashed is listed apart, at the top. */
     void addressClashesGetTheirOwnRootAtTheTop();
+    void duplicateNamesAreListedAndARenameToATakenNameIsRefused();
     /** Fixtures or a group dropped on a universe, or on a fixture in one. */
     void aDropOnAUniverseNamesItAndItsFixtures();
 

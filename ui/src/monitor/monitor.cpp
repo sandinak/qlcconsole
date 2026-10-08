@@ -36,6 +36,7 @@
 #include <QPainter>
 #include <QPolygonF>
 #include <QtMath>
+#include <cmath>
 #include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -2215,6 +2216,27 @@ void Monitor::showStageOverview()
     });
     view->setAmbient(ambientCombo->currentData().toDouble());
 
+    /* Haze: whether the beams show IN THE AIR. Only the shafts -- where the
+       light lands and what it lights do not change with it. */
+    bar->addWidget(new QLabel(tr("Haze:"), &dlg));
+    QComboBox *hazeCombo = new QComboBox(&dlg);
+    hazeCombo->addItem(tr("None"),   0.0);
+    hazeCombo->addItem(tr("Light"),  0.4);
+    hazeCombo->addItem(tr("Medium"), 1.0);
+    hazeCombo->addItem(tr("Heavy"),  1.8);
+    hazeCombo->setCurrentIndex(2);
+    hazeCombo->setProperty("cycleOnClick", true);
+    hazeCombo->installEventFilter(this);
+    hazeCombo->setToolTip(tr("How much haze is in the air: how visible the "
+                             "beams are between the fixture and where they "
+                             "land — click to cycle"));
+    bar->addWidget(hazeCombo);
+    connect(hazeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, hazeCombo](int) {
+        view->setHaze(hazeCombo->currentData().toDouble());
+    });
+    view->setHaze(hazeCombo->currentData().toDouble());
+
     /* Fidelity against speed, for the machine this is running on: sharper
        edges cost fill, and the rate is only a ceiling -- a frame that takes
        longer than the rate allows still slows the view down on its own. Both
@@ -2639,10 +2661,27 @@ void Monitor::slotPasteFeatures()
     pasteClipboard(step, step);
 }
 
-void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
+void Monitor::slotFixtureDoubleClicked(quint32 fid)
 {
     // Map double-click: edit whatever is selected (single OR the multi-selection
     // the map restored) — keeps multi-edit on the 2D plot.
+    /* ...unless that selection does not hold THIS fixture. "Edit Fixture…" on
+       a Layers row asks for one the plot cannot select at all -- a washer
+       inside a step, under its deck -- and with nothing selected the editor
+       quietly did nothing ("right click on US1t1 to edit fixture I get
+       nothing"). */
+    if (fid != Fixture::invalidId())
+    {
+        bool inSelection = false;
+        foreach (MonitorFixtureItem *it, m_graphicsView->selectedFixtureItems())
+            if (it != nullptr && it->fixtureID() == fid)
+                inSelection = true;
+        if (!inSelection)
+        {
+            editFixtureProperties(fid);
+            return;
+        }
+    }
     showFixtureItemEditor();
 }
 
@@ -6667,15 +6706,18 @@ public:
         svs << m_fxi->positionToValues(QLCChannel::Tilt, tiltDeg);
         appendFixtureOnValues(m_fxi, svs);
 
-        fader->removeAll();
+        // Swapped in whole: an emptied fader caught by its universe's thread
+        // went out as a blank frame -- the beam blinked while being dragged.
+        QList<FadeChannel> fcs;
         for (const SceneValue &sv : svs)
         {
             FadeChannel fc(m_doc, m_fxi->id(), sv.channel);
             fc.setTarget(sv.value);
             fc.setCurrent(sv.value);
             fc.setFadeTime(0);
-            fader->add(fc);
+            fcs << fc;
         }
+        fader->replaceAll(fcs);
     }
 
 private:
@@ -6817,16 +6859,18 @@ public:
     void setOn(bool on)
     {
         if (m_fader.isNull()) return;
-        m_fader->removeAll();
-        if (!on) return;
-        for (const SceneValue &sv : m_onValues)
-        {
-            FadeChannel fc(m_doc, sv.fxi, sv.channel);
-            fc.setTarget(sv.value);
-            fc.setCurrent(sv.value);
-            fc.setFadeTime(0);
-            m_fader->add(fc);
-        }
+        // Swapped in whole, never emptied first (see setDegrees).
+        QList<FadeChannel> fcs;
+        if (on)
+            for (const SceneValue &sv : m_onValues)
+            {
+                FadeChannel fc(m_doc, sv.fxi, sv.channel);
+                fc.setTarget(sv.value);
+                fc.setCurrent(sv.value);
+                fc.setFadeTime(0);
+                fcs << fc;
+            }
+        m_fader->replaceAll(fcs);
     }
 
 private:
@@ -8568,6 +8612,28 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
                                  "mount — e.g. lift a followspot above the truss."));
     rigForm->addRow(tr("Height offset:"), heightOffSpin);
 
+    /* Hanger: hung off its structure on an arm and a drop -- a lantern on a
+       bracket off the side of a tower. 0 and 0 = fastened at the mount. */
+    QDoubleSpinBox *hangerArmSpin = new QDoubleSpinBox;
+    hangerArmSpin->setRange(0, 5 * toDisp_fx);
+    hangerArmSpin->setSuffix(unitSfx_fx); hangerArmSpin->setDecimals(2);
+    hangerArmSpin->setToolTip(tr("How far the hanger's arm reaches out from the structure"));
+    rigForm->addRow(tr("Hanger arm:"), hangerArmSpin);
+    QComboBox *hangerDirCb = new QComboBox;
+    const QList<QPair<QString, int> > hangerDirs = {
+        { tr("Downstage"), 0 }, { tr("Downstage left"), 45 }, { tr("Stage left"), 90 },
+        { tr("Upstage left"), 135 }, { tr("Upstage"), 180 }, { tr("Upstage right"), 225 },
+        { tr("Stage right"), 270 }, { tr("Downstage right"), 315 } };
+    for (const auto &d : hangerDirs)
+        hangerDirCb->addItem(d.first, d.second);
+    hangerDirCb->setToolTip(tr("Which way the arm points, seen from above"));
+    rigForm->addRow(tr("Hanger points:"), hangerDirCb);
+    QDoubleSpinBox *hangerDropSpin = new QDoubleSpinBox;
+    hangerDropSpin->setRange(0, 10 * toDisp_fx);
+    hangerDropSpin->setSuffix(unitSfx_fx); hangerDropSpin->setDecimals(2);
+    hangerDropSpin->setToolTip(tr("How far it hangs below the end of the arm, on its chain or cable"));
+    rigForm->addRow(tr("Hanger drop:"), hangerDropSpin);
+
     // Deck mount: a fixture standing on top of a platform ("floor mounted").
     QComboBox *deckCb = new QComboBox;
     deckCb->addItem(tr("(none)"), QVariant(FixtureRigProps::invalidPlatformId()));
@@ -8713,6 +8779,21 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         { deckCb->setCurrentIndex(i); break; }
     deckHeightSpin->setValue(double(rp.deckHeightOffset) * toDisp_fx);
     heightOffSpin->setValue(double(rp.mountZOffset) * toDisp_fx);
+    hangerArmSpin->setValue(double(rp.hangerArm) * toDisp_fx);
+    hangerDropSpin->setValue(double(rp.hangerDrop) * toDisp_fx);
+    {
+        // The nearest of the eight; a value set elsewhere that is none of them
+        // is kept as it is unless the combo is changed.
+        int best = 0;
+        double bestD = 1e9;
+        for (int i = 0; i < hangerDirCb->count(); ++i)
+        {
+            double d = qAbs(std::fmod(double(rp.hangerAngle) - hangerDirCb->itemData(i).toDouble() + 540.0, 360.0) - 180.0);
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        hangerDirCb->setCurrentIndex(best);
+    }
+    const int initialHangerDirIndex = hangerDirCb->currentIndex();
     panZeroSpin->setValue(double(rp.panZeroDir));
     panOffsetSpin->setValue(double(rp.panOffsetDeg));
     tiltOffsetSpin->setValue(double(rp.tiltOffsetDeg));
@@ -8747,6 +8828,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     const bool structMount = rp.trussId != Truss::invalidId()
         || rp.pipeId != Pipe::invalidId() || rp.towerId != Tower::invalidId();
     if (!structMount) hideRow(heightOffSpin);
+    if (!structMount) { hideRow(hangerArmSpin); hideRow(hangerDirCb); hideRow(hangerDropSpin); }
     // Aim (pan-zero / front of device) applies to movers AND fixed beams (their
     // facing); a strip uses Face+Angle instead. Pan/tilt CAL + Test are movers-only.
     if (isStrip) hideRow(panZeroSpin);
@@ -9216,7 +9298,9 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     if (fxi != nullptr && nameEdit != nullptr)
     {
         const QString newName = nameEdit->text().trimmed();
-        if (!newName.isEmpty() && newName != fxi->name())
+        // Another fixture's name is refused (said so); the rest still applies.
+        if (!newName.isEmpty() && newName != fxi->name()
+            && !AppUtil::refuseTakenFixtureName(this, m_doc, fxi->id(), newName))
         {
             fxi->setName(newName);
             m_doc->setModified();
@@ -9251,6 +9335,10 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     newRp.deckPlatformId = deckCb->currentData().toUInt();
     newRp.deckHeightOffset = float(deckHeightSpin->value() * fromDisp_fx);
     newRp.mountZOffset = float(heightOffSpin->value() * fromDisp_fx);
+    newRp.hangerArm  = float(hangerArmSpin->value() * fromDisp_fx);
+    newRp.hangerDrop = float(hangerDropSpin->value() * fromDisp_fx);
+    if (hangerDirCb->currentIndex() != initialHangerDirIndex)
+        newRp.hangerAngle = float(hangerDirCb->currentData().toInt());
     newRp.panZeroDir    = float(panZeroSpin->value());
     newRp.panOffsetDeg  = float(panOffsetSpin->value());
     newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());

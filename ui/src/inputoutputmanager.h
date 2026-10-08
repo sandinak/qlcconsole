@@ -58,6 +58,9 @@ public:
     /** Get the singleton instance */
     static InputOutputManager* instance();
 
+    /** Select @p universe in the list, showing its patch. */
+    void selectUniverse(quint32 universe);
+
     /** Match the main window's icon/text display preference
      *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
     void applyToolbarLabelMode();

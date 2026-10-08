@@ -33,6 +33,13 @@
 #include <QRect>
 #include <QFile>
 #include <QDir>
+#include <QRegularExpression>
+#include <QFont>
+#include <QColor>
+#include <QTreeWidgetItem>
+#include <QFileInfo>
+#include <QMap>
+#include <algorithm>
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #include <windows.h>
@@ -44,6 +51,16 @@
 #include "qlcpalette.h"
 #include "scene.h"
 #include "doc.h"
+#include "fixture.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcphysical.h"
+#include "showstatus.h"
+#include "qlcioplugin.h"
+#include "ioplugincache.h"
+#include "fixturedefcheck.h"
+#include "inputoutputmap.h"
+#include "qlcfixturedefcache.h"
 
 /****************************************************************************
  * Widget visibility helper
@@ -294,8 +311,9 @@ bool AppUtil::launchFixtureEditor(const QString &fixtureFilePath, QWidget *paren
     }
 
     QStringList args;
+    // Opened for one file: the editor goes away again when it is closed.
     if (fixtureFilePath.isEmpty() == false)
-        args << QStringLiteral("--open") << fixtureFilePath;
+        args << QStringLiteral("--open") << fixtureFilePath << QStringLiteral("--close-when-done");
 
     return QProcess::startDetached(editorPath, args);
 }
@@ -340,4 +358,354 @@ void ComboBoxDelegate::updateEditorGeometry(QWidget *editor,
         const QStyleOptionViewItem &option, const QModelIndex &/*index*/) const
 {
     editor->setGeometry(option.rect);
+}
+
+bool AppUtil::refuseTakenFixtureName(QWidget *parent, Doc *doc, quint32 fid, const QString &name)
+{
+    if (doc == nullptr || name.isEmpty() || !doc->fixtureNameTaken(name, fid))
+        return false;
+    QMessageBox::warning(parent, QObject::tr("Rename Fixture"),
+        QObject::tr("Another fixture is already called “%1”. Fixture names are unique, so "
+                    "every view, palette and cue can tell them apart -- pick another name "
+                    "(for example “%2”).").arg(name, doc->uniqueFixtureName(name, fid)));
+    return true;
+}
+
+void AppUtil::updateFixtureReadiness(Doc *doc)
+{
+    if (doc == NULL)
+        return;
+
+    QList<Fixture *> unpatched;
+    struct SilentType { QString file; int fixtures = 0; };
+    QMap<QString, SilentType> silentTypes;      // "Maker Model (mode)" -> its file, fixtures
+    foreach (Fixture *fx, doc->fixtures())
+    {
+        if (fx == NULL)
+            continue;
+        // A clash is listed as a clash (below), not as merely unpatched.
+        if (fx->isPatched() == false && fx->addressClash() == false)
+            unpatched << fx;
+        const QLCFixtureMode *mode = fx->fixtureMode();
+        if (mode != NULL && mode->physical().declaresOutput() == false)
+        {
+            const QLCFixtureDef *def = fx->fixtureDef();
+            const QString type = (def != NULL)
+                ? QString("%1 %2 (%3) · %4").arg(def->manufacturer(), def->model(), mode->name(),
+                                                  def->sourceDescription())
+                : mode->name();
+            SilentType &st = silentTypes[type];
+            st.file = (def != NULL) ? def->definitionSourceFile() : QString();
+            st.fixtures++;
+        }
+    }
+
+    ShowStatus *status = ShowStatus::instance();
+    if (unpatched.isEmpty())
+    {
+        status->clearStatus("fixtures.unpatched");
+    }
+    else
+    {
+        std::sort(unpatched.begin(), unpatched.end(), [](Fixture *a, Fixture *b) {
+            return QString::localeAwareCompare(a->name(), b->name()) < 0;
+        });
+        QStringList items;
+        QVariantList ids;
+        foreach (Fixture *fx, unpatched)
+        {
+            items << fx->name();
+            ids << fx->id();
+        }
+        status->setStatus("fixtures.unpatched", ShowStatus::Warning,
+            QCoreApplication::translate("AppUtil", "%n fixture(s) not patched: they send no DMX",
+                                        "", unpatched.count()),
+            QCoreApplication::translate("AppUtil", "They show in the rig view only. Select "
+                                        "them and Patch."),
+            items, ids);
+    }
+
+    if (silentTypes.isEmpty())
+    {
+        status->clearStatus("fixtures.output");
+    }
+    else
+    {
+        QStringList items;
+        QVariantList files;
+        int fixtures = 0;
+        for (auto it = silentTypes.constBegin(); it != silentTypes.constEnd(); ++it)
+        {
+            items << QCoreApplication::translate("AppUtil", "%1 — %n fixture(s)", "", it.value().fixtures)
+                         .arg(it.key());
+            files << it.value().file;
+            fixtures += it.value().fixtures;
+        }
+        status->setStatus("fixtures.output", ShowStatus::Warning,
+            QCoreApplication::translate("AppUtil", "%n fixture type(s) declare no light output",
+                                        "", silentTypes.count()),
+            QCoreApplication::translate("AppUtil", "The rig view draws these %n fixture(s) at a "
+                                        "guess. Edit the definition and set its lumens (or "
+                                        "power) on the Physical tab.", "", fixtures),
+            items, files);
+    }
+
+    /* Fixtures that loaded unpatched because their address was taken. */
+    {
+        QStringList items;
+        QVariantList ids;
+        foreach (quint32 fid, doc->addressClashes())
+        {
+            Fixture *fx = doc->fixture(fid);
+            if (fx == NULL)
+                continue;
+            items << QCoreApplication::translate("AppUtil", "%1 — wanted universe %2, address %3")
+                         .arg(fx->name()).arg(fx->universe() + 1).arg(fx->address() + 1);
+            ids << fid;
+        }
+        if (items.isEmpty())
+            status->clearStatus("fixtures.clash");
+        else
+            status->setStatus("fixtures.clash", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n fixture(s) clash with another's address",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "They loaded unpatched, so they send no "
+                                            "DMX. Re-patch them somewhere free."),
+                items, ids);
+    }
+
+    /* Two fixtures with one name cannot be told apart where a fixture is
+       picked by name. */
+    {
+        const QMap<QString, QList<quint32> > dups = doc->duplicateFixtureNames();
+        QStringList items;
+        QVariantList names;
+        for (auto it = dups.constBegin(); it != dups.constEnd(); ++it)
+        {
+            items << QCoreApplication::translate("AppUtil", "%1 — %n fixture(s)", "", it.value().count())
+                         .arg(it.key());
+            names << it.key();
+        }
+        if (items.isEmpty())
+            status->clearStatus("fixtures.duplicates");
+        else
+            status->setStatus("fixtures.duplicates", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n fixture name(s) used more than once",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "Numbering keeps the name on the patched "
+                                            "one and gives the others \"#2\", \"#3\"..."),
+                items, names);
+    }
+
+    /* Definition files that could not be read: missing from the library. */
+    {
+        const QMap<QString, QString> failed = doc->fixtureDefCache()->failedDefinitions();
+        const QHash<QString, QLCFixtureDef *> defsByName = definitionsByName(doc->fixtureDefCache());
+        QStringList items, groups;
+        QVariantList files;
+        QHash<QByteArray, QString> firstWithContent;     // a "X 2.qxf" that is X.qxf again
+        // Originals before their numbered copies ("X.qxf" before "X 2.qxf"),
+        // so it is the copy that says so.
+        QStringList paths = failed.keys();
+        static const QRegularExpression numbered(QStringLiteral(" \\d+\\.[^.]+$"));
+        std::stable_sort(paths.begin(), paths.end(), [](const QString &a, const QString &b) {
+            const bool ca = QFileInfo(a).fileName().contains(numbered);
+            const bool cb = QFileInfo(b).fileName().contains(numbered);
+            return ca != cb ? !ca : QFileInfo(a).fileName() < QFileInfo(b).fileName();
+        });
+        QHash<QString, QString> whyOf;
+        foreach (const QString &path, paths)
+        {
+            QString why = QCoreApplication::translate("AppUtil", "read error");
+            QFile f(path);
+            if (f.open(QIODevice::ReadOnly))
+            {
+                const QByteArray content = f.readAll();
+                FixtureDefCheck::ParseProblem p;
+                if (FixtureDefCheck::diagnose(content, &p) && !p.brief().isEmpty())
+                    why += QStringLiteral(", ") + p.brief();
+                const QString twin = firstWithContent.value(content);
+                if (twin.isEmpty())
+                    firstWithContent.insert(content, QFileInfo(path).fileName());
+                else
+                    why += QCoreApplication::translate("AppUtil", " (copy of %1)").arg(twin);
+            }
+            whyOf.insert(path, why);
+        }
+        for (auto it = failed.constBegin(); it != failed.constEnd(); ++it)
+        {
+            const bool local = QFileInfo(it.key()).absolutePath()
+                == QLCFixtureDefCache::userDefinitionDirectory().absolutePath();
+            // "read error", and why when the file says.
+            const QString why = whyOf.value(it.key());
+            QString item = QString("%1 — %2").arg(QFileInfo(it.key()).fileName(), why);
+            /* A definition of the same fixture that DID load is used in its
+               place: say which, so a broken local copy of an included
+               fixture is not mistaken for the fixture going missing. */
+            QFile src(it.key());
+            if (src.open(QIODevice::ReadOnly))
+            {
+                const QString text = QString::fromUtf8(src.readAll());
+                static const QRegularExpression man(QStringLiteral("<Manufacturer>([^<]*)</Manufacturer>"));
+                static const QRegularExpression mod(QStringLiteral("<Model>([^<]*)</Model>"));
+                const QString key = man.match(text).captured(1).trimmed() + QLatin1Char('\n')
+                                  + mod.match(text).captured(1).trimmed();
+                if (QLCFixtureDef *used = defsByName.value(key))
+                    item += (used->source() == QLCFixtureDef::Local)
+                        ? QCoreApplication::translate("AppUtil", " · %1 is used").arg(QFileInfo(used->definitionSourceFile()).fileName())
+                        : QCoreApplication::translate("AppUtil", " · the included one is used");
+            }
+            items << item;
+            groups << QLCFixtureDef::sourceToString(local ? QLCFixtureDef::Local : QLCFixtureDef::Included);
+            files << it.key();
+        }
+        if (items.isEmpty())
+            status->clearStatus("definitions.failed");
+        else
+            status->setStatus("definitions.failed", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n fixture definition(s) could not be read",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "Missing from the fixture library "
+                                            "until repaired."),
+                items, files, groups);
+    }
+
+    /* Two LOCAL files for one fixture: only one is used (the newest), the
+       other is clutter -- or a different version nobody knows is ignored.
+       (A local one replacing an included one is by design: not listed.) */
+    {
+        QStringList items, groups;
+        QVariantList files;
+        foreach (const QLCFixtureDefCache::Duplicate &d, doc->fixtureDefCache()->duplicates())
+        {
+            if (!d.keptIsLocal || !d.ignoredIsLocal || !QFile::exists(d.ignored))
+                continue;
+            const QString kept = QFileInfo(d.kept).fileName();
+            items << (d.identical
+                ? QCoreApplication::translate("AppUtil", "%1 — same as %2").arg(QFileInfo(d.ignored).fileName(), kept)
+                : QCoreApplication::translate("AppUtil", "%1 — older than %2, not used").arg(QFileInfo(d.ignored).fileName(), kept));
+            files << d.ignored;
+            QFile f(d.kept);
+            QString name = kept;
+            if (f.open(QIODevice::ReadOnly))
+            {
+                const QString text = QString::fromUtf8(f.readAll());
+                static const QRegularExpression man(QStringLiteral("<Manufacturer>([^<]*)</Manufacturer>"));
+                static const QRegularExpression mod(QStringLiteral("<Model>([^<]*)</Model>"));
+                name = QString("%1 %2").arg(man.match(text).captured(1).trimmed(),
+                                            mod.match(text).captured(1).trimmed());
+            }
+            groups << name;
+        }
+        if (items.isEmpty())
+            status->clearStatus("definitions.duplicates");
+        else
+            status->setStatus("definitions.duplicates", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n local definition file(s) not used: another "
+                                            "file defines the same fixture", "", items.count()),
+                QCoreApplication::translate("AppUtil", "The most recently changed file is the one used."),
+                items, files, groups);
+    }
+
+    /* WLED lanterns that do not answer, or answer on a weak signal -- asked
+       by the WLED output itself, every few seconds. */
+    {
+        QStringList items;
+        QVariantList ips;
+        QLCIOPlugin *wled = doc->ioPluginCache() != NULL
+                          ? doc->ioPluginCache()->plugin(QStringLiteral("WLED")) : NULL;
+        if (wled != NULL)
+        {
+            foreach (const QString &problem, wled->targetProblems())
+            {
+                const QString ip = problem.section(QStringLiteral(" — "), 0, 0);
+                QStringList names;
+                foreach (Fixture *fx, doc->fixtures())
+                    if (fx != NULL && fx->connection() == Fixture::Network && fx->ipAddress() == ip)
+                        names << fx->name();
+                items << (names.isEmpty() ? problem
+                                          : QString("%1 (%2)").arg(names.join(", "), problem));
+                ips << ip;
+            }
+        }
+        if (items.isEmpty())
+            status->clearStatus("wled.targets");
+        else
+            status->setStatus("wled.targets", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n WLED device(s) not answering or on weak Wi-Fi",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "Checked every few seconds. Weaker than -75 dBm "
+                                            "drops on stage Wi-Fi."),
+                items, ips);
+    }
+
+    /* A universe fixtures are patched on, with nowhere to send it. */
+    {
+        InputOutputMap *io = doc->inputOutputMap();
+        QMap<quint32, int> used;
+        foreach (Fixture *fx, doc->fixtures())
+            if (fx != NULL && fx->isPatched() && fx->universe() < io->universesCount())
+                used[fx->universe()]++;
+        QStringList items;
+        QVariantList universes;
+        for (auto it = used.constBegin(); it != used.constEnd(); ++it)
+        {
+            if (io->outputPatchesCount(it.key()) > 0)
+                continue;
+            const QString name = io->getUniverseNameByIndex(it.key());
+            items << QCoreApplication::translate("AppUtil", "Universe %1%2 — %n fixture(s)", "", it.value())
+                         .arg(it.key() + 1)
+                         .arg(name.isEmpty() ? QString() : QString(" (%1)").arg(name));
+            universes << it.key();
+        }
+        if (items.isEmpty())
+            status->clearStatus("universes.nooutput");
+        else
+            status->setStatus("universes.nooutput", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n universe(s) with fixtures but no output",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "What they send goes nowhere. Give each "
+                                            "an output in Connections."),
+                items, universes);
+    }
+}
+
+QHash<QString, QLCFixtureDef *> AppUtil::definitionsByName(QLCFixtureDefCache *cache)
+{
+    QHash<QString, QLCFixtureDef *> out;
+    if (cache == NULL)
+        return out;
+    foreach (QLCFixtureDef *def, cache->definitions())
+        if (def != NULL)
+            out.insert(def->manufacturer() + QLatin1Char('\n') + def->model(), def);
+    return out;
+}
+
+void AppUtil::showDefinitionSource(QTreeWidgetItem *item, int column, const QLCFixtureDef *def)
+{
+    if (item == NULL || def == NULL)
+        return;
+    item->setText(column, def->sourceDescription());
+    QFont f = item->font(column);
+    switch (def->source())
+    {
+    case QLCFixtureDef::Local:
+        item->setForeground(column, QColor(70, 140, 230));
+        item->setToolTip(column, QCoreApplication::translate("AppUtil",
+            "Your own definition: %1").arg(def->definitionSourceFile()));
+        break;
+    case QLCFixtureDef::Downloadable:
+        f.setItalic(true);
+        item->setForeground(column, QColor(150, 150, 150));
+        item->setToolTip(column, QCoreApplication::translate("AppUtil",
+            "From the online library: fetched when it is used."));
+        break;
+    case QLCFixtureDef::Included:
+    default:
+        item->setForeground(column, QColor(140, 140, 140));
+        item->setToolTip(column, QCoreApplication::translate("AppUtil",
+            "Ships with the app. Edits are saved as a local copy."));
+        break;
+    }
+    item->setFont(column, f);
 }

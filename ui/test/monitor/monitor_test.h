@@ -113,6 +113,15 @@ private slots:
     void aGroupIsLaidOutAgainFromTheStage();
     void enterRenamesAnyLayersRowFromItsBareName();
     void stepFrontsAndTopsAreLaidOutAsOnStage();
+    void aClearTopGlowsWithTheLightInsideIt();
+    void twoBarsOfOneKindEachSplitIntoAGroupPerKind();
+    void editFixtureFromLayersEditsThatFixture();
+    void aBarLitInSectionsLightsOnlyAboveThem();
+    void aFixturesLightFollowsWhatItsDefinitionPutsOut();
+    void stepBarsTippedUpstageWashTheTopOfTheCyc();
+    void aPixelBarsLightComesFromItsLitPixels();
+    void aBarHungOnATrussShinesOutOfItsFace();
+    void aLanternHangsOffATowerAndGlowsAllRound();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an
      *  opened fixture group stays open through a rebuild of the list; and a

@@ -1460,7 +1460,20 @@ void MonitorLayersPanel::slotItemChanged(QTreeWidgetItem *item, int column)
     }
     else // NodeItem — rename the underlying map item
     {
-        renameMapItem(item->data(0, NodeKindRole).toString(), id, name);
+        /* Refused (another fixture has that name): the row goes back to the
+           name it has. Not now -- the edited row is still in use. */
+        if (!renameMapItem(item->data(0, NodeKindRole).toString(), id, name))
+        {
+            if (!m_reloadQueued)
+            {
+                m_reloadQueued = true;
+                QTimer::singleShot(0, this, [this]() {
+                    m_reloadQueued = false;
+                    reload();
+                });
+            }
+            return;
+        }
     }
     m_doc->setModified();
 }
@@ -1488,10 +1501,9 @@ void MonitorLayersPanel::setObjectLocked(const QString &kind, quint32 id, bool l
         m_view->setItemLocked(kind, id, locked);
 }
 
-void MonitorLayersPanel::renameMapItem(const QString &kind, quint32 id, const QString &name)
+bool MonitorLayersPanel::renameMapItem(const QString &kind, quint32 id, const QString &name)
 {
-    if (m_view != nullptr)
-        m_view->renameItem(kind, id, name);
+    return m_view == nullptr || m_view->renameItem(kind, id, name);
 }
 
 void MonitorLayersPanel::collectLeaves(QTreeWidgetItem *node,

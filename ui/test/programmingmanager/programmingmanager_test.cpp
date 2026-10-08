@@ -23,6 +23,8 @@
 #include <QTreeWidgetItemIterator>
 #include <QSplitter>
 #include <QLayout>
+#include <QScrollArea>
+#include <QLabel>
 
 #define protected public
 #define private public
@@ -35,10 +37,20 @@
 #include "fixture.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
+#include "apputil.h"
+#include "showstatus.h"
+#include "qlcfixturedefcache.h"
+#include <QRegularExpression>
+#include <QDateTime>
+#include <QTemporaryDir>
+#include "showstatusdialog.h"
+#include <QPushButton>
+#include <QTreeWidget>
 #include "doc.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
+#include "qlcchannel.h"
 #include "monitor/structurestudioview.h"
 #undef private
 #undef protected
@@ -632,6 +644,538 @@ void ProgrammingManager_Test::aRenamedFixedTargetShowsItsNewName()
     other->setName("Still Not In It");
     QCoreApplication::processEvents();
     QVERIFY(!listed("Still Not In It"));
+}
+
+/* "everytime I click a fader in the color picker it drops out of the color
+   picker": a look edit reloads the canvas, which re-announced the selected
+   group, which swapped the look editor for the fixtures' faders. */
+void ProgrammingManager_Test::theColourPickerStaysOpenWhileItsLookIsEdited()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    QList<quint32> fids;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QString("USt %1").arg(i + 1));
+        f->setChannels(3);
+        f->setAddress(quint32(i) * 3);
+        QVERIFY(m_doc->addFixture(f));
+        fids << f->id();
+    }
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("USt");
+    grp->setSize(QSize(2, 1));
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->assignFixture(fids[0], QLCPoint(0, 0));
+    grp->assignFixture(fids[1], QLCPoint(1, 0));
+
+    QLCPalette *col = new QLCPalette(QLCPalette::Color, m_doc);
+    col->setName("Blue");
+    col->setValue(QColor(0, 0, 200));
+    QVERIFY(m_doc->addPalette(col));
+
+    Fixture *solo = new Fixture(m_doc);       // a fixed target of its own
+    solo->setName("Solo");
+    solo->setChannels(3);
+    solo->setAddress(20);
+    QVERIFY(m_doc->addFixture(solo));
+
+    Scene *scene = new Scene(m_doc);
+    scene->setName("USt test");
+    scene->addFixtureGroup(grp->id());
+    scene->addFixture(solo->id());
+    scene->addPalette(col->id());
+    QVERIFY(m_doc->addFunction(scene));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.loadCanvas(scene->id());
+    SceneGroupLooks *canvas = mgr.m_canvas;
+    QVERIFY(canvas != nullptr);
+
+    // Select the group target: the fixtures' faders.
+    QTreeWidgetItem *groupRow = nullptr;
+    for (QTreeWidgetItemIterator it(canvas->m_targetList); *it; ++it)
+        if ((*it)->data(0, Qt::UserRole + 1).toInt() == 0 /* TargetGroup */
+            && (*it)->data(0, Qt::UserRole).toUInt() == grp->id())
+            groupRow = *it;
+    QVERIFY(groupRow != nullptr);
+    groupRow->setSelected(true);
+    QCOMPARE(mgr.m_selectedFixtures, fids);
+    QVERIFY(mgr.m_lookEditor->isHidden());
+
+    // Then the look: its editor, the group still selected behind it.
+    QTreeWidgetItem *lookRow = nullptr;
+    for (int i = 0; i < canvas->m_lookList->topLevelItemCount(); ++i)
+        if (canvas->m_lookList->topLevelItem(i)->data(0, Qt::UserRole).toUInt() == col->id())
+            lookRow = canvas->m_lookList->topLevelItem(i);
+    QVERIFY(lookRow != nullptr);
+    canvas->m_lookList->setCurrentItem(lookRow);
+    lookRow->setSelected(true);
+    QVERIFY(!mgr.m_lookEditor->isHidden());
+    QCOMPARE(mgr.m_lookEditor->paletteId(), col->id());
+
+    // Move the blue: every tick reloads the canvas. The picker stays.
+    for (int b = 150; b <= 250; b += 50)
+    {
+        mgr.m_lookEditor->slotColorChanged(QColor(0, 0, b));
+        QVERIFY2(!mgr.m_lookEditor->isHidden(), qPrintable(QString("dropped out at blue %1").arg(b)));
+        QVERIFY(mgr.m_fixtureScroll->isHidden());
+        QCOMPARE(mgr.m_lookEditor->paletteId(), col->id());
+    }
+    QCOMPARE(col->rgbValue().blue(), 250);
+
+    // A real change of selection still swaps to the faders.
+    groupRow = nullptr;
+    for (QTreeWidgetItemIterator it(canvas->m_targetList); *it; ++it)
+        if ((*it)->data(0, Qt::UserRole + 1).toInt() == 1 /* TargetFixture */
+            && (*it)->data(0, Qt::UserRole).toUInt() == solo->id())
+            groupRow = *it;
+    QVERIFY(groupRow != nullptr);
+    canvas->m_targetList->clearSelection();
+    groupRow->setSelected(true);
+    QCOMPARE(mgr.m_selectedFixtures, QList<quint32>({ solo->id() }));
+    QVERIFY(mgr.m_lookEditor->isHidden());
+}
+
+/* "push blue up from all the USt bars .. I don't see anything on the rig
+   view": a look built on the scene's own faders, no palette, drew nothing
+   without live DMX. */
+void ProgrammingManager_Test::theRigViewDrawsWhatTheScenesFadersSet()
+{
+    Fixture *f = new Fixture(m_doc);
+    f->setName("USt 1");
+    f->setChannels(3);
+    QVERIFY(m_doc->addFixture(f));
+    Scene *scene = new Scene(m_doc);
+    scene->setName("USt test");
+    scene->setValue(f->id(), 2, 200);           // blue up, on the fader
+    QVERIFY(m_doc->addFunction(scene));
+
+    StructureStudioView view(m_doc, StructureStudioView::StageKind, 0);
+    view.setLiveValues(false);
+    view.setActiveScene(scene->id());
+    const QByteArray v = view.valuesForDrawing(f);
+    QVERIFY(v.size() >= 3);
+    QCOMPARE(uchar(v.at(2)), uchar(200));
+
+    // A fader moved later shows too.
+    scene->setValue(f->id(), 2, 90);
+    auto blue = [&view, f]() {
+        const QByteArray b = view.valuesForDrawing(f);
+        return b.size() > 2 ? uchar(b.at(2)) : uchar(0);
+    };
+    QTRY_COMPARE(blue(), uchar(90));
+}
+
+/* "changed to red.. no red on the person": a look SWAPPED on a scene (Blue
+   out, Red in) changed what it paints but told nobody, so the rig view went
+   on drawing blue. Adding or removing a look or a target now notifies. */
+void ProgrammingManager_Test::theRigViewFollowsALookSwappedOnTheScene()
+{
+    // An RGB fixture: a colour look paints its red, green and blue.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("RGB Washer");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("RGB");
+    const QLCChannel::Preset presets[3] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                            QLCChannel::IntensityBlue };
+    for (int c = 0; c < 3; ++c)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("C%1").arg(c));
+        ch->setPreset(presets[c]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, c);
+    }
+    def->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *f = new Fixture(m_doc);
+    f->setName("US1t1");
+    f->setFixtureDefinition(def, mode);
+    QVERIFY(m_doc->addFixture(f));
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QColor(0, 0, 255));
+    QVERIFY(m_doc->addPalette(blue));
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QColor(230, 0, 2));
+    QVERIFY(m_doc->addPalette(red));
+    Scene *scene = new Scene(m_doc);
+    scene->setName("USt-Blue");
+    scene->addFixture(f->id());
+    scene->addPalette(blue->id());
+    QVERIFY(m_doc->addFunction(scene));
+
+    QSignalSpy spy(m_doc, &Doc::functionChanged);
+    StructureStudioView view(m_doc, StructureStudioView::StageKind, 0);
+    view.setLiveValues(false);
+    view.setActiveScene(scene->id());
+    auto rgb = [&view, f]() {
+        const QByteArray b = view.valuesForDrawing(f);
+        return b.size() > 2 ? QColor(uchar(b.at(0)), uchar(b.at(1)), uchar(b.at(2))) : QColor();
+    };
+    QTRY_VERIFY(rgb().isValid() && rgb().blue() > 200 && rgb().red() < 20);
+
+    // Swap the look, as dropping Red and removing Blue in the Looks list does.
+    spy.clear();
+    scene->removePalette(blue->id());
+    scene->addPalette(red->id());
+    QVERIFY2(spy.count() >= 2, "swapping a look on the scene told nobody");
+    QTRY_VERIFY2(rgb().red() > 200 && rgb().blue() < 20,
+                 qPrintable("the rig view still draws " + rgb().name()));
+
+    // No change, no notice.
+    spy.clear();
+    scene->addPalette(red->id());
+    scene->removePalette(blue->id());
+    QCOMPARE(spy.count(), 0);
+}
+
+/* "not seeing output on farts .. we need a warning in programming view for
+   unpatched fixtures": a group whose fixtures are in the inventory looked
+   like any other target. */
+void ProgrammingManager_Test::unpatchedTargetsAreFlaggedInTheProgrammingView()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    Fixture *patched = new Fixture(m_doc);
+    patched->setName("FART-SR-1");
+    patched->setChannels(3);
+    QVERIFY(m_doc->addFixture(patched));
+    Fixture *staged = new Fixture(m_doc);
+    staged->setName("FART-SR-2");
+    staged->setChannels(3);
+    staged->setPatched(false);
+    QVERIFY(m_doc->addFixture(staged));
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("FARTS");
+    grp->setSize(QSize(2, 1));
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->assignFixture(patched->id(), QLCPoint(0, 0));
+    grp->assignFixture(staged->id(), QLCPoint(1, 0));
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Gradient");
+    scene->addFixtureGroup(grp->id());
+    QVERIFY(m_doc->addFunction(scene));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.loadCanvas(scene->id());
+    SceneGroupLooks *canvas = mgr.m_canvas;
+    QVERIFY(canvas != nullptr);
+    QVERIFY(!canvas->m_unpatchedNote->isHidden());
+    QVERIFY2(canvas->m_unpatchedNote->text().contains("1 of these 2"), qPrintable(canvas->m_unpatchedNote->text()));
+    QVERIFY(canvas->m_unpatchedNote->text().contains("send no DMX"));
+
+    // Patched: the warning goes.
+    QVERIFY(m_doc->patchFixtures({ { staged->id(), 0, 10 } }));
+    canvas->reload();
+    QVERIFY(canvas->m_unpatchedNote->isHidden());
+}
+
+/* A colour effect is a look for colour, a dimmer effect for the dimmer:
+   the Targets list must not say "no look for" what the effect drives. */
+void ProgrammingManager_Test::anEffectIsALookForWhatItDrives()
+{
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Par");
+    fx->setChannels(1);                          // a dimmer
+    QVERIFY(m_doc->addFixture(fx));
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Pars");
+    grp->setSize(QSize(1, 1));
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->assignFixture(fx->id(), QLCPoint(0, 0));
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Flicker");
+    scene->addFixtureGroup(grp->id());
+    QVERIFY(m_doc->addFunction(scene));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.loadCanvas(scene->id());
+    SceneGroupLooks *canvas = mgr.m_canvas;
+    QVERIFY(canvas != nullptr);
+    auto groupRow = [canvas]() {
+        return canvas->m_targetList->topLevelItemCount() > 0
+               ? canvas->m_targetList->topLevelItem(0)->text(0) : QString();
+    };
+    QVERIFY2(groupRow().contains("no look for: dimmer"), qPrintable(groupRow()));
+
+    QLCPalette *effect = new QLCPalette(QLCPalette::Effect, m_doc);
+    effect->setName("fire");
+    effect->setPath("Palettes/Effect/Dimmer/Fire/");
+    QVERIFY(m_doc->addPalette(effect));
+    scene->addPalette(effect->id());
+    canvas->reload();
+    QVERIFY2(!groupRow().contains("no look for"), qPrintable(groupRow()));
+}
+
+/* The footer's "Not ready" list carries fixtures that send no DMX, and
+   fixture types whose definition declares no light output; each clears when
+   it is fixed. */
+void ProgrammingManager_Test::unpatchedAndSilentFixturesAreInTheFooter()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    Fixture *patched = new Fixture(m_doc);
+    patched->setName("Par 1");
+    patched->setChannels(1);
+    QVERIFY(m_doc->addFixture(patched));
+    Fixture *staged = new Fixture(m_doc);
+    staged->setName("FART-SL-9");
+    staged->setChannels(1);
+    staged->setPatched(false);
+    QVERIFY(m_doc->addFixture(staged));
+
+    auto entry = [](const QString &key) {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == key)
+                return e;
+        return ShowStatus::Entry();
+    };
+    AppUtil::updateFixtureReadiness(m_doc);
+    const ShowStatus::Entry unpatched = entry("fixtures.unpatched");
+    QVERIFY2(unpatched.summary.contains("1 fixture"), qPrintable(unpatched.summary));
+    QCOMPARE(unpatched.items, QStringList() << "FART-SL-9");
+    const ShowStatus::Entry silent = entry("fixtures.output");
+    QVERIFY2(silent.summary.contains("1 fixture type"), qPrintable(silent.summary));
+    QCOMPARE(silent.items.size(), 1);
+    QVERIFY2(silent.items.first().contains("2 fixture"), qPrintable(silent.items.first()));
+
+    // Patched: that one goes.
+    QVERIFY(m_doc->patchFixtures({ { staged->id(), 0, 10 } }));
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("fixtures.unpatched").key.isEmpty());
+
+    // The definition says what it puts out: so does that one.
+    for (Fixture *fx : { patched, staged })        // a generic fixture has a definition of its own
+    {
+        QLCFixtureMode *mode = const_cast<QLCFixtureMode *>(fx->fixtureMode());
+        QLCPhysical ph = mode->physical();
+        ph.setBulbLumens(300);
+        mode->setPhysical(ph);
+    }
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("fixtures.output").key.isEmpty());
+}
+
+/* The footer's detail dialog fixes problems in place: select rows -- a
+   shift-click range, or an entry's own row for all of it -- and its action
+   runs on exactly those; a problem nothing can fix is not selectable, a
+   selection across two problems offers no fix, and the list follows as
+   things are fixed. */
+void ProgrammingManager_Test::theReadinessDialogFixesWhatIsSelected()
+{
+    ShowStatus *status = ShowStatus::instance();
+    QVariantList ran;
+    status->setAction("test.fixable", "Patch…", [&ran](QWidget *, const QVariantList &items) {
+        ran = items;
+    });
+    status->setStatus("test.fixable", ShowStatus::Warning, "4 things", QString(),
+                      { "A", "B", "C", "D" }, { 1, 2, 3, 4 });
+    status->setStatus("test.unfixable", ShowStatus::Warning, "1 other thing", QString(),
+                      { "E" }, { 5 });
+
+    ShowStatusDialog dlg;
+    QTreeWidget *tree = dlg.tree();
+    auto row = [tree](const QString &text) -> QTreeWidgetItem * {
+        const QList<QTreeWidgetItem *> found = tree->findItems(text, Qt::MatchExactly | Qt::MatchRecursive);
+        return found.isEmpty() ? nullptr : found.first();
+    };
+    QVERIFY(row("B") && row("D") && row("E"));
+
+    // A shift-click range: B..D.
+    dlg.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      tree->visualItemRect(row("B")).center());
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::ShiftModifier,
+                      tree->visualItemRect(row("D")).center());
+    QVariantList items;
+    QCOMPARE(dlg.selectionKey(&items), QString("test.fixable"));
+    QCOMPARE(items, (QVariantList{ 2, 3, 4 }));
+    QVERIFY(dlg.actionButton()->isEnabled());
+    QCOMPARE(dlg.actionButton()->text(), QString("Patch… (3)"));
+    dlg.actionButton()->click();
+    QCOMPARE(ran, (QVariantList{ 2, 3, 4 }));
+
+    // The entry's own row: all of it.
+    tree->clearSelection();
+    row("4 things")->setSelected(true);
+    QVERIFY(dlg.selectionKey(&items) == "test.fixable");
+    QCOMPARE(items, (QVariantList{ 1, 2, 3, 4 }));
+
+    // Nothing fixes the other one: it cannot be picked, so a selection
+    // reaching for it is still only the fixable rows.
+    QVERIFY(!(row("E")->flags() & Qt::ItemIsSelectable));
+
+    // Double-click: that one.
+    ran.clear();
+    emit tree->itemDoubleClicked(row("A"), 0);
+    QCOMPARE(ran, (QVariantList{ 1 }));
+
+    // Fixed elsewhere: the list follows.
+    status->setStatus("test.fixable", ShowStatus::Warning, "1 thing", QString(), { "D" }, { 4 });
+    QVERIFY(row("A") == nullptr);
+    QVERIFY(row("D") != nullptr);
+
+    status->clearStatus("test.fixable");
+    status->clearStatus("test.unfixable");
+    status->setAction("test.fixable", QString(), ShowStatus::Action());
+}
+
+/* Address clashes, names used twice, and universes with fixtures but no
+   output are in the footer too, each item carrying what its fix needs. */
+void ProgrammingManager_Test::otherRigProblemsAreInTheFooter()
+{
+    auto entry = [](const QString &key) {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == key)
+                return e;
+        return ShowStatus::Entry();
+    };
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    auto make = [this](const QString &name, quint32 uni, quint32 addr, bool patched = true) {
+        Fixture *fx = new Fixture(m_doc);
+        fx->setName(name);
+        fx->setChannels(1);
+        fx->setUniverse(uni);
+        fx->setAddress(addr);
+        fx->setPatched(patched);
+        m_doc->addFixture(fx);
+        return fx;
+    };
+    Fixture *a = make("Dup", 0, 0);
+    Fixture *b = make("Dup", 0, 1);
+    Fixture *other = make("Twin", 0, 2);
+    Fixture *twin = make("Twin", 0, 3);
+    // Patched on universe 2, which has no output.
+    make("Lonely", 1, 0);
+    // Loaded unpatched because its address was taken.
+    // (as a load leaves it: unpatched, flagged)
+    Fixture *clash = make("Clash", 0, 0, false);
+    clash->setAddressClash(true);
+    QCOMPARE(a->name(), QString("Dup"));
+    // addFixture() may number a taken name: put the duplicates back.
+    b->setName("Dup");
+    twin->setName("Twin");
+    other->setName("Twin");
+
+    AppUtil::updateFixtureReadiness(m_doc);
+
+    const ShowStatus::Entry dups = entry("fixtures.duplicates");
+    QCOMPARE(dups.itemData, (QVariantList{ "Dup", "Twin" }));
+    const ShowStatus::Entry clashes = entry("fixtures.clash");
+    QCOMPARE(clashes.itemData, (QVariantList{ clash->id() }));
+    // ...and only there, not also as merely unpatched.
+    QVERIFY(!entry("fixtures.unpatched").itemData.contains(clash->id()));
+    const ShowStatus::Entry silent = entry("universes.nooutput");
+    QVERIFY2(silent.itemData.contains(1), qPrintable(silent.items.join("; ")));
+
+    // Numbering only the names picked.
+    QCOMPARE(m_doc->makeFixtureNamesUnique(QStringList() << "Dup"), 1);
+    AppUtil::updateFixtureReadiness(m_doc);
+    QCOMPARE(entry("fixtures.duplicates").itemData, (QVariantList{ "Twin" }));
+    QCOMPARE(m_doc->makeFixtureNamesUnique(), 1);
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("fixtures.duplicates").key.isEmpty());
+
+    ShowStatus::instance()->clearStatus("universes.nooutput");
+    ShowStatus::instance()->clearStatus("fixtures.clash");
+}
+
+/* Broken definitions under "Local" and "Included" headings; a heading
+   picks everything under it; and an entry can offer more than one fix
+   (repair it, or move it to the Trash) -- one button each. */
+void ProgrammingManager_Test::readinessItemsSitUnderHeadingsWithMoreThanOneFix()
+{
+    ShowStatus *status = ShowStatus::instance();
+    QString ran;
+    QVariantList on;
+    status->setAction("test.files", "Repair…", [&](QWidget *, const QVariantList &items) { ran = "repair"; on = items; });
+    status->addAction("test.files", "Move to Trash…", [&](QWidget *, const QVariantList &items) { ran = "trash"; on = items; });
+    status->setStatus("test.files", ShowStatus::Warning, "3 files", QString(),
+                      { "a.qxf — read error", "b.qxf — read error", "c.qxf — read error" },
+                      { "/a", "/b", "/c" }, { "Local", "Local", "Included" });
+
+    ShowStatusDialog dlg;
+    QTreeWidget *tree = dlg.tree();
+    const QList<QTreeWidgetItem *> local = tree->findItems("Local", Qt::MatchExactly | Qt::MatchRecursive);
+    QCOMPARE(local.size(), 1);
+    QCOMPARE(local.first()->childCount(), 2);
+    QCOMPARE(local.first()->child(0)->text(0), QString("a.qxf — read error"));
+
+    local.first()->setSelected(true);
+    QVariantList items;
+    QCOMPARE(dlg.selectionKey(&items), QString("test.files"));
+    QCOMPARE(items, (QVariantList{ "/a", "/b" }));
+    QCOMPARE(dlg.actionButtons().size(), 2);
+    QCOMPARE(dlg.actionButtons().at(0)->text(), QString("Repair… (2)"));
+    QCOMPARE(dlg.actionButtons().at(1)->text(), QString("Move to Trash… (2)"));
+    dlg.actionButtons().at(1)->click();
+    QCOMPARE(ran, QString("trash"));
+    QCOMPARE(on, (QVariantList{ "/a", "/b" }));
+
+    status->clearStatus("test.files");
+    status->setAction("test.files", QString(), ShowStatus::Action());
+}
+
+/* Two local files for one fixture: the one not used is listed under the
+   fixture's name ("older than ..., not used"), to be trashed. A broken file
+   for a fixture another file does provide says which is used instead. */
+void ProgrammingManager_Test::duplicateDefinitionsAreListedWithWhatIsUsed()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QByteArray xml(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<!DOCTYPE FixtureDefinition>\n"
+        "<FixtureDefinition xmlns=\"http://www.qlcplus.org/FixtureDefinition\">\n"
+        " <Manufacturer>Zz Dup</Manufacturer>\n"
+        " <Model>Par</Model>\n"
+        " <Type>Color Changer</Type>\n"
+        " <Channel Name=\"Dimmer\" Preset=\"IntensityDimmer\"/>\n"
+        " <Mode Name=\"1ch\">\n"
+        "  <Channel Number=\"0\">Dimmer</Channel>\n"
+        " </Mode>\n"
+        "</FixtureDefinition>\n");
+    auto write = [&](const QString &name, QByteArray data, int age) {
+        QFile f(dir.filePath(name));
+        f.open(QIODevice::WriteOnly);
+        f.write(data);
+        f.close();
+        f.open(QIODevice::ReadWrite);
+        f.setFileTime(QDateTime::currentDateTime().addSecs(-age), QFileDevice::FileModificationTime);
+    };
+    QByteArray newer = xml;
+    newer.replace("<Type>", "<!-- edited -->\n <Type>");
+    write("Zz-Dup-Par.qxf", xml, 3600);
+    write("Zz-Dup-Par 2.qxf", newer, 10);
+    QByteArray broken = xml;
+    broken.replace("IntensityDimmer\"/>", "IntensityDimmer\"\\>");
+    write("Zz-Dup-Par 3.qxf", broken, 7200);
+    QVERIFY(m_doc->fixtureDefCache()->load(QDir(dir.path(), "*.qxf")));
+
+    AppUtil::updateFixtureReadiness(m_doc);
+    ShowStatus::Entry dups, failed;
+    foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+    {
+        if (e.key == "definitions.duplicates") dups = e;
+        if (e.key == "definitions.failed") failed = e;
+    }
+    const int i = dups.items.indexOf(QRegularExpression("^Zz-Dup-Par\\.qxf.*"));
+    QVERIFY2(i >= 0, qPrintable(dups.items.join("; ")));
+    QVERIFY(dups.items.at(i).contains("older than Zz-Dup-Par 2.qxf, not used"));
+    QCOMPARE(dups.itemGroups.at(i), QString("Zz Dup Par"));
+    QCOMPARE(dups.itemData.at(i).toString(), dir.filePath("Zz-Dup-Par.qxf"));
+
+    const int j = failed.items.indexOf(QRegularExpression("^Zz-Dup-Par 3\\.qxf.*"));
+    QVERIFY2(j >= 0, qPrintable(failed.items.join("; ")));
+    QVERIFY2(failed.items.at(j).contains("Zz-Dup-Par 2.qxf is used"), qPrintable(failed.items.at(j)));
+
+    m_doc->fixtureDefCache()->forgetFailedDefinition(dir.filePath("Zz-Dup-Par 3.qxf"));
+    ShowStatus::instance()->clearStatus("definitions.duplicates");
+    ShowStatus::instance()->clearStatus("definitions.failed");
 }
 
 QTEST_MAIN(ProgrammingManager_Test)

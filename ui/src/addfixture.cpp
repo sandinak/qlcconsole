@@ -46,6 +46,7 @@
 #define SETTINGS_GEOMETRY "addfixture/geometry"
 
 #define KColumnName 0
+#define KColumnSource 1
 
 AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
     : QDialog(parent)
@@ -70,11 +71,14 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
     /* Connection: DMX (through a converter node / wireless receiver) or
        Network (the fixture speaks ArtNet/sACN itself and takes a unicast IP). */
     m_connectionCombo = new QComboBox(m_propertiesGroup);
-    m_connectionCombo->addItem(tr("DMX"), int(Fixture::Dmx));
-    m_connectionCombo->addItem(tr("Network (ArtNet/sACN)"), int(Fixture::Network));
+    m_connectionCombo->addItem(tr("DMX"), connectionKey(Fixture::Dmx, Fixture::ArtNetTransport));
+    m_connectionCombo->addItem(tr("Network (ArtNet/sACN)"), connectionKey(Fixture::Network, Fixture::ArtNetTransport));
+    m_connectionCombo->addItem(tr("Network (WLED, JSON over Wi-Fi)"), connectionKey(Fixture::Network, Fixture::WledTransport));
     m_connectionCombo->setToolTip(tr("DMX fixtures hang off a node or wireless receiver. "
                                      "Network fixtures are their own endpoint and are "
-                                     "sent to at their own IP."));
+                                     "sent to at their own IP -- as Art-Net DMX, or for "
+                                     "WLED on Wi-Fi, as its look's state through WLED's "
+                                     "own API, only when it changes."));
     m_ipEdit = new QLineEdit(m_propertiesGroup);
     m_ipEdit->setPlaceholderText(tr("unicast IP, e.g. 172.18.2.41"));
     m_ipEdit->setEnabled(false);
@@ -87,7 +91,7 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
         pg->addWidget(m_ipEdit, row + 1, 2);
     }
     connect(m_connectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [this](int) { m_ipEdit->setEnabled(m_connectionCombo->currentData().toInt() == int(Fixture::Network)); });
+            [this](int) { m_ipEdit->setEnabled(connection() == Fixture::Network); });
 
     QAction* action = new QAction(this);
     action->setShortcut(QKeySequence(QKeySequence::Close));
@@ -145,7 +149,9 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
 
         m_multipleGroup->setEnabled(false);
 
-        m_connectionCombo->setCurrentIndex(m_connectionCombo->findData(int(fxi->connection())));
+        m_connectionCombo->setCurrentIndex(m_connectionCombo->findData(
+            connectionKey(fxi->connection(), fxi->connection() == Fixture::Network
+                                             ? fxi->transport() : Fixture::ArtNetTransport)));
         m_ipEdit->setText(fxi->ipAddress());
 
         // Name
@@ -270,9 +276,19 @@ void AddFixture::setInventoryMode(bool inventory)
     updateMaximumAmount();
 }
 
+int AddFixture::connectionKey(Fixture::Connection c, Fixture::Transport t)
+{
+    return int(c) * 10 + int(t);
+}
+
 Fixture::Connection AddFixture::connection() const
 {
-    return Fixture::Connection(m_connectionCombo->currentData().toInt());
+    return Fixture::Connection(m_connectionCombo->currentData().toInt() / 10);
+}
+
+Fixture::Transport AddFixture::transport() const
+{
+    return Fixture::Transport(m_connectionCombo->currentData().toInt() % 10);
 }
 
 QString AddFixture::ipAddress() const
@@ -309,6 +325,9 @@ void AddFixture::fillTree(const QString& selectManufacturer,
     m_tree->clear();
 
     QString filter = m_searchEdit->text().toLower();
+    const QHash<QString, QLCFixtureDef *> defs = AppUtil::definitionsByName(m_doc->fixtureDefCache());
+    m_tree->setColumnCount(2);
+    m_tree->setHeaderLabels(QStringList() << tr("Fixture Model") << tr("Source"));
 
     /* Add all known fixture definitions to the tree */
     QStringListIterator it(m_doc->fixtureDefCache()->manufacturers());
@@ -338,6 +357,7 @@ void AddFixture::fillTree(const QString& selectManufacturer,
             }
             child = new QTreeWidgetItem(parent);
             child->setText(KColumnName, model);
+            AppUtil::showDefinitionSource(child, KColumnSource, defs.value(manuf + QLatin1Char('\n') + model));
 
             if (manuf == selectManufacturer &&
                     model == selectModel)
@@ -672,22 +692,28 @@ QSet<QString> AddFixture::existingFixtureNames() const
 
 void AddFixture::checkNameConflict()
 {
-    // Warn whenever the typed name is already taken. A single add would create a
-    // literal duplicate; a multi add auto-numbers PAST the collision — either
-    // way the user asked to be told the name is in use. The label wording adapts.
-    const bool conflict = m_nameEdit->isEnabled()
-                          && existingFixtureNames().contains(m_nameEdit->text());
+    /* Fixture names are unique. Adding: a taken name is numbered on (the
+       label says to what). Changing an existing fixture: a taken name is
+       refused -- OK stays off until the name is free. */
+    const QString typed = m_nameEdit->text();
+    const bool conflict = m_nameEdit->isEnabled() && existingFixtureNames().contains(typed);
+    const bool editing = m_fixtureID != Fixture::invalidId();
     if (conflict)
     {
-        m_nameErrorLabel->setText(m_amountValue > 1
-            ? tr("<html><body><p><span style=\" color:#e08000;\">"
-                 "That name exists — the new fixtures will be numbered past it."
-                 "</span></p></body></html>")
-            : tr("<html><body><p><span style=\" color:#e08000;\">"
-                 "A fixture with this name already exists."
-                 "</span></p></body></html>"));
+        QString text;
+        if (editing)
+            text = tr("Another fixture is already called this.");
+        else if (m_amountValue > 1)
+            text = tr("That name exists — the new fixtures will be numbered past it.");
+        else
+            text = tr("That name exists — it will be added as “%1”.")
+                       .arg(m_doc->uniqueFixtureName(typed));
+        m_nameErrorLabel->setText(QString("<html><body><p><span style=\" color:#e08000;\">%1"
+                                          "</span></p></body></html>").arg(text.toHtmlEscaped()));
     }
     m_nameErrorLabel->setVisible(conflict);
+    if (QPushButton *ok = m_buttonBox->button(QDialogButtonBox::Ok))
+        ok->setEnabled(!(editing && conflict));
 }
 
 void AddFixture::slotGapSpinChanged(int value)
