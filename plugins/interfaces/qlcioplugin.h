@@ -22,6 +22,7 @@
 #define QLCIOPLUGIN_H
 
 #include <QStringList>
+#include <QVector>
 #include <QPair>
 #include <QtPlugin>
 #include <QVariant>
@@ -473,6 +474,26 @@ public:
     virtual QStringList targetProblems() const { return QStringList(); }
 
     /**
+     * A device that runs its own looks (a WLED: the console sends "Chase, speed
+     * 128", the device works out every LED) can say what it is SHOWING, LED by
+     * LED -- for the rig view to draw the real thing.
+     *
+     * watchTargetPixels() starts (or stops) asking the device on @p universe;
+     * asking costs network traffic, so only while something is watching. Calls
+     * are counted: each true needs a false. targetPixels() is the latest
+     * answer (0xRRGGBB, the first LED first), empty when there is none or it
+     * is stale; targetPixelCount() how many LEDs the device says it drives
+     * (0 = not known). targetPixelsChanged() fires when a new answer arrives.
+     * Defaults: nothing to say.
+     */
+    virtual void watchTargetPixels(quint32 universe, bool watch)
+    { Q_UNUSED(universe) Q_UNUSED(watch) }
+    virtual QVector<quint32> targetPixels(quint32 universe) const
+    { Q_UNUSED(universe) return QVector<quint32>(); }
+    virtual int targetPixelCount(quint32 universe) const
+    { Q_UNUSED(universe) return 0; }
+
+    /**
      * Return a human-readable name for a specific input channel (axis/button)
      * on a given input line.  Plugins that load device profiles can override
      * this to return names like "Left Stick X".  The default returns an empty
@@ -575,6 +596,10 @@ signals:
      * re-read the plugin's current configuration.
      */
     void configurationChanged();
+
+    /** A device on @p universe has said what its LEDs are showing
+     *  (targetPixels()). */
+    void targetPixelsChanged(quint32 universe);
 
 protected:
     /**

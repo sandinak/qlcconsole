@@ -51,6 +51,11 @@ class QTimer;
  * Each lantern is also asked /json/info every few seconds: its name, its
  * firmware, its Wi-Fi signal -- and whether it answers at all.
  * targetProblems() says which do not, or answer on a weak signal.
+ *
+ * While the rig view watches a lantern (watchTargetPixels()), it is asked
+ * /json/live a few times a second -- what each LED is showing, its effect
+ * worked out by the lantern itself -- and only then: sixteen colours is a
+ * small answer, but Wi-Fi is the thing this plugin exists to spare.
  */
 class WledPlugin final : public QLCIOPlugin
 {
@@ -81,6 +86,16 @@ public:
                       QString name, QVariant value) override;
     QStringList targetProblems() const override;
 
+    void watchTargetPixels(quint32 universe, bool watch) override;
+    QVector<quint32> targetPixels(quint32 universe) const override;
+    int targetPixelCount(quint32 universe) const override;
+
+    /** How often a watched lantern is asked what its LEDs show (ms). */
+    void setLiveInterval(int ms);
+    /** An answer older than this (ms) is not shown: the lantern stopped
+     *  answering, and a frozen frame would say it was still running. */
+    static const int liveStaleMs = 2000;
+
     /** How often a changed state may go out, per lantern (ms). Tests run it
      *  faster; WLED's transition matches it. */
     void setSendInterval(int ms);
@@ -105,10 +120,15 @@ private:
         int rssi = 0;               ///< dBm, 0 = unknown
         QString deviceName;
         QString version;
+        int ledCount = 0;           ///< from /json/info, 0 = not known
+        bool liveInFlight = false;
+        QVector<quint32> pixels;    ///< /json/live: what the LEDs show
+        qint64 pixelsAt = 0;        ///< when (QDateTime ms)
     };
 
     void tick();
     void pollInfo();
+    void pollLive();
     void send(quint32 universe);
     void setAnswered(Target &t, bool answered);
     void problemsMaybeChanged();
@@ -116,9 +136,12 @@ private:
     QNetworkAccessManager *m_nam = nullptr;
     QTimer *m_sendTimer = nullptr;
     QTimer *m_infoTimer = nullptr;
+    QTimer *m_liveTimer = nullptr;
     int m_sendInterval = 100;
     mutable QMutex m_mutex;         ///< m_targets: writeUniverse() runs on universe threads
     QHash<quint32, Target> m_targets;
+    QHash<quint32, int> m_watchers; ///< watchTargetPixels() counts, by universe:
+                                    ///< they outlive an output closed and reopened
     QStringList m_lastProblems;
 };
 

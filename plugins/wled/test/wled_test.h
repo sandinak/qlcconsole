@@ -23,6 +23,7 @@ private slots:
     void colourModesAreSolidColours();
     void onlyChangesAreSentAndBurstsCollapse();
     void aWeakOrSilentLanternIsAProblem();
+    void aWatchedLanternSaysWhatItsLedsShow();
 };
 
 #endif

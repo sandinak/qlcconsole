@@ -20,6 +20,8 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QMutexLocker>
+#include <QDateTime>
+#include <QJsonArray>
 #include <QTimer>
 #include <QDebug>
 
@@ -41,6 +43,10 @@ void WledPlugin::init()
     m_infoTimer->setInterval(5000);
     connect(m_infoTimer, &QTimer::timeout, this, &WledPlugin::pollInfo);
     m_infoTimer->start();
+    m_liveTimer = new QTimer(this);
+    m_liveTimer->setInterval(150);
+    connect(m_liveTimer, &QTimer::timeout, this, &WledPlugin::pollLive);
+    m_liveTimer->start();
 }
 
 QString WledPlugin::name() const
@@ -76,6 +82,12 @@ void WledPlugin::setInfoInterval(int ms)
 {
     if (m_infoTimer != nullptr)
         m_infoTimer->setInterval(qMax(10, ms));
+}
+
+void WledPlugin::setLiveInterval(int ms)
+{
+    if (m_liveTimer != nullptr)
+        m_liveTimer->setInterval(qMax(10, ms));
 }
 
 /*********************************************************************
@@ -286,12 +298,101 @@ void WledPlugin::pollInfo()
                     t.version = info.value(QStringLiteral("ver")).toString();
                     t.rssi = info.value(QStringLiteral("wifi")).toObject()
                                  .value(QStringLiteral("rssi")).toInt();
+                    t.ledCount = info.value(QStringLiteral("leds")).toObject()
+                                     .value(QStringLiteral("count")).toInt();
                 }
                 setAnswered(t, ok);
             }
             problemsMaybeChanged();
         });
     }
+}
+
+void WledPlugin::pollLive()
+{
+    QList<QPair<quint32, QString> > ask;
+    {
+        QMutexLocker locker(&m_mutex);
+        for (auto it = m_targets.begin(); it != m_targets.end(); ++it)
+        {
+            Target &t = it.value();
+            if (m_watchers.value(it.key()) > 0 && !t.ip.isEmpty() && !t.liveInFlight && t.answered != 0)
+            {
+                t.liveInFlight = true;
+                ask << qMakePair(it.key(), t.ip);
+            }
+        }
+    }
+    for (const auto &a : ask)
+    {
+        const quint32 universe = a.first;
+        const QString ip = a.second;
+        QNetworkRequest req(QUrl(QStringLiteral("http://%1/json/live").arg(ip)));
+        req.setTransferTimeout(1000);
+        QNetworkReply *reply = m_nam->get(req);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, universe, ip]() {
+            reply->deleteLater();
+            const bool ok = reply->error() == QNetworkReply::NoError;
+            const QJsonArray leds = ok ? QJsonDocument::fromJson(reply->readAll()).object()
+                                             .value(QStringLiteral("leds")).toArray()
+                                       : QJsonArray();
+            bool changed = false;
+            {
+                QMutexLocker locker(&m_mutex);
+                auto it = m_targets.find(universe);
+                if (it == m_targets.end() || it.value().ip != ip)
+                    return;
+                Target &t = it.value();
+                t.liveInFlight = false;
+                if (!leds.isEmpty())
+                {
+                    /* "FF8000" each, brightness already applied; a white
+                       channel, where there is one, is already added in. */
+                    QVector<quint32> px;
+                    px.reserve(leds.size());
+                    for (const QJsonValue &v : leds)
+                        px << (v.toString().right(6).toUInt(nullptr, 16) & 0xFFFFFF);
+                    changed = (px != t.pixels);
+                    t.pixels = px;
+                    t.pixelsAt = QDateTime::currentMSecsSinceEpoch();
+                }
+            }
+            if (changed)
+                emit targetPixelsChanged(universe);
+        });
+    }
+}
+
+void WledPlugin::watchTargetPixels(quint32 universe, bool watch)
+{
+    QMutexLocker locker(&m_mutex);
+    const int n = qMax(0, m_watchers.value(universe) + (watch ? 1 : -1));
+    if (n > 0)
+        m_watchers[universe] = n;
+    else
+    {
+        m_watchers.remove(universe);
+        auto it = m_targets.find(universe);
+        if (it != m_targets.end())
+            it.value().pixels.clear();
+    }
+}
+
+QVector<quint32> WledPlugin::targetPixels(quint32 universe) const
+{
+    QMutexLocker locker(&m_mutex);
+    auto it = m_targets.constFind(universe);
+    if (it == m_targets.constEnd()
+        || QDateTime::currentMSecsSinceEpoch() - it.value().pixelsAt > liveStaleMs)
+        return QVector<quint32>();
+    return it.value().pixels;
+}
+
+int WledPlugin::targetPixelCount(quint32 universe) const
+{
+    QMutexLocker locker(&m_mutex);
+    auto it = m_targets.constFind(universe);
+    return it == m_targets.constEnd() ? 0 : it.value().ledCount;
 }
 
 void WledPlugin::setAnswered(Target &t, bool answered)

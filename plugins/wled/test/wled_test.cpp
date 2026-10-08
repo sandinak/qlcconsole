@@ -29,6 +29,8 @@ namespace
     public:
         QList<QJsonObject> posts;
         int rssi = -60;
+        int liveAsked = 0;                  ///< GET /json/live count
+        QByteArray live = "{\"leds\":[\"FF0000\",\"00FF00\",\"0000FF\",\"102030\"],\"n\":1}";
 
         FakeWled()
         {
@@ -54,7 +56,13 @@ namespace
                             posts << QJsonDocument::fromJson(body).object();
                         else if (req.startsWith("GET /json/info"))
                             reply = QString("{\"name\":\"Lantern SL\",\"ver\":\"0.15.0\","
+                                            "\"leds\":{\"count\":16},"
                                             "\"wifi\":{\"rssi\":%1}}").arg(rssi).toUtf8();
+                        else if (req.startsWith("GET /json/live"))
+                        {
+                            ++liveAsked;
+                            reply = live;
+                        }
                         s->write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
                                  "Content-Length: " + QByteArray::number(reply.size()) + "\r\n\r\n" + reply);
                     });
@@ -189,6 +197,63 @@ void Wled_Test::aWeakOrSilentLanternIsAProblem()
     wled.powerOff();
     plugin.writeUniverse(3, 0, universe({ 255, 1 }), true);
     QTRY_VERIFY_WITH_TIMEOUT(plugin.targetProblems().join(";").contains(ip + " — not answering"), 8000);
+}
+
+/* The rig view asks what a lantern is SHOWING -- its effect worked out on
+   the lantern -- and only while it is watching: on Wi-Fi every request
+   counts. */
+void Wled_Test::aWatchedLanternSaysWhatItsLedsShow()
+{
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    WledPlugin plugin;
+    plugin.init();
+    plugin.setInfoInterval(40);
+    plugin.setLiveInterval(40);
+    QVERIFY(plugin.openOutput(0, 2));
+    plugin.setParameter(2, 0, QLCIOPlugin::Output, WLED_OUTPUTIP,
+                        QString("127.0.0.1:%1").arg(wled.serverPort()));
+
+    // How many LEDs it drives, from its info.
+    QTRY_COMPARE(plugin.targetPixelCount(2), 16);
+    // Not watched: never asked.
+    QTest::qWait(200);
+    QCOMPARE(wled.liveAsked, 0);
+    QVERIFY(plugin.targetPixels(2).isEmpty());
+
+    QSignalSpy pixels(&plugin, &QLCIOPlugin::targetPixelsChanged);
+    plugin.watchTargetPixels(2, true);
+    QTRY_COMPARE(plugin.targetPixels(2), (QVector<quint32>{ 0xFF0000, 0x00FF00, 0x0000FF, 0x102030 }));
+    QVERIFY(pixels.count() >= 1);
+    QCOMPARE(pixels.first().first().toUInt(), 2u);
+
+    // It moves on; so does the answer -- and only a change is signalled.
+    const int before = pixels.count();
+    wled.live = "{\"leds\":[\"000000\",\"FFFFFF\"],\"n\":1}";
+    QTRY_COMPARE(plugin.targetPixels(2), (QVector<quint32>{ 0x000000, 0xFFFFFF }));
+    QTest::qWait(200);
+    QCOMPARE(pixels.count(), before + 1);
+
+    // Watched twice, let go once: still watched. Let go again: not asked.
+    plugin.watchTargetPixels(2, true);
+    plugin.watchTargetPixels(2, false);
+    const int asked = wled.liveAsked;
+    QTRY_VERIFY(wled.liveAsked > asked);
+    plugin.watchTargetPixels(2, false);
+    QVERIFY(plugin.targetPixels(2).isEmpty());
+    QTest::qWait(100);                  // one may have been in flight
+    const int stopped = wled.liveAsked;
+    QTest::qWait(250);
+    QCOMPARE(wled.liveAsked, stopped);
+
+    // A watch outlives its output closing and opening again.
+    plugin.watchTargetPixels(2, true);
+    plugin.closeOutput(0, 2);
+    QVERIFY(plugin.openOutput(0, 2));
+    plugin.setParameter(2, 0, QLCIOPlugin::Output, WLED_OUTPUTIP,
+                        QString("127.0.0.1:%1").arg(wled.serverPort()));
+    QTRY_VERIFY(!plugin.targetPixels(2).isEmpty());
+    plugin.watchTargetPixels(2, false);
 }
 
 QTEST_MAIN(Wled_Test)
