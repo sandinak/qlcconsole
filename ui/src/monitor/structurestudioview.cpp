@@ -35,6 +35,7 @@
 #include "righeads.h"
 #include "humanfigure.h"
 #include "fixturevisualtraits.h"
+#include "lanternpixels.h"
 #include "monitorproperties.h"
 #include "pipe.h"
 #include "stand.h"
@@ -71,6 +72,8 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
     setAcceptDrops(true);   // fixtures dragged in from the source tree
+    m_lanternPixels = new LanternPixels(doc, this);
+    connect(m_lanternPixels, &LanternPixels::changed, this, QOverload<>::of(&QWidget::update));
 
     {
         QSettings s;
@@ -905,6 +908,8 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
             drawOneStructure(p, it.kind, it.id);
     }
     collectInsideLight(p);
+    drawSocks(p);
+    drawTowerFaces(p);
     if (m_kind == StageKind)
         drawStageFigures(p);
     m_collecting = false;
@@ -2182,6 +2187,21 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             const QPointF a = w2s(QVector3D(x0, y0, 0));
             const QPointF b = w2s(QVector3D(x1, y1, 0));
             p.drawRect(QRectF(a, b).normalized());
+            if (t->hasFaces())
+            {
+                // Its faced sides, as thick edges in the panels' colour.
+                QColor fc = t->facesColour();
+                if (fc.lightness() < 60)
+                    fc = fc.lighter(260);           // a black facade, still seen on the dark plan
+                p.setPen(QPen(fc, 4.0, Qt::SolidLine, Qt::FlatCap));
+                const QPointF fl = w2s(QVector3D(x0, y1, 0)), fr = w2s(QVector3D(x1, y1, 0));
+                const QPointF bl = w2s(QVector3D(x0, y0, 0)), br = w2s(QVector3D(x1, y0, 0));
+                if (t->facesSides() & Tower::FrontSide) p.drawLine(fl, fr);
+                if (t->facesSides() & Tower::BackSide)  p.drawLine(bl, br);
+                if (t->facesSides() & Tower::LeftSide)  p.drawLine(fr, br);
+                if (t->facesSides() & Tower::RightSide) p.drawLine(fl, bl);
+                p.setPen(QPen(steel, 1.8));
+            }
         }
         else
         {
@@ -2195,6 +2215,24 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             const QPointF a = w2s(QVector3D(x0, y0, 0));
             const QPointF b = w2s(QVector3D(x1, y1, h));
             p.drawRect(QRectF(a, b).normalized());
+            /* Its faces, seen flat: the stretch they cover filled -- the print
+               when there is one -- so the shelves and lines still read over it. */
+            const int facing = (m_plane == Front) ? int(Tower::FrontSide)
+                             : int(Tower::LeftSide | Tower::RightSide);
+            if (t->hasFaces() && (t->facesSides() & facing))
+            {
+                const QRectF band = QRectF(w2s(QVector3D(x0, y0, t->facesFrom())),
+                                           w2s(QVector3D(x1, y1, t->facesTo()))).normalized();
+                const QImage pattern = patternImage(t->facesPattern());
+                p.fillRect(band, t->facesColour());
+                if (!pattern.isNull())
+                {
+                    p.save();
+                    p.setOpacity(t->facesPatternOpacity());
+                    p.drawImage(band, pattern);
+                    p.restore();
+                }
+            }
             p.setPen(QPen(steel.lighter(140), 2.0));
             p.setFont(QFont("Arial", 8));
             const QFontMetricsF fm(p.font());
@@ -2289,6 +2327,36 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         const QPointF b = w2s(t->positionAt(t->length()));
         const double wpx = qMax(6.0, double(t->width()) * m_scale);
         const QLineF axis(a, b);
+
+        /* Its sock, in a flat view: a band of fabric over the stretch it
+           covers, glowing where the bars inside are lit. Drawn first, under
+           the lattice lines, so the truss still reads through it. */
+        if (t->hasSock() && axis.length() >= 4.0 && t->sockTo() - t->sockFrom() >= 0.01f)
+        {
+            const float from = t->sockFrom(), to = t->sockTo();
+            const int segments = qBound(1, int((to - from) / 0.2f + 0.5f), 200);
+            const QVector<QVector3D> glow = sockGlow(t, segments);
+            const QColor fabric = t->sockColour();
+            const QPointF dir = (b - a) / axis.length();
+            const QPointF off = QPointF(-dir.y(), dir.x()) * (wpx / 2.0 + 1.0);
+            p.setPen(Qt::NoPen);
+            for (int k = 0; k < segments; ++k)
+            {
+                const QPointF s0 = w2s(t->positionAt(from + (to - from) * k / segments));
+                const QPointF s1 = w2s(t->positionAt(from + (to - from) * (k + 1) / segments));
+                const QVector3D g = glow.at(k);
+                const double lit = qMin(1.0, double(qMax(g.x(), qMax(g.y(), g.z()))) * 1.5);
+                const double room = 0.55 * (1.0 - 0.8 * lit);
+                QColor c = QColor::fromRgbF(float(qMin(1.0, fabric.redF() * room + g.x())),
+                                            float(qMin(1.0, fabric.greenF() * room + g.y())),
+                                            float(qMin(1.0, fabric.blueF() * room + g.z())));
+                c.setAlpha(210);
+                p.setBrush(c);
+                QPolygonF band;
+                band << s0 + off << s1 + off << s1 - off << s0 - off;
+                p.drawPolygon(band);
+            }
+        }
 
         if (axis.length() < 4.0)
         {
@@ -3924,6 +3992,306 @@ void StructureStudioView::collectInsideLight(QPainter &p) const
     }
 }
 
+QImage StructureStudioView::patternImage(const QString &path) const
+{
+    if (path.isEmpty())
+        return QImage();
+    auto it = m_patterns.constFind(path);
+    if (it != m_patterns.constEnd())
+        return it.value();
+    QImage img(path);
+    if (!img.isNull())
+        img = img.scaled(96, 96, Qt::KeepAspectRatio, Qt::SmoothTransformation)
+                 .convertToFormat(QImage::Format_ARGB32);
+    m_patterns.insert(path, img);               // a missing file is not retried every frame
+    return img;
+}
+
+void StructureStudioView::emitPatternedFace(QPainter &p, const QVector3D q[4], const QImage &img,
+        const QColor &plain, double opacity,
+        const std::function<QColor(const QColor &, const QVector3D &)> &shade,
+        double depthBias) const
+{
+    // Patches about four pixels across on screen, at most what the image has.
+    const double wPx = QLineF(w2s(q[0]), w2s(q[1])).length();
+    const double hPx = QLineF(w2s(q[0]), w2s(q[3])).length();
+    const int nu = img.isNull() ? 1 : qBound(1, int(wPx / 4.0), qMin(48, img.width()));
+    const int nv = img.isNull() ? 1 : qBound(1, int(hPx / 4.0), qMin(96, img.height()));
+    auto at = [&](double u, double v) {
+        const QVector3D lo = q[0] + (q[1] - q[0]) * float(u);
+        const QVector3D hi = q[3] + (q[2] - q[3]) * float(u);
+        return lo + (hi - lo) * float(v);
+    };
+    for (int iu = 0; iu < nu; ++iu)
+    {
+        for (int iv = 0; iv < nv; ++iv)
+        {
+            const double u0 = double(iu) / nu, u1 = double(iu + 1) / nu;
+            const double v0 = double(iv) / nv, v1 = double(iv + 1) / nv;
+            const QVector3D quad[4] = { at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1) };
+            const QVector3D mid = at((u0 + u1) / 2, (v0 + v1) / 2);
+            QColor albedo = plain;
+            if (!img.isNull())
+            {
+                // The image upright on the face: its top at the face's top.
+                const int x = qBound(0, int((u0 + u1) / 2 * img.width()), img.width() - 1);
+                const int y = qBound(0, int((1.0 - (v0 + v1) / 2) * img.height()), img.height() - 1);
+                // The print over the plain colour: by its opacity, and its own alpha.
+                const QColor print = img.pixelColor(x, y);
+                const double a = qBound(0.0, opacity * print.alphaF(), 1.0);
+                albedo = QColor::fromRgbF(float(plain.redF() * (1 - a) + print.redF() * a),
+                                          float(plain.greenF() * (1 - a) + print.greenF() * a),
+                                          float(plain.blueF() * (1 - a) + print.blueF() * a));
+            }
+            QPolygonF poly;
+            QVector<double> zs;
+            for (const QVector3D &v : quad)
+            {
+                poly << w2s(v);
+                zs << viewDepth(v) + depthBias;
+            }
+            emitPoly(poly, viewDepth(mid) + depthBias, shade(albedo, mid), QColor(), 0.0, p, zs);
+        }
+    }
+}
+
+void StructureStudioView::drawTowerFaces(QPainter &p) const
+{
+    if (m_plane != Angled)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<Tower *> towers;
+    if (m_kind == StageKind)
+        towers = props->towers();
+    else if (m_kind == TowerKind && props->tower(m_id) != nullptr)
+        towers << props->tower(m_id);
+    const double af = 0.18 + 0.82 * m_ambient;
+
+    foreach (Tower *t, towers)
+    {
+        if (t == nullptr || !t->hasFaces() || t->facesSides() == 0
+            || t->facesTo() - t->facesFrom() < 0.01f)
+            continue;
+        // A hair outside the steel, so the panels cover it.
+        const float pad = 0.004f;
+        const float x0 = t->originX() - pad, y0 = t->originY() - pad;
+        const float x1 = t->originX() + t->width() + pad, y1 = t->originY() + t->depth() + pad;
+        const float z0 = t->facesFrom(), z1 = t->facesTo();
+        const QImage pattern = patternImage(t->facesPattern());
+        const QColor plain = t->facesColour();
+
+        struct Side { int bit; QVector3D q[4]; QVector3D n; };
+        // Each seen from outside: bottom-left, bottom-right, top-right, top-left.
+        const Side sides[4] = {
+            { Tower::FrontSide, { {x0, y1, z0}, {x1, y1, z0}, {x1, y1, z1}, {x0, y1, z1} }, { 0, 1, 0 } },
+            { Tower::BackSide,  { {x1, y0, z0}, {x0, y0, z0}, {x0, y0, z1}, {x1, y0, z1} }, { 0, -1, 0 } },
+            { Tower::LeftSide,  { {x1, y1, z0}, {x1, y0, z0}, {x1, y0, z1}, {x1, y1, z1} }, { 1, 0, 0 } },
+            { Tower::RightSide, { {x0, y0, z0}, {x0, y1, z0}, {x0, y1, z1}, {x0, y0, z1} }, { -1, 0, 0 } } };
+        for (const Side &side : sides)
+        {
+            if (!(t->facesSides() & side.bit))
+                continue;
+            const QVector3D n = side.n;
+            emitPatternedFace(p, side.q, pattern, plain, t->facesPatternOpacity(),
+                [&](const QColor &albedo, const QVector3D &at) {
+                    // The room on it, and whatever of the rig is pointed at it.
+                    const QVector3D lit = beamLightAt(at, n) / 255.0f;
+                    const double r = albedo.redF() * (af * 0.9 + double(lit.x()));
+                    const double g = albedo.greenF() * (af * 0.9 + double(lit.y()));
+                    const double b = albedo.blueF() * (af * 0.9 + double(lit.z()));
+                    return QColor::fromRgbF(float(qMin(1.0, r)), float(qMin(1.0, g)), float(qMin(1.0, b)));
+                }, 0.0);
+        }
+    }
+}
+
+bool StructureStudioView::underSock(const FixtureRigProps &rp) const
+{
+    if (rp.placement != FixtureRigProps::Inside || rp.trussId == Truss::invalidId())
+        return false;
+    const Truss *t = m_doc->monitorProperties()->truss(rp.trussId);
+    return t != nullptr && t->sockCovers(rp.trussOffset);
+}
+
+QVector<QVector3D> StructureStudioView::sockGlow(Truss *t, int segments) const
+{
+    QVector<QVector3D> out(qMax(1, segments));
+    if (t == nullptr || !t->hasSock())
+        return out;
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // The light of every bar rigged Inside under it, as points along it.
+    QVector<BarLight> lights;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        const FixtureRigProps rp = props->fixtureRigProps(fx->id());
+        if (rp.trussId != t->id() || !underSock(rp))
+            continue;
+        bool complete = true;
+        const QByteArray vals = valuesForDrawing(fx, &complete);
+        if (vals.isEmpty())
+            continue;
+        const FixtureVisualTraits traits = classifyFixture(fx);
+        const QVector3D centre = fixtureCentre(fx->id());
+        if (traits.headCount > 1)
+            lights += barLights(fx, rp, traits, vals, centre);
+        else
+        {
+            QColor c;
+            uchar dim = 0;
+            if (fixtureLiveState(fx, vals, c, dim, complete) && dim > 2)
+                lights << BarLight{ centre, c, dim / 255.0 * fixtureOutput(fx) };
+        }
+    }
+    if (lights.isEmpty())
+        return out;
+
+    /* Each stretch glows with what is near it: a lit section of a bar lights
+       the fabric over it and a little either side, not the whole sock. The
+       fabric's own colour filters it. */
+    const QColor fabric = t->sockColour();
+    const float from = t->sockFrom(), to = t->sockTo();
+    for (int k = 0; k < out.size(); ++k)
+    {
+        const float along = from + (to - from) * (k + 0.5f) / out.size();
+        const QVector3D at = t->positionAt(along);
+        double r = 0.0, g = 0.0, b = 0.0;
+        for (const BarLight &bl : lights)
+        {
+            const double d = double((bl.at - at).length());
+            const double fall = 1.0 / (1.0 + (d / 0.25) * (d / 0.25));
+            const double e = bl.level * fall * 2.5;
+            r += bl.colour.redF() * e; g += bl.colour.greenF() * e; b += bl.colour.blueF() * e;
+        }
+        out[k] = QVector3D(float(qMin(1.0, r * fabric.redF())), float(qMin(1.0, g * fabric.greenF())),
+                           float(qMin(1.0, b * fabric.blueF())));
+    }
+    return out;
+}
+
+void StructureStudioView::drawSocks(QPainter &p) const
+{
+    if (m_plane != Angled)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<Truss *> trusses;
+    if (m_kind == StageKind)
+        trusses = props->trusses();
+    else if (m_kind == TrussKind && props->truss(m_id) != nullptr)
+        trusses << props->truss(m_id);
+    const double af = 0.18 + 0.82 * m_ambient;
+
+    foreach (Truss *t, trusses)
+    {
+        if (t == nullptr || !t->hasSock() || t->isChildBar() || t->sockTo() - t->sockFrom() < 0.01f)
+            continue;
+        // The same oriented section as the truss itself (drawOneStructure()).
+        const QVector3D A = t->origin();
+        QVector3D L = t->positionAt(t->length()) - A;
+        if (L.length() < 1e-6f)
+            continue;
+        L.normalize();
+        QVector3D C, U;
+        if (t->type() == Truss::Vertical)
+        {
+            C = QVector3D(1, 0, 0);
+            U = QVector3D(0, 1, 0);
+        }
+        else
+        {
+            const QPointF d = t->direction();
+            const double dl = std::hypot(d.x(), d.y());
+            C = (dl > 1e-9) ? QVector3D(float(-d.y() / dl), float(d.x() / dl), 0.0f) : QVector3D(0, 1, 0);
+            U = QVector3D(0, 0, 1);
+        }
+        // A little proud of the chords: fabric stretched over them.
+        const float hw = qMax(0.05f, t->width()) * 0.5f * 1.06f;
+        const QVector3D c1 = C * hw, u1 = U * hw;
+        const QVector3D ring[4] = { -c1 - u1, c1 - u1, c1 + u1, -c1 + u1 };
+
+        const float from = t->sockFrom(), to = t->sockTo();
+        const int segments = qBound(1, int((to - from) / 0.2f + 0.5f), 200);
+        const QVector<QVector3D> glow = sockGlow(t, segments);
+        const QColor fabric = t->sockColour();
+
+        auto shade = [&](const QVector3D &g) {
+            /* The room on the fabric, and what glows through it -- the glow
+               taking over as it grows, so a red-lit white sock reads red,
+               not pink. */
+            const double lit = qMin(1.0, double(qMax(g.x(), qMax(g.y(), g.z()))) * 1.5);
+            const double room = af * 0.85 * (1.0 - 0.8 * lit);
+            const double r = qMin(1.0, fabric.redF() * room + g.x());
+            const double gg = qMin(1.0, fabric.greenF() * room + g.y());
+            const double b = qMin(1.0, fabric.blueF() * room + g.z());
+            QColor c = QColor::fromRgbF(float(r), float(gg), float(b));
+            c.setAlpha(232);                    // fabric: the lattice a shadow through it
+            return c;
+        };
+        auto face = [&](const QVector3D quad[4], const QColor &fill) {
+            QPolygonF poly;
+            QVector<double> zs;
+            QVector3D mid;
+            for (int i = 0; i < 4; ++i)
+            {
+                poly << w2s(quad[i]);
+                zs << viewDepth(quad[i]) - 2e-4;
+                mid += quad[i];
+            }
+            emitPoly(poly, viewDepth(mid / 4.0f) - 2e-4, fill, QColor(), 0.0, p, zs);
+        };
+        const QImage pattern = patternImage(t->sockPattern());
+        if (!pattern.isNull())
+        {
+            /* Printed: the image stretched along each side of the sock, the
+               fabric's print where its colour was, still glowing from within
+               (the glow, filtered by the print). */
+            for (int f = 0; f < 4; ++f)
+            {
+                const QVector3D quad[4] = { t->positionAt(from) + ring[f], t->positionAt(to) + ring[f],
+                                            t->positionAt(to) + ring[(f + 1) % 4],
+                                            t->positionAt(from) + ring[(f + 1) % 4] };
+                emitPatternedFace(p, quad, pattern, fabric, t->sockPatternOpacity(),
+                    [&](const QColor &print, const QVector3D &at) {
+                        const float along = QVector3D::dotProduct(at - A, L);
+                        const int k = qBound(0, int((along - from) / qMax(0.01f, to - from) * segments),
+                                             segments - 1);
+                        const QVector3D g = glow.at(k);
+                        const double lit = qMin(1.0, double(qMax(g.x(), qMax(g.y(), g.z()))) * 1.5);
+                        const double room = af * 0.85 * (1.0 - 0.8 * lit);
+                        // White fabric's glow is the light; a print filters it.
+                        const double fr = fabric.redF() > 0 ? print.redF() / fabric.redF() : 0.0;
+                        const double fg = fabric.greenF() > 0 ? print.greenF() / fabric.greenF() : 0.0;
+                        const double fb = fabric.blueF() > 0 ? print.blueF() / fabric.blueF() : 0.0;
+                        QColor c = QColor::fromRgbF(float(qMin(1.0, print.redF() * room + g.x() * qMin(1.0, fr))),
+                                                    float(qMin(1.0, print.greenF() * room + g.y() * qMin(1.0, fg))),
+                                                    float(qMin(1.0, print.blueF() * room + g.z() * qMin(1.0, fb))));
+                        c.setAlpha(232);
+                        return c;
+                    }, -2e-4);
+            }
+        }
+        else
+        for (int k = 0; k < segments; ++k)
+        {
+            const QVector3D s0 = t->positionAt(from + (to - from) * k / segments);
+            const QVector3D s1 = t->positionAt(from + (to - from) * (k + 1) / segments);
+            const QColor fill = shade(glow.at(k));
+            for (int f = 0; f < 4; ++f)
+            {
+                const QVector3D quad[4] = { s0 + ring[f], s1 + ring[f], s1 + ring[(f + 1) % 4],
+                                            s0 + ring[(f + 1) % 4] };
+                face(quad, fill);
+            }
+        }
+        // Its ends, closed where it stops short of the truss's.
+        const QVector3D e0 = t->positionAt(from), e1 = t->positionAt(to);
+        const QVector3D cap0[4] = { e0 + ring[0], e0 + ring[1], e0 + ring[2], e0 + ring[3] };
+        const QVector3D cap1[4] = { e1 + ring[0], e1 + ring[1], e1 + ring[2], e1 + ring[3] };
+        face(cap0, shade(glow.first()));
+        face(cap1, shade(glow.last()));
+    }
+}
+
 QVector<StructureStudioView::BarLight> StructureStudioView::barLights(Fixture *fx,
         const FixtureRigProps &rp, const FixtureVisualTraits &traits,
         const QByteArray &vals, const QVector3D &centre) const
@@ -4520,7 +4888,14 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             const double af = 0.30 + 0.70 * m_ambient;
             const QColor cage = (drag || hi) ? col
                               : QColor(qRound(70 * af), qRound(70 * af), qRound(74 * af));
-            drawLanternSolid(p, corner, cage, live, lit ? dim / 255.0 : 0.0, depthBias);
+            const QVector<QVector3D> ledPts =
+                RigHeads::lightPoints(m_doc, fid, m_lanternPixels->deviceLeds(fx));
+            LanternPixels::Frame leds;
+            if (lit)
+                leds = m_lanternPixels->frame(fx, vals, qMax(1, ledPts.size()), live, dim / 255.0,
+                                              valsComplete);
+            drawLanternSolid(p, corner, cage, live, lit ? dim / 255.0 : 0.0, depthBias,
+                             ledPts, leds.leds, leds.tag, RigHeads::clearGlass(m_doc, fid));
         }
         else
             drawSolidBox(p, corner, col, overlapAwareEdgeColor(fid, col), 255, !showingOutput,
@@ -4546,13 +4921,39 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             uchar dim = 0;
             if (fixtureLiveState(fx, vals, live, dim, valsComplete) && dim > 2)
             {
+                /* What its LEDs add up to, where it is built of them: an
+                   effect lights the truss in what the LEDs are showing, not
+                   in the look's colour 1. */
+                double level = dim / 255.0;
+                const int ledCount = RigHeads::lightLeds(m_doc, fid, m_lanternPixels->deviceLeds(fx));
+                if (ledCount > 0)
+                {
+                    const LanternPixels::Frame leds =
+                        m_lanternPixels->frame(fx, vals, ledCount, live, level, valsComplete);
+                    double sr = 0.0, sg = 0.0, sb = 0.0;
+                    foreach (const QColor &lc, leds.leds)
+                    {
+                        sr += lc.redF(); sg += lc.greenF(); sb += lc.blueF();
+                    }
+                    const double n = qMax(1, leds.leds.size());
+                    const double peak = qMax(sr, qMax(sg, sb)) / n;
+                    if (peak > 0.0)
+                    {
+                        live = QColor::fromRgbF(float(sr / n / peak), float(sg / n / peak),
+                                                float(sb / n / peak));
+                        level = peak;
+                    }
+                    else
+                        level = 0.0;
+                }
                 FrameBeam fb{ fixtureCentre(fid), QVector3D(0, 0, -1), M_PI, 10.0, live,
-                              dim / 255.0 * fixtureOutput(fx) };
+                              level * fixtureOutput(fx) };
                 fb.omni = true;
                 m_frameBeams << fb;
             }
         }
-        else if (traits.kind != FixtureSilhouette::Mover && m_beams && showingOutput)
+        else if (traits.kind != FixtureSilhouette::Mover && m_beams && showingOutput
+                 && !underSock(rp))   // a socked bar glows through the fabric instead
         {
             QColor live = col;
             uchar dim = 0;
@@ -4918,12 +5319,75 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             p.setPen(halo); p.setBrush(Qt::NoBrush);
             p.drawRoundedRect(r.adjusted(-3, -3, 3, 3), wPx * 0.4, wPx * 0.4);
         }
+        const QVector<QVector3D> ledPts =
+            RigHeads::lightPoints(m_doc, fid, m_lanternPixels->deviceLeds(fx));
+        const bool clear = RigHeads::clearGlass(m_doc, fid);
+        QColor glass(40, 40, 44, 90);
+        if (!clear)
+        {
+            /* Diffusing glass: the body glows in what is lit behind it. */
+            QColor live = col;
+            uchar dim = 0;
+            if (showingOutput && fixtureLiveState(fx, vals, live, dim, valsComplete) && dim > 2)
+            {
+                const LanternPixels::Frame leds = m_lanternPixels->frame(
+                    fx, vals, qMax(1, ledPts.size()), live, dim / 255.0, valsComplete);
+                double sr = 0.0, sg = 0.0, sb = 0.0;
+                foreach (const QColor &lc, leds.leds)
+                {
+                    sr += lc.redF(); sg += lc.greenF(); sb += lc.blueF();
+                }
+                const double n = qMax(1, leds.leds.size());
+                const double peak = qMax(sr, qMax(sg, sb)) / n;
+                if (peak > 0.004)
+                {
+                    glass = QColor::fromRgbF(float(sr / n / peak), float(sg / n / peak),
+                                             float(sb / n / peak));
+                    glass.setAlpha(qBound(60, int(60 + 150 * peak), 210));
+                }
+            }
+            else
+                glass = QColor(200, 196, 188, 50);           // frosted
+        }
         p.setPen(QPen(QColor(90, 90, 96), 1.4));
-        p.setBrush(QColor(40, 40, 44, 90));
+        p.setBrush(glass);
         p.drawRoundedRect(r, wPx * 0.4, wPx * 0.4);
         p.setPen(Qt::NoPen);
-        p.setBrush(col);
-        p.drawEllipse(c, wPx * 0.28, wPx * 0.28);
+        if (ledPts.isEmpty())
+        {
+            p.setBrush(col);
+            p.drawEllipse(c, wPx * 0.28, wPx * 0.28);
+        }
+        else
+        {
+            // Built of LEDs: each in what it is showing, beads when dark.
+            QColor live = col;
+            uchar dim = 0;
+            LanternPixels::Frame leds;
+            if (showingOutput && fixtureLiveState(fx, vals, live, dim, valsComplete))
+                leds = m_lanternPixels->frame(fx, vals, ledPts.size(), live, dim / 255.0,
+                                              valsComplete);
+            const double ledR = qMax(1.0, wPx * 0.05);
+            for (int i = 0; i < ledPts.size(); ++i)
+            {
+                const QColor lc = leds.leds.value(i, QColor(Qt::black));
+                const double peak = qMax(lc.redF(), qMax(lc.greenF(), lc.blueF()));
+                QColor bead = peak > 0.004
+                              ? QColor::fromRgbF(float(lc.redF() / peak), float(lc.greenF() / peak),
+                                                 float(lc.blueF() / peak))
+                              : QColor(96, 90, 80);
+                if (!clear)
+                    bead.setAlpha(peak > 0.004 ? 150 : 70);
+                p.setBrush(bead);
+                p.drawEllipse(w2s(ledPts.at(i)), clear ? ledR : ledR * 1.5, clear ? ledR : ledR * 1.5);
+            }
+            if (!leds.tag.isEmpty())
+            {
+                p.setPen(QColor(230, 200, 120));
+                p.drawText(QPointF(r.right() + 4, r.bottom()), leds.tag);
+                p.setPen(Qt::NoPen);
+            }
+        }
     }
     else if (traits.kind == FixtureSilhouette::Par)
     {
@@ -7024,6 +7488,18 @@ quint32 StructureStudioView::hitTestHanger(const QPointF &px) const
     return best;
 }
 
+void StructureStudioView::showEvent(QShowEvent *e)
+{
+    QWidget::showEvent(e);
+    m_lanternPixels->setActive(true);   // ask devices what they show, while seen
+}
+
+void StructureStudioView::hideEvent(QHideEvent *e)
+{
+    m_lanternPixels->setActive(false);
+    QWidget::hideEvent(e);
+}
+
 void StructureStudioView::mouseDoubleClickEvent(QMouseEvent *e)
 {
     const quint32 fid = hitTestFixture(e->pos());
@@ -7091,7 +7567,10 @@ void StructureStudioView::dropEvent(QDropEvent *e)
 
 void StructureStudioView::drawLanternSolid(QPainter &p, const QVector3D corner[8],
                                            const QColor &cage, const QColor &live,
-                                           double level, double depthBias) const
+                                           double level, double depthBias,
+                                           const QVector<QVector3D> &ledPts,
+                                           const QVector<QColor> &ledCols,
+                                           const QString &tag, bool clearGlass) const
 {
     /* Corners k and k+4 are the two ends of one vertical edge of the body
        (fixtureBoxCorners(): k+4 is +H). Which end is UP depends on the frame,
@@ -7123,6 +7602,70 @@ void StructureStudioView::drawLanternSolid(QPainter &p, const QVector3D corner[8
                  cage.darker(120), 1.6, p);
     }
 
+    /* Diffusing glass: each side pane glows in what lights it -- the LEDs
+       nearest it count most, so an effect still runs round the lantern, but
+       as a blur rather than as points. Dark, it is frosted. */
+    if (!clearGlass)
+    {
+        QVector3D glass[8];
+        capCorners(0.12f, 0.88f, glass);
+        /* Each pane in patches, two across and three up, each lit by the
+           LEDs nearest it: a block of colour running round the lantern shows
+           as a soft patch moving across the glass. */
+        auto glow = [&](const QVector3D &at) {
+            double r = 0.0, g = 0.0, b = 0.0, wsum = 0.0;
+            if (level > 0.0 && !ledPts.isEmpty())
+            {
+                for (int i = 0; i < ledPts.size() && i < ledCols.size(); ++i)
+                {
+                    const double d2 = double((ledPts.at(i) - at).lengthSquared());
+                    const double wt = 1.0 / (0.0004 + d2 * d2);
+                    r += ledCols.at(i).redF() * wt; g += ledCols.at(i).greenF() * wt;
+                    b += ledCols.at(i).blueF() * wt; wsum += wt;
+                }
+                if (wsum > 0.0) { r /= wsum; g /= wsum; b /= wsum; }
+            }
+            else if (level > 0.0)
+            {
+                r = live.redF() * level; g = live.greenF() * level; b = live.blueF() * level;
+            }
+            const double peak = qMax(r, qMax(g, b));
+            QColor pane(200, 196, 188, 60);                 // frosted, unlit
+            if (peak > 0.004)
+            {
+                pane = QColor::fromRgbF(float(r / peak), float(g / peak), float(b / peak));
+                pane.setAlpha(qBound(60, int(60 + 150 * peak), 210));
+            }
+            return pane;
+        };
+        const int across = 2, up = 3;
+        for (int k = 0; k < 4; ++k)
+        {
+            const int k1 = (k + 1) % 4;
+            const QVector3D b0 = glass[k], b1 = glass[k1], t0 = glass[k + 4], t1 = glass[k1 + 4];
+            auto at = [&](double u, double v) {
+                const QVector3D lo = b0 + (b1 - b0) * float(u), hi = t0 + (t1 - t0) * float(u);
+                return lo + (hi - lo) * float(v);
+            };
+            for (int iu = 0; iu < across; ++iu)
+                for (int iv = 0; iv < up; ++iv)
+                {
+                    const double u0 = double(iu) / across, u1 = double(iu + 1) / across;
+                    const double v0 = double(iv) / up, v1 = double(iv + 1) / up;
+                    const QVector3D quad[4] = { at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1) };
+                    const QVector3D fc = at((u0 + u1) / 2, (v0 + v1) / 2);
+                    QPolygonF poly;
+                    QVector<double> zs;
+                    for (const QVector3D &v : quad)
+                    {
+                        poly << w2s(v);
+                        zs << viewDepth(v) + depthBias + 1e-4;
+                    }
+                    emitPoly(poly, viewDepth(fc) + depthBias + 1e-4, glow(fc), QColor(), 0.0, p, zs);
+                }
+        }
+    }
+
     /* The core: the LEDs clustered in the middle, seen through the glass --
        bright in its own colour when lit, dull glass when not. Sized from the
        body, never smaller than a few pixels so a lit lantern reads at
@@ -7131,6 +7674,65 @@ void StructureStudioView::drawLanternSolid(QPainter &p, const QVector3D corner[8
     const double r = qMax(2.5, bodyPx * 0.28);
     const QPointF c = w2s(centre);
     const double z = viewDepth(centre) + depthBias + 2e-4;
+
+    /* Its LEDs, where it is built of them: each its own small light, in its
+       own colour -- an effect running along the string shows as it runs. Dark,
+       they are beads on the wire; the glass round them stays faint. The glow
+       in the haze is what they add up to. */
+    if (!ledPts.isEmpty())
+    {
+        const double ledR = qMax(1.2, bodyPx * 0.045);
+        double sr = 0.0, sg = 0.0, sb = 0.0;
+        for (int i = 0; i < ledPts.size(); ++i)
+        {
+            const QColor lc = (level > 0.0 && i < ledCols.size()) ? ledCols.at(i) : QColor(Qt::black);
+            const double peak = qMax(lc.redF(), qMax(lc.greenF(), lc.blueF()));
+            sr += lc.redF(); sg += lc.greenF(); sb += lc.blueF();
+            QColor bead(96, 90, 80);
+            if (peak > 0.004)
+            {
+                // Its own hue at full: lifting it toward white read red as pink.
+                bead = QColor::fromRgbF(float(lc.redF() / peak), float(lc.greenF() / peak),
+                                        float(lc.blueF() / peak));
+                const double a = qBound(0.25, peak * 1.6, 1.0);
+                bead.setRgbF(float(96 / 255.0 * (1 - a) + bead.redF() * a),
+                             float(90 / 255.0 * (1 - a) + bead.greenF() * a),
+                             float(80 / 255.0 * (1 - a) + bead.blueF() * a));
+            }
+            if (!clearGlass)
+                bead.setAlpha(peak > 0.004 ? 150 : 70);    // a blur behind the glass
+            emitDot(w2s(ledPts.at(i)), viewDepth(ledPts.at(i)) + depthBias + 3e-4,
+                    clearGlass ? ledR : ledR * 1.5, bead, p);
+        }
+        const int n = ledPts.size();
+        const QColor avg = QColor::fromRgbF(float(qMin(1.0, sr / n)), float(qMin(1.0, sg / n)),
+                                            float(qMin(1.0, sb / n)));
+        const double avgPeak = qMax(avg.redF(), qMax(avg.greenF(), avg.blueF()));
+        if (avgPeak > 0.004 && m_haze > 0.0)
+        {
+            const QColor core = QColor::fromRgbF(float(avg.redF() / avgPeak), float(avg.greenF() / avgPeak),
+                                                 float(avg.blueF() / avgPeak)).lighter(int(100 + 60 * avgPeak));
+            for (int ring = 0; ring < 2; ++ring)
+            {
+                const double rr = r * (ring == 0 ? 1.9 : 3.4);
+                QPolygonF disc;
+                QVector<double> zs;
+                for (int i = 0; i < 24; ++i)
+                {
+                    const double a = 2.0 * M_PI * i / 24.0;
+                    disc << QPointF(c.x() + rr * qCos(a), c.y() + rr * qSin(a));
+                    zs << z;
+                }
+                QColor halo = core;
+                halo.setAlpha(qBound(0, int((ring == 0 ? 90.0 : 40.0) * avgPeak * qMin(1.5, m_haze)), 200));
+                emitLight(disc, z, halo, p, zs);
+            }
+        }
+        if (!tag.isEmpty())
+            emitLabel(QPointF(c.x() + r + 4, c.y() + r + 10), z, tag, QColor(230, 200, 120), p);
+        return;
+    }
+
     if (level <= 0.0)
     {
         QPolygonF glass;
@@ -7169,4 +7771,6 @@ void StructureStudioView::drawLanternSolid(QPainter &p, const QVector3D corner[8
             emitLight(disc, z, halo, p, zs);
         }
     }
+    if (!tag.isEmpty())
+        emitLabel(QPointF(c.x() + r + 4, c.y() + r + 10), z, tag, QColor(230, 200, 120), p);
 }

@@ -122,6 +122,9 @@ private slots:
     void aPixelBarsLightComesFromItsLitPixels();
     void aBarHungOnATrussShinesOutOfItsFace();
     void aLanternHangsOffATowerAndGlowsAllRound();
+    void aWledLanternShowsItsEffectLedByLed();
+    void aSockedTrussGlowsWithTheBarsInsideIt();
+    void aTowerWearsItsFacesPlainOrPrinted();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

@@ -32,5 +32,8 @@ endif()
 if(NOT (qmlui OR (QT_VERSION_MAJOR GREATER 5)))
     target_link_libraries(${module_name} PRIVATE
         Qt${QT_MAJOR_VERSION}::Script
+        # The lantern test runs WLED effect ports (EffectScript, QJSEngine),
+        # as the engine itself does on Qt5.
+        Qt${QT_MAJOR_VERSION}::Qml
     )
 endif()

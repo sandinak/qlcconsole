@@ -229,6 +229,17 @@ void TrussItem::paint(QPainter *painter,
     painter->setBrush(QBrush(chordFill));
     painter->drawRect(QRectF(0, top, L, m_pxWid));
 
+    // Its sock: a band of the fabric's colour over the stretch it covers.
+    if (m_truss->hasSock() && m_truss->length() > 0.0f)
+    {
+        const double x0 = L * m_truss->sockFrom() / m_truss->length();
+        const double x1 = L * m_truss->sockTo() / m_truss->length();
+        QColor fabric = m_truss->sockColour();
+        fabric.setAlpha(150);
+        painter->setBrush(fabric);
+        painter->drawRect(QRectF(x0, top - 1.0, x1 - x0, m_pxWid + 2.0));
+    }
+
     // Web spacing: at least 1 cell, at most 30px
     double webSpacing = qBound(6.0, double(m_pxWid) * 2.0, 30.0);
     int nCells = qMax(1, int(qRound(L / webSpacing)));

@@ -26,6 +26,8 @@
 #define STRUCTURESTUDIOVIEW_H
 
 #include <QWidget>
+#include <QImage>
+#include <functional>
 #include <QVector3D>
 #include <QColor>
 #include <QList>
@@ -255,6 +257,8 @@ protected:
     void mousePressEvent(QMouseEvent *) override;
     void mouseMoveEvent(QMouseEvent *) override;
     void mouseReleaseEvent(QMouseEvent *) override;
+    void showEvent(QShowEvent *e) override;
+    void hideEvent(QHideEvent *e) override;
     void mouseDoubleClickEvent(QMouseEvent *) override;
     void dragEnterEvent(QDragEnterEvent *) override;
     void dropEvent(QDropEvent *) override;
@@ -398,6 +402,32 @@ private:
      *  through the top. Adds them to m_frameBeams for the figures, and
      *  draws each fixture's footprint where its cone meets the top. */
     void collectInsideLight(QPainter &p) const;
+    /** Each truss sock in the angled view: the fabric over its stretch of the
+     *  truss, lit by the room and glowing from the LED bars rigged Inside
+     *  under it. After every fixture is drawn -- it needs their light. */
+    void drawSocks(QPainter &p) const;
+    /** What a truss's sock gives out along it, in @p segments equal stretches
+     *  from sockFrom() to sockTo(): each stretch's glow, RGB 0..1 (the
+     *  fabric's colour times the light of the bars Inside near it). */
+    QVector<QVector3D> sockGlow(class Truss *t, int segments) const;
+    /** Each tower's faces in the angled view: opaque panels, plain or
+     *  printed, lit by the room and the rig. After every fixture is drawn. */
+    void drawTowerFaces(QPainter &p) const;
+    /** An image to print on a face, small (a few dozen pixels a side is all a
+     *  mosaic of patches needs); null when it will not load. Cached. */
+    QImage patternImage(const QString &path) const;
+    /** A face @p q (bottom-left, bottom-right, top-right, top-left, seen from
+     *  outside) as patches: each its colour from @p img at its place on the
+     *  face over @p plain -- by @p opacity, and the image's own alpha -- or
+     *  @p plain where there is no image, through @p shade. Depth-sorted
+     *  with everything else, so a printed face sits where it is. */
+    void emitPatternedFace(QPainter &p, const QVector3D q[4], const QImage &img,
+                           const QColor &plain, double opacity,
+                           const std::function<QColor(const QColor &, const QVector3D &)> &shade,
+                           double depthBias) const;
+    /** Whether fixture @p rp is rigged Inside a truss under its sock: its
+     *  light leaves through the fabric, not as a beam. */
+    bool underSock(const struct FixtureRigProps &rp) const;
     void drawSolidBox(QPainter &p, const QVector3D corner[8],
                       const QColor &base, const QColor &edge,
                       int topAlpha = 255, bool ambientLit = true,
@@ -611,10 +641,16 @@ private:
     /** spreadFactor() for a beam, and for an all-round source the share of
      *  its light a surface a metre away gets (FrameBeam::omni). */
     static double lightFactor(const FrameBeam &fb);
-    /** A lantern in the angled view: caps and posts of a cage round a core
-     *  lit in @p live at @p level (0 = dark glass), with a halo in the haze. */
+    /** A lantern in the angled view: caps and posts of a cage round its
+     *  light -- one point lit in @p live at @p level, or the LEDs at
+     *  @p ledPts in @p ledCols -- seen through diffusing glass (it glows,
+     *  each pane in the LEDs nearest it) or @p clearGlass (each LED seen),
+     *  with a halo in the haze. */
     void drawLanternSolid(QPainter &p, const QVector3D corner[8], const QColor &cage,
-                          const QColor &live, double level, double depthBias) const;
+                          const QColor &live, double level, double depthBias,
+                          const QVector<QVector3D> &ledPts = QVector<QVector3D>(),
+                          const QVector<QColor> &ledCols = QVector<QColor>(),
+                          const QString &tag = QString(), bool clearGlass = false) const;
     /** The light this frame's beams put on a surface at @p at facing @p n,
      *  as RGB 0..255 sums (before exposure and the knee). */
     QVector3D beamLightAt(const QVector3D &at, const QVector3D &n) const;
@@ -784,6 +820,10 @@ private:
     double   m_ambient = 0.62;       ///< room light, 0 = blackout .. 1 = work light
     double   m_haze = 1.0;           ///< haze in the air (setHaze())
     class QTimer *m_liveTimer = nullptr;
+    /** What each LED of a lantern shows (its device's live view, or its
+     *  look's colour). */
+    class LanternPixels *m_lanternPixels = nullptr;
+    mutable QHash<QString, QImage> m_patterns;   ///< patternImage() cache
     double   m_frameMs = 0.0;        ///< smoothed repaint cost, for the live rate
     mutable int m_lastOpCount = 0;   ///< primitives in the last angled frame
     bool     m_zoomed = false;       ///< zoomed or panned by hand: refit() must not stomp it

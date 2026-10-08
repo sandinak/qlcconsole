@@ -95,6 +95,9 @@
 #include "monitorinventorypanel.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
+#include "qlcphysical.h"
+#include "righeads.h"
+#include "lightcontrols.h"
 #include "scenevalue.h"
 #include "scene.h"
 #include "mastertimer.h"
@@ -3081,6 +3084,16 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                             "face instead."));
     inspForm->addRow(tr("Tilt:"), tiltSpin);
 
+    /* What makes its light and what it is seen through, where that is a
+       question: a lantern round one bulb, a hanging LED cluster or LED tape,
+       behind diffusing or clear glass -- what THIS one is, so the rig view
+       draws it and runs its effects as it was built. */
+    LightControls *light = new LightControls(insp);
+    QWidget *lightBox = light->lightRow();
+    QComboBox *glassCombo = light->glassCombo();
+    inspForm->addRow(tr("Light:"), lightBox);
+    inspForm->addRow(tr("Glass:"), glassCombo);
+
     /* A bar's own quick field: everything else it has (Face/Standoff/Run/
      * Lock) is one click away via fullBtn below, same division of labour as
      * a fixture's own mini-fields + Full-properties button. Range set once
@@ -3183,8 +3196,21 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             dmxNote->show();
         }
     };
-    auto populate = [this, curFid, curBarId, targets, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, tiltSpin, mountCombo, fullBtn, mountOnLbl, barAlongSpin, towerPosCombo, row, populateDmx]() {
+    /* The Light and Glass rows: only for a fixture whose definition makes
+       light all round or out of LEDs -- a mover's lamp is not a question
+       anyone asks. */
+    auto populateLight = [this, curFid, curBarId, light, lightBox, glassCombo, row]() {
+        Fixture *fx = (*curBarId == UINT_MAX && *curFid != Fixture::invalidId())
+                          ? m_doc->fixture(*curFid) : nullptr;
+        const bool relevant = LightControls::relevant(fx);
+        row(lightBox, relevant);
+        row(glassCombo, relevant);
+        if (relevant)
+            light->load(m_doc, fx);
+    };
+    auto populate = [this, curFid, curBarId, targets, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, tiltSpin, mountCombo, fullBtn, mountOnLbl, barAlongSpin, towerPosCombo, row, populateDmx, populateLight]() {
         populateDmx();
+        populateLight();
         row(barAlongSpin, false);   // this panel is never showing a bar AND a fixture
         row(towerPosCombo, false);  // shown below, for a tower-mounted fixture only
         const quint32 fid = *curFid;
@@ -3277,7 +3303,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
        is one click away via fullBtn, same division of labour as a fixture's
        own mini-fields + Full-properties button. */
     auto populateBar = [this, curFid, curBarId, inspTitle, mountOnLbl, fullBtn, barAlongSpin, row,
-                        gelBtn, mountCombo, faceCombo, placeCombo, angleSpin, tiltSpin, towerPosCombo]() {
+                        gelBtn, mountCombo, faceCombo, placeCombo, angleSpin, tiltSpin, towerPosCombo,
+                        lightBox, glassCombo]() {
         const quint32 barId = *curBarId;
         Truss *bar = (barId != UINT_MAX) ? m_props->truss(barId) : nullptr;
         const bool have = (bar != nullptr);
@@ -3300,7 +3327,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         fullBtn->setEnabled(true);
         row(gelBtn, false); row(mountCombo, false); row(faceCombo, false);
         row(placeCombo, false); row(angleSpin, false); row(tiltSpin, false);
-        row(towerPosCombo, false);
+        row(towerPosCombo, false); row(lightBox, false); row(glassCombo, false);
         inspTitle->setText(bar->name());
         Truss *parent = m_props->truss(bar->parentTrussId());
         const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
@@ -3408,6 +3435,23 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         }
         m_doc->setModified();
         if (view) view->reload();
+    });
+    // The Light and Glass rows write together, to every selected fixture.
+    connect(light, &LightControls::edited, insp, [this, targets, view, light, populateLight]() {
+        const QList<quint32> fids = targets();
+        if (fids.isEmpty()) return;
+        foreach (quint32 f, fids)
+        {
+            const Fixture *fx = m_doc->fixture(f);
+            if (!LightControls::relevant(fx))
+                continue;
+            FixtureRigProps rp = m_props->fixtureRigProps(f);
+            light->store(fx, rp);
+            m_props->setFixtureRigProps(f, rp);
+        }
+        m_doc->setModified();
+        populateLight();
+        if (view) view->update();
     });
     connect(tiltSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
             [this, targets, view](double v) {
@@ -5945,6 +5989,62 @@ void Monitor::slotAddTower()
     slotEditTower(t->id());
 }
 
+/* An image to print on a face or a sock: "Pattern…" picks one, "×" takes
+   it off; the label says which. Calls @p changed after either. */
+static QWidget *makePatternPicker(QWidget *parent, QString *path, float *opacity,
+                                  const std::function<void()> &changed)
+{
+    QWidget *w = new QWidget(parent);
+    QHBoxLayout *lay = new QHBoxLayout(w);
+    lay->setContentsMargins(0, 0, 0, 0);
+    QPushButton *choose = new QPushButton(QObject::tr("Pattern…"), w);
+    choose->setToolTip(QObject::tr("An image printed over it, stretched to each face"));
+    QToolButton *clear = new QToolButton(w);
+    clear->setText(QStringLiteral("×"));
+    clear->setToolTip(QObject::tr("No pattern: plain colour"));
+    QLabel *name = new QLabel(w);
+    name->setStyleSheet("color:#b0b4c0;");
+    // How much of the print shows over the colour beneath it.
+    QSpinBox *opacitySpin = new QSpinBox(w);
+    opacitySpin->setRange(0, 100);
+    opacitySpin->setSuffix(QStringLiteral("%"));
+    opacitySpin->setValue(qRound(*opacity * 100.0f));
+    opacitySpin->setToolTip(QObject::tr("Opacity of the print: 100% the print as it is, "
+                                        "less and the colour beneath shows through"));
+    auto show = [path, name, clear, opacitySpin]() {
+        name->setText(path->isEmpty() ? QObject::tr("(plain)") : QFileInfo(*path).fileName());
+        name->setToolTip(*path);
+        clear->setEnabled(!path->isEmpty());
+        opacitySpin->setEnabled(!path->isEmpty());
+    };
+    QObject::connect(opacitySpin, QOverload<int>::of(&QSpinBox::valueChanged), w,
+                     [opacity, changed](int v) {
+        *opacity = float(v) / 100.0f;
+        changed();
+    });
+    show();
+    QObject::connect(choose, &QPushButton::clicked, w, [w, path, show, changed]() {
+        const QString f = QFileDialog::getOpenFileName(w, QObject::tr("Pattern image"),
+            path->isEmpty() ? QString() : QFileInfo(*path).absolutePath(),
+            QObject::tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"));
+        if (f.isEmpty())
+            return;
+        *path = f;
+        show();
+        changed();
+    });
+    QObject::connect(clear, &QToolButton::clicked, w, [path, show, changed]() {
+        path->clear();
+        show();
+        changed();
+    });
+    lay->addWidget(choose);
+    lay->addWidget(clear);
+    lay->addWidget(name, 1);
+    lay->addWidget(opacitySpin);
+    return w;
+}
+
 void Monitor::slotEditTower(quint32 tid)
 {
     Tower *t = m_props->tower(tid);
@@ -5987,6 +6087,65 @@ void Monitor::slotEditTower(quint32 tid)
     form->addRow(tr("Width:"), wSpin);
     form->addRow(tr("Depth:"), dSpin);
     form->addRow(tr("Height:"), hSpin);
+
+    /* Faces: opaque panels on its sides -- a black facade, or a printed one --
+       on the sides ticked, over the stretch of its height given. */
+    const bool snapFaces = t->hasFaces();
+    const int snapSides = t->facesSides();
+    const QColor snapFacesColour = t->facesColour();
+    const float snapFacesFrom = t->facesFrom();
+    const float snapFacesTo = (t->facesTo() < t->height() - 1e-3f) ? t->facesTo() : -1.0f;
+    const QString snapPattern = t->facesPattern();
+    QWidget *facesRow = new QWidget(&dlg);
+    QHBoxLayout *facesLay = new QHBoxLayout(facesRow);
+    facesLay->setContentsMargins(0, 0, 0, 0);
+    QCheckBox *facesCb = new QCheckBox(tr("Faces"), facesRow);
+    facesCb->setChecked(t->hasFaces());
+    facesCb->setToolTip(tr("Opaque panels over the tower's sides"));
+    QPushButton *facesColourBtn = new QPushButton(facesRow);
+    facesColourBtn->setToolTip(tr("The panels' colour"));
+    QColor *facesColour = new QColor(t->facesColour());
+    auto showFacesColour = [facesColourBtn](const QColor &c) {
+        facesColourBtn->setText(c.name());
+        facesColourBtn->setStyleSheet(QString("background:%1; color:%2").arg(c.name())
+                                          .arg(c.lightness() > 128 ? "#000" : "#fff"));
+    };
+    showFacesColour(*facesColour);
+    QDoubleSpinBox *facesFromSpin = mkSpin(t->facesFrom(), 0.0, hMax);
+    QDoubleSpinBox *facesToSpin = mkSpin(t->facesTo(), 0.0, hMax);
+    facesFromSpin->setToolTip(tr("How high the panels start"));
+    facesToSpin->setToolTip(tr("How high they go -- its top covers the whole tower"));
+    facesLay->addWidget(facesCb);
+    facesLay->addWidget(facesColourBtn);
+    facesLay->addWidget(new QLabel(tr("from"), facesRow));
+    facesLay->addWidget(facesFromSpin);
+    facesLay->addWidget(new QLabel(tr("to"), facesRow));
+    facesLay->addWidget(facesToSpin);
+    form->addRow(tr("Faces:"), facesRow);
+    QWidget *sidesRow = new QWidget(&dlg);
+    QHBoxLayout *sidesLay = new QHBoxLayout(sidesRow);
+    sidesLay->setContentsMargins(0, 0, 0, 0);
+    QList<QPair<QCheckBox *, int> > sideCbs;
+    for (const auto &sd : { qMakePair(tr("Front"), int(Tower::FrontSide)),
+                            qMakePair(tr("Back"), int(Tower::BackSide)),
+                            qMakePair(tr("Stage left"), int(Tower::LeftSide)),
+                            qMakePair(tr("Stage right"), int(Tower::RightSide)) })
+    {
+        QCheckBox *cb = new QCheckBox(sd.first, sidesRow);
+        cb->setChecked(t->facesSides() & sd.second);
+        sidesLay->addWidget(cb);
+        sideCbs << qMakePair(cb, sd.second);
+    }
+    sidesLay->addStretch(1);
+    form->addRow(tr("On sides:"), sidesRow);
+    QString *facesPattern = new QString(t->facesPattern());
+    float *facesOpacity = new float(t->facesPatternOpacity());
+    const float snapOpacity = t->facesPatternOpacity();
+    std::function<void()> applyFaces;               // set below, once the canvas exists
+    QWidget *facesPatternRow = makePatternPicker(&dlg, facesPattern, facesOpacity, [&applyFaces]() {
+        if (applyFaces) applyFaces();
+    });
+    form->addRow(tr("Printed:"), facesPatternRow);
     vl->addLayout(form);
 
     // Shelves — a list of heights the user can add / remove.
@@ -6057,6 +6216,46 @@ void Monitor::slotEditTower(quint32 tid)
         if (view) view->reload();
     });
 
+    // The faces apply live, so the canvas shows them as they are set.
+    applyFaces = [=]() {
+        t->setFaces(facesCb->isChecked());
+        int sides = 0;
+        for (const auto &sc : sideCbs)
+            if (sc.first->isChecked())
+                sides |= sc.second;
+        t->setFacesSides(sides);
+        t->setFacesColour(*facesColour);
+        const float to = float(facesToSpin->value() * fromDisp);
+        t->setFacesRange(float(facesFromSpin->value() * fromDisp),
+                         qAbs(to - t->height()) < 1e-3f ? -1.0f : to);     // its top: follows the height
+        t->setFacesPattern(*facesPattern);
+        t->setFacesPatternOpacity(*facesOpacity);
+        const bool on = facesCb->isChecked();
+        for (QWidget *w : { static_cast<QWidget *>(facesColourBtn), static_cast<QWidget *>(facesFromSpin),
+                            static_cast<QWidget *>(facesToSpin), sidesRow, facesPatternRow })
+            w->setEnabled(on);
+        if (view) view->reload();
+        m_graphicsView->updatePlatforms();
+    };
+    for (QWidget *w : { static_cast<QWidget *>(facesColourBtn), static_cast<QWidget *>(facesFromSpin),
+                        static_cast<QWidget *>(facesToSpin), sidesRow, facesPatternRow })
+        w->setEnabled(t->hasFaces());
+    connect(facesCb, &QCheckBox::toggled, &dlg, [&applyFaces](bool) { applyFaces(); });
+    for (QDoubleSpinBox *sp : { facesFromSpin, facesToSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [&applyFaces](double) { applyFaces(); });
+    for (const auto &sc : sideCbs)
+        connect(sc.first, &QCheckBox::toggled, &dlg, [&applyFaces](bool) { applyFaces(); });
+    connect(facesColourBtn, &QPushButton::clicked, &dlg,
+            [&dlg, facesColour, showFacesColour, &applyFaces]() {
+        const QColor c = QColorDialog::getColor(*facesColour, &dlg, tr("Faces colour"));
+        if (!c.isValid())
+            return;
+        *facesColour = c;
+        showFacesColour(c);
+        applyFaces();
+    });
+
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
@@ -6075,9 +6274,21 @@ void Monitor::slotEditTower(quint32 tid)
         // that guard existed), silently losing a shelf on Cancel instead of
         // actually cancelling.
         t->setShelves(snapShelves);
+        t->setFaces(snapFaces);
+        t->setFacesSides(snapSides);
+        t->setFacesColour(snapFacesColour);
+        t->setFacesRange(snapFacesFrom, snapFacesTo);
+        t->setFacesPattern(snapPattern);
+        t->setFacesPatternOpacity(snapOpacity);
+        delete facesColour;
+        delete facesPattern;
+        delete facesOpacity;
         m_graphicsView->updatePlatforms();
         return;
     }
+    delete facesColour;
+    delete facesPattern;
+    delete facesOpacity;
 
     t->setName(nameEdit->text());
     t->setOriginX(float(oxSpin->value() * fromDisp));
@@ -7856,6 +8067,59 @@ void Monitor::slotEditTruss(quint32 tid)
                            "the stand top and follows it."));
     form->addRow(tr("On stand:"), standCb);
 
+    /* A sock: diffusing fabric over the truss, for LED bars rigged Inside it
+       to glow through. Its colour (white unless told otherwise) and the
+       stretch of the truss it covers. */
+    QWidget *sockRow = new QWidget(&editDlg);
+    QHBoxLayout *sockLay = new QHBoxLayout(sockRow);
+    sockLay->setContentsMargins(0, 0, 0, 0);
+    QCheckBox *sockCb = new QCheckBox(tr("Sock"), sockRow);
+    sockCb->setChecked(t->hasSock());
+    sockCb->setToolTip(tr("A diffusing fabric sleeve over the truss: LED bars rigged "
+                          "Inside it glow through it instead of throwing beams"));
+    QPushButton *sockColourBtn = new QPushButton(sockRow);
+    sockColourBtn->setToolTip(tr("The sock's colour"));
+    auto showSockColour = [sockColourBtn](const QColor &c) {
+        sockColourBtn->setText(c.name());
+        sockColourBtn->setStyleSheet(QString("background:%1; color:%2").arg(c.name())
+                                         .arg(c.lightness() > 128 ? "#000" : "#fff"));
+    };
+    QColor *sockColour = new QColor(t->sockColour());
+    showSockColour(*sockColour);
+    QDoubleSpinBox *sockFromSpin = new QDoubleSpinBox(sockRow);
+    QDoubleSpinBox *sockToSpin = new QDoubleSpinBox(sockRow);
+    for (QDoubleSpinBox *sp : { sockFromSpin, sockToSpin })
+    {
+        sp->setRange(0.0, lenMax_e);
+        sp->setDecimals(2);
+        sp->setSuffix(unitSfx_e);
+    }
+    sockFromSpin->setValue(t->sockFrom() * toDisp_e);
+    sockToSpin->setValue(t->sockTo() * toDisp_e);
+    sockFromSpin->setToolTip(tr("Where along the truss the sock starts"));
+    sockToSpin->setToolTip(tr("Where along the truss it ends -- its far end covers the whole truss"));
+    sockLay->addWidget(sockCb);
+    sockLay->addWidget(sockColourBtn);
+    sockLay->addWidget(new QLabel(tr("from"), sockRow));
+    sockLay->addWidget(sockFromSpin);
+    sockLay->addWidget(new QLabel(tr("to"), sockRow));
+    sockLay->addWidget(sockToSpin);
+    form->addRow(tr("Sock:"), sockRow);
+    QString *sockPattern = new QString(t->sockPattern());
+    float *sockOpacity = new float(t->sockPatternOpacity());
+    const float origSockOpacity = t->sockPatternOpacity();
+    std::function<void()> applySockFn;               // set below, once the canvas exists
+    QWidget *sockPatternRow = makePatternPicker(&editDlg, sockPattern, sockOpacity, [&applySockFn]() {
+        if (applySockFn) applySockFn();
+    });
+    sockPatternRow->setEnabled(t->hasSock());
+    form->addRow(tr("Sock printed:"), sockPatternRow);
+    const QString origSockPattern = t->sockPattern();
+    const bool origSock = t->hasSock();
+    const QColor origSockColour = t->sockColour();
+    const float origSockFrom = t->sockFrom();
+    const float origSockTo = t->hasSock() && t->sockTo() < t->length() - 1e-3f ? t->sockTo() : -1.0f;
+
     // --- Bar attachment: make this truss a "bar" hung on a parent truss ---
     QComboBox *parentCb = new QComboBox(&editDlg);
     parentCb->addItem(tr("(free — not a bar)"), Truss::invalidId());
@@ -8056,6 +8320,45 @@ void Monitor::slotEditTruss(quint32 tid)
             [applyGeomLive](int){ applyGeomLive(); });
     connect(profileCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg,
             [applyGeomLive](int){ applyGeomLive(); });
+    // The sock applies live too: tick it and the canvas wraps the truss.
+    auto applySock = [=]() {
+        t->setSock(sockCb->isChecked());
+        t->setSockColour(*sockColour);
+        const float to = float(sockToSpin->value() * fromDisp_e);
+        t->setSockRange(float(sockFromSpin->value() * fromDisp_e),
+                        qAbs(to - t->length()) < 1e-3f ? -1.0f : to);   // its end: follows the length
+        t->setSockPattern(*sockPattern);
+        t->setSockPatternOpacity(*sockOpacity);
+        sockColourBtn->setEnabled(sockCb->isChecked());
+        sockFromSpin->setEnabled(sockCb->isChecked());
+        sockToSpin->setEnabled(sockCb->isChecked());
+        sockPatternRow->setEnabled(sockCb->isChecked());
+        reloadStudio();
+    };
+    applySockFn = applySock;
+    sockColourBtn->setEnabled(t->hasSock());
+    sockFromSpin->setEnabled(t->hasSock());
+    sockToSpin->setEnabled(t->hasSock());
+    connect(sockCb, &QCheckBox::toggled, &editDlg, [applySock](bool) { applySock(); });
+    connect(sockFromSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg,
+            [applySock](double) { applySock(); });
+    connect(sockToSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg,
+            [applySock](double) { applySock(); });
+    connect(sockColourBtn, &QPushButton::clicked, &editDlg,
+            [&editDlg, sockColour, showSockColour, applySock]() {
+        const QColor c = QColorDialog::getColor(*sockColour, &editDlg, tr("Sock colour"));
+        if (!c.isValid())
+            return;
+        *sockColour = c;
+        showSockColour(c);
+        applySock();
+    });
+    QObject::connect(&editDlg, &QObject::destroyed, [sockColour, sockPattern, sockOpacity]() {
+        delete sockColour;
+        delete sockPattern;
+        delete sockOpacity;
+    });
+
     // The bar-preview hooks already recompute a child bar — mirror onto the canvas.
     connect(alongSpin,    QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [reloadStudio](double){ reloadStudio(); });
     connect(standoffSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [reloadStudio](double){ reloadStudio(); });
@@ -8095,6 +8398,11 @@ void Monitor::slotEditTruss(quint32 tid)
             t->setWidth(origWidth);
         }
         t->setProfile(origProfile);
+        t->setSock(origSock);
+        t->setSockColour(origSockColour);
+        t->setSockRange(origSockFrom, origSockTo);
+        t->setSockPattern(origSockPattern);
+        t->setSockPatternOpacity(origSockOpacity);
         // Remove any bars created during this session BEFORE rebuilding the
         // canvas, not after -- updateTrusses() rebuilds MonitorGraphicsView's
         // own m_trussItems from props->trusses() (which still includes these
@@ -8996,6 +9304,21 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     locateRowLayout->addStretch();
     rigForm->addRow(tr("Identify:"), locateRowWidget);
 
+    /* What makes its light and what it is seen through -- for a fixture
+       whose definition makes light all round or out of LEDs (the studio
+       inspector's rows, here too). */
+    LightControls *lightCtl = nullptr;
+    if (Fixture *lfx = m_doc->fixture(fxItem->fixtureID()))
+    {
+        if (LightControls::relevant(lfx))
+        {
+            lightCtl = new LightControls(rigBox);
+            lightCtl->load(m_doc, lfx);
+            rigForm->addRow(tr("Light:"), lightCtl->lightRow());
+            rigForm->addRow(tr("Glass:"), lightCtl->glassCombo());
+        }
+    }
+
     connect(testModeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int) {
         testTargetCb->setVisible(testModeCb->currentData().toInt() == 2);
     });
@@ -9565,6 +9888,8 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     newRp.deckPlatformId = deckCb->currentData().toUInt();
     newRp.deckHeightOffset = float(deckHeightSpin->value() * fromDisp_fx);
     newRp.mountZOffset = float(heightOffSpin->value() * fromDisp_fx);
+    if (lightCtl != nullptr)
+        lightCtl->store(m_doc->fixture(fxItem->fixtureID()), newRp);
     newRp.panZeroDir    = float(panZeroSpin->value());
     newRp.panOffsetDeg  = float(panOffsetSpin->value());
     newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());

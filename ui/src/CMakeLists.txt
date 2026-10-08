@@ -111,6 +111,8 @@ add_library(${module_name}
     monitor/structurestudioview.cpp monitor/structurestudioview.h
     monitor/zraster.cpp monitor/zraster.h
     monitor/fixturevisualtraits.cpp monitor/fixturevisualtraits.h
+    monitor/lanternpixels.cpp monitor/lanternpixels.h
+    monitor/lightcontrols.cpp monitor/lightcontrols.h
     monitor/humanfigure.cpp monitor/humanfigure.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
@@ -129,6 +131,7 @@ add_library(${module_name}
     gradientdirectionwidget.cpp gradientdirectionwidget.h
     bundleeditor.cpp bundleeditor.h
     bundlebrowser.cpp bundlebrowser.h
+    effectbrowser.cpp effectbrowser.h
     lookeditor.cpp lookeditor.h
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h

@@ -50,6 +50,9 @@
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "structurestudioview.h"
+#include "lanternpixels.h"
+#include "effectscriptrunner.h"
+#include "effectscriptcache.h"
 #include "monitorlayerspanel.h"
 #include "monitorinventorypanel.h"
 #include "networktopologydialog.h"
@@ -15594,6 +15597,295 @@ void Monitor_Test::aPixelBarsLightComesFromItsLitPixels()
 /* A WLED lantern on a bracket off the side of a tower: drawn as a lantern,
    hung where its hanger puts it, and lit all round -- no cone; what is near
    it is lit, falling off with the square of the distance. */
+/* A WLED lantern in effect mode: the console sends "Chase", the lantern
+   works out every LED. The rig view draws each of its sixteen LEDs -- by the
+   port of that effect where there is one, else in colour 1 with the effect
+   it is not showing named beside it. */
+void Monitor_Test::aWledLanternShowsItsEffectLedByLed()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf"),
+             QFile::NoError);
+    QLCFixtureMode *mode = def->mode("Effect (15ch)");
+    QVERIFY(mode != nullptr);
+    QCOMPARE(mode->physical().leds(), 16);
+
+    Doc *doc = new Doc(this);
+    doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    Fixture *lantern = new Fixture(doc);
+    lantern->setFixtureDefinition(def, mode);
+    lantern->setName("Lantern SL");
+    QVERIFY(doc->addFixture(lantern));
+    doc->monitorProperties()->setFixturePosition(lantern->id(), 0, 0, QVector3D(3000, 2000, 2500));
+
+    // Master, Effect, Speed, Intensity, Palette, Option, colours 1-3.
+    auto values = [](int effect) {
+        QByteArray v(15, char(0));
+        v[0] = char(255); v[1] = char(effect); v[2] = char(0); v[3] = char(128);
+        v[6] = char(255);                       // colour 1 red
+        v[10] = char(255);                      // colour 2 green
+        v[14] = char(255);                      // colour 3 blue
+        return v;
+    };
+    LanternPixels lp(doc);
+
+    // Chase has a port: the LEDs differ, a block of blue in the red.
+    LanternPixels::Frame f = lp.frame(lantern, values(28), 16, Qt::red, 1.0, true);
+    QCOMPARE(f.source, LanternPixels::Script);
+    QVERIFY(f.tag.isEmpty());
+    QCOMPARE(f.leds.size(), 16);
+    QCOMPARE(f.leds.count(QColor(0, 0, 255)), 3);
+    QCOMPARE(f.leds.count(QColor(255, 0, 0)), 13);
+    // At half its dimmer, half as bright.
+    f = lp.frame(lantern, values(28), 16, Qt::red, 0.5, true);
+    QCOMPARE(f.leds.count(QColor(128, 0, 0)), 13);
+
+    // Fireworks has none (yet): colour 1, and it says what it is not showing.
+    f = lp.frame(lantern, values(42), 16, Qt::red, 1.0, true);
+    QCOMPARE(f.source, LanternPixels::Flat);
+    QCOMPARE(f.tag, QString("WLED: Fireworks"));
+    QCOMPARE(f.leds.count(QColor(255, 0, 0)), 16);
+    // Solid is exactly that.
+    f = lp.frame(lantern, values(0), 16, Qt::red, 1.0, true);
+    QCOMPARE(f.source, LanternPixels::Flat);
+    QVERIFY(f.tag.isEmpty());
+    // Not patched to a device that can say: never the device.
+    QVERIFY(lp.deviceLeds(lantern) == 0);
+
+    // In the rig view: sixteen beads, red and blue among them -- reversed,
+    // so the blue block is at the bottom, where a view from above sees it.
+    Scene *scene = new Scene(doc);
+    QVERIFY(doc->addFunction(scene));
+    QByteArray chase = values(28);
+    chase[5] = char(128);
+    for (int i = 0; i < chase.size(); ++i)
+        scene->setValue(lantern->id(), quint32(i), uchar(chase.at(i)));
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    view.resize(700, 700);
+    view.setLiveValues(true);
+    view.setActiveScene(scene->id());
+    view.reload();
+    struct Counts { int blue = 0, red = 0, lit = 0; };
+    auto render = [&](StructureStudioView::Plane plane, const QString &name) {
+        view.setPlane(plane);
+        QCoreApplication::processEvents();
+        QImage img(view.size(), QImage::Format_ARGB32);
+        img.fill(Qt::black);
+        view.render(&img);
+        if (!qEnvironmentVariableIsEmpty("LANTERN_PNG"))
+            img.save(qEnvironmentVariable("LANTERN_PNG").replace(".png", "-" + name + ".png"));
+        Counts n;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.blue() > 200 && c.red() < 120 && c.green() < 120) ++n.blue;
+                if (c.red() > 200 && c.blue() < 120 && c.green() < 120) ++n.red;
+                if (c.red() > c.green() + 60) ++n.lit;
+            }
+        return n;
+    };
+
+    // Clear glass: every LED seen, in its own colour.
+    FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(lantern->id());
+    rp.lightGlass = 1;
+    doc->monitorProperties()->setFixtureRigProps(lantern->id(), rp);
+    const Counts clearFlat = render(StructureStudioView::Front, "clear-front");
+    QVERIFY2(clearFlat.blue > 0 && clearFlat.red > 0,
+             qPrintable(QString("blue %1 red %2").arg(clearFlat.blue).arg(clearFlat.red)));
+    const Counts clearAngled = render(StructureStudioView::Angled, "clear-angled");
+    QVERIFY2(clearAngled.blue > 0 && clearAngled.red > 0,
+             qPrintable(QString("angled: blue %1 red %2").arg(clearAngled.blue).arg(clearAngled.red)));
+
+    // Diffusing glass (the default): the glass itself glows -- far more of
+    // the lantern lit than its beads alone.
+    rp.lightGlass = -1;
+    doc->monitorProperties()->setFixtureRigProps(lantern->id(), rp);
+    const Counts diffuseFlat = render(StructureStudioView::Front, "diffuse-front");
+    QVERIFY2(diffuseFlat.lit > clearFlat.lit * 3,
+             qPrintable(QString("lit %1 vs clear %2").arg(diffuseFlat.lit).arg(clearFlat.lit)));
+    const Counts diffuseAngled = render(StructureStudioView::Angled, "diffuse-angled");
+    QVERIFY2(diffuseAngled.lit > clearAngled.lit,
+             qPrintable(QString("angled lit %1 vs clear %2").arg(diffuseAngled.lit).arg(clearAngled.lit)));
+}
+
+/* "put a sock on trusses that would diffuse for internal led bars .. a sock
+   color picker as the default color of white and a way to set how much of
+   the truss the sock covers." A red bar Inside the socked stretch glows
+   through the fabric, the sock lit near it; a bar past the end of the sock
+   is not under it. */
+void Monitor_Test::aSockedTrussGlowsWithTheBarsInsideIt()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(-3.0f, 2.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.29f);
+    QCOMPARE(t->sockColour(), QColor(Qt::white));      // white, unless told
+    t->setSock(true);
+    t->setSockRange(0.0f, 3.0f);                        // the first half
+
+    Fixture *inside = makeChunkyBar(doc, 0, "Under the sock");
+    Fixture *outside = makeChunkyBar(doc, 10, "Past the sock");
+    QVERIFY(inside != nullptr && outside != nullptr);
+    auto mount = [&](Fixture *f, float along) {
+        FixtureRigProps rp;
+        rp.trussId = t->id();
+        rp.trussOffset = along;
+        rp.placement = FixtureRigProps::Inside;
+        props->setFixtureRigProps(f->id(), rp);
+    };
+    mount(inside, 1.0f);
+    mount(outside, 5.0f);
+
+    Scene *scene = new Scene(doc);
+    QVERIFY(doc->addFunction(scene));
+    scene->setValue(inside->id(), 0, 255);              // red
+    scene->setValue(outside->id(), 0, 255);
+
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    view.resize(800, 600);
+    view.setLiveValues(true);
+    view.setBeams(true);
+    view.setActiveScene(scene->id());
+    view.reload();
+    view.setPlane(StructureStudioView::Angled);
+    QCoreApplication::processEvents();
+    QImage img(view.size(), QImage::Format_ARGB32);
+    img.fill(Qt::black);
+    view.render(&img);
+    if (!qEnvironmentVariableIsEmpty("SOCK_PNG"))
+        img.save(qEnvironmentVariable("SOCK_PNG"));
+
+    QVERIFY(view.underSock(props->fixtureRigProps(inside->id())));
+    QVERIFY(!view.underSock(props->fixtureRigProps(outside->id())));
+    // The sock glows red over the bar, and far less at its other end.
+    const QVector<QVector3D> glow = view.sockGlow(t, 6); // half-metre stretches
+    QVERIFY2(glow.at(2).x() > 0.3f, qPrintable(QString::number(glow.at(2).x())));
+    QVERIFY(glow.at(2).y() < 0.01f && glow.at(2).z() < 0.01f);
+    QVERIFY(glow.at(5).x() < glow.at(2).x() * 0.5f);
+
+    // A blue sock filters it: red light through blue fabric is dark.
+    t->setSockColour(QColor(0, 0, 255));
+    QVERIFY(view.sockGlow(t, 6).at(2).x() < 0.01f);
+}
+
+/* "we need faces on the tower .. similar to sock .. for the towers they're
+   opaque if we wanna be snazzy we can upload a pattern that can cover the
+   sock or opaque parts." */
+void Monitor_Test::aTowerWearsItsFacesPlainOrPrinted()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Tower *tw = props->addTower();
+    tw->setOriginX(-0.5f); tw->setOriginY(0.0f);
+    tw->setWidth(1.0f); tw->setDepth(1.0f); tw->setHeight(3.0f);
+
+    StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+    view.resize(700, 700);
+    view.reload();
+    view.setPlane(StructureStudioView::Angled);
+    auto render = [&](const QString &name) {
+        QCoreApplication::processEvents();
+        QImage img(view.size(), QImage::Format_ARGB32);
+        img.fill(QColor(255, 255, 255));            // panels show as dark on white
+        view.render(&img);
+        if (!qEnvironmentVariableIsEmpty("FACES_PNG"))
+            img.save(qEnvironmentVariable("FACES_PNG").replace(".png", "-" + name + ".png"));
+        return img;
+    };
+    auto count = [](const QImage &img, const std::function<bool(const QColor &)> &f) {
+        int n = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+                if (f(img.pixelColor(x, y))) ++n;
+        return n;
+    };
+    auto green = [](const QColor &c) { return c.green() > 120 && c.red() < 90 && c.blue() < 90; };
+    auto magenta = [](const QColor &c) { return c.red() > 120 && c.blue() > 120 && c.green() < 90; };
+
+    // Open steel: nothing coloured.
+    view.reload();
+    QCOMPARE(count(render("open"), green), 0);
+
+    // Faced in green: the tower is a green block.
+    tw->setFaces(true);
+    tw->setFacesColour(QColor(0, 230, 0));
+    view.reload();
+    const int plain = count(render("plain"), green);
+    QVERIFY2(plain > 2000, qPrintable(QString::number(plain)));
+
+    // Front only: less of it.
+    tw->setFacesSides(Tower::FrontSide);
+    view.reload();
+    const int front = count(render("front"), green);
+    QVERIFY(front > 0 && front < plain);
+
+    // Printed: the top half green, the bottom half magenta -- both on it.
+    QTemporaryDir dir;
+    QImage art(32, 32, QImage::Format_ARGB32);
+    for (int y = 0; y < 32; ++y)
+        for (int x = 0; x < 32; ++x)
+            art.setPixelColor(x, y, y < 16 ? QColor(0, 230, 0) : QColor(230, 0, 230));
+    const QString artPath = dir.filePath("wrap.png");
+    QVERIFY(art.save(artPath));
+    tw->setFacesSides(Tower::AllSides);
+    tw->setFacesColour(QColor(20, 20, 20));
+    tw->setFacesPattern(artPath);
+    view.reload();
+    const QImage printed = render("printed");
+    QVERIFY(count(printed, green) > 500);
+    QVERIFY(count(printed, magenta) > 500);
+    // ...the green above the magenta, as printed.
+    double gy = 0, my = 0; int gn = 0, mn = 0;
+    for (int y = 0; y < printed.height(); ++y)
+        for (int x = 0; x < printed.width(); ++x)
+        {
+            const QColor c = printed.pixelColor(x, y);
+            if (green(c)) { gy += y; ++gn; }
+            if (magenta(c)) { my += y; ++mn; }
+        }
+    QVERIFY(gy / gn < my / mn);
+
+    // A missing file: plain colour, no harm.
+    tw->setFacesPattern(dir.filePath("gone.png"));
+    view.reload();
+    QCOMPARE(count(render("missing"), magenta), 0);
+
+    // The flat front view: the print, upright.
+    tw->setFacesPattern(artPath);
+    view.setPlane(StructureStudioView::Front);
+    view.reload();
+    const QImage flat = render("flat");
+    QVERIFY(count(flat, green) > 100 && count(flat, magenta) > 100);
+
+    // Faded: at 0% the print is gone, the panels' own colour left.
+    view.setPlane(StructureStudioView::Angled);
+    tw->setFacesPatternOpacity(0.0f);
+    view.reload();
+    QCOMPARE(count(render("faded"), magenta), 0);
+    tw->setFaces(false);
+
+    // A sock takes a print too, faded the same way.
+    Truss *t = props->addTruss();
+    t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(-2.0f, 1.0f, 2.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(4.0f);
+    t->setWidth(0.4f);
+    t->setSock(true);
+    t->setSockPattern(artPath);
+    view.reload();
+    const QImage sock = render("sock");
+    QVERIFY(count(sock, magenta) > 100);
+    t->setSockPatternOpacity(0.0f);
+    view.reload();
+    QCOMPARE(count(render("sock-faded"), magenta), 0);
+}
+
 void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()
 {
     QLCFixtureDef *def = new QLCFixtureDef();
